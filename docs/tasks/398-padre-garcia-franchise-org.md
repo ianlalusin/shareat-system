@@ -1,7 +1,22 @@
 # T-398: Padre Garcia on v2 as its own organisation (plan C11)
 
-**Status:** S1 SHIPPED (migration **0194**, on main); S2-S7 not built. | Earlier: SPEC APPROVED WITH CHANGES 2026-10-10 (fresh Opus review applied). Amendments A1-A10 in §8 bind and win
-over any earlier sentence they correct; the corrected sentences are also fixed in place.
+**Status:** AMENDED 2026-10-17 (B1-B14 from the re-audit, `docs/tasks/398-audit-2026-10-17.md`); S2-S7 ready to build
+once Ian answers Q5 (VAT, needed by 13 Nov) and the other questions each slice names below. S1 SHIPPED (migration
+**0194**, on main); S2-S7 not built.
+- **Buildable now (no Ian answer needed):** **S2a** (the DEF-421 ratchet, B2), **S2b** (the conversion), **S3**, **S4**.
+  Their *production apply* (S3, S4 migrations) waits on **Q9** (who runs the prechecks and picks the night window);
+  S3's lock timing waits on a restore taken after T-391's production load (B6).
+- **S5 — blocked by Q5** (VAT legs in the posting pattern; the planner's POSTING-PATTERNS entry cannot be written
+  without it), **Q6** (book at dispatch vs receipt), **Q4** (price), **Q7** (credit limit), **Q8** (what A3's
+  function may return), and Ian's ruling on B5's pay-now recommendation.
+- **S6 — blocked by Q1** (the break-glass identity and its second email) and **Q2** (the column list V2 pins);
+  planner prerequisite: the CAPABILITY-MATRIX row for `view_franchise_access_log`.
+- **S7 — blocked by Q1** (who signs in), **Q3** (history vs opening balances, and the 1 Jan opening per B4),
+  **Q11** (PG's attendance/leave/payroll, B7), and K4's data (second email, owner and staff names, POS store id).
+- Q10 blocks no build; it is needed before 4 Dec production.
+
+Amendments A1-A11 and B1-B14 in §8 bind and win over any earlier sentence they correct; the corrected sentences are
+also fixed in place.
 **Model:** Sonnet lanes (tester then builder per slice); Opus for the review and for any spec amendment.
 **Why now:** bible row 305 (Ian, 2026-10-10, plan-q4 = (b)): *Padre Garcia runs on v2 by 1 January 2027, as its own
 organisation.* Row 246's trigger ("before a second organisation is onboarded") therefore fires before cutover, so
@@ -9,7 +24,7 @@ DEF-491 and DEF-421 are cutover scope. Plan: `docs/plans/remaining-build-plan.md
 **Deadline:** 4 Dec on production (plan §2.1); second rehearsal with two organisations on 18 Dec.
 **Drop-alone rule (plan §2.2):** if S5-S7 are not on production by 4 Dec, Padre Garcia stays on v1 past 1 Jan and
 Ian's organisation cuts over alone. S1-S4 land regardless: they harden Ian's own org and cost nothing to keep.
-**Migrations:** every slice that has one takes **the next free number at merge** (0193 today, after T-386 S6's 0192).
+**Migrations:** every slice that has one takes **the next free number at merge** (0209 today, after T-439's 0208 — B8).
 No slice hard-codes a number; the journal `when` is the previous entry's + 86 400 000.
 
 ---
@@ -28,7 +43,8 @@ No slice hard-codes a number; the journal `when` is the previous entry's + 86 40
 `manager` (row 114); `customers.counterparty_org_id` and the derived `inter_entity` treatment (ADR-008 §2,
 `packages/db/src/repo/customers.ts:57-60`); capability `view_franchise_sales`, super-admin only, platform-scoped,
 **no reader** (`packages/auth/src/capabilities.ts:988`); the external-sale dispatch with FIFO COGS
-(`packages/domain/src/trade/index.ts:425`, COGS at `:580-647`); supplier deliveries that post inventory + AP
+(`packages/domain/src/trade/index.ts:426`, COGS at `:580-647`; since T-433 it also takes `payNow` and
+`creditOverrideReason` and stamps an optional `bir_invoice_no` — B5); supplier deliveries that post inventory + AP
 (`packages/domain/src/deliveries/documents.ts:122,313`, capability `receive_delivery`); customer returns and credits
 (`packages/domain/src/trade/returns.ts:169,645`); POS links, globally unique per POS store
 (`packages/db/schema/pos-v1.ts`, `pos_v1_store_links_pos_store_id_unique`).
@@ -36,12 +52,14 @@ No slice hard-codes a number; the journal `when` is the previous entry's + 86 40
 **What is missing** — and the order this spec builds it in:
 
 1. **DEF-491** — 370 org→org FKs + 77 derived→org + 5 org→derived/derived→derived FKs + 5 FK-less refs with no same-org check (S1 tester census, A11; T-357 R1 said ≈360 + 79). S1, S3, S4.
-2. **DEF-421** — 165 `tx: Tx | null` signatures in 49 files of `packages/domain/src`, ≈132 `transaction(run)` null
-   branches with no org principal. S2.
+2. **DEF-421** — 206 `Tx | null` occurrences in 55 files of `packages/domain/src` (measured 2026-10-17 at
+   `c6b16cf`; was 165 in 49 — B2), and 188 `transaction(` calls in 60 files, many of them null branches with no org
+   principal. S2 (S2a ratchet, S2b conversion).
 3. **The inter-entity sale** — `createTradeOrder` refuses it (`trade/index.ts:198-206`). S5.
 4. **The franchisor's sales-only view** and its access log. S6.
-5. **Onboarding** — the org, Ian's PG person, the store, the two counterparty rows, items split out of the T-391
-   import, POS link, multi-org checks on every scheduled job. S7.
+5. **Onboarding** — the org, Ian's PG person, the store, the two counterparty rows, then PG's master data loaded by
+   T-391's `master-data run` against PG's org (B1), POS link and clock terminal, multi-org checks on every scheduled
+   job, and the per-org 1 Jan purge and opening (B4). S7.
 
 ---
 
@@ -83,8 +101,10 @@ No slice hard-codes a number; the journal `when` is the previous entry's + 86 40
   guard (a `null` argument stops typecheck), plus a source-scanning unit test so the allow-list cannot grow silently.
   - **Allowed to keep `Tx | null`.** In `packages/domain/src`: **only `runDepreciation`** (DEF-421 note: one tx per
     asset). The AUTH door — `signInWithPin`, `signInWithFirebase`, `resolveTerminalIdentity`, `resolveActor`,
-    `signOut` — lives in `packages/auth/src/sessions.ts` (`:85,265,333,395,431`), outside the scan root, and stays
-    as it is. Any other function found to need it is a **spec defect to report**, not an addition.
+    `signOut` in `packages/auth/src/sessions.ts` (`:94,379,495,557,597`), **plus the two PIN approval verifiers**
+    `verifyAdminApproval` (`packages/auth/src/admin-approval.ts:40`) and `verifyPosManagerApproval`
+    (`packages/auth/src/pos-approval.ts:47`) (B3) — lives outside the scan root and stays as it is. Any other
+    function found to need it is a **spec defect to report**, not an addition.
   - `runDepreciation`'s null branch opens `withOrgPrincipal(orgId, …)` per asset, never a bare `transaction()`.
   - No `transaction(` call remains in `packages/domain/src`. That includes the **bare `transaction((trx) => …)`
     forms** that are not `transaction(run)` (A9 names them, e.g. `files/index.ts:112,282`, `expenses/*`,
@@ -92,8 +112,10 @@ No slice hard-codes a number; the journal `when` is the previous entry's + 86 40
     `money-transfers/index.ts:68,164`, `fixed-assets/*`); each one's principal is ruled in A9.
   - The 12 non-test `null` callers (`apps/erp/src/app/fixed-assets/actions.ts:205`, sign-in, setup, session,
     `scripts/smoke-pin-throttle.ts:51`) are all allow-listed functions; nothing else changes in apps.
-  - The ≈100 test call sites (22 files) that pass `null` move to `withOrgPrincipal(org, (tx) => fn(tx, …))`. That is
-    the tester's work in S2, and it is the bulk of S2.
+  - The test call sites that pass `null` (44 test files pass `(null, ` today; the tester lists them — B2) move to
+    `withOrgPrincipal(org, (tx) => fn(tx, …))`. That is the tester's work in S2b, and it is the bulk of S2.
+  - **B2: S2 is split.** S2a lands the scan (T1/T2) first as a **ratchet pinned at today's measured counts**, so no
+    lane adds to DEF-421 while S2b converts it.
 - **R5 — The inter-entity sale: two orgs, two transactions, one handoff, one reconciliation.** No transaction spans
   two orgs once RLS isolates them (T-133 §4, discovery 19 §7.5). So:
   - **Seller (Ian's org), at dispatch:** the existing external-sale path, unchanged — `recordCharge` (AR `1210` +
@@ -117,7 +139,9 @@ No slice hard-codes a number; the journal `when` is the previous entry's + 86 40
     detail, only "Padre Garcia has recorded ₱X against shipment N"). This is ADR-008 §4's "the same debt viewed
     twice", checked rather than assumed.
   - **Payments** are recorded independently on each side (PG's AP payment, the commissary's AR collection); the
-    balance check above catches a one-sided payment.
+    balance check above catches a one-sided payment. **B5:** `dispatchTradeOrder`'s `payNow` is refused on an
+    inter-entity order, and the seller-side `receiveTradeOrder` (`trade/index.ts:887`) is refused for an
+    inter-entity order (PG confirms receipt in its own books) — *orchestrator recommendation, pending Ian's ruling*.
   - **Price:** the franchise customer's price list (ADR-008 §3) — Q4.
   - The posting pattern **"dispatch to a franchise"** is added to `docs/POSTING-PATTERNS.md` by the planner **before
     S5's tester starts** (ADR-008 "What this changes today"); S5 implements it, it does not decide it.
@@ -126,7 +150,7 @@ No slice hard-codes a number; the journal `when` is the previous entry's + 86 40
     `franchisor_person_id` (Ian's person **in PG's org**, so a same-org FK), `sales_visible_from`, scope. Written only
     by the S7 onboarding path; readable by both orgs.
   - `franchise_access_log` — append-only (trigger refuses UPDATE/DELETE), readable by both orgs: who, when, which
-    org, which range, what (`sales_daily` / `break_glass_sign_in`), reason.
+    org, which range, what (`sales_daily` / `break_glass_sign_in` / `break_glass_approval` — B3), reason.
   - `franchise_sales_daily(franchisee_org uuid, from date, to date)` — `SECURITY DEFINER`, `search_path` pinned. It
     returns **only** store, business date, channel, tender, gross, discounts, net and sales-day status, and only when
     an agreement row has `franchisor_org_id = app_current_org()` and the range is on/after `sales_visible_from`. It
@@ -134,8 +158,10 @@ No slice hard-codes a number; the journal `when` is the previous entry's + 86 40
   - The domain `viewFranchiseSales(tx, actor, …)` calls `authorize(…, 'view_franchise_sales')` first (§15.11: two
     layers — the capability and the function's own agreement check).
   - **Full-books access is not this function.** It is Ian's own person row in PG's org (row 175), with its own
-    credential; every session that person opens writes a `break_glass_sign_in` row to the log. That **is** the
-    break-glass of T-121 A.3: an identity, not a bypass, and PG can see each use.
+    credential; every session that person opens — **by email or by PIN** (`signInWithPin` is per org, so a PG
+    terminal accepts that person's PIN) — writes a `break_glass_sign_in` row, and every PIN approval that person
+    gives through `verifyAdminApproval` or `verifyPosManagerApproval` writes a `break_glass_approval` row (B3). That
+    **is** the break-glass of T-121 A.3: an identity, not a bypass, and PG can see each use.
   - A PG `manager` can read the log through a new capability `view_franchise_access_log` (store-less, org scope;
     manager + admin ✅, staff ✗). CAPABILITY-MATRIX row added by the planner before S6's tester starts.
 - **R7 — Onboarding is a CLI, not `/setup`.** `bootstrapOrganization` refuses a second org by design
@@ -144,6 +170,13 @@ No slice hard-codes a number; the journal `when` is the previous entry's + 86 40
   two counterparty rows (Ian-side customer with `counterparty_org_id`, PG-side supplier with `counterparty_org_id`)
   and the agreement row are written each under its own org principal. `scripts/onboard-franchise.ts` follows
   `scripts/bootstrap-org.ts`'s guards exactly (no defaults, `--confirm`, dry run by default, never a unit).
+  - **B10:** the CLI takes `--last`, `--first` and `--middle` for Ian's PG person and writes them through the
+    name-parts path (T-438, row 360); `createFirstAdmin`'s `displayName`-only form is not enough.
+  - **B1:** the CLI's `--code` **must equal** the PG `org_code` in Ian's `stores.csv` (today the placeholder
+    `PADRE_GARCIA`), and the store code must equal its `store_code`; T-391's `assertRunTarget`
+    (`packages/etl/src/master-data/store-map.ts:87-94`) refuses a run otherwise. The CLI's PG-side supplier and
+    Ian-side customer take the v1 names of the commissary-mirror supplier and the PG AR customer, so T-391's planner
+    links them instead of creating them twice.
   - ⚠️ `person_credentials_external_id_unique` is global (`schema/sessions.ts:134`): **Ian needs a second sign-in
     identity** (another email) for his PG person. Q1.
 
@@ -151,7 +184,8 @@ No slice hard-codes a number; the journal `when` is the previous entry's + 86 40
 
 ## 3. Slices
 
-Order: **S1 ∥ S2 → S3 → S4 → (S5 ∥ S6, merges serialised: S5 first) → S7.** S1 and S2 touch disjoint trees (db schema/migrations vs domain/tests)
+Order: **S1 ∥ S2 → S3 → S4 → (S5 ∥ S6, merges serialised: S5 first) → S7.** (B2: S2a lands first, now, on its
+own; S2b follows.) S1 and S2 touch disjoint trees (db schema/migrations vs domain/tests)
 and share no state if each runs on its own lane DB (row 298 worktrees). S5 and S6 both edit the migration journal, `cutover/classification.ts` and `rls/registry.ts`
 (A10): they build in parallel worktrees but **merge one after the other, S5 first**; S6 rebases, renumbers to the next
 free slot and re-runs `migration-journal.test.ts`, `rls-registry.test.ts` and `cutover-classification.test.ts`.
@@ -159,13 +193,14 @@ free slot and re-runs `migration-journal.test.ts`, `rls-registry.test.ts` and `c
 | Slice | What | Migration | Size | Needed by |
 |---|---|---|---|---|
 | **S1** | Census guard (A8 scope) + exemptions file; persons (153) + stores (76) = 229 composites (A11) | yes | M 2 | 13 Nov (plan) |
-| **S2** | DEF-421: non-nullable `tx`, allow-list guard, tests moved to principals | none | M 1.5 | 13 Nov |
+| **S2a** | DEF-421 ratchet (B2): T1/T2 pinned at today's counts; may fall, never rise | none | S 0.2 | now |
+| **S2b** | DEF-421: non-nullable `tx`, allow-list guard at its final value, tests moved to principals | none | M 1.8 | 13 Nov |
 | **S3** | DEF-491: the remaining org→org parents (journal_entries, items, stock_locations, suppliers, employments, the rest: 141) + 5 FK-less `ref-gap` columns (A11) | yes | M 1.5 | 20 Nov |
 | **S4** | DEF-491: the 82 derived-scope FKs (A11) by trigger; `OPEN_DEF_491` reaches empty | yes | S-M 1.5 | 24 Nov |
 | **S5** | Inter-entity sale: shipment handoff, definer receive/void, credit note, reconciliation fn | yes | L 3.5 | 1 Dec |
 | **S6** | Sales-only view + access log + break-glass sign-in logging + screen (A5 hardening) | yes | M 2 | 2 Dec, merged after S5 |
-| **S7** | Onboarding CLI, split item import, POS link, multi-org job checks, two-org rehearsal data | none expected | M 1.5 | 4 Dec |
-| | **Total** | 5 | **≈ 13.5** (was 11) | |
+| **S7** | Onboarding CLI, then T-391's master-data load into PG (B1), POS link + clock terminal, multi-org job checks, per-org purge runbook, two-org rehearsal data | none expected | M 1.5 | 4 Dec |
+| | **Total** | 5 | **≈ 14** (was 13.5; S2 re-sized to ≈ 2.0 by B2) | |
 
 ### S1 — the census guard, persons and stores (DEF-491 part 1)
 
@@ -198,24 +233,36 @@ entries need a planner ruling id" assertion.
 
 ### S2 — DEF-421, transactions always carry an org principal
 
-**TESTER paths:** new `tests/unit/t398-s2-domain-tx-non-nullable.test.ts` (scans `packages/domain/src` for
-`Tx | null` and for `transaction(` imports outside the R4 allow-list); every test file that passes `null` to a
-domain function (≈22 files; the tester lists them) — **only** the `null` → `withOrgPrincipal` change; new
-`packages/domain/tests/integration/t398-s2-depreciation-principal.test.ts`.
-**BUILDER paths:** `packages/domain/src/**` signatures and null branches only. No behaviour change **except** the
+**Split by B2 into S2a (now) and S2b (the conversion).**
+
+**S2a — the ratchet (≈ 0.2 day, tester only, buildable now).** New `tests/unit/t398-s2-domain-tx-non-nullable.test.ts`
+with T1 and T2 written as **ceilings pinned at the counts measured on main at `c6b16cf` (2026-10-17)**:
+- T1 ceiling: **206** occurrences of the literal `Tx | null` across **55** files under `packages/domain/src`;
+- T2 ceiling: **188** occurrences of `\btransaction\(` across **60** files under `packages/domain/src`
+  (and **38** lines importing `transaction` there).
+The test fails if any count rises above its pin, and also fails (stale pin) if a count falls without the pin being
+lowered in the same commit, so the number only ever goes down. The tester re-measures on the branch's base before
+committing and writes the measured numbers (not these, if main has moved) into the file, stating the commit.
+S2a touches no other file. S2b later replaces the ceilings with T1/T2's final form below.
+
+**S2b TESTER paths:** the same test file, its pins replaced by T1/T2's final form; every test file that passes `null`
+to a domain function (44 test files pass `(null, ` today; the tester lists them) — **only** the `null` →
+`withOrgPrincipal` change; new `packages/domain/tests/integration/t398-s2-depreciation-principal.test.ts`.
+**S2b BUILDER paths:** `packages/domain/src/**` signatures and null branches only. No behaviour change **except** the
 A9 bare-`transaction((trx) => …)` sites, each of which now opens the principal A9 rules. ⛔ No app, db, auth, or test
 file.
 
 | Id | Case | Target | Red today |
 |---|---|---|---|
-| T1 | Scan: `Tx \| null` appears only on the six allow-listed functions | Pass | Red: 165 sites |
+| T1 | Scan: `Tx \| null` appears only on `runDepreciation` (A9, B2) | Pass | Red: 206 sites (S2a pins this as a ceiling meanwhile) |
 | T2 | Scan: no `transaction(` import in `packages/domain/src` outside the allow-listed files | Pass | Red |
 | T3 | Typecheck with one test deliberately passing `null` to `createTradeOrder` (a `// @ts-expect-error` line) | The directive is satisfied (i.e. `null` is a type error) | Red: `@ts-expect-error` unused |
 | T4 | `runDepreciation(null, …)` as the app role over two assets | Both post; each ran under `app.org_id` = the actor's org (read back `current_setting` inside a test hook, or the posted rows' visibility under RLS) | Red if the null branch is a bare `transaction()` under the app role (DEF-417 refusal) |
 | T5 | Full integration suite | Green with only R4's call-site moves | — |
 
 **Mutants:** re-add `| null` to `dispatchTradeOrder` → T1; replace one `withOrgPrincipal` in `runDepreciation` with
-`transaction` → T2 and T4; add a seventh name to the allow-list → T1's pinned list (the list is pinned by value).
+`transaction` → T2 and T4; add a second name to the allow-list → T1's pinned list (the list is pinned by value).
+S2a mutant: add one `Tx | null` to any domain file → T1's ceiling reds.
 
 ### S3 — DEF-491, the remaining org→org parents
 
@@ -223,10 +270,20 @@ file.
 table, ≥ 1 per parent, the tester names the child), plus M1/M2 as in S1.
 **BUILDER paths:** the new migration, the journal, the Drizzle schema files for the children, NOTE comments on each
 parent, `same-org-fk-exemptions.ts` (deletions only).
-Legs: K1 (census green with the shrunken list), one F-leg per parent (`23503` as `shareat_app`), one owner leg,
+**B6 — skip parents that already carry the key.** Add `UNIQUE (org_id, id)` **only** to parents that do not already
+have `<parent>_org_id_id_unique`. At least seven S3 parents already do — `items`, `production_recipes`,
+`stock_locations` (`0196:56-58`); `employments`, `positions`, `pay_runs`, `separations` (`0205:23-29`);
+`stored_files` (`0204:11`); `pos_v1_store_links` (`0202:15`); `money_accounts` (earlier). A second
+`ADD CONSTRAINT … UNIQUE` with the same name fails the migration. **Generate the list from `pg_constraint`, not by
+hand**, and paste the query in the migration header.
+**B6 — lock timing:** A1's timed run is done on a restore taken **after** T-391's production load, because items and
+parties are now real rows.
+Legs: K1 (census green with the shrunken list), **K2 (B6): every composite's parent has exactly one `(org_id, id)`
+unique** (catalog), one F-leg per parent (`23503` as `shareat_app`), one owner leg,
 same-org controls, M1/M2. **Workflow sweep allowed** (row 298 #5) for writing the 146 `ADD CONSTRAINT` lines from
 the census query output; the builder pastes the query and the sweep's diff stat in its report.
-**Mutants:** drop any one composite → C1; reorder `VALIDATE` before `ADD … NOT VALID` → migration fails on scratch.
+**Mutants:** drop any one composite → C1; reorder `VALIDATE` before `ADD … NOT VALID` → migration fails on scratch;
+add a duplicate `(org_id, id)` unique on a parent that already has one → K2.
 
 ### S4 — DEF-491, the derived-scope children
 
@@ -247,10 +304,13 @@ trigger → D1; change `UPDATE OF col` to plain `UPDATE` → no leg reds, so D4 
 
 ### S5 — the inter-entity sale
 
-**Planner pre-requisite:** the "dispatch to a franchise" posting pattern in `docs/POSTING-PATTERNS.md` (R5).
+**Blocked by:** Q5 (VAT), Q6, Q4, Q7, Q8, and Ian's ruling on B5 (see Status).
+**Planner pre-requisite:** the "dispatch to a franchise" posting pattern in `docs/POSTING-PATTERNS.md` (R5, A7),
+written once Q5 is answered; today `POSTING-PATTERNS.md:743` still says "do not use for a franchise" (B14).
 **TESTER paths:** new `packages/domain/tests/integration/t398-s5-inter-entity-sale.test.ts`; new
-`packages/db/tests/integration/t398-s5-shipment-rls.test.ts`; the existing T-133 test that asserts the refusal
-(the tester finds it by grepping "belongs to another organisation") is **ruled** to assert the new behaviour.
+`packages/db/tests/integration/t398-s5-shipment-rls.test.ts`; the existing T-133 refusal test
+**`packages/domain/tests/integration/trade.test.ts:873`** (it asserts `/no second org exists/`) is **ruled** to
+assert the new behaviour (B8).
 **BUILDER paths:** the new migration (`suppliers.counterparty_org_id`; `inter_entity_shipments` +
 `inter_entity_shipment_lines` with a dual-org RLS policy — SELECT `org_id = app_current_org() OR buyer_org_id =
 app_current_org()`, INSERT/UPDATE/DELETE seller only; `deliveries.inter_entity_shipment_id`); the journal;
@@ -258,9 +318,15 @@ app_current_org()`, INSERT/UPDATE/DELETE seller only; `deliveries.inter_entity_s
 tables; `packages/db/src/cutover/classification.ts` and `packages/db/src/rls/registry.ts` (the build requires both);
 `same-org-fk-exemptions.ts` (`CROSS_ORG_BY_DESIGN` += `deliveries.inter_entity_shipment_id`,
 `inter_entity_shipments.buyer_org_id` is to `organizations` and needs nothing); `packages/domain/src/trade/index.ts`;
-`packages/domain/src/deliveries/`; a new `packages/domain/src/trade/inter-entity-reconcile.ts`; the scheduler job
-registration; `apps/erp/src/app/deliveries/` (an "Inbound from commissary" list and receipt form on the existing
-delivery screens) and `apps/erp/src/app/trade/` (treatment label only).
+`packages/domain/src/deliveries/`; a new `packages/domain/src/trade/inter-entity-reconcile.ts`; the scheduler entry
+point in `packages/domain/src/scheduler/index.ts` (iterating `listOrgsToRun`) plus its `docs/ops/*.service` /
+`*.timer` pair (B11); `apps/erp/src/app/inventory/deliveries/` (`actions.ts`, `lib.ts` — an "Inbound from
+commissary" list and receipt form on the existing delivery screens; B8) and `apps/erp/src/app/trade/` (treatment
+label only); `apps/erp/src/lib/route-capability.ts` (B9: the inbound list → `receive_delivery`; each new page calls
+`requirePageAccess`, and `tests/unit/{route-capability-coverage,no-ungated-read-surface,nav-route-reachability}.test.ts`
+stay green).
+**B5 — dispatch since T-433:** E1's control order uses **no `payNow` and no `creditOverrideReason`**. The shipment
+snapshot carries the order's `bir_invoice_no` (0203) when set, for PG's input VAT under Q5.
 
 | Id | Case | Target | Red today |
 |---|---|---|---|
@@ -277,15 +343,22 @@ delivery screens) and `apps/erp/src/app/trade/` (treatment label only).
 | E11 | Void before receipt | Seller reverses (existing path); shipment marked void; PG's inbound list no longer offers it | Red |
 | E12 | Balance tie: after a mix (two shipments, one short, one payment each side) seller AR for PG = PG AP for commissary | Equal; and a one-sided payment produces exactly one finding per org | Red |
 | E13 | `customer_group` drives nothing: a `franchise`-group customer with no `counterparty_org_id` still posts as external, writes no shipment | — | Green (guard, ADR-008 §2) |
+| E14-E21 | As A3, A4, A6, A7 in §8 | — | Red |
+| E22 | (B5) Seller calls `receiveTradeOrder` (`trade/index.ts:887`) on a dispatched `inter_entity` order | Refused: "Padre Garcia confirms receipt in its own books"; nothing written | Red (accepted today via `approve_buyer`, `:906`) |
+| E23 | (B5, pending Ian) `dispatchTradeOrder` with `payNow` on an `inter_entity` order | Refused in words; nothing posted. *If Ian rules "allow" instead: it posts, and E12's one-sided-payment finding fires until PG records its AP payment — the leg is rewritten to that* | Red |
+| E24 | (B9, row 353, ADR-008 §5) The shipment snapshot as PG reads it | Holds no person name and no cost column (catalog check on the snapshot columns plus a row read) | Red |
+| E25 | (B5) Order dispatched with a `bir_invoice_no` | The shipment carries the same number; without one, NULL | Red |
 
 **Mutants:** drop the `OR buyer_org_id` arm → E3 red; widen it to UPDATE → E4 red; post buyer AP at the dispatched
 (not received) quantity → E7 red; let reconciliation tolerate ±1 centavo → E12 (exact-centavo assertion); derive
-treatment from `customer_group` → E13.
+treatment from `customer_group` → E13; remove the `receiveTradeOrder` inter-entity refusal → E22; drop the `payNow`
+refusal → E23; add `unit_cost` to the snapshot → E24.
 
 ### S6 — the sales-only view and the access log
 
+**Blocked by:** Q1 and Q2 (see Status).
 **Planner pre-requisite:** CAPABILITY-MATRIX rows for `view_franchise_access_log` (R6) and a note on
-`view_franchise_sales` naming its reader.
+`view_franchise_sales` naming its reader (still open on 17 Oct — B14).
 **TESTER paths:** new `packages/db/tests/integration/t398-s6-franchise-sales-fn.test.ts`; new
 `packages/auth/tests/integration/t398-s6-franchise-capabilities.test.ts`; new
 `apps/erp/tests/integration/t398-s6-view-franchise-sales.test.ts`.
@@ -294,10 +367,15 @@ treatment from `customer_group` → E13.
 `packages/auth/src/capabilities.ts` (the new capability, matrix, labels, area); `packages/domain/src/franchise/`
 (new: `viewFranchiseSales`, `listFranchiseAccessLog`); the sign-in path for a person whose org has a
 agreement and who is its `franchisor_person_id` (logs `break_glass_sign_in`) in
-`packages/auth/src/sessions.ts` (A5: also where `app.person_id` is set for this path);
-`packages/db/src/rls/principal.ts` (A5: `openAs` gains the person id); `apps/erp/src/app/franchise/`
+`packages/auth/src/sessions.ts` — **both** `signInWithFirebase` and `signInWithPin` (B3) — (A5: also where
+`app.person_id` is set for this path); `packages/auth/src/admin-approval.ts` and `packages/auth/src/pos-approval.ts`
+(B3: an approval by the franchisor person writes `break_glass_approval` through the same definer function);
+`packages/db/src/rls/principal.ts` (A5/B13: `withOrgPrincipal` gains an optional `personId` passed into `openAs`;
+`applyPrincipal`'s existing branch at `:51-52` is the model); `apps/erp/src/app/franchise/`
 (new screens: sales by day/channel/tender for Ian's org; access log for PG's org); nav entry gated on the
-capability.
+capability; `apps/erp/src/lib/route-capability.ts` (B9: `/franchise/sales` → `view_franchise_sales`,
+`/franchise/access-log` → `view_franchise_access_log`; each page calls `requirePageAccess`; the three T-435 unit
+guards stay green).
 
 | Id | Case | Target | Red today |
 |---|---|---|---|
@@ -308,36 +386,69 @@ capability.
 | V5 | Direct SQL as app role with `app.org_id` = Ian's org: `SELECT * FROM expenses WHERE org_id = PG` | 0 rows (RLS unchanged — the function is the only door) | Green (guard) |
 | V6 | A range before `sales_visible_from` | Refused or clipped (builder states which; the test pins it) | Red |
 | V7 | UPDATE / DELETE on `franchise_access_log` as owner | Rejected by trigger | Red |
-| V8 | Ian's PG person signs in | One `break_glass_sign_in` row; PG manager sees it via `listFranchiseAccessLog`; PG staff refused (✗) | Red |
+| V8a | (B3) Ian's PG person signs in **by email** | Exactly one `break_glass_sign_in` row; PG manager sees it via `listFranchiseAccessLog`; PG staff refused (✗) | Red |
+| V8b | (B3) Ian's PG person signs in **by PIN** at a PG terminal | Exactly one `break_glass_sign_in` row | Red |
+| V8c | (B3) Ian's PG person gives a PIN approval through `verifyAdminApproval`, and again through `verifyPosManagerApproval` | Exactly one `break_glass_approval` row each | Red |
 | V9 | The function called with no app org set | Refused, no rows, no log row | Red |
 
 **Mutants:** remove the log INSERT from the function → V1 (log count); add `total_expenses` to the return → V2;
 change `view_franchise_sales` to admin ✅ → V3 and `capability-matrix.test.ts`; make the function `SECURITY INVOKER`
-→ V1 (returns 0 rows, under PG's RLS); drop the agreement check → V4.
+→ V1 (returns 0 rows, under PG's RLS); drop the agreement check → V4; drop the PIN-path log → V8b; drop the
+log call from either approval verifier → V8c.
 
 ### S7 — onboarding Padre Garcia
 
+**Blocked by:** Q1, Q3, Q11 and K4's data (see Status).
 **TESTER paths:** new `packages/domain/tests/integration/t398-s7-onboard-franchise.test.ts`; new
-`tests/unit/t398-s7-multi-org-jobs.test.ts` (asserts every scheduled job iterates `listOrgsToRun`, not a single
-org, by scanning job registrations); the existing `tests/unit/organization-insert-callers.test.ts` and
+`tests/unit/t398-s7-multi-org-jobs.test.ts` (B11: scans every `ExecStart` script in `docs/ops/*.service`; each must
+reach `listOrgsToRun` (`packages/domain/src/scheduler/index.ts:220`) or be on a pinned allow-list — `dual-run`
+(single-org by design, `packages/etl/src/dual-run/snapshot.ts:60`), `db-backup`, `restore-drill` — each with its
+reason); the existing `tests/unit/organization-insert-callers.test.ts` and
 `tests/unit/system-transaction-callers.test.ts` are **ruled** to admit exactly the new call sites.
 **BUILDER paths:** `packages/domain/src/organizations/index.ts` (`onboardFranchiseOrganization`);
-`scripts/onboard-franchise.ts` (new); `scripts/import-items.ts` (a `--v1-store` filter so PG's items import into PG's
-org and are excluded from Ian's — coordinate with T-391, which owns that script's other changes; ⛔ if T-391 is
-mid-flight on it, stop and report); `docs/ops/README.md` (the onboarding runbook section).
+`scripts/onboard-franchise.ts` (new; takes `--last/--first/--middle` for Ian's PG person — B10);
+`scripts/provision-terminal.ts` (the `--org` flag — B12);
+`docs/ops/README.md` (the onboarding runbook section). ⛔ **`scripts/import-items.ts` is NOT touched (B1)**: PG's
+items, suppliers, customers and staff are loaded by T-391's existing command, not by a new filter.
+**B1 — the data load, in this order:**
+1. `onboard-franchise --code <C>` where `<C>` **equals** PG's `org_code` in Ian's `stores.csv` (today the
+   placeholder `PADRE_GARCIA`), and the store code equals that row's `store_code`. Ian fixes the CSV or the code
+   so they match **before** step 1; `assertRunTarget` refuses any mismatch.
+2. Then T-391's load against PG: `npm run master-data -- run --snapshot <dir>/v1-snapshot.json --map
+   <dir>/stores.csv --org <PG uuid> --org-code <PG code> --stores <PG store code> --actor <Ian's PG person uuid>
+   --sheets <dir>` (dry run), then the same with `--apply`. Onboarding always comes before the load.
+3. The CLI's PG-side supplier and Ian-side customer are named exactly as v1's commissary-mirror supplier and PG AR
+   customer, so the planner links them rather than creating a second copy.
+**B12 — clock terminal:** PG staff sign in by PIN only, so the runbook adds `scripts/provision-terminal.ts --org
+<PG uuid>` for PG's store. ⚠️ That flag **does not exist yet**: `findStoreByCode` looks a store up by code alone and
+its comment says a second organisation "would need `--org=` added here" (`scripts/provision-terminal.ts:101-110`).
+S7's BUILDER therefore also owns `scripts/provision-terminal.ts`: add a required-when-more-than-one-org `--org`,
+and refuse a code that matches stores in two orgs without it (new leg **O10**).
+**B4 — the 1 Jan purge is per org:** `applyPurge` loops every org and refuses unless each has a performer
+(`packages/db/src/cutover/purge.ts:513-528`), so PG's December operational rows (shipments, receipts, AR, AP) are
+purged on both sides; configuration survives. The runbook (T-394) therefore says: `npm run cutover:purge -- … --apply`
+gets **one `--by <personId>` per organization** — Ian's org's performer **and** `--by <Ian's PG person uuid>` (the
+script maps each person to its org, `scripts/cutover-purge.ts:198-222`; the audit's `--performed-by` form does not
+exist); PG's opening entry (Q3 (a): count, cash,
+AP/AR) is entered **per org after** the purge; 3900 = 0 is checked **per org**; **no real inter-entity trade is
+posted on production before 1 Jan**, except as part of a rehearsal.
 | Id | Case | Target |
 |---|---|---|
-| O1 | Onboard on an empty-of-PG DB with Ian's org present | PG org with seeded chart, periods, positions; Ian's PG person = admin; one store; agreement; Ian-side customer (`franchise`, `counterparty_org_id`, price list); PG-side supplier (`counterparty_org_id`) |
+| O1 | Onboard on an empty-of-PG DB with Ian's org present | PG org with seeded chart, periods, and the six canonical positions **by their row-362 names** (e.g. "Kitchen Staff", 0208); Ian's PG person = admin, with last/first/middle name parts set (row 360, B10); one store; agreement; Ian-side customer (`franchise`, `counterparty_org_id`, price list); PG-side supplier (`counterparty_org_id`) |
 | O2 | Run twice | Second is a no-op naming the existing org (by code) |
 | O3 | Dry run (no `--confirm`) | Prints the plan, writes nothing |
 | O4 | Inject a failure after the org insert | Nothing remains (one transaction for the org half) |
-| O5 | PG's manager (the owner) signs in | Sees PG's store only; sees no commissary screen (ADR-008 §6: "no rule needed") — the nav and every Ian-org route return not-found under PG's principal |
+| O5 | PG's manager (the owner) signs in — **with an org-wide role and no employment row** (row 340, B12) | Sign-in succeeds; sees PG's store only; sees no commissary screen (ADR-008 §6: "no rule needed") — the nav and every Ian-org route return not-found under PG's principal |
 | O6 | Link PG's POS store id in PG's org when Ian's org already linked it | Refused (global unique) with a message naming "already linked elsewhere", not the other org's name |
-| O7 | Multi-org jobs scan | Every scheduler job iterates orgs |
+| O7 | Multi-org jobs scan (B11) | Every `docs/ops/*.service` `ExecStart` reaches `listOrgsToRun` or is on the pinned allow-list with its reason; S5's 06:30 reconciliation job is in the scanned set |
+| O8 | (B1) After onboarding, a PG `master-data run` dry run on the T-391 snapshot fixture | Plans **0** new suppliers named like the commissary and **0** new customers named like PG (both linked); a `--org-code` that differs from the onboarded code is refused |
+| O10 | (B12) `provision-terminal` with a store code present in both orgs: without `--org`, and with `--org <PG>` | Without: refused, naming the ambiguity; with: provisions PG's store only |
+| O9 | (B4) Two-org purge on a scratch DB: both orgs with December trades, `cutover:purge --apply` with one `--by` per org, then an opening entry per org | Apply refuses with either `--by` missing; after it and the openings, 3900 = 0 **in each org** |
 **§9.4:** on a fresh copy, onboard PG, receive one commissary shipment as PG, read its sales as Ian, open the access
 log as PG's manager — screenshots of each, plus `select org_id, count(*) from journal_lines group by 1`.
-**Production (4 Dec, with Ian):** run the CLI; PG's money accounts, staff, POS link and opening count are **data
-through existing screens**, not code; the 18 Dec rehearsal runs with both orgs (T-394).
+**Production (4 Dec, with Ian):** run the CLI, then T-391's load (B1), then provision PG's clock terminal (B12); PG's
+money accounts, POS link and opening count are **data through existing screens**, not code; the 18 Dec rehearsal runs
+with both orgs (T-394), including the per-org purge and opening (B4, O9).
 
 ---
 
@@ -350,6 +461,16 @@ through existing screens**, not code; the 18 Dec rehearsal runs with both orgs (
 - An org switcher (row 175: one person per org; Ian signs in separately).
 - Loyalty across owners (discovery pos-sales-usage Q-C).
 - Any change to `bootstrapOrganization` or `/setup`.
+- **(B7) PG's leave (T-436) and statutory payroll (T-190).** `statutory_rates` / `withholding_brackets` are seeded only
+  for org code `shareat` (`0206:317,326`) and `createOrganization` does not seed them, so PG's payroll preview refuses
+  for want of rates; `leave_types` is a shared platform seed (`0205:57-62`), but row 355 routes a manager's or admin's
+  own leave to the super-admin, and PG has none under Q1 (a). Both follow Q1 and **Q11**; not built in T-398.
+- **(B7) POS v2 for PG.** The POS v2 server serves one organisation by design (`POS_ORG_ID`,
+  `apps/pos/src/server/pos2/deps.ts:8,25`). PG gets a second `shareat-pos` instance with PG's `POS_ORG_ID` at P4
+  (Q3 2027, `docs/plans/pos-customer-v2-phase-plan.md:35`), not in T-398. Row 348's "11 Jan" is the POS v2 go-live,
+  not the ERP one, so it does not conflict with 4 Dec / 1 Jan.
+- **(B13) Writing break-glass sign-ins to PG's `audit_log` as well.** Not adopted: `franchise_access_log` stays the
+  single place PG reads every use of the franchisor identity, through one capability.
 
 ## 5. Done when
 
@@ -360,6 +481,7 @@ through existing screens**, not code; the 18 Dec rehearsal runs with both orgs (
 - **Orchestrator / planner records:** a bible row answering ADR-008 Open 2 (same instance; buyer posts on its own
   receipt; reconciliation, not a shared transaction) and Open 3 (each org keeps its own items and stores); Q1-Q4's
   answers; the POSTING-PATTERNS entry; the CAPABILITY-MATRIX rows; the BIR gap in `docs/CAPABILITY-GAPS.md`.
+- **(B14)** Q1-Q11 are on the decisions page, and each answer has a bible row citing T-398.
 
 ## 6. Questions for Ian (Open Questions page)
 
@@ -396,16 +518,23 @@ through existing screens**, not code; the 18 Dec rehearsal runs with both orgs (
   **Recommended (a)** — the precedent for every production migration.
 - **Q10 — Tell PG in writing that the platform operator (you) can technically reach all data, and that every use is
   logged?** (a) yes, in the franchise agreement or a privacy notice (Data Privacy Act) · (b) no. **Recommended (a)**.
+- **Q11 (B7) — Does Padre Garcia run attendance, leave and payroll on v2 from 1 Jan?** (a) no: PG keeps its own
+  payroll outside v2 for now; v2 is its books, stock and sales only · (b) yes: PG needs statutory rates seeded for its
+  org and someone (not you) to approve its manager's own leave. **Recommended (a)** — nothing in T-398 builds (b), and
+  (b) would need its own task after Q1 is answered.
+- **Ruling wanted on B5 (orchestrator recommendation):** may the commissary mark "paid now" when dispatching to PG?
+  (a) no — each side records its own payment (R5) · (b) yes — then a mismatch finding shows until PG records its
+  payment. **Recommended (a).** Also: the commissary cannot mark PG's order "received"; PG does that in its own books.
 
 ## 7. Risks to 4 Dec
 
 | # | Risk | Mitigation |
 |---|---|---|
 | K1 | DEF-491 is ≈440 constraints in three migrations applied to production during the dual run, in one drizzle transaction holding `SHARE ROW EXCLUSIVE` until commit | A1: `lock_timeout`, timed on a production-size restore, night window, `VALIDATE` split into a later deploy if over budget; Q9 names who runs it |
-| K2 | S2's ≈100 test call-site moves collide with lanes editing the same test files before 15 Nov | S2 in its own worktree; merge at a lane boundary; the full suite in CI |
+| K2 | S2b's test call-site moves (the tester lists the files; 44 pass `(null, ` today) collide with lanes editing the same test files before 15 Nov | S2a's ratchet lands now so the count cannot grow (B2); S2b in its own worktree; merge at a lane boundary; the full suite in CI |
 | K3 | Lanes are needed for C1-C8 before 15 Nov; S1+S2 (3.5) are due 13 Nov | S3-S7 are ≈ 10 lane-days in the 13 working days 16 Nov-4 Dec: **4 Dec holds only with two lanes on C11 from 16 Nov** (S3→S4→S7 on one; S5→S6 on the other). One lane ≈ 18 Dec, i.e. the drop-alone rule fires |
-| K4 | Ian's answers and data: Q1-Q4, a second sign-in email, PG's owner and staff names, POS store id, tenders, money accounts | On the Open Questions page now; needed by 20 Nov for S7 |
-| K5 | T-391 owns `scripts/import-items.ts`; PG's split collides | S7 stops and reports if T-391 is mid-flight; otherwise one flag |
+| K4 | Ian's answers and data: Q1-Q11 (Q5 by 13 Nov), a second sign-in email, PG's owner and staff names, POS store id, tenders, money accounts, PG's `org_code`/`store_code` in `stores.csv` | On the Open Questions page now; needed by 20 Nov for S7 |
+| ~~K5~~ | *Deleted by B1: S7 no longer edits `scripts/import-items.ts`; PG's data loads through T-391's `master-data run`* | — |
 | K6 | Reconciliation is weaker than a shared transaction (by design) | Daily job + findings in both orgs; E7/E12 pin exactness |
 
 ## 8. Amendments (fresh Opus review, 2026-10-10 — these bind)
@@ -501,3 +630,86 @@ through existing screens**, not code; the 18 Dec rehearsal runs with both orgs (
     `owner_drawing_closes.adjustment_entry_id`, `pos_v1_day_feeds.batch_id`. Until S3 merges they are declared
     `ref-gap` in `NO_FK_REFERENCES` (A8's no-FK list); S3 deletes the declarations. Each gets S3's pre-flight.
   - **Post-S1 `OPEN_DEF_491` pin = 223** (by value, A8).
+
+### Amendments B1-B14 (2026-10-17 — Opus re-audit against main `d335959`/`c6b16cf`; these bind, keep A1-A11, and win over any earlier sentence)
+
+Source: `docs/tasks/398-audit-2026-10-17.md`. Each one is also written into the slice it changes, so a builder
+reading only that slice sees the current rule. Confirmed still true by the audit: `OPEN_DEF_491` = 223, every table
+added since 0194 was guarded at creation, `CROSS_ORG_BY_DESIGN` is `[]`, and A11's S3 (141) / S4 (82) counts hold.
+
+- **B1 — S7's data load is T-391's (supersedes the `scripts/import-items.ts --v1-store` filter and deletes K5).**
+  T-391 R6/R7 already load PG with `npm run master-data -- run … --org <PG uuid> --org-code <PG code> --stores <PG
+  store code> --actor <Ian's PG person>`; `assertRunTarget` (`packages/etl/src/master-data/store-map.ts:87-94`)
+  refuses unless `organizations.code` equals `--org-code`. Rules: (1) `onboard-franchise --code` MUST equal PG's
+  `org_code` in Ian's `stores.csv` (today the placeholder `PADRE_GARCIA`) and the store code its `store_code`;
+  (2) onboarding runs first, then the master-data dry run and apply; (3) the CLI's PG-side supplier and Ian-side
+  customer take the v1 names of the commissary-mirror supplier and the PG AR customer, so the planner links rather
+  than duplicates them (in a PG run that supplier's linked store is in another org, so `own` is null —
+  `parties-plan.ts:239` — and it would otherwise be created twice). New leg **O8**.
+- **B2 — S2 is split; T1 matches A9.** Measured on main at `c6b16cf`: **206** `Tx | null` in **55** files and
+  **188** `\btransaction\(` in **60** files of `packages/domain/src` (38 lines import `transaction`); 44 test files
+  pass `(null, `. **S2a** (≈ 0.2 day, now) lands `tests/unit/t398-s2-domain-tx-non-nullable.test.ts` with T1/T2 as
+  ceilings pinned at those counts — may fall (the pin lowered in the same commit), never rise; the tester re-measures
+  on its base and records the commit. **S2b** does the conversion and sets the final form: T1 "`Tx | null` appears
+  only on `runDepreciation`"; the mutant is "add a **second** name". S2 re-sized to ≈ 2.0; K2's file count is "the
+  tester lists them".
+- **B3 — Break-glass logging covers PIN sign-in and both PIN approvals (R4, R6, A5, V8).** PINs are per org
+  (`signInWithPin`, `packages/auth/src/sessions.ts:94`), so Ian's PG person can sign in at a PG terminal by PIN; and
+  `verifyAdminApproval` (`admin-approval.ts:40`) and `verifyPosManagerApproval` (`pos-approval.ts:47`) let a person
+  act by PIN without a session. R4's auth door is now `sessions.ts:94,379,495,557,597` **plus** those two. Each path
+  writes through the definer function A5 names (it now takes the kind): `break_glass_sign_in` for sign-in by email
+  (**V8a**) and by PIN (**V8b**), `break_glass_approval` for an approval by Ian's PG person through either verifier
+  (**V8c**) — exactly one row each. Mutants: drop the PIN-path log → V8b; drop either verifier's log → V8c.
+- **B4 — The 1 Jan purge is per org (S7, §9.4, §5).** `applyPurge` loops every org and refuses an apply when any org
+  lacks a performer (`packages/db/src/cutover/purge.ts:513-528`); classification is global, so PG's December
+  operational rows (shipments, receipts, AR, AP) are purged on both sides; configuration survives. The T-394 runbook:
+  `cutover:purge --apply` takes one `--by <personId>` **per organization**, including Ian's PG person
+  (`scripts/cutover-purge.ts:198-222`; the audit's `--performed-by <org>=<person>` form does not exist); PG's opening
+  entry (Q3 (a)) is entered per org after the purge; 3900 = 0 is checked per org; no real inter-entity trade is posted
+  on production before 1 Jan except in a rehearsal. New leg **O9** (two-org purge + openings; 3900 = 0 in each), run
+  again in the 18 Dec rehearsal.
+- **B5 — S5 vs T-433 (R5, A4).** `receiveTradeOrder` (`trade/index.ts:887`) lets the SELLER mark a dispatched order
+  received (`approve_buyer`, `:906`); `dispatchTradeOrder` (`:426-429`) now takes `payNow` and
+  `creditOverrideReason`, posts through `recordChargeWithCollection` (`:601`) and stamps an optional `bir_invoice_no`
+  (0203). Rulings: **E22** `receiveTradeOrder` on an `inter_entity` order is refused ("Padre Garcia confirms receipt
+  in its own books"). **E23** `payNow` on an inter-entity dispatch is **refused** — *orchestrator recommendation,
+  pending Ian* (on the decisions page beside Q11); if Ian allows it, E23 is rewritten so the dispatch posts and E12's
+  one-sided-payment finding fires until PG records its AP payment. E1's control order uses no `payNow` and no
+  override. The shipment snapshot carries `bir_invoice_no` when set, for PG's input VAT under Q5 (**E25**).
+- **B6 — S3 skips parents that already have the key (R2).** At least `items`, `production_recipes`,
+  `stock_locations` (0196), `employments`, `positions`, `pay_runs`, `separations` (0205), `stored_files` (0204),
+  `pos_v1_store_links` (0202) and `money_accounts` already carry `<parent>_org_id_id_unique`. Add `UNIQUE (org_id, id)`
+  only where it is missing, from a `pg_constraint` query (pasted in the header), never a hand list. New leg **K2**:
+  every composite's parent has exactly one `(org_id, id)` unique. A1's timed run uses a restore taken **after** T-391's
+  production load.
+- **B7 — Out of scope, named (§4).** PG's leave (T-436) and statutory payroll (T-190) are not seeded for PG (rates
+  only for org `shareat`, `0206:317,326`; row 355's super-admin leave approver does not exist in PG under Q1 (a)):
+  they follow Q1 and new **Q11**. POS v2 for PG is a second `shareat-pos` instance with PG's `POS_ORG_ID` at P4,
+  not T-398.
+- **B8 — Paths corrected in place.** Delivery screens are `apps/erp/src/app/inventory/deliveries/` (`actions.ts`,
+  `lib.ts`); the T-133 refusal test is `packages/domain/tests/integration/trade.test.ts:873` (asserts
+  `/no second org exists/`); `dispatchTradeOrder` is `:426`; the next free migration is **0209**.
+- **B9 — New pages pass T-435's read-gate guards (S5, S6).** BUILDER paths add `apps/erp/src/lib/route-capability.ts`:
+  `/franchise/sales` → `view_franchise_sales`, `/franchise/access-log` → `view_franchise_access_log`, the inbound
+  list → `receive_delivery`; each page calls `requirePageAccess`; `tests/unit/{route-capability-coverage,
+  no-ungated-read-surface,nav-route-reachability}.test.ts` stay green. New leg **E24**: the shipment snapshot carries
+  no person name and no cost (row 353, ADR-008 §5).
+- **B10 — Name parts and positions (R7, O1; rows 360, 362).** The CLI takes `--last/--first/--middle` and writes
+  them through the name-parts path; O1 asserts the six canonical positions by their row-362 names ("Kitchen Staff",
+  0208).
+- **B11 — O7 scans `docs/ops/*.service` (there is no job registry).** Every `ExecStart` script must reach
+  `listOrgsToRun` (`scheduler/index.ts:220`) or sit on a pinned allow-list with its reason — `dual-run` (single-org
+  by design, `packages/etl/src/dual-run/snapshot.ts:60`), `db-backup`, `restore-drill`. S5's 06:30 reconciliation
+  job joins the scanned set.
+- **B12 — Clock terminal and owner sign-in (S7; rows 361, 340).** The runbook adds `scripts/provision-terminal.ts
+  --org <PG uuid>`; O5 asserts an owner with an org-wide role and no employment row signs in. *Planner addition while
+  folding:* `--org` does not exist yet (`provision-terminal.ts:101-110` looks a store up by code alone), so S7 adds
+  it, with leg **O10**.
+- **B13 — A5 restated.** `applyPrincipal` already sets `app.person_id` when given a `personId`
+  (`principal.ts:51-52`); only `openAs` lacks it. So: `withOrgPrincipal` gains an optional `personId`, passed into
+  `openAs`, modelled on `applyPrincipal`'s branch. The optional second copy of break-glass rows in PG's `audit_log` is
+  **not adopted** (§4).
+- **B14 — Process.** Q1-Q11 (and B5's ruling) go on the decisions page now; Q5 is needed by **13 Nov** for the S5
+  posting pattern and K4's set by 20 Nov. Planner prerequisites still open: the POSTING-PATTERNS franchise entry
+  (`POSTING-PATTERNS.md:743` still says "do not use for a franchise") and the CAPABILITY-MATRIX row for
+  `view_franchise_access_log`. Bible rows 347-362 contradict nothing here.
