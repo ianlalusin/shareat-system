@@ -30,6 +30,24 @@ function arg(name: string): string | undefined {
   return hit?.split('=')[1];
 }
 
+/**
+ * Dead-man's switch: tells the healthcheck service how the run went. Never throws, never changes the exit code, and never
+ * writes the URL anywhere (it carries a secret token - even a network error message may quote it).
+ */
+async function heartbeat(failed: boolean, lines: string[]): Promise<void> {
+  const url = process.env['POS_IMPORT_HEARTBEAT_URL'];
+  if (!url) {
+    console.log('pos-day-import: no heartbeat configured (POS_IMPORT_HEARTBEAT_URL unset) - a dead timer will not be noticed.');
+    return;
+  }
+  try {
+    if (failed) await fetch(`${url}/fail`, { method: 'POST', body: lines.join(String.fromCharCode(10)) || 'pos-day-import failed' });
+    else await fetch(url, { method: 'POST' });
+  } catch {
+    console.error('pos-day-import: heartbeat ping failed (network) - the run itself is unaffected.');
+  }
+}
+
 async function main(): Promise<number> {
   const orgId = arg('org');
   const trigger = process.argv.includes('--manual') ? 'manual' : 'cron';
@@ -38,30 +56,38 @@ async function main(): Promise<number> {
 
   const result = await posDayImportSweep({ orgId, trigger, dryRun, now: new Date() });
 
+  const failLines: string[] = [];
   for (const o of result.outcomes) {
     const head = `  ${o.orgName}`;
     if (o.error) {
       console.error(`${head}: FAILED OUTRIGHT - ${o.error}`);
+      failLines.push(`${o.orgName}: FAILED OUTRIGHT - ${o.error}`);
       continue;
     }
     console.log(`${head}: ${o.detail ?? `imported ${o.posted} - already there ${o.skipped}`}`);
     for (const w of o.wouldImport ?? []) console.log(`${head}:   would import ${w}`);
     for (const f of o.failures) {
       if (f.kind === 'notice') console.log(`${head}:   note - ${f.subjectName}: ${f.reason}`);
-      else console.error(`${head}:   FAILED - ${f.subjectName}: ${f.reason}`);
+      else {
+        console.error(`${head}:   FAILED - ${f.subjectName}: ${f.reason}`);
+        failLines.push(`${f.subjectName}: ${f.reason}`);
+      }
     }
   }
 
   if (result.hadFailures) {
     console.error('pos-day-import: finished WITH FAILURES - see above.');
+    await heartbeat(true, failLines);
     return 1;
   }
   if (result.outcomes.length === 0) {
     console.error('pos-day-import: no orgs were processed - nothing to import?');
+    await heartbeat(true, ['no orgs were processed']);
     return 1;
   }
   const posted = result.outcomes.reduce((n, o) => n + o.posted, 0);
   console.log(`pos-day-import: ok - ${dryRun ? 'would import' : 'imported'} ${posted} - ${result.outcomes.length} orgs`);
+  await heartbeat(false, []);
   return 0;
 }
 
