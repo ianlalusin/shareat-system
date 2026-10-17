@@ -3,7 +3,8 @@
   "compilerOptions": {
     "plugins": [{ "name": "next" }],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@shareat/core/money": ["../../packages/core/src/money.ts"]
     }
   },
   "include": ["next-env.d.ts", "capacitor.config.ts", "src/**/*.ts", "src/**/*.tsx", ".next/types/**/*.ts", ".next/dev/types/**/*.ts"],
