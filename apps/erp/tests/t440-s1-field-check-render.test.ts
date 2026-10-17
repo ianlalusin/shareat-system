@@ -9,7 +9,7 @@
  *     result = checkField(...) for the current value, or undefined (checks inactive). Not touched, or no result -> 'muted':
  *     the rule's requirement before typing - starts "Required" for a required rule, names the length ("10 digits") for the
  *     SSS rule. Touched and failing -> 'failing', text = the rule's `progress`. Touched and passing -> 'passing', text "Good".
- *   FieldCheckView({ id, line }) -> <p id={id} aria-live="polite"> holding an aria-hidden <svg> icon AND the text (never
+ *   FieldCheckView({ id, line }) -> <p id={id}> (NOT a live region: CheckSummary is the one announcer) holding an aria-hidden <svg> icon AND the text (never
  *     colour alone). Failing is danger-toned, passing success-toned, muted neither.
  *   planFieldAria(current, helperId, failing) where current = { describedby: string | null; invalid: string | null;
  *     ownInvalid: boolean } -> { describedby: string; invalid: 'true' | null; ownInvalid: boolean }
@@ -88,11 +88,15 @@ describe('FieldCheckView', () => {
     const { FieldCheckView } = await forms();
     return renderToStaticMarkup(createElement(FieldCheckView as never, { id, line: l } as never));
   }
-  it('is a polite live region with the given id', async () => {
+  // CONTRACT (T-440 S1 audit): ONE announcer. The "Save is off until..." summary (CheckSummary) is the persistent live region;
+  // the per-field helper is plain text wired by aria-describedby, so a keystroke is announced once, not twice.
+  it('has the given id and is NOT itself a live region (the summary is the one announcer)', async () => {
     const html = await view({ kind: 'passing', text: 'Good' });
     expect(html).toMatch(/^<p\b/);
     expect(html).toContain('id="h-1"');
-    expect(html).toContain('aria-live="polite"');
+    expect(html).not.toContain('aria-live');
+    expect(html).not.toContain('role="status"');
+    expect(html).not.toContain('role="alert"');
   });
   it('passing: the text "Good" AND an aria-hidden icon (not colour alone), success-toned', async () => {
     const html = await view({ kind: 'passing', text: 'Good' });
@@ -191,10 +195,9 @@ describe('Field / FieldCheck render (SSR)', () => {
   it('active + untouched: a muted requirement line sits OUTSIDE the <label> (mutant: text inside the label)', async () => {
     const set = await rules();
     const html = await renderField(set.name!, await context({ values: { name: '' }, touched: {}, active: true }));
-    expect(html).toContain('aria-live="polite"');
-    expect(labelInner(html)).not.toContain('aria-live');
+    expect(html).not.toContain('aria-live');
     expect(labelInner(html)).not.toMatch(/Required/);
-    expect(html).toMatch(/<\/label>\s*<p\b[^>]*aria-live="polite"/);
+    expect(html).toMatch(/<\/label>\s*<p\b[^>]*>[\s\S]*Required/);
     expect(html).toMatch(/<p\b[^>]*\sid="[^"]+"/);
   });
   it('active + touched + passing: "Good" with an icon, outside the label', async () => {
@@ -210,6 +213,33 @@ describe('Field / FieldCheck render (SSR)', () => {
     expect(html).toContain('Required');
     expect(labelInner(html)).not.toContain('Required');
     expect(html).not.toContain('Good');
+  });
+});
+
+describe('release: taking the helper id back off the control keeps the control other ids (audit d)', () => {
+  type Rel = { describedby: string | null; clearInvalid: boolean };
+  const release = async (cur: { describedby: string | null; invalid: string | null; ownInvalid: boolean }, id: string) => {
+    const { planFieldRelease } = (await forms()) as unknown as {
+      planFieldRelease: (c: typeof cur, i: string) => Rel;
+    };
+    return planFieldRelease(cur, id);
+  };
+  it('"sss-help other h1" minus h1 is "sss-help other" (split on whitespace, order kept)', async () => {
+    expect((await release({ describedby: 'sss-help other h1', invalid: null, ownInvalid: false }, 'h1')).describedby).toBe('sss-help other');
+    expect((await release({ describedby: 'h1 sss-help  other', invalid: null, ownInvalid: false }, 'h1')).describedby).toBe('sss-help other');
+  });
+  it('only our id: describedby is null (the attribute is removed); an id that merely CONTAINS ours is untouched', async () => {
+    expect((await release({ describedby: 'h1', invalid: null, ownInvalid: false }, 'h1')).describedby).toBeNull();
+    expect((await release({ describedby: 'h10 xh1', invalid: null, ownInvalid: false }, 'h1')).describedby).toBe('h10 xh1');
+    expect((await release({ describedby: null, invalid: null, ownInvalid: false }, 'h1')).describedby).toBeNull();
+  });
+  it('aria-invalid is cleared ONLY when we set it', async () => {
+    expect((await release({ describedby: 'h1', invalid: 'true', ownInvalid: true }, 'h1')).clearInvalid).toBe(true);
+    expect((await release({ describedby: 'h1', invalid: 'true', ownInvalid: false }, 'h1')).clearInvalid).toBe(false);
+  });
+  it('FieldCheck.tsx release() goes through planFieldRelease (no second inline copy of the rule)', () => {
+    const s = read('components/forms/FieldCheck.tsx');
+    expect(s).toMatch(/planFieldRelease\(/);
   });
 });
 

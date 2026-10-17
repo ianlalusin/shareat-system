@@ -174,8 +174,9 @@ export function checkField(rule: FieldRule, raw: string | null | undefined): Fie
         return bad(rule, numberSentence(rule), rule.integer ? 'Whole numbers only' : 'Numbers only');
       }
       const n = Number(v);
-      if ((rule.min !== undefined && lt(n, rule.min)) || (rule.max !== undefined && lt(rule.max, n))) {
-        return bad(rule, numberSentence(rule), numberRangeProgress(rule));
+      // "-0" / "-00" read as zero but are a minus sign in front of nothing: not a number of days (or anything else).
+      if (Object.is(n, -0) || (rule.min !== undefined && lt(n, rule.min)) || (rule.max !== undefined && lt(rule.max, n))) {
+        return bad(rule, numberSentence(rule), Object.is(n, -0) && rule.min === undefined ? 'Numbers only' : numberRangeProgress(rule));
       }
       return { ok: true, value: v };
     }
@@ -184,7 +185,10 @@ export function checkField(rule: FieldRule, raw: string | null | undefined): Fie
       try {
         money = String(parseMoneyInput(v, rule.name, rule.label));
       } catch (e) {
-        return bad(rule, (e as { userMessage?: string }).userMessage ?? `${rule.label} must be an amount like 1250.00.`, 'Enter an amount like 1250.00');
+        // parseMoneyInput's sentence quotes the figure ("12abc" is not a valid amount); the screen never repeats what was typed.
+        const said = (e as { userMessage?: string }).userMessage;
+        const text = said ? said.split(`"${v}"`).join('that') : `${rule.label} must be an amount like 1250.00.`;
+        return bad(rule, text, 'Enter an amount like 1250.00');
       }
       const n = Number(money);
       if ((rule.min !== undefined && lt(n, rule.min)) || (rule.max !== undefined && lt(rule.max, n))) {

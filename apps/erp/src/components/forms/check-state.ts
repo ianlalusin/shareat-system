@@ -162,3 +162,16 @@ export function planFieldAria(current: AriaCurrent, helperId: string, failing: b
   if (serverInvalid) return { describedby, invalid: 'true', ownInvalid: false };
   return { describedby, invalid: null, ownInvalid: false };
 }
+
+export interface ReleasePlan {
+  /** What `aria-describedby` becomes: the other ids, in order, our helper id gone; null = remove the attribute. */
+  describedby: string | null;
+  /** Remove `aria-invalid` (only when we set it ourselves). */
+  clearInvalid: boolean;
+}
+
+/** The mirror of `planFieldAria`: takes our helper id back off the control, split on whitespace, keeping every other id. */
+export function planFieldRelease(current: AriaCurrent, helperId: string): ReleasePlan {
+  const rest = (current.describedby ?? '').split(/\s+/).filter((x) => x && x !== helperId);
+  return { describedby: rest.length > 0 ? rest.join(' ') : null, clearInvalid: current.ownInvalid };
+}

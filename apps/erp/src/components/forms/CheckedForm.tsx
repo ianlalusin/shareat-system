@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, type ComponentPropsWithoutRef, type FormEvent } from 'react';
 import { rulesOf, type FieldRuleSetLike } from '@shareat/domain/field-rules';
 import { CheckContext } from './context';
+import { CheckSummary } from './CheckSummary';
 import { CHECKED_FORM_INITIAL, checkContextValue, checkedFormReducer, onCheckedSubmit, watchFormReset } from './check-state';
 import { focusControl, readRuledValues, ruledTarget, syncForeignSubmits } from './check-dom';
 
@@ -69,11 +70,7 @@ export function CheckedForm({ rules, action, children, ...formProps }: CheckedFo
         }
       >
         {children}
-        {ctx.blocked ? (
-          <p role="status" aria-live="polite" className="mt-3 text-sm text-ink/70">
-            {ctx.summary}
-          </p>
-        ) : null}
+        <CheckSummary active={ctx.active} summary={ctx.summary} />
       </form>
     </CheckContext.Provider>
   );

@@ -162,7 +162,25 @@ describe('T-S1-2 money uses parseMoneyInput itself (mutant: Number(x) > 0)', () 
       expected = (e as { userMessage?: string }).userMessage;
     }
     expect(expected, 'parseMoneyInput itself refuses it').toBeTruthy();
-    expect(failed(await check(s.amount!, raw)).requirement).toBe(expected);
+    // Audit (c): the rule refuses exactly what parseMoneyInput refuses, but its words never quote the typed value.
+    const f = failed(await check(s.amount!, raw));
+    expect(f.requirement).toContain('The amount');
+    expect(f.requirement).not.toContain(raw);
+    expect(f.progress).not.toContain(raw);
+  });
+  it.each(['12abc', '1,250.00x', 'SECRET9'])('(c) typing "%s": neither the requirement, the progress nor the live-check summary contains the typed value', async (raw) => {
+    const s = await fixtureSet();
+    const f = failed(await check(s.amount!, raw));
+    expect(JSON.stringify([f.requirement, f.progress])).not.toContain(raw);
+    const { assertFieldRules } = await server();
+    let err: { message: string; userMessage: string } | undefined;
+    try {
+      (assertFieldRules as unknown as (a: unknown, b: unknown) => unknown)({ form: 'x', amount: s.amount }, { amount: raw });
+    } catch (e) {
+      err = e as typeof err;
+    }
+    expect(err?.userMessage).toBe(f.requirement);
+    expect(JSON.stringify([err?.message, err?.userMessage])).not.toContain(raw);
   });
   it('"1250.00" passes', async () => {
     const s = await fixtureSet();
@@ -394,14 +412,14 @@ describe('T-S1-3 parity: the server throws the very sentence the screen shows (m
 });
 
 describe('T-S1-15 no echo (A5): a failing value appears in no sentence, progress or error (mutant: the diagnostic interpolates the value)', () => {
-  // Money is the one documented exception (parseMoneyInput's own sentence quotes the figure), so it is skipped here.
+  // Money is no exception any more (audit c): the rule's words never quote the figure either.
   const TOKENS = ['4815162342x', 'SECRETSECRET', 'SECRET-9', 'SECRETDATE'];
   it('fixture and every exported set: requirement, progress, RefusalError.message and .userMessage never contain the typed value', async () => {
     const { assertFieldRules } = await server();
     const { defineFieldRules } = await leaf();
     let exercised = 0;
     for (const set of [await fixtureSet(), ...(await exportedSets())]) {
-      for (const rule of rulesOf(set).filter((r) => r.kind !== 'money')) {
+      for (const rule of rulesOf(set)) {
         const { name: _n, ...rest } = rule;
         void _n;
         const one = (defineFieldRules as unknown as (f: string, r: Record<string, unknown>) => Record<string, Rule>)(set.form, { [rule.name]: rest });
@@ -442,7 +460,9 @@ describe('pilot rule sets exist with the spec\'s rules (staff government IDs, su
     expect(await check(name, '  ABC Meat  ')).toEqual({ ok: true, value: 'ABC Meat' });
     expect(await check(sup.creditTermsDays!, '')).toEqual({ ok: true, value: null });
     expect((await check(sup.creditTermsDays!, '365')).ok).toBe(true);
-    for (const bad of ['366', '-1', '1.5', 'x']) expect((await check(sup.creditTermsDays!, bad)).ok, bad).toBe(false);
+    // audit (b): "-0" is not a number of days; the rule is the ONE definition and the server speaks it.
+    for (const bad of ['366', '-1', '-0', '-00', ' -0 ', '+5', '1.5', 'x']) expect((await check(sup.creditTermsDays!, bad)).ok, bad).toBe(false);
+    expect(await check(sup.creditTermsDays!, '0')).toEqual({ ok: true, value: '0' });
   });
 });
 

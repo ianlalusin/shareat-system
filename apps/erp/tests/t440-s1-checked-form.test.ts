@@ -33,8 +33,8 @@
  *   <CheckedForm rules action {...formProps}>   'use client'; renders the <form>; provides CheckContext; before the layout
  *     effect it provides the INACTIVE state, so its first render equals the server render and Save is enabled (no-JS safe).
  *   SubmitButton (components/feedback) and EditableRecordView's Save read CheckContext: disabled = pending || prop || blocked.
- *     EditableRecordView ALSO renders the status line: <p role="status" aria-live="polite">{ctx.summary}</p>, only when it is
- *     editing and ctx.blocked. EditableRecord gains `rules?: FieldRuleSet`.
+ *     EditableRecordView ALSO renders the status line: <CheckSummary active summary>: ONE persistent <p role="status" aria-live="polite"> (empty text when nothing blocks),
+ *     rendered whenever it is editing and the context is active (audit a). EditableRecord gains `rules?: FieldRuleSet`.
  *
  * MUTANTS: aria-disabled instead of disabled; SubmitButton ignores the context; the guard sits on onClick only (no
  * preventDefault in the submit handler); checks active while locked; initial state computed from the rules alone (blocks a
@@ -348,12 +348,16 @@ describe('EditableRecordView under the context (T-S1-8, T-S1-10)', () => {
     const c = await ctxFor(await oneSet(), ACTIVE({}));
     expect(save(await view('editing', c, { saveLabel: 'Save draft' }))).toMatch(/\sdisabled=""/);
   });
-  it('editing + passing: Save enabled, no status line', async () => {
+  it('editing + passing: Save enabled; the status region STAYS in the DOM, empty (a live region must exist before it changes)', async () => {
     const c = await ctxFor(await oneSet(), ACTIVE({ name: 'Ana' }));
     const html = await view('editing', c);
     expect(save(html)).not.toMatch(/\sdisabled=""/);
-    expect(html).not.toContain('role="status"');
+    expect(html).toMatch(/<p\b[^>]*role="status"[^>]*aria-live="polite"[^>]*><\/p>/);
     expect(html).not.toContain('Save is off');
+  });
+  it('editing + an INACTIVE context (the server render): no status region yet', async () => {
+    const c = await ctxFor(await oneSet(), { values: {}, touched: {}, active: false });
+    expect(await view('editing', c)).not.toContain('role="status"');
   });
   it('LOCKED: nothing is marked and no explanation shows, whatever the context says (row 289; mutant: checks active while locked)', async () => {
     const c = await ctxFor(await oneSet(), ACTIVE({}));
@@ -371,6 +375,35 @@ describe('EditableRecordView under the context (T-S1-8, T-S1-10)', () => {
     expect(lit, 'PRIMARY is a single quoted literal').not.toBeNull();
     expect(lit![1]).toMatch(/disabled:pointer-events-none/);
     expect(lit![1]).toMatch(/disabled:opacity-50/);
+  });
+});
+
+describe('CheckSummary: the ONE persistent live region (audit a)', () => {
+  // CONTRACT: CheckSummary({ active: boolean; summary: string | null }) is exported from forms/index.ts. Active: ALWAYS renders
+  // <p role="status" aria-live="polite">{summary ?? ''}</p> (empty text when nothing is blocked), so a screen reader announces
+  // every change of the text. Inactive (first render = server render, locked, outside a form): renders nothing. The per-field
+  // helper lines are NOT live regions, so a keystroke is announced once.
+  async function summary(props: { active: boolean; summary: string | null }) {
+    const { CheckSummary } = (await forms()) as unknown as { CheckSummary: (p: typeof props) => ReactNode };
+    return renderToStaticMarkup(createElement(CheckSummary as never, props as never));
+  }
+  it('active + nothing blocked: the element is there with no text', async () => {
+    expect(await summary({ active: true, summary: null })).toMatch(/^<p\b[^>]*role="status"[^>]*aria-live="polite"[^>]*><\/p>$/);
+  });
+  it('active + blocked: the same element carries the summary', async () => {
+    const html = await summary({ active: true, summary: 'Save is off until: The name is required.' });
+    expect(html).toMatch(/^<p\b[^>]*role="status"[^>]*aria-live="polite"[^>]*>Save is off until: The name is required\.<\/p>$/);
+  });
+  it('inactive: nothing at all (the server render has no status region)', async () => {
+    expect(await summary({ active: false, summary: null })).toBe('');
+    expect(await summary({ active: false, summary: 'x' })).toBe('');
+  });
+  it('CheckedForm.tsx and EditableRecord.tsx render <CheckSummary> unconditionally on active (no `blocked ? <p role=status`)', () => {
+    for (const f of ['components/forms/CheckedForm.tsx', 'components/forms/EditableRecord.tsx']) {
+      const s = read(f);
+      expect(s, f).toMatch(/<CheckSummary\b/);
+      expect(s, f).not.toMatch(/blocked\s*\?\s*\(\s*<p\b[^>]*role="status"/);
+    }
   });
 });
 

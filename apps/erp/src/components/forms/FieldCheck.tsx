@@ -12,7 +12,7 @@
 import { useContext, useEffect, useId, useLayoutEffect, useRef } from 'react';
 import type { FieldRule } from '@shareat/domain/field-rules';
 import { CheckContext } from './context';
-import { fieldCheckLine, planFieldAria, type FieldCheckLine } from './check-state';
+import { fieldCheckLine, planFieldAria, planFieldRelease, type FieldCheckLine } from './check-state';
 
 const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
@@ -52,10 +52,13 @@ const TONE: Record<FieldCheckLine['kind'], string> = {
   passing: 'text-success',
 };
 
-/** The presentational line: a polite live region holding the text and (for failing/passing) an aria-hidden icon. */
+/**
+ * The presentational line: the text and (for failing/passing) an aria-hidden icon. NOT a live region: the form's `CheckSummary`
+ * is the one announcer, and this line is read through the control's aria-describedby (no double announcement per keystroke).
+ */
 export function FieldCheckView({ id, line }: { id: string; line: FieldCheckLine }) {
   return (
-    <p id={id} aria-live="polite" className={`mt-1 flex items-start gap-1.5 text-xs ${TONE[line.kind]}`}>
+    <p id={id} className={`mt-1 flex items-start gap-1.5 text-xs ${TONE[line.kind]}`}>
       {line.kind === 'passing' ? <CheckIcon /> : line.kind === 'failing' ? <WarnIcon /> : null}
       <span>{line.text}</span>
     </p>
@@ -87,10 +90,13 @@ export function FieldCheck({ rule }: { rule: FieldRule }) {
   release.current = () => {
     const control = applied.current;
     if (!control) return;
-    const rest = (control.getAttribute('aria-describedby') ?? '').split(/s+/).filter((x) => x && x !== id);
-    if (rest.length > 0) control.setAttribute('aria-describedby', rest.join(' '));
+    const plan = planFieldRelease(
+      { describedby: control.getAttribute('aria-describedby'), invalid: control.getAttribute('aria-invalid'), ownInvalid: ownInvalid.current },
+      id,
+    );
+    if (plan.describedby !== null) control.setAttribute('aria-describedby', plan.describedby);
     else control.removeAttribute('aria-describedby');
-    if (ownInvalid.current) control.removeAttribute('aria-invalid');
+    if (plan.clearInvalid) control.removeAttribute('aria-invalid');
     ownInvalid.current = false;
     applied.current = null;
   };

@@ -22,6 +22,7 @@ import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, us
 import { rulesOf, type FieldRuleSetLike } from '@shareat/domain/field-rules';
 import type { TypedView } from '@/lib/keep-typing';
 import { CheckContext } from './context';
+import { CheckSummary } from './CheckSummary';
 import { CHECKED_FORM_INITIAL, checkContextValue, checkedFormReducer, onCheckedSubmit, watchFormReset } from './check-state';
 import { focusControl, readRuledValues, ruledTarget } from './check-dom';
 
@@ -393,11 +394,7 @@ export function EditableRecordView({
             </span>
           ) : null}
         </div>
-        {blocked ? (
-          <p role="status" aria-live="polite" className="mt-2 text-sm text-ink/70">
-            {check?.summary}
-          </p>
-        ) : null}
+        <CheckSummary active={editing && check?.active === true} summary={check?.summary ?? null} />
       </form>
       {editing ? extra : null}
     </>
