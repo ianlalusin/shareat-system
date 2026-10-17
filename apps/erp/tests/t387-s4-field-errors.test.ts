@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { readFileSync } from 'node:fs';
+import { readControlSource } from './helpers/control-source';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FlashBanner } from '../src/components/ui/FlashBanner';
@@ -22,7 +22,7 @@ import { FlashBanner } from '../src/components/ui/FlashBanner';
  */
 
 const APP = resolve(__dirname, '../src/app');
-const read = (p: string) => readFileSync(resolve(APP, p), 'utf8');
+const read = (p: string) => readControlSource(resolve(APP, p), 'utf8');
 
 function body(file: string, fn: string): string {
   const src = read(file);

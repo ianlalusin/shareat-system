@@ -17,7 +17,7 @@
  * only what the spec states for each: NumField loses type/step/min; IntField loses type/min/max.
  * IntField's `step` is left unasserted either way.
  */
-import { readFileSync } from 'node:fs';
+import { readControlSource } from './helpers/control-source';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -29,7 +29,7 @@ const repoRoot = resolve(__dirname, '..', '..', '..');
 const TWO_SITE_FILES = new Set(['apps/erp/src/app/cutover/count/page.tsx']);
 
 function inputTagFor(filePath: string, nameLiteral: string): string {
-  const src = readFileSync(resolve(repoRoot, filePath), 'utf8');
+  const src = readControlSource(resolve(repoRoot, filePath), 'utf8');
   const needle = `name=${nameLiteral}`;
   const occurrences = src.split(needle).length - 1;
   if (TWO_SITE_FILES.has(filePath)) {
@@ -39,7 +39,7 @@ function inputTagFor(filePath: string, nameLiteral: string): string {
     for (let k = 0; k < 2; k++) {
       const idx = src.indexOf(needle, from);
       from = idx + needle.length;
-      const start = src.lastIndexOf('<input', idx);
+      const start = Math.max(src.lastIndexOf('<input', idx), src.lastIndexOf('<Input', idx));
       expect(start, `no preceding <input for "${needle}" in ${filePath}`).toBeGreaterThan(-1);
       const end = src.indexOf('/>', idx);
       expect(end, `no self-closing "/>" found for "${needle}" in ${filePath}`).toBeGreaterThan(-1);
@@ -50,7 +50,7 @@ function inputTagFor(filePath: string, nameLiteral: string): string {
   expect(occurrences, `"${needle}" must appear exactly once in ${filePath}`).toBe(1);
 
   const nameIdx = src.indexOf(needle);
-  const tagStart = src.lastIndexOf('<input', nameIdx);
+  const tagStart = Math.max(src.lastIndexOf('<input', nameIdx), src.lastIndexOf('<Input', nameIdx));
   expect(tagStart, `no preceding <input for "${needle}" in ${filePath}`).toBeGreaterThan(-1);
   const tagEnd = src.indexOf('/>', nameIdx);
   expect(tagEnd, `no self-closing "/>" found for "${needle}" in ${filePath}`).toBeGreaterThan(-1);
@@ -59,7 +59,7 @@ function inputTagFor(filePath: string, nameLiteral: string): string {
 
 /** For a shared helper component rendering one <input> per call — finds it by function name. */
 function helperInputTag(filePath: string, functionName: string): string {
-  const src = readFileSync(resolve(repoRoot, filePath), 'utf8');
+  const src = readControlSource(resolve(repoRoot, filePath), 'utf8');
   const fnNeedle = `function ${functionName}(`;
   const occurrences = src.split(fnNeedle).length - 1;
   expect(occurrences, `"${fnNeedle}" must appear exactly once in ${filePath}`).toBe(1);
@@ -142,7 +142,7 @@ describe('R-legs — green, unedited: the one REQUIRED spinner this task census 
     // Three `name="year"` inputs exist on this page (one visible, two hidden); the visible one is
     // the only one with `type="number"` and is distinguished by that, not by `inputTagFor`'s
     // exactly-once search (which would fail here for an unrelated reason — three matches).
-    const src = readFileSync(resolve(repoRoot, 'apps/erp/src/app/payroll/thirteenth-month/page.tsx'), 'utf8');
+    const src = readControlSource(resolve(repoRoot, 'apps/erp/src/app/payroll/thirteenth-month/page.tsx'), 'utf8');
     const needle = 'name="year" type="number"';
     expect(src, `expected "${needle}" to appear exactly once`).toMatch(needle);
     expect(src.split(needle).length - 1).toBe(1);

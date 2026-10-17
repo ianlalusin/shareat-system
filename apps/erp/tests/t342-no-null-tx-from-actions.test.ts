@@ -45,7 +45,7 @@ const NULL_FIRST_ARG_PATTERN = /\b\w+\(\s*(?:null|undefined)(?:\s+as\s+[\w<>[\].
  */
 const ALLOWLIST: ReadonlySet<string> = new Set([
   // signInWithFirebase(null, { verifiedUid }) — first-run setup, before any session/org exists.
-  'app/setup/actions.ts:102',
+  'app/setup/actions.ts:105', // T-440: was :102 - the setup fields moved onto rules above it
   // resolveTerminalIdentity(null, identity.uid) — resolving WHO is signing in, pre-session.
   'app/sign-in/actions.ts:49',
   'app/sign-in/actions.ts:76',
@@ -62,7 +62,7 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
   // Wrapping the action in `withOrgPrincipal` and passing that tx through switches this call into
   // atomic mode, which is a regression, not a fix — the null branch already opens its own
   // per-asset `withOrgPrincipal` transactions internally (DEF-287), so it was never RLS-unsafe.
-  'app/fixed-assets/actions.ts:211', // T-412: was :205 - two imports were added above it
+  'app/fixed-assets/actions.ts:225', // T-412: was :205; T-440: was :211 - the rule check moved above it
 ]);
 
 function isUseServerFile(content: string): boolean {

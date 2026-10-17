@@ -338,42 +338,41 @@ function assertEvidence(index: Index, actionName: string, set: RuleSetInfo): { f
         if (wordRe(set.name).test(joined)) {
           asserted = true;
           if (texts.some((t) => noSpace(t) === set.name || noSpace(t) === `{...${set.name}}`) || wordRe('\\.\\.\\.\\s*' + set.name).test(joined)) whole = true;
-          for (const m of joined.matchAll(wordRe(set.name, '\\.(\\w+)'))) covered.add(m[1]);
+          for (const m of joined.matchAll(wordRe(set.name, '\\.(\\w+)'))) covered.add(m[1] ?? '');
         }
       }
       ts.forEachChild(n, v);
     };
     v(def.node);
-    for (const m of def.node.getText().matchAll(wordRe(set.name, '\\.(\\w+)'))) covered.add(m[1]);
+    for (const m of def.node.getText().matchAll(wordRe(set.name, '\\.(\\w+)'))) covered.add(m[1] ?? '');
   }
   return { found: true, asserted, missing: asserted && !whole ? set.fields.filter((f) => !covered.has(f)) : asserted ? [] : set.fields };
 }
-/** G3a over a source universe: each set reaches an assertFieldRules call (by name, direct or via an alias const). */
-function unassertedSets(sets: RuleSetInfo[], universe: Sources): string[] {
-  const index = buildIndex(universe);
-  const bad: string[] = [];
-  for (const s of sets) {
-    let hit = false;
-    for (const [file, src] of Object.entries(universe)) {
-      const sf = parse(src, file);
-      const v = (n: ts.Node) => {
-        if (ts.isCallExpression(n) && n.expression.getText() === 'assertFieldRules' && n.arguments[0]) {
-          const arg = n.arguments[0];
-          const texts = [arg.getText()];
-          if (ts.isIdentifier(arg)) {
-            const a = index.consts.get(file)?.get(arg.text);
-            if (a) texts.push(a);
-          }
-          if (wordRe(s.name).test(texts.join(' '))) hit = true;
+/**
+ * G3a over a source universe: each set reaches an assertFieldRules call (by name, direct or via an alias const).
+ * Perf: only files that mention `assertFieldRules(` are parsed, each once; the argument texts (and the alias const behind an
+ * identifier argument) are collected, then every set is tested against that one list.
+ */
+function unassertedSets(sets: RuleSetInfo[], universe: Sources, index: Index = buildIndex(universe)): string[] {
+  const argTexts: string[] = [];
+  for (const [file, src] of Object.entries(universe)) {
+    if (!src.includes('assertFieldRules(')) continue;
+    const sf = parse(src, file);
+    const v = (n: ts.Node) => {
+      if (ts.isCallExpression(n) && n.expression.getText() === 'assertFieldRules' && n.arguments[0]) {
+        const arg = n.arguments[0];
+        const texts = [arg.getText()];
+        if (ts.isIdentifier(arg)) {
+          const a = index.consts.get(file)?.get(arg.text);
+          if (a) texts.push(a);
         }
-        ts.forEachChild(n, v);
-      };
-      v(sf);
-      if (hit) break;
-    }
-    if (!hit) bad.push(s.name);
+        argTexts.push(texts.join(' '));
+      }
+      ts.forEachChild(n, v);
+    };
+    v(sf);
   }
-  return bad;
+  return sets.filter((s) => !argTexts.some((t) => wordRe(s.name).test(t))).map((s) => s.name);
 }
 /** G3b over forms: every `rules={X}` form's action asserts X, covering every field. */
 function formActionProblems(forms: FormInfo[], sets: RuleSetInfo[], index: Index): string[] {
@@ -419,7 +418,7 @@ function parseCensus(md: string): CensusRow[] {
       continue;
     }
     if (!cols || cols.kind < 0 || /^[-:\s|]+$/.test(line) || cells.every((c) => /^[-: ]*$/.test(c))) continue;
-    rows.push({ file: cells[cols.file].replace(/`/g, ''), field: cells[cols.field].replace(/`/g, ''), kinds: cells[cols.kind] });
+    rows.push({ file: (cells[cols.file] ?? '').replace(/`/g, ''), field: (cells[cols.field] ?? '').replace(/`/g, ''), kinds: cells[cols.kind] ?? '' });
   }
   return rows;
 }
@@ -483,6 +482,16 @@ const EXEMPT: Record<string, { count: number; reason: string }> = {
   'remittance/page.tsx': { count: 2, reason: `lineAmount_\${i} / lineOverage_\${i}: ${REPEATED}` },
   'sales-days/[id]/page.tsx': { count: 1, reason: `channel_\${c.id} per-channel amounts: ${REPEATED}` },
   'settings/attendance/page.tsx': { count: 2, reason: 'local number-field helpers: name arrives as a prop, one component for many callers' },
+  'commissary/orders/page.tsx': { count: 3, reason: 'repeated line family, S8' },
+  'commissary/orders/[id]/page.tsx': { count: 1, reason: 'repeated line family, S8' },
+  'inventory/deliveries/NewDeliveryForm.tsx': { count: 5, reason: 'repeated line family, S8' },
+  'inventory/deliveries/[id]/page.tsx': { count: 1, reason: 'repeated line family, S8' },
+  'trade/orders/NewOrderForm.tsx': { count: 3, reason: 'repeated line family, S8' },
+  'trade/orders/[id]/page.tsx': { count: 1, reason: 'repeated line family, S8' },
+  'wastage/[id]/page.tsx': { count: 1, reason: 'repeated line family, S8' },
+  'inventory/production/recipes/recipe-form.tsx': { count: 3, reason: 'repeated line family, S8' },
+  'sign-in/EmailSignInForm.tsx': { count: 2, reason: 'credentials go to Firebase in the browser; no server action; client-only checks deliberately absent' },
+  'sign-in/TerminalSignInForm.tsx': { count: 3, reason: 'credentials go to Firebase in the browser; no server action; client-only checks deliberately absent' },
   'till/page.tsx': { count: 1, reason: `count:\${a.id} per-denomination counts: ${REPEATED}` },
 };
 
@@ -515,7 +524,7 @@ function exemptApplied(g1: Finding[], exempt: Record<string, { count: number; re
       stale.push(`${f}: EXEMPT absorbs ${e.count} but the file has only ${raw[f] ?? 0} finding(s) (stale)`);
       continue;
     }
-    counts[f] = raw[f] - e.count;
+    counts[f] = (raw[f] ?? 0) - e.count;
     if (counts[f] === 0) delete counts[f];
   }
   return { counts, stale };
@@ -584,11 +593,13 @@ describe('T-440 S2 census + ratchet over the real tree', () => {
     it('the rule files define rule sets (we are not looking at nothing)', () => {
       expect(sets.length).toBeGreaterThanOrEqual(2);
     });
+    let sharedIndex: Index | undefined;
+    const indexOfUniverse = () => (sharedIndex ??= buildIndex(universe));
     it('G3a: every exported rule set reaches assertFieldRules on the server (no client-only rules)', () => {
-      expect(unassertedSets(sets, universe)).toEqual([]);
+      expect(unassertedSets(sets, universe, indexOfUniverse())).toEqual([]);
     });
     it('G3b (O3): every <CheckedForm|EditableRecord rules={X}> has an action whose own call chain asserts X, every field', () => {
-      expect(formActionProblems(realScan().forms, sets, buildIndex(universe))).toEqual([]);
+      expect(formActionProblems(realScan().forms, sets, indexOfUniverse())).toEqual([]);
     });
   });
 
@@ -662,7 +673,7 @@ describe('G5 controls: G1 bites and does not over-fire (census scope, A12)', () 
   it('a ruled control with no lexical form (a shared component renders it into a form) is still a finding, labelled', () => {
     const f = g1Of('<div><input name="x" required /></div>');
     expect(f).toHaveLength(1);
-    expect(f[0].detail).toContain('no lexical form');
+    expect(f[0]?.detail).toContain('no lexical form');
     expect(g1Of('<div><input name="x" /></div>')).toHaveLength(0);
   });
   it('the NEAREST form decides: a control in a GET form nested in a write form is out; one in a write form inside a GET shell is in', () => {
@@ -675,9 +686,9 @@ describe('G5 controls: G1 bites and does not over-fire (census scope, A12)', () 
   it('a non-literal (or missing) name is a finding labelled as such (it must be listed in EXEMPT, not skipped)', () => {
     const f = g1Of('<form action={a}><input name={`${n}Amount_${i}`} required /></form>');
     expect(f).toHaveLength(1);
-    expect(f[0].detail).toContain('(non-literal name)');
-    expect(g1Of('<form action={a}><input name={fieldName} required /></form>')[0].detail).toContain('(non-literal name)');
-    expect(g1Of('<form action={a}><input required /></form>')[0].detail).toContain('(non-literal name)');
+    expect(f[0]?.detail).toContain('(non-literal name)');
+    expect(g1Of('<form action={a}><input name={fieldName} required /></form>')[0]?.detail).toContain('(non-literal name)');
+    expect(g1Of('<form action={a}><input required /></form>')[0]?.detail).toContain('(non-literal name)');
   });
   it('a converted control (spread nativeAttrs) is NOT a G1 finding even with the attrs it spreads', () => {
     const ok = '<CheckedForm rules={R} action={a}><Field label="n" rule={R.n}><Input {...nativeAttrs(R.n)} maxLength={5} /></Field></CheckedForm>';

@@ -19,7 +19,7 @@
  * All five files are server components (spec's own line) — every leg here is source-text, no
  * render needed (unlike S5.5s's two 'use client' forms).
  */
-import { readFileSync } from 'node:fs';
+import { readControlSource } from './helpers/control-source';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -39,7 +39,7 @@ const repoRoot = resolve(__dirname, '..', '..', '..');
 const TWO_SITE_FILES = new Set(['apps/erp/src/app/cutover/count/page.tsx']);
 
 function inputTagFor(filePath: string, nameLiteral: string): string {
-  const src = readFileSync(resolve(repoRoot, filePath), 'utf8');
+  const src = readControlSource(resolve(repoRoot, filePath), 'utf8');
   const needle = `name=${nameLiteral}`;
   const occurrences = src.split(needle).length - 1;
   if (TWO_SITE_FILES.has(filePath)) {
@@ -49,7 +49,7 @@ function inputTagFor(filePath: string, nameLiteral: string): string {
     for (let k = 0; k < 2; k++) {
       const idx = src.indexOf(needle, from);
       from = idx + needle.length;
-      const start = src.lastIndexOf('<input', idx);
+      const start = Math.max(src.lastIndexOf('<input', idx), src.lastIndexOf('<Input', idx));
       expect(start, `no preceding <input for "${needle}" in ${filePath}`).toBeGreaterThan(-1);
       const end = src.indexOf('/>', idx);
       expect(end, `no self-closing "/>" found for "${needle}" in ${filePath}`).toBeGreaterThan(-1);
@@ -60,7 +60,7 @@ function inputTagFor(filePath: string, nameLiteral: string): string {
   expect(occurrences, `"${needle}" must appear exactly once in ${filePath}`).toBe(1);
 
   const nameIdx = src.indexOf(needle);
-  const tagStart = src.lastIndexOf('<input', nameIdx);
+  const tagStart = Math.max(src.lastIndexOf('<input', nameIdx), src.lastIndexOf('<Input', nameIdx));
   expect(tagStart, `no preceding <input for "${needle}" in ${filePath}`).toBeGreaterThan(-1);
   // Anchor on the tag's real close (`/>`), not the first `>` — an inline `onChange={(e) => …}`
   // arrow function's own `>` sits before the tag actually closes and would truncate the slice early.

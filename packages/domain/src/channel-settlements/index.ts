@@ -24,6 +24,8 @@ import { compare, fromCentavos, isZero, money, negate, toCentavos, ZERO, type Mo
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { CHANNEL_SETTLEMENT_RECORD_RULES } from '../field-rules/channel-settlements';
 import { refuse } from '../shared/refusal';
 
 const R = channelSettlementsRepo;
@@ -504,6 +506,15 @@ export async function recordChannelSettlement(
     // unique index refuses a duplicate too — this says WHY, and it is the same context the
     // preview reads, so a screen cannot show a green light this then refuses.
     const ctx = await gatherSettlementContext(trx, actor, input);
+    // T-440 — the typed-field rules (gross, net, loan amount, reference, date) run HERE, after authorize()
+    // (inside gatherSettlementContext), never in the action before it.
+    assertFieldRules(CHANNEL_SETTLEMENT_RECORD_RULES, {
+      grossAmount: input.grossAmount,
+      netDeposited: input.netDeposited,
+      loanAmount: input.loan?.amount,
+      reference: input.reference,
+      settledOn: input.settledOn,
+    });
     const figures = assertSettlementFigures('recordChannelSettlement', input);
     const config = ctx.config;
     const c = computeSettlement(figures, input.recognizeGain, ctx.outstanding, config.name);

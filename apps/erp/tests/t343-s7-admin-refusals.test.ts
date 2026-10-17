@@ -94,6 +94,7 @@ vi.mock('../src/app/admin/users/lib', async (importOriginal) => {
 
 const setPositionDefault = vi.fn();
 vi.mock('@shareat/domain', () => ({
+  assertFieldRules: () => ({}),
   setPositionDefault: (...args: unknown[]) => setPositionDefault(...args),
   retireStorePosition: vi.fn(),
 }));

@@ -13,6 +13,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) throw new Error('Refusing to run agai
 
 import { closeDb } from '@shareat/db';
 import { createPrepaidItem } from '@shareat/domain';
+import { PREPAID_ADD_RULES } from '@shareat/domain/field-rules';
 import { NAN_INPUTS, asOrg, bootstrap, count, expectPlainRefusal, refusalOf } from './_fixtures/t371-nan';
 
 const sql = postgres(url, { max: 5 });
@@ -32,7 +33,7 @@ describe('prepaid — totalCost', () => {
       const k = await bootstrap(sql, `pp-${typed}`);
       const before = await count(sql, 'prepaid_items', k.orgId);
       const got = await refusalOf(asOrg(k.orgId, (tx) => createPrepaidItem(tx, k.admin, item(k, { totalCost: typed }) as never)));
-      expectPlainRefusal(got, typed, /cost/i, 'createPrepaidItem.totalCost');
+      expectPlainRefusal(got, typed, /cost/i, 'createPrepaidItem.totalCost', PREPAID_ADD_RULES.totalCost);
       expect(await count(sql, 'prepaid_items', k.orgId), 'a refused item wrote a row').toBe(before);
       const ok = await refusalOf(asOrg(k.orgId, (tx) => createPrepaidItem(tx, k.admin, item(k) as never)));
       expect(ok.text, `the control was refused: ${ok.text}`).toBeNull();

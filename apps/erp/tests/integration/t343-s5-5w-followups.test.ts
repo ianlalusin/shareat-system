@@ -56,6 +56,8 @@ import {
   seedAttendanceConfig,
 } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
+import { PREPAID_ADD_RULES } from '@shareat/domain/field-rules';
+import { expectRuleSentence } from '../helpers/rule-sentence';
 import { paramsOf } from '../helpers/flash-jar';
 import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
@@ -229,9 +231,7 @@ describe('P1 (S5.5w) — prepaid create totalCost="1,5"', () => {
       const { createPrepaidItemAction } = await import('../../src/app/prepaid/actions');
       const before = await prepaidItemCountFor(f.orgId);
       const to = await expectRedirectTo(() => createPrepaidItemAction(prepaidFormData(f, { totalCost: '1,5' })));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe(
-        'The total cost — "1,5" is not a valid amount. Use at most two decimal places.',
-      );
+      expectRuleSentence(errorOf(to), PREPAID_ADD_RULES.totalCost, '1,5');
       expect(await prepaidItemCountFor(f.orgId), 'no item should have been created').toBe(before);
     },
     30000,
@@ -249,7 +249,7 @@ describe('P2 (S5.5w) — prepaid create coverageMonths blank', () => {
       const { createPrepaidItemAction } = await import('../../src/app/prepaid/actions');
       const before = await prepaidItemCountFor(f.orgId);
       const to = await expectRedirectTo(() => createPrepaidItemAction(prepaidFormData(f, { coverageMonths: '' })));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe('The coverage — enter a whole number of months from 1 to 120.');
+      expectRuleSentence(errorOf(to), PREPAID_ADD_RULES.coverageMonths, '');
       expect(await prepaidItemCountFor(f.orgId), 'no item should have been created').toBe(before);
     },
     30000,
@@ -266,7 +266,7 @@ describe('P3 (S5.5w) — prepaid create coverageMonths="1,5"', () => {
       const { createPrepaidItemAction } = await import('../../src/app/prepaid/actions');
       const before = await prepaidItemCountFor(f.orgId);
       const to = await expectRedirectTo(() => createPrepaidItemAction(prepaidFormData(f, { coverageMonths: '1,5' })));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe('The coverage — "1,5" is not a whole number of months from 1 to 120.');
+      expectRuleSentence(errorOf(to), PREPAID_ADD_RULES.coverageMonths, '1,5');
       expect(await prepaidItemCountFor(f.orgId), 'no item should have been created').toBe(before);
     },
     30000,

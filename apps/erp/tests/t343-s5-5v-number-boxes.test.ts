@@ -15,21 +15,26 @@
  * inline `onChange={(e) => setGross(e.target.value)}`, and that arrow's own `=>` contains a `>` that
  * would truncate a first-`>` slice before the tag's real attributes (`type`, `step`, `inputMode`).
  */
-import { readFileSync } from 'node:fs';
+import { readControlSource } from './helpers/control-source';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(__dirname, '..', '..', '..');
 
+/** T-440: the controls are `<Input`/`<input`; the nearest opening tag of either. */
+function lastInputTag(src: string, before: number): number {
+  return Math.max(src.lastIndexOf('<input', before), src.lastIndexOf('<Input', before));
+}
+
 function allInputTags(filePath: string, nameLiteral: string): string[] {
-  const src = readFileSync(resolve(repoRoot, filePath), 'utf8');
+  const src = readControlSource(resolve(repoRoot, filePath), 'utf8');
   const needle = `name=${nameLiteral}`;
   const tags: string[] = [];
   let from = 0;
   for (;;) {
     const nameIdx = src.indexOf(needle, from);
     if (nameIdx === -1) break;
-    const tagStart = src.lastIndexOf('<input', nameIdx);
+    const tagStart = lastInputTag(src, nameIdx);
     expect(tagStart, `no preceding <input for "${needle}" in ${filePath}`).toBeGreaterThan(-1);
     const tagEnd = src.indexOf('/>', nameIdx);
     expect(tagEnd, `no closing "/>" for the <input carrying "${needle}" in ${filePath}`).toBeGreaterThan(-1);
@@ -111,14 +116,14 @@ describe('R-legs — source-text: each of the 22 S5.5v boxes has no type="number
   it('payroll/page.tsx — amount (decimal)', () => {
     assertConverted('apps/erp/src/app/payroll/page.tsx', '"amount"', 'decimal');
   });
-  it('owners/[id]/page.tsx — amount[1] settle (decimal)', () => {
+  it('owners/[id]/SettleForm.tsx — amount settle (decimal; the settle form moved to a client component in T-440)', () => {
+    assertConverted('apps/erp/src/app/owners/[id]/SettleForm.tsx', '"amount"', 'decimal');
+  });
+  it('owners/[id]/page.tsx — amount[1] contribution (decimal)', () => {
     assertConverted('apps/erp/src/app/owners/[id]/page.tsx', '"amount"', 'decimal', 1);
   });
-  it('owners/[id]/page.tsx — amount[2] contribution (decimal)', () => {
+  it('owners/[id]/page.tsx — amount[2] drawing (decimal)', () => {
     assertConverted('apps/erp/src/app/owners/[id]/page.tsx', '"amount"', 'decimal', 2);
-  });
-  it('owners/[id]/page.tsx — amount[3] drawing (decimal)', () => {
-    assertConverted('apps/erp/src/app/owners/[id]/page.tsx', '"amount"', 'decimal', 3);
   });
   it('service-charge/page.tsx — amount (decimal)', () => {
     assertConverted('apps/erp/src/app/service-charge/page.tsx', '"amount"', 'decimal');
@@ -132,7 +137,7 @@ describe('PV4 (S5.5v Amendment A3) — SettlementForm.check() must pass gross/ne
       '"Check the numbers" can no longer show "reconciles exactly" and enable Post for a genuinely ' +
       'blank gross',
     () => {
-      const src = readFileSync(
+      const src = readControlSource(
         resolve(repoRoot, 'apps/erp/src/app/channel-settlements/SettlementForm.tsx'),
         'utf8',
       );

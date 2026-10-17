@@ -20,14 +20,14 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 const h = vi.hoisted(() => ({ actor: null as null | { personId: string; orgId: string } }));
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
-vi.mock('next/navigation', async () => (await import('../../../../apps/erp/tests/helpers/flash-jar-core')).nextNavigationMock());
+vi.mock('next/navigation', async () => (await import('../../../../tests/helpers/flash-jar-core')).nextNavigationMock());
 vi.mock('../../../../apps/erp/src/lib/session', () => ({
   requireActor: vi.fn(async () => h.actor),
   requireSession: vi.fn(async () => ({ actor: h.actor, sessionId: 'session-1', credentialKind: 'pin' as const, storeId: null, expiresAt: new Date('2099-01-01') })),
 }));
 
 import { closeDb } from '@shareat/db';
-import { captureRedirect, outcomeOf, resetJar } from '../../../../apps/erp/tests/helpers/flash-jar';
+import { captureRedirect, outcomeOf, resetJar } from '../../../../tests/helpers/flash-jar';
 import { moneyFixture } from './_fixtures/t402-s3-money';
 
 const sql = postgres(url, { max: 5 });
@@ -56,8 +56,8 @@ async function run(mod: string, name: string, fields: Record<string, string>) {
 }
 
 async function count(table: string, orgId: string): Promise<number> {
-  const rows = await sql.unsafe(`select count(*)::int as n from ${table} where org_id = '${orgId}'`);
-  return (rows[0] as { n: number }).n;
+  const rows = await sql.unsafe<{ n: number }[]>(`select count(*)::int as n from ${table} where org_id = '${orgId}'`);
+  return rows[0]?.n ?? 0;
 }
 
 describe('T-440 S3: a bad value is refused with the rule sentence and nothing is written', () => {

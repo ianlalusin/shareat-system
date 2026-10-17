@@ -19,6 +19,7 @@ vi.mock('../src/lib/session', () => ({ requireActor: async () => ({ orgId: 'org'
 vi.mock('../src/app/expenses/lib', () => ({ withOrgPrincipal: async (_org: string, fn: (tx: unknown) => unknown) => fn({}) }));
 vi.mock('@/lib/constraint-messages', () => ({ errorMessage: (e: unknown) => String(e) }));
 vi.mock('@shareat/domain', () => ({
+  assertFieldRules: () => ({}),
   recordReturn: async (_tx: unknown, i: { returnedOn: string }) => ((captured.supplierReturnedOn = i.returnedOn), { ok: true }),
   refundSupplierCredit: async (_tx: unknown, i: { businessDate: string }) => ((captured.refundBusinessDate = i.businessDate), { ok: true }),
   voidReturn: async () => ({ ok: true }),

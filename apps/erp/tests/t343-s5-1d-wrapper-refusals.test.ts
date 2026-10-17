@@ -91,6 +91,7 @@ const uploadFile = vi.fn<(...args: unknown[]) => Promise<{ fileId: string }>>(as
 const createLocation = vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => undefined);
 
 vi.mock('@shareat/domain', () => ({
+  assertFieldRules: () => ({}),
   // wastage
   recordOrderWastage: (...args: unknown[]) => recordOrderWastage(...args),
   disputeOrderWastage: (...args: unknown[]) => disputeOrderWastage(...args),

@@ -114,7 +114,6 @@ const EXEMPT: Record<string, (typeof EXEMPT_REASONS)[number]> = {
   // S3 (T-371): the rest of the proven-safe set — ISO business-date / period-key ordering, whole-number counts and loop indexes, row-id tie-breaks. None is a numeric(p,s) column value;
   // the two BudgetHint lines are display-only (a client warning colour: the hint warns and never blocks — see its header, T-175).
   'packages/domain/src/ap/index.ts::run::dueDate < invoiceDate': 'not-a-column-value',
-  'packages/domain/src/ap/index.ts::parseCreditTermsDays::Number(t) > 365': 'not-a-column-value',
   'packages/domain/src/loans/interest.ts::accruedInterest::days <= 0': 'not-a-column-value',
   'packages/domain/src/remittance/index.ts::run::on < variance.remittedOn': 'not-a-column-value',
   'packages/domain/src/owners/index.ts::run::nextMonthOf(periodMonth) > input.on': 'not-a-column-value',

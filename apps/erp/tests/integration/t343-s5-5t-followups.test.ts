@@ -68,6 +68,8 @@ import {
   openTillShift,
 } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
+import { CUTOVER_COUNT_RULES } from '@shareat/domain/field-rules';
+import { expectRuleSentence } from '../helpers/rule-sentence';
 import { paramsOf } from '../helpers/flash-jar';
 import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
@@ -347,7 +349,7 @@ describe('U1 (DEF-470) — cutover unitCost="1,5"', () => {
       fd.set('quantity', '5');
       fd.set('unitCost', '1,5');
       const to = await expectRedirectTo(() => recordCountAction(fd));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe(UNIT_COST_SENTENCE);
+      expectRuleSentence(errorOf(to), CUTOVER_COUNT_RULES.unitCost, '1,5');
       expect(await openingCostFor(f.orgId, f.itemId), 'no count should have been written').toBeNull();
     },
     30000,

@@ -21,14 +21,14 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 const h = vi.hoisted(() => ({ actor: null as null | { personId: string; orgId: string } }));
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
-vi.mock('next/navigation', async () => (await import('../../../../apps/erp/tests/helpers/flash-jar-core')).nextNavigationMock());
+vi.mock('next/navigation', async () => (await import('../../../../tests/helpers/flash-jar-core')).nextNavigationMock());
 vi.mock('../../../../apps/erp/src/lib/session', () => ({
   requireActor: vi.fn(async () => h.actor),
   requireSession: vi.fn(async () => ({ actor: h.actor, sessionId: 'session-1', credentialKind: 'pin' as const, storeId: null, expiresAt: new Date('2099-01-01') })),
 }));
 
 import { closeDb } from '@shareat/db';
-import { captureRedirect, outcomeOf, resetJar } from '../../../../apps/erp/tests/helpers/flash-jar';
+import { captureRedirect, outcomeOf, resetJar } from '../../../../tests/helpers/flash-jar';
 import { moneyFixture } from './_fixtures/t402-s3-money';
 import { testItemCode } from './_fixtures/item-code';
 import { SETTINGS_LEAVE_CAP_RULES, SETTINGS_LEAVE_KIND_RULES, SETTINGS_ORG_TOLERANCE_RULES, SETTINGS_ITEM_TOLERANCE_RULES, SETTINGS_ORGANIZATION_RULES, SETTINGS_EXPENSE_CATEGORY_RULES, SETTINGS_SALES_CHANNEL_RULES, SETTINGS_POS_LINK_RULES, SETTINGS_POS_UNLINK_RULES, SETTINGS_TENDER_RULES } from '../../src/field-rules/settings';
@@ -68,8 +68,8 @@ async function run(mod: string, name: string, fields: Record<string, string>, as
 }
 
 async function count(table: string, orgId: string): Promise<number> {
-  const rows = await sql.unsafe(`select count(*)::int as n from ${table} where org_id = '${orgId}'`);
-  return (rows[0] as { n: number }).n;
+  const rows = await sql.unsafe<{ n: number }[]>(`select count(*)::int as n from ${table} where org_id = '${orgId}'`);
+  return rows[0]?.n ?? 0;
 }
 
 describe('T-440 S7: a bad value is refused with the rule sentence and nothing is written', () => {
@@ -118,6 +118,7 @@ describe('T-440 S7: a bad value is refused with the rule sentence and nothing is
     const f = await fixture();
     const code = testItemCode();
     const [item] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${f.orgId}, ${code}, 'Pork', 'raw_material', 'kg', ${f.admin.personId}) returning id`;
+    if (!item) throw new Error('fixture: the item insert returned no row');
     const o = await run('settings/usage-tolerance/actions', 'setItemUsageToleranceAction', { itemId: item.id, tolerance: '0.12345' });
     expect(o.flash.error).toBe(sentence(SETTINGS_ITEM_TOLERANCE_RULES.tolerance, '0.12345'));
     const [row] = await sql<{ t: string | null }[]>`select usage_tolerance::text as t from items where id = ${item.id}`;

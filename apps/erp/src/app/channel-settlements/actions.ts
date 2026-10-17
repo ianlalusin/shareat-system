@@ -19,7 +19,7 @@ import {
   voidChannelSettlement,
   type SettlementPreview,
 } from '@shareat/domain';
-import { CHANNEL_PAYOUT_DESTINATION_RULES, CHANNEL_SETTLEMENT_RECORD_RULES, CHANNEL_SETTLEMENT_VOID_RULES } from '@shareat/domain/field-rules';
+import { CHANNEL_PAYOUT_DESTINATION_RULES, CHANNEL_SETTLEMENT_VOID_RULES } from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -112,8 +112,7 @@ export async function recordSettlementAction(formData: FormData): Promise<void> 
   const actor = await requireActor();
 
   try {
-    // T-440: the same rule set the screen shows (gross, net, loan amount, reference, date).
-    assertFieldRules(CHANNEL_SETTLEMENT_RECORD_RULES, formData);
+    // T-440: the screen's rule set (CHANNEL_SETTLEMENT_RECORD_RULES) is asserted in recordChannelSettlement, AFTER authorize().
     const channelId = str(formData, 'channelId');
     const salesDayId = str(formData, 'salesDayId');
     if (!channelId) throw new Error('Choose the channel this payout is for.');

@@ -79,6 +79,7 @@ vi.mock('../src/app/inventory/usage/lib', () => ({
 }));
 
 vi.mock('../src/app/inventory/counts/lib', () => ({
+  countLineId: async () => 'line-1',
   withOrgPrincipal: async (_orgId: string, fn: (tx: unknown) => unknown) => fn({}),
 }));
 
@@ -138,6 +139,7 @@ const provisionTerminal = vi.fn();
 const mintTerminalToken = vi.fn();
 
 vi.mock('@shareat/domain', () => ({
+  assertFieldRules: () => ({}),
   upsertPosItemMap: (...args: unknown[]) => upsertPosItemMap(...args),
   decideMapRequest: (...args: unknown[]) => decideMapRequest(...args),
   requestMap: (...args: unknown[]) => requestMap(...args),
