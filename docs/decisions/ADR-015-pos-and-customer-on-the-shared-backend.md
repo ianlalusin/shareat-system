@@ -189,8 +189,9 @@ Customer v2 sends **no push**: on-page notices only (A6).
    tabs voiding at once). Paid receipts stay immutable (row 272).
 2. **Wrong tender on a paid receipt** (Ian, 15 Oct): the receipt never changes. The cashier marks it; **a correction
    entry approved by manager PIN fixes the tender before shift close**. After close it is refund + re-ring (row 272).
-   One correction document replaces v1's in-place edit (`EditReceiptDialog`) and "payment conversion"
-   (`PaymentConvertModal`). No receipt figure is edited, so row 272 holds.
+   One correction document replaces v1's in-place edit (`EditReceiptDialog`). No receipt figure is edited, so row
+   272 holds. ⚠️ **Corrected 17 Oct (bible row 359):** v1's `PaymentConvertModal` ("Convert") is NOT a wrong-tender
+   fix; it is a GCash cash-in/cash-out service and stays a SEPARATE feature (T-427).
 3. **One price per head** for packages (Ian, 15 Oct): no child, senior or age tiers. v1's bundle rule is kept.
 4. **Redesign the payment and table screens before go-live** (`redesign` = b, against the recommended a; row 283).
    Mock-ups go to Ian first. A dine-in table may also take à la carte lines (Ian's 13 Oct note).
