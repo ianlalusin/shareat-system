@@ -41,8 +41,14 @@ async function heartbeat(failed: boolean, lines: string[]): Promise<void> {
     return;
   }
   try {
-    if (failed) await fetch(`${url}/fail`, { method: 'POST', body: lines.join(String.fromCharCode(10)) || 'pos-day-import failed' });
-    else await fetch(url, { method: 'POST' });
+    const base = url.replace(/\/+$/, '');
+    if (failed) {
+      await fetch(`${base}/fail`, {
+        method: 'POST',
+        body: lines.join(String.fromCharCode(10)) || 'pos-day-import failed',
+        signal: AbortSignal.timeout(10_000),
+      });
+    } else await fetch(base, { method: 'POST', signal: AbortSignal.timeout(10_000) });
   } catch {
     console.error('pos-day-import: heartbeat ping failed (network) - the run itself is unaffected.');
   }

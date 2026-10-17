@@ -138,3 +138,48 @@ describe('S2-6 the heartbeat ping', () => {
     expect(code).toBe(1);
   });
 });
+
+describe('S2-6 audit: the ping cannot hang the run, and the URL is normalised', () => {
+  const sig = (c: unknown[]) => (c[1] as { signal?: unknown } | undefined)?.signal;
+
+  it('both pings carry an AbortSignal - kills: fetch with no timeout', async () => {
+    const ok = await run(CLEAN, { url: SECRET });
+    expect(sig(ok.calls[0]!)).toBeInstanceOf(AbortSignal);
+    vi.resetModules();
+    const bad = await run(FAILED, { url: SECRET });
+    expect(sig(bad.calls[0]!)).toBeInstanceOf(AbortSignal);
+  });
+
+  it('a fetch that never answers does not block exit past the timeout - kills: awaits a hung ping forever', async () => {
+    vi.useFakeTimers();
+    try {
+      // Node's own AbortSignal.timeout ignores fake timers; route it through the faked setTimeout so any timeout style is advanced.
+      vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms: number) => {
+        const c = new AbortController();
+        setTimeout(() => c.abort(), ms);
+        return c.signal;
+      });
+      fetchMock.mockImplementation(
+        (_u: unknown, init?: { signal?: AbortSignal }) =>
+          new Promise((_res, rej) => init?.signal?.addEventListener('abort', () => rej(new Error('aborted')))),
+      );
+      sweep.mockResolvedValue(CLEAN);
+      vi.doMock('dotenv', () => ({ config: () => void (process.env['POS_IMPORT_HEARTBEAT_URL'] = SECRET) }));
+      let code: number | undefined;
+      vi.spyOn(process, 'exit').mockImplementation(((c?: number) => void (code = c ?? 0)) as never);
+      await import('../../scripts/pos-day-import');
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(code).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a trailing slash never makes //fail - kills: naive concatenation', async () => {
+    const { calls } = await run(FAILED, { url: `${SECRET}/` });
+    expect(calls.map(urlOf)).toEqual([`${SECRET}/fail`]);
+    vi.resetModules();
+    const ok = await run(CLEAN, { url: `${SECRET}//` });
+    expect(ok.calls.map(urlOf).every((u) => !u.endsWith('//'))).toBe(true);
+  });
+});

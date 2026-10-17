@@ -217,3 +217,29 @@ describe('S2-5 / S2-5b who sees what', () => {
     expect(all).toContain('ZZ-B-FAIL');
   }, 30_000);
 });
+
+describe('S2 audit: a store-scoped viewer gets no cross-store run-level text', () => {
+  it('run-level error naming store B and all-store counts are hidden from a store-A manager; an org-wide viewer sees them - kills: leaks o.error / org-wide counts', async () => {
+    const f = await fixture('runlevel');
+    await insertRun(f, {
+      outcome: 'failed',
+      posted: 7,
+      error: 'ZZ-RUNERR Store Bravo import crashed: boom',
+      failures: [
+        { subjectId: f.storeA, subjectName: 'Store Alpha, 14 Oct', reason: 'ZZ-A-FAIL no wallet.' },
+        { subjectId: f.storeB, subjectName: 'Store Bravo, 14 Oct', reason: 'ZZ-B-FAIL no wallet.' },
+      ],
+    });
+    const scoped = await renderPageAs(f, f.managerA);
+    expect(scoped).not.toContain('ZZ-RUNERR');
+    expect(scoped).not.toContain('Bravo import crashed'); // not 'Store Bravo': the page's store filter lists every store name
+    expect(scoped).not.toMatch(/7 posted/);
+    expect(scoped).toContain('ZZ-A-FAIL');
+    expect(scoped).toMatch(/did not complete cleanly/i);
+    expect(scoped).toMatch(/stores you don(?:'|&#x27;)t manage/i);
+
+    const all = await renderPageAs(f, f.admin);
+    expect(all).toContain('ZZ-RUNERR');
+    expect(all).toMatch(/7 posted/);
+  }, 30_000);
+});

@@ -16,7 +16,7 @@
  */
 import { formatBusinessDateTime, toBusinessDate } from '@shareat/core/datetime';
 import { schedulerRepo, type SchedulerJob } from '@shareat/db';
-import { withOrgPrincipal } from '../app/expenses/lib';
+import { listStores, withOrgPrincipal } from '../app/expenses/lib';
 import { containsIdentifier } from '../lib/error-shape';
 import { Banner } from '@/components/ui/Banner';
 
@@ -105,6 +105,10 @@ export async function SchedulerStatus({
     );
   }
 
+  // A viewer who cannot see every store gets the run-level text (error, all-store counts) only as a generic line: it can name
+  // another store. A viewer who sees all of the org's stores gets it whole.
+  const orgWide = !visibleSubjectIds || (await listStores(orgId)).every((st) => visibleSubjectIds.includes(st.id));
+
   // T-368: a `kind: 'notice'` entry is said, not failed - it never renders as a failure.
   const shown = (last.failures ?? []).filter((f) => !visibleSubjectIds || visibleSubjectIds.includes(f.subjectId));
   const failureRows = shown.filter((f) => f.kind !== 'notice');
@@ -116,8 +120,14 @@ export async function SchedulerStatus({
         <strong className="font-medium">
           The last {label.toLowerCase()} run ({last.period}, {when}) did not complete cleanly.
         </strong>{' '}
-        {last.postedCount} posted, {last.failedCount} failed.
-        {last.error && <div className="mt-1">{redactDetail(last.error)}</div>}
+        {!orgWide ? (
+          <div className="mt-1">The last morning import had problems at stores you don&apos;t manage.</div>
+        ) : (
+          <>
+            {last.postedCount} posted, {last.failedCount} failed.
+            {last.error && <div className="mt-1">{redactDetail(last.error)}</div>}
+          </>
+        )}
         {/* ⚠️ Verbatim WHEN id-free, on the page. The likeliest reason is mundane — "no fiscal
             period covers 2026-06-30" — and it is only actionable if somebody can read it; an
             id-bearing one is redacted above (`redactSubject`/`redactDetail`, T-343 S4b). */}
