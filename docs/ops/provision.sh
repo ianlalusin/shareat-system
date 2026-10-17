@@ -150,7 +150,7 @@ if [ -n "$DOMAIN" ]; then
   fi
   cat > /etc/caddy/Caddyfile <<EOF
 $DOMAIN {
-  reverse_proxy localhost:9008
+  reverse_proxy 127.0.0.1:9008
 }
 EOF
   systemctl reload caddy 2>/dev/null || systemctl restart caddy
