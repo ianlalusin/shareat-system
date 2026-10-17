@@ -287,8 +287,8 @@ describe('T-387 S7 - /staff views', () => {
     }[];
     fns.forEach((f) => f.mockClear());
     await render();
-    expect(fns[0].mock.calls.length).toBeGreaterThan(0); // control: the wall calls them
-    expect(fns[1].mock.calls.length).toBeGreaterThan(0);
+    expect(fns[0]?.mock.calls.length ?? 0).toBeGreaterThan(0); // control: the wall calls them
+    expect(fns[1]?.mock.calls.length ?? 0).toBeGreaterThan(0);
     fns.forEach((f) => f.mockClear());
     await render({ view: 'positions' });
     for (const f of fns) expect(f.mock.calls.length).toBe(0);
