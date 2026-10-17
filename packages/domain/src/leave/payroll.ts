@@ -15,7 +15,7 @@
  * Freezing: a paid leave day freezes to the run (`frozen_by_pay_run_id`), exactly as an attendance day does; the payout row freezes in
  * the same transaction, so a second run finds it taken. Voiding the run releases both.
  */
-import { journalRepo, leaveRepo, payrollRepo, type Tx } from '@shareat/db';
+import { advisoryLocksRepo, journalRepo, leaveRepo, payrollRepo, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { ZERO, add, decimal, money, multiply, type Money } from '@shareat/core/money';
 import { refuse } from '../shared/refusal';
@@ -109,7 +109,11 @@ export async function planLeavePayroll(
     const dec31 = `${year}-12-31`;
     if (isoBefore(dec31, input.from) || isoAfter(dec31, input.to)) continue;
     const candidates = await leaveRepo.personsOpenAtStoreOn(tx, orgId, input.storeId, dec31);
-    for (const c of candidates) {
+    // ⛔ Each person's leave lock is taken (in a stable order, person id) BEFORE their balance is read, so an approval that
+    // committed or is committing is seen: the cash days and the approved paid days can never exceed the entitlement together.
+    // postPayRun reads this plan inside its own transaction, so the locks are held until the payout rows are written.
+    for (const c of [...candidates].sort((a, b) => cmpIso(a.personId, b.personId))) {
+      await advisoryLocksRepo.lockPersonLeave(tx, c.personId);
       const spans = await leaveRepo.listEmploymentSpans(tx, orgId, c.personId);
       const open = spans.filter((s) => isoOnOrBefore(s.startedOn, dec31) && (s.endedOn === null || isoOnOrAfter(s.endedOn, dec31)));
       // Designated: open on 31 Dec with the EARLIEST started_on (ties: lowest id). `listEmploymentSpans` is ordered by (started_on, id).
@@ -152,6 +156,7 @@ export async function applyLeaveToRun(
 ): Promise<void> {
   await leaveRepo.freezeLeaveDays(tx, input.leaveDayIds, input.runId);
   for (const p of input.payouts) {
+    await advisoryLocksRepo.lockPersonLeave(tx, p.personId); // already held from the plan; re-taking it in one transaction is free
     const claimed = await leaveRepo.claimCommutation(tx, {
       orgId: by.orgId,
       personId: p.personId,
@@ -198,6 +203,8 @@ export async function settleSilAtSeparation(
   input: { storeId: string; employmentId: string; personId: string; separationId: string; separationDate: string; entryDate: string; moneyAccountGlCode: string },
 ): Promise<{ amount: Money } | null> {
   const year = Number(input.separationDate.slice(0, 4));
+  // ⛔ Under the person's leave lock BEFORE the balance is read: a paid SIL approval racing this payout is either seen or queued.
+  await advisoryLocksRepo.lockPersonLeave(tx, input.personId);
   const spans = await leaveRepo.listEmploymentSpans(tx, by.orgId, input.personId);
   const stillEmployed = spans.some(
     (s) => s.id !== input.employmentId && isoOnOrBefore(s.startedOn, `${year}-12-31`) && (s.endedOn === null || isoAfter(s.endedOn, input.separationDate)),

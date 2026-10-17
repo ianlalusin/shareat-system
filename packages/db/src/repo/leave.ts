@@ -382,6 +382,20 @@ export async function workedDates(tx: Tx, personId: string, dates: readonly stri
   return rows.map((r) => r.d);
 }
 
+/** Dates (of these) that fall inside the period of a POSTED (not voided) pay run of this store: a paid day there would never be paid. */
+export async function datesInPostedRunPeriod(tx: Tx, orgId: string, storeId: string, dates: readonly string[]): Promise<string[]> {
+  if (dates.length === 0) return [];
+  const rows = rowsOf<{ d: string }>(
+    await tx.execute(sql`
+      select distinct x::text as "d" from unnest(array[${sql.join(dates.map((v) => sql`${v}`), sql`, `)}]::date[]) as x
+      where exists (select 1 from pay_runs r
+                    where r.org_id = ${orgId} and r.store_id = ${storeId} and r.status = 'posted'
+                      and x between r.period_start and r.period_end)
+      order by 1`),
+  );
+  return rows.map((r) => r.d);
+}
+
 // ---------------------------------------------------------------------------------------------
 // Counts (all PERSON-keyed, all under the caller's person lock)
 

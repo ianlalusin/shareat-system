@@ -8,5 +8,5 @@ export * from './requests';
 export * from './documents';
 export { silEntitlementDays, silAnniversary, serviceStartFor } from './sil';
 export { cmpIso as isoDateCompare } from './dates';
-export { LeaveRefusal, LEAVE_REFUSAL_CODES, type LeaveRefusalCode } from './refusal';
+export { LeaveRefusal, leaveRefusal, LEAVE_REFUSAL_CODES, type LeaveRefusalCode } from './refusal';
 export { LEAVE_DOCUMENT_LINK_SECONDS } from './document-access';

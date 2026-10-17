@@ -13,7 +13,7 @@
  * - **The note is personal data** (D13, bible row 353): only the loader returns it, and only to people allowed to open the request.
  */
 import { accessRepo, leaveRepo, advisoryLocksRepo, transaction, type Tx } from '@shareat/db';
-import { authorize, type Actor } from '@shareat/auth';
+import { authorize, heldCapabilities, type Actor } from '@shareat/auth';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { gone } from '../shared/refusal';
 import { audit } from './audit';
@@ -108,12 +108,16 @@ async function create(
   const employment = await loadEmployment(tx, input.employmentId);
   if (!employment || employment.orgId !== actor.orgId) throw gone('leave: that employment does not exist', 'job');
   const isSelf = employment.personId === actor.personId;
+  let selfApprovedSuperAdmin = false;
 
   // WHO (D5). A request: the person themself (an identity check, no capability) or a manage_attendance holder on their behalf.
   // A record is always a manager's act.
   if (origin === 'record' || !isSelf) await authorize(tx, actor, 'manage_attendance', { storeId: employment.storeId });
-  if (origin === 'record' && isSelf && !(await isSuperAdmin(tx, actor))) {
-    throw leaveRefusal('LEAVE_OWN_APPROVAL', 'You cannot record your own leave: another manager has to enter it.');
+  if (origin === 'record' && isSelf) {
+    if (!(await isSuperAdmin(tx, actor))) {
+      throw leaveRefusal('LEAVE_OWN_APPROVAL', 'You cannot record your own leave: another manager has to enter it.');
+    }
+    selfApprovedSuperAdmin = true;
   }
 
   const type = await leaveRepo.resolveType(tx, actor.orgId, input.leaveType);
@@ -251,6 +255,13 @@ async function create(
       }),
     });
   }
+  if (selfApprovedSuperAdmin) {
+    await audit(tx, actor, 'leave.self_approved', {
+      storeId: employment.storeId,
+      entityId: id,
+      after: payload({ personId: employment.personId, employmentId: employment.id, leaveType: type.code }, dates, { status: 'approved' }),
+    });
+  }
   return { requestId: id };
 }
 
@@ -270,7 +281,12 @@ export function recordLeave(tx: Tx | null, actor: Actor, input: LeaveRequestInpu
 /** Reads the request fresh, AFTER the person lock is held (a read taken before it could be stale by the time the lock is won). */
 async function lockedRequest(tx: Tx, actor: Actor, requestId: string) {
   const first = await leaveRepo.getRequest(tx, actor.orgId, requestId);
-  if (!first) throw gone('leave: that request does not exist', 'leave request');
+  if (!first) {
+    // A missing id must not tell a caller who may not decide leave which ids exist: they get the same refusal a real request
+    // would give them. Only someone who holds the capability somewhere learns "does not exist".
+    if (!(await heldCapabilities(tx, actor)).has('manage_attendance')) await authorize(tx, actor, 'manage_attendance');
+    throw gone('leave: that request does not exist', 'leave request');
+  }
   return first;
 }
 

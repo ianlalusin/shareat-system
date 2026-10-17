@@ -230,7 +230,7 @@ describe('T-436 B - paid leave cannot be dated into a period a posted pay run al
     await post(f, '2026-01-01', '2026-01-15');
     // MUTANT: checkAndPrice never looks at posted runs -> a paid day nobody will ever pay.
     expect((await errOf(record(f, { days: [day('2026-01-08')] })))?.code).toBe('LEAVE_PERIOD_PAID');
-    expect((await errOf(record(f, { leaveType: 'sick', days: [day('2026-01-09')] })))?.code).toBe('LEAVE_PERIOD_PAID');
+    expect((await errOf(record(f, { leaveType: 'sick', paid: true, days: [day('2026-01-09')] })))?.code).toBe('LEAVE_PERIOD_PAID');
     expect((await errOf(record(f, { days: [day('2026-01-15')] })))?.code, 'last day of the period is inside it').toBe('LEAVE_PERIOD_PAID');
     // control: unpaid, and a date outside the period
     await record(f, { leaveType: 'unpaid_other', days: [day('2026-01-08')] });

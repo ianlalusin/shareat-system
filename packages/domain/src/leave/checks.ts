@@ -229,6 +229,15 @@ export async function checkAndPrice(
   await enforceCaps(tx, c, leaveDates);
 
   const price = effectivePaid(c.type, wantedPaid);
+  if (price.paid) {
+    const paidOver = await leaveRepo.datesInPostedRunPeriod(tx, c.orgId, c.employment.storeId, leaveDates);
+    if (paidOver.length > 0) {
+      throw leaveRefusal(
+        'LEAVE_PERIOD_PAID',
+        `A pay run has already been posted for ${paidOver.join(', ')}, so paid leave cannot be added there. Record it as unpaid, or void that pay run first.`,
+      );
+    }
+  }
   if (price.paid && c.type.drawsSil) await enforceSil(tx, c, leaveDates);
   return price;
 }

@@ -10,6 +10,7 @@
  */
 import {
   isoDateCompare,
+  leaveRefusal,
   listLeave,
   loadLeaveRequest,
   myLeave,
@@ -111,13 +112,18 @@ export function groupByRequest(rows: readonly LeaveRow[]): RequestGroup[] {
   return [...map.values()].sort((a, b) => isoDateCompare(first(a), first(b)));
 }
 
-/** Every date from..to inclusive; at most 62, and refuses an inverted range. The rest days are marked, not dropped. */
+/** Every date from..to inclusive; at most 366 (the domain's ceiling), and throws beyond that - never a quiet cut. An inverted range is []. The rest days are marked, not dropped. */
+const MAX_RANGE_DAYS = 366;
+
 export function expandRange(from: string, to: string, restDays: ReadonlySet<string>): { date: string; kind: 'leave' | 'rest_day' }[] {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || isoDateCompare(from, to) === 1) return [];
   const out: { date: string; kind: 'leave' | 'rest_day' }[] = [];
   let t = Date.parse(`${from}T00:00:00Z`);
   const end = Date.parse(`${to}T00:00:00Z`);
-  while (t <= end && out.length < 62) {
+  while (t <= end) {
+    if (out.length >= MAX_RANGE_DAYS) {
+      throw leaveRefusal('LEAVE_NO_DAYS', `A request covers at most ${MAX_RANGE_DAYS} days: split a longer absence into two.`);
+    }
     const date = new Date(t).toISOString().slice(0, 10);
     out.push({ date, kind: restDays.has(date) ? 'rest_day' : 'leave' });
     t += 86_400_000;

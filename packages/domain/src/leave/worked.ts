@@ -10,7 +10,7 @@
  *
  * Deliberately depends only on the db repos and the audit writer, so the attendance module can import it without a cycle.
  */
-import { auditLogRepo, leaveRepo, type Tx } from '@shareat/db';
+import { advisoryLocksRepo, auditLogRepo, leaveRepo, type Tx } from '@shareat/db';
 
 export type LeaveWorkOutcome = 'none' | 'superseded' | 'held';
 
@@ -20,6 +20,8 @@ export async function reconcileLeaveWithWorkedDay(
 ): Promise<LeaveWorkOutcome> {
   // A voided attendance day is not "worked": it never supersedes or blocks leave.
   if (input.attendanceStatus === 'voided') return 'none';
+  // Under the person's leave lock, so an approval in flight is either seen here or queued behind this recompute (never missed).
+  await advisoryLocksRepo.lockPersonLeave(tx, input.personId);
   const live = await leaveRepo.liveLeaveDaysOn(tx, input.personId, input.shiftDay);
   if (live.length === 0) return 'none';
 
