@@ -9,11 +9,12 @@
  * out and exactly what would trigger porting the rest.
  */
 import { sql } from 'drizzle-orm';
-import { ZERO, add, compare, decimal, formatMoney, money, subtract, type Money } from '@shareat/core/money';
+import { ZERO, add, compare, decimal, divideMoney, formatMoney, money, subtract, type Money } from '@shareat/core/money';
 import {
   attendanceConfigRepo,
   moneyAccountsRepo,
   payrollRepo,
+  statutoryRepo,
   transaction,
   type Tx,
 } from '@shareat/db';
@@ -22,11 +23,23 @@ import { parseMoneyInput } from '../shared/money-input';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { advanceToRecover, computePay, type DayInput } from './compute';
+import { refuse } from '../shared/refusal';
+import {
+  AGENCIES,
+  computeStatutory,
+  type Agency,
+  type AgencyPrior,
+  type ContributionRate,
+  type WithholdingBracket,
+} from './statutory';
 // T-436: leave pay + the year-end SIL payout. The computation lives in `leave/payroll.ts`; this file only adds its two figures to a slip.
 import { applyLeaveToRun, planLeavePayroll, releaseLeaveOfRun, sumMoney, type SilPayoutPlan } from '../leave/payroll';
 
 export * from './compute';
 export * from './periods';
+// T-190 - the pure statutory engine and the rate-table management functions.
+export * from './statutory';
+export * from './rates';
 // ⚠️ `./thirteenth-month` imports `outstandingAdvance` / `PAYROLL_ADVANCE_ACCOUNT` FROM this file
 // (they are only defined here, not in a sibling module) — a deliberate circular import, safe only
 // because both are used inside thirteenth-month.ts's function BODIES, never at its module top
@@ -44,6 +57,13 @@ export const SALARIES_ACCOUNT = '6100';
  * worth a refactor from inside a payroll task.
  */
 export const PAYROLL_ADVANCE_ACCOUNT = '1230';
+/** T-190. Employee + employer shares sit on these until T-193 remits them; the employer share is a cost on 6110-6130. */
+export const STATUTORY_PAYABLE_ACCOUNT = { sss: '2210', philhealth: '2220', pagibig: '2230' } as const;
+export const WITHHOLDING_PAYABLE_ACCOUNT = '2240';
+export const STATUTORY_EXPENSE_ACCOUNT = { sss: '6110', philhealth: '6120', pagibig: '6130' } as const;
+
+const AGENCY_LABEL: Record<Agency, string> = { sss: 'SSS', philhealth: 'PhilHealth', pagibig: 'Pag-IBIG' };
+const FREQUENCY_LABEL = { monthly: 'monthly', semi_monthly: 'semi-monthly', weekly: 'weekly' } as const;
 
 // -------------------------------------------------------------------------------------
 
@@ -124,9 +144,31 @@ export interface PayslipDraft {
   grossPay: Money;
   advanceRecovered: Money;
   netPay: Money;
+  // ---- T-190 statutory lines. The employee shares and withholding come out of the gross; the employer shares are a cost on top.
+  sssEe: Money;
+  philhealthEe: Money;
+  pagibigEe: Money;
+  withholding: Money;
+  sssEr: Money;
+  sssEc: Money;
+  philhealthEr: Money;
+  pagibigEr: Money;
+  taxablePay: Money;
+  /** Minimum-wage earner: the daily rate is at or under the store's minimum wage, so no withholding. */
+  isMwe: boolean;
+  /** Agencies NOT deducted (employee AND employer share 0) because the person has no number on file. */
+  skippedAgencies: Agency[];
+  /** The rate rows used; null for a skipped agency. */
+  sssRateId: string | null;
+  philhealthRateId: string | null;
+  pagibigRateId: string | null;
 }
 
 export interface PayRunPreview {
+  /** T-190. What is NOT yet confirmed (each names the agency, the withholding table or the minimum wage). A POST refuses while any is. */
+  unconfirmedRates: string[];
+  /** T-190. Every person and agency with no number on file: that agency is not deducted for them. */
+  missingGovernmentIds: { personId: string; personName: string; agency: Agency }[];
   slips: PayslipDraft[];
   totalGross: Money;
   totalNet: Money;
@@ -160,7 +202,22 @@ export async function previewPayRun(
   actor: Actor,
   input: { storeId: string; periodStart: string; periodEnd: string },
 ): Promise<PayRunPreview> {
-  const run = async (trx: Tx): Promise<PayRunPreview> => {
+  const run = (trx: Tx) => buildPreview(trx, actor, input, false);
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+/**
+ * The preview, and the one place the numbers are made. `forPost` takes the person locks (in id order) BEFORE reading month-to-date,
+ * so a post and a void for the same person run one after the other and the post sees the void's result (T-190 case 21).
+ */
+async function buildPreview(
+  trx: Tx,
+  actor: Actor,
+  input: { storeId: string; periodStart: string; periodEnd: string },
+  forPost: boolean,
+): Promise<PayRunPreview> {
+  {
     await authorize(trx, actor, 'run_payroll', { storeId: input.storeId });
 
     const config = await attendanceConfigRepo.findLive(trx, input.storeId);
@@ -214,7 +271,8 @@ export async function previewPayRun(
     const roster = await payrollRepo.employmentsForStore(trx, actor.orgId, input.storeId);
     const nameOf = new Map(roster.map((r) => [r.id, r.personName]));
 
-    const slips: PayslipDraft[] = [];
+    type Base = Omit<PayslipDraft, StatutoryDraftKeys> & { dailyRate: Money };
+    const bases: Base[] = [];
     const unratedEmployments: PayRunPreview['unratedEmployments'] = [];
 
     // ⭐ T-436: paid leave days and the year-end SIL payout. A person with leave but no attendance (or only the payout) still gets a slip.
@@ -237,6 +295,7 @@ export async function previewPayRun(
       // because that is the rate in force at the end of the period the slip covers.
       const inputs: DayInput[] = [];
       let payRateId: string | null = null;
+      let dailyRateAtEnd: Money = ZERO;
       let missingRate = 0;
 
       for (const d of theirDays) {
@@ -253,6 +312,7 @@ export async function previewPayRun(
           );
         }
         payRateId = rate.id;
+        dailyRateAtEnd = money(rate.amount);
         inputs.push({
           shiftDay: d.shiftDay,
           isHalfDay: d.isHalfDay,
@@ -283,6 +343,15 @@ export async function previewPayRun(
       }
       payRateId = payRateId ?? leaveLine?.payRateId ?? silPayouts[silPayouts.length - 1]?.payRateId ?? null;
       if ((inputs.length === 0 && !leaveLine && silPayouts.length === 0) || !payRateId) continue;
+      // T-190 audit gap 5: minimum-wage earner status is judged on the daily rate IN FORCE AT period_end, not on the last day worked.
+      const rateAtEnd = await payrollRepo.rateInForceOn(trx, actor.orgId, employmentId, input.periodEnd);
+      if (rateAtEnd && rateAtEnd.basis === 'daily') dailyRateAtEnd = money(rateAtEnd.amount);
+      // DEF-671: a leave-only / SIL-payout-only slip has no worked-day rate. Seed from what it was actually paid at, never ZERO (which reads as MWE).
+      if (compare(dailyRateAtEnd, ZERO) === 0) {
+        const lastSil = silPayouts[silPayouts.length - 1];
+        if (leaveLine && leaveLine.dayIds.length > 0) dailyRateAtEnd = divideMoney(leaveLine.leavePay, leaveLine.dayIds.length);
+        else if (lastSil) dailyRateAtEnd = lastSil.dailyRate;
+      }
 
       // ⭐ Every premium is now a per-store SETTING rather than a constant (T-189b, Ian's
       // "configurable to x1.25 or fix amount" and "holiday must be configurable too").
@@ -308,9 +377,8 @@ export async function previewPayRun(
       const silConversionPay = sumMoney(silPayouts.map((p) => p.amount));
       const grossPay = add(pay.grossPay, leavePay, silConversionPay);
       const outstanding = await outstandingAdvance(trx, actor.orgId, personId);
-      const advanceRecovered = advanceToRecover(grossPay, outstanding);
 
-      slips.push({
+      bases.push({
         employmentId,
         personId,
         personName: nameOf.get(employmentId) ?? 'unknown',
@@ -322,18 +390,26 @@ export async function previewPayRun(
         silConversionPay,
         leaveDayIds: leaveLine?.dayIds ?? [],
         silPayouts,
+        // T-436 leave + SIL are compensation: they are in the gross BEFORE the statutory pass reads it.
         grossPay,
-        advanceRecovered,
-        netPay: subtract(grossPay, advanceRecovered),
+        // Placeholders: the statutory pass below sets the advance and the net AFTER the contributions and the withholding.
+        advanceRecovered: outstanding,
+        netPay: grossPay,
+        dailyRate: dailyRateAtEnd,
       });
     }
     for (const u of leavePlan.unrated) {
       unratedEmployments.push({ employmentId: u.employmentId, personName: nameOf.get(u.employmentId) ?? 'unknown', days: u.days });
     }
 
-    slips.sort((a, b) => a.personName.localeCompare(b.personName));
+    bases.sort((a, b) => a.personName.localeCompare(b.personName) || a.employmentId.localeCompare(b.employmentId));
+
+    // ---- T-190: statutory contributions and withholding, from the confirmed tables in force on the run's period_end.
+    const { slips, unconfirmedRates, missingGovernmentIds } = await applyStatutory(trx, actor, input, config.payrollPeriodType, bases, forPost);
 
     return {
+      unconfirmedRates,
+      missingGovernmentIds,
       slips,
       totalGross: add(ZERO, ...slips.map((s) => s.grossPay)),
       totalNet: add(ZERO, ...slips.map((s) => s.netPay)),
@@ -350,9 +426,145 @@ export async function previewPayRun(
         heldZeroCredit.reduce((n, d) => n + d.pendingOtMinutes, 0),
       heldZeroCreditDays: heldZeroCredit.length,
     };
-  };
-  if (tx) return run(tx);
-  return transaction(run);
+  }
+}
+
+type StatutoryDraftKeys =
+  | 'sssEe' | 'philhealthEe' | 'pagibigEe' | 'withholding' | 'sssEr' | 'sssEc' | 'philhealthEr' | 'pagibigEr'
+  | 'taxablePay' | 'isMwe' | 'skippedAgencies' | 'sssRateId' | 'philhealthRateId' | 'pagibigRateId';
+
+function emptyPrior(): AgencyPrior {
+  return { base: ZERO, ee: ZERO, er: ZERO, ec: ZERO };
+}
+
+/**
+ * T-190 S3. Turns the pay of each person into payslip drafts with SSS / PhilHealth / Pag-IBIG / withholding.
+ *
+ * Lookups are all AS OF the run's `period_end`. A missing row is a typed refusal that names what is missing, never "taxable" or zero;
+ * an unconfirmed row is returned in `unconfirmedRates` (the preview warns; `postPayRun` refuses). Month-to-date comes from the person's
+ * earlier POSTED, non-voided payslips of the calendar month (any store, any employment), counting an agency only where it WAS deducted;
+ * in a post the people are locked first. Within one run a person's second payslip sees the first.
+ */
+async function applyStatutory(
+  trx: Tx,
+  actor: Actor,
+  input: { storeId: string; periodStart: string; periodEnd: string },
+  frequency: 'monthly' | 'semi_monthly' | 'weekly',
+  bases: (Omit<PayslipDraft, StatutoryDraftKeys> & { dailyRate: Money })[],
+  forPost: boolean,
+): Promise<{ slips: PayslipDraft[]; unconfirmedRates: string[]; missingGovernmentIds: PayRunPreview['missingGovernmentIds'] }> {
+  if (bases.length === 0) return { slips: [], unconfirmedRates: [], missingGovernmentIds: [] };
+  const on = input.periodEnd;
+  const unconfirmedRates: string[] = [];
+
+  const rates = {} as Record<Agency, ContributionRate>;
+  for (const agency of AGENCIES) {
+    const row = await statutoryRepo.rateInForceOn(trx, actor.orgId, agency, on);
+    if (!row) {
+      throw refuse(
+        `previewPayRun: no ${AGENCY_LABEL[agency]} contribution rate is in force on ${on}`,
+        `There is no ${AGENCY_LABEL[agency]} contribution rate in force on ${on}. Add and confirm it under payroll rates before running payroll.`,
+      );
+    }
+    if (!row.confirmedAt) unconfirmedRates.push(`${AGENCY_LABEL[agency]} contribution rate (from ${row.effectiveFrom})`);
+    rates[agency] = row as unknown as ContributionRate;
+  }
+
+  const set = await statutoryRepo.bracketSetInForceOn(trx, actor.orgId, frequency, on);
+  if (!set) {
+    throw refuse(
+      `previewPayRun: no ${frequency} withholding brackets in force on ${on}`,
+      `There is no ${FREQUENCY_LABEL[frequency]} withholding tax table in force on ${on}. Add and confirm it under payroll rates before running payroll.`,
+    );
+  }
+  if (!set.confirmed) unconfirmedRates.push(`${FREQUENCY_LABEL[frequency]} withholding tax table (from ${set.effectiveFrom})`);
+  const brackets: WithholdingBracket[] = set.rows;
+
+  const minWage = await statutoryRepo.minimumWageInForceOn(trx, actor.orgId, input.storeId, on);
+  if (!minWage) {
+    throw refuse(
+      `previewPayRun: no minimum wage in force on ${on} for store ${input.storeId}`,
+      `This store has no minimum wage on file for ${on}. Add and confirm it under payroll rates before running payroll.`,
+    );
+  }
+  if (!minWage.confirmedAt) unconfirmedRates.push(`minimum wage (from ${minWage.effectiveFrom})`);
+  const minimum = money(minWage.dailyRate);
+
+  const personIds = [...new Set(bases.map((b) => b.personId))];
+  if (forPost) await statutoryRepo.lockPersons(trx, actor.orgId, personIds);
+  const ids = new Map((await statutoryRepo.governmentIdsFor(trx, actor.orgId, personIds)).map((r) => [r.personId, r]));
+
+  const priorOf = new Map<string, Record<Agency, AgencyPrior>>();
+  for (const personId of personIds) {
+    const prior: Record<Agency, AgencyPrior> = { sss: emptyPrior(), philhealth: emptyPrior(), pagibig: emptyPrior() };
+    for (const r of await statutoryRepo.monthToDate(trx, actor.orgId, personId, on)) {
+      prior[r.agency] = { base: money(r.base), ee: money(r.ee), er: money(r.er), ec: money(r.ec) };
+    }
+    priorOf.set(personId, prior);
+  }
+
+  const missingGovernmentIds: PayRunPreview['missingGovernmentIds'] = [];
+  const slips: PayslipDraft[] = [];
+  // DEF-670: advance already recovered by this person's EARLIER slips in this run (a second employment must not recover it again).
+  const advanceTakenOf = new Map<string, Money>();
+  for (const b of bases) {
+    const gid = ids.get(b.personId);
+    const skipped: Agency[] = [];
+    if (!gid?.sssNo) skipped.push('sss');
+    if (!gid?.philhealthNo) skipped.push('philhealth');
+    if (!gid?.pagibigNo) skipped.push('pagibig');
+    for (const agency of skipped) missingGovernmentIds.push({ personId: b.personId, personName: b.personName, agency });
+
+    const isMwe = compare(b.dailyRate, minimum) <= 0;
+    const prior = priorOf.get(b.personId)!;
+    const { dailyRate: _dailyRate, ...draft } = b;
+    void _dailyRate;
+    const alreadyTaken = advanceTakenOf.get(b.personId) ?? ZERO;
+    // the placeholder carried the outstanding advance; less what this person's earlier slips in the run already took
+    const outstanding = compare(draft.advanceRecovered, alreadyTaken) > 0 ? subtract(draft.advanceRecovered, alreadyTaken) : ZERO;
+    const r = computeStatutory({
+      basicPay: b.basicPay,
+      grossPay: b.grossPay,
+      isMwe,
+      rates,
+      prior,
+      skipped,
+      brackets,
+      advanceOutstanding: outstanding,
+    });
+
+    // The person's next payslip in this same run (a second employment) must see this one.
+    const take = (agency: Agency, base: Money, ee: Money, er: Money, ec: Money) => {
+      const p = prior[agency];
+      prior[agency] = { base: add(p.base, base), ee: add(p.ee, ee), er: add(p.er, er), ec: add(p.ec, ec) };
+    };
+    if (!skipped.includes('sss')) take('sss', rates.sss.baseKind === 'gross' ? b.grossPay : b.basicPay, r.sss.ee, r.sss.er, r.sss.ec);
+    if (!skipped.includes('philhealth')) take('philhealth', rates.philhealth.baseKind === 'gross' ? b.grossPay : b.basicPay, r.philhealth.ee, r.philhealth.er, ZERO);
+    if (!skipped.includes('pagibig')) take('pagibig', rates.pagibig.baseKind === 'gross' ? b.grossPay : b.basicPay, r.pagibig.ee, r.pagibig.er, ZERO);
+
+    advanceTakenOf.set(b.personId, add(alreadyTaken, r.advanceRecovered));
+
+    slips.push({
+      ...draft,
+      advanceRecovered: r.advanceRecovered,
+      netPay: r.netPay,
+      sssEe: r.sss.ee,
+      philhealthEe: r.philhealth.ee,
+      pagibigEe: r.pagibig.ee,
+      withholding: r.withholding,
+      sssEr: r.sss.er,
+      sssEc: r.sss.ec,
+      philhealthEr: r.philhealth.er,
+      pagibigEr: r.pagibig.er,
+      taxablePay: r.taxablePay,
+      isMwe,
+      skippedAgencies: skipped,
+      sssRateId: skipped.includes('sss') ? null : rates.sss.id,
+      philhealthRateId: skipped.includes('philhealth') ? null : rates.philhealth.id,
+      pagibigRateId: skipped.includes('pagibig') ? null : rates.pagibig.id,
+    });
+  }
+  return { slips, unconfirmedRates, missingGovernmentIds };
 }
 
 /**
@@ -415,7 +627,7 @@ export async function postPayRun(
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'run_payroll', { storeId: input.storeId });
 
-    const preview = await previewPayRun(trx, actor, input);
+    const preview = await buildPreview(trx, actor, input, true);
     // ⚠️ UNRATED IS CHECKED FIRST, and the order is the point. When the only people who worked
     // have no rate, both conditions are true — and "nothing to pay" is the useless half of the
     // answer. Naming who has no rate is what someone can act on.
@@ -432,6 +644,14 @@ export async function postPayRun(
           (preview.needsReviewDays > 0
             ? `${preview.needsReviewDays} day(s) still need a manager's review and are deliberately excluded.`
             : 'No payable attendance days were found.'),
+      );
+    }
+
+    // ⛔ T-190: a POST uses only CONFIRMED statutory rows (preview works and warns). Names every unconfirmed table.
+    if (preview.unconfirmedRates.length > 0) {
+      throw refuse(
+        `postPayRun: unconfirmed statutory rates: ${preview.unconfirmedRates.join('; ')}`,
+        `These payroll tables are not confirmed yet: ${preview.unconfirmedRates.join('; ')}. The accountant must confirm them before payroll can be posted.`,
       );
     }
 
@@ -486,16 +706,48 @@ export async function postPayRun(
           grossPay: slip.grossPay,
           advanceRecovered: slip.advanceRecovered,
           netPay: slip.netPay,
+          sssEe: slip.sssEe,
+          philhealthEe: slip.philhealthEe,
+          pagibigEe: slip.pagibigEe,
+          withholding: slip.withholding,
+          sssEr: slip.sssEr,
+          sssEc: slip.sssEc,
+          philhealthEr: slip.philhealthEr,
+          pagibigEr: slip.pagibigEr,
+          taxablePay: slip.taxablePay,
+          isMwe: slip.isMwe,
+          skippedAgencies: slip.skippedAgencies,
+          sssRateId: slip.sssRateId,
+          philhealthRateId: slip.philhealthRateId,
+          pagibigRateId: slip.pagibigRateId,
           journalEntryId: null,
         })
       ).id;
 
+      const sssOwed = add(slip.sssEe, slip.sssEr, slip.sssEc);
+      const philhealthOwed = add(slip.philhealthEe, slip.philhealthEr);
+      const pagibigOwed = add(slip.pagibigEe, slip.pagibigEr);
+      const sssCost = add(slip.sssEr, slip.sssEc);
+      const credit = (accountCode: string, amount: Money) =>
+        compare(amount, ZERO) > 0 ? [{ accountCode, storeId: input.storeId, credit: amount }] : [];
+      const debit = (accountCode: string, amount: Money) =>
+        compare(amount, ZERO) > 0 ? [{ accountCode, storeId: input.storeId, debit: amount }] : [];
+
+      // ⛔ The §16.7 double-count trap: the EMPLOYEE share is already inside 6100 gross, so only the EMPLOYER share is debited to
+      // 6110-6130. Expense = gross + employer share, never more. The payable (2210-2240) holds both sides until T-193 remits.
       const lines = [
         {
           accountCode: SALARIES_ACCOUNT,
           storeId: input.storeId,
           debit: slip.grossPay,
         },
+        ...debit(STATUTORY_EXPENSE_ACCOUNT.sss, sssCost),
+        ...debit(STATUTORY_EXPENSE_ACCOUNT.philhealth, slip.philhealthEr),
+        ...debit(STATUTORY_EXPENSE_ACCOUNT.pagibig, slip.pagibigEr),
+        ...credit(STATUTORY_PAYABLE_ACCOUNT.sss, sssOwed),
+        ...credit(STATUTORY_PAYABLE_ACCOUNT.philhealth, philhealthOwed),
+        ...credit(STATUTORY_PAYABLE_ACCOUNT.pagibig, pagibigOwed),
+        ...credit(WITHHOLDING_PAYABLE_ACCOUNT, slip.withholding),
         ...(compare(slip.advanceRecovered, ZERO) > 0
           ? [
               {
@@ -574,6 +826,8 @@ export async function voidPayRun(
     }
 
     const slips = await payrollRepo.listPayslips(trx, input.runId);
+    // ⛔ T-190: lock every affected person (id order) BEFORE the status changes, so a concurrent post's month-to-date sees this void.
+    await statutoryRepo.lockPersons(trx, actor.orgId, slips.map((x) => x.personId));
     let reversed = 0;
     for (const slip of slips) {
       if (!slip.journalEntryId) continue;

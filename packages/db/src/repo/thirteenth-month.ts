@@ -84,6 +84,26 @@ export async function hasPostedSeparationInYear(
   return !!row;
 }
 
+/**
+ * T-190: what a PERSON has already been paid as 13th month in a calendar year, from POSTED runs only (a voided run paid nothing).
+ * The tax-exempt ceiling (RA 10963: 90,000 a year across 13th month and other benefits) is per person, not per employment.
+ */
+export async function paidInYearForPerson(tx: Tx, orgId: string, personId: string, year: number): Promise<string> {
+  const [row] = await tx
+    .select({ total: sql<string>`coalesce(sum(${thirteenthMonthPayouts.grossPay}), 0)::text` })
+    .from(thirteenthMonthPayouts)
+    .innerJoin(thirteenthMonthRuns, eq(thirteenthMonthRuns.id, thirteenthMonthPayouts.runId))
+    .where(
+      and(
+        eq(thirteenthMonthPayouts.orgId, orgId),
+        eq(thirteenthMonthPayouts.personId, personId),
+        eq(thirteenthMonthRuns.status, 'posted'),
+        eq(thirteenthMonthRuns.year, year),
+      ),
+    );
+  return row?.total ?? '0';
+}
+
 // -------------------------------------------------------------------------------------
 
 export interface ThirteenthMonthRunRow {

@@ -20,6 +20,7 @@ import {
   removeStaffPhoto,
   removeStaffSignature,
   setEmploymentPositions,
+  setGovernmentIds,
   setStaffPhoto,
   setStaffSignature,
   upsertStorePosition,
@@ -236,6 +237,31 @@ export async function issuePinAction(formData: FormData): Promise<void> {
     return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
   }
   return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Sign-in PIN issued.' });
+}
+
+/** T-190 - SSS / PhilHealth / Pag-IBIG / TIN. A blank box clears that number; an agency with no number is not deducted on the payslip. */
+export async function setGovernmentIdsAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/staff');
+  const employmentId = str(formData, 'employmentId');
+  try {
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      const employment = await employmentRepo.getEmployment(tx, employmentId);
+      if (!employment || employment.orgId !== actor.orgId) {
+        throw new Error('That employment does not exist.');
+      }
+      await setGovernmentIds(tx, actor, {
+        personId: employment.personId,
+        storeId: employment.storeId,
+        sssNo: str(formData, 'sssNo'),
+        philhealthNo: str(formData, 'philhealthNo'),
+        pagibigNo: str(formData, 'pagibigNo'),
+        tin: str(formData, 'tin'),
+      });
+    });
+  } catch (err) {
+    return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Government numbers saved.' });
 }
 
 /**

@@ -17,6 +17,7 @@
 export * from './organizations';
 export * from './payroll';
 export * from './thirteenth-month';
+export * from './statutory';
 export * from './separations';
 export * from './stores';
 export * from './persons';

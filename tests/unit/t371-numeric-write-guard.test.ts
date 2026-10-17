@@ -146,6 +146,8 @@ const EXEMPT: Record<string, (typeof EXEMPT_REASONS)[number]> = {
   'packages/domain/src/payroll/periods.ts::maxPayoutGapDays::earlier < GAP_PAIR_FROM': 'not-a-column-value',
   'apps/erp/src/app/payroll/lib.ts::currentPeriod::today >= p.start': 'not-a-column-value',
   'apps/erp/src/app/payroll/lib.ts::currentPeriod::today <= p.end': 'not-a-column-value',
+  // T-190: ISO 'YYYY-MM-DD' business-date ordering (a table's effective_from vs the latest posted period_end) - string-vs-string, never a money value
+  'packages/domain/src/payroll/rates.ts::assertNotPaidAlready::effectiveFrom <= latest': 'not-a-column-value',
   'packages/domain/src/stock/layers.ts::sortForFifo::a.id < b.id': 'not-a-column-value',
   'packages/domain/src/stock/layers.ts::sortForFifo::a.id > b.id': 'not-a-column-value',
   'packages/domain/src/fixed-assets/schedule.ts::periodsThrough::p.period <= asOfPeriod': 'not-a-column-value',

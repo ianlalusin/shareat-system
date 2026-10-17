@@ -262,13 +262,32 @@ export default async function PayrollPage({
             </Banner>
           )}
 
+          {pv.unconfirmedRates.length > 0 && (
+            <Banner tone="warning">
+              ⚠️ <strong>Rates not confirmed:</strong> {pv.unconfirmedRates.join('; ')}. The figures below use them, but the run
+              cannot be posted until the accountant approves them under
+              Payroll rates (in the menu).
+            </Banner>
+          )}
+
+          {pv.missingGovernmentIds.length > 0 && (
+            <Banner tone="warning">
+              ⚠️ <strong>Missing government numbers — not deducted:</strong>{' '}
+              {pv.missingGovernmentIds
+                .map((m) => `${m.personName} (${m.agency === 'sss' ? 'SSS' : m.agency === 'philhealth' ? 'PhilHealth' : 'Pag-IBIG'})`)
+                .join(', ')}
+              . An agency with no number on file is skipped for that person (both shares), and not caught up later; add the number on the
+              staff page.
+            </Banner>
+          )}
+
           {pv.slips.length === 0 ? (
             <p className="rounded border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500 dark:border-neutral-700">
               Nothing payable in this period.
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[52rem] text-sm">
+              <table className="w-full min-w-[60rem] text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-neutral-500">
                     <th className="py-1 pr-3 font-medium">Person</th>
@@ -277,6 +296,8 @@ export default async function PayrollPage({
                     <th className="py-1 pr-3 text-right font-medium">OT + ND + Hol</th>
                     <th className="py-1 pr-3 text-right font-medium">Leave + SIL payout</th>
                     <th className="py-1 pr-3 text-right font-medium">Gross</th>
+                    <th className="py-1 pr-3 text-right font-medium">SSS / PhilHealth / Pag-IBIG</th>
+                    <th className="py-1 pr-3 text-right font-medium">Tax</th>
                     <th className="py-1 pr-3 text-right font-medium">Advance</th>
                     <th className="py-1 text-right font-medium">Net</th>
                   </tr>
@@ -300,6 +321,17 @@ export default async function PayrollPage({
                       </td>
                       <td className="py-1.5 pr-3 text-right font-mono tabular-nums">
                         {peso(Number(s.grossPay))}
+                      </td>
+                      <td className="py-1.5 pr-3 text-right font-mono text-xs tabular-nums">
+                        {peso(Number(s.sssEe))} / {peso(Number(s.philhealthEe))} / {peso(Number(s.pagibigEe))}
+                        {s.skippedAgencies.length > 0 && (
+                          <div className="font-sans text-warning-ink">
+                            not deducted: no {s.skippedAgencies.map((a) => (a === 'sss' ? 'SSS' : a === 'philhealth' ? 'PhilHealth' : 'Pag-IBIG')).join(', ')} no.
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-1.5 pr-3 text-right font-mono tabular-nums">
+                        {s.isMwe ? 'MWE' : peso(Number(s.withholding))}
                       </td>
                       <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-warning-ink">
                         {compare(money(s.advanceRecovered), ZERO) > 0 ? `−${peso(Number(s.advanceRecovered))}` : '—'}
@@ -432,6 +464,9 @@ export default async function PayrollPage({
                       <span className="font-mono">{peso(Number(s.netPay))}</span>
                       {compare(money(s.advanceRecovered), ZERO) > 0 &&
                         ` (advance −${peso(Number(s.advanceRecovered))})`}
+                      {` · SSS ${peso(Number(s.sssEe))}, PhilHealth ${peso(Number(s.philhealthEe))}, Pag-IBIG ${peso(Number(s.pagibigEe))}, tax ${peso(Number(s.withholding))}`}
+                      {s.skippedAgencies.length > 0 &&
+                        ` · not deducted: no ${s.skippedAgencies.map((x) => (x === 'sss' ? 'SSS' : x === 'philhealth' ? 'PhilHealth' : 'Pag-IBIG')).join(', ')} no.`}
                     </li>
                   ))}
                 </ul>

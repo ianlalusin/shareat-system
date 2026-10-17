@@ -146,6 +146,7 @@ export { LEAVE_REQUEST_STATUSES, LEAVE_DAY_STATUSES, LEAVE_DAY_KINDS, LEAVE_ORIG
 export type { LeaveRequestStatus, LeaveDayStatus, LeaveDayKind, LeaveOrigin } from '../schema/leave';
 // T-191 — 13th-month pay (Phase 5, after T-189).
 export * as thirteenthMonthRepo from './repo/thirteenth-month';
+export * as statutoryRepo from './repo/statutory';
 // T-192 — separations, final pay, clearance (Phase 5, after T-191).
 export * as separationsRepo from './repo/separations';
 export type { PayRateRow, PayRunRow, PayslipRow, PayableDay } from './repo/payroll';

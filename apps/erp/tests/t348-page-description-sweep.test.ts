@@ -151,7 +151,7 @@ describe('T-348 S2 — the two neutral-500 prose sites move too (SW3)', () => {
 });
 
 describe('T-348 S2 — the population lands exactly, nothing dropped or doubled (SW4)', () => {
-  it('SW4: exactly 118 <PageDescription> call sites exist under app/', () => {
+  it('SW4: exactly 119 <PageDescription> call sites exist under app/', () => {
     let count = 0;
     for (const file of walk(appRoot)) {
       const content = readFileSync(file, 'utf8');
@@ -160,7 +160,8 @@ describe('T-348 S2 — the population lands exactly, nothing dropped or doubled 
     // 105 -> 106, T-375 S1: the new /settings/pos-link page carries its <PageDescription> (SW1/SW2 stay green). T-401 S4: +4 (menu screens). 110 -> 111, T-401 S5 / combined release: +1. 111 -> 112, T-408: /ap/vat carries its <PageDescription>. 112 -> 116, release 2026-10-16: +4 new pages each carrying one (recipes list/new/[id] from T-413, /settings/usage-tolerance from T-401 S6); measured by walking app/.
     // 116 -> 117, T-431: /liabilities/unpaid carries its <PageDescription>; measured by walking app/.
     // 117 -> 118, T-436: the new /attendance/leave page carries its <PageDescription>.
-    expect(count).toBe(118);
+    // 118 -> 119, T-190: /payroll/rates carries its <PageDescription>; measured by walking app/.
+    expect(count).toBe(119);
   });
 });
 

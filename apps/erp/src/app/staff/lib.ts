@@ -8,7 +8,7 @@
  * reads (a by-id reader checks the ROW's store). Mutations still run through `packages/domain/src/people/index.ts`'s own
  * `authorize()` via `withOrgPrincipal`. `searchPersonsFor` carries `enrol_staff` and is scoped in the domain function.
  */
-import { employmentRepo, personsRepo, sessionsRepo, type EmploymentPositionRow, type EmploymentRow, type PersonRow, type PositionRow, type RosterRow, type Tx } from '@shareat/db';
+import { employmentRepo, personsRepo, sessionsRepo, statutoryRepo, type EmploymentPositionRow, type EmploymentRow, type PersonRow, type PositionRow, type RosterRow, type Tx } from '@shareat/db';
 import { authorize, can, type Actor, type Capability } from '@shareat/auth';
 import { searchPersons, staffMediaView } from '@shareat/domain';
 import { listStores, withOrgPrincipal, type StoreOption } from '../expenses/lib';
@@ -93,6 +93,23 @@ export async function employmentDetail(actor: Actor, employmentId: string): Prom
       storeName: store?.name ?? employment.storeId,
       positions: positionRows.map((p) => ({ positionId: p.positionId, name: p.positionName, isPrimary: p.isPrimary })),
     };
+  });
+}
+
+/**
+ * T-190 - the person's government numbers (SSS, PhilHealth, Pag-IBIG, TIN). PERSONAL DATA: returned only to someone holding `enrol_staff`
+ * at the store of the employment being viewed; `null` otherwise (the section is simply not shown). A missing number means that agency is
+ * not deducted on the person's payslips.
+ */
+export async function governmentIdsFor(
+  actor: Actor,
+  personId: string,
+  storeId: string,
+): Promise<{ sssNo: string | null; philhealthNo: string | null; pagibigNo: string | null; tin: string | null } | null> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    if (!(await can(tx, actor, 'enrol_staff', { storeId }))) return null;
+    const [row] = await statutoryRepo.governmentIdsFor(tx, actor.orgId, [personId]);
+    return row ? { sssNo: row.sssNo, philhealthNo: row.philhealthNo, pagibigNo: row.pagibigNo, tin: row.tin } : null;
   });
 }
 

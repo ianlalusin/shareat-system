@@ -37,6 +37,14 @@ export const persons = pgTable(
      */
     kind: text('kind', { enum: ['person', 'terminal'] }).notNull().default('person'),
     /**
+     * ⭐ T-190 (migration 0206) - government numbers. PERSONAL DATA: read only behind `run_payroll` / `enrol_staff`. A missing number
+     * means that agency is NOT deducted for the person (Ian, 16 Oct). Digits only; the format CHECKs are hand-added in 0206.
+     */
+    sssNo: text('sss_no'),
+    philhealthNo: text('philhealth_no'),
+    pagibigNo: text('pagibig_no'),
+    tin: text('tin'),
+    /**
      * T-434, migration 0204. The person's CURRENT signature (a PNG filed through the broker, purpose `staff_signature`).
      * On the PERSON, not the employment: a signature is the human's legal mark. Never selected by a list, a wall or an
      * export; read only through the signature rule in `@shareat/domain` (people/signature).
@@ -47,6 +55,10 @@ export const persons = pgTable(
   },
   (t) => [
     check('persons_kind_check', sql`${t.kind} in ('person', 'terminal')`),
+    check('persons_sss_no_format_check', sql`${t.sssNo} is null or ${t.sssNo} ~ '^[0-9]{10}$'`),
+    check('persons_philhealth_no_format_check', sql`${t.philhealthNo} is null or ${t.philhealthNo} ~ '^[0-9]{12}$'`),
+    check('persons_pagibig_no_format_check', sql`${t.pagibigNo} is null or ${t.pagibigNo} ~ '^[0-9]{12}$'`),
+    check('persons_tin_format_check', sql`${t.tin} is null or ${t.tin} ~ '^[0-9]{9,12}$'`),
     // NOTE: persons_signature_file_id_same_org_fk FOREIGN KEY (org_id, signature_file_id) -> stored_files (org_id, id) - hand-added in
     // migration 0204 (T-434), no Drizzle mirror: declaring it here would make `persons` and `stored_files` reference each other's
     // composite columns and TypeScript cannot infer either table. It is the same-org twin of the single-column FK above (T-398 S1

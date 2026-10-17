@@ -25,6 +25,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
+import { seedStatutoryRates } from './_fixtures/statutory-rates';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import {
@@ -91,6 +92,8 @@ async function fixture(hint: string, opts: { secondStore?: boolean } = {}) {
     return p!.id;
   };
   const adminId = await mk('Admin', 'admin');
+  // T-190: a pay run refuses without confirmed statutory tables. No one here has government numbers, so no deduction is taken and the figures stay as T-436 specified.
+  await seedStatutoryRates(orgId, actor(orgId, adminId), B ? [A.storeId, B.storeId] : [A.storeId]);
   const managerId = await mk('Manager', 'manager');
   const emp = async (personId: string, storeId: string, startedOn: string, rate: string, endedOn: string | null = null) => {
     const [e] = await sql<{ id: string }[]>`

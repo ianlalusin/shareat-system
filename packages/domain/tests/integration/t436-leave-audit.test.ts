@@ -23,6 +23,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
+import { seedStatutoryRates } from './_fixtures/statutory-rates';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import {
@@ -82,6 +83,8 @@ async function fixture(hint: string) {
     return p!.id;
   };
   const adminId = await mk('Admin', 'admin');
+  // T-190: a pay run refuses without confirmed statutory tables (no government numbers on file here, so nothing is deducted).
+  await seedStatutoryRates(orgId, actor(orgId, adminId), [storeId]);
   const mgrId = await mk('Manager', 'manager');
   const mgr2Id = await mk('Manager 2', 'manager');
   const superId = await mk('Super', 'super_admin');
