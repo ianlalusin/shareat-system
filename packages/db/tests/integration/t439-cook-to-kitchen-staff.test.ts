@@ -80,4 +80,34 @@ describe('T-439 - Cook becomes Kitchen Staff', () => {
     expect(seen!.canon).toEqual({ id: seen!.canonId, name: 'Kitchen Staff' });
     expect(seen!.storeMade).toEqual({ id: seen!.storeMadeId, name: 'Cook' });
   });
+
+  it('0208 also renames a canonical " cook " row (case and padding), and leaves a store-made one alone', async () => {
+    const dir = fileURLToPath(new URL('../../migrations/', import.meta.url));
+    const f = readdirSync(dir).find((x) => /^0208_.*\.sql$/.test(x));
+    expect(f, 'migration 0208_*.sql does not exist yet').toBeDefined();
+    const text = readFileSync(dir + f!, 'utf8');
+    const statements = text.split('--> statement-breakpoint').map((x) => x.trim()).filter((x) => x.length > 0);
+    expect(statements.length).toBeGreaterThanOrEqual(1);
+
+    const orgId = await newOrg('mig');
+    const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${orgId}, ${uid('s')}, 'Lipa') returning id`;
+    const ROLLBACK = new Error('rollback');
+    let seen: { canon: { id: string; name: string }; storeMade: { id: string; name: string }; canonId: string; storeMadeId: string } | null = null;
+    await sql
+      .begin(async (tx) => {
+        const [c] = await tx<{ id: string }[]>`insert into positions (org_id, store_id, name, is_canonical, is_active) values (${orgId}, null, ' cook ', true, true) returning id`;
+        const [s] = await tx<{ id: string }[]>`insert into positions (org_id, store_id, name, is_canonical, is_active) values (${orgId}, ${store!.id}, 'Cook', false, true) returning id`;
+        for (const st of statements) await tx.unsafe(st);
+        const [canon] = await tx<{ id: string; name: string }[]>`select id, name from positions where id = ${c!.id}`;
+        const [storeMade] = await tx<{ id: string; name: string }[]>`select id, name from positions where id = ${s!.id}`;
+        seen = { canon: canon!, storeMade: storeMade!, canonId: c!.id, storeMadeId: s!.id };
+        throw ROLLBACK;
+      })
+      .catch((e) => {
+        if (e !== ROLLBACK) throw e;
+      });
+    expect(seen).not.toBeNull();
+    expect(seen!.canon).toEqual({ id: seen!.canonId, name: 'Kitchen Staff' });
+    expect(seen!.storeMade).toEqual({ id: seen!.storeMadeId, name: 'Cook' });
+  });
 });

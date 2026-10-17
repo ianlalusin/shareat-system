@@ -67,12 +67,12 @@ const asStaffOnly = async (fx: Fx): Promise<Actor> => {
 };
 
 describe('T-438 H1 - createPerson with parts stores the parts and derives "Last, First M."', () => {
-  it('Santos / Maria / clara -> row has the three parts and display_name "Santos, Maria C."', async () => {
+  it('Santos / Maria / clara -> row (normalised to Clara) has the three parts and display_name "Santos, Maria C."', async () => {
     // Kills: parts dropped; displayName not derived (e.g. stored as the raw first name).
     const fx = await fixture();
     const p = await hire(fx, fx.adminActor, { name: { lastName: 'Santos', firstName: 'Maria', middleName: 'clara' } });
     expect(p.displayName).toBe('Santos, Maria C.');
-    expect(await row(p.id)).toMatchObject({ display_name: 'Santos, Maria C.', last_name: 'Santos', first_name: 'Maria', middle_name: 'clara', kind: 'person' });
+    expect(await row(p.id)).toMatchObject({ display_name: 'Santos, Maria C.', last_name: 'Santos', first_name: 'Maria', middle_name: 'Clara', kind: 'person' });
   });
   it('H1b: untrimmed and blank-middle input is normalised; a blank middle is NULL, never the empty string', async () => {
     // Kills: no trim/collapse before storing; '' stored for a blank middle.
@@ -128,6 +128,53 @@ describe('T-438 H2/H3 - the duplicate-name guard and its "different person" over
   });
 });
 
+describe('T-438 H2c-f - the duplicate guard: folding, volume, and who may be told the name', () => {
+  it('H2c: a middle name starting with ß or a ligature is saved as typed, not a 500', async () => {
+    // Kills: toUpperCase() of ß ("SS") or ﬁ ("FI") making the stored initial disagree with the CHECK.
+    const fx = await fixture();
+    const a = await hire(fx, fx.adminActor, { name: { lastName: 'Gross', firstName: 'Uwe', middleName: 'ßerg' } });
+    expect(await row(a.id)).toMatchObject({ middle_name: 'ßerg', display_name: 'Gross, Uwe ß.' });
+    const b = await hire(fx, fx.adminActor, { name: { lastName: 'Fischer', firstName: 'Ola', middleName: 'ﬁna' } });
+    expect((await row(b.id)).middle_name).toBe('ﬁna');
+  });
+  it('H2d: "Peña" vs "Pena", and "Reyes-Santos" vs "Reyes Santos", are the same name', async () => {
+    // Kills: accent- or hyphen-sensitive comparison.
+    const fx = await fixture();
+    await legacy(fx.orgId, 'Ana Peña');
+    await expect(hire(fx, fx.adminActor, { name: { lastName: 'Pena', firstName: 'Ana' } })).rejects.toThrow(/already in the system/);
+    await legacy(fx.orgId, 'Ana Reyes Santos');
+    await expect(hire(fx, fx.adminActor, { name: { lastName: 'Reyes-Santos', firstName: 'Ana' } })).rejects.toThrow(/already in the system/);
+  });
+  it('H2e: a match among more than 200 same-org persons is still found', async () => {
+    // Kills: the candidate read capped (limit 200) so a later person escapes the guard.
+    const fx = await fixture();
+    await sql`insert into persons (org_id, display_name) select ${fx.orgId}, 'Aaa Filler' || g from generate_series(1, 120) g`;
+    await legacy(fx.orgId, 'Maria Mmm');
+    await sql`insert into persons (org_id, display_name) select ${fx.orgId}, 'Zzz Filler' || g from generate_series(1, 120) g`;
+    expect(await countPersons(fx.orgId)).toBeGreaterThan(240);
+    await expect(hire(fx, fx.adminActor, { name: { lastName: 'Mmm', firstName: 'Maria' } })).rejects.toThrow(/already in the system/);
+  });
+  it('H2f: a store-scoped enroller whose match works only at ANOTHER store is not told the name; a whole-org actor is', async () => {
+    // Kills: the duplicate message leaking other branches' staff names.
+    const fx = await fixture();
+    const [s2] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${fx.orgId}, ${uid('S2')}, 'Second') returning id`;
+    const existing = await legacy(fx.orgId, 'Maria Santos');
+    await sql`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on, created_by)
+      values (${fx.orgId}, ${s2!.id}, ${existing}, ${uid('SE')}, 'regular', '2026-10-01', ${fx.adminActor.personId})`;
+    const scoped = await legacy(fx.orgId, 'Branch One Manager');
+    await sql`insert into person_roles (person_id, org_id, role) values (${scoped}, ${fx.orgId}, 'manager')`;
+    await sql`insert into person_store_scope (person_id, store_id) values (${scoped}, ${fx.storeId})`;
+    const err = await hire(fx, { personId: scoped, orgId: fx.orgId }, { name: { lastName: 'Santos', firstName: 'Maria' } }).then(() => null, (e: Error) => e);
+    expect(err, 'must refuse').not.toBeNull();
+    const text = `${(err as { userReason?: string }).userReason ?? ''} ${err!.message}`;
+    expect(text).toContain('Someone with this name is already in the system.');
+    expect(text).not.toContain('Maria Santos');
+    await sql`insert into person_store_scope (person_id, store_id) values (${fx.adminActor.personId}, ${s2!.id})`;
+    const err2 = await hire(fx, fx.adminActor, { name: { lastName: 'Santos', firstName: 'Maria' } }).then(() => null, (e: Error) => e);
+    expect(`${(err2 as { userReason?: string }).userReason ?? ''} ${err2!.message}`).toContain('Someone named Maria Santos is already in the system.');
+  });
+});
+
 describe('T-438 H6 - search matches every word against any part, in any order (N7)', () => {
   it('"maria santos", "santos maria", "clara" find Santos, Maria C.; "maria pedro" does not', async () => {
     // Kills: OR across words instead of AND; middle_name not searched; order-sensitive match.
@@ -178,7 +225,7 @@ describe('T-438 S2b - renamePerson', () => {
     const { personId, employmentId } = await employed(fx, 'Maria Dela Cruz Santos');
     await rename(fx, fx.adminActor, { employmentId, lastName: 'Dela Cruz Santos', firstName: 'Maria', middleName: 'lopez' });
     const r = await row(personId);
-    expect(r).toMatchObject({ display_name: 'Dela Cruz Santos, Maria L.', last_name: 'Dela Cruz Santos', first_name: 'Maria', middle_name: 'lopez' });
+    expect(r).toMatchObject({ display_name: 'Dela Cruz Santos, Maria L.', last_name: 'Dela Cruz Santos', first_name: 'Maria', middle_name: 'Lopez' });
     const [u] = await sql<{ updated_at: Date | null }[]>`select updated_at from persons where id = ${personId}`;
     expect(u!.updated_at).not.toBeNull();
     const audit = await sql<{ before: Record<string, unknown>; after: Record<string, unknown> }[]>`
@@ -196,7 +243,7 @@ describe('T-438 S2b - renamePerson', () => {
     const otherAdmin = await legacy(fx.orgId, 'Other Branch Admin');
     await sql`insert into person_roles (person_id, org_id, role) values (${otherAdmin}, ${fx.orgId}, 'manager')`;
     await sql`insert into person_store_scope (person_id, store_id) values (${otherAdmin}, ${s2!.id})`;
-    await expect(rename(fx, { personId: otherAdmin, orgId: fx.orgId }, { employmentId, lastName: 'Reyes', firstName: 'Ana' })).rejects.toThrow(/enrol_staff|not authori[sz]ed/i);
+    await expect(rename(fx, { personId: otherAdmin, orgId: fx.orgId }, { employmentId, lastName: 'Reyes', firstName: 'Ana' })).rejects.toThrow(/enrol_staff|not authori[sz]ed|no store scope/i);
     expect((await row(personId)).display_name).toBe('Maria Santos');
   });
 

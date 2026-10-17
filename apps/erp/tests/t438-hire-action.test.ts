@@ -64,7 +64,7 @@ describe('T-438 H8 - hireAction decides what the form meant, and never guesses (
   });
   it('last without first, and first without last: refused with the both-names sentence', async () => {
     // Kills: accepting a one-part name.
-    for (const f of [{ lastName: 'Reyes' }, { firstName: 'Ana' }, { lastName: 'Reyes', middleName: 'Lim' }]) {
+    for (const f of <Record<string, string>[]>[{ lastName: 'Reyes' }, { firstName: 'Ana' }, { lastName: 'Reyes', middleName: 'Lim' }]) {
       redirectWithFlash.mockClear();
       const [, , flash] = await run(f);
       expect(flash.error).toBe('A new person needs both a last name and a first name.');

@@ -54,26 +54,29 @@ describe('T-438 D1 - parts must agree with display_name', () => {
   });
   it('the exact formatted display_name is accepted', async () => {
     const o = await org();
-    const rows = await insert(o, 'Santos, Maria C.', { last: 'Santos', first: 'Maria', middle: 'clara' });
+    const rows = await insert(o, 'Santos, Maria C.', { last: 'Santos', first: 'Maria', middle: 'Clara' });
     expect(rows[0]!['display_name']).toBe('Santos, Maria C.');
   });
 });
 
 describe('T-438 D2 - the TypeScript formatter and the SQL expression agree', () => {
   const cases: [string, string, string | null][] = [
-    ['Santos', 'Maria', 'clara'], // U1
+    ['Santos', 'Maria', 'clara'], // U1 (typed lower-case; the normaliser capitalises it)
     ['Santos', 'Maria', null], // U2
-    ['Dela Cruz', 'Juan Miguel', 'santos'], // U3 (already normalised)
-    ['Reyes', 'Ana', 'ñoño'], // upper() of a non-ASCII initial
+    ['Dela Cruz', 'Juan Miguel', 'santos'], // U3
+    ['Reyes', 'Ana', 'ñoño'], // non-ASCII initial
+    ['Gross', 'Uwe', 'ßerg'], // upper('ß') is two characters, so it stays as typed
   ];
   for (const [last, first, middle] of cases) {
     it(`${last} / ${first} / ${middle ?? '(none)'}`, async () => {
       // Kills: TS and SQL formats drifting (initial case, period, comma/space).
       const o = await org();
       // Imported lazily from source (not the barrel) so the other cases go red for the DB reason, not for a missing module.
-      const { formatDisplayName } = await import('../../../domain/src/people/person-name');
-      const display = formatDisplayName({ lastName: last, firstName: first, ...(middle === null ? {} : { middleName: middle }) });
-      expect(await code(insert(o, display, { last, first, middle }))).toBe('accepted');
+      const { formatDisplayName, normaliseName } = await import('../../../domain/src/people/person-name');
+      const parts = { lastName: last, firstName: first, ...(middle === null ? {} : { middleName: middle }) };
+      const display = formatDisplayName(parts);
+      const n = normaliseName(parts);
+      expect(await code(insert(o, display, { last: n.lastName, first: n.firstName, middle: n.middleName }))).toBe('accepted');
     });
   }
 });
@@ -87,7 +90,7 @@ describe('T-438 D3 - all-or-nothing parts', () => {
   });
   it('a middle name alone (no last/first) -> refused', async () => {
     const o = await org();
-    expect(await code(insert(o, 'C.', { last: null, first: null, middle: 'clara' }))).toBe('23514');
+    expect(await code(insert(o, 'C.', { last: null, first: null, middle: 'Clara' }))).toBe('23514');
   });
   it('all three NULL accepts any display_name (legacy rows, terminals, system author)', async () => {
     const o = await org();
@@ -120,7 +123,7 @@ describe('T-438 D5 - middle name shape', () => {
     // Kills: empty-string middle allowed.
     const o = await org();
     expect(await code(insert(o, 'Santos, Maria', { last: 'Santos', first: 'Maria', middle: '' }))).toBe('23514');
-    expect(await code(insert(o, 'Santos, Maria C.', { last: 'Santos', first: 'Maria', middle: ' clara' }))).toBe('23514');
+    expect(await code(insert(o, 'Santos, Maria C.', { last: 'Santos', first: 'Maria', middle: ' Clara' }))).toBe('23514');
     expect(await code(insert(o, 'Santos, Maria', { last: 'Santos', first: 'Maria', middle: null }))).toBe('accepted');
   });
 });
