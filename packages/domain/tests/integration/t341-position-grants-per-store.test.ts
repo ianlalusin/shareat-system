@@ -64,7 +64,7 @@ async function fixture(hint: string) {
   const [cashier] = await sql<{ id: string }[]>`
     select id from positions where org_id = ${orgId} and store_id is null and name = 'Cashier'`;
   const [cook] = await sql<{ id: string }[]>`
-    select id from positions where org_id = ${orgId} and store_id is null and name = 'Cook'`;
+    select id from positions where org_id = ${orgId} and store_id is null and name = 'Kitchen Staff'`;
 
   return {
     orgId,

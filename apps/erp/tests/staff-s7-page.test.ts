@@ -78,7 +78,7 @@ vi.mock('../src/app/staff/lib', async (orig) => {
     ...actual,
     rosterForStore: vi.fn(async () => H.roster ?? [
       row(PERSON.ana, '2026-07-11', 'regular', 'Cashier'),
-      row(PERSON.ben, '2026-09-27', 'probationary', 'Cook'),
+      row(PERSON.ben, '2026-09-27', 'probationary', 'Kitchen Staff'),
       row(PERSON.cia, '2025-08-11', 'regular', 'Server'),
     ]),
     positionsForStore: vi.fn(async () => H.positions ?? [{ id: 'pos-Cashier', name: 'Cashier', isCanonical: true }]),
@@ -257,7 +257,7 @@ describe('T-387 S7 - /staff views', () => {
   it('positions view: one person holding two positions appears under both, counted once in each', async () => {
     H.positions = [
       { id: 'pos-Cashier', name: 'Cashier', isCanonical: true },
-      { id: 'pos-Cook', name: 'Cook', isCanonical: true },
+      { id: 'pos-Cook', name: 'Kitchen Staff', isCanonical: true },
     ];
     H.roster = [rowFor('emp-ana', 'Ana Reyes', ['pos-Cashier', 'pos-Cook'])];
     const blocks = cardBlocks(await render({ view: 'positions' }));
