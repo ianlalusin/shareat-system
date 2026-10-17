@@ -273,3 +273,51 @@ describe('T-188 §2.1 — org-scoping is what removes v1’s duplication', () =>
     ).rejects.toThrow(/suppliers_org_name_key/);
   });
 });
+
+describe('T-440 S1 (createSupplier) - the supplier add form\'s rule set is the one the server speaks', () => {
+  /** The pilot rule set exported by the field-rules leaf: the one that carries `creditTermsDays` (+ `name`). */
+  async function supplierRules() {
+    const mod = (await import('../../src/field-rules')) as Record<string, unknown>;
+    const set = Object.values(mod).find(
+      (v): v is Record<string, { name: string }> =>
+        typeof v === 'object' && v !== null && Object.isFrozen(v) && 'creditTermsDays' in (v as object) && 'name' in (v as object),
+    );
+    expect(set, 'a frozen field-rules set carries both `name` and `creditTermsDays` (the supplier add form)').toBeDefined();
+    const { checkField } = mod as unknown as { checkField: (r: unknown, raw: string) => { ok: boolean; requirement?: string } };
+    return { set: set!, checkField };
+  }
+
+  it('a blank name is refused with the very sentence the live check shows (one sentence, two places)  [mutant: edit one server sentence]', async () => {
+    const f = await fixture('t440name');
+    const { set, checkField } = await supplierRules();
+    const shown = checkField(set.name, '   ');
+    expect(shown.ok).toBe(false);
+    for (const blank of ['', '   ']) {
+      let err: (Error & { userMessage?: string; name: string }) | undefined;
+      try {
+        await asOrg(f.orgId, (tx) => createSupplier(tx, f.manager, { name: blank }));
+      } catch (e) {
+        err = e as typeof err;
+      }
+      expect(err?.name, JSON.stringify(blank)).toBe('RefusalError');
+      expect(err?.userMessage).toBe(shown.requirement);
+    }
+  });
+
+  it('a name is stored trimmed, and a stored supplier is unchanged by the refactor (green guard: passes before and after)', async () => {
+    const f = await fixture('t440trim');
+    const { id } = await asOrg(f.orgId, (tx) => createSupplier(tx, f.manager, { name: '  ABC Meat Supply  ' }));
+    const s = await asOrg(f.orgId, (tx) => apRepo.getSupplierById(tx, f.orgId, id));
+    expect(s!.name).toBe('ABC Meat Supply');
+  });
+
+  it('creditTermsDays 366 is refused and 365 / blank are accepted (the rule\'s 0-365 matches the server)', async () => {
+    const f = await fixture('t440days');
+    await expect(
+      asOrg(f.orgId, (tx) => createSupplier(tx, f.manager, { name: 'Late Co.', creditTermsDays: '366' as unknown as number })),
+    ).rejects.toMatchObject({ name: 'RefusalError' });
+    const ok = await asOrg(f.orgId, (tx) => createSupplier(tx, f.manager, { name: 'Edge Co.', creditTermsDays: '365' as unknown as number }));
+    const s = await asOrg(f.orgId, (tx) => apRepo.getSupplierById(tx, f.orgId, ok.id));
+    expect(s!.creditTermsDays).toBe(365);
+  });
+});

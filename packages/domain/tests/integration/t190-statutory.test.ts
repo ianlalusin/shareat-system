@@ -835,6 +835,58 @@ describe('T-190 audit gap 3 - setGovernmentIds is audited by FIELD NAME, never b
   });
 });
 
+describe('T-440 S1 (T-S1-12, T-S1-15) - setGovernmentIds takes its checks from the shared rule set', () => {
+  const stored = async (f: Fixture) =>
+    (await sql<{ sss_no: string | null; philhealth_no: string | null; pagibig_no: string | null; tin: string | null }[]>`
+      select sss_no, philhealth_no, pagibig_no, tin from persons where id = ${f.workerId}`)[0]!;
+  const attempt = async (f: Fixture, over: Record<string, string>) => {
+    try {
+      await asOrg(f.orgId, (tx) => setGovernmentIds(tx, f.admin, { personId: f.workerId, storeId: f.storeId, ...over }));
+      return undefined;
+    } catch (e) {
+      return e as Error & { userMessage?: string };
+    }
+  };
+
+  it('"123" is refused with the rule-set sentence and nothing is stored', async () => {
+    const f = await ready('t440a', { numbers: [] });
+    await sql`update persons set sss_no = null, philhealth_no = null, pagibig_no = null, tin = null where id = ${f.workerId}`;
+    const err = await attempt(f, { sssNo: '123' });
+    expect(err?.name).toBe('RefusalError');
+    expect(err?.userMessage).toBe('The SSS number must be 10 digits.');
+    expect(await stored(f)).toEqual({ sss_no: null, philhealth_no: null, pagibig_no: null, tin: null });
+  });
+
+  it('the other three sentences are unchanged', async () => {
+    const f = await ready('t440b', { numbers: [] });
+    expect((await attempt(f, { philhealthNo: '123' }))?.userMessage).toBe('The PhilHealth number must be 12 digits.');
+    expect((await attempt(f, { pagibigNo: '123' }))?.userMessage).toBe('The Pag-IBIG number must be 12 digits.');
+    expect((await attempt(f, { tin: '123' }))?.userMessage).toBe('The TIN must be 9 to 12 digits.');
+  });
+
+  it('"12-3456789-0" is stored as the 10 stripped digits, never the raw input  [mutant: store raw input]', async () => {
+    const f = await ready('t440c', { numbers: [] });
+    await sql`update persons set sss_no = null where id = ${f.workerId}`;
+    expect(await attempt(f, { sssNo: '12-3456789-0', philhealthNo: '1234 5678 9012', pagibigNo: '', tin: ' 123-456-789 ' })).toBeUndefined();
+    const row = await stored(f);
+    expect(row.sss_no).toBe('1234567890');
+    expect(row.philhealth_no).toBe('123456789012');
+    expect(row.pagibig_no).toBeNull();
+    expect(row.tin).toBe('123456789');
+  });
+
+  it('no echo (A5): a refused government number appears in neither the raw diagnostic nor the sentence  [mutant: the diagnostic interpolates the value]', async () => {
+    const f = await ready('t440d', { numbers: [] });
+    for (const [field, value] of [['sssNo', '1234567x90'], ['philhealthNo', '98765432109z'], ['pagibigNo', '5555-66z7'], ['tin', '31415926535q']] as const) {
+      const err = await attempt(f, { [field]: value });
+      expect(err?.name, field).toBe('RefusalError');
+      expect(err?.message, `${field} raw diagnostic`).not.toContain(value);
+      expect(err?.userMessage, `${field} sentence`).not.toContain(value);
+      expect(err?.message, `${field} raw diagnostic (stripped form)`).not.toContain(value.replace(/[\s-]/g, ''));
+    }
+  });
+});
+
 describe('T-190 audit gap 5 - MWE is decided on the rate in force at period_end', () => {
   it("a raise to 700 on 14 Jan (last shift 13 Jan at 695, period_end 15 Jan) makes the slip NOT MWE  [mutant: last worked day's rate]", async () => {
     const f = await ready('g5', { rate: '695.00' });
