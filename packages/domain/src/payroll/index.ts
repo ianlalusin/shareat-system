@@ -9,7 +9,7 @@
  * out and exactly what would trigger porting the rest.
  */
 import { sql } from 'drizzle-orm';
-import { ZERO, add, compare, decimal, formatMoney, money, subtract, type Money } from '@shareat/core/money';
+import { ZERO, add, compare, decimal, divideMoney, formatMoney, money, subtract, type Money } from '@shareat/core/money';
 import {
   attendanceConfigRepo,
   moneyAccountsRepo,
@@ -346,6 +346,12 @@ async function buildPreview(
       // T-190 audit gap 5: minimum-wage earner status is judged on the daily rate IN FORCE AT period_end, not on the last day worked.
       const rateAtEnd = await payrollRepo.rateInForceOn(trx, actor.orgId, employmentId, input.periodEnd);
       if (rateAtEnd && rateAtEnd.basis === 'daily') dailyRateAtEnd = money(rateAtEnd.amount);
+      // DEF-671: a leave-only / SIL-payout-only slip has no worked-day rate. Seed from what it was actually paid at, never ZERO (which reads as MWE).
+      if (compare(dailyRateAtEnd, ZERO) === 0) {
+        const lastSil = silPayouts[silPayouts.length - 1];
+        if (leaveLine && leaveLine.dayIds.length > 0) dailyRateAtEnd = divideMoney(leaveLine.leavePay, leaveLine.dayIds.length);
+        else if (lastSil) dailyRateAtEnd = lastSil.dailyRate;
+      }
 
       // ⭐ Every premium is now a per-store SETTING rather than a constant (T-189b, Ian's
       // "configurable to x1.25 or fix amount" and "holiday must be configurable too").
@@ -499,6 +505,8 @@ async function applyStatutory(
 
   const missingGovernmentIds: PayRunPreview['missingGovernmentIds'] = [];
   const slips: PayslipDraft[] = [];
+  // DEF-670: advance already recovered by this person's EARLIER slips in this run (a second employment must not recover it again).
+  const advanceTakenOf = new Map<string, Money>();
   for (const b of bases) {
     const gid = ids.get(b.personId);
     const skipped: Agency[] = [];
@@ -511,7 +519,9 @@ async function applyStatutory(
     const prior = priorOf.get(b.personId)!;
     const { dailyRate: _dailyRate, ...draft } = b;
     void _dailyRate;
-    const outstanding = draft.advanceRecovered; // the placeholder carried the outstanding advance
+    const alreadyTaken = advanceTakenOf.get(b.personId) ?? ZERO;
+    // the placeholder carried the outstanding advance; less what this person's earlier slips in the run already took
+    const outstanding = compare(draft.advanceRecovered, alreadyTaken) > 0 ? subtract(draft.advanceRecovered, alreadyTaken) : ZERO;
     const r = computeStatutory({
       basicPay: b.basicPay,
       grossPay: b.grossPay,
@@ -531,6 +541,8 @@ async function applyStatutory(
     if (!skipped.includes('sss')) take('sss', rates.sss.baseKind === 'gross' ? b.grossPay : b.basicPay, r.sss.ee, r.sss.er, r.sss.ec);
     if (!skipped.includes('philhealth')) take('philhealth', rates.philhealth.baseKind === 'gross' ? b.grossPay : b.basicPay, r.philhealth.ee, r.philhealth.er, ZERO);
     if (!skipped.includes('pagibig')) take('pagibig', rates.pagibig.baseKind === 'gross' ? b.grossPay : b.basicPay, r.pagibig.ee, r.pagibig.er, ZERO);
+
+    advanceTakenOf.set(b.personId, add(alreadyTaken, r.advanceRecovered));
 
     slips.push({
       ...draft,
