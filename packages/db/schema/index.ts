@@ -146,3 +146,6 @@ export * from './dual-run';
 
 // T-401 S1 - the ERP menu and catalog master: categories, items, variants, option groups, links, refills, depletion rules, offers.
 export * from './menu';
+
+// T-436 - leave and absence tracking: kinds, caps, requests, per-date days, the year-end SIL payout.
+export * from './leave';

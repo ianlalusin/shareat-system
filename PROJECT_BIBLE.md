@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1691` 13. Decision log
-- `1692–1711` 14. Amendment protocol
-- `1712–1716` 15. Engineering standards — the industry practices this project follows
-  - `1717–1722` 15.1 Build order: walking skeleton first
-  - `1723–1734` 15.2 Golden-master testing — the most important practice here
-  - `1735–1743` 15.3 Strangler Fig, not big-bang cutover
-  - `1744–1748` 15.4 No dual-write
-  - `1749–1757` 15.5 Expand/contract migrations
-  - `1758–1766` 15.6 Observability from day zero, not later
-  - `1767–1771` 15.7 CI gates
-  - `1772–1776` 15.8 Backups and a tested restore
-  - `1777–1781` 15.9 Twelve-Factor config
-  - `1782–1789` 15.10 Append-only ledgers — but not event sourcing
-  - `1790–1794` 15.11 Defence in depth
-  - `1795–1823` 15.12 Skills are lenses, not assurance
-  - `1824–1830` 15.13 Reconciliation is a permanent feature
-- `1831–1835` 16. The accounting spine
-  - `1836–1867` 16.0 What we are actually fixing — the diagnosis
-  - `1868–1911` 16.1 The ten invariants — non-negotiable
-  - `1912–1926` 16.2 The oracle: how "correct" is tested
-  - `1927–1948` 16.3 The model — header + lines, not legs
-  - `1949–1968` 16.4 Deliberately simpler than ERPNext
-  - `1969–2035` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2036–2060` 16.6 What v1 already gets right — preserve the intent
-  - `2061–2082` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2083–2097` 16.8 What v1's accounting already gets right
-  - `2098–2141` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2142–2192` 16.10 Posting patterns — one canonical pattern per business event
-  - `2193–2225` 16.11 Inventory's accounting integration
+- `1329–1692` 13. Decision log
+- `1693–1712` 14. Amendment protocol
+- `1713–1717` 15. Engineering standards — the industry practices this project follows
+  - `1718–1723` 15.1 Build order: walking skeleton first
+  - `1724–1735` 15.2 Golden-master testing — the most important practice here
+  - `1736–1744` 15.3 Strangler Fig, not big-bang cutover
+  - `1745–1749` 15.4 No dual-write
+  - `1750–1758` 15.5 Expand/contract migrations
+  - `1759–1767` 15.6 Observability from day zero, not later
+  - `1768–1772` 15.7 CI gates
+  - `1773–1777` 15.8 Backups and a tested restore
+  - `1778–1782` 15.9 Twelve-Factor config
+  - `1783–1790` 15.10 Append-only ledgers — but not event sourcing
+  - `1791–1795` 15.11 Defence in depth
+  - `1796–1824` 15.12 Skills are lenses, not assurance
+  - `1825–1831` 15.13 Reconciliation is a permanent feature
+- `1832–1836` 16. The accounting spine
+  - `1837–1868` 16.0 What we are actually fixing — the diagnosis
+  - `1869–1912` 16.1 The ten invariants — non-negotiable
+  - `1913–1927` 16.2 The oracle: how "correct" is tested
+  - `1928–1949` 16.3 The model — header + lines, not legs
+  - `1950–1969` 16.4 Deliberately simpler than ERPNext
+  - `1970–2036` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2037–2061` 16.6 What v1 already gets right — preserve the intent
+  - `2062–2083` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2084–2098` 16.8 What v1's accounting already gets right
+  - `2099–2142` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2143–2193` 16.10 Posting patterns — one canonical pattern per business event
+  - `2194–2226` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1688,6 +1688,7 @@ just a patch.**
 | 353 | 2026-10-16 | ⭐ **STAFF AND CUSTOMER PERSONAL INFORMATION IS STRICTLY GUARDED (standing).** Personal data of staff and customers (names with contact details, addresses, government IDs, birthdays, photos, PIN data, bank/e-wallet details, B2B customer contacts and balances) is shown only to people whose capability needs it, enforced in the LOADER/domain (never only the UI), store-scoped, and never in exports or logs beyond what the task requires. **Signatures are the strictest class:** stored only through the file broker (never a data URL), viewable only by payroll staff and admins, never shown in lists, cards or exports, served by a short-lived link, and EVERY view and change is audited. Every new screen or report touching personal data needs a test proving an unauthorised viewer sees nothing. | Ian, 2026-10-16 (orchestrator session) | No — tightening only |
 | 354 | 2026-10-16 | **EARLY-PHASE CLOSE-OUT RULINGS.** (1) Backups (T-393, Phase 0): switch ON now with one proven restore drill, before the 15 Nov go/no-go (reverses row 306's "no backup for now"). (2) Leave/absence tracking (monthly and yearly caps, Phase 4, never built): BUILD before the 1 Jan go-live. (3) Expanded withholding tax on supplier payments (BIR 1601-E): Shareat does NOT withhold; closed as not applicable. (4) Payroll statutory deductions (SSS, PhilHealth, Pag-IBIG, withholding; T-190, then remittance T-193): start NOW from the official 2026 tables; staff data from the HR sheet when it arrives (due 31 Oct). | Ian, 2026-10-16 (orchestrator session, roadmap review) | Yes, per item |
 | 355 | 2026-10-16 | **LEAVE AND PAYROLL-DEDUCTION RULINGS.** Leave (T-436): caps and the 5 legal paid days reset every 1 January; unused legal days are paid out as cash at year end; whole days only at go-live; managers may attach medical-certificate photos (guarded per row 353); pro-rated paid days in the year a person reaches one year of service; nobody approves their own leave (a manager's or admin's own leave needs the super-admin). Payroll (T-190): a government contribution (SSS, PhilHealth, Pag-IBIG) is NOT deducted for a person until that agency's number is on file; the payroll preview lists who is missing what. Backups (T-393): files are not encrypted; the bucket stays private with a bucket-only key. | Ian, 2026-10-16 (orchestrator session); the orchestrator noted the penalty risk of skipping contributions | Yes |
+| 356 | 2026-10-17 | **POS v2 OFFLINE RULES (narrows ADR-015 A3).** (1) NO refunds while offline: the tablet says "Refunds need the internet." The server-side manager PIN check (row 351) cannot run offline before P1's offline verifier. (2) Voiding an UNPAID table while offline is allowed only for a signed-in manager or admin; the void is marked `voidedOffline`, listed by pos2-audit, and reviewed after sync. Spec: T-425 (PC-5). | Ian, 2026-10-17, in the POS v2 session; recorded by the orchestrator | Yes |
 
 ## 14. Amendment protocol
 

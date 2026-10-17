@@ -45,6 +45,13 @@ const EXEMPT: Record<string, string> = {};
 // `<button>` labels written in app/ - they are the `label=` prop of <ConfirmDestructive>, whose own submit button is the one
 // control (apps/erp/tests/t412-destructive-census.test.ts is the guard for those). Their entries left this list with them.
 const COMMANDS: Record<string, string> = {
+  'View certificate': 'T-436: opens a leave certificate (one-time link, audited); a POST so the view is recorded',
+  'Cancel': 'T-436: withdraws a pending leave request',
+  'Request leave': 'T-436: files a pending leave request for approval',
+  'Record absence': 'T-436: records a leave or absence day that already happened',
+  'Attach certificate': 'T-436: attaches a medical certificate to a leave request',
+  'Save leave limit': 'T-436: saves a leave cap',
+  'Add kind': 'T-436: adds a leave kind',
   'Delete draft': 'T-418: discards an unposted expense draft; one click, no PIN (Ian 16 Oct)',
   'Delete usage draft': 'T-418: discards an unposted usage draft; one click, no PIN (Ian 16 Oct)',
   'Delete template': 'T-418: deletes a never-used recurring template; one click, no PIN (Ian 16 Oct)',

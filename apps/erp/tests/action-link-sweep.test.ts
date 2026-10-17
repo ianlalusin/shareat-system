@@ -444,8 +444,12 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // +6 (16 Oct): T-433 order page — Print delivery receipt link, BIR invoice no. input + save button, pay-now amount, money account select, receipt photo
     // -1 (16 Oct): T-433 BIR invoice no. form moved into EditableRecord, so its Save button leaves the census
     // +7 (16 Oct): T-434 staff detail page photo and signature controls (net +7 measured, 1259 -> 1266; the "View signature" link is a per-click link).
-    // +35 (17 Oct): T-190 payroll screens (rates page, government IDs on the staff page, payslip lines; net +35 measured, 1266 -> 1301).
-    expect(results.length).toBe(1301);
+    // +4 (17 Oct): T-386 /staff Positions tab - the third view-switch link, the per-position <details> summary, and the holder link (plus the add form's controls, measured net +4, 1266 -> 1270).
+    // +45 (17 Oct): T-436 leave tracking - attendance/leave page (request, record, approve, reject, cancel, void, certificate attach/view) and settings/attendance leave kinds and caps controls (1266 -> 1311 measured).
+    // = 1315 after both merged (17 Oct)
+    // +35 (17 Oct): T-190 payroll screens (rates page, government IDs on the staff page, payslip lines; net +35 measured on its older base).
+    // = 1352 after T-190 merged onto main (17 Oct; expected 1350, measured 1352: the two extra controls come from where the T-190 screens meet T-436/T-386 on the same pages)
+    expect(results.length).toBe(1352);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

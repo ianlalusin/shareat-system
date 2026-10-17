@@ -223,6 +223,12 @@ export type Capability =
   | 'manage_stores'
   | 'grant_capability'
   | 'manage_attendance'
+  /**
+   * ⭐ T-436 (bible row 353). Opening a leave request's medical-certificate photo - payroll staff, who need the proof but are not
+   * the manager who decided the request. STORE-scoped and position-grantable; super_admin and admin hold it, manager does not
+   * (a manager sees a certificate only while the request is pending, or if they decided it).
+   */
+  | 'view_leave_document'
   /** T-189. ⛔ Manager DENIED — rostering a team must not include repricing it. */
   | 'set_pay_rate'
   /** T-189. ⛔ Admin-only, as v1's postPayrollRunAction is. */
@@ -385,6 +391,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'manage_stores',
   'grant_capability',
   'manage_attendance',
+  'view_leave_document',
   'set_pay_rate',
   'run_payroll',
   'manage_payroll_rates',
@@ -570,6 +577,7 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   manage_stores: 'org',
   grant_capability: 'org',
   manage_attendance: 'store',
+  view_leave_document: 'store',
   set_pay_rate: 'store',
   run_payroll: 'store',
   // T-190. The rate tables are per org (each org confirms its own), not per store.
@@ -760,6 +768,7 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
 
   enrol_staff: 'staff',
   manage_attendance: 'staff',
+  view_leave_document: 'staff',
   set_pay_rate: 'staff',
   run_payroll: 'staff',
   manage_payroll_rates: 'staff', // T-190
@@ -984,6 +993,8 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   manage_stores: { super_admin: true, admin: true, manager: false, staff: false },
   grant_capability: { super_admin: true, admin: true, manager: false, staff: false },
   manage_attendance: { super_admin: true, admin: true, manager: true, staff: false },
+  // T-436: payroll staff who must see the proof. Manager is false: a manager's right to a certificate is the request-level rule.
+  view_leave_document: { super_admin: true, admin: true, manager: false, staff: false },
   set_pay_rate: { super_admin: true, admin: true, manager: false, staff: false },
   run_payroll: { super_admin: true, admin: true, manager: false, staff: false },
   // T-190: admin-only. A manager must not be able to move the table that sets every payslip's deductions.
@@ -1233,6 +1244,7 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   manage_stores: 'open or close a store',
   grant_capability: 'give someone extra permissions',
   manage_attendance: 'manage attendance',
+  view_leave_document: "open a leave request's medical certificate",
   set_pay_rate: 'set a pay rate',
   run_payroll: 'run payroll',
   manage_payroll_rates: 'add or confirm the SSS, PhilHealth, Pag-IBIG and tax tables',

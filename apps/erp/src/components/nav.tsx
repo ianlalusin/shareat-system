@@ -48,6 +48,8 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       // one is the only way to create.
       { href: '/staff', label: 'Staff' },
       { href: '/attendance', label: 'Attendance' },
+      // T-436 - ask for leave, decide it, record an absence. Open to everyone: a staff member requests their own.
+      { href: '/attendance/leave', label: 'Leave' },
       // ⭐ DEF-133 — provisioning a clock terminal or enrolling a card/fingerprint had no admin UI
       // until 2026-09-04; only hand-run SQL could. `provision_clock_terminal` is admin-only.
       { href: '/attendance/terminals', label: 'Clock terminals' },

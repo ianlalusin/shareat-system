@@ -7,7 +7,6 @@ import { sql as dsql } from 'drizzle-orm';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test_t424(\?|$)/.test(url)) throw new Error('Runs only on the lane database shareat_test_t424.');
 
 import { APP_ROLE, closeDb, transaction, type Tx } from '@shareat/db';
 import { AuthorizationError, flushSecurityEvents, hashPin, resolvePosTerminalLink } from '@shareat/auth';

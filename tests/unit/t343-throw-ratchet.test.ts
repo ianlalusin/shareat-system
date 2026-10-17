@@ -69,6 +69,7 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/dual-run': 3, // T-392 S4 (2026-10-12): new directory, ceiling = count at birth
   'packages/domain/src/menu': 0, // T-401 S2: new directory, ceiling = count at birth (refuse/gone/internalFault only, no bare throw)
   'packages/domain/src/activity': 0, // T-402 S3: new directory, no raw throws (client-events.ts uses refuse(...))
+  'packages/domain/src/leave': 0, // T-436: new directory, no raw throws (refuse/gone only), ceiling = count at birth
   'packages/domain/src/ap': 0, // T-343 S5.2: 39 -> 0, all converted to refuse/gone/internalFault
   'packages/domain/src/ar': 31, // T-343 S5.5p: 35 -> 34, recordCollection's negative-credit throw converted to refuse(...); T-367 S1 + DEF-546 (2026-10-01): 34 -> 31, writeOffCharge, voidCharge and voidCollection not-found throws folded into the uniform AuthorizationError
   'packages/domain/src/attendance': 1,

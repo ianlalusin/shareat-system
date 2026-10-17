@@ -29,6 +29,8 @@ import type { AttendanceDayStatus } from '@shareat/db/schema';
 import { getConfigForShiftDay } from './config';
 import { computeDay, type DayAdjustments, type DayPolicy, type DayPunch } from './compute-day';
 import { parseShiftDay, type ShiftDay } from './shift-day';
+// T-436: leaf module (db repos + audit only), so attendance can import it without a cycle through payroll.
+import { reconcileLeaveWithWorkedDay } from '../leave/worked';
 
 export class AdjudicationError extends Error {
   constructor(message: string) {
@@ -155,7 +157,7 @@ export async function adjudicateDay(tx: Tx, input: AdjudicateInput): Promise<Att
 
   const isHoliday = input.isHoliday ?? false;
 
-  return attendanceDaysRepo.upsertDay(tx, {
+  const day = await attendanceDaysRepo.upsertDay(tx, {
     orgId: employment.orgId,
     storeId: employment.storeId,
     personId: employment.personId,
@@ -187,6 +189,16 @@ export async function adjudicateDay(tx: Tx, input: AdjudicateInput): Promise<Att
     explain: result.explain,
     computedFromPunchCount: punches.length,
   });
+
+  // ⭐ T-436 (spec D8): punches on a date with approved leave. Unpaid leave is superseded by the work; leave already paid in a run
+  // holds THIS day from payroll (needs_review + clash) so the date is never paid twice. Returns the row as it now stands.
+  const outcome = await reconcileLeaveWithWorkedDay(tx, {
+    orgId: day.orgId,
+    personId: day.personId,
+    shiftDay: day.shiftDay,
+    attendanceStatus: day.status,
+  });
+  return outcome === 'held' ? { ...day, status: 'needs_review' } : day;
 }
 
 /**

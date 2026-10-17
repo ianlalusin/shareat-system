@@ -31,6 +31,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
@@ -152,6 +153,8 @@ export const payRuns = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    // T-436 (migration 0205): the target of the leave tables' same-org composite FKs on frozen_by_pay_run_id.
+    unique('pay_runs_org_id_id_unique').on(t.orgId, t.id),
     index('pay_runs_org_status_idx').on(t.orgId, t.status),
     index('pay_runs_store_period_idx').on(t.storeId, t.periodStart, t.periodEnd),
     check('pay_runs_period_order_check', sql`${t.periodEnd} >= ${t.periodStart}`),
@@ -246,6 +249,10 @@ export const payslips = pgTable(
     otPay: numeric('ot_pay', { precision: 14, scale: 2 }).notNull().default('0'),
     nightDiffPay: numeric('night_diff_pay', { precision: 14, scale: 2 }).notNull().default('0'),
     holidayPay: numeric('holiday_pay', { precision: 14, scale: 2 }).notNull().default('0'),
+    /** T-436 (migration 0205). Paid leave days priced at the daily rate in force that day. ⛔ NEVER part of `basic_pay`: the 13th month reads it. */
+    leavePay: numeric('leave_pay', { precision: 14, scale: 2 }).notNull().default('0'),
+    /** T-436. The year-end / final-pay cash payout of unused Service Incentive Leave. ⛔ Not in `basic_pay` either (PD 851). */
+    silConversionPay: numeric('sil_conversion_pay', { precision: 14, scale: 2 }).notNull().default('0'),
 
     grossPay: numeric('gross_pay', { precision: 14, scale: 2 }).notNull(),
     /** ⛔ Capped at gross. Net may reach zero; it may never go below, and what is still owed stays
@@ -285,7 +292,8 @@ export const payslips = pgTable(
     check('payslips_days_nonnegative_check', sql`${t.daysWorked} >= 0`),
     check(
       'payslips_gross_identity_check',
-      sql`${t.grossPay} = ${t.basicPay} + ${t.otPay} + ${t.nightDiffPay} + ${t.holidayPay}`,
+      // T-436 (migration 0205) restated it with the two new legs, as this comment demanded of whoever adds one.
+      sql`${t.grossPay} = ${t.basicPay} + ${t.otPay} + ${t.nightDiffPay} + ${t.holidayPay} + ${t.leavePay} + ${t.silConversionPay}`,
     ),
     /** ⭐ Restated by migration 0206 (T-190): net = gross - the three employee shares - withholding - advance. */
     check(
@@ -316,6 +324,9 @@ export const payslips = pgTable(
     check('payslips_ot_pay_finite_check', sql`${t.otPay} > '-Infinity'::numeric and ${t.otPay} < 'Infinity'::numeric`),
     check('payslips_night_diff_pay_finite_check', sql`${t.nightDiffPay} > '-Infinity'::numeric and ${t.nightDiffPay} < 'Infinity'::numeric`),
     check('payslips_holiday_pay_finite_check', sql`${t.holidayPay} > '-Infinity'::numeric and ${t.holidayPay} < 'Infinity'::numeric`),
+    check('payslips_leave_pay_finite_check', sql`${t.leavePay} > '-Infinity'::numeric and ${t.leavePay} < 'Infinity'::numeric`),
+    check('payslips_sil_conversion_pay_finite_check', sql`${t.silConversionPay} > '-Infinity'::numeric and ${t.silConversionPay} < 'Infinity'::numeric`),
+    check('payslips_leave_legs_nonnegative_check', sql`${t.leavePay} >= 0 and ${t.silConversionPay} >= 0`),
     check('payslips_gross_pay_finite_check', sql`${t.grossPay} > '-Infinity'::numeric and ${t.grossPay} < 'Infinity'::numeric`),
     check('payslips_advance_recovered_finite_check', sql`${t.advanceRecovered} > '-Infinity'::numeric and ${t.advanceRecovered} < 'Infinity'::numeric`),
     check('payslips_net_pay_finite_check', sql`${t.netPay} > '-Infinity'::numeric and ${t.netPay} < 'Infinity'::numeric`),
