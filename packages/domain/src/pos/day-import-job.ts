@@ -5,7 +5,7 @@
  *
  * For every store with a LIVE POS link, it drafts yesterday's sales day (and any missed day in the last 7) from the POS v1 feed,
  * by calling the ordinary `importSalesDay` as the person who last vouched for the link. The draft is `open`: **it never submits,
- * verifies, posts, re-imports or voids**, and the ledger is untouched. A person submits it, and a different person verifies it.
+ * verifies, posts or voids**, and the ledger is untouched. A person submits it, and a different person verifies it.
  *
  * ## The rules that are easy to break
  *
@@ -28,7 +28,7 @@ import { addDays as addBusinessDays, parseBusinessDate } from '@shareat/core/dat
 import { logger } from '@shareat/core/logger';
 import { runJobForOrg, listOrgsToRun, type JobOutcome } from '../scheduler';
 import { importSalesDay, type ImportFetchers, type ImportSalesDayOutcome } from '../sales-days/import';
-import { safeHumanDate } from '../sales-days/create-block';
+import { safeHumanDate, SalesDayBlockedError } from '../sales-days/create-block';
 import { recheckRecentDays } from './v1-recheck';
 import { PosNotConfiguredError, PosUnreachableError } from './v1-feed';
 
@@ -50,6 +50,7 @@ export interface PosDayImportSweepResult {
 
 interface OrgWork {
   posted: number;
+  /** Total of both kinds of skip below (the run record's `skipped_count`). */
   skipped: number;
   failures: SchedulerFailure[];
   detail: string;
@@ -129,7 +130,8 @@ export async function posDayImportSweep(options: {
     // Read BEFORE this run opens its own row, so "the previous run" is really the previous one.
     const prev = await withOrgPrincipal(org.id, (tx) => schedulerRepo.lastRunFor(tx, org.id, 'pos_day_import'));
     const prevRunAt = prev?.startedAt ?? null;
-    const work = () => importForOrg(org, { today, trigger, dryRun, fetchers: options.fetchers, prevRunAt });
+    const prevRunOk = prev?.outcome === 'ok';
+    const work = () => importForOrg(org, { today, trigger, dryRun, fetchers: options.fetchers, prevRunAt, prevRunOk });
 
     if (dryRun) {
       const base = { orgId: org.id, orgName: org.name, job: 'pos_day_import' as const, period };
@@ -157,19 +159,21 @@ export async function posDayImportSweep(options: {
 
 async function importForOrg(
   org: { id: string; name: string },
-  ctx: { today: string; trigger: 'cron' | 'manual'; dryRun: boolean; fetchers: ImportFetchers | undefined; prevRunAt: Date | null },
+  ctx: { today: string; trigger: 'cron' | 'manual'; dryRun: boolean; fetchers: ImportFetchers | undefined; prevRunAt: Date | null; prevRunOk: boolean },
 ): Promise<OrgWork> {
-  const { today, trigger, dryRun, fetchers, prevRunAt } = ctx;
+  const { today, trigger, dryRun, fetchers, prevRunAt, prevRunOk } = ctx;
   const failures: SchedulerFailure[] = [];
   const wouldImport: string[] = [];
   let posted = 0;
   let skipped = 0;
+  let racedDays = 0;
   let closedDays = 0;
   let storesVisited = 0;
 
   const yesterday = addDays(today, -1);
   const capStart = addDays(yesterday, -(CATCH_UP_DAYS - 1));
   const prevRunDate = prevRunAt ? toBusinessDate(prevRunAt) : null;
+  const prevCleanDate = prevRunAt && prevRunOk ? prevRunDate : null;
 
   const links = await withOrgPrincipal(org.id, (tx) => posV1Repo.listLiveLinks(tx, org.id));
   let orgStopped = false;
@@ -186,15 +190,22 @@ async function importForOrg(
     const actor: Actor = { personId: link.updatedBy ?? link.createdBy, orgId: org.id };
     const linkDate = toBusinessDate(link.createdAt);
 
-    // A gap beyond the window: dates the timer will never reach. Said, never silent.
-    const gapFrom = prevRunDate && prevRunDate.localeCompare(linkDate) > 0 ? prevRunDate : linkDate;
+    // A gap beyond the window: dates with no sales day (any status) that the timer will never reach. Said on every run until
+    // each exists, never silent - computed from the data, not from when the job last ran.
+    // A previous run that finished clean already said everything before its own date; any other previous run (failed, partial,
+    // unfinished) said nothing reliable, so the count goes back to the link date.
+    const gapFrom = prevCleanDate && prevCleanDate.localeCompare(linkDate) > 0 ? prevCleanDate : linkDate;
     if (gapFrom.localeCompare(capStart) < 0) {
-      const gap = dateRange(gapFrom, addDays(capStart, -1));
-      const reason =
-        `${listDates(gap)} ${gap.length === 1 ? 'is' : 'are'} older than the ${CATCH_UP_DAYS}-day window, so the morning import will never reach ` +
-        `${gap.length === 1 ? 'it' : 'them'}. Import ${gap.length === 1 ? 'it' : 'them'} by hand on the sales day page.`;
-      // The org's first-ever run only has a link date to go on, so it is a notice; a run that follows a stale one is a failure.
-      failures.push(line(reason, prevRunDate ? undefined : 'notice'));
+      const gapEnd = addDays(capStart, -1);
+      const have = await withOrgPrincipal(org.id, (tx) => salesDaysRepo.datesWithAnyDay(tx, org.id, link.storeId, gapFrom, gapEnd));
+      const gap = dateRange(gapFrom, gapEnd).filter((d) => !have.has(d));
+      if (gap.length > 0) {
+        const reason =
+          `${listDates(gap)} ${gap.length === 1 ? 'is' : 'are'} older than the ${CATCH_UP_DAYS}-day window and ${gap.length === 1 ? 'has' : 'have'} no sales day, ` +
+          `so the morning import will never reach ${gap.length === 1 ? 'it' : 'them'}. Import ${gap.length === 1 ? 'it' : 'them'} by hand on the sales day page.`;
+        // The org's first-ever run only has a link date to go on, so it is a notice; a run that follows an earlier one is a failure.
+        failures.push(line(reason, prevRunDate ? undefined : 'notice'));
+      }
     }
 
     const from = linkDate.localeCompare(capStart) > 0 ? linkDate : capStart;
@@ -233,6 +244,7 @@ async function importForOrg(
           closedDays += 1;
         } else if (answer.skipped) {
           skipped += 1;
+          racedDays += 1;
         } else {
           posted += 1;
           imported.push(date);
@@ -259,12 +271,13 @@ async function importForOrg(
           );
           if (nowPresent) {
             skipped += 1;
+            racedDays += 1;
             continue;
           }
         }
         failures.push(line(`${when}: ${sentenceOf(e)}`));
         // A person who may no longer import cannot import any other day either: one line, not seven.
-        if (e instanceof AuthorizationError) storeStopped = true;
+        if (e instanceof AuthorizationError || e instanceof SalesDayBlockedError) storeStopped = true;
       }
     }
 
@@ -302,7 +315,7 @@ async function importForOrg(
     failures,
     wouldImport,
     detail:
-      `${dryRun ? 'dry run - would import' : 'imported'} ${posted} - already there ${skipped} - closed ${closedDays} - ` +
+      `${dryRun ? 'dry run - would import' : 'imported'} ${posted} - already there ${skipped - racedDays} - ${racedDays > 0 ? `${racedDays} imported by a person first - ` : ''}closed ${closedDays} - ` +
       `stores ${storesVisited} - refused ${realFailures}`,
   };
 }

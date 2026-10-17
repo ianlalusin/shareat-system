@@ -67,7 +67,14 @@ export function importSalesDay(
   input: ImportSalesDayInput & { readonly ifAbsent: true },
   fetchers?: ImportFetchers,
 ): Promise<ImportSalesDayOutcome>;
-export function importSalesDay(tx: MaybeTx, actor: Actor, input: ImportSalesDayInput, fetchers?: ImportFetchers): Promise<{ id: string }>;
+export function importSalesDay(
+  tx: MaybeTx,
+  actor: Actor,
+  input: ImportSalesDayInput & { readonly ifAbsent?: false },
+  fetchers?: ImportFetchers,
+): Promise<{ id: string }>;
+/** A non-literal `ifAbsent: boolean` may answer either shape. */
+export function importSalesDay(tx: MaybeTx, actor: Actor, input: ImportSalesDayInput, fetchers?: ImportFetchers): Promise<ImportSalesDayOutcome>;
 export async function importSalesDay(
   tx: MaybeTx,
   actor: Actor,
