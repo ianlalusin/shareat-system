@@ -29,7 +29,9 @@ const H: {
   caps: Set<string>;
   states: Record<string, { state: 'on' | 'break' | 'off'; since?: Date }>;
   viewable: Set<string>;
-} = { caps: new Set(), states: {}, viewable: new Set() };
+  roster: Record<string, unknown>[] | null;
+  positions: { id: string; name: string; isCanonical: boolean }[] | null;
+} = { caps: new Set(), states: {}, viewable: new Set(), roster: null, positions: null };
 
 vi.mock('../src/lib/session', () => ({
   requireActor: vi.fn(async () => ({ orgId: 'org-1', personId: 'viewer-1' })),
@@ -74,12 +76,12 @@ vi.mock('../src/app/staff/lib', async (orig) => {
   });
   return {
     ...actual,
-    rosterForStore: vi.fn(async () => [
+    rosterForStore: vi.fn(async () => H.roster ?? [
       row(PERSON.ana, '2026-07-11', 'regular', 'Cashier'),
       row(PERSON.ben, '2026-09-27', 'probationary', 'Cook'),
       row(PERSON.cia, '2025-08-11', 'regular', 'Server'),
     ]),
-    positionsForStore: vi.fn(async () => [{ id: 'pos-Cashier', name: 'Cashier', isCanonical: true }]),
+    positionsForStore: vi.fn(async () => H.positions ?? [{ id: 'pos-Cashier', name: 'Cashier', isCanonical: true }]),
   };
 });
 vi.mock('@shareat/auth', async (orig) => {
@@ -148,6 +150,8 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-10-11T04:00:00Z'));
   H.caps = new Set(['manage_attendance']);
+  H.roster = null;
+  H.positions = null;
   H.viewable = new Set(['file-ana']);
   H.states = {
     [PERSON.ana.id]: { state: 'on', since: new Date('2026-10-11T00:00:00Z') },
@@ -198,18 +202,96 @@ describe('T-387 S7 - /staff views', () => {
     expect(roster).toMatch(/<a[^>]*view=roster[^>]*aria-current="page"|<a[^>]*aria-current="page"[^>]*view=roster/);
   });
 
-  it('Hire is the primary action, above the wall; the positions card sits above the wall too, in both views', async () => {
+  it('Hire is the primary action, above the wall, in both views; Positions is a third tab, not a box above the wall', async () => {
     for (const sp of [{}, { view: 'roster' }] as Record<string, string>[]) {
       const html = await render(sp);
       const hire = html.search(/<a[^>]*href="\/staff\/hire[^"]*"[^>]*>/);
       expect(hire).toBeGreaterThanOrEqual(0);
       expect(html.match(/<a[^>]*href="\/staff\/hire[^"]*"[^>]*>/)![0]).toContain('bg-brand');
       const view = html.search(/data-view="(cards|roster)"/);
-      const positions = html.indexOf('Positions</h2>');
-      expect(positions).toBeGreaterThanOrEqual(0);
+      expect(html).not.toContain('Positions</h2>');
       expect(hire).toBeLessThan(view);
-      expect(positions).toBeLessThan(view);
     }
+  });
+
+  // One block per position card (text after each `<details` opener).
+  const cardBlocks = (html: string) => html.split('<details').slice(1);
+  const rowFor = (id: string, name: string, positionIds: string[]) => ({
+    id,
+    personId: `person-${id}`,
+    staffCode: `C-${id}`,
+    displayName: name,
+    employmentStatus: 'regular',
+    startedOn: '2026-07-11',
+    positions: positionIds.map((pid, i) => ({ positionId: pid, name: pid, isPrimary: i === 0 })),
+  });
+
+  it('?view=positions is the third tab: expandable position cards with holder counts and links, no wall', async () => {
+    const html = await render({ view: 'positions' });
+    expect(html).toContain('Positions</h2>');
+    expect(html).not.toContain('data-view=');
+    const blocks = cardBlocks(html);
+    expect(blocks.length).toBe(1);
+    // Scoped to the one Cashier card; the count is exactly 1 (kills off-by-one / 10 / 0).
+    expect(blocks[0]).toMatch(/Cashier[\s\S]*?<span[^>]*>· (?:<!-- -->)?1<\/span>/);
+    expect(blocks[0]).toContain('href="/staff/emp-ana"');
+    expect(blocks[0]).not.toContain('href="/staff/emp-ben"');
+    expect(html).toMatch(/<a[^>]*view=positions[^>]*aria-current="page"|<a[^>]*aria-current="page"[^>]*view=positions/);
+  });
+
+  it('positions view: a position nobody holds shows count 0 and the empty state, with no holder links', async () => {
+    H.positions = [
+      { id: 'pos-Cashier', name: 'Cashier', isCanonical: true },
+      { id: 'pos-Host', name: 'Host', isCanonical: false },
+    ];
+    const blocks = cardBlocks(await render({ view: 'positions' }));
+    expect(blocks.length).toBe(2);
+    const host = blocks.find((b) => b.includes('Host'))!;
+    expect(host).toMatch(/<span[^>]*>· (?:<!-- -->)?0<\/span>/);
+    expect(host).toContain('Nobody holds this position here.');
+    expect(host).not.toContain('href="/staff/');
+    // empty state is per card: the held Cashier card must not show it (kills a global/inverted empty check)
+    expect(blocks.find((b) => b.includes('Cashier'))!).not.toContain('Nobody holds this position here.');
+  });
+
+  it('positions view: one person holding two positions appears under both, counted once in each', async () => {
+    H.positions = [
+      { id: 'pos-Cashier', name: 'Cashier', isCanonical: true },
+      { id: 'pos-Cook', name: 'Cook', isCanonical: true },
+    ];
+    H.roster = [rowFor('emp-ana', 'Ana Reyes', ['pos-Cashier', 'pos-Cook'])];
+    const blocks = cardBlocks(await render({ view: 'positions' }));
+    expect(blocks.length).toBe(2);
+    for (const b of blocks) {
+      expect(b).toMatch(/<span[^>]*>· (?:<!-- -->)?1<\/span>/);
+      expect((b.match(/href="\/staff\/emp-ana"/g) ?? []).length).toBe(1);
+    }
+  });
+
+  it('positions view: a holder whose position is not in the store list appears under no card', async () => {
+    H.positions = [{ id: 'pos-Cashier', name: 'Cashier', isCanonical: true }];
+    H.roster = [rowFor('emp-ana', 'Ana Reyes', ['pos-Cashier']), rowFor('emp-ghost', 'Gus Ghost', ['pos-Retired'])];
+    const html = await render({ view: 'positions' });
+    expect(html).not.toContain('href="/staff/emp-ghost"');
+    expect(html).not.toContain('Gus Ghost');
+    expect(cardBlocks(html)[0]).toMatch(/<span[^>]*>· (?:<!-- -->)?1<\/span>/);
+  });
+
+  it('positions view does not touch photo ids, today-state or photo viewability (the wall does)', async () => {
+    const { employmentRepo } = await import('@shareat/db');
+    const { todayStateFor } = await import('@shareat/domain');
+    const { canViewPhoto } = await import('../src/lib/photo-link');
+    const fns = [employmentRepo.photoFileIds, todayStateFor, canViewPhoto] as unknown as {
+      mockClear(): void;
+      mock: { calls: unknown[][] };
+    }[];
+    fns.forEach((f) => f.mockClear());
+    await render();
+    expect(fns[0].mock.calls.length).toBeGreaterThan(0); // control: the wall calls them
+    expect(fns[1].mock.calls.length).toBeGreaterThan(0);
+    fns.forEach((f) => f.mockClear());
+    await render({ view: 'positions' });
+    for (const f of fns) expect(f.mock.calls.length).toBe(0);
   });
 });
 
