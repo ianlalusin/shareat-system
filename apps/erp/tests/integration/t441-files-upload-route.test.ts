@@ -479,7 +479,7 @@ describe('M18 - faults say nothing: generic 500, kind-only log', () => {
       remove: async () => undefined,
     };
     setStorageDriver(broken);
-    const spies = (['error', 'warn', 'info', 'debug', 'fatal'] as const).map((l) => vi.spyOn(logger, l as never));
+    const spies = (['error', 'warn', 'info', 'debug', 'fatal'] as const).map((l) => vi.spyOn(logger, l as 'error'));
     const res = await post(f, f.manager);
     expect(res.status).toBe(500);
     const t = await res.clone().text();
@@ -490,7 +490,7 @@ describe('M18 - faults say nothing: generic 500, kind-only log', () => {
 
   it('a successful upload logs no path or signed URL', async () => {
     const f = await fixture('quiet');
-    const spies = (['error', 'warn', 'info', 'debug'] as const).map((l) => vi.spyOn(logger, l as never));
+    const spies = (['error', 'warn', 'info', 'debug'] as const).map((l) => vi.spyOn(logger, l as 'error'));
     const res = await post(f, f.manager);
     expect(res.status).toBe(200);
     const logged = JSON.stringify(spies.flatMap((s) => s.mock.calls));

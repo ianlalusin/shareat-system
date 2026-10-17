@@ -18,7 +18,7 @@
  */
 import { createHash } from 'node:crypto';
 import { authorize, type Actor, can } from '@shareat/auth';
-import { filesRepo, goneSentence, RefusalError, transaction, withSystemOrgPrincipal, type FilePurpose, type Tx } from '@shareat/db';
+import { filesRepo, goneSentence, refuse, RefusalError, transaction, UUID_SHAPE, withSystemOrgPrincipal, type FilePurpose, type Tx } from '@shareat/db';
 import { stripImageMetadata } from '@shareat/core/exif';
 import { logger } from '@shareat/core/logger';
 import { resolveStorageDriver } from './driver';
@@ -32,53 +32,17 @@ import { signatureUrl } from './signature';
 
 export * from './driver';
 export { mayViewSignature, SIGNATURE_LINK_SECONDS } from './signature';
+export { fileBytesMatchType } from './magic';
 
-/**
- * What each purpose may hold, and how big. ⚠️ v1 used one blanket 25 MB with *"no content-type
- * restriction"* because a single rule had to cover images, PDFs and Word documents at once.
- * Per-purpose limits make the blanket unnecessary.
- */
-export const PURPOSE_LIMITS: Record<
-  FilePurpose,
-  { readonly types: readonly string[]; readonly maxBytes: number }
-> = {
-  receipt_photo: { types: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'], maxBytes: 8 * 1024 * 1024 },
-  ar_collection_proof: { types: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'], maxBytes: 8 * 1024 * 1024 },
-  memo_document: { types: ['application/pdf', 'image/jpeg', 'image/png'], maxBytes: 15 * 1024 * 1024 },
-  wastage_dispute: { types: ['image/jpeg', 'image/png', 'image/webp'], maxBytes: 8 * 1024 * 1024 },
-  onboarding_document: { types: ['application/pdf', 'image/jpeg', 'image/png'], maxBytes: 25 * 1024 * 1024 },
-  // T-436: a medical-certificate photo. Images only; the app-wide 1 MB photo cap applies on top.
-  leave_document: { types: ['image/jpeg', 'image/png', 'image/webp'], maxBytes: 8 * 1024 * 1024 },
-  // T-434. The staff ID-card photo, and the on-screen signature (PNG only, under the app-wide 1 MB image ceiling).
-  staff_photo: { types: ['image/jpeg', 'image/png', 'image/webp'], maxBytes: 8 * 1024 * 1024 },
-  staff_signature: { types: ['image/png'], maxBytes: 1024 * 1024 },
-};
+import { isImageContentType, MAX_IMAGE_BYTES, PURPOSE_LIMITS, type LimitPurpose } from './limits';
 
-/**
- * ⭐ **T-296 — Ian, 2026-09-12: *"every uploaded photo accross the app to not exceed 1mb"*.**
- *
- * ONE ceiling for every image, applied on top of the per-purpose limit below. ⛔ Deliberately not
- * a per-purpose `maxImageBytes` field: Ian said *"across the app"*, and five copies of one rule is
- * five places for it to drift — a new purpose would silently inherit whatever its author typed.
- *
- * ⚠️ **Exactly 1 MB, and the browser aims at 950 KB** (`PHOTO_TARGET_BYTES` in
- * `apps/erp/src/components/photo-compression.ts`). The gap is deliberate: the client aims under the
- * line so a marginal encode is not refused by the layer that cannot explain itself as well.
- *
- * ⛔ **This is the guarantee, not the compression.** With JavaScript disabled no compression runs
- * at all; this is what makes "no stored photo exceeds 1 MB" provable from `stored_files.byte_size`
- * rather than merely likely.
- *
- * ⚠️ **PDFs are NOT subject to it.** They cannot be re-encoded, and the rule is about photos —
- * a 25 MB onboarding PDF stays legal under its own purpose limit, which is also why
- * `next.config.js`'s 26 MB body limit (T-282/DEF-317) must not be lowered to match this.
- */
-export const MAX_IMAGE_BYTES = 1024 * 1024;
+// T-441 (audit A7): the limits live in a db-free leaf the browser imports; this is the same object, re-exported.
+export { isImageContentType, MAX_IMAGE_BYTES, PURPOSE_LIMITS } from './limits';
 
-/** Whether `MAX_IMAGE_BYTES` applies. Images only — see its note. */
-export function isImageContentType(contentType: string): boolean {
-  return contentType.toLowerCase().startsWith('image/');
-}
+/** Compile-time check: the leaf's purpose list equals the schema's `FILE_PURPOSES`. A drift in either fails `typecheck`. */
+type _SamePurposes = [LimitPurpose] extends [FilePurpose] ? ([FilePurpose] extends [LimitPurpose] ? true : never) : never;
+const purposesMatchSchema: _SamePurposes = true;
+void purposesMatchSchema;
 
 /** The capability that governs the THING, not a generic "may upload". */
 const PURPOSE_CAPABILITY: Record<FilePurpose, Parameters<typeof authorize>[2]> = {
@@ -317,6 +281,54 @@ export async function readFileUrl(
   };
   if (tx) return run(tx);
   return transaction(run);
+}
+
+/**
+ * T-441 (audit A1/A2) - THE claim of an upload-on-pick file by the record that now owns it. ONE conditional
+ * UPDATE in the repo (`claimFile`): the file must be this person's own unlinked upload of this purpose and store,
+ * under 24 h old on the database clock, and it is linked in the same statement - so two concurrent Saves cannot
+ * both win and the orphan sweep (which deletes only `linked_to IS NULL`) cannot take a claimed file.
+ *
+ * Every failure - missing, someone else's, another org's, wrong purpose or store, already taken, expired,
+ * malformed id - is the SAME sentence, so a probe learns nothing. Call it after the record insert, in the same
+ * transaction, for both the upload-first path and the no-JS path.
+ */
+export async function claimUpload(
+  tx: Tx,
+  actor: Actor,
+  input: { fileId: string; purpose: FilePurpose; storeId: string | null; linkTo: string },
+): Promise<void> {
+  const unavailable = () => refuse('claimUpload: not claimable', 'That photo is no longer available - pick it again.');
+  if (!UUID_SHAPE.test(input.fileId) || !UUID_SHAPE.test(input.linkTo)) throw unavailable();
+  const claimed = await filesRepo.claimFile(tx, {
+    orgId: actor.orgId,
+    id: input.fileId,
+    uploadedBy: actor.personId,
+    purpose: input.purpose,
+    storeId: input.storeId,
+    linkedTo: input.linkTo,
+  });
+  if (!claimed) throw unavailable();
+}
+
+/** T-441 ruling: one person may hold at most this many unclaimed uploads younger than 24 h. */
+export const UNCLAIMED_UPLOAD_CAP = 30;
+
+/** Thrown by `assertUnclaimedUploadRoom`; the upload route turns exactly this into a 429. */
+export class UploadCapError extends RefusalError {
+  constructor() {
+    super(
+      'upload cap reached',
+      'You have too many photos waiting to be saved. Save or remove some, then try again.',
+    );
+    this.name = 'UploadCapError';
+  }
+}
+
+/** Refuses when this person already holds `UNCLAIMED_UPLOAD_CAP` unclaimed uploads under 24 h old (a flood guard, not a quota). */
+export async function assertUnclaimedUploadRoom(tx: Tx, actor: Actor): Promise<void> {
+  const held = await filesRepo.countUnclaimedBy(tx, actor.orgId, actor.personId, 24);
+  if (held >= UNCLAIMED_UPLOAD_CAP) throw new UploadCapError();
 }
 
 /** Claims a file, so the orphan sweep leaves it alone. */

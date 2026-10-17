@@ -54,6 +54,11 @@ export default {
         neutral: WARM_NEUTRAL,
       },
       // next/font sets --font-body and --font-display on <html> (layout.tsx).
+      // T-441: the upload control's water fill drifts sideways (always under `motion-safe:`) and its compressing ripple breathes.
+      keyframes: {
+        'water-drift': { from: { transform: 'translateX(0)' }, to: { transform: 'translateX(-50%)' } },
+      },
+      animation: { 'water-drift': 'water-drift 2.4s linear infinite' },
       fontFamily: {
         sans: ['var(--font-body)', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
         display: ['var(--font-display)', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],

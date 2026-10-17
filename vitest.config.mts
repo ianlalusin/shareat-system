@@ -39,6 +39,8 @@ const alias = {
   '@shareat/domain/money-input': `${root}packages/domain/src/shared/money-input.ts`,
   // T-386 - the item-code rule is a client-safe leaf (ItemCodeField imports it in the browser); exact entry before the bare name.
   '@shareat/domain/item-code': `${root}packages/domain/src/item-code.ts`,
+  // T-441 - the upload control's db-free limits leaf (browser import); exact entry before the bare name.
+  '@shareat/domain/files/limits': `${root}packages/domain/src/files/limits.ts`,
   // T-343 S5.0 — mirrors the two subpaths above: `refusal-leaf.ts` has no `@shareat/db` import
   // deliberately (a `'use client'` component may reach for `humanDate`/`internalFault` directly),
   // so it needs its own exact entry the same reason the other leaves above do.
