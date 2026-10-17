@@ -38,7 +38,10 @@ import type { Capability } from '@shareat/auth';
  * that matters is *"would it be wrong for the person at the counter to read this"*, not
  * *"is there a capability that sounds related"*.
  */
-export const ROUTE_CAPABILITY: Readonly<Record<string, Capability>> = {
+/** T-435: a single capability, a LIST meaning ANY-OF, or `null` meaning OPEN (a longer `null` key re-opens a sub-route). */
+export type RouteRequirement = Capability | readonly Capability[] | null;
+
+export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   // --- Who may act, and where. The keys to the building. -------------------------------------
   '/admin/users': 'manage_users',
   '/admin/stores': 'manage_stores',
@@ -87,10 +90,20 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, Capability>> = {
   //     and needs the (store-scoped) request word instead, which a manager holds. The writes check their own words in the domain.
   '/menu': 'view_menu',
   '/menu/requests': 'request_menu_item',
+
+  // --- T-435 / bible row 353: personal data is read only by people whose job needs it, for their own stores. The page also
+  //     filters the store list and every loader authorizes (two layers). ----------------------------------------------------
+  // Customers are org master data; AR is per store. Everyone with a reason to see a B2B customer collects from them.
+  '/customers': 'record_ar_collection',
+  // Ian Q3 (16 Oct): price lists stay open. The longer `null` key wins over the `/customers` prefix.
+  '/customers/price-lists': null,
+  // Ian Q2: holding only manage_attendance at a store is enough to see that store's roster.
+  '/staff': ['enrol_staff', 'manage_attendance'],
+  '/staff/hire': 'enrol_staff',
 };
 
 /**
- * The capability required to read `pathname`, or `null` when the route is open to any signed-in
+ * The requirement to read `pathname`: a capability, a list (ANY-OF), or `null` when the route is open to any signed-in
  * person.
  *
  * ⚠️ **Longest prefix wins, and the boundary check is not decoration.** A bare `startsWith` would
@@ -98,14 +111,21 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, Capability>> = {
  * which is exactly how this kind of helper acquires a wrong answer nobody notices. A prefix
  * matches only at a `/` boundary or on an exact match.
  */
-export function capabilityForRoute(pathname: string): Capability | null {
-  let best: { route: string; capability: Capability } | null = null;
-  for (const [route, capability] of Object.entries(ROUTE_CAPABILITY)) {
+export function capabilityForRoute(pathname: string): RouteRequirement {
+  let best: { route: string; requirement: RouteRequirement } | null = null;
+  for (const [route, requirement] of Object.entries(ROUTE_CAPABILITY)) {
     const matches = pathname === route || pathname.startsWith(`${route}/`);
     if (!matches) continue;
-    if (!best || route.length > best.route.length) best = { route, capability };
+    if (!best || route.length > best.route.length) best = { route, requirement };
   }
-  return best?.capability ?? null;
+  return best?.requirement ?? null;
+}
+
+/** The capabilities a route accepts (any one of them is enough), `[]` when it is open. */
+export function capabilitiesForRoute(pathname: string): readonly Capability[] {
+  const r = capabilityForRoute(pathname);
+  if (r === null) return [];
+  return typeof r === 'string' ? [r] : r;
 }
 
 /**
@@ -117,6 +137,6 @@ export function capabilityForRoute(pathname: string): Capability | null {
  * re-created DEF-051.
  */
 export function navHrefAllowed(href: string, held: ReadonlySet<string>): boolean {
-  const required = capabilityForRoute(href);
-  return required === null || held.has(required);
+  const accepted = capabilitiesForRoute(href);
+  return accepted.length === 0 || accepted.some((c) => held.has(c));
 }

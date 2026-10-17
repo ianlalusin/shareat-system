@@ -1,6 +1,6 @@
 # T-418 — Deleting an unposted draft needs no administrator's PIN
 
-**Status:** spec written 2026-10-16, not started; **Ian's answers folded in 16 Oct (both questions closed)**. Opus spec. Reopens **T-412** Question 2 (`docs/tasks/412-confirm-destructive-tiers.md`).
+**Status:** DONE 2026-10-16 (merged to main); **Ian's answers folded in 16 Oct (both questions closed)**. Opus spec. Reopens **T-412** Question 2 (`docs/tasks/412-confirm-destructive-tiers.md`).
 **Source:** bible row 348 (Ian, 16 Oct, decisions page): *"deleting an unposted DRAFT needs NO admin PIN; only posted records
 do."* T-412 shipped the opposite default (Q2 "keep that literal"), so three draft deletes ask for a PIN today.
 **Model: SONNET** (one builder, one tester; Haiku not used: auth-adjacent). **No migration.** **No capability change**

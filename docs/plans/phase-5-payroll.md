@@ -116,6 +116,8 @@ nobody re-derives it. ⭐ **T-189 attaches the FK and becomes the first thing th
 
 ## 5. ⛔ The statutory trigger — write it down so nobody guesses
 
+> ⚠️ **Superseded by bible row 354 (Ian, 2026-10-16):** start T-190 now from the official 2026 tables; do not wait for the first SSS number. See `docs/tasks/190-payroll-statutory.md`.
+
 **Port `ERP-rebuild/src/lib/payroll/statutory.ts` when, and not before, the first employment
 carries a real SSS number.** It is 196 lines, pure, isomorphic, 14 tests, and carries its own
 sources in a header comment — SSS 4.5% of MSC (₱500 brackets, floor ₱4,000 / ceiling ₱30,000),

@@ -1,8 +1,6 @@
 # T-216 — Recurring-expense automation
 
-> **Status**: 🟡 **HALF BUILT 2026-09-06 — the template ships. The JOB is specified but not built:
-> see [Part 2](#part-2--the-job-half-spec-written-2026-09-07-lane-d-ianla-0a) at the foot of this
-> file, which is the live half of this task.**
+> **Status**: **BUILT (job half shipped; extended by T-430, 16 Oct)**
 >
 > ✅ **Open question 2 was answered by Ian on 6–7 Sep: v2 DRAFTS, never auto-pays.** §3 argued that
 > v2 should draft where v1 auto-pays, and warned that *"say no and it changes the shape of the job,

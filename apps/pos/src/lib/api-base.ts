@@ -11,8 +11,22 @@
  */
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 
+/**
+ * T-424 Ruling 1: the POS v2 server (refunds, tender corrections, session voids, analytics port). Only "/api/pos2/..." calls go here; every
+ * other "/api/..." call keeps API_BASE (v1's server). Defaults to https://pos2.shareat.net.
+ */
+export const POS2_API_BASE = process.env.NEXT_PUBLIC_POS2_API_BASE || "https://pos2.shareat.net";
+
+const POS2_PREFIX = "/api/pos2/";
+
+/** The base for one relative "/api/..." path. */
+function baseFor(path: string): string {
+  return path.startsWith(POS2_PREFIX) ? POS2_API_BASE : API_BASE;
+}
+
 /** Prefix a relative "/api/..." path with the configured base. */
 export function apiUrl(path: string): string {
+  if (path.startsWith(POS2_PREFIX) && API_BASE) return `${POS2_API_BASE}${path}`;
   if (!API_BASE) return path;
   return path.startsWith("/") ? `${API_BASE}${path}` : path;
 }
@@ -31,9 +45,9 @@ export function installApiBaseFetch(): void {
   const orig = w.fetch.bind(w);
   w.fetch = ((input: any, init?: any) => {
     if (typeof input === "string" && input.startsWith("/api/")) {
-      input = API_BASE + input;
+      input = baseFor(input) + input;
     } else if (input instanceof URL && input.pathname.startsWith("/api/") && input.origin === window.location.origin) {
-      input = API_BASE + input.pathname + input.search;
+      input = baseFor(input.pathname) + input.pathname + input.search;
     }
     return orig(input, init);
   }) as typeof fetch;

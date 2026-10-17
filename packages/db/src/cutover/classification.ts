@@ -1195,6 +1195,13 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'same class as pos_item_maps - nobody re-links a store on 1 January, and a purged link would silently flip a ' +
       'linked store back to the typed path (the link row IS the per-store switch, I10).',
   },
+  pos_terminal_links: {
+    class: 'keep',
+    reason:
+      'Configuration: which POS v2 tablet (device id) is which ERP terminal person at which store. The same class as ' +
+      'pos_v1_store_links - a tablet is registered once, not on 1 January; a purged link would leave every approval on that ' +
+      'tablet refused until an administrator registers it again.',
+  },
   tenders: {
     class: 'keep',
     reason:

@@ -419,6 +419,19 @@ export async function listOtherOpenBranches(
   }));
 }
 
+/**
+ * T-435: does this person have an employment (any status) at one of `storeIds`? The scope test behind a viewer's access to
+ * a person-level read (the sign-in PIN state) - a person outside the viewer's stores is not theirs to see.
+ */
+export async function personHasEmploymentAtStores(tx: Tx, personId: string, storeIds: readonly string[]): Promise<boolean> {
+  if (storeIds.length === 0) return false;
+  const result = await tx.execute(sql`
+    select 1 as one from employments e
+    where e.person_id = ${personId} and e.store_id in (${sql.join(storeIds.map((i) => sql`${i}`), sql`, `)})
+    limit 1`);
+  return (result as unknown as unknown[]).length > 0;
+}
+
 /** The roster — reads the VIEW, which is the only answer to "who is active". */
 export async function listActiveRoster(tx: Tx, storeId: string): Promise<RosterRow[]> {
   const result = await tx.execute(sql`
@@ -450,4 +463,24 @@ export async function photoFileIds(tx: Tx, employmentIds: string[]): Promise<Map
     .where(inArray(employments.id, employmentIds));
   for (const r of rows) out.set(r.id, r.photoFileId ?? null);
   return out;
+}
+
+/** T-434: set (or clear, with null) the employment's ID-card photo. The previous stored_files row is kept. */
+export async function setPhotoFileId(tx: Tx, employmentId: string, fileId: string | null): Promise<void> {
+  await tx.update(employments).set({ photoFileId: fileId, updatedAt: sql`now()` }).where(eq(employments.id, employmentId));
+}
+
+/**
+ * T-434: a person's OPEN employments (`ended_on is null`) with the instant each row was created. `createdAt`, not only
+ * `started_on`, is what a "hired before the upload" test compares: a start date can be back-dated, a creation instant cannot.
+ */
+export async function listOpenForPerson(
+  tx: Tx,
+  personId: string,
+): Promise<{ id: string; storeId: string; createdAt: Date }[]> {
+  const rows = await tx
+    .select({ id: employments.id, storeId: employments.storeId, createdAt: employments.createdAt })
+    .from(employments)
+    .where(and(eq(employments.personId, personId), isNull(employments.endedOn)));
+  return rows;
 }

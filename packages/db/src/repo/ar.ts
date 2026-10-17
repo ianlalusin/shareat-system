@@ -112,6 +112,11 @@ export async function markChargeVoided(
 // ⭐ Derived — every AR figure, from the ledger and the allocation rows
 // -------------------------------------------------------------------------------------
 
+/** T-435: the comma-separated bound ids of a store list (callers handle the empty list: an empty `in ()` is a syntax error). */
+function storeList(storeIds: readonly string[]) {
+  return sql.join(storeIds.map((i) => sql`${i}`), sql`, `);
+}
+
 export interface ArPosition {
   controlBalance: string;
 }
@@ -122,6 +127,8 @@ export async function positionOf(
   orgId: string,
   customerId: string,
   storeId?: string,
+  /** T-435: restrict to these stores (a viewer's held stores). Ignored when `storeId` is given. */
+  storeIds?: readonly string[],
 ): Promise<ArPosition> {
   const [row] = (await tx.execute(sql`
     select coalesce(sum(jl.debit - jl.credit), 0)::text as balance
@@ -133,7 +140,7 @@ export async function positionOf(
       and jl.party_id = ${customerId}
       and a.code = ${AR_CONTROL_CODE}
       and je.status <> 'draft'
-      ${storeId ? sql`and jl.store_id = ${storeId}` : sql``}
+      ${storeId ? sql`and jl.store_id = ${storeId}` : storeIds ? sql`and ${(storeIds.length === 0 ? sql`false` : sql`jl.store_id in (${storeList(storeIds)})`)}` : sql``}
   `)) as unknown as Record<string, string>[];
   return { controlBalance: Number(row?.balance ?? 0).toFixed(2) };
 }
@@ -162,7 +169,13 @@ export async function orgAgingTotal(tx: Tx, orgId: string, storeId?: string): Pr
  * (DEF-075). Mirrors T-170's `advancesPositionOf` (`repo/ap.ts`) pointed the other way: `2140` is
  * a LIABILITY, so its balance is `credit - debit`, opposite `positionOf`'s asset-side `1210`.
  */
-export async function creditBalanceOf(tx: Tx, orgId: string, customerId: string): Promise<string> {
+export async function creditBalanceOf(
+  tx: Tx,
+  orgId: string,
+  customerId: string,
+  /** T-435: only these stores' store-credit lines. Omitted = org-wide (the posting paths). */
+  storeIds?: readonly string[],
+): Promise<string> {
   const [row] = (await tx.execute(sql`
     select coalesce(sum(jl.credit - jl.debit), 0)::text as balance
     from journal_lines jl
@@ -173,6 +186,7 @@ export async function creditBalanceOf(tx: Tx, orgId: string, customerId: string)
       and jl.party_id = ${customerId}
       and a.code = ${STORE_CREDIT_CODE}
       and je.status <> 'draft'
+      ${storeIds ? sql`and ${(storeIds.length === 0 ? sql`false` : sql`jl.store_id in (${storeList(storeIds)})`)}` : sql``}
   `)) as unknown as Record<string, string>[];
   return Number(row?.balance ?? 0).toFixed(2);
 }
@@ -265,6 +279,35 @@ export async function outstandingForCharge(tx: Tx, orgId: string, chargeId: stri
     where ch.org_id = ${orgId} and ch.id = ${chargeId} and ch.status = 'posted'
   `)) as unknown as Record<string, string>[];
   return row ? Number(row.outstanding).toFixed(2) : '0.00';
+}
+
+/**
+ * T-433. How many payments (posted collections) are allocated to this charge. A charge with any cannot be
+ * voided: the payment would stay allocated to a dead charge.
+ */
+export async function liveAllocationCount(tx: Tx, orgId: string, chargeId: string): Promise<number> {
+  const [row] = (await tx.execute(sql`
+    select count(*)::int as n
+    from ar_collection_allocations a
+    join ar_collections c on c.id = a.ar_collection_id
+    where c.org_id = ${orgId} and a.ar_charge_id = ${chargeId} and c.status = 'posted'
+  `)) as unknown as { n: number }[];
+  // Store-credit applications are collections allocated to the charge, so they are counted above; write-offs settle it too.
+  const [wo] = (await tx.execute(sql`
+    select count(*)::int as n from ar_write_offs where org_id = ${orgId} and ar_charge_id = ${chargeId}
+  `)) as unknown as { n: number }[];
+  return (row ? Number(row.n) : 0) + (wo ? Number(wo.n) : 0);
+}
+
+/** T-433. What has been paid against this charge: the sum of its posted allocations, as 2dp text. */
+export async function paidForCharge(tx: Tx, orgId: string, chargeId: string): Promise<string> {
+  const [row] = (await tx.execute(sql`
+    select coalesce(sum(a.amount_applied), 0)::numeric(14,2)::text as paid
+    from ar_collection_allocations a
+    join ar_collections c on c.id = a.ar_collection_id
+    where c.org_id = ${orgId} and a.ar_charge_id = ${chargeId} and c.status = 'posted'
+  `)) as unknown as { paid: string }[];
+  return row ? row.paid : '0.00';
 }
 
 export interface ArAgingBucket {
@@ -494,9 +537,13 @@ export async function listChargesForCustomer(
   tx: Tx,
   orgId: string,
   customerId: string,
-  opts: { storeId?: string; limit?: number } = {},
+  opts: { storeId?: string; storeIds?: readonly string[]; limit?: number } = {},
 ): Promise<ArChargeListRow[]> {
-  const storeFilter = opts.storeId ? sql`and ch.store_id = ${opts.storeId}` : sql``;
+  const storeFilter = opts.storeId
+    ? sql`and ch.store_id = ${opts.storeId}`
+    : opts.storeIds
+      ? sql`and ${(opts.storeIds.length === 0 ? sql`false` : sql`ch.store_id in (${storeList(opts.storeIds)})`)}`
+      : sql``;
   const rows = (await tx.execute(sql`
     with allocated as (
       select a.ar_charge_id, sum(a.amount_applied) as amt
@@ -575,9 +622,13 @@ export async function listCollectionsForCustomer(
   tx: Tx,
   orgId: string,
   customerId: string,
-  opts: { storeId?: string; limit?: number } = {},
+  opts: { storeId?: string; storeIds?: readonly string[]; limit?: number } = {},
 ): Promise<ArCollectionListRow[]> {
-  const storeFilter = opts.storeId ? sql`and co.store_id = ${opts.storeId}` : sql``;
+  const storeFilter = opts.storeId
+    ? sql`and co.store_id = ${opts.storeId}`
+    : opts.storeIds
+      ? sql`and ${(opts.storeIds.length === 0 ? sql`false` : sql`co.store_id in (${storeList(opts.storeIds)})`)}`
+      : sql``;
   const rows = (await tx.execute(sql`
     select co.id as collection_id, co.store_id, co.collection_date::text as collection_date,
            co.amount::text as amount, co.platform_fee::text as platform_fee,

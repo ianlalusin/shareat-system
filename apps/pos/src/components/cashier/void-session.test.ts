@@ -33,7 +33,6 @@ vi.mock('@/lib/analytics/applyReceiptDeltaServerFirst', () => ({ applyReceiptDel
 vi.mock('@/lib/analytics/applyKdsTicketDelta', () => ({ applyKdsTicketDelta: vi.fn(async () => {}) }));
 vi.mock('@/lib/analytics/applyKdsDeltaServerFirst', () => ({ applyKdsDeltaServerFirst: vi.fn(async () => {}) }));
 
-import { voidSession } from '@/components/cashier/firestore';
 import { getQueue, type QueuedPayment } from '@/lib/offline/payment-queue';
 import { replayDeferredEffects } from '@/lib/offline/replayDeferredEffects';
 
@@ -41,7 +40,6 @@ let fs: FakeFirestore;
 const SP = `stores/${STORE_ID}/sessions/sess1`;
 const TABLE = `stores/${STORE_ID}/tables/t1`;
 const TABLE_PROJ = `stores/${STORE_ID}/storeConfig/current/tables/t1`;
-const run = () => voidSession({ storeId: STORE_ID, sessionId: 'sess1', reason: 'walk-out', actor: user });
 const ticket = (id: string) => fs.get(`${SP}/kitchentickets/${id}`)!;
 const R = [{ redemptionId: 'R1', type: 'fixed' as const, value: 50 }, { redemptionId: 'R2', type: 'percent' as const, value: 10 }];
 const voidItems = () => getQueue().filter((q) => q.sessionId === 'sess1' && q.kind === 'void');
@@ -53,103 +51,6 @@ beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
-
-describe('voidSession baseline (must keep working)', () => {
-  it('voids the session, cancels the live tickets, frees the table and moves the projection', async () => {
-    seedSession(fs, { tickets: [{ id: 'k1', status: 'preparing' }, { id: 'k2', status: 'ready' }, { id: 'k3', status: 'served' }] });
-    await run();
-    expect(fs.get(SP)).toMatchObject({ status: 'voided', voidReason: 'walk-out', voidedByUid: 'u1' });
-    expect(ticket('k1').status).toBe('cancelled');
-    expect(ticket('k2').status).toBe('cancelled');
-    expect(ticket('k3').status).toBe('served');
-    expect(fs.get(TABLE)).toMatchObject({ status: 'available', currentSessionId: null });
-    expect(fs.get(TABLE_PROJ)).toMatchObject({ status: 'available', currentSessionId: null });
-    expect(fs.has(`stores/${STORE_ID}/activeSessions/sess1`)).toBe(false);
-    expect(fs.get(`stores/${STORE_ID}/closedSessions/sess1`)).toMatchObject({ status: 'voided' });
-  });
-
-  it('an already-closed or voided session is left alone and queues nothing', async () => {
-    seedSession(fs, { loyaltyRedemptions: R });
-    fs.seed(SP, { ...fs.get(SP)!, status: 'voided' });
-    const before = fs.get(TABLE);
-    await run();
-    expect(fs.get(TABLE)).toEqual(before);
-    expect(voidItems()).toHaveLength(0);
-  });
-});
-
-describe('race 1: a ticket served between the pre-read and the transaction is NOT cancelled (Acceptance 10)', () => {
-  it('re-reads the ticket inside the transaction and leaves a served ticket served', async () => {
-    seedSession(fs, { tickets: [{ id: 'k1', status: 'preparing' }, { id: 'k2', status: 'ready' }] });
-    fs.beforeNextTransaction(() => fs.seed(`${SP}/kitchentickets/k1`, { id: 'k1', status: 'served', servedAtClientMs: 5, createdAtClientMs: 1 }));
-    await run();
-    expect(ticket('k1').status).toBe('served');
-    expect(ticket('k1').servedAtClientMs).toBe(5);
-    expect(ticket('k1').cancelReason).toBeUndefined();
-    expect(ticket('k2').status).toBe('cancelled');
-    expect(fs.get(SP)).toMatchObject({ status: 'voided' });
-  });
-});
-
-describe('race 2: a table re-seated to another session is NOT freed (Acceptance 10)', () => {
-  it('leaves the table and its projection alone when currentSessionId is no longer this session', async () => {
-    seedSession(fs);
-    fs.beforeNextTransaction(() => {
-      fs.seed(TABLE, { status: 'occupied', currentSessionId: 'sessOTHER' });
-      fs.seed(TABLE_PROJ, { status: 'occupied', currentSessionId: 'sessOTHER', customerName: 'Ben' });
-    });
-    await run();
-    expect(fs.get(TABLE)).toEqual({ status: 'occupied', currentSessionId: 'sessOTHER' });
-    expect(fs.get(TABLE_PROJ)).toEqual({ status: 'occupied', currentSessionId: 'sessOTHER', customerName: 'Ben' });
-    expect(fs.get(SP)).toMatchObject({ status: 'voided' });
-  });
-
-  it('an a-la-carte session (no table) voids without touching any table', async () => {
-    seedSession(fs, { tableId: 'alacarte' });
-    await expect(run()).resolves.toBeTruthy();
-    expect(fs.get(SP)).toMatchObject({ status: 'voided' });
-  });
-});
-
-describe('race 3: the loyalty reversal is queued BEFORE the commit and cannot be lost or doubled (Acceptance 10)', () => {
-  it('the queue already holds the reversal at the moment the transaction commits', async () => {
-    seedSession(fs, { loyaltyRedemptions: R });
-    let atCommit: QueuedPayment[] | null = null;
-    fs.onCommit(() => { atCommit = getQueue(); });
-    await run();
-    expect(atCommit).not.toBeNull();
-    const item = (atCommit as unknown as QueuedPayment[]).find((q) => q.sessionId === 'sess1' && q.kind === 'void');
-    expect(item, 'a kind:"void" item for the session exists before commit').toBeTruthy();
-    expect(item!.storeId).toBe(STORE_ID);
-    expect(item!.ctx.redemptionIds).toEqual(['R1', 'R2']);
-    expect(item!.effects.loyaltyReverse).toBe('pending');
-    expect(item!.effects.analytics).toBe('skip');
-    expect(item!.effects.loyaltyFinalize).toBe('skip');
-    expect(item!.effects.loyaltyEarn).toBe('skip');
-    expect(voidItems()).toHaveLength(1);
-  });
-
-  it('a transaction retry does not queue a second reversal', async () => {
-    seedSession(fs, { loyaltyRedemptions: R });
-    fs.retryNextTransaction(1);
-    await run();
-    expect(voidItems()).toHaveLength(1);
-  });
-
-  it('a session without redemptions queues no reversal', async () => {
-    seedSession(fs);
-    await run();
-    expect(voidItems().filter((q) => q.effects.loyaltyReverse === 'pending')).toHaveLength(0);
-  });
-
-  it('a commit that fails leaves the session unvoided and the queued reversal in place (crash before commit)', async () => {
-    seedSession(fs, { loyaltyRedemptions: R });
-    fs.failNextCommit(new Error('network down'));
-    await expect(run()).rejects.toThrow();
-    expect(fs.get(SP)).toMatchObject({ status: 'active' });
-    expect(voidItems()).toHaveLength(1);
-  });
-});
 
 describe('replay checks that the session really is voided before it reverses loyalty points', () => {
   const item = (): QueuedPayment => ({

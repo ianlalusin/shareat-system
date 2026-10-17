@@ -1,6 +1,6 @@
 # T-432: the supplier payment form can pay a booked bill from a cash request
 
-**Status:** spec written 2026-10-16, not started (revised same day after Opus review; Ian approved the bill-page link)
+**Status:** DONE 2026-10-16 (merged to main); revised same day after Opus review; Ian approved the bill-page link)
 **Closes:** DEF-662 (found in the T-415 spec review; T-415's "Recommended follow-up").
 **Model:** Sonnet tester first (commits red), then Sonnet builder (bible row 184). Money path: Sonnet, not Haiku.
 **Migration:** none. `ap_payments.cash_request_id` exists; the domain side shipped in T-415. Next free number unchanged.

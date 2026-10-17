@@ -423,3 +423,24 @@ export async function latestForEntity(
     .limit(1);
   return row;
 }
+
+/**
+ * T-434: has this viewer already been recorded as refused for this person on this channel within `seconds`? Throttles
+ * `staff_signature.view_refused` so a refused click-loop cannot flood the log (one row per viewer, person and channel per window).
+ */
+export async function hasRecentSignatureRefusal(
+  tx: Tx,
+  orgId: string,
+  actorPersonId: string,
+  personId: string,
+  via: string,
+  seconds: number,
+): Promise<boolean> {
+  const rows = (await tx.execute(sql`
+    select 1 as one from audit_log
+    where org_id = ${orgId} and action = 'staff_signature.view_refused' and actor_person_id = ${actorPersonId}
+      and entity_id = ${personId} and after->>'via' = ${via}
+      and occurred_at > now() - make_interval(secs => ${seconds})
+    limit 1`)) as unknown as unknown[];
+  return rows.length > 0;
+}

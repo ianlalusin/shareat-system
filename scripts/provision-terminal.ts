@@ -13,6 +13,16 @@
  * This script only links the uid it produces to a store, as a terminal-kind `persons` row plus a
  * `kind='firebase'` credential (option (a), T-304 §Q1).
  *
+ * ## T-424: registering a POS v2 TABLET for manager approvals (`--link-pos-device`)
+ *
+ * A POS v2 tablet approves refunds with a store manager's ERP PIN. A wrong PIN is charged to the TABLET's own bucket, so the tablet must be an
+ * ERP terminal person (this script's normal mode creates one) AND be linked to its device id (the line on POS v2 > Settings). Link it with:
+ *
+ *   npm run provision-terminal -- --store=LIPA --link-pos-device=<device uuid> --terminal-no=1 --terminal-person=<person id> --admin=<admin person id> --confirm
+ *
+ * It calls `provisionPosTerminalLink` (capability `provision_clock_terminal`, so the --admin person must be an administrator; audited). A
+ * re-install makes a new device id: run it again with the new id and the store's old link is revoked in the same transaction.
+ *
  * ⛔ **No defaults, `--confirm` required, one transaction** — the same three guards
  * `bootstrap-org.ts` states and for the same reasons: a default is how the wrong store gets a
  * shared password quietly, and a half-written credential is worse than none.
@@ -25,18 +35,27 @@ import { sql } from 'drizzle-orm';
 import { closeDb, systemTransaction, type Tx } from '../packages/db/src/client';
 import * as personsRepo from '../packages/db/src/repo/persons';
 import * as sessionsRepo from '../packages/db/src/repo/sessions';
+import { withOrgPrincipal } from '../packages/db/src/rls/principal';
+import * as posTerminalLinksRepo from '../packages/db/src/repo/pos-terminal-links';
+import { provisionPosTerminalLink, revokePosTerminalLink } from '../packages/domain/src/pos/terminal-link';
 
 interface Args {
   storeCode: string;
   uid: string;
   confirm: boolean;
+  /** T-424: set when linking a POS v2 tablet instead of creating a terminal person. */
+  link: { deviceId: string; terminalNo: number; terminalPersonId: string; adminPersonId: string } | null;
+  /** T-424 audit: revoke a tablet's link by device id. */
+  revoke?: { deviceId: string; adminPersonId: string };
 }
 
 const USAGE = `
 Usage:
   npm run provision-terminal -- --store=LIPA --uid=<firebase-uid> [--confirm]
+  npm run provision-terminal -- --store=LIPA --link-pos-device=<uuid> --terminal-no=1 --terminal-person=<id> --admin=<id> [--confirm]
+  npm run provision-terminal -- --store=LIPA --revoke-pos-device=<uuid> --admin=<id> [--confirm]
 
-Both --store and --uid are REQUIRED and have no default.
+--store is REQUIRED, and so is --uid (or the four --link-pos-device options); nothing has a default.
 Without --confirm the script prints the plan and writes nothing.
 `;
 
@@ -57,7 +76,21 @@ function parseArgs(argv: readonly string[]): Args {
     if (!value) throw new Error(`provision-terminal: --${key} is required and has no default.\n${USAGE}`);
     return value;
   };
-  return { storeCode: required('store'), uid: required('uid'), confirm };
+  if (raw.has('revoke-pos-device')) {
+    return { storeCode: required('store'), uid: '', confirm, link: null, revoke: { deviceId: required('revoke-pos-device').toLowerCase(), adminPersonId: required('admin') } };
+  }
+  if (raw.has('link-pos-device')) {
+    const terminalNo = Number(required('terminal-no'));
+    if (!Number.isInteger(terminalNo) || terminalNo < 1 || terminalNo > 99) throw new Error(`provision-terminal: --terminal-no must be a whole number from 1 to 99.
+${USAGE}`);
+    return {
+      storeCode: required('store'),
+      uid: '',
+      confirm,
+      link: { deviceId: required('link-pos-device'), terminalNo, terminalPersonId: required('terminal-person'), adminPersonId: required('admin') },
+    };
+  }
+  return { storeCode: required('store'), uid: required('uid'), confirm, link: null };
 }
 
 interface StoreLookup {
@@ -114,6 +147,56 @@ async function main(): Promise<void> {
   if (!store) {
     console.error(`REFUSED: no store with code "${args.storeCode}". Nothing was written.`);
     process.exitCode = 1;
+    return;
+  }
+
+  if (args.revoke) {
+    const rev = args.revoke;
+    const found = await withOrgPrincipal(store.orgId, (tx) => posTerminalLinksRepo.getActiveLinkByDevice(tx, store.orgId, rev.deviceId));
+    if (!found || found.storeId !== store.id) {
+      console.error(`REFUSED: no active POS v2 link for device ${rev.deviceId} at ${store.name}. Nothing was written.`);
+      process.exitCode = 1;
+      return;
+    }
+    console.log(`provision-terminal - REVOKE the POS v2 link of device ${rev.deviceId} at ${store.name} (approvals on that tablet stop until it is registered again)`);
+    if (!args.confirm) {
+      console.log('DRY RUN - nothing was written. Re-run with --confirm to do it.');
+      return;
+    }
+    const done = await withOrgPrincipal(store.orgId, (tx) => revokePosTerminalLink(tx, { personId: rev.adminPersonId, orgId: store.orgId }, { linkId: found.id }));
+    console.log(`DONE - committed. Revoked link id ${done.linkId}`);
+    return;
+  }
+
+  if (args.link) {
+    const link = args.link;
+    console.log('');
+    console.log('provision-terminal - link a POS v2 tablet (T-424)');
+    console.log('─────────────────────────────────────────────────────────────');
+    console.log(`  store               : ${store.name}  (code ${args.storeCode})`);
+    console.log(`  device id           : ${link.deviceId}`);
+    console.log(`  terminal no         : ${link.terminalNo}`);
+    console.log(`  terminal person     : ${link.terminalPersonId}`);
+    console.log(`  approved by (admin) : ${link.adminPersonId}`);
+    console.log("  effect              : the store's previous POS v2 tablet link, if any, is revoked");
+    console.log('─────────────────────────────────────────────────────────────');
+    if (!args.confirm) {
+      console.log('');
+      console.log('DRY RUN - nothing was written. Re-run with --confirm to do it.');
+      return;
+    }
+    const done = await withOrgPrincipal(store.orgId, (tx) =>
+      provisionPosTerminalLink(tx, { personId: link.adminPersonId, orgId: store.orgId }, {
+        storeId: store.id,
+        terminalNo: link.terminalNo,
+        deviceId: link.deviceId,
+        terminalPersonId: link.terminalPersonId,
+      }),
+    );
+    console.log('');
+    console.log('DONE - committed.');
+    console.log(`  link id             : ${done.linkId}`);
+    if (done.revokedLinkId) console.log(`  revoked link id     : ${done.revokedLinkId}`);
     return;
   }
 

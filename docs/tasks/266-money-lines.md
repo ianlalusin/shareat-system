@@ -1,6 +1,6 @@
 # T-266 — `MoneyLines`: one component for every peso that moves
 
-> **Status: SPECIFIED, not built.** Written 2026-09-11 in plan mode (CLAUDE.md's opusplan rule —
+> **Status: BUILT.** Used by `packages/domain/src/expenses/create.ts` and `edit.ts`, and by the `MoneyLines` component. Written 2026-09-11 in plan mode (CLAUDE.md's opusplan rule —
 > a spec written as ordinary work gets Sonnet). Ian approved the design in chat the same day,
 > including the four rulings in §11 — ⭐ note ruling 1, which **corrected this spec's own first
 > draft** rather than merely approving it.

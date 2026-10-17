@@ -291,6 +291,7 @@ export const NO_FK_REFERENCES: readonly NoFkReference[] = [
   { column: 'owner_drawing_closes.adjustment_entry_id', kind: 'ref-gap', reason: 'uuid of a journal entry with NO foreign key; same-org is not enforced in T-398 S1 (reported)' },
   { column: 'payslips.journal_entry_id', kind: 'ref-gap', reason: 'uuid of a journal entry with NO foreign key; same-org is not enforced in T-398 S1 (reported)' },
   { column: 'person_credentials.external_id', kind: 'external-key', reason: 'Firebase/IdP subject id' },
+  { column: 'pos_terminal_links.device_id', kind: 'external-key', reason: 'the POS v2 tablet install id (a uuid minted on the device), shown on its Settings page; not a row of ours' },
   { column: 'pos_v1_day_feeds.batch_id', kind: 'ref-gap', reason: 'uuid of the feed batch with NO foreign key; same-org is not enforced in T-398 S1 (reported)' },
   { column: 'pos_v1_day_feeds.pos_store_id', kind: 'external-key', reason: 'v1 POS store id string, mapped through pos_v1_store_links' },
   { column: 'pos_v1_store_links.pos_store_id', kind: 'external-key', reason: 'v1 POS store id string' },

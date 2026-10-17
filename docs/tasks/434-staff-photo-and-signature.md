@@ -1,6 +1,6 @@
 # T-434 — Staff photo and signature (upload, replace, remove; signature guarded)
 
-**Status:** spec written 2026-10-16, not started
+**Status:** DONE 2026-10-17 — merged to main; in release PR #34 (not yet live).
 **Model:** Sonnet (auth + files). Write any spec amendment in plan mode.
 **Sources:** Ian 2026-10-16 (incl. answers to Q1-Q3 the same day); bible row 353 (standing): *"strictly guard staff and customer info, especially the signature; enforce proper rules"*.
 
@@ -145,3 +145,5 @@ on a card, a list or an export.
 ## Out of scope
 
 Building the payslip, cash advance and ID-card prints; signature history screen; staff self-service.
+
+**Orchestrator note (16 Oct, audit):** the uploader rule compares `employments.created_at` with `stored_files.uploaded_at` (not `started_on`). This is stricter (a back-dated start date cannot pre-date an upload) and is the intended rule.

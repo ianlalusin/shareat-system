@@ -10,7 +10,9 @@
 import { toBusinessDate } from '@shareat/core/datetime';
 import { payrollRepo, type PayRunRow, type PayslipRow } from '@shareat/db';
 import { derivePeriods, previewPayRun, type PayPeriod, type PayRunPreview } from '@shareat/domain';
+import { authorize, type Actor } from '@shareat/auth';
 import { withOrgPrincipal } from '../expenses/lib';
+import { heldStoresFor } from '../../lib/held-stores';
 import { errorMessage } from '@/lib/constraint-messages';
 
 export { peso } from '../../lib/format';
@@ -33,21 +35,43 @@ export async function preview(
   }
 }
 
-export async function runsFor(orgId: string, storeId: string): Promise<PayRunRow[]> {
-  return withOrgPrincipal(orgId, (tx) => payrollRepo.listPayRuns(tx, orgId, { storeId }));
+/**
+ * T-435 / bible row 353 — the stores `actor` may run payroll for (retired ones only where the actor holds a scope row, so a
+ * closed branch's final pay stays reachable). NO admin bypass: `authorize` needs a scope row even for an admin.
+ */
+export async function payrollStoresFor(actor: Actor) {
+  return withOrgPrincipal(actor.orgId, (tx) => heldStoresFor(tx, actor, ['run_payroll'], { includeRetired: true }));
 }
 
-export async function slipsFor(orgId: string, runId: string): Promise<PayslipRow[]> {
-  return withOrgPrincipal(orgId, (tx) => payrollRepo.listPayslips(tx, runId));
+// ⛔ Every reader below takes the FULL Actor and authorizes `run_payroll` at the store it reads (T-435, bible §15.11: the page
+//    filter is one layer, this is the other). A by-id reader authorizes on the ROW's own store, never on one the caller names.
+export async function runsFor(actor: Actor, storeId: string): Promise<PayRunRow[]> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    await authorize(tx, actor, 'run_payroll', { storeId });
+    return payrollRepo.listPayRuns(tx, actor.orgId, { storeId });
+  });
 }
 
-export async function rosterFor(orgId: string, storeId: string) {
+export async function slipsFor(actor: Actor, runId: string): Promise<PayslipRow[]> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    const run = await payrollRepo.getPayRun(tx, actor.orgId, runId);
+    if (!run) return [];
+    await authorize(tx, actor, 'run_payroll', { storeId: run.storeId });
+    return payrollRepo.listPayslips(tx, runId);
+  });
+}
+
+export async function rosterFor(actor: Actor, storeId: string) {
+  const orgId = actor.orgId;
   return withOrgPrincipal(orgId, async (tx) => {
+    await authorize(tx, actor, 'run_payroll', { storeId });
     const roster = await payrollRepo.employmentsForStore(tx, orgId, storeId);
     const today = toBusinessDate();
     return Promise.all(
       roster.map(async (r) => ({
         ...r,
+        // `displayName` is the name every other roster reader uses (the T-435 tests read it); `personName` stays for the page.
+        displayName: r.personName,
         rate: await payrollRepo.rateInForceOn(tx, orgId, r.id, today),
       })),
     );
@@ -61,15 +85,18 @@ export async function rosterFor(orgId: string, storeId: string) {
  * settings now (T-189b), and a number that decides somebody's pay should be visible on the screen
  * that spends it rather than knowable only by reading a migration.
  */
-export async function premiumSettingsFor(orgId: string, storeId: string) {
-  return withOrgPrincipal(orgId, async (tx) => {
+export async function premiumSettingsFor(actor: Actor, storeId: string) {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    await authorize(tx, actor, 'run_payroll', { storeId });
     const { attendanceConfigRepo } = await import('@shareat/db');
     return attendanceConfigRepo.findLive(tx, storeId);
   });
 }
 
-export async function cashAccountsFor(orgId: string, storeId: string) {
+export async function cashAccountsFor(actor: Actor, storeId: string) {
+  const orgId = actor.orgId;
   return withOrgPrincipal(orgId, async (tx) => {
+    await authorize(tx, actor, 'run_payroll', { storeId });
     const { moneyAccountsRepo } = await import('@shareat/db');
     return moneyAccountsRepo.listMoneyAccounts(tx, orgId, { storeId });
   });

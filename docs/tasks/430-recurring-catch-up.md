@@ -1,6 +1,6 @@
 # T-430 — Recurring templates: a starting period, and catch-up drafting
 
-**Status:** spec written 2026-10-16, not started. Opus spec; Opus review fixes and Ian's answers folded in 16 Oct.
+**Status:** DONE 2026-10-16 (merged to main). Opus spec; Opus review fixes and Ian's answers folded in 16 Oct.
 **Source:** worklist `docs/plans/2026-10-14-ian-answers-worklist.md` row 9; bible row 327 (Ian, Q9): *"when template
 is created add the recurring timing then build up based on the selected period."* Row 183 stands: **drafts, never pays.**
 **Builds on:** T-216 (template + job, `packages/domain/src/recurring-expenses/`), T-140 (the scheduler that runs it),

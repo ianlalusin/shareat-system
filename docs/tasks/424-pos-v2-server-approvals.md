@@ -1,6 +1,6 @@
 # T-424: POS v2 server — manager-PIN approvals, refunds, tender corrections, server-gated void (P0, PC-4 part 2)
 
-**Status:** spec written 2026-10-16 (Opus planner, POS v2 lane, plan mode); revised the same day after the Opus spec
+**Status:** DONE 2026-10-17 — merged to main; in release PR #34 (not yet live; POS v2 lane — in use only after the docs/ops/pos2-runbook.md steps).
 review (B1, B2, M1-M6 and minors folded in, marked ✎R). Re-review before build.
 **Model:** Sonnet tester -> Sonnet builder -> Sonnet auditor; S5 (auth) is an auth lane: Sonnet, its own test DB
 copied with `CREATE DATABASE … TEMPLATE shareat_test_t416`.
@@ -201,6 +201,7 @@ report).
   ERP routine must exist by then. Orchestrator to schedule.
 - **Offline refunds** (ADR A3: same tablet, same day, cash only, manager PIN) are PC-5.
 - **E-wallet refunds:** wait for T-375 to read `refundTender` (orchestrator, ERP side).
+- **Known drift (builder, audit):** a v2 refund skips what v1's `apply-delta 'refund'` also did: the `catalogCache/popularItems` decrement and the `dailySessions` refund row. CUSTOMER's "Popular" may overcount refunded dishes; the ERP feed is unaffected.
 
 ## Open questions
 1. Refunds always need a manager PIN (recommended; 7 refunds all-time) — or may a manager signed in on the tablet

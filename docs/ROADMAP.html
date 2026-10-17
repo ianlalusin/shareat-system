@@ -261,9 +261,9 @@
       <div class="phase s-done"><div class="ph-num">0</div><div class="ph-top"><span class="ph-name">Foundation</span><span class="chip c-done">complete</span></div><div class="ph-body">Repo, Postgres on 5435, Drizzle, migrations, CI, backups, and the offline spike for the Firestore two-lane contract.</div><div class="ph-gate"><b>Exit gate</b>Skeleton runs end to end; an offline write survives and reconciles.</div></div>
       <div class="phase s-done"><div class="ph-num">1</div><div class="ph-top"><span class="ph-name">Accounting spine</span><span class="chip c-done">complete</span></div><div class="ph-body">Chart of accounts, journal, the one posting door, reversal, fiscal periods, trial balance. Every invariant enforced by the database.</div><div class="ph-gate"><b>Exit gate</b>Invariant suite green; worked examples post; trial balance ties.</div></div>
       <div class="phase s-active"><div class="ph-num">2</div><div class="ph-top"><span class="ph-name">Money documents</span><span class="chip c-active">hardening</span></div><div class="ph-body">Expenses, sales days, AP, AR, settlements, cash custody, and the five ledger capabilities January needs. All built; the money-defect push is closing what audits found.</div><div class="ph-gate"><b>Exit gate</b>Subledgers tie to control accounts; a real closed period reconciles.</div></div>
-      <div class="phase s-done"><div class="ph-num">3</div><div class="ph-top"><span class="ph-name">Inventory</span><span class="chip c-done">20 of 20</span></div><div class="ph-body">Locations, stock ledger, FIFO layers, receiving, transfers, usage, wastage, counts, production, the commissary pipeline and the POS usage pull.</div><div class="ph-gate"><b>Exit gate</b>Inventory control accounts equal on-hand valuation.</div></div>
+      <div class="phase s-done"><div class="ph-num">3</div><div class="ph-top"><span class="ph-name">Inventory</span><span class="chip c-done">22 of 22</span></div><div class="ph-body">Locations, stock ledger, FIFO layers, receiving, transfers, usage, wastage, counts, production, the commissary pipeline and the POS usage pull.</div><div class="ph-gate"><b>Exit gate</b>Inventory control accounts equal on-hand valuation.</div></div>
       <div class="phase s-done"><div class="ph-num">4</div><div class="ph-top"><span class="ph-name">Attendance</span><span class="chip c-done">complete</span></div><div class="ph-body">Punches, adjudication in integer minutes, the Firestore mirror and inbox, the offline clock terminal, staff and credential admin.</div><div class="ph-gate"><b>Exit gate</b>A terminal clocks in offline and reconciles on reconnect.</div></div>
-      <div class="phase s-active"><div class="ph-num">5</div><div class="ph-top"><span class="ph-name">Payroll</span><span class="chip c-part">16 of 18</span></div><div class="ph-body">Pay rates, runs, overtime, periods and paydays, 13th month, separation. T-190 and T-193 wait on statutory numbers for 126 staff.</div><div class="ph-gate"><b>Exit gate</b>A payslip a staff member could be shown, posted and tied.</div></div>
+      <div class="phase s-active"><div class="ph-num">5</div><div class="ph-top"><span class="ph-name">Payroll</span><span class="chip c-part">16 of 19</span></div><div class="ph-body">Pay rates, runs, overtime, periods and paydays, 13th month, separation. T-190 (migration 0206) and T-436 leave tracking (0205) are built on lanes, not merged; T-193 follows T-190.</div><div class="ph-gate"><b>Exit gate</b>A payslip a staff member could be shown, posted and tied.</div></div>
       <div class="phase s-done"><div class="ph-num">6</div><div class="ph-top"><span class="ph-name">Reporting</span><span class="chip c-done">complete</span></div><div class="ph-body">Statements, aging, cash flow, sales reporting, dashboards, budgets, recurring expenses, and the findings watchdog.</div><div class="ph-gate"><b>Exit gate</b>Statements tie; every figure is a live query.</div></div>
       <div class="phase s-active"><div class="ph-num">7</div><div class="ph-top"><span class="ph-name">Admin screens</span><span class="chip c-active">in progress</span></div><div class="ph-body">Users and roles, stores, organisations, settings, sign-in and access are live. Activity log, memos, onboarding, cookbook and the remaining settings screens are still to build; v1 covers them until then.</div><div class="ph-gate"><b>Exit gate</b>Feature parity checklist complete.</div></div>
       <div class="phase s-queued"><div class="ph-num">8</div><div class="ph-top"><span class="ph-name">Cutover</span><span class="chip c-queued">dated</span></div><div class="ph-body">Opening-balance migration only. v1 and v2 run side by side on real days until the numbers agree, then v2 becomes the system of record.</div><div class="ph-gate"><b>Exit gate</b>You sign off a reconciled dual run.</div></div>
@@ -384,6 +384,19 @@
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-345</div><div class="task-what">An adjustment naming a missed month counts as that month&apos;s depreciation</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-346</div><div class="task-what">Stores get an opening date; assets depreciate from when they are in service (DEF-428, DEF-427)</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-347</div><div class="task-what">The cutover purge can clear an active fixed asset (DEF-437)</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-266</div><div class="task-what"><code>MoneyLines</code> &mdash; one component for every peso that moves</div></div>
+      </div>
+    </div>
+    <div class="wave">
+      <div class="wave-head"><h3>Cash, bills, trade and recurring, 16&ndash;17 Oct</h3><span class="chip c-done">live and in release</span><span class="why">PR #32 and #33 live; T-433 and T-424 wait in release PR #34.</span></div>
+      <div class="tasks">
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-415</div><div class="task-what">Every move of money in or out of a cash request locks the request first (DEF-657/658)</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-416</div><div class="task-what">Administrator-PIN approvals get a per-person miss cap (DEF-653)</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-418</div><div class="task-what">Deleting an unposted draft needs no administrator PIN</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-430</div><div class="task-what">Recurring templates: a starting period, and catch-up drafting</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-431</div><div class="task-what">&ldquo;Everything unpaid&rdquo;: one read-only view of what the business owes</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-432</div><div class="task-what">The supplier payment form can pay a booked bill from a cash request</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-433</div><div class="task-what">Business customers on trade orders: pay now, printable delivery receipt, BIR booklet, credit-limit warning</div><div class="task-note">In release PR #34, not yet live</div></div>
       </div>
     </div>
   </section>
@@ -487,6 +500,13 @@
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-175</div><div class="task-what">Low stock becomes an order</div></div>
       </div>
     </div>
+    <div class="wave">
+      <div class="wave-head"><h3>Cook usage on the daily screen</h3><span class="chip c-done">complete</span><span class="why">Live 17 Oct (PR #32).</span></div>
+      <div class="tasks">
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-419</div><div class="task-what">Ingredients used by recipe cooking also show on the daily usage screen, labelled &ldquo;from recipe&rdquo;</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-420</div><div class="task-what">The daily usage check counts ingredients already used by posted recipe cooking</div></div>
+      </div>
+    </div>
   </section>
 
   <section id="p4" class="inv">
@@ -527,7 +547,7 @@
   <section id="p5" class="inv">
     <h2>Phase 5 &middot; Payroll</h2>
     <div class="wave">
-      <div class="wave-head"><h3>Pay runs</h3><span class="chip c-part">16 of 18</span><span class="why">The last two wait on statutory numbers.</span></div>
+      <div class="wave-head"><h3>Pay runs</h3><span class="chip c-part">16 of 19</span><span class="why">T-190 and T-436 are built on lanes, not merged; T-193 follows T-190.</span></div>
       <div class="tasks">
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-189</div><div class="task-what">Pay rates, and the pay run that finally pays somebody</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-189b</div><div class="task-what">Overtime priced two ways, hours in half-hour steps, holiday per type</div></div>
@@ -545,8 +565,9 @@
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-201</div><div class="task-what">The attendance &amp; payroll settings screen &mdash; added this session, not in the original 17</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-191</div><div class="task-what">13th-month pay</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-192</div><div class="task-what">Separation, final pay and clearance (first slice)</div></div>
-        <div class="task"><div class="task-id"><span class="dot"></span>T-190</div><div class="task-what">Statutory contributions and withholding</div><div class="task-note">Blocked on HR data for 126 staff</div></div>
-        <div class="task"><div class="task-id"><span class="dot"></span>T-193</div><div class="task-what">Statutory remittance, settling 2210&ndash;2240</div><div class="task-note">Blocked on HR data for 126 staff</div></div>
+        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-190</div><div class="task-what">Statutory contributions and withholding</div><div class="task-note">Built on a lane (migration 0206), not merged; BIR 1601-E supplier withholding closed as not applicable (row 354)</div></div>
+        <div class="task"><div class="task-id"><span class="dot"></span>T-193</div><div class="task-what">Statutory remittance, settling 2210&ndash;2240</div><div class="task-note">After T-190 merges</div></div>
+        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-436</div><div class="task-what">Leave and absence tracking (monthly and yearly caps, paid vs unpaid)</div><div class="task-note">Built on a lane (migration 0205), not merged</div></div>
       </div>
     </div>
   </section>
@@ -571,6 +592,7 @@
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-223</div><div class="task-what">The low-stock auto-order finally has a caller</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-224</div><div class="task-what">lowStockOrderNotProposed &mdash; the durable half of DEF-186</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-225</div><div class="task-what">The half day that was nearly a full day</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-421</div><div class="task-what">Dashboard sales chart: one bar per day, split and colour-coded by sales channel</div></div>
       </div>
     </div>
   </section>
@@ -620,6 +642,10 @@
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-341</div><div class="task-what">A position grant authorises only at the store whose default produced it (DEF-414, DEF-429)</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-342</div><div class="task-what">The org's own admin can use the cutover screens again (DEF-417 part 1)</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-349</div><div class="task-what">&ldquo;Hold in their own right&rdquo; keeps the grant at the job&apos;s store (DEF-456)</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-434</div><div class="task-what">Staff photo and signature: upload, replace, remove; signature guarded</div><div class="task-note">In release PR #34, not yet live</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-435</div><div class="task-what">Personal-data access gates for payroll, customers, staff and trade</div><div class="task-note">In release PR #34, not yet live</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>DEF-664</div><div class="task-what">Re-adding a retired store position now brings it back; the Staff page is retitled</div><div class="task-note">Live (PR #33)</div></div>
+        <div class="task t-active"><div class="task-id"><span class="dot"></span>Staff Positions tab</div><div class="task-what">Expandable position cards on the Staff page</div><div class="task-note">Built on a lane, not merged</div></div>
       </div>
     </div>
     <div class="wave">
@@ -666,6 +692,11 @@
         <div class="task"><div class="task-id"><span class="dot"></span>Phase 7</div><div class="task-what">Tutorials: on-demand walkthroughs (count first, then spec)</div></div>
         <div class="task"><div class="task-id"><span class="dot"></span>T-314</div><div class="task-what">Fingerprint capture</div><div class="task-note">Blocked on a tablet and the reader model</div></div>
         <div class="task"><div class="task-id"><span class="dot"></span>T-363</div><div class="task-what">Managers and admins can flag any expense as doubtful</div><div class="task-note">After launch, your ruling</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-422 &middot; T-423</div><div class="task-what">POS v2: v1 floor screens copied into apps/pos; money in centavos and one receipt series per tablet</div><div class="task-note">Live (PR #32); T-417 empty shells also live</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-424</div><div class="task-what">POS v2 server: manager-PIN approvals, refunds, tender corrections, server-gated void</div><div class="task-note">In release PR #34, not yet live</div></div>
+        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-425</div><div class="task-what">POS v2 offline rules (PC-5)</div><div class="task-note">Spec in review; PC-6 senior/PWD discounts next</div></div>
+        <div class="task"><div class="task-id"><span class="dot"></span>T-398 S2&ndash;S7</div><div class="task-what">Padre Garcia franchise organisation, remaining slices</div></div>
+        <div class="task"><div class="task-id"><span class="dot"></span>DEF-585</div><div class="task-what">Production has no fiscal period before October 2026</div></div>
       </div>
     </div>
   </section>
@@ -768,6 +799,7 @@
       <div class="def"><div class="def-name">DEF-491 &middot; same-organisation link checks</div><div class="def-why">About 360 links. Before a second organisation is onboarded (your ruling 29 Sep).</div></div>
       <div class="def"><div class="def-name">DEF-421 &middot; transactions opened without an organisation</div><div class="def-why">Structural, about 60 functions; deferred with DEF-491.</div></div>
       <div class="def"><div class="def-name">Books tie-out audit tool</div><div class="def-why">A standing check, not a posting path.</div></div>
+      <div class="def"><div class="def-name">BIR 1601-E supplier withholding</div><div class="def-why">Closed as not applicable (bible row 354).</div></div>
       <div class="def"><div class="def-name">T-206 &middot; retire the old shared droplet</div><div class="def-why">159.223.78.207 (ERPNext and the POS archive). Only after v2 has its own POS app.</div></div>
     </div>
   </section>

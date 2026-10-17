@@ -22,8 +22,10 @@ import { filesRepo, goneSentence, RefusalError, transaction, withSystemOrgPrinci
 import { stripImageMetadata } from '@shareat/core/exif';
 import { logger } from '@shareat/core/logger';
 import { resolveStorageDriver } from './driver';
+import { signatureUrl } from './signature';
 
 export * from './driver';
+export { mayViewSignature, SIGNATURE_LINK_SECONDS } from './signature';
 
 /**
  * What each purpose may hold, and how big. ⚠️ v1 used one blanket 25 MB with *"no content-type
@@ -39,6 +41,9 @@ export const PURPOSE_LIMITS: Record<
   memo_document: { types: ['application/pdf', 'image/jpeg', 'image/png'], maxBytes: 15 * 1024 * 1024 },
   wastage_dispute: { types: ['image/jpeg', 'image/png', 'image/webp'], maxBytes: 8 * 1024 * 1024 },
   onboarding_document: { types: ['application/pdf', 'image/jpeg', 'image/png'], maxBytes: 25 * 1024 * 1024 },
+  // T-434. The staff ID-card photo, and the on-screen signature (PNG only, under the app-wide 1 MB image ceiling).
+  staff_photo: { types: ['image/jpeg', 'image/png', 'image/webp'], maxBytes: 8 * 1024 * 1024 },
+  staff_signature: { types: ['image/png'], maxBytes: 1024 * 1024 },
 };
 
 /**
@@ -79,6 +84,9 @@ const PURPOSE_CAPABILITY: Record<FilePurpose, Parameters<typeof authorize>[2]> =
   memo_document: 'manage_users',
   wastage_dispute: 'record_wastage',
   onboarding_document: 'enrol_staff',
+  staff_photo: 'enrol_staff',
+  // ⛔ T-434: this governs UPLOAD of a signature only. Signature READS never use it: see `./signature` (`mayViewSignature`).
+  staff_signature: 'enrol_staff',
 };
 
 const EXTENSIONS: Record<string, string> = {
@@ -229,6 +237,8 @@ export async function canReadFiles(tx: Tx, actor: Actor, fileIds: readonly strin
     const files = await filesRepo.getByIds(tx, actor.orgId, [...new Set(fileIds)]);
     const verdicts = new Map<string, boolean>();
     for (const file of files) {
+      // ⛔ T-434: a signature is NEVER decided here (the shared verdict is keyed by capability + store, the wrong question for it).
+      if (file.purpose === 'staff_signature') continue;
       const key = `${PURPOSE_CAPABILITY[file.purpose]}|${file.storeId ?? ''}`;
       let ok = verdicts.get(key);
       if (ok === undefined) {
@@ -265,6 +275,8 @@ export async function readFileUrl(
       // from an internal fault (a 500), and a bare Error cannot be told from either.
       throw new FileNotFoundError(`readFileUrl: file ${input.fileId} does not exist in this org.`);
     }
+    // ⛔ T-434: a signature goes through its own rule, its own 60 s link and its own audit - never `assertCanRead`.
+    if (file.purpose === 'staff_signature') return signatureUrl(trx, actor, file);
     await assertCanRead(trx, actor, file);
 
     const url = await resolveStorageDriver().signedUrl(

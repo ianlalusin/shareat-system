@@ -80,6 +80,8 @@ export type Capability =
   | 'void_sales_day'
   | 'record_statutory_discount'
   | 'void_statutory_discount'
+  /** T-424. Approving a POS v2 refund, tender correction or unpaid-session void with an ERP PIN. Admin yes, manager NO by role: held by grant (store-manager position defaults / a hand grant). */
+  | 'approve_pos_correction'
   | 'accept_remittance'
   /** T-186. Staff-OPEN: the person holding the drawer is the cashier. */
   | 'record_till_count'
@@ -225,6 +227,12 @@ export type Capability =
   | 'set_pay_rate'
   /** T-189. ⛔ Admin-only, as v1's postPayrollRunAction is. */
   | 'run_payroll'
+  /**
+   * T-434, bible row 353. Seeing a staff member's SIGNATURE IMAGE (payslips, cash advance forms, ID cards print it). A signature can be
+   * forged, so this is NOT folded into `enrol_staff` and does not imply `run_payroll`. Store-scoped; admins hold it, managers do not;
+   * grantable to a position (a payroll clerk). Every view is audited.
+   */
+  | 'view_staff_signature'
   | 'provision_clock_terminal'
   // Configuration
   | 'manage_store_settings'
@@ -308,6 +316,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'void_sales_day',
   'record_statutory_discount',
   'void_statutory_discount',
+  'approve_pos_correction',
   'accept_remittance',
   'record_till_count',
   'resolve_till_variance',
@@ -376,6 +385,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'manage_attendance',
   'set_pay_rate',
   'run_payroll',
+  'view_staff_signature',
   'provision_clock_terminal',
   'manage_store_settings',
   'set_cash_policy',
@@ -431,6 +441,7 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   // The SC/PWD register is kept per store, like the sales day it sits beside (T-137).
   record_statutory_discount: 'store',
   void_statutory_discount: 'store',
+  approve_pos_correction: 'store',
   accept_remittance: 'store',
   record_till_count: 'store',
   resolve_till_variance: 'store',
@@ -558,6 +569,7 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   manage_attendance: 'store',
   set_pay_rate: 'store',
   run_payroll: 'store',
+  view_staff_signature: 'store',
   provision_clock_terminal: 'store',
 
   manage_store_settings: 'store',
@@ -663,6 +675,7 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   void_sales_day: 'sales',
   record_statutory_discount: 'sales',
   void_statutory_discount: 'sales',
+  approve_pos_correction: 'sales',
   accept_remittance: 'sales',
   record_till_count: 'sales',
   resolve_till_variance: 'sales',
@@ -744,6 +757,7 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   manage_attendance: 'staff',
   set_pay_rate: 'staff',
   run_payroll: 'staff',
+  view_staff_signature: 'staff',
   provision_clock_terminal: 'staff',
 
   run_cutover: 'books',
@@ -804,6 +818,9 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   // the seller, so withdrawing a statutory record is a supervisory act - same shape as
   // void_sales_day directly above.
   void_statutory_discount: { super_admin: true, admin: true, manager: true, staff: false },
+  // T-424. ⭐ Manager is FALSE on purpose: approving a refund / tender correction / void with a PIN is held by GRANT (the store-manager
+  // positions' access defaults, or a hand grant at the store) - a franchise-owner role alone does not approve. Admins hold it implicitly.
+  approve_pos_correction: { super_admin: true, admin: true, manager: false, staff: false },
   accept_remittance: { super_admin: true, admin: true, manager: true, staff: false },
   record_till_count: { super_admin: true, admin: true, manager: true, staff: false },
   resolve_till_variance: { super_admin: true, admin: true, manager: true, staff: false },
@@ -963,6 +980,8 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   manage_attendance: { super_admin: true, admin: true, manager: true, staff: false },
   set_pay_rate: { super_admin: true, admin: true, manager: false, staff: false },
   run_payroll: { super_admin: true, admin: true, manager: false, staff: false },
+  // T-434 (bible row 353): manager DENIED - a signature is forgeable. Position-grantable (a payroll clerk); never implies run_payroll.
+  view_staff_signature: { super_admin: true, admin: true, manager: false, staff: false },
   // ⭐ ADMIN-ONLY (Ian, 2026-08-29, bible row 165). A provisioned terminal is the ONLY principal
   // allowed to read the credential mirror, so whoever may create one may read every enrolled
   // fingerprint template and card id at that store. Manager was v1's level; this is tighter.
@@ -1139,6 +1158,7 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   void_sales_day: 'void a sales day',
   record_statutory_discount: 'record a statutory discount',
   void_statutory_discount: 'void a statutory discount',
+  approve_pos_correction: 'approve a POS refund or correction',
   accept_remittance: 'accept a remittance',
   record_till_count: 'record a till count',
   resolve_till_variance: 'resolve a till variance',
@@ -1207,6 +1227,7 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   manage_attendance: 'manage attendance',
   set_pay_rate: 'set a pay rate',
   run_payroll: 'run payroll',
+  view_staff_signature: "see a staff member's signature",
   provision_clock_terminal: 'set up a clock-in tablet',
   manage_store_settings: 'manage store settings',
   set_cash_policy: "set a store's cash policy",

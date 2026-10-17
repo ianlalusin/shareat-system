@@ -104,6 +104,8 @@ export const tradeOrders = pgTable(
     /** Who let a dispatch through despite the credit limit, and why. Both or neither. */
     creditOverrideBy: uuid('credit_override_by').references(() => persons.id, { onDelete: 'restrict' }),
     creditOverrideReason: text('credit_override_reason'),
+    /** T-433 S2 (migration 0203). The number from the pre-printed BIR booklet, noted for the printout; this system never issues the official invoice. Unique per org when set. */
+    birInvoiceNo: text('bir_invoice_no'),
     voidedBy: uuid('voided_by').references(() => persons.id, { onDelete: 'restrict' }),
     voidedAt: timestamp('voided_at', { withTimezone: true }),
     voidReason: text('void_reason'),
@@ -170,6 +172,7 @@ export const tradeOrders = pgTable(
     index('trade_orders_org_customer_idx').on(t.orgId, t.customerId),
     index('trade_orders_org_store_date_idx').on(t.orgId, t.storeId, t.orderDate),
     uniqueIndex('trade_orders_ar_charge_key').on(t.arChargeId).where(sql`${t.arChargeId} is not null`),
+    uniqueIndex('trade_orders_org_bir_invoice_no_key').on(t.orgId, t.birInvoiceNo).where(sql`${t.birInvoiceNo} is not null`),
     check('trade_orders_total_amount_finite_check', sql`${t.totalAmount} > '-Infinity'::numeric and ${t.totalAmount} < 'Infinity'::numeric`),
     check('trade_orders_delivery_fee_finite_check', sql`${t.deliveryFee} > '-Infinity'::numeric and ${t.deliveryFee} < 'Infinity'::numeric`),
     check('trade_orders_other_fees_finite_check', sql`${t.otherFees} > '-Infinity'::numeric and ${t.otherFees} < 'Infinity'::numeric`),

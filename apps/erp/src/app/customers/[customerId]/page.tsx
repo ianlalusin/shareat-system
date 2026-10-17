@@ -4,7 +4,7 @@ import { compare, money, ZERO } from '@shareat/core/money';
 import { authorize, heldCapabilities, can } from '@shareat/auth';
 import { canReadFiles } from '@shareat/domain';
 import { ACTION_LINK } from '@/components/action-link';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess, StoreNotAvailable } from '../../../lib/page-access';
 import {
   recordCollectionAction,
   autoAllocateCollectionAction,
@@ -17,8 +17,10 @@ import {
   TREATMENT_LABEL,
   TREATMENT_TONE,
   creditBalance,
+  arStoresFor,
   getCustomer,
   getPosition,
+  isOverLimit,
   listCharges,
   listCollections,
   moneyAccountsFor,
@@ -81,17 +83,27 @@ export default async function CustomerDetailPage({
 }) {
   const { customerId } = await params;
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`/customers/${customerId}`);
+  // T-435 / bible row 353 - `record_ar_collection` to read; everything below is limited to the viewer's own stores.
+  const { actor, refusal } = await requirePageAccess(`/customers/${customerId}`);
+  if (refusal) return refusal;
   const orgId = actor.orgId;
+  if ((await arStoresFor(actor)).length === 0) return <StoreNotAvailable />;
 
-  const customer = await getCustomer(orgId, customerId);
+  // The same notFound() for a customer outside the viewer's stores as for a forged id (DEF-497).
+  const customer = await getCustomer(actor, customerId);
   if (!customer) notFound();
 
-  const [owedOverall, credit, storeOptions] = await Promise.all([
-    getPosition(orgId, customerId),
-    creditBalance(orgId, customerId),
-    storesWithOpenItems(orgId, customerId),
+  const [owedOverall, overLimit, credit, storeOptions] = await Promise.all([
+    getPosition(actor, customerId),
+    isOverLimit(actor, customerId),
+    creditBalance(actor, customerId),
+    storesWithOpenItems(actor, customerId),
   ]);
+  // A requested store the viewer does not hold: one sentence, nothing of that store (and no quiet fallback).
+  if (sp.store) {
+    const heldIds = new Set((await arStoresFor(actor)).map((x) => x.id));
+    if (!heldIds.has(sp.store)) return <StoreNotAvailable />;
+  }
 
   // ⭐ CHOSEN, never inferred from whichever open item sorted first — `/ap/suppliers/[id]`'s rule,
   // copied with its reason: that older AP behaviour booked every leg of a payment at one store when
@@ -104,11 +116,11 @@ export default async function CustomerDetailPage({
       : (storeOptions[0]?.storeId ?? '');
 
   const [charges, collections, openItems, wallets, owedHere] = await Promise.all([
-    listCharges(orgId, customerId),
-    listCollections(orgId, customerId),
-    storeId ? openItemsFor(orgId, customerId, storeId) : Promise.resolve([]),
-    storeId ? moneyAccountsFor(orgId, storeId) : Promise.resolve([]),
-    storeId ? getPosition(orgId, customerId, storeId) : Promise.resolve('0.00'),
+    listCharges(actor, customerId),
+    listCollections(actor, customerId),
+    storeId ? openItemsFor(actor, customerId, storeId) : Promise.resolve([]),
+    storeId ? moneyAccountsFor(actor, storeId) : Promise.resolve([]),
+    storeId ? getPosition(actor, customerId, storeId) : Promise.resolve('0.00'),
   ]);
 
   // Photo links only for receipts this viewer can actually open (the same check the route makes).
@@ -160,13 +172,13 @@ export default async function CustomerDetailPage({
           {/* ⚠️ Two positions, deliberately kept apart. The credit limit is judged ORG-WIDE — a
               limit is extended to a buyer, not to a buyer at one branch — while allocation happens
               per store. Conflating them is how a limit silently becomes per-branch. */}
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">Owed overall</p>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">Owed at your stores</p>
           <p className="text-2xl font-semibold tabular-nums">{peso(owedOverall)}</p>
           {customer.creditLimit !== null && (
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
               limit {peso(customer.creditLimit)}
-              {compare(money(owedOverall), money(customer.creditLimit)) > 0 && (
-                <span className="ml-1 font-medium text-danger">over</span>
+              {overLimit && (
+                <span className="ml-1 font-medium text-danger">over limit</span>
               )}
             </p>
           )}

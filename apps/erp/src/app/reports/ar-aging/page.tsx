@@ -1,6 +1,6 @@
 import { getArAgingReport } from '@shareat/domain';
 import { customersRepo } from '@shareat/db';
-import { reportScope, runReport } from '../lib';
+import { mayReadCustomerBalances, reportScope, runReport } from '../lib';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { EmptyState } from '@/components/reports/EmptyState';
 import { AgingFilters } from '@/components/reports/AgingFilters';
@@ -35,6 +35,16 @@ export default async function ArAgingPage({
   const currentStore = storeId ? storeRows.find((s) => s.id === storeId) : undefined;
 
   const asOfDate = sp.asOf ?? toBusinessDate();
+
+  // T-435: customer names and balances need record_ar_collection at the store(s) reported on, not just the report capability.
+  if (!(await mayReadCustomerBalances(scope))) {
+    return (
+      <Page density="wide">
+        <h1 className="text-2xl font-semibold">AR Aging</h1>
+        <p className="mt-4 text-sm">You do not have access to customer balances. They need the record_ar_collection capability at this store.</p>
+      </Page>
+    );
+  }
 
   const { report, customerNames } = await runReport(orgId, async (tx) => {
     const [report, customers] = await Promise.all([

@@ -1,8 +1,8 @@
 import { toBusinessDate } from '@shareat/core/datetime';
-import { requirePageAccess } from '../../../lib/page-access';
+import { requirePageAccess, StoreNotAvailable } from '../../../lib/page-access';
 import { compare, money, ZERO } from '@shareat/core/money';
 import { post13thMonthRunAction, void13thMonthRunAction } from './actions';
-import { cashAccountsFor, listStores, payoutsFor, peso, preview, runsFor } from './lib';
+import { cashAccountsFor, payrollStoresFor, payoutsFor, peso, preview, runsFor } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -34,7 +34,10 @@ export default async function ThirteenthMonthPage({
   // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
   if (refusal) return refusal;
 
-  const stores = await listStores(actor.orgId);
+  const stores = await payrollStoresFor(actor);
+  if (stores.length === 0) return <StoreNotAvailable />;
+  // T-435: a requested store the actor does not hold is one sentence — never a fallback to another store.
+  if (sp.store && !stores.some((s) => s.id === sp.store)) return <StoreNotAvailable />;
   const storeId = sp.store || stores[0]?.id;
   const year = Number(sp.year) || Number(toBusinessDate().slice(0, 4));
 
@@ -49,12 +52,12 @@ export default async function ThirteenthMonthPage({
 
   const [{ preview: pv, error: previewError }, runs, accounts] = await Promise.all([
     preview(actor.orgId, actor, { storeId, year }),
-    runsFor(actor.orgId, storeId),
-    cashAccountsFor(actor.orgId, storeId),
+    runsFor(actor, storeId),
+    cashAccountsFor(actor, storeId),
   ]);
 
   const latest = runs[0];
-  const latestPayouts = latest ? await payoutsFor(actor.orgId, latest.id) : [];
+  const latestPayouts = latest ? await payoutsFor(actor, latest.id) : [];
 
   return (
     <Page density="table">

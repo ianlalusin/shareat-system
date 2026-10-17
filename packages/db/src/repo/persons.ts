@@ -5,7 +5,7 @@
  * SQL in `scripts/dev-seed.ts:102` — `createEmployment` (T-154) requires an existing `personId`,
  * so a real onboarding screen could not work without this closing first (docs/tasks/202-*.md).
  */
-import { and, asc, eq, ilike, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { persons } from '../../schema/persons';
 import { personGrants, personRoles, personStoreScope } from '../../schema/access';
@@ -115,7 +115,11 @@ export async function getPersonById(tx: Tx, orgId: string, id: string): Promise<
  */
 export async function searchPersons(
   tx: Tx,
-  input: { orgId: string; query: string; limit?: number },
+  input: {
+    orgId: string;
+    query: string;
+    limit?: number;
+  },
 ): Promise<PersonRow[]> {
   const limit = input.limit ?? 20;
   const rows = await tx
@@ -129,9 +133,52 @@ export async function searchPersons(
     .from(persons)
     // ⛔ T-304 — a terminal is not a candidate for "the same Maria who already works Lipa".
     .where(
-      and(eq(persons.orgId, input.orgId), eq(persons.kind, 'person'), ilike(persons.displayName, `%${input.query}%`)),
+      and(
+        eq(persons.orgId, input.orgId),
+        eq(persons.kind, 'person'),
+        ilike(persons.displayName, `%${input.query}%`),
+      ),
     )
     .orderBy(asc(persons.displayName))
     .limit(limit);
   return rows;
+}
+
+/**
+ * T-435: every employment (any status) of these persons, with its store's name. The hire search uses it to tell a hit at the
+ * searcher's own stores from one who works only elsewhere (shown as name + branch only).
+ */
+export async function employmentStoresFor(
+  tx: Tx,
+  personIds: readonly string[],
+): Promise<{ personId: string; storeId: string; storeName: string }[]> {
+  if (personIds.length === 0) return [];
+  const rows = (await tx.execute(sql`
+    select e.person_id, e.store_id, s.name as store_name
+    from employments e join stores s on s.id = e.store_id
+    where e.person_id in (${sql.join(personIds.map((i) => sql`${i}`), sql`, `)})
+    order by s.name`)) as unknown as Record<string, string>[];
+  return rows.map((r) => ({ personId: String(r.person_id), storeId: String(r.store_id), storeName: String(r.store_name) }));
+}
+
+/**
+ * T-434: the person's CURRENT signature file id (null = none). ⛔ The ONLY reader of `persons.signature_file_id`; no list,
+ * roster or search select may add the column. Callers are the signature rule and the staff detail loader in
+ * `@shareat/domain`, never a screen.
+ */
+export async function getSignatureFileId(tx: Tx, orgId: string, personId: string): Promise<string | null> {
+  const [row] = await tx
+    .select({ signatureFileId: persons.signatureFileId })
+    .from(persons)
+    .where(and(eq(persons.id, personId), eq(persons.orgId, orgId)))
+    .limit(1);
+  return row?.signatureFileId ?? null;
+}
+
+/** T-434: point the person at a new current signature (or null to remove). The old stored_files row is kept. */
+export async function setSignatureFileId(tx: Tx, orgId: string, personId: string, fileId: string | null): Promise<void> {
+  await tx
+    .update(persons)
+    .set({ signatureFileId: fileId, updatedAt: sql`now()` })
+    .where(and(eq(persons.id, personId), eq(persons.orgId, orgId)));
 }

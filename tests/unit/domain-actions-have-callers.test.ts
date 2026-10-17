@@ -89,6 +89,12 @@ function actionShapedExports(): Map<string, string> {
  * off the same day** by T-226, and the stale-exemption rule below is what forced their rows out.
  */
 const EXEMPT: Record<string, string> = {
+  revokePosTerminalLink:
+    'UNWIRED — T-424 audit: scripts/provision-terminal.ts (--revoke-pos-device) is its caller, run by an administrator; no ERP screen yet. ' +
+    'It retires a lost or replaced POS v2 tablet.',
+  provisionPosTerminalLink:
+    'UNWIRED — T-424 S5: scripts/provision-terminal.ts (--link-pos-device) is its caller, run by an administrator; no ERP screen yet. ' +
+    "The tablet's device id is read from POS v2 Settings and typed into that command.",
   recordRemittanceEvent:
     'INTERNAL — `createRemittance` calls it (`remittance/index.ts:422`) in the same transaction, after its own rows (T-402 S3 C4); ' +
     'a separate file only so the action-coverage scan does not read the TYPE members in index.ts as audit actions.',
@@ -107,6 +113,9 @@ const EXEMPT: Record<string, string> = {
     'event. ⚠️ The LAST of DEF-190’s five still without a screen: a charge raised outside a trade ' +
     'order is T-226 §6, and it is blocked on Ian deciding which revenue account a manual credit ' +
     'sale credits — no wholesale-revenue account exists in the chart.',
+  recordChargeWithCollection:
+    'INTERNAL — `dispatchTradeOrder` calls it (`trade/index.ts:602`) when the buyer pays at dispatch (T-433 S1); ' +
+    'dispatch is the billing event, not a separate human boundary.',
   writeToleranceVerified:
     'INTERNAL — `postUsage` calls it (`stock/usage-records.ts:298`) in the same transaction to record the manager’s reason for an out-of-band line.',
   capitalizeApprovedExpense:
@@ -216,6 +225,24 @@ const EXEMPT: Record<string, string> = {
   // `setPositionDefault` and `retireStorePosition` carried UNWIRED rows here between T-289 and
   // T-290; T-290 (`apps/erp/src/app/admin/access-defaults/actions.ts`) is their caller, and this
   // guard's third `it` is what forced the rows out the moment that became true.
+
+  // ---- T-434 — staff signature (packages/domain/src/files/signature.ts) --------------------
+  assertMayLearnSignatureAbsent:
+    'INTERNAL — `currentSignatureFile` (`people/staff-media.ts`), reached from `viewStaffSignatureUrl` and ' +
+    '`signatureForPrint`, calls it when the person has no signature, so a non-viewer cannot tell "none" from "has one".',
+  auditSignatureChange:
+    'INTERNAL — `setStaffSignature` and `removeStaffSignature` (`people/staff-media.ts`) call it in the same ' +
+    'transaction to audit every signature change.',
+  mayViewSignature:
+    'INTERNAL — `signatureUrl` and `signatureBytes` (`files/signature.ts`) and `staffMediaView` (`people/staff-media.ts`) call it; ' +
+    'it is the single read rule for signatures, never a screen action.',
+  signatureBytes:
+    'INTERNAL — `signatureForPrint` (`people/staff-media.ts`) is its only caller, for the print path.',
+  signatureUrl:
+    'INTERNAL — `readFileUrl` (`files/index.ts`) and `viewStaffSignatureUrl` (`people/staff-media.ts`) call it to ' +
+    'mint the 60-second link.',
+  signatureForPrint:
+    'UNWIRED — RESERVED: print routes for payslips/forms come later (T-434 spec: prints out of scope).',
 
   // ---- T-336 — per-position access defaults at store creation -------------------------------
   seedStoreAccessDefaults:

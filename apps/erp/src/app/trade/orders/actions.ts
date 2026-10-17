@@ -10,12 +10,16 @@
  * same way the AP and item actions do.
  */
 import { revalidatePath } from 'next/cache';
-import { createTradeOrder, dispatchTradeOrder, receiveTradeOrder, voidTradeOrder } from '@shareat/domain';
+import { tradeRepo } from '@shareat/db';
+import { compare, money, ZERO } from '@shareat/core/money';
+import { createTradeOrder, dispatchTradeOrder, receiveTradeOrder, setBirInvoiceNo, uploadFile, voidTradeOrder } from '@shareat/domain';
 import { SHORTAGE_REASONS, type ShortageReason } from '@shareat/db/schema';
 import { peso, withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
+import { keepTyping } from '@/lib/keep-typing';
+import { BIR_INVOICE_NO } from './typed-forms';
 import { verifyAdminApproval } from '@shareat/auth';
 import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
@@ -73,25 +77,80 @@ export async function dispatchOrderAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
   let message = '';
   try {
-    const result = await withOrgPrincipal(actor.orgId, (tx) =>
-      dispatchTradeOrder(tx, actor, {
+    // T-433 S1: a buyer who pays at the door. Blank amount = the old dispatch (billed, paid later on the customer's page).
+    const payNowAmount = str(fd, 'payNowAmount');
+    // ⭐ The proof is UPLOADED, never typed (same path as the customer page's collection). Upload, bill and collect share
+    // ONE transaction, so a payment can never reference a file that was not written, nor a bill exist without its payment.
+    const proof = fd.get('receiptPhoto');
+    const hasProof = proof instanceof File && proof.size > 0;
+    const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      let payNow: { amount: string; moneyAccountId: string; receiptFileId: string | null; referenceNo: string | null } | null = null;
+      if (payNowAmount) {
+        let receiptFileId: string | null = null;
+        if (hasProof) {
+          const order = await tradeRepo.getOrderById(tx, actor.orgId, orderId);
+          if (order) {
+            const uploaded = await uploadFile(tx, actor, {
+              purpose: 'receipt_photo',
+              storeId: order.storeId,
+              contentType: (proof as File).type,
+              bytes: new Uint8Array(await (proof as File).arrayBuffer()),
+            });
+            receiptFileId = uploaded.fileId;
+          }
+        }
+        payNow = {
+          amount: payNowAmount,
+          moneyAccountId: str(fd, 'moneyAccountId'),
+          receiptFileId,
+          referenceNo: str(fd, 'payNowReferenceNo') || null,
+        };
+      }
+      return dispatchTradeOrder(tx, actor, {
         orderId,
         creditOverrideReason: str(fd, 'creditOverrideReason') || null,
-      }),
-    );
+        payNow,
+      });
+    });
     // ⭐ Says what the treatment DID to the books — "internal" and "external" are one word apart
     // and a world apart (the customers screen makes the same point).
-    message =
-      result.treatment === 'internal'
-        ? 'Dispatched. The goods are in transit at cost and the commissary’s stock is relieved; ' +
-          'both stores’ books move when the branch confirms what actually arrived.'
-        : 'Dispatched and billed: the receivable is raised against the customer, stock is relieved ' +
-          'and cost of sales posted.' +
-          (result.creditOverridden ? ' ⚠️ The credit limit was exceeded on your stated reason, which is kept.' : '');
+    const overridden = result.creditOverridden ? ' ⚠️ The credit limit was exceeded on your stated reason, which is kept.' : '';
+    if (result.treatment === 'internal') {
+      message =
+        'Dispatched. The goods are in transit at cost and the commissary’s stock is relieved; ' +
+        'both stores’ books move when the branch confirms what actually arrived.';
+    } else if (result.paidNow && result.balanceAfterPayment !== null) {
+      message =
+        `Dispatched, billed and paid ${peso(result.paidNow)}; ` +
+        (compare(money(result.balanceAfterPayment), ZERO) > 0 ? `${peso(result.balanceAfterPayment)} still owed.` : 'nothing still owed.') +
+        overridden;
+    } else {
+      message =
+        'Dispatched and billed: the receivable is raised against the customer, stock is relieved ' +
+        'and cost of sales posted.' +
+        overridden;
+    }
   } catch (err) {
     return await redirectWithFlash(`/trade/orders/${orderId}`, {}, { error: errorMessage(err) });
   }
   revalidatePath('/trade/orders');
+  revalidatePath(`/trade/orders/${orderId}`);
+  return await redirectWithFlash(`/trade/orders/${orderId}`, {}, { ok: message });
+}
+
+/** T-433 S2. Note (or clear) the number from the pre-printed BIR booklet; the delivery receipt then shows it. */
+export async function setBirInvoiceNoAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/trade/orders');
+  const orderId = str(fd, 'orderId');
+  let message = '';
+  try {
+    const result = await withOrgPrincipal(actor.orgId, (tx) =>
+      setBirInvoiceNo(tx, actor, { orderId, value: str(fd, 'birInvoiceNo') }),
+    );
+    message = result.birInvoiceNo ? `Invoice no. ${result.birInvoiceNo} noted on this order.` : 'Invoice no. cleared.';
+  } catch (err) {
+    return await redirectWithFlash(`/trade/orders/${orderId}`, {}, { error: errorMessage(err), typed: keepTyping(fd, BIR_INVOICE_NO, orderId, { actorId: actor.personId }) });
+  }
   revalidatePath(`/trade/orders/${orderId}`);
   return await redirectWithFlash(`/trade/orders/${orderId}`, {}, { ok: message });
 }

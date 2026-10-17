@@ -25,6 +25,7 @@
  * MARGIN is not. See the spec's Out of scope.
  */
 import {
+  auditLogRepo,
   commissaryRepo,
   customersRepo,
   itemsRepo,
@@ -40,11 +41,11 @@ import { authorize, AuthorizationError, type Actor, type Capability, can } from 
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { assertFiguresReconcile } from '../shared/reconcile';
 import { parseQuantityInput } from '../shared/quantity-input';
-import { recordCharge, voidCharge } from '../ar';
+import { recordCharge, recordChargeWithCollection, voidCharge, type PayNowInput } from '../ar';
 import { branchPriceFor } from '../items';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
-import { add, compare, money, toCentavos, ZERO, type Money } from '@shareat/core/money';
+import { add, compare, money, subtract, toCentavos, ZERO, type Money } from '@shareat/core/money';
 import { bookedReceiptQuantity, confirmReceipt, dispatchOrder, postInternalFreight, type ReceiptLineInput } from '../commissary/transfer';
 import { consume, reverseConsumption } from '../stock/consume';
 import { postConsumption } from '../stock/consumption-posting';
@@ -409,6 +410,9 @@ export interface DispatchResult {
   /** True when the credit limit was breached and someone with the capability let it through. */
   creditOverridden: boolean;
   treatment: 'internal' | 'external';
+  /** T-433. What was paid at the door in the same transaction, and what is still owed on this order; null when nothing was. */
+  paidNow: string | null;
+  balanceAfterPayment: string | null;
 }
 
 /**
@@ -422,10 +426,10 @@ export interface DispatchResult {
 export async function dispatchTradeOrder(
   tx: Tx | null,
   actor: Actor,
-  input: { orderId: string; creditOverrideReason?: string | null },
+  input: { orderId: string; creditOverrideReason?: string | null; payNow?: PayNowInput | null },
 ): Promise<DispatchResult> {
   const run = async (trx: Tx): Promise<DispatchResult> => {
-    const order = await tradeRepo.getOrderById(trx, actor.orgId, input.orderId);
+    const order = await tradeRepo.getOrderById(trx, actor.orgId, input.orderId, { forUpdate: true });
     if (!order) throw new Error(`dispatchTradeOrder: order ${input.orderId} does not exist.`);
     // ⭐ T-172. A BRANCH order's dispatch is its own capability — the posting event on the
     // commissary's side, manager+ — and never `approve_buyer`, which is about extending credit to
@@ -438,6 +442,14 @@ export async function dispatchTradeOrder(
 
     // Idempotent by design — a retried dispatch must not raise a second receivable.
     if (order.status === 'dispatched' || order.status === 'received') {
+      // T-433 R4: a payment sent with a dispatch that already happened is refused out loud, never dropped silently
+      // (the buyer would believe it was recorded).
+      if (input.payNow) {
+        throw refuse(
+          `dispatchTradeOrder: order ${order.id} is already ${order.status}; a pay-now payment cannot be added.`,
+          "This order is already dispatched; record the payment on the customer's page.",
+        );
+      }
       if (!order.journalEntryId) {
         throw new Error('dispatchTradeOrder: order is dispatched but carries no entry — that is a bug.');
       }
@@ -448,6 +460,8 @@ export async function dispatchTradeOrder(
         creditOverridden: order.creditOverrideReason !== null,
         // ⚠️ Read back from the FACT — an internal transfer never raised a charge.
         treatment: order.arChargeId ? 'external' : 'internal',
+        paidNow: null,
+        balanceAfterPayment: null,
       };
     }
     if (order.status !== 'draft' && order.status !== 'confirmed') {
@@ -480,6 +494,13 @@ export async function dispatchTradeOrder(
     // ⛔ NO REVENUE: a branch is not a customer of its own company.
     // -----------------------------------------------------------------------------------------
     if (customersRepo.treatmentOf(customer) === 'internal') {
+      // T-433 R2: a branch transfer is not sold, so nothing is paid for it.
+      if (input.payNow) {
+        throw refuse(
+          `dispatchTradeOrder: order ${order.id} is a branch transfer; a pay-now payment does not apply.`,
+          'A branch transfer is not paid for; remove the payment.',
+        );
+      }
       const allLines = await tradeRepo.linesFor(trx, actor.orgId, order.id);
       if (allLines.length === 0) {
         throw new Error('dispatchTradeOrder: order has no lines — that is a bug, createTradeOrder refuses this.');
@@ -556,13 +577,18 @@ export async function dispatchTradeOrder(
       });
       // ⛔ No credit gate. A branch is not extended credit, so a limit on an internal counterparty
       // is meaningless and is deliberately not consulted.
-      return { orderId: order.id, chargeId: null, entryId: dispatched.entryId, creditOverridden: false, treatment: 'internal' };
+      return {
+        orderId: order.id, chargeId: null, entryId: dispatched.entryId, creditOverridden: false, treatment: 'internal',
+        paidNow: null, balanceAfterPayment: null,
+      };
     }
 
     // ⭐ Bills by calling AR, never by posting its own legs. One owner of the 1210/4200 entry —
     // and DEF-158, the credit-limit gate itself now lives inside `recordCharge`, the one place
     // every AR-charging caller goes through, rather than a copy kept here.
-    const { chargeId, entryId, creditOverrideBy, creditOverrideReason } = await recordCharge(trx, actor, {
+    // T-433: with a payment at the door, the charge and its collection are ONE call (one transaction), so a crash between
+    // them cannot bill a buyer who already paid. The charge is dated the ORDER's date; the payment is dated today.
+    const chargeInput = {
       storeId: order.storeId,
       customerId: order.customerId,
       chargeDate: order.orderDate,
@@ -571,7 +597,10 @@ export async function dispatchTradeOrder(
       referenceNo: order.referenceNo,
       notes: `Wholesale order ${order.referenceNo ?? order.id}`,
       creditOverrideReason: input.creditOverrideReason,
-    });
+    };
+    const { chargeId, entryId, creditOverrideBy, creditOverrideReason } = input.payNow
+      ? await recordChargeWithCollection(trx, actor, { ...chargeInput, payNow: input.payNow })
+      : await recordCharge(trx, actor, chargeInput);
 
     // ---------------------------------------------------------------------------------------
     // ⭐ T-165 / DEF-125. COGS and inventory relief — T-132's own header called this a "stated
@@ -639,9 +668,12 @@ export async function dispatchTradeOrder(
       creditOverrideReason,
     });
 
+    const paidNow = input.payNow ? parseMoneyInput(input.payNow.amount, 'dispatchTradeOrder: the payment', 'The amount paid now') : null;
     return {
       orderId: order.id, chargeId, entryId,
       creditOverridden: creditOverrideReason !== null, treatment: 'external',
+      paidNow,
+      balanceAfterPayment: paidNow ? subtract(money(order.totalAmount), paidNow) : null,
     };
   };
   if (tx) return run(tx);
@@ -787,6 +819,19 @@ export async function voidTradeOrder(
       voidedBy: actor.personId,
       voidReason: reason,
     });
+    // T-433: a void frees the booklet number (the paper may be reused on a new order); the change is audited.
+    if (order.birInvoiceNo) {
+      await tradeRepo.setBirInvoiceNo(trx, actor.orgId, order.id, null);
+      await auditLogRepo.append(trx, actor.orgId, {
+        actorPersonId: actor.personId,
+        action: 'trade_order.bir_invoice_set',
+        storeId: order.storeId,
+        entityId: order.id,
+        before: { birInvoiceNo: order.birInvoiceNo },
+        after: { birInvoiceNo: null, voided: true },
+        source: 'web',
+      });
+    }
     return { reversedEntryId };
   };
   if (tx) return run(tx);
@@ -1010,6 +1055,89 @@ export async function receiveTradeOrder(
 
     const receivedAt = await tradeRepo.markReceived(trx, actor.orgId, order.id, actor.personId);
     return { receivedAt, entryId, freightEntryId, overCounts };
+  };
+  if (tx) return run(tx);
+  return transaction(run);
+}
+
+// -------------------------------------------------------------------------------------
+// T-433 S2 - the BIR booklet invoice number
+// -------------------------------------------------------------------------------------
+
+/** "January 2026" - the month a fiscal period covers. */
+function periodMonthLabel(startsOn: string): string {
+  return new Date(`${startsOn}T00:00:00Z`).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+}
+
+/**
+ * T-433 S2. Note the number from the pre-printed BIR booklet on a SALE that has gone out, so the delivery receipt can show it.
+ * This system never issues the official invoice (bible row 75); it only remembers the booklet's number.
+ *
+ * Trimmed; a blank clears it. Unique per organisation (a second order with the same number is refused in words, and the
+ * partial unique index is the backstop). Refused once the order's month is closed. Audited with before and after.
+ */
+export async function setBirInvoiceNo(
+  tx: Tx | null,
+  actor: Actor,
+  input: { orderId: string; value: string },
+): Promise<{ birInvoiceNo: string | null }> {
+  const run = async (trx: Tx) => {
+    const order = await tradeRepo.getOrderById(trx, actor.orgId, input.orderId, { forUpdate: true });
+    if (!order) throw refuse(`setBirInvoiceNo: order ${input.orderId} does not exist.`, 'That order no longer exists.');
+    await authorize(trx, actor, 'approve_buyer', { storeId: order.storeId });
+
+    if ((order.status !== 'dispatched' && order.status !== 'received') || !order.arChargeId) {
+      throw refuse(
+        `setBirInvoiceNo: order ${order.id} is ${order.status}${order.arChargeId ? '' : ' / not a sale'}.`,
+        'An invoice number can be noted only on a sale that has been dispatched.',
+      );
+    }
+
+    const next = input.value.trim() || null;
+    if (next === order.birInvoiceNo) return { birInvoiceNo: next };
+
+    const period = await journalRepo.findPeriodForDate(trx, actor.orgId, order.orderDate);
+    if (period && period.status !== 'open') {
+      const sentence = `${periodMonthLabel(period.startsOn)} is ${period.status}. The invoice number on an order from that month can't be changed.`;
+      throw refuse(`setBirInvoiceNo: ${sentence}`, sentence);
+    }
+
+    if (next) {
+      const other = await tradeRepo.findByBirInvoiceNo(trx, actor.orgId, next);
+      if (other && other.id !== order.id) {
+        throw refuse(
+          `setBirInvoiceNo: invoice no. ${next} is already on order ${other.id}.`,
+          `Invoice no. ${next} is already on order ${other.referenceNo ?? other.id}.`,
+        );
+      }
+    }
+
+    try {
+      // A savepoint, so a lost race on the unique index does not poison the surrounding transaction.
+      await trx.transaction(async (sp) => {
+        await tradeRepo.setBirInvoiceNo(sp, actor.orgId, order.id, next);
+      });
+    } catch (err) {
+      const e = err as { code?: string; cause?: { code?: string } };
+      if (next && (e.code === '23505' || e.cause?.code === '23505')) {
+        const holder = await tradeRepo.findByBirInvoiceNo(trx, actor.orgId, next);
+        throw refuse(
+          `setBirInvoiceNo: invoice no. ${next} is already on another order.`,
+          `Invoice no. ${next} is already on order ${holder?.referenceNo ?? holder?.id ?? 'another order'}.`,
+        );
+      }
+      throw err;
+    }
+    await auditLogRepo.append(trx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'trade_order.bir_invoice_set',
+      storeId: order.storeId,
+      entityId: order.id,
+      before: { birInvoiceNo: order.birInvoiceNo },
+      after: { birInvoiceNo: next },
+      source: 'web',
+    });
+    return { birInvoiceNo: next };
   };
   if (tx) return run(tx);
   return transaction(run);

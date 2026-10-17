@@ -108,6 +108,9 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('set_staff_code', 'security', 'high', 'store', 'employments', 'T-391', { viewers: 'admin' }),
   def('link_store_to_pos', 'settings', 'normal', 'store', 'pos_v1_store_links', 'T-375'),
   def('unlink_store_from_pos', 'settings', 'normal', 'store', 'pos_v1_store_links', 'T-382'),
+  // T-424 S5: registering a POS v2 tablet as an ERP terminal person (dotted: new, never in 0197's copy list).
+  def('pos_terminal_link.provision', 'settings', 'high', 'store', 'pos_terminal_links', 'T-424'),
+  def('pos_terminal_link.revoke', 'settings', 'high', 'store', 'pos_terminal_links', 'T-424'),
   def('create_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('update_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('reactivate_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
@@ -182,6 +185,10 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('auth.approval_pin_capped', 'security', 'high', 'org', 'persons', 'T-416', { actor: 'system' }),
   // T-416: an administrator cleared a person's cap.
   def('auth.approval_pin_cap_reset', 'security', 'high', 'org', 'persons', 'T-416'),
+  // T-433: a charge let through over the customer's credit limit, with who and why.
+  def('credit_limit.overridden', 'money', 'high', 'store', 'ar_charges', 'T-433'),
+  // T-433: the pre-printed BIR booklet number set, changed or cleared on a trade order.
+  def('trade_order.bir_invoice_set', 'money', 'normal', 'store', 'trade_orders', 'T-433'),
   def('auth.pin_stopped_for_day', 'security', 'critical', 'store', 'stores', 'T-402', { actor: 'either' }),
   def('session.ended', 'security', 'low', 'org', 'sessions', 'T-402'),
   def('session.ended_all', 'security', 'high', 'org', 'sessions', 'T-402', { actor: 'either' }),
@@ -197,6 +204,17 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('security.event_store_mismatch', 'security', 'high', 'store', 'stores', 'T-402', { actor: 'either' }),
   def('employment.created', 'staff', 'normal', 'store', 'employments', 'T-402'),
   def('employment.ended', 'staff', 'normal', 'store', 'employments', 'T-402'),
+  // T-434: a staff photo is changed on an EMPLOYMENT (the store's ID card). Photo VIEWS are deliberately not logged (every card load would flood it).
+  def('staff_photo.set', 'staff', 'normal', 'store', 'employments', 'T-434'),
+  def('staff_photo.replaced', 'staff', 'normal', 'store', 'employments', 'T-434'),
+  def('staff_photo.removed', 'staff', 'normal', 'store', 'employments', 'T-434'),
+  // T-434 / bible row 353: a signature belongs to the PERSON (entity_id = person id). Payloads carry NO file id, path or URL.
+  // `viewed` / `view_refused` are every attempt to open it (DEF-668, signatures only); admin-read because who looked at a signature is itself sensitive.
+  def('staff_signature.set', 'security', 'high', 'either', 'persons', 'T-434', { viewers: 'admin' }),
+  def('staff_signature.replaced', 'security', 'high', 'either', 'persons', 'T-434', { viewers: 'admin' }),
+  def('staff_signature.removed', 'security', 'high', 'either', 'persons', 'T-434', { viewers: 'admin' }),
+  def('staff_signature.viewed', 'security', 'high', 'either', 'persons', 'T-434', { viewers: 'admin' }),
+  def('staff_signature.view_refused', 'security', 'high', 'either', 'persons', 'T-434', { viewers: 'admin' }),
   def('employment.positions_set', 'staff', 'normal', 'store', 'employments', 'T-402'),
   def('position.reactivated', 'staff', 'normal', 'store', 'positions', 'T-402'),
 

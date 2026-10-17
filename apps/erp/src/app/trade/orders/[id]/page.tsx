@@ -3,13 +3,18 @@ import { notFound } from 'next/navigation';
 import { SHORTAGE_REASONS } from '@shareat/db/schema';
 import { add, compare, money, ZERO } from '@shareat/core/money';
 import { requireSession } from '../../../../lib/session';
-import { dispatchOrderAction, receiveOrderAction, voidOrderAction } from '../actions';
-import { orderDetail, peso, today } from '../lib';
+import { dispatchOrderAction, receiveOrderAction, setBirInvoiceNoAction, voidOrderAction } from '../actions';
+import { canSeeCreditLimit, creditPreview, orderDetail, peso, storeMoneyAccounts, today } from '../lib';
+import { ACTION_LINK } from '@/components/action-link';
+import { PhotoInput } from '@/components/PhotoInput';
+import { EditableRecord } from '@/components/forms';
 import { TREATMENT_LABEL, TREATMENT_TONE } from '../../../customers/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Button, ConfirmDestructive, exitStepFromTimestamps, FlashBanner, Input, LinkRow, RowAction, RowLink, Select, simpleStepIndexFor, StatusHero, statusLabel, tradeOrderSteps, type StatusIconKind, type Tone } from '@/components/ui';
+import { Button, ConfirmDestructive, exitStepFromTimestamps, FlashBanner, Field, FormGrid, Input, LinkRow, RowAction, RowLink, Select, simpleStepIndexFor, StatusHero, statusLabel, tradeOrderSteps, type StatusIconKind, type Tone } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
+import { typedFor } from '@/lib/keep-typing';
+import { BIR_INVOICE_NO } from '../typed-forms';
 
 export const metadata = { title: 'Trade order — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -47,9 +52,13 @@ export default async function TradeOrderPage({
   const { id } = await params;
   const sp = await withFlash(searchParams);
   const { actor } = await requireSession(`/trade/orders/${id}`);
-  const detail = await orderDetail(actor.orgId, id);
+  const detail = await orderDetail(actor, id);
   if (!detail) notFound();
-  const { order, lines, customer, treatment, sellingStore, receivingStore } = detail;
+  const { order, lines, treatment, sellingStore, receivingStore } = detail;
+  // T-435 / bible row 353 - the buyer's credit limit is shown only to someone who can approve_buyer or override_credit_limit at
+  // THIS order's store. For everyone else it is dropped here, before anything below can print it.
+  const limitVisible = await canSeeCreditLimit(actor, detail.order.storeId);
+  const customer = limitVisible ? detail.customer : { ...detail.customer, creditLimit: null };
 
   const isInternal = treatment === 'internal';
   const canDispatch = order.status === 'draft' || order.status === 'confirmed';
@@ -82,6 +91,15 @@ export default async function TradeOrderPage({
   })();
   const fees = add(money(order.deliveryFee), money(order.otherFees));
 
+  // T-433. Pay at the door, and the credit-limit warning BEFORE the button is pressed (the server still decides).
+  const payAtDispatch = canDispatch && !isInternal;
+  const accounts = payAtDispatch ? await storeMoneyAccounts(actor.orgId, order.storeId) : [];
+  const preview =
+    payAtDispatch && customer.creditLimit !== null
+      ? await creditPreview(actor, { customerId: customer.id, storeId: order.storeId, total: order.totalAmount })
+      : null;
+  const isSale = (order.status === 'dispatched' || order.status === 'received') && !isInternal;
+
   return (
     <Page density="table">
       <div>
@@ -109,6 +127,35 @@ export default async function TradeOrderPage({
             className="flex flex-wrap items-end gap-3"
           >
             <input type="hidden" name="orderId" value={order.id} />
+            {preview?.over && (
+              <p role="alert" className="w-full rounded-md border border-amber-400 bg-amber-50 p-2 text-sm text-amber-900 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-100">
+                Owes {peso(preview.owed)}. This order takes them to {peso(preview.after)} against a {peso(preview.limit ?? '0')} limit.
+                Dispatch is refused unless a manager says why below, or they pay enough now to stay within the limit.
+              </p>
+            )}
+            {payAtDispatch && (
+              <fieldset className="w-full rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
+                <legend className="px-1 text-xs text-neutral-500 dark:text-neutral-400">Paid on the spot? (optional)</legend>
+                <FormGrid>
+                  <Field label="Paid now (₱)">
+                    <Input name="payNowAmount" inputMode="decimal" placeholder="0.00" className="w-full text-right tabular-nums" />
+                  </Field>
+                  <Field label="Into account">
+                    <Select name="moneyAccountId" defaultValue="" className="w-full">
+                      <option value="">Choose…</option>
+                      {accounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name} ({a.custodian})
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="Proof of payment (required for GCash or bank)" span="full">
+                    <PhotoInput name="receiptPhoto" className="text-sm" />
+                  </Field>
+                </FormGrid>
+              </fieldset>
+            )}
             {!isInternal && customer.creditLimit !== null && (
               <label className="flex min-w-[14rem] flex-1 flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
                 Reason to exceed the {peso(customer.creditLimit)} limit (only if it does)
@@ -249,6 +296,27 @@ export default async function TradeOrderPage({
             {isInternal
               ? 'The goods leave the commissary: its stock is relieved into in-transit at real FIFO cost. No revenue, no receivable — a branch is not a customer of its own company.'
               : 'The billing event: the receivable is raised against the customer, wholesale revenue is recognised, and stock is relieved with cost of sales — one act, idempotent.'}
+          </p>
+        </div>
+      )}
+
+      {isSale && (
+        <div className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-medium">Delivery receipt</h2>
+            <Link href={`/trade/orders/${order.id}/print`} className={ACTION_LINK}>
+              Print delivery receipt
+            </Link>
+          </div>
+          <EditableRecord action={setBirInvoiceNoAction} label="BIR invoice no." hidden={{ orderId: order.id }} typed={typedFor(sp, BIR_INVOICE_NO, order.id, actor.personId)}>
+            <FormGrid>
+              <Field label="BIR invoice no. (booklet)">
+                <Input name="birInvoiceNo" defaultValue={order.birInvoiceNo ?? ''} placeholder="from the pre-printed booklet" className="w-full" />
+              </Field>
+            </FormGrid>
+          </EditableRecord>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            The official invoice is the booklet you already use; this only notes its number so it prints on the receipt. Leave it blank and save to clear it.
           </p>
         </div>
       )}

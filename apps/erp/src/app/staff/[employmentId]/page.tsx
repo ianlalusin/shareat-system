@@ -1,9 +1,20 @@
 import { notFound } from 'next/navigation';
 import { ENDED_STATUSES } from '@shareat/db/schema';
 import { toBusinessDate } from '@shareat/core/datetime';
-import { requireSession } from '../../../lib/session';
-import { endEmploymentAction, issuePinAction, setPositionsAction } from '../actions';
-import { employmentDetail, livePinFor, otherOpenBranchesFor, positionsForStore } from '../lib';
+import { requirePageAccess } from '../../../lib/page-access';
+import {
+  endEmploymentAction,
+  issuePinAction,
+  removeStaffPhotoAction,
+  removeStaffSignatureAction,
+  setPositionsAction,
+  setStaffPhotoAction,
+  setStaffSignatureAction,
+  viewStaffSignatureAction,
+} from '../actions';
+import { employmentDetail, livePinFor, mediaFor, otherOpenBranchesFor, positionsForStore } from '../lib';
+import { PhotoInput } from '@/components/PhotoInput';
+import { SignaturePad } from '@/components/SignaturePad';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
 import { Banner, Button, ConfirmDestructive, FlashBanner, Input } from '@/components/ui';
@@ -26,17 +37,20 @@ export default async function EmploymentDetailPage({
 }) {
   const { employmentId } = await params;
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`/staff/${employmentId}`);
-  const detail = await employmentDetail(actor.orgId, employmentId);
+  // T-435 / bible row 353 - the read gate, then the by-id scope (the same notFound for another store's employment as for a forged id).
+  const { actor, refusal } = await requirePageAccess(`/staff/${employmentId}`);
+  if (refusal) return refusal;
+  const detail = await employmentDetail(actor, employmentId);
   if (!detail) notFound();
 
   const isEnded = detail.employment.endedOn !== null;
-  const [positions, livePin, otherBranches] = await Promise.all([
+  const [positions, livePin, otherBranches, media] = await Promise.all([
     positionsForStore(actor.orgId, detail.employment.storeId),
-    livePinFor(actor.orgId, detail.employment.personId),
+    livePinFor(actor, detail.employment.personId),
     // ⭐ T-302 — read BEFORE the form renders, because the warning it feeds has to be on screen
     // before the button is pressed, not in a toast after the write.
-    otherOpenBranchesFor(actor.orgId, detail.employment.personId, detail.employment.storeId),
+    otherOpenBranchesFor(actor, detail.employment.personId, detail.employment.storeId),
+    mediaFor(actor, employmentId),
   ]);
   const assignedIds = new Set(detail.positions.map((p) => p.positionId));
   const primaryId = detail.positions.find((p) => p.isPrimary)?.positionId;
@@ -127,10 +141,14 @@ export default async function EmploymentDetailPage({
           branch too. A confirmation after the write would not be a control, and "this affects
           somewhere else" is not something an admin can act on — so it names the branches.
         */}
-        {!isEnded && otherBranches.length > 0 && (
+        {!isEnded && otherBranches.branches.length + otherBranches.hiddenCount > 0 && (
           <Banner tone="warning">
-            ⚠️ This person also works at{' '}
-            <strong>{otherBranches.map((b) => b.storeName).join(', ')}</strong>. They have one PIN
+            ⚠️ This person works at{' '}
+            <strong>
+              {[detail.storeName, ...otherBranches.branches.map((b) => b.storeName)].join(', ')}
+              {otherBranches.hiddenCount > 0 &&
+                ` and ${otherBranches.hiddenCount} other branch${otherBranches.hiddenCount === 1 ? '' : 'es'}`}
+            </strong>. They have one PIN
             for the whole business, so issuing a new one here{' '}
             <strong>changes the PIN they use there too</strong> — tell them the new digits before
             their next shift at either branch.
@@ -189,6 +207,65 @@ export default async function EmploymentDetailPage({
         <a href={`/staff/${employmentId}/credentials`} className="text-sm underline underline-offset-4">
           Manage credentials →
         </a>
+      </section>
+
+      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">Photo and signature</h2>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          The photo is for this store&rsquo;s ID card. The signature is printed on documents (payslips, cash advance forms); it is not
+          an approval, PINs do that. Staff cannot change their own.
+        </p>
+        <div className="space-y-2 text-sm">
+          <h3 className="font-medium">Photo</h3>
+          {media.photoFileId ? (
+            <a href={`/files/${media.photoFileId}`} className="inline-block py-1 underline underline-offset-4">
+              View photo
+            </a>
+          ) : (
+            <p className="text-neutral-500 dark:text-neutral-400">No photo on file.</p>
+          )}
+          {!isEnded && (
+            <form action={setStaffPhotoAction} className="flex flex-wrap items-end gap-3">
+              <input type="hidden" name="employmentId" value={employmentId} />
+              <PhotoInput name="photo" required accept="image/*" capture="user" />
+              <Button type="submit" variant="primary">
+                {media.photoFileId ? 'Replace photo' : 'Save photo'}
+              </Button>
+            </form>
+          )}
+          {!isEnded && media.photoFileId && (
+            <form action={removeStaffPhotoAction}>
+              <input type="hidden" name="employmentId" value={employmentId} />
+              <Button type="submit">Remove photo</Button>
+            </form>
+          )}
+        </div>
+        <div className="space-y-2 text-sm">
+          <h3 className="font-medium">Signature</h3>
+          {media.hasSignature ? (
+            <p>Signature on file.</p>
+          ) : (
+            <p className="text-neutral-500 dark:text-neutral-400">No signature on file.</p>
+          )}
+          {media.hasSignature && media.canViewSignature && (
+            <form action={viewStaffSignatureAction}>
+              <input type="hidden" name="employmentId" value={employmentId} />
+              <input type="hidden" name="personId" value={detail.employment.personId} />
+              <Button type="submit">View signature</Button>
+              <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">Each view is recorded. The link lasts one minute.</span>
+            </form>
+          )}
+          {!isEnded && (
+            <SignaturePad personId={detail.employment.personId} employmentId={employmentId} action={setStaffSignatureAction} />
+          )}
+          {!isEnded && media.hasSignature && (
+            <form action={removeStaffSignatureAction}>
+              <input type="hidden" name="employmentId" value={employmentId} />
+              <input type="hidden" name="personId" value={detail.employment.personId} />
+              <Button type="submit">Remove signature</Button>
+            </form>
+          )}
+        </div>
       </section>
 
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">

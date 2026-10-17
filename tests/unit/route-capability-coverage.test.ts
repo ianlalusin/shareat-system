@@ -26,6 +26,16 @@ import { ROUTE_CAPABILITY, capabilityForRoute, navHrefAllowed } from '../../apps
  * already has a stronger one would be churn that buys nothing.
  */
 
+/**
+ * T-435: a route's requirement is now a LIST (any-of) or null (open). Older assertions below go through this so they hold for the
+ * single-capability shape (before) and the list shape (after): the capabilities a route accepts, [] when open.
+ */
+function accepts(route: string): string[] {
+  const v = capabilityForRoute(route) as unknown;
+  if (v === null || v === undefined) return [];
+  return (Array.isArray(v) ? [...v] : [v]) as string[];
+}
+
 const repoRoot = path.resolve(__dirname, '../..');
 const APP = path.join(repoRoot, 'apps/erp/src/app');
 
@@ -138,11 +148,11 @@ describe('T-288 — ROUTE_CAPABILITY covers what it claims, and only what it can
 
 describe('capabilityForRoute — prefix matching', () => {
   it('an exact route matches', () => {
-    expect(capabilityForRoute('/admin/users')).toBe('manage_users');
+    expect(accepts('/admin/users')).toEqual(['manage_users']);
   });
 
   it('a child route inherits its parent', () => {
-    expect(capabilityForRoute('/admin/users/01a0-abcd')).toBe('manage_users');
+    expect(accepts('/admin/users/01a0-abcd')).toEqual(['manage_users']);
   });
 
   it('⛔ a route that merely SHARES A PREFIX does not inherit', () => {
@@ -155,9 +165,8 @@ describe('capabilityForRoute — prefix matching', () => {
   it('the LONGEST matching prefix wins', () => {
     // `/settings` and `/settings/sales-channels` would both match if the latter were mapped
     // separately; the deeper one must win so a narrower rule is never shadowed by a broader one.
-    const deep = capabilityForRoute('/reports/trial-balance');
-    expect(deep).toBe('view_trial_balance');
-    expect(capabilityForRoute('/reports/ap-aging')).toBe('view_financial_reports');
+    expect(accepts('/reports/trial-balance')).toEqual(['view_trial_balance']);
+    expect(accepts('/reports/ap-aging')).toEqual(['view_financial_reports']);
   });
 
   it('an unmapped route is open to any signed-in person', () => {
@@ -177,5 +186,102 @@ describe('navHrefAllowed — presentation only', () => {
 
   it('shows it once they hold it', () => {
     expect(navHrefAllowed('/payroll', new Set(['run_payroll']))).toBe(true);
+  });
+});
+
+// =====================================================================================================================
+// T-435 (TESTER) - personal-data access gates. docs/tasks/435-personal-data-access-gates.md design 5, cases 13, 24, 37.
+// Ian Q2: manage_attendance alone is enough for a store's roster. Ian Q3: price lists stay open. Bible row 353.
+//   M13 remove the `null` price-lists entry (the /customers prefix closes it); M24 /staff maps to enrol_staff alone;
+//   M37 one page under /customers or /staff keeps bare requireSession.
+// =====================================================================================================================
+
+describe('T-435 - the route map names the customer and staff screens', () => {
+  it('/customers (and any customer id under it) needs record_ar_collection', () => {
+    expect(accepts('/customers')).toEqual(['record_ar_collection']);
+    expect(accepts('/customers/019a0000-0000-7000-8000-000000000001')).toEqual(['record_ar_collection']);
+  });
+
+  it('M13: /customers/price-lists is OPEN (null re-opens the sub-route; longest prefix wins) - Ian Q3', () => {
+    expect(capabilityForRoute('/customers/price-lists')).toBeNull();
+    expect(capabilityForRoute('/customers/price-lists/019a0000-0000-7000-8000-000000000001')).toBeNull();
+    // ... and the null is not a hole in its neighbours:
+    expect(accepts('/customers')).not.toEqual([]);
+  });
+
+  it('M24: /staff, an employment under it and its credentials page accept enrol_staff OR manage_attendance - Ian Q2', () => {
+    for (const route of ['/staff', '/staff/019a0000-0000-7000-8000-000000000001', '/staff/019a0000-0000-7000-8000-000000000001/credentials']) {
+      expect(accepts(route).sort(), route).toEqual(['enrol_staff', 'manage_attendance']);
+    }
+  });
+
+  it('/staff/hire needs enrol_staff ALONE (longer prefix wins over /staff)', () => {
+    expect(accepts('/staff/hire')).toEqual(['enrol_staff']);
+  });
+
+  it('a prefix that merely shares letters does not inherit (/customers-archive, /staffing)', () => {
+    expect(capabilityForRoute('/customers-archive')).toBeNull();
+    expect(capabilityForRoute('/staffing')).toBeNull();
+  });
+});
+
+describe('T-435 - navHrefAllowed understands any-of and open', () => {
+  it('/staff is shown to a holder of EITHER capability and hidden from everyone else', () => {
+    expect(navHrefAllowed('/staff', new Set(['manage_attendance']))).toBe(true);
+    expect(navHrefAllowed('/staff', new Set(['enrol_staff']))).toBe(true);
+    expect(navHrefAllowed('/staff', new Set(['enrol_staff', 'manage_attendance']))).toBe(true);
+    expect(navHrefAllowed('/staff', new Set())).toBe(false);
+    expect(navHrefAllowed('/staff', new Set(['record_ar_collection', 'run_payroll']))).toBe(false);
+  });
+
+  it('/staff/hire needs enrol_staff: manage_attendance alone does not show it', () => {
+    expect(navHrefAllowed('/staff/hire', new Set(['manage_attendance']))).toBe(false);
+    expect(navHrefAllowed('/staff/hire', new Set(['enrol_staff']))).toBe(true);
+  });
+
+  it('/customers is hidden without record_ar_collection; the open price-lists link is always shown', () => {
+    expect(navHrefAllowed('/customers', new Set())).toBe(false);
+    expect(navHrefAllowed('/customers', new Set(['record_ar_collection']))).toBe(true);
+    expect(navHrefAllowed('/customers/price-lists', new Set())).toBe(true);
+  });
+});
+
+describe('T-435 - the map keeps its promises', () => {
+  it('every any-of entry names at least two DIFFERENT capabilities; no entry is an empty list', () => {
+    for (const [route, v] of Object.entries(ROUTE_CAPABILITY as Record<string, unknown>)) {
+      if (!Array.isArray(v)) continue;
+      expect(v.length, `${route}: an empty list would mean "nobody"`).toBeGreaterThan(0);
+      expect(new Set(v).size, `${route}: duplicate capability`).toBe(v.length);
+    }
+  });
+
+  it('every null (open) entry sits under a gated parent - a null with nothing above it is dead weight', () => {
+    const entries = Object.entries(ROUTE_CAPABILITY as Record<string, unknown>);
+    const opens = entries.filter(([, v]) => v === null).map(([r]) => r);
+    for (const route of opens) {
+      const parent = entries.find(([r, v]) => v !== null && route.startsWith(`${r}/`));
+      expect(parent, `${route}: open entry with no gated parent`).toBeDefined();
+    }
+  });
+
+  it('M37: every page under /customers (price lists excepted) and /staff calls requirePageAccess, not bare requireSession', () => {
+    const offenders: string[] = [];
+    for (const file of trackedPages()) {
+      const route = routeOf(file);
+      const gated = /^\/(customers|staff)(\/|$)/.test(route) && !route.startsWith('/customers/price-lists');
+      if (!gated) continue;
+      const src = codeOnly(readFileSync(path.join(repoRoot, file), 'utf8'));
+      if (!src.includes('requirePageAccess(')) offenders.push(route);
+    }
+    expect(offenders.sort()).toEqual([]);
+  });
+
+  it('the price-list pages stay on requireSession (open by decision, Ian Q3) - the gate is not copied onto them', () => {
+    const lists = trackedPages().filter((f) => routeOf(f).startsWith('/customers/price-lists'));
+    expect(lists.length).toBeGreaterThan(0);
+    for (const file of lists) {
+      const src = codeOnly(readFileSync(path.join(repoRoot, file), 'utf8'));
+      expect(src.includes('requirePageAccess('), file).toBe(false);
+    }
   });
 });
