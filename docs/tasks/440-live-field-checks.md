@@ -337,3 +337,105 @@ Open (need a decision, not folded):
 ## Orchestrator ruling (sweep reconcile, 2026-10-17)
 
 - **Authorization before field checks, everywhere** (A2 stands). The sweep placed assertFieldRules before authorize() in converted actions (DEF-676). The two pinned cases are fixed in the reconcile; **S9** restores auth-first order in every converted action and adds a guard test.
+
+## S9 — authorization before field checks; plus two smoke fixes (2026-10-17)
+**Model:** Opus spec; Sonnet tester then builders. **Migration:** none. Lines: `wt-t386` a535226 + reconcile WIP; re-grep, G6 rules.
+### A. DEF-676 — every `assertFieldRules(` call site, classified (172 = 152 in actions + 20 in domain)
+- **(i) already after authorization — 25, no change.** Actions: admin/users setCapabilityGrant:242; commissary/discrepancies
+  resolve:43, defer:78; inventory/low-stock setThreshold:42; menu/requests submitItemRequest:44. Domain (after `authorize`/
+  `loadAndAuthorize`, or in a private helper only called after it): ap/index.ts:181 (judgeCreditTerms),
+  attendance/adjustments.ts:160-162, attendance/config.ts:117, channel-settlements/index.ts:511 (moved by the reconcile),
+  dual-run/dispositions.ts:94, expenses/categories.ts:182 (cleanCategoryName), loans/index.ts:60, organizations/index.ts:508,
+  payroll/rates.ts:345, pos/store-link.ts:45, pos/tenders.ts:112,180, prepaid/index.ts:107,166, sales-channels/index.ts:128
+  (cleanName), stock/usage-tolerance.ts:97,112,113.
+- **(i-R) the action already has its own gate, just LATER — 36: move the call to just after that gate** (`authorize`,
+  `loadDestructiveTarget`; into the `withOrgPrincipal` callback if the gate is there). admin/users unlinkCredential:304 ·
+  ap voidInvoice:302, recordPayment:377, voidPayment:477 · attendance/terminals revoke:94 · channel-settlements voidSettlement:177
+  · commissary/orders/[id] withdrawOrder:218 · customers voidCollection:249, voidCharge:275, writeOffCharge:298 ·
+  expenses/recurring createTemplate:35 · fixed-assets createAsset:60 · inventory/counts recordCount:107 · inventory/pos-usage
+  voidPull:138 · inventory/production saveDraft:75, void:150 · inventory/returns record:43, void:76 · inventory/transfers
+  create:35, void:83 · inventory/usage void:182 · loans reverseEntry:114 · money-transfers void:103 · owners settle:116 ·
+  payroll/separations post:31 · prepaid reverseMonth:110, writeOff:137 · remittance reverse:193 · settings/pos-link unlink:207 ·
+  staff/[employmentId]/credentials revoke:71 · staff endEmployment:205, issuePin:242, issueAdminPin:329 · trade/orders void:210 ·
+  trade/returns void:80 · wastage reverseAutoCharge:197.
+- **(iii) domain function has other callers, several domain calls, or two rule sets — 23: action-level pre-check.**
+  admin/stores createStore:95 (bootstrap) · admin/users assignRole:78, linkFirebase:277 (`@shareat/auth`, which must not import
+  domain) · ap recordInvoice:174 (recurring job), recordInvoiceExpense:448 (delegates to the expenses action: use its gate) ·
+  cash-requests decide:70,77 (two sets) · commissary/orders/[id] receiveOrder:252 (shared with trade, different set) · customers
+  createCustomer:43 (master-data script), recordCollection:172 (ar, trade returns) · expenses create:255, void:375 (ap, recurring
+  job) · fixed-assets setInService:148,149 (two sets) · items createItem:119 (script) · menu createItem:75 (request approval) ·
+  menu/items/[id] createOptionGroup:123 (three domain calls) · money-transfers create:32 (remittance) · sales-days
+  importSalesDay:135 (day-import job) · staff hire:126, upsertStorePosition:354 (script) · trade/orders dispatch:82
+  (commissary fulfilment), receive:182.
+- **(ii) single caller (A6) — 87: move into the domain function, right after its `authorize()`.** Every remaining action site:
+  admin/access-defaults, admin/stores update/openingDate, attendance/lane, attendance/leave ×3, budgets, cash-requests
+  create/release/settle, channel-settlements payoutDestination, commissary/catalogue ×3, commissary/orders, commissary/orders/[id]
+  addLine/updateLine/reject/fulfil/propose, customers reconcile/priceList/setPrice, cutover ×3, expenses/recurring update,
+  expenses/reimbursements, findings ×2, fixed-assets updateTerms/dispose, inventory counts open/deliveries/locations/pos-map/
+  returns refund, items request/unit/rename/approve/reject, liabilities ×3, loans disburse/payment, menu category create/edit,
+  menu/items/[id] editItem/variant/depletion/editGroup/addValue/editValue, menu/prices ×2, menu/requests reject, money-accounts ×2,
+  money-transfers settle, owners create/contribution/drawing/closeMonth, payroll setPayRate, payroll/rates ×3, prepaid amortise,
+  remittance create/cashPolicy, sales-days create/correction/void, service-charge, settings/attendance ×2, staff/credentials
+  enrolCard, staff renamePerson, statutory-discounts ×2, till openShift, trade/orders create, trade/returns record, wastage record.
+- **EXEMPT (1):** setup createFirstRun:71 — no actor exists yet; the gate is the setup window + signed setup identity above it.
+**Fix patterns.** (ii) domain: `assertFieldRules(SET, { <ruleName>: input.<key>, ... })` after `authorize` (and after any
+load the authorize needs); keys mapped literally where the domain's input key differs; a conditional assert keeps its
+condition (`if (input.name !== undefined)` for editMenuCategory/editMenuItem, whose retire path sends no name); the domain uses
+the RETURNED normalised values where the action did (settings/attendance caps/kind). Remove the action's call and import.
+Before moving, the worker re-greps callers (`packages`, `apps`, `scripts`, non-test); any other caller => use (iii) instead.
+(iii) action: inside the existing `withOrgPrincipal` callback,
+`if (await can(tx, actor, '<cap>', <ctx>)) assertFieldRules(SET, formData);` then the domain call. `<cap>`/`<ctx>` are copied
+literally from the domain function's first `authorize()`, with a comment naming it. `can()` does not log; if false, the
+domain's `authorize()` refuses and logs once. A drifted capability fails OPEN, so the area refusal tests (authorised user +
+bad field => field sentence) must stay green: they catch drift.
+**Guard G6 (tester, S9a)** — new `apps/erp/tests/t440-s9-auth-first-guard.test.ts`; the TS index/reachable helpers move
+(not copy) from t440-s2 into `apps/erp/tests/helpers/ts-index.ts`. Scope: `apps/erp/src/app/**/actions.ts`,
+`apps/erp/src/lib/**`, `packages/domain/src/**` minus `field-rules/` and `shared/field-rules-assert.ts`. For every
+`assertFieldRules(` CALL (AST, so comments and strings never count), walking up to the top-level function (callbacks such as
+`withOrgPrincipal((tx) => ...)` belong to it): a GATE call must end before the assert starts. GATE = `authorize`,
+`authorizeOrgLevel`, `loadAndAuthorize`, `loadDestructiveTarget`, or a one-hop indexed function whose body contains one of
+them; `can(` counts only when the assert is inside the then-branch of an `if` whose condition contains it. A private helper
+that asserts with no gate passes only if EVERY call site of it in its file passes. EXEMPT = `{ 'setup/actions.ts#createFirstRunAction': reason }`.
+Ratchet: `apps/erp/tests/auth-first-baseline.json` lists today's 146 violators as `file#function`; a violator not listed is
+red; a listed entry that now passes is red ("lower it"). ⛔ Workers never edit it; the orchestrator lowers it after each
+merge; S9 closes with it empty and deleted. **Controls (fixtures, each red unless said):** C1 assert then authorize; C2 gate
+only in a sibling function; C3 gate only in a comment or string; C4 `await can(...)` result ignored, assert after; C5 helper
+asserted from one call site before authorize and one after (names the early site); C6 green: authorize->assert,
+if(can)->assert, loadDestructiveTarget->assert, one-hop lib helper->assert, helper only called after authorize; C7 an EXEMPT
+or baseline entry whose function no longer exists is red; C8 non-vacuous: >= 170 sites over >= 60 files, the 25 class-i sites green.
+**Behaviour tests (one per class per slice):** an actor WITHOUT the capability posts a bad field => the authorization
+refusal (never the field sentence), exactly one denial event. Mutants: assert before the gate; pre-check on another capability.
+**Slices** (S9a alone first; then three parallel Sonnet builders, disjoint `app/<area>/` folders + their domain files; a
+domain file two slices need is assigned to one before launch, as A13):
+| Slice | Areas | Sites |
+|---|---|---|
+| S9a tester | G6 + baseline + helpers move + behaviour-test skeletons | — |
+| S9b people & settings | admin, attendance, staff, payroll, owners, settings, findings, setup (exempt), till, service-charge, budgets, cutover | 48 |
+| S9c money, AP/AR | ap, customers, trade, prepaid, liabilities, loans, cash-requests, channel-settlements, expenses, money-*, remittance, sales-days, statutory-discounts, fixed-assets | 52 |
+| S9d stock & menu | inventory, items, commissary, menu, wastage | 47 |
+| S9e (part B) | joins when the first of S9b-d finishes; its files are disjoint from all three | — |
+### B. Smoke: "Days to pay" judged (and blocking Save) when Payment terms = Cash on delivery
+**Design — "applies when", one definition.** `FieldRule.when?: { field: string; equals: readonly string[]; says: string }`
+(plain JSON, crosses to the client). `check.ts`: `ruleApplies(rule, input)` = the controlling field is ABSENT from the input
+(fail closed) or its trimmed value is in `equals`; `checkAll` skips a rule that does not apply (value `null`).
+`defineFieldRules` refuses `when.field === rule name` and an empty `equals`. `nativeAttrs` never emits `required` for a
+`when` rule (with no JS the server judges). Client (`CheckedForm`, `EditableRecord`): applicability re-read on `input`,
+`change` and `reset` from the live form; a rule that does not apply makes its control `disabled` (greyed, not submitted),
+shows `when.says` as a muted line, and never counts toward Save or the status line. Server render leaves it enabled.
+**Applied:** `SUPPLIER_ADD_RULES.creditTermsDays = { label: 'Days to pay', kind: 'number', integer: true, min: 0, max: 365,
+when: { field: 'termsMode', equals: ['credit'], says: 'Not needed for Cash on delivery' } }` (no longer optional: required
+when On credit, R1's rule moved live). Add and edit forms both use it. `judgeCreditTerms` passes no `termsMode`, so the rule
+applies there (fail closed); if its `TERMS_BLANK` sentence differs from the rule's blank sentence, the rule's wins and the
+domain's blank branch goes. Update the `field-rules/ap.ts` header comment.
+**Q4 relaxed for this case only:** a rule may turn on/off by a sibling field's value (equality); comparing two values stays a save refusal.
+**Files:** `packages/domain/src/field-rules/check.ts`, `field-rules/ap.ts`, `packages/domain/src/ap/index.ts` (judgeCreditTerms
+only), `apps/erp/src/components/forms/CheckedForm.tsx`, `EditableRecord.tsx`, `apps/erp/src/app/ap/page.tsx`,
+`ap/suppliers/[id]/page.tsx`. **Tests** `apps/erp/tests/t440-s9-applies-when.test.ts` (node): B1 COD + "abc" => ok, null
+(mutant: `when` ignored); B2 credit + "" => blank sentence, credit + "400" => max sentence (mutants: equals inverted; rule
+left optional); B3 termsMode absent + "abc" => refused (mutant: absent = skip); B4 self-reference / empty `equals` refused
+at define time; B5 `nativeAttrs` of a `when` rule has no `required` (mutant: emitted); B6 node render: add form (COD default)
+renders the days input without `required`; edit form of a credit supplier enabled. Integration (`supplier-master`):
+createSupplierAction with termsMode=cod, creditTermsDays="abc" saves with terms null; termsMode=credit, blank => refused.
+**Smoke** /ap 1280 + 375: COD => days greyed, Save on; On credit => "Required", Save off; 30 => Good; saved supplier reads
+"On credit · 30 days". Edit page: credit -> COD -> Cancel restores select and field state.
+C (Lightbox overflow) is in `441-photo-upload-control.md`, "Smoke fix L1".
