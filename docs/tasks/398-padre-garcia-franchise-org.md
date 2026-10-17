@@ -1,22 +1,24 @@
 # T-398: Padre Garcia on v2 as its own organisation (plan C11)
 
-**Status:** AMENDED 2026-10-17 (B1-B14 from the re-audit, `docs/tasks/398-audit-2026-10-17.md`); S2-S7 ready to build
-once Ian answers Q5 (VAT, needed by 13 Nov) and the other questions each slice names below. S1 SHIPPED (migration
-**0194**, on main); S2-S7 not built.
-- **Buildable now (no Ian answer needed):** **S2a** (the DEF-421 ratchet, B2), **S2b** (the conversion), **S3**, **S4**.
-  Their *production apply* (S3, S4 migrations) waits on **Q9** (who runs the prechecks and picks the night window);
-  S3's lock timing waits on a restore taken after T-391's production load (B6).
-- **S5 — blocked by Q5** (VAT legs in the posting pattern; the planner's POSTING-PATTERNS entry cannot be written
-  without it), **Q6** (book at dispatch vs receipt), **Q4** (price), **Q7** (credit limit), **Q8** (what A3's
-  function may return), and Ian's ruling on B5's pay-now recommendation.
-- **S6 — blocked by Q1** (the break-glass identity and its second email) and **Q2** (the column list V2 pins);
-  planner prerequisite: the CAPABILITY-MATRIX row for `view_franchise_access_log`.
-- **S7 — blocked by Q1** (who signs in), **Q3** (history vs opening balances, and the 1 Jan opening per B4),
-  **Q11** (PG's attendance/leave/payroll, B7), and K4's data (second email, owner and staff names, POS store id).
-- Q10 blocks no build; it is needed before 4 Dec production.
+**Status:** AMENDED 2026-10-17 (B1-B14 from the re-audit, `docs/tasks/398-audit-2026-10-17.md`; then C1-C6 folding
+**Ian's answers to Q1-Q10, given 2026-10-10** — §0b). S1 SHIPPED (migration **0194**, on main); S2-S7 not built.
+- **Buildable now (no Ian answer needed):** **S2a**, **S2b**, **S3**, **S4** — and their production apply too: Q9 (b)
+  lets a DEF-491 migration deploy at any time, short pauses accepted (C2). S3's lock timing still uses a restore taken
+  after T-391's production load (B6).
+- **S5 — buildable now** (Q4 a, Q6 a, Q7 a, Q8 a answered) once the planner writes the `trade_dispatch.franchise`
+  entries in POSTING-PATTERNS (planner work, not Ian's). Two items stay open and are fenced (C3): **Q5** (VAT,
+  Ian answers by **13 Nov**) — v2 computes no VAT today (bible #75), so S5 builds the no-VAT legs and a VAT leg, if
+  Q5 says (a), is a follow-on amendment; and the **pay-now ruling** (§6) — S5 builds the recommended refusal (E23)
+  and rewrites one leg if Ian rules otherwise. Q7's **figures** (limit, terms) are data entered later, not a build.
+- **S6 — buildable now** (Q1 a, Q2 **b**: sales **plus stock levels**, C4). Planner prerequisites: the
+  CAPABILITY-MATRIX rows for `view_franchise_access_log` and the `view_franchise_sales` reader note.
+- **S7 — blocked by Q11** (PG's attendance/leave/payroll, B7) and **K4's data** (second sign-in email, owner and
+  staff names, POS store id, `org_code`/`store_code`, and Ian's confirmation whether PG trades in v1 today, Q3).
+  Q1 and Q3 are answered (a).
+- Q10 (a) blocks no build: Ian's written notice to PG is due before 4 Dec production (C6).
 
-Amendments A1-A11 and B1-B14 in §8 bind and win over any earlier sentence they correct; the corrected sentences are
-also fixed in place.
+Amendments A1-A11, B1-B14 and C1-C6 in §8 bind and win over any earlier sentence they correct; the corrected
+sentences are also fixed in place.
 **Model:** Sonnet lanes (tester then builder per slice); Opus for the review and for any spec amendment.
 **Why now:** bible row 305 (Ian, 2026-10-10, plan-q4 = (b)): *Padre Garcia runs on v2 by 1 January 2027, as its own
 organisation.* Row 246's trigger ("before a second organisation is onboarded") therefore fires before cutover, so
@@ -26,6 +28,28 @@ DEF-491 and DEF-421 are cutover scope. Plan: `docs/plans/remaining-build-plan.md
 Ian's organisation cuts over alone. S1-S4 land regardless: they harden Ian's own org and cost nothing to keep.
 **Migrations:** every slice that has one takes **the next free number at merge** (0209 today, after T-439's 0208 — B8).
 No slice hard-codes a number; the journal `when` is the previous entry's + 86 400 000.
+
+---
+
+## 0b. Ian's answers (2026-10-10, Open Questions page — these bind)
+
+The 10 Oct spec and the 17 Oct audit treated Q1-Q10 as open. They were answered on 10 Oct. Two answers are **not**
+the recommended option (Q2, Q9); both are folded as given. Each answer still needs its bible row (§5, B14).
+
+| Q | Answer | What it changes here |
+|---|---|---|
+| Q1 | **(a)** The owner signs in as **manager** of PG's store. Ian holds PG's **org-admin** as a **separate person** with a **second sign-in email**; every use is logged where the owner can see it. PG staff by PIN | R6/R7 as written; S6's break-glass legs (V8a-c) stand; the second email is K4 data |
+| Q2 | **(b), not the recommended (a).** From his own org Ian may see PG's **sales plus stock levels**. Every look is logged and visible to the owner | **C4:** S6 adds a second definer function for stock levels (§R6, S6), read-only, quantities only, logged |
+| Q3 | **(a)** No v1 history import; PG starts from opening balances on 1 Jan. Ian to confirm whether PG trades in v1 today | S7/B4 as written; the confirmation is K4 data (it decides whether PG's opening has v1 balances to carry) |
+| Q4 | **(a)** A franchise price list, first filled from today's branch prices | S5/S7: onboarding creates the price list and fills it from the branch price per item (C5) |
+| Q5 | **(c)** Not sure; Ian asks the accountant and answers by **13 Nov** | **S5's VAT posting stays blocked** (C3); everything else in S5 builds |
+| Q6 | **(a)** The sale is recorded at dispatch; a PG shortage becomes a credit note | R5/A7 as written |
+| Q7 | **(a)** Credit limit + payment terms on PG's customer record; figures from the franchise agreement, **owed by Ian** | S5 builds the mechanism (C5); the numbers are data entered later |
+| Q8 | **(a)** The commissary may see per shipment "PG recorded ₱X", nothing else | A3 as written |
+| Q9 | **(b), not the recommended (a).** Integrity migrations may run **at any time**; short pauses are accepted. No night window, no Ian-attended precheck required by this rule | **C2:** A1's night-window clause is withdrawn; the lock-timeout, budget and split-VALIDATE rules stay |
+| Q10 | **(a)** Written notice to PG that the operator can reach all data and every use is logged | No build; Ian's action before 4 Dec (C6) |
+
+**Still open** (§6): **Q11** (PG's attendance, leave and payroll) and the **pay-now-at-dispatch ruling** (B5).
 
 ---
 
@@ -84,8 +108,9 @@ No slice hard-codes a number; the journal `when` is the previous entry's + 86 40
   - ⚠️ **Production lock budget — corrected by A1.** drizzle applies every pending migration in ONE transaction
     (`drizzle-orm` pg-core `dialect.js:60`), so `NOT VALID` then `VALIDATE` in the same migration gains nothing: each
     `ADD FOREIGN KEY` holds `SHARE ROW EXCLUSIVE` on child and parent, and each `UNIQUE (org_id, id)` holds `SHARE`,
-    until commit. The rule is A1: `SET LOCAL lock_timeout`, a timed run on a production-size restore with the budget
-    stated in the migration header, a night window, and `VALIDATE` in a separate deploy where the budget is exceeded.
+    until commit. The rule is A1 as amended by C2: `SET LOCAL lock_timeout`, a timed run on a production-size
+    restore with the budget stated in the migration header, deploy at any time (Q9 b — no night window), and
+    `VALIDATE` in a separate deploy where the budget is exceeded.
   - **Pre-flight, fail closed** (T-357 R4): a DO block counts cross-org rows per FK and RAISEs naming each non-zero
     one with *"DEF-491: no silent fix; each row needs a human decision"*. Production holds one org, so its count is
     0 by construction; a lane DB with residue is re-made, never the migration edited (T-357 R7).
@@ -142,7 +167,10 @@ No slice hard-codes a number; the journal `when` is the previous entry's + 86 40
     balance check above catches a one-sided payment. **B5:** `dispatchTradeOrder`'s `payNow` is refused on an
     inter-entity order, and the seller-side `receiveTradeOrder` (`trade/index.ts:887`) is refused for an
     inter-entity order (PG confirms receipt in its own books) — *orchestrator recommendation, pending Ian's ruling*.
-  - **Price:** the franchise customer's price list (ADR-008 §3) — Q4.
+  - **Price:** the franchise customer's price list (ADR-008 §3) — Q4 (a): created at onboarding, first filled from
+    today's branch price per item, then Ian's to change (C5).
+  - **Credit:** Q7 (a) — PG's customer row carries a credit limit (the existing `customers.credit_limit`, enforced at
+    dispatch with the manager override, `schema/customers.ts:150-159`) and payment terms (new, C5). Figures are data.
   - The posting pattern **"dispatch to a franchise"** is added to `docs/POSTING-PATTERNS.md` by the planner **before
     S5's tester starts** (ADR-008 "What this changes today"); S5 implements it, it does not decide it.
 - **R6 — The franchisor's view is enforced in the database, and the log is written by the database.**
@@ -155,8 +183,21 @@ No slice hard-codes a number; the journal `when` is the previous entry's + 86 40
     returns **only** store, business date, channel, tender, gross, discounts, net and sales-day status, and only when
     an agreement row has `franchisor_org_id = app_current_org()` and the range is on/after `sales_visible_from`. It
     **inserts the log row itself**, so no caller can read without logging.
-  - The domain `viewFranchiseSales(tx, actor, …)` calls `authorize(…, 'view_franchise_sales')` first (§15.11: two
-    layers — the capability and the function's own agreement check).
+  - **C4 (Q2 b) — `franchise_stock_levels(franchisee_org uuid, store uuid)`**, same guards as the sales function
+    (`SECURITY DEFINER`, `search_path` pinned, agreement with `franchisor_org_id = app_current_org()`, A5's person
+    and super-admin checks, `EXECUTE` to `shareat_app` only, it inserts its own log row with what = `stock_levels`).
+    **Read-only, a snapshot "as of now", quantities only.** It returns exactly, per PG store and per PG item with a
+    non-zero on-hand or a threshold row: store, item name, base unit, **on-hand quantity** (the sum of
+    `stock_movements` quantity across all the store's locations — the same definition as `lowStock`,
+    `packages/db/src/repo/low-stock.ts`), the store's **threshold** for the item (`store_item_thresholds`, NULL when
+    none), a **below-threshold** boolean, and `as_of` (the call's timestamp). It returns **no** cost, value, rate,
+    layer, supplier, movement history, count variance or wastage column — those are PG's cost structure (ADR-008
+    §5). No history range: Ian sees today's stock, not a time series. Items are PG's own items (Open 3).
+  - `franchise_access_log.what` gains `stock_levels`; the log row records the store asked for (range columns NULL).
+  - The domain `viewFranchiseSales(tx, actor, …)` and `viewFranchiseStock(tx, actor, …)` each call
+    `authorize(…, 'view_franchise_sales')` first (§15.11: two layers — the capability and the function's own agreement
+    check). One capability covers both reads (Ian's org super-admin only); the matrix note says "sales and stock
+    levels of a franchisee, per Q2 (b)".
   - **Full-books access is not this function.** It is Ian's own person row in PG's org (row 175), with its own
     credential; every session that person opens — **by email or by PIN** (`signInWithPin` is per org, so a PG
     terminal accepts that person's PIN) — writes a `break_glass_sign_in` row, and every PIN approval that person
@@ -198,9 +239,9 @@ free slot and re-runs `migration-journal.test.ts`, `rls-registry.test.ts` and `c
 | **S3** | DEF-491: the remaining org→org parents (journal_entries, items, stock_locations, suppliers, employments, the rest: 141) + 5 FK-less `ref-gap` columns (A11) | yes | M 1.5 | 20 Nov |
 | **S4** | DEF-491: the 82 derived-scope FKs (A11) by trigger; `OPEN_DEF_491` reaches empty | yes | S-M 1.5 | 24 Nov |
 | **S5** | Inter-entity sale: shipment handoff, definer receive/void, credit note, reconciliation fn | yes | L 3.5 | 1 Dec |
-| **S6** | Sales-only view + access log + break-glass sign-in logging + screen (A5 hardening) | yes | M 2 | 2 Dec, merged after S5 |
+| **S6** | Sales + stock-levels view (C4) + access log + break-glass sign-in logging + screens (A5 hardening) | yes | M 2.3 | 2 Dec, merged after S5 |
 | **S7** | Onboarding CLI, then T-391's master-data load into PG (B1), POS link + clock terminal, multi-org job checks, per-org purge runbook, two-org rehearsal data | none expected | M 1.5 | 4 Dec |
-| | **Total** | 5 | **≈ 14** (was 13.5; S2 re-sized to ≈ 2.0 by B2) | |
+| | **Total** | 5 | **≈ 14.3** (was 13.5; S2 re-sized to ≈ 2.0 by B2; S6 +0.3 for stock levels, C4) | |
 
 ### S1 — the census guard, persons and stores (DEF-491 part 1)
 
@@ -278,6 +319,10 @@ have `<parent>_org_id_id_unique`. At least seven S3 parents already do — `item
 hand**, and paste the query in the migration header.
 **B6 — lock timing:** A1's timed run is done on a restore taken **after** T-391's production load, because items and
 parties are now real rows.
+**C2 — deploy (Q9 b):** the migration ships with the next ordinary deploy, **at any hour**; short pauses are
+accepted. No night window and no Ian-attended precheck. What still binds: `SET LOCAL lock_timeout = '5s'`, the
+timed budget in the header, the fail-closed pre-flight, and the split `VALIDATE` deploy if the timed run exceeds 60 s.
+A deploy whose migration hits `lock_timeout` fails and is simply re-run; it is never edited to pass.
 Legs: K1 (census green with the shrunken list), **K2 (B6): every composite's parent has exactly one `(org_id, id)`
 unique** (catalog), one F-leg per parent (`23503` as `shareat_app`), one owner leg,
 same-org controls, M1/M2. **Workflow sweep allowed** (row 298 #5) for writing the 146 `ADD CONSTRAINT` lines from
@@ -290,6 +335,7 @@ add a duplicate `(org_id, id)` unique on a parent that already has one → K2.
 **TESTER paths:** new `packages/db/tests/integration/t398-s4-derived-same-org.test.ts`.
 **BUILDER paths:** the new migration (R3's function + 82 triggers + pre-flight), the journal,
 `same-org-fk-exemptions.ts` (deletions to empty).
+**C2 — deploy (Q9 b):** as S3 — any hour, short pauses accepted, `lock_timeout` + budget header still required.
 | Id | Case | Target |
 |---|---|---|
 | D1 | Census: every derived→org FK has a trigger whose `tgargs` name it; `OPEN_DEF_491` is empty | Pass |
@@ -304,9 +350,22 @@ trigger → D1; change `UPDATE OF col` to plain `UPDATE` → no leg reds, so D4 
 
 ### S5 — the inter-entity sale
 
-**Blocked by:** Q5 (VAT), Q6, Q4, Q7, Q8, and Ian's ruling on B5 (see Status).
-**Planner pre-requisite:** the "dispatch to a franchise" posting pattern in `docs/POSTING-PATTERNS.md` (R5, A7),
-written once Q5 is answered; today `POSTING-PATTERNS.md:743` still says "do not use for a franchise" (B14).
+**Buildable now (C3).** Q4 (a), Q6 (a), Q7 (a), Q8 (a) are answered. Fenced, not blocking:
+- **Q5 (VAT, answer by 13 Nov):** v2 computes no VAT anywhere today (`POSTING-PATTERNS.md:124`, bible #75), so the
+  seller legs are the external-sale legs exactly (E1) and PG's receipt is `DR 1310 / CR 2110` with no VAT split.
+  If Q5 comes back (a), a follow-on amendment adds the output/input VAT legs (and the POSTING-PATTERNS lines) as a
+  separate slice; if (b), nothing changes. No leg in this slice may assert "no VAT line exists" — that would pin an
+  answer Ian has not given.
+- **Pay-now ruling (§6):** build E23 as the recommended refusal; if Ian rules (b), E23 is rewritten as stated there.
+**Planner pre-requisite:** the `trade_dispatch.franchise` and `trade_dispatch.franchise_transit_shortage` entries in
+`docs/POSTING-PATTERNS.md` (R5, A7), written **now** with a "VAT: pending Q5 (13 Nov)" note, replacing the
+"do not use for a franchise" warning at `POSTING-PATTERNS.md:743` with a pointer to them (B14).
+**C5 — price and credit (Q4 a, Q7 a):** S5's migration adds `customers.credit_terms_days integer NULL`, with the same
+check as `suppliers.credit_terms_days` (`schema/suppliers.ts:145,182`): NULL = no terms set, display and AR ageing
+only, ⛔ never an input to an accounting decision; the enforced gate stays `credit_limit` at dispatch. The limit and
+days for PG are **data** Ian enters from the franchise agreement. New legs **E26** (`credit_terms_days` stored and
+shown; negative refused by the check) and **E27** (a dispatch over PG's `credit_limit` without override is refused,
+the same as any customer — a guard leg proving the inter-entity branch did not bypass the gate).
 **TESTER paths:** new `packages/domain/tests/integration/t398-s5-inter-entity-sale.test.ts`; new
 `packages/db/tests/integration/t398-s5-shipment-rls.test.ts`; the existing T-133 refusal test
 **`packages/domain/tests/integration/trade.test.ts:873`** (it asserts `/no second org exists/`) is **ruled** to
@@ -327,6 +386,8 @@ label only); `apps/erp/src/lib/route-capability.ts` (B9: the inbound list → `r
 stay green).
 **B5 — dispatch since T-433:** E1's control order uses **no `payNow` and no `creditOverrideReason`**. The shipment
 snapshot carries the order's `bir_invoice_no` (0203) when set, for PG's input VAT under Q5.
+**Paths added by C5:** `schema/customers.ts` (the new column), the customer edit form and its action under
+`apps/erp/src/app/` (the field beside credit limit).
 
 | Id | Case | Target | Red today |
 |---|---|---|---|
@@ -348,34 +409,43 @@ snapshot carries the order's `bir_invoice_no` (0203) when set, for PG's input VA
 | E23 | (B5, pending Ian) `dispatchTradeOrder` with `payNow` on an `inter_entity` order | Refused in words; nothing posted. *If Ian rules "allow" instead: it posts, and E12's one-sided-payment finding fires until PG records its AP payment — the leg is rewritten to that* | Red |
 | E24 | (B9, row 353, ADR-008 §5) The shipment snapshot as PG reads it | Holds no person name and no cost column (catalog check on the snapshot columns plus a row read) | Red |
 | E25 | (B5) Order dispatched with a `bir_invoice_no` | The shipment carries the same number; without one, NULL | Red |
+| E26 | (C5, Q7 a) Set PG's `credit_terms_days` = 30; then try −1 | Stored and shown; −1 refused by the check | Red (column absent) |
+| E27 | (C5, Q7 a) Dispatch to PG over its `credit_limit`, no override | Refused exactly as for an external customer; with a manager override it posts | Green (guard) |
 
 **Mutants:** drop the `OR buyer_org_id` arm → E3 red; widen it to UPDATE → E4 red; post buyer AP at the dispatched
 (not received) quantity → E7 red; let reconciliation tolerate ±1 centavo → E12 (exact-centavo assertion); derive
 treatment from `customer_group` → E13; remove the `receiveTradeOrder` inter-entity refusal → E22; drop the `payNow`
-refusal → E23; add `unit_cost` to the snapshot → E24.
+refusal → E23; add `unit_cost` to the snapshot → E24; skip the credit-limit check when `treatmentOf` =
+`inter_entity` → E27.
 
-### S6 — the sales-only view and the access log
+### S6 — the franchisor's sales-and-stock view and the access log
 
-**Blocked by:** Q1 and Q2 (see Status).
+**Buildable now** — Q1 (a) and Q2 (**b**, C4) answered.
 **Planner pre-requisite:** CAPABILITY-MATRIX rows for `view_franchise_access_log` (R6) and a note on
-`view_franchise_sales` naming its reader (still open on 17 Oct — B14).
+`view_franchise_sales` naming its reader and its scope "sales and stock levels, per Q2 (b)" (still open on 17 Oct —
+B14).
+**C4 — stock levels (Q2 b):** the migration also creates `franchise_stock_levels` (R6) and widens
+`franchise_access_log.what` to include `stock_levels`; the domain adds `viewFranchiseStock`; the screen adds
+`/franchise/stock` (Ian's org: pick a PG store, see today's on-hand per item, threshold, below-threshold flag; no
+edit control anywhere) → `view_franchise_sales` in `route-capability.ts`. PG's access-log screen shows stock looks
+beside sales looks.
 **TESTER paths:** new `packages/db/tests/integration/t398-s6-franchise-sales-fn.test.ts`; new
 `packages/auth/tests/integration/t398-s6-franchise-capabilities.test.ts`; new
 `apps/erp/tests/integration/t398-s6-view-franchise-sales.test.ts`.
 **BUILDER paths:** the new migration (two tables, the function, the append-only trigger, grants: `EXECUTE` to
 `shareat_app` only); the journal; a new `schema/franchise.ts`; repo; classification + RLS registry;
 `packages/auth/src/capabilities.ts` (the new capability, matrix, labels, area); `packages/domain/src/franchise/`
-(new: `viewFranchiseSales`, `listFranchiseAccessLog`); the sign-in path for a person whose org has a
+(new: `viewFranchiseSales`, `viewFranchiseStock` (C4), `listFranchiseAccessLog`); the sign-in path for a person whose org has a
 agreement and who is its `franchisor_person_id` (logs `break_glass_sign_in`) in
 `packages/auth/src/sessions.ts` — **both** `signInWithFirebase` and `signInWithPin` (B3) — (A5: also where
 `app.person_id` is set for this path); `packages/auth/src/admin-approval.ts` and `packages/auth/src/pos-approval.ts`
 (B3: an approval by the franchisor person writes `break_glass_approval` through the same definer function);
 `packages/db/src/rls/principal.ts` (A5/B13: `withOrgPrincipal` gains an optional `personId` passed into `openAs`;
 `applyPrincipal`'s existing branch at `:51-52` is the model); `apps/erp/src/app/franchise/`
-(new screens: sales by day/channel/tender for Ian's org; access log for PG's org); nav entry gated on the
-capability; `apps/erp/src/lib/route-capability.ts` (B9: `/franchise/sales` → `view_franchise_sales`,
-`/franchise/access-log` → `view_franchise_access_log`; each page calls `requirePageAccess`; the three T-435 unit
-guards stay green).
+(new screens: sales by day/channel/tender and stock levels (C4) for Ian's org; access log for PG's org); nav entry
+gated on the capability; `apps/erp/src/lib/route-capability.ts` (B9: `/franchise/sales` and `/franchise/stock` →
+`view_franchise_sales`, `/franchise/access-log` → `view_franchise_access_log`; each page calls `requirePageAccess`;
+the three T-435 unit guards stay green).
 
 | Id | Case | Target | Red today |
 |---|---|---|---|
@@ -390,15 +460,28 @@ guards stay green).
 | V8b | (B3) Ian's PG person signs in **by PIN** at a PG terminal | Exactly one `break_glass_sign_in` row | Red |
 | V8c | (B3) Ian's PG person gives a PIN approval through `verifyAdminApproval`, and again through `verifyPosManagerApproval` | Exactly one `break_glass_approval` row each | Red |
 | V9 | The function called with no app org set | Refused, no rows, no log row | Red |
+| V15 | (C4) Ian (super-admin, his org) reads one PG store's stock | Each item's on-hand equals the sum of that store's `stock_movements` across all its locations (two locations seeded) and equals `lowStock`'s on-hand for items with a threshold; exactly one `stock_levels` log row, visible to PG's manager | Red |
+| V16 | (C4) `franchise_stock_levels`' result columns | Exactly: store, item name, base unit, on-hand, threshold, below-threshold, `as_of` (catalog check) — no cost, value, rate, layer, supplier or movement column | Red |
+| V17 | (C4) The stock function is read-only and fenced | Called by a third org, by Ian's org without an agreement, with a NULL person, or by a non-super-admin → refused, no rows, no log row; `stock_movements`/`stock_layers` row counts and PG's 1310 balance unchanged after a successful call | Red |
+| V18 | (C4) Ian's org admin / manager / staff call `viewFranchiseStock` | `AuthorizationError` ×3 | Red |
 
 **Mutants:** remove the log INSERT from the function → V1 (log count); add `total_expenses` to the return → V2;
+add `unit_cost` or a valuation column to the stock return → V16; remove the stock function's log INSERT → V15;
+drop its agreement check → V17;
 change `view_franchise_sales` to admin ✅ → V3 and `capability-matrix.test.ts`; make the function `SECURITY INVOKER`
 → V1 (returns 0 rows, under PG's RLS); drop the agreement check → V4; drop the PIN-path log → V8b; drop the
 log call from either approval verifier → V8c.
 
 ### S7 — onboarding Padre Garcia
 
-**Blocked by:** Q1, Q3, Q11 and K4's data (see Status).
+**Blocked by:** Q11 and K4's data (see Status). Q1 (a) and Q3 (a) are answered: Ian's PG person is org-admin with
+the second email, the owner is PG's manager, and PG opens from balances on 1 Jan. **Ian's confirmation whether PG
+trades in v1 today** (Q3) is K4 data: if it does, PG's 31 Dec count and open AP/AR are its opening entry; if not, the
+opening is the count and cash alone.
+**C5 (Q4 a):** `onboardFranchiseOrganization` creates PG's franchise price list on Ian's side and fills it, per item
+the commissary sells, from today's branch price; the CLI's dry run prints the item count and the total it would
+write. New leg **O11**: after onboarding the price list has one line per commissary-offered item, each equal to that
+item's branch price at onboarding time; a later change to the branch price does not move the franchise price.
 **TESTER paths:** new `packages/domain/tests/integration/t398-s7-onboard-franchise.test.ts`; new
 `tests/unit/t398-s7-multi-org-jobs.test.ts` (B11: scans every `ExecStart` script in `docs/ops/*.service`; each must
 reach `listOrgsToRun` (`packages/domain/src/scheduler/index.ts:220`) or be on a pinned allow-list — `dual-run`
@@ -454,7 +537,7 @@ with both orgs (T-394), including the per-org purge and opening (B4, O9).
 
 ## 4. Out of scope
 
-- PG's attendance and payroll on v2 (row 302 binds Ian's org; PG's is PG's business — follows Q1's answer).
+- PG's attendance and payroll on v2 (row 302 binds Ian's org; PG's is PG's business — follows Q11, still open).
 - BIR invoicing between the two companies (a commissary-to-franchise sale is a taxable sale; v2's wholesale
   documents are not BIR invoices today). Logged as a capability gap by the orchestrator, not built here.
 - A group/consolidated view of Ian's own orgs (ADR-008 §5 row 3).
@@ -479,61 +562,38 @@ with both orgs (T-394), including the per-org purge and opening (B4, O9).
   the PR (row 291/296); typecheck clean; each migration applies from zero on a scratch DB (ADR-012 §5.8).
 - §9.4 per slice with screenshots; S7's production run done with Ian.
 - **Orchestrator / planner records:** a bible row answering ADR-008 Open 2 (same instance; buyer posts on its own
-  receipt; reconciliation, not a shared transaction) and Open 3 (each org keeps its own items and stores); Q1-Q4's
-  answers; the POSTING-PATTERNS entry; the CAPABILITY-MATRIX rows; the BIR gap in `docs/CAPABILITY-GAPS.md`.
-- **(B14)** Q1-Q11 are on the decisions page, and each answer has a bible row citing T-398.
+  receipt; reconciliation, not a shared transaction) and Open 3 (each org keeps its own items and stores); Ian's
+  Q1-Q10 answers (§0b, given 2026-10-10); the POSTING-PATTERNS entry; the CAPABILITY-MATRIX rows; the BIR gap in
+  `docs/CAPABILITY-GAPS.md`.
+- **(B14, C1)** Each of Q1-Q10's answers has a bible row citing T-398 and §0b; Q11, the pay-now ruling and Q5's
+  final answer get theirs when given.
 
 ## 6. Questions for Ian (Open Questions page)
 
-- **Q1 — Who signs in at Padre Garcia?** (a) the owner as **manager** of PG's store; you hold PG's **org-admin** as a
-  separate person with **a second sign-in email**, and every time you sign in there it is logged where the owner can
-  see it; PG staff by PIN · (b) the owner is org-admin from day one and you hold nothing inside PG · (c) you run PG as
-  admin until the owner is trained. **Recommended (a)** — row 114's plan; transferable later by data, not code.
-- **Q2 — What may you see of PG?** (a) daily sales per store by channel and tender (gross, discounts, net), every
-  look logged and visible to the owner · (b) (a) plus item sales mix · (c) monthly totals only. **Recommended (a)** —
-  the royalty basis, nothing about their costs (ADR-008 §5). Please also say whether the franchise agreement fixes
-  a date from which you may see sales.
-- **Q3 — Is PG's v1 history imported?** (a) no: PG starts with opening balances only (its own 31 Dec count, opening
-  cash, AP/AR) and its v1 data stays readable in v1 · (b) its 2026 closed sales days, for royalty comparisons ·
-  (c) everything. **Recommended (a)** — the roster showed 0 documents for PG; please confirm whether PG has started
-  trading in v1.
-- **Q4 — At what price does the commissary sell to PG?** (a) a franchise **price list** (ADR-008 §3), first filled
-  from today's branch price for each item, then yours to change · (b) the branch price rule as is · (c) cost only.
-  **Recommended (a)** — a separate company buys at an agreed price; the price list already exists for wholesale.
+**Q1-Q10 were answered by Ian on 2026-10-10** — see §0b for each answer and what it changed. The original options
+are on the Open Questions page. Q5's answer was (c) "ask the accountant": its **final** answer, (a) VAT-registered
+and inclusive or (b) not registered, is still due by **13 Nov** (C3). Two questions remain open:
 
-- **Q5 — Is the commissary VAT-registered, and are PG's prices VAT-inclusive?** (a) yes / inclusive: output VAT on
-  the commissary side, input VAT on PG's · (b) not registered: no VAT legs · (c) unsure — ask the accountant.
-  **Recommended: answer (a) or (b) by 13 Nov, via (c) if needed**; the S5 posting pattern depends on it.
-- **Q6 — When does the commissary book the sale: at dispatch, or when PG confirms receipt?** (a) at dispatch (today's
-  wholesale path; a shortage becomes a credit note) · (b) at PG's receipt (what v1 does for branches,
-  `branch-sale-ar.ts`). **Recommended (a)** — one posting function owns AR, and PG's receipt runs in PG's org and
-  cannot post Ian's books in the same transaction. Goods in transit are excluded from the AR = AP check.
-- **Q7 — PG's credit limit and payment terms?** (a) a limit and terms on PG's customer row, enforced at dispatch like
-  any buyer · (b) no limit. **Recommended (a)**, figures from the franchise agreement.
-- **Q8 — May the commissary see "PG recorded ₱X against shipment N"?** (a) yes, per shipment only, never PG's AP
-  ledger · (b) no, only "matched / not matched". **Recommended (a)** — the same debt seen from the other side
-  (ADR-008 §4), not PG's cost structure (§5).
-- **Q9 — Who runs the production-migration prechecks and picks the night windows for S1, S3, S4?** (a) Ian with the
-  orchestrator, from precheck SQL in `docs/ops/README.md`, as for 0187 · (b) the orchestrator alone.
-  **Recommended (a)** — the precedent for every production migration.
-- **Q10 — Tell PG in writing that the platform operator (you) can technically reach all data, and that every use is
-  logged?** (a) yes, in the franchise agreement or a privacy notice (Data Privacy Act) · (b) no. **Recommended (a)**.
-- **Q11 (B7) — Does Padre Garcia run attendance, leave and payroll on v2 from 1 Jan?** (a) no: PG keeps its own
-  payroll outside v2 for now; v2 is its books, stock and sales only · (b) yes: PG needs statutory rates seeded for its
-  org and someone (not you) to approve its manager's own leave. **Recommended (a)** — nothing in T-398 builds (b), and
-  (b) would need its own task after Q1 is answered.
-- **Ruling wanted on B5 (orchestrator recommendation):** may the commissary mark "paid now" when dispatching to PG?
-  (a) no — each side records its own payment (R5) · (b) yes — then a mismatch finding shows until PG records its
-  payment. **Recommended (a).** Also: the commissary cannot mark PG's order "received"; PG does that in its own books.
+- **Q11 (B7) — Does Padre Garcia run attendance, leave and payroll on v2 from 1 Jan?** (a) no: PG keeps doing its
+  staff time and pay outside v2 for now; v2 holds PG's books, stock and sales only · (b) yes: PG's own government
+  rates (SSS, PhilHealth, Pag-IBIG, tax) are set up for its company, and someone other than you approves its
+  manager's own leave. **Recommended (a)** — nothing in T-398 builds (b); (b) would be its own task, and PG's owner
+  can move to it later without redoing anything. **Blocks S7.**
+- **Pay-now at dispatch (B5) — May the commissary mark a Padre Garcia order "paid now" when it ships?** (a) no:
+  each side records its own payment — the commissary when the money arrives, PG when it pays (R5) · (b) yes: then a
+  "payment not matched" warning shows in both companies until PG records the same payment. **Recommended (a)** — it
+  keeps the two companies' books matching without warnings. Either way, the commissary cannot mark PG's order
+  "received"; PG does that in its own books. **Blocks nothing:** S5 builds (a) and rewrites one test leg if Ian
+  picks (b).
 
 ## 7. Risks to 4 Dec
 
 | # | Risk | Mitigation |
 |---|---|---|
-| K1 | DEF-491 is ≈440 constraints in three migrations applied to production during the dual run, in one drizzle transaction holding `SHARE ROW EXCLUSIVE` until commit | A1: `lock_timeout`, timed on a production-size restore, night window, `VALIDATE` split into a later deploy if over budget; Q9 names who runs it |
+| K1 | DEF-491 is ≈440 constraints in three migrations applied to production during the dual run, in one drizzle transaction holding `SHARE ROW EXCLUSIVE` until commit | A1: `lock_timeout`, timed on a production-size restore, `VALIDATE` split into a later deploy if over budget; deployed at any hour, short pauses accepted (Q9 b, C2) |
 | K2 | S2b's test call-site moves (the tester lists the files; 44 pass `(null, ` today) collide with lanes editing the same test files before 15 Nov | S2a's ratchet lands now so the count cannot grow (B2); S2b in its own worktree; merge at a lane boundary; the full suite in CI |
 | K3 | Lanes are needed for C1-C8 before 15 Nov; S1+S2 (3.5) are due 13 Nov | S3-S7 are ≈ 10 lane-days in the 13 working days 16 Nov-4 Dec: **4 Dec holds only with two lanes on C11 from 16 Nov** (S3→S4→S7 on one; S5→S6 on the other). One lane ≈ 18 Dec, i.e. the drop-alone rule fires |
-| K4 | Ian's answers and data: Q1-Q11 (Q5 by 13 Nov), a second sign-in email, PG's owner and staff names, POS store id, tenders, money accounts, PG's `org_code`/`store_code` in `stores.csv` | On the Open Questions page now; needed by 20 Nov for S7 |
+| K4 | Ian's remaining answers and data: Q11, the pay-now ruling, Q5's final answer (by 13 Nov); a second sign-in email, PG's owner and staff names, POS store id, tenders, money accounts, PG's `org_code`/`store_code` in `stores.csv`, whether PG trades in v1 today (Q3), PG's credit limit and terms (Q7) | Q1-Q10 answered 2026-10-10 (§0b); the rest on the Open Questions page; needed by 20 Nov for S7 |
 | ~~K5~~ | *Deleted by B1: S7 no longer edits `scripts/import-items.ts`; PG's data loads through T-391's `master-data run`* | — |
 | K6 | Reconciliation is weaker than a shared transaction (by design) | Daily job + findings in both orgs; E7/E12 pin exactness |
 
@@ -544,7 +604,7 @@ with both orgs (T-394), including the per-org purge and opening (B4, O9).
   - starts with `SET LOCAL lock_timeout = '5s'` (fail fast rather than queue behind live traffic);
   - is **timed on a production-size restore** by the builder; the measured time and the locks taken go in the
     migration header as its budget;
-  - is applied in a **night window** (Q9), never 05:30-07:00 (the T-396 timer);
+  - ~~is applied in a night window (Q9)~~ — **withdrawn by C2** (Q9 b): applied with any deploy, at any hour;
   - if the timed run exceeds 60 s, `VALIDATE CONSTRAINT` moves to a **separate later migration and deploy**.
   - New leg **L1** (S1, S3, S4): the migration text contains `lock_timeout` and its header states the budget (a
     source assertion in the census test file).
@@ -713,3 +773,28 @@ added since 0194 was guarded at creation, `CROSS_ORG_BY_DESIGN` is `[]`, and A11
   posting pattern and K4's set by 20 Nov. Planner prerequisites still open: the POSTING-PATTERNS franchise entry
   (`POSTING-PATTERNS.md:743` still says "do not use for a franchise") and the CAPABILITY-MATRIX row for
   `view_franchise_access_log`. Bible rows 347-362 contradict nothing here.
+
+### Amendments C1-C6 (2026-10-17 — Ian's Q1-Q10 answers of 2026-10-10 folded; these bind and win over any earlier sentence)
+
+- **C1 — The answers exist.** §0b records Ian's 10 Oct answers. The 10 Oct spec's "pending Q1-Q10" and the 17 Oct
+  audit's B14 "Q1-Q11 go on the decisions page" are superseded for Q1-Q10; only Q11, the pay-now ruling and Q5's
+  final answer remain (§6).
+- **C2 — Q9 (b): integrity migrations deploy at any time.** A1's night-window clause and R2's "a night window" are
+  withdrawn; no Ian-attended precheck is required by this rule. Kept: `SET LOCAL lock_timeout = '5s'`, the timed
+  budget in the header (L1), the fail-closed pre-flight, and the split `VALIDATE` deploy over 60 s. A deploy that
+  hits `lock_timeout` is re-run, never edited. S3 and S4 state this in their slice text.
+- **C3 — Q5 (c): S5 builds without VAT.** v2 computes no VAT (bible #75), so S5's legs carry none and S5 is not
+  blocked; a VAT leg, if Q5's final answer is (a), is a follow-on amendment after 13 Nov. No S5 leg may assert the
+  absence of a VAT line. The planner writes the POSTING-PATTERNS franchise entries now with a "VAT: pending Q5" note.
+  The pay-now ruling likewise fences one leg (E23) and blocks nothing.
+- **C4 — Q2 (b): sales plus stock levels.** R6 gains `franchise_stock_levels`: read-only, "as of now", per PG store
+  and item — item name, base unit, on-hand (summed across the store's locations, `lowStock`'s definition), threshold,
+  below-threshold, `as_of`; no cost, value, rate, layer, supplier or history. Same guards and same self-written log
+  (`what` = `stock_levels`) as the sales function, one capability (`view_franchise_sales`) for both. New legs
+  V15-V18; S6 re-sized to ≈ 2.3.
+- **C5 — Q4 (a) and Q7 (a).** Onboarding fills PG's franchise price list from today's branch prices (leg O11). S5 adds
+  `customers.credit_terms_days` (display and ageing only) beside the existing enforced `credit_limit` (legs E26, E27).
+  The figures are Ian's data, entered from the franchise agreement, and block no build.
+- **C6 — Q10 (a).** Ian gives PG written notice (franchise agreement or privacy notice) that the operator can reach
+  all data and every use is logged — before 4 Dec production. No build; the S6 access-log screen is what the notice
+  points PG's owner to.
