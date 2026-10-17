@@ -258,11 +258,23 @@ export async function createPerson(tx: Tx, actor: Actor, input: CreatePersonInpu
   const display = formatDisplayName(name);
   // N4: legacy "Maria Santos", new-style "Santos, Maria C." and a typed Santos / Maria share one key. Initials do not count.
   const key = nameKey(`${name.lastName} ${name.firstName}`);
-  const match = (await personsRepo.nameCandidates(tx, { orgId: actor.orgId, lastName: name.lastName })).find(
+  const match = (await personsRepo.nameCandidates(tx, { orgId: actor.orgId })).find(
     (c) => nameKey(c.displayName) === key,
   );
   if (match && input.sameNameConfirmed !== true) {
-    const reason = `Someone named ${match.displayName} is already in the system. Search for them and pick them, or tick 'This is a different person with the same name'.`;
+    // Name the existing person only to an actor who may read staff where that person works (or who covers the whole org); anyone else
+    // learns only that the name is taken - a duplicate check must not become a way to read other branches' staff.
+    let mayName = await accessRepo.personCoversWholeOrg(tx, actor.personId, actor.orgId);
+    if (!mayName) {
+      const held = new Set<string>();
+      for (const storeId of await accessRepo.storeIdsForPerson(tx, actor.personId)) {
+        if (await can(tx, actor, 'enrol_staff', { storeId })) held.add(storeId);
+      }
+      const emps = await personsRepo.employmentStoresFor(tx, [match.id]);
+      mayName = emps.some((e) => held.has(e.storeId));
+    }
+    const who = mayName ? `Someone named ${match.displayName}` : 'Someone with this name';
+    const reason = `${who} is already in the system. Search for them and pick them, or tick 'This is a different person with the same name'.`;
     throw new EmploymentError(reason, reason);
   }
   const person = await personsRepo.insertPerson(tx, { orgId: actor.orgId, name });

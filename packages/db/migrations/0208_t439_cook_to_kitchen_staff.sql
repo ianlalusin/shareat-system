@@ -4,7 +4,7 @@
 -- canonical "Kitchen Staff" (the unique name index would refuse a second one) - that org's "Cook" is left for a person to merge.
 UPDATE "positions" p
 SET "name" = 'Kitchen Staff', "updated_at" = now()
-WHERE p."is_canonical" AND p."name" = 'Cook'
+WHERE p."is_canonical" AND lower(btrim(p."name")) = 'cook'
   AND NOT EXISTS (
     SELECT 1 FROM "positions" k
     WHERE k."org_id" = p."org_id" AND k."is_canonical" AND lower(btrim(k."name")) = 'kitchen staff'

@@ -12,9 +12,23 @@ export interface NameParts {
   middleName?: string | null;
 }
 
-/** Trim, and collapse each inner run of whitespace to one space. */
+/**
+ * NFC, trim, collapse each inner run of whitespace to one space, and capitalise the first letter of each word - only when
+ * `toUpperCase()` yields exactly one character (so "ß" and ligatures are kept as typed). Locale-free on purpose: the SQL CHECK
+ * (migration 0207) compares text with NO upper()/lower(), so the stored initial is already final.
+ */
 export function normaliseNamePart(s: string): string {
-  return s.trim().replace(/\s+/g, ' ');
+  return s
+    .normalize('NFC')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .split(' ')
+    .map((w) => {
+      const [first = ''] = Array.from(w);
+      const up = first.toUpperCase();
+      return first !== '' && Array.from(up).length === 1 ? up + w.slice(first.length) : w;
+    })
+    .join(' ');
 }
 
 /** The three parts as they are stored: normalised, and a blank middle name is `null` (never ''). */
@@ -23,20 +37,22 @@ export function normaliseName(p: NameParts): { lastName: string; firstName: stri
   return { lastName: normaliseNamePart(p.lastName), firstName: normaliseNamePart(p.firstName), middleName: middle === '' ? null : middle };
 }
 
-/** "Last, First M." - the middle name is shown as its upper-cased first letter and a period; none means nothing is added. */
+/** "Last, First M." - the middle name is shown as its first character (already capitalised by normalisation) and a period. */
 export function formatDisplayName(p: NameParts): string {
   const n = normaliseName(p);
-  const initial = n.middleName === null ? '' : ` ${(Array.from(n.middleName)[0] ?? '').toUpperCase()}.`;
+  const initial = n.middleName === null ? '' : ` ${Array.from(n.middleName)[0] ?? ''}.`;
   return `${n.lastName}, ${n.firstName}${initial}`;
 }
 
 /**
  * Order- and case-insensitive identity of a name: lower-case, apostrophes dropped, other punctuation read as a space, words split,
- * one-letter words dropped (a middle initial does not count), sorted, joined. So legacy `Maria Santos`, `Santos, Maria C.` and a typed
+ * accents folded (Pena = Peña), hyphens read as spaces, one-letter words dropped (a middle initial does not count), sorted, joined. So legacy `Maria Santos`, `Santos, Maria C.` and a typed
  * `Santos` / `Maria` all share one key.
  */
 export function nameKey(s: string): string {
   return s
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
     .toLowerCase()
     .replace(/['\u2019]/g, '')
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')

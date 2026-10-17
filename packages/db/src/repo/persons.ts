@@ -33,7 +33,7 @@ export interface PersonNameParts {
  * pair (the db package cannot import the domain), and the CHECK refuses any drift between the two.
  */
 function displayNameFor(n: PersonNameParts): string {
-  const initial = n.middleName === null ? '' : ` ${(Array.from(n.middleName)[0] ?? '').toUpperCase()}.`;
+  const initial = n.middleName === null ? '' : ` ${Array.from(n.middleName)[0] ?? ''}.`;
   return `${n.lastName}, ${n.firstName}${initial}`;
 }
 
@@ -97,24 +97,16 @@ function likeLiteral(s: string): string {
 }
 
 /**
- * T-438 N4: persons of kind `person` in the org who MIGHT share a typed name - `display_name` containing every word of the last name,
- * or a stored last name equal to it. The domain keys them (`nameKey`) and decides; this only narrows.
+ * T-438 N4: every person of kind `person` in the org. The domain keys them (`nameKey`: NFC/NFD-folded accents, hyphens as spaces,
+ * order-free) and decides - SQL cannot fold accents without an extension, and a narrowing cap could silently drop the match, so
+ * nothing is narrowed or capped here (an org's staff list is thousands of short rows at most).
  */
-export async function nameCandidates(tx: Tx, input: { orgId: string; lastName: string; limit?: number }): Promise<PersonRow[]> {
-  const words = input.lastName.split(/\s+/).filter((w) => w.length > 0);
-  const byDisplay = words.length === 0 ? sql`false` : and(...words.map((w) => ilike(persons.displayName, `%${likeLiteral(w)}%`)));
+export async function nameCandidates(tx: Tx, input: { orgId: string }): Promise<PersonRow[]> {
   return tx
     .select({ id: persons.id, orgId: persons.orgId, displayName: persons.displayName, isActive: persons.isActive, kind: persons.kind })
     .from(persons)
-    .where(
-      and(
-        eq(persons.orgId, input.orgId),
-        eq(persons.kind, 'person'),
-        or(byDisplay, sql`lower(${persons.lastName}) = lower(${input.lastName})`),
-      ),
-    )
-    .orderBy(asc(persons.displayName))
-    .limit(input.limit ?? 200);
+    .where(and(eq(persons.orgId, input.orgId), eq(persons.kind, 'person')))
+    .orderBy(asc(persons.displayName));
 }
 
 export interface PersonWithAccessRow extends PersonRow {
