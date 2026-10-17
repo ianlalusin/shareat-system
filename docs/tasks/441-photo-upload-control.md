@@ -312,3 +312,7 @@ Verdict: **sound after the changes below; S1 may start.** Rulings Q1-Q5 untouche
 - **DEF-672 backfill** (link receipt photos already saved): its own task **T-442** (reserved).
 - **Staff photos:** thumbnails allowed, gated by `canViewPhoto` (T-434's rule); row 364's "guarded" means its read rule is kept, not that it gets no thumbnail. Signatures and leave certificates: no thumbnail.
 - **Status:** AUDITED 2026-10-17; S1 buildable.
+
+## Note for S2 from the T-442 audit (2026-10-17)
+
+- Trade pay-now proof photos must be claimed with `linkTo` = the **ar_collections** id, not the trade order id; otherwise T-442's `--check` reports every one as mismatched forever.
