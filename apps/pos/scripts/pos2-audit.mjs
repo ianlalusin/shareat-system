@@ -9,6 +9,7 @@
 //   2. refund receipts with no `receiptNumbers/{number}` document  (a refund that skipped the numbered series)
 //   3. `paymentConversions` whose `source` is not 'pos2-correction' (a conversion made by v1's /api/analytics/payment-conversion, no PIN)
 //   4. 'pos2-correction' conversions that v1 has since VOIDED      (status 'voided': v1's dashboard reversed a v2 correction)
+//   5. unpaid sessions VOIDED OFFLINE (T-425, `voidedOffline: true`)   (a manager reviews every void made without the internet; listed by session id)
 // It only ever calls `.get()`: no write, no update, no delete. Exit code 0 when everything is clean, 2 when anything is listed, 1 on error.
 import { readFileSync } from 'node:fs';
 import { initializeApp, cert } from 'firebase-admin/app';
@@ -40,9 +41,9 @@ const storeIds = onlyStores.length ? onlyStores : (await db.collection('stores')
 let listed = 0;
 
 for (const storeId of storeIds) {
-  const days = new Map(); // dayId -> { unapprovedRefunds, unnumberedRefunds, foreignConversions, voidedCorrections }
+  const days = new Map(); // dayId -> { unapprovedRefunds, unnumberedRefunds, foreignConversions, voidedCorrections, voidedOffline }
   const bucket = (dayId) => {
-    if (!days.has(dayId)) days.set(dayId, { unapprovedRefunds: [], unnumberedRefunds: [], foreignConversions: [], voidedCorrections: [] });
+    if (!days.has(dayId)) days.set(dayId, { unapprovedRefunds: [], unnumberedRefunds: [], foreignConversions: [], voidedCorrections: [], voidedOffline: [] });
     return days.get(dayId);
   };
 
@@ -67,8 +68,17 @@ for (const storeId of storeIds) {
     else if (c.status === 'voided') bucket(dayId).voidedCorrections.push(d.id);
   }
 
+  // T-425: sessions voided without the internet. `voidedAt` is a Firestore timestamp (the void's own server time, set when the write landed).
+  const offlineVoids = await db.collection(`stores/${storeId}/sessions`).where('voidedOffline', '==', true).get();
+  for (const d of offlineVoids.docs) {
+    const v = d.data();
+    const ms = typeof v.voidedAt?.toMillis === 'function' ? v.voidedAt.toMillis() : typeof v.updatedAt?.toMillis === 'function' ? v.updatedAt.toMillis() : Number.NaN;
+    if (!Number.isFinite(ms) || ms < fromMs || ms > toMs) continue;
+    bucket(dayOf(ms)).voidedOffline.push(d.id);
+  }
+
   for (const [dayId, b] of [...days.entries()].sort()) {
-    const n = b.unapprovedRefunds.length + b.unnumberedRefunds.length + b.foreignConversions.length + b.voidedCorrections.length;
+    const n = b.unapprovedRefunds.length + b.unnumberedRefunds.length + b.foreignConversions.length + b.voidedCorrections.length + b.voidedOffline.length;
     if (n === 0) continue;
     listed += n;
     console.log(`store ${storeId}  day ${dayId}`);
@@ -76,6 +86,7 @@ for (const storeId of storeIds) {
     if (b.unnumberedRefunds.length) console.log(`  refunds without a receipt-number record (${b.unnumberedRefunds.length}): ${b.unnumberedRefunds.join(', ')}`);
     if (b.foreignConversions.length) console.log(`  payment conversions not made by POS v2 (${b.foreignConversions.length}): ${b.foreignConversions.join(', ')}`);
     if (b.voidedCorrections.length) console.log(`  POS v2 corrections voided by v1 (${b.voidedCorrections.length}): ${b.voidedCorrections.join(', ')}`);
+    if (b.voidedOffline.length) console.log(`  sessions voided offline, for a manager to review (${b.voidedOffline.length}): ${b.voidedOffline.join(', ')}`);
   }
 }
 

@@ -8,6 +8,7 @@
  */
 import { auth } from "@/lib/firebase/client";
 import { getBrowserDeviceId } from "@/lib/offline/browserDevice";
+import { getConnectivityStore } from "@/hooks/useConnectivity";
 
 export class Pos2Error extends Error {
   constructor(readonly status: number, message: string) {
@@ -29,6 +30,7 @@ export async function postPos2<T extends Record<string, unknown>>(path: string, 
       body: JSON.stringify({ ...body, deviceId: getBrowserDeviceId() }),
     });
   } catch {
+    getConnectivityStore().reportNetworkError(); // T-425: probe the server now instead of waiting for the interval
     throw new Pos2Error(0, POS2_UNREACHABLE);
   }
   const data = (await res.json().catch(() => null)) as ({ ok?: boolean; error?: string } & Record<string, unknown>) | null;

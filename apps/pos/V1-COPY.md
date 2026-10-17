@@ -90,3 +90,21 @@ Ported from v1 into `src/server/pos2/` (the vendored fixtures below are the pari
 - `src/lib/__fixtures__/v1-analytics/applyPaymentConversionServer.ts` (T-424 slice T): v1's `src/lib/server/analytics/applyPaymentConversionServer.ts` at e26d0c1; same three import edits. Same rules.
 - `src/lib/__fixtures__/v1-analytics/admin-shim.ts` (T-424 slice T): NOT v1 code; a `FieldValue` shim that returns the in-memory fake's sentinels so the vendored files run against the fake.
 - The lib/analytics daily module (copied in T-422) is already byte-identical to v1 and is what the vendored delta code imports; it needs no entry.
+
+## T-425 edits (offline selling: sale ledger, server-proven sync, reachability, offline rules, X-slip)
+
+- `src/components/cashier/offlinePayment.ts` (T-425 S1/S4): ledger-first. The complete write list is built as plain data (`ops`), the receipt number is reserved and the event stored in ONE IndexedDB transaction (`reserveOfflineEvent`), then the Firestore batch is built FROM those ops (`applyOpsToBatch`); payment doc ids are fixed `<sessionId>-p<index>`; refuses a table opened on another tablet and any tender that needs the internet / lacks a reference BEFORE a number is reserved; the receipt gains the additive `tendersToCheck`; the deferred effects item goes to the IndexedDB effects store (`addToQueue` is gone).
+- `src/components/cashier/offlineVoid.ts` (T-425 S1/S4): manager or admin only, owner-checked, ledger-first (a `void` event reserves a number); the session update carries the additive `voidedOffline: true`.
+- `src/components/cashier/firestore.ts` (T-425 S1/S3): the online sale reserves its number through the ledger (`reserveOnlineEvent`), then `markAcknowledged` / `markSkipped`; `navigator.onLine` reads (backup print, bill-line edits) ask the connectivity store; the unused `addToQueue`/`getQueue` imports are gone.
+- `src/components/cashier/payment-modal.tsx` (T-425 S4): offline, card / QR Ph / other methods are listed disabled with "Needs the internet" and an e-wallet needs a reference.
+- `src/components/cashier/void-session-dialog.tsx` (T-425 S2/S4): the loyalty-reversal queue is the IndexedDB effects store; offline, a non-manager/admin sees the refusal sentence and cannot confirm.
+- `src/components/receipts/RefundReceiptDialog.tsx` (T-425 S4): offline shows "Refunds need the internet." and cannot submit.
+- `src/lib/offline/payment-queue.ts` (T-425 S2): now only the item types and pure helpers (no storage); the queue is `src/lib/outbox/effects-store.ts`. `src/hooks/use-payment-queue-sync.ts` and `src/components/shared/PaymentQueueSyncProvider.tsx` drain it, and only for receipts whose ledger row is acknowledged.
+- `src/lib/terminal/counter.ts` (T-425 S1): opens through the shared opener `src/lib/terminal/db.ts` (version 2); no hard-coded version 1.
+- `src/hooks/use-online-status.ts` (T-425 S3): a thin wrapper over `src/hooks/useConnectivity.ts` (a probe of `/api/pos2/health`, not `navigator.onLine`). `src/components/shared/OfflineBanner.tsx` uses it. `src/lib/pos2/client.ts` reports a network error to the store. The proof-photo capture module keeps its own browser online check (a listed exception in the offline guards: it is a flush guard, not a sale or a connectivity decision).
+- `src/app/layout.tsx` (T-425 S5): mounts `OutboxSync` (reconcile), `XSlipScheduler` and `UnsentBanner`. `src/app/settings/page.tsx`: adds the `OutboxSection` (unsent count and update gate, Print X-slip, manager lists).
+- `src/components/cashier/void-session.test.ts` (T-425): dropped the unused `getQueue` import and helper (the localStorage queue reader is gone). `src/components/cashier/receipt-number.test.ts` (T-425): the offline cases seed the session owner and give the tablet the device id DEV-A (an offline sale is now refused for a table the tablet did not open).
+- `scripts/pos2-audit.mjs` (T-425): also lists sessions voided offline.
+
+New in T-425, not from v1: `src/lib/terminal/db.ts`, `src/lib/outbox/**`, `src/lib/offline/offlineRules.ts`, `src/lib/printing/xSlipFormatter.ts`, `src/lib/money/format.ts`, `src/lib/appVersion.ts`, `src/hooks/useConnectivity.ts`, `src/hooks/useOutboxStatus.ts`, `src/app/api/pos2/health/route.ts`, `src/components/shared/{OutboxSync,UnsentBanner,XSlipScheduler}.tsx`, `src/components/settings/OutboxSection.tsx`, `scripts/pos2-soak-verify.mjs`.
+

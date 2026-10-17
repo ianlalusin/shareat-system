@@ -5,6 +5,8 @@
  * `indexedDB` is read lazily at call time so tests can install a fake.
  */
 
+import { STORE_TERMINAL, inTerminalTransaction } from './db';
+
 export const MAX_TERMINAL_SEQ = 999_999;
 
 export interface TerminalRecord {
@@ -30,8 +32,6 @@ export class TerminalNotClaimedError extends Error {
   }
 }
 
-const DB_NAME = 'shareat-pos-terminal';
-const STORE = 'terminal';
 const ROW_KEY = 'current';
 
 /** Uppercase, everything outside A-Z0-9 removed ('' for nullish). */
@@ -48,53 +48,16 @@ export function formatTerminalReceiptNumber(storeCode: string, terminalNo: numbe
   return `${code}-${String(terminalNo).padStart(2, '0')}-${String(seq).padStart(6, '0')}`;
 }
 
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const factory: IDBFactory | undefined = (globalThis as { indexedDB?: IDBFactory }).indexedDB;
-    if (!factory) {
-      reject(new Error('This device cannot store the receipt counter (no IndexedDB).'));
-      return;
-    }
-    const req = factory.open(DB_NAME, 1);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error ?? new Error('Could not open the receipt counter.'));
-  });
-}
-
 /**
- * Runs `work` inside ONE readwrite transaction and settles only after the transaction's `complete` (or `abort`) event.
- * `work` calls `done(value)` / `fail(error)` to choose the outcome; a `fail` leaves the stored data untouched by the caller.
+ * Runs `work` inside ONE transaction over the terminal store and settles only after the transaction's `complete` (or `abort`) event.
+ * `work` calls `done(value)` / `fail(error)` to choose the outcome; a `fail` aborts, so the stored data is untouched.
+ * The database is opened through the shared opener (T-425: the version and upgrade live in `db.ts`).
  */
-async function inTransaction<T>(
+function inTransaction<T>(
   mode: IDBTransactionMode,
   work: (store: IDBObjectStore, done: (v: T) => void, fail: (e: Error) => void) => void,
 ): Promise<T> {
-  const db = await openDb();
-  try {
-    return await new Promise<T>((resolve, reject) => {
-      let outcome: { ok: true; value: T } | { ok: false; error: Error } | null = null;
-      const tx = db.transaction(STORE, mode);
-      tx.oncomplete = () => {
-        if (!outcome) reject(new Error('Receipt counter transaction ended without a result.'));
-        else if (outcome.ok) resolve(outcome.value);
-        else reject(outcome.error);
-      };
-      tx.onabort = () => reject(tx.error ?? new Error('Receipt counter transaction was aborted.'));
-      tx.onerror = () => { /* the abort event that follows rejects */ };
-      try {
-        work(tx.objectStore(STORE), (value) => { outcome = { ok: true, value }; }, (error) => { outcome = { ok: false, error }; });
-      } catch (e) {
-        try { tx.abort(); } catch { /* already finished */ }
-        reject(e instanceof Error ? e : new Error(String(e)));
-      }
-    });
-  } finally {
-    try { db.close(); } catch { /* ignore */ }
-  }
+  return inTerminalTransaction<T>(STORE_TERMINAL, mode, (tx, done, fail) => work(tx.objectStore(STORE_TERMINAL), done, fail));
 }
 
 /** Writes THE record (the store holds exactly one row). Resolves after the transaction completed. */
@@ -114,6 +77,24 @@ export function readTerminal(): Promise<TerminalRecord | null> {
   });
 }
 
+/** The counter row's key in the `terminal` store (the ledger reserves a number in the same transaction, T-425). */
+export const TERMINAL_ROW_KEY = ROW_KEY;
+
+/**
+ * Pure: what reserving the next number does to the stored row. Throws TerminalNotClaimedError (no row) or the plain
+ * "used all of its numbers" error, changing nothing. Shared by `reserveNext` and the ledger's one-transaction reservation.
+ */
+export function planReservation(rec: TerminalRecord | undefined): { next: TerminalRecord; reserved: ReservedNumber } {
+  if (!rec) throw new TerminalNotClaimedError();
+  if (!Number.isInteger(rec.nextSeq) || rec.nextSeq < 1 || rec.nextSeq > MAX_TERMINAL_SEQ) {
+    throw new Error('This terminal has used all of its receipt numbers. Ask a manager to move this tablet to a new terminal number.');
+  }
+  return {
+    next: { ...rec, nextSeq: rec.nextSeq + 1 },
+    reserved: { storeId: rec.storeId, terminalNo: rec.terminalNo, deviceId: rec.deviceId, terminalSeq: rec.nextSeq },
+  };
+}
+
 /**
  * Hands out `nextSeq` and stores `nextSeq + 1` in one readwrite transaction; resolves only after it completed.
  * Rejects TerminalNotClaimedError with no record, and (changing nothing) past MAX_TERMINAL_SEQ.
@@ -123,17 +104,13 @@ export function reserveNext(): Promise<ReservedNumber> {
     const req = store.get(ROW_KEY);
     req.onerror = () => fail(req.error ?? new Error('Could not read the receipt counter.'));
     req.onsuccess = () => {
-      const rec = req.result as TerminalRecord | undefined;
-      if (!rec) {
-        fail(new TerminalNotClaimedError());
-        return;
+      try {
+        const plan = planReservation(req.result as TerminalRecord | undefined);
+        store.put(plan.next, ROW_KEY);
+        done(plan.reserved);
+      } catch (e) {
+        fail(e instanceof Error ? e : new Error(String(e)));
       }
-      if (!Number.isInteger(rec.nextSeq) || rec.nextSeq < 1 || rec.nextSeq > MAX_TERMINAL_SEQ) {
-        fail(new Error('This terminal has used all of its receipt numbers. Ask a manager to move this tablet to a new terminal number.'));
-        return;
-      }
-      store.put({ ...rec, nextSeq: rec.nextSeq + 1 }, ROW_KEY);
-      done({ storeId: rec.storeId, terminalNo: rec.terminalNo, deviceId: rec.deviceId, terminalSeq: rec.nextSeq });
     };
   });
 }

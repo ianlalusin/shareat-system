@@ -52,9 +52,11 @@ import { stripUndefined } from '@/lib/firebase/utils';
 import { printKitchenTicketBackup } from '@/lib/printing/kitchenBackupPrint';
 import { makeKitchenBackupDeps } from '@/lib/printing/kitchenBackupDeps';
 import { roundHalfUp, storedPesosToCentavos, toWirePesos } from '@/lib/money/centavos';
-import { formatTerminalReceiptNumber, reserveNext } from '@/lib/terminal/counter';
 import { buildOfflinePaymentSummary } from '@/lib/offline/offlinePaymentSummary';
-import { addToQueue, getQueue } from '@/lib/offline/payment-queue';
+import { markAcknowledged, markSkipped, reserveOnlineEvent } from '@/lib/outbox/ledger';
+import { computeLinesHash } from '@/lib/outbox/linesHash';
+import { getConnectivityStore } from '@/hooks/useConnectivity';
+import { notifyOutboxChanged } from '@/lib/outbox/outboxStatus';
 import { computeSessionLabel } from '@/lib/utils/session';
 import { writeActivityLog } from '@/components/cashier/activity-log';
 import { commitLocalFirst } from '@/lib/offline/commit';
@@ -343,9 +345,9 @@ export async function startSession(storeId: string, payload: StartSessionPayload
 
   // Fire-and-forget backup print to the shared kitchen Bluetooth printer.
   // startSession has no React `isOnline` (it's a plain data-layer function),
-  // so it gates directly on navigator.onLine. Never awaited into the order
+  // so it asks the connectivity store (a probe of the POS server, T-425). Never awaited into the order
   // flow; any dep (or the kitchenLocations fetch) throwing is swallowed.
-  if (typeof navigator !== 'undefined' && !navigator.onLine && packageTicketPayload) {
+  if (!getConnectivityStore().getState().online && packageTicketPayload) {
     const ticketToPrint = packageTicketPayload;
     void (async () => {
       const klSnap = await getDocs(collection(db, 'stores', storeId, 'kitchenLocations'));
@@ -446,9 +448,27 @@ export async function completePaymentFromUnits(
 
   // T-423: ONE receipt number per payment from this tablet's own series, reserved BEFORE (and outside) the transaction
   // callback so a Firestore retry reuses it. A crash can skip a number, never reuse one. Refuses with no terminal claim.
-  const reserved = await reserveNext();
-  const receiptNumber = formatTerminalReceiptNumber(store.code, reserved.terminalNo, reserved.terminalSeq);
+  // T-425: through the sale ledger, so every number is explained: `reserved` now, `acknowledged` when the transaction committed, `skipped` when it
+  // failed for good (no money). A crash in between leaves `reserved`, which reconcile resolves by reading the server.
+  const ledgerEvent = await reserveOnlineEvent({
+    kind: 'sale',
+    storeCode: store.code,
+    receiptId: sessionId,
+    totalCentavos: amountDueCents,
+    linesHash: computeLinesHash(billLines as unknown[]),
+    tenders: payments.map((p) => ({
+      method: paymentMethods.find((m) => m.id === p.methodId)?.name || p.methodId || 'unknown',
+      centavos: storedPesosToCentavos(p.amount),
+      toCheck: false,
+      reference: typeof p.reference === 'string' && p.reference.trim() !== '' ? p.reference.trim() : null,
+    })),
+    createdAtClientMs: now,
+  });
+  notifyOutboxChanged();
+  const reserved = { terminalNo: ledgerEvent.terminalNo, terminalSeq: ledgerEvent.terminalSeq, deviceId: ledgerEvent.deviceId };
+  const receiptNumber = ledgerEvent.receiptNumber;
 
+  try {
   await runTransaction(db, async (tx: Transaction) => {
     // --- READ PHASE ---
     const sessionRef = doc(db, `stores/${storeId}/sessions`, sessionId);
@@ -725,6 +745,20 @@ export async function completePaymentFromUnits(
       }
     }
   });
+  } catch (txErr) {
+    // A definite failure: this number carries no money. A network failure is AMBIGUOUS (the commit may have landed): leave it `reserved`
+    // and reconcile reads the server to decide.
+    const code = String((txErr as { code?: unknown } | null)?.code ?? '');
+    if (!['unavailable', 'deadline-exceeded', 'cancelled', 'unknown'].includes(code)) {
+      await markSkipped(ledgerEvent.deviceId, ledgerEvent.terminalSeq, txErr instanceof Error ? txErr.message : String(txErr)).catch(() => {});
+      notifyOutboxChanged();
+    }
+    throw txErr;
+  }
+  // The callback wrote a receipt only when it did not return early (already paid / already applied).
+  if (finalReceipt) await markAcknowledged(ledgerEvent.deviceId, ledgerEvent.terminalSeq).catch((e) => console.error('[ledger] could not acknowledge the sale', e));
+  else await markSkipped(ledgerEvent.deviceId, ledgerEvent.terminalSeq, 'This session was already paid.').catch(() => {});
+  notifyOutboxChanged();
 
   if (rtKdsUpdates.length > 0) {
     try {
@@ -1157,7 +1191,7 @@ export async function updateSessionBillLine(
   batch.update(lineRef, updatePayload);
   batch.update(sessionRef, { billingRevision: increment(1), updatedAt: serverTimestamp() });
   const affectsFlags = patchAffectsAdjustmentFlags(patch as Record<string, any>);
-  if (navigator.onLine) {
+  if (getConnectivityStore().getState().online) {
     await batch.commit();
     if (affectsFlags) await recomputeSessionAdjustmentFlags(storeId, sessionId);
   } else {
@@ -1193,7 +1227,7 @@ export async function removeLineAdjustment(
   const batch = writeBatch(db);
   batch.update(lineRef, updatePayload);
   batch.update(sessionRef, { billingRevision: increment(1), updatedAt: serverTimestamp() });
-  if (navigator.onLine) {
+  if (getConnectivityStore().getState().online) {
     await batch.commit();
     await recomputeSessionAdjustmentFlags(storeId, sessionId);
   } else {
