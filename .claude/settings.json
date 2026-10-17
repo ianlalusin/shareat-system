@@ -1,5 +1,21 @@
 {
   "permissions": {
+    "allow": [
+      "mcp__ccd_pr__get_status",
+      "mcp__Claude_Browser__find",
+      "mcp__Claude_Browser__get_page_text",
+      "mcp__Claude_Browser__read_page",
+      "mcp__Claude_Browser__read_console_messages",
+      "mcp__Claude_Browser__preview_logs",
+      "mcp__Claude_Browser__tabs_context",
+      "mcp__873f7b16-039b-47f9-b780-2411a8285c12__jobs_wait",
+      "mcp__873f7b16-039b-47f9-b780-2411a8285c12__balance",
+      "mcp__873f7b16-039b-47f9-b780-2411a8285c12__models_explore",
+      "mcp__873f7b16-039b-47f9-b780-2411a8285c12__show_generation_by_ids",
+      "Bash(npm run typecheck)",
+      "Bash(npm test -w @shareat/pos)",
+      "Bash(npx tsc -p apps/pos/tsconfig.json --noEmit)"
+    ],
     "deny": [
       "Edit(//C:/Users/ianla/webapps/ERP-rebuild/**)",
       "Write(//C:/Users/ianla/webapps/ERP-rebuild/**)",
