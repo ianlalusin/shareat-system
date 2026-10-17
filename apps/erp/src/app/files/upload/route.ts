@@ -9,13 +9,14 @@
  * Route handlers get no server-action origin check, so this one does its own, in this order:
  *   401 no session (JSON - never a redirect, which an XHR would follow to a 200 sign-in page) -> 403 Origin missing or
  *   foreign -> 400 purpose / store -> 415 type -> 411 no Content-Length -> 413 too big (all decided BEFORE the body is
- *   read) -> body read with a hard byte cap -> 415 magic bytes -> 429 too many unclaimed -> uploadFile.
+ *   read) -> 403 capability (non-logging) -> body read with a hard byte cap -> 415 magic bytes -> 429 too many unclaimed -> uploadFile.
  * Faults answer a generic 500 and log only their kind: an error text can name a path or a signed URL.
  */
 import { AuthorizationError } from '@shareat/auth';
 import { UUID_SHAPE, type FilePurpose } from '@shareat/db';
 import {
   assertUnclaimedUploadRoom,
+  canUploadFile,
   fileBytesMatchType,
   isImageContentType,
   MAX_IMAGE_BYTES,
@@ -106,6 +107,11 @@ export async function POST(request: Request): Promise<Response> {
     // "declared is over the cap", spelled without a relational operator on a string-derived number (the T-371 numeric guard).
     if (Math.max(declared, cap) !== cap) return refusal(413, 'That file is too big.');
     if (declared === 0) return refusal(400, 'That file is empty.');
+
+    // The capability, asked WITHOUT logging and BEFORE the body is pulled: a person who may not upload this here costs us no bytes.
+    // (uploadFile authorizes again below - this is the early exit, not the gate.)
+    const allowed = await withOrgPrincipal(actor.orgId, (tx) => canUploadFile(tx, actor, purpose, storeId));
+    if (!allowed) return refusal(403, 'You are not allowed to upload this here.');
 
     const bytes = await readCapped(request, cap);
     if (bytes === null) return refusal(413, 'That file is too big.');

@@ -29,6 +29,7 @@ import {
   recordLeaveDocumentViewRefused,
 } from '../leave/document-access';
 import { signatureUrl } from './signature';
+import { fileBytesMatchType } from './magic';
 
 export * from './driver';
 export { mayViewSignature, SIGNATURE_LINK_SECONDS } from './signature';
@@ -95,6 +96,15 @@ export async function uploadFile(
   return transaction((trx) => runUpload(trx, actor, input));
 }
 
+/**
+ * T-441: whether this actor may upload this purpose at this store - the SAME capability `runUpload` gates on, asked with the
+ * non-logging `can`, so the upload route can refuse a person who lacks it BEFORE it reads the request body. A presentation of
+ * the gate, not a replacement: `uploadFile` still authorizes.
+ */
+export async function canUploadFile(tx: Tx, actor: Actor, purpose: FilePurpose, storeId: string | null): Promise<boolean> {
+  return can(tx, actor, PURPOSE_CAPABILITY[purpose], { ...(storeId ? { storeId } : {}) });
+}
+
 async function runUpload(tx: Tx, actor: Actor, input: UploadInput): Promise<UploadResult> {
   const limits = PURPOSE_LIMITS[input.purpose];
   if (!limits) throw new Error(`uploadFile: ${input.purpose} is not a known kind of file.`);
@@ -113,6 +123,10 @@ async function runUpload(tx: Tx, actor: Actor, input: UploadInput): Promise<Uplo
     );
   }
   if (input.bytes.length === 0) throw new Error('uploadFile: the file is empty.');
+  // T-441: the declared type is not trusted - the first bytes must match it, on EVERY path (route and no-JS action alike).
+  if (!fileBytesMatchType(input.contentType, input.bytes)) {
+    throw new Error(`uploadFile: the file does not look like the ${input.contentType} it says it is.`);
+  }
   // ⭐ T-296. The app-wide photo ceiling, checked BEFORE the per-purpose limit so an oversized
   //    image gets the message about photos rather than the one about its purpose's larger cap.
   if (isImageContentType(input.contentType) && input.bytes.length > MAX_IMAGE_BYTES) {
@@ -327,6 +341,8 @@ export class UploadCapError extends RefusalError {
 
 /** Refuses when this person already holds `UNCLAIMED_UPLOAD_CAP` unclaimed uploads under 24 h old (a flood guard, not a quota). */
 export async function assertUnclaimedUploadRoom(tx: Tx, actor: Actor): Promise<void> {
+  // The per-person lock is held to COMMIT, so the count and the insert that follows are one step for this person.
+  await filesRepo.lockUnclaimedUploads(tx, actor.orgId, actor.personId);
   const held = await filesRepo.countUnclaimedBy(tx, actor.orgId, actor.personId, 24);
   if (held >= UNCLAIMED_UPLOAD_CAP) throw new UploadCapError();
 }

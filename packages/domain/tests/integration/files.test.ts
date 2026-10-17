@@ -87,6 +87,15 @@ async function fixture(hint: string) {
   return { ...o, staffId, staff: actor(o.orgId, staffId) };
 }
 
+/** T-441: uploadFile checks the declared type against the file's first bytes, so size-only fixtures need a real signature. */
+const PNG_SIG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const PDF_SIG = [0x25, 0x50, 0x44, 0x46, 0x2d];
+function sized(sig: number[], total: number): Uint8Array {
+  const out = new Uint8Array(total);
+  out.set(sig, 0);
+  return out;
+}
+
 /** A structurally real JPEG carrying GPS in an EXIF segment. */
 function photoWithGps(): Uint8Array {
   const ascii = (s: string) => [...s].map((c) => c.charCodeAt(0));
@@ -237,7 +246,7 @@ describe('the refusals', () => {
           purpose: 'receipt_photo',
           storeId: f.storeId,
           contentType: 'image/png',
-          bytes: new Uint8Array(2 * 1024 * 1024),
+          bytes: sized(PNG_SIG, 2 * 1024 * 1024),
         }),
       ),
     ).rejects.toThrow(/photos are capped at 1 MB everywhere in the app/);
@@ -252,7 +261,7 @@ describe('the refusals', () => {
         purpose: 'receipt_photo',
         storeId: f.storeId,
         contentType: 'image/png',
-        bytes: new Uint8Array(1000 * 1024),
+        bytes: sized(PNG_SIG, 1000 * 1024),
       }),
     );
     expect(r.byteSize).toBe(1000 * 1024);
@@ -267,7 +276,7 @@ describe('the refusals', () => {
         purpose: 'receipt_photo',
         storeId: f.storeId,
         contentType: 'application/pdf',
-        bytes: new Uint8Array(2 * 1024 * 1024),
+        bytes: sized(PDF_SIG, 2 * 1024 * 1024),
       }),
     );
     expect(r.byteSize).toBe(2 * 1024 * 1024);
@@ -281,10 +290,23 @@ describe('the refusals', () => {
           purpose: 'receipt_photo',
           storeId: f.storeId,
           contentType: 'application/pdf',
-          bytes: new Uint8Array(9 * 1024 * 1024),
+          bytes: sized(PDF_SIG, 9 * 1024 * 1024),
         }),
       ),
     ).rejects.toThrow(/the limit for a receipt photo is 8 MB/);
+  });
+
+  it('⛔ T-441: uploadFile itself refuses bytes that are not the declared type (magic bytes), storing nothing', async () => {
+    const f = await fixture('magic');
+    const notJpeg = Uint8Array.from([...'hello, this is plain text'].map((c) => c.charCodeAt(0)));
+    await expect(
+      asOrg(f.orgId, (tx) =>
+        uploadFile(tx, f.staff, { purpose: 'receipt_photo', storeId: f.storeId, contentType: 'image/jpeg', bytes: notJpeg }),
+      ),
+    ).rejects.toThrow(/does not look like|not .*image\/jpeg|match/i);
+    expect(driver.files.size).toBe(0);
+    const [n] = await sql<{ n: string }[]>`select count(*)::text as n from stored_files where org_id = ${f.orgId}`;
+    expect(n!.n).toBe('0');
   });
 
   it('⛔ refuses an empty file', async () => {

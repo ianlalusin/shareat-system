@@ -184,3 +184,14 @@ export async function deleteFile(tx: Tx, orgId: string, id: string): Promise<boo
     .returning({ id: storedFiles.id });
   return deleted.length > 0;
 }
+
+/** Namespace (first int4) for the per-person unclaimed-upload lock. T-441 (see `advisory-locks.ts` for the other namespaces). */
+const UNCLAIMED_UPLOAD_LOCK_NAMESPACE = 441001;
+
+/** Serialises one person's uploads from "count what they hold" through the row insert, so parallel requests cannot all
+ *  read 29 and all insert. Transaction-scoped: released at COMMIT/ROLLBACK. Take it AFTER the capability check. */
+export async function lockUnclaimedUploads(tx: Tx, orgId: string, personId: string): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(${UNCLAIMED_UPLOAD_LOCK_NAMESPACE}::int4, hashtext(${orgId}::text || ':' || ${personId}::text))`,
+  );
+}

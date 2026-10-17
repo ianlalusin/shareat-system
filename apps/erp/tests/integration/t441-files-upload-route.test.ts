@@ -328,6 +328,15 @@ describe('M16 - the capability that governs the purpose, at the store', () => {
     expect(res.headers.get('content-type') ?? '').toMatch(/json/);
   });
 
+  it('M16b the capability is checked BEFORE the body is read: a person without it gets 403 and the stream is never pulled', async () => {
+    const f = await fixture('capnobody');
+    const { stream, state } = spyStream(jpeg());
+    const res = await post(f, f.staff, { body: stream, length: jpeg().length });
+    expect(res.status).toBe(403);
+    expect(state.pulled).toBe(false);
+    expect(await rowsFor(f.orgId)).toBe(0);
+  });
+
   it("a manager scoped to store A cannot upload into store B, or into a store that is not in the org's", async () => {
     const f = await fixture('capstore');
     expect((await post(f, f.manager, { storeId: f.storeB })).status).toBe(403);
@@ -452,6 +461,15 @@ describe('ruling - at most 30 unclaimed uploads per person (younger than 24 h)',
     expect(await rowsFor(f.orgId, f.managerId)).toBe(before);
   });
 
+  it('M32 five parallel uploads at 29 held: exactly ONE succeeds and the rest are 429 (the count is serialised per person)', async () => {
+    const f = await fixture('cap30race');
+    await park(f, f.managerId, 29);
+    const results = await Promise.all([0, 1, 2, 3, 4].map(() => post(f, f.manager)));
+    const codes = results.map((r) => r.status).sort();
+    expect(codes).toEqual([200, 429, 429, 429, 429]);
+    expect(await rowsFor(f.orgId, f.managerId)).toBe(30);
+  });
+
   it('claimed uploads and uploads older than 24 h do not count; another person\'s do not count', async () => {
     const f = await fixture('cap30b');
     await park(f, f.managerId, 20, { linked: true });
@@ -551,6 +569,15 @@ describe('resolveUploadedFile + claimUpload - both paths end linked (M21, M31)',
       select uploaded_by, purpose, store_id, linked_to from stored_files where id = ${id}`;
     expect(row).toEqual({ uploaded_by: f.managerId, purpose: 'receipt_photo', store_id: f.storeA, linked_to: rec });
     expect(await rowsFor(f.orgId)).toBe(1);
+  });
+
+  it('M33 no-JS path: a posted File whose bytes are not the declared type is refused by uploadFile itself, nothing stored', async () => {
+    const f = await fixture('resolve-magic');
+    const { resolveUploadedFile } = await loadResolve();
+    const fd = new FormData();
+    fd.set('receiptPhoto', new File([text() as BlobPart], 'r.jpg', { type: 'image/jpeg' }));
+    await expect(asOrg(f.orgId, (tx) => resolveUploadedFile(tx, f.manager, fd, 'receiptPhoto', opts(f)))).rejects.toThrow();
+    expect(await rowsFor(f.orgId)).toBe(0);
   });
 
   it('nothing posted, or an empty File, resolves to null; a posted FileId beats a posted File (no second upload)', async () => {
