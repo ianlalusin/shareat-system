@@ -453,6 +453,8 @@ describe('the browser path', () => {
     // A login is not an introduction. Someone with an account but no person row has not been
     // given access to anything, and creating one silently would be exactly that.
     const f = await setup('fb');
+    // T-438: email sign-in needs a manager/admin role (staff are PIN-only); this case tests the browser path, so the person is a manager.
+    await sql`insert into person_roles (person_id, org_id, role) values (${f.personId}, ${f.orgId}, 'manager')`;
     const externalId = uid('fbuid');
     await asOrg(f.orgId, (tx) =>
       sessionsRepo.insertCredential(tx, { personId: f.personId, kind: 'firebase', externalId }),
@@ -467,6 +469,8 @@ describe('the browser path', () => {
 
   it('a browser session carries NO store — it is not bound to one', async () => {
     const f = await setup('fbstore');
+    // T-438: email sign-in needs a manager/admin role (staff are PIN-only); this case tests the browser path, so the person is a manager.
+    await sql`insert into person_roles (person_id, org_id, role) values (${f.personId}, ${f.orgId}, 'manager')`;
     const externalId = uid('fbuid2');
     await asOrg(f.orgId, (tx) =>
       sessionsRepo.insertCredential(tx, { personId: f.personId, kind: 'firebase', externalId }),
