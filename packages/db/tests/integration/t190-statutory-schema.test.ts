@@ -319,6 +319,11 @@ describe('T-190 audit gap 4 - the 0206 seed goes to the main org by its key, not
     await sql
       .begin(async (tx) => {
         await tx`set local session_replication_role = replica`;
+        // The three history guards are ENABLE ALWAYS (replica mode no longer bypasses them), so lift them inside this
+        // rolled-back transaction only; ALTER TABLE is transactional and the ROLLBACK below restores them.
+        await tx`alter table statutory_rates disable trigger statutory_rates_immutable`;
+        await tx`alter table withholding_brackets disable trigger withholding_brackets_immutable`;
+        await tx`alter table minimum_wages disable trigger minimum_wages_immutable`;
         await tx`delete from statutory_rates`;
         await tx`delete from withholding_brackets`;
         await tx`delete from minimum_wages`;

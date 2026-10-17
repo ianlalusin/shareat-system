@@ -305,6 +305,22 @@ export const payslips = pgTable(
       'payslips_advance_within_gross_check',
       sql`${t.advanceRecovered} <= ${t.grossPay} - ${t.sssEe} - ${t.philhealthEe} - ${t.pagibigEe} - ${t.withholding}`,
     ),
+    // T-398 S1 same-org twins (migration 0206); statutory_rates_org_id_id_unique is hand-added there, no Drizzle mirror.
+    foreignKey({
+      columns: [t.orgId, t.sssRateId],
+      foreignColumns: [statutoryRates.orgId, statutoryRates.id],
+      name: 'payslips_sss_rate_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.philhealthRateId],
+      foreignColumns: [statutoryRates.orgId, statutoryRates.id],
+      name: 'payslips_philhealth_rate_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.pagibigRateId],
+      foreignColumns: [statutoryRates.orgId, statutoryRates.id],
+      name: 'payslips_pagibig_rate_id_same_org_fk',
+    }).onDelete('restrict'),
     check('payslips_skipped_agencies_check', sql`${t.skippedAgencies} <@ ARRAY['sss', 'philhealth', 'pagibig']::text[]`),
     check(
       'payslips_statutory_nonnegative_check',

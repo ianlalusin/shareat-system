@@ -198,6 +198,12 @@ CREATE TRIGGER "withholding_brackets_immutable" BEFORE UPDATE OR DELETE ON "with
 --> statement-breakpoint
 CREATE TRIGGER "minimum_wages_immutable" BEFORE UPDATE OR DELETE ON "minimum_wages" FOR EACH ROW EXECUTE FUNCTION t190_reference_row_immutable();
 --> statement-breakpoint
+ALTER TABLE "statutory_rates" ENABLE ALWAYS TRIGGER "statutory_rates_immutable";
+--> statement-breakpoint
+ALTER TABLE "withholding_brackets" ENABLE ALWAYS TRIGGER "withholding_brackets_immutable";
+--> statement-breakpoint
+ALTER TABLE "minimum_wages" ENABLE ALWAYS TRIGGER "minimum_wages_immutable";
+--> statement-breakpoint
 
 -- RLS (DEF-077 / DEF-183) and grants (ADR-012 s5 4/4a): UPDATE on the two confirmation columns only; DELETE for the unconfirmed-row delete.
 ALTER TABLE "statutory_rates" ENABLE ROW LEVEL SECURITY;
@@ -259,6 +265,14 @@ ALTER TABLE "payslips" ADD CONSTRAINT "payslips_sss_rate_id_statutory_rates_id_f
 ALTER TABLE "payslips" ADD CONSTRAINT "payslips_philhealth_rate_id_statutory_rates_id_fk" FOREIGN KEY ("philhealth_rate_id") REFERENCES "public"."statutory_rates"("id") ON DELETE restrict ON UPDATE no action;
 --> statement-breakpoint
 ALTER TABLE "payslips" ADD CONSTRAINT "payslips_pagibig_rate_id_statutory_rates_id_fk" FOREIGN KEY ("pagibig_rate_id") REFERENCES "public"."statutory_rates"("id") ON DELETE restrict ON UPDATE no action;
+--> statement-breakpoint
+ALTER TABLE "statutory_rates" ADD CONSTRAINT "statutory_rates_org_id_id_unique" UNIQUE ("org_id", "id");
+--> statement-breakpoint
+ALTER TABLE "payslips" ADD CONSTRAINT "payslips_sss_rate_id_same_org_fk" FOREIGN KEY ("org_id", "sss_rate_id") REFERENCES "statutory_rates" ("org_id", "id") ON DELETE RESTRICT;
+--> statement-breakpoint
+ALTER TABLE "payslips" ADD CONSTRAINT "payslips_philhealth_rate_id_same_org_fk" FOREIGN KEY ("org_id", "philhealth_rate_id") REFERENCES "statutory_rates" ("org_id", "id") ON DELETE RESTRICT;
+--> statement-breakpoint
+ALTER TABLE "payslips" ADD CONSTRAINT "payslips_pagibig_rate_id_same_org_fk" FOREIGN KEY ("org_id", "pagibig_rate_id") REFERENCES "statutory_rates" ("org_id", "id") ON DELETE RESTRICT;
 --> statement-breakpoint
 CREATE INDEX "payslips_sss_rate_idx" ON "payslips" ("sss_rate_id") WHERE "sss_rate_id" IS NOT NULL;
 --> statement-breakpoint
