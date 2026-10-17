@@ -333,3 +333,7 @@ Open (need a decision, not folded):
 - **O3:** tighten. G3 must prove the rule set is asserted in THAT form's own action (the action named by the form calls assertFieldRules with that rule set), not merely somewhere on the server.
 - **O4:** no jsdom; node rendering + the §9.4 browser smoke.
 - **Status:** AUDITED 2026-10-17; S1 building.
+
+## Orchestrator ruling (sweep reconcile, 2026-10-17)
+
+- **Authorization before field checks, everywhere** (A2 stands). The sweep placed assertFieldRules before authorize() in converted actions (DEF-676). The two pinned cases are fixed in the reconcile; **S9** restores auth-first order in every converted action and adds a guard test.
