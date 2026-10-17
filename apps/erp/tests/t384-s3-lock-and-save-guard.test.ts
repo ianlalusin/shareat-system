@@ -505,7 +505,7 @@ describe('T-S1-16 (T-440 A3): CheckedForm counts as a form, so the guards stay s
     expect(labelFindings(checked('Save item').replace('<CheckedForm rules={R}', '<CheckedForm method="get" rules={R}'), F)).toEqual([]);
   });
   it('the live scan really contains a <CheckedForm> once the pilots are converted (the guard is exercised on real source, not only fixtures)', () => {
-    const seen = scan((src, f) => (/<CheckedForm/.test(src) ? [{ file: f, line: 1, detail: 'uses CheckedForm' }] : []), true);
+    const seen = scan((src, f) => (/<CheckedForm\b/.test(src) ? [{ file: f, line: 1, detail: 'uses CheckedForm' }] : []), true);
     expect(seen.map((x) => x.file)).toContain('ap/page.tsx');
   });
 });

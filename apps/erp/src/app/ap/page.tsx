@@ -7,6 +7,9 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Button, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import { SubmitButton } from '@/components/feedback/SubmitButton';
+import { SUPPLIER_ADD_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { ACTION_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Accounts payable — Shareat System' };
@@ -98,9 +101,9 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
       <div className="grid gap-6 md:grid-cols-2">
         <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="font-medium">Record a supplier</h2>
-          <form action={createSupplierAction} className="space-y-3">
-            <Field label="Name">
-              <Input name="name" required placeholder="ABC Meat Supply" className="w-full" />
+          <CheckedForm rules={SUPPLIER_ADD_RULES} action={createSupplierAction} className="space-y-3">
+            <Field label="Name" rule={SUPPLIER_ADD_RULES.name}>
+              <Input {...nativeAttrs(SUPPLIER_ADD_RULES.name)} placeholder="ABC Meat Supply" className="w-full" />
             </Field>
             <Field label="Address" hint="Optional.">
               <Input name="address" className="w-full" />
@@ -114,11 +117,11 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
                 <option value="credit">On credit (AP)</option>
               </Select>
             </Field>
-            <Field label="Days to pay" hint="Only for On credit. 0 to 365.">
-              <Input type="number" name="creditTermsDays" min="0" max="365" step="1" className="w-full" />
+            <Field label="Days to pay" hint="Only for On credit. 0 to 365." rule={SUPPLIER_ADD_RULES.creditTermsDays}>
+              <Input {...nativeAttrs(SUPPLIER_ADD_RULES.creditTermsDays)} className="w-full" />
             </Field>
-            <Button type="submit" variant="secondary">Save</Button>
-          </form>
+            <SubmitButton variant="secondary">Save</SubmitButton>
+          </CheckedForm>
         </section>
 
         <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
@@ -212,12 +215,20 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
 // PhotoInput is a file input, which the kit does not wrap; it takes the field tokens directly.
 const FILE_INPUT = 'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 text-sm text-ink';
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
+function Field({ label, hint, rule, children }: { label: string; hint?: string; rule?: FieldRule; children: React.ReactNode }) {
+  const body = (
+    <>
       <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
       {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </label>
+    </>
+  );
+  // T-440: a ruled field keeps its label and puts the live helper line OUTSIDE it (so the line never joins the accessible name).
+  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
+  return (
+    <div>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }

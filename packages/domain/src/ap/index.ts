@@ -60,6 +60,8 @@ import { reverseEntry } from '../ledger/reverse-entry';
 import { checkDraw } from '../money-accounts/overdraft';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { gone, humanDate, internalFault, refuse } from '../shared/refusal';
+import { checkField } from '../field-rules/check';
+import { SUPPLIER_ADD_RULES } from '../field-rules/ap';
 import { allocateOldestFirst, type AllocationItem, type TypedAmount } from '../shared/allocate-oldest-first';
 import { createExpense, type CreateExpensePaymentInput } from '../expenses/create';
 import { approveExpense, type ApproveExpenseResult } from '../expenses/approve';
@@ -143,6 +145,12 @@ function orNull(v: string | null | undefined): string | null | undefined {
   return v?.trim() || null;
 }
 
+/** T-440: the blank-name sentence is the supplier rule set's own, the very line the add form shows (one sentence, two places). */
+function nameRequirement(): string {
+  const c = checkField(SUPPLIER_ADD_RULES.name, '');
+  return c.ok ? 'A supplier needs a name people will recognise.' : c.requirement;
+}
+
 const TERMS_BLANK = 'Enter how many days of credit this supplier gives (0 to 365), or choose Cash on delivery.';
 const termsMalformed = (v: string) => `Payment terms — "${v}" is not a whole number of days from 0 to 365.`;
 
@@ -185,7 +193,7 @@ export async function createSupplier(
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_supplier', {});
     const name = input.name.trim();
-    if (!name) throw refuse('createSupplier: a supplier needs a name people will recognise.', 'A supplier needs a name people will recognise.');
+    if (!name) throw refuse('createSupplier: a supplier needs a name people will recognise.', nameRequirement());
     const creditTermsDays = parseCreditTermsDays(input.creditTermsDays, 'createSupplier');
     return apRepo.insertSupplier(trx, {
       orgId: actor.orgId,
@@ -246,7 +254,7 @@ export async function editSupplier(
     const values: Parameters<typeof apRepo.updateSupplier>[3] = {};
     if (input.name !== undefined) {
       const name = input.name.trim();
-      if (!name) throw refuse('editSupplier: a supplier needs a name people will recognise.', 'A supplier needs a name people will recognise.');
+      if (!name) throw refuse('editSupplier: a supplier needs a name people will recognise.', nameRequirement());
       values.name = name;
     }
     // T-362 / DEF-495 — R2's order: authorize -> gone -> name -> TERMS -> the other fields.

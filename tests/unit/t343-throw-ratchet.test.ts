@@ -90,6 +90,7 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/expenses': 0, // T-343 S5.1: 40 -> 0, all converted to refuse/gone/internalFault
   'packages/domain/src/files': 9,
   'packages/domain/src/findings': 1,
+  'packages/domain/src/field-rules': 1, // T-440: defineFieldRules refuses a rule named 'form' at definition time (a programmer error, never user-facing)
   'packages/domain/src/fiscal-periods': 15,
   'packages/domain/src/fixed-assets': 17,
   'packages/domain/src/items': 24,
