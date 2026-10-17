@@ -7,6 +7,7 @@ import {
   issuePinAction,
   removeStaffPhotoAction,
   removeStaffSignatureAction,
+  renamePersonAction,
   setGovernmentIdsAction,
   setPositionsAction,
   setStaffPhotoAction,
@@ -21,7 +22,7 @@ import { EditableRecord } from '@/components/forms';
 import { Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
-import { STAFF_POSITIONS } from '../typed-forms';
+import { STAFF_POSITIONS, STAFF_RENAME } from '../typed-forms';
 
 export const metadata = { title: 'Employment — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -80,6 +81,30 @@ export default async function EmploymentDetailPage({
       </div>
 
       <FlashBanner flash={sp} />
+
+      {!isEnded && (
+        <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <h2 className="font-medium">Name</h2>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            {detail.nameParts.lastName === null
+              ? `Saved as "${detail.personName}" (one box, from before names were split). Type the last, first and middle name once to fix it; it then reads "Last, First M.".`
+              : 'Shown everywhere as "Last, First M.". Saving rewrites it.'}
+          </p>
+          <EditableRecord action={renamePersonAction} label="name" hidden={{ employmentId }} typed={typedFor(sp, STAFF_RENAME, employmentId, actor.personId)}>
+            <FormGrid>
+              <Field label="Last name">
+                <Input name="lastName" required defaultValue={detail.nameParts.lastName ?? ''} className="mt-1 w-full" />
+              </Field>
+              <Field label="First name">
+                <Input name="firstName" required defaultValue={detail.nameParts.firstName ?? ''} className="mt-1 w-full" />
+              </Field>
+              <Field label="Middle name (optional)">
+                <Input name="middleName" defaultValue={detail.nameParts.middleName ?? ''} className="mt-1 w-full" />
+              </Field>
+            </FormGrid>
+          </EditableRecord>
+        </section>
+      )}
 
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Positions</h2>

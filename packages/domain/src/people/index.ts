@@ -39,6 +39,10 @@ export {
   seedStoreAccessDefaults,
 } from './position-defaults';
 
+// T-438: name parts - the formatter and the comparison key.
+import { formatDisplayName, nameKey, normaliseName, type NameParts } from './person-name';
+export { formatDisplayName, nameKey, normaliseNamePart, normaliseName, type NameParts } from './person-name';
+
 // T-434: staff photo and signature (upload / replace / remove / guarded view).
 export * from './staff-media';
 
@@ -232,17 +236,83 @@ export async function createEmployment(
  * already checks**, not a new one. `storeId` is context for the authorize call only; it is never
  * persisted on `persons` (bible §4.2 — a person has no store of its own, an employment does).
  */
-export async function createPerson(
-  tx: Tx,
-  actor: Actor,
-  input: { storeId: string; displayName: string },
-): Promise<PersonRow> {
+export type CreatePersonInput =
+  | { storeId: string; displayName: string; name?: undefined; sameNameConfirmed?: undefined }
+  | { storeId: string; name: NameParts; sameNameConfirmed?: boolean; displayName?: undefined };
+
+export async function createPerson(tx: Tx, actor: Actor, input: CreatePersonInput): Promise<PersonRow> {
   await authorize(tx, actor, 'enrol_staff', { storeId: input.storeId });
 
-  const displayName = input.displayName.trim();
-  if (!displayName) throw new EmploymentError('A person needs a name.');
+  // T-438 (master-data form): one string, parts stay NULL, and the same-name guard does NOT run - the v1 load has its own
+  // same-person sheet, and a guard here would break it.
+  if (input.name === undefined) {
+    const displayName = (input.displayName ?? '').trim();
+    if (!displayName) throw new EmploymentError('A person needs a name.');
+    return personsRepo.insertPerson(tx, { orgId: actor.orgId, displayName });
+  }
 
-  return personsRepo.insertPerson(tx, { orgId: actor.orgId, displayName });
+  const name = normaliseName(input.name);
+  if (!name.lastName || !name.firstName) {
+    throw new EmploymentError('A person needs a name.', 'A new person needs both a last name and a first name.');
+  }
+  const display = formatDisplayName(name);
+  // N4: legacy "Maria Santos", new-style "Santos, Maria C." and a typed Santos / Maria share one key. Initials do not count.
+  const key = nameKey(`${name.lastName} ${name.firstName}`);
+  const match = (await personsRepo.nameCandidates(tx, { orgId: actor.orgId, lastName: name.lastName })).find(
+    (c) => nameKey(c.displayName) === key,
+  );
+  if (match && input.sameNameConfirmed !== true) {
+    const reason = `Someone named ${match.displayName} is already in the system. Search for them and pick them, or tick 'This is a different person with the same name'.`;
+    throw new EmploymentError(reason, reason);
+  }
+  const person = await personsRepo.insertPerson(tx, { orgId: actor.orgId, name });
+  if (match) {
+    await auditLogRepo.append(tx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'person.same_name_confirmed',
+      storeId: input.storeId,
+      entityId: person.id,
+      before: null,
+      after: { displayName: display, sameNameConfirmed: true },
+      source: 'web',
+    });
+  }
+  return person;
+}
+
+/**
+ * T-438 S2b. Retype a person's name as last / first / middle (the way a legacy single-string name is fixed, spec N3). Authorises
+ * `enrol_staff` at the EMPLOYMENT's store. A terminal is not a person and is refused. The duplicate guard (N4) does not run: this
+ * is the same person. Audit carries displayName before/after only (bible row 353).
+ */
+export async function renamePerson(
+  tx: Tx,
+  actor: Actor,
+  input: { employmentId: string; lastName: string; firstName: string; middleName?: string | null },
+): Promise<PersonRow> {
+  const employment = await employmentRepo.getEmployment(tx, input.employmentId);
+  if (!employment || employment.orgId !== actor.orgId) throw new EmploymentError('That employment was not found.');
+  await authorize(tx, actor, 'enrol_staff', { storeId: employment.storeId });
+
+  const person = await personsRepo.getPersonById(tx, actor.orgId, employment.personId);
+  if (!person) throw new EmploymentError('That person was not found.');
+  if (person.kind !== 'person') throw new EmploymentError('A terminal has no personal name to change.');
+
+  const name = normaliseName(input);
+  if (!name.lastName || !name.firstName) {
+    throw new EmploymentError('A person needs a name.', 'A person needs both a last name and a first name.');
+  }
+  const displayName = await personsRepo.setPersonName(tx, actor.orgId, person.id, name);
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'person.renamed',
+    storeId: employment.storeId,
+    entityId: person.id,
+    before: { displayName: person.displayName },
+    after: { displayName },
+    source: 'web',
+  });
+  return { ...person, displayName };
 }
 
 /**

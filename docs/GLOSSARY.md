@@ -166,6 +166,7 @@ DEF-002.
 | Term | Meaning |
 |---|---|
 | **person** | One **human being**, independent of how they authenticate. A staff member who is also a loyalty customer is **one** person |
+| **`display_name`** ⚠️ | A person's name as shown everywhere. Since T-438 (migration 0207) it is DERIVED when `last_name` / `first_name` / `middle_name` are set: `Last, First M.` (the CHECK `persons_name_parts_check` enforces it). Legacy rows, terminals and the usage author have NULL parts and keep a free-text `display_name`; parts are never guessed from it, they are retyped once on the staff page |
 | **person_identity** | One way a person is recognised: `firebase_uid`, `phone`, `email`, `staff_no`, `device_hash`. Many per person. **Phone is an identity, never a primary key** — it changes. DEF-009 |
 | **staff vs diner** | A *role*, not a table. Both are persons |
 | **platformAdmin** ✅ | A Firebase custom claim granting cross-store admin. Distinct from `staff/{uid}.status === 'active'`; either passes CUSTOMER's admin gate |

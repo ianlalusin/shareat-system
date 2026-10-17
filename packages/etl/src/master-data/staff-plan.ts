@@ -18,6 +18,9 @@ import { selectTargetStores, type StoreMapRow } from './store-map';
 
 type Row = Record<string, string>;
 
+/** A v1 position name (compared by `ck`) that is a canonical v2 position under another name. */
+const POSITION_ALIASES: Readonly<Record<string, string>> = { cook: 'kitchen staff' };
+
 export const STAFF_SHEETS = ['positions', 'staff-same-person', 'access-to-grant', 'staff-roster'] as const;
 export type StaffSheet = (typeof STAFF_SHEETS)[number];
 
@@ -362,7 +365,8 @@ export function planStaff(input: PlanStaffInput): StaffPlan {
       const k = ck(v1);
       if (seen.has(k)) continue;
       seen.add(k);
-      const c = canon.get(k);
+      // T-439 (bible row 362): v1's "Cook" is v2's canonical "Kitchen Staff" - an alias, so it needs no sheet row.
+      const c = canon.get(POSITION_ALIASES[k] ?? k);
       if (c) {
         add(c);
         continue;

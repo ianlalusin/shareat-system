@@ -69,6 +69,8 @@ export async function positionsForStore(orgId: string, storeId: string): Promise
 export interface EmploymentDetail {
   employment: EmploymentRow;
   personName: string;
+  /** T-438: the stored parts; all null for a legacy person (never guessed, spec N3) - the Name form then shows empty boxes. */
+  nameParts: { lastName: string | null; firstName: string | null; middleName: string | null };
   storeName: string;
   positions: PositionAssignment[];
 }
@@ -85,11 +87,13 @@ export async function employmentDetail(actor: Actor, employmentId: string): Prom
     if (!employment || employment.orgId !== orgId) return null;
     if (!(await anyOf(tx, actor, STAFF_READ, employment.storeId))) return null;
     const person = await personsRepo.getPersonById(tx, orgId, employment.personId);
+    const nameParts = (await personsRepo.getNameParts(tx, orgId, employment.personId)) ?? { lastName: null, firstName: null, middleName: null };
     const store = stores.find((s) => s.id === employment.storeId);
     const positionRows = await employmentRepo.listEmploymentPositions(tx, employmentId);
     return {
       employment,
       personName: person?.displayName ?? '(unknown person)',
+      nameParts,
       storeName: store?.name ?? employment.storeId,
       positions: positionRows.map((p) => ({ positionId: p.positionId, name: p.positionName, isPrimary: p.isPrimary })),
     };

@@ -26,6 +26,13 @@ export const persons = pgTable(
       .notNull()
       .references(() => organizations.id, { onDelete: 'restrict' }),
     displayName: text('display_name').notNull(),
+    /**
+     * T-438 (migration 0207, bible row 360). The name as typed on the Hire screen. All three NULL for legacy rows (never split by
+     * guesswork, spec N3), terminals and the usage author. When set, `display_name` MUST equal "Last, First M." (the CHECK below).
+     */
+    lastName: text('last_name'),
+    firstName: text('first_name'),
+    middleName: text('middle_name'),
     isActive: boolean('is_active').notNull().default(true),
     /**
      * ⭐ T-304 — explicit, not inferred. A shared-terminal Firebase credential (option (a),
@@ -55,6 +62,20 @@ export const persons = pgTable(
   },
   (t) => [
     check('persons_kind_check', sql`${t.kind} in ('person', 'terminal')`),
+    // T-438 (0207): parts are all-NULL, or last+first set on a person-kind row with display_name equal to the formatted parts.
+    check(
+      'persons_name_parts_check',
+      sql`(${t.lastName} is null and ${t.firstName} is null and ${t.middleName} is null)
+        or (
+          ${t.lastName} is not null and ${t.firstName} is not null
+          and ${t.lastName} <> '' and ${t.firstName} <> ''
+          and ${t.lastName} = btrim(${t.lastName}) and ${t.firstName} = btrim(${t.firstName})
+          and (${t.middleName} is null or (${t.middleName} <> '' and ${t.middleName} = btrim(${t.middleName})))
+          and ${t.kind} = 'person'
+          and ${t.displayName} = ${t.lastName} || ', ' || ${t.firstName}
+            || coalesce(' ' || upper(left(${t.middleName}, 1)) || '.', '')
+        )`,
+    ),
     check('persons_sss_no_format_check', sql`${t.sssNo} is null or ${t.sssNo} ~ '^[0-9]{10}$'`),
     check('persons_philhealth_no_format_check', sql`${t.philhealthNo} is null or ${t.philhealthNo} ~ '^[0-9]{12}$'`),
     check('persons_pagibig_no_format_check', sql`${t.pagibigNo} is null or ${t.pagibigNo} ~ '^[0-9]{12}$'`),

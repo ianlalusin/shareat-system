@@ -220,6 +220,9 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('staff_signature.removed', 'security', 'high', 'either', 'persons', 'T-434', { viewers: 'admin' }),
   def('staff_signature.viewed', 'security', 'high', 'either', 'persons', 'T-434', { viewers: 'admin' }),
   def('staff_signature.view_refused', 'security', 'high', 'either', 'persons', 'T-434', { viewers: 'admin' }),
+  // T-438 (bible row 360): a person renamed on the staff page (before/after displayName ONLY), and a hire that overrode the same-name guard.
+  def('person.renamed', 'staff', 'normal', 'store', 'persons', 'T-438'),
+  def('person.same_name_confirmed', 'staff', 'normal', 'store', 'persons', 'T-438'),
   def('employment.positions_set', 'staff', 'normal', 'store', 'employments', 'T-402'),
   def('position.reactivated', 'staff', 'normal', 'store', 'positions', 'T-402'),
 
