@@ -68,6 +68,7 @@ import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accou
 import { seedExpenseCategories } from '../../../../packages/db/seed/expense-categories';
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
 import { paramsOf, urlOf } from '../helpers/flash-jar';
+import { SUPPLIER_ADD_RULES, checkField } from '@shareat/domain/field-rules';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -188,7 +189,13 @@ function editFormData(supplier: { id: string; name: string }, overrides: Record<
 }
 
 const TERMS_BLANK = 'Enter how many days of credit this supplier gives (0 to 365), or choose Cash on delivery.';
-const M = (v: string) => `Payment terms — "${v}" is not a whole number of days from 0 to 365.`;
+// T-440 (row 363): ONE rule; the server refuses with the rule's own sentence, which never quotes the typed value.
+const RULE_SENTENCE = (() => {
+  const c = checkField(SUPPLIER_ADD_RULES.creditTermsDays, 'x');
+  if (c.ok) throw new Error('rule accepted x');
+  return c.requirement;
+})();
+const M = (_typed: string) => RULE_SENTENCE;
 
 describe('W1 — editSupplierAction on a COD supplier, termsMode=credit, creditTermsDays=30', () => {
   it('redirect ok=Supplier updated.; row 30; 1 AUD row — was red today: row null', async () => {
@@ -251,6 +258,7 @@ describe('W5 — editSupplierAction, termsMode=credit, creditTermsDays=400', () 
     const { editSupplierAction } = await import('../../src/app/ap/actions');
     const to = await expectRedirectTo(() => editSupplierAction(editFormData(s, { termsMode: 'credit', creditTermsDays: '400' })));
     expect(errorOf(to), `redirect URL was: ${to}`).toBe(M('400'));
+    expect(errorOf(to) ?? '', 'never quotes the typed value').not.toContain('"400"');
     expect(await creditTermsOf(s.id)).toBeNull();
   });
 });
@@ -263,6 +271,7 @@ describe('W6 — editSupplierAction, termsMode=bogus', () => {
     const { editSupplierAction } = await import('../../src/app/ap/actions');
     const to = await expectRedirectTo(() => editSupplierAction(editFormData(s, { termsMode: 'bogus' })));
     expect(errorOf(to), `redirect URL was: ${to}`).toBe(M('bogus'));
+    expect(errorOf(to) ?? '', 'never quotes the typed value').not.toContain('bogus');
     expect(await creditTermsOf(s.id)).toBeNull();
   });
 });
@@ -282,6 +291,7 @@ describe('W6b (audit finding) — editSupplierAction, termsMode is a NUMBER-LOOK
       const { editSupplierAction } = await import('../../src/app/ap/actions');
       const to = await expectRedirectTo(() => editSupplierAction(editFormData(s, { termsMode: mode })));
       expect(errorOf(to), `redirect URL was: ${to}`).toBe(M(mode));
+      expect(errorOf(to) ?? '', 'never quotes the typed value').not.toContain(`"${mode}"`);
       expect(await creditTermsOf(s.id)).toBeNull();
     });
   }

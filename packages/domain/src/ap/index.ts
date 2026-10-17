@@ -60,6 +60,9 @@ import { reverseEntry } from '../ledger/reverse-entry';
 import { checkDraw } from '../money-accounts/overdraft';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { gone, humanDate, internalFault, refuse } from '../shared/refusal';
+import { checkField } from '../field-rules/check';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { SUPPLIER_ADD_RULES } from '../field-rules/ap';
 import { allocateOldestFirst, type AllocationItem, type TypedAmount } from '../shared/allocate-oldest-first';
 import { createExpense, type CreateExpensePaymentInput } from '../expenses/create';
 import { approveExpense, type ApproveExpenseResult } from '../expenses/approve';
@@ -98,7 +101,7 @@ export interface CreateSupplierInput {
 
   /**
    * T-362 / DEF-495 — R1: `null` means cash-on-delivery; `0` to `365` means credit (0 is legal:
-   * on credit, due on the invoice date). The value is RAW here and parsed by `parseCreditTermsDays`
+   * on credit, due on the invoice date). The value is RAW here and parsed by `judgeCreditTerms`
    * after `authorize` (R2, the DEF-478 / T-352 / T-360 shape) — never judged at the call site.
    *
    * `UnrecognisedTermsMode` (audit finding F1, 2026-09-29): a caller mapping a `termsMode` selector
@@ -143,38 +146,40 @@ function orNull(v: string | null | undefined): string | null | undefined {
   return v?.trim() || null;
 }
 
+/** T-440: the blank-name sentence is the supplier rule set's own, the very line the add form shows (one sentence, two places). */
+function nameRequirement(): string {
+  const c = checkField(SUPPLIER_ADD_RULES.name, '');
+  return c.ok ? 'A supplier needs a name people will recognise.' : c.requirement;
+}
+
 const TERMS_BLANK = 'Enter how many days of credit this supplier gives (0 to 365), or choose Cash on delivery.';
-const termsMalformed = (v: string) => `Payment terms — "${v}" is not a whole number of days from 0 to 365.`;
+
+/** The days-to-pay rule as a one-rule set: the SAME definition the add form's live check reads (T-440, one sentence in two places). */
+const TERMS_RULE_SET = { form: SUPPLIER_ADD_RULES.form, creditTermsDays: SUPPLIER_ADD_RULES.creditTermsDays };
+/** Something that is never a number of days, for the F1 marker (an unrecognised terms MODE is refused whatever digits it spells). */
+const NOT_A_NUMBER_OF_DAYS = 'unrecognised';
 
 /**
- * T-362 / DEF-495 — R2: parses a supplier's raw `creditTermsDays` box. `null`/`undefined` (the key
- * absent, or explicitly cleared) means cash-on-delivery. `0` is legal and means "on credit, due on
- * the invoice date" (R1) — never coerced into "no credit". The upper bound (365) is the CHECK
- * constraint's own typo guard (`0141:47-48`); refusing it here first keeps the sentence readable,
- * with the database CHECK as the backstop (RULES §6.3).
+ * T-362 / DEF-495 — R2: judges a supplier's raw `creditTermsDays` box. `null`/`undefined` (the key absent, or explicitly cleared)
+ * means cash-on-delivery. `0` is legal and means "on credit, due on the invoice date" (R1) — never coerced into "no credit".
+ * T-440: the value rule (a whole number, 0 to 365) is `SUPPLIER_ADD_RULES.creditTermsDays` — the one the screen shows live — not
+ * a second parser; only the blank box (R1: an empty credit box is refused, not guessed) and the F1 marker are decided here.
+ * The database CHECK (`0141:47-48`) stays the backstop (RULES §6.3).
  */
-function parseCreditTermsDays(
+function judgeCreditTerms(
   raw: number | string | null | undefined | UnrecognisedTermsMode,
   fn: string,
 ): number | null {
   if (raw === null || raw === undefined) return null;
-  if (typeof raw === 'object') {
-    const v = raw.unrecognisedTermsMode;
-    throw refuse(`${fn}: credit terms mode ${JSON.stringify(v)} is not recognised`, termsMalformed(v));
+  let text: string;
+  if (typeof raw === 'object') text = NOT_A_NUMBER_OF_DAYS;
+  else if (typeof raw === 'number') text = String(raw);
+  else {
+    text = raw.trim();
+    if (text === '') throw refuse(`${fn}: credit terms is blank`, TERMS_BLANK);
   }
-  if (typeof raw === 'number') {
-    if (Number.isInteger(raw) && raw >= 0 && raw <= 365) return raw;
-    const v = String(raw);
-    throw refuse(`${fn}: credit terms ${JSON.stringify(v)} is not a whole number of days from 0 to 365`, termsMalformed(v));
-  }
-  const t = raw.trim();
-  if (t === '') {
-    throw refuse(`${fn}: credit terms is blank`, TERMS_BLANK);
-  }
-  if (!/^\d+$/.test(t) || Number(t) > 365) {
-    throw refuse(`${fn}: credit terms ${JSON.stringify(t)} is not a whole number of days from 0 to 365`, termsMalformed(t));
-  }
-  return Number(t);
+  const days = assertFieldRules(TERMS_RULE_SET, { creditTermsDays: text }).creditTermsDays;
+  return days === null || days === undefined ? null : Number(days);
 }
 
 export async function createSupplier(
@@ -185,8 +190,8 @@ export async function createSupplier(
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_supplier', {});
     const name = input.name.trim();
-    if (!name) throw refuse('createSupplier: a supplier needs a name people will recognise.', 'A supplier needs a name people will recognise.');
-    const creditTermsDays = parseCreditTermsDays(input.creditTermsDays, 'createSupplier');
+    if (!name) throw refuse('createSupplier: a supplier needs a name people will recognise.', nameRequirement());
+    const creditTermsDays = judgeCreditTerms(input.creditTermsDays, 'createSupplier');
     return apRepo.insertSupplier(trx, {
       orgId: actor.orgId,
       name,
@@ -246,13 +251,13 @@ export async function editSupplier(
     const values: Parameters<typeof apRepo.updateSupplier>[3] = {};
     if (input.name !== undefined) {
       const name = input.name.trim();
-      if (!name) throw refuse('editSupplier: a supplier needs a name people will recognise.', 'A supplier needs a name people will recognise.');
+      if (!name) throw refuse('editSupplier: a supplier needs a name people will recognise.', nameRequirement());
       values.name = name;
     }
     // T-362 / DEF-495 — R2's order: authorize -> gone -> name -> TERMS -> the other fields.
     let creditTermsDays: number | null | undefined;
     if (input.creditTermsDays !== undefined) {
-      creditTermsDays = parseCreditTermsDays(input.creditTermsDays, 'editSupplier');
+      creditTermsDays = judgeCreditTerms(input.creditTermsDays, 'editSupplier');
       values.creditTermsDays = creditTermsDays;
     }
     if (input.address !== undefined) values.address = orNull(input.address) ?? null;

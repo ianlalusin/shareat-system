@@ -19,6 +19,7 @@ import { PhotoInput } from '@/components/PhotoInput';
 import { SignaturePad } from '@/components/SignaturePad';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
+import { STAFF_GOV_ID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
@@ -219,19 +220,19 @@ export default async function EmploymentDetailPage({
             Payroll deducts SSS, PhilHealth and Pag-IBIG only for an agency whose number is filled in here. A blank box means that agency is
             not deducted from this person&rsquo;s payslips (and nothing is caught up later). Digits only; dashes and spaces are ignored.
           </p>
-          <EditableRecord action={setGovernmentIdsAction} label="government numbers" hidden={{ employmentId }} typed={null}>
+          <EditableRecord action={setGovernmentIdsAction} label="government numbers" hidden={{ employmentId }} typed={null} rules={STAFF_GOV_ID_RULES}>
             <FormGrid>
-              <Field label="SSS number (10 digits)">
-                <Input name="sssNo" defaultValue={govIds.sssNo ?? ''} inputMode="numeric" className="w-full font-mono" />
+              <Field label="SSS number (10 digits)" rule={STAFF_GOV_ID_RULES.sssNo}>
+                <Input {...nativeAttrs(STAFF_GOV_ID_RULES.sssNo)} defaultValue={govIds.sssNo ?? ''} className="w-full font-mono" />
               </Field>
-              <Field label="PhilHealth number (12 digits)">
-                <Input name="philhealthNo" defaultValue={govIds.philhealthNo ?? ''} inputMode="numeric" className="w-full font-mono" />
+              <Field label="PhilHealth number (12 digits)" rule={STAFF_GOV_ID_RULES.philhealthNo}>
+                <Input {...nativeAttrs(STAFF_GOV_ID_RULES.philhealthNo)} defaultValue={govIds.philhealthNo ?? ''} className="w-full font-mono" />
               </Field>
-              <Field label="Pag-IBIG number (12 digits)">
-                <Input name="pagibigNo" defaultValue={govIds.pagibigNo ?? ''} inputMode="numeric" className="w-full font-mono" />
+              <Field label="Pag-IBIG number (12 digits)" rule={STAFF_GOV_ID_RULES.pagibigNo}>
+                <Input {...nativeAttrs(STAFF_GOV_ID_RULES.pagibigNo)} defaultValue={govIds.pagibigNo ?? ''} className="w-full font-mono" />
               </Field>
-              <Field label="TIN (9 to 12 digits)">
-                <Input name="tin" defaultValue={govIds.tin ?? ''} inputMode="numeric" className="w-full font-mono" />
+              <Field label="TIN (9 to 12 digits)" rule={STAFF_GOV_ID_RULES.tin}>
+                <Input {...nativeAttrs(STAFF_GOV_ID_RULES.tin)} defaultValue={govIds.tin ?? ''} className="w-full font-mono" />
               </Field>
             </FormGrid>
           </EditableRecord>

@@ -20,6 +20,8 @@
  * or a server-action form can import it.
  */
 import type { ReactNode } from 'react';
+import type { FieldRule } from '@shareat/domain/field-rules';
+import { FieldCheck } from '@/components/forms/FieldCheck';
 
 export interface FormGridProps {
   readonly className?: string;
@@ -41,6 +43,11 @@ export interface FieldProps {
   readonly hint?: ReactNode;
   readonly span?: 'wide' | 'full';
   readonly className?: string;
+  /**
+   * T-440: this field's rule. Adds the live helper line OUTSIDE the label (a wrapper `<div>` holds label + line) and, with the
+   * control spread from `nativeAttrs(rule)`, its native attributes. No rule = exactly the bare `<label>` it always was.
+   */
+  readonly rule?: FieldRule;
   readonly children?: ReactNode;
 }
 
@@ -49,16 +56,22 @@ const SPAN: Record<'wide' | 'full', string> = {
   full: ' col-span-full',
 };
 
-export function Field({ label, hint, span, className, children }: FieldProps) {
-  return (
-    <label
-      className={`block min-w-0${span ? SPAN[span] : ''}${className ? ` ${className}` : ''}`}
-    >
+export function Field({ label, hint, span, className, rule, children }: FieldProps) {
+  const outer = `min-w-0${span ? SPAN[span] : ''}${className ? ` ${className}` : ''}`;
+  const inner = (
+    <>
       <span className="block text-ink">{label}</span>
       {hint !== undefined && hint !== null && (
         <span className="mt-0.5 block text-xs text-ink/70">{hint}</span>
       )}
       {children}
-    </label>
+    </>
+  );
+  if (!rule) return <label className={`block ${outer}`}>{inner}</label>;
+  return (
+    <div className={outer}>
+      <label className="block">{inner}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }
