@@ -1,6 +1,6 @@
 # T-441: One photo-upload control with progress and preview
 
-**Status:** SPEC WRITTEN 2026-10-17 (Opus planner). Audit pending. S1 may start on the recommended answers to Q1-Q5;
+**Status:** SPEC WRITTEN 2026-10-17 (Opus planner). Opus audit done 2026-10-17 (see end). S1 may start on the recommended answers to Q1-Q5;
 amend if Ian differs.
 **Ruling:** bible row 364 (Ian, 2026-10-17). Also row 353 (personal data strictly guarded; signatures strictest), row 171 /
 §1.2c (one family of patterns), row 289 (an add form ends in Save), T-296 (1 MB photo cap, browser compression), T-141
@@ -60,11 +60,16 @@ CUSTOMER and Website: no file inputs. **Total: 7 ERP upload surfaces (6 `PhotoIn
 3. On Save, the action calls a shared helper `resolveUploadedFile(tx, actor, formData, name, { purpose, storeId })`:
    with a `FileId` it calls new domain **`claimUpload(tx, actor, { fileId, purpose, storeId })`**, which refuses unless
    the row exists in the actor's org, `uploaded_by` = the actor, `purpose` and `store_id` match the record's, `linked_to`
-   is null and it is under 24 h old; it does NOT link (linking stays where it is today, see §8 F1). Without a `FileId`
+   is null and it is under 24 h old, AND links it (`linked_to` = the new record's id) in ONE conditional
+   `UPDATE ... WHERE linked_to IS NULL ... RETURNING`, called after the record insert in the same transaction (audit A1:
+   atomic = race-safe, and fixes DEF-672 for every migrated screen). Without a `FileId`
    (JavaScript off) it falls back to `uploadFile` on the posted `File`, exactly as today.
-- **Route safety** (route handlers do not get the server-action origin check): `requireActor()`; refuse unless the
-  `Origin` header equals the app's own origin (403); purpose must be in `CONTROL_PURPOSES` (all except
-  `staff_signature`, which keeps its own audited action); refusals return the domain's `userMessage` as JSON with 4xx;
+- **Route safety** (route handlers do not get the server-action origin check): session via `currentSession()` -> 401 JSON
+  when absent (NOT `requireActor()`, whose redirect an XHR silently follows to a 200 sign-in page; audit A3); refuse
+  unless `Origin` is present and its host equals `x-forwarded-host ?? host` (Next's own server-action rule; 403); purpose
+  must be in `CONTROL_PURPOSES` = `receipt_photo`, `staff_photo`, `leave_document` only (purposes with a live claiming
+  screen; dormant ones join when their screen ships; `staff_signature` never; audit A4); size/type refused BEFORE the body
+  is buffered (audit A5); refusals return the domain's `userMessage` as JSON with 4xx;
   faults log kind only (same rule as `/files/[fileId]`); `Cache-Control: private, no-store`.
 - **Store:** pages that know the store pass `storeId`. `/ap` picks the store in the form: the control reads the named
   store field (`storeField="storeId"`), shows "Choose a store first" until it has one, and if the store changes after
@@ -106,7 +111,8 @@ loader decided the viewer may open it).
 - The whole shape is a `<button>` (Enter/Space opens the picker when empty, opens the lightbox when there is a picture).
   The file input stays in the DOM (`sr-only`, never `display:none`) so `required` and no-JS still work.
 - While compressing or uploading the control sets `setCustomValidity('Wait for the photo to finish uploading')` so the
-  form cannot submit half-done; `required` is satisfied by the hidden `FileId`.
+  form cannot submit half-done. A hidden input cannot satisfy `required`: once a `FileId` is held the control REMOVES
+  `required` from the file input (restores it on Remove), and the action still refuses when neither is posted (audit A8).
 - Size 96 px (`h-24 w-24`), `rounded-[10px]` or `rounded-full`; fits `FormGrid` and the 375 px phone width.
 - **Guarded purposes:** no thumbnail is ever fetched for a stored file. The shape shows a document/lock icon and "On
   file"; the lightbox fetches `/files/{id}` only when opened (one open = one audited view, which is row 353's rule), the
@@ -130,7 +136,9 @@ pure modules + integration tests + the §6 smoke, and wiring by source-reading t
 `packages/domain/tests/integration/t441-claim-upload.test.ts`, `apps/erp/tests/integration/t441-files-upload-route.test.ts`,
 `apps/erp/tests/t441-s1-wiring.test.ts`.
 **Builder:** `components/upload/*` (7 files), `packages/domain/src/files/limits.ts`, `files/index.ts` (`claimUpload`,
-re-export), `apps/erp/src/app/files/upload/route.ts`, `apps/erp/src/lib/uploaded-file.ts`, `ap/page.tsx`, `ap/actions.ts`.
+re-export), `packages/db/src/repo/files.ts` (`claimFile`, the conditional UPDATE; SQL lives only in repo/),
+`packages/domain/package.json` (`"./files/limits"` export), `apps/erp/src/app/files/upload/route.ts`,
+`apps/erp/src/lib/uploaded-file.ts`, `ap/page.tsx`, `ap/actions.ts`.
 **Tests and the mutants they kill:**
 - state: `percent` returns 100 before the server reply (M1); uploading -> done without a `fileId` (M2); failed loses the
   file so Retry cannot resend (M3); Replace does not abort the in-flight upload (M4).
@@ -142,6 +150,12 @@ re-export), `apps/erp/src/app/files/upload/route.ts`, `apps/erp/src/lib/uploaded
   over 1 MB image -> 200 (M17); response or log carries a path or signed URL (M18); missing `no-store` (M19).
 - wiring: `/ap` action ignores `receiptPhotoFileId` (M20); no-JS `File` fallback removed (M21); Lightbox `src` built from
   anything but `/files/` (M22); guarded purpose renders a thumbnail `<img>` for a stored file (M23).
+- audit additions: two concurrent claims of one id both succeed (M24, two transactions, second must be refused);
+  claim leaves `linked_to` null (M25); claim of an id the sweep already deleted is not refused (M26); route with no
+  session answers 3xx/200 instead of 401 JSON (M27); `memo_document`/`onboarding_document` accepted (M28);
+  Content-Length over the purpose cap read before refusal / missing Content-Length accepted (M29); Lightbox `src`
+  identical on a second open, so the browser image cache skips the audited GET (M30); no-JS `File` path saved but not
+  linked (M31).
 
 ### S2 - the other receipt-photo callers (sweep, parallel-safe)
 Customers payment, new delivery, trade pay-now. Each: swap `PhotoInput` for `PhotoUpload`, action uses
@@ -149,10 +163,11 @@ Customers payment, new delivery, trade pay-now. Each: swap `PhotoInput` for `Pho
 reads `<name>FileId`, fallback kept). **Builder:** `AutoAllocateCollectionForm.tsx`, `customers/actions.ts`,
 `NewDeliveryForm.tsx`, `inventory/deliveries/actions.ts`, `trade/orders/[id]/page.tsx`, `trade/orders/actions.ts`.
 
-### S3 - staff photo (circle)
+### S3 - staff photo (circle) - ⛔ runs BEFORE S5, never alongside it (both edit `staff-media.ts`, `staff/actions.ts`, `staff/[employmentId]/page.tsx`)
 `setStaffPhoto` accepts `{ fileId } | { contentType, bytes }`; page passes `existing` only when `canViewPhoto`.
 **Tester:** `packages/domain/tests/integration/t441-s3-staff-photo-claim.test.ts` (claim path links to the employment;
-another store's file refused), `apps/erp/tests/t441-s3-staff-photo-wiring.test.ts` (circle, `capture="user"`, no
+another store's file refused; the claim path keeps `setStaffPhoto`'s self-refusal: an `enrol_staff` holder cannot claim a
+photo onto their OWN employment, M32), `apps/erp/tests/t441-s3-staff-photo-wiring.test.ts` (circle, `capture="user"`, no
 `existing` for a viewer without rights - row 353 test). **Builder:** `people/staff-media.ts`, `staff/actions.ts`,
 `staff/[employmentId]/page.tsx`.
 
@@ -224,3 +239,76 @@ per field. A PDF viewer inside the lightbox. Screens for the four dormant purpos
 - **Q1 = a** (real percent via upload-on-pick to `POST /files/upload` + `claimUpload()` on Save; Ian asked for a progress animation that responds to the user, so it must be real). **Q2 = a**, **Q3 = a** (POS v2 follow-up task), **Q4 = a**, **Q5 = a**.
 - **F1** logged as DEF-672, **F3** as DEF-673 (DEFECTS-REGISTER section E). F2 noted only.
 - **Status:** spec written; Opus audit next.
+
+## Audit 2026-10-17 (Opus spec auditor, against main `fead2ea`)
+
+Verdict: **sound after the changes below; S1 may start.** Rulings Q1-Q5 untouched.
+
+- **A1 Claim links, atomically (§3 step 3, M24-M26).** The spec had `claimUpload` NOT link. That left two holes: two
+  concurrent Saves (double-submit) could both pass "`linked_to` is null" and share one file, and every claimed receipt
+  stayed an orphan candidate the sweep fails on nightly (DEF-672). Now: `claimUpload(tx, actor, { fileId, purpose,
+  storeId, linkTo })` = repo `claimFile`: `UPDATE stored_files SET linked_to = $linkTo WHERE id = $id AND org_id = $org
+  AND uploaded_by = $actor AND purpose = $p AND store_id IS NOT DISTINCT FROM $store AND linked_to IS NULL AND
+  uploaded_at > now() - interval '24 hours' RETURNING id`; zero rows -> ONE refusal ("That photo is no longer available -
+  pick it again"), same sentence for missing / foreign / expired / taken, so a probe learns nothing. Uses the DB clock
+  (same clock as `listOrphans`). Race with the sweep: `deleteFile` is `WHERE linked_to IS NULL` and the row lock
+  serialises them, so whichever commits first wins and the loser matches zero rows (no file deleted under a saved record,
+  no record pointing at deleted bytes). Do NOT reuse `filesRepo.linkFile`: it has no `linked_to IS NULL` guard.
+- **A2 One link step for both paths.** `resolveUploadedFile` returns a `fileId` for the JS path (posted `FileId`) AND the
+  no-JS path (fresh `uploadFile` by the same actor); after inserting the record the action calls `claimUpload(...,
+  linkTo: recordId)` for either. So the no-JS path links too (M31) and DEF-672 closes per migrated screen.
+- **A3 Route auth must not redirect.** `requireActor()` -> `redirect('/sign-in')`; XHR follows it and sees a 200 HTML page.
+  Use `currentSession()`, 401 JSON when absent; `upload-xhr.ts` treats non-JSON, `xhr.responseURL` not ending in
+  `/files/upload`, or 401 as "Your session ended - sign in again, then Retry" (M27). Also `export const runtime =
+  'nodejs'` and `dynamic = 'force-dynamic'`. Origin: present AND host equals `x-forwarded-host ?? host` (the droplet
+  sits behind a proxy; comparing to `request.url` would refuse every real request). Session cookie is `SameSite=Lax`, which
+  already blocks a cross-site POST carrying it; the Origin check is the second layer.
+- **A4 `CONTROL_PURPOSES` narrowed** to purposes with a screen that claims them (`receipt_photo`, `staff_photo`,
+  `leave_document`). The dormant ones (up to 25 MB PDFs) would otherwise be an unclaimable-upload surface with no use
+  (M28). Add each when its screen ships.
+- **A5 Size before buffering.** `request.formData()` buffers the whole body with no route-level limit (the 26 MB
+  `bodySizeLimit` covers server actions only). Route contract: `POST /files/upload?purpose=..&storeId=..` (ids only, no
+  personal data), body = the raw file, `Content-Type` = the file's type. Refuse 400 on unknown purpose / non-uuid store,
+  415 on a type not in `PURPOSE_LIMITS`, 411 without `Content-Length`, 413 when it exceeds the purpose cap (and
+  `MAX_IMAGE_BYTES` for images) - all BEFORE reading the body; then re-check the real byte length and call
+  `uploadFile` (which re-checks everything). `AuthorizationError` -> 403 generic sentence; any other throw -> 500 generic,
+  kind-only log (`uploadFile`'s plain `Error` texts are not user messages and must not be echoed) (M29).
+- **A6 Lightbox = one audited view per open (M30).** `/files/{id}` is `no-store`, but a browser can reuse a decoded image
+  for an identical `<img src>` in the same document without re-requesting it, so a second open of a leave certificate or
+  signature would show the picture with NO audit row. Lightbox `src` = `/files/{id}?open={counter}` (fresh per open; the
+  route ignores the query); `<img>` mounted only while open. Storage objects are already `private, max-age=0, no-store`
+  (`packages/storage-firebase/src/index.ts:197`).
+- **A7 Leaf boundary.** `tests/unit/client-bundle-boundary.test.ts` walks type-only imports too, so `files/limits.ts`
+  must NOT import `FilePurpose` from `@shareat/db`. It declares its own purpose key list; `files/index.ts` holds a
+  compile-time check that its keys equal `FILE_PURPOSES` (a drift fails `typecheck`). Export via `package.json`
+  `"./files/limits"` (pattern: `./item-code`).
+- **A8 `required`** fixed in §4 (hidden inputs cannot satisfy it).
+- **A9 Accessibility.** Compressing ripple is `motion-safe:` like the wave. The `aria-live` line announces phase changes
+  and upload progress at 25 % steps only (a live region per percent floods a screen reader); `role="progressbar"`
+  carries every value.
+- **A10 Slices.** S3 and S5 edit the same three files: sequential (S3 then S5), never parallel. S5 deliberately reverses
+  `staff-media.ts:12` ("Nothing here returns a signature file id"): update that comment and `t434-staff-signature-surfaces`
+  in S5, and keep the id out of every list/card loader (row 353). Path check: every builder/test path named exists on main
+  or is a new file in an existing folder.
+
+### Open items for the orchestrator (not folded in: new rules, not clear-cut)
+
+1. **DEF-672 backfill.** A2 links new saves only. Rows already saved stay unlinked and fail the sweep nightly until a
+   one-off backfill sets `linked_to` from `supplier_invoices` / collections / deliveries / trade-order proof columns
+   ("Migration: none" here, so it needs its own data-migration task) plus the census the DEF names.
+2. **Unclaimed-upload flood.** Any capability holder can now park up to 24 h of unclaimed files. Suggest a cap (e.g. 429
+   when the actor has 30+ unclaimed uploads under 24 h). Needs Ian/orchestrator.
+3. **Content sniffing (pre-existing, both paths).** `uploadFile` trusts the declared type: a non-JPEG labelled
+   `image/jpeg` is stored unstripped, and PNG/WebP metadata is never stripped (`core/exif.ts:119`). Recommend a DEF:
+   magic-byte check in `uploadFile` (JPEG FFD8FF, PNG 89504E47, WebP RIFF..WEBP, PDF %PDF-).
+4. Row 364 calls staff photos "guarded"; this spec keeps them non-guarded (thumbnail allowed, gated by `canViewPhoto` and
+   `/files` `enrol_staff`). Consistent with today's staff-list avatars; confirm.
+
+## Orchestrator rulings on the audit's open items (2026-10-17)
+
+- **Unclaimed-upload cap:** the route refuses a new upload when the person already holds **30** unclaimed uploads (< 24 h); a test kills 'cap removed'.
+- **Content check in S1:** the new route verifies the file's magic bytes match the declared image type (JPEG/PNG/WebP; PDF where allowed) before storage; mismatch = 415. A test kills 'declared type trusted'.
+- **PNG/WebP metadata not stripped (pre-existing):** logged as DEF-674; not in T-441.
+- **DEF-672 backfill** (link receipt photos already saved): its own task **T-442** (reserved).
+- **Staff photos:** thumbnails allowed, gated by `canViewPhoto` (T-434's rule); row 364's "guarded" means its read rule is kept, not that it gets no thumbnail. Signatures and leave certificates: no thumbnail.
+- **Status:** AUDITED 2026-10-17; S1 buildable.
