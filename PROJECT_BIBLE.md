@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1699` 13. Decision log
-- `1700–1719` 14. Amendment protocol
-- `1720–1724` 15. Engineering standards — the industry practices this project follows
-  - `1725–1730` 15.1 Build order: walking skeleton first
-  - `1731–1742` 15.2 Golden-master testing — the most important practice here
-  - `1743–1751` 15.3 Strangler Fig, not big-bang cutover
-  - `1752–1756` 15.4 No dual-write
-  - `1757–1765` 15.5 Expand/contract migrations
-  - `1766–1774` 15.6 Observability from day zero, not later
-  - `1775–1779` 15.7 CI gates
-  - `1780–1784` 15.8 Backups and a tested restore
-  - `1785–1789` 15.9 Twelve-Factor config
-  - `1790–1797` 15.10 Append-only ledgers — but not event sourcing
-  - `1798–1802` 15.11 Defence in depth
-  - `1803–1831` 15.12 Skills are lenses, not assurance
-  - `1832–1838` 15.13 Reconciliation is a permanent feature
-- `1839–1843` 16. The accounting spine
-  - `1844–1875` 16.0 What we are actually fixing — the diagnosis
-  - `1876–1919` 16.1 The ten invariants — non-negotiable
-  - `1920–1934` 16.2 The oracle: how "correct" is tested
-  - `1935–1956` 16.3 The model — header + lines, not legs
-  - `1957–1976` 16.4 Deliberately simpler than ERPNext
-  - `1977–2043` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2044–2068` 16.6 What v1 already gets right — preserve the intent
-  - `2069–2090` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2091–2105` 16.8 What v1's accounting already gets right
-  - `2106–2149` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2150–2200` 16.10 Posting patterns — one canonical pattern per business event
-  - `2201–2233` 16.11 Inventory's accounting integration
+- `1329–1700` 13. Decision log
+- `1701–1720` 14. Amendment protocol
+- `1721–1725` 15. Engineering standards — the industry practices this project follows
+  - `1726–1731` 15.1 Build order: walking skeleton first
+  - `1732–1743` 15.2 Golden-master testing — the most important practice here
+  - `1744–1752` 15.3 Strangler Fig, not big-bang cutover
+  - `1753–1757` 15.4 No dual-write
+  - `1758–1766` 15.5 Expand/contract migrations
+  - `1767–1775` 15.6 Observability from day zero, not later
+  - `1776–1780` 15.7 CI gates
+  - `1781–1785` 15.8 Backups and a tested restore
+  - `1786–1790` 15.9 Twelve-Factor config
+  - `1791–1798` 15.10 Append-only ledgers — but not event sourcing
+  - `1799–1803` 15.11 Defence in depth
+  - `1804–1832` 15.12 Skills are lenses, not assurance
+  - `1833–1839` 15.13 Reconciliation is a permanent feature
+- `1840–1844` 16. The accounting spine
+  - `1845–1876` 16.0 What we are actually fixing — the diagnosis
+  - `1877–1920` 16.1 The ten invariants — non-negotiable
+  - `1921–1935` 16.2 The oracle: how "correct" is tested
+  - `1936–1957` 16.3 The model — header + lines, not legs
+  - `1958–1977` 16.4 Deliberately simpler than ERPNext
+  - `1978–2044` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2045–2069` 16.6 What v1 already gets right — preserve the intent
+  - `2070–2091` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2092–2106` 16.8 What v1's accounting already gets right
+  - `2107–2150` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2151–2201` 16.10 Posting patterns — one canonical pattern per business event
+  - `2202–2234` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1696,6 +1696,7 @@ just a patch.**
 | 361 | 2026-10-17 | **SIGN-IN BY ROLE: MANAGER, ADMIN AND SUPER-ADMIN MAY USE BOTH PIN AND EMAIL/PASSWORD; A STAFF-ROLE PERSON SIGNS IN ONLY WITH THE TERMINAL PIN.** Today manager/admin/super_admin already may use both; the change is that email/password is refused for a person whose only role is `staff`, even if an email account is linked. Task **T-438**. | Ian, 2026-10-17, asking which sign-in a manager uses; recorded by the orchestrator | Yes |
 | 362 | 2026-10-17 | **THE BUILT-IN POSITION "COOK" IS RENAMED "KITCHEN STAFF".** The canonical six become Cashier, Kitchen Staff, Server, Dishwasher, Slicer, Inventory Staff. Existing canonical rows are renamed in place (same position id, same grants), by migration 0208; new orgs are seeded with the new name. Same day: the six canonical positions were backfilled on production (T-335 script) and Lipa's hand-made Cashier/DishWasher/Server were retired by Ian. Task **T-439**. | Ian, 2026-10-17, after the production positions backfill; recorded by the orchestrator | Yes |
 | 363 | 2026-10-17 | **LIVE FIELD CHECKS ON EVERY FORM FIELD THAT HAS A RULE.** Where a field has a requirement (required, length, allowed characters, a pattern, a range), the form shows a helper line saying what is still missing as the user types, turns it green ("good", "valid") once satisfied, and keeps Save disabled until every rule on the form passes. Fields with no rule are untouched. The server still validates every save (row 7 / §2.6: no client-only rules); the live check mirrors the server rule from ONE shared definition so the two cannot drift. Task **T-440** maps every form. | Ian, 2026-10-17; recorded by the orchestrator | Yes |
+| 364 | 2026-10-17 | **ONE PHOTO-UPLOAD CONTROL EVERYWHERE: SHOW STATE, PROGRESS AND A PREVIEW.** Every photo upload uses one control: empty = a rounded square (or a circle for a person's photo) on a gray background with an upload icon; uploading = a filling-water style progress animation; done = the preview inside the shape; clicking the preview opens the full-size picture. Guarded files (signatures, leave certificates, staff photos; rows 353, T-434, T-436) keep their own read rules: the full-size view uses the same short-lived audited link, never a public URL. Task **T-441** maps every upload. | Ian, 2026-10-17; recorded by the orchestrator | Yes |
 
 ## 14. Amendment protocol
 
