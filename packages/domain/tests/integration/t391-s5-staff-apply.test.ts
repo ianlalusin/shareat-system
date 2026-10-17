@@ -344,8 +344,8 @@ describe('S5 apply - persons, employments, positions, links, audit', () => {
       expect(malvar.find((x) => x.display_name === 'Cai Dela Rosa')!.staff_code).toBe('SE-003'); // S11: earliest dateHired keeps the duplicate
       expect((await empPositions(ana.id)).map((x) => x.name)).toEqual(['Cashier']);
       const ben = await empPositions(got.find((x) => x.display_name === 'Ben Cruz')!.id);
-      expect(ben.map((x) => x.name)).toEqual(['Cook', 'Server']);
-      expect(ben.filter((x) => x.is_primary).map((x) => x.name)).toEqual(['Cook']);
+      expect(ben.map((x) => x.name)).toEqual(['Kitchen Staff', 'Server']);
+      expect(ben.filter((x) => x.is_primary).map((x) => x.name)).toEqual(['Kitchen Staff']);
 
       const el = await links(e.orgId, 'employment');
       expect(el).toHaveLength(4);
@@ -389,7 +389,7 @@ describe('S5 apply - persons, employments, positions, links, audit', () => {
         const ps = await empPositions(got.find((x) => x.display_name === nm)!.id);
         expect(ps.map((x) => x.name)).toEqual(['Grill Master']);
       }
-      expect((await empPositions(got.find((x) => x.display_name === 'Mal Three')!.id)).map((x) => x.name)).toEqual(['Cook']);
+      expect((await empPositions(got.find((x) => x.display_name === 'Mal Three')!.id)).map((x) => x.name)).toEqual(['Kitchen Staff']);
       const pa = (await audits(e.orgId, 'master_data.positions_load')).filter((x) => x.entity === 'positions');
       expect(pa).toHaveLength(1);
     },
@@ -455,7 +455,7 @@ describe('S5 apply - S2 / I9: nothing beyond the hire baseline', () => {
       await run(e, s, { answers: { positions: fill(rows, { v2_position: 'none' }) } });
       // the control: the same positions hired through the plain domain call as the super admin
       const ctl: Record<string, Any> = {};
-      for (const [nm, store, positions] of [['Cashier', 'LIPA', ['Cashier']], ['Cook', 'MLVR', ['Cook']], ['Default', 'LIPA', []]] as const) {
+      for (const [nm, store, positions] of [['Cashier', 'LIPA', ['Cashier']], ['Cook', 'MLVR', ['Kitchen Staff']], ['Default', 'LIPA', []]] as const) {
         const pid = await newPerson(e, `Control ${nm}`);
         const names = positions as readonly string[];
         const posIds = names.length
