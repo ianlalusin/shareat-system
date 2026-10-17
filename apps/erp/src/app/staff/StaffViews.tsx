@@ -82,7 +82,7 @@ function Avatar({ person, className }: { person: StaffPerson; className: string 
 const SEG_ACTIVE = 'inline-flex min-h-11 items-center rounded-full bg-ink px-4 text-sm font-semibold text-canvas';
 const SEG_IDLE = 'inline-flex min-h-11 items-center rounded-full px-4 text-sm font-semibold text-ink hover:bg-canvas';
 
-export function ViewSwitch({ view, storeId }: { view: 'cards' | 'roster'; storeId: string }) {
+export function ViewSwitch({ view, storeId }: { view: 'cards' | 'roster' | 'positions'; storeId: string }) {
   return (
     <nav aria-label="Staff view" className="inline-flex gap-1 rounded-full border border-surface-border bg-surface p-1">
       {view === 'cards' ? (
@@ -101,6 +101,15 @@ export function ViewSwitch({ view, storeId }: { view: 'cards' | 'roster'; storeI
       ) : (
         <Link href={`/staff?view=roster&store=${storeId}`} className={SEG_IDLE}>
           Roster
+        </Link>
+      )}
+      {view === 'positions' ? (
+        <Link href={`/staff?view=positions&store=${storeId}`} aria-current="page" className={SEG_ACTIVE}>
+          Positions
+        </Link>
+      ) : (
+        <Link href={`/staff?view=positions&store=${storeId}`} className={SEG_IDLE}>
+          Positions
         </Link>
       )}
     </nav>

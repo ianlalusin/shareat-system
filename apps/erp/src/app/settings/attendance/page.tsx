@@ -1,11 +1,11 @@
 import { requirePageAccess } from '../../../lib/page-access';
 import { addShiftDays, toShiftDay } from '@shareat/domain';
-import { updateAttendanceConfigAction } from './actions';
-import { liveConfigFor, listStores } from './lib';
+import { addLeaveTypeAction, saveLeaveCapAction, setLeaveTypeActiveAction, updateAttendanceConfigAction } from './actions';
+import { leaveSettingsFor, liveConfigFor, listStores } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { EditableRecord } from '@/components/forms';
-import { Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Button, Checkbox, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { ATTENDANCE_POLICY } from './typed-forms';
@@ -51,6 +51,7 @@ export default async function AttendanceSettingsPage({
 
   const cfg = await liveConfigFor(actor.orgId, storeId);
   const defaultEffectiveFrom = addShiftDays(toShiftDay(), 1);
+  const leave = await leaveSettingsFor(actor, storeId).catch(() => null);
 
   return (
     <Page density="table">
@@ -236,6 +237,125 @@ export default async function AttendanceSettingsPage({
 
           </div>
         </EditableRecord>
+      )}
+
+      {leave && (
+        <section id={`store-${storeId}`} className="space-y-4">
+          <h2 className="text-lg font-semibold">Leave limits</h2>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+            How many days of each kind a person may take in a calendar month and in a year. Empty means no limit. The most specific row
+            wins: store and position, then position, then store, then the business-wide default. Maternity and paternity are counted per
+            birth and ignore these limits; a statutory kind cannot be set below its legal days. All limits restart on 1 January.
+          </p>
+          {leave.caps.length > 0 && (
+            <ul className="space-y-1 text-sm">
+              {leave.caps.map((c) => (
+                <li key={c.id} className="flex flex-wrap justify-between gap-2 border-t border-surface-border py-2">
+                  <span>
+                    {leave.kinds.find((k) => k.code === c.leaveType)?.label ?? c.leaveType}
+                    <span className="text-neutral-500">
+                      {' · '}
+                      {c.storeId ? 'this store' : 'whole business'}
+                      {c.positionId ? ` · ${leave.positions.find((p) => p.id === c.positionId)?.name ?? 'a position'}` : ''}
+                    </span>
+                  </span>
+                  <span className="tabular-nums">
+                    {c.monthlyCap ?? 'no limit'} a month · {c.yearlyCap ?? 'no limit'} a year
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form action={saveLeaveCapAction} className="space-y-3 rounded border border-surface-border p-4">
+            <input type="hidden" name="storeId" value={storeId} />
+            <FormGrid>
+              <Field label="Kind of leave">
+                <Select name="leaveType" className="mt-1 w-full">
+                  {leave.kinds
+                    .filter((k) => k.active)
+                    .map((k) => (
+                      <option key={k.code} value={k.code}>
+                        {k.label}
+                      </option>
+                    ))}
+                </Select>
+              </Field>
+              <Field label="Applies to" hint="The whole business needs an administrator.">
+                <Select name="scope" defaultValue="store" className="mt-1 w-full">
+                  <option value="store">This store</option>
+                  <option value="org">The whole business</option>
+                </Select>
+              </Field>
+              <Field label="Only for position">
+                <Select name="positionId" defaultValue="" className="mt-1 w-full">
+                  <option value="">Any position</option>
+                  {leave.positions.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Days per month" hint="Empty = no limit.">
+                <Input name="monthlyCap" inputMode="numeric" className="mt-1 w-full" />
+              </Field>
+              <Field label="Days per year" hint="Empty = no limit.">
+                <Input name="yearlyCap" inputMode="numeric" className="mt-1 w-full" />
+              </Field>
+            </FormGrid>
+            <Button type="submit" variant="primary">
+              Save leave limit
+            </Button>
+          </form>
+
+          <h3 className="font-medium">Kinds of leave</h3>
+          <ul className="space-y-2">
+            {leave.kinds.map((k) => (
+              <li key={k.id} className="flex flex-wrap items-center justify-between gap-2 rounded border border-surface-border p-3 text-sm">
+                <span>
+                  <strong>{k.label}</strong> <span className="text-neutral-500">({k.code})</span>
+                  {' · '}
+                  {k.paid ? 'paid' : 'unpaid by default'}
+                  {k.drawsSil ? ' · uses Service Incentive Leave when paid' : ''}
+                  {k.statutory ? ' · required by law' : ''}
+                  {!k.active ? ' · retired' : ''}
+                </span>
+                {k.orgId !== null && (
+                  <form action={setLeaveTypeActiveAction}>
+                    <input type="hidden" name="storeId" value={storeId} />
+                    <input type="hidden" name="id" value={k.id} />
+                    <input type="hidden" name="active" value={k.active ? 'no' : 'yes'} />
+                    <Button type="submit" variant="secondary">
+                      {k.active ? 'Retire' : 'Restore'}
+                    </Button>
+                  </form>
+                )}
+              </li>
+            ))}
+          </ul>
+          <form action={addLeaveTypeAction} className="space-y-3 rounded border border-surface-border p-4">
+            <input type="hidden" name="storeId" value={storeId} />
+            <h4 className="text-sm font-medium">Add a kind of leave (administrators)</h4>
+            <FormGrid>
+              <Field label="Name">
+                <Input name="label" required className="mt-1 w-full" />
+              </Field>
+              <Field label="Short code" hint="Letters, digits, underscores. Cannot be changed.">
+                <Input name="code" required className="mt-1 w-full" />
+              </Field>
+              <Field label="Pay">
+                <Select name="paid" defaultValue="unpaid" className="mt-1 w-full">
+                  <option value="unpaid">Unpaid</option>
+                  <option value="paid">Paid</option>
+                </Select>
+              </Field>
+            </FormGrid>
+            <Checkbox name="needsProof" label="Needs a certificate" />
+            <Button type="submit" variant="secondary">
+              Add kind
+            </Button>
+          </form>
+        </section>
       )}
     </Page>
   );

@@ -21,6 +21,7 @@
  */
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   check,
   date,
   foreignKey,
@@ -30,6 +31,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
@@ -37,6 +39,7 @@ import { employments } from './employment';
 import { moneyAccounts } from './money-accounts';
 import { organizations } from './organizations';
 import { persons } from './persons';
+import { statutoryRates } from './statutory';
 import { stores } from './stores';
 
 /**
@@ -150,6 +153,8 @@ export const payRuns = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    // T-436 (migration 0205): the target of the leave tables' same-org composite FKs on frozen_by_pay_run_id.
+    unique('pay_runs_org_id_id_unique').on(t.orgId, t.id),
     index('pay_runs_org_status_idx').on(t.orgId, t.status),
     index('pay_runs_store_period_idx').on(t.storeId, t.periodStart, t.periodEnd),
     check('pay_runs_period_order_check', sql`${t.periodEnd} >= ${t.periodStart}`),
@@ -244,6 +249,10 @@ export const payslips = pgTable(
     otPay: numeric('ot_pay', { precision: 14, scale: 2 }).notNull().default('0'),
     nightDiffPay: numeric('night_diff_pay', { precision: 14, scale: 2 }).notNull().default('0'),
     holidayPay: numeric('holiday_pay', { precision: 14, scale: 2 }).notNull().default('0'),
+    /** T-436 (migration 0205). Paid leave days priced at the daily rate in force that day. ⛔ NEVER part of `basic_pay`: the 13th month reads it. */
+    leavePay: numeric('leave_pay', { precision: 14, scale: 2 }).notNull().default('0'),
+    /** T-436. The year-end / final-pay cash payout of unused Service Incentive Leave. ⛔ Not in `basic_pay` either (PD 851). */
+    silConversionPay: numeric('sil_conversion_pay', { precision: 14, scale: 2 }).notNull().default('0'),
 
     grossPay: numeric('gross_pay', { precision: 14, scale: 2 }).notNull(),
     /** ⛔ Capped at gross. Net may reach zero; it may never go below, and what is still owed stays
@@ -252,6 +261,24 @@ export const payslips = pgTable(
       .notNull()
       .default('0'),
     netPay: numeric('net_pay', { precision: 14, scale: 2 }).notNull(),
+
+    // ---- T-190 (migration 0206). The employee share is deducted from the pay, the employer share is a cost on top.
+    sssEe: numeric('sss_ee', { precision: 14, scale: 2 }).notNull().default('0'),
+    philhealthEe: numeric('philhealth_ee', { precision: 14, scale: 2 }).notNull().default('0'),
+    pagibigEe: numeric('pagibig_ee', { precision: 14, scale: 2 }).notNull().default('0'),
+    withholding: numeric('withholding', { precision: 14, scale: 2 }).notNull().default('0'),
+    sssEr: numeric('sss_er', { precision: 14, scale: 2 }).notNull().default('0'),
+    sssEc: numeric('sss_ec', { precision: 14, scale: 2 }).notNull().default('0'),
+    philhealthEr: numeric('philhealth_er', { precision: 14, scale: 2 }).notNull().default('0'),
+    pagibigEr: numeric('pagibig_er', { precision: 14, scale: 2 }).notNull().default('0'),
+    taxablePay: numeric('taxable_pay', { precision: 14, scale: 2 }).notNull().default('0'),
+    isMwe: boolean('is_mwe').notNull().default(false),
+    /** Agencies NOT deducted because the person had no number on file when this slip was posted. */
+    skippedAgencies: text('skipped_agencies').array().notNull().default(sql`'{}'::text[]`),
+    /** ⭐ The rate rows used (the "re-read March in June" rule, as `pay_rate_id`); null where the agency was skipped. */
+    sssRateId: uuid('sss_rate_id').references(() => statutoryRates.id, { onDelete: 'restrict' }),
+    philhealthRateId: uuid('philhealth_rate_id').references(() => statutoryRates.id, { onDelete: 'restrict' }),
+    pagibigRateId: uuid('pagibig_rate_id').references(() => statutoryRates.id, { onDelete: 'restrict' }),
 
     journalEntryId: uuid('journal_entry_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -265,17 +292,57 @@ export const payslips = pgTable(
     check('payslips_days_nonnegative_check', sql`${t.daysWorked} >= 0`),
     check(
       'payslips_gross_identity_check',
-      sql`${t.grossPay} = ${t.basicPay} + ${t.otPay} + ${t.nightDiffPay} + ${t.holidayPay}`,
+      // T-436 (migration 0205) restated it with the two new legs, as this comment demanded of whoever adds one.
+      sql`${t.grossPay} = ${t.basicPay} + ${t.otPay} + ${t.nightDiffPay} + ${t.holidayPay} + ${t.leavePay} + ${t.silConversionPay}`,
     ),
-    /** ⚠️ Gains `- statutory - withholding` when T-190 lands. That migration must restate it. */
-    check('payslips_net_identity_check', sql`${t.netPay} = ${t.grossPay} - ${t.advanceRecovered}`),
+    /** ⭐ Restated by migration 0206 (T-190): net = gross - the three employee shares - withholding - advance. */
+    check(
+      'payslips_net_identity_check',
+      sql`${t.netPay} = ${t.grossPay} - ${t.sssEe} - ${t.philhealthEe} - ${t.pagibigEe} - ${t.withholding} - ${t.advanceRecovered}`,
+    ),
     check('payslips_net_nonnegative_check', sql`${t.netPay} >= 0`),
-    check('payslips_advance_within_gross_check', sql`${t.advanceRecovered} <= ${t.grossPay}`),
+    check(
+      'payslips_advance_within_gross_check',
+      sql`${t.advanceRecovered} <= ${t.grossPay} - ${t.sssEe} - ${t.philhealthEe} - ${t.pagibigEe} - ${t.withholding}`,
+    ),
+    // T-398 S1 same-org twins (migration 0206); statutory_rates_org_id_id_unique is hand-added there, no Drizzle mirror.
+    foreignKey({
+      columns: [t.orgId, t.sssRateId],
+      foreignColumns: [statutoryRates.orgId, statutoryRates.id],
+      name: 'payslips_sss_rate_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.philhealthRateId],
+      foreignColumns: [statutoryRates.orgId, statutoryRates.id],
+      name: 'payslips_philhealth_rate_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.pagibigRateId],
+      foreignColumns: [statutoryRates.orgId, statutoryRates.id],
+      name: 'payslips_pagibig_rate_id_same_org_fk',
+    }).onDelete('restrict'),
+    check('payslips_skipped_agencies_check', sql`${t.skippedAgencies} <@ ARRAY['sss', 'philhealth', 'pagibig']::text[]`),
+    check(
+      'payslips_statutory_nonnegative_check',
+      sql`${t.sssEe} >= 0 and ${t.philhealthEe} >= 0 and ${t.pagibigEe} >= 0 and ${t.withholding} >= 0 and ${t.sssEr} >= 0 and ${t.sssEc} >= 0 and ${t.philhealthEr} >= 0 and ${t.pagibigEr} >= 0 and ${t.taxablePay} >= 0`,
+    ),
+    check('payslips_sss_ee_finite_check', sql`${t.sssEe} > '-Infinity'::numeric and ${t.sssEe} < 'Infinity'::numeric`),
+    check('payslips_philhealth_ee_finite_check', sql`${t.philhealthEe} > '-Infinity'::numeric and ${t.philhealthEe} < 'Infinity'::numeric`),
+    check('payslips_pagibig_ee_finite_check', sql`${t.pagibigEe} > '-Infinity'::numeric and ${t.pagibigEe} < 'Infinity'::numeric`),
+    check('payslips_withholding_finite_check', sql`${t.withholding} > '-Infinity'::numeric and ${t.withholding} < 'Infinity'::numeric`),
+    check('payslips_sss_er_finite_check', sql`${t.sssEr} > '-Infinity'::numeric and ${t.sssEr} < 'Infinity'::numeric`),
+    check('payslips_sss_ec_finite_check', sql`${t.sssEc} > '-Infinity'::numeric and ${t.sssEc} < 'Infinity'::numeric`),
+    check('payslips_philhealth_er_finite_check', sql`${t.philhealthEr} > '-Infinity'::numeric and ${t.philhealthEr} < 'Infinity'::numeric`),
+    check('payslips_pagibig_er_finite_check', sql`${t.pagibigEr} > '-Infinity'::numeric and ${t.pagibigEr} < 'Infinity'::numeric`),
+    check('payslips_taxable_pay_finite_check', sql`${t.taxablePay} > '-Infinity'::numeric and ${t.taxablePay} < 'Infinity'::numeric`),
     check('payslips_days_worked_finite_check', sql`${t.daysWorked} > '-Infinity'::numeric and ${t.daysWorked} < 'Infinity'::numeric`),
     check('payslips_basic_pay_finite_check', sql`${t.basicPay} > '-Infinity'::numeric and ${t.basicPay} < 'Infinity'::numeric`),
     check('payslips_ot_pay_finite_check', sql`${t.otPay} > '-Infinity'::numeric and ${t.otPay} < 'Infinity'::numeric`),
     check('payslips_night_diff_pay_finite_check', sql`${t.nightDiffPay} > '-Infinity'::numeric and ${t.nightDiffPay} < 'Infinity'::numeric`),
     check('payslips_holiday_pay_finite_check', sql`${t.holidayPay} > '-Infinity'::numeric and ${t.holidayPay} < 'Infinity'::numeric`),
+    check('payslips_leave_pay_finite_check', sql`${t.leavePay} > '-Infinity'::numeric and ${t.leavePay} < 'Infinity'::numeric`),
+    check('payslips_sil_conversion_pay_finite_check', sql`${t.silConversionPay} > '-Infinity'::numeric and ${t.silConversionPay} < 'Infinity'::numeric`),
+    check('payslips_leave_legs_nonnegative_check', sql`${t.leavePay} >= 0 and ${t.silConversionPay} >= 0`),
     check('payslips_gross_pay_finite_check', sql`${t.grossPay} > '-Infinity'::numeric and ${t.grossPay} < 'Infinity'::numeric`),
     check('payslips_advance_recovered_finite_check', sql`${t.advanceRecovered} > '-Infinity'::numeric and ${t.advanceRecovered} < 'Infinity'::numeric`),
     check('payslips_net_pay_finite_check', sql`${t.netPay} > '-Infinity'::numeric and ${t.netPay} < 'Infinity'::numeric`),

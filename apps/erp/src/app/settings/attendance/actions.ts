@@ -14,7 +14,7 @@
  * `authorize()` call, not here. Parsing before the gate let a non-holder's malformed field draw a
  * field sentence instead of the authorization refusal.
  */
-import { supersedeConfig, type ConfigChangesInput } from '@shareat/domain';
+import { addLeaveType, setLeaveCap, setLeaveTypeActive, supersedeConfig, type ConfigChangesInput } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
@@ -107,4 +107,65 @@ export async function updateAttendanceConfigAction(formData: FormData): Promise<
     return await redirectWithFlash('/settings/attendance', { store: store }, { error: errorMessage(err), typed: keepTyping(formData, ATTENDANCE_POLICY, store, { actorId: actor.personId }) });
   }
   return await redirectWithFlash('/settings/attendance', { store: store }, { ok: `Saved. The new policy takes effect from ${effectiveFrom}.` });
+}
+
+// ---------------------------------------------------------------------------------------------
+// T-436: leave limits and kinds. Every gate is in the domain (`setLeaveCap` authorizes manage_attendance at the store, or people
+// admin for the business-wide default; a statutory limit cannot be lowered). These actions only turn the form into its input.
+
+/** A whole number of days, or empty for "no limit". Anything else goes to the domain as NaN and is refused there, in words. */
+function capField(fd: FormData, key: string): number | null {
+  const v = str(fd, key);
+  if (v === '') return null;
+  return /^[0-9]+$/.test(v) ? Number(v) : Number.NaN;
+}
+
+export async function saveLeaveCapAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const store = str(formData, 'storeId');
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      setLeaveCap(tx, actor, {
+        leaveType: str(formData, 'leaveType'),
+        storeId: str(formData, 'scope') === 'org' ? null : store,
+        positionId: str(formData, 'positionId') || null,
+        monthlyCap: capField(formData, 'monthlyCap'),
+        yearlyCap: capField(formData, 'yearlyCap'),
+      }),
+    );
+  } catch (err) {
+    return await redirectWithFlash('/settings/attendance', { store }, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash('/settings/attendance', { store }, { ok: 'Leave limit saved.' });
+}
+
+export async function addLeaveTypeAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const store = str(formData, 'storeId');
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      addLeaveType(tx, actor, {
+        code: str(formData, 'code'),
+        label: str(formData, 'label'),
+        paid: str(formData, 'paid') === 'paid',
+        needsProof: bool(formData, 'needsProof'),
+      }),
+    );
+  } catch (err) {
+    return await redirectWithFlash('/settings/attendance', { store }, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash('/settings/attendance', { store }, { ok: 'Kind of leave added.' });
+}
+
+export async function setLeaveTypeActiveAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const store = str(formData, 'storeId');
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      setLeaveTypeActive(tx, actor, { id: str(formData, 'id'), active: str(formData, 'active') === 'yes' }),
+    );
+  } catch (err) {
+    return await redirectWithFlash('/settings/attendance', { store }, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash('/settings/attendance', { store }, { ok: 'Kind of leave updated.' });
 }

@@ -647,4 +647,28 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'history_guard',
     reason: 'A usage-source switch is never deleted (0196, ENABLE ALWAYS). Decides only from TG_OP.',
   },
+  statutory_rates_immutable: {
+    table: 'statutory_rates',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A confirmed statutory rate is never edited or deleted (0206, T-190). Decides only from OLD/NEW.',
+  },
+  withholding_brackets_immutable: {
+    table: 'withholding_brackets',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A confirmed withholding bracket is never edited or deleted (0206, T-190). Decides only from OLD/NEW.',
+  },
+  minimum_wages_immutable: {
+    table: 'minimum_wages',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A confirmed minimum wage is never edited or deleted (0206, T-190). Decides only from OLD/NEW.',
+  },
+  withholding_brackets_set_closed: {
+    table: 'withholding_brackets',
+    mode: 'origin',
+    kind: 'validator',
+    reason: 'No row may join a bracket set that already holds a confirmed row (0206, T-190). Reads other rows of the set.',
+  },
 } as const;

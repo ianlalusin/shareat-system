@@ -63,6 +63,7 @@ import {
   setPayRate,
 } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
+import { seedStatutoryRates } from '../../../../packages/domain/tests/integration/_fixtures/statutory-rates';
 import { captureRedirect, outcomeOf, pageParamsOf } from '../helpers/flash-jar';
 import { givePin } from '../helpers/approval-pin';
 
@@ -522,6 +523,7 @@ describe('W-S2 (B2) - posting a pay run keeps the net total out of the URL; the 
       const [office] = await sql<{ id: string }[]>`
         select id from money_accounts where store_id = ${storeId} and instrument = 'cash' and custodian = 'office' and is_foundation`;
       const admin = actor(orgId, adminId);
+      await seedStatutoryRates(orgId, admin, [storeId]);
       await asOrg(orgId, (tx) =>
         setPayRate(tx, admin, { employmentId: emp!.id, storeId, basis: 'daily', amount: '540.00', effectiveFrom: '2026-01-01' }),
       );

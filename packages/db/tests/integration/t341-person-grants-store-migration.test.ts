@@ -143,7 +143,7 @@ describe('T-341 / DEF-414 M1-M4 — the person_grants store backfill migration',
     const [admin] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Admin') returning id`;
     ids.adminId = admin!.id;
 
-    // One org-wide 'Cashier' position, used by every seeded person below by default. 'Cook' exists
+    // One org-wide 'Cashier' position, used by every seeded person below by default. 'Kitchen Staff' exists
     // only so R (below) can hold a DIFFERENT position at B than the one the shared active default
     // is on — the fixture that proves step 5 checks WHICH position is held, not merely that some
     // open employment exists (builder's self-report, orchestrator CHANGES 2026-09-25).
@@ -151,7 +151,7 @@ describe('T-341 / DEF-414 M1-M4 — the person_grants store backfill migration',
       insert into positions (org_id, store_id, name, is_canonical, is_active) values (${orgId}, null, 'Cashier', true, true) returning id`;
     ids.cashierId = cashier!.id;
     const [cook] = await sql<{ id: string }[]>`
-      insert into positions (org_id, store_id, name, is_canonical, is_active) values (${orgId}, null, 'Cook', true, true) returning id`;
+      insert into positions (org_id, store_id, name, is_canonical, is_active) values (${orgId}, null, 'Kitchen Staff', true, true) returning id`;
 
     async function defaultAt(
       storeId: string,

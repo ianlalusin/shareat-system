@@ -20,15 +20,46 @@ export interface PersonRow {
   kind: 'person' | 'terminal';
 }
 
+/** T-438: the three name parts, already normalised by the domain (trimmed, inner spaces collapsed, blank middle = null). */
+export interface PersonNameParts {
+  lastName: string;
+  firstName: string;
+  middleName: string | null;
+}
+
+/**
+ * T-438: "Last, First M." - the SAME text migration 0207's `persons_name_parts_check` demands. The domain's `formatDisplayName`
+ * (people/person-name.ts) is the canonical TypeScript copy; this one exists so no caller can hand `insertPerson` a mismatching
+ * pair (the db package cannot import the domain), and the CHECK refuses any drift between the two.
+ */
+function displayNameFor(n: PersonNameParts): string {
+  const initial = n.middleName === null ? '' : ` ${Array.from(n.middleName)[0] ?? ''}.`;
+  return `${n.lastName}, ${n.firstName}${initial}`;
+}
+
 export async function insertPerson(
   tx: Tx,
   /** ⭐ T-304 — `kind` defaults to `'person'`; every existing caller is unaffected. Only
-   *  `scripts/provision-terminal.ts` ever passes `'terminal'`. */
-  input: { orgId: string; displayName: string; kind?: 'person' | 'terminal' },
+   *  `scripts/provision-terminal.ts` ever passes `'terminal'`.
+   *  ⭐ T-438 — pass `displayName` (legacy / single-string callers, parts stay NULL) OR `name` (the parts; `displayName` is derived here). */
+  input:
+    | { orgId: string; displayName: string; kind?: 'person' | 'terminal'; name?: undefined }
+    | { orgId: string; name: PersonNameParts; kind?: 'person'; displayName?: undefined },
 ): Promise<PersonRow> {
+  const values =
+    input.name !== undefined
+      ? {
+          orgId: input.orgId,
+          displayName: displayNameFor(input.name),
+          lastName: input.name.lastName,
+          firstName: input.name.firstName,
+          middleName: input.name.middleName,
+          kind: 'person' as const,
+        }
+      : { orgId: input.orgId, displayName: input.displayName, kind: input.kind ?? 'person' };
   const [row] = await tx
     .insert(persons)
-    .values({ orgId: input.orgId, displayName: input.displayName, kind: input.kind ?? 'person' })
+    .values(values)
     .returning({
       id: persons.id,
       orgId: persons.orgId,
@@ -38,6 +69,44 @@ export async function insertPerson(
     });
   if (!row) throw new Error('insertPerson: insert returned no row');
   return row;
+}
+
+/** T-438: the stored parts of one person (all null for a legacy row, a terminal and the usage author). */
+export async function getNameParts(tx: Tx, orgId: string, id: string): Promise<{ lastName: string | null; firstName: string | null; middleName: string | null } | undefined> {
+  const [row] = await tx
+    .select({ lastName: persons.lastName, firstName: persons.firstName, middleName: persons.middleName })
+    .from(persons)
+    .where(and(eq(persons.id, id), eq(persons.orgId, orgId)))
+    .limit(1);
+  return row;
+}
+
+/** T-438 S2b: write the three parts and the derived display_name together. A terminal is refused by the CHECK as well as by the domain. */
+export async function setPersonName(tx: Tx, orgId: string, id: string, name: PersonNameParts): Promise<string> {
+  const displayName = displayNameFor(name);
+  await tx
+    .update(persons)
+    .set({ displayName, lastName: name.lastName, firstName: name.firstName, middleName: name.middleName, updatedAt: sql`now()` })
+    .where(and(eq(persons.id, id), eq(persons.orgId, orgId)));
+  return displayName;
+}
+
+/** Escapes `%`, `_` and the backslash so a typed word is matched literally by ilike. */
+function likeLiteral(s: string): string {
+  return s.replace(/[%_\\]/g, (c) => `\\${c}`);
+}
+
+/**
+ * T-438 N4: every person of kind `person` in the org. The domain keys them (`nameKey`: NFC/NFD-folded accents, hyphens as spaces,
+ * order-free) and decides - SQL cannot fold accents without an extension, and a narrowing cap could silently drop the match, so
+ * nothing is narrowed or capped here (an org's staff list is thousands of short rows at most).
+ */
+export async function nameCandidates(tx: Tx, input: { orgId: string }): Promise<PersonRow[]> {
+  return tx
+    .select({ id: persons.id, orgId: persons.orgId, displayName: persons.displayName, isActive: persons.isActive, kind: persons.kind })
+    .from(persons)
+    .where(and(eq(persons.orgId, input.orgId), eq(persons.kind, 'person')))
+    .orderBy(asc(persons.displayName));
 }
 
 export interface PersonWithAccessRow extends PersonRow {
@@ -108,11 +177,16 @@ export async function getPersonById(tx: Tx, orgId: string, id: string): Promise<
 }
 
 /**
- * `ilike displayName` (`%query%`), org-scoped, ordered by name, default limit 20. Exists so the
+ * `ilike` on every word of the query against the name and its parts (T-438 N7), org-scoped, ordered by name, default limit 20. Exists so the
  * hire flow can find "the same Maria who already works Lipa" rather than minting a duplicate
  * person — T-154 invariant 8 (one person, two stores, two employments) only works if the UI ever
  * offers the existing person back.
  */
+function queryWords(q: string): string[] {
+  const words = q.split(/\s+/).filter((w) => w.length > 0);
+  return words.length === 0 ? [''] : words; // an empty query matches everyone, as before
+}
+
 export async function searchPersons(
   tx: Tx,
   input: {
@@ -136,7 +210,15 @@ export async function searchPersons(
       and(
         eq(persons.orgId, input.orgId),
         eq(persons.kind, 'person'),
-        ilike(persons.displayName, `%${input.query}%`),
+        // T-438 N7: every word must match at least one of display_name / last / first / middle, in any order.
+        ...queryWords(input.query).map((w) =>
+          or(
+            ilike(persons.displayName, `%${likeLiteral(w)}%`),
+            ilike(persons.lastName, `%${likeLiteral(w)}%`),
+            ilike(persons.firstName, `%${likeLiteral(w)}%`),
+            ilike(persons.middleName, `%${likeLiteral(w)}%`),
+          ),
+        ),
       ),
     )
     .orderBy(asc(persons.displayName))

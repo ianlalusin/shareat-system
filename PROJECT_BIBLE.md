@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1692` 13. Decision log
-- `1693–1712` 14. Amendment protocol
-- `1713–1717` 15. Engineering standards — the industry practices this project follows
-  - `1718–1723` 15.1 Build order: walking skeleton first
-  - `1724–1735` 15.2 Golden-master testing — the most important practice here
-  - `1736–1744` 15.3 Strangler Fig, not big-bang cutover
-  - `1745–1749` 15.4 No dual-write
-  - `1750–1758` 15.5 Expand/contract migrations
-  - `1759–1767` 15.6 Observability from day zero, not later
-  - `1768–1772` 15.7 CI gates
-  - `1773–1777` 15.8 Backups and a tested restore
-  - `1778–1782` 15.9 Twelve-Factor config
-  - `1783–1790` 15.10 Append-only ledgers — but not event sourcing
-  - `1791–1795` 15.11 Defence in depth
-  - `1796–1824` 15.12 Skills are lenses, not assurance
-  - `1825–1831` 15.13 Reconciliation is a permanent feature
-- `1832–1836` 16. The accounting spine
-  - `1837–1868` 16.0 What we are actually fixing — the diagnosis
-  - `1869–1912` 16.1 The ten invariants — non-negotiable
-  - `1913–1927` 16.2 The oracle: how "correct" is tested
-  - `1928–1949` 16.3 The model — header + lines, not legs
-  - `1950–1969` 16.4 Deliberately simpler than ERPNext
-  - `1970–2036` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2037–2061` 16.6 What v1 already gets right — preserve the intent
-  - `2062–2083` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2084–2098` 16.8 What v1's accounting already gets right
-  - `2099–2142` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2143–2193` 16.10 Posting patterns — one canonical pattern per business event
-  - `2194–2226` 16.11 Inventory's accounting integration
+- `1329–1698` 13. Decision log
+- `1699–1718` 14. Amendment protocol
+- `1719–1723` 15. Engineering standards — the industry practices this project follows
+  - `1724–1729` 15.1 Build order: walking skeleton first
+  - `1730–1741` 15.2 Golden-master testing — the most important practice here
+  - `1742–1750` 15.3 Strangler Fig, not big-bang cutover
+  - `1751–1755` 15.4 No dual-write
+  - `1756–1764` 15.5 Expand/contract migrations
+  - `1765–1773` 15.6 Observability from day zero, not later
+  - `1774–1778` 15.7 CI gates
+  - `1779–1783` 15.8 Backups and a tested restore
+  - `1784–1788` 15.9 Twelve-Factor config
+  - `1789–1796` 15.10 Append-only ledgers — but not event sourcing
+  - `1797–1801` 15.11 Defence in depth
+  - `1802–1830` 15.12 Skills are lenses, not assurance
+  - `1831–1837` 15.13 Reconciliation is a permanent feature
+- `1838–1842` 16. The accounting spine
+  - `1843–1874` 16.0 What we are actually fixing — the diagnosis
+  - `1875–1918` 16.1 The ten invariants — non-negotiable
+  - `1919–1933` 16.2 The oracle: how "correct" is tested
+  - `1934–1955` 16.3 The model — header + lines, not legs
+  - `1956–1975` 16.4 Deliberately simpler than ERPNext
+  - `1976–2042` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2043–2067` 16.6 What v1 already gets right — preserve the intent
+  - `2068–2089` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2090–2104` 16.8 What v1's accounting already gets right
+  - `2105–2148` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2149–2199` 16.10 Posting patterns — one canonical pattern per business event
+  - `2200–2232` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1689,6 +1689,12 @@ just a patch.**
 | 354 | 2026-10-16 | **EARLY-PHASE CLOSE-OUT RULINGS.** (1) Backups (T-393, Phase 0): switch ON now with one proven restore drill, before the 15 Nov go/no-go (reverses row 306's "no backup for now"). (2) Leave/absence tracking (monthly and yearly caps, Phase 4, never built): BUILD before the 1 Jan go-live. (3) Expanded withholding tax on supplier payments (BIR 1601-E): Shareat does NOT withhold; closed as not applicable. (4) Payroll statutory deductions (SSS, PhilHealth, Pag-IBIG, withholding; T-190, then remittance T-193): start NOW from the official 2026 tables; staff data from the HR sheet when it arrives (due 31 Oct). | Ian, 2026-10-16 (orchestrator session, roadmap review) | Yes, per item |
 | 355 | 2026-10-16 | **LEAVE AND PAYROLL-DEDUCTION RULINGS.** Leave (T-436): caps and the 5 legal paid days reset every 1 January; unused legal days are paid out as cash at year end; whole days only at go-live; managers may attach medical-certificate photos (guarded per row 353); pro-rated paid days in the year a person reaches one year of service; nobody approves their own leave (a manager's or admin's own leave needs the super-admin). Payroll (T-190): a government contribution (SSS, PhilHealth, Pag-IBIG) is NOT deducted for a person until that agency's number is on file; the payroll preview lists who is missing what. Backups (T-393): files are not encrypted; the bucket stays private with a bucket-only key. | Ian, 2026-10-16 (orchestrator session); the orchestrator noted the penalty risk of skipping contributions | Yes |
 | 356 | 2026-10-17 | **POS v2 OFFLINE RULES (narrows ADR-015 A3).** (1) NO refunds while offline: the tablet says "Refunds need the internet." The server-side manager PIN check (row 351) cannot run offline before P1's offline verifier. (2) Voiding an UNPAID table while offline is allowed only for a signed-in manager or admin; the void is marked `voidedOffline`, listed by pos2-audit, and reviewed after sync. Spec: T-425 (PC-5). | Ian, 2026-10-17, in the POS v2 session; recorded by the orchestrator | Yes |
+| 357 | 2026-10-17 | **POS v2: NO FIXED TABLES — STAND NUMBERS.** A party's "table number" is a numbered stainless stand handed over at seating, not a place on a floor. The POS v2 table screen is a list of OPEN ORDERS BY STAND NUMBER, not a floor map (mock-up v3, PC-7). Open: whether a stand number already in use is refused, and how many stands each store has. | Ian, 2026-10-17, comments on the PC-7 mock-ups; recorded by the orchestrator | Yes |
+| 358 | 2026-10-17 | **POS v2: THE FIRST ORDER MAY HOLD A PACKAGE AND À LA CARTE TOGETHER.** v1 forces "start the package, then add items"; v2 lets the first order carry both. Payment screen mock-up: agreed. | Ian, 2026-10-17, PC-7 mock-up comments; recorded by the orchestrator | Yes |
+| 359 | 2026-10-17 | **POS v2: KEEP "CONVERT" AS ITS OWN FEATURE (corrects ADR-015 A4.2).** v1's `PaymentConvertModal` is a GCash cash-in/cash-out service (333 conversions in the live data), not a wrong-tender fix. Ian: keep it, as a separate feature. The wrong-tender correction stays its own document. T-422 dropped Convert with /dashboard: a regression, restored by **T-427** (server route like T-424; net-zero move between payment methods as v1 did; no PIN for cashiers as in v1). | Ian, 2026-10-17, PC-7 mock-up comments; recorded by the orchestrator | Yes |
+| 360 | 2026-10-17 | **A PERSON'S NAME IS LAST, FIRST, MIDDLE; OTHER SCREENS SHOW "LAST, FIRST M."; HIRE CREATES THE PERSON FROM THE TYPED NAME.** The Hire screen takes Last name, First name and Middle name as three fields; every other screen shows `Lastname, Firstname M.` (middle name reduced to its initial). The "Create new person named" radio is dropped: a name typed into Who-is-this creates the person on save (searching still never creates one). Task **T-438**. | Ian, 2026-10-17, on the Hire screen while hiring Lipa's manager; recorded by the orchestrator | Yes |
+| 361 | 2026-10-17 | **SIGN-IN BY ROLE: MANAGER, ADMIN AND SUPER-ADMIN MAY USE BOTH PIN AND EMAIL/PASSWORD; A STAFF-ROLE PERSON SIGNS IN ONLY WITH THE TERMINAL PIN.** Today manager/admin/super_admin already may use both; the change is that email/password is refused for a person whose only role is `staff`, even if an email account is linked. Task **T-438**. | Ian, 2026-10-17, asking which sign-in a manager uses; recorded by the orchestrator | Yes |
+| 362 | 2026-10-17 | **THE BUILT-IN POSITION "COOK" IS RENAMED "KITCHEN STAFF".** The canonical six become Cashier, Kitchen Staff, Server, Dishwasher, Slicer, Inventory Staff. Existing canonical rows are renamed in place (same position id, same grants), by migration 0208; new orgs are seeded with the new name. Same day: the six canonical positions were backfilled on production (T-335 script) and Lipa's hand-made Cashier/DishWasher/Server were retired by Ian. Task **T-439**. | Ian, 2026-10-17, after the production positions backfill; recorded by the orchestrator | Yes |
 
 ## 14. Amendment protocol
 

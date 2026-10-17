@@ -564,7 +564,7 @@ describe('Invariant 15 - employment created / ended / positions_set', () => {
     const f = await fixture(hint);
     await withOrgPrincipal(f.orgId, (tx) => seedCanonicalPositions(tx, f.orgId));
     const pos = await sql<{ id: string; name: string }[]>`select id, name from positions where org_id = ${f.orgId} and store_id is null`;
-    return { f, cashier: pos.find((p) => p.name === 'Cashier')!, cook: pos.find((p) => p.name === 'Cook')! };
+    return { f, cashier: pos.find((p) => p.name === 'Cashier')!, cook: pos.find((p) => p.name === 'Kitchen Staff')! };
   }
   const hire = (f: Fx, over: Record<string, unknown> = {}) =>
     withOrgPrincipal(f.orgId, (tx) =>

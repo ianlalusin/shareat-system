@@ -74,6 +74,7 @@ import {
   voidInvoice,
 } from '@shareat/domain';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
+import { seedStatutoryRates } from './_fixtures/statutory-rates';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -177,6 +178,7 @@ async function fixture(hint: string, opts: { noAttendanceConfig?: boolean } = {}
     drawers[k] = d!.id;
     offices[k] = o!.id;
   }
+  await seedStatutoryRates(orgId, actor(orgId, adminId), all);
   const f = {
     orgId, stores, names, adminId, managerId, managerAId, staffId, workerId, workerEmpId: workerEmp!.id, configId,
     admin: actor(orgId, adminId), manager: actor(orgId, managerId), managerA: actor(orgId, managerAId), staff: actor(orgId, staffId),

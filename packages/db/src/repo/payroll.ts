@@ -201,9 +201,24 @@ export interface PayslipRow {
   otPay: string;
   nightDiffPay: string;
   holidayPay: string;
+  /** T-436: paid leave days, and the year-end / final-pay SIL cash payout. Neither is part of `basicPay`. */
+  leavePay: string;
+  silConversionPay: string;
   grossPay: string;
   advanceRecovered: string;
   netPay: string;
+  // T-190 (migration 0206)
+  sssEe: string;
+  philhealthEe: string;
+  pagibigEe: string;
+  withholding: string;
+  sssEr: string;
+  sssEc: string;
+  philhealthEr: string;
+  pagibigEr: string;
+  taxablePay: string;
+  isMwe: boolean;
+  skippedAgencies: string[];
   journalEntryId: string | null;
 }
 
@@ -230,9 +245,28 @@ export type PayslipInsert = Pick<
   otPay?: Money;
   nightDiffPay?: Money;
   holidayPay?: Money;
+  /** T-436 (migration 0205). NOT NULL DEFAULT 0 - omit to take the column default. */
+  leavePay?: Money;
+  silConversionPay?: Money;
   grossPay: Money;
   advanceRecovered?: Money;
   netPay: Money;
+  /** T-190. NOT NULL DEFAULT 0 - omit for a payslip with no statutory lines. */
+  sssEe?: Money;
+  philhealthEe?: Money;
+  pagibigEe?: Money;
+  withholding?: Money;
+  sssEr?: Money;
+  sssEc?: Money;
+  philhealthEr?: Money;
+  pagibigEr?: Money;
+  taxablePay?: Money;
+  isMwe?: boolean;
+  skippedAgencies?: string[];
+  /** The rate rows used; null for an agency that was skipped. */
+  sssRateId?: string | null;
+  philhealthRateId?: string | null;
+  pagibigRateId?: string | null;
 };
 
 export async function insertPayslip(tx: Tx, input: PayslipInsert): Promise<{ id: string }> {
@@ -253,9 +287,25 @@ export async function insertPayslip(tx: Tx, input: PayslipInsert): Promise<{ id:
       otPay: input.otPay,
       nightDiffPay: input.nightDiffPay,
       holidayPay: input.holidayPay,
+      leavePay: input.leavePay,
+      silConversionPay: input.silConversionPay,
       grossPay: input.grossPay,
       advanceRecovered: input.advanceRecovered,
       netPay: input.netPay,
+      sssEe: input.sssEe,
+      philhealthEe: input.philhealthEe,
+      pagibigEe: input.pagibigEe,
+      withholding: input.withholding,
+      sssEr: input.sssEr,
+      sssEc: input.sssEc,
+      philhealthEr: input.philhealthEr,
+      pagibigEr: input.pagibigEr,
+      taxablePay: input.taxablePay,
+      isMwe: input.isMwe,
+      skippedAgencies: input.skippedAgencies,
+      sssRateId: input.sssRateId ?? null,
+      philhealthRateId: input.philhealthRateId ?? null,
+      pagibigRateId: input.pagibigRateId ?? null,
       journalEntryId: input.journalEntryId,
     })
     .returning({ id: payslips.id });
@@ -280,9 +330,22 @@ export async function listPayslips(tx: Tx, runId: string): Promise<PayslipRow[]>
       otPay: payslips.otPay,
       nightDiffPay: payslips.nightDiffPay,
       holidayPay: payslips.holidayPay,
+      leavePay: payslips.leavePay,
+      silConversionPay: payslips.silConversionPay,
       grossPay: payslips.grossPay,
       advanceRecovered: payslips.advanceRecovered,
       netPay: payslips.netPay,
+      sssEe: payslips.sssEe,
+      philhealthEe: payslips.philhealthEe,
+      pagibigEe: payslips.pagibigEe,
+      withholding: payslips.withholding,
+      sssEr: payslips.sssEr,
+      sssEc: payslips.sssEc,
+      philhealthEr: payslips.philhealthEr,
+      pagibigEr: payslips.pagibigEr,
+      taxablePay: payslips.taxablePay,
+      isMwe: payslips.isMwe,
+      skippedAgencies: payslips.skippedAgencies,
       journalEntryId: payslips.journalEntryId,
     })
     .from(payslips)

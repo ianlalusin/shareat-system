@@ -7,20 +7,22 @@ import {
   issuePinAction,
   removeStaffPhotoAction,
   removeStaffSignatureAction,
+  renamePersonAction,
+  setGovernmentIdsAction,
   setPositionsAction,
   setStaffPhotoAction,
   setStaffSignatureAction,
   viewStaffSignatureAction,
 } from '../actions';
-import { employmentDetail, livePinFor, mediaFor, otherOpenBranchesFor, positionsForStore } from '../lib';
+import { employmentDetail, governmentIdsFor, livePinFor, mediaFor, otherOpenBranchesFor, positionsForStore } from '../lib';
 import { PhotoInput } from '@/components/PhotoInput';
 import { SignaturePad } from '@/components/SignaturePad';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
-import { Banner, Button, ConfirmDestructive, FlashBanner, Input } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
-import { STAFF_POSITIONS } from '../typed-forms';
+import { STAFF_POSITIONS, STAFF_RENAME } from '../typed-forms';
 
 export const metadata = { title: 'Employment — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -44,12 +46,14 @@ export default async function EmploymentDetailPage({
   if (!detail) notFound();
 
   const isEnded = detail.employment.endedOn !== null;
-  const [positions, livePin, otherBranches, media] = await Promise.all([
+  const [positions, livePin, otherBranches, govIds, media] = await Promise.all([
     positionsForStore(actor.orgId, detail.employment.storeId),
     livePinFor(actor, detail.employment.personId),
     // ⭐ T-302 — read BEFORE the form renders, because the warning it feeds has to be on screen
     // before the button is pressed, not in a toast after the write.
     otherOpenBranchesFor(actor, detail.employment.personId, detail.employment.storeId),
+    // T-190 - personal data, shown only to someone holding enrol_staff at this store (null hides the section).
+    governmentIdsFor(actor, detail.employment.personId, detail.employment.storeId),
     mediaFor(actor, employmentId),
   ]);
   const assignedIds = new Set(detail.positions.map((p) => p.positionId));
@@ -77,6 +81,30 @@ export default async function EmploymentDetailPage({
       </div>
 
       <FlashBanner flash={sp} />
+
+      {!isEnded && (
+        <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <h2 className="font-medium">Name</h2>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            {detail.nameParts.lastName === null
+              ? `Saved as "${detail.personName}" (one box, from before names were split). Type the last, first and middle name once to fix it; it then reads "Last, First M.".`
+              : 'Shown everywhere as "Last, First M.". Saving rewrites it.'}
+          </p>
+          <EditableRecord action={renamePersonAction} label="name" hidden={{ employmentId }} typed={typedFor(sp, STAFF_RENAME, employmentId, actor.personId)}>
+            <FormGrid>
+              <Field label="Last name">
+                <Input name="lastName" required defaultValue={detail.nameParts.lastName ?? ''} className="mt-1 w-full" />
+              </Field>
+              <Field label="First name">
+                <Input name="firstName" required defaultValue={detail.nameParts.firstName ?? ''} className="mt-1 w-full" />
+              </Field>
+              <Field label="Middle name (optional)">
+                <Input name="middleName" defaultValue={detail.nameParts.middleName ?? ''} className="mt-1 w-full" />
+              </Field>
+            </FormGrid>
+          </EditableRecord>
+        </section>
+      )}
 
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Positions</h2>
@@ -183,6 +211,32 @@ export default async function EmploymentDetailPage({
           </p>
         )}
       </section>
+
+      {govIds && (
+        <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <h2 className="font-medium">Government numbers</h2>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            Payroll deducts SSS, PhilHealth and Pag-IBIG only for an agency whose number is filled in here. A blank box means that agency is
+            not deducted from this person&rsquo;s payslips (and nothing is caught up later). Digits only; dashes and spaces are ignored.
+          </p>
+          <EditableRecord action={setGovernmentIdsAction} label="government numbers" hidden={{ employmentId }} typed={null}>
+            <FormGrid>
+              <Field label="SSS number (10 digits)">
+                <Input name="sssNo" defaultValue={govIds.sssNo ?? ''} inputMode="numeric" className="w-full font-mono" />
+              </Field>
+              <Field label="PhilHealth number (12 digits)">
+                <Input name="philhealthNo" defaultValue={govIds.philhealthNo ?? ''} inputMode="numeric" className="w-full font-mono" />
+              </Field>
+              <Field label="Pag-IBIG number (12 digits)">
+                <Input name="pagibigNo" defaultValue={govIds.pagibigNo ?? ''} inputMode="numeric" className="w-full font-mono" />
+              </Field>
+              <Field label="TIN (9 to 12 digits)">
+                <Input name="tin" defaultValue={govIds.tin ?? ''} inputMode="numeric" className="w-full font-mono" />
+              </Field>
+            </FormGrid>
+          </EditableRecord>
+        </section>
+      )}
 
       <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Role and access</h2>

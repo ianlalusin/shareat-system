@@ -40,7 +40,7 @@ const STORE_ID = 'store-fixture-1';
 
 const FIXTURE_POSITIONS = [
   { id: 'pos-cashier', name: 'Cashier', isCanonical: true, holderCount: 2 },
-  { id: 'pos-cook', name: 'Cook', isCanonical: true, holderCount: 1 },
+  { id: 'pos-cook', name: 'Kitchen Staff', isCanonical: true, holderCount: 1 },
   { id: 'pos-prep', name: 'Prep Lead', isCanonical: false, holderCount: 0 },
 ] as const;
 
@@ -562,7 +562,7 @@ describe('R5 (Amendment A1) — mobile: openPositionId opens exactly that positi
     };
 
     const cashierIdx = html.indexOf('Cashier');
-    const cookIdx = html.indexOf('Cook');
+    const cookIdx = html.indexOf('Kitchen Staff');
     const prepIdx = html.indexOf('Prep Lead');
     expect([cashierIdx, cookIdx, prepIdx].every((i) => i !== -1), 'fixture must render all three positions').toBe(true);
 

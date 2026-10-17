@@ -19,6 +19,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
   );
 }
 
+import { seedStatutoryRates } from './_fixtures/statutory-rates';
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, payrollRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
@@ -80,6 +81,7 @@ async function fixture(
   const [office] = await sql<{ id: string }[]>`
     select id from money_accounts where store_id = ${storeId}
       and instrument = 'cash' and custodian = 'office' and is_foundation`;
+  await seedStatutoryRates(orgId, actor(orgId, adminId), [storeId]);
 
   return {
     orgId, storeId, configId: config!.id, adminId, managerId, workerId,

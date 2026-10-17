@@ -100,7 +100,7 @@ export const CANONICAL_POSITION_DEFAULTS: Readonly<
     'transfer_stock',
     'record_wastage',
   ],
-  Cook: ['record_stock_movement', 'record_wastage'],
+  'Kitchen Staff': ['record_stock_movement', 'record_wastage'],
   Server: ['record_stock_movement', 'record_wastage'],
   Dishwasher: ['record_stock_movement', 'record_wastage'],
   Slicer: ['record_stock_movement', 'record_wastage', 'request_pos_map'],

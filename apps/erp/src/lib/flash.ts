@@ -117,6 +117,7 @@ const NAV_SHAPES = {
   period: PERIOD,
   year: YEAR,
   cap: CAP,
+  view: /^(cards|roster|positions)$/,
 } as const satisfies Record<string, RegExp>;
 
 export type NavKey = keyof typeof NAV_SHAPES;

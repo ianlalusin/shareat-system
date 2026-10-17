@@ -9,3 +9,9 @@ export const STAFF_POSITIONS = defineTypedForm({
   form: 'staff.positions',
   fields: ['positionIds', 'primaryPositionId'],
 });
+
+/** T-438 S2b: the Name form keeps what was typed after a refused save (a person's name is not a secret). */
+export const STAFF_RENAME = defineTypedForm({
+  form: 'staff.rename',
+  fields: ['lastName', 'firstName', 'middleName'],
+});

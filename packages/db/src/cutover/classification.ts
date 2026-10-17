@@ -537,6 +537,22 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'every employment unpayable on 2 January. ⚠️ Effective-dated rows from 2026 stay: a rate ' +
       'that took effect in November is still the rate in force in January until somebody changes it.',
   },
+  statutory_rates: {
+    class: 'keep',
+    reason:
+      'T-190. The SSS / PhilHealth / Pag-IBIG rate tables are CONFIGURATION, confirmed once by the accountant and effective-dated. ' +
+      'Purging them would make every payroll POST refuse on 2 January until somebody re-keyed and re-confirmed them.',
+  },
+  withholding_brackets: {
+    class: 'keep',
+    reason: 'T-190. The BIR withholding tables per pay frequency: configuration, as statutory_rates. Kept so payroll posts on day one.',
+  },
+  minimum_wages: {
+    class: 'keep',
+    reason:
+      'T-190. The minimum daily wage of each store decides who is a minimum-wage earner: configuration, as statutory_rates, and the ' +
+      'one table the accountant must fill per store before a POST.',
+  },
   pay_runs: {
     class: 'purge',
     reason:
@@ -563,6 +579,38 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'As thirteenth_month_runs — what somebody earned in a purged run. Must go with the run it ' +
       'belongs to, same reasoning as payslips.',
   },
+  // ---- T-436: leave and absence tracking (migration 0205) --------------------------------
+  leave_types: {
+    class: 'keep',
+    reason:
+      'Configuration: the eleven platform kinds (org_id NULL) and any kind an org added. Purging it would leave every ' +
+      'leave request unable to name its kind on 2 January.',
+  },
+  leave_caps: {
+    class: 'keep',
+    reason:
+      'Configuration, like the roster it limits: a monthly or yearly cap set in November is still the cap in January. ' +
+      'The COUNTS restart on 1 Jan by construction (a cap counts a calendar month / year), so nothing needs clearing.',
+  },
+  leave_request_days: {
+    class: 'purge',
+    reason:
+      'One row per leave date of a pilot request, and some are frozen to pay runs that are themselves purged. Purged FIRST, ' +
+      'before leave_requests (its parent) and before pay_runs (the frozen_by_pay_run_id FK): children before parents (PURGE_ORDER_HINT).',
+  },
+  leave_commutations: {
+    class: 'purge',
+    reason:
+      'The year-end / final-pay cash payout of a pilot year, frozen to a pay run or a separation that are themselves purged. ' +
+      'Purged before pay_runs and separations (its FKs); the payout of 2026 is paid in 2026, never carried into the opening books.',
+  },
+  leave_requests: {
+    class: 'purge',
+    reason:
+      'Pilot-period requests and recorded absences, including personal notes (bible row 353) that have no business surviving the ' +
+      'pilot. Purged after its days (children first). Caps and kinds are kept; the 2027 balances start from nothing by calendar.',
+  },
+
   separations: {
     class: 'purge',
     reason:

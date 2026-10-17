@@ -161,7 +161,7 @@ describe('T-154 invariant 3 — exactly one primary position', () => {
     const pos = await sql<{ id: string; name: string }[]>`
       select id, name from positions where org_id = ${f.orgId} and store_id is null`;
     const cashier = pos.find((p) => p.name === 'Cashier')!;
-    const cook = pos.find((p) => p.name === 'Cook')!;
+    const cook = pos.find((p) => p.name === 'Kitchen Staff')!;
 
     await asOrg(f.orgId, (tx) =>
       setEmploymentPositions(tx, f.admin, {
@@ -183,7 +183,7 @@ describe('T-154 invariant 3 — exactly one primary position', () => {
       join positions p on p.id = ep.position_id where ep.employment_id = ${e.id} order by p.name`;
     expect(rows).toHaveLength(2);
     expect(rows.filter((r) => r.is_primary)).toHaveLength(1);
-    expect(rows.find((r) => r.is_primary)!.name).toBe('Cook');
+    expect(rows.find((r) => r.is_primary)!.name).toBe('Kitchen Staff');
   });
 
   it('a primary that is not among the assigned positions is refused', async () => {
@@ -192,7 +192,7 @@ describe('T-154 invariant 3 — exactly one primary position', () => {
     const pos = await sql<{ id: string; name: string }[]>`
       select id, name from positions where org_id = ${f.orgId} and store_id is null`;
     const cashier = pos.find((p) => p.name === 'Cashier')!;
-    const cook = pos.find((p) => p.name === 'Cook')!;
+    const cook = pos.find((p) => p.name === 'Kitchen Staff')!;
     await expect(
       asOrg(f.orgId, (tx) =>
         setEmploymentPositions(tx, f.admin, {

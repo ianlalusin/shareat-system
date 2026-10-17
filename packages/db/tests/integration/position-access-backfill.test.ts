@@ -565,7 +565,7 @@ describe('T-318 slice B / migration 0152 — backfills position_capability_defau
     const [inactiveStore] = await sql<{ id: string }[]>`insert into stores (org_id, code, name, is_active) values (${orgId}, 'INA', 'Inactive Store', false) returning id`;
 
     const [cashier] = await sql<{ id: string }[]>`insert into positions (org_id, store_id, name, is_canonical, is_active) values (${orgId}, null, 'Cashier', true, true) returning id`;
-    const [cook] = await sql<{ id: string }[]>`insert into positions (org_id, store_id, name, is_canonical, is_active) values (${orgId}, null, 'Cook', true, true) returning id`;
+    const [cook] = await sql<{ id: string }[]>`insert into positions (org_id, store_id, name, is_canonical, is_active) values (${orgId}, null, 'Kitchen Staff', true, true) returning id`;
     cashierId = cashier!.id;
     cookId = cook!.id;
 

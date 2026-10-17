@@ -26,6 +26,14 @@ import { outstandingAdvance, PAYROLL_ADVANCE_ACCOUNT } from './index';
 export const THIRTEENTH_MONTH_ACCOUNT = '6140';
 
 /**
+ * T-190. The 13th month and other benefits are exempt from contributions and withholding up to this much a year per person
+ * (RA 10963 s32(B)(7)(e), PHP 90,000). It is fixed by law and is NOT one of the effective-dated rate tables: the exemption has
+ * no deduction to compute, it only decides whether the run may pay. Above it the run refuses and names the person (nobody is
+ * near it today; the accountant decides what to do).
+ */
+export const THIRTEENTH_MONTH_EXEMPT_CEILING = money('90000.00');
+
+/**
  * T-343 S5.5q / DEF-465 — the range is the one the system already enforces:
  * `thirteenth_month_runs_year_check` (`packages/db/schema/thirteenth-month.ts`, migration 0115). No
  * other year validation exists in `packages/` to reuse.
@@ -89,6 +97,16 @@ export async function preview13thMonthRun(
     if (compare(earned, ZERO) <= 0) continue;
 
     const gross = divideMoney(earned, 12);
+    // T-190: the exemption is per PERSON per year, across jobs and across runs already posted.
+    const alreadyPaid = money(await thirteenthMonthRepo.paidInYearForPerson(tx, actor.orgId, emp.personId, input.year));
+    const thisRunSoFar = payouts.filter((p) => p.personId === emp.personId).reduce((n, p) => add(n, p.grossPay), ZERO);
+    const yearToDate = add(alreadyPaid, thisRunSoFar, gross);
+    if (compare(yearToDate, THIRTEENTH_MONTH_EXEMPT_CEILING) > 0) {
+      throw refuse(
+        `preview13thMonthRun: ${emp.personName} would reach ${yearToDate} of 13th month in ${input.year}, over the ${THIRTEENTH_MONTH_EXEMPT_CEILING} exemption`,
+        `${emp.personName}'s 13th month for ${input.year} would be over the PHP 90,000 tax-exempt limit. Ask the accountant how to treat the excess before this run is posted.`,
+      );
+    }
     const outstanding = await outstandingAdvance(tx, actor.orgId, emp.personId);
     const advanceRecovered = advanceToRecover(gross, outstanding);
     const netPay = subtract(gross, advanceRecovered);

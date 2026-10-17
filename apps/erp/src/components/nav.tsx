@@ -48,6 +48,8 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       // one is the only way to create.
       { href: '/staff', label: 'Staff' },
       { href: '/attendance', label: 'Attendance' },
+      // T-436 - ask for leave, decide it, record an absence. Open to everyone: a staff member requests their own.
+      { href: '/attendance/leave', label: 'Leave' },
       // ⭐ DEF-133 — provisioning a clock terminal or enrolling a card/fingerprint had no admin UI
       // until 2026-09-04; only hand-run SQL could. `provision_clock_terminal` is admin-only.
       { href: '/attendance/terminals', label: 'Clock terminals' },
@@ -58,6 +60,8 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       // Found by T-227's own guard on its first run, which is what a guard is for.
       { href: '/attendance/lane', label: 'Clock lane' },
       { href: '/payroll', label: 'Payroll' },
+      // T-190: SSS / PhilHealth / Pag-IBIG / tax tables and minimum wages. Gated by `manage_payroll_rates` in ROUTE_CAPABILITY.
+      { href: '/payroll/rates', label: 'Payroll rates' },
       { href: '/expenses', label: 'Expenses' },
       // T-369 S1 (DEF-198): paying staff back what they spent out of pocket. Gated by
       // `record_ap_payment` in ROUTE_CAPABILITY, so the link only shows to someone who can open it.

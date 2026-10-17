@@ -139,8 +139,14 @@ export * as schedulerRepo from './repo/scheduler';
 export * as remittanceRepo from './repo/remittance';
 export * as advisoryLocksRepo from './repo/advisory-locks';
 export * as payrollRepo from './repo/payroll';
+// T-436 - leave and absence tracking (migration 0205).
+export * as leaveRepo from './repo/leave';
+export type { OwnRequestRow as LeaveOwnRequestRow, OpenEmploymentRow as LeaveOpenEmploymentRow, LeaveTypeRow, CapRow, CapListRow, RequestRow as LeaveRequestRow, DayRow as LeaveDayRow, LeaveDayReadRow, PayableLeaveDay, CommutationRow, EmploymentSpan } from './repo/leave';
+export { LEAVE_REQUEST_STATUSES, LEAVE_DAY_STATUSES, LEAVE_DAY_KINDS, LEAVE_ORIGINS } from '../schema/leave';
+export type { LeaveRequestStatus, LeaveDayStatus, LeaveDayKind, LeaveOrigin } from '../schema/leave';
 // T-191 — 13th-month pay (Phase 5, after T-189).
 export * as thirteenthMonthRepo from './repo/thirteenth-month';
+export * as statutoryRepo from './repo/statutory';
 // T-192 — separations, final pay, clearance (Phase 5, after T-191).
 export * as separationsRepo from './repo/separations';
 export type { PayRateRow, PayRunRow, PayslipRow, PayableDay } from './repo/payroll';
