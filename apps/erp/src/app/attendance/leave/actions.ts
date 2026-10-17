@@ -122,10 +122,10 @@ export async function voidLeaveAction(formData: FormData): Promise<void> {
 export async function attachLeaveDocumentAction(formData: FormData): Promise<void> {
   const { actor } = await requireSession();
   const photo = formData.get('certificate');
+  if (!(photo instanceof File) || photo.size === 0) {
+    return await redirectWithFlash(BACK, {}, { error: 'Choose a photo of the certificate first.' });
+  }
   try {
-    if (!(photo instanceof File) || photo.size === 0) {
-      return await redirectWithFlash(BACK, {}, { error: 'Choose a photo of the certificate first.' });
-    }
     const bytes = new Uint8Array(await photo.arrayBuffer());
     await withOrgPrincipal(actor.orgId, (tx) =>
       attachLeaveDocument(tx, actor, { requestId: str(formData, 'requestId'), contentType: photo.type, bytes }),
@@ -148,5 +148,5 @@ export async function openLeaveDocumentAction(formData: FormData): Promise<void>
   } catch {
     return await redirectWithFlash(BACK, {}, { error: "This certificate isn't available to you." });
   }
-  redirect(url);
+  redirect(`${url}`);
 }
