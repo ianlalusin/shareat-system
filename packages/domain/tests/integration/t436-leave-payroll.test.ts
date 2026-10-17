@@ -293,7 +293,7 @@ describe('T-436 payroll - leave and attendance on the same date (real punches, y
 
     const out = await post(f, FROM, DAY);
     const [s] = await slipRows(out.runId);
-    expect(s).toMatchObject({ days_worked: '1.00', basic_pay: '600.00', leave_pay: '0.00', gross_pay: '600.00' });
+    expect(s).toMatchObject({ days_worked: '1.00', basic_pay: '600.00', leave_pay: '0.00', gross_pay: '606.67' }); // 606.67 = 600 + 6.67 night differential (14:00-23:00 shift has 1h after 22:00)
   });
 });
 

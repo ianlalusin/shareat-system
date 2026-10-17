@@ -444,7 +444,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // +6 (16 Oct): T-433 order page — Print delivery receipt link, BIR invoice no. input + save button, pay-now amount, money account select, receipt photo
     // -1 (16 Oct): T-433 BIR invoice no. form moved into EditableRecord, so its Save button leaves the census
     // +7 (16 Oct): T-434 staff detail page photo and signature controls (net +7 measured, 1259 -> 1266; the "View signature" link is a per-click link).
-    expect(results.length).toBe(1266);
+    // +45 (17 Oct): T-436 leave tracking - attendance/leave page (request, record, approve, reject, cancel, void, certificate attach/view) and settings/attendance leave kinds and caps controls (1266 -> 1311 measured).
+    expect(results.length).toBe(1311);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {
