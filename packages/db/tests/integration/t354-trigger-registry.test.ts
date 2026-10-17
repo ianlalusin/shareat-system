@@ -59,6 +59,10 @@ const ALWAYS_TRIGGERS = [
   { table: 'menu_offers', trigger: 'menu_offers_update_guard' },
   { table: 'menu_option_offers', trigger: 'menu_option_offers_update_guard' },
   { table: 'menu_depletion_rules', trigger: 'menu_depletion_rules_update_guard' },
+  // T-190 (migration 0206): reference-row immutability.
+  { table: 'statutory_rates', trigger: 'statutory_rates_immutable' },
+  { table: 'withholding_brackets', trigger: 'withholding_brackets_immutable' },
+  { table: 'minimum_wages', trigger: 'minimum_wages_immutable' },
 ] as const;
 
 /** The six mirror enqueuers + the money-account seeder — must stay live `'O'` (T5, and R2's list). */
@@ -106,7 +110,8 @@ describe('T1 — registry floor', () => {
     const always = Object.entries(reg).filter(([, e]) => e.mode === 'always');
     // T-386 S2 (2026-10-09): 22 -> 23, DELIBERATELY. item_code_counters_forward_only (migration 0189) is ENABLE ALWAYS: the mark only rises.
     // T-401 S1: three history update guards (menu_offers / menu_option_offers / menu_depletion_rules, migration 0196) 23 -> 26, + menu_usage_source_switches update guard (R7, I26) 26 -> 27, + its delete guard (A3) 27 -> 28.
-    expect(always.length, 'expected exactly 28 ALWAYS triggers (R1 + 0175 + 0179 + 0183 + 0189 + 0196)').toBe(28);
+    // T-190 (migration 0206): the three reference-row immutable guards 28 -> 31. NB: 0206 does not ENABLE ALWAYS them yet, so T3 is red until migration 0207 does.
+    expect(always.length, 'expected exactly 31 ALWAYS triggers (R1 + 0175 + 0179 + 0183 + 0189 + 0196 + 0206)').toBe(31);
 
     const alwaysNames = new Set(always.map(([name]) => name));
     for (const { trigger } of ALWAYS_TRIGGERS) {
