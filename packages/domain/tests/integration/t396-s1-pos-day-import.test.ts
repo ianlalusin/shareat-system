@@ -821,3 +821,78 @@ describe('15 - a pile of unverified drafts is said', () => {
     expect(noticesOf(run).filter((l) => /waiting/i.test(text(l)))).toEqual([]);
   });
 });
+
+// ---- Audit 2026-10-17 findings on day-import-job.ts (pinned RED until the builder fixes them) ---------------------
+/** 06:00 Manila on `isoDate`, as the injected clock. */
+const morning = (isoDate: string): string => `${ago(isoDate, -1)}T22:00:00.000Z`;
+
+describe('A1 - a long POS outage never lets the oldest missing date slide out of the window unsaid', () => {
+  it('POS fails 9 mornings running (each run recorded), works on the 10th: EVERY date with no sales day that is older than the window is named in a gap line (kills: gap computed from the last run date)', async () => {
+    const f = await fixture('a1', [{ name: 'Alpha', linkedOn: '2027-01-01' }]);
+    const a = f.byName('Alpha');
+    for (let d = 5; d <= 13; d += 1) {
+      const day = `2027-01-${String(d).padStart(2, '0')}`;
+      const down = router({ [a.posStoreId]: { fail: new PosUnreachableError('POS /api/external/sales returned 503: down') } });
+      await sweep(f, { now: morning(day), fetchers: down.fetchers });
+      await stampLastRun(f.orgId, morning(day));
+    }
+    expect(await dayDates(a.storeId), 'precondition: nothing was imported during the outage').toEqual([]);
+
+    // 10th morning (14 Jan): POS is back. Window = 7..13 Jan, so 1..6 Jan can never be reached by the timer.
+    await sweep(f, { now: morning('2027-01-14'), fetchers: router().fetchers });
+    const run = await lastRun(f.orgId);
+    expect(await dayDates(a.storeId), 'the window itself was imported').toEqual(range('2027-01-07', '2027-01-13'));
+    const said = (run.failures ?? []).filter((l) => l.subjectId === a.storeId).map(text).join(' | ');
+    for (const d of range('2027-01-01', '2027-01-06')) {
+      expect(mentions(said, d), `${d} has no sales day and is outside the window, so it must be named. Lines: ${said}`).toBe(true);
+    }
+  });
+});
+
+describe('A2 - a non-admin whose older unverified day blocks the create: ONE stopped line for the store, not one per date', () => {
+  it('link vouched for by a store-scoped manager (cannot bypass the create-block); an older open day blocks every window date -> exactly one failure line for that store naming the blocker; the other store still imports (kills: SalesDayBlockedError not stopping the store)', async () => {
+    const f = await fixture('a2', [{ name: 'Alpha', linkedOn: '2027-01-01' }, { name: 'Bravo', linkedOn: '2027-01-01' }]);
+    const a = f.byName('Alpha');
+    const b = f.byName('Bravo');
+    // The blocker: an older day that stays open (imported by the org-wide fixture manager).
+    await humanImport(f, a.storeId, '2027-01-05');
+    // A manager scoped to Alpha only: not org-wide, so `close_period` (the bypass) is refused for them.
+    const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${f.orgId}, 'Scoped Manager') returning id`;
+    await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${f.orgId}, 'manager')`;
+    await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${a.storeId})`;
+    await sql`update pos_v1_store_links set updated_by = ${p!.id}, updated_at = ${noonManila('2027-01-01')}::timestamptz where id = ${a.linkId}`;
+
+    const pos = router();
+    await sweep(f, { fetchers: pos.fetchers });
+    const run = await lastRun(f.orgId);
+    const fail = failuresOf(run).filter((l) => l.subjectId === a.storeId);
+    expect(fail, `one line for the store, not one per date. Lines: ${JSON.stringify(failuresOf(run).map(text))}`).toHaveLength(1);
+    expect(mentions(text(fail[0]!), '2027-01-05'), `the one line names the blocking day: ${text(fail[0]!)}`).toBe(true);
+    expect(await dayDates(a.storeId), 'only the blocker exists for Alpha').toEqual(['2027-01-05']);
+    expect(await dayDates(b.storeId), 'the other store is untouched by it').toEqual(range(WINDOW_START, YESTERDAY));
+  });
+});
+
+describe('A3 - the run detail tells "already there before the run" apart from "a person beat the timer mid-run"', () => {
+  // CONTRACT (chosen): `skipped_count` stays the total of both (tests 2, 4d, 6 pin it). The `detail` text must NOT call a
+  // race skip "already there": it says "already there N" for days present when the run began, and names the
+  // race count separately (wording free, but it must contain "race", "first", "beaten" or "person").
+  it('5 days already present, one more committed by a person mid-fetch: skipped_count 6 total, detail says "already there 5" and names the race separately', async () => {
+    const f = await fixture('a3', [{ name: 'Alpha', linkedOn: '2027-01-01' }]);
+    const a = f.byName('Alpha');
+    for (const d of range('2027-01-06', '2027-01-10')) await humanImport(f, a.storeId, d);
+    const pos = router({
+      [a.posStoreId]: {
+        onCall: async (kind, date, n) => {
+          if (kind === 'sales' && date === '2027-01-11' && n === 1) await humanImport(f, a.storeId, date, D2B_FIGURES);
+        },
+      },
+    });
+    const result = await sweep(f, { fetchers: pos.fetchers });
+    const run = await lastRun(f.orgId);
+    expect([run.posted_count, run.skipped_count, run.failed_count], 'one imported (12 Jan), six skipped in all').toEqual([1, 6, 0]);
+    const detail = String((result.outcomes[0] as { detail?: string }).detail ?? '');
+    expect(detail, `"already there" counts only the 5 present at the start. detail: ${detail}`).toMatch(/already there 5\b/);
+    expect(detail, `the one race loss is named separately. detail: ${detail}`).toMatch(/\b(race|first|beaten|person)\b/i);
+  });
+});
