@@ -1,12 +1,13 @@
 # T-427: POS v2 — Convert (GCash cash-in / cash-out) as its own screen, through the POS v2 server (P0)
 
-**Status:** spec written 2026-10-17 (Opus planner, POS v2 lane); awaiting Opus spec review. (Written outside plan mode
+**Status:** spec written 2026-10-17 (Opus planner, POS v2 lane); revised after the Opus review (✎R); ready to build. (Written outside plan mode
 at Ian's request to cut approval pop-ups; the spec is Opus-written and Opus-reviewed, which is what plan mode secured.)
 **Model:** Sonnet tester -> Sonnet builder -> Sonnet auditor (money lane).
 **Migration:** none.
 **Authority:** bible row 359 (Ian 17 Oct: Convert kept as its own feature; ADR-015 A4.2 corrected; T-422 regression) ·
 orchestrator approval 17 Oct (server route like T-424, net-zero byMethod move as v1, no cashier PIN as in v1; tests must
-cover two tabs converting at once and shift-close reconciliation) · row 351 (money moves through the POS v2 server) ·
+cover two tabs converting at once and shift-close reconciliation; ✎R the "two tabs" case must truly overlap the two
+transactions with the fake's `consumeBeforeTx` hook) · row 351 (money moves through the POS v2 server) ·
 row 319 (the till is an ERP record) · PC-0: 333 conversions in 91 days, ~3.7/day, almost all Lipa.
 **Depends on:** T-424 (server skeleton, `payment-conversion.ts` writer, identity, `openTillShift`).
 
@@ -39,34 +40,49 @@ directions, sales do not change, and the drawer count at shift close still balan
    ones struck through) with Void on each of today's active ones (confirm step in the page). The money-morph animation
    is not carried (a toast "Recorded" is enough).
 2. **Server route** `POST /api/pos2/conversions` `{storeId, deviceId, requestId, direction: 'cash_in'|'cash_out',
-   walletMethod, amountCentavos, note?, actorName}`: identity as T-424 (token + staff doc); roles admin/manager/cashier;
+   walletMethod, amountCentavos, note?}`: ✎R `createdBy` comes from the signed-in caller (never a body name, as
+   `tender-corrections.ts:130`); identity as T-424 (token + staff doc); roles admin/manager/cashier;
    no PIN (v1 parity, orchestrator 17 Oct); `walletMethod` must be an active non-cash method and the store must have an
    active cash method; `amountCentavos` > 0 and ≤ 5,000,000 (₱50,000, a fat-finger guard; above it: "That amount is too
    large for one conversion. Split it or check the number."); **an ERP till shift must be open** (`openTillShift`,
-   row 319: Convert changes physical cash); `requestId` is the doc id and the body hash makes a retry return the same
-   doc, a different body 409. Writes in ONE transaction: the `paymentConversions` doc in v1's shape (`fromMethod`,
-   `toMethod` from the direction, `amount` pesos, `dayId`/`dayStartMs` = now, `status: 'active'`, `createdBy`) plus
-   `source: 'pos2-convert'`, `direction`, `amountCentavos`, `requestHash`, `tillShiftOpenedAtMs`; and the byMethod
-   move via `writeByMethodDelta` (net zero; `totalGross`/`txCount` untouched).
-3. **Negative-day guard (ERP refusal risk):** inside the transaction the route reads `analytics/{dayId}.payments.byMethod`
-   and, if the move would make the `from` method negative for the day, it STILL records the conversion (refusing would
-   stop a real cash-in service) but sets `makesDayNegative: true` on the doc and returns a warning the sheet shows:
-   "Recorded. Today's GCash total is now below zero; the office will need to check this day." The ERP-side fix
-   (import conversions as cash<->wallet transfers instead of letting a negative method refuse the day) is named for the
-   orchestrator; it affects every v1 store too.
+   row 319: Convert changes physical cash), ✎R refused otherwise with its OWN sentence: "Open the till shift in ERP
+   before recording a cash-in or cash-out." (the orchestrator confirms Lipa opens an ERP till shift every day from
+   11 Jan; if not, this gate is dropped for P0); `requestId` is the doc id and the body hash makes a retry return the same
+   doc, a different body 409; ✎R the replay check also requires `source === 'pos2-convert'` and returns the same
+   warning as the first call. Writes in ONE transaction: the `paymentConversions` doc in v1's shape (`fromMethod`,
+   `toMethod` from the direction, `amount` pesos, ✎R `dayId`/`dayStartMs` from the SAME day function POS v2 sales use
+   (`getDayIdFromTimestamp(now)`, so a conversion and the sales it relates to sit on one day; when row 348's closing-time
+   day is implemented for sales it applies here too), `createdAtClientMs` = server now, `status: 'active'`,
+   `createdBy`) plus `source: 'pos2-convert'`, `direction`, `amountCentavos`, `requestHash`, `tillShiftOpenedAtMs`; and
+   the byMethod move via `writeByMethodDelta`: ✎R v1's BLIND increments, no read of the day doc in the transaction (no
+   contention with sales' increments). ✎R The cash method is chosen deterministically: the store's active
+   `storeModesOfPayment` of type cash with the lowest `sortOrder`, by the same name sales write into `byMethod`.
+3. ✎R **Negative-day rule (orchestrator 17 Oct: record and flag, never refuse; blocking a real cash-in is worse and v1
+   allowed it).** After the commit, a plain read of the day doc: if the `from` method is now below zero, the response
+   carries a warning the sheet shows: "Recorded. Today's GCash total is below zero for now; the office will check this
+   day if it stays that way." The doc stores `warnedNegativeAtWrite: true` as ADVISORY only. The authoritative check is
+   `pos2-audit.mjs`, which reads each day's FINAL `byMethod` (what `v1-methods.ts:72` refuses on) and lists every
+   negative day per store, with the conversions and corrections on it; the handover screen shows the same check for
+   the current day. The ERP-side fix (import conversions as cash<->wallet transfers) is named for the orchestrator.
 4. **Void route** `POST /api/pos2/conversions/void` `{storeId, deviceId, conversionId, requestId}`: same roles; only a
    doc with `source: 'pos2-convert'` (never a `pos2-correction`, never a v1 doc), still `active`, made in the CURRENTLY
-   open till shift (`tillShiftOpenedAtMs` equals the open shift's) and on today's `dayId`; idempotent; reverses with sign
+   open till shift (`tillShiftOpenedAtMs` equals the open shift's) ✎R (no separate same-day rule; the reversal always
+   goes to the doc's own day); ✎R writes `voidedVia: 'pos2'` so v1-dashboard voids can be told apart; idempotent; reverses with sign
    −1 on the doc's own day; sets `status: 'voided'`, `voidedAt`, `voidedBy`.
-5. **Drawer reconciliation (closes v1's gap):** v2's cash handover expectation (`lib/cash/handover.ts`
-   `computeCashSales` and `CashHandoverClient.tsx`) adds the net cash effect of active `pos2-convert` conversions in the
-   period (cash-in +, cash-out −), shown as its own line "Convert (cash-in/out): +₱1,200.00". The X-slip (T-425) adds
-   the same line when present. ERP till reconciliation follows the day feed (unchanged here). When any conversion in
-   the period has `makesDayNegative: true`, the handover screen also shows "A conversion took today's GCash below zero;
-   the office must check this day." (orchestrator 17 Oct: record and flag, never refuse).
+5. ✎R **Drawer reconciliation (closes v1's gap fully):** v2's cash handover expectation (`lib/cash/handover.ts`
+   `computeCashSales`, `CashHandoverClient.tsx`) adds the net cash effect of EVERY active `paymentConversions` doc in
+   the handover window `[prior.periodEndMs, now]` by `createdAtClientMs` whose from or to method is cash (`isCashKey`):
+   v1 conversions, `pos2-convert` and `pos2-correction` alike (a GCash-to-Cash correction really put cash in the
+   drawer while the receipt stays unchanged). Shown as its own line "Convert and tender fixes: +₱900.00", saved on the
+   `cashHandovers` doc as the additive field `convertNet` (pesos) so the saved Expected still equals Starting + Cash
+   sales + convertNet − Deductions in history and export. When the day is currently negative for any method, the
+   screen also shows "A payment method is below zero today; the office must check this day." No X-slip line (✎R: the
+   X-slip is built offline from the ledger; conversions need the internet).
 6. **Offline:** Convert needs the internet (server route); the button shows "Needs the internet" offline (T-425
    connectivity). Volume and the ADR A3 offline list do not justify an offline path.
-7. **pos2-audit.mjs** counts `pos2-convert` as POS v2's own and lists `makesDayNegative` days.
+7. **pos2-audit.mjs** counts `pos2-convert` as POS v2's own, lists negative days from final totals (Ruling 3), and
+   ✎R flags `pos2-convert` docs voided without `voidedVia: 'pos2'` (voided from v1's dashboard).
+8. ✎R The list under the Convert sheet hides `pos2-correction` docs; v1 docs may show, never with a Void button.
 
 ## Slices
 **T** tester: route tests (identity, roles, method rules, cap, open-shift gate, idempotency, two tabs converting at once
@@ -83,17 +99,25 @@ audit script.
    one move; same requestId different body -> 409. Kills: lost or doubled moves.
 3. No open till shift -> refused before any write. Kills: cash moved outside a shift.
 4. Above ₱50,000 refused with the sentence; 0 or negative refused; a cash method as wallet refused.
-5. A cash-in larger than the day's GCash sales -> recorded with `makesDayNegative: true` and the warning returned.
-   Kills: silently creating a day the ERP refuses.
-6. Void: a `pos2-correction` doc, a v1 doc, yesterday's doc, a doc from a previous shift -> refused; a valid void
+5. ✎R A cash-in larger than the day's GCash sales -> recorded, warning returned, `warnedNegativeAtWrite: true`;
+   pos2-audit lists the day while its final GCash total is negative and drops it once later sales lift it above zero.
+   Kills: silently creating a day the ERP refuses; false alarms.
+6. Void: a `pos2-correction` doc, a v1 doc, a doc from a previous shift -> refused; ✎R an 11:50 PM conversion voided at
+   12:10 AM in the same shift -> allowed, reversed on its own day; a valid void
    reverses exactly; a second void is a no-op. Kills: voiding the wrong record; double reversal.
-7. Shift-close reconciliation: start ₱2,000, cash sales ₱5,000, cash-in ₱1,200, cash-out ₱300, deductions ₱0 ->
-   expected cash ₱7,900 and the "Convert" line shows +₱900. Kills: v1's handover gap.
+7. ✎R Shift-close reconciliation: start ₱2,000, cash sales ₱5,000, cash-in ₱1,200, cash-out ₱300, a GCash-to-Cash
+   tender correction ₱150, a v1 conversion cash-in ₱100, deductions ₱0 -> expected cash ₱8,150, the line shows +₱1,150,
+   and the saved `cashHandovers` doc has `convertNet: 1150`. Kills: v1's handover gap, half-fixes.
 8. Offline -> button disabled with "Needs the internet". 
 9. `npm test -w @shareat/pos`, pos tsc, all pos-v2 guards, `build` + `build:cap` green; no test requires a lane DB name.
 
 ## Must NOT change
 Firestore field meanings (additive only) · `packages/**` · `apps/erp/**` · v1 · live `shareat-hub-v2`.
+
+## Live data (read-only count, 17 Oct, ~1,000 reads)
+120 days, 4 real stores: **0 days with a negative payment method**; 588 conversions (Lipa 546, Malvar 42), of which 3
+(0.5%) between 00:00 and 05:00. The negative-day risk is real but rare, so the ERP-side fix is a follow-up, not a
+go-live blocker.
 
 ## For the orchestrator
 The ERP day feed refuses a day with a negative method total; Convert legitimately produces one (cash-in before GCash
