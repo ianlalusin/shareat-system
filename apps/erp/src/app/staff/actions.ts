@@ -12,13 +12,14 @@
 import { redirect } from 'next/navigation';
 import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
-import { STAFF_POSITIONS } from './typed-forms';
+import { STAFF_POSITIONS, STAFF_RENAME } from './typed-forms';
 import {
   createEmployment,
   createPerson,
   endEmployment,
   removeStaffPhoto,
   removeStaffSignature,
+  renamePerson,
   setEmploymentPositions,
   setGovernmentIds,
   setStaffPhoto,
@@ -59,6 +60,8 @@ function errorMessage(err: unknown): string {
   if (/primary position must be one of/.test(raw)) return raw;
   if (/is a canonical position/.test(raw)) return raw;
   if (/A person needs a name/.test(raw)) return raw;
+  if (/is already in the system\. Search for them/.test(raw)) return raw; // T-438 N4
+  if (/has no personal name to change/.test(raw)) return raw;
   if (/store scope, so you may not search/.test(raw)) return raw;
   if (/must be exactly 6 digits/.test(raw)) return raw;
   // ⭐ T-302 — the sentence `setPin` throws dropped "at this store" when the lookup key became
@@ -98,22 +101,30 @@ export async function hireAction(formData: FormData): Promise<void> {
   // "existing" value could not tell two search results apart once more than one existed.
   const personChoiceRaw = str(formData, 'personChoice');
   const isExisting = personChoiceRaw.startsWith('existing:');
-  const isNew = personChoiceRaw === 'new';
   const existingPersonId = isExisting ? personChoiceRaw.slice('existing:'.length) : '';
-  const newDisplayName = str(formData, 'newDisplayName');
+  // T-438: a new person is typed as last / first / middle name; the "new person" radio is gone.
+  const lastName = str(formData, 'lastName');
+  const firstName = str(formData, 'firstName');
+  const middleName = str(formData, 'middleName');
+  const sameNameConfirmed = formData.get('sameNameConfirmed') !== null && str(formData, 'sameNameConfirmed') !== 'false';
+  const typed = lastName !== '' || firstName !== '' || middleName !== '';
   const employmentStatus = str(formData, 'employmentStatus') as EmploymentStatus;
   const startedOn = str(formData, 'startedOn');
   const positionIds = strs(formData, 'positionIds');
   const primaryPositionId = str(formData, 'primaryPositionId');
 
-  if (!isExisting && !isNew) {
-    return await redirectWithFlash('/staff/hire', { store: storeId }, { error: 'Pick "use this existing person" or "create new person" before hiring.' });
+  // N5: picked AND typed is refused, never guessed; neither is refused; one half of a name is refused.
+  if (isExisting && (lastName !== '' || firstName !== '')) {
+    return await redirectWithFlash('/staff/hire', { store: storeId }, { error: 'You picked a person from the search and also typed a new name. Keep only one.' });
+  }
+  if (!isExisting && !typed) {
+    return await redirectWithFlash('/staff/hire', { store: storeId }, { error: 'Pick a person from the search, or type their last and first name.' });
   }
   if (isExisting && !existingPersonId) {
     return await redirectWithFlash('/staff/hire', { store: storeId }, { error: 'Pick which existing person to hire.' });
   }
-  if (isNew && !newDisplayName) {
-    return await redirectWithFlash('/staff/hire', { store: storeId }, { error: 'Name the new person.' });
+  if (!isExisting && (lastName === '' || firstName === '')) {
+    return await redirectWithFlash('/staff/hire', { store: storeId }, { error: 'A new person needs both a last name and a first name.' });
   }
 
   // ⚠️ A "primary" radio checked without its checkbox is a UI slip, not a rejection — the person
@@ -129,7 +140,7 @@ export async function hireAction(formData: FormData): Promise<void> {
     const employment = await withOrgPrincipal(actor.orgId, async (tx) => {
       const personId = isExisting
         ? existingPersonId
-        : (await createPerson(tx, actor, { storeId, displayName: newDisplayName })).id;
+        : (await createPerson(tx, actor, { storeId, name: { lastName, firstName, middleName }, sameNameConfirmed })).id;
 
       const input: CreateEmploymentInput = {
         storeId,
@@ -237,6 +248,25 @@ export async function issuePinAction(formData: FormData): Promise<void> {
     return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
   }
   return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Sign-in PIN issued.' });
+}
+
+/** T-438 S2b - retype a person's name as last / first / middle. Writes the parts and display_name together; audit `person.renamed`. */
+export async function renamePersonAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/staff');
+  const employmentId = str(formData, 'employmentId');
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      renamePerson(tx, actor, {
+        employmentId,
+        lastName: str(formData, 'lastName'),
+        firstName: str(formData, 'firstName'),
+        middleName: str(formData, 'middleName'),
+      }),
+    );
+  } catch (err) {
+    return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err), typed: keepTyping(formData, STAFF_RENAME, employmentId, { actorId: actor.personId }) });
+  }
+  return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Name saved.' });
 }
 
 /** T-190 - SSS / PhilHealth / Pag-IBIG / TIN. A blank box clears that number; an agency with no number is not deducted on the payslip. */

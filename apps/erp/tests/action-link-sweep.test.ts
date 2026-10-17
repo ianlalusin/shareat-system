@@ -449,7 +449,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // = 1315 after both merged (17 Oct)
     // +35 (17 Oct): T-190 payroll screens (rates page, government IDs on the staff page, payslip lines; net +35 measured on its older base).
     // = 1352 after T-190 merged onto main (17 Oct; expected 1350, measured 1352: the two extra controls come from where the T-190 screens meet T-436/T-386 on the same pages)
-    expect(results.length).toBe(1352);
+    // +5 (17 Oct): T-438 hire name boxes and rename form
+    expect(results.length).toBe(1357);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

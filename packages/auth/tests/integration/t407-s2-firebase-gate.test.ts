@@ -45,6 +45,7 @@ const uid = (p: string) => `${p}-${Date.now()}-${++seq}`;
 
 /** The sentences, written out in full: the test must not import the constant it is judging. */
 const NO_ACCESS = 'Sign-in failed: this account no longer has access. Ask an admin if this is wrong.';
+const PIN_ONLY = 'Sign-in failed: staff sign in with their PIN. Ask an admin if this is wrong.';
 const NOT_LINKED = 'Sign-in failed: this account is not linked to a person in this system.';
 
 afterAll(async () => {
@@ -172,18 +173,29 @@ describe('Invariant 6 - the franchise owner (leg c): a manager who was never emp
 describe('Invariant 7 - employed at B, ended at A: any open employment admits (leg a)', () => {
   it('signs in; the MOST RECENT employment (A, started later) is the ended one', async () => {
     const f = await fixture('two-stores');
-    const p = await f.person('Floater', 'staff');
+    const p = await f.person('Floater', 'manager');
     await f.employ(p.personId, f.storeB, '2026-01-01'); // open at B, the OLDER row
     await f.employ(p.personId, f.storeA, '2026-02-01', '2026-03-01'); // ended at A, the NEWER row
     const r = await signInWithFirebase(null, { verifiedUid: p.externalId });
     expect(r.personId, 'mutant: R1 reads only the most recent employment').toBe(p.personId);
   });
 
-  it('control: an employed staff person with a plain open employment signs in', async () => {
-    const f = await fixture('staff-ok');
-    const p = await f.person('Cashier', 'staff');
+  it('control: an employed manager with a plain open employment signs in', async () => {
+    const f = await fixture('mgr-ok');
+    const p = await f.person('Supervisor', 'manager');
     await f.employ(p.personId, f.storeA, '2026-01-01');
     expect((await signInWithFirebase(null, { verifiedUid: p.externalId })).personId).toBe(p.personId);
+  });
+
+  // T-438 S1 (bible row 361): was "an employed staff person signs in by email"; staff are PIN-only now.
+  it('an employed staff person with a plain open employment is refused by email: PIN_ONLY (reason pin_only_role)', async () => {
+    const f = await fixture('staff-pin-only');
+    const p = await f.person('Cashier', 'staff');
+    await f.employ(p.personId, f.storeA, '2026-01-01');
+    const e = await refused(p.externalId);
+    expect(e.message).toBe(PIN_ONLY);
+    expect(await sessionCount(p.personId)).toBe(0);
+    expect((await refusals(f.orgId))[0]?.after.reason).toBe('pin_only_role');
   });
 });
 

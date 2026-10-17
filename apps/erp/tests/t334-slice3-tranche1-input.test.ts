@@ -151,7 +151,7 @@ const TRANCHE1_FILES: readonly TrancheFile[] = [
   },
   {
     rel: 'apps/erp/src/app/staff/hire/page.tsx',
-    convertingInputs: ['q', 'newDisplayName', 'startedOn'],
+    convertingInputs: ['q', 'startedOn'],
     nonConvertedSelects: ['store', 'employmentStatus'],
     constantSurvives: true,
   },
@@ -543,4 +543,17 @@ describe('R7 — dark: token classification (synthetic fixture)', () => {
       }
     }
   });
+});
+
+// T-438 (17 Oct): the hire page's single new-name box (newDisplayName) became three (lastName, firstName,
+// middleName). They did not exist at BEFORE_REF, so the before/after comparison above cannot name them; this
+// proves they were born as the shared <Input>, not a raw <input>.
+describe('T-438 - the hire page name boxes are the shared <Input>', () => {
+  const src = readFileSync(path.join(REPO_ROOT, 'apps/erp/src/app/staff/hire/page.tsx'), 'utf8');
+  for (const name of ['lastName', 'firstName', 'middleName']) {
+    it(`name="${name}" is an <Input>, and the old newDisplayName box is gone`, () => {
+      expect(src).toMatch(new RegExp(`<Input[^>]*name="${name}"`));
+      expect(src).not.toContain('newDisplayName');
+    });
+  }
 });

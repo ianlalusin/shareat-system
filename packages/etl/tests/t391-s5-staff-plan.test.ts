@@ -50,7 +50,7 @@ const MAP_CSV = [
   `${P},SharEat Padre Garcia,franchise,SEPG,PGAR`,
 ].join('\r\n');
 
-const CANON = ['Cashier', 'Cook', 'Server', 'Dishwasher', 'Slicer', 'Inventory Staff'].map((name, i) => ({ id: `pos-${i}`, name, storeCode: null }));
+const CANON = ['Cashier', 'Kitchen Staff', 'Server', 'Dishwasher', 'Slicer', 'Inventory Staff'].map((name, i) => ({ id: `pos-${i}`, name, storeCode: null }));
 
 let n = 0;
 const stf = (store: string, name: string, over: Record<string, unknown> = {}): Any => ({
@@ -184,8 +184,16 @@ describe('14c. S1 / S2 / S6 positions', () => {
   it('a canonical name resolves case- and spacing-blind with no sheet row: "Cashier ", "cook", "Inventory  Staff"', async () => {
     const p = await plan(snap([stf(L, 'Una', { positions: ['Cashier '] }), stf(L, 'Dos', { positions: ['cook'] }), stf(L, 'Tres', { positions: ['Inventory  Staff'] })]));
     expect(empOf(p, 'Una').positions).toEqual(['Cashier']);
-    expect(empOf(p, 'Dos').positions).toEqual(['Cook']);
+    expect(empOf(p, 'Dos').positions).toEqual(['Kitchen Staff']);
     expect(empOf(p, 'Tres').positions).toEqual(['Inventory Staff']);
+    expect(sheet(p, 'positions')).toHaveLength(0);
+    expect(p.held).toBe(0);
+  });
+
+  it('v1 "Cook" resolves to canonical "Kitchen Staff" by alias, with no sheet row. Mutant: alias missing (Cook held as unknown)', async () => {
+    const p = await plan(snap([stf(L, 'Alias Al', { positions: ['Cook'] }), stf(L, 'Alias Bo', { positions: [' COOK '] })]));
+    expect(empOf(p, 'Alias Al')).toMatchObject({ positions: ['Kitchen Staff'], primaryPosition: 'Kitchen Staff' });
+    expect(empOf(p, 'Alias Bo').positions).toEqual(['Kitchen Staff']);
     expect(sheet(p, 'positions')).toHaveLength(0);
     expect(p.held).toBe(0);
   });
@@ -197,10 +205,10 @@ describe('14c. S1 / S2 / S6 positions', () => {
     const rows = sheet(p, 'positions');
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ store_code: 'LIPA' });
-    const ok = await plan(s, { answers: { positions: answer(rows, { v2_position: 'Cook' }) } });
+    const ok = await plan(s, { answers: { positions: answer(rows, { v2_position: 'Kitchen Staff' }) } });
     expect(ok.held).toBe(0);
-    expect(empOf(ok, 'Gil One').positions).toEqual(['Cook']);
-    expect(empOf(ok, 'Gil Two').positions).toEqual(['Cook']);
+    expect(empOf(ok, 'Gil One').positions).toEqual(['Kitchen Staff']);
+    expect(empOf(ok, 'Gil Two').positions).toEqual(['Kitchen Staff']);
   });
 
   it('`new:<name>` plans ONE store-position create at that store only, and the staff get it. Mutant: one create per staff member / created org-wide', async () => {
@@ -258,7 +266,7 @@ describe('14c. S1 / S2 / S6 positions', () => {
     const rows = sheet(await plan(s), 'positions');
     const p = await plan(s, { answers: { positions: answer(rows, { v2_position: 'none' }) } });
     expect(p.held).toBe(0);
-    expect(empOf(p, 'Multi Mo')).toMatchObject({ positions: ['Cook', 'Cashier'], primaryPosition: 'Cook' });
+    expect(empOf(p, 'Multi Mo')).toMatchObject({ positions: ['Kitchen Staff', 'Cashier'], primaryPosition: 'Kitchen Staff' });
     expect(empOf(p, 'Nopos Nel')).toMatchObject({ positions: [], primaryPosition: null });
     expect(JSON.stringify(p.listed)).toMatch(/Griller/);
   });
@@ -270,7 +278,7 @@ describe('14c2. S10 unanswered positions', () => {
     const p = await plan(s);
     expect(p.held).toBeGreaterThan(0);
     expect(empOf(p, 'All Open')).toBeUndefined();
-    expect(empOf(p, 'Some Open')).toMatchObject({ positions: ['Cook'], primaryPosition: 'Cook' });
+    expect(empOf(p, 'Some Open')).toMatchObject({ positions: ['Kitchen Staff'], primaryPosition: 'Kitchen Staff' });
     expect(JSON.stringify(p.listed)).toContain('Griller');
   });
 });
@@ -299,7 +307,7 @@ describe('14d2. S12 dateHired forms and S13 person_ref', () => {
 describe('S14d / S14e access-to-grant', () => {
   it.each(['Manager', 'Supervisor', 'OIC'])('S14d: an UNANSWERED %s on a person who also has a resolved position: hired with the resolved one AND on access-to-grant, marked pending. Mutant: only listed after an answer', async (mgmt) => {
     const p = await plan(snap([stf(L, 'Half Hal', { positions: [mgmt, 'Cook'] })]));
-    expect(empOf(p, 'Half Hal')).toMatchObject({ positions: ['Cook'], primaryPosition: 'Cook' });
+    expect(empOf(p, 'Half Hal')).toMatchObject({ positions: ['Kitchen Staff'], primaryPosition: 'Kitchen Staff' });
     const g = sheet(p, 'access-to-grant');
     expect(g).toHaveLength(1);
     expect(g[0]).toMatchObject({ full_name: 'Half Hal', store_code: 'LIPA', v1_position: mgmt });
@@ -411,7 +419,7 @@ describe('14f. R4 / R11 / R12 / R13 / R15 and the sheets', () => {
   it('R11: an answer whose row_key no longer matches is ignored, listed stale, and the row is held again', async () => {
     const s = snap([stf(L, 'Gil One', { positions: ['Griller'] })]);
     const row = sheet(await plan(s), 'positions')[0];
-    const p = await plan(s, { answers: { positions: [{ ...row, row_key: 'kdeadbeef0000', v2_position: 'Cook' }] } });
+    const p = await plan(s, { answers: { positions: [{ ...row, row_key: 'kdeadbeef0000', v2_position: 'Kitchen Staff' }] } });
     expect(p.stale.length).toBeGreaterThan(0);
     expect(p.held).toBeGreaterThan(0);
     expect(empOf(p, 'Gil One')).toBeUndefined();

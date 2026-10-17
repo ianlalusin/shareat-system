@@ -57,7 +57,7 @@ import { stores } from './stores';
  */
 export const CANONICAL_POSITIONS = [
   'Cashier',
-  'Cook',
+  'Kitchen Staff', // T-439 (bible row 362, migration 0208): was 'Cook'
   'Server',
   'Dishwasher',
   'Slicer',

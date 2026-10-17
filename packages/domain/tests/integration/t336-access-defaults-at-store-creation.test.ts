@@ -377,7 +377,7 @@ describe('I8 — a later store gets them, and a positionless org gets none quiet
     const [row] = await sql<{ n: number }[]>`select count(*)::int n from position_capability_defaults where store_id = ${store.storeId}`;
     expect(row!.n).toBe(0);
     expect([...(store as unknown as { missingCanonical: string[] }).missingCanonical].sort()).toEqual(
-      [...['Cashier', 'Cook', 'Server', 'Dishwasher', 'Slicer', 'Inventory Staff']].sort(),
+      [...['Cashier', 'Kitchen Staff', 'Server', 'Dishwasher', 'Slicer', 'Inventory Staff']].sort(),
     );
   });
 });

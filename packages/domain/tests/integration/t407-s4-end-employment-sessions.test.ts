@@ -187,10 +187,11 @@ describe('Invariant 15 - ending a manager\'s only employment ends every session 
   });
 });
 
+// T-438: email sign-in needs a manager/admin role (staff are PIN-only), so the browser-session fixtures below use manager.
 describe('Invariant 16 - ended at A, still open at B (R6)', () => {
   it('browser session and the PIN session at B survive; the PIN session at A ends; the event carries storeId A', async () => {
     const f = await fixture('inv16');
-    const s = await f.person('Floater', 'staff');
+    const s = await f.person('Floater', 'manager');
     const empA = await f.hire(s.personId, f.storeA);
     await f.hire(s.personId, f.storeB);
     const browser = await f.browserSession(s);
@@ -216,7 +217,7 @@ describe('Invariant 16 - ended at A, still open at B (R6)', () => {
 describe('Invariant 17 - ended at A but keeps manual scope at A and is open at B: nothing ends', () => {
   it('no session ends and no session.ended_all event is written (mutant: end at A unconditionally)', async () => {
     const f = await fixture('inv17');
-    const s = await f.person('Keeper', 'staff');
+    const s = await f.person('Keeper', 'manager');
     await f.scope(s.personId, f.storeA, 'manual'); // a deliberate manual grant: survives the end (T-336)
     const empA = await f.hire(s.personId, f.storeA);
     await f.hire(s.personId, f.storeB);
@@ -339,7 +340,7 @@ describe('Invariant 20 - ending the last admin\'s employment never locks the org
 describe('Invariant 21 - two terminations of the SAME person (different stores) must serialise, not deadlock', () => {
   it('both endEmployment calls succeed; the person ends with no open employment and no live session', async () => {
     const f = await fixture('inv21');
-    const s = await f.person('Floater', 'staff');
+    const s = await f.person('Floater', 'manager');
     const empA = await f.hire(s.personId, f.storeA);
     const empB = await f.hire(s.personId, f.storeB);
     await f.browserSession(s);
