@@ -338,13 +338,13 @@ function assertEvidence(index: Index, actionName: string, set: RuleSetInfo): { f
         if (wordRe(set.name).test(joined)) {
           asserted = true;
           if (texts.some((t) => noSpace(t) === set.name || noSpace(t) === `{...${set.name}}`) || wordRe('\\.\\.\\.\\s*' + set.name).test(joined)) whole = true;
-          for (const m of joined.matchAll(wordRe(set.name, '\\.(\\w+)'))) covered.add(m[1]);
+          for (const m of joined.matchAll(wordRe(set.name, '\\.(\\w+)'))) covered.add(m[1] ?? '');
         }
       }
       ts.forEachChild(n, v);
     };
     v(def.node);
-    for (const m of def.node.getText().matchAll(wordRe(set.name, '\\.(\\w+)'))) covered.add(m[1]);
+    for (const m of def.node.getText().matchAll(wordRe(set.name, '\\.(\\w+)'))) covered.add(m[1] ?? '');
   }
   return { found: true, asserted, missing: asserted && !whole ? set.fields.filter((f) => !covered.has(f)) : asserted ? [] : set.fields };
 }
@@ -419,7 +419,7 @@ function parseCensus(md: string): CensusRow[] {
       continue;
     }
     if (!cols || cols.kind < 0 || /^[-:\s|]+$/.test(line) || cells.every((c) => /^[-: ]*$/.test(c))) continue;
-    rows.push({ file: cells[cols.file].replace(/`/g, ''), field: cells[cols.field].replace(/`/g, ''), kinds: cells[cols.kind] });
+    rows.push({ file: (cells[cols.file] ?? '').replace(/`/g, ''), field: (cells[cols.field] ?? '').replace(/`/g, ''), kinds: cells[cols.kind] ?? '' });
   }
   return rows;
 }
@@ -515,7 +515,7 @@ function exemptApplied(g1: Finding[], exempt: Record<string, { count: number; re
       stale.push(`${f}: EXEMPT absorbs ${e.count} but the file has only ${raw[f] ?? 0} finding(s) (stale)`);
       continue;
     }
-    counts[f] = raw[f] - e.count;
+    counts[f] = (raw[f] ?? 0) - e.count;
     if (counts[f] === 0) delete counts[f];
   }
   return { counts, stale };
@@ -662,7 +662,7 @@ describe('G5 controls: G1 bites and does not over-fire (census scope, A12)', () 
   it('a ruled control with no lexical form (a shared component renders it into a form) is still a finding, labelled', () => {
     const f = g1Of('<div><input name="x" required /></div>');
     expect(f).toHaveLength(1);
-    expect(f[0].detail).toContain('no lexical form');
+    expect(f[0]?.detail).toContain('no lexical form');
     expect(g1Of('<div><input name="x" /></div>')).toHaveLength(0);
   });
   it('the NEAREST form decides: a control in a GET form nested in a write form is out; one in a write form inside a GET shell is in', () => {
@@ -675,9 +675,9 @@ describe('G5 controls: G1 bites and does not over-fire (census scope, A12)', () 
   it('a non-literal (or missing) name is a finding labelled as such (it must be listed in EXEMPT, not skipped)', () => {
     const f = g1Of('<form action={a}><input name={`${n}Amount_${i}`} required /></form>');
     expect(f).toHaveLength(1);
-    expect(f[0].detail).toContain('(non-literal name)');
-    expect(g1Of('<form action={a}><input name={fieldName} required /></form>')[0].detail).toContain('(non-literal name)');
-    expect(g1Of('<form action={a}><input required /></form>')[0].detail).toContain('(non-literal name)');
+    expect(f[0]?.detail).toContain('(non-literal name)');
+    expect(g1Of('<form action={a}><input name={fieldName} required /></form>')[0]?.detail).toContain('(non-literal name)');
+    expect(g1Of('<form action={a}><input required /></form>')[0]?.detail).toContain('(non-literal name)');
   });
   it('a converted control (spread nativeAttrs) is NOT a G1 finding even with the attrs it spreads', () => {
     const ok = '<CheckedForm rules={R} action={a}><Field label="n" rule={R.n}><Input {...nativeAttrs(R.n)} maxLength={5} /></Field></CheckedForm>';
