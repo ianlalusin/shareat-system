@@ -38,7 +38,7 @@ build: not run locally. packages/etl/tests/capture.test.ts:113 is the known env-
   tablet app #244, 7,668 stale joins closed).
 
 ## Pick up here
-1. **Release PR release/2026-10-18**: watch CI; merge + deploy **only on Ian's go** (it carries DEF-675 — ship soon).
+1. **Release PR #36 (release/2026-10-18, https://github.com/ianlalusin/shareat-system/pull/36)**: watch CI; merge + deploy **only on Ian's go** (it carries DEF-675 — ship soon).
 2. **T-440 sweep (lane/t440-sweep)**: fix the 2 failing `t440-s6-money-refusals` settlement cases (settledOn is
    checked before the rule set), then run **S9** (auth before field checks, 172 sites, guard G6, spec §S9) and the
    days-to-pay "when" rule; audit; merge.
@@ -66,8 +66,8 @@ build: not run locally. packages/etl/tests/capture.test.ts:113 is the known env-
 ```
 You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-system). Run the global /orchestrator
 skill. Start COLD: read docs/HANDOFF-TODAY.md (all), docs/RULES.md, and docs/handoff/2026-10-17-session-reports.md.
-GREP the bible and register, never Read them whole. State: production = d335959 (PR #35). Release PR
-release/2026-10-18 (T-396 S1+S2 with migration 0209, T-440 S1+S2, T-441 S1, T-398 S2a, DEF-675 port fix) is open:
+GREP the bible and register, never Read them whole. State: production = d335959 (PR #35). Release PR #36
+(release/2026-10-18; T-396 S1+S2 with migration 0209, T-440 S1+S2, T-441 S1, T-398 S2a, DEF-675 port fix) is open:
 check its CI; merge+deploy only when Ian says so. Next: finish T-440 on lane/t440-sweep (2 red settlement tests,
 then S9 auth-first + days-to-pay "when" rule), then T-441 S2-S7, T-442, T-398 S2b-S6. POS v2 lane work sits on
 branch claude/pos-v2-907a29 (not merged). Next free migration 0210, task T-443, DEF-678.
