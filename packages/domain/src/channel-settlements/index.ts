@@ -499,22 +499,31 @@ export async function previewChannelSettlement(
 export async function recordChannelSettlement(
   tx: Tx | null,
   actor: Actor,
-  input: RecordSettlementInput,
+  rawInput: RecordSettlementInput,
 ): Promise<SettlementResult> {
   const run = async (trx: Tx): Promise<SettlementResult> => {
     // ⭐ One POSTED settlement per channel-day, one destination account, one store. The partial
     // unique index refuses a duplicate too — this says WHY, and it is the same context the
     // preview reads, so a screen cannot show a green light this then refuses.
-    const ctx = await gatherSettlementContext(trx, actor, input);
-    // T-440 — the typed-field rules (gross, net, loan amount, reference, date) run HERE, after authorize()
-    // (inside gatherSettlementContext), never in the action before it.
+    // T-440 — authorize() first, then the typed-field rules (gross, net, loan amount, reference, date),
+    // THEN the channel/day lookups: a malformed figure is named before any business check can mask it.
+    await authorize(trx, actor, 'record_ar_collection', { storeId: rawInput.storeId });
     assertFieldRules(CHANNEL_SETTLEMENT_RECORD_RULES, {
-      grossAmount: input.grossAmount,
-      netDeposited: input.netDeposited,
-      loanAmount: input.loan?.amount,
-      reference: input.reference,
-      settledOn: input.settledOn,
+      grossAmount: rawInput.grossAmount,
+      netDeposited: rawInput.netDeposited,
+      loanAmount: rawInput.loan?.amount,
+      reference: rawInput.reference,
+      settledOn: rawInput.settledOn,
     });
+    // An amount docked with no loan picked is a picker left open: the rules above saw it, the books do not.
+    const input: RecordSettlementInput = { ...rawInput, loan: rawInput.loan?.loanId ? rawInput.loan : null };
+    if (!rawInput.salesDayId) {
+      throw new Error(
+        'Choose the day this payout settles. A settlement clears one verified channel-day — ' +
+          'a payout covering several days is one settlement per day, sharing a reference.',
+      );
+    }
+    const ctx = await gatherSettlementContext(trx, actor, input);
     const figures = assertSettlementFigures('recordChannelSettlement', input);
     const config = ctx.config;
     const c = computeSettlement(figures, input.recognizeGain, ctx.outstanding, config.name);

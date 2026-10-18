@@ -116,12 +116,7 @@ export async function recordSettlementAction(formData: FormData): Promise<void> 
     const channelId = str(formData, 'channelId');
     const salesDayId = str(formData, 'salesDayId');
     if (!channelId) throw new Error('Choose the channel this payout is for.');
-    if (!salesDayId) {
-      throw new Error(
-        'Choose the day this payout settles. A settlement clears one verified channel-day — ' +
-          'a payout covering several days is one settlement per day, sharing a reference.',
-      );
-    }
+    // the blank-day refusal lives in recordChannelSettlement, AFTER authorize() and the field rules.
 
     // S5.5v Amendment A2 item 1 — raw strings, unvalidated: the blank/parse refusal for gross/net
     // now lives in the domain, AFTER authorize(), never before it.
@@ -133,7 +128,7 @@ export async function recordSettlementAction(formData: FormData): Promise<void> 
     // schema's own CHECK refuses the pair anyway. Treated as "no loan" rather than surfaced as a
     // constraint error, because that is what the person meant.
     const loanAmount = str(formData, 'loanAmount');
-    const hasLoan = loanId !== '' && loanAmount !== '' && Number(loanAmount) !== 0;
+    const hasLoan = loanAmount !== '' && Number(loanAmount) !== 0; // loanId may be blank: the domain rules see the amount, then drop the pair
 
     await withOrgPrincipal(actor.orgId, (tx) =>
       recordChannelSettlement(tx, actor, {

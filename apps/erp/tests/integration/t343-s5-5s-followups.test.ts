@@ -726,7 +726,8 @@ describe('Amount docked (DEF-470 item 8) — comma leg + negative range guard', 
     }
     expect(caught, 'expected loan amount "1,000" to be refused at all').toBeInstanceOf(Error);
     const err = caught as Error & { userMessage?: string };
-    expect(err.userMessage).toBe('The amount docked — "1,000" is not a valid amount. Use at most two decimal places.');
+    // T-440: the rule's own sentence (CHANNEL_SETTLEMENT_RECORD_RULES.loanAmount) wins over the old domain sentence.
+    expect(err.userMessage).toBe('The amount docked — that is not a valid amount. Use at most two decimal places.');
   });
 
   it(
@@ -756,7 +757,7 @@ describe('Amount docked (DEF-470 item 8) — comma leg + negative range guard', 
     }
     expect(caught, 'expected a negative loan amount to be refused at all').toBeInstanceOf(Error);
     const err = caught as Error & { userMessage?: string };
-    expect(err.userMessage).toBe('The amount docked cannot be negative.');
+    expect(err.userMessage).toBe('The amount docked must be an amount of 0 or more.');
   });
 });
 
