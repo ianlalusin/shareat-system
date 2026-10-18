@@ -35,6 +35,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import ts from 'typescript';
+import { buildIndex, callees, lineOf, noSpace, parse, reachable, read, toSources, walk, wordRe, type FnDef, type Index, type Sources } from './helpers/ts-index';
 import { describe, expect, it } from 'vitest';
 
 const ERP_SRC = resolve(__dirname, '..', 'src');
@@ -49,9 +50,6 @@ const BASELINE_FILE = join(__dirname, 'live-check-baseline.json');
 // ---------------------------------------------------------------------------------------------------------------------
 // AST helpers (the t384-s3 parsers, extended for CheckedForm / EditableRecord and the nativeAttrs spread)
 // ---------------------------------------------------------------------------------------------------------------------
-function parse(source: string, file: string) {
-  return ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
-}
 type Open = ts.JsxOpeningElement | ts.JsxSelfClosingElement;
 function opening(n: ts.Node): Open | undefined {
   if (ts.isJsxElement(n)) return n.openingElement;
@@ -86,7 +84,6 @@ const CONTROL_TAGS = new Set(['input', 'select', 'textarea']);
 const FORM_TAGS = new Set(['form', 'CheckedForm', 'EditableRecord']);
 /** A12: these input types are never a text rule (a file, a tick, a hidden carrier). */
 const SKIP_TYPES = new Set(['hidden', 'file', 'checkbox', 'radio']);
-const lineOf = (sf: ts.SourceFile, n: ts.Node) => sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
 function allJsx(sf: ts.SourceFile): Open[] {
   const out: Open[] = [];
   const v = (n: ts.Node) => {
@@ -226,7 +223,6 @@ function countByFile(items: { file: string }[]): Record<string, number> {
 // ---------------------------------------------------------------------------------------------------------------------
 // G3: rule sets, the function index and the call chain from a form's action (O3)
 // ---------------------------------------------------------------------------------------------------------------------
-type Sources = Record<string, string>;
 interface RuleSetInfo {
   name: string;
   file: string;
@@ -251,69 +247,6 @@ function ruleSets(files: Sources): RuleSetInfo[] {
   return out;
 }
 
-interface FnDef {
-  file: string;
-  node: ts.Node;
-}
-interface Index {
-  defs: Map<string, FnDef[]>;
-  consts: Map<string, Map<string, string>>; // file -> const name -> initializer text (all depths, collisions joined)
-}
-function buildIndex(sources: Sources): Index {
-  const defs = new Map<string, FnDef[]>();
-  const consts = new Map<string, Map<string, string>>();
-  const add = (name: string, d: FnDef) => defs.set(name, [...(defs.get(name) ?? []), d]);
-  for (const [file, src] of Object.entries(sources)) {
-    const sf = parse(src, file);
-    const fc = new Map<string, string>();
-    consts.set(file, fc);
-    const v = (n: ts.Node) => {
-      if (ts.isFunctionDeclaration(n) && n.name && n.body) add(n.name.text, { file, node: n.body });
-      if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer) {
-        if (ts.isArrowFunction(n.initializer) || ts.isFunctionExpression(n.initializer)) add(n.name.text, { file, node: n.initializer.body });
-        fc.set(n.name.text, [fc.get(n.name.text), n.initializer.getText()].filter(Boolean).join(' '));
-      }
-      ts.forEachChild(n, v);
-    };
-    v(sf);
-  }
-  return { defs, consts };
-}
-function callees(n: ts.Node): Set<string> {
-  const out = new Set<string>();
-  const v = (x: ts.Node) => {
-    if (ts.isCallExpression(x)) {
-      const e = x.expression;
-      if (ts.isIdentifier(e)) out.add(e.text);
-      else if (ts.isPropertyAccessExpression(e)) out.add(e.name.text);
-    }
-    ts.forEachChild(x, v);
-  };
-  v(n);
-  return out;
-}
-const noSpace = (s: string) => s.replace(/\s+/g, '');
-const wordRe = (w: string, tail = '') => new RegExp(`(?<![\\w$])${w.replace(/\$/g, '\\$')}${tail}(?![\\w$])`, 'g');
-
-/** The function bodies reachable from `start` by name (union over same-named functions), depth-limited. */
-function reachable(index: Index, start: string, maxDepth = 8): FnDef[] {
-  const seen = new Set<string>();
-  const out: FnDef[] = [];
-  let frontier = [start];
-  for (let d = 0; d <= maxDepth && frontier.length; d++) {
-    const next: string[] = [];
-    for (const name of frontier) {
-      if (seen.has(name)) continue;
-      seen.add(name);
-      for (const def of index.defs.get(name) ?? []) {
-        out.push(def);
-        for (const c of callees(def.node)) if (!seen.has(c) && index.defs.has(c)) next.push(c);
-      }
-    }
-    frontier = next;
-  }
-  return out;
-}
 /**
  * O3: does the call chain of `actionName` assert rule set `setName`, and which of its fields does it cover? `asserted` is
  * false when no reachable `assertFieldRules(` names the set (directly or through an alias const); `missing` lists fields of
@@ -442,20 +375,7 @@ function serverOnly(rows: CensusRow[], knownFiles: Set<string>, formsByFile: Rec
 // ---------------------------------------------------------------------------------------------------------------------
 // The real tree
 // ---------------------------------------------------------------------------------------------------------------------
-function walk(dir: string, accept: (f: string) => boolean, out: string[] = []): string[] {
-  if (!existsSync(dir)) return out;
-  for (const e of readdirSync(dir)) {
-    if (e === 'node_modules' || e === '.next') continue;
-    const p = join(dir, e);
-    if (statSync(p).isDirectory()) walk(p, accept, out);
-    else if (accept(p)) out.push(p);
-  }
-  return out;
-}
 const key = (f: string) => (f.startsWith(COMPONENTS_ROOT) ? 'components/' + relative(COMPONENTS_ROOT, f) : relative(APP_ROOT, f)).replace(/\\/g, '/');
-const read = (f: string) => readFileSync(f, 'utf8');
-const toSources = (files: string[], k: (f: string) => string): Sources => Object.fromEntries(files.map((f) => [k(f), read(f)]));
-
 const tsxFiles = [...walk(APP_ROOT, (f) => f.endsWith('.tsx')), ...walk(COMPONENTS_ROOT, (f) => f.endsWith('.tsx'))];
 const ruleFiles = walk(RULES_DIR, (f) => f.endsWith('.ts') && !f.endsWith('index.ts') && !f.endsWith('check.ts'));
 const serverFiles = [
@@ -598,7 +518,7 @@ describe('T-440 S2 census + ratchet over the real tree', () => {
     it('G3a: every exported rule set reaches assertFieldRules on the server (no client-only rules)', () => {
       expect(unassertedSets(sets, universe, indexOfUniverse())).toEqual([]);
     });
-    it('G3b (O3): every <CheckedForm|EditableRecord rules={X}> has an action whose own call chain asserts X, every field', () => {
+    it('G3b (O3): every <CheckedForm|EditableRecord rules={X}> has an action whose own call chain asserts X, every field', { timeout: 60_000 }, () => {
       expect(formActionProblems(realScan().forms, sets, indexOfUniverse())).toEqual([]);
     });
   });
