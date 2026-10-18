@@ -2,6 +2,18 @@
 
 > ✅ **DONE 2026-10-07 by Ian.** Secret `POS_EXTERNAL_API_KEYS_JSON` version 2 holds **Lipa only** (`L5MExycvUOfQ96Y10FqF`); version 1 (the bare key, not JSON) is superseded. POS `apphosting.yaml` declares it and the rollout is green. `POS_API_URL` / `POS_API_KEY` are on `159.223.46.224`. Step 4 returned **200**. Lesson: the first server copy did not match the secret (401); compare SHA-256 prefixes of the two copies, never the keys. To add a store: re-run step 2.2 with the longer list, then roll out POS.
 
+## POS store ids (Ian, 2026-10-18, read from POS v1)
+
+| Store | POS store id |
+|---|---|
+| Lipa | `L5MExycvUOfQ96Y10FqF` |
+| Malvar | `epiOh1uLetFaK4wI6XmO` |
+| Banay-Banay | `zZM9TfGqSyA5eDg2kyrv` |
+| Davao | `aH3kgLDVjVnW5VtObMEx` |
+| Padre Garcia (franchise, T-398) | `g2CVxzCKVRE7e0cczU0t` |
+
+These are NOT the v1 ERP ids in `docs/STORE-ROSTER.md`.
+
 Ian ruled (bible row 279): **a new, store-scoped POS API key for v2**; v1's global key is not reused. Nothing can be
 linked on production until this exists. The key's value never goes in chat, a commit, or a doc.
 
