@@ -1,6 +1,6 @@
 # T-436 — Leave and absence tracking (monthly and yearly caps, paid vs unpaid)
 
-**Status:** spec written 2026-10-16, not started. Ian answered Q1-Q6 the same day (folded in below).
+**Status:** LIVE 2026-10-17 (PR #34, migration 0205). Leave and absence tracking.
 **Model:** Sonnet (money + auth lane). Write any spec amendment in plan mode.
 **Sources:** bible row 354 item 2 (Ian 2026-10-16: build before the 1 Jan go-live); row 353 (personal
 data guarded); `docs/plans/phase-4-attendance.md:83,354` (deliverable 7, was T-165);

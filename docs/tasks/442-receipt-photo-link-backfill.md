@@ -1,7 +1,6 @@
 # T-442: Link the files already saved (DEF-672 backfill + census)
 
-**Status:** SPEC 2026-10-17 (Opus planner). Depends on T-441 S1 (merged). Run in production only after T-441 S2
-(the other receipt-photo screens claim on save) is deployed, so no new unlinked file arrives after the backfill.
+**Status:** SPEC AUDITED 2026-10-18, WAITING ON T-441 S2; production run by Ian after that deploys.
 
 ## 1. The problem, measured in code (not assumed)
 
@@ -122,3 +121,54 @@ script. Then watch the next 03:00 sweep log: `failed 0`, `referencedUnlinked 0`.
 - Migrating screens to `claimUpload` (T-441 S2-S7). Cross-org same-org FK twins for the five single-column FKs
   (log as a DEF if the report finds any). Deleting stranded bytes (DEF-307). PNG/WebP metadata (DEF-674).
 - Close DEF-672 when S1+S2 are merged, the production `--check` exits 0, and one nightly sweep shows `failed 0`.
+
+## Audit 2026-10-17
+
+Opus spec audit against main (`d634523`). Verified: the six FK columns are complete (schema grep + every migration
+`REFERENCES stored_files`: 0046, 0049, 0057, 0066, 0080, 0204; 0204 adds TWO constraints on `persons`, single + composite);
+`claimFile`/`claimUpload` link the bare record id (`ap/actions.ts:192`, `staff-media.ts:85,127`, `leave/documents.ts:34`);
+sweep deletes the row before the bytes (`files/index.ts:405-420`), so an FK refusal never removes bytes. Folded in:
+
+- **A1 Catalog test, composite FK.** `pg_constraint` returns 7 rows for 6 columns (persons has the single-column FK and
+  `persons_signature_file_id_same_org_fk (org_id, signature_file_id)`). Compare the DISTINCT set of
+  (table, referencing column other than `org_id`) to `FILE_REFERENCES`. Also assert every `uuid` column in
+  `information_schema.columns` named `%file_id` (public schema) is in `FILE_REFERENCES`: catches a future file column
+  added WITHOUT an FK, which the constraint query cannot see.
+- **A2 Guarded files never named in output.** For purposes `staff_signature`, `staff_photo`, `leave_document`, the script
+  prints COUNTS ONLY (no file id, no owner id), in every list including shared/mismatched/cross-org. No purpose ever
+  prints `storage_path`, a URL, or a name: the domain result type carries no `storagePath` field. Test M13: capture the
+  script's stdout for the fixture and assert it contains no fixture `storage_path`, no fixture person name, no `http`,
+  and no id of a guarded-purpose file or of its owner person/employment.
+- **A3 Purpose guard before linking.** Link only when the file's purpose fits the source: `supplier_invoices`,
+  `deliveries` -> `receipt_photo`; `ar_collections` -> `receipt_photo` or `ar_collection_proof`; `employments` ->
+  `staff_photo`; `persons` -> `staff_signature`; `channel_settlements` -> any purpose except the three guarded ones.
+  Otherwise report under `wrongPurpose` (count) and do not write. Reason: `signature.ts:46,121` resolves a signature's
+  person FROM `linked_to`; a guarded file linked to an invoice id would be read as belonging to that id. Mutant M14:
+  a `staff_signature` file referenced from `supplier_invoices` stays `linked_to IS NULL` and counts once in `wrongPurpose`.
+- **A4 Shared vs mismatched.** A shared file's non-owner references (after linking to the lowest owner id) are listed
+  under `shared` only, never also under `mismatched` (on the second, idempotent run too: M6 must see identical lists).
+- **A5 Census tests also assert `listReferenceProblems` is empty** for each write path, not only
+  `listReferencedUnlinked`. ⛔ This pins the convention for T-441 S2's trade pay-now: the file is stored on
+  `ar_collections.receipt_file_id`, so it must be claimed with `linkTo` = the **ar_collections id** (claim inside
+  `dispatchTradeOrder` after the collection insert, or have it return the id), never the trade order id. Same for
+  deliveries: the `deliveries` row id.
+- **A6 `deleteFile` takes the same NOT EXISTS predicate** (built from `FILE_REFERENCES`), so a file referenced between
+  `listOrphans` and the delete resolves as `claimed`, not as an FK error in `failed`. FK `restrict` stays the last wall.
+  M15: reference a candidate after `listOrphans` and before `deleteFile`; result `claimed: 1`, `failed: []`, bytes kept.
+- **A7 RLS, corrected.** Production `DATABASE_URL` is `shareat_app_prod` (non-bypassing, docs/ops/README.md:66) and
+  `withSystemOrgPrincipal` sets role `shareat_app` anyway, so RLS IS enforced; keep the explicit `org_id` filters as the
+  second layer. Consequence: under the org principal a cross-org referencing row is invisible to the sweep's NOT EXISTS,
+  so a cross-org-referenced file stays a candidate and fails visibly on the FK. That is intended; it is exactly the
+  report's list (c). Both sides of every join filter `org_id = $org` (all six tables carry `org_id`).
+- **A8 No `systemTransaction`.** List orgs with a bare `transaction((tx) => schedulerRepo.listOrgsToRun(tx))` exactly as
+  `backfill-store-attendance-config.ts:209`; per-org work under `withSystemOrgPrincipal`. Do NOT add the script to
+  `tests/unit/system-transaction-callers.test.ts`; it must stay green unchanged. Script loads `.env.local` via `dotenv`
+  like its siblings (on the droplet `/srv/shareat` resolves the shared `.env.local`, docs/ops/README.md:759).
+- **A9 Sweep log field.** `runOrphanFileSweepForOrg` has one `detail` string (`scheduler/index.ts:983`); put
+  `referencedUnlinked n` there, joined with the cap message when both apply. A count only, never ids.
+- **A10 Args.** `--org=` must match the UUID shape or exit 1; a well-formed id of no org = "no org processed", exit 1.
+
+Tests added: M13 (output privacy), M14 (purpose guard), M15 (race resolves as claimed). Open (orchestrator): A5 is a
+constraint on T-441 S2's trade pay-now builder; brief S2 with it before S2 starts.
+
+**Status:** AUDITED 2026-10-17. Build after T-441 S2 (the trade pay-now link fix) so the backfill and new uploads use the same link targets; production run by Ian after deploy.

@@ -1,7 +1,6 @@
 # T-441: One photo-upload control with progress and preview
 
-**Status:** SPEC WRITTEN 2026-10-17 (Opus planner). Opus audit done 2026-10-17 (see end). S1 may start on the recommended answers to Q1-Q5;
-amend if Ian differs.
+**Status:** BUILT, NOT RELEASED 2026-10-18 for S1 (shared photo-upload control, POST /files/upload, /ap pilot); S2-S7 SPEC AUDITED, waiting.
 **Ruling:** bible row 364 (Ian, 2026-10-17). Also row 353 (personal data strictly guarded; signatures strictest), row 171 /
 §1.2c (one family of patterns), row 289 (an add form ends in Save), T-296 (1 MB photo cap, browser compression), T-141
 (file broker), T-369 S2 (`/files/[fileId]`), T-434 (staff photo + signature), T-436 (leave certificates).
@@ -312,3 +311,25 @@ Verdict: **sound after the changes below; S1 may start.** Rulings Q1-Q5 untouche
 - **DEF-672 backfill** (link receipt photos already saved): its own task **T-442** (reserved).
 - **Staff photos:** thumbnails allowed, gated by `canViewPhoto` (T-434's rule); row 364's "guarded" means its read rule is kept, not that it gets no thumbnail. Signatures and leave certificates: no thumbnail.
 - **Status:** AUDITED 2026-10-17; S1 buildable.
+
+## Note for S2 from the T-442 audit (2026-10-17)
+
+- Trade pay-now proof photos must be claimed with `linkTo` = the **ar_collections** id, not the trade order id; otherwise T-442's `--check` reports every one as mismatched forever.
+
+## Smoke fix L1 — Lightbox lets a large image run past the modal (2026-10-17, from T-440 S9)
+**Found:** an 1800×1300 image at a 1280×900 window runs past the bottom of the dialog. **Cause** (`Lightbox.tsx:68,84`): the
+dialog caps itself at `max-h-[95vh]`, but inside it the Close row (~40 px), the 12 px gap and `p-3` padding sit ON TOP of an
+image allowed `max-h-[90vh]`: 810 + ~76 > 855 px, and the dialog has no overflow rule, so the picture spills out.
+**Fix (Builder: `apps/erp/src/components/upload/Lightbox.tsx` only):**
+- Dialog: `open:flex flex-col max-h-[95dvh] max-w-[95vw] overflow-hidden` (keep the rest). ⛔ Use `open:flex`, never bare
+  `flex`: a class `display` overrides the browser's `dialog:not([open]) { display: none }`, so a closed lightbox would show.
+- Body wrapper: `flex min-h-0 flex-1 flex-col gap-3`; Close row `shrink-0`. Image box: `min-h-0 flex-1 overflow-auto` (the scroll fallback: on a tiny or zoomed viewport the picture scrolls INSIDE
+  the dialog instead of escaping it). Image: `block mx-auto h-auto w-auto max-w-full max-h-[calc(95dvh-5.5rem)] object-contain`
+  (whole picture, aspect kept, never cropped, never upscaled).
+- PDF branch unchanged.
+**Test** (node, added to `apps/erp/tests/t441-s1-wiring.test.ts`): reads the classes from the source and kills M-L1 bare
+`flex` on the dialog (closed dialog visible); M-L2 image back to a viewport-only cap (`90vh`, no `max-h-[calc(`); M-L3
+`overflow-hidden` dropped from the dialog; M-L4 `overflow-auto` dropped from the image box; M-L5 `object-contain` dropped.
+**Smoke** (port 9008, `/ap` invoice receipt photo, 1800×1300 fixture; also a 600×3000 tall one): at 1280×900 and 375×812,
+`javascript_tool` reads `getBoundingClientRect()`: image bottom <= dialog bottom <= `innerHeight`, image right <= dialog right,
+Close visible without scrolling; the whole picture shows (natural aspect ratio == rendered ratio ± 1%); screenshots attached.

@@ -1,7 +1,6 @@
 # T-437: Customer v2 minimum skeleton (diner phone app, fixtures only)
 
-**Status:** DONE on branch 2026-10-17 (awaiting merge by the orchestrator); spec 2026-10-17 (Opus planner, customer-v2 lane, branch `claude/customer-v2-mvp-3920d6`); Opus spec
-review APPROVE WITH CHANGES, all 11 changes folded in
+**Status:** LIVE 2026-10-17 (PR #35). Customer v2 skeleton, sample data only.
 **Model:** Sonnet tester (slice T) -> Sonnet builder (B1-B3) -> Sonnet auditor (A). No money posting, no auth, no DB.
 **Migration:** none. No schema, no `packages/**` source change.
 **Authority:** plan `docs/plans/pos-customer-v2-phase-plan.md` §5 · ADR-015 Amendment A6 · bible rows 307 (no admin in

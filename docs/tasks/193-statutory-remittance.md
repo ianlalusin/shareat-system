@@ -1,7 +1,6 @@
 # T-193: statutory remittance (paying SSS, PhilHealth, Pag-IBIG and BIR what payroll accrued)
 
-**Status:** spec written 2026-10-17 (Opus planner), not started. Bible row 354 item 4 (Ian, 16 Oct): T-190 now,
-then remittance T-193. Row 217: the business deducts, adds the employer share and remits itself.
+**Status:** SPEC AUDITED 2026-10-18, WAITING ON Ian's answers Q1-Q4.
 **Model:** Sonnet tester first (commits red), then Sonnet builder, per slice. Money path: never Haiku.
 **Migration:** YES, one, hand-authored (ADR-012 §5): **0209 or the next free slot** (T-396 may also take one; whoever
 lands second renumbers, journal idx and `when` = previous + 86400000).

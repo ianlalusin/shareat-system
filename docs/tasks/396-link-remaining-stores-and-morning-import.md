@@ -1,6 +1,6 @@
 # T-396: Link Malvar, Banay-Banay, Davao to POS, and a morning import timer
 
-**Status:** SPECIFIED 2026-10-17 (Opus planner). Replaces the 2026-10-10 reserved stub.
+**Status:** BUILT, NOT RELEASED 2026-10-18 for S1+S2 (06:00 Manila POS day-import, migration 0209, failure status on /sales-days, heartbeat alert); S3/S4 (link Malvar, Davao, Banay-Banay) WAITING ON Ian's POS store ids by Fri 23 Oct.
 **Plan:** `docs/plans/remaining-build-plan.md` C8 (§3.3 row T-396), wave 2. **Bible:** rows 284 (Lipa first, Monday
 start), 292 (POS "collected" = a second cash tender), 293 (submitter never verifies), 303 (Lipa double-enters from 19 Oct,
 all four from **Mon 2 Nov**; timer 06:00 Manila; submit and verify stay human). **Builds on:** T-375 (feed, import,

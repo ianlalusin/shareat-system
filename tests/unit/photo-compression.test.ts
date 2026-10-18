@@ -181,8 +181,7 @@ describe('⛔ THE PLANT — every file input in the app goes through PhotoInput'
 
     const offenders = tracked.filter((f) => {
       if (f.endsWith('components/PhotoInput.tsx')) return false;
-      // T-441: the shared upload control owns its own raw file input (it compresses and limits before the server sees the file).
-      if (f === 'apps/erp/src/components/upload/PhotoUpload.tsx') return false;
+      if (f === 'apps/erp/src/components/upload/PhotoUpload.tsx') return false; // T-441 shared control owns its raw file input (re-uses the compression path)
       const src = readFileSync(path.join(repoRoot, f), 'utf8')
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .split('\n')
