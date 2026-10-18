@@ -1,8 +1,6 @@
 # T-190: payroll statutory contributions and withholding
 
-**Status:** spec written 2026-10-16, not started. Ian, bible row 354 (16 Oct): start NOW from the official 2026
-tables; staff data comes from the HR sheet due 31 Oct. Row 217: the business deducts, adds the employer share, and
-remits itself (remittance is T-193).
+**Status:** LIVE 2026-10-17 (PR #35, migration 0206). Posting is refused until the statutory rates are confirmed.
 **Model:** Sonnet tester first (commits red), then Sonnet builder, per slice. Money path: never Haiku.
 **Migration:** YES, one, hand-authored (ADR-012 §5): **0206** (after T-434's 0204 and T-436's 0205), journal idx
 206, `when` 1803871907084 (0205's + 86400000). Restates `payslips_net_identity_check` (schema/payroll.ts:270).

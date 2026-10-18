@@ -1,7 +1,6 @@
 # T-442: Link the files already saved (DEF-672 backfill + census)
 
-**Status:** SPEC 2026-10-17 (Opus planner). Depends on T-441 S1 (merged). Run in production only after T-441 S2
-(the other receipt-photo screens claim on save) is deployed, so no new unlinked file arrives after the backfill.
+**Status:** SPEC AUDITED 2026-10-18, WAITING ON T-441 S2; production run by Ian after that deploys.
 
 ## 1. The problem, measured in code (not assumed)
 

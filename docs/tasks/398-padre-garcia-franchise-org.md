@@ -1,7 +1,7 @@
 # T-398: Padre Garcia on v2 as its own organisation (plan C11)
 
-**Status:** AMENDED 2026-10-17 (B1-B14 from the re-audit, `docs/tasks/398-audit-2026-10-17.md`; then C1-C6 folding
-**Ian's answers to Q1-Q10, given 2026-10-10** — §0b). S1 SHIPPED (migration **0194**, on main); S2-S7 not built.
+**Status:** S1 LIVE (0194); S2a BUILT, NOT RELEASED 2026-10-18 (DEF-421 ratchet); S2b-S6 SPEC AUDITED, buildable (amended B1-B14, C1-C6); S7 WAITING ON Ian Q11 + data.
+**Ian's answers to Q1-Q10, given 2026-10-10** — §0b.
 - **Buildable now (no Ian answer needed):** **S2a**, **S2b**, **S3**, **S4** — and their production apply too: Q9 (b)
   lets a DEF-491 migration deploy at any time, short pauses accepted (C2). S3's lock timing still uses a restore taken
   after T-391's production load (B6).
