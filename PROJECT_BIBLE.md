@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1700` 13. Decision log
-- `1701–1720` 14. Amendment protocol
-- `1721–1725` 15. Engineering standards — the industry practices this project follows
-  - `1726–1731` 15.1 Build order: walking skeleton first
-  - `1732–1743` 15.2 Golden-master testing — the most important practice here
-  - `1744–1752` 15.3 Strangler Fig, not big-bang cutover
-  - `1753–1757` 15.4 No dual-write
-  - `1758–1766` 15.5 Expand/contract migrations
-  - `1767–1775` 15.6 Observability from day zero, not later
-  - `1776–1780` 15.7 CI gates
-  - `1781–1785` 15.8 Backups and a tested restore
-  - `1786–1790` 15.9 Twelve-Factor config
-  - `1791–1798` 15.10 Append-only ledgers — but not event sourcing
-  - `1799–1803` 15.11 Defence in depth
-  - `1804–1832` 15.12 Skills are lenses, not assurance
-  - `1833–1839` 15.13 Reconciliation is a permanent feature
-- `1840–1844` 16. The accounting spine
-  - `1845–1876` 16.0 What we are actually fixing — the diagnosis
-  - `1877–1920` 16.1 The ten invariants — non-negotiable
-  - `1921–1935` 16.2 The oracle: how "correct" is tested
-  - `1936–1957` 16.3 The model — header + lines, not legs
-  - `1958–1977` 16.4 Deliberately simpler than ERPNext
-  - `1978–2044` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2045–2069` 16.6 What v1 already gets right — preserve the intent
-  - `2070–2091` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2092–2106` 16.8 What v1's accounting already gets right
-  - `2107–2150` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2151–2201` 16.10 Posting patterns — one canonical pattern per business event
-  - `2202–2234` 16.11 Inventory's accounting integration
+- `1329–1708` 13. Decision log
+- `1709–1728` 14. Amendment protocol
+- `1729–1733` 15. Engineering standards — the industry practices this project follows
+  - `1734–1739` 15.1 Build order: walking skeleton first
+  - `1740–1751` 15.2 Golden-master testing — the most important practice here
+  - `1752–1760` 15.3 Strangler Fig, not big-bang cutover
+  - `1761–1765` 15.4 No dual-write
+  - `1766–1774` 15.5 Expand/contract migrations
+  - `1775–1783` 15.6 Observability from day zero, not later
+  - `1784–1788` 15.7 CI gates
+  - `1789–1793` 15.8 Backups and a tested restore
+  - `1794–1798` 15.9 Twelve-Factor config
+  - `1799–1806` 15.10 Append-only ledgers — but not event sourcing
+  - `1807–1811` 15.11 Defence in depth
+  - `1812–1840` 15.12 Skills are lenses, not assurance
+  - `1841–1847` 15.13 Reconciliation is a permanent feature
+- `1848–1852` 16. The accounting spine
+  - `1853–1884` 16.0 What we are actually fixing — the diagnosis
+  - `1885–1928` 16.1 The ten invariants — non-negotiable
+  - `1929–1943` 16.2 The oracle: how "correct" is tested
+  - `1944–1965` 16.3 The model — header + lines, not legs
+  - `1966–1985` 16.4 Deliberately simpler than ERPNext
+  - `1986–2054` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2055–2079` 16.6 What v1 already gets right — preserve the intent
+  - `2080–2101` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2102–2116` 16.8 What v1's accounting already gets right
+  - `2117–2160` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2161–2211` 16.10 Posting patterns — one canonical pattern per business event
+  - `2212–2244` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1689,7 +1689,7 @@ just a patch.**
 | 354 | 2026-10-16 | **EARLY-PHASE CLOSE-OUT RULINGS.** (1) Backups (T-393, Phase 0): switch ON now with one proven restore drill, before the 15 Nov go/no-go (reverses row 306's "no backup for now"). (2) Leave/absence tracking (monthly and yearly caps, Phase 4, never built): BUILD before the 1 Jan go-live. (3) Expanded withholding tax on supplier payments (BIR 1601-E): Shareat does NOT withhold; closed as not applicable. (4) Payroll statutory deductions (SSS, PhilHealth, Pag-IBIG, withholding; T-190, then remittance T-193): start NOW from the official 2026 tables; staff data from the HR sheet when it arrives (due 31 Oct). | Ian, 2026-10-16 (orchestrator session, roadmap review) | Yes, per item |
 | 355 | 2026-10-16 | **LEAVE AND PAYROLL-DEDUCTION RULINGS.** Leave (T-436): caps and the 5 legal paid days reset every 1 January; unused legal days are paid out as cash at year end; whole days only at go-live; managers may attach medical-certificate photos (guarded per row 353); pro-rated paid days in the year a person reaches one year of service; nobody approves their own leave (a manager's or admin's own leave needs the super-admin). Payroll (T-190): a government contribution (SSS, PhilHealth, Pag-IBIG) is NOT deducted for a person until that agency's number is on file; the payroll preview lists who is missing what. Backups (T-393): files are not encrypted; the bucket stays private with a bucket-only key. | Ian, 2026-10-16 (orchestrator session); the orchestrator noted the penalty risk of skipping contributions | Yes |
 | 356 | 2026-10-17 | **POS v2 OFFLINE RULES (narrows ADR-015 A3).** (1) NO refunds while offline: the tablet says "Refunds need the internet." The server-side manager PIN check (row 351) cannot run offline before P1's offline verifier. (2) Voiding an UNPAID table while offline is allowed only for a signed-in manager or admin; the void is marked `voidedOffline`, listed by pos2-audit, and reviewed after sync. Spec: T-425 (PC-5). | Ian, 2026-10-17, in the POS v2 session; recorded by the orchestrator | Yes |
-| 357 | 2026-10-17 | **POS v2: NO FIXED TABLES — STAND NUMBERS.** A party's "table number" is a numbered stainless stand handed over at seating, not a place on a floor. The POS v2 table screen is a list of OPEN ORDERS BY STAND NUMBER, not a floor map (mock-up v3, PC-7). Open: whether a stand number already in use is refused, and how many stands each store has. | Ian, 2026-10-17, comments on the PC-7 mock-ups; recorded by the orchestrator | Yes |
+| 357 | 2026-10-17 | **POS v2: NO FIXED TABLES — STAND NUMBERS.** A party's "table number" is a numbered stainless stand handed over at seating, not a place on a floor. The POS v2 table screen is a list of OPEN ORDERS BY STAND NUMBER, not a floor map (mock-up v3, PC-7). ~~Open: whether a stand number already in use is refused, and how many stands each store has.~~ **Answered by row 371** (v1's fixed stand set, one use at a time, picked by click). | Ian, 2026-10-17, comments on the PC-7 mock-ups; recorded by the orchestrator | Yes |
 | 358 | 2026-10-17 | **POS v2: THE FIRST ORDER MAY HOLD A PACKAGE AND À LA CARTE TOGETHER.** v1 forces "start the package, then add items"; v2 lets the first order carry both. Payment screen mock-up: agreed. | Ian, 2026-10-17, PC-7 mock-up comments; recorded by the orchestrator | Yes |
 | 359 | 2026-10-17 | **POS v2: KEEP "CONVERT" AS ITS OWN FEATURE (corrects ADR-015 A4.2).** v1's `PaymentConvertModal` is a GCash cash-in/cash-out service (333 conversions in the live data), not a wrong-tender fix. Ian: keep it, as a separate feature. The wrong-tender correction stays its own document. T-422 dropped Convert with /dashboard: a regression, restored by **T-427** (server route like T-424; net-zero move between payment methods as v1 did; no PIN for cashiers as in v1). | Ian, 2026-10-17, PC-7 mock-up comments; recorded by the orchestrator | Yes |
 | 360 | 2026-10-17 | **A PERSON'S NAME IS LAST, FIRST, MIDDLE; OTHER SCREENS SHOW "LAST, FIRST M."; HIRE CREATES THE PERSON FROM THE TYPED NAME.** The Hire screen takes Last name, First name and Middle name as three fields; every other screen shows `Lastname, Firstname M.` (middle name reduced to its initial). The "Create new person named" radio is dropped: a name typed into Who-is-this creates the person on save (searching still never creates one). Task **T-438**. | Ian, 2026-10-17, on the Hire screen while hiring Lipa's manager; recorded by the orchestrator | Yes |
@@ -1697,6 +1697,14 @@ just a patch.**
 | 362 | 2026-10-17 | **THE BUILT-IN POSITION "COOK" IS RENAMED "KITCHEN STAFF".** The canonical six become Cashier, Kitchen Staff, Server, Dishwasher, Slicer, Inventory Staff. Existing canonical rows are renamed in place (same position id, same grants), by migration 0208; new orgs are seeded with the new name. Same day: the six canonical positions were backfilled on production (T-335 script) and Lipa's hand-made Cashier/DishWasher/Server were retired by Ian. Task **T-439**. | Ian, 2026-10-17, after the production positions backfill; recorded by the orchestrator | Yes |
 | 363 | 2026-10-17 | **LIVE FIELD CHECKS ON EVERY FORM FIELD THAT HAS A RULE.** Where a field has a requirement (required, length, allowed characters, a pattern, a range), the form shows a helper line saying what is still missing as the user types, turns it green ("good", "valid") once satisfied, and keeps Save disabled until every rule on the form passes. Fields with no rule are untouched. The server still validates every save (row 7 / §2.6: no client-only rules); the live check mirrors the server rule from ONE shared definition so the two cannot drift. Task **T-440** maps every form. | Ian, 2026-10-17; recorded by the orchestrator | Yes |
 | 364 | 2026-10-17 | **ONE PHOTO-UPLOAD CONTROL EVERYWHERE: SHOW STATE, PROGRESS AND A PREVIEW.** Every photo upload uses one control: empty = a rounded square (or a circle for a person's photo) on a gray background with an upload icon; uploading = a filling-water style progress animation; done = the preview inside the shape; clicking the preview opens the full-size picture. Guarded files (signatures, leave certificates, staff photos; rows 353, T-434, T-436) keep their own read rules: the full-size view uses the same short-lived audited link, never a public URL. Task **T-441** maps every upload. | Ian, 2026-10-17; recorded by the orchestrator | Yes |
+| 365 | 2026-10-17 | **PAYING THE AGENCIES (T-193): ONE EMPLOYER NUMBER, PENALTY BOOKED WHEN PAID, ACCOUNT 6810, NO VOID OF A PAID MONTH.** (1) One employer number per agency for the whole company, not per branch (q-t193-employer-no a). (2) Late-payment penalties: the report shows an ESTIMATE only; the real penalty is booked when it is paid, from the agency's receipt. Nothing is accrued automatically. **This amends §16.5 requirement 4** (penalty accrual) (q-t193-penalty a). (3) Penalties go to a NEW account **6810 Penalties and surcharges**, not 6900 (q-t193-penalty-account a). (4) A payroll run whose month was already paid to an agency cannot be voided until that agency payment is voided first; the books never show an agency as overpaid by accident (q-t193-void-paid-month a). | Ian, 2026-10-17 13:47-13:54 UTC, Open Questions page; all four as recommended. Recorded 2026-10-18 by the Opus planner | Yes |
+| 366 | 2026-10-17 | **PAID LEAVE IS NOT "BASIC PAY" FOR PHILHEALTH AND PAG-IBIG; ONLY DAYS ACTUALLY WORKED COUNT.** Keeps T-190/T-436 as built: `leave_pay` and `sil_conversion_pay` stay out of `basic_pay`, so the PhilHealth and Pag-IBIG base (`base_kind = basic`) excludes paid leave; SSS (base = gross) still sees it. **Against the recommendation** (count paid leave days as basic, keep only the year-end SIL payout out). The accountant's rate confirmation (T-190 "verify") may still revisit it; posting stays blocked until then (q-t190-leave-in-basic b). | Ian, 2026-10-17, Open Questions page; recorded 2026-10-18 by the Opus planner | Yes |
+| 367 | 2026-10-17 | **VAWC LEAVE IS SHOWN AS PLAIN "LEAVE" EXCEPT TO THE APPROVER, HR AND ADMINS.** Staff lists, the attendance grid and CSV exports say "Leave" for a VAWC (RA 9262) day; only the person approving it, HR and admins see "VAWC". Applies row 353 (personal data strictly guarded). **Changes live T-436**, which today shows "VAWC" to every attendance manager at the store (q-t436-vawc-label a). | Ian, 2026-10-17, Open Questions page; as recommended. Recorded 2026-10-18 by the Opus planner | Yes |
+| 368 | 2026-10-17 | **THE 06:00 POS MORNING IMPORT (T-396): ACTOR, ALERT, CLOSED DAYS, LINK DATE.** (1) The import is recorded as the admin who last saved that store's POS link (q-t396-actor a). (2) A failed morning shows ONLY as a note on the Sales days page; **no phone/email alert** (q-t396-alert b, **against the recommendation**). (3) A day POS has no sales for (store closed) is a quiet note, not an alarm; a POS outage still shows as a failure (q-t396-closed-day a). (4) Malvar, Davao and Banay-Banay are linked on **Mon 26 Oct**, one week before double entry starts on 2 Nov (q-t396-link-date a). Still open: the three stores' POS ids (q-t396-pos-ids, Ian asked whether they can be read from v1). | Ian, 2026-10-17, Open Questions page; recorded 2026-10-18 by the Opus planner | Yes |
+| 369 | 2026-10-17 | **PADRE GARCIA RUNS ITS STAFF ATTENDANCE, LEAVE AND PAYROLL ON v2 FROM 1 JAN.** T-398 Q11 = (b), **against the recommendation** (keep PG's HR outside v2 for now). Consequence: PG needs its own government rates (SSS, PhilHealth, Pag-IBIG, withholding) seeded for its company, and an approver above PG's manager for the manager's own leave (row 355 routes it to a super-admin, which PG does not have under T-398 Q1 a). Not built by T-398 as specced: a new task, needed before 1 Jan (t398-q11-pg-hr b). | Ian, 2026-10-17, Open Questions page; recorded 2026-10-18 by the Opus planner | Yes |
+| 370 | 2026-10-17 | **THE COMMISSARY MAY NOT MARK A PADRE GARCIA ORDER "PAID NOW" WHEN IT SHIPS.** Each company records its own payment when money actually moves (T-398 B5 / E23: `payNow` on an inter-entity dispatch is refused) (t398-q12-pay-now a). | Ian, 2026-10-17, Open Questions page; as recommended. Recorded 2026-10-18 by the Opus planner | Yes |
+| 371 | 2026-10-17 | **STANDS ARE v1'S FIXED SET PER STORE, ONE USE AT A TIME, PICKED BY CLICK, NEVER TYPED (amends row 357).** Ian's words: "v1 has specific set of table stand and each can only be used once at a time so once a stand no is used take that out from roster of table instead of typing user must click only. no typing for pos but on notes and billing only." So: each store's stands are the set v1 already holds (v1 POS `stores/{storeId}/tables`, managed in v1's store settings); a stand in use is removed from the pick list until its order closes, so a double use cannot happen; the cashier picks a stand by tapping, and POS v2 has no free typing except in notes and billing. Replaces the option asked (refuse a typed number, plus a per-store range from Ian). Applies to T-429 (q-row357-stands, free text). | Ian, 2026-10-17, Open Questions page; recorded 2026-10-18 by the Opus planner | Yes |
+| 372 | 2026-10-17 | **A SENIOR'S OR PWD DINER'S DISCOUNTED SHARE = HER OWN PACKAGE HEAD PLUS DISHES MARKED AS HERS; SHARED DISHES GET NO DISCOUNT.** Matches DOJ Legal Opinion 45 (2024) and what T-426 is building (q-t426-senior-share a). | Ian, 2026-10-17, Open Questions page; as recommended. Recorded 2026-10-18 by the Opus planner | Yes |
 
 ## 14. Amendment protocol
 
@@ -2037,6 +2045,8 @@ Requirements this creates:
 3. **Due-date awareness** per agency, with a warning before the deadline.
 4. **Penalty accrual** once overdue, so the true cost is on the books rather than
    arriving as a surprise.
+   *Amended by row 365 (Ian, 2026-10-17): the report shows an ESTIMATED penalty; the real
+   penalty is booked when paid, from the receipt, to 6810. Nothing accrues automatically.*
 5. **Partial remittance** must be representable — real catch-up payments are partial.
 6. The subledger total must reconcile to the control account (invariant 6).
 

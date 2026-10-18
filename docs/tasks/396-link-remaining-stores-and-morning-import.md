@@ -121,6 +121,11 @@ line or zero orgs. `docs/ops/shareat-pos-day-import.timer`: `OnCalendar=*-*-* 06
 (a missed 06:00 runs at boot; the 7-day window covers longer outages), `AccuracySec=1min`. `.service`: oneshot,
 `User=shareat`, `NODE_ENV=production`, log `/var/log/shareat/pos-day-import.log`, `TimeoutStartSec=15min`.
 
+> **Ian's ruling changes the spec (Q2 b, row 368):** a failed morning shows ONLY on `/sales-days`. Part (ii) below
+> (the `POS_IMPORT_HEARTBEAT_URL` ping to phone/email) is dropped: no heartbeat secret, no `httpHeartbeat` calls, and
+> the "arm the heartbeat" deploy step goes. Part (i) stays, including amber-when-stale (now the only sign of a dead
+> timer). Planner to amend D3 and its test legs before S2 builds.
+
 **D3 — alarm Ian can see (Q2 a).** (i) `/sales-days` renders `SchedulerStatus job="pos_day_import"` for anyone with
 `submit_sales_day`: red with every failure line, amber when stale; (ii) the script pings `POS_IMPORT_HEARTBEAT_URL`
 (`httpHeartbeat`: `/start`, ok, `/fail` with the failure lines) so a dead timer or a failing morning reaches Ian's phone
@@ -253,11 +258,11 @@ store 1 skipped, status line green; re-run once more → 0 imported. Open one dr
 
 | # | Question | Options | Recommended |
 |---|---|---|---|
-| Q1 | Whose name the morning import works under | (a) the admin who last saved that store's POS link · (b) a new "system" identity | **(a)**: no new always-on login nobody watches; if that admin leaves, the import stops loudly and someone re-saves the link |
-| Q2 | How a failed morning reaches you | (a) red line on Sales days **and** a phone/email alert from the backup alert service · (b) the page only | **(a)**: a page only helps if someone opens it; the alert service is already paid for |
-| Q3 | (action) Send the POS store ids of Malvar, Banay-Banay, Davao, add all four to the POS key and roll POS out; say which bank/e-wallet account receives each store's GCash, bank transfer and QRPH | — | By **Fri 23 Oct**, or 26 Oct slips |
-| Q4 | A day POS has no sales for (store closed) | (a) a note, no alarm · (b) an alarm | **(a)**: a closed day is normal; a POS outage still alarms |
-| Q5 | Which Monday to link the three stores | (a) Mon 26 Oct · (b) Mon 2 Nov | **(a)**: one week of imports to shake out before double entry starts 2 Nov; (b) leaves no slack |
+| Q1 ✅ **(a), row 368** | Whose name the morning import works under | (a) the admin who last saved that store's POS link · (b) a new "system" identity | **(a)**: no new always-on login nobody watches; if that admin leaves, the import stops loudly and someone re-saves the link |
+| Q2 ✅ **(b), row 368 — against the recommendation** | How a failed morning reaches you | (a) red line on Sales days **and** a phone/email alert from the backup alert service · (b) the page only | **(a)**: a page only helps if someone opens it; the alert service is already paid for |
+| Q3 ⏳ **open**: Ian asked "can't you read them directly on v1?" (lookup pending) | (action) Send the POS store ids of Malvar, Banay-Banay, Davao, add all four to the POS key and roll POS out; say which bank/e-wallet account receives each store's GCash, bank transfer and QRPH | — | By **Fri 23 Oct**, or 26 Oct slips |
+| Q4 ✅ **(a), row 368** | A day POS has no sales for (store closed) | (a) a note, no alarm · (b) an alarm | **(a)**: a closed day is normal; a POS outage still alarms |
+| Q5 ✅ **(a) Mon 26 Oct, row 368** | Which Monday to link the three stores | (a) Mon 26 Oct · (b) Mon 2 Nov | **(a)**: one week of imports to shake out before double entry starts 2 Nov; (b) leaves no slack |
 
 ## Out of scope
 
@@ -316,5 +321,5 @@ log, not on the day page; acceptable?
 - **After-midnight sales (row 348) for POS v1:** accepted as v1 files them (next calendar date) for the dual-run period; POS v2 follows row 348. Not a T-375 defect.
 - **A store trading past 06:00:** the 7-day recheck corrects the partial day; no extra handling.
 - **Timer work visible in the audit log; failures on /sales-days (S2):** accepted.
-- **S1 builds with the recommended defaults** (actor = the admin who last saved the store's POS link; Ian's q-t396-actor can switch it before arming).
+- **S1 builds with the recommended defaults** (actor = the admin who last saved the store's POS link; Ian confirmed this 2026-10-17, row 368).
 - **Status:** AUDITED 2026-10-17. S1 building now (migration 0209). S3/S4 data blocked on Ian's q-t396-pos-ids (by Fri 23 Oct).
