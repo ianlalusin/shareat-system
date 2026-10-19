@@ -1,13 +1,14 @@
 import { notFound } from 'next/navigation';
 import { requireSession } from '../../../lib/session';
 import { can } from '@shareat/auth';
-import { getItem, itemPrices, peso, retireReadout, sellabilityByStore, soldAsLabel, unitHistoryExists, withOrgPrincipal } from '../lib';
+import { getItem, itemPrices, peso, retireReadout, sellabilityByStore, soldAsLabel, unitHistoryExists, variationParentOptions, variationsOf, withOrgPrincipal } from '../lib';
 import { whoSells } from '../../ap/lib';
 import {
   changeItemUnitAction,
   clearStoreSellabilityAction,
   renameItemAction,
   setItemStatusAction,
+  setItemVariantOfAction,
   setStoreSellabilityAction,
   suggestItemCodeAction,
   updateItemFlagsAction,
@@ -16,10 +17,10 @@ import { ItemCodeField } from '../ItemCodeField';
 import { BASE_UNITS, itemKindLabel } from '@shareat/db';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
-import { ITEM_FLAGS, ITEM_RENAME, ITEM_STORE_SELLABILITY, ITEM_UNIT } from '../typed-forms';
+import { ITEM_FLAGS, ITEM_RENAME, ITEM_STORE_SELLABILITY, ITEM_UNIT, ITEM_VARIANT } from '../typed-forms';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
-import { Banner, Button, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Banner, Button, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select, SplitWorkspace } from '@/components/ui';
 
 export const metadata = { title: 'Item — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -65,6 +66,12 @@ export default async function ItemDetailPage({
   // T-378 S4 (DEF-600). Presentation aid only: the same gate the action uses, asked here so the form is drawn only for
   // who may use it. `changeItemBaseUnit` stays the enforcement. Pattern: channel-settlements/page.tsx.
   const mayApproveItem = await withOrgPrincipal(actor.orgId, (tx) => can(tx, actor, 'approve_item', {}));
+  // T-443 R1. The variations of this item, its parent (if it is one), and - for who may group items - the parents it could go under.
+  const variations = await variationsOf(actor.orgId, id);
+  const parentItem = item.variantOfItemId ? await getItem(actor.orgId, item.variantOfItemId) : undefined;
+  const parentChoices = mayApproveItem && variations.length === 0
+    ? (await variationParentOptions(actor.orgId)).filter((o) => o.id !== item.id && o.kind === item.kind && o.status !== 'merged')
+    : [];
   // T-383 R5/B2.4. Advisory readout for the Retire section: active or retired, never merged, and only for who may use it.
   const readout =
     mayApproveItem && (item.status === 'active' || item.status === 'inactive')
@@ -82,7 +89,7 @@ export default async function ItemDetailPage({
   const FLAGS = [
     { key: 'isPurchasable', label: 'Bought from suppliers', org: item.isPurchasable },
     { key: 'sellableRetail', label: 'Sold à la carte', org: item.sellableRetail },
-    { key: 'sellableWholesale', label: 'Sold wholesale', org: item.sellableWholesale },
+    { key: 'sellableWholesale', label: 'Sold to other stores or buyers (wholesale)', org: item.sellableWholesale },
   ] as const;
 
   return (
@@ -96,20 +103,30 @@ export default async function ItemDetailPage({
           <span className="font-mono text-xs">{item.code}</span> · {itemKindLabel(item.kind)} ·
           priced per {item.baseUnit} · {soldAsLabel(item)}
         </p>
+        {parentItem && (
+          <p className="text-sm text-neutral-500 dark:text-neutral-400">
+            Variation of{' '}
+            <a href={`/items/${parentItem.id}`} className="inline-block py-0.5 underline underline-offset-2">{parentItem.name}</a>
+          </p>
+        )}
       </div>
 
       <FlashBanner flash={sp} />
 
+      <SplitWorkspace
+        formTitle="Item settings"
+        detailsTitle="Item details and prices"
+        form={<div className="min-w-0 space-y-4">
       {/* T-383 R6. Rename: name and code, super-admin only; the domain (`renameItem`) is the enforcement. */}
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Name and code</h2>
         {mayApproveItem ? (
           <EditableRecord action={renameItemAction} label={item.name} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_RENAME, item.id, actor.personId)}>
             <FormGrid>
-              <Field label="Name">
+              <Field width="name" label="Name">
                 <Input id="rename-name" name="name" type="text" required defaultValue={item.name} className="w-full" />
               </Field>
-              <Field label="Code">
+              <Field width="code" label="Code">
                 <Input name="code" type="text" required defaultValue={item.code} className="w-full" />
               </Field>
               {/* T-386 R10 (q4): the code stays on rename; the tick offers the new suggestion. */}
@@ -135,6 +152,54 @@ export default async function ItemDetailPage({
         )}
       </section>
 
+      {/*
+        T-443 R1. Variations: each size is its own item (own code, stock, price history) grouped under a top-level parent. One level only;
+        the database trigger `items_variant_guard` is the rule and the domain (`setItemVariantOf`) speaks it in words. Super-admin sets it.
+      */}
+      <section id="variation" className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">Variations</h2>
+        {variations.length > 0 && (
+          <div className="space-y-1 text-sm">
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              These items are sizes or variations of {item.name}. Each keeps its own code, stock and price history.
+            </p>
+            <ul className="list-inside list-disc">
+              {variations.map((v) => (
+                <li key={v.id}>
+                  <a href={`/items/${v.id}`} className="inline-block py-0.5 underline underline-offset-2">{v.name}</a>{' '}
+                  <span className="font-mono text-xs text-neutral-500">{v.code}</span>
+                  {v.status !== 'active' && <span className="ml-2 text-xs text-neutral-500">({v.status})</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {mayApproveItem && item.status !== 'merged' ? (
+          variations.length > 0 ? (
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              This item has variations, so it cannot itself be a variation. Detach them first to change that.
+            </p>
+          ) : (
+            <EditableRecord action={setItemVariantOfAction} label={`${item.name} variation`} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_VARIANT, item.id, actor.personId)}>
+              <FormGrid>
+                <Field width="long" label="Variation of">
+                  <Select name="parentId" defaultValue={item.variantOfItemId ?? ''} className="w-full">
+                    <option value="">(none, a top-level item)</option>
+                    {parentChoices.map((o) => (
+                      <option key={o.id} value={o.id}>{o.name} ({o.code})</option>
+                    ))}
+                  </Select>
+                </Field>
+              </FormGrid>
+            </EditableRecord>
+          )
+        ) : variations.length === 0 ? (
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+            {parentItem ? 'Only a super-admin can change which item this is a variation of.' : 'No variations. Only a super-admin can group items as variations.'}
+          </p>
+        ) : null}
+      </section>
+
       {/* T-378 R2/R4. The form shows only while the database says the item has no history; the trigger is the rule. */}
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Measured in</h2>
@@ -150,7 +215,7 @@ export default async function ItemDetailPage({
         ) : (
           <EditableRecord action={changeItemUnitAction} label={`${item.name} unit`} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_UNIT, item.id, actor.personId)}>
             <FormGrid>
-              <Field label="Unit">
+              <Field width="short" label="Unit">
                 <Select name="baseUnit" required defaultValue={item.baseUnit} className="w-full">
                   {BASE_UNITS.map((u) => (
                     <option key={u} value={u}>{u}</option>
@@ -305,34 +370,6 @@ export default async function ItemDetailPage({
         )}
       </section>
 
-      {sellers.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="font-medium">Who sells this</h2>
-          {sellers.length === 1 && (
-            <p className="text-xs text-warning-ink">
-              ⚠️ Only one supplier &mdash; a single point of supply for this item.
-            </p>
-          )}
-          <ul className="flex flex-wrap gap-2 text-sm">
-            {sellers.map((s) => (
-              <li
-                key={s.supplierId}
-                className="rounded-lg border border-neutral-200 px-3 py-1.5 dark:border-neutral-800"
-              >
-                <a href={`/ap/suppliers/${s.supplierId}`} className="underline hover:no-underline">
-                  {s.supplierName}
-                </a>
-                <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">
-                  {s.source === 'observed'
-                    ? `billed ${s.timesBilled}× since ${s.firstSeenOn}`
-                    : 'declared — never billed'}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
       {/* T-383 R6/B2.4. Retire or restore: super-admin only, never for a merged item. The domain (`setItemStatus`) is the enforcement. */}
       {mayApproveItem && readout && (
         <section id="retire" className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
@@ -389,6 +426,46 @@ export default async function ItemDetailPage({
         </section>
       )}
 
+
+        </div>}
+        details={<div className="min-w-0 space-y-4">
+          <section className="rounded-lg border border-surface-border bg-surface p-4">
+            <h2 className="mb-3 font-semibold">Item details</h2>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              <dt className="text-muted">Code</dt><dd className="font-mono">{item.code}</dd>
+              <dt className="text-muted">Kind</dt><dd>{itemKindLabel(item.kind)}</dd>
+              <dt className="text-muted">Measured in</dt><dd>{item.baseUnit}</dd>
+              <dt className="text-muted">Status</dt><dd className="capitalize">{item.status}</dd>
+            </dl>
+          </section>
+      {sellers.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="font-medium">Who sells this</h2>
+          {sellers.length === 1 && (
+            <p className="text-xs text-warning-ink">
+              ⚠️ Only one supplier &mdash; a single point of supply for this item.
+            </p>
+          )}
+          <ul className="flex flex-wrap gap-2 text-sm">
+            {sellers.map((s) => (
+              <li
+                key={s.supplierId}
+                className="rounded-lg border border-neutral-200 px-3 py-1.5 dark:border-neutral-800"
+              >
+                <a href={`/ap/suppliers/${s.supplierId}`} className="underline hover:no-underline">
+                  {s.supplierName}
+                </a>
+                <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">
+                  {s.source === 'observed'
+                    ? `billed ${s.timesBilled}× since ${s.firstSeenOn}`
+                    : 'declared — never billed'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {history.length === 0 ? (
         <p className="rounded-lg border border-neutral-200 p-4 text-sm text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
           No prices yet. Record a supplier invoice with this item on a line, and its history starts
@@ -403,9 +480,9 @@ export default async function ItemDetailPage({
               an average of averages. Buying 100{item.baseUnit} cheap and 1{item.baseUnit} dear is
               not a mid-price month.
             </p>
-            <div className="space-y-1">
+            <div className="overflow-x-auto space-y-1">
               {movement.map((m) => (
-                <div key={m.month} className="flex items-center gap-3 text-sm">
+                <div key={m.month} className="flex min-w-[30rem] items-center gap-3 text-sm">
                   <span className="w-16 shrink-0 font-mono text-xs">{m.month}</span>
                   <div className="h-5 flex-1 overflow-hidden rounded bg-neutral-100 dark:bg-neutral-900">
                     <div
@@ -431,10 +508,10 @@ export default async function ItemDetailPage({
                 <table className="w-full min-w-[520px] border-collapse text-sm">
                   <thead>
                     <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
-                      <th className="px-3 py-2 font-medium">Supplier</th>
-                      <th className="px-3 py-2 text-right font-medium">Average</th>
-                      <th className="px-3 py-2 text-right font-medium">Last</th>
-                      <th className="px-3 py-2 text-right font-medium">Times bought</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Supplier</th>
+                      <th scope="col" className="px-3 py-2 text-right font-medium">Average</th>
+                      <th scope="col" className="px-3 py-2 text-right font-medium">Last</th>
+                      <th scope="col" className="px-3 py-2 text-right font-medium">Times bought</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -461,10 +538,10 @@ export default async function ItemDetailPage({
               <table className="w-full min-w-[640px] border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
-                    <th className="px-3 py-2 font-medium">Date</th>
-                    <th className="px-3 py-2 font-medium">Supplier</th>
-                    <th className="px-3 py-2 font-medium">Billed as</th>
-                    <th className="px-3 py-2 text-right font-medium">Per {item.baseUnit}</th>
+                    <th scope="col" className="px-3 py-2 font-medium">Date</th>
+                    <th scope="col" className="px-3 py-2 font-medium">Supplier</th>
+                    <th scope="col" className="px-3 py-2 font-medium">Billed as</th>
+                    <th scope="col" className="px-3 py-2 text-right font-medium">Per {item.baseUnit}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -484,6 +561,9 @@ export default async function ItemDetailPage({
           </section>
         </>
       )}
+
+        </div>}
+      />
     </Page>
   );
 }

@@ -16,7 +16,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input, LinkRow, RowAction, RowLink, Select } from '@/components/ui';
+import { Button, FlashBanner, Input, LinkRow, RowAction, RowLink, Select, FormGrid, FormSection, type FieldProps } from '@/components/ui';
 
 export const metadata = { title: 'Customers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -159,67 +159,77 @@ export default async function CustomersPage({
         </div>
 
         <form action={createCustomerAction} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Name">
-              <Input name="name" required placeholder="Resto Bulacan" className="w-full" />
-            </Field>
-            <Field
-              label="Counterparty"
-              hint="Leave as “External” for an ordinary wholesale buyer. A customer has at most one."
-            >
-              {/* ⭐ ONE picker, not two. Two independent dropdowns would let someone fill both, and
+          <FormSection title="Customer identity">
+            <FormGrid layout="fields">
+              <Field width="name" label="Name">
+                <Input name="name" required placeholder="Resto Bulacan" className="w-full" />
+              </Field>
+              <Field
+                label="Counterparty"
+                hint="Leave as “External” for an ordinary wholesale buyer. A customer has at most one."
+              >
+                {/* ⭐ ONE picker, not two. Two independent dropdowns would let someone fill both, and
                   the whole design rests on a customer having at most one counterparty. */}
-              <Select name="counterparty" defaultValue="" className="w-full">
-                <option value="">External — an outside buyer</option>
-                {stores.length > 0 && (
-                  <optgroup label="One of our own stores — eliminates">
-                    {stores.map((s) => (
-                      <option key={s.id} value={`store:${s.id}`}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-                {orgs.length > 0 && (
-                  <optgroup label="Another company — real revenue">
-                    {orgs.map((o) => (
-                      <option key={o.id} value={`org:${o.id}`}>
-                        {o.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-              </Select>
-            </Field>
-            <Field
-              label="Group"
-              hint="Reporting and defaults only — it never decides how a sale is treated."
-            >
-              <Select name="customerGroup" defaultValue="wholesale" className="w-full">
-                {CUSTOMER_GROUPS.map((g) => (
-                  <option key={g} value={g}>
-                    {GROUP_LABEL[g] ?? g}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Price list" hint="Optional — without one, nothing has a rate for them.">
-              <Select name="priceListId" defaultValue="" className="w-full">
-                <option value="">—</option>
-                {priceLists.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Contact" hint="Optional.">
-              <Input name="contactNo" className="w-full" />
-            </Field>
-            <Field label="Address" hint="Optional.">
-              <Input name="address" className="w-full" />
-            </Field>
-          </div>
+                <Select name="counterparty" defaultValue="" className="w-full">
+                  <option value="">External — an outside buyer</option>
+                  {stores.length > 0 && (
+                    <optgroup label="One of our own stores — eliminates">
+                      {stores.map((s) => (
+                        <option key={s.id} value={`store:${s.id}`}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {orgs.length > 0 && (
+                    <optgroup label="Another company — real revenue">
+                      {orgs.map((o) => (
+                        <option key={o.id} value={`org:${o.id}`}>
+                          {o.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </Select>
+              </Field>
+            </FormGrid>
+          </FormSection>
+          <FormSection title="Pricing defaults">
+            <FormGrid layout="fields">
+              <Field width="code"
+                label="Group"
+                hint="Reporting and defaults only — it never decides how a sale is treated."
+              >
+                <Select name="customerGroup" defaultValue="wholesale" className="w-full">
+                  {CUSTOMER_GROUPS.map((g) => (
+                    <option key={g} value={g}>
+                      {GROUP_LABEL[g] ?? g}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Price list" hint="Optional — without one, nothing has a rate for them.">
+                <Select name="priceListId" defaultValue="" className="w-full">
+                  <option value="">—</option>
+                  {priceLists.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </FormGrid>
+          </FormSection>
+          <FormSection title="Contact details">
+            <FormGrid layout="fields">
+              <Field width="code" label="Contact" hint="Optional.">
+                <Input name="contactNo" className="w-full" />
+              </Field>
+              <Field width="long" label="Address" hint="Optional.">
+                <Input name="address" className="w-full" />
+              </Field>
+            </FormGrid>
+          </FormSection>
           <Button type="submit" variant="primary">
             Save
           </Button>
@@ -230,16 +240,18 @@ export default async function CustomersPage({
 }
 
 function Field({
+  width,
   label,
   hint,
   children,
 }: {
+  width?: FieldProps['width'];
   label: string;
   hint?: string;
   children: React.ReactNode;
 }) {
   return (
-    <label className="flex flex-col gap-1">
+    <label className={`flex min-w-0 flex-col gap-1${width ? ` erp-field-${width}` : ''}`}>
       <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
       {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}

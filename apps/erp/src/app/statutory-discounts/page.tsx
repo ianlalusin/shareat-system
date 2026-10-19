@@ -10,7 +10,7 @@ import { recordStatutoryDiscountAction, voidStatutoryDiscountAction } from './ac
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, ConfirmDestructive, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, FlashBanner, FormGrid, Input, Select , FormSection} from '@/components/ui';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 
 export const metadata = { title: 'SC/PWD register — Shareat System' };
@@ -206,72 +206,97 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
         <form action={recordStatutoryDiscountAction} className="rounded border border-neutral-200 p-4 dark:border-neutral-800">
           <input type="hidden" name="from" value={carry.from} />
           <input type="hidden" name="to" value={carry.to} />
-          <FormGrid>
-
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Store</span>
-            <Select name="storeId" required defaultValue={storeId ?? ''}>
-              <option value="" disabled>Choose a store</option>
-              {stores.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </Select>
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Date of sale</span>
-            <Input type="date" name="businessDate" required defaultValue={to} />
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Invoice / OR number</span>
-            <Input name="invoiceNumber" required />
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Discount kind</span>
-            <Select name="kind" required defaultValue="senior">
-              <option value="senior">Senior citizen (OSCA ID)</option>
-              <option value="pwd">PWD (PWD ID)</option>
-            </Select>
-            <span className="text-xs text-neutral-500">One only — a PWD who is also a senior claims one 20%, not both.</span>
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Holder&apos;s name</span>
-            <Input name="holderName" required />
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">ID number</span>
-            <Input name="idNumber" required />
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Gross amount</span>
-            <Input name="grossAmount" inputMode="decimal" required placeholder="0.00" className="tabular-nums" />
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Discount granted</span>
-            <Input name="discountAmount" inputMode="decimal" required placeholder="0.00" className="tabular-nums" />
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Signatory <span className="font-normal text-neutral-500">(optional)</span></span>
-            <Input name="signatory" />
-            <span className="text-xs text-neutral-500">Not required by the regulations — kept if your store&apos;s logbook has the column.</span>
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm col-span-full">
-            <span className="font-medium">Notes <span className="font-normal text-neutral-500">(optional)</span></span>
-            <Input name="notes" />
-          </label>
-
-          <div className="col-span-full">
-            <SubmitButton pendingLabel="Saving…" className="w-full sm:w-auto">Save</SubmitButton>
-          </div>
-          </FormGrid>
+          <>
+            <FormSection title="Sale document">
+              <FormGrid layout="fields">
+                <div className="min-w-0">
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium">Store</span>
+                    <Select name="storeId" required defaultValue={storeId ?? ''}>
+                      <option value="" disabled>Choose a store</option>
+                      {stores.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </Select>
+                  </label>
+                </div>
+                <div className="min-w-0 erp-field-date">
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium">Date of sale</span>
+                    <Input type="date" name="businessDate" required defaultValue={to} />
+                  </label>
+                </div>
+                <div className="min-w-0 erp-field-code">
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium">Invoice / OR number</span>
+                    <Input name="invoiceNumber" required />
+                  </label>
+                </div>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Beneficiary">
+              <FormGrid layout="fields">
+                <div className="min-w-0">
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium">Discount kind</span>
+                    <Select name="kind" required defaultValue="senior">
+                      <option value="senior">Senior citizen (OSCA ID)</option>
+                      <option value="pwd">PWD (PWD ID)</option>
+                    </Select>
+                    <span className="text-xs text-neutral-500">One only — a PWD who is also a senior claims one 20%, not both.</span>
+                  </label>
+                </div>
+                <div className="min-w-0 erp-field-name">
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium">Holder&apos;s name</span>
+                    <Input name="holderName" required />
+                  </label>
+                </div>
+                <div className="min-w-0 erp-field-code">
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium">ID number</span>
+                    <Input name="idNumber" required />
+                  </label>
+                </div>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Amounts">
+              <FormGrid layout="fields">
+                <div className="min-w-0">
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium">Gross amount</span>
+                    <Input name="grossAmount" inputMode="decimal" required placeholder="0.00" className="tabular-nums" />
+                  </label>
+                </div>
+                <div className="min-w-0">
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium">Discount granted</span>
+                    <Input name="discountAmount" inputMode="decimal" required placeholder="0.00" className="tabular-nums" />
+                  </label>
+                </div>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Sign-off and notes">
+              <FormGrid layout="fields">
+                <div className="min-w-0">
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium">Signatory <span className="font-normal text-neutral-500">(optional)</span></span>
+                    <Input name="signatory" />
+                    <span className="text-xs text-neutral-500">Not required by the regulations — kept if your store&apos;s logbook has the column.</span>
+                  </label>
+                </div>
+                <div className="min-w-0 erp-field-long">
+                  <label className="flex flex-col gap-1 text-sm col-span-full">
+                    <span className="font-medium">Notes <span className="font-normal text-neutral-500">(optional)</span></span>
+                    <Input name="notes" />
+                  </label>
+                </div>
+                <div className="col-span-full">
+                  <SubmitButton pendingLabel="Saving…" className="w-full sm:w-auto">Save</SubmitButton>
+                </div>
+              </FormGrid>
+            </FormSection>
+          </>
         </form>
       </section>
     </Page>

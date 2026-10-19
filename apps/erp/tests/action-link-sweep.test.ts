@@ -453,7 +453,11 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // +6 (17 Oct): T-441 S1 shared photo control on /ap (Lightbox dialog/Close/Open PDF, PhotoUpload shape button/file input/action button; 1357 -> 1363 measured).
     // -1 (17 Oct): T-440 S1 supplier add form - Days-to-pay loses type=number, a Button becomes SubmitButton (1357 -> 1356 measured).
     // = 1362 with both merged (17 Oct)
-    expect(results.length).toBe(1362);
+    // +12 (18 Oct): T-443 items page - kind filter chips (6), the look-alike panel's note box + "Different items" button (per pair), the
+    //   dismissed-pairs list (summary, links, Undo), the Variation-of selects on the request form and approve row, and the item page's
+    //   Variations section (links, select, Save). Measured 1362 -> 1374; all 12 new controls are >= 24px (the 5 that were 20px got py-0.5).
+    // T-444: one new Review and approvals disclosure summary; all existing controls remain.
+    expect(results.length).toBe(1375);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

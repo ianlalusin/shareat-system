@@ -21,7 +21,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../db/seed/expense-categories';
-import { closeDb, itemsRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
+import { closeDb, itemsRepo, transaction, APP_ROLE, RefusalError, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import * as domain from '@shareat/domain';
 import { createItem, createSupplier, recordInvoice, updateItem, verifyInvoice } from '@shareat/domain';
@@ -188,7 +188,9 @@ describe('R - renameItem', () => {
           createItem(tx, f.superAdmin, { code: 'CK15-002', name: 'coke 1.5', kind: 'raw_material', baseUnit: 'pcs' }),
         ),
       );
-      expect(constraintOf(control)).toBe('items_org_name_key');
+      // T-443 R5: the approval-time guard now speaks first (a RefusalError naming the item); `items_org_name_key` stays the backstop.
+      expect(control).toBeInstanceOf(RefusalError);
+      expect((control as RefusalError).userMessage).toMatch(/already exists/);
 
       await rename(f, f.superAdmin, oldId, 'Coke 1.5 (old)', 'CK1O-001');
       const replacement = await asOrg(f.orgId, (tx) =>
