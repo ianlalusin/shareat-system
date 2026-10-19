@@ -153,6 +153,8 @@ const COMMANDS: Record<string, string> = {
   'Set up rooms': 'provisions rooms (a one-shot setup action)',
   'Build plan': 'generates a plan (an action, not data entry)',
   'Keep &ldquo;&rdquo;': 'items/page: a permanent item merge (label is Keep &ldquo;{name}&rdquo;)',
+  'Different items — stop asking': 'T-443: records that a look-alike pair are different products, so the panel stops suggesting a merge',
+  'Undo': 'T-443: removes a dismissal, so the look-alike pair is suggested again',
   'Request item': 'files a request (moves a status)',
   'Mark duplicate': 'closes a menu item request as a duplicate (moves a status)',
   'Clear': 'clears a held value / flag (an action)',

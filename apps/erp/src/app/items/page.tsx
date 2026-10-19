@@ -2,17 +2,31 @@ import { requireSession } from '../../lib/session';
 import {
   approveItemRequestAction,
   createItemAction,
+  dismissDuplicatePairAction,
   mergeItemsAction,
   rejectItemRequestAction,
   requestItemAction,
   suggestItemCodeAction,
+  undoDuplicateDismissalAction,
 } from './actions';
 import { ItemCodeField } from './ItemCodeField';
-import { listItems, mayApproveItem, pendingRequestCodes, pendingRequests, duplicateCandidates, soldAsLabel } from './lib';
+import {
+  dismissedPairs,
+  duplicateCandidates,
+  itemKindCounts,
+  listItems,
+  mayApproveItem,
+  parseKindFilter,
+  pendingRequestCodes,
+  pendingRequests,
+  soldAsLabel,
+  variationParentOptions,
+} from './lib';
+import { arrangeFamilies } from './family';
 import { BASE_UNITS, ITEM_KINDS, ITEM_KIND_LABEL, itemKindLabel } from '@shareat/db';
 import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
-import { Banner, Button, Checkbox, FlashBanner, Input, LinkRow, RowLink, Select, FormGrid, Field } from '@/components/ui';
+import { Banner, Button, Checkbox, FlashBanner, Input, LinkRow, RowLink, Select, FormGrid, Field, SplitWorkspace } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Items — Shareat System' };
@@ -21,15 +35,23 @@ export const dynamic = 'force-dynamic';
 export default async function ItemsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; ok?: string; warning?: string }>;
+  searchParams: Promise<{ error?: string; ok?: string; warning?: string; kind?: string }>;
 }) {
-  const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/items');
-  const [items, requests, dupes] = await Promise.all([
-    listItems(actor.orgId),
+  // T-443 R3: `kind` is not a flash key; read it from the raw params before `withFlash` consumes them.
+  const rawParams = await searchParams;
+  const kind = parseKindFilter(typeof rawParams.kind === 'string' ? rawParams.kind : undefined);
+  const sp = await withFlash(Promise.resolve(rawParams));
+  const { actor } = await requireSession(kind ? `/items?kind=${kind}` : '/items');
+  const [items, requests, dupes, dismissed, kindCounts, parentOptions] = await Promise.all([
+    listItems(actor.orgId, true, kind),
     pendingRequests(actor.orgId),
     duplicateCandidates(actor.orgId),
+    dismissedPairs(actor.orgId),
+    itemKindCounts(actor.orgId),
+    variationParentOptions(actor.orgId),
   ]);
+  const rows = arrangeFamilies(items);
+  const totalItems = Object.values(kindCounts).reduce((a, b) => a + b, 0);
   // T-386 R10. Presentation aids only (the domain stays the enforcement): who gets the override inputs, and what each pending
   // request would be coded if approved right now (its stored code is only the requester's frozen preview).
   const [canOverride, willBe] = await Promise.all([mayApproveItem(actor), pendingRequestCodes(actor, requests)]);
@@ -39,13 +61,183 @@ export default async function ItemsPage({
       <div>
         <h1 className="text-2xl font-semibold">Items</h1>
         <PageDescription>
-          One identity per thing the business buys, for the whole organisation. ⭐ Only a
-          <strong> super-admin</strong> can add one — everyone else requests it, because a duplicate
-          is not a row you delete later, it is a price history split in two.
+          The shared item catalogue for every store. Request a new item here; a super-admin approves it. Open an item for its settings, suppliers and price history.
         </PageDescription>
       </div>
 
       <FlashBanner flash={sp} />
+
+      <SplitWorkspace
+        balance="details"
+        formTitle="Request or add an item"
+        detailsTitle="Item catalogue"
+        form={<>
+      <section id="new-item" className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">Request a new item</h2>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          Choose the unit used to measure stock and compare prices. Boxes and packs use conversions on the invoice.
+        </p>
+        <form action={requestItemAction} className="space-y-3">
+          <FormGrid>
+            <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Name</span>} className="text-sm">
+              <Input id="item-name" name="name" required placeholder="Pork belly" className="mt-1 block w-full" />
+            </Field>
+            <ItemCodeField nameInputId="item-name" mode="new" canOverride={false} suggestAction={suggestItemCodeAction} />
+            <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Kind</span>} className="text-sm">
+              <select name="kind" required defaultValue="" className="mt-1 block w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink">
+                <option value="">Choose a kind</option>
+                {ITEM_KINDS.map((k) => (
+                  <option key={k} value={k}>{ITEM_KIND_LABEL[k]}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Measured in</span>} className="text-sm">
+              <Select name="baseUnit" required defaultValue="" className="mt-1 block w-full">
+                <option value="">Choose a unit</option>
+                {BASE_UNITS.map((u) => (
+                  <option key={u} value={u}>{u}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field
+              span="full"
+              label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Variation of <span className="italic">(optional — e.g. Kimchi 250g under Kimchi)</span></span>}
+              className="text-sm"
+            >
+              <Select name="variantOfItemId" defaultValue="" className="mt-1 block w-full">
+                <option value="">(none, a top-level item)</option>
+                {parentOptions.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name} ({o.code})</option>
+                ))}
+              </Select>
+            </Field>
+          <Field
+              span="full"
+              label={
+                <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                  Why do we need it? <span className="italic">(optional — helps whoever approves)</span>
+                </span>
+              }
+              className="text-sm"
+            >
+              <Input name="reason" className="mt-1 block w-full" />
+            </Field>
+          </FormGrid>
+          {/*
+            ⭐ DEF-130. T-149's three independent facts. Until 2026-09-03 the form never asked, both
+            "sold" columns default to false, and every item made here was sold to nobody — which
+            `createTradeOrder` then refused, correctly, on its own gate.
+          */}
+          <fieldset className="space-y-2 rounded border border-neutral-200 p-3 dark:border-neutral-800">
+            <legend className="px-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
+              What it may be bought and sold as
+            </legend>
+            <div className="grid gap-2 text-sm [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
+              <Checkbox name="isPurchasable" defaultChecked label="Bought from suppliers" />
+              <Checkbox name="sellableRetail" label="Sold à la carte (retail)" />
+              <Checkbox name="sellableWholesale" label="Sold to other stores or buyers (wholesale)" />
+            </div>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              Independent choices. &ldquo;Wholesale&rdquo; includes our branches, franchisees and outside buyers like Xlice — not diners. A store can override these choices on the item&rsquo;s page.
+            </p>
+          </fieldset>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" variant="primary">Request item</Button>
+            {/* T-386 R7: the override belongs to the direct add (a super-admin), not to the request fields. */}
+            {canOverride && (
+              <label className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                Use a different code (super-admin)
+                <Input
+                  name="code"
+                  type="text"
+                  autoComplete="off"
+                  pattern="[A-Za-z0-9]{4}-[0-9]{3}"
+                  placeholder="CHWN-001"
+                  className="font-mono"
+                />
+              </label>
+            )}
+            <Button type="submit" variant="secondary" formAction={createItemAction}>
+              Add directly (super-admin)
+            </Button>
+          </div>
+        </form>
+      </section>
+
+        </>}
+        details={<div className="min-w-0 space-y-4">
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold">Catalogue</h2>
+          <span className="text-xs text-muted">{items.length} {items.length === 1 ? 'item' : 'items'}</span>
+        </div>
+        {/* T-443 R3: filter the table by kind (server-side; an unknown ?kind= shows all). */}
+        <nav aria-label="Filter by kind" className="flex flex-wrap gap-2 text-sm">
+          {[{ key: undefined, label: 'All', count: totalItems }, ...ITEM_KINDS.map((k) => ({ key: k as string | undefined, label: ITEM_KIND_LABEL[k], count: kindCounts[k] ?? 0 }))].map((c) => {
+            const active = (kind ?? undefined) === c.key;
+            return (
+              <a
+                key={c.key ?? 'all'}
+                href={c.key ? `/items?kind=${c.key}` : '/items'}
+                aria-current={active ? 'page' : undefined}
+                className={
+                  active
+                    ? 'rounded-full border border-neutral-900 bg-neutral-900 px-3 py-1 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900'
+                    : 'rounded-full border border-neutral-300 px-3 py-1 text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900'
+                }
+              >
+                {c.label} · {c.count}
+              </a>
+            );
+          })}
+        </nav>
+        {items.length > 0 ? (
+          <div className="catalogue-table min-w-0 rounded-lg border border-surface-border bg-surface">
+            <table className="w-full min-w-[560px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
+                  <th scope="col" className="px-3 py-2 font-medium">Item</th>
+                  <th scope="col" className="px-3 py-2 font-medium">Code</th>
+                  <th scope="col" className="px-3 py-2 font-medium">Kind</th>
+                  <th scope="col" className="px-3 py-2 font-medium">Priced per</th>
+                  {/* ⭐ DEF-130. The org's default — a store may differ; see the item's page. */}
+                  <th scope="col" className="px-3 py-2 font-medium">Sold as</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(({ item: i, indented }) => (
+                  <LinkRow key={i.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
+                    <td className={indented ? 'py-2 pl-8 pr-3' : 'px-3 py-2'}>
+                      {indented && <span aria-hidden="true" className="mr-1 text-neutral-400">↳</span>}
+                      <RowLink href={`/items/${i.id}`}>{i.name}</RowLink>
+                      {i.status !== 'active' && (
+                        <span className="ml-2 text-xs text-neutral-500">({i.status})</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs">{i.code}</td>
+                    <td className="px-3 py-2">{itemKindLabel(i.kind)}</td>
+                    <td className="px-3 py-2">{i.baseUnit}</td>
+                    <td className="px-3 py-2 text-xs text-neutral-600 dark:text-neutral-400">{soldAsLabel(i)}</td>
+                  </LinkRow>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-sm text-neutral-500 dark:text-neutral-400">
+            {kind
+              ? 'No items of this kind.'
+              : 'No items yet. Their price history builds itself from the invoices you record.'}
+          </p>
+        )}
+      </section>
+
+
+          {(dupes.length > 0 || dismissed.length > 0 || requests.length > 0) && (
+            <details className="rounded-lg border border-surface-border bg-surface p-3">
+              <summary className="cursor-pointer py-1 text-sm font-semibold">Review and approvals · {requests.length} waiting · {dupes.length} similar pairs</summary>
+              <div className="mt-3 space-y-3">
+
 
       {dupes.length > 0 && (
         <section className="space-y-3 rounded-lg border border-warning-ink bg-warning-soft p-4">
@@ -96,10 +288,41 @@ export default async function ItemsPage({
                     </form>
                   </div>
                 )}
+                {/* T-443 R2: a real pair (Samyang Cheese / Samyang 4 Cheese) is dismissed, not merged, and stops being suggested. */}
+                <form action={dismissDuplicatePairAction} className="mt-2 flex flex-wrap items-end gap-2">
+                  <input type="hidden" name="itemAId" value={d.aId} />
+                  <input type="hidden" name="itemBId" value={d.bId} />
+                  <Input name="note" placeholder="Note (optional)" className="min-w-[10rem]" />
+                  <Button type="submit" variant="ghost">
+                    Different items — stop asking
+                  </Button>
+                </form>
               </li>
             ))}
           </ul>
         </section>
+      )}
+
+      {dismissed.length > 0 && (
+        <details className="rounded-lg border border-neutral-200 p-3 text-sm dark:border-neutral-800">
+          <summary className="cursor-pointer py-0.5 font-medium">
+            {dismissed.length === 1 ? '1 pair marked as different' : `${dismissed.length} pairs marked as different`}
+          </summary>
+          <ul className="mt-2 space-y-2">
+            {dismissed.map((d) => (
+              <li key={d.id} className="flex flex-wrap items-center gap-2">
+                <a href={`/items/${d.itemAId}`} className="inline-block py-0.5 underline hover:no-underline">{d.itemAName}</a>
+                <span className="text-neutral-400">and</span>
+                <a href={`/items/${d.itemBId}`} className="inline-block py-0.5 underline hover:no-underline">{d.itemBName}</a>
+                {d.note ? <span className="text-xs text-neutral-500 dark:text-neutral-400">— {d.note}</span> : null}
+                <form action={undoDuplicateDismissalAction}>
+                  <input type="hidden" name="dismissalId" value={d.id} />
+                  <Button type="submit" variant="ghost">Undo</Button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
 
       {requests.length > 0 && (
@@ -151,6 +374,16 @@ export default async function ItemsPage({
                         ))}
                       </Select>
                     </label>
+                    {/* T-443 R1: the requester's "variation of", which the approver may change or clear. */}
+                    <label className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                      Variation of
+                      <Select name="variantOfItemId" defaultValue={r.variantOfItemId ?? ''}>
+                        <option value="">(none, a top-level item)</option>
+                        {parentOptions.map((o) => (
+                          <option key={o.id} value={o.id}>{o.name} ({o.code})</option>
+                        ))}
+                      </Select>
+                    </label>
                     {canOverride && (
                       <label className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
                         Use a different code
@@ -165,7 +398,7 @@ export default async function ItemsPage({
                     )}
                     <Checkbox name="isPurchasable" defaultChecked={r.isPurchasable} label="Bought" />
                     <Checkbox name="sellableRetail" defaultChecked={r.sellableRetail} label="Sold à la carte" />
-                    <Checkbox name="sellableWholesale" defaultChecked={r.sellableWholesale} label="Sold wholesale" />
+                    <Checkbox name="sellableWholesale" defaultChecked={r.sellableWholesale} label="Sold to other stores/buyers" />
                     <Button type="submit" variant="secondary">Approve</Button>
                   </form>
                   <form action={rejectItemRequestAction} className="flex flex-wrap items-end gap-2 gap-y-2">
@@ -182,129 +415,12 @@ export default async function ItemsPage({
         </section>
       )}
 
-      <section className="space-y-3">
-        {items.length > 0 ? (
-          <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <table className="w-full min-w-[560px] border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
-                  <th className="px-3 py-2 font-medium">Item</th>
-                  <th className="px-3 py-2 font-medium">Code</th>
-                  <th className="px-3 py-2 font-medium">Kind</th>
-                  <th className="px-3 py-2 font-medium">Priced per</th>
-                  {/* ⭐ DEF-130. The org's default — a store may differ; see the item's page. */}
-                  <th className="px-3 py-2 font-medium">Sold as</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((i) => (
-                  <LinkRow key={i.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                    <td className="px-3 py-2">
-                      <RowLink href={`/items/${i.id}`}>{i.name}</RowLink>
-                      {i.status !== 'active' && (
-                        <span className="ml-2 text-xs text-neutral-500">({i.status})</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 font-mono text-xs">{i.code}</td>
-                    <td className="px-3 py-2">{itemKindLabel(i.kind)}</td>
-                    <td className="px-3 py-2">{i.baseUnit}</td>
-                    <td className="px-3 py-2 text-xs text-neutral-600 dark:text-neutral-400">{soldAsLabel(i)}</td>
-                  </LinkRow>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="text-sm text-neutral-500 dark:text-neutral-400">
-            No items yet. Their price history builds itself from the invoices you record.
-          </p>
-        )}
-      </section>
 
-      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="font-medium">Request a new item</h2>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          A super-admin approves it, and then every store can use it. ⚠️ &ldquo;Measured in&rdquo;
-          is the unit every price is compared in, so pick the one you actually measure by. A box is
-          not a unit of measure — it belongs on the invoice line with its conversion.
-        </p>
-        <form action={requestItemAction} className="space-y-3">
-          <FormGrid>
-            <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Name</span>} className="text-sm">
-              <Input id="item-name" name="name" required placeholder="Pork belly" className="mt-1 block w-full" />
-            </Field>
-            <ItemCodeField nameInputId="item-name" mode="new" canOverride={false} suggestAction={suggestItemCodeAction} />
-            <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Kind</span>} className="text-sm">
-              <select name="kind" required defaultValue="" className="mt-1 block w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink">
-                <option value="">Choose a kind</option>
-                {ITEM_KINDS.map((k) => (
-                  <option key={k} value={k}>{ITEM_KIND_LABEL[k]}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Measured in</span>} className="text-sm">
-              <Select name="baseUnit" required defaultValue="" className="mt-1 block w-full">
-                <option value="">Choose a unit</option>
-                {BASE_UNITS.map((u) => (
-                  <option key={u} value={u}>{u}</option>
-                ))}
-              </Select>
-            </Field>
-          <Field
-              span="full"
-              label={
-                <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
-                  Why do we need it? <span className="italic">(optional — helps whoever approves)</span>
-                </span>
-              }
-              className="text-sm"
-            >
-              <Input name="reason" className="mt-1 block w-full" />
-            </Field>
-          </FormGrid>
-          {/*
-            ⭐ DEF-130. T-149's three independent facts. Until 2026-09-03 the form never asked, both
-            "sold" columns default to false, and every item made here was sold to nobody — which
-            `createTradeOrder` then refused, correctly, on its own gate.
-          */}
-          <fieldset className="space-y-2 rounded border border-neutral-200 p-3 dark:border-neutral-800">
-            <legend className="px-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
-              What it may be bought and sold as
-            </legend>
-            <div className="grid gap-2 text-sm sm:grid-cols-3">
-              <Checkbox name="isPurchasable" defaultChecked label="Bought from suppliers" />
-              <Checkbox name="sellableRetail" label="Sold à la carte (retail)" />
-              <Checkbox name="sellableWholesale" label="Sold wholesale / to franchisees" />
-            </div>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              Three independent facts — Milkis is all three, a bento box is retail-only and made
-              here, charcoal is bought and sold to nobody. These apply to a request too: the
-              super-admin sees them when approving and can correct them. A store that differs from
-              the organisation says so on the item&rsquo;s page.
-            </p>
-          </fieldset>
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" variant="primary">Request item</Button>
-            {/* T-386 R7: the override belongs to the direct add (a super-admin), not to the request fields. */}
-            {canOverride && (
-              <label className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
-                Use a different code (super-admin)
-                <Input
-                  name="code"
-                  type="text"
-                  autoComplete="off"
-                  pattern="[A-Za-z0-9]{4}-[0-9]{3}"
-                  placeholder="CHWN-001"
-                  className="font-mono"
-                />
-              </label>
-            )}
-            <Button type="submit" variant="secondary" formAction={createItemAction}>
-              Add directly (super-admin)
-            </Button>
-          </div>
-        </form>
-      </section>
+              </div>
+            </details>
+          )}
+        </div>}
+      />
     </Page>
   );
 }

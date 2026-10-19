@@ -116,6 +116,12 @@ export const CONSTRAINT_MESSAGES: Record<string, string> = {
   items_base_unit_fixed:
     "This item's unit can no longer change: it already has stock, counts, invoices, recipes, prices or orders " +
     'recorded in its current unit, and changing it would re-read every one of them in the new unit.',
+  // T-443 (0210) - item variations and the open-request backstop. The domain speaks first; these are the database's last word.
+  items_variant_guard:
+    'That variation is not allowed: variations go one level only, must be the same kind as their parent, and a parent that has ' +
+    'variations cannot change kind or be merged.',
+  items_variant_not_self_check: 'An item cannot be a variation of itself.',
+  item_requests_open_name_key: 'Someone has already asked for an item with that name; it is waiting for a super-admin.',
 };
 
 /**
@@ -191,12 +197,20 @@ export function parseConstraintName(raw: string): string | null {
  * the fallback, unchanged, for anything that doesn't expose the field.
  */
 export function resolveConstraintName(err: unknown): string | null {
-  if (err && typeof err === 'object' && 'constraint_name' in err) {
-    const name = (err as { constraint_name?: unknown }).constraint_name;
-    if (typeof name === 'string' && name.length > 0) return name;
+  // Drizzle wraps the driver's structured error in cause; never parse or display its SQL dump.
+  const seen = new Set<unknown>();
+  let current = err;
+  while (current !== null && current !== undefined && !seen.has(current)) {
+    seen.add(current);
+    if (typeof current === 'object' && 'constraint_name' in current) {
+      const name = (current as { constraint_name?: unknown }).constraint_name;
+      if (typeof name === 'string' && name.length > 0) return name;
+    }
+    const parsed = parseConstraintName(current instanceof Error ? current.message : String(current));
+    if (parsed) return parsed;
+    current = typeof current === 'object' && 'cause' in current ? current.cause : undefined;
   }
-  const raw = err instanceof Error ? err.message : String(err);
-  return parseConstraintName(raw);
+  return null;
 }
 
 /**

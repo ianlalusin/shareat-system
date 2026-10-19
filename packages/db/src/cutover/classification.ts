@@ -995,6 +995,14 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'warning they were shown at the time. The item survives the cutover, so its authorisation ' +
       'must too — otherwise the control leaves no trace.',
   },
+  item_duplicate_dismissals: {
+    // keep, like the items it qualifies: "these two are different products" is a catalogue decision, not activity. Items survive the
+    // cutover, so the answer must too - otherwise every dismissed pair reappears in the look-alike panel on day one.
+    class: 'keep',
+    reason:
+      'A super-admin ruling that two look-alike items are different products (T-443). The items carry forward, so the ' +
+      'ruling does; purging it would re-open every dismissed pair.',
+  },
   supplier_items: {
     // ⭐ keep, like `items`: a declaration that a supplier CAN sell us something carries no
     // balance and is not invalidated by the ledger restarting. ⚠️ The observed half of the

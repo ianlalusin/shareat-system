@@ -34,3 +34,5 @@ export * from './status-steps';
 // T-412: the one danger button, two tiers (retype the name / an administrator's PIN).
 export { ConfirmDestructive } from './ConfirmDestructive';
 export type { ConfirmDestructiveProps } from './ConfirmDestructive';
+
+export { SplitWorkspace } from './SplitWorkspace';

@@ -675,6 +675,12 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'Pending and decided item requests, including the near-duplicate warnings shown to the ' +
       'approver. Org-scoped like the item master it governs.',
   },
+  item_duplicate_dismissals: {
+    scope: 'org_column',
+    reason:
+      'Which look-alike item pairs a super-admin said are different products (T-443). Org-scoped like the item master ' +
+      'it qualifies; another org must never see, or undo, what this org decided.',
+  },
   supplier_items: {
     scope: 'org_column',
     reason:

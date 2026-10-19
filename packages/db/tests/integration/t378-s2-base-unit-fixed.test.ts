@@ -297,6 +297,13 @@ const EXEMPT: Record<string, string> = {
   'supplier_items.item_id': 'a declaration, no quantity or price (C2 ex)',
   'store_item_sellability.item_id': 'three booleans (C2 ex)',
   'item_requests.created_item_id': 'provenance only (C2 ex)',
+  'items.variant_of_item_id': 'T-443: a grouping pointer (a variation is its own item with its own history); no quantity or price rides on it',
+  'items.org_id': 'T-443: the org half of the variant_of composite same-org self-FK; not an item id',
+  'item_requests.variant_of_item_id': 'T-443: the parent the requester chose; provenance only',
+  'item_requests.org_id': 'T-443: the org half of the variant_of composite same-org FK; not an item id',
+  'item_duplicate_dismissals.item_a_id': 'T-443: a ruling that two items differ; no quantity or price rides on it',
+  'item_duplicate_dismissals.item_b_id': 'T-443: a ruling that two items differ; no quantity or price rides on it',
+  'item_duplicate_dismissals.org_id': 'T-443: the org half of the composite same-org FKs; not an item id',
   'menu_depletion_rules.org_id': 'the org half of the T-401 composite same-org FK; not an item id (its item_id leg is NOT exempt)',
 };
 

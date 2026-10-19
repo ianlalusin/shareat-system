@@ -18,6 +18,7 @@
  *     return credit, keyed on the supplier id), 369003 (inter-store pair settlement, keyed on the
  *     UNORDERED pair of store ids), 392001 (dual-run store-week, keyed on org:store:week), 436001 (a
  *     person's leave: caps, SIL balance, one-leave-day-per-date, keyed on the person id).
+ *   - Migration 0211: namespace 443001 (item family structure, keyed on org id).
  *   - A `hashtext(storeId)` collision only serialises two stores for a moment; it never gives a
  *     wrong answer (the same reasoning as `access.ts` `lockOrgAccess`).
  *

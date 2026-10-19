@@ -20,6 +20,7 @@ import { recordGone } from './record-gone';
 import {
   items,
   itemRequests,
+  itemDuplicateDismissals,
   type ItemRequestStatus,
   type BaseUnit,
   type PurchaseUnit,
@@ -45,6 +46,8 @@ export interface ItemRow {
   sellableRetail: boolean;
   sellableWholesale: boolean;
   notes: string | null;
+  /** T-443 R1: the top-level item this one is a variation of (`Kimchi 250g` -> `Kimchi`), or null. */
+  variantOfItemId: string | null;
   /** T-391 S1: the default buying unit and its ratio to the base unit; both null or both set. */
   purchaseUnit: PurchaseUnit | null;
   purchaseFactor: string | null;
@@ -65,6 +68,8 @@ export async function insertItem(
     isPurchasable?: boolean;
     sellableRetail?: boolean;
     sellableWholesale?: boolean;
+    /** T-443 R1: copied from the request at approval, or typed by the super-admin on a direct add. */
+    variantOfItemId?: string | null;
   },
 ): Promise<{ id: string }> {
   const [row] = await tx.insert(items).values(input).returning({ id: items.id });
@@ -83,10 +88,11 @@ export async function getItemById(tx: Tx, orgId: string, id: string): Promise<It
 export async function listItems(
   tx: Tx,
   orgId: string,
-  filter: { includeInactive?: boolean } = {},
+  filter: { includeInactive?: boolean; kind?: ItemKind } = {},
 ): Promise<ItemRow[]> {
   const conditions = [eq(items.orgId, orgId)];
   if (!filter.includeInactive) conditions.push(eq(items.status, 'active'));
+  if (filter.kind) conditions.push(eq(items.kind, filter.kind)); // T-443 R3
   const rows = await tx.select().from(items).where(and(...conditions)).orderBy(asc(items.name));
   return rows as ItemRow[];
 }
@@ -131,6 +137,8 @@ export async function updateItem(
     costBasisItemId: string | null;
     purchaseUnit: PurchaseUnit | null;
     purchaseFactor: Decimal<'14,6'> | null;
+    /** T-443 R1: written by `setItemVariantOf` alone. The database trigger `items_variant_guard` is the rule. */
+    variantOfItemId: string | null;
   }>,
 ): Promise<void> {
   const updated = await tx
@@ -605,6 +613,8 @@ export interface ItemRequestRow {
   sellableRetail: boolean;
   sellableWholesale: boolean;
   reason: string | null;
+  /** T-443 R1: the optional "variation of" the requester chose. */
+  variantOfItemId: string | null;
   status: ItemRequestStatus;
   similarWarning: string | null;
   requestedBy: string;
@@ -628,6 +638,7 @@ export async function insertItemRequest(
     sellableRetail?: boolean;
     sellableWholesale?: boolean;
     reason: string | null;
+    variantOfItemId?: string | null;
     similarWarning: string | null;
     requestedBy: string;
   },
@@ -785,6 +796,15 @@ export async function findDuplicateCandidates(
      and a.id < b.id
      and similarity(lower(a.name), lower(b.name)) >= ${floor}
     where a.org_id = ${orgId} and a.status <> 'merged' and b.status <> 'merged'
+      -- T-443 R2: sizes of one product are expected to look alike (parent <-> variation, sibling <-> sibling)...
+      -- (coalesce: the three comparisons are NULL for a top-level item, and NOT NULL would drop the row)
+      and not coalesce(a.variant_of_item_id = b.id or b.variant_of_item_id = a.id
+               or (a.variant_of_item_id is not null and a.variant_of_item_id = b.variant_of_item_id), false)
+      -- ...and a pair a super-admin said is different is not asked about again (until Undo).
+      and not exists (
+        select 1 from item_duplicate_dismissals d
+        where d.org_id = a.org_id and d.item_a_id = a.id and d.item_b_id = b.id
+      )
     order by sim desc, a.name asc
     limit 50
   `)) as unknown as Record<string, string>[];
@@ -798,6 +818,164 @@ export async function findDuplicateCandidates(
     similarity: Number(r.sim),
     unitsDiffer: String(r.a_unit) !== String(r.b_unit),
   }));
+}
+
+/** T-443 R4/R5. An item, any status, whose name equals `name` ignoring case (the same key as `items_org_name_key`). */
+export interface ItemNameHit {
+  id: string;
+  name: string;
+  code: string;
+  status: ItemStatus;
+  /** The survivor's name and code when this one was merged. */
+  mergedIntoName: string | null;
+  mergedIntoCode: string | null;
+}
+
+export async function findItemByName(tx: Tx, orgId: string, name: string): Promise<ItemNameHit | undefined> {
+  const rows = (await tx.execute(sql`
+    select i.id, i.name, i.code, i.status, w.name as w_name, w.code as w_code
+    from items i
+    left join items w on w.id = i.merged_into_id and w.org_id = i.org_id
+    where i.org_id = ${orgId} and lower(i.name) = lower(${name})
+    limit 1
+  `)) as unknown as Record<string, string | null>[];
+  const r = rows[0];
+  if (!r) return undefined;
+  return {
+    id: String(r.id),
+    name: String(r.name),
+    code: String(r.code),
+    status: String(r.status) as ItemStatus,
+    mergedIntoName: r.w_name ?? null,
+    mergedIntoCode: r.w_code ?? null,
+  };
+}
+
+/** T-443 R4. The OPEN request (`requested`) with this name ignoring case, with who asked and when. */
+export interface OpenRequestHit {
+  id: string;
+  name: string;
+  requestedByName: string;
+  requestedAt: Date;
+}
+
+export async function findOpenRequestByName(tx: Tx, orgId: string, name: string): Promise<OpenRequestHit | undefined> {
+  const rows = (await tx.execute(sql`
+    select r.id, r.name, r.requested_at, p.display_name as who
+    from item_requests r
+    join persons p on p.id = r.requested_by and p.org_id = r.org_id
+    where r.org_id = ${orgId} and r.status = 'requested' and lower(r.name) = lower(${name})
+    order by r.requested_at asc
+    limit 1
+  `)) as unknown as Record<string, unknown>[];
+  const r = rows[0];
+  if (!r) return undefined;
+  return {
+    id: String(r.id),
+    name: String(r.name),
+    requestedByName: String(r.who),
+    requestedAt: new Date(r.requested_at as string | Date),
+  };
+}
+
+/** T-443 R1. The items that are variations of `parentId` (any status), by name. */
+export async function listVariationsOf(tx: Tx, orgId: string, parentId: string): Promise<ItemRow[]> {
+  const rows = await tx
+    .select()
+    .from(items)
+    .where(and(eq(items.orgId, orgId), eq(items.variantOfItemId, parentId)))
+    .orderBy(asc(items.name));
+  return rows as ItemRow[];
+}
+
+export async function countVariationsOf(tx: Tx, orgId: string, parentId: string): Promise<number> {
+  const rows = (await tx.execute(sql`
+    select count(*)::int as n from items where org_id = ${orgId} and variant_of_item_id = ${parentId}
+  `)) as unknown as { n: number }[];
+  return Number(rows[0]?.n ?? 0);
+}
+
+export interface DismissalRow {
+  id: string;
+  itemAId: string;
+  itemAName: string;
+  itemBId: string;
+  itemBName: string;
+  note: string | null;
+  dismissedAt: Date;
+}
+
+/**
+ * T-443 R2. Record "these two are different items". `aId`/`bId` arrive in any order and are stored ordered (the CHECK
+ * `a < b`); a second dismissal of the same pair is a no-op (returns the existing id), so the click is idempotent.
+ */
+export async function insertDismissal(
+  tx: Tx,
+  input: { orgId: string; aId: string; bId: string; note: string | null; dismissedBy: string },
+): Promise<{ id: string; created: boolean }> {
+  // Ordered the way Postgres orders uuids (byte order = lower-case hex text order); `.sort()` and not `<`, which the T-371 guard flags.
+  const [lo, hi] = [input.aId.toLowerCase(), input.bId.toLowerCase()].sort() as [string, string];
+  const inserted = await tx
+    .insert(itemDuplicateDismissals)
+    .values({ orgId: input.orgId, itemAId: lo, itemBId: hi, note: input.note, dismissedBy: input.dismissedBy })
+    .onConflictDoNothing()
+    .returning({ id: itemDuplicateDismissals.id });
+  if (inserted[0]) return { id: inserted[0].id, created: true };
+  const [existing] = await tx
+    .select({ id: itemDuplicateDismissals.id })
+    .from(itemDuplicateDismissals)
+    .where(
+      and(
+        eq(itemDuplicateDismissals.orgId, input.orgId),
+        eq(itemDuplicateDismissals.itemAId, lo),
+        eq(itemDuplicateDismissals.itemBId, hi),
+      ),
+    )
+    .limit(1);
+  return { id: existing!.id, created: false }; // ON CONFLICT DO NOTHING fired, so the row exists
+}
+
+/** Undo. Returns whether a row was removed. */
+export async function deleteDismissal(tx: Tx, orgId: string, id: string): Promise<boolean> {
+  const gone = await tx
+    .delete(itemDuplicateDismissals)
+    .where(and(eq(itemDuplicateDismissals.id, id), eq(itemDuplicateDismissals.orgId, orgId)))
+    .returning({ id: itemDuplicateDismissals.id });
+  return gone.length > 0;
+}
+
+export async function listDismissals(tx: Tx, orgId: string): Promise<DismissalRow[]> {
+  const rows = (await tx.execute(sql`
+    select d.id, d.item_a_id, a.name as a_name, d.item_b_id, b.name as b_name, d.note, d.dismissed_at
+    from item_duplicate_dismissals d
+    join items a on a.id = d.item_a_id and a.org_id = d.org_id
+    join items b on b.id = d.item_b_id and b.org_id = d.org_id
+    where d.org_id = ${orgId}
+    order by d.dismissed_at desc, d.id
+  `)) as unknown as Record<string, unknown>[];
+  return rows.map((r) => ({
+    id: String(r.id),
+    itemAId: String(r.item_a_id),
+    itemAName: String(r.a_name),
+    itemBId: String(r.item_b_id),
+    itemBName: String(r.b_name),
+    note: r.note === null || r.note === undefined ? null : String(r.note),
+    dismissedAt: new Date(r.dismissed_at as string | Date),
+  }));
+}
+
+/** Counts per kind over the same rows the table lists (T-443 R3 chips). */
+export async function countItemsByKind(
+  tx: Tx,
+  orgId: string,
+  filter: { includeInactive?: boolean } = {},
+): Promise<Record<string, number>> {
+  const rows = (await tx.execute(sql`
+    select kind, count(*)::int as n from items
+    where org_id = ${orgId} ${filter.includeInactive ? sql`` : sql`and status = 'active'`}
+    group by kind
+  `)) as unknown as { kind: string; n: number }[];
+  return Object.fromEntries(rows.map((r) => [String(r.kind), Number(r.n)]));
 }
 
 export interface ResolvedSellability {
