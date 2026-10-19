@@ -18,7 +18,8 @@
  * false and this is a plain submit button.
  */
 import { useFormStatus } from 'react-dom';
-import type { ReactNode } from 'react';
+import { useContext, type ReactNode } from 'react';
+import { CheckContext } from '@/components/forms/context';
 import { Button } from '@/components/ui';
 import type { ButtonVariant } from '@/components/ui/Button';
 import { submitButtonState } from './submit-button-state';
@@ -54,6 +55,9 @@ function Spinner(): ReactNode {
 
 export function SubmitButton({ children, pendingLabel, className, disabled, variant = 'primary' }: SubmitButtonProps) {
   const { pending } = useFormStatus();
+  // T-440: inside a checked form, a failing rule makes Save truly `disabled`. It must be read here, not set imperatively:
+  // this button re-renders when `pending` ends and would otherwise undo an imperative change. No provider = unchanged.
+  const blocked = useContext(CheckContext)?.blocked === true;
   const state = submitButtonState({ pending, label: children, pendingLabel });
 
   return (
@@ -61,7 +65,8 @@ export function SubmitButton({ children, pendingLabel, className, disabled, vari
       type="submit"
       variant={variant}
       className={className}
-      disabled={state.disabled || disabled}
+      disabled={state.disabled || disabled || blocked}
+      data-check-aware="true"
       aria-busy={state.ariaBusy ? 'true' : undefined}
     >
       {pending ? <Spinner /> : null}

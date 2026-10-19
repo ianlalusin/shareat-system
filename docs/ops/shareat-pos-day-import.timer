@@ -1,0 +1,15 @@
+# T-396 S1 - DAILY, 06:00 Manila.
+#
+# 06:00 Manila, not UTC: the POS day feed is keyed by the Manila calendar date, so "yesterday" is the Manila day that just ended.
+# `Persistent=true`: a missed 06:00 (a reboot, an outage) runs at boot; the job's 7-day window covers a longer outage.
+
+[Unit]
+Description=Shareat - 06:00 Manila import of POS-linked stores' closed days, daily (T-396 S1)
+
+[Timer]
+OnCalendar=*-*-* 06:00:00 Asia/Manila
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

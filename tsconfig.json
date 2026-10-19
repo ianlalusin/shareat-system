@@ -49,6 +49,9 @@
       "@shareat/domain/item-code": [
         "./packages/domain/src/item-code.ts"
       ],
+      "@shareat/domain/field-rules": [
+        "./packages/domain/src/field-rules/index.ts"
+      ],
       "@shareat/domain/*": [
         "./packages/domain/src/*"
       ],

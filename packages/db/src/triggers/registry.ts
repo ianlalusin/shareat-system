@@ -384,6 +384,12 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'validator',
     reason: "An item's unit cannot change once it has history (0186, T-378) - reads other tables' CURRENT rows, so it must stay silent on a replica-mode restore.",
   },
+  items_variant_guard: {
+    table: 'items',
+    mode: 'origin',
+    kind: 'validator',
+    reason: 'A variation is one level, the same kind as its parent, and its parent is not merged (0210/0211, T-443; serialized per org) - reads the parent row and the child rows as they are NOW, so it must stay silent on a replica-mode restore.',
+  },
   items_check_parent_slab_unit_trg: {
     table: 'items',
     mode: 'origin',

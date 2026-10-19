@@ -1,6 +1,11 @@
 # T-436 — Leave and absence tracking (monthly and yearly caps, paid vs unpaid)
 
-**Status:** spec written 2026-10-16, not started. Ian answered Q1-Q6 the same day (folded in below).
+**Status:** LIVE 2026-10-17 (PR #34, migration 0205). Leave and absence tracking.
+
+> **Ian's ruling changes the spec (q-t436-vawc-label a, bible row 367):** a VAWC day must show as plain "Leave" in
+> staff lists, the attendance grid and CSV exports; only the approver, HR and admins see "VAWC". As built, every
+> attendance manager at the store sees "VAWC". Follow-on slice needed (loader masking + CSV + a test that a
+> store manager who is not the approver gets "Leave"); not yet specced.
 **Model:** Sonnet (money + auth lane). Write any spec amendment in plan mode.
 **Sources:** bible row 354 item 2 (Ian 2026-10-16: build before the 1 Jan go-live); row 353 (personal
 data guarded); `docs/plans/phase-4-attendance.md:83,354` (deliverable 7, was T-165);
@@ -108,6 +113,7 @@ row lock, so two recorders cannot both pass; (5) payroll actually pays paid leav
     re-added as `gross_pay = basic_pay + ot_pay + night_diff_pay + holiday_pay + leave_pay +
     sil_conversion_pay`. ⛔ **Neither goes into `basic_pay`:** the 13th month reads `basicPay`, and
     PD 851's rules exclude leave conversions from it. T-190 deductions see both inside gross.
+    **Confirmed by Ian 2026-10-17 (row 366):** paid leave stays out of the PhilHealth/Pag-IBIG "basic" base.
 11. **Year-end SIL cash payout (Ian: paid out, never carried over).** `leave_commutations` (unique per
     PERSON per year: `days`, `daily_rate`, `amount`, `employment_id`, `frozen_by_pay_run_id`,
     `separation_id`, CHECK at most one of the two set). **Designated employment** = the person's

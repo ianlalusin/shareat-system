@@ -153,6 +153,8 @@ const COMMANDS: Record<string, string> = {
   'Set up rooms': 'provisions rooms (a one-shot setup action)',
   'Build plan': 'generates a plan (an action, not data entry)',
   'Keep &ldquo;&rdquo;': 'items/page: a permanent item merge (label is Keep &ldquo;{name}&rdquo;)',
+  'Different items — stop asking': 'T-443: records that a look-alike pair are different products, so the panel stops suggesting a merge',
+  'Undo': 'T-443: removes a dismissal, so the look-alike pair is suggested again',
   'Request item': 'files a request (moves a status)',
   'Mark duplicate': 'closes a menu item request as a duplicate (moves a status)',
   'Clear': 'clears a held value / flag (an action)',
@@ -257,9 +259,14 @@ function inside(n: ts.Node, tag: string): boolean {
   }
   return false;
 }
+/**
+ * T-440 S1 (A3 / T-S1-16): a form is the native `<form>` OR the `<CheckedForm>` that renders one. Without this, every add form
+ * converted to CheckedForm would leave G7 and G8 (the guards would see no form and the counts would "fall" for the wrong reason).
+ */
+const FORM_TAGS: ReadonlySet<string> = new Set(['form', 'CheckedForm']);
 function isNonGetForm(n: ts.Node): boolean {
   const o = opening(n);
-  if (!o || tagName(o) !== 'form') return false;
+  if (!o || !FORM_TAGS.has(tagName(o))) return false;
   return (attrString(o, 'method') ?? 'post').toLowerCase() !== 'get';
 }
 function descendants(n: ts.Node, pred: (x: ts.Node) => boolean): ts.Node[] {
@@ -458,6 +465,50 @@ describe('G8b: dynamic-label buttons are an explicit list', () => {
       if (n) actual[rel(f)] = n;
     }
     expect(actual).toEqual(DYNAMIC_BUTTONS);
+  });
+});
+
+describe('T-S1-16 (T-440 A3): CheckedForm counts as a form, so the guards stay sighted (mutant: tag list reverted to form only)', () => {
+  const F = 'app/x/page.tsx';
+  const checked = (label: string) =>
+    `export default function P() { return (<CheckedForm rules={R} action={act}><input name="name" /><button type="submit">${label}</button></CheckedForm>); }`;
+  const checkedKit = (label: string) =>
+    `export default function P() { return (<CheckedForm rules={R} action={act}><Input name="name" /><SubmitButton>${label}</SubmitButton></CheckedForm>); }`;
+  const checkedRecord = `export default function P({ row }: any) { return (
+    <CheckedForm rules={R} action={act}>
+      <input type="hidden" name="id" value={row.id} />
+      <input name="name" defaultValue={row.name} />
+      <button type="submit">Save</button>
+    </CheckedForm>); }`;
+
+  it('G8: a <CheckedForm> ending in "Save item" is flagged, like a <form> would be; "Save" and "Save draft" pass', () => {
+    expect(labelFindings(checked('Save item'), F).map((f) => f.detail)).toEqual(['submit label "Save item"']);
+    expect(labelFindings(checkedKit('Save item'), F).map((f) => f.detail)).toEqual(['submit label "Save item"']);
+    for (const ok of ['Save', 'Save draft']) expect(labelFindings(checked(ok), F), ok).toEqual([]);
+  });
+  it('G8: the LAST button of a <CheckedForm> is judged even without type="submit", and a COMMANDS verb still passes', () => {
+    const lastBtn = `export default function P() { return (<CheckedForm rules={R} action={act}><button>Add room</button></CheckedForm>); }`;
+    expect(labelFindings(lastBtn, F)).toHaveLength(1);
+    expect(labelFindings(checked('Record payment'), F)).toEqual([]);
+  });
+  it('G7: a raw record-bound <CheckedForm> (hidden id + a default read from a record) is flagged; inside <EditableRecord> it is not', () => {
+    expect(lockFindings(checkedRecord, F)).toHaveLength(1);
+    const wrapped = `export default function P({ row }: any) { return (
+      <EditableRecord action={act} label="x" hidden={{ id: row.id }}>
+        <CheckedForm rules={R} action={act}>
+          <input type="hidden" name="id" value={row.id} />
+          <input name="name" defaultValue={row.name} />
+        </CheckedForm>
+      </EditableRecord>); }`;
+    expect(lockFindings(wrapped, F)).toEqual([]);
+  });
+  it('an unbound add <CheckedForm> is not a G7 finding; a GET CheckedForm is not a form for G8', () => {
+    expect(lockFindings(checked('Save'), F)).toEqual([]);
+    expect(labelFindings(checked('Save item').replace('<CheckedForm rules={R}', '<CheckedForm method="get" rules={R}'), F)).toEqual([]);
+  });
+  it('the live scan really contains a <CheckedForm> once the pilots are converted (the guard is exercised on real source, not only fixtures)', () => {
+    const seen = scan((src, f) => (/<CheckedForm\b/.test(src) ? [{ file: f, line: 1, detail: 'uses CheckedForm' }] : []), true);
+    expect(seen.map((x) => x.file)).toContain('ap/page.tsx');
   });
 });
 

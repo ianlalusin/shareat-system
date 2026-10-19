@@ -13,6 +13,8 @@
       "@shareat/domain/money-lines": ["../../packages/domain/src/shared/money-lines.ts"],
       "@shareat/domain/money-input": ["../../packages/domain/src/shared/money-input.ts"],
       "@shareat/domain/item-code": ["../../packages/domain/src/item-code.ts"],
+      "@shareat/domain/files/limits": ["../../packages/domain/src/files/limits.ts"],
+      "@shareat/domain/field-rules": ["../../packages/domain/src/field-rules/index.ts"],
       "@shareat/domain/refusal-leaf": ["../../packages/domain/src/shared/refusal-leaf.ts"],
       "@shareat/domain/attendance/fingerprint": ["../../packages/domain/src/attendance/fingerprint/index.ts"],
       "@shareat/domain": ["../../packages/domain/src/index.ts"]

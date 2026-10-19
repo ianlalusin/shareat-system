@@ -49,6 +49,7 @@
     "budget-reissue": "tsx scripts/budget-reissue.ts",
     "recurring-expense-draft": "tsx scripts/recurring-expense-draft.ts",
     "usage-auto-post": "tsx scripts/usage-auto-post.ts",
+    "pos-day-import": "tsx scripts/pos-day-import.ts",
     "fiscal-period-seed": "tsx scripts/fiscal-period-seed.ts",
     "bootstrap-org": "tsx scripts/bootstrap-org.ts",
     "provision-terminal": "tsx scripts/provision-terminal.ts",

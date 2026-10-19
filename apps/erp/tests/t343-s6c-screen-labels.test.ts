@@ -232,6 +232,11 @@ vi.mock('../src/app/items/lib', async (importOriginal) => {
     // T-386 S4: the page asks for each pending request's render-time code; I1/I2 prove labels only, so an empty answer.
     pendingRequestCodes: async () => new Map(),
     duplicateCandidates: (...a: unknown[]) => duplicateCandidatesMock(...a),
+    // T-443: the list page also reads the dismissed pairs, the kind counts and the variation parents; the item page its variations.
+    dismissedPairs: async () => [],
+    itemKindCounts: async () => ({}),
+    variationParentOptions: async () => [],
+    variationsOf: async () => [],
     getItem: (...a: unknown[]) => getItemMock(...a),
     itemPrices: (...a: unknown[]) => itemPricesMock(...a),
     sellabilityByStore: (...a: unknown[]) => sellabilityByStoreMock(...a),
@@ -262,6 +267,10 @@ vi.mock('../src/app/items/actions', () => ({
   renameItemAction: vi.fn(),
   setItemStatusAction: vi.fn(),
   suggestItemCodeAction: vi.fn(),
+  // T-443
+  dismissDuplicatePairAction: vi.fn(),
+  undoDuplicateDismissalAction: vi.fn(),
+  setItemVariantOfAction: vi.fn(),
 }));
 
 const whoSellsMock = vi.fn();

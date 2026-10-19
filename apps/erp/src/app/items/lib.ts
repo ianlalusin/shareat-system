@@ -1,7 +1,9 @@
 /** Server-only helpers for the item master. T-145. */
 import {
   itemsRepo,
+  type DismissalRow,
   type DuplicateCandidate,
+  type ItemKind,
   type ItemRequestRow,
   type ItemRow,
   type PriceObservation,
@@ -55,8 +57,33 @@ export function soldAsLabel(item: Pick<ItemRow, 'isPurchasable' | 'sellableRetai
   return [sold || '—', made].filter(Boolean).join(' · ');
 }
 
-export async function listItems(orgId: string, includeInactive = true): Promise<ItemRow[]> {
-  return withOrgPrincipal(orgId, (tx) => itemsRepo.listItems(tx, orgId, { includeInactive }));
+export async function listItems(orgId: string, includeInactive = true, kind?: ItemKind): Promise<ItemRow[]> {
+  return withOrgPrincipal(orgId, (tx) => itemsRepo.listItems(tx, orgId, { includeInactive, ...(kind ? { kind } : {}) }));
+}
+
+export { parseKindFilter } from './family';
+
+/** T-443 R3. Per-kind counts over the same rows the table lists, for the filter chips. */
+export async function itemKindCounts(orgId: string, includeInactive = true): Promise<Record<string, number>> {
+  return withOrgPrincipal(orgId, (tx) => itemsRepo.countItemsByKind(tx, orgId, { includeInactive }));
+}
+
+/** T-443 R2. The pairs a super-admin said are different items (for the collapsed list with Undo). */
+export async function dismissedPairs(orgId: string): Promise<DismissalRow[]> {
+  return withOrgPrincipal(orgId, (tx) => itemsRepo.listDismissals(tx, orgId));
+}
+
+/** T-443 R1. Top-level, live (not merged) items: what a "Variation of" select offers. */
+export async function variationParentOptions(orgId: string): Promise<Pick<ItemRow, 'id' | 'name' | 'code' | 'kind' | 'status'>[]> {
+  const rows = await listItems(orgId, true);
+  return rows
+    .filter((i) => i.variantOfItemId === null && i.status !== 'merged')
+    .map((i) => ({ id: i.id, name: i.name, code: i.code, kind: i.kind, status: i.status }));
+}
+
+/** T-443 R1. The variations of one item (any status), for its page. */
+export async function variationsOf(orgId: string, itemId: string): Promise<ItemRow[]> {
+  return withOrgPrincipal(orgId, (tx) => itemsRepo.listVariationsOf(tx, orgId, itemId));
 }
 
 /** T-378 R2: the page's courtesy read of the database's one definition of "has history". */

@@ -450,7 +450,14 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // +35 (17 Oct): T-190 payroll screens (rates page, government IDs on the staff page, payslip lines; net +35 measured on its older base).
     // = 1352 after T-190 merged onto main (17 Oct; expected 1350, measured 1352: the two extra controls come from where the T-190 screens meet T-436/T-386 on the same pages)
     // +5 (17 Oct): T-438 hire name boxes and rename form
-    expect(results.length).toBe(1357);
+    // +6 (17 Oct): T-441 S1 shared photo control on /ap (Lightbox dialog/Close/Open PDF, PhotoUpload shape button/file input/action button; 1357 -> 1363 measured).
+    // -1 (17 Oct): T-440 S1 supplier add form - Days-to-pay loses type=number, a Button becomes SubmitButton (1357 -> 1356 measured).
+    // = 1362 with both merged (17 Oct)
+    // +12 (18 Oct): T-443 items page - kind filter chips (6), the look-alike panel's note box + "Different items" button (per pair), the
+    //   dismissed-pairs list (summary, links, Undo), the Variation-of selects on the request form and approve row, and the item page's
+    //   Variations section (links, select, Save). Measured 1362 -> 1374; all 12 new controls are >= 24px (the 5 that were 20px got py-0.5).
+    // T-444: one new Review and approvals disclosure summary; all existing controls remain.
+    expect(results.length).toBe(1375);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

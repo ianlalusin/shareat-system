@@ -1,4 +1,6 @@
+import { can } from '@shareat/auth';
 import { salesDaysRepo } from '@shareat/db';
+import { SchedulerStatus } from '../../components/scheduler-status';
 import { formatMoney, money } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { listStores } from './lib';
@@ -34,6 +36,13 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
   const days = await withOrgPrincipal(orgId, (tx) =>
     salesDaysRepo.listSalesDays(tx, { orgId, storeId, status, limit: 100 }),
   );
+  // T-396 S2: the morning POS import's health, only for a person who may submit a sales day, and each line only at the
+  // stores they may submit for.
+  const submitStoreIds = await withOrgPrincipal(orgId, async (tx) => {
+    const ok: string[] = [];
+    for (const s of stores) if (await can(tx, actor, 'submit_sales_day', { storeId: s.id })) ok.push(s.id);
+    return ok;
+  });
   const storeById = new Map(stores.map((s) => [s.id, s]));
 
   const carry = new URLSearchParams();
@@ -63,6 +72,16 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
           New sales day
         </a>
       </div>
+
+      {submitStoreIds.length > 0 && (
+        <SchedulerStatus
+          orgId={orgId}
+          job="pos_day_import"
+          label="Morning POS import"
+          cadence="daily"
+          visibleSubjectIds={submitStoreIds}
+        />
+      )}
 
       {oldestUnverified && (
         <Banner tone="warning">

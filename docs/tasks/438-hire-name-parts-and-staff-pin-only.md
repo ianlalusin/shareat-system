@@ -1,7 +1,6 @@
 # T-438 — Hire by last/first/middle name; staff sign in by PIN only
 
-**Status:** SPEC 2026-10-17 (Opus planner). Bible rows **360, 361**. Migration slot **0207**. Ship today: S1 and S2
-touch disjoint files and may build in parallel.
+**Status:** LIVE 2026-10-17 (PR #35, migration 0207). Hire by last/first/middle name; staff PIN-only.
 
 ## Goal, in plain words
 

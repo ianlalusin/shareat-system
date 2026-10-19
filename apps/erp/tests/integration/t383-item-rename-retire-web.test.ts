@@ -57,9 +57,6 @@ const NOT_SUPER_ADMIN = 'Only a super-admin can rename, retire or restore an ite
 const MERGED_SENTENCE = 'This item was merged into another, so it cannot be retired or restored.';
 const DUP_NAME =
   'An item with that name already exists — names are one per organisation, ignoring case. To reuse the name, rename the existing item on its page first.';
-// Shared by createItem and the request actions: the readers are not all super-admins, so no 'on its page' hint.
-const SHARED_DUP_NAME =
-  'An item with that name already exists — names are one per organisation, ignoring case. To reuse the name, ask a super-admin to rename the existing item first.';
 const BLANK_NAME = 'Give the item a name people will recognise.';
 const BLANK_CODE = 'Give the item a code.';
 
@@ -276,7 +273,8 @@ describe('W3 - the create form tells you how to reuse a taken name or code', () 
       const byName = await redirectOf(() =>
         actions.createItemAction(form({ code: 'NEWX-001', name: 'coke 1.5', kind: 'raw_material', baseUnit: 'pcs' })),
       );
-      expect(param(byName, 'error')).toBe(SHARED_DUP_NAME);
+      // T-443 now refuses before INSERT, with the existing item's name and code.
+      expect(param(byName, 'error')).toBe('An item called "Coke 1.5" (CK15-001) already exists. Use that item, or choose a different name.');
       const byCode = await redirectOf(() =>
         actions.createItemAction(form({ code: 'CK15-001', name: 'Something else', kind: 'raw_material', baseUnit: 'pcs' })),
       );
@@ -286,7 +284,7 @@ describe('W3 - the create form tells you how to reuse a taken name or code', () 
   );
 
   it(
-    "W3b: a manager who submits the duplicate (createItemAction; requestItemAction accepts an exact duplicate as a request, so it raises no duplicate error) is never told to rename 'on its page' (they cannot). Guards the shared errorMessage against leaking the page hint to non-super-admins. Green against a2fd5c3 (their refusal is an authorization sentence); kept as the regression guard",
+    "W3b: a manager using the direct-add action is refused by authorisation and is never told to rename 'on its page' (they cannot). Guards the shared errorMessage against leaking the page hint to non-super-admins. Green against a2fd5c3 (their refusal is an authorization sentence); kept as the regression guard",
     async () => {
       const f = await fixture('w3b');
       await insertItem(f, 'Coke 1.5', 'CK15-001');

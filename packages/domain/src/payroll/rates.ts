@@ -9,6 +9,8 @@ import { auditLogRepo, statutoryRepo, transaction, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { parseDecimalInput } from '../shared/money-input';
 import { gone, refuse } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { STAFF_GOV_ID_RULES } from '../field-rules/staff';
 
 const CAPABILITY = 'manage_payroll_rates' as const;
 const AGENCIES = ['sss', 'philhealth', 'pagibig'] as const;
@@ -338,20 +340,9 @@ export function setGovernmentIds(
 ): Promise<void> {
   return run(tx, async (trx) => {
     await authorize(trx, actor, 'enrol_staff', { storeId: input.storeId });
-    const digits = (v: string | null | undefined, pattern: RegExp, label: string, shape: string): string | null => {
-      const t = (v ?? '').replace(/[\s-]/g, '');
-      if (t === '') return null;
-      if (!pattern.test(t)) {
-        throw refuse(`setGovernmentIds: ${label} "${v}" has the wrong shape`, `${label} must be ${shape}.`);
-      }
-      return t;
-    };
-    const ids = {
-      sssNo: digits(input.sssNo, /^[0-9]{10}$/, 'The SSS number', '10 digits'),
-      philhealthNo: digits(input.philhealthNo, /^[0-9]{12}$/, 'The PhilHealth number', '12 digits'),
-      pagibigNo: digits(input.pagibigNo, /^[0-9]{12}$/, 'The Pag-IBIG number', '12 digits'),
-      tin: digits(input.tin, /^[0-9]{9,12}$/, 'The TIN', '9 to 12 digits'),
-    };
+    // T-440: the shapes, the sentences and the stripping (dashes/spaces) live in ONE rule set shared with the screen; the
+    // refusal's raw diagnostic names the field and never the number (government numbers are personal data).
+    const ids = assertFieldRules(STAFF_GOV_ID_RULES, input) as Record<'sssNo' | 'philhealthNo' | 'pagibigNo' | 'tin', string | null>;
     // Numbers decide which agencies a payslip deducts: lock the person like a post does, so a run cannot read half a change.
     await statutoryRepo.lockPersons(trx, actor.orgId, [input.personId]);
     const [current] = await statutoryRepo.governmentIdsFor(trx, actor.orgId, [input.personId]);

@@ -4,7 +4,7 @@
  * ⛔ **No public-URL column exists to read**, and none should. A read is brokered per request; see
  * `packages/domain/src/files`.
  */
-import { and, asc, eq, inArray, isNull, lt, sql } from 'drizzle-orm';
+import { and, asc, count, eq, gt, inArray, isNull, lt, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { storedFiles, type FilePurpose } from '../../schema/stored-files';
 import { recordGone } from './record-gone';
@@ -80,6 +80,50 @@ export async function linkFile(
 }
 
 /**
+ * T-441 (audit A1) - claim an upload-on-pick file for the record that owns it, in ONE conditional UPDATE.
+ * Matches only the uploader's own, still-unlinked file of this purpose and store (NULL-safe), under 24 h old on the
+ * DATABASE clock (the clock `listOrphans` uses). Returns whether a row matched; zero rows means "not claimable" for
+ * every reason alike. Do not reuse `linkFile`: it has no `linked_to IS NULL` guard.
+ */
+export async function claimFile(
+  tx: Tx,
+  input: { orgId: string; id: string; uploadedBy: string; purpose: FilePurpose; storeId: string | null; linkedTo: string },
+): Promise<boolean> {
+  const updated = await tx
+    .update(storedFiles)
+    .set({ linkedTo: input.linkedTo })
+    .where(
+      and(
+        eq(storedFiles.id, input.id),
+        eq(storedFiles.orgId, input.orgId),
+        eq(storedFiles.uploadedBy, input.uploadedBy),
+        eq(storedFiles.purpose, input.purpose),
+        input.storeId === null ? isNull(storedFiles.storeId) : eq(storedFiles.storeId, input.storeId),
+        isNull(storedFiles.linkedTo),
+        gt(storedFiles.uploadedAt, sql`now() - interval '24 hours'`),
+      ),
+    )
+    .returning({ id: storedFiles.id });
+  return updated.length > 0;
+}
+
+/** T-441: how many uploads this person holds that nothing has claimed yet and that are younger than `hours`. */
+export async function countUnclaimedBy(tx: Tx, orgId: string, uploadedBy: string, hours: number): Promise<number> {
+  const [row] = await tx
+    .select({ n: count() })
+    .from(storedFiles)
+    .where(
+      and(
+        eq(storedFiles.orgId, orgId),
+        eq(storedFiles.uploadedBy, uploadedBy),
+        isNull(storedFiles.linkedTo),
+        gt(storedFiles.uploadedAt, sql`now() - make_interval(hours => ${hours})`),
+      ),
+    );
+  return Number(row?.n ?? 0);
+}
+
+/**
  * ⭐ T-272/DEF-306 — the ONE definition of the orphan sweep's per-run candidate cap. Compared
  * against in `scheduler/index.ts` to detect when a run was capped rather than fully drained
  * (`candidates === ORPHAN_SWEEP_BATCH_LIMIT`); changing the limit here changes the comparison too,
@@ -139,4 +183,15 @@ export async function deleteFile(tx: Tx, orgId: string, id: string): Promise<boo
     .where(and(eq(storedFiles.id, id), eq(storedFiles.orgId, orgId), isNull(storedFiles.linkedTo)))
     .returning({ id: storedFiles.id });
   return deleted.length > 0;
+}
+
+/** Namespace (first int4) for the per-person unclaimed-upload lock. T-441 (see `advisory-locks.ts` for the other namespaces). */
+const UNCLAIMED_UPLOAD_LOCK_NAMESPACE = 441001;
+
+/** Serialises one person's uploads from "count what they hold" through the row insert, so parallel requests cannot all
+ *  read 29 and all insert. Transaction-scoped: released at COMMIT/ROLLBACK. Take it AFTER the capability check. */
+export async function lockUnclaimedUploads(tx: Tx, orgId: string, personId: string): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(${UNCLAIMED_UPLOAD_LOCK_NAMESPACE}::int4, hashtext(${orgId}::text || ':' || ${personId}::text))`,
+  );
 }

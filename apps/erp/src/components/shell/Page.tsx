@@ -89,7 +89,7 @@ export function Page({ density, title, description, actions, className, children
     <div
       // ⚠️ `w-full` matters: without it a short page inside a flex shell can shrink-to-fit and the
       // `mx-auto` centring silently stops applying.
-      className={`mx-auto w-full${WIDTH[density] ? ` ${WIDTH[density]}` : ''} px-4 py-4 md:px-6 md:py-6 xl:px-8 ${className ?? 'space-y-6'}`}
+      className={`erp-page mx-auto w-full${WIDTH[density] ? ` ${WIDTH[density]}` : ''} px-4 py-4 md:px-6 md:py-6 xl:px-6 xl:py-4 ${className ?? 'space-y-6 xl:space-y-4'}`}
     >
       {title !== undefined && (
         <PageHeader title={title} description={description} actions={actions} />

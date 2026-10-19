@@ -19,6 +19,7 @@ import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
 import { auditLogRepo, moneyAccountsRepo, posV1Repo, salesDaysRepo, storesRepo, transaction, type Tx } from '@shareat/db';
 import type { PosV1FeedKind } from '@shareat/db/schema';
 import { parseBusinessDate } from '@shareat/core/datetime';
+import { POS_V1_SALES_FIELDS } from '@shareat/db/pos-v1/wire';
 import { logger } from '@shareat/core/logger';
 import { gone, refuse } from '../shared/refusal';
 import {
@@ -43,14 +44,43 @@ export interface ImportSalesDayInput {
   readonly storeId: string;
   /** A Manila business date, `YYYY-MM-DD`. */
   readonly businessDate: string;
+  /**
+   * T-396 (the morning timer): "a day on this date, in ANY status, voided included, is already there". A present day is
+   * answered `{ id, skipped: true }` before the day-state gate and before POS is called, and again under the store lock
+   * after the fetch (writing nothing); a POS `found:false` is answered `{ notFound: true }` instead of a refusal.
+   * Absent or false: the web behaviour, unchanged.
+   */
+  readonly ifAbsent?: boolean;
+  /** T-396: `cron` or `manual` writes one `sales_day.auto_imported` audit row for a NEW day. Absent: nothing (the web path). */
+  readonly source?: 'cron' | 'manual';
 }
 
+/** What an `ifAbsent` import answers: the day it made, the day that was already there, or POS having no sales for the date. */
+export type ImportSalesDayOutcome = { id: string; skipped?: true } | { notFound: true };
+
+/** The nullable transaction argument, spelled once here so the two overloads below add nothing to the DEF-421 ratchet. */
+type MaybeTx = Tx | null;
+
+export function importSalesDay(
+  tx: MaybeTx,
+  actor: Actor,
+  input: ImportSalesDayInput & { readonly ifAbsent: true },
+  fetchers?: ImportFetchers,
+): Promise<ImportSalesDayOutcome>;
+export function importSalesDay(
+  tx: MaybeTx,
+  actor: Actor,
+  input: ImportSalesDayInput & { readonly ifAbsent?: false },
+  fetchers?: ImportFetchers,
+): Promise<{ id: string }>;
+/** A non-literal `ifAbsent: boolean` may answer either shape. */
+export function importSalesDay(tx: MaybeTx, actor: Actor, input: ImportSalesDayInput, fetchers?: ImportFetchers): Promise<ImportSalesDayOutcome>;
 export async function importSalesDay(
-  tx: Tx | null,
+  tx: MaybeTx,
   actor: Actor,
   input: ImportSalesDayInput,
   fetchers: ImportFetchers = LIVE_FETCHERS,
-): Promise<{ id: string }> {
+): Promise<ImportSalesDayOutcome> {
   if (tx) return runImport(tx, actor, input, fetchers);
   return transaction((trx) => runImport(trx, actor, input, fetchers));
 }
@@ -77,7 +107,8 @@ export async function reimportSalesDay(
   }
   // A denied actor gets the very same sentence as a missing day (DEF-546's pattern).
   try {
-    return await runImport(tx, actor, { storeId: day.storeId, businessDate: day.businessDate }, fetchers);
+    // No `ifAbsent` here, so the answer is always a day id.
+    return (await runImport(tx, actor, { storeId: day.storeId, businessDate: day.businessDate }, fetchers)) as { id: string };
   } catch (err) {
     if (err instanceof AuthorizationError) {
       const uniform = new AuthorizationError(`reimportSalesDay: ${err.message}`, 'submit_sales_day', DAY_OUT_OF_REACH);
@@ -110,6 +141,11 @@ async function gateExistingDay(tx: Tx, actor: Actor, input: ImportSalesDayInput,
   if (day.status === 'submitted') await authorize(tx, actor, 'verify_sales_day', { storeId: input.storeId });
 }
 
+function withCause<E extends Error>(refusal: E, cause: unknown): E {
+  refusal.cause = cause;
+  return refusal;
+}
+
 async function fetchBoth(
   fetchers: ImportFetchers,
   posStoreId: string,
@@ -122,17 +158,18 @@ async function fetchBoth(
     const soldItems = await call(fetchers.soldItems, 'sold_items');
     return { sales, soldItems };
   } catch (err) {
+    // T-396: the typed error stays as the refusal's `cause`, so a caller classifies on it, never on a sentence.
     if (err instanceof PosNotConfiguredError) {
-      throw refuse(err.message, "The POS connection isn't set up on this server, so sales can't be imported.");
+      throw withCause(refuse(err.message, "The POS connection isn't set up on this server, so sales can't be imported."), err);
     }
     if (err instanceof PosUnreachableError) {
-      throw refuse(err.message, `POS couldn't be reached, so ${when} wasn't imported. Try again later — sales only come from POS.`);
+      throw withCause(refuse(err.message, `POS couldn't be reached, so ${when} wasn't imported. Try again later — sales only come from POS.`), err);
     }
     throw err;
   }
 }
 
-async function runImport(tx: Tx, actor: Actor, input: ImportSalesDayInput, fetchers: ImportFetchers): Promise<{ id: string }> {
+async function runImport(tx: Tx, actor: Actor, input: ImportSalesDayInput, fetchers: ImportFetchers): Promise<ImportSalesDayOutcome> {
   const { orgId } = actor;
   await authorize(tx, actor, 'submit_sales_day', { storeId: input.storeId });
   // Strict: a real calendar date, before any read or fetch.
@@ -157,6 +194,13 @@ async function runImport(tx: Tx, actor: Actor, input: ImportSalesDayInput, fetch
   }
   const tenders = await posV1Repo.listTendersByStore(tx, orgId, input.storeId);
   const when = safeHumanDate(input.businessDate);
+
+  // T-396: `ifAbsent` honours a day in ANY status (voided included) before the gate, so a verified day is a skip,
+  // never a refusal, and POS is not asked.
+  if (input.ifAbsent) {
+    const present = await salesDaysRepo.findAnyByBusinessDate(tx, orgId, input.storeId, input.businessDate);
+    if (present) return { id: present.id, skipped: true };
+  }
 
   // The day-state gate, before POS is called and with no lock held.
   const peek = await salesDaysRepo.findByBusinessDate(tx, orgId, input.storeId, input.businessDate);
@@ -186,6 +230,15 @@ async function runImport(tx: Tx, actor: Actor, input: ImportSalesDayInput, fetch
     );
   }
 
+  if (input.ifAbsent) {
+    // A day a person made while POS was being asked is theirs: nothing is written. (No lock stops a NEW day being
+    // inserted after this read; the unique index is the last word and the caller treats its 23505 as a skip.)
+    const present = await salesDaysRepo.findAnyByBusinessDate(tx, orgId, input.storeId, input.businessDate);
+    if (present) return { id: present.id, skipped: true };
+    // POS has no sales for the date: a typed outcome, not a refusal to be matched by its sentence.
+    if (!posHasSales(fetched.sales.payload)) return { notFound: true };
+  }
+
   const derived = deriveSalesDay(fetched.sales.payload, {
     channelId: link.salesChannelId,
     taxType: link.posTaxType,
@@ -212,6 +265,7 @@ async function runImport(tx: Tx, actor: Actor, input: ImportSalesDayInput, fetch
   const live = await salesDaysRepo.findByBusinessDate(tx, orgId, input.storeId, input.businessDate);
   const day = live ? await salesDaysRepo.getByIdForUpdate(tx, orgId, live.id) : undefined;
   const liveDay = day && day.status !== 'voided' ? day : undefined;
+  if (input.ifAbsent && liveDay) return { id: liveDay.id, skipped: true };
   if (liveDay) await gateExistingDay(tx, actor, input, liveDay);
   else if (peek) await assertCanOpenDay(tx, actor, input, 'importSalesDay'); // the day we gated on is gone: gate as new
 
@@ -264,6 +318,18 @@ async function runImport(tx: Tx, actor: Actor, input: ImportSalesDayInput, fetch
       await salesDaysRepo.replaceTenders(tx, newId, tenderRows);
       return newId;
     });
+    if (input.source) {
+      // The activity log says the timer made this day, not the admin whose name it carries.
+      await auditLogRepo.append(tx, orgId, {
+        actorPersonId: actor.personId,
+        action: 'sales_day.auto_imported',
+        storeId: input.storeId,
+        entityId: id,
+        before: null,
+        after: { businessDate: input.businessDate, totalSales: f.totalSales, posV1DayFeedId: salesFeedId },
+        source: input.source,
+      });
+    }
     return { id };
   }
 
@@ -304,6 +370,11 @@ async function runImport(tx: Tx, actor: Actor, input: ImportSalesDayInput, fetch
     source: 'web',
   });
   return { id: liveDay.id };
+}
+
+/** True when POS's sales answer says it has sales for the date (`found: true`). */
+function posHasSales(payload: unknown): boolean {
+  return typeof payload === 'object' && payload !== null && (payload as Record<string, unknown>)[POS_V1_SALES_FIELDS.found] === true;
 }
 
 /** The figures, their feed, the channels and the tenders, for the re-import's audit row. */

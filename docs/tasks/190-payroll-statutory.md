@@ -1,8 +1,6 @@
 # T-190: payroll statutory contributions and withholding
 
-**Status:** spec written 2026-10-16, not started. Ian, bible row 354 (16 Oct): start NOW from the official 2026
-tables; staff data comes from the HR sheet due 31 Oct. Row 217: the business deducts, adds the employer share, and
-remits itself (remittance is T-193).
+**Status:** LIVE 2026-10-17 (PR #35, migration 0206). Posting is refused until the statutory rates are confirmed.
 **Model:** Sonnet tester first (commits red), then Sonnet builder, per slice. Money path: never Haiku.
 **Migration:** YES, one, hand-authored (ADR-012 §5): **0206** (after T-434's 0204 and T-436's 0205), journal idx
 206, `when` 1803871907084 (0205's + 86400000). Restates `payslips_net_identity_check` (schema/payroll.ts:270).
@@ -44,6 +42,9 @@ same as `pay_rates`), withholding brackets included, so each org confirms its ow
 ## What counts (v1 requirements, `ERP-rebuild/src/lib/payroll/statutory.ts`, read as requirements only)
 - **Contribution base** is a column on each rate row (`base_kind`: `gross` or `basic`), not code. Seed: SSS = gross
   (basic + OT + night diff + holiday, "all actual remuneration"); PhilHealth = basic; Pag-IBIG = basic. Verify.
+  **Paid leave is NOT basic (Ian, 2026-10-17, row 366, q-t190-leave-in-basic b, against the recommendation):**
+  `leave_pay` and `sil_conversion_pay` stay out of the PhilHealth/Pag-IBIG base; only days worked count. As built;
+  no code change. The accountant's "verify" may still revisit it.
 - **Taxable** = gross − the employee's three contributions. **MWE**: if the employment's daily rate ≤ the store's
   minimum wage on the period end, basic + OT + night diff + holiday are all exempt, withholding = 0 (contributions
   still apply). ₱1 above the minimum is not an MWE (RR 11-2018; verify).

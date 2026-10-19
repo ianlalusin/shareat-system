@@ -39,6 +39,8 @@ const alias = {
   '@shareat/domain/money-input': `${root}packages/domain/src/shared/money-input.ts`,
   // T-386 - the item-code rule is a client-safe leaf (ItemCodeField imports it in the browser); exact entry before the bare name.
   '@shareat/domain/item-code': `${root}packages/domain/src/item-code.ts`,
+  // T-441 - the upload control's db-free limits leaf (browser import); exact entry before the bare name.
+  '@shareat/domain/files/limits': `${root}packages/domain/src/files/limits.ts`,
   // T-343 S5.0 — mirrors the two subpaths above: `refusal-leaf.ts` has no `@shareat/db` import
   // deliberately (a `'use client'` component may reach for `humanDate`/`internalFault` directly),
   // so it needs its own exact entry the same reason the other leaves above do.
@@ -51,6 +53,8 @@ const alias = {
   // `@shareat/domain/*` wildcard (only the root tsconfig does), so this leaf needs its own exact
   // entry rather than relying on the wildcard the way `npm run typecheck` (root config) does.
   '@shareat/domain/service-charge': `${root}packages/domain/src/service-charge/index.ts`,
+  // T-440 - the field-rule leaf (CheckedForm / FieldCheck import it in the browser); exact entry before the bare name.
+  '@shareat/domain/field-rules': `${root}packages/domain/src/field-rules/index.ts`,
   '@shareat/domain': `${root}packages/domain/src/index.ts`,
   // ⚠️ The subpath goes BEFORE the bare name: these are exact-match aliases applied in order, and
   // T-237's `@shareat/auth/errors` leaf (the error classes without `@shareat/db` behind them) is

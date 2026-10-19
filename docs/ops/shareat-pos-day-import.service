@@ -1,0 +1,28 @@
+# T-396 S1 - the 06:00 Manila import of every POS-linked store's closed days, as DRAFTS. INSTALL INSTRUCTIONS: docs/ops/README.md
+#
+# What it is for: yesterday's sales day (and any missed day in the last 7) is drafted from the POS v1 feed for every store with a
+# live POS link, as an `open` draft. It never submits, verifies or posts; a person submits it and a different person verifies it.
+# It acts as the person who last saved the store's POS link, through their real permission, so the automation can do nothing that
+# admin could not.
+
+[Unit]
+Description=Shareat - 06:00 Manila import of POS-linked stores' closed days, as drafts (T-396 S1)
+After=network-online.target
+Wants=network-online.target
+# No After=postgresql.service - the database is DO Managed Postgres, off-box (ADR-002 section 1).
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/shareat
+ExecStart=/usr/bin/npm run pos-day-import
+User=shareat
+Group=shareat
+TimeoutStartSec=15min
+
+# NEVER build here. This is a 4 GB droplet that runs the app; a build OOMs it. This unit runs an already-installed tree shipped by CI - bible 2.10.
+Environment=NODE_ENV=production
+
+# The exit code is load-bearing: non-zero when any store-date was refused (unmapped method, retired account, POS unreachable, POS
+# not configured, a gap beyond the 7-day window) or no org was found, so systemd shows the unit failed.
+StandardOutput=append:/var/log/shareat/pos-day-import.log
+StandardError=append:/var/log/shareat/pos-day-import.log
