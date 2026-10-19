@@ -77,16 +77,15 @@ export default async function ItemsPage({
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           Choose the unit used to measure stock and compare prices. Boxes and packs use conversions on the invoice.
         </p>
-            <form action={requestItemAction} className="space-y-3">
+            <form action={requestItemAction} className="erp-item-form space-y-3">
               <FormSection title="Identity">
-                <FormGrid layout="fields">
-                  <Field width="long" label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Name</span>} className="text-sm">
+                <FormGrid layout="fields" className="erp-item-identity">
+                  <Field width="name" label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Name</span>} className="text-sm">
                     <Input id="item-name" name="name" required placeholder="Pork belly" className="mt-1 block w-full" />
                   </Field>
-                  <ItemCodeField nameInputId="item-name" mode="new" canOverride={false} suggestAction={suggestItemCodeAction} />
                   <Field width="code" label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Kind</span>} className="text-sm">
                     <select name="kind" required defaultValue="" className="mt-1 block w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink">
-                      <option value="">Choose a kind</option>
+                      <option value="">Kind…</option>
                       {ITEM_KINDS.map((k) => (
                         <option key={k} value={k}>{ITEM_KIND_LABEL[k]}</option>
                       ))}
@@ -101,6 +100,9 @@ export default async function ItemsPage({
                     </Select>
                   </Field>
                 </FormGrid>
+                <div className="mt-2">
+                  <ItemCodeField nameInputId="item-name" mode="new" canOverride={false} suggestAction={suggestItemCodeAction} />
+                </div>
               </FormSection>
               <FormSection title="Item family">
                 <FormGrid layout="fields">
@@ -140,15 +142,15 @@ export default async function ItemsPage({
           */}
               <fieldset className="space-y-2 rounded border border-neutral-200 p-3 dark:border-neutral-800">
                 <legend className="px-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
-                  What it may be bought and sold as
+                  Buying and selling
                 </legend>
-                <div className="grid gap-2 text-sm [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
-                  <Checkbox name="isPurchasable" defaultChecked label="Bought from suppliers" />
-                  <Checkbox name="sellableRetail" label="Sold à la carte (retail)" />
-                  <Checkbox name="sellableWholesale" label="Sold to other stores or buyers (wholesale)" />
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                  <Checkbox name="isPurchasable" defaultChecked label="Buy" aria-label="Bought from suppliers" />
+                  <Checkbox name="sellableRetail" label="Retail" aria-label="Sold à la carte (retail)" />
+                  <Checkbox name="sellableWholesale" label="Wholesale" aria-label="Sold to other stores or buyers (wholesale)" />
                 </div>
                 <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                  Independent choices. &ldquo;Wholesale&rdquo; includes our branches, franchisees and outside buyers like Xlice — not diners. A store can override these choices on the item&rsquo;s page.
+                  Buy = bought from suppliers. Retail = sold à la carte. Wholesale = sold to our branches, franchisees or outside buyers like Xlice. These are independent choices; a store can override them on the item&rsquo;s page.
                 </p>
               </fieldset>
               <div className="flex flex-wrap gap-2">

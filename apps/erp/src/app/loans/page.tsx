@@ -121,12 +121,12 @@ export default async function LoansPage({
           <>
             <FormSection title="Loan and lender">
               <FormGrid layout="fields">
-                <div className="min-w-0 erp-field-long">
+                <div className="min-w-0 erp-field-name">
                   <Field label="What it is called">
                     <Input name="name" required maxLength={120} placeholder="Grab cash advance" className="w-full" />
                   </Field>
                 </div>
-                <div className="min-w-0 erp-field-long">
+                <div className="min-w-0 erp-field-name">
                   <Field label="Lender">
                     <Input name="lenderName" required maxLength={120} placeholder="Grab" className="w-full" />
                   </Field>

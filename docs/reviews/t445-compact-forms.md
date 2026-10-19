@@ -9,5 +9,5 @@ FINDINGS: implementation checked locally; browser verification blocked
 - Production build succeeds with port 9008 stopped. Typecheck passes. No full integration run or CI merge is claimed for this slice.
 - Browser gate denied the sample origin, then denied 127.0.0.1:9008 despite Ian's explicit permission. No alternate browser/network workaround was attempted; the synthetic harness was stopped. Visual geometry is not yet verified.
 - Incidental source finding logged as DEF-681: existing Number conversions in money displays; unchanged by this slice.
-- Background proposal is a separate white/red-arch sample outside the repository; no palette/background changes applied. Existing untracked docs/operations/ is untouched.
-FOR IAN: compact forms are implemented locally and automated checks pass. Browser verification and green PR CI remain before release; approve the separate background sample before it is implemented.
+- Ian superseded the background samples with plain white/no pattern on 2026-10-19; implemented separately in T-446 with compact related rows. Existing untracked docs/operations/ is untouched.
+FOR IAN: compact forms are implemented locally and automated checks pass. Browser verification and green PR CI remain before release; the background choice is settled in T-446.

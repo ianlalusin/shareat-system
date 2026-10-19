@@ -246,7 +246,7 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
                     <span className="text-xs text-neutral-500">One only — a PWD who is also a senior claims one 20%, not both.</span>
                   </label>
                 </div>
-                <div className="min-w-0 erp-field-long">
+                <div className="min-w-0 erp-field-name">
                   <label className="flex flex-col gap-1 text-sm">
                     <span className="font-medium">Holder&apos;s name</span>
                     <Input name="holderName" required />

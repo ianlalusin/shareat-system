@@ -104,7 +104,7 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
           <CheckedForm rules={SUPPLIER_ADD_RULES} action={createSupplierAction} className="space-y-3">
             <FormSection title="Supplier details">
               <FormGrid layout="fields">
-                <Field width="long" label="Name" rule={SUPPLIER_ADD_RULES.name}>
+                <Field width="name" label="Name" rule={SUPPLIER_ADD_RULES.name}>
                   <Input {...nativeAttrs(SUPPLIER_ADD_RULES.name)} placeholder="ABC Meat Supply" className="w-full" />
                 </Field>
                 <Field width="long" label="Address" hint="Optional.">

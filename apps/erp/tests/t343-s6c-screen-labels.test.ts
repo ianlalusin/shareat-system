@@ -328,9 +328,13 @@ describe('I1 — items list: meat_slab / meat_sliced show their label; the kind 
     const selectBlock = /<select\s+name="kind"[^>]*>([\s\S]*?)<\/select>/.exec(html)?.[1];
     expect(selectBlock, 'expected the kind <select>').toBeTruthy();
     const optionValues = [...selectBlock!.matchAll(/<option[^>]*value="([^"]*)"/g)].map((m) => m[1]!);
-    // T-378 S1: the kind has no default, so the <select> opens on a blank "Choose a kind" option before the ITEM_KINDS.
+    // T-446: concise placeholder, still blank and required: a kind is never silently chosen.
     expect(optionValues).toEqual(['', ...ITEM_KINDS]);
-    expect(/<option[^>]*value=""[^>]*>([^<]*)<\/option>/.exec(selectBlock!)?.[1]).toBe('Choose a kind');
+    const identity = /<div class="erp-form-fields erp-item-identity">([\s\S]*?)<\/div>/.exec(html)?.[1] ?? '';
+    for (const name of ['name', 'kind', 'baseUnit']) expect(identity).toContain(`name="${name}"`);
+    const selling = /<div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">([\s\S]*?)<\/div>/.exec(html)?.[1] ?? '';
+    for (const name of ['isPurchasable', 'sellableRetail', 'sellableWholesale']) expect(selling).toContain(`name="${name}"`);
+    expect(/<option[^>]*value=""[^>]*>([^<]*)<\/option>/.exec(selectBlock!)?.[1]).toBe('Kind…');
   });
 });
 

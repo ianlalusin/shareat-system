@@ -126,7 +126,7 @@ export default async function StoresPage({
                     <Input name="code" required maxLength={16} className="mt-1 w-full" />
                   </Field>
                 </div>
-                <div className="min-w-0 erp-field-long">
+                <div className="min-w-0 erp-field-name">
                   <Field label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>}>
                     <Input name="name" required className="mt-1 w-full" />
                   </Field>

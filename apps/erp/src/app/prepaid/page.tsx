@@ -182,7 +182,7 @@ export default async function PrepaidPage({
           <>
             <FormSection title="Prepaid item">
               <FormGrid layout="fields">
-                <div className="min-w-0 erp-field-long">
+                <div className="min-w-0 erp-field-name">
                   <Field label="Name" hint="What it is, as somebody would say it out loud">
                     <Input name="name" required maxLength={120} placeholder="Fire insurance 2026" className="w-full" />
                   </Field>

@@ -123,7 +123,7 @@ export default async function ItemDetailPage({
         {mayApproveItem ? (
           <EditableRecord action={renameItemAction} label={item.name} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_RENAME, item.id, actor.personId)}>
             <FormGrid>
-              <Field width="long" label="Name">
+              <Field width="name" label="Name">
                 <Input id="rename-name" name="name" type="text" required defaultValue={item.name} className="w-full" />
               </Field>
               <Field width="code" label="Code">

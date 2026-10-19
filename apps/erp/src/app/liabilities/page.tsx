@@ -162,7 +162,7 @@ export default async function LiabilitiesPage({
                     </Select>
                   </Field>
                 </div>
-                <div className="min-w-0 erp-field-long">
+                <div className="min-w-0 erp-field-name">
                   <Field label="What it is">
                     <Input name="name" required placeholder="Accrued rent — January" className="w-full" />
                   </Field>

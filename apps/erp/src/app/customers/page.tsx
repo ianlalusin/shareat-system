@@ -161,7 +161,7 @@ export default async function CustomersPage({
         <form action={createCustomerAction} className="space-y-4">
           <FormSection title="Customer identity">
             <FormGrid layout="fields">
-              <Field width="long" label="Name">
+              <Field width="name" label="Name">
                 <Input name="name" required placeholder="Resto Bulacan" className="w-full" />
               </Field>
               <Field

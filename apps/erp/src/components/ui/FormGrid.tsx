@@ -44,7 +44,7 @@ export function FormGrid({ layout = 'grid', className, children }: FormGridProps
 }
 
 export interface FieldProps {
-  readonly width?: 'short' | 'code' | 'date' | 'long' | 'full';
+  readonly width?: 'short' | 'code' | 'date' | 'name' | 'long' | 'full';
   readonly label: ReactNode;
   readonly hint?: ReactNode;
   readonly span?: 'wide' | 'full';

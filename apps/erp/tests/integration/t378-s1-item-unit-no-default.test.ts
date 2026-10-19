@@ -124,10 +124,10 @@ async function itemsHtml(hint: string): Promise<string> {
 
 describe('U1 - the unit and kind selects start blank', () => {
   it(
-    'baseUnit: first option is value="" "Choose a unit", it alone is selected, required, options exactly BASE_UNITS. Killing mutants: restore defaultValue="kg" / drop required. Red today: kg is selected, no blank option',
+    'baseUnit: first option is value="" "Unit…", it alone is selected, required, options exactly BASE_UNITS. Killing mutants: restore defaultValue="kg" / drop required. Red today: kg is selected, no blank option',
     async () => {
       const { tag, options } = selectOf(await itemsHtml('u1'), 'baseUnit');
-      expect(options[0], 'first option').toMatchObject({ value: '', text: 'Choose a unit', selected: true });
+      expect(options[0], 'first option').toMatchObject({ value: '', text: 'Unit…', selected: true });
       expect(options.filter((o) => o.selected).map((o) => o.value), 'only the blank is selected').toEqual(['']);
       expect(tag, 'required').toMatch(/\brequired\b/);
       expect(options.slice(1).map((o) => o.value)).toEqual([...BASE_UNITS]);
@@ -136,10 +136,10 @@ describe('U1 - the unit and kind selects start blank', () => {
   );
 
   it(
-    'kind: first option is value="" "Choose a kind", it alone is selected, required, options exactly ITEM_KINDS. Killing mutant: restore defaultValue="raw_material". Red today: raw_material is selected',
+    'kind: first option is value="" "Kind…", it alone is selected, required, options exactly ITEM_KINDS. Killing mutant: restore defaultValue="raw_material". Red today: raw_material is selected',
     async () => {
       const { tag, options } = selectOf(await itemsHtml('u1b'), 'kind');
-      expect(options[0], 'first option').toMatchObject({ value: '', text: 'Choose a kind', selected: true });
+      expect(options[0], 'first option').toMatchObject({ value: '', text: 'Kind…', selected: true });
       expect(options.filter((o) => o.selected).map((o) => o.value)).toEqual(['']);
       expect(tag, 'required').toMatch(/\brequired\b/);
       expect(options.slice(1).map((o) => o.value)).toEqual([...ITEM_KINDS]);
