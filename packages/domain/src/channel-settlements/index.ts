@@ -518,7 +518,8 @@ export async function recordChannelSettlement(
     // An amount docked with no loan picked is a picker left open: the rules above saw it, the books do not.
     const input: RecordSettlementInput = { ...rawInput, loan: rawInput.loan?.loanId ? rawInput.loan : null };
     if (!rawInput.salesDayId) {
-      throw new Error(
+      throw refuse(
+        'recordChannelSettlement: no sales day selected',
         'Choose the day this payout settles. A settlement clears one verified channel-day — ' +
           'a payout covering several days is one settlement per day, sharing a reference.',
       );

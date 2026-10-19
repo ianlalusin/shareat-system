@@ -58,10 +58,12 @@ export type FieldInput = FormData | Record<string, unknown>;
 export function defineFieldRules<R extends Record<string, FieldRuleDef>>(form: string, rules: R): FieldRuleSet<Extract<keyof R, string>> {
   const out: Record<string, unknown> = { form };
   for (const [name, def] of Object.entries(rules)) {
-    if (name === 'form') throw new Error(`defineFieldRules(${form}): a rule cannot be named "form"`);
-    if (def.when && (def.when.field === name || def.when.equals.length === 0)) {
-      throw new Error(`defineFieldRules(${form}): invalid condition for ${name}`);
-    }
+    const definitionError = name === 'form'
+      ? 'a rule cannot be named "form"'
+      : def.when && (def.when.field === name || def.when.equals.length === 0)
+        ? `invalid condition for ${name}`
+        : null;
+    if (definitionError) throw new Error(`defineFieldRules(${form}): ${definitionError}`);
     out[name] = Object.freeze({ ...def, name, ...(def.when ? { when: Object.freeze({ ...def.when, equals: Object.freeze([...def.when.equals]) }) } : {}) });
   }
   return Object.freeze(out) as FieldRuleSet<Extract<keyof R, string>>;

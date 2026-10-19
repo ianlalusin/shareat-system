@@ -1,8 +1,9 @@
-FINDINGS: 4 (2 MED, 2 LOW); corrected in working tree, release verification continues
+FINDINGS: 5 (2 MED, 3 LOW); corrected, release verification continues
 - MED · apps/erp/tests/t440-s9-auth-first-guard.test.ts · G6 accepted any condition mentioning can(), including an OR path that never called it; four money-transfer/trade missing-record fallbacks showed field sentences without proving permission. Added red bypass/negation controls, tightened the proof, and removed those fallbacks.
 - LOW · packages/domain/src/field-rules/check.ts · Money bounds converted the parsed amount through Number(), contrary to the core-money rule. Added a red source guard plus centavo boundary cases; comparisons now use core money.
 - MED · apps/erp/src/app/menu/actions.ts and menu/prices/actions.ts · Whole-number/date parsing could refuse before the new can/assert checks, so an unauthorized fractional sort order or bundle size still leaked the field sentence. Two real PostgreSQL controls failed first; the existing domain capability is now proved before parsing across the matching menu paths.
 - LOW · packages/domain/tests/integration/t440-s4-ap-ar-refusals.test.ts and S3/S5/S6 fixtures · Fake targets and generic text overwrote the actor's real store, while item tests used an admin for super-admin acts; after auth-first, 60 tests failed on missing rows, UUID parsing or permission. Replaced those fixtures with real scoped targets/actors and strengthened row snapshots without relaxing sentence assertions.
+- LOW · packages/domain/src/channel-settlements/index.ts and field-rules/check.ts · Two added raw Error sites exceeded unchanged T-343 limits; the settlement now uses the standard refusal and invalid rule definitions share one programmer-error path. Existing ratchet was red first; all 69 refusal checks pass after correction.
 CHECKED CLEAN
 - S9 B: missing controller fails closed; COD ignores leftover days; credit requires days; no conditional native required attribute; controller names participate in reads/events; only the helper's own disabled flag is released.
 - New state tests failed first (3/3); old conditional tests failed before implementation. Money and G6 controls also failed before their corrections.
@@ -10,6 +11,5 @@ CHECKED CLEAN
 - G6 has no baseline file; positive/negative controls pass. Leave rule sets are explicit calls so the existing server call-chain guard can verify all fields.
 - Supporting scope includes check-dom.ts, check-state.ts and FieldCheck.tsx; three older supplier test files plus the S4/core parity fixtures now pin the S9-approved required sentence, retaining persistence/refusal assertions.
 - Combined with main 758a48c: 1,491 unit tests in 18 files and 215 PostgreSQL tests in 10 files passed; root and ERP typechecks and the ERP production build passed. Compact row/section layout retained; delivery page supplies the typed action prop.
-- Pending: full PR CI and running-app checks. Browser automation remains denied by saved policy; no visual or whole-branch release-readiness claim.
-FOR IAN: the local S9 failures are resolved; this branch remains separate from the approved UI deployment.
+FOR IAN: full PR CI and running-app checks remain pending; browser automation is denied by saved policy. This branch remains separate from the approved UI deployment.
 Model: GPT-6 (Codex).
