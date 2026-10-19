@@ -1,6 +1,6 @@
 # T-193: statutory remittance (paying SSS, PhilHealth, Pag-IBIG and BIR what payroll accrued)
 
-**Status:** SPEC AUDITED 2026-10-18, WAITING ON Ian's answers Q1-Q4.
+**Status:** SPEC AUDITED 2026-10-18. Ian answered Q1-Q4 (all as recommended, bible row 365): buildable.
 **Model:** Sonnet tester first (commits red), then Sonnet builder, per slice. Money path: never Haiku.
 **Migration:** YES, one, hand-authored (ADR-012 §5): **0209 or the next free slot** (T-396 may also take one; whoever
 lands second renumbers, journal idx and `when` = previous + 86400000).
@@ -222,6 +222,9 @@ and see SSS October owed per store; record a partial then the rest with a refere
 tile shows the unremitted total. Sign in as a manager: menu item absent, direct URL refused. Screenshots in the report.
 
 ## Questions for Ian (Open Questions page; plain words, one recommended each)
+**ANSWERED 2026-10-17, bible row 365: Q1 a (one company-wide number per agency), Q2 a (estimate shown, real
+penalty booked when paid; §16.5 req. 4 amended), Q3 a (new 6810 Penalties and surcharges), Q4 a (refuse the void
+until the agency payment is voided).** No spec change: the design below already assumes these.
 1. **One employer number per agency for the whole company, or one per branch?** Company-wide (recommended: the
    company already has one TIN, and one payment can still cover several branches) vs per branch (a numbers table
    per store; more setup). The design supports both payment shapes; only where the number is stored changes.
@@ -267,7 +270,7 @@ Changes made:
 8. Double-submit guard: partial unique (org, agency, reference_no) on posted payments.
 9. Paths: repo export via `packages/db/src/index.ts`; dashboard is `app/page.tsx` + `dashboard/lib.ts`; 0209 taken by T-396.
 10. Cases 16 and 18 widened; cases 19-21 added. Done-when: bible notes derivation replaces §16.5's obligation table.
-Open (not decided here): Q1-Q4; whether every agency's reference no. is unique per payment (assumed: it is that
+Open (not decided here): ~~Q1-Q4~~ (answered, row 365); whether every agency's reference no. is unique per payment (assumed: it is that
 payment's receipt); cutover purges payslips, so a v2 December payroll paid in January loses its owed figure unless
 v2 payroll starts only at cutover (orchestrator to confirm).
 
@@ -275,4 +278,4 @@ v2 payroll starts only at cutover (orchestrator to confirm).
 
 - **v2 payroll starts at cutover (1 Jan 2027, bible row 302 Q1 a).** December 2026 payroll runs on v1, so the cutover purge never removes payslips whose contributions v2 must pay; the first v2 statutory payment covers January 2027.
 - **An agency receipt / PRN is unique to one payment** (the double-submit guard relies on it). If an agency ever reuses a reference across months, the guard narrows to (agency, month, reference).
-- **Status:** AUDITED 2026-10-17; build once Ian answers Q1-Q4 (Open Questions page: q-t193-*).
+- **Status:** AUDITED 2026-10-17; Q1-Q4 answered 2026-10-17 (row 365, all a). Buildable.

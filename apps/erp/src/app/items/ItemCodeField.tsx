@@ -106,15 +106,15 @@ export function ItemCodeField({ nameInputId, mode, canOverride, currentCode, ite
   return (
     <div ref={root} className="col-span-full space-y-2 text-sm">
       {mode === 'new' && (
-        <div>
-          <span className="block text-xs font-medium text-neutral-500 dark:text-neutral-400">Code</span>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Code</span>
           <span
-            className="mt-1 block w-full rounded border border-neutral-200 bg-neutral-50 px-2 py-1 font-mono text-sm dark:border-neutral-800 dark:bg-neutral-900"
+            className="inline-flex rounded border border-neutral-200 bg-neutral-50 px-2 py-1 font-mono text-sm dark:border-neutral-800 dark:bg-neutral-900"
             aria-live="polite"
           >
             {display}
           </span>
-          <span className="mt-1 block text-xs text-neutral-500 dark:text-neutral-400">
+          <span className="text-xs text-neutral-500 dark:text-neutral-400">
             Filled in from the name. The number is fixed when the item is saved.
           </span>
           <noscript>

@@ -9,6 +9,7 @@ CHECKED CLEAN
 - Focused unit run: 1,445 passed across 12 files; typecheck passed; caller/boundary/numeric/throw guards: 165 passed across seven files. Area PostgreSQL tests: 137 passed; expanded auth-first controls: seven passed (the two parser controls were red first).
 - G6 has no baseline file; positive/negative controls pass. Leave rule sets are explicit calls so the existing server call-chain guard can verify all fields.
 - Supporting scope includes check-dom.ts, check-state.ts and FieldCheck.tsx; three older supplier test files plus the S4/core parity fixtures now pin the S9-approved required sentence, retaining persistence/refusal assertions.
-- Pending: reconcile current main/UI, recheck the combined tree, full PR CI and running-app checks. No claim of whole-branch release readiness.
+- Combined with main 758a48c: 1,491 unit tests in 18 files and 215 PostgreSQL tests in 10 files passed; root and ERP typechecks and the ERP production build passed. Compact row/section layout retained; delivery page supplies the typed action prop.
+- Pending: full PR CI and running-app checks. Browser automation remains denied by saved policy; no visual or whole-branch release-readiness claim.
 FOR IAN: the local S9 failures are resolved; this branch remains separate from the approved UI deployment.
 Model: GPT-6 (Codex).

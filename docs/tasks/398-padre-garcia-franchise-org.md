@@ -1,6 +1,6 @@
 # T-398: Padre Garcia on v2 as its own organisation (plan C11)
 
-**Status:** S1 LIVE (0194); S2a BUILT, NOT RELEASED 2026-10-18 (DEF-421 ratchet); S2b-S6 SPEC AUDITED, buildable (amended B1-B14, C1-C6); S7 WAITING ON Ian Q11 + data.
+**Status:** S1 LIVE (0194); S2a BUILT, NOT RELEASED 2026-10-18 (DEF-421 ratchet); S2b-S6 SPEC AUDITED, buildable (amended B1-B14, C1-C6); S7 WAITING ON data (Q11 answered b, row 369: PG HR on v2 needs a new task).
 **Ian's answers to Q1-Q10, given 2026-10-10** — §0b.
 - **Buildable now (no Ian answer needed):** **S2a**, **S2b**, **S3**, **S4** — and their production apply too: Q9 (b)
   lets a DEF-491 migration deploy at any time, short pauses accepted (C2). S3's lock timing still uses a restore taken
@@ -12,7 +12,7 @@
   and rewrites one leg if Ian rules otherwise. Q7's **figures** (limit, terms) are data entered later, not a build.
 - **S6 — buildable now** (Q1 a, Q2 **b**: sales **plus stock levels**, C4). Planner prerequisites: the
   CAPABILITY-MATRIX rows for `view_franchise_access_log` and the `view_franchise_sales` reader note.
-- **S7 — blocked by Q11** (PG's attendance/leave/payroll, B7) and **K4's data** (second sign-in email, owner and
+- **S7 — Q11 answered (b), row 369; PG HR needs a new task** — still blocked by **K4's data** (second sign-in email, owner and
   staff names, POS store id, `org_code`/`store_code`, and Ian's confirmation whether PG trades in v1 today, Q3).
   Q1 and Q3 are answered (a).
 - Q10 (a) blocks no build: Ian's written notice to PG is due before 4 Dec production (C6).
@@ -49,7 +49,14 @@ the recommended option (Q2, Q9); both are folded as given. Each answer still nee
 | Q9 | **(b), not the recommended (a).** Integrity migrations may run **at any time**; short pauses are accepted. No night window, no Ian-attended precheck required by this rule | **C2:** A1's night-window clause is withdrawn; the lock-timeout, budget and split-VALIDATE rules stay |
 | Q10 | **(a)** Written notice to PG that the operator can reach all data and every use is logged | No build; Ian's action before 4 Dec (C6) |
 
-**Still open** (§6): **Q11** (PG's attendance, leave and payroll) and the **pay-now-at-dispatch ruling** (B5).
+**Answered 2026-10-17:** **Q11 = (b)** PG runs attendance, leave and payroll on v2 from 1 Jan (bible row 369,
+**against the recommendation**); **pay-now = (a)** refused, as E23 builds (row 370).
+
+> **Ian's ruling changes the spec (Q11 b, row 369):** PG's HR is no longer out of scope. Before 1 Jan PG needs its
+> own statutory rates and withholding brackets (today seeded only for org `shareat`, `0206:317,326`;
+> `createOrganization` seeds none), and someone above PG's manager to approve the manager's own leave (row 355;
+> PG has no super-admin under Q1 a). §4's "PG's attendance and payroll" and B7 out-of-scope lines no longer hold.
+> Planner: write a new task for PG HR on v2 (not T-398 S1-S6); S7 is unblocked on Q11, still waits on K4's data.
 
 ---
 
@@ -474,7 +481,7 @@ log call from either approval verifier → V8c.
 
 ### S7 — onboarding Padre Garcia
 
-**Blocked by:** Q11 and K4's data (see Status). Q1 (a) and Q3 (a) are answered: Ian's PG person is org-admin with
+**Blocked by:** K4's data (see Status); Q11 answered (b), row 369. Q1 (a) and Q3 (a) are answered: Ian's PG person is org-admin with
 the second email, the owner is PG's manager, and PG opens from balances on 1 Jan. **Ian's confirmation whether PG
 trades in v1 today** (Q3) is K4 data: if it does, PG's 31 Dec count and open AP/AR are its opening entry; if not, the
 opening is the count and cash alone.
@@ -537,7 +544,7 @@ with both orgs (T-394), including the per-org purge and opening (B4, O9).
 
 ## 4. Out of scope
 
-- PG's attendance and payroll on v2 (row 302 binds Ian's org; PG's is PG's business — follows Q11, still open).
+- ~~PG's attendance and payroll on v2~~ — **back in scope by Q11 (b), row 369**: a new task, not T-398.
 - BIR invoicing between the two companies (a commissary-to-franchise sale is a taxable sale; v2's wholesale
   documents are not BIR invoices today). Logged as a capability gap by the orchestrator, not built here.
 - A group/consolidated view of Ian's own orgs (ADR-008 §5 row 3).

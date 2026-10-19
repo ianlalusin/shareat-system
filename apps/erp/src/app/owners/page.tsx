@@ -1,3 +1,5 @@
+import { OWNERS_CREATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { CheckedForm } from '@/components/forms';
 import Link from 'next/link';
 import { requirePageAccess } from '../../lib/page-access';
 import { createOwnerAction } from './actions';
@@ -12,9 +14,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, Field, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
-import { CheckedForm } from '@/components/forms';
-import { OWNERS_CREATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { Banner, Button, FlashBanner, Input, LinkRow, RowLink, Select , FormGrid, FormSection, Field } from '@/components/ui';
 
 export const metadata = { title: 'Owners — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -159,64 +159,91 @@ export default async function OwnersPage({
         </div>
 
         <CheckedForm rules={OWNERS_CREATE_RULES} action={createOwnerAction} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Store" rule={OWNERS_CREATE_RULES.storeId}>
-              <Select {...nativeAttrs(OWNERS_CREATE_RULES.storeId)} defaultValue="" className="w-full">
-                <option value="" disabled>
-                  Choose…
-                </option>
-                {stores.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Who" rule={OWNERS_CREATE_RULES.personId}>
-              <Select {...nativeAttrs(OWNERS_CREATE_RULES.personId)} defaultValue="" className="w-full">
-                <option value="" disabled>
-                  Choose…
-                </option>
-                {persons.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.displayName}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Role" hint="Managing Partner, Silent Partner…">
-              <Input name="role" className="w-full" />
-            </Field>
-            <Field
-              label="Ownership %"
-              hint="Indicative only — nothing checks that these add to 100, because a store mid-restructure legitimately does not."
-              rule={OWNERS_CREATE_RULES.ownershipPercentage}
-            >
-              <Input {...nativeAttrs(OWNERS_CREATE_RULES.ownershipPercentage)} className="w-full" />
-            </Field>
-            <Field label="Drawing limit" hint="Leave both blank for no limit." rule={OWNERS_CREATE_RULES.drawingLimit}>
-              <Input {...nativeAttrs(OWNERS_CREATE_RULES.drawingLimit)} className="w-full" />
-            </Field>
-            <Field label="Limit period">
-              <Select name="drawingLimitPeriod" defaultValue="" className="w-full">
-                <option value="">—</option>
-                <option value="monthly">Monthly — resets each calendar month</option>
-                <option value="total">Total — across all time</option>
-              </Select>
-            </Field>
-            <Field
-              label="Personal expenses"
-              hint="Decides where a personal expense lands. It is the line the tax treatment turns on, so it is a stated policy rather than a per-expense guess."
-            >
-              <Select name="personalExpenseTreatment" defaultValue="repayable" className="w-full">
-                <option value="repayable">{TREATMENT_LABEL.repayable}</option>
-                <option value="drawing">{TREATMENT_LABEL.drawing}</option>
-              </Select>
-            </Field>
-            <Field label="Notes" hint="Optional.">
-              <Input name="notes" className="w-full" />
-            </Field>
-          </div>
+          <>
+            <FormSection title="Ownership">
+              <FormGrid layout="fields">
+                <div className="min-w-0">
+                  <Field rule={OWNERS_CREATE_RULES.storeId} label="Store">
+                    <Select {...nativeAttrs(OWNERS_CREATE_RULES.storeId)}   defaultValue="" className="w-full">
+                      <option value="" disabled>
+                        Choose…
+                      </option>
+                      {stores.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-long">
+                  <Field rule={OWNERS_CREATE_RULES.personId} label="Who">
+                    <Select {...nativeAttrs(OWNERS_CREATE_RULES.personId)}   defaultValue="" className="w-full">
+                      <option value="" disabled>
+                        Choose…
+                      </option>
+                      {persons.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.displayName}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-code">
+                  <Field label="Role" hint="Managing Partner, Silent Partner…">
+                    <Input name="role" className="w-full" />
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-short">
+                  <Field rule={OWNERS_CREATE_RULES.ownershipPercentage}
+                    label="Ownership %"
+                    hint="Indicative only — nothing checks that these add to 100, because a store mid-restructure legitimately does not."
+                  >
+                    <Input {...nativeAttrs(OWNERS_CREATE_RULES.ownershipPercentage)} className="w-full" />
+                  </Field>
+                </div>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Drawings policy">
+              <FormGrid layout="fields">
+                <div className="min-w-0">
+                  <Field rule={OWNERS_CREATE_RULES.drawingLimit} label="Drawing limit" hint="Leave both blank for no limit.">
+                    <Input {...nativeAttrs(OWNERS_CREATE_RULES.drawingLimit)} className="w-full" />
+                  </Field>
+                </div>
+                <div className="min-w-0">
+                  <Field label="Limit period">
+                    <Select name="drawingLimitPeriod" defaultValue="" className="w-full">
+                      <option value="">—</option>
+                      <option value="monthly">Monthly — resets each calendar month</option>
+                      <option value="total">Total — across all time</option>
+                    </Select>
+                  </Field>
+                </div>
+                <div className="min-w-0">
+                  <Field
+                    label="Personal expenses"
+                    hint="Decides where a personal expense lands. It is the line the tax treatment turns on, so it is a stated policy rather than a per-expense guess."
+                  >
+                    <Select name="personalExpenseTreatment" defaultValue="repayable" className="w-full">
+                      <option value="repayable">{TREATMENT_LABEL.repayable}</option>
+                      <option value="drawing">{TREATMENT_LABEL.drawing}</option>
+                    </Select>
+                  </Field>
+                </div>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Notes">
+              <FormGrid layout="fields">
+                <div className="min-w-0 erp-field-long">
+                  <Field label="Notes" hint="Optional.">
+                    <Input name="notes" className="w-full" />
+                  </Field>
+                </div>
+              </FormGrid>
+            </FormSection>
+          </>
           <Button type="submit" variant="primary">
             Save
           </Button>

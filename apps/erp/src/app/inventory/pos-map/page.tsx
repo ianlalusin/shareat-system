@@ -1,12 +1,12 @@
+import { INVENTORY_POS_MAP_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { CheckedForm } from '@/components/forms';
 import Link from 'next/link';
 import { can } from '@shareat/auth';
 import { requireSession } from '../../../lib/session';
 import { upsertPosItemMapAction, decideMapRequestAction } from './actions';
 import { listStores, posMapScreenData, withOrgPrincipal } from './lib';
 import { Page } from '@/components/shell/Page';
-import { Button, Checkbox, FlashBanner, FormGrid, Field, Input, Select } from '@/components/ui';
-import { CheckedForm } from '@/components/forms';
-import { INVENTORY_POS_MAP_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { Button, Checkbox, FlashBanner, FormGrid, Field, Input, Select , FormSection} from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -106,61 +106,87 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
       {canEditMap && (
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="text-sm font-medium">New / edit mapping</h2>
-        <CheckedForm rules={INVENTORY_POS_MAP_RULES} action={upsertPosItemMapAction} className="mt-3 space-y-3">
-          <input type="hidden" name="storeId" value={storeId} />
-          <FormGrid>
-          <Field label={<span className="text-neutral-600 dark:text-neutral-400">POS item key</span>} className="text-sm" rule={INVENTORY_POS_MAP_RULES.posItemKey}>
-            <Input {...nativeAttrs(INVENTORY_POS_MAP_RULES.posItemKey)} className="w-full" />
-          </Field>
-          <Field label={<span className="text-neutral-600 dark:text-neutral-400">POS item name</span>} className="text-sm" rule={INVENTORY_POS_MAP_RULES.posItemName}>
-            <Input {...nativeAttrs(INVENTORY_POS_MAP_RULES.posItemName)} className="w-full" />
-          </Field>
-          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Mode</span>} className="text-sm">
-            <Select name="mode" className="w-full" defaultValue="direct">
-              <option value="direct">Direct → one stock item</option>
-              <option value="recipe">Recipe → ingredients</option>
-              <option value="no_stock">Sells, consumes no stock</option>
-            </Select>
-          </Field>
-          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Stock item (direct)</span>} className="text-sm">
-            <Select name="itemId" className="w-full">
-              <option value="">—</option>
-              {items.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.code} — {i.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Quantity per sale (direct)</span>} className="text-sm">
-            <Input name="quantityPerSale" defaultValue="1" className="w-full" />
-          </Field>
-          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Recipe</span>} className="text-sm">
-            <Select name="recipeId" className="w-full">
-              <option value="">—</option>
-              {recipes.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Location override (optional)</span>} className="text-sm">
-            <Select name="locationId" className="w-full">
-              <option value="">— use the pull&apos;s own location —</option>
-              {locations.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Checkbox name="confirmShared" value="true" label="Confirm sharing this stock item across POS items" />
-          </FormGrid>
-          <Button type="submit" variant="primary">
-            Save
-          </Button>
-        </CheckedForm>
+          <CheckedForm rules={INVENTORY_POS_MAP_RULES} action={upsertPosItemMapAction} className="mt-3 space-y-3">
+            <input type="hidden" name="storeId" value={storeId} />
+            <>
+              <FormSection title="POS item">
+                <FormGrid layout="fields">
+                  <div className="min-w-0 erp-field-code">
+                    <Field rule={INVENTORY_POS_MAP_RULES.posItemKey} label={<span className="text-neutral-600 dark:text-neutral-400">POS item key</span>} className="text-sm">
+                      <Input {...nativeAttrs(INVENTORY_POS_MAP_RULES.posItemKey)}   className="w-full" />
+                    </Field>
+                  </div>
+                  <div className="min-w-0 erp-field-name">
+                    <Field rule={INVENTORY_POS_MAP_RULES.posItemName} label={<span className="text-neutral-600 dark:text-neutral-400">POS item name</span>} className="text-sm">
+                      <Input {...nativeAttrs(INVENTORY_POS_MAP_RULES.posItemName)}   className="w-full" />
+                    </Field>
+                  </div>
+                </FormGrid>
+              </FormSection>
+              <FormSection title="Stock usage">
+                <FormGrid layout="fields">
+                  <div className="min-w-0 erp-field-code">
+                    <Field label={<span className="text-neutral-600 dark:text-neutral-400">Mode</span>} className="text-sm">
+                      <Select name="mode" className="w-full" defaultValue="direct">
+                        <option value="direct">Direct → one stock item</option>
+                        <option value="recipe">Recipe → ingredients</option>
+                        <option value="no_stock">Sells, consumes no stock</option>
+                      </Select>
+                    </Field>
+                  </div>
+                  <div className="min-w-0 erp-field-long">
+                    <Field label={<span className="text-neutral-600 dark:text-neutral-400">Stock item (direct)</span>} className="text-sm">
+                      <Select name="itemId" className="w-full">
+                        <option value="">—</option>
+                        {items.map((i) => (
+                          <option key={i.id} value={i.id}>
+                            {i.code} — {i.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                  </div>
+                  <div className="min-w-0">
+                    <Field label={<span className="text-neutral-600 dark:text-neutral-400">Quantity per sale (direct)</span>} className="text-sm">
+                      <Input name="quantityPerSale" defaultValue="1" className="w-full" />
+                    </Field>
+                  </div>
+                  <div className="min-w-0 erp-field-long">
+                    <Field label={<span className="text-neutral-600 dark:text-neutral-400">Recipe</span>} className="text-sm">
+                      <Select name="recipeId" className="w-full">
+                        <option value="">—</option>
+                        {recipes.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                  </div>
+                </FormGrid>
+              </FormSection>
+              <FormSection title="Stock room">
+                <FormGrid layout="fields">
+                  <div className="min-w-0">
+                    <Field label={<span className="text-neutral-600 dark:text-neutral-400">Location override (optional)</span>} className="text-sm">
+                      <Select name="locationId" className="w-full">
+                        <option value="">— use the pull&apos;s own location —</option>
+                        {locations.map((l) => (
+                          <option key={l.id} value={l.id}>
+                            {l.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                  </div>
+                  <Checkbox name="confirmShared" value="true" label="Confirm sharing this stock item across POS items" />
+                </FormGrid>
+              </FormSection>
+            </>
+            <Button type="submit" variant="primary">
+              Save
+            </Button>
+          </CheckedForm>
       </section>
       )}
 

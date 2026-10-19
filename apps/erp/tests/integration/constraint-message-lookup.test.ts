@@ -646,10 +646,36 @@ describe('T-391 S1 - the item buying-unit CHECKs', () => {
   }
 });
 
+// T-443: provoke each new database backstop; dictionary growth must have real driver coverage.
+describe('T-443 variation and duplicate-request messages', () => {
+  for (const key of ['items_variant_guard', 'items_variant_not_self_check', 'item_requests_open_name_key']) {
+    it(key, async () => {
+      const code = uid('t443-lookup');
+      const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${code}, ${code}) returning id`;
+      const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${org!.id}, 'Reviewer') returning id`;
+      const [parent] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${org!.id}, 'PRNT-001', 'Parent', 'raw_material', 'kg', ${person!.id}) returning id`;
+      const [child] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${org!.id}, 'CHLD-001', 'Child', 'retail', 'pcs', ${person!.id}) returning id`;
+      let err: unknown;
+      if (key === 'items_variant_guard') {
+        err = await provoke(() => sql`update items set variant_of_item_id = ${parent!.id} where id = ${child!.id}`);
+      } else if (key === 'items_variant_not_self_check') {
+        err = await provoke(() => sql`update items set variant_of_item_id = id where id = ${parent!.id}`);
+      } else {
+        await sql`insert into item_requests (org_id, code, name, kind, base_unit, requested_by) values (${org!.id}, 'BSIL-001', 'Fresh basil', 'raw_material', 'kg', ${person!.id})`;
+        err = await provoke(() => sql`insert into item_requests (org_id, code, name, kind, base_unit, requested_by) values (${org!.id}, 'BSIL-001', 'Fresh basil', 'raw_material', 'kg', ${person!.id})`);
+      }
+      const row = record(key, err);
+      expect(row.constraintName).toBe(key);
+      expect(row.message).toBe(CONSTRAINT_MESSAGES[key]);
+    });
+  }
+});
+
 it('sanity: every CONSTRAINT_MESSAGES key was exercised above', () => {
   const exercised = new Set(rows.map((r) => r.key));
   const missing = Object.keys(CONSTRAINT_MESSAGES).filter((k) => !exercised.has(k));
   expect(missing).toEqual([]);
   // 26 (T-271) + T-370 S3's semi-monthly two-days key + T-369 S7's sales-day unique key + T-375 S4's four lock keys + T-378 S1's four unit/kind keys + T-378 S2's items_base_unit_fixed + T-382's two unlink CHECK keys + T-383 S1's items blank-name and blank-code CHECK keys + T-385 S2's sales_days_verify_requires_submitted + T-386 S2's items_code_never_reused + T-386 S6's items_code_shape_check = 44 rows provoked above.
-  expect(rows.length).toBe(47);
+  // T-443: three real item variation/open-request errors above.
+  expect(rows.length).toBe(50);
 });

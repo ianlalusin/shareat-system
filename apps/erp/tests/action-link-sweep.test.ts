@@ -455,7 +455,12 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // -1 (17 Oct): T-440 S1 supplier add form - Days-to-pay loses type=number, a Button becomes SubmitButton (1357 -> 1356 measured).
     // = 1362 with both merged (17 Oct)
     // +16 (17 Oct): T-440 S3-S7 sweep - ruled fields moved onto Field/CheckedForm (helper lines, SubmitButton, the owners SettleForm split; 1362 -> 1378 measured).
-    expect(results.length).toBe(1378);
+    // +12 (18 Oct): T-443 items page - kind filter chips (6), the look-alike panel's note box + "Different items" button (per pair), the
+    //   dismissed-pairs list (summary, links, Undo), the Variation-of selects on the request form and approve row, and the item page's
+    //   Variations section (links, select, Save). Measured 1362 -> 1374; all 12 new controls are >= 24px (the 5 that were 20px got py-0.5).
+    // T-444: one new Review and approvals disclosure summary; all existing controls remain.
+    // Combined T-440 and T-443/T-444 changes: preserve both sets of controls; verified by the census below.
+    expect(results.length).toBe(1391);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

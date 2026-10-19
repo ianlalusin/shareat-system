@@ -6,7 +6,7 @@ export { Input } from './Input';
 export type { InputProps } from './Input';
 export { Card } from './Card';
 export type { CardProps } from './Card';
-export { FormGrid, Field } from './FormGrid';
+export { FormGrid, Field, FormSection } from './FormGrid';
 export type { FormGridProps, FieldProps } from './FormGrid';
 // T-387 S3: the missing kit.
 export { Badge } from './Badge';
@@ -34,3 +34,5 @@ export * from './status-steps';
 // T-412: the one danger button, two tiers (retype the name / an administrator's PIN).
 export { ConfirmDestructive } from './ConfirmDestructive';
 export type { ConfirmDestructiveProps } from './ConfirmDestructive';
+
+export { SplitWorkspace } from './SplitWorkspace';

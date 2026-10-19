@@ -1,4 +1,6 @@
 'use client';
+import { TRADE_ORDER_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { CheckedForm } from '@/components/forms';
 
 /**
  * The "New trade order" form — DEF-138. One document for a wholesale sale and an internal
@@ -10,9 +12,7 @@
  * sees "no default" before the server refuses the line.
  */
 import { useState } from 'react';
-import { Button, Field, FormGrid, Input, Select } from '@/components/ui';
-import { CheckedForm } from '@/components/forms';
-import { TRADE_ORDER_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { Button, FormGrid, FormSection, Input, Select , Field } from '@/components/ui';
 import type { CustomerOption, ItemOption, StoreOption } from './lib';
 
 interface LineDraft {
@@ -90,51 +90,54 @@ export function NewOrderForm({
 
   return (
     <CheckedForm rules={TRADE_ORDER_RULES} action={createOrderAction} className="mt-3 space-y-4">
-      <FormGrid>
-        <Field label="Selling store" rule={TRADE_ORDER_RULES.storeId}>
-          <Select
-            {...nativeAttrs(TRADE_ORDER_RULES.storeId)}
-            value={sellingStoreId}
-            onChange={(e) => setSellingStoreId(e.target.value)}
-          >
-            {stores.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} ({s.code})
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Customer" rule={TRADE_ORDER_RULES.customerId}>
-          <Select
-            {...nativeAttrs(TRADE_ORDER_RULES.customerId)}
-            value={customerId}
-            onChange={(e) => setCustomerId(e.target.value)}
-          >
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-                {c.treatment === 'internal' ? ' — our own store' : c.treatment === 'inter_entity' ? ' — another company' : ''}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Order date" rule={TRADE_ORDER_RULES.orderDate}>
-          <Input type="date" {...nativeAttrs(TRADE_ORDER_RULES.orderDate)} defaultValue={today} />
-        </Field>
-        <label className={label}>
-          Reference (optional)
-          <Input name="referenceNo" placeholder="DR-0001" />
-        </label>
-      </FormGrid>
+      <FormSection title="Document">
+        <FormGrid layout="fields">
+          <Field label="Selling store" rule={TRADE_ORDER_RULES.storeId} className={`${label} erp-field-code`}>
+            <Select {...nativeAttrs(TRADE_ORDER_RULES.storeId)}
+
+
+              value={sellingStoreId}
+              onChange={(e) => setSellingStoreId(e.target.value)}
+            >
+              {stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.code})
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Customer" rule={TRADE_ORDER_RULES.customerId} className={`${label} erp-field-long`}>
+            <Select {...nativeAttrs(TRADE_ORDER_RULES.customerId)}
+
+
+              value={customerId}
+              onChange={(e) => setCustomerId(e.target.value)}
+            >
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {c.treatment === 'internal' ? ' — our own store' : c.treatment === 'inter_entity' ? ' — another company' : ''}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Order date" rule={TRADE_ORDER_RULES.orderDate} className={`${label} erp-field-date`}>
+            <Input {...nativeAttrs(TRADE_ORDER_RULES.orderDate)}  type="date"  defaultValue={today} />
+          </Field>
+          <label className={`${label} erp-field-code`}>
+            Reference (optional)
+            <Input name="referenceNo" placeholder="DR-0001" />
+          </label>
+        </FormGrid>
+      </FormSection>
 
       <p
-        className={`text-xs ${
-          treatment === 'internal'
+        className={`text-xs ${treatment === 'internal'
             ? 'text-info'
             : unsupported
               ? 'text-danger'
               : 'text-neutral-600 dark:text-neutral-400'
-        }`}
+          }`}
       >
         {TREATMENT_HINT[treatment]}
         {treatment === 'internal' && customer?.counterpartyStoreId === sellingStoreId && (
@@ -142,7 +145,7 @@ export function NewOrderForm({
         )}
       </p>
 
-      <div className="space-y-2">
+      <FormSection title="Order lines" className="space-y-2">
         <div className="flex items-baseline justify-between">
           <h3 className="text-sm font-medium">Lines</h3>
           <Button type="button" variant="secondary" onClick={addLine}>
@@ -214,20 +217,22 @@ export function NewOrderForm({
           ⚠️ Whatever rate is used is <strong>captured</strong> onto the line — a later price-list
           edit never reaches back. An amber rate box means nothing can price that line by default.
         </p>
-      </div>
+      </FormSection>
 
-      <FormGrid>
-        <Field label="Delivery fee ₱ (optional)" rule={TRADE_ORDER_RULES.deliveryFee}>
-          <Input {...nativeAttrs(TRADE_ORDER_RULES.deliveryFee)} placeholder="0.00" className="tabular-nums" />
-        </Field>
-        <Field label="Other fees ₱ (optional)" rule={TRADE_ORDER_RULES.otherFees}>
-          <Input {...nativeAttrs(TRADE_ORDER_RULES.otherFees)} placeholder="0.00" className="tabular-nums" />
-        </Field>
-        <label className={label}>
-          Notes (optional)
-          <Input name="notes" />
-        </label>
-      </FormGrid>
+      <FormSection title="Fees and notes">
+        <FormGrid layout="fields">
+          <Field label="Delivery fee ₱ (optional)" rule={TRADE_ORDER_RULES.deliveryFee} className={`${label} erp-field-code`}>
+            <Input {...nativeAttrs(TRADE_ORDER_RULES.deliveryFee)}   placeholder="0.00" className="tabular-nums" />
+          </Field>
+          <Field label="Other fees ₱ (optional)" rule={TRADE_ORDER_RULES.otherFees} className={`${label} erp-field-code`}>
+            <Input {...nativeAttrs(TRADE_ORDER_RULES.otherFees)}   placeholder="0.00" className="tabular-nums" />
+          </Field>
+          <label className={`${label} erp-field-long`}>
+            Notes (optional)
+            <Input name="notes" />
+          </label>
+        </FormGrid>
+      </FormSection>
 
       <Button type="submit" variant="primary" disabled={unsupported}>
         Save draft

@@ -1,3 +1,5 @@
+import { LOAN_ADD_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
+import { CheckedForm, FieldCheck } from '@/components/forms';
 import { INTEREST_METHODS, PAYMENT_FREQUENCIES, RATE_PERIODS } from '@shareat/db';
 import { requirePageAccess } from '../../lib/page-access';
 import { createLoanAction } from './actions';
@@ -5,9 +7,7 @@ import { METHOD_LABEL, listRegister, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Button, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
-import { CheckedForm, FieldCheck } from '@/components/forms';
-import { LOAN_ADD_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
+import { Badge, Button, FlashBanner, Input, LinkRow, RowLink, Select , FormGrid, FormSection, type FieldProps } from '@/components/ui';
 
 export const metadata = { title: 'Loans — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -120,82 +120,110 @@ export default async function LoansPage({
         </div>
 
         <CheckedForm rules={LOAN_ADD_RULES} action={createLoanAction} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="What it is called" rule={LOAN_ADD_RULES.name}>
-              <Input {...nativeAttrs(LOAN_ADD_RULES.name)} placeholder="Grab cash advance" className="w-full" />
-            </Field>
-            <Field label="Lender" rule={LOAN_ADD_RULES.lenderName}>
-              <Input {...nativeAttrs(LOAN_ADD_RULES.lenderName)} placeholder="Grab" className="w-full" />
-            </Field>
-            <Field label="Store" rule={LOAN_ADD_RULES.storeId}>
-              <Select {...nativeAttrs(LOAN_ADD_RULES.storeId)} defaultValue="" className="w-full">
-                <option value="">Choose a store…</option>
-                {stores.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.code})
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Amount agreed" rule={LOAN_ADD_RULES.principalAmount}>
-              <input
-                {...nativeAttrs(LOAN_ADD_RULES.principalAmount)}
-                name="principalAmount"
-                inputMode="decimal"
-                placeholder="0.00"
-                className={INPUT}
-              />
-            </Field>
+          <>
+            <FormSection title="Loan and lender">
+              <FormGrid layout="fields">
+                <div className="min-w-0 erp-field-name">
+                  <Field rule={LOAN_ADD_RULES.name} label="What it is called">
+                    <Input {...nativeAttrs(LOAN_ADD_RULES.name)}    placeholder="Grab cash advance" className="w-full" />
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-name">
+                  <Field rule={LOAN_ADD_RULES.lenderName} label="Lender">
+                    <Input {...nativeAttrs(LOAN_ADD_RULES.lenderName)}    placeholder="Grab" className="w-full" />
+                  </Field>
+                </div>
+                <div className="min-w-0">
+                  <Field rule={LOAN_ADD_RULES.storeId} label="Store">
+                    <Select {...nativeAttrs(LOAN_ADD_RULES.storeId)}   defaultValue="" className="w-full">
+                      <option value="">Choose a store…</option>
+                      {stores.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.code})
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+                <div className="min-w-0">
+                  <Field rule={LOAN_ADD_RULES.principalAmount} label="Amount agreed">
+                    <input {...nativeAttrs(LOAN_ADD_RULES.principalAmount)}
 
-            <Field label="Interest rate (%)" rule={LOAN_ADD_RULES.interestRate}>
-              {/* The pattern kind carries no keypad hint of its own, so the decimal keypad stays a literal here. */}
-              <input
-                {...nativeAttrs(LOAN_ADD_RULES.interestRate)}
-                name="interestRate"
-                inputMode="decimal"
-                className={INPUT}
-              />
-            </Field>
-            {/* ⛔ No default, deliberately. In v1 an absent rate period meant ANNUAL on old rows and
+
+
+                      placeholder="0.00"
+                      className={INPUT}
+                    />
+                  </Field>
+                </div>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Interest">
+              <FormGrid layout="fields">
+                <div className="min-w-0">
+                  <Field rule={LOAN_ADD_RULES.interestRate} label="Interest rate (%)">
+                    <input {...nativeAttrs(LOAN_ADD_RULES.interestRate)}
+
+
+
+                      className={INPUT}
+                    />
+                  </Field>
+                </div>
+                {/* ⛔ No default, deliberately. In v1 an absent rate period meant ANNUAL on old rows and
                 MONTHLY on new ones, with nothing on the row to tell them apart — so the same "2"
                 described two very different debts. */}
-            <Field label="…per" hint="A month is 30 days and a year is 365. Say which." rule={LOAN_ADD_RULES.ratePeriod}>
-              <Select {...nativeAttrs(LOAN_ADD_RULES.ratePeriod)} defaultValue="" className="w-full">
-                <option value="">Choose…</option>
-                {RATE_PERIODS.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-
-            <Field label="How interest is charged">
-              <Select name="interestMethod" defaultValue="straight" className="w-full">
-                {INTEREST_METHODS.map((m) => (
-                  <option key={m} value={m}>
-                    {METHOD_LABEL[m] ?? m}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Repaid">
-              <Select name="paymentFrequency" defaultValue="monthly" className="w-full">
-                {PAYMENT_FREQUENCIES.map((f) => (
-                  <option key={f} value={f}>
-                    {f}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-
-            <Field label="Number of payments" rule={LOAN_ADD_RULES.termPeriods}>
-              <input {...nativeAttrs(LOAN_ADD_RULES.termPeriods)} name="termPeriods" inputMode="numeric" defaultValue={12} className={INPUT} />
-            </Field>
-            <Field label="Starts" rule={LOAN_ADD_RULES.startDate}>
-              <Input type="date" {...nativeAttrs(LOAN_ADD_RULES.startDate)} defaultValue={today()} className="w-full" />
-            </Field>
-          </div>
+                <div className="min-w-0 erp-field-code">
+                  <Field rule={LOAN_ADD_RULES.ratePeriod} label="…per" hint="A month is 30 days and a year is 365. Say which.">
+                    <Select {...nativeAttrs(LOAN_ADD_RULES.ratePeriod)}   defaultValue="" className="w-full">
+                      <option value="">Choose…</option>
+                      {RATE_PERIODS.map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+                <div className="min-w-0">
+                  <Field label="How interest is charged">
+                    <Select name="interestMethod" defaultValue="straight" className="w-full">
+                      {INTEREST_METHODS.map((m) => (
+                        <option key={m} value={m}>
+                          {METHOD_LABEL[m] ?? m}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Repayment schedule">
+              <FormGrid layout="fields">
+                <div className="min-w-0 erp-field-code">
+                  <Field label="Repaid">
+                    <Select name="paymentFrequency" defaultValue="monthly" className="w-full">
+                      {PAYMENT_FREQUENCIES.map((f) => (
+                        <option key={f} value={f}>
+                          {f}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-short">
+                  <Field rule={LOAN_ADD_RULES.termPeriods} label="Number of payments">
+                    <input {...nativeAttrs(LOAN_ADD_RULES.termPeriods)}    defaultValue={12} className={INPUT} />
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-date">
+                  <Field rule={LOAN_ADD_RULES.startDate} label="Starts">
+                    <Input {...nativeAttrs(LOAN_ADD_RULES.startDate)}  type="date"  defaultValue={today()} className="w-full" />
+                  </Field>
+                </div>
+              </FormGrid>
+            </FormSection>
+          </>
           <Field label="Notes">
             <Input name="notes" className="w-full" />
           </Field>
@@ -212,30 +240,9 @@ export default async function LoansPage({
 const INPUT =
   'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
 
-function Field({
-  label,
-  hint,
-  rule,
-  children,
-}: {
-  label: React.ReactNode;
-  hint?: string;
-  rule?: FieldRule;
-  children: React.ReactNode;
-}) {
-  const body = (
-    <>
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
-      {children}
-      {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </>
-  );
-  // T-440: a ruled field puts its live helper line OUTSIDE the label, so the line never joins the accessible name.
-  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
-  return (
-    <div>
-      <label className="flex flex-col gap-1">{body}</label>
-      <FieldCheck rule={rule} />
-    </div>
-  );
+function Field({ width, label, hint, rule, children }: FieldProps) {
+  const body = <><span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>{children}{hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}</>;
+  const sizing = width ? ` erp-field-${width}` : '';
+  if (!rule) return <label className={`flex min-w-0 flex-col gap-1${sizing}`}>{body}</label>;
+  return <div className={`min-w-0${sizing}`}><label className="flex min-w-0 flex-col gap-1">{body}</label><FieldCheck rule={rule} /></div>;
 }

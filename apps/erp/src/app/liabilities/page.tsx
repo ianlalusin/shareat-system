@@ -1,3 +1,5 @@
+import { LIABILITY_ADD_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
+import { CheckedForm, FieldCheck } from '@/components/forms';
 import Link from 'next/link';
 import { add, compare, money, ZERO } from '@shareat/core/money';
 import { LIABILITY_CATEGORIES } from '@shareat/db/schema';
@@ -8,9 +10,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { ACTION_LINK } from '@/components/action-link';
-import { Banner, Button, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
-import { CheckedForm, FieldCheck } from '@/components/forms';
-import { LIABILITY_ADD_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
+import { Banner, Button, FlashBanner, Input, LinkRow, RowLink, Select , FormGrid, FormSection, type FieldProps } from '@/components/ui';
 
 export const metadata = { title: 'Liabilities — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -147,45 +147,64 @@ export default async function LiabilitiesPage({
         </div>
 
         <CheckedForm rules={LIABILITY_ADD_RULES} action={createLiabilityAction} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Store" rule={LIABILITY_ADD_RULES.storeId}>
-              <Select {...nativeAttrs(LIABILITY_ADD_RULES.storeId)} defaultValue="" className="w-full">
-                <option value="" disabled>
-                  Choose…
-                </option>
-                {stores.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="What it is" rule={LIABILITY_ADD_RULES.name}>
-              <Input {...nativeAttrs(LIABILITY_ADD_RULES.name)} placeholder="Accrued rent — January" className="w-full" />
-            </Field>
-            <Field label="Category">
-              <Select name="category" defaultValue="other" className="w-full">
-                {LIABILITY_CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {CATEGORY_LABEL[c] ?? c}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field
-              label="Due"
-              hint="Optional — but an obligation with no due date can never be reported late."
-              rule={LIABILITY_ADD_RULES.dueOn}
-            >
-              <Input type="date" {...nativeAttrs(LIABILITY_ADD_RULES.dueOn)} defaultValue={today()} className="w-full" />
-            </Field>
-            <Field label="Description" hint="Optional.">
-              <Input name="description" className="w-full" />
-            </Field>
-            <Field label="Notes" hint="Optional.">
-              <Input name="notes" className="w-full" />
-            </Field>
-          </div>
+          <>
+            <FormSection title="Obligation">
+              <FormGrid layout="fields">
+                <div className="min-w-0">
+                  <Field rule={LIABILITY_ADD_RULES.storeId} label="Store">
+                    <Select {...nativeAttrs(LIABILITY_ADD_RULES.storeId)}   defaultValue="" className="w-full">
+                      <option value="" disabled>
+                        Choose…
+                      </option>
+                      {stores.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-name">
+                  <Field rule={LIABILITY_ADD_RULES.name} label="What it is">
+                    <Input {...nativeAttrs(LIABILITY_ADD_RULES.name)}   placeholder="Accrued rent — January" className="w-full" />
+                  </Field>
+                </div>
+                <div className="min-w-0">
+                  <Field label="Category">
+                    <Select name="category" defaultValue="other" className="w-full">
+                      {LIABILITY_CATEGORIES.map((c) => (
+                        <option key={c} value={c}>
+                          {CATEGORY_LABEL[c] ?? c}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Due date and details">
+              <FormGrid layout="fields">
+                <div className="min-w-0 erp-field-date">
+                  <Field rule={LIABILITY_ADD_RULES.dueOn}
+                    label="Due"
+                    hint="Optional — but an obligation with no due date can never be reported late."
+                  >
+                    <Input {...nativeAttrs(LIABILITY_ADD_RULES.dueOn)}  type="date" defaultValue={today()} className="w-full" />
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-long">
+                  <Field label="Description" hint="Optional.">
+                    <Input name="description" className="w-full" />
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-long">
+                  <Field label="Notes" hint="Optional.">
+                    <Input name="notes" className="w-full" />
+                  </Field>
+                </div>
+              </FormGrid>
+            </FormSection>
+          </>
           <Button type="submit" variant="primary">
             Record obligation
           </Button>
@@ -195,30 +214,9 @@ export default async function LiabilitiesPage({
   );
 }
 
-function Field({
-  label,
-  hint,
-  rule,
-  children,
-}: {
-  label: React.ReactNode;
-  hint?: string;
-  rule?: FieldRule;
-  children: React.ReactNode;
-}) {
-  const body = (
-    <>
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
-      {children}
-      {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </>
-  );
-  // T-440: a ruled field puts its live helper line OUTSIDE the label, so the line never joins the accessible name.
-  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
-  return (
-    <div>
-      <label className="flex flex-col gap-1">{body}</label>
-      <FieldCheck rule={rule} />
-    </div>
-  );
+function Field({ width, label, hint, rule, children }: FieldProps) {
+  const body = <><span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>{children}{hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}</>;
+  const sizing = width ? ` erp-field-${width}` : '';
+  if (!rule) return <label className={`flex min-w-0 flex-col gap-1${sizing}`}>{body}</label>;
+  return <div className={`min-w-0${sizing}`}><label className="flex min-w-0 flex-col gap-1">{body}</label><FieldCheck rule={rule} /></div>;
 }

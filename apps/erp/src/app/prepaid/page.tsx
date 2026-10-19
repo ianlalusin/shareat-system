@@ -17,7 +17,7 @@ import { CheckedForm, FieldCheck } from '@/components/forms';
 import { PREPAID_ADD_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Banner, FlashBanner, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
+import { Badge, Banner, FlashBanner, Input, LinkRow, RowLink, Select, statusTone , FormGrid, FormSection, type FieldProps } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Prepaid expenses — Shareat System' };
@@ -181,55 +181,74 @@ export default async function PrepaidPage({
         </div>
 
         <CheckedForm rules={PREPAID_ADD_RULES} action={createPrepaidItemAction} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Name" hint="What it is, as somebody would say it out loud" rule={PREPAID_ADD_RULES.name}>
-              <Input {...nativeAttrs(PREPAID_ADD_RULES.name)} placeholder="Fire insurance 2026" className="w-full" />
-            </Field>
-            <Field label="Store" rule={PREPAID_ADD_RULES.storeId}>
-              <Select {...nativeAttrs(PREPAID_ADD_RULES.storeId)} defaultValue="" className="w-full">
-                <option value="">Choose a store…</option>
-                {stores.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.code})
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Kind">
-              <Select name="category" defaultValue="insurance" className="w-full">
-                {PREPAID_CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {CATEGORY_LABEL[c] ?? c}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Total cost" rule={PREPAID_ADD_RULES.totalCost}>
-              <input
-                {...nativeAttrs(PREPAID_ADD_RULES.totalCost)}
-                name="totalCost"
-                inputMode="decimal"
-                placeholder="0.00"
-                className={INPUT}
-              />
-            </Field>
-            <Field label="Coverage starts" hint="The first month the cover actually applies to" rule={PREPAID_ADD_RULES.coverageStartDate}>
-              <Input type="date" {...nativeAttrs(PREPAID_ADD_RULES.coverageStartDate)} className="w-full" />
-            </Field>
-            <Field
-              label="Coverage months"
-              hint="The CONTRACT's term — read it off the document, don't estimate"
-              rule={PREPAID_ADD_RULES.coverageMonths}
-            >
-              <input
-                {...nativeAttrs(PREPAID_ADD_RULES.coverageMonths)}
-                name="coverageMonths"
-                inputMode="numeric"
-                defaultValue={12}
-                className={INPUT}
-              />
-            </Field>
-          </div>
+          <>
+            <FormSection title="Prepaid item">
+              <FormGrid layout="fields">
+                <div className="min-w-0 erp-field-name">
+                  <Field rule={PREPAID_ADD_RULES.name} label="Name" hint="What it is, as somebody would say it out loud">
+                    <Input {...nativeAttrs(PREPAID_ADD_RULES.name)}    placeholder="Fire insurance 2026" className="w-full" />
+                  </Field>
+                </div>
+                <div className="min-w-0">
+                  <Field rule={PREPAID_ADD_RULES.storeId} label="Store">
+                    <Select {...nativeAttrs(PREPAID_ADD_RULES.storeId)}   defaultValue="" className="w-full">
+                      <option value="">Choose a store…</option>
+                      {stores.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.code})
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+                <div className="min-w-0">
+                  <Field label="Kind">
+                    <Select name="category" defaultValue="insurance" className="w-full">
+                      {PREPAID_CATEGORIES.map((c) => (
+                        <option key={c} value={c}>
+                          {CATEGORY_LABEL[c] ?? c}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Coverage and cost">
+              <FormGrid layout="fields">
+                <div className="min-w-0">
+                  <Field rule={PREPAID_ADD_RULES.totalCost} label="Total cost">
+                    <input {...nativeAttrs(PREPAID_ADD_RULES.totalCost)}
+
+
+
+                      placeholder="0.00"
+                      className={INPUT}
+                    />
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-date">
+                  <Field rule={PREPAID_ADD_RULES.coverageStartDate} label="Coverage starts" hint="The first month the cover actually applies to">
+                    <Input {...nativeAttrs(PREPAID_ADD_RULES.coverageStartDate)}  type="date"  className="w-full" />
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-short">
+                  <Field rule={PREPAID_ADD_RULES.coverageMonths}
+                    label="Coverage months"
+                    hint="The CONTRACT's term — read it off the document, don't estimate"
+                  >
+                    <input {...nativeAttrs(PREPAID_ADD_RULES.coverageMonths)}
+
+
+
+                      defaultValue={12}
+                      className={INPUT}
+                    />
+                  </Field>
+                </div>
+              </FormGrid>
+            </FormSection>
+          </>
           <Field label="Notes">
             <Input name="notes" className="w-full" />
           </Field>
@@ -253,30 +272,9 @@ export default async function PrepaidPage({
 const INPUT =
   'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
 
-function Field({
-  label,
-  hint,
-  rule,
-  children,
-}: {
-  label: React.ReactNode;
-  hint?: string;
-  rule?: FieldRule;
-  children: React.ReactNode;
-}) {
-  const body = (
-    <>
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
-      {children}
-      {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </>
-  );
-  // T-440: a ruled field puts its live helper line OUTSIDE the label, so the line never joins the accessible name.
-  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
-  return (
-    <div>
-      <label className="flex flex-col gap-1">{body}</label>
-      <FieldCheck rule={rule} />
-    </div>
-  );
+function Field({ width, label, hint, rule, children }: FieldProps) {
+  const body = <><span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>{children}{hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}</>;
+  const sizing = width ? ` erp-field-${width}` : '';
+  if (!rule) return <label className={`flex min-w-0 flex-col gap-1${sizing}`}>{body}</label>;
+  return <div className={`min-w-0${sizing}`}><label className="flex min-w-0 flex-col gap-1">{body}</label><FieldCheck rule={rule} /></div>;
 }

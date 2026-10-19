@@ -1,3 +1,5 @@
+import { PAYROLL_BRACKET_SET_RULES, PAYROLL_MIN_WAGE_RULES, PAYROLL_STATUTORY_RATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { CheckedForm } from '@/components/forms';
 import { requirePageAccess } from '../../../lib/page-access';
 import { withFlash } from '../../../lib/flash';
 import {
@@ -14,9 +16,7 @@ import {
 import { listStores, ratesView } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Button, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
-import { CheckedForm } from '@/components/forms';
-import { PAYROLL_BRACKET_SET_RULES, PAYROLL_MIN_WAGE_RULES, PAYROLL_STATUTORY_RATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { Badge, Button, Field, FlashBanner, FormGrid, Input, Select , FormSection} from '@/components/ui';
 
 export const metadata = { title: 'Payroll rates — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -95,63 +95,115 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
         <details className="border-t border-neutral-200 pt-3 dark:border-neutral-800">
           <summary className="cursor-pointer py-2.5 text-sm font-medium">Add a contribution row</summary>
           <CheckedForm rules={PAYROLL_STATUTORY_RATE_RULES} action={addStatutoryRateAction} className="mt-3">
-<FormGrid>
-            <Field label="Agency">
-<Select name="agency" defaultValue="sss">
-                <option value="sss">SSS</option>
-                <option value="philhealth">PhilHealth</option>
-                <option value="pagibig">Pag-IBIG</option>
-              </Select>
-</Field>
-            <Field label="Effective from (the 1st of a month)" rule={PAYROLL_STATUTORY_RATE_RULES.effectiveFrom}>
-<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.effectiveFrom)} placeholder="2026-07-01" className="w-full" />
-</Field>
-            <Field label="Counted on">
-<Select name="baseKind" defaultValue="basic">
-                <option value="basic">Basic pay</option>
-                <option value="gross">Gross pay</option>
-              </Select>
-</Field>
-            <Field label="Employee rate (0.05 is 5%)" rule={PAYROLL_STATUTORY_RATE_RULES.eeRate}>
-<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.eeRate)} className="w-full" />
-</Field>
-            <Field label="Employer rate" rule={PAYROLL_STATUTORY_RATE_RULES.erRate}>
-<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.erRate)} className="w-full" />
-</Field>
-            <Field label="Floor (lowest pay it counts)" rule={PAYROLL_STATUTORY_RATE_RULES.floor}>
-<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.floor)} className="w-full" />
-</Field>
-            <Field label="Ceiling (highest pay it counts)" rule={PAYROLL_STATUTORY_RATE_RULES.ceiling}>
-<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.ceiling)} className="w-full" />
-</Field>
-            <Field label="Step (SSS rounds pay to this)" rule={PAYROLL_STATUTORY_RATE_RULES.step}>
-<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.step)} className="w-full" />
-</Field>
-            <Field label="Low band: pay up to (Pag-IBIG)" rule={PAYROLL_STATUTORY_RATE_RULES.lowThreshold}>
-<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.lowThreshold)} className="w-full" />
-</Field>
-            <Field label="Low band: employee rate" rule={PAYROLL_STATUTORY_RATE_RULES.lowEeRate}>
-<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.lowEeRate)} className="w-full" />
-</Field>
-            <Field label="EC: switch point (SSS)" rule={PAYROLL_STATUTORY_RATE_RULES.ecThreshold}>
-<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.ecThreshold)} className="w-full" />
-</Field>
-            <Field label="EC below the switch point" rule={PAYROLL_STATUTORY_RATE_RULES.ecLow}>
-<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.ecLow)} className="w-full" />
-</Field>
-            <Field label="EC at or above it" rule={PAYROLL_STATUTORY_RATE_RULES.ecHigh}>
-<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.ecHigh)} className="w-full" />
-</Field>
-            <Field label="Where it comes from (circular or law)" span="full" rule={PAYROLL_STATUTORY_RATE_RULES.sourceRef}>
-<Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.sourceRef)} className="w-full" />
-</Field>
-            <div className="flex items-end">
-              <Button type="submit" variant="primary">
-                Save
-              </Button>
-            </div>
-          </FormGrid>
-</CheckedForm>
+            <>
+              <FormSection title="Agency and effective date">
+                <FormGrid layout="fields">
+                  <div className="min-w-0 erp-field-code">
+                    <Field label="Agency">
+                      <Select name="agency" defaultValue="sss">
+                        <option value="sss">SSS</option>
+                        <option value="philhealth">PhilHealth</option>
+                        <option value="pagibig">Pag-IBIG</option>
+                      </Select>
+                    </Field>
+                  </div>
+                  <div className="min-w-0 erp-field-date">
+                    <Field rule={PAYROLL_STATUTORY_RATE_RULES.effectiveFrom} label="Effective from (the 1st of a month)">
+                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.effectiveFrom)}  placeholder="2026-07-01"  className="w-full" />
+                    </Field>
+                  </div>
+                  <div className="min-w-0 erp-field-code">
+                    <Field label="Counted on">
+                      <Select name="baseKind" defaultValue="basic">
+                        <option value="basic">Basic pay</option>
+                        <option value="gross">Gross pay</option>
+                      </Select>
+                    </Field>
+                  </div>
+                </FormGrid>
+              </FormSection>
+              <FormSection title="Contribution rates">
+                <FormGrid layout="fields">
+                  <div className="min-w-0">
+                    <Field rule={PAYROLL_STATUTORY_RATE_RULES.eeRate} label="Employee rate (0.05 is 5%)">
+                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.eeRate)}    className="w-full" />
+                    </Field>
+                  </div>
+                  <div className="min-w-0">
+                    <Field rule={PAYROLL_STATUTORY_RATE_RULES.erRate} label="Employer rate">
+                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.erRate)}    className="w-full" />
+                    </Field>
+                  </div>
+                </FormGrid>
+              </FormSection>
+              <FormSection title="Pay bands">
+                <FormGrid layout="fields">
+                  <div className="min-w-0">
+                    <Field rule={PAYROLL_STATUTORY_RATE_RULES.floor} label="Floor (lowest pay it counts)">
+                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.floor)}   className="w-full" />
+                    </Field>
+                  </div>
+                  <div className="min-w-0">
+                    <Field rule={PAYROLL_STATUTORY_RATE_RULES.ceiling} label="Ceiling (highest pay it counts)">
+                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.ceiling)}   className="w-full" />
+                    </Field>
+                  </div>
+                  <div className="min-w-0">
+                    <Field rule={PAYROLL_STATUTORY_RATE_RULES.step} label="Step (SSS rounds pay to this)">
+                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.step)}   className="w-full" />
+                    </Field>
+                  </div>
+                </FormGrid>
+              </FormSection>
+              <FormSection title="Pag-IBIG low band">
+                <FormGrid layout="fields">
+                  <div className="min-w-0">
+                    <Field rule={PAYROLL_STATUTORY_RATE_RULES.lowThreshold} label="Low band: pay up to (Pag-IBIG)">
+                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.lowThreshold)}   className="w-full" />
+                    </Field>
+                  </div>
+                  <div className="min-w-0">
+                    <Field rule={PAYROLL_STATUTORY_RATE_RULES.lowEeRate} label="Low band: employee rate">
+                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.lowEeRate)}   className="w-full" />
+                    </Field>
+                  </div>
+                </FormGrid>
+              </FormSection>
+              <FormSection title="Employees’ compensation">
+                <FormGrid layout="fields">
+                  <div className="min-w-0">
+                    <Field rule={PAYROLL_STATUTORY_RATE_RULES.ecThreshold} label="EC: switch point (SSS)">
+                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.ecThreshold)}   className="w-full" />
+                    </Field>
+                  </div>
+                  <div className="min-w-0">
+                    <Field rule={PAYROLL_STATUTORY_RATE_RULES.ecLow} label="EC below the switch point">
+                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.ecLow)}   className="w-full" />
+                    </Field>
+                  </div>
+                  <div className="min-w-0">
+                    <Field rule={PAYROLL_STATUTORY_RATE_RULES.ecHigh} label="EC at or above it">
+                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.ecHigh)}   className="w-full" />
+                    </Field>
+                  </div>
+                </FormGrid>
+              </FormSection>
+              <FormSection title="Source">
+                <FormGrid layout="fields">
+                  <div className="min-w-0 erp-field-long">
+                    <Field rule={PAYROLL_STATUTORY_RATE_RULES.sourceRef} label="Where it comes from (circular or law)" span="full">
+                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.sourceRef)}   className="w-full" />
+                    </Field>
+                  </div>
+                  <div className="flex items-end">
+                    <Button type="submit" variant="primary">
+                      Save
+                    </Button>
+                  </div>
+                </FormGrid>
+              </FormSection>
+            </>
+          </CheckedForm>
         </details>
       </section>
 

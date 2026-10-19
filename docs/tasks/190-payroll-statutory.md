@@ -42,6 +42,9 @@ same as `pay_rates`), withholding brackets included, so each org confirms its ow
 ## What counts (v1 requirements, `ERP-rebuild/src/lib/payroll/statutory.ts`, read as requirements only)
 - **Contribution base** is a column on each rate row (`base_kind`: `gross` or `basic`), not code. Seed: SSS = gross
   (basic + OT + night diff + holiday, "all actual remuneration"); PhilHealth = basic; Pag-IBIG = basic. Verify.
+  **Paid leave is NOT basic (Ian, 2026-10-17, row 366, q-t190-leave-in-basic b, against the recommendation):**
+  `leave_pay` and `sil_conversion_pay` stay out of the PhilHealth/Pag-IBIG base; only days worked count. As built;
+  no code change. The accountant's "verify" may still revisit it.
 - **Taxable** = gross − the employee's three contributions. **MWE**: if the employment's daily rate ≤ the store's
   minimum wage on the period end, basic + OT + night diff + holiday are all exempt, withholding = 0 (contributions
   still apply). ₱1 above the minimum is not an MWE (RR 11-2018; verify).

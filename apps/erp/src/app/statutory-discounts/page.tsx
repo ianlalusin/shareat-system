@@ -12,7 +12,7 @@ import { STATUTORY_DISCOUNT_RECORD_RULES, STATUTORY_DISCOUNT_VOID_RULES, nativeA
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, ConfirmDestructive, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, FlashBanner, FormGrid, Input, Select , FormSection, type FieldProps } from '@/components/ui';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 
 export const metadata = { title: 'SC/PWD register — Shareat System' };
@@ -210,79 +210,106 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
         <CheckedForm rules={STATUTORY_DISCOUNT_RECORD_RULES} action={recordStatutoryDiscountAction} className="rounded border border-neutral-200 p-4 dark:border-neutral-800">
           <input type="hidden" name="from" value={carry.from} />
           <input type="hidden" name="to" value={carry.to} />
-          <FormGrid>
+          <>
+            <FormSection title="Sale document">
+              <FormGrid layout="fields">
+                <div className="min-w-0">
+                  <Field label="Store" rule={STATUTORY_DISCOUNT_RECORD_RULES.storeId} className="flex flex-col gap-1 text-sm">
 
-          <Field label="Store" rule={STATUTORY_DISCOUNT_RECORD_RULES.storeId}>
-            <Select {...nativeAttrs(STATUTORY_DISCOUNT_RECORD_RULES.storeId)} defaultValue={storeId ?? ''}>
-              <option value="" disabled>Choose a store</option>
-              {stores.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </Select>
-          </Field>
+                    <Select {...nativeAttrs(STATUTORY_DISCOUNT_RECORD_RULES.storeId)}   defaultValue={storeId ?? ''}>
+                      <option value="" disabled>Choose a store</option>
+                      {stores.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-date">
+                  <Field label="Date of sale" rule={STATUTORY_DISCOUNT_RECORD_RULES.businessDate} className="flex flex-col gap-1 text-sm">
 
-          <Field label="Date of sale" rule={STATUTORY_DISCOUNT_RECORD_RULES.businessDate}>
-            <Input type="date" {...nativeAttrs(STATUTORY_DISCOUNT_RECORD_RULES.businessDate)} defaultValue={to} />
-          </Field>
+                    <Input {...nativeAttrs(STATUTORY_DISCOUNT_RECORD_RULES.businessDate)} type="date"   defaultValue={to} />
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-code">
+                  <Field label="Invoice / OR number" rule={STATUTORY_DISCOUNT_RECORD_RULES.invoiceNumber} className="flex flex-col gap-1 text-sm">
 
-          <Field label="Invoice / OR number" rule={STATUTORY_DISCOUNT_RECORD_RULES.invoiceNumber}>
-            <Input {...nativeAttrs(STATUTORY_DISCOUNT_RECORD_RULES.invoiceNumber)} />
-          </Field>
+                    <Input {...nativeAttrs(STATUTORY_DISCOUNT_RECORD_RULES.invoiceNumber)}   />
+                  </Field>
+                </div>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Beneficiary">
+              <FormGrid layout="fields">
+                <div className="min-w-0">
+                  <Field label="Discount kind" rule={STATUTORY_DISCOUNT_RECORD_RULES.kind} className="flex flex-col gap-1 text-sm">
 
-          <Field label="Discount kind" hint="One only — a PWD who is also a senior claims one 20%, not both." rule={STATUTORY_DISCOUNT_RECORD_RULES.kind}>
-            <Select {...nativeAttrs(STATUTORY_DISCOUNT_RECORD_RULES.kind)} defaultValue="senior">
-              <option value="senior">Senior citizen (OSCA ID)</option>
-              <option value="pwd">PWD (PWD ID)</option>
-            </Select>
-          </Field>
+                    <Select {...nativeAttrs(STATUTORY_DISCOUNT_RECORD_RULES.kind)}   defaultValue="senior">
+                      <option value="senior">Senior citizen (OSCA ID)</option>
+                      <option value="pwd">PWD (PWD ID)</option>
+                    </Select>
+                    <span className="text-xs text-neutral-500">One only — a PWD who is also a senior claims one 20%, not both.</span>
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-name">
+                  <Field label="Holder&apos;s name" rule={STATUTORY_DISCOUNT_RECORD_RULES.holderName} className="flex flex-col gap-1 text-sm">
 
-          <Field label="Holder&apos;s name" rule={STATUTORY_DISCOUNT_RECORD_RULES.holderName}>
-            <Input {...nativeAttrs(STATUTORY_DISCOUNT_RECORD_RULES.holderName)} />
-          </Field>
+                    <Input {...nativeAttrs(STATUTORY_DISCOUNT_RECORD_RULES.holderName)}   />
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-code">
+                  <Field label="ID number" rule={STATUTORY_DISCOUNT_RECORD_RULES.idNumber} className="flex flex-col gap-1 text-sm">
 
-          <Field label="ID number" rule={STATUTORY_DISCOUNT_RECORD_RULES.idNumber}>
-            <Input {...nativeAttrs(STATUTORY_DISCOUNT_RECORD_RULES.idNumber)} />
-          </Field>
+                    <Input {...nativeAttrs(STATUTORY_DISCOUNT_RECORD_RULES.idNumber)}   />
+                  </Field>
+                </div>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Amounts">
+              <FormGrid layout="fields">
+                <div className="min-w-0">
+                  <Field label="Gross amount" rule={STATUTORY_DISCOUNT_RECORD_RULES.grossAmount} className="flex flex-col gap-1 text-sm">
 
-          <Field label="Gross amount" rule={STATUTORY_DISCOUNT_RECORD_RULES.grossAmount}>
-            <Input {...nativeAttrs(STATUTORY_DISCOUNT_RECORD_RULES.grossAmount)} placeholder="0.00" className="tabular-nums" />
-          </Field>
+                    <Input {...nativeAttrs(STATUTORY_DISCOUNT_RECORD_RULES.grossAmount)}    placeholder="0.00" className="tabular-nums" />
+                  </Field>
+                </div>
+                <div className="min-w-0">
+                  <Field label="Discount granted" rule={STATUTORY_DISCOUNT_RECORD_RULES.discountAmount} className="flex flex-col gap-1 text-sm">
 
-          <Field label="Discount granted" rule={STATUTORY_DISCOUNT_RECORD_RULES.discountAmount}>
-            <Input {...nativeAttrs(STATUTORY_DISCOUNT_RECORD_RULES.discountAmount)} placeholder="0.00" className="tabular-nums" />
-          </Field>
-
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Signatory <span className="font-normal text-neutral-500">(optional)</span></span>
-            <Input name="signatory" />
-            <span className="text-xs text-neutral-500">Not required by the regulations — kept if your store&apos;s logbook has the column.</span>
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm col-span-full">
-            <span className="font-medium">Notes <span className="font-normal text-neutral-500">(optional)</span></span>
-            <Input name="notes" />
-          </label>
-
-          <div className="col-span-full">
-            <SubmitButton pendingLabel="Saving…" className="w-full sm:w-auto">Save</SubmitButton>
-          </div>
-          </FormGrid>
+                    <Input {...nativeAttrs(STATUTORY_DISCOUNT_RECORD_RULES.discountAmount)}    placeholder="0.00" className="tabular-nums" />
+                  </Field>
+                </div>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Sign-off and notes">
+              <FormGrid layout="fields">
+                <div className="min-w-0">
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium">Signatory <span className="font-normal text-neutral-500">(optional)</span></span>
+                    <Input name="signatory" />
+                    <span className="text-xs text-neutral-500">Not required by the regulations — kept if your store&apos;s logbook has the column.</span>
+                  </label>
+                </div>
+                <div className="min-w-0 erp-field-long">
+                  <label className="flex flex-col gap-1 text-sm col-span-full">
+                    <span className="font-medium">Notes <span className="font-normal text-neutral-500">(optional)</span></span>
+                    <Input name="notes" />
+                  </label>
+                </div>
+                <div className="col-span-full">
+                  <SubmitButton pendingLabel="Saving…" className="w-full sm:w-auto">Save</SubmitButton>
+                </div>
+              </FormGrid>
+            </FormSection>
+          </>
         </CheckedForm>
       </section>
     </Page>
   );
 }
 
-function Field({ label, hint, rule, children }: { label: React.ReactNode; hint?: string; rule: FieldRule; children: React.ReactNode }) {
-  // T-440: the label keeps its look; the live helper line sits OUTSIDE it (never part of the accessible name).
-  return (
-    <div>
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="font-medium">{label}</span>
-        {children}
-        {hint && <span className="text-xs text-neutral-500">{hint}</span>}
-      </label>
-      <FieldCheck rule={rule} />
-    </div>
-  );
+function Field({ width, label, hint, rule, children }: FieldProps) {
+  const body = <><span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>{children}{hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}</>;
+  const sizing = width ? ` erp-field-${width}` : '';
+  if (!rule) return <label className={`flex min-w-0 flex-col gap-1${sizing}`}>{body}</label>;
+  return <div className={`min-w-0${sizing}`}><label className="flex min-w-0 flex-col gap-1">{body}</label><FieldCheck rule={rule} /></div>;
 }

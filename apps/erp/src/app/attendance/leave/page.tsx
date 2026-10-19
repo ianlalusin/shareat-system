@@ -1,3 +1,10 @@
+import {
+  ATTENDANCE_LEAVE_RECORD_RULES,
+  ATTENDANCE_LEAVE_REQUEST_RULES,
+  ATTENDANCE_LEAVE_VOID_RULES,
+  nativeAttrs,
+} from '@shareat/domain/field-rules';
+import { CheckedForm } from '@/components/forms';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { requireSession } from '../../../lib/session';
 import {
@@ -25,14 +32,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { PhotoInput } from '@/components/PhotoInput';
-import { Badge, Button, Field, FlashBanner, FormGrid, Input, Select, Textarea } from '@/components/ui';
-import { CheckedForm } from '@/components/forms';
-import {
-  ATTENDANCE_LEAVE_RECORD_RULES,
-  ATTENDANCE_LEAVE_REQUEST_RULES,
-  ATTENDANCE_LEAVE_VOID_RULES,
-  nativeAttrs,
-} from '@shareat/domain/field-rules';
+import { Badge, Button, Field, FlashBanner, FormGrid, Input, Select, Textarea , FormSection} from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { ACTION_LINK } from '@/components/action-link';
 
@@ -147,50 +147,76 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
             You have no open job on record, so there is nothing to request leave against.
           </p>
         ) : (
-          <CheckedForm rules={ATTENDANCE_LEAVE_REQUEST_RULES} action={requestLeaveAction} className="space-y-3 rounded border border-surface-border p-4">
-            <FormGrid>
-              {mine.employments.length > 1 ? (
-                <Field label="Job">
-                  <Select name="employmentId" className="mt-1 w-full">
-                    {mine.employments.map((e) => (
-                      <option key={e.employmentId} value={e.employmentId}>
-                        {e.storeName}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              ) : (
-                <input type="hidden" name="employmentId" value={mine.employments[0]!.employmentId} />
-              )}
-              <Field label="Kind of leave">
-                <Select name="leaveType" className="mt-1 w-full">
-                  {kinds.map((k) => (
-                    <option key={k.code} value={k.code}>
-                      {k.label}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="First day" rule={ATTENDANCE_LEAVE_REQUEST_RULES.from}>
-                <Input type="date" {...nativeAttrs(ATTENDANCE_LEAVE_REQUEST_RULES.from)} className="mt-1 w-full" />
-              </Field>
-              <Field label="Last day" hint="Leave empty for a single day." rule={ATTENDANCE_LEAVE_REQUEST_RULES.to}>
-                <Input type="date" {...nativeAttrs(ATTENDANCE_LEAVE_REQUEST_RULES.to)} className="mt-1 w-full" />
-              </Field>
-              <Field label="Days in that range you have off anyway" hint="Dates like 2026-03-04, 2026-03-05 - not counted as leave." span="wide">
-                <Input name="restDays" className="mt-1 w-full" />
-              </Field>
-              <Field label="Date of the birth" hint="Maternity and paternity leave only." rule={ATTENDANCE_LEAVE_REQUEST_RULES.birthDate}>
-                <Input type="date" {...nativeAttrs(ATTENDANCE_LEAVE_REQUEST_RULES.birthDate)} className="mt-1 w-full" />
-              </Field>
-              <Field label="Reason or medical note" hint="Only you and your managers can read this." span="full">
-                <Textarea name="note" rows={2} className="mt-1 w-full" />
-              </Field>
-            </FormGrid>
-            <Button type="submit" variant="primary">
-              Request leave
-            </Button>
-          </CheckedForm>
+            <CheckedForm rules={ATTENDANCE_LEAVE_REQUEST_RULES} action={requestLeaveAction} className="space-y-3 rounded border border-surface-border p-4">
+              <>
+                <FormSection title="Leave request">
+                  <FormGrid layout="fields">
+                    <div className="min-w-0">
+                      {mine.employments.length > 1 ? (
+                        <Field label="Job">
+                          <Select name="employmentId" className="mt-1 w-full">
+                            {mine.employments.map((e) => (
+                              <option key={e.employmentId} value={e.employmentId}>
+                                {e.storeName}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
+                      ) : (
+                        <input type="hidden" name="employmentId" value={mine.employments[0]!.employmentId} />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <Field label="Kind of leave">
+                        <Select name="leaveType" className="mt-1 w-full">
+                          {kinds.map((k) => (
+                            <option key={k.code} value={k.code}>
+                              {k.label}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                    </div>
+                  </FormGrid>
+                </FormSection>
+                <FormSection title="Dates and entitlement">
+                  <FormGrid layout="fields">
+                    <div className="min-w-0 erp-field-date">
+                      <Field rule={ATTENDANCE_LEAVE_REQUEST_RULES.from} label="First day">
+                        <Input {...nativeAttrs(ATTENDANCE_LEAVE_REQUEST_RULES.from)}  type="date"  className="mt-1 w-full" />
+                      </Field>
+                    </div>
+                    <div className="min-w-0 erp-field-date">
+                      <Field rule={ATTENDANCE_LEAVE_REQUEST_RULES.to} label="Last day" hint="Leave empty for a single day.">
+                        <Input {...nativeAttrs(ATTENDANCE_LEAVE_REQUEST_RULES.to)}  type="date" className="mt-1 w-full" />
+                      </Field>
+                    </div>
+                    <div className="min-w-0 erp-field-short">
+                      <Field label="Days in that range you have off anyway" hint="Dates like 2026-03-04, 2026-03-05 - not counted as leave." span="wide">
+                        <Input name="restDays" className="mt-1 w-full" />
+                      </Field>
+                    </div>
+                    <div className="min-w-0 erp-field-date">
+                      <Field rule={ATTENDANCE_LEAVE_REQUEST_RULES.birthDate} label="Date of the birth" hint="Maternity and paternity leave only.">
+                        <Input {...nativeAttrs(ATTENDANCE_LEAVE_REQUEST_RULES.birthDate)}  type="date" className="mt-1 w-full" />
+                      </Field>
+                    </div>
+                  </FormGrid>
+                </FormSection>
+                <FormSection title="Note">
+                  <FormGrid layout="fields">
+                    <div className="min-w-0 erp-field-long">
+                      <Field label="Reason or medical note" hint="Only you and your managers can read this." span="full">
+                        <Textarea name="note" rows={2} className="mt-1 w-full" />
+                      </Field>
+                    </div>
+                  </FormGrid>
+                </FormSection>
+              </>
+              <Button type="submit" variant="primary">
+                Request leave
+              </Button>
+            </CheckedForm>
         )}
 
         {mine.requests.length > 0 && (

@@ -18,26 +18,31 @@ import {
   changeItemBaseUnit,
   clearStoreSellability,
   createItem,
+  dismissDuplicatePair,
   mergeItems,
+  normaliseItemName,
+  openItemRequestSentence,
   renameItem,
   rejectItemRequest,
   requestItem,
   setItemStatus,
+  setItemVariantOf,
   setStoreSellability,
   suggestItemCode,
+  undoDuplicateDismissal,
   updateItem,
   assertFieldRules,
   type ItemCodeSuggestion,
 } from '@shareat/domain';
 import { ITEMS_REJECT_RULES, ITEMS_RENAME_RULES, ITEMS_REQUEST_RULES } from '@shareat/domain/field-rules';
 import { AuthorizationError, can } from '@shareat/auth';
-import type { BaseUnit, ItemKind } from '@shareat/db';
+import { itemsRepo, type BaseUnit, type ItemKind } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
-import { ITEM_FLAGS, ITEM_RENAME, ITEM_STORE_SELLABILITY, ITEM_UNIT } from './typed-forms';
-import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
+import { ITEM_FLAGS, ITEM_RENAME, ITEM_STORE_SELLABILITY, ITEM_UNIT, ITEM_VARIANT } from './typed-forms';
+import { errorMessage as sharedErrorMessage, resolveConstraintName } from '@/lib/constraint-messages';
 import { isPresentable } from '../../lib/error-shape';
 import { loadDestructiveTarget, retypeRefusalError } from '@/lib/destructive';
 import { retypeMatches } from '@/lib/retype';
@@ -90,6 +95,8 @@ export async function requestItemAction(formData: FormData): Promise<void> {
         kind: str(formData, 'kind') as ItemKind,
         baseUnit: str(formData, 'baseUnit') as BaseUnit,
         reason: str(formData, 'reason') || null,
+        // T-443 R1: optional "Variation of"; blank means none.
+        variantOfItemId: str(formData, 'variantOfItemId') || null,
         // T-378 R7 (DEF-599): the ticks travel with the request, so approval can carry them to the item.
         isPurchasable: flag(formData, 'isPurchasable'),
         sellableRetail: flag(formData, 'sellableRetail'),
@@ -98,6 +105,15 @@ export async function requestItemAction(formData: FormData): Promise<void> {
     );
     warning = result.similarWarning ?? '';
   } catch (err) {
+    // The failed transaction has rolled back. Re-authorise the contextual read in a fresh one.
+    if (resolveConstraintName(err) === 'item_requests_open_name_key') {
+      const winner = await withOrgPrincipal(actor.orgId, async (tx) => {
+        if (!(await can(tx, actor, 'manage_items', {}))) return undefined;
+        return itemsRepo.findOpenRequestByName(tx, actor.orgId, normaliseItemName(str(formData, 'name')));
+      });
+      if (winner) return await redirectWithFlash('/items', {}, { error: openItemRequestSentence(winner) });
+    }
+
     return await redirectWithFlash('/items', {}, { error: errorMessage(err) });
   }
   return await redirectWithFlash(
@@ -124,6 +140,7 @@ export async function createItemAction(formData: FormData): Promise<void> {
         kind: str(formData, 'kind') as ItemKind,
         baseUnit: str(formData, 'baseUnit') as BaseUnit,
         notes: str(formData, 'notes') || null,
+        variantOfItemId: str(formData, 'variantOfItemId') || null, // T-443 R1
         // ⭐ DEF-130. Read from the form — a missing checkbox is an explicit "no", which for
         // `isPurchasable` means the form's default-ticked box was deliberately unticked.
         isPurchasable: flag(formData, 'isPurchasable'),
@@ -313,6 +330,8 @@ export async function approveItemRequestAction(formData: FormData): Promise<void
         isPurchasable: confirmed ? flag(formData, 'isPurchasable') : undefined,
         sellableRetail: confirmed ? flag(formData, 'sellableRetail') : undefined,
         sellableWholesale: confirmed ? flag(formData, 'sellableWholesale') : undefined,
+        // T-443 R1: the approve form always submits the select; blank clears the requester's choice, a value sets it.
+        variantOfItemId: formData.has('variantOfItemId') ? str(formData, 'variantOfItemId') || null : undefined,
       }),
     );
     approvedCode = approved.code;
@@ -351,6 +370,58 @@ export async function rejectItemRequestAction(formData: FormData): Promise<void>
     return await redirectWithFlash('/items', {}, { error: errorMessage(err) });
   }
   return await redirectWithFlash('/items', {}, { ok: 'Rejected, with your reason recorded for the requester.' });
+}
+
+/** ⛔ T-443 R1. Super-admin only (`approve_item`): make this item a variation of another, or detach it (blank parent). */
+export async function setItemVariantOfAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const itemId = str(formData, 'itemId');
+  const parentId = str(formData, 'parentId') || null;
+  let message = '';
+  try {
+    const { changed } = await withOrgPrincipal(actor.orgId, (tx) => setItemVariantOf(tx, actor, { itemId, parentId }));
+    message = !changed ? 'No change.' : parentId ? 'Saved. This item is now a variation.' : 'Detached. This item is top-level again.';
+  } catch (err) {
+    if (err instanceof AuthorizationError) {
+      return await redirectWithFlash(`/items/${itemId}`, {}, { error: 'Only a super-admin can group items as variations.', typed: keepTyping(formData, ITEM_VARIANT, itemId, { actorId: actor.personId }) }, { anchor: 'variation' });
+    }
+    return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err), typed: keepTyping(formData, ITEM_VARIANT, itemId, { actorId: actor.personId }) }, { anchor: 'variation' });
+  }
+  return await redirectWithFlash(`/items/${itemId}`, {}, { ok: message }, { anchor: 'variation' });
+}
+
+/** ⛔ T-443 R2. Super-admin only (`approve_item`): "these two are different items - stop asking". */
+export async function dismissDuplicatePairAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      dismissDuplicatePair(tx, actor, {
+        itemAId: str(formData, 'itemAId'),
+        itemBId: str(formData, 'itemBId'),
+        note: str(formData, 'note') || null,
+      }),
+    );
+  } catch (err) {
+    if (err instanceof AuthorizationError) {
+      return await redirectWithFlash('/items', {}, { error: 'Only a super-admin can mark two items as different.' });
+    }
+    return await redirectWithFlash('/items', {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash('/items', {}, { ok: 'Marked as different items. They will not be suggested as a duplicate again.' });
+}
+
+/** ⛔ T-443 R2. Super-admin only (`approve_item`): put a dismissed pair back in the look-alike panel. */
+export async function undoDuplicateDismissalAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => undoDuplicateDismissal(tx, actor, { dismissalId: str(formData, 'dismissalId') }));
+  } catch (err) {
+    if (err instanceof AuthorizationError) {
+      return await redirectWithFlash('/items', {}, { error: 'Only a super-admin can undo that.' });
+    }
+    return await redirectWithFlash('/items', {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash('/items', {}, { ok: 'Undone. If the two still look alike they will be suggested again.' });
 }
 
 /** ⛔ Super-admin only, and effectively irreversible — every reference moves to the winner. */

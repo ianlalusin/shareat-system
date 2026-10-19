@@ -25,7 +25,7 @@ export function RowAction({ className, ...rest }: HTMLAttributes<HTMLDivElement>
 
 export function Table({ className, children }: { readonly className?: string; readonly children?: ReactNode }) {
   return (
-    <div className="overflow-x-auto">
+    <div className="min-w-0 overflow-x-auto rounded-lg border border-surface-border">
       <table className={join('w-full border-collapse text-sm text-ink', className)}>{children}</table>
     </div>
   );
