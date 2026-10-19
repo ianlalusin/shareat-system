@@ -14,7 +14,7 @@ import {
 import { listStores, ratesView } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Button, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Badge, Button, Field, FlashBanner, FormGrid, Input, Select , FormSection} from '@/components/ui';
 
 export const metadata = { title: 'Payroll rates — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -93,63 +93,115 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
         <details className="border-t border-neutral-200 pt-3 dark:border-neutral-800">
           <summary className="cursor-pointer py-2.5 text-sm font-medium">Add a contribution row</summary>
           <form action={addStatutoryRateAction} className="mt-3">
-<FormGrid>
-            <Field label="Agency">
-<Select name="agency" defaultValue="sss">
-                <option value="sss">SSS</option>
-                <option value="philhealth">PhilHealth</option>
-                <option value="pagibig">Pag-IBIG</option>
-              </Select>
-</Field>
-            <Field label="Effective from (the 1st of a month)">
-<Input name="effectiveFrom" placeholder="2026-07-01" required className="w-full" />
-</Field>
-            <Field label="Counted on">
-<Select name="baseKind" defaultValue="basic">
-                <option value="basic">Basic pay</option>
-                <option value="gross">Gross pay</option>
-              </Select>
-</Field>
-            <Field label="Employee rate (0.05 is 5%)">
-<Input name="eeRate" inputMode="decimal" required className="w-full" />
-</Field>
-            <Field label="Employer rate">
-<Input name="erRate" inputMode="decimal" required className="w-full" />
-</Field>
-            <Field label="Floor (lowest pay it counts)">
-<Input name="floor" inputMode="decimal" className="w-full" />
-</Field>
-            <Field label="Ceiling (highest pay it counts)">
-<Input name="ceiling" inputMode="decimal" className="w-full" />
-</Field>
-            <Field label="Step (SSS rounds pay to this)">
-<Input name="step" inputMode="decimal" className="w-full" />
-</Field>
-            <Field label="Low band: pay up to (Pag-IBIG)">
-<Input name="lowThreshold" inputMode="decimal" className="w-full" />
-</Field>
-            <Field label="Low band: employee rate">
-<Input name="lowEeRate" inputMode="decimal" className="w-full" />
-</Field>
-            <Field label="EC: switch point (SSS)">
-<Input name="ecThreshold" inputMode="decimal" className="w-full" />
-</Field>
-            <Field label="EC below the switch point">
-<Input name="ecLow" inputMode="decimal" className="w-full" />
-</Field>
-            <Field label="EC at or above it">
-<Input name="ecHigh" inputMode="decimal" className="w-full" />
-</Field>
-            <Field label="Where it comes from (circular or law)" span="full">
-<Input name="sourceRef" required className="w-full" />
-</Field>
-            <div className="flex items-end">
-              <Button type="submit" variant="primary">
-                Save
-              </Button>
-            </div>
-          </FormGrid>
-</form>
+            <>
+              <FormSection title="Agency and effective date">
+                <FormGrid layout="fields">
+                  <div className="min-w-0 erp-field-code">
+                    <Field label="Agency">
+                      <Select name="agency" defaultValue="sss">
+                        <option value="sss">SSS</option>
+                        <option value="philhealth">PhilHealth</option>
+                        <option value="pagibig">Pag-IBIG</option>
+                      </Select>
+                    </Field>
+                  </div>
+                  <div className="min-w-0 erp-field-date">
+                    <Field label="Effective from (the 1st of a month)">
+                      <Input name="effectiveFrom" placeholder="2026-07-01" required className="w-full" />
+                    </Field>
+                  </div>
+                  <div className="min-w-0 erp-field-code">
+                    <Field label="Counted on">
+                      <Select name="baseKind" defaultValue="basic">
+                        <option value="basic">Basic pay</option>
+                        <option value="gross">Gross pay</option>
+                      </Select>
+                    </Field>
+                  </div>
+                </FormGrid>
+              </FormSection>
+              <FormSection title="Contribution rates">
+                <FormGrid layout="fields">
+                  <div className="min-w-0">
+                    <Field label="Employee rate (0.05 is 5%)">
+                      <Input name="eeRate" inputMode="decimal" required className="w-full" />
+                    </Field>
+                  </div>
+                  <div className="min-w-0">
+                    <Field label="Employer rate">
+                      <Input name="erRate" inputMode="decimal" required className="w-full" />
+                    </Field>
+                  </div>
+                </FormGrid>
+              </FormSection>
+              <FormSection title="Pay bands">
+                <FormGrid layout="fields">
+                  <div className="min-w-0">
+                    <Field label="Floor (lowest pay it counts)">
+                      <Input name="floor" inputMode="decimal" className="w-full" />
+                    </Field>
+                  </div>
+                  <div className="min-w-0">
+                    <Field label="Ceiling (highest pay it counts)">
+                      <Input name="ceiling" inputMode="decimal" className="w-full" />
+                    </Field>
+                  </div>
+                  <div className="min-w-0">
+                    <Field label="Step (SSS rounds pay to this)">
+                      <Input name="step" inputMode="decimal" className="w-full" />
+                    </Field>
+                  </div>
+                </FormGrid>
+              </FormSection>
+              <FormSection title="Pag-IBIG low band">
+                <FormGrid layout="fields">
+                  <div className="min-w-0">
+                    <Field label="Low band: pay up to (Pag-IBIG)">
+                      <Input name="lowThreshold" inputMode="decimal" className="w-full" />
+                    </Field>
+                  </div>
+                  <div className="min-w-0">
+                    <Field label="Low band: employee rate">
+                      <Input name="lowEeRate" inputMode="decimal" className="w-full" />
+                    </Field>
+                  </div>
+                </FormGrid>
+              </FormSection>
+              <FormSection title="Employees’ compensation">
+                <FormGrid layout="fields">
+                  <div className="min-w-0">
+                    <Field label="EC: switch point (SSS)">
+                      <Input name="ecThreshold" inputMode="decimal" className="w-full" />
+                    </Field>
+                  </div>
+                  <div className="min-w-0">
+                    <Field label="EC below the switch point">
+                      <Input name="ecLow" inputMode="decimal" className="w-full" />
+                    </Field>
+                  </div>
+                  <div className="min-w-0">
+                    <Field label="EC at or above it">
+                      <Input name="ecHigh" inputMode="decimal" className="w-full" />
+                    </Field>
+                  </div>
+                </FormGrid>
+              </FormSection>
+              <FormSection title="Source">
+                <FormGrid layout="fields">
+                  <div className="min-w-0 erp-field-long">
+                    <Field label="Where it comes from (circular or law)" span="full">
+                      <Input name="sourceRef" required className="w-full" />
+                    </Field>
+                  </div>
+                  <div className="flex items-end">
+                    <Button type="submit" variant="primary">
+                      Save
+                    </Button>
+                  </div>
+                </FormGrid>
+              </FormSection>
+            </>
+          </form>
         </details>
       </section>
 

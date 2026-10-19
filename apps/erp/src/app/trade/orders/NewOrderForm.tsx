@@ -10,7 +10,7 @@
  * sees "no default" before the server refuses the line.
  */
 import { useState } from 'react';
-import { Button, FormGrid, Input, Select } from '@/components/ui';
+import { Button, FormGrid, FormSection, Input, Select } from '@/components/ui';
 import type { CustomerOption, ItemOption, StoreOption } from './lib';
 
 interface LineDraft {
@@ -87,56 +87,57 @@ export function NewOrderForm({
 
   return (
     <form action={action} className="mt-3 space-y-4">
-      <FormGrid>
-        <label className={label}>
-          Selling store
-          <Select
-            name="storeId"
-            required
-            value={sellingStoreId}
-            onChange={(e) => setSellingStoreId(e.target.value)}
-          >
-            {stores.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} ({s.code})
-              </option>
-            ))}
-          </Select>
-        </label>
-        <label className={label}>
-          Customer
-          <Select
-            name="customerId"
-            required
-            value={customerId}
-            onChange={(e) => setCustomerId(e.target.value)}
-          >
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-                {c.treatment === 'internal' ? ' — our own store' : c.treatment === 'inter_entity' ? ' — another company' : ''}
-              </option>
-            ))}
-          </Select>
-        </label>
-        <label className={label}>
-          Order date
-          <Input name="orderDate" type="date" required defaultValue={today} />
-        </label>
-        <label className={label}>
-          Reference (optional)
-          <Input name="referenceNo" placeholder="DR-0001" />
-        </label>
-      </FormGrid>
+      <FormSection title="Document">
+        <FormGrid layout="fields">
+          <label className={`${label} erp-field-code`}>
+            Selling store
+            <Select
+              name="storeId"
+              required
+              value={sellingStoreId}
+              onChange={(e) => setSellingStoreId(e.target.value)}
+            >
+              {stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.code})
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className={`${label} erp-field-long`}>
+            Customer
+            <Select
+              name="customerId"
+              required
+              value={customerId}
+              onChange={(e) => setCustomerId(e.target.value)}
+            >
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {c.treatment === 'internal' ? ' — our own store' : c.treatment === 'inter_entity' ? ' — another company' : ''}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className={`${label} erp-field-date`}>
+            Order date
+            <Input name="orderDate" type="date" required defaultValue={today} />
+          </label>
+          <label className={`${label} erp-field-code`}>
+            Reference (optional)
+            <Input name="referenceNo" placeholder="DR-0001" />
+          </label>
+        </FormGrid>
+      </FormSection>
 
       <p
-        className={`text-xs ${
-          treatment === 'internal'
+        className={`text-xs ${treatment === 'internal'
             ? 'text-info'
             : unsupported
               ? 'text-danger'
               : 'text-neutral-600 dark:text-neutral-400'
-        }`}
+          }`}
       >
         {TREATMENT_HINT[treatment]}
         {treatment === 'internal' && customer?.counterpartyStoreId === sellingStoreId && (
@@ -144,7 +145,7 @@ export function NewOrderForm({
         )}
       </p>
 
-      <div className="space-y-2">
+      <FormSection title="Order lines" className="space-y-2">
         <div className="flex items-baseline justify-between">
           <h3 className="text-sm font-medium">Lines</h3>
           <Button type="button" variant="secondary" onClick={addLine}>
@@ -216,22 +217,24 @@ export function NewOrderForm({
           ⚠️ Whatever rate is used is <strong>captured</strong> onto the line — a later price-list
           edit never reaches back. An amber rate box means nothing can price that line by default.
         </p>
-      </div>
+      </FormSection>
 
-      <FormGrid>
-        <label className={label}>
-          Delivery fee ₱ (optional)
-          <Input name="deliveryFee" inputMode="decimal" placeholder="0.00" className="tabular-nums" />
-        </label>
-        <label className={label}>
-          Other fees ₱ (optional)
-          <Input name="otherFees" inputMode="decimal" placeholder="0.00" className="tabular-nums" />
-        </label>
-        <label className={label}>
-          Notes (optional)
-          <Input name="notes" />
-        </label>
-      </FormGrid>
+      <FormSection title="Fees and notes">
+        <FormGrid layout="fields">
+          <label className={`${label} erp-field-code`}>
+            Delivery fee ₱ (optional)
+            <Input name="deliveryFee" inputMode="decimal" placeholder="0.00" className="tabular-nums" />
+          </label>
+          <label className={`${label} erp-field-code`}>
+            Other fees ₱ (optional)
+            <Input name="otherFees" inputMode="decimal" placeholder="0.00" className="tabular-nums" />
+          </label>
+          <label className={`${label} erp-field-long`}>
+            Notes (optional)
+            <Input name="notes" />
+          </label>
+        </FormGrid>
+      </FormSection>
 
       <Button type="submit" variant="primary" disabled={unsupported}>
         Save draft

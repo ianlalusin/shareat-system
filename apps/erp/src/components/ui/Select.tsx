@@ -14,6 +14,7 @@ const BASE_CLASSES = 'rounded-[10px] border bg-field px-3 py-2 min-h-11 text-sm 
 export function Select({ invalid = false, className, 'aria-invalid': _callerAriaInvalid, children, ...rest }: SelectProps) {
   return (
     <select
+      data-erp-control="single"
       className={`${BASE_CLASSES} ${invalid ? 'border-2 border-danger' : 'border-field-border'}${className ? ` ${className}` : ''}`}
       aria-invalid={invalid ? 'true' : undefined}
       {...rest}

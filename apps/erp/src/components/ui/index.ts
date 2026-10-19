@@ -6,7 +6,7 @@ export { Input } from './Input';
 export type { InputProps } from './Input';
 export { Card } from './Card';
 export type { CardProps } from './Card';
-export { FormGrid, Field } from './FormGrid';
+export { FormGrid, Field, FormSection } from './FormGrid';
 export type { FormGridProps, FieldProps } from './FormGrid';
 // T-387 S3: the missing kit.
 export { Badge } from './Badge';

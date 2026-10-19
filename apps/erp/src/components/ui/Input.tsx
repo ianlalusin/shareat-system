@@ -35,6 +35,7 @@ export function Input({
 }: InputProps) {
   return (
     <input
+      data-erp-control="single"
       // §4.5: invalid emits BOTH border-danger and aria-invalid="true" — the ARIA half is not
       // optional, colour is never the sole channel. `undefined` (not `false`) so the attribute is
       // omitted entirely when valid, rather than rendering the literal string "false".

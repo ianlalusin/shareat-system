@@ -15,7 +15,7 @@ import {
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Banner, FlashBanner, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
+import { Badge, Banner, FlashBanner, Input, LinkRow, RowLink, Select, statusTone , FormGrid, FormSection} from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Prepaid expenses — Shareat System' };
@@ -179,54 +179,74 @@ export default async function PrepaidPage({
         </div>
 
         <form action={createPrepaidItemAction} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Name" hint="What it is, as somebody would say it out loud">
-              <Input name="name" required maxLength={120} placeholder="Fire insurance 2026" className="w-full" />
-            </Field>
-            <Field label="Store">
-              <Select name="storeId" required defaultValue="" className="w-full">
-                <option value="">Choose a store…</option>
-                {stores.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.code})
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Kind">
-              <Select name="category" defaultValue="insurance" className="w-full">
-                {PREPAID_CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {CATEGORY_LABEL[c] ?? c}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Total cost">
-              <input
-                name="totalCost"
-                required
-                inputMode="decimal"
-                placeholder="0.00"
-                className={INPUT}
-              />
-            </Field>
-            <Field label="Coverage starts" hint="The first month the cover actually applies to">
-              <Input name="coverageStartDate" type="date" required className="w-full" />
-            </Field>
-            <Field
-              label="Coverage months"
-              hint="The CONTRACT's term — read it off the document, don't estimate"
-            >
-              <input
-                name="coverageMonths"
-                inputMode="numeric"
-                required
-                defaultValue={12}
-                className={INPUT}
-              />
-            </Field>
-          </div>
+          <>
+            <FormSection title="Prepaid item">
+              <FormGrid layout="fields">
+                <div className="min-w-0 erp-field-name">
+                  <Field label="Name" hint="What it is, as somebody would say it out loud">
+                    <Input name="name" required maxLength={120} placeholder="Fire insurance 2026" className="w-full" />
+                  </Field>
+                </div>
+                <div className="min-w-0">
+                  <Field label="Store">
+                    <Select name="storeId" required defaultValue="" className="w-full">
+                      <option value="">Choose a store…</option>
+                      {stores.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.code})
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+                <div className="min-w-0">
+                  <Field label="Kind">
+                    <Select name="category" defaultValue="insurance" className="w-full">
+                      {PREPAID_CATEGORIES.map((c) => (
+                        <option key={c} value={c}>
+                          {CATEGORY_LABEL[c] ?? c}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Coverage and cost">
+              <FormGrid layout="fields">
+                <div className="min-w-0">
+                  <Field label="Total cost">
+                    <input
+                      name="totalCost"
+                      required
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      className={INPUT}
+                    />
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-date">
+                  <Field label="Coverage starts" hint="The first month the cover actually applies to">
+                    <Input name="coverageStartDate" type="date" required className="w-full" />
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-short">
+                  <Field
+                    label="Coverage months"
+                    hint="The CONTRACT's term — read it off the document, don't estimate"
+                  >
+                    <input
+                      name="coverageMonths"
+                      inputMode="numeric"
+                      required
+                      defaultValue={12}
+                      className={INPUT}
+                    />
+                  </Field>
+                </div>
+              </FormGrid>
+            </FormSection>
+          </>
           <Field label="Notes">
             <Input name="notes" className="w-full" />
           </Field>
