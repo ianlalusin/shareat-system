@@ -205,10 +205,11 @@ describe('absent on the server -> guarded replay (Acceptance 3, 6; DEF-018)', ()
   it('table re-seated on the server (session still open): receipt written, table and its projection NOT freed', async () => {
     const ev = await sell('s1');
     fs.seed(`stores/${STORE}/tables/t-s1`, { status: 'occupied', currentSessionId: 'other-session' });
+    const projectionBefore = structuredClone(fs.get(`stores/${STORE}/storeConfig/current/tables/t-s1`));
     await reconcile.runReconcilePass(deps());
     expect(fs.has(receiptPath('s1'))).toBe(true);
     expect(fs.get(`stores/${STORE}/tables/t-s1`)).toEqual({ status: 'occupied', currentSessionId: 'other-session' });
-    expect(fs.get(`stores/${STORE}/storeConfig/current/tables/t-s1`)).toMatchObject({ status: 'occupied', currentSessionId: 'other-session' });
+    expect(fs.get(`stores/${STORE}/storeConfig/current/tables/t-s1`)).toEqual(projectionBefore);
     await reconcile.runReconcilePass(deps());
     expect((await status(ev)).status).toBe('acknowledged');
   });

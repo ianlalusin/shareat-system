@@ -97,7 +97,8 @@ describe('formatXSlip (Acceptance 13)', () => {
     expect(text).toMatch(/receipts?\D*3\b/i);
     expect(text).toContain('SHT-01-000005');
     expect(text).toContain('SHT-01-000008');
-    expect(text).toMatch(/cash.*1,196\.00/i);
+    // The period includes both the acknowledged 1,196 sale and the unsent 45,000 sale.
+    expect(text).toMatch(/cash.*46,196\.00/i);
     expect(text).toMatch(/gcash.*200\.00/i);
     expect(text).toMatch(/gcash[^\n]*to check|to check[^\n]*gcash/i);
     const cashLine = text.split('\n').find((l) => /^\s*cash\b/i.test(l));
