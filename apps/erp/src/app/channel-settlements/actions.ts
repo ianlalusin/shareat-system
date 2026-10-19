@@ -19,7 +19,7 @@ import {
   voidChannelSettlement,
   type SettlementPreview,
 } from '@shareat/domain';
-import { CHANNEL_PAYOUT_DESTINATION_RULES, CHANNEL_SETTLEMENT_VOID_RULES } from '@shareat/domain/field-rules';
+import { CHANNEL_SETTLEMENT_VOID_RULES } from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -169,11 +169,11 @@ export async function voidSettlementAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
 
   try {
-    assertFieldRules(CHANNEL_SETTLEMENT_VOID_RULES, formData);
     const reason = str(formData, 'reason');
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const settlementId = str(formData, 'settlementId');
     const target = await loadDestructiveTarget(actor, 'channel_settlement', settlementId, ['record_ar_collection']);
+    assertFieldRules(CHANNEL_SETTLEMENT_VOID_RULES, formData);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'record_ar_collection' });
     await withOrgPrincipal(actor.orgId, async (tx) => {
       await voidChannelSettlement(tx, actor, { settlementId, reason });
@@ -200,7 +200,6 @@ export async function setPayoutDestinationAction(formData: FormData): Promise<vo
 
   try {
     channelId = str(formData, 'channelId');
-    assertFieldRules(CHANNEL_PAYOUT_DESTINATION_RULES, formData);
     const moneyAccountId = str(formData, 'moneyAccountId');
     await withOrgPrincipal(actor.orgId, (tx) => setChannelPayoutDestination(tx, actor, { channelId, moneyAccountId }));
   } catch (err) {

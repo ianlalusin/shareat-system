@@ -71,6 +71,7 @@ const ROWS: Record<string, Row> = {
   'ap.createSupplier.name': req('A supplier needs a name people will recognise.'),
   'ap.createSupplier.creditTermsDays': {
     ok: '30',
+    blank: 'Days to pay is required.',
     bad: [['abc', 'Days to pay must be a whole number from 0 to 365.'], ['366', 'Days to pay must be a whole number from 0 to 365.'], ['-1', 'Days to pay must be a whole number from 0 to 365.'], ['1.5', 'Days to pay must be a whole number from 0 to 365.']],
   },
   'ap.recordInvoice.storeId': req('Choose a store.'),

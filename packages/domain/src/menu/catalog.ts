@@ -13,6 +13,8 @@ import { menuRepo, type Tx } from '@shareat/db';
 import { MENU_ITEM_TYPES, type MenuItemType, type MenuStatus } from '@shareat/db/schema';
 import { gone, refuse } from '../shared/refusal';
 import { audit, changedFields, inTx, requireName } from './shared';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { MENU_CATEGORY_RULES, MENU_VARIANT_RULES } from '../field-rules/menu';
 
 const text = (raw: unknown) => (typeof raw === 'string' ? raw.trim() : '');
 
@@ -28,6 +30,7 @@ export interface CreateMenuCategoryInput {
 export async function createMenuCategory(actor: Actor, input: CreateMenuCategoryInput, tx?: Tx): Promise<{ id: string }> {
   return inTx(tx, async (trx) => {
     await authorize(trx, actor, 'manage_menu', {});
+    assertFieldRules(MENU_CATEGORY_RULES, { name: input.name, sortOrder: input.sortOrder === undefined ? undefined : String(input.sortOrder) });
     const name = requireName(input.name, 'createMenuCategory', 'A category');
     if (await menuRepo.findCategoryByName(trx, actor.orgId, name)) {
       throw refuse(`createMenuCategory: a category named "${name}" exists.`, `There is already a category called "${name}".`);
@@ -238,6 +241,7 @@ export async function addMenuVariant(
 ): Promise<{ id: string }> {
   return inTx(tx, async (trx) => {
     await authorize(trx, actor, 'add_menu_item', {});
+    assertFieldRules(MENU_VARIANT_RULES, { label: input.label });
     const label = requireName(input.label, 'addMenuVariant', 'A variant');
     const item = await menuRepo.getItem(trx, actor.orgId, input.menuItemId, true);
     if (!item) throw gone(`addMenuVariant: item ${input.menuItemId} does not exist.`, 'menu item');

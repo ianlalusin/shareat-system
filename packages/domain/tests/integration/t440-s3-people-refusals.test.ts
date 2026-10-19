@@ -39,9 +39,18 @@ afterAll(async () => {
   await sql.end({ timeout: 5 });
 });
 
-type Fx = Awaited<ReturnType<typeof moneyFixture>>;
+async function createFixture() {
+  const f = await moneyFixture(sql, 't440s3');
+  const [employment] = await sql<{ id: string }[]>`select id from employments where org_id = ${f.orgId} and person_id = ${f.staffId}`;
+  const [owner] = await sql<{ id: string }[]>`insert into owners (org_id, store_id, person_id, created_by) values (${f.orgId}, ${f.storeId}, ${f.staffId}, ${f.adminId}) returning id`;
+  const [terminal] = await sql<{ id: string }[]>`insert into clock_terminals (org_id, store_id, label, firebase_uid, provisioned_by) values (${f.orgId}, ${f.storeId}, 'Synthetic terminal', ${`t440-${f.orgId}`}, ${f.adminId}) returning id`;
+  const [attendance] = await sql<{ id: string }[]>`insert into attendance_credentials (org_id, store_id, employment_id, kind, card_id, enrolled_by) values (${f.orgId}, ${f.storeId}, ${employment!.id}, 'card', ${`t440-${f.orgId}`}, ${f.adminId}) returning id`;
+  const [credential] = await sql<{ id: string }[]>`insert into person_credentials (person_id, kind, external_id) values (${f.staffId}, 'firebase', ${`t440-${f.orgId}`}) returning id`;
+  return { ...f, employmentId: employment!.id, ownerId: owner!.id, terminalId: terminal!.id, attendanceCredentialId: attendance!.id, credentialId: credential!.id };
+}
+type Fx = Awaited<ReturnType<typeof createFixture>>;
 let fxPromise: Promise<Fx> | null = null;
-const fixture = () => (fxPromise ??= moneyFixture(sql, 't440s3'));
+const fixture = () => (fxPromise ??= createFixture());
 
 /** Runs the action as the org's administrator and returns the banner it redirected with. */
 async function run(mod: string, name: string, fields: Record<string, string>) {
@@ -83,7 +92,7 @@ describe('T-440 S3: a bad value is refused with the rule sentence and nothing is
     const f = await fixture();
     const before = await count('leave_requests', f.orgId);
     const o = await run('attendance/leave/actions', 'recordLeaveAction', {
-      employmentId: '00000000-0000-0000-0000-000000000000',
+      employmentId: f.employmentId,
       leaveType: 'sick',
       from: '2999-01-01',
       to: '2999-01-02',
@@ -96,7 +105,7 @@ describe('T-440 S3: a bad value is refused with the rule sentence and nothing is
     const f = await fixture();
     const before = await count('leave_requests', f.orgId);
     const o = await run('attendance/leave/actions', 'requestLeaveAction', {
-      employmentId: '00000000-0000-0000-0000-000000000000',
+      employmentId: f.employmentId,
       leaveType: 'sick',
       from: 'soon',
     });
@@ -173,7 +182,7 @@ describe('T-440 S3: a bad value is refused with the rule sentence and nothing is
     const f = await fixture();
     const before = await count('journal_entries', f.orgId);
     const o = await run('owners/actions', 'drawingAction', {
-      ownerId: '00000000-0000-0000-0000-000000000000',
+      ownerId: f.ownerId,
       amount: '-7',
       fromMoneyAccountId: f.drawerId,
       on: '2026-01-15',
@@ -186,7 +195,7 @@ describe('T-440 S3: a bad value is refused with the rule sentence and nothing is
     const f = await fixture();
     const before = await count('journal_entries', f.orgId);
     const o = await run('owners/actions', 'closeMonthAction', {
-      ownerId: '00000000-0000-0000-0000-000000000000',
+      ownerId: f.ownerId,
       month: '2026-01',
       on: 'soon',
     });
@@ -198,7 +207,7 @@ describe('T-440 S3: a bad value is refused with the rule sentence and nothing is
     const f = await fixture();
     const o = await run('attendance/terminals/actions', 'revokeTerminalAction', {
       storeId: f.storeId,
-      terminalId: '00000000-0000-0000-0000-000000000000',
+      terminalId: f.terminalId,
       reason: '   ',
     });
     expect(o.flash.error).toBe('The reason is required.');
@@ -207,8 +216,8 @@ describe('T-440 S3: a bad value is refused with the rule sentence and nothing is
   it('staff/credentials revokeCredentialAction: a blank reason is refused with the rule sentence (mutant: assert removed from revokeCredentialAction)', async () => {
     const f = await fixture();
     const o = await run('staff/[employmentId]/credentials/actions', 'revokeCredentialAction', {
-      employmentId: '00000000-0000-0000-0000-000000000000',
-      credentialId: '00000000-0000-0000-0000-000000000000',
+      employmentId: f.employmentId,
+      credentialId: f.attendanceCredentialId,
       reason: '   ',
     });
     expect(o.flash.error).toBe('The reason is required.');
@@ -216,17 +225,19 @@ describe('T-440 S3: a bad value is refused with the rule sentence and nothing is
   });
 
   it('staff/credentials enrolCardAction: a blank card id is refused with the old sentence (mutant: the rule re-words it)', async () => {
+    const f = await fixture();
     const o = await run('staff/[employmentId]/credentials/actions', 'enrolCardAction', {
-      employmentId: '00000000-0000-0000-0000-000000000000',
+      employmentId: f.employmentId,
       cardId: '   ',
     });
     expect(o.flash.error).toBe(`A card needs an id ${DASH} that is the whole credential.`);
   });
 
   it('admin/users unlinkCredentialAction: a blank reason keeps the audit-trail sentence (mutant: the rule re-words it / assert removed)', async () => {
+    const f = await fixture();
     const o = await run('admin/users/actions', 'unlinkCredentialAction', {
-      personId: '00000000-0000-0000-0000-000000000000',
-      credentialId: '00000000-0000-0000-0000-000000000000',
+      personId: f.staffId,
+      credentialId: f.credentialId,
       reason: '   ',
     });
     expect(o.flash.error).toBe(`Unlinking a sign-in account needs a reason ${DASH} a revoked credential nobody can explain is not an audit trail.`);

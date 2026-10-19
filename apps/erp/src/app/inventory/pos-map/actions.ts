@@ -8,6 +8,7 @@
  */
 import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
+import { can } from '@shareat/auth';
 import { assertFieldRules, decideMapRequest, upsertPosItemMap } from '@shareat/domain';
 import { INVENTORY_POS_MAP_RULES } from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from './lib';
@@ -26,9 +27,11 @@ export async function upsertPosItemMapAction(fd: FormData): Promise<void> {
 
   let result: Awaited<ReturnType<typeof upsertPosItemMap>> | undefined;
   try {
-    assertFieldRules(INVENTORY_POS_MAP_RULES, fd);
-    result = await withOrgPrincipal(actor.orgId, (tx) =>
-      upsertPosItemMap(tx, actor, {
+    result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): the field check runs only for a caller `upsertPosItemMap`'s first authorize() would let in
+      // ('manage_pos_map' at this store); anyone else is refused by that gate before any field sentence.
+      if (await can(tx, actor, 'manage_pos_map', { storeId })) assertFieldRules(INVENTORY_POS_MAP_RULES, fd);
+      return upsertPosItemMap(tx, actor, {
         orgId: actor.orgId,
         storeId,
         posItemKey: str(fd, 'posItemKey'),
@@ -40,8 +43,8 @@ export async function upsertPosItemMapAction(fd: FormData): Promise<void> {
         locationId: str(fd, 'locationId') || null,
         confirmShared: str(fd, 'confirmShared') === 'true',
         editMapId: str(fd, 'editMapId') || null,
-      }),
-    );
+      });
+    });
   } catch (err) {
     return await redirectWithFlash('/inventory/pos-map', { store: storeId }, { error: errorMessage(err) });
   }

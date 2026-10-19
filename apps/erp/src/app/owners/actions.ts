@@ -16,13 +16,7 @@ import {
   writeOffReceivable,
 } from '@shareat/domain';
 import type { DrawingLimitPeriod, PersonalExpenseTreatment } from '@shareat/db/schema';
-import {
-  OWNERS_CLOSE_MONTH_RULES,
-  OWNERS_CONTRIBUTION_RULES,
-  OWNERS_CREATE_RULES,
-  OWNERS_DRAWING_RULES,
-  OWNERS_SETTLE_RULES,
-} from '@shareat/domain/field-rules';
+import { OWNERS_SETTLE_RULES } from '@shareat/domain/field-rules';
 import { verifyAdminApproval } from '@shareat/auth';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
@@ -39,8 +33,6 @@ export async function createOwnerAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   let id = '';
   try {
-    // T-440: "Choose a store." / "Choose who this is." are now rule sentences, the same ones the screen shows live.
-    assertFieldRules(OWNERS_CREATE_RULES, formData);
     const storeId = str(formData, 'storeId');
     const personId = str(formData, 'personId');
     const limit = str(formData, 'drawingLimit');
@@ -68,7 +60,6 @@ export async function contributionAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const id = str(formData, 'ownerId');
   try {
-    assertFieldRules(OWNERS_CONTRIBUTION_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       recordContribution(tx, actor, {
         ownerId: id,
@@ -88,7 +79,6 @@ export async function drawingAction(formData: FormData): Promise<void> {
   const id = str(formData, 'ownerId');
   let message = 'Drawn. Equity is down by that much.';
   try {
-    assertFieldRules(OWNERS_DRAWING_RULES, formData);
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       recordDrawing(tx, actor, {
         ownerId: id,
@@ -113,6 +103,8 @@ export async function settleAction(formData: FormData): Promise<void> {
   const amount = str(formData, 'amount');
   let message = '';
   try {
+    // T-440 S9 (i-R): judged only once the actor holds the gate for the branch they chose (the record's own store).
+    const target = await loadDestructiveTarget(actor, 'owner', id, [how === 'cash' ? 'transfer_funds' : 'approve_expense']);
     assertFieldRules(OWNERS_SETTLE_RULES, formData);
     if (how === 'cash') {
       const result = await withOrgPrincipal(actor.orgId, (tx) =>
@@ -136,7 +128,6 @@ export async function settleAction(formData: FormData): Promise<void> {
     } else if (how === 'writeoff') {
       // T-412 Tier P (DEF-654): writing a posted receivable off is an administrator's PIN, checked on the server against the
       // RECORD's store. Only this branch is guarded: repaying in cash or from pay moves money back, it forgives nothing.
-      const target = await loadDestructiveTarget(actor, 'owner', id, ['approve_expense']);
       const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId!, pin: str(formData, 'adminPin'), capability: 'approve_expense' });
       const result = await withOrgPrincipal(actor.orgId, async (tx) => {
         const written = await writeOffReceivable(tx, actor, {
@@ -165,7 +156,6 @@ export async function closeMonthAction(formData: FormData): Promise<void> {
   const id = str(formData, 'ownerId');
   let message = '';
   try {
-    assertFieldRules(OWNERS_CLOSE_MONTH_RULES, formData);
     const acknowledged = str(formData, 'acknowledgedAmount');
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       closeDrawingMonth(tx, actor, {

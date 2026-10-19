@@ -152,8 +152,6 @@ function nameRequirement(): string {
   return c.ok ? 'A supplier needs a name people will recognise.' : c.requirement;
 }
 
-const TERMS_BLANK = 'Enter how many days of credit this supplier gives (0 to 365), or choose Cash on delivery.';
-
 /** The days-to-pay rule as a one-rule set: the SAME definition the add form's live check reads (T-440, one sentence in two places). */
 const TERMS_RULE_SET = { form: SUPPLIER_ADD_RULES.form, creditTermsDays: SUPPLIER_ADD_RULES.creditTermsDays };
 /** Something that is never a number of days, for the F1 marker (an unrecognised terms MODE is refused whatever digits it spells). */
@@ -163,7 +161,8 @@ const NOT_A_NUMBER_OF_DAYS = 'unrecognised';
  * T-362 / DEF-495 — R2: judges a supplier's raw `creditTermsDays` box. `null`/`undefined` (the key absent, or explicitly cleared)
  * means cash-on-delivery. `0` is legal and means "on credit, due on the invoice date" (R1) — never coerced into "no credit".
  * T-440: the value rule (a whole number, 0 to 365) is `SUPPLIER_ADD_RULES.creditTermsDays` — the one the screen shows live — not
- * a second parser; only the blank box (R1: an empty credit box is refused, not guessed) and the F1 marker are decided here.
+ * a second parser. A blank credit box uses the rule's required sentence (S9 B); null still means COD and the F1 marker
+ * still refuses an unrecognised mode.
  * The database CHECK (`0141:47-48`) stays the backstop (RULES §6.3).
  */
 function judgeCreditTerms(
@@ -176,7 +175,6 @@ function judgeCreditTerms(
   else if (typeof raw === 'number') text = String(raw);
   else {
     text = raw.trim();
-    if (text === '') throw refuse(`${fn}: credit terms is blank`, TERMS_BLANK);
   }
   const days = assertFieldRules(TERMS_RULE_SET, { creditTermsDays: text }).creditTermsDays;
   return days === null || days === undefined ? null : Number(days);

@@ -10,6 +10,7 @@
  * second caller cannot skip it — a rule in one route file is a rule the next route file misses,
  * which is how DEF-180 happened.
  */
+import { can } from '@shareat/auth';
 import {
   assertFieldRules,
   CANONICAL_POSITION_DEFAULTS,
@@ -20,7 +21,7 @@ import {
   setStoreStockModel,
   updateStoreDetails,
 } from '@shareat/domain';
-import { ADMIN_STORE_CREATE_RULES, ADMIN_STORE_DETAILS_RULES, ADMIN_STORE_OPENING_DATE_RULES } from '@shareat/domain/field-rules';
+import { ADMIN_STORE_CREATE_RULES } from '@shareat/domain/field-rules';
 
 // Derived, never hand-typed — T-336 §1's own lesson (three documents once quoted "~8-12" and none
 // had checked it). Recomputes to 38 today; changes with the ruling, not with this file.
@@ -91,16 +92,12 @@ export async function createStoreAction(fd: FormData): Promise<void> {
   if (openingDate !== null && !storesRepo.isValidDateString(openingDate)) {
     return await redirectWithFlash('/admin/stores', {}, { error: invalidDateMessage(openingDate) });
   }
-  try {
-    assertFieldRules(ADMIN_STORE_CREATE_RULES, fd);
-  } catch (err) {
-    return await redirectWithFlash('/admin/stores', {}, { error: errorMessage(err) });
-  }
-
   let result: Awaited<ReturnType<typeof createStore>> | undefined;
   try {
-    result = await withOrgPrincipal(actor.orgId, (tx) =>
-      createStore(tx, actor, {
+    result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): judged only once the actor holds the gate; capability copied from createStore's first authorize() (manage_stores).
+      if (await can(tx, actor, 'manage_stores', {})) assertFieldRules(ADMIN_STORE_CREATE_RULES, fd);
+      return createStore(tx, actor, {
         code: str(fd, 'code'),
         name: str(fd, 'name'),
         timezone: str(fd, 'timezone') || undefined,
@@ -110,8 +107,8 @@ export async function createStoreAction(fd: FormData): Promise<void> {
         // that is legal for this cadence.
         unremittedCeiling: ceilingRaw === '' ? null : ceilingRaw,
         openingDate,
-      }),
-    );
+      });
+    });
   } catch (err) {
     return await redirectWithFlash('/admin/stores', {}, { error: errorMessage(err) });
   }
@@ -141,7 +138,6 @@ export async function updateStoreAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/admin/stores');
   const storeId = str(fd, 'storeId');
   try {
-    assertFieldRules(ADMIN_STORE_DETAILS_RULES, fd);
     await withOrgPrincipal(actor.orgId, (tx) =>
       updateStoreDetails(tx, actor, storeId, {
         name: str(fd, 'name'),
@@ -226,7 +222,6 @@ export async function setStoreOpeningDateAction(fd: FormData): Promise<void> {
     );
   }
   try {
-    assertFieldRules(ADMIN_STORE_OPENING_DATE_RULES, fd);
     await withOrgPrincipal(actor.orgId, (tx) =>
       setStoreOpeningDate(tx, actor, storeId, { openingDate, confirmedPlan }),
     );

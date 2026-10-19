@@ -6,20 +6,12 @@
  * ⛔ The gates live in the services, not here. A gate in a server action protects one caller.
  */
 import {
-  assertFieldRules,
   cancelCashRequest,
   createCashRequest,
   decideCashRequest,
   releaseCashRequest,
   settleCashRequest,
 } from '@shareat/domain';
-import {
-  CASH_REQUEST_APPROVE_RULES,
-  CASH_REQUEST_CREATE_RULES,
-  CASH_REQUEST_REFUSE_RULES,
-  CASH_REQUEST_RELEASE_RULES,
-  CASH_REQUEST_SETTLE_RULES,
-} from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -39,8 +31,7 @@ export async function createRequestAction(formData: FormData): Promise<void> {
   const requestedFor = str(formData, 'requestedFor');
   if (!requestedFor) return await redirectWithFlash('/cash-requests', {}, { error: 'Say who is holding the money.', field: 'requested-for' });
   try {
-    // T-440: the same rule set the screen shows (one definition); the domain keeps its own money/date parsing.
-    assertFieldRules(CASH_REQUEST_CREATE_RULES, formData);
+    // T-440 / S9: the screen's rule set (one definition) is judged in the domain, right after its authorize().
     const created = await withOrgPrincipal(actor.orgId, (tx) =>
       createCashRequest(tx, actor, {
         storeId,
@@ -67,14 +58,12 @@ export async function decideAction(formData: FormData): Promise<void> {
   let message = '';
   try {
     if (decision === 'reject') {
-      assertFieldRules(CASH_REQUEST_REFUSE_RULES, formData);
       const reason = str(formData, 'reason');
       await withOrgPrincipal(actor.orgId, (tx) =>
         decideCashRequest(tx, actor, { requestId: id, decision: 'reject', reason }),
       );
       message = 'Refused. Nothing posted.';
     } else {
-      assertFieldRules(CASH_REQUEST_APPROVE_RULES, formData);
       const amount = str(formData, 'amount');
       await withOrgPrincipal(actor.orgId, (tx) =>
         decideCashRequest(tx, actor, { requestId: id, decision: 'approve', amount }),
@@ -98,7 +87,6 @@ export async function releaseAction(formData: FormData): Promise<void> {
   const id = str(formData, 'requestId');
   let message = '';
   try {
-    assertFieldRules(CASH_REQUEST_RELEASE_RULES, formData);
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       releaseCashRequest(tx, actor, {
         requestId: id,
@@ -122,7 +110,6 @@ export async function settleAction(formData: FormData): Promise<void> {
   const id = str(formData, 'requestId');
   let message = '';
   try {
-    assertFieldRules(CASH_REQUEST_SETTLE_RULES, formData);
     const returnedAmount = str(formData, 'returnedAmount');
     const shortAmount = str(formData, 'shortAmount');
     if (!returnedAmount && !shortAmount) {

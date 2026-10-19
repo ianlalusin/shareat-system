@@ -31,6 +31,8 @@ import { moneyAccountsRepo, salesDaysRepo, transaction, type Tx } from '@shareat
 import { add, compare, isZero, ZERO, type Money } from '@shareat/core/money';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { SALES_DAY_CREATE_RULES } from '../field-rules/sales-days';
 import { assertCanOpenDay, assertStoreTakesTypedDays, safeHumanDate } from './create-block';
 
 // T-375 S3: the create-block moved to `create-block.ts`; its names stay importable from here.
@@ -83,6 +85,8 @@ export async function createSalesDay(
 
 async function runCreate(tx: Tx, actor: Actor, input: CreateSalesDayInput): Promise<{ id: string }> {
   await authorize(tx, actor, 'submit_sales_day', { storeId: input.storeId });
+  // T-440 / S9: the screen's own rule judges the box AFTER the gate (T-364 order). Moved here from the action.
+  assertFieldRules(SALES_DAY_CREATE_RULES, { businessDate: input.businessDate });
   // T-375 S3 (R13): a LINKED store takes its sales from POS - the typed path refuses (store row FOR KEY SHARE first).
   await assertStoreTakesTypedDays(tx, actor, input.storeId, 'createSalesDay');
 

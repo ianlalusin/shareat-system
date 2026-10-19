@@ -26,6 +26,8 @@ import { LINK_STATUSES } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { decimal, type Decimal } from '@shareat/core/money';
 import { gone, refuse } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { COMMISSARY_LINK_RULES, COMMISSARY_MAP_RULES, COMMISSARY_OFFERING_RULES } from '../field-rules/commissary';
 
 export type LinkStatus = (typeof LINK_STATUSES)[number];
 
@@ -121,6 +123,7 @@ export async function upsertCommissaryLink(
 ): Promise<UpsertCommissaryLinkResult> {
   const run = async (trx: Tx): Promise<UpsertCommissaryLinkResult> => {
     await authorize(trx, actor, 'manage_commissary_offerings', { storeId: input.commissaryStoreId });
+    assertFieldRules(COMMISSARY_LINK_RULES, { branchStoreId: input.branchStoreId });
 
     // ⛔ The database's own check (`commissary_links_not_self_check`) refuses this too; refusing it
     // here as well means the message explains WHY rather than naming a constraint.
@@ -196,6 +199,7 @@ export async function upsertOffering(
 ): Promise<{ id: string }> {
   const run = async (trx: Tx): Promise<{ id: string }> => {
     await authorize(trx, actor, 'manage_commissary_offerings', { storeId: input.commissaryStoreId });
+    assertFieldRules(COMMISSARY_OFFERING_RULES, { itemId: input.itemId, manualCost: input.manualCost });
 
     const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
     if (!item) throw gone(`upsertOffering: item ${input.itemId} does not exist.`, 'item');
@@ -274,6 +278,7 @@ export async function upsertMap(
 ): Promise<{ id: string }> {
   const run = async (trx: Tx): Promise<{ id: string }> => {
     await authorize(trx, actor, 'manage_commissary_map', { storeId: input.branchStoreId });
+    assertFieldRules(COMMISSARY_MAP_RULES, { commissaryItemId: input.commissaryItemId, branchItemId: input.branchItemId });
 
     const linked = await commissaryRepo.activeLinkExists(trx, actor.orgId, input.commissaryStoreId, input.branchStoreId);
     if (!linked) {

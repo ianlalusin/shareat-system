@@ -17,7 +17,7 @@ import {
 } from '@shareat/domain';
 import { productionRepo } from '@shareat/db';
 import { INVENTORY_PRODUCTION_RULES, INVENTORY_PRODUCTION_VOID_RULES } from '@shareat/domain/field-rules';
-import { authorize } from '@shareat/auth';
+import { authorize, can } from '@shareat/auth';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
@@ -72,8 +72,10 @@ export async function saveProductionDraftAction(fd: FormData): Promise<void> {
 
   let result: Awaited<ReturnType<typeof createProductionDraft>> | undefined;
   try {
-    assertFieldRules(INVENTORY_PRODUCTION_RULES, fd);
     result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): the field check runs only for a caller `createProductionDraft`'s first authorize() would let in
+      // ('record_stock_movement' at this store); anyone else is refused by that gate before any field sentence.
+      if (await can(tx, actor, 'record_stock_movement', { storeId })) assertFieldRules(INVENTORY_PRODUCTION_RULES, fd);
       if (kind === 'cook') {
         // T-409 R4: the cook form is a recipe and a quantity made. Ingredients are never read from the form; the output item
         // and unit come from the recipe unless sent (the domain refuses an item that is not the recipe's).
@@ -147,9 +149,9 @@ export async function voidProductionAction(fd: FormData): Promise<void> {
 
   let result: Awaited<ReturnType<typeof voidProduction>> | undefined;
   try {
-    assertFieldRules(INVENTORY_PRODUCTION_VOID_RULES, fd);
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const target = await loadDestructiveTarget(actor, 'production_record', recordId, ['void_production']);
+    assertFieldRules(INVENTORY_PRODUCTION_VOID_RULES, fd);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'void_production' });
     result = await withOrgPrincipal(actor.orgId, async (tx) => {
       const voided = await voidProduction(tx, actor, { recordId, reason });

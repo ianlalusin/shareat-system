@@ -25,6 +25,7 @@ import {
 import {
   assignRoleAsActor,
   authorize,
+  can,
   CAPABILITY_SCOPE,
   capabilityTitle,
   grantCapabilityAsActor,
@@ -75,8 +76,11 @@ export async function assignRoleAction(formData: FormData): Promise<void> {
 
   let message = 'Role updated.';
   try {
-    assertFieldRules(ADMIN_ASSIGN_ROLE_RULES, formData);
-    const result = await withOrgPrincipal(actor.orgId, (tx) => assignRoleAsActor(tx, actor, { personId, role }));
+    const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): judged only once the actor holds the gate; capability copied from assignRoleAsActor's first authorize().
+      if (await can(tx, actor, 'manage_users', {})) assertFieldRules(ADMIN_ASSIGN_ROLE_RULES, formData);
+      return assignRoleAsActor(tx, actor, { personId, role });
+    });
     // Say what else the write did, rather than letting a materialisation, an elevation or a
     // revocation be invisible — all three are real rows this person's org now holds differently
     // (§C.2, §B.1, and T-248 / DEF-237). Each clause names its own verb so the sentence stays
@@ -274,10 +278,11 @@ export async function linkFirebaseAction(formData: FormData): Promise<void> {
   const uid = str(formData, 'uid');
 
   try {
-    assertFieldRules(ADMIN_LINK_FIREBASE_RULES, formData);
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      linkFirebaseCredential(tx, actor, { personId, uid }),
-    );
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): judged only once the actor holds the gate; capability copied from linkFirebaseCredential's first authorize().
+      if (await can(tx, actor, 'manage_users', {})) assertFieldRules(ADMIN_LINK_FIREBASE_RULES, formData);
+      return linkFirebaseCredential(tx, actor, { personId, uid });
+    });
   } catch (err) {
     return await redirectWithFlash(`/admin/users/${personId}`, {}, { error: errorMessage(err) });
   }
@@ -301,9 +306,9 @@ export async function unlinkCredentialAction(formData: FormData): Promise<void> 
 
   let ended = 0;
   try {
-    assertFieldRules(ADMIN_UNLINK_RULES, formData);
     // T-412 Tier R: the person retypes the account holder's name; the server compares it with the name IT loads.
     const target = await loadDestructiveTarget(actor, 'person_credential', credentialId, ['manage_users']);
+    assertFieldRules(ADMIN_UNLINK_RULES, formData);
     if (!retypeMatches(str(formData, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       unlinkCredential(tx, actor, { personId, credentialId, reason }),

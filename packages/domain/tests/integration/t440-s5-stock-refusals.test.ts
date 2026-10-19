@@ -50,9 +50,18 @@ afterAll(async () => {
   await sql.end({ timeout: 5 });
 });
 
-type Fx = Awaited<ReturnType<typeof moneyFixture>>;
+async function createFixture() {
+  const f = await moneyFixture(sql, 't440s5');
+  // Item approval, rename and unit changes are super-admin acts; the positive refusal actor must hold them.
+  await sql`update person_roles set role = 'super_admin' where person_id = ${f.adminId} and org_id = ${f.orgId}`;
+  const [day] = await sql<{ id: string }[]>`insert into sales_days (org_id, store_id, business_date, total_sales, unli_sales, ala_carte_sales, created_by) values (${f.orgId}, ${f.storeId}, '2026-01-10', '0', '0', '0', ${f.adminId}) returning id`;
+  const [channel] = await sql<{ id: string }[]>`insert into sales_channels (org_id, store_id, name, is_remitted_daily) values (${f.orgId}, ${f.storeId}, 'Synthetic channel', true) returning id`;
+  const [wastage] = await sql<{ id: string }[]>`insert into order_wastages (org_id, store_id, sales_day_id, channel_id, channel, type_mode, amount, reason, created_by) values (${f.orgId}, ${f.storeId}, ${day!.id}, ${channel!.id}, 'Synthetic channel', 'tracked', '1.00', 'Synthetic incident', ${f.adminId}) returning id`;
+  return { ...f, wastageId: wastage!.id };
+}
+type Fx = Awaited<ReturnType<typeof createFixture>>;
 let fxPromise: Promise<Fx> | null = null;
-const fixture = () => (fxPromise ??= moneyFixture(sql, 't440s5'));
+const fixture = () => (fxPromise ??= createFixture());
 
 /** The sentence the SCREEN shows for this value: the rule set's own, so client === server is the thing under test. */
 function sentence(rule: Parameters<typeof checkField>[0], value: string): string {
@@ -90,9 +99,11 @@ async function count(table: string, orgId: string): Promise<number> {
 async function refused(table: string, go: (f: Fx) => Promise<{ flash: { error?: string } }>, want: string) {
   const f = await fixture();
   const before = await count(table, f.orgId);
+  const beforeRows = Array.from(await sql.unsafe(`select * from ${table} where org_id = $1 order by id`, [f.orgId]));
   const o = await go(f);
   expect(o.flash.error).toBe(want);
   expect(await count(table, f.orgId)).toBe(before);
+  expect(Array.from(await sql.unsafe(`select * from ${table} where org_id = $1 order by id`, [f.orgId]))).toEqual(beforeRows);
 }
 
 describe('T-440 S5: a bad value is refused with the rule sentence and nothing is written', () => {
@@ -112,10 +123,10 @@ describe('T-440 S5: a bad value is refused with the rule sentence and nothing is
     );
   });
 
-  it('wastage reverseAutoChargeAction: a blank reason is refused before any lookup (mutant: assert removed from reverseAutoChargeAction)', async () => {
+  it('wastage reverseAutoChargeAction: a blank reason is refused after the target authorization (mutant: assert removed)', async () => {
     await refused(
       'order_wastages',
-      (f) => run('wastage/actions', 'reverseAutoChargeAction', { id: FAKE_ID, storeId: f.storeId, reason: '' }),
+      (f) => run('wastage/actions', 'reverseAutoChargeAction', { id: f.wastageId, storeId: f.storeId, reason: '' }),
       sentence(WASTAGE_REVERSE_RULES.reason, ''),
     );
   });

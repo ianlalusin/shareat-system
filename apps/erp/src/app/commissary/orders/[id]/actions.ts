@@ -13,8 +13,8 @@
  */
 import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
-import { authorize, type Actor } from '@shareat/auth';
-import { goneSentence, lowStockRepo, schema, type Tx } from '@shareat/db';
+import { authorize, can, type Actor } from '@shareat/auth';
+import { goneSentence, lowStockRepo, schema, tradeRepo, type Tx } from '@shareat/db';
 import { SHORTAGE_REASONS, type ShortageReason } from '@shareat/db/schema';
 import {
   assertFieldRules,
@@ -34,8 +34,6 @@ import {
   voidTradeOrder,
 } from '@shareat/domain';
 import {
-  COMMISSARY_LINE_EDIT_RULES,
-  COMMISSARY_ORDER_LINE_RULES,
   COMMISSARY_RECEIVE_RULES,
   COMMISSARY_REJECT_RULES,
   COMMISSARY_WITHDRAW_RULES,
@@ -153,7 +151,6 @@ export async function postMessageAction(fd: FormData): Promise<void> {
 export async function addLineAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
   return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
-    assertFieldRules(COMMISSARY_ORDER_LINE_RULES, fd);
     await addBranchOrderLine(tx, actor, {
       orderId,
       itemId: str(fd, 'itemId'),
@@ -167,7 +164,6 @@ export async function addLineAction(fd: FormData): Promise<void> {
 export async function updateLineAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
   return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
-    assertFieldRules(COMMISSARY_LINE_EDIT_RULES, fd);
     await updateBranchOrderLine(tx, actor, {
       orderId,
       lineId: str(fd, 'lineId'),
@@ -215,8 +211,8 @@ export async function withdrawOrderAction(fd: FormData): Promise<void> {
   let approval: { approverPersonId: string } | null = null;
   let storeOfOrder: string | null = null;
   try {
-    assertFieldRules(COMMISSARY_WITHDRAW_RULES, fd);
     const target = await loadDestructiveTarget(actor, 'trade_order', orderId, ['dispatch_branch_order', 'place_branch_order', 'fulfil_branch_order']);
+    assertFieldRules(COMMISSARY_WITHDRAW_RULES, fd);
     storeOfOrder = target.storeId;
     if (needsPin(target.status)) {
       approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'dispatch_branch_order' });
@@ -249,7 +245,19 @@ export async function receiveOrderAction(fd: FormData): Promise<void> {
     }))
     .filter((l) => l.lineId);
   const flash = await perform(orderId, async (tx, actor) => {
-    assertFieldRules(COMMISSARY_RECEIVE_RULES, fd);
+    // T-440 S9 (iii): `receiveTradeOrder` is shared with trade (a different rule set), so the field check stays here. It runs only
+    // for a caller that function's first authorize() would let in: 'confirm_receipt' at either store of a branch order, else
+    // 'approve_buyer' at the order's store. Anyone else is refused by that gate, logged once, before any field sentence.
+    const order = await tradeRepo.getOrderById(tx, actor.orgId, orderId);
+    if (
+      order &&
+      (order.requestedByStoreId
+        ? (await can(tx, actor, 'confirm_receipt', { storeId: order.requestedByStoreId })) ||
+          (await can(tx, actor, 'confirm_receipt', { storeId: order.storeId }))
+        : await can(tx, actor, 'approve_buyer', { storeId: order.storeId }))
+    ) {
+      assertFieldRules(COMMISSARY_RECEIVE_RULES, fd);
+    }
     const result = await receiveTradeOrder(tx, actor, {
       orderId,
       receivedOn: str(fd, 'receivedOn') || undefined,
@@ -287,7 +295,10 @@ export async function acceptOrderAction(fd: FormData): Promise<void> {
 export async function rejectOrderAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
   return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
-    assertFieldRules(COMMISSARY_REJECT_RULES, fd);
+    // T-440 S9 (iii): the field check stays here, and runs only for a caller `rejectOrder`'s first authorize()
+    // ('fulfil_branch_order' at the order's store) would let in; anyone else is refused by that gate before any field sentence.
+    const order = await tradeRepo.getOrderById(tx, actor.orgId, orderId);
+    if (order && (await can(tx, actor, 'fulfil_branch_order', { storeId: order.storeId }))) assertFieldRules(COMMISSARY_REJECT_RULES, fd);
     await rejectOrder(tx, actor, { orderId, reason: str(fd, 'reason') });
     return 'Rejected. The branch sees your reason on the thread and may order again.';
   }));
@@ -296,7 +307,6 @@ export async function rejectOrderAction(fd: FormData): Promise<void> {
 export async function fulfilLineAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
   return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
-    assertFieldRules(COMMISSARY_LINE_EDIT_RULES, fd);
     await fulfilLine(tx, actor, {
       orderId,
       lineId: str(fd, 'lineId'),
@@ -311,7 +321,6 @@ export async function fulfilLineAction(fd: FormData): Promise<void> {
 export async function proposeLineAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
   return await redirectWithFlash(`/commissary/orders/${orderId}`, {}, await perform(orderId, async (tx, actor) => {
-    assertFieldRules(COMMISSARY_ORDER_LINE_RULES, fd);
     await proposeLine(tx, actor, {
       orderId,
       itemId: str(fd, 'itemId'),

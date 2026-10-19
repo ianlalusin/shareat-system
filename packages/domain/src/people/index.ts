@@ -28,6 +28,8 @@ import { DEFAULT_POSITION, type EmploymentStatus } from '@shareat/db/schema';
 // NOT re-exported here — `tests/unit/position-defaults-callers.test.ts` is the closed-importer
 // guard that keeps it reachable only from this file, its own definition, and its integration test.
 import { reconcilePositionGrants } from './position-defaults';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { STAFF_RENAME_RULES } from '../field-rules/staff';
 // `OFFERABLE_TO_POSITIONS` crosses the barrel too: T-290's screen renders from it and the spec
 // says "import it, never re-derive it" — a second derivation in apps/erp is a second source of
 // truth. (T-289's own file list missed this line; T-290's build found it.)
@@ -305,6 +307,8 @@ export async function renamePerson(
   const employment = await employmentRepo.getEmployment(tx, input.employmentId);
   if (!employment || employment.orgId !== actor.orgId) throw new EmploymentError('That employment was not found.');
   await authorize(tx, actor, 'enrol_staff', { storeId: employment.storeId });
+  // T-440 S9 (ii): the screen's own rules, only once the gate has passed.
+  assertFieldRules(STAFF_RENAME_RULES, { lastName: input.lastName, firstName: input.firstName });
 
   const person = await personsRepo.getPersonById(tx, actor.orgId, employment.personId);
   if (!person) throw new EmploymentError('That person was not found.');

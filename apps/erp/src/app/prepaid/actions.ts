@@ -17,7 +17,7 @@ import {
 import type { PrepaidCategory } from '@shareat/db';
 import { compare, ZERO } from '@shareat/core/money';
 import { withOrgPrincipal } from './lib';
-import { PREPAID_MONTH_REVERSE_RULES, PREPAID_RELEASE_RULES, PREPAID_WRITE_OFF_RULES } from '@shareat/domain/field-rules';
+import { PREPAID_MONTH_REVERSE_RULES, PREPAID_WRITE_OFF_RULES } from '@shareat/domain/field-rules';
 import { assertFieldRules } from '@shareat/domain';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -64,7 +64,6 @@ export async function amortiseAction(formData: FormData): Promise<void> {
   const id = str(formData, 'prepaidItemId');
   let summary = '';
   try {
-    assertFieldRules(PREPAID_RELEASE_RULES, formData);
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       amortisePrepaidItem(tx, actor, {
         prepaidItemId: id,
@@ -107,9 +106,9 @@ export async function reverseMonthAction(formData: FormData): Promise<void> {
   const period = str(formData, 'period');
   try {
     const reason = str(formData, 'reason');
-    assertFieldRules(PREPAID_MONTH_REVERSE_RULES, formData);
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const target = await loadDestructiveTarget(actor, 'prepaid_item', id, ['run_amortisation']);
+    assertFieldRules(PREPAID_MONTH_REVERSE_RULES, formData);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'run_amortisation' });
     await withOrgPrincipal(actor.orgId, async (tx) => {
       await reverseAmortisation(tx, actor, { prepaidItemId: id, period, reason });
@@ -134,9 +133,9 @@ export async function writeOffAction(formData: FormData): Promise<void> {
   const refundAccountCode = str(formData, 'refundAccountCode');
   const writtenOffOn = str(formData, 'writtenOffOn');
   try {
-    assertFieldRules(PREPAID_WRITE_OFF_RULES, formData);
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const target = await loadDestructiveTarget(actor, 'prepaid_item', id, ['manage_prepaid_items']);
+    assertFieldRules(PREPAID_WRITE_OFF_RULES, formData);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'manage_prepaid_items' });
     const result = await withOrgPrincipal(actor.orgId, async (tx) => {
       const writtenOff = await writeOffPrepaidItem(tx, actor, {

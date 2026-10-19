@@ -17,9 +17,7 @@ import {
   discardMinimumWage,
   discardStatutoryRate,
   discardWithholdingBracketSet,
-  assertFieldRules,
 } from '@shareat/domain';
-import { PAYROLL_BRACKET_SET_RULES, PAYROLL_MIN_WAGE_RULES, PAYROLL_STATUTORY_RATE_RULES } from '@shareat/domain/field-rules';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { redirectWithFlash } from '../../../lib/flash';
@@ -36,7 +34,6 @@ const blank = (v: string): string | null => (v === '' ? null : v);
 export async function addStatutoryRateAction(fd: FormData): Promise<void> {
   const actor = await requireActor(PAGE);
   try {
-    assertFieldRules(PAYROLL_STATUTORY_RATE_RULES, fd);
     await withOrgPrincipal(actor.orgId, (tx) =>
       addStatutoryRate(tx, actor, {
         agency: str(fd, 'agency') as 'sss' | 'philhealth' | 'pagibig',
@@ -99,7 +96,6 @@ function parseBracketLines(text: string): { over: string; baseTax: string; rate:
 export async function addWithholdingBracketSetAction(fd: FormData): Promise<void> {
   const actor = await requireActor(PAGE);
   try {
-    assertFieldRules(PAYROLL_BRACKET_SET_RULES, fd);
     await withOrgPrincipal(actor.orgId, (tx) =>
       addWithholdingBracketSet(tx, actor, {
         frequency: str(fd, 'frequency') as 'monthly' | 'semi_monthly' | 'weekly',
@@ -134,7 +130,6 @@ export async function confirmWithholdingBracketSetAction(fd: FormData): Promise<
 export async function addMinimumWageAction(fd: FormData): Promise<void> {
   const actor = await requireActor(PAGE);
   try {
-    assertFieldRules(PAYROLL_MIN_WAGE_RULES, fd);
     await withOrgPrincipal(actor.orgId, (tx) =>
       addMinimumWage(tx, actor, {
         storeId: str(fd, 'storeId'),

@@ -37,7 +37,7 @@ import { compare, isZero, money, subtract, ZERO, type Money } from '@shareat/cor
 import { parseMoneyInput } from '../shared/money-input';
 import { parseWholeNumberInput } from '../shared/whole-number-input';
 import { assertFieldRules } from '../shared/field-rules-assert';
-import { PREPAID_ADD_RULES, PREPAID_TERM_RULES } from '../field-rules/prepaid';
+import { PREPAID_ADD_RULES, PREPAID_RELEASE_RULES, PREPAID_TERM_RULES } from '../field-rules/prepaid';
 import { buildStraightLine, periodsThroughOf, type SchedulePeriod } from '../shared/straight-line';
 import { readPolicyOrRefuse } from '../fixed-assets/policy';
 import { refuse } from '../shared/refusal';
@@ -224,6 +224,9 @@ async function runAmortise(
 ): Promise<AmortiseResult> {
   // ⭐ The gate is at the boundary; `amortiseItemCore` below is shared with the scheduled run.
   await authorize(tx, actor, 'run_amortisation', {});
+  // T-440 / S9: the screen's own rule judges the box AFTER the gate (T-364 order). Moved here from the action; not in
+  // `amortiseItemCore`, which the scheduled run shares.
+  assertFieldRules(PREPAID_RELEASE_RULES, { asOfPeriod: input.asOfPeriod });
   return amortiseItemCore(tx, actor.orgId, actor.personId, input);
 }
 

@@ -10,8 +10,7 @@
  *
  * ⭐ The actor comes from `requireActor()`, never the form (T-138, bible §7.1).
  */
-import { assertFieldRules, createMoneyAccount, renameMoneyAccount, retireMoneyAccount } from '@shareat/domain';
-import { MONEY_ACCOUNT_CREATE_RULES, MONEY_ACCOUNT_RENAME_RULES } from '@shareat/domain/field-rules';
+import { createMoneyAccount, renameMoneyAccount, retireMoneyAccount } from '@shareat/domain';
 import type { Custodian, MoneyInstrument } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
@@ -31,7 +30,6 @@ export async function createMoneyAccountAction(formData: FormData): Promise<void
   const actor = await requireActor();
 
   try {
-    assertFieldRules(MONEY_ACCOUNT_CREATE_RULES, formData);
     const storeId = str(formData, 'storeId');
 
     await withOrgPrincipal(actor.orgId, (tx) =>
@@ -72,7 +70,6 @@ export async function renameMoneyAccountAction(formData: FormData): Promise<void
   const actor = await requireActor();
 
   try {
-    assertFieldRules(MONEY_ACCOUNT_RENAME_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       renameMoneyAccount(tx, actor, {
         moneyAccountId: str(formData, 'moneyAccountId'),

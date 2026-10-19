@@ -27,7 +27,6 @@ import {
   ASSET_DISPOSE_RULES,
   ASSET_IN_SERVICE_CONFIRM_RULES,
   ASSET_IN_SERVICE_RULES,
-  ASSET_TERMS_RULES,
 } from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
@@ -36,7 +35,7 @@ import { redirectWithFlash, type Nav } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
 import { ASSET_IN_SERVICE_EDIT, ASSET_TERMS_EDIT } from './typed-forms';
 import { recordingRefusalsFor } from '../expenses/lib';
-import { verifyAdminApproval } from '@shareat/auth';
+import { can, verifyAdminApproval } from '@shareat/auth';
 import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
@@ -56,8 +55,6 @@ export async function createAssetAction(formData: FormData): Promise<void> {
   let newId: string;
 
   try {
-    // T-440: the same rule set the screen shows. In the action, not in createAsset: the domain has other callers (A6).
-    assertFieldRules(ASSET_CREATE_RULES, formData);
     const storeId = str(formData, 'storeId');
 
     const lifeRaw = str(formData, 'usefulLifeMonths');
@@ -69,8 +66,11 @@ export async function createAssetAction(formData: FormData): Promise<void> {
     const inServiceSource: fixedAssetsRepo.InServiceSource | undefined =
       inServiceModeRaw === 'acquired' || inServiceModeRaw === 'set' ? inServiceModeRaw : undefined;
 
-    const result = await withOrgPrincipal(actor.orgId, (tx) =>
-      createAsset(tx, actor, {
+    const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440: the same rule set the screen shows. In the action, not in createAsset: the domain has other callers (A6).
+      // Judged only once the actor holds the gate: capability copied from createAsset's first authorize() (S9 pattern iii).
+      if (await can(tx, actor, 'manage_fixed_assets', {})) assertFieldRules(ASSET_CREATE_RULES, formData);
+      return createAsset(tx, actor, {
         storeId,
         name: str(formData, 'name'),
         category: str(formData, 'category') as AssetCategory,
@@ -85,8 +85,8 @@ export async function createAssetAction(formData: FormData): Promise<void> {
         notes: str(formData, 'notes') || null,
         inServiceSource,
         inServiceOn: inServiceSource === 'set' ? str(formData, 'inServiceOn') : undefined,
-      }),
-    );
+      });
+    });
     newId = result.id;
   } catch (err) {
     return await redirectWithFlash('/fixed-assets/new', nav, { error: errorMessage(err) });
@@ -108,7 +108,6 @@ export async function updateTermsAction(formData: FormData): Promise<void> {
   const nav = carryNav(formData);
 
   try {
-    assertFieldRules(ASSET_TERMS_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       updateAssetTerms(tx, actor, assetId, {
         name: str(formData, 'name'),
@@ -145,16 +144,20 @@ export async function setAssetInServiceAction(formData: FormData): Promise<void>
 
   try {
     // The confirm step carries the plan token and only a reason; the edit form carries the date as well.
-    if (confirmedPlan !== undefined) assertFieldRules(ASSET_IN_SERVICE_CONFIRM_RULES, formData);
-    else assertFieldRules(ASSET_IN_SERVICE_RULES, formData);
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      setAssetInService(tx, actor, assetId, {
+    // Judged only once the actor holds the gate: capability copied from setAssetInService's first authorize() (S9 pattern iii;
+    // two rule sets, so the rule stays in the action).
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      if (await can(tx, actor, 'manage_fixed_assets', {})) {
+        if (confirmedPlan !== undefined) assertFieldRules(ASSET_IN_SERVICE_CONFIRM_RULES, formData);
+        else assertFieldRules(ASSET_IN_SERVICE_RULES, formData);
+      }
+      return setAssetInService(tx, actor, assetId, {
         mode,
         inServiceOn: mode === 'set' ? str(formData, 'inServiceOn') : undefined,
         reason: str(formData, 'reason'),
         confirmedPlan,
-      }),
-    );
+      });
+    });
   } catch (err) {
     const message = errorMessage(err);
     // "confirm to proceed" is `setAssetInService`'s own refusal shape (in-service.ts) — the ONE

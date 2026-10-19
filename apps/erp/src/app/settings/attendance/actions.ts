@@ -14,8 +14,7 @@
  * `authorize()` call, not here. Parsing before the gate let a non-holder's malformed field draw a
  * field sentence instead of the authorization refusal.
  */
-import { addLeaveType, assertFieldRules, setLeaveCap, setLeaveTypeActive, supersedeConfig, type ConfigChangesInput } from '@shareat/domain';
-import { SETTINGS_LEAVE_CAP_RULES, SETTINGS_LEAVE_KIND_RULES } from '@shareat/domain/field-rules';
+import { addLeaveType, setLeaveCap, setLeaveTypeActive, supersedeConfig, type ConfigChangesInput } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
@@ -123,15 +122,13 @@ export async function saveLeaveCapAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const store = str(formData, 'storeId');
   try {
-    // T-440: the caps' rule is the one the form shows live (field-rules/settings.ts); the domain keeps its own backstop for its other callers.
-    const caps = assertFieldRules(SETTINGS_LEAVE_CAP_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       setLeaveCap(tx, actor, {
         leaveType: str(formData, 'leaveType'),
         storeId: str(formData, 'scope') === 'org' ? null : store,
         positionId: str(formData, 'positionId') || null,
-        monthlyCap: capOf(caps.monthlyCap ?? null),
-        yearlyCap: capOf(caps.yearlyCap ?? null),
+        monthlyCap: capOf(str(formData, 'monthlyCap') || null),
+        yearlyCap: capOf(str(formData, 'yearlyCap') || null),
       }),
     );
   } catch (err) {
@@ -144,12 +141,10 @@ export async function addLeaveTypeAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const store = str(formData, 'storeId');
   try {
-    // T-440: the name and code rule is the one the form shows live (field-rules/settings.ts).
-    const kind = assertFieldRules(SETTINGS_LEAVE_KIND_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       addLeaveType(tx, actor, {
-        code: kind.code ?? '',
-        label: kind.label ?? '',
+        code: str(formData, 'code'),
+        label: str(formData, 'label'),
         paid: str(formData, 'paid') === 'paid',
         needsProof: bool(formData, 'needsProof'),
       }),

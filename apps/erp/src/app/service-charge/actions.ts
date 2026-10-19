@@ -11,8 +11,6 @@
 // and `@shareat/domain/money-input` (packages/domain/package.json). The barrel is the
 // orchestrator's to wire; this is additive and does not touch it.
 import { distributeServiceCharge } from '@shareat/domain/service-charge';
-import { assertFieldRules } from '@shareat/domain';
-import { SERVICE_CHARGE_DISTRIBUTE_RULES } from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { redirectWithFlash } from '@/lib/flash';
@@ -31,7 +29,6 @@ export async function distributeAction(formData: FormData): Promise<void> {
   let warning: string | undefined;
   try {
     if (!storeId) throw new Error('Choose a store.');
-    assertFieldRules(SERVICE_CHARGE_DISTRIBUTE_RULES, formData);
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       distributeServiceCharge(tx, actor, {
         storeId,

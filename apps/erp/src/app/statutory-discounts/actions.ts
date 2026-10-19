@@ -17,7 +17,7 @@ import { withOrgPrincipal } from '../expenses/lib';
 import { requireActor } from '../../lib/session';
 import { redirectWithFlash, type Nav } from '@/lib/flash';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
-import { verifyAdminApproval } from '@shareat/auth';
+import { can, verifyAdminApproval } from '@shareat/auth';
 import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
@@ -62,9 +62,11 @@ export async function recordStatutoryDiscountAction(formData: FormData): Promise
   const kind = str(formData, 'kind');
 
   try {
-    assertFieldRules(STATUTORY_DISCOUNT_RECORD_RULES, formData);
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      recordStatutoryDiscount(tx, actor, {
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 / S9 pattern iii: the rule stays in the action because the domain input is lossy (a blank discount kind arrives
+      // as 'senior'); judged only once the actor holds the gate - capability copied from recordStatutoryDiscount's first authorize().
+      if (await can(tx, actor, 'record_statutory_discount', { storeId })) assertFieldRules(STATUTORY_DISCOUNT_RECORD_RULES, formData);
+      return recordStatutoryDiscount(tx, actor, {
         storeId,
         businessDate: str(formData, 'businessDate'),
         invoiceNumber: str(formData, 'invoiceNumber'),
@@ -76,8 +78,8 @@ export async function recordStatutoryDiscountAction(formData: FormData): Promise
         discountAmount: str(formData, 'discountAmount'),
         signatory: str(formData, 'signatory') || null,
         notes: str(formData, 'notes') || null,
-      }),
-    );
+      });
+    });
   } catch (err) {
     return await redirectWithFlash('/statutory-discounts', navOf(formData), { error: errorMessage(err) });
   }

@@ -18,6 +18,8 @@ import type { Tx } from '@shareat/db';
 import { gone, refuse } from '../shared/refusal';
 import { parseDecimalInput } from '../shared/money-input';
 import { parseWholeNumberInput } from '../shared/whole-number-input';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { ASSET_TERMS_RULES } from '../field-rules/fixed-assets';
 import { MAX_USEFUL_LIFE_MONTHS } from './capitalize';
 import { DEPRECIATION_INTERVALS, type DepreciationInterval } from './schedule';
 
@@ -38,6 +40,8 @@ export async function updateAssetTerms(
   input: UpdateAssetTermsInput,
 ): Promise<void> {
   await authorize(tx, actor, 'manage_fixed_assets', {});
+  // T-440 / S9: the screen's own rule judges the boxes AFTER the gate (T-364 order). Moved here from the action.
+  assertFieldRules(ASSET_TERMS_RULES, { name: input.name, usefulLifeMonths: input.usefulLifeMonths, salvageValue: input.salvageValue });
 
   // T-374 S5 / DEF-584 — `Number('0x10')` was 16 and `Number('1e1')` was 10; the shared helper takes digits only.
   // A blank is refused too (a supplied terms form always carries a life).

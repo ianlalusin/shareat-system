@@ -26,6 +26,8 @@
  */
 import { toBusinessDate } from '@shareat/core/datetime';
 import { humanDate } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { STAFF_CARD_RULES } from '../field-rules/staff';
 import { randomBytes } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { authorize, type Actor } from '@shareat/auth';
@@ -144,6 +146,8 @@ export async function enrolCard(
     actorPersonId: actor.personId,
   });
   await authorize(tx, actor, 'manage_attendance', { storeId: employment.storeId });
+  // T-440 S9 (ii): the screen's own rules, only once the gate has passed.
+  assertFieldRules(STAFF_CARD_RULES, { cardId: input.cardId });
 
   const cardId = input.cardId.trim();
   if (!cardId) throw new CredentialError('A card needs an id — that is the whole credential.');

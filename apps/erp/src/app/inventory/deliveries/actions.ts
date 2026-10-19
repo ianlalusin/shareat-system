@@ -15,6 +15,7 @@
  */
 import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
+import { can } from '@shareat/auth';
 import { assertFieldRules, createDeliveryDocument, receiveDeliveryDocument, uploadFile } from '@shareat/domain';
 import { INVENTORY_DELIVERY_RULES } from '@shareat/domain/field-rules';
 import type { ShortageReason } from '@shareat/db/schema';
@@ -149,12 +150,14 @@ export async function createDeliveryAction(fd: FormData): Promise<void> {
   let deliveryId = '';
   let warning = '';
   try {
-    assertFieldRules(INVENTORY_DELIVERY_RULES, fd);
     const photo = fd.get('proofPhoto');
-    if (!(photo instanceof File) || photo.size === 0) {
-      throw new Error('A photo of the paper is required — a link or a typed reference is not evidence.');
-    }
     const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): the field check runs only for a caller `createDeliveryDocument`'s first authorize() would let in
+      // ('receive_delivery' at this store); anyone else is refused by that gate, and logged once, before any field sentence.
+      if (await can(tx, actor, 'receive_delivery', { storeId })) assertFieldRules(INVENTORY_DELIVERY_RULES, fd);
+      if (!(photo instanceof File) || photo.size === 0) {
+        throw new Error('A photo of the paper is required — a link or a typed reference is not evidence.');
+      }
       const uploaded = await uploadFile(tx, actor, {
         purpose: 'receipt_photo',
         storeId,

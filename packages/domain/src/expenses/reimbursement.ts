@@ -24,6 +24,8 @@ import { withInterStoreLegs } from '../ledger/inter-store';
 import { parseMoneyInput } from '../shared/money-input';
 import { EXPENSE_FUNDING_ACCOUNTS } from './routing';
 import { refuse, gone } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { EXPENSE_REIMBURSEMENT_RULES } from '../field-rules/expenses';
 
 /** "January 2026" - the month a fiscal period covers, for a sentence a person reads. */
 function monthLabel(startsOn: string): string {
@@ -66,6 +68,8 @@ export async function payReimbursement(
     // Same capability as an AP or loan payment — cash leaving the business to settle a
     // liability, gated the same way every other outgoing payment in this codebase is.
     await authorize(trx, actor, 'record_ap_payment', { storeId: input.storeId });
+    // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
+    assertFieldRules(EXPENSE_REIMBURSEMENT_RULES, { amount: input.amount, on: input.on, fromMoneyAccountId: input.fromMoneyAccountId });
 
     // The payoutId becomes part of the idempotency key, so a blank or malformed one would make
     // every such payout share a key (the second would "replay" the first). Refused here, not by

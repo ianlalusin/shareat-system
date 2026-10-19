@@ -43,6 +43,20 @@ const server = () => import('../../src/shared/field-rules-assert');
 const refusal = () => import('../../src/shared/refusal');
 const moneyInput = () => import('../../src/shared/money-input');
 
+it('money range checks keep the amount in core money, never Number()', async () => {
+  const source = readFileSync(join(LEAF_DIR, 'check.ts'), 'utf8');
+  const moneyCase = source.slice(source.indexOf("case 'money':"), source.indexOf("case 'date':"));
+  expect(moneyCase).not.toMatch(/\bNumber\s*\(/);
+  const { checkField, defineFieldRules } = await leaf();
+  const set = defineFieldRules('t440.money-boundary', {
+    amount: { label: 'The amount', kind: 'money', min: 0.01, max: 999999999999.98 },
+  });
+  expect(checkField(set.amount, '0.00').ok).toBe(false);
+  expect(checkField(set.amount, '0.01')).toEqual({ ok: true, value: '0.01' });
+  expect(checkField(set.amount, '999999999999.98')).toEqual({ ok: true, value: '999999999999.98' });
+  expect(checkField(set.amount, '999999999999.99').ok).toBe(false);
+});
+
 type Rule = Record<string, unknown> & { name: string; label: string; kind: string; optional?: true };
 type Check = { ok: true; value: string | null } | { ok: false; requirement: string; progress: string };
 
@@ -458,7 +472,7 @@ describe('pilot rule sets exist with the spec\'s rules (staff government IDs, su
     const name = (await setWithRule('name'))['name']!;
     expect(failed(await check(name, '   ')).progress).toBe('Required');
     expect(await check(name, '  ABC Meat  ')).toEqual({ ok: true, value: 'ABC Meat' });
-    expect(await check(sup.creditTermsDays!, '')).toEqual({ ok: true, value: null });
+    expect(await check(sup.creditTermsDays!, '')).toEqual({ ok: false, requirement: 'Days to pay is required.', progress: 'Required' });
     expect((await check(sup.creditTermsDays!, '365')).ok).toBe(true);
     // audit (b): "-0" is not a number of days; the rule is the ONE definition and the server speaks it.
     for (const bad of ['366', '-1', '-0', '-00', ' -0 ', '+5', '1.5', 'x']) expect((await check(sup.creditTermsDays!, bad)).ok, bad).toBe(false);

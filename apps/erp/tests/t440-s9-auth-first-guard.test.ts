@@ -119,6 +119,17 @@ function dominates(gate: ts.Node, at: ts.Node): boolean {
 }
 
 /** Does a gate (or an `if (await can(..))` around `at`) govern the position `at` inside top-level statement `stmt`? */
+function provesCan(expression: ts.Expression): boolean {
+  if (ts.isParenthesizedExpression(expression) || ts.isAwaitExpression(expression)) return provesCan(expression.expression);
+  if (ts.isCallExpression(expression)) return calleeName(expression) === 'can';
+  if (ts.isBinaryExpression(expression)) {
+    if (expression.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) return provesCan(expression.left) || provesCan(expression.right);
+    if (expression.operatorToken.kind === ts.SyntaxKind.BarBarToken) return provesCan(expression.left) && provesCan(expression.right);
+  }
+  if (ts.isConditionalExpression(expression)) return provesCan(expression.whenTrue) && provesCan(expression.whenFalse);
+  return false;
+}
+
 function gated(at: ts.Node, stmt: ts.Node, gateNames: Set<string>): boolean {
   const start = at.getStart();
   for (const c of callsIn(stmt)) {
@@ -127,7 +138,7 @@ function gated(at: ts.Node, stmt: ts.Node, gateNames: Set<string>): boolean {
   }
   for (let p: ts.Node | undefined = at; p && p !== stmt.parent; p = p.parent) {
     const par: ts.Node | undefined = p.parent;
-    if (par && ts.isIfStatement(par) && par.thenStatement === p && callsIn(par.expression).some((c) => calleeName(c) === 'can')) return true;
+    if (par && ts.isIfStatement(par) && par.thenStatement === p && provesCan(par.expression)) return true;
   }
   return false;
 }
@@ -320,6 +331,16 @@ export async function g6(tx, actor, fd) { await authorize(tx, actor, 'cap', {});
   it('C6b RED: `can` guarding the wrong branch (assert in the else, or outside the if)', () => {
     expect(fails(`export async function a(tx, actor, fd) { if (await can(tx, actor, 'cap', {})) { x(); } assertFieldRules(R, fd); }`)).toEqual(['x/actions.ts#a']);
     expect(fails(`export async function b(tx, actor, fd) { if (await can(tx, actor, 'cap', {})) { x(); } else { assertFieldRules(R, fd); } }`)).toEqual(['x/actions.ts#b']);
+  });
+  it('C6c RED: merely mentioning can in a condition must not permit an ungated path', () => {
+    expect(fails(`export async function a(tx, actor, fd) { if (!record || await can(tx, actor, 'cap', {})) assertFieldRules(R, fd); }`)).toEqual(['x/actions.ts#a']);
+    expect(fails(`export async function b(tx, actor, fd) { if (!(await can(tx, actor, 'cap', {}))) assertFieldRules(R, fd); }`)).toEqual(['x/actions.ts#b']);
+    expect(fails(`export async function c(tx, actor, fd) { if (flag ? true : await can(tx, actor, 'cap', {})) assertFieldRules(R, fd); }`)).toEqual(['x/actions.ts#c']);
+  });
+  it('C6d GREEN: every true path proves a positive capability result', () => {
+    expect(fails(`export async function a(tx, actor, fd) { if (record && (await can(tx, actor, 'cap', {}))) assertFieldRules(R, fd); }`)).toEqual([]);
+    expect(fails(`export async function b(tx, actor, fd) { if ((await can(tx, actor, 'a', {})) || (await can(tx, actor, 'b', {}))) assertFieldRules(R, fd); }`)).toEqual([]);
+    expect(fails(`export async function c(tx, actor, fd) { if (flag ? await can(tx, actor, 'a', {}) : await can(tx, actor, 'b', {})) assertFieldRules(R, fd); }`)).toEqual([]);
   });
   it('C7 RED: an EXEMPT or baseline entry whose function no longer exists; a listed entry that now passes', () => {
     const sites = run(`export async function a(tx, actor, fd) { await authorize(tx, actor, 'cap', {}); assertFieldRules(R, fd); }

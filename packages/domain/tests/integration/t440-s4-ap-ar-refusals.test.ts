@@ -9,9 +9,7 @@ import postgres from 'postgres';
  * the rule set good, so that rule is the first to fail) and proves two things: the person is told the rule's exact sentence (read
  * from the imported rule set, never a copy) and NOTHING was written (the action's own table keeps its row count).
  *
- * Every S4 action asserts at the top of the action, before it loads the target record or checks the PIN, so a made-up id is fine
- * for the void / reverse / write-off cases. createLoan, createPrepaidItem and confirmPrepaidTerm assert in the DOMAIN, after
- * `authorize` (T-364 order); the admin fixture actor passes the gate, so those cases prove the order too.
+ * S9: authorization comes first. Targets exist in the actor's store; generic passing text never replaces real scope ids.
  *
  * Session mocked (t412 idiom); redirects captured; the banner read through the flash jar. Every case names the mutant it kills;
  * the mutant is "the assertFieldRules call is removed from that action" unless stated otherwise.
@@ -34,7 +32,10 @@ vi.mock('../../../../apps/erp/src/lib/session', () => ({
 
 import { closeDb } from '@shareat/db';
 import { captureRedirect, outcomeOf, resetJar } from '../../../../tests/helpers/flash-jar';
-import { moneyFixture } from './_fixtures/t402-s3-money';
+import { moneyFixture, pendingInvoice } from './_fixtures/t402-s3-money';
+import { asOrgOn } from './_fixtures/pos-s6';
+import { createCustomer, createItem, createTradeOrder, dispatchTradeOrder, recordCollection, recordCustomerReturn, receiveDelivery, quantity } from '@shareat/domain';
+import { toBusinessDate } from '@shareat/core/datetime';
 import { checkField, rulesOf, type FieldRule, type FieldRuleSetLike } from '../../src/field-rules/check';
 import {
   INVOICE_EXPENSE_RULES, INVOICE_VOID_RULES, PAYMENT_VOID_RULES, SUPPLIER_INVOICE_LOG_RULES, SUPPLIER_PAYMENT_RULES,
@@ -60,9 +61,45 @@ afterAll(async () => {
   await sql.end({ timeout: 5 });
 });
 
-type Fx = Awaited<ReturnType<typeof moneyFixture>>;
+let fixtureStep = 'money base';
+async function createFixture() {
+  const f = await moneyFixture(sql, 't440s4');
+  await sql`update person_roles set role = 'super_admin' where person_id = ${f.adminId} and org_id = ${f.orgId}`;
+  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${f.orgId}::uuid, d::date, (d + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2026-03-01'::date, '2026-12-01'::date, '1 month') d`;
+  fixtureStep = 'pending invoice';
+  const invoiceId = await pendingInvoice(sql, f, '100.00');
+  // A valid draft payment needs no journal yet; it is never posted by these refusal cases.
+  const [payment] = await sql<{ id: string }[]>`insert into ap_payments (org_id, store_id, supplier_id, business_date, amount, money_account_id, created_by) values (${f.orgId}, ${f.storeId}, ${f.supplierId}, '2026-01-10', '1.00', ${f.drawerId}, ${f.adminId}) returning id`;
+  const [liability] = await sql<{ id: string }[]>`insert into liabilities (org_id, store_id, name, created_by) values (${f.orgId}, ${f.storeId}, 'Synthetic obligation', ${f.adminId}) returning id`;
+  const [loan] = await sql<{ id: string }[]>`insert into loans (org_id, store_id, name, lender_name, principal_amount, interest_rate, rate_period, interest_method, payment_frequency, term_periods, start_date, created_by) values (${f.orgId}, ${f.storeId}, 'Synthetic loan', 'Synthetic lender', '1000.00', '0', 'month', 'straight', 'monthly', 12, '2026-01-01', ${f.adminId}) returning id`;
+  const [prepaid] = await sql<{ id: string }[]>`insert into prepaid_items (org_id, store_id, name, category, coverage_start_date, coverage_months, total_cost, created_by) values (${f.orgId}, ${f.storeId}, 'Synthetic policy', 'insurance', '2026-01-01', 12, '12000.00', ${f.adminId}) returning id`;
+  fixtureStep = 'customer';
+  const customer = await asOrgOn(f.orgId, (tx) => createCustomer(tx, f.admin, { name: 'Synthetic buyer' }));
+  fixtureStep = 'item';
+  const item = await asOrgOn(f.orgId, (tx) => createItem(tx, f.admin, { name: 'Synthetic stock', kind: 'raw_material', baseUnit: 'kg', sellableWholesale: true }));
+  fixtureStep = 'delivery headers';
+  const [type] = await sql<{ id: string }[]>`insert into location_types (org_id, code, name) values (${f.orgId}, 'STK', 'Stockroom') returning id`;
+  const [location] = await sql<{ id: string }[]>`insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by) values (${f.orgId}, ${f.storeId}, 'A', 'Stockroom A', ${type!.id}, 'operating', true, ${f.adminId}) returning id`;
+  const [file] = await sql<{ id: string }[]>`insert into stored_files (org_id, store_id, purpose, storage_path, content_type, byte_size, checksum, uploaded_by) values (${f.orgId}, ${f.storeId}, 'receipt_photo', ${`orgs/${f.orgId}/receipt_photo/synthetic.jpg`}, 'image/jpeg', 100, 'synthetic', ${f.adminId}) returning id`;
+  const [delivery] = await sql<{ id: string }[]>`insert into deliveries (org_id, store_id, kind, delivered_on, proof_file_id, created_by) values (${f.orgId}, ${f.storeId}, 'purchase', '2026-01-01', ${file!.id}, ${f.adminId}) returning id`;
+  fixtureStep = 'delivery receipt';
+  await asOrgOn(f.orgId, (tx) => receiveDelivery(tx, { orgId: f.orgId, storeId: f.storeId, deliveryId: delivery!.id, deliveredOn: '2026-01-01', receivedBy: f.adminId, locations: [{ id: location!.id, role: 'operating', purpose: 'normal', isDefault: true, status: 'active' }], lines: [{ lineId: '1', itemId: item.id, itemKind: 'raw_material', receivedQuantity: quantity('10'), conversionFactor: '1', unitCost: '50.0000', locationId: location!.id }] }));
+  fixtureStep = 'trade order';
+  const order = await asOrgOn(f.orgId, (tx) => createTradeOrder(tx, f.admin, { storeId: f.storeId, customerId: customer.id, orderDate: '2026-01-10', lines: [{ itemId: item.id, quantity: '1', rate: '100.00' }] }));
+  fixtureStep = 'dispatch';
+  const dispatched = await asOrgOn(f.orgId, (tx) => dispatchTradeOrder(tx, f.admin, { orderId: order.orderId }));
+  const [line] = await sql<{ id: string }[]>`select id from trade_order_lines where order_id = ${order.orderId}`;
+  fixtureStep = 'customer return';
+  const returned = await asOrgOn(f.orgId, (tx) => recordCustomerReturn(tx, { actor: f.admin, tradeOrderId: order.orderId, returnedOn: toBusinessDate(), reason: 'Synthetic return', lines: [{ tradeOrderLineId: line!.id, quantity: '0.1' }] }));
+  if (!returned.ok || !dispatched.chargeId) throw new Error('Synthetic sale/return failed');
+  const chargeId = dispatched.chargeId;
+  fixtureStep = 'collection';
+  const collection = await asOrgOn(f.orgId, (tx) => recordCollection(tx, f.admin, { storeId: f.storeId, customerId: customer.id, collectionDate: toBusinessDate(), amount: '1.00', moneyAccountId: f.drawerId, allocations: [{ chargeId, amountApplied: '1.00' }] }));
+  return { ...f, invoiceId, paymentId: payment!.id, liabilityId: liability!.id, loanId: loan!.id, prepaidItemId: prepaid!.id, customerId: customer.id, chargeId: dispatched.chargeId, collectionId: collection.collectionId, orderId: order.orderId, tradeOrderId: order.orderId, tradeOrderLineId: line!.id, returnId: returned.returnId };
+}
+type Fx = Awaited<ReturnType<typeof createFixture>>;
 let fxPromise: Promise<Fx> | null = null;
-const fixture = () => (fxPromise ??= moneyFixture(sql, 't440s4'));
+const fixture = () => (fxPromise ??= createFixture().catch((cause) => { throw new Error(`T-440 S4 fixture failed during ${fixtureStep}`, { cause }); }));
 
 const GOOD: Record<string, string> = { text: 'Something', money: '500.00', date: '2020-01-02', number: '15', digits: '1234', pattern: 'abc' };
 
@@ -173,6 +210,7 @@ describe('T-440 S4: a bad value is refused with the rule sentence and nothing is
       const rule = (c.set as unknown as Record<string, FieldRule>)[c.rule];
       if (!rule) throw new Error(`${c.set.form} has no rule ${c.rule}`);
       const before = await count(c.table, f.orgId);
+      const beforeRows = Array.from(await sql.unsafe(`select * from ${c.table} where org_id = $1 order by id`, [f.orgId]));
 
       const mod = (await import(/* @vite-ignore */ `${APP}/${c.mod}`)) as Record<string, (fd: FormData) => Promise<void>>;
       const act = mod[c.action];
@@ -180,12 +218,19 @@ describe('T-440 S4: a bad value is refused with the rule sentence and nothing is
       resetJar();
       h.actor = f.admin;
       const fd = new FormData();
-      const fields = { storeId: f.storeId, ...(c.extra ?? {}), ...goodFields(c.set, c.good), [c.rule]: c.value };
+      // Keep real scope/record ids: generic text examples must not overwrite the fixture's authorization context.
+      const fields: Record<string, string> = { ...goodFields(c.set, c.good), ...(c.extra ?? {}), storeId: f.storeId };
+      for (const key of Object.keys(fields)) {
+        const real = f[key as keyof Fx];
+        if (typeof real === 'string' && key.endsWith('Id')) fields[key] = real;
+      }
+      fields[c.rule] = c.value;
       for (const [k, v] of Object.entries(fields)) fd.set(k, v);
       const o = outcomeOf(await captureRedirect(() => act(fd)));
 
       expect(o.flash.error).toBe(sentence(rule, c.value));
       expect(await count(c.table, f.orgId)).toBe(before);
+      expect(Array.from(await sql.unsafe(`select * from ${c.table} where org_id = $1 order by id`, [f.orgId]))).toEqual(beforeRows);
     });
   }
 });

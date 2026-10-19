@@ -7,8 +7,7 @@
  * feed is for its condition to stop being true. Acknowledging says *"I accept this for now"*, is
  * still counted, ages visibly, and expires after 30 days on its own.
  */
-import { acknowledgeFinding, assertFieldRules, bookMissedMonth, closePeriod, createMissingClosedPeriod } from '@shareat/domain';
-import { FINDINGS_MISSED_MONTH_RULES, FINDINGS_MISSING_PERIOD_RULES } from '@shareat/domain/field-rules';
+import { acknowledgeFinding, bookMissedMonth, closePeriod, createMissingClosedPeriod } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -74,8 +73,6 @@ export async function createMissingClosedPeriodAction(formData: FormData): Promi
 
   let result: Awaited<ReturnType<typeof createMissingClosedPeriod>>;
   try {
-    // T-440: the "why" box's rule is the one the form shows live (field-rules/findings.ts); the domain keeps its own backstop.
-    assertFieldRules(FINDINGS_MISSING_PERIOD_RULES, formData);
     result = await withOrgPrincipal(actor.orgId, (tx) =>
       createMissingClosedPeriod(tx, actor, { startsOn, endsOn, reason }),
     );
@@ -115,7 +112,6 @@ export async function bookMissedMonthAction(formData: FormData): Promise<void> {
   const schedule = scheduleRaw as 'depreciation' | 'amortisation';
 
   try {
-    assertFieldRules(FINDINGS_MISSED_MONTH_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       bookMissedMonth(tx, actor, { schedule, subjectId, belongsToPeriod, reason }),
     );

@@ -179,9 +179,9 @@ export async function voidUsageAction(fd: FormData): Promise<void> {
 
   let result: Awaited<ReturnType<typeof voidUsage>> | undefined;
   try {
-    assertFieldRules(INVENTORY_USAGE_VOID_RULES, fd);
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const target = await loadDestructiveTarget(actor, 'stock_usage_record', recordId, ['void_usage_record']);
+    assertFieldRules(INVENTORY_USAGE_VOID_RULES, fd);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'void_usage_record' });
     result = await withOrgPrincipal(actor.orgId, async (tx) => {
       const voided = await voidUsage(tx, actor, { recordId, reason });

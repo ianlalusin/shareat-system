@@ -17,7 +17,7 @@ import { parseMoneyInput } from '../shared/money-input';
 import { parseWholeNumberInput } from '../shared/whole-number-input';
 import { refuse } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
-import { LOAN_ADD_RULES } from '../field-rules/loans';
+import { LOAN_ADD_RULES, LOAN_DRAW_RULES, LOAN_PAYMENT_RULES } from '../field-rules/loans';
 import { postEntry } from '../ledger/post-entry';
 import { authorizeOtherStores, withInterStoreLegs } from '../ledger/inter-store';
 import { reverseEntry } from '../ledger/reverse-entry';
@@ -123,6 +123,8 @@ export async function disburseLoan(
     const loan = await loansRepo.getById(trx, actor.orgId, input.loanId);
     if (!loan) throw new Error(`disburseLoan: loan ${input.loanId} does not exist.`);
     await authorize(trx, actor, 'record_ap_payment', { storeId: loan.storeId });
+    // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
+    assertFieldRules(LOAN_DRAW_RULES, { amount: input.amount, intoMoneyAccountId: input.intoMoneyAccountId, on: input.on });
 
     const amount = parseMoneyInput(input.amount, 'disburseLoan: the amount', 'The loan amount');
     if (compare(amount, ZERO) <= 0) {
@@ -213,6 +215,8 @@ export async function recordLoanPayment(
     const loan = await loansRepo.getById(trx, actor.orgId, input.loanId);
     if (!loan) throw new Error(`recordLoanPayment: loan ${input.loanId} does not exist.`);
     await authorize(trx, actor, 'record_ap_payment', { storeId: loan.storeId });
+    // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
+    assertFieldRules(LOAN_PAYMENT_RULES, { amount: input.amount, fromMoneyAccountId: input.fromMoneyAccountId, on: input.on });
 
     const amount = parseMoneyInput(input.amount, 'recordLoanPayment: the amount', 'The payment amount');
     if (compare(amount, ZERO) <= 0) {

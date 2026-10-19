@@ -32,6 +32,8 @@ import { gone, refuse } from '../shared/refusal';
 import { notActiveItemSentence } from './not-active';
 import { formatItemCode, itemCodeStem, parseItemCode } from './code';
 import { allocateItemCode, requireItemCodeStem, validateItemCodeOverride } from './code-allocation';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { ITEMS_APPROVE_RULES, ITEMS_REQUEST_RULES, ITEMS_UNIT_RULES } from '../field-rules/items';
 
 export { ITEM_CODE_RE, formatItemCode, itemCodeStem, parseItemCode } from './code';
 export { allocateItemCode, requireItemCodeStem } from './code-allocation';
@@ -145,6 +147,7 @@ export async function changeItemBaseUnit(
 ): Promise<{ changed: boolean }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_item', {});
+    assertFieldRules(ITEMS_UNIT_RULES, { baseUnit: input.baseUnit });
     const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
     if (!item) throw gone(`changeItemBaseUnit: item ${input.itemId} does not exist.`, 'item');
     if (item.baseUnit === input.baseUnit) return { changed: false };
@@ -749,6 +752,7 @@ export async function requestItem(
 ): Promise<RequestItemResult> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_items', {});
+    assertFieldRules(ITEMS_REQUEST_RULES, { name: input.name, kind: input.kind, baseUnit: input.baseUnit });
     const name = input.name.trim();
     if (!name) throw new Error('requestItem: an item needs a name people will recognise.');
     // T-386 R6: a request takes NO code (I3). It stores a frozen preview - the next code at this moment, a preview and not a
@@ -801,6 +805,7 @@ export async function approveItemRequest(
 ): Promise<{ itemId: string; code: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_item', {});
+    assertFieldRules(ITEMS_APPROVE_RULES, { code: input.code, baseUnit: input.baseUnit });
     const req = await itemsRepo.getItemRequestById(trx, actor.orgId, input.requestId);
     if (!req) throw new Error(`approveItemRequest: request ${input.requestId} does not exist.`);
     if (req.status !== 'requested') {

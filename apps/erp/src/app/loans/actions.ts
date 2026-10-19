@@ -5,7 +5,7 @@
  *
  * ⛔ The gates live in the services, not here. A gate in a server action protects one caller.
  */
-import { LOAN_DRAW_RULES, LOAN_PAYMENT_RULES, LOAN_REVERSE_RULES } from '@shareat/domain/field-rules';
+import { LOAN_REVERSE_RULES } from '@shareat/domain/field-rules';
 import {
   assertFieldRules,
   createLoan,
@@ -62,7 +62,6 @@ export async function disburseLoanAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const id = str(formData, 'loanId');
   try {
-    assertFieldRules(LOAN_DRAW_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       disburseLoan(tx, actor, {
         loanId: id,
@@ -82,7 +81,6 @@ export async function recordPaymentAction(formData: FormData): Promise<void> {
   const id = str(formData, 'loanId');
   let summary = '';
   try {
-    assertFieldRules(LOAN_PAYMENT_RULES, formData);
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       recordLoanPayment(tx, actor, {
         loanId: id,
@@ -111,9 +109,9 @@ export async function reverseEntryAction(formData: FormData): Promise<void> {
   const id = str(formData, 'loanId');
   try {
     const reason = str(formData, 'reason');
-    assertFieldRules(LOAN_REVERSE_RULES, formData);
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const target = await loadDestructiveTarget(actor, 'loan', id, ['record_ap_payment']);
+    assertFieldRules(LOAN_REVERSE_RULES, formData);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'record_ap_payment' });
     const entryId = str(formData, 'entryId');
     await withOrgPrincipal(actor.orgId, async (tx) => {

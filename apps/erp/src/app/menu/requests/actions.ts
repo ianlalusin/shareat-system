@@ -10,7 +10,7 @@
 import { authorize } from '@shareat/auth';
 import { menuRepo } from '@shareat/db';
 import type { MenuItemType } from '@shareat/db/schema';
-import { MENU_REQUEST_REJECT_RULES, MENU_REQUEST_RULES } from '@shareat/domain/field-rules';
+import { MENU_REQUEST_RULES } from '@shareat/domain/field-rules';
 import {
   assertFieldRules,
   approveMenuItemRequest,
@@ -116,7 +116,6 @@ export async function markItemRequestDuplicateAction(fd: FormData): Promise<void
 export async function rejectItemRequestAction(fd: FormData): Promise<void> {
   const actor = await requireActor(PATH);
   try {
-    assertFieldRules(MENU_REQUEST_REJECT_RULES, fd);
     const id = requireId(fd, 'id', 'Choose a request.');
     await withOrgPrincipal(actor.orgId, (tx) => rejectMenuItemRequest(actor, { id, note: str(fd, 'note') }, tx));
   } catch (err) {

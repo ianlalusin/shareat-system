@@ -11,6 +11,7 @@
  * is money, whose sentence is `parseMoneyInput`'s own.
  */
 import { parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
+import { compare, money as exactMoney } from '@shareat/core/money';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 
 export type FieldKind = 'text' | 'digits' | 'pattern' | 'number' | 'money' | 'date';
@@ -22,6 +23,8 @@ export interface FieldRule {
   readonly label: string;
   /** A blank passes (and is stored as null). Otherwise a blank is "Required". */
   readonly optional?: true;
+  /** Judge only these controlling values; a missing controller fails closed. */
+  readonly when?: { readonly field: string; readonly equals: readonly string[]; readonly says: string };
   readonly kind: FieldKind;
   /** Length for text/digits; value for number/money. */
   readonly min?: number;
@@ -56,7 +59,10 @@ export function defineFieldRules<R extends Record<string, FieldRuleDef>>(form: s
   const out: Record<string, unknown> = { form };
   for (const [name, def] of Object.entries(rules)) {
     if (name === 'form') throw new Error(`defineFieldRules(${form}): a rule cannot be named "form"`);
-    out[name] = Object.freeze({ ...def, name });
+    if (def.when && (def.when.field === name || def.when.equals.length === 0)) {
+      throw new Error(`defineFieldRules(${form}): invalid condition for ${name}`);
+    }
+    out[name] = Object.freeze({ ...def, name, ...(def.when ? { when: Object.freeze({ ...def.when, equals: Object.freeze([...def.when.equals]) }) } : {}) });
   }
   return Object.freeze(out) as FieldRuleSet<Extract<keyof R, string>>;
 }
@@ -66,6 +72,20 @@ export function rulesOf(set: FieldRuleSetLike): FieldRule[] {
   return Object.values(set as Record<string, unknown>).filter(
     (v): v is FieldRule => typeof v === 'object' && v !== null && typeof (v as { kind?: unknown }).kind === 'string',
   );
+}
+
+/** Include unruled sibling controls so input/change/reset all update applicability. */
+export function ruleInputNames(set: FieldRuleSetLike): string[] {
+  return [...new Set(rulesOf(set).flatMap((rule) => rule.when ? [rule.name, rule.when.field] : [rule.name]))];
+}
+
+export function ruleApplies(rule: FieldRule, input: FieldInput): boolean {
+  if (!rule.when) return true;
+  const present = typeof FormData !== 'undefined' && input instanceof FormData
+    ? input.has(rule.when.field)
+    : Object.prototype.hasOwnProperty.call(input, rule.when.field);
+  if (!present) return true;
+  return rule.when.equals.includes((rawOf(input, rule.when.field) ?? '').trim());
 }
 
 /** Relational comparison on plain numbers (the numeric-write guard judges the operands of an inline `<` that came from a string). */
@@ -190,8 +210,9 @@ export function checkField(rule: FieldRule, raw: string | null | undefined): Fie
         const text = said ? said.split(`"${v}"`).join('that') : `${rule.label} must be an amount like 1250.00.`;
         return bad(rule, text, 'Enter an amount like 1250.00');
       }
-      const n = Number(money);
-      if ((rule.min !== undefined && lt(n, rule.min)) || (rule.max !== undefined && lt(rule.max, n))) {
+      const amount = exactMoney(money);
+      if ((rule.min !== undefined && compare(amount, exactMoney(String(rule.min))) < 0) ||
+          (rule.max !== undefined && compare(amount, exactMoney(String(rule.max))) > 0)) {
         return bad(rule, `${rule.label} must be an amount ${rangeWords(rule)}.`, numberRangeProgress(rule));
       }
       return { ok: true, value: money };
@@ -255,7 +276,7 @@ export interface NativeAttrs {
  */
 export function nativeAttrs(rule: FieldRule): NativeAttrs {
   const out: NativeAttrs = { name: rule.name };
-  if (rule.optional !== true) out.required = true;
+  if (rule.optional !== true && !rule.when) out.required = true;
   if (rule.kind === 'text' && rule.strip === undefined && rule.max !== undefined) out.maxLength = rule.max;
   if (rule.kind === 'digits' || (rule.kind === 'number' && rule.integer === true)) out.inputMode = 'numeric';
   else if (rule.kind === 'money' || rule.kind === 'number') out.inputMode = 'decimal';
@@ -278,6 +299,10 @@ export type CheckAll =
 export function checkAll(set: FieldRuleSetLike, input: FieldInput): CheckAll {
   const values: Record<string, string | null> = {};
   for (const rule of rulesOf(set)) {
+    if (!ruleApplies(rule, input)) {
+      values[rule.name] = null;
+      continue;
+    }
     const c = checkField(rule, rawOf(input, rule.name));
     if (!c.ok) return { ok: false, rule, requirement: c.requirement, progress: c.progress };
     values[rule.name] = c.value;

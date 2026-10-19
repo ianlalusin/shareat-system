@@ -20,9 +20,7 @@ import {
   rejectLeave,
   requestLeave,
   voidLeave,
-  assertFieldRules,
 } from '@shareat/domain';
-import { ATTENDANCE_LEAVE_RECORD_RULES, ATTENDANCE_LEAVE_REQUEST_RULES, ATTENDANCE_LEAVE_VOID_RULES } from '@shareat/domain/field-rules';
 import { redirectWithFlash } from '@/lib/flash';
 import { errorMessage } from '@/lib/constraint-messages';
 import { requireSession } from '../../../lib/session';
@@ -57,13 +55,14 @@ function leaveInput(fd: FormData) {
     days: expandRange(str(fd, 'from'), str(fd, 'to') || str(fd, 'from'), restDaySet(fd)),
     note: str(fd, 'note') || null,
     birthDate: str(fd, 'birthDate') || null,
+    // T-440 S9: the raw date fields travel to the domain, which judges them once the gate has passed.
+    screen: { from: str(fd, 'from'), to: str(fd, 'to'), birthDate: str(fd, 'birthDate') },
   };
 }
 
 export async function requestLeaveAction(formData: FormData): Promise<void> {
   const { actor } = await requireSession();
   try {
-    assertFieldRules(ATTENDANCE_LEAVE_REQUEST_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) => requestLeave(tx, actor, leaveInput(formData)));
   } catch (err) {
     return await redirectWithFlash(BACK, {}, { error: errorMessage(err) });
@@ -74,7 +73,6 @@ export async function requestLeaveAction(formData: FormData): Promise<void> {
 export async function recordLeaveAction(formData: FormData): Promise<void> {
   const { actor } = await requireSession();
   try {
-    assertFieldRules(ATTENDANCE_LEAVE_RECORD_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) => recordLeave(tx, actor, { ...leaveInput(formData), paid: payChoice(formData) }));
   } catch (err) {
     return await redirectWithFlash(BACK, {}, { error: errorMessage(err) });
@@ -115,7 +113,6 @@ export async function cancelLeaveAction(formData: FormData): Promise<void> {
 export async function voidLeaveAction(formData: FormData): Promise<void> {
   const { actor } = await requireSession();
   try {
-    assertFieldRules(ATTENDANCE_LEAVE_VOID_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) => voidLeave(tx, actor, { requestId: str(formData, 'requestId'), reason: str(formData, 'reason') }));
   } catch (err) {
     return await redirectWithFlash(BACK, {}, { error: errorMessage(err) });

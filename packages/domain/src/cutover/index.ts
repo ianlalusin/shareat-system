@@ -28,6 +28,8 @@ import { parseQuantityInput } from '../shared/quantity-input';
 import { compareQuantity, ZERO_QUANTITY } from '../stock/quantity';
 import { isZero, money } from '@shareat/core/money';
 import { refuse } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { CUTOVER_COUNT_RULES } from '../field-rules/cutover';
 import { capAuditText } from '../shared/audit-text';
 import { openingTieOut, tieOutDetail } from './tie-out';
 
@@ -258,6 +260,8 @@ export async function recordOpeningCount(
 ): Promise<void> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'run_cutover', { storeId: input.storeId });
+    // T-440 S9 (ii): the screen's own rules, only once the gate has passed.
+    assertFieldRules(CUTOVER_COUNT_RULES, { quantity: input.quantity, unitCost: input.unitCost });
     // Lock order: shared org lock, then the (store, item) lock, then row writes (see repo lockOpeningItem).
     await cutoverRepo.lockOpeningShared(trx, actor.orgId);
     await cutoverRepo.lockOpeningItem(trx, input.storeId, input.itemId);

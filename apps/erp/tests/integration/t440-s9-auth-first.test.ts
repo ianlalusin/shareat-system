@@ -152,4 +152,58 @@ describe('T-440 S9 behaviour - a caller without the capability is refused, not c
     };
     await expectAuthFirst(f, /needs a name|recognise/i, () => createCustomerAction(form('')), () => createCustomerAction(form('Aling Nena Store')));
   });
+  it('stock action pre-check: blank room code + no capability => authorization refusal, one denial', async () => {
+    const f = await fixture('stock');
+    const { createLocationAction } = await import('../../src/app/inventory/locations/actions');
+    const form = (code: string) => {
+      const fd = new FormData();
+      fd.set('storeId', f.storeId);
+      fd.set('code', code);
+      fd.set('name', 'Synthetic stockroom');
+      fd.set('typeId', '00000000-0000-4000-8000-000000000001');
+      fd.set('role', 'operating');
+      return fd;
+    };
+    await expectAuthFirst(f, /room code|needs a code|required/i, () => createLocationAction(form('')), () => createLocationAction(form('A')));
+  });
+  it('people domain check: blank surname + no capability => authorization refusal, one denial', async () => {
+    const f = await fixture('people');
+    const [job] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${f.orgId}, ${f.storeId}, ${f.staff.personId}, ${uid('job')}, 'regular', '2025-01-01') returning id`;
+    if (!job) throw new Error('Synthetic job was not inserted');
+    const { renamePersonAction } = await import('../../src/app/staff/actions');
+    const form = (lastName: string) => {
+      const fd = new FormData();
+      fd.set('employmentId', job.id);
+      fd.set('lastName', lastName);
+      fd.set('firstName', 'Ana');
+      return fd;
+    };
+    await expectAuthFirst(f, /last name|surname|required/i, () => renamePersonAction(form('')), () => renamePersonAction(form('Reyes')));
+  });
+  it('menu parser: fractional sort order + no capability => authorization refusal, one denial', async () => {
+    const f = await fixture('menu-sort');
+    const { createCategoryAction } = await import('../../src/app/menu/actions');
+    const form = (sort: string) => {
+      const fd = new FormData();
+      fd.set('name', 'Synthetic menu');
+      fd.set('sortOrder', sort);
+      return fd;
+    };
+    await expectAuthFirst(f, /whole number|sort order/i, () => createCategoryAction(form('1.5')), () => createCategoryAction(form('1')));
+  });
+  it('price parser: fractional bundle heads + no capability => authorization refusal, one denial', async () => {
+    const f = await fixture('menu-price');
+    const { setPriceAction } = await import('../../src/app/menu/prices/actions');
+    const form = (heads: string) => {
+      const fd = new FormData();
+      fd.set('storeId', f.storeId);
+      fd.set('variantId', '00000000-0000-4000-8000-000000000001');
+      fd.set('bundleHeads', heads);
+      fd.set('pricingMode', 'fixed');
+      fd.set('channel', 'dine_in');
+      fd.set('amount', '100.00');
+      return fd;
+    };
+    await expectAuthFirst(f, /whole number|guests in a bundle/i, () => setPriceAction(form('1.5')), () => setPriceAction(form('1')));
+  });
 });

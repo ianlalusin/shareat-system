@@ -9,8 +9,7 @@
  */
 import { revalidatePath } from 'next/cache';
 import { redirectWithFlash } from '@/lib/flash';
-import { assertFieldRules, saveBranchOrderDraft } from '@shareat/domain';
-import { COMMISSARY_ORDER_NEW_RULES } from '@shareat/domain/field-rules';
+import { saveBranchOrderDraft } from '@shareat/domain';
 import { errorMessageOf, withOrgPrincipal, peso } from './lib';
 import { requireActor } from '../../../lib/session';
 
@@ -41,7 +40,6 @@ export async function createOrderAction(fd: FormData): Promise<void> {
   let orderId = '';
   let total = '';
   try {
-    assertFieldRules(COMMISSARY_ORDER_NEW_RULES, fd);
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       saveBranchOrderDraft(tx, actor, {
         branchStoreId,

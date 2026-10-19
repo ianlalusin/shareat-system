@@ -36,7 +36,7 @@ import { closedMonthOf, closedMonths, periodOverrideProblem, readPeriodOverride 
 import { loadMoneyLines } from '@/lib/money-lines/load';
 import { requireActor } from '../../lib/session';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
-import { authorize, verifyAdminApproval, type Actor, type Capability } from '@shareat/auth';
+import { authorize, can, verifyAdminApproval, type Actor, type Capability } from '@shareat/auth';
 import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 import { redirectWithFlash, splitReturnTo, type Nav } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
@@ -128,7 +128,7 @@ async function parseExpenseForm(
   fallbackReturnTo: string,
   capabilities: readonly Capability[],
   /** T-440: the screen's own field rules for this form, judged right AFTER the gate (never before it, T-364). */
-  judgeFields?: () => void,
+  judgeFields?: (tx: Parameters<Parameters<typeof withOrgPrincipal>[1]>[0]) => Promise<void> | void,
 ): Promise<ParsedExpenseForm> {
   const storeId = str(formData, 'storeId');
   if (!storeId) throw new FieldError('Choose a store.', { field: 'store' });
@@ -137,8 +137,8 @@ async function parseExpenseForm(
   if (capabilities.length === 0) throw internalFault('parseExpenseForm: capabilities must not be empty');
   await withOrgPrincipal(actor.orgId, async (tx) => {
     for (const c of capabilities) await authorize(tx, actor, c, { storeId });
+    await judgeFields?.(tx);
   });
-  judgeFields?.();
 
   const carry = carryNav(formData);
   // ⭐ Each form names where it actually lives (`/expenses/new` or `/ap/invoices/[id]`) — a
@@ -251,8 +251,9 @@ export async function createExpenseAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   let parsed: ParsedExpenseForm;
   try {
-    parsed = await parseExpenseForm(formData, actor, '/expenses/new', ['create_expense'], () => {
-      assertFieldRules(EXPENSE_CREATE_RULES, formData);
+    parsed = await parseExpenseForm(formData, actor, '/expenses/new', ['create_expense'], async (tx) => {
+      // Capability copied from parseExpenseForm's gate for this form (S9 pattern iii); it has just passed, so this always judges.
+      if (await can(tx, actor, 'create_expense', { storeId: str(formData, 'storeId') })) assertFieldRules(EXPENSE_CREATE_RULES, formData);
     });
   } catch (err) {
     const returned = splitReturnTo(str(formData, 'returnTo'), '/expenses/new');

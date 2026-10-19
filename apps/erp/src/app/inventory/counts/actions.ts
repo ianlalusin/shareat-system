@@ -20,9 +20,7 @@ import { keepTyping } from '@/lib/keep-typing';
 import { COUNT_LINE } from './typed-forms';
 import { revalidatePath } from 'next/cache';
 import { AuthorizationError } from '@shareat/auth';
-import { INVENTORY_COUNT_LINE_RULES, INVENTORY_COUNT_OPEN_RULES } from '@shareat/domain/field-rules';
 import {
-  assertFieldRules,
   advanceCountSession,
   cancelCountSession,
   commitCount,
@@ -77,7 +75,6 @@ export async function openCountSessionAction(fd: FormData): Promise<void> {
   let sessionId: string | null = null;
   let errorText: string | null = null;
   try {
-    assertFieldRules(INVENTORY_COUNT_OPEN_RULES, fd);
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       openCountSession(tx, actor, { storeId, locationIds, countedOn, note: note || null }),
     );
@@ -104,7 +101,6 @@ export async function recordCountAction(fd: FormData): Promise<void> {
   let errorText: string | null = null;
   let denied = false;
   try {
-    assertFieldRules(INVENTORY_COUNT_LINE_RULES, fd);
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       // T-371 S3: the raw figure goes to the domain, which parses it after `authorize()` (R5) into a presentable refusal.
       recordCount(tx, actor, { sessionId, itemId, locationId, countedQuantity }),

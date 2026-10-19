@@ -11,7 +11,7 @@
 import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
 import { assertFieldRules, enrolCard, enrolFingerprint, revokeCredential } from '@shareat/domain';
-import { STAFF_CARD_RULES, STAFF_CREDENTIAL_REVOKE_RULES } from '@shareat/domain/field-rules';
+import { STAFF_CREDENTIAL_REVOKE_RULES } from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from '../../../expenses/lib';
 import { requireActor } from '../../../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -29,7 +29,6 @@ export async function enrolCardAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const employmentId = str(formData, 'employmentId');
   try {
-    assertFieldRules(STAFF_CARD_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       enrolCard(tx, actor, { employmentId, cardId: str(formData, 'cardId') }),
     );
@@ -68,9 +67,9 @@ export async function revokeCredentialAction(formData: FormData): Promise<void> 
   const credentialId = str(formData, 'credentialId');
   const reason = str(formData, 'reason');
   try {
-    assertFieldRules(STAFF_CREDENTIAL_REVOKE_RULES, formData);
     // T-412 Tier R: the person retypes the employee's name; the server compares it with the name IT loads.
     const target = await loadDestructiveTarget(actor, 'attendance_credential', credentialId, ['manage_attendance']);
+    assertFieldRules(STAFF_CREDENTIAL_REVOKE_RULES, formData);
     if (!retypeMatches(str(formData, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
     await withOrgPrincipal(actor.orgId, (tx) => revokeCredential(tx, actor, { credentialId, reason }));
   } catch (err) {

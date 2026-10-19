@@ -14,8 +14,7 @@
  * editable inbox would be a second, unattributed write path into payroll.
  */
 import { redirectWithFlash } from '@/lib/flash';
-import { assertFieldRules, discardQuarantined, retryQuarantined } from '@shareat/domain';
-import { ATTENDANCE_DISCARD_RULES } from '@shareat/domain/field-rules';
+import { discardQuarantined, retryQuarantined } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -57,7 +56,6 @@ export async function discardEventAction(formData: FormData): Promise<void> {
   const actor = await requireActor('/attendance/lane');
   const storeId = str(formData, 'storeId');
   try {
-    assertFieldRules(ATTENDANCE_DISCARD_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       discardQuarantined(tx, actor, {
         quarantineId: str(formData, 'quarantineId'),

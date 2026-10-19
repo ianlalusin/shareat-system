@@ -11,8 +11,7 @@
  * figures, the account, the date and the `payoutId` the page minted for THIS render — a second
  * submit of the same form carries the same `payoutId` and so posts once.
  */
-import { assertFieldRules, payReimbursement } from '@shareat/domain';
-import { EXPENSE_REIMBURSEMENT_RULES } from '@shareat/domain/field-rules';
+import { payReimbursement } from '@shareat/domain';
 import { parseMoneyInput } from '@shareat/domain/money-input';
 import { displayNameOf, peso, withOrgPrincipal } from './lib';
 import { closedMonthOf, closedMonths, periodOverrideProblem, readPeriodOverride } from '../../../lib/period-override';
@@ -36,7 +35,6 @@ export async function payReimbursementAction(formData: FormData): Promise<void> 
   // throw inside the try would be caught by our own catch (DEF-422).
   let flash: Flash;
   try {
-    assertFieldRules(EXPENSE_REIMBURSEMENT_RULES, formData);
     const amount = str(formData, 'amount');
 
     // The override is forwarded only when the payout's date really is in a CLOSED month: otherwise an

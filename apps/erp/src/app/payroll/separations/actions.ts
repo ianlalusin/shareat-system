@@ -28,10 +28,10 @@ export async function postSeparationAction(formData: FormData): Promise<void> {
   const employmentId = str(formData, 'employmentId');
   const separationDate = str(formData, 'separationDate');
   try {
-    assertFieldRules(PAYROLL_SEPARATION_RULES, formData);
     // T-412 Tier P: posting a separation pays out and ends the employment. An administrator's PIN, verified on the server
     // against the EMPLOYMENT's store (the record), not the form's `storeId`.
     const target = await loadDestructiveTarget(actor, 'employment', employmentId, ['run_payroll']);
+    assertFieldRules(PAYROLL_SEPARATION_RULES, formData);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'run_payroll' });
     await withOrgPrincipal(actor.orgId, async (tx) => {
       await postSeparation(tx, actor, {

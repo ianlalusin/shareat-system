@@ -35,6 +35,8 @@ vi.mock('../../../../apps/erp/src/lib/session', () => ({
 import { closeDb } from '@shareat/db';
 import { captureRedirect, outcomeOf, resetJar } from '../../../../tests/helpers/flash-jar';
 import { moneyFixture } from './_fixtures/t402-s3-money';
+import { asOrgOn } from './_fixtures/pos-s6';
+import { createMoneyTransfer } from '@shareat/domain';
 import { checkField, rulesOf, type FieldRule, type FieldRuleSetLike } from '../../src/field-rules/check';
 import {
   CASH_REQUEST_CREATE_RULES, CASH_REQUEST_APPROVE_RULES, CASH_REQUEST_REFUSE_RULES, CASH_REQUEST_RELEASE_RULES, CASH_REQUEST_SETTLE_RULES,
@@ -59,9 +61,22 @@ afterAll(async () => {
   await sql.end({ timeout: 5 });
 });
 
-type Fx = Awaited<ReturnType<typeof moneyFixture>>;
+async function createFixture() {
+  const f = await moneyFixture(sql, 't440s6');
+  const [office] = await sql<{ id: string }[]>`select id from money_accounts where store_id = ${f.storeId} and instrument = 'cash' and custodian = 'office' and is_foundation`;
+  const transfer = await asOrgOn(f.orgId, (tx) => createMoneyTransfer(tx, f.admin, { fromMoneyAccountId: f.drawerId, toMoneyAccountId: office!.id, amountOut: '10.00', amountIn: '10.00', transferDate: '2026-01-10' }));
+  // Requested cash and draft settlement/template records exist before their authorized bad-field posts.
+  const [request] = await sql<{ id: string }[]>`insert into cash_requests (org_id, store_id, requested_for, purpose, requested_amount, requested_on, created_by) values (${f.orgId}, ${f.storeId}, ${f.staffId}, 'Synthetic float', '100.00', '2026-01-10', ${f.adminId}) returning id`;
+  const [day] = await sql<{ id: string }[]>`insert into sales_days (org_id, store_id, business_date, total_sales, unli_sales, ala_carte_sales, created_by) values (${f.orgId}, ${f.storeId}, '2026-01-10', '0', '0', '0', ${f.adminId}) returning id`;
+  const [channel] = await sql<{ id: string }[]>`insert into sales_channels (org_id, store_id, name, is_remitted_daily, receivable_account_code) values (${f.orgId}, ${f.storeId}, 'Synthetic channel', false, '1220') returning id`;
+  const [settlement] = await sql<{ id: string }[]>`insert into channel_settlements (org_id, store_id, channel_id, sales_day_id, business_date, gross_amount, outstanding_cleared, net_deposited, destination_money_account_id, settled_on, created_by) values (${f.orgId}, ${f.storeId}, ${channel!.id}, ${day!.id}, '2026-01-10', '0', '0', '0', ${office!.id}, '2026-01-10', ${f.adminId}) returning id`;
+  const [template] = await sql<{ id: string }[]>`insert into recurring_expenses (org_id, store_id, name, category_id, supplier_id, default_amount, interval, anchor_day, starts_on, next_due_date, created_by) values (${f.orgId}, ${f.storeId}, 'Synthetic template', ${f.categoryId}, ${f.supplierId}, '100.00', 'monthly', 1, '2026-01-01', '2026-02-01', ${f.adminId}) returning id`;
+  const [remittance] = await sql<{ id: string }[]>`insert into remittances (org_id, store_id, remitted_on, created_by) values (${f.orgId}, ${f.storeId}, '2026-01-10', ${f.adminId}) returning id`;
+  return { ...f, requestedFor: f.staffId, fromMoneyAccountId: f.drawerId, toMoneyAccountId: office!.id, requestId: request!.id, channelId: channel!.id, settlementId: settlement!.id, templateId: template!.id, moneyTransferId: transfer.id, remittanceId: remittance!.id, salesDayId: day!.id };
+}
+type Fx = Awaited<ReturnType<typeof createFixture>>;
 let fxPromise: Promise<Fx> | null = null;
-const fixture = () => (fxPromise ??= moneyFixture(sql, 't440s6'));
+const fixture = () => (fxPromise ??= createFixture());
 
 const GOOD: Record<string, string> = { text: 'Something', money: '500.00', date: '2020-01-02', number: '15', digits: '1234', pattern: 'abc' };
 
@@ -142,6 +157,7 @@ describe('T-440 S6: a bad value is refused with the rule sentence and nothing is
       const rule = (c.set as unknown as Record<string, FieldRule>)[c.rule];
       if (!rule) throw new Error(`${c.set.form} has no rule ${c.rule}`);
       const before = await count(c.table, f.orgId);
+      const beforeRows = Array.from(await sql.unsafe(`select * from ${c.table} where org_id = $1 order by id`, [f.orgId]));
 
       const mod = (await import(/* @vite-ignore */ `${APP}/${c.mod}`)) as Record<string, (fd: FormData) => Promise<void>>;
       const act = mod[c.action];
@@ -149,12 +165,23 @@ describe('T-440 S6: a bad value is refused with the rule sentence and nothing is
       resetJar();
       h.actor = f.admin;
       const fd = new FormData();
-      const fields = { storeId: f.storeId, ...(c.extra ?? {}), ...goodFields(c.set), [c.rule]: c.value };
+      const fields: Record<string, string> = { ...goodFields(c.set), ...(c.extra ?? {}), storeId: f.storeId };
+      for (const key of Object.keys(fields)) {
+        const real = f[key as keyof Fx];
+        if (typeof real === 'string') fields[key] = real;
+      }
+      if (c.mod === 'money-transfers/actions') {
+        fields.fromMoneyAccountId ??= f.fromMoneyAccountId;
+        fields.toMoneyAccountId ??= f.toMoneyAccountId;
+        if (c.action === 'settleBetweenStoresAction') fields.settlementId = randomUUID();
+      }
+      fields[c.rule] = c.value;
       for (const [k, v] of Object.entries(fields)) fd.set(k, v);
       const o = outcomeOf(await captureRedirect(() => act(fd)));
 
       expect(o.flash.error).toBe(sentence(rule, c.value));
       expect(await count(c.table, f.orgId)).toBe(before);
+      expect(Array.from(await sql.unsafe(`select * from ${c.table} where org_id = $1 order by id`, [f.orgId]))).toEqual(beforeRows);
     });
   }
 });

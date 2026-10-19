@@ -25,6 +25,8 @@ import { parseMoneyInput } from '../shared/money-input';
 import { gone, humanDate, refuse } from '../shared/refusal';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { openingTieOut, tieOutRefusalText } from './tie-out';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { CUTOVER_FIGURE_RULES } from '../field-rules/cutover';
 import { assertOpeningWritable, assertPurgedAndNotOpened, writeOpeningStock } from './opening-stock';
 
 export const OPENING_EQUITY_CODE = '3900';
@@ -62,6 +64,13 @@ export async function addOpeningFigure(
 ): Promise<{ entryId: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'run_cutover', {});
+    // T-440 S9 (ii): the screen's own rules, only once the gate has passed.
+    assertFieldRules(CUTOVER_FIGURE_RULES, {
+      accountCode: input.accountCode,
+      storeId: input.storeId,
+      direction: input.direction,
+      amount: input.amount,
+    });
     // T-390 R13 + R8: the shared opening lock first, then the purge must have run and the books must not be open yet.
     await assertOpeningWritable(trx, actor.orgId, { requirePurge: true });
 

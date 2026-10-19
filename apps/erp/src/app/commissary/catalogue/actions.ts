@@ -10,8 +10,7 @@
  * and expenses actions do.
  */
 import { revalidatePath } from 'next/cache';
-import { assertFieldRules, removeMap, upsertCommissaryLink, upsertMap, upsertOffering } from '@shareat/domain';
-import { COMMISSARY_LINK_RULES, COMMISSARY_MAP_RULES, COMMISSARY_OFFERING_RULES } from '@shareat/domain/field-rules';
+import { removeMap, upsertCommissaryLink, upsertMap, upsertOffering } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -32,7 +31,6 @@ export async function upsertLinkAction(fd: FormData): Promise<void> {
 
   let message = '';
   try {
-    assertFieldRules(COMMISSARY_LINK_RULES, fd);
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       upsertCommissaryLink(tx, actor, { commissaryStoreId, branchStoreId, status }),
     );
@@ -59,7 +57,6 @@ export async function upsertOfferingAction(fd: FormData): Promise<void> {
 
   let message = '';
   try {
-    assertFieldRules(COMMISSARY_OFFERING_RULES, fd);
     await withOrgPrincipal(actor.orgId, (tx) =>
       upsertOffering(tx, actor, { commissaryStoreId, itemId, manualCost: manualCost || null, status }),
     );
@@ -78,7 +75,6 @@ export async function upsertMapAction(fd: FormData): Promise<void> {
 
   let message = '';
   try {
-    assertFieldRules(COMMISSARY_MAP_RULES, fd);
     await withOrgPrincipal(actor.orgId, (tx) =>
       upsertMap(tx, actor, {
         commissaryStoreId,

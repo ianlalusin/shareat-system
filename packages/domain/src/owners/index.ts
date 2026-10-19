@@ -22,6 +22,8 @@ import { reverseEntry } from '../ledger/reverse-entry';
 import { checkDraw } from '../money-accounts/overdraft';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { OWNERS_CLOSE_MONTH_RULES, OWNERS_CONTRIBUTION_RULES, OWNERS_CREATE_RULES, OWNERS_DRAWING_RULES } from '../field-rules/owners';
 
 export const CAPITAL_CODE = '3100';
 export const DRAWINGS_CODE = '3200';
@@ -74,6 +76,13 @@ export async function createOwner(
     // ⚠️ Admin, not manager. Who owns a store and what they may withdraw is a governance fact, not
     // a daily operation — the same reasoning that made renaming a money account admin-only.
     await authorize(trx, actor, 'manage_chart_of_accounts', { storeId: input.storeId });
+    // T-440 S9 (ii): the screen's own rules, only once the gate has passed.
+    assertFieldRules(OWNERS_CREATE_RULES, {
+      storeId: input.storeId,
+      personId: input.personId,
+      ownershipPercentage: input.ownershipPercentage,
+      drawingLimit: input.drawingLimit,
+    });
 
     // T-371 R6 — `drawing_limit` is NULLABLE: a blank box is no limit (null), never a guessed ₱0. A typed value parses
     // into the column's (14,2) brand with `parseMoneyInput`'s sentences unchanged.
@@ -157,6 +166,8 @@ export async function recordContribution(
     const owner = await ownersRepo.getById(trx, actor.orgId, input.ownerId);
     if (!owner) throw new Error(`recordContribution: owner ${input.ownerId} does not exist.`);
     await authorize(trx, actor, 'transfer_funds', { storeId: owner.storeId });
+    // T-440 S9 (ii): the screen's own rules, only once the gate has passed.
+    assertFieldRules(OWNERS_CONTRIBUTION_RULES, { amount: input.amount, intoMoneyAccountId: input.intoMoneyAccountId, on: input.on });
 
     const amount = parseMoneyInput(input.amount, 'recordContribution: the amount', 'The contribution amount');
     if (compare(amount, ZERO) <= 0) {
@@ -298,6 +309,8 @@ export async function recordDrawing(
     const owner = await ownersRepo.getById(trx, actor.orgId, input.ownerId);
     if (!owner) throw new Error(`recordDrawing: owner ${input.ownerId} does not exist.`);
     await authorize(trx, actor, 'transfer_funds', { storeId: owner.storeId });
+    // T-440 S9 (ii): the screen's own rules, only once the gate has passed.
+    assertFieldRules(OWNERS_DRAWING_RULES, { amount: input.amount, fromMoneyAccountId: input.fromMoneyAccountId, on: input.on });
 
     // ⛔ T-370 / DEF-516 (R3a) — held to COMMIT/ROLLBACK, AFTER authorize so a refused caller never
     // queues on the row: two concurrent drawings must not both read the cap before either posts.
@@ -667,6 +680,8 @@ export async function closeDrawingMonth(
     // ⚠️ `approve_expense`, not `transfer_funds`: agreeing a month is an approval, and the person
     // who took the money should not be the one who signs it off.
     await authorize(trx, actor, 'approve_expense', { storeId: owner.storeId });
+    // T-440 S9 (ii): the screen's own rules, only once the gate has passed.
+    assertFieldRules(OWNERS_CLOSE_MONTH_RULES, { acknowledgedAmount: input.acknowledgedAmount, on: input.on });
 
     const periodMonth = monthOf(input.month);
     if (await ownersRepo.closeFor(trx, actor.orgId, owner.id, periodMonth)) {

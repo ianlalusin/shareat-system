@@ -6,8 +6,7 @@
  * ⛔ Every gate is `authorize()` inside the service — `set_pay_rate` and `run_payroll`, both of
  * which deny a manager. A gate in a server action protects one caller.
  */
-import { assertFieldRules, postPayRun, setPayRate, voidPayRun } from '@shareat/domain';
-import { PAYROLL_PAY_RATE_RULES } from '@shareat/domain/field-rules';
+import { postPayRun, setPayRate, voidPayRun } from '@shareat/domain';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '../../lib/constraint-messages';
@@ -24,7 +23,6 @@ export async function setPayRateAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const store = str(formData, 'storeId');
   try {
-    assertFieldRules(PAYROLL_PAY_RATE_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       setPayRate(tx, actor, {
         employmentId: str(formData, 'employmentId'),

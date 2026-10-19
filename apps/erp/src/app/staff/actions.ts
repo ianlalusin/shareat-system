@@ -34,10 +34,9 @@ import {
   STAFF_HIRE_RULES,
   STAFF_PIN_RULES,
   STAFF_POSITION_RULES,
-  STAFF_RENAME_RULES,
 } from '@shareat/domain/field-rules';
 import type { EmploymentStatus } from '@shareat/db/schema';
-import { authorize, reopenPinSignIn, setPin } from '@shareat/auth';
+import { authorize, can, reopenPinSignIn, setPin } from '@shareat/auth';
 import { accessRepo, employmentRepo, refuse, storesRepo, type Tx } from '@shareat/db';
 import { listStores, withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
@@ -123,7 +122,10 @@ export async function hireAction(formData: FormData): Promise<void> {
 
   // T-440: the start date's rule is the one the screen shows live.
   try {
-    assertFieldRules(STAFF_HIRE_RULES, formData);
+    // S9 (iii): judged only once the actor holds the gate; capability copied from createEmployment's first authorize().
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      if (await can(tx, actor, 'enrol_staff', { storeId })) assertFieldRules(STAFF_HIRE_RULES, formData);
+    });
   } catch (err) {
     return await redirectWithFlash('/staff/hire', { store: storeId }, { error: errorMessage(err) });
   }
@@ -202,9 +204,9 @@ export async function endEmploymentAction(formData: FormData): Promise<void> {
   const employmentStatus = str(formData, 'employmentStatus') as EmploymentStatus;
 
   try {
-    assertFieldRules(STAFF_END_RULES, formData);
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const target = await loadDestructiveTarget(actor, 'employment', employmentId, ['enrol_staff']);
+    assertFieldRules(STAFF_END_RULES, formData);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'enrol_staff' });
     await withOrgPrincipal(actor.orgId, async (tx) => {
       await endEmployment(tx, actor, { employmentId, endedOn, employmentStatus });
@@ -239,13 +241,13 @@ export async function issuePinAction(formData: FormData): Promise<void> {
   const pin = str(formData, 'pin');
 
   try {
-    assertFieldRules(STAFF_PIN_RULES, formData);
     await withOrgPrincipal(actor.orgId, async (tx) => {
       const employment = await employmentRepo.getEmployment(tx, employmentId);
       if (!employment || employment.orgId !== actor.orgId) {
         throw new Error('That employment does not exist.');
       }
       await authorize(tx, actor, 'enrol_staff', { storeId: employment.storeId });
+      assertFieldRules(STAFF_PIN_RULES, formData);
       // T-412: an administrator's PIN approves destructive actions, so setting it is administrator work: a manager who may
       // issue ordinary staff PINs must not be able to choose one for an administrator and then use it.
       if (await accessRepo.personIsActiveAdmin(tx, actor.orgId, employment.personId)) await authorize(tx, actor, 'manage_users', {});
@@ -272,7 +274,6 @@ export async function renamePersonAction(formData: FormData): Promise<void> {
   const actor = await requireActor('/staff');
   const employmentId = str(formData, 'employmentId');
   try {
-    assertFieldRules(STAFF_RENAME_RULES, formData);
     await withOrgPrincipal(actor.orgId, (tx) =>
       renamePerson(tx, actor, {
         employmentId,
@@ -326,9 +327,9 @@ export async function issueAdminPinAction(formData: FormData): Promise<void> {
   const pin = str(formData, 'pin');
 
   try {
-    assertFieldRules(STAFF_PIN_RULES, formData);
     await withOrgPrincipal(actor.orgId, async (tx) => {
       await authorize(tx, actor, 'manage_users', {});
+      assertFieldRules(STAFF_PIN_RULES, formData);
       if (!UUID_SHAPE.test(personId) || !(await accessRepo.personIsActiveAdmin(tx, actor.orgId, personId))) {
         throw refuse(`issueAdminPin: ${personId} is not an active administrator of org ${actor.orgId}`, 'That person is not an active administrator.');
       }
@@ -351,8 +352,13 @@ export async function upsertStorePositionAction(formData: FormData): Promise<voi
 
   let outcome: string | undefined;
   try {
-    assertFieldRules(STAFF_POSITION_RULES, formData);
-    outcome = (await withOrgPrincipal(actor.orgId, (tx) => upsertStorePosition(tx, actor, { storeId, name })))?.outcome;
+    outcome = (
+      await withOrgPrincipal(actor.orgId, async (tx) => {
+        // S9 (iii): judged only once the actor holds the gate; capability copied from upsertStorePosition's first authorize().
+        if (await can(tx, actor, 'manage_store_settings', { storeId })) assertFieldRules(STAFF_POSITION_RULES, formData);
+        return upsertStorePosition(tx, actor, { storeId, name });
+      })
+    )?.outcome;
   } catch (err) {
     return await redirectWithFlash('/staff', { view: 'positions', store: storeId }, { error: errorMessage(err) });
   }

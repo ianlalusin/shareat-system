@@ -27,6 +27,14 @@ import { postEntry } from '../ledger/post-entry';
 import { parseMoneyInput } from '../shared/money-input';
 import { gone, refuse } from '../shared/refusal';
 import { capAuditText } from '../shared/audit-text';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import {
+  CASH_REQUEST_APPROVE_RULES,
+  CASH_REQUEST_CREATE_RULES,
+  CASH_REQUEST_REFUSE_RULES,
+  CASH_REQUEST_RELEASE_RULES,
+  CASH_REQUEST_SETTLE_RULES,
+} from '../field-rules/cash-requests';
 
 export const STAFF_FLOAT_CODE = '1120';
 /**
@@ -53,6 +61,14 @@ export async function createCashRequest(
 ): Promise<{ id: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'create_expense', { storeId: input.storeId });
+    // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
+    assertFieldRules(CASH_REQUEST_CREATE_RULES, {
+      storeId: input.storeId,
+      requestedFor: input.requestedFor,
+      purpose: input.purpose,
+      amount: input.amount,
+      on: input.on,
+    });
     const purpose = input.purpose.trim();
     if (!purpose) throw new Error('createCashRequest: say what the money is for.');
     const amount = parseMoneyInput(input.amount, 'createCashRequest: the amount', 'The amount requested');
@@ -91,6 +107,9 @@ export async function decideCashRequest(
     const req = await cashRequestsRepo.getById(trx, actor.orgId, input.requestId);
     if (!req) throw new Error(`decideCashRequest: request ${input.requestId} does not exist.`);
     await authorize(trx, actor, 'approve_expense', { storeId: req.storeId });
+    // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
+    if (input.decision === 'reject') assertFieldRules(CASH_REQUEST_REFUSE_RULES, { reason: input.reason });
+    else assertFieldRules(CASH_REQUEST_APPROVE_RULES, { amount: input.amount });
 
     // ⛔ v1's `decisionLocked`, as behaviour rather than a column: once money has moved, the
     // approval behind it cannot be edited. Changing it would rewrite the reason a payment happened.
@@ -202,6 +221,8 @@ export async function releaseCashRequest(
     const req = await cashRequestsRepo.getById(trx, actor.orgId, input.requestId);
     if (!req) throw new Error(`releaseCashRequest: request ${input.requestId} does not exist.`);
     await authorize(trx, actor, 'approve_expense', { storeId: req.storeId });
+    // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
+    assertFieldRules(CASH_REQUEST_RELEASE_RULES, { amount: input.amount, fromMoneyAccountId: input.fromMoneyAccountId, on: input.on });
 
     if (req.status !== 'approved') {
       throw new Error(
@@ -360,6 +381,8 @@ export async function settleCashRequest(
     const [req] = await cashRequestsRepo.lockForSpend(trx, actor.orgId, [input.requestId]);
     if (!req) throw gone(`settleCashRequest: request ${input.requestId} does not exist.`, 'cash request');
     await authorize(trx, actor, 'approve_expense', { storeId: req.storeId });
+    // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
+    assertFieldRules(CASH_REQUEST_SETTLE_RULES, { returnedAmount: input.returnedAmount, shortAmount: input.shortAmount, on: input.on });
     const holder = (await personsRepo.getPersonById(trx, actor.orgId, req.requestedFor))?.displayName ?? 'The holder';
     if (req.status !== 'released') {
       throw refuse(

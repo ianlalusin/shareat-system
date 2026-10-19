@@ -91,9 +91,9 @@ export async function revokeTerminalAction(formData: FormData): Promise<void> {
   const terminalId = str(formData, 'terminalId');
   const reason = str(formData, 'reason');
   try {
-    assertFieldRules(ATTENDANCE_TERMINAL_REVOKE_RULES, formData);
     // T-412 Tier R: the person retypes the terminal's label; the server compares it with the label IT loads.
     const target = await loadDestructiveTarget(actor, 'clock_terminal', terminalId, ['provision_clock_terminal']);
+    assertFieldRules(ATTENDANCE_TERMINAL_REVOKE_RULES, formData);
     if (!retypeMatches(str(formData, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
     await withOrgPrincipal(actor.orgId, (tx) =>
       revokeTerminal(tx, actor, createFirestoreTerminalDriver(), { terminalId, reason }),

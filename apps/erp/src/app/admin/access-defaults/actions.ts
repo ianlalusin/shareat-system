@@ -19,7 +19,7 @@
 import { accessRepo, type Tx } from '@shareat/db';
 import { assertFieldRules, retireStorePosition, setPositionDefault } from '@shareat/domain';
 import { ADMIN_COPY_DEFAULTS_RULES } from '@shareat/domain/field-rules';
-import { type Capability } from '@shareat/auth';
+import { can, type Capability } from '@shareat/auth';
 import { requireActor } from '../../../lib/session';
 import { activeDefaultsAtStore, bannerMessage, bulkBannerMessage, copyableDefaults, withOrgPrincipal } from './lib';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
@@ -173,7 +173,10 @@ export async function copyDefaultsAction(formData: FormData): Promise<void> {
   let anySkippedSelf = false;
   let rowsWritten = 0;
   try {
-    assertFieldRules(ADMIN_COPY_DEFAULTS_RULES, formData);
+    // T-440 S9 (iii): judged only once the actor holds the gate; capability copied from setPositionDefault's authorize().
+    await withOrgPrincipal(actor.orgId, async (tx: Tx) => {
+      if (await can(tx, actor, 'grant_capability', {})) assertFieldRules(ADMIN_COPY_DEFAULTS_RULES, formData);
+    });
     if (sourceStoreId === targetStoreId) {
       throw new Error('Choose a different store to copy from.');
     }

@@ -13,7 +13,7 @@ import { revalidatePath } from 'next/cache';
 import { tradeRepo } from '@shareat/db';
 import { compare, money, ZERO } from '@shareat/core/money';
 import { assertFieldRules, createTradeOrder, dispatchTradeOrder, receiveTradeOrder, setBirInvoiceNo, uploadFile, voidTradeOrder } from '@shareat/domain';
-import { TRADE_DISPATCH_RULES, TRADE_ORDER_RULES, TRADE_RECEIVE_RULES, TRADE_VOID_RULES } from '@shareat/domain/field-rules';
+import { TRADE_DISPATCH_RULES, TRADE_RECEIVE_RULES, TRADE_VOID_RULES } from '@shareat/domain/field-rules';
 import { SHORTAGE_REASONS, type ShortageReason } from '@shareat/db/schema';
 import { peso, withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
@@ -21,13 +21,15 @@ import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
 import { BIR_INVOICE_NO } from './typed-forms';
-import { verifyAdminApproval } from '@shareat/auth';
+import { can, verifyAdminApproval } from '@shareat/auth';
 import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
   return typeof v === 'string' ? v.trim() : '';
 }
+
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Repeated fields — one per line row. Parallel arrays, in document order. */
 function strs(fd: FormData, key: string): string[] {
@@ -50,7 +52,6 @@ export async function createOrderAction(fd: FormData): Promise<void> {
   let orderId = '';
   let total = '';
   try {
-    assertFieldRules(TRADE_ORDER_RULES, fd);
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       createTradeOrder(tx, actor, {
         storeId,
@@ -79,7 +80,6 @@ export async function dispatchOrderAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
   let message = '';
   try {
-    assertFieldRules(TRADE_DISPATCH_RULES, fd);
     // T-433 S1: a buyer who pays at the door. Blank amount = the old dispatch (billed, paid later on the customer's page).
     const payNowAmount = str(fd, 'payNowAmount');
     // ⭐ The proof is UPLOADED, never typed (same path as the customer page's collection). Upload, bill and collect share
@@ -87,6 +87,13 @@ export async function dispatchOrderAction(fd: FormData): Promise<void> {
     const proof = fd.get('receiptPhoto');
     const hasProof = proof instanceof File && proof.size > 0;
     const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 / S9 pattern iii (dispatchTradeOrder is also reached by commissary fulfilment): judged only once the actor holds the
+      // gate. Capability copied from dispatchTradeOrder's first authorize(): 'dispatch_branch_order' for a branch order, else
+      // 'approve_buyer', at the order's store. No such order: nothing to gate on, the domain refuses it by name.
+      const order = UUID_SHAPE.test(orderId) ? await tradeRepo.getOrderById(tx, actor.orgId, orderId) : null;
+      if (order && (await can(tx, actor, order.requestedByStoreId ? 'dispatch_branch_order' : 'approve_buyer', { storeId: order.storeId }))) {
+        assertFieldRules(TRADE_DISPATCH_RULES, fd);
+      }
       let payNow: { amount: string; moneyAccountId: string; receiptFileId: string | null; referenceNo: string | null } | null = null;
       if (payNowAmount) {
         let receiptFileId: string | null = null;
@@ -179,14 +186,26 @@ export async function receiveOrderAction(fd: FormData): Promise<void> {
 
   let message = '';
   try {
-    assertFieldRules(TRADE_RECEIVE_RULES, fd);
-    const result = await withOrgPrincipal(actor.orgId, (tx) =>
-      receiveTradeOrder(tx, actor, {
+    const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 / S9 pattern iii (receive is shared with the commissary screens): judged only once the actor holds the gate.
+      // Capability copied from receiveTradeOrder's first authorize(): 'confirm_receipt' at either store of a branch order, else
+      // 'approve_buyer' at the order's store. No such order: nothing to gate on, the domain refuses it by name.
+      const order = UUID_SHAPE.test(orderId) ? await tradeRepo.getOrderById(tx, actor.orgId, orderId) : null;
+      if (
+        order &&
+        (order.requestedByStoreId
+          ? (await can(tx, actor, 'confirm_receipt', { storeId: order.requestedByStoreId })) ||
+            (await can(tx, actor, 'confirm_receipt', { storeId: order.storeId }))
+          : await can(tx, actor, 'approve_buyer', { storeId: order.storeId }))
+      ) {
+        assertFieldRules(TRADE_RECEIVE_RULES, fd);
+      }
+      return receiveTradeOrder(tx, actor, {
         orderId,
         receivedOn: str(fd, 'receivedOn') || undefined,
         lines: lines.length > 0 ? lines : undefined,
-      }),
-    );
+      });
+    });
     message = result.entryId
       ? 'Receipt confirmed. Both stores’ books moved on what was actually signed for; any shortfall is an open transit discrepancy.'
       : 'Receipt recorded — who signed, and when. Nothing further posts for a sale: the value moved at dispatch.';
@@ -207,9 +226,9 @@ export async function voidOrderAction(fd: FormData): Promise<void> {
   const orderId = str(fd, 'orderId');
   let message = '';
   try {
-    assertFieldRules(TRADE_VOID_RULES, fd);
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const target = await loadDestructiveTarget(actor, 'trade_order', orderId, ['approve_buyer', 'dispatch_branch_order']);
+    assertFieldRules(TRADE_VOID_RULES, fd);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'approve_buyer' });
     const result = await withOrgPrincipal(actor.orgId, async (tx) => {
       const voided = await voidTradeOrder(tx, actor, { orderId, reason: str(fd, 'reason') });
