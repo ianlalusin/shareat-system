@@ -280,6 +280,59 @@
 .split-workspace {
   container-type: inline-size;
 }
+
+/* T-445, Ian's approved sample: full-width pages, content-sized fields. Wrapping depends
+   on available container space rather than the viewport or a fixed number of columns. */
+.erp-form-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.erp-form-fields > * {
+  flex: 0 1 20rem;
+  min-width: 0;
+  max-width: 100%;
+}
+.erp-field-short, .erp-form-fields > .erp-field-short { flex-basis: 8rem; max-width: min(100%, 8rem); }
+.erp-field-code, .erp-form-fields > .erp-field-code { flex-basis: 14rem; max-width: min(100%, 14rem); }
+.erp-field-date, .erp-form-fields > .erp-field-date { flex-basis: 11rem; max-width: min(100%, 11rem); }
+.erp-field-long, .erp-form-fields > .erp-field-long { flex-basis: 32rem; max-width: min(100%, 32rem); }
+.erp-form-fields > .erp-field-full, .erp-form-fields > .col-span-full { flex-basis: 100%; }
+.erp-form-section {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.erp-form-section > legend { margin-bottom: 0.5rem; padding: 0; }
+.erp-form-section + .erp-form-section { border-top: 1px solid var(--surface-border); padding-top: 0.75rem; }
+.erp-delivery-lines { container-type: inline-size; }
+@container (min-width: 54rem) {
+  .erp-delivery-line { grid-template-columns: minmax(14rem, 2fr) repeat(4, minmax(5rem, 1fr)) minmax(9rem, 1fr) auto; align-items: end; }
+  .erp-delivery-line > label:first-child { grid-column: auto; }
+}
+
+/* Include legacy native fields, keeping file selectors, switches and hidden inputs untouched.
+   Widths are ceilings, never minimums: even a 320px phone can shrink them safely. */
+.erp-page :where(input:not([type]), input[type="text"], input[type="email"], input[type="tel"], input[type="search"], select) { max-inline-size: min(100%, 32rem); }
+.erp-page :where(input[type="date"], input[type="month"], input[type="time"]) { max-inline-size: min(100%, 11rem); }
+.erp-page :where(input[inputmode="decimal"], input[inputmode="numeric"], input[type="number"]) { max-inline-size: min(100%, 10rem); }
+.erp-page :where(input[name="code"], input[name="referenceNo"], input[name="invoiceNo"]) { max-inline-size: min(100%, 14rem); }
+.erp-page :where(input[name="purchaseUnit"], input[name="baseUnit"], select[name="baseUnit"], input[name="creditTermsDays"]) { max-inline-size: min(100%, 8rem); }
+.erp-page :where(select[name="kind"], select[name="customerGroup"], select[name="vatType"], select[name="isOfficialReceipt"]) { max-inline-size: min(100%, 16rem); }
+@media (min-width: 768px) and (pointer: fine) {
+  [data-erp-control="single"]:not([type="file"]):not([type="checkbox"]):not([type="radio"]),
+  .erp-page :where(input:not([type]), input[type="text"], input[type="email"], input[type="tel"], input[type="search"], input[type="password"], input[type="number"], input[type="date"], input[type="month"], input[type="time"], input[type="url"], select) {
+    min-height: 32px;
+    padding-block: 0.25rem;
+  }
+  [data-erp-control="multiline"], .erp-page textarea {
+    min-height: 64px;
+    padding-block: 0.375rem;
+  }
+}
 @container (min-width: 58rem) {
   .split-workspace-grid {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

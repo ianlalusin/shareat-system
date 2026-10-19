@@ -123,10 +123,10 @@ export default async function ItemDetailPage({
         {mayApproveItem ? (
           <EditableRecord action={renameItemAction} label={item.name} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_RENAME, item.id, actor.personId)}>
             <FormGrid>
-              <Field label="Name">
+              <Field width="long" label="Name">
                 <Input id="rename-name" name="name" type="text" required defaultValue={item.name} className="w-full" />
               </Field>
-              <Field label="Code">
+              <Field width="code" label="Code">
                 <Input name="code" type="text" required defaultValue={item.code} className="w-full" />
               </Field>
               {/* T-386 R10 (q4): the code stays on rename; the tick offers the new suggestion. */}
@@ -182,7 +182,7 @@ export default async function ItemDetailPage({
           ) : (
             <EditableRecord action={setItemVariantOfAction} label={`${item.name} variation`} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_VARIANT, item.id, actor.personId)}>
               <FormGrid>
-                <Field label="Variation of">
+                <Field width="long" label="Variation of">
                   <Select name="parentId" defaultValue={item.variantOfItemId ?? ''} className="w-full">
                     <option value="">(none, a top-level item)</option>
                     {parentChoices.map((o) => (
@@ -215,7 +215,7 @@ export default async function ItemDetailPage({
         ) : (
           <EditableRecord action={changeItemUnitAction} label={`${item.name} unit`} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_UNIT, item.id, actor.personId)}>
             <FormGrid>
-              <Field label="Unit">
+              <Field width="short" label="Unit">
                 <Select name="baseUnit" required defaultValue={item.baseUnit} className="w-full">
                   {BASE_UNITS.map((u) => (
                     <option key={u} value={u}>{u}</option>

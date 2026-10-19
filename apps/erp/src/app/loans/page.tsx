@@ -5,7 +5,7 @@ import { METHOD_LABEL, listRegister, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Button, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Badge, Button, FlashBanner, Input, LinkRow, RowLink, Select , FormGrid, FormSection} from '@/components/ui';
 
 export const metadata = { title: 'Loans — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -118,81 +118,110 @@ export default async function LoansPage({
         </div>
 
         <form action={createLoanAction} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="What it is called">
-              <Input name="name" required maxLength={120} placeholder="Grab cash advance" className="w-full" />
-            </Field>
-            <Field label="Lender">
-              <Input name="lenderName" required maxLength={120} placeholder="Grab" className="w-full" />
-            </Field>
-            <Field label="Store">
-              <Select name="storeId" required defaultValue="" className="w-full">
-                <option value="">Choose a store…</option>
-                {stores.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.code})
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Amount agreed">
-              <input
-                name="principalAmount"
-                required
-                inputMode="decimal"
-                placeholder="0.00"
-                className={INPUT}
-              />
-            </Field>
-
-            <Field label="Interest rate (%)">
-              <input
-                name="interestRate"
-                required
-                inputMode="decimal"
-                className={INPUT}
-              />
-            </Field>
-            {/* ⛔ No default, deliberately. In v1 an absent rate period meant ANNUAL on old rows and
+          <>
+            <FormSection title="Loan and lender">
+              <FormGrid layout="fields">
+                <div className="min-w-0 erp-field-long">
+                  <Field label="What it is called">
+                    <Input name="name" required maxLength={120} placeholder="Grab cash advance" className="w-full" />
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-long">
+                  <Field label="Lender">
+                    <Input name="lenderName" required maxLength={120} placeholder="Grab" className="w-full" />
+                  </Field>
+                </div>
+                <div className="min-w-0">
+                  <Field label="Store">
+                    <Select name="storeId" required defaultValue="" className="w-full">
+                      <option value="">Choose a store…</option>
+                      {stores.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.code})
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+                <div className="min-w-0">
+                  <Field label="Amount agreed">
+                    <input
+                      name="principalAmount"
+                      required
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      className={INPUT}
+                    />
+                  </Field>
+                </div>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Interest">
+              <FormGrid layout="fields">
+                <div className="min-w-0">
+                  <Field label="Interest rate (%)">
+                    <input
+                      name="interestRate"
+                      required
+                      inputMode="decimal"
+                      className={INPUT}
+                    />
+                  </Field>
+                </div>
+                {/* ⛔ No default, deliberately. In v1 an absent rate period meant ANNUAL on old rows and
                 MONTHLY on new ones, with nothing on the row to tell them apart — so the same "2"
                 described two very different debts. */}
-            <Field label="…per" hint="A month is 30 days and a year is 365. Say which.">
-              <Select name="ratePeriod" required defaultValue="" className="w-full">
-                <option value="">Choose…</option>
-                {RATE_PERIODS.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-
-            <Field label="How interest is charged">
-              <Select name="interestMethod" defaultValue="straight" className="w-full">
-                {INTEREST_METHODS.map((m) => (
-                  <option key={m} value={m}>
-                    {METHOD_LABEL[m] ?? m}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Repaid">
-              <Select name="paymentFrequency" defaultValue="monthly" className="w-full">
-                {PAYMENT_FREQUENCIES.map((f) => (
-                  <option key={f} value={f}>
-                    {f}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-
-            <Field label="Number of payments">
-              <input name="termPeriods" inputMode="numeric" required defaultValue={12} className={INPUT} />
-            </Field>
-            <Field label="Starts">
-              <Input name="startDate" type="date" required defaultValue={today()} className="w-full" />
-            </Field>
-          </div>
+                <div className="min-w-0 erp-field-code">
+                  <Field label="…per" hint="A month is 30 days and a year is 365. Say which.">
+                    <Select name="ratePeriod" required defaultValue="" className="w-full">
+                      <option value="">Choose…</option>
+                      {RATE_PERIODS.map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+                <div className="min-w-0">
+                  <Field label="How interest is charged">
+                    <Select name="interestMethod" defaultValue="straight" className="w-full">
+                      {INTEREST_METHODS.map((m) => (
+                        <option key={m} value={m}>
+                          {METHOD_LABEL[m] ?? m}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Repayment schedule">
+              <FormGrid layout="fields">
+                <div className="min-w-0 erp-field-code">
+                  <Field label="Repaid">
+                    <Select name="paymentFrequency" defaultValue="monthly" className="w-full">
+                      {PAYMENT_FREQUENCIES.map((f) => (
+                        <option key={f} value={f}>
+                          {f}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-short">
+                  <Field label="Number of payments">
+                    <input name="termPeriods" inputMode="numeric" required defaultValue={12} className={INPUT} />
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-date">
+                  <Field label="Starts">
+                    <Input name="startDate" type="date" required defaultValue={today()} className="w-full" />
+                  </Field>
+                </div>
+              </FormGrid>
+            </FormSection>
+          </>
           <Field label="Notes">
             <Input name="notes" className="w-full" />
           </Field>

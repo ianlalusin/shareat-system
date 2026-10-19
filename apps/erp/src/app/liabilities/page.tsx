@@ -8,7 +8,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { ACTION_LINK } from '@/components/action-link';
-import { Banner, Button, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Banner, Button, FlashBanner, Input, LinkRow, RowLink, Select , FormGrid, FormSection} from '@/components/ui';
 
 export const metadata = { title: 'Liabilities — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -145,44 +145,64 @@ export default async function LiabilitiesPage({
         </div>
 
         <form action={createLiabilityAction} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Store">
-              <Select name="storeId" required defaultValue="" className="w-full">
-                <option value="" disabled>
-                  Choose…
-                </option>
-                {stores.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="What it is">
-              <Input name="name" required placeholder="Accrued rent — January" className="w-full" />
-            </Field>
-            <Field label="Category">
-              <Select name="category" defaultValue="other" className="w-full">
-                {LIABILITY_CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {CATEGORY_LABEL[c] ?? c}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field
-              label="Due"
-              hint="Optional — but an obligation with no due date can never be reported late."
-            >
-              <Input name="dueOn" type="date" defaultValue={today()} className="w-full" />
-            </Field>
-            <Field label="Description" hint="Optional.">
-              <Input name="description" className="w-full" />
-            </Field>
-            <Field label="Notes" hint="Optional.">
-              <Input name="notes" className="w-full" />
-            </Field>
-          </div>
+          <>
+            <FormSection title="Obligation">
+              <FormGrid layout="fields">
+                <div className="min-w-0">
+                  <Field label="Store">
+                    <Select name="storeId" required defaultValue="" className="w-full">
+                      <option value="" disabled>
+                        Choose…
+                      </option>
+                      {stores.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-long">
+                  <Field label="What it is">
+                    <Input name="name" required placeholder="Accrued rent — January" className="w-full" />
+                  </Field>
+                </div>
+                <div className="min-w-0">
+                  <Field label="Category">
+                    <Select name="category" defaultValue="other" className="w-full">
+                      {LIABILITY_CATEGORIES.map((c) => (
+                        <option key={c} value={c}>
+                          {CATEGORY_LABEL[c] ?? c}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </div>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Due date and details">
+              <FormGrid layout="fields">
+                <div className="min-w-0 erp-field-date">
+                  <Field
+                    label="Due"
+                    hint="Optional — but an obligation with no due date can never be reported late."
+                  >
+                    <Input name="dueOn" type="date" defaultValue={today()} className="w-full" />
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-long">
+                  <Field label="Description" hint="Optional.">
+                    <Input name="description" className="w-full" />
+                  </Field>
+                </div>
+                <div className="min-w-0 erp-field-long">
+                  <Field label="Notes" hint="Optional.">
+                    <Input name="notes" className="w-full" />
+                  </Field>
+                </div>
+              </FormGrid>
+            </FormSection>
+          </>
           <Button type="submit" variant="primary">
             Record obligation
           </Button>

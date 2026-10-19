@@ -104,7 +104,7 @@ export function ItemCodeField({ nameInputId, mode, canOverride, currentCode, ite
   const sameStem = shown?.sameStem ?? [];
 
   return (
-    <div ref={root} className="col-span-full space-y-2 text-sm">
+    <div ref={root} className={`${mode === 'new' ? 'erp-field-code' : 'col-span-full'} space-y-2 text-sm`}>
       {mode === 'new' && (
         <div>
           <span className="block text-xs font-medium text-neutral-500 dark:text-neutral-400">Code</span>

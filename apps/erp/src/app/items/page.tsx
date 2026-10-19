@@ -26,7 +26,7 @@ import { arrangeFamilies } from './family';
 import { BASE_UNITS, ITEM_KINDS, ITEM_KIND_LABEL, itemKindLabel } from '@shareat/db';
 import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
-import { Banner, Button, Checkbox, FlashBanner, Input, LinkRow, RowLink, Select, FormGrid, Field, SplitWorkspace } from '@/components/ui';
+import { Banner, Button, Checkbox, FlashBanner, Input, LinkRow, RowLink, Select, FormGrid, FormSection, Field, SplitWorkspace } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Items — Shareat System' };
@@ -77,91 +77,101 @@ export default async function ItemsPage({
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           Choose the unit used to measure stock and compare prices. Boxes and packs use conversions on the invoice.
         </p>
-        <form action={requestItemAction} className="space-y-3">
-          <FormGrid>
-            <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Name</span>} className="text-sm">
-              <Input id="item-name" name="name" required placeholder="Pork belly" className="mt-1 block w-full" />
-            </Field>
-            <ItemCodeField nameInputId="item-name" mode="new" canOverride={false} suggestAction={suggestItemCodeAction} />
-            <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Kind</span>} className="text-sm">
-              <select name="kind" required defaultValue="" className="mt-1 block w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink">
-                <option value="">Choose a kind</option>
-                {ITEM_KINDS.map((k) => (
-                  <option key={k} value={k}>{ITEM_KIND_LABEL[k]}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Measured in</span>} className="text-sm">
-              <Select name="baseUnit" required defaultValue="" className="mt-1 block w-full">
-                <option value="">Choose a unit</option>
-                {BASE_UNITS.map((u) => (
-                  <option key={u} value={u}>{u}</option>
-                ))}
-              </Select>
-            </Field>
-            <Field
-              span="full"
-              label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Variation of <span className="italic">(optional — e.g. Kimchi 250g under Kimchi)</span></span>}
-              className="text-sm"
-            >
-              <Select name="variantOfItemId" defaultValue="" className="mt-1 block w-full">
-                <option value="">(none, a top-level item)</option>
-                {parentOptions.map((o) => (
-                  <option key={o.id} value={o.id}>{o.name} ({o.code})</option>
-                ))}
-              </Select>
-            </Field>
-          <Field
-              span="full"
-              label={
-                <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
-                  Why do we need it? <span className="italic">(optional — helps whoever approves)</span>
-                </span>
-              }
-              className="text-sm"
-            >
-              <Input name="reason" className="mt-1 block w-full" />
-            </Field>
-          </FormGrid>
-          {/*
+            <form action={requestItemAction} className="space-y-3">
+              <FormSection title="Identity">
+                <FormGrid layout="fields">
+                  <Field width="long" label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Name</span>} className="text-sm">
+                    <Input id="item-name" name="name" required placeholder="Pork belly" className="mt-1 block w-full" />
+                  </Field>
+                  <ItemCodeField nameInputId="item-name" mode="new" canOverride={false} suggestAction={suggestItemCodeAction} />
+                  <Field width="code" label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Kind</span>} className="text-sm">
+                    <select name="kind" required defaultValue="" className="mt-1 block w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink">
+                      <option value="">Choose a kind</option>
+                      {ITEM_KINDS.map((k) => (
+                        <option key={k} value={k}>{ITEM_KIND_LABEL[k]}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field width="short" label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Measured in</span>} className="text-sm">
+                    <Select name="baseUnit" required defaultValue="" className="mt-1 block w-full">
+                      <option value="">Unit…</option>
+                      {BASE_UNITS.map((u) => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
+                    </Select>
+                  </Field>
+                </FormGrid>
+              </FormSection>
+              <FormSection title="Item family">
+                <FormGrid layout="fields">
+                  <Field width="long"
+                    span="full"
+                    label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Variation of <span className="italic">(optional — e.g. Kimchi 250g under Kimchi)</span></span>}
+                    className="text-sm"
+                  >
+                    <Select name="variantOfItemId" defaultValue="" className="mt-1 block w-full">
+                      <option value="">(none, a top-level item)</option>
+                      {parentOptions.map((o) => (
+                        <option key={o.id} value={o.id}>{o.name} ({o.code})</option>
+                      ))}
+                    </Select>
+                  </Field>
+                </FormGrid>
+              </FormSection>
+              <FormSection title="Request details">
+                <FormGrid layout="fields">
+                  <Field width="long"
+                    span="full"
+                    label={
+                      <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                        Why do we need it? <span className="italic">(optional — helps whoever approves)</span>
+                      </span>
+                    }
+                    className="text-sm"
+                  >
+                    <Input name="reason" className="mt-1 block w-full" />
+                  </Field>
+                </FormGrid>
+              </FormSection>
+              {/*
             ⭐ DEF-130. T-149's three independent facts. Until 2026-09-03 the form never asked, both
             "sold" columns default to false, and every item made here was sold to nobody — which
             `createTradeOrder` then refused, correctly, on its own gate.
           */}
-          <fieldset className="space-y-2 rounded border border-neutral-200 p-3 dark:border-neutral-800">
-            <legend className="px-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
-              What it may be bought and sold as
-            </legend>
-            <div className="grid gap-2 text-sm [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
-              <Checkbox name="isPurchasable" defaultChecked label="Bought from suppliers" />
-              <Checkbox name="sellableRetail" label="Sold à la carte (retail)" />
-              <Checkbox name="sellableWholesale" label="Sold to other stores or buyers (wholesale)" />
-            </div>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              Independent choices. &ldquo;Wholesale&rdquo; includes our branches, franchisees and outside buyers like Xlice — not diners. A store can override these choices on the item&rsquo;s page.
-            </p>
-          </fieldset>
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" variant="primary">Request item</Button>
-            {/* T-386 R7: the override belongs to the direct add (a super-admin), not to the request fields. */}
-            {canOverride && (
-              <label className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
-                Use a different code (super-admin)
-                <Input
-                  name="code"
-                  type="text"
-                  autoComplete="off"
-                  pattern="[A-Za-z0-9]{4}-[0-9]{3}"
-                  placeholder="CHWN-001"
-                  className="font-mono"
-                />
-              </label>
-            )}
-            <Button type="submit" variant="secondary" formAction={createItemAction}>
-              Add directly (super-admin)
-            </Button>
-          </div>
-        </form>
+              <fieldset className="space-y-2 rounded border border-neutral-200 p-3 dark:border-neutral-800">
+                <legend className="px-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                  What it may be bought and sold as
+                </legend>
+                <div className="grid gap-2 text-sm [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
+                  <Checkbox name="isPurchasable" defaultChecked label="Bought from suppliers" />
+                  <Checkbox name="sellableRetail" label="Sold à la carte (retail)" />
+                  <Checkbox name="sellableWholesale" label="Sold to other stores or buyers (wholesale)" />
+                </div>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                  Independent choices. &ldquo;Wholesale&rdquo; includes our branches, franchisees and outside buyers like Xlice — not diners. A store can override these choices on the item&rsquo;s page.
+                </p>
+              </fieldset>
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" variant="primary">Request item</Button>
+                {/* T-386 R7: the override belongs to the direct add (a super-admin), not to the request fields. */}
+                {canOverride && (
+                  <label className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                    Use a different code (super-admin)
+                    <Input
+                      name="code"
+                      type="text"
+                      autoComplete="off"
+                      pattern="[A-Za-z0-9]{4}-[0-9]{3}"
+                      placeholder="CHWN-001"
+                      className="font-mono"
+                    />
+                  </label>
+                )}
+                <Button type="submit" variant="secondary" formAction={createItemAction}>
+                  Add directly (super-admin)
+                </Button>
+              </div>
+            </form>
       </section>
 
         </>}
