@@ -16,12 +16,13 @@
  *   M3 voided counted; M4 window ignored; M5 sign flipped; M6 non-cash conversion counted; M7 convertNet not saved; M8 float drift.
  */
 import { describe, expect, it } from 'vitest';
-import { NEGATIVE_METHOD_NOTICE, buildHandoverRecord, computeExpectedCash, convertLineText, convertNetPesos, negativeMethods } from '@/lib/cash/convert-net';
+import { NEGATIVE_METHOD_NOTICE, buildHandoverRecord, computeExpectedCash, convertLineText, convertNetPesos, negativeMethods, handoverReadFrom, parseCashAdjustment } from '@/lib/cash/convert-net';
 
 const FROM = Date.parse('2026-10-14T08:00:00+08:00');
 const TO = Date.parse('2026-10-14T20:00:00+08:00');
 const at = (h: number) => Date.parse(`2026-10-14T${String(h).padStart(2, '0')}:00:00+08:00`);
-const isCash = (k: string) => k === 'Cash' || k.toLowerCase().includes('cash');
+// Cash and GCash are different tenders. A substring callback would make every cash/wallet move net to zero.
+const isCash = (k: string) => k === 'Cash' || /\bcash\b/i.test(k);
 const doc = (over: Record<string, unknown>) => ({ status: 'active', fromMethod: 'GCash', toMethod: 'Cash', amount: 100, createdAtClientMs: at(12), ...over }) as any;
 
 const acceptance7 = () => [
@@ -32,6 +33,25 @@ const acceptance7 = () => [
 ];
 
 describe('Acceptance 7 - shift-close reconciliation', () => {
+  it('manual adjustments use exact signed centavos and refuse malformed typed amounts', () => {
+    expect(parseCashAdjustment('')).toBe(0); expect(parseCashAdjustment(' +0.10 ')).toBe(10); expect(parseCashAdjustment('-100.25')).toBe(-10025);
+    for (const invalid of ['1e2', '1.234', '--5', '0x10']) expect(() => parseCashAdjustment(invalid)).toThrow();
+  });
+  it('an explicit signed adjustment is retained with its reason and included exactly once', () => {
+    const record = buildHandoverRecord({ startingCash: 2000, cashSales: 5000, convertNet: 1150, deductions: 0,
+      countedCash: 8300.25, manualCashAdjustment: 150.25, manualCashAdjustmentReason: '  Offline cash not yet synced  ' });
+    expect(record).toMatchObject({ expectedCash: 8300.25, variance: 0, manualCashAdjustment: 150.25, manualCashAdjustmentReason: 'Offline cash not yet synced' });
+    expect(computeExpectedCash({ startingCash: 2000, cashSales: 5000, convertNet: 1150, deductions: 0, manualCashAdjustment: -0.1 })).toBe(8149.9);
+    expect(() => buildHandoverRecord({ startingCash: 0, cashSales: 0, convertNet: 0, deductions: 0, countedCash: 0, manualCashAdjustment: 1 }))
+      .toThrow('Say why cash sales are being adjusted.');
+  });
+  it('consecutive windows include a boundary movement exactly once; the first window includes its opening instant', () => {
+    const docs = [doc({ createdAtClientMs: 1500, amount: 100 })];
+    const first = convertNetPesos(docs, handoverReadFrom(1000, false), 1500, isCash);
+    const next = convertNetPesos(docs, handoverReadFrom(1500, true), 2000, isCash);
+    expect(first).toBe(100); expect(next).toBe(0);
+    expect(handoverReadFrom(1500, false)).toBe(1500);
+  });
   it('start 2,000 + cash sales 5,000 + convert net 1,150 - deductions 0 = expected 8,150; the line shows +1,150; the saved doc has convertNet 1150', () => {
     const net = convertNetPesos(acceptance7(), FROM, TO, isCash);
     expect(net).toBe(1150);

@@ -453,6 +453,11 @@ export type CashHandover = {
   periodEndMs: number;
   startingCash: number;
   cashSales: number;
+  /** T-427 additive fields; absent on older handovers. */
+  convertNet?: number;
+  manualCashAdjustment?: number;
+  manualCashAdjustmentReason?: string | null;
+  periodStartExclusive?: boolean;
   deductions: CashHandoverDeduction[];
   deductionsTotal: number;
   expectedCash: number;

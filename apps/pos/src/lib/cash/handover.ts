@@ -1,8 +1,11 @@
 "use client";
 
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, doc, getDocFromServer, getDocs, getDocsFromServer, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { storedPesosToCentavos, toWirePesos } from "@/lib/money/centavos";
+import { isCashMethod } from './cash-method';
+import { convertNetPesos, negativeMethods, type ConversionLike } from './convert-net';
+import { getDayIdFromTimestamp } from '@/lib/analytics/daily';
 
 /**
  * Start-of-shift-day in ms, anchored at 4 AM Asia/Manila (mirrors getShiftDayId
@@ -23,19 +26,20 @@ export function getShiftDayStartMs(now: Date = new Date()): number {
  * Resolve the set of payment-method NAMES that count as cash for this store.
  * Receipt analytics store `mop` keyed by method name (net of change given), so
  * matching cash sales means matching those names. Falls back to any name
- * containing "cash".
+ * containing the word "cash" (never GCash).
  */
-export async function getCashMethodNames(storeId: string): Promise<Set<string>> {
+export async function getCashMethodNames(storeId: string, fresh = false): Promise<Set<string>> {
   const names = new Set<string>();
   try {
-    const snap = await getDocs(
+    const snap = await (fresh ? getDocsFromServer : getDocs)(
       query(collection(db, "stores", storeId, "storeModesOfPayment"), where("type", "==", "cash")),
     );
     snap.forEach((d) => {
       const name = (d.data() as any)?.name;
       if (name) names.add(String(name));
     });
-  } catch {
+  } catch (error) {
+    if (fresh) throw error; // A closing calculation cannot guess configured cash identities from an outage.
     // ignore — fallback below still catches "cash"-named keys
   }
   return names;
@@ -51,12 +55,14 @@ export async function computeCashSales(
   storeId: string,
   fromMs: number,
   toMs: number,
+  knownCashNames?: ReadonlySet<string>,
+  fresh = false,
 ): Promise<number> {
-  const cashNames = await getCashMethodNames(storeId);
+  const cashNames = knownCashNames ?? await getCashMethodNames(storeId, fresh);
   const isCashKey = (k: string) =>
-    cashNames.has(k) || k.toLowerCase().includes("cash");
+    isCashMethod(k, cashNames);
 
-  const snap = await getDocs(
+  const snap = await (fresh ? getDocsFromServer : getDocs)(
     query(
       collection(db, "stores", storeId, "receipts"),
       where("createdAtClientMs", ">=", fromMs),
@@ -85,4 +91,20 @@ export async function computeCashSales(
     }
   });
   return toWirePesos(totalCents);
+}
+
+/** One explicit server window for handover; a failed read aborts the save instead of treating missing totals as zero. */
+export async function computeHandoverCash(storeId: string, fromMs: number, toMs: number) {
+  const cashNames = await getCashMethodNames(storeId, true);
+  const [cashSales, conversions, day] = await Promise.all([
+    computeCashSales(storeId, fromMs, toMs, cashNames, true),
+    getDocsFromServer(query(collection(db, 'stores', storeId, 'paymentConversions'), where('createdAtClientMs', '>=', fromMs), where('createdAtClientMs', '<=', toMs))),
+    getDocFromServer(doc(db, 'stores', storeId, 'analytics', getDayIdFromTimestamp(toMs))),
+  ]);
+  const movements: ConversionLike[] = [];
+  conversions.forEach((row) => movements.push(row.data() as ConversionLike));
+  return {
+    cashSales, convertNet: convertNetPesos(movements, fromMs, toMs, (name) => isCashMethod(name, cashNames)),
+    negativeMethodNames: negativeMethods(day.data()?.payments?.byMethod ?? {}),
+  };
 }

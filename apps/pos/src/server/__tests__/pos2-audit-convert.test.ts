@@ -17,8 +17,51 @@
  *   M4 -0.01 or 0 treated wrongly; M5 a recovered day still listed.
  */
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import ts from 'typescript';
 // @ts-expect-error - plain .mjs module without types
-import { classifyConversion, negativeDays } from '../../../scripts/pos2-audit-lib.mjs';
+import { auditRange, classifyConversion, negativeDays } from '../../../scripts/pos2-audit-lib.mjs';
+
+describe('audit command wiring (no live execution)', () => {
+  const source = readFileSync(new URL('../../../scripts/pos2-audit.mjs', import.meta.url), 'utf8');
+  function mutationCalls(text: string): string[] {
+    const file = ts.createSourceFile('audit.mjs', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const hits: string[] = [];
+    const walk = (node: ts.Node) => {
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && /^(?:set|update|delete|add|create|batch|runTransaction|bulkWriter)$/.test(node.expression.name.text)) {
+        const receiver = node.expression.expression.getText(file);
+        // The existing local accumulator is a const Map, not a Firestore document. Chained db.doc(...).set remains forbidden.
+        if (!(receiver === 'days' && /const days = new Map\(\)/.test(text) && node.expression.name.text === 'set')) hits.push(node.getText(file));
+      }
+      ts.forEachChild(node, walk);
+    };
+    walk(file); return hits;
+  }
+  it('the write detector catches direct and chained database mutations while allowing the local Map accumulator', () => {
+    expect(mutationCalls("db.doc('x').set({}); ref.update({}); db.batch();")).toHaveLength(3);
+    expect(mutationCalls('const days = new Map(); days.set(1, {});')).toEqual([]);
+    expect(mutationCalls("const days = db.doc('x'); days.set({});")).toHaveLength(1);
+  });
+  it('uses the pure classifiers and final day totals, and refuses bad dates before opening credentials', () => {
+    expect(source).toContain('classifyConversion(c)'); expect(source).toContain('negativeDays(finalDays, conversionDays)');
+    expect(source.indexOf('if (!keyFile || !range)')).toBeLessThan(source.indexOf('readFileSync(keyFile'));
+    expect(source).toContain("db.collection(`stores/${storeId}/analytics`)");
+  });
+  it('prints negative-method counts and related document ids without printing money totals', () => {
+    expect(source).toContain('final payment methods below zero (${day.methods.length})');
+    expect(source).not.toMatch(/console\.log\([^\n]*method\.total/);
+    expect(mutationCalls(source)).toEqual([]);
+  });
+});
+
+describe('audit date boundaries', () => {
+  it.each([['20260230', '20260301'], ['20261301', '20261302'], ['20261015', '20261014'], ['', '20261014']])('refuses an invalid or reversed range %s to %s before reads', (from, to) => {
+    expect(auditRange(from, to)).toBeNull();
+  });
+  it('keeps a real leap day and the exact inclusive Manila end', () => {
+    expect(auditRange('20240229', '20240229')).toEqual({ fromMs: Date.parse('2024-02-29T00:00:00+08:00'), toMs: Date.parse('2024-03-01T00:00:00+08:00') - 1 });
+  });
+});
 
 describe('classifyConversion', () => {
   it('pos2-convert is POS v2\'s own: active or voided via pos2 -> no tags (M1)', () => {

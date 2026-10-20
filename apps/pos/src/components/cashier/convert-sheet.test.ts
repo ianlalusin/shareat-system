@@ -19,9 +19,19 @@
  * RED: the module does not exist yet.   MUTANTS: M1 labels swapped; M2 corrections listed; M3 Void on v1 docs; M4 online-only button enabled offline.
  */
 import { describe, expect, it } from 'vitest';
-import { DIRECTION_LABELS, convertButtonState, convertEffectText, conversionRows, conversionsNet, directionLabel } from '@/components/cashier/convert-sheet-logic';
+import { DIRECTION_LABELS, convertButtonState, convertEffectText, conversionRows, conversionsNet, directionLabel, decodeConversionAttempt } from '@/components/cashier/convert-sheet-logic';
 
 const doc = (over: Record<string, unknown>) => ({ id: 'x', status: 'active', fromMethod: 'GCash', toMethod: 'Cash', amount: 100, createdAtClientMs: 1000, source: 'pos2-convert', ...over }) as any;
+
+describe('a retry after reload preserves the original request', () => {
+  const original = { requestId: '9d3e5f6a-1b2c-4d3e-8f90-a1b2c3d4e5f6', direction: 'cash_in', walletMethod: 'GCash', amountCentavos: 50000, note: 'Test note' };
+  it('restores the exact request id and body, not a newly generated conversion', () => {
+    expect(decodeConversionAttempt(JSON.parse(JSON.stringify(original)))).toEqual(original);
+  });
+  it.each([null, {}, { ...original, amountCentavos: 1.5 }, { ...original, requestId: 'bad' }, { ...original, direction: 'sideways' }])('rejects corrupt recovery data %j', (input) => {
+    expect(decodeConversionAttempt(input)).toBeNull();
+  });
+});
 
 describe('direction labels and the plain effect', () => {
   it('the two big choices read exactly as the spec', () => {

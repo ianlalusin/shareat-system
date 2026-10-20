@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   addDoc, collection, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp,
@@ -19,7 +19,9 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getDayIdFromTimestamp } from "@/lib/analytics/daily";
-import { computeCashSales, getShiftDayStartMs } from "@/lib/cash/handover";
+import { computeHandoverCash, getShiftDayStartMs } from "@/lib/cash/handover";
+import { buildHandoverRecord, computeExpectedCash, convertLineText, handoverReadFrom, NEGATIVE_METHOD_NOTICE, parseCashAdjustment } from '@/lib/cash/convert-net';
+import { parsePesoInput, storedPesosToCentavos, toWirePesos } from '@/lib/money/centavos';
 import { exportToXlsx } from "@/lib/export/export-xlsx-client";
 import type { CashHandover, CashHandoverDeduction } from "@/lib/types";
 
@@ -43,6 +45,14 @@ export function CashHandoverClient() {
   const [periodStartMs, setPeriodStartMs] = useState<number>(() => getShiftDayStartMs());
   const [startingCash, setStartingCash] = useState<string>("0");
   const [cashSales, setCashSales] = useState<string>("0");
+  const [convertNet, setConvertNet] = useState(0);
+  const [manualCashAdjustment, setManualCashAdjustment] = useState('');
+  const [adjustmentReason, setAdjustmentReason] = useState('');
+  const [negativeMethodNames, setNegativeMethodNames] = useState<string[]>([]);
+  const [hasPrior, setHasPrior] = useState(false);
+  const [computedForStore, setComputedForStore] = useState<string | null>(null);
+  const storeNow = useRef(activeStore?.id);
+  storeNow.current = activeStore?.id;
   const [deductions, setDeductions] = useState<CashHandoverDeduction[]>([]);
   const [dedAmount, setDedAmount] = useState<string>("");
   const [dedReason, setDedReason] = useState<string>("");
@@ -75,6 +85,7 @@ export function CashHandoverClient() {
   useEffect(() => {
     if (!activeStore?.id) return;
     let cancelled = false;
+    setComputedForStore(null); setManualCashAdjustment(''); setAdjustmentReason('');
     (async () => {
       try {
         const snap = await getDocs(query(
@@ -86,8 +97,9 @@ export function CashHandoverClient() {
         const start = prior?.periodEndMs ?? getShiftDayStartMs();
         if (cancelled) return;
         setPeriodStartMs(start);
+        setHasPrior(Boolean(prior));
         setStartingCash(String(prior?.countedCash ?? 0));
-        await recompute(start);
+        await recompute(start, Boolean(prior));
       } catch {
         // keep defaults
       }
@@ -103,41 +115,49 @@ export function CashHandoverClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appUser]);
 
-  const recompute = async (fromMs: number) => {
+  const recompute = async (fromMs: number, priorExists = hasPrior) => {
     if (!activeStore?.id) return;
     setComputingSales(true);
     try {
-      const total = await computeCashSales(activeStore.id, fromMs, Date.now());
-      setCashSales(String(Math.round(total * 100) / 100));
+      const result = await computeHandoverCash(activeStore.id, handoverReadFrom(fromMs, priorExists), Date.now());
+      if (storeNow.current !== activeStore.id) return;
+      setCashSales(String(result.cashSales)); setConvertNet(result.convertNet); setNegativeMethodNames(result.negativeMethodNames);
+      setComputedForStore(activeStore.id);
     } catch (e: any) {
-      toast({ variant: "destructive", title: "Could not compute cash sales", description: e?.message });
+      setComputedForStore(null);
+      toast({ variant: "destructive", title: "Could not compute cash sales", description: 'Fresh totals need the internet. Recompute before saving this handover.' });
     } finally {
       setComputingSales(false);
     }
   };
 
   const deductionsTotal = useMemo(
-    () => deductions.reduce((s, d) => s + (Number(d.amount) || 0), 0),
+    () => toWirePesos(deductions.reduce((s, d) => s + storedPesosToCentavos(d.amount), 0)),
     [deductions],
   );
-  const expectedCash = useMemo(
-    () => (Number(startingCash) || 0) + (Number(cashSales) || 0) - deductionsTotal,
-    [startingCash, cashSales, deductionsTotal],
-  );
+  const parsed = useMemo(() => {
+    try { return { ok: true as const, starting: parsePesoInput(startingCash), adjustment: parseCashAdjustment(manualCashAdjustment),
+      counted: countedCash === '' ? null : parsePesoInput(countedCash), error: '' }; }
+    catch (error) { return { ok: false as const, error: (error as Error).message }; }
+  }, [startingCash, manualCashAdjustment, countedCash]);
+  const expectedCash = parsed.ok ? computeExpectedCash({ startingCash: toWirePesos(parsed.starting), cashSales: toWirePesos(storedPesosToCentavos(cashSales)),
+    convertNet, manualCashAdjustment: toWirePesos(parsed.adjustment), deductions: deductionsTotal }) : 0;
   const variance = useMemo(
-    () => (countedCash === "" ? 0 : (Number(countedCash) || 0) - expectedCash),
-    [countedCash, expectedCash],
+    () => !parsed.ok || parsed.counted === null ? 0 : toWirePesos(parsed.counted - storedPesosToCentavos(expectedCash)),
+    [parsed, expectedCash],
   );
 
   const addDeduction = () => {
-    const amt = Number(dedAmount);
-    if (!Number.isFinite(amt) || amt <= 0 || !dedReason.trim()) {
+    let cents: number;
+    try { cents = parsePesoInput(dedAmount); }
+    catch (error) { toast({ variant: 'destructive', title: 'Check the deduction amount', description: (error as Error).message }); return; }
+    if (cents <= 0 || !dedReason.trim()) {
       toast({ variant: "destructive", title: "Add an amount and reason for the deduction." });
       return;
     }
     setDeductions((prev) => [...prev, {
       id: `ded_${Date.now()}`,
-      amount: Math.round(amt * 100) / 100,
+      amount: toWirePesos(cents),
       reason: dedReason.trim(),
       encodedByUid: appUser?.uid ?? null,
       encodedByName: appUser?.displayName || appUser?.name || null,
@@ -149,27 +169,31 @@ export function CashHandoverClient() {
 
   const canSave =
     !saving &&
+    !computingSales && computedForStore === activeStore?.id && parsed.ok && parsed.counted !== null &&
+    (parsed.adjustment === 0 || adjustmentReason.trim().length > 0) &&
     !!activeStore?.id &&
     countedCash !== "" &&
     outgoing.trim().length > 0 &&
     incoming.trim().length > 0;
 
   const handleSave = async () => {
-    if (!canSave || !activeStore?.id) return;
+    if (!canSave || !activeStore?.id || !parsed.ok || parsed.counted === null) return;
     setSaving(true);
     try {
       const now = Date.now();
+      const fresh = await computeHandoverCash(activeStore.id, handoverReadFrom(periodStartMs, hasPrior), now);
+      if (storeNow.current !== activeStore.id) throw new Error('The store changed. Review this handover again before saving.');
+      const figures = buildHandoverRecord({ startingCash: toWirePesos(parsed.starting), cashSales: fresh.cashSales, convertNet: fresh.convertNet,
+        manualCashAdjustment: toWirePesos(parsed.adjustment), manualCashAdjustmentReason: adjustmentReason,
+        deductions: deductionsTotal, countedCash: toWirePesos(parsed.counted) });
+      setCashSales(String(fresh.cashSales)); setConvertNet(fresh.convertNet); setNegativeMethodNames(fresh.negativeMethodNames);
       await addDoc(collection(db, "stores", activeStore.id, "cashHandovers"), {
         shiftDayId: getDayIdFromTimestamp(now),
         periodStartMs,
         periodEndMs: now,
-        startingCash: Number(startingCash) || 0,
-        cashSales: Number(cashSales) || 0,
+        periodStartExclusive: hasPrior,
+        ...figures,
         deductions,
-        deductionsTotal,
-        expectedCash,
-        countedCash: Number(countedCash) || 0,
-        variance,
         outgoingCashierName: outgoing.trim(),
         incomingCashierName: incoming.trim(),
         notes: notes.trim() || null,
@@ -178,16 +202,16 @@ export function CashHandoverClient() {
         createdByUid: appUser?.uid ?? null,
         createdByName: appUser?.displayName || appUser?.name || null,
       });
-      toast({ title: "Handover logged", description: `${outgoing.trim()} → ${incoming.trim()} · ${peso(countedCash === "" ? 0 : Number(countedCash))}` });
+      toast({ title: "Handover logged", description: `${outgoing.trim()} → ${incoming.trim()} · ${peso(figures.countedCash)}` });
       // Reset for the next handover: new float = just-counted cash, new window from now.
-      setStartingCash(String(Number(countedCash) || 0));
+      setStartingCash(String(figures.countedCash)); setHasPrior(true); setManualCashAdjustment(''); setAdjustmentReason('');
       setPeriodStartMs(now);
       setDeductions([]);
       setCountedCash("");
       setNotes("");
       setOutgoing(incoming.trim());
       setIncoming("");
-      await recompute(now);
+      await recompute(now, true);
     } catch (e: any) {
       toast({ variant: "destructive", title: "Save failed", description: e?.message });
     } finally {
@@ -207,6 +231,9 @@ export function CashHandoverClient() {
         "Incoming": h.incomingCashierName,
         "Starting Cash": h.startingCash,
         "Cash Sales": h.cashSales,
+        "Convert and tender fixes": h.convertNet ?? 0,
+        "Manual cash adjustment": h.manualCashAdjustment ?? 0,
+        "Adjustment reason": h.manualCashAdjustmentReason ?? '',
         "Deductions": h.deductionsTotal,
         "Expected": h.expectedCash,
         "Counted": h.countedCash,
@@ -253,19 +280,30 @@ export function CashHandoverClient() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label>Starting cash (float)</Label>
-                <Input type="number" inputMode="decimal" value={startingCash} onChange={(e) => setStartingCash(e.target.value)} disabled={saving} />
+                <Input inputMode="decimal" value={startingCash} onChange={(e) => setStartingCash(e.target.value)} disabled={saving} />
               </div>
               <div className="space-y-1">
                 <Label className="flex items-center justify-between">
                   Cash sales
-                  <Button type="button" variant="ghost" size="sm" className="h-6 px-1 text-xs" onClick={() => recompute(periodStartMs)} disabled={computingSales || saving}>
+                  <Button type="button" variant="ghost" size="sm" className="min-h-11 px-2 text-xs lg:min-h-9" onClick={() => recompute(periodStartMs)} disabled={computingSales || saving}>
                     {computingSales ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                     <span className="ml-1">Recompute</span>
                   </Button>
                 </Label>
-                <Input type="number" inputMode="decimal" value={cashSales} onChange={(e) => setCashSales(e.target.value)} disabled={saving} />
+                <Input inputMode="decimal" value={cashSales} readOnly aria-label="Computed cash sales" />
+                <p className="text-xs text-muted-foreground">From receipts; refreshed again when saved.</p>
               </div>
             </div>
+
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+              <div className="space-y-1"><Label>Manual adjustment (optional)</Label>
+                <Input inputMode="decimal" placeholder="0.00 or -100.00" value={manualCashAdjustment} onChange={(e) => setManualCashAdjustment(e.target.value)} disabled={saving} /></div>
+              <div className="space-y-1"><Label>Adjustment reason</Label>
+                <Input value={adjustmentReason} onChange={(e) => setAdjustmentReason(e.target.value)} placeholder="Required for a nonzero adjustment" disabled={saving} /></div>
+            </div>
+            {!parsed.ok && <p role="alert" className="text-sm text-destructive">{parsed.error}</p>}
+            {parsed.ok && parsed.adjustment !== 0 && !adjustmentReason.trim() && <p role="alert" className="text-sm text-destructive">Say why cash sales are being adjusted.</p>}
+            {negativeMethodNames.length > 0 && <p role="status" className="rounded border p-3 text-sm">{NEGATIVE_METHOD_NOTICE}</p>}
 
             {/* Deductions */}
             <div className="space-y-2">
@@ -277,7 +315,7 @@ export function CashHandoverClient() {
                       <span className="truncate">{d.reason}</span>
                       <span className="flex items-center gap-2">
                         <span className="tabular-nums">{peso(d.amount)}</span>
-                        <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                        <Button type="button" variant="ghost" size="icon" className="h-11 w-11 lg:h-9 lg:w-9 text-muted-foreground hover:text-destructive" disabled={saving}
                           onClick={() => setDeductions((prev) => prev.filter((x) => x.id !== d.id))} aria-label="Remove deduction">
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -288,8 +326,8 @@ export function CashHandoverClient() {
               )}
               <div className="flex items-center gap-2">
                 <Input placeholder="Reason (e.g. supplies)" value={dedReason} onChange={(e) => setDedReason(e.target.value.slice(0, 60))} disabled={saving} />
-                <Input type="number" inputMode="decimal" placeholder="Amount" value={dedAmount} onChange={(e) => setDedAmount(e.target.value)} className="w-32" disabled={saving} />
-                <Button type="button" variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={addDeduction} disabled={saving} aria-label="Add deduction">
+                <Input inputMode="decimal" placeholder="Amount" value={dedAmount} onChange={(e) => setDedAmount(e.target.value)} className="w-32" disabled={saving} />
+                <Button type="button" variant="outline" size="icon" className="h-11 w-11 lg:h-9 lg:w-9 shrink-0" onClick={addDeduction} disabled={saving} aria-label="Add deduction">
                   <Plus className="h-4 w-4" />
                 </Button>
               </div>
@@ -297,14 +335,15 @@ export function CashHandoverClient() {
 
             {/* Computed expected */}
             <div className="rounded-md border bg-muted/40 p-3 space-y-1 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">Starting + Cash sales − Deductions</span><span className="tabular-nums">{peso(expectedCash)}</span></div>
-              <div className="flex justify-between font-semibold"><span>Expected cash on hand</span><span className="tabular-nums">{peso(expectedCash)}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-muted-foreground">Starting + Cash sales + Adjustment + Converts − Deductions</span><span className="tabular-nums">{parsed.ok ? peso(expectedCash) : '—'}</span></div>
+              {convertLineText(convertNet) && <p className="tabular-nums">{convertLineText(convertNet)}</p>}
+              <div className="flex justify-between font-semibold"><span>Expected cash on hand</span><span className="tabular-nums">{parsed.ok ? peso(expectedCash) : '—'}</span></div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label>Counted cash</Label>
-                <Input type="number" inputMode="decimal" value={countedCash} onChange={(e) => setCountedCash(e.target.value)} placeholder="Physical count" disabled={saving} />
+                <Input inputMode="decimal" value={countedCash} onChange={(e) => setCountedCash(e.target.value)} placeholder="Physical count" disabled={saving} />
               </div>
               <div className="space-y-1">
                 <Label>Variance</Label>
@@ -332,7 +371,7 @@ export function CashHandoverClient() {
               <Input value={notes} onChange={(e) => setNotes(e.target.value.slice(0, 120))} placeholder="Anything worth noting" disabled={saving} />
             </div>
 
-            <Button onClick={handleSave} disabled={!canSave} className="w-full">
+            <Button onClick={handleSave} disabled={!canSave} className="sticky bottom-0 min-h-11 w-full md:static lg:min-h-9">
               {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
               Log handover
             </Button>
@@ -356,12 +395,27 @@ export function CashHandoverClient() {
             ) : history.length === 0 ? (
               <p className="text-center text-muted-foreground py-10">No handovers recorded yet.</p>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              <div className="divide-y md:hidden">{history.map((h) => <article key={h.id} className="py-3 space-y-2">
+                <p className="text-xs text-muted-foreground">{fmtDateTime(h.createdAtClientMs)}</p>
+                <p className="truncate text-sm">{h.outgoingCashierName} → {h.incomingCashierName}</p>
+                <dl className="grid grid-cols-2 gap-2 text-sm">
+                  <div><dt className="text-xs text-muted-foreground">Expected</dt><dd className="tabular-nums">{peso(h.expectedCash)}</dd></div>
+                  <div><dt className="text-xs text-muted-foreground">Counted</dt><dd className="tabular-nums">{peso(h.countedCash)}</dd></div>
+                  <div><dt className="text-xs text-muted-foreground">Variance</dt><dd className="tabular-nums">{peso(h.variance)}</dd></div>
+                  <div><dt className="text-xs text-muted-foreground">Converts</dt><dd className="tabular-nums">{peso(h.convertNet ?? 0)}</dd></div>
+                  <div><dt className="text-xs text-muted-foreground">Adjustment</dt><dd className="tabular-nums">{peso(h.manualCashAdjustment ?? 0)}</dd></div>
+                </dl>
+                {h.manualCashAdjustmentReason && <p className="text-xs break-words">{h.manualCashAdjustmentReason}</p>}
+              </article>)}</div>
+              <div className="hidden overflow-x-auto md:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>When</TableHead>
                       <TableHead>Cashiers</TableHead>
+                      <TableHead className="text-right">Converts</TableHead>
+                      <TableHead className="text-right">Adjustment</TableHead>
                       <TableHead className="text-right">Expected</TableHead>
                       <TableHead className="text-right">Counted</TableHead>
                       <TableHead className="text-right">Variance</TableHead>
@@ -372,6 +426,8 @@ export function CashHandoverClient() {
                       <TableRow key={h.id}>
                         <TableCell className="whitespace-nowrap text-xs">{fmtDateTime(h.createdAtClientMs)}</TableCell>
                         <TableCell className="text-xs">{h.outgoingCashierName} → {h.incomingCashierName}</TableCell>
+                        <TableCell className="text-right tabular-nums text-xs">{peso(h.convertNet ?? 0)}</TableCell>
+                        <TableCell className="text-right tabular-nums text-xs"><div>{peso(h.manualCashAdjustment ?? 0)}</div>{h.manualCashAdjustmentReason && <p className="text-muted-foreground whitespace-normal">{h.manualCashAdjustmentReason}</p>}</TableCell>
                         <TableCell className="text-right tabular-nums text-xs">{peso(h.expectedCash)}</TableCell>
                         <TableCell className="text-right tabular-nums text-xs">{peso(h.countedCash)}</TableCell>
                         <TableCell className={`text-right tabular-nums text-xs font-medium ${
@@ -384,6 +440,7 @@ export function CashHandoverClient() {
                   </TableBody>
                 </Table>
               </div>
+              </>
             )}
           </CardContent>
         </Card>
