@@ -3,7 +3,8 @@
 Status: in progress, authorized 2026-10-20: install the supplied skill and start with every dashboard and detail view.
 Owner review: screenshots identify the dashboard. Pad Waiting tiles horizontally; use AR/AP's row for more cards;
 use the blank space beside By channel. Revision adds Assets and Books cards and moves operations beside channels.
-PR #41 remains held for revised preview review and final gates. First commit 79d4c4f; preview uses port 9008.
+Ian approved revision be47f67 on 2026-10-20. PR #41 requires green combined CI after lightbox main e34a979;
+no further design approval is needed. First commit 79d4c4f; preview uses port 9008.
 
 ## Contract
 
