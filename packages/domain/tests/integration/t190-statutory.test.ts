@@ -656,8 +656,8 @@ describe('T-190 - rate rows: effective dating, confirmation, refusals (cases 12,
   it('case 20: a store with NO minimum-wage row - preview and post both refuse, naming the minimum wage  [mutant: treated as non-MWE silently]', async () => {
     const f = await ready('c20mw', { minWage: null });
     await addDays(f, dates('2026-01', 1, 13));
-    for (const call of [preview(f, H1), post(f, H1)]) {
-      const text = await refusalText(call);
+    for (const call of [() => preview(f, H1), () => post(f, H1)]) {
+      const text = await refusalText(call());
       expect(text, 'a missing minimum wage was not refused').not.toBeNull();
       expect(text).toMatch(/minimum wage/i);
     }
@@ -668,8 +668,8 @@ describe('T-190 - rate rows: effective dating, confirmation, refusals (cases 12,
     const f = await ready('c20wk', { frequency: 'weekly', rate: '4000.00', brackets: ['semi_monthly', 'monthly'] });
     await addDay(f, '2026-01-02');
     const week = { periodStart: '2025-12-28', periodEnd: '2026-01-03' };
-    for (const call of [preview(f, week), post(f, week)]) {
-      const text = await refusalText(call);
+    for (const call of [() => preview(f, week), () => post(f, week)]) {
+      const text = await refusalText(call());
       expect(text, 'missing weekly brackets were not refused').not.toBeNull();
       expect(text).toMatch(/withholding/i);
       expect(text).toMatch(/weekly/i);
