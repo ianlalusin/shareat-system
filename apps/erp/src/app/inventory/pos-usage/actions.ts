@@ -5,7 +5,8 @@
  */
 import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
-import { finalizeSections, requestMap, voidPosUsagePull } from '@shareat/domain';
+import { assertFieldRules, finalizeSections, requestMap, voidPosUsagePull } from '@shareat/domain';
+import { INVENTORY_POS_VOID_RULES } from '@shareat/domain/field-rules';
 import { salesDaysRepo } from '@shareat/db';
 import { buildPlanForDay, withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
@@ -136,6 +137,7 @@ export async function voidPullAction(fd: FormData): Promise<void> {
   try {
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store (not the form's `storeId`).
     const target = await loadDestructiveTarget(actor, 'pos_usage_pull', pullId, ['void_usage_record']);
+    assertFieldRules(INVENTORY_POS_VOID_RULES, fd);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'void_usage_record' });
     const result = await withOrgPrincipal(actor.orgId, async (tx) => {
       const r = await voidPosUsagePull(tx, actor, { pullId, reason });

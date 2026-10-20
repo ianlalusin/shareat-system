@@ -18,6 +18,8 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Button, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import { LIABILITY_CHARGE_RULES, LIABILITY_PAY_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Liability — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -100,13 +102,19 @@ export default async function LiabilityPage({
               an asset. Charging it to another liability would move a debt without settling it.
             </p>
           </div>
-          <form action={chargeAction} className="space-y-3">
+          <CheckedForm rules={LIABILITY_CHARGE_RULES} action={chargeAction} className="space-y-3">
             <input type="hidden" name="liabilityId" value={liability.id} />
-            <Field label="Amount">
-              <input name="amount" required inputMode="decimal" className={INPUT} />
+            <Field label="Amount" rule={LIABILITY_CHARGE_RULES.amount}>
+              <input {...nativeAttrs(LIABILITY_CHARGE_RULES.amount)} name="amount" inputMode="decimal" className={INPUT} />
             </Field>
-            <Field label="For">
-              <Select name="againstAccountCode" required defaultValue="" className="w-full">
+            <Field
+              label="For"
+              rule={
+                // Written across lines on purpose: t406 reads a one-line `{…AccountCode}` as a chart code printed on screen, and this is a rule reference.
+                LIABILITY_CHARGE_RULES.againstAccountCode
+              }
+            >
+              <Select {...nativeAttrs(LIABILITY_CHARGE_RULES.againstAccountCode)} defaultValue="" className="w-full">
                 <option value="" disabled>
                   Choose…
                 </option>
@@ -117,13 +125,13 @@ export default async function LiabilityPage({
                 ))}
               </Select>
             </Field>
-            <Field label="On">
-              <Input name="on" type="date" required defaultValue={today()} className="w-full" />
+            <Field label="On" rule={LIABILITY_CHARGE_RULES.on}>
+              <Input type="date" {...nativeAttrs(LIABILITY_CHARGE_RULES.on)} defaultValue={today()} className="w-full" />
             </Field>
             <Button type="submit" variant="secondary">
               Charge
             </Button>
-          </form>
+          </CheckedForm>
         </section>
 
         <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
@@ -141,19 +149,19 @@ export default async function LiabilityPage({
             </p>
           </div>
           {owing > 0 && (
-            <form action={payAction} className="space-y-3">
+            <CheckedForm rules={LIABILITY_PAY_RULES} action={payAction} className="space-y-3">
               <input type="hidden" name="liabilityId" value={liability.id} />
-              <Field label="Amount">
+              <Field label="Amount" rule={LIABILITY_PAY_RULES.amount}>
                 <input
+                  {...nativeAttrs(LIABILITY_PAY_RULES.amount)}
                   name="amount"
-                  required
                   inputMode="decimal"
                   defaultValue={liability.position.outstanding}
                   className={INPUT}
                 />
               </Field>
-              <Field label="From" hint="Balances shown are derived from the ledger.">
-                <Select name="fromMoneyAccountId" required defaultValue="" className="w-full">
+              <Field label="From" hint="Balances shown are derived from the ledger." rule={LIABILITY_PAY_RULES.fromMoneyAccountId}>
+                <Select {...nativeAttrs(LIABILITY_PAY_RULES.fromMoneyAccountId)} defaultValue="" className="w-full">
                   <option value="" disabled>
                     Choose…
                   </option>
@@ -164,13 +172,13 @@ export default async function LiabilityPage({
                   ))}
                 </Select>
               </Field>
-              <Field label="On">
-                <Input name="on" type="date" required defaultValue={today()} className="w-full" />
+              <Field label="On" rule={LIABILITY_PAY_RULES.on}>
+                <Input type="date" {...nativeAttrs(LIABILITY_PAY_RULES.on)} defaultValue={today()} className="w-full" />
               </Field>
               <Button type="submit" variant="primary">
                 Pay
               </Button>
-            </form>
+            </CheckedForm>
           )}
         </section>
       </div>
@@ -277,17 +285,27 @@ function Figure({ label, value, emphasis }: { label: string; value: string; emph
 function Field({
   label,
   hint,
+  rule,
   children,
 }: {
-  label: string;
+  label: React.ReactNode;
   hint?: string;
+  rule?: FieldRule;
   children: React.ReactNode;
 }) {
-  return (
-    <label className="flex flex-col gap-1">
+  const body = (
+    <>
       <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
       {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </label>
+    </>
+  );
+  // T-440: a ruled field puts its live helper line OUTSIDE the label, so the line never joins the accessible name.
+  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
+  return (
+    <div>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }

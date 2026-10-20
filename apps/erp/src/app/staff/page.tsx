@@ -4,7 +4,9 @@ import { issueAdminPinAction, upsertStorePositionAction } from './actions';
 import { positionsForStore, rosterForStore, staffStoresFor, withOrgPrincipal } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
-import { Button, FlashBanner, Input } from '@/components/ui';
+import { Button, Field, FlashBanner, Input } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { STAFF_PIN_RULES, STAFF_POSITION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { can } from '@shareat/auth';
@@ -174,19 +176,19 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
             );
           })}
         </ul>
-        <form
+        <CheckedForm
+          rules={STAFF_POSITION_RULES}
           action={upsertStorePositionAction}
           className="flex flex-wrap items-end gap-3 border-t border-neutral-200 pt-3 dark:border-neutral-800"
         >
           <input type="hidden" name="storeId" value={storeId} />
-          <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">Add a position</span>
-            <Input name="name" required placeholder="Barista" />
-          </label>
+          <Field label="Add a position" rule={STAFF_POSITION_RULES.name}>
+            <Input {...nativeAttrs(STAFF_POSITION_RULES.name)} placeholder="Barista" />
+          </Field>
           <Button type="submit" variant="secondary">
             Save
           </Button>
-        </form>
+        </CheckedForm>
       </section>
       ) : (
       <section className="space-y-3">
@@ -221,17 +223,16 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
                     {a.role === 'super_admin' ? 'Super admin' : 'Admin'} · {a.hasPin ? 'PIN issued' : 'No PIN yet'}
                   </div>
                 </div>
-                <form action={issueAdminPinAction} className="flex flex-wrap items-end gap-2">
+                <CheckedForm rules={STAFF_PIN_RULES} action={issueAdminPinAction} className="flex flex-wrap items-end gap-2">
                   <input type="hidden" name="personId" value={a.personId} />
                   <input type="hidden" name="storeId" value={storeId} />
-                  <label className="text-sm">
-                    <span className="block text-neutral-600 dark:text-neutral-400">{a.hasPin ? 'New PIN' : 'PIN'} (6 digits)</span>
-                    <Input name="pin" type="password" inputMode="numeric" autoComplete="off" maxLength={6} pattern="[0-9]{6}" required />
-                  </label>
+                  <Field label={`${a.hasPin ? 'New PIN' : 'PIN'} (6 digits)`} rule={STAFF_PIN_RULES.pin}>
+                    <Input {...nativeAttrs(STAFF_PIN_RULES.pin)} type="password" autoComplete="off" />
+                  </Field>
                   <Button type="submit" variant="secondary">
                     {a.hasPin ? 'Re-issue PIN' : 'Issue PIN'}
                   </Button>
-                </form>
+                </CheckedForm>
               </li>
             ))}
           </ul>

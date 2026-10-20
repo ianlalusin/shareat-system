@@ -56,6 +56,8 @@ import type { Actor } from '@shareat/auth';
 import { getLiveConfig, preview13thMonthRun, post13thMonthRun, seedAttendanceConfig, createAsset } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../../packages/db/seed/expense-categories';
+import { ASSET_CREATE_RULES, ASSET_TERMS_RULES } from '@shareat/domain/field-rules';
+import { expectRuleSentence } from '../helpers/rule-sentence';
 import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
@@ -294,7 +296,7 @@ describe('F1 (DEF-464) — usefulLifeMonths="abc" should refuse by name, never p
     const to = await expectRedirectTo(() => createAssetAction(assetFormData(f, { usefulLifeMonths: 'abc' })));
     const params = paramsOf(to);
     const error = params.get('error');
-    expect(error, `redirect URL was: ${to}`).toBe(lifeSentence('abc'));
+    expectRuleSentence(error, ASSET_CREATE_RULES.usefulLifeMonths, 'abc');
     expect(error).not.toContain('NaN');
     const after = await assetCountFor(f.orgId);
     expect(after, 'no asset should have been created').toBe(before);
@@ -308,7 +310,7 @@ describe('F1 (DEF-464) — usefulLifeMonths="abc" should refuse by name, never p
     const before = await assetCountFor(f.orgId);
     const to = await expectRedirectTo(() => createAssetAction(assetFormData(f, { usefulLifeMonths: '0' })));
     const params = paramsOf(to);
-    expect(params.get('error'), `redirect URL was: ${to}`).toBe(lifeSentence('0'));
+    expectRuleSentence(params.get('error'), ASSET_CREATE_RULES.usefulLifeMonths, '0');
     const after = await assetCountFor(f.orgId);
     expect(after, 'no asset should have been created').toBe(before);
   });
@@ -372,7 +374,7 @@ describe('T1 (DEF-467) — updateTermsAction usefulLifeMonths="" should refuse b
     const before = await unmappedConstraintCountFor(f.orgId, 'fixed_assets_useful_life_positive_check');
     const to = await expectRedirectTo(() => updateTermsAction(termsFormData(assetId, { usefulLifeMonths: '' })));
     const params = paramsOf(to);
-    expect(params.get('error'), `redirect URL was: ${to}`).toBe(LIFE_BLANK_SENTENCE);
+    expectRuleSentence(params.get('error'), ASSET_TERMS_RULES.usefulLifeMonths, '');
     const [row] = await sql<{ useful_life_months: number; needs_review: boolean }[]>`
       select useful_life_months, needs_review from fixed_assets where id = ${assetId}`;
     expect(row!.useful_life_months, 'the term must be unchanged').toBe(24);
@@ -388,7 +390,7 @@ describe('T1 (DEF-467) — updateTermsAction usefulLifeMonths="" should refuse b
 
     const to = await expectRedirectTo(() => updateTermsAction(termsFormData(assetId, { usefulLifeMonths: 'abc' })));
     const params = paramsOf(to);
-    expect(params.get('error'), `redirect URL was: ${to}`).toBe(lifeSentence('abc'));
+    expectRuleSentence(params.get('error'), ASSET_TERMS_RULES.usefulLifeMonths, 'abc');
     const [row] = await sql<{ useful_life_months: number }[]>`select useful_life_months from fixed_assets where id = ${assetId}`;
     expect(row!.useful_life_months).toBe(24);
   });
@@ -401,7 +403,7 @@ describe('T1 (DEF-467) — updateTermsAction usefulLifeMonths="" should refuse b
 
     const to = await expectRedirectTo(() => updateTermsAction(termsFormData(assetId, { usefulLifeMonths: '1.5' })));
     const params = paramsOf(to);
-    expect(params.get('error'), `redirect URL was: ${to}`).toBe(lifeSentence('1.5'));
+    expectRuleSentence(params.get('error'), ASSET_TERMS_RULES.usefulLifeMonths, '1.5');
     const [row] = await sql<{ useful_life_months: number }[]>`select useful_life_months from fixed_assets where id = ${assetId}`;
     expect(row!.useful_life_months).toBe(24);
   });

@@ -40,6 +40,8 @@ vi.mock('@/components/forms', async (orig) => {
 
 import { createRecurringTemplate } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
+import { RECURRING_TEMPLATE_RULES } from '@shareat/domain/field-rules';
+import { requirementOf } from '../helpers/rule-sentence';
 import { actor, asOrg, captureRedirect, closeAfterAll, keepTypingLegs, outcomeOf, person, sql, uid } from './t389-s3-common';
 
 closeAfterAll();
@@ -99,7 +101,7 @@ keepTypingLegs<C>({
     const o = outcomeOf(signal);
     return { signal, error: o.flash.error, ok: o.flash.ok };
   },
-  expectError: /greater than zero/i,
+  expectError: requirementOf(RECURRING_TEMPLATE_RULES.defaultAmount, '0'),
   expectedFields: (c) => ({
     name: 'Typed Rent Name', supplierId: c.supB, categoryId: c.catB, defaultAmount: '0', interval: 'weekly', anchorDay: '3',
     defaultMoneyAccountId: '', tillIsDeliberate: 'on',

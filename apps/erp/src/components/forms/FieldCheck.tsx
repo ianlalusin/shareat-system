@@ -83,6 +83,21 @@ export function FieldCheck({ rule }: { rule: FieldRule }) {
   const touched = shown ? ctx.touched(rule.name) : false;
   const failing = touched && result !== undefined && !result.ok;
   const visible = shown && result !== undefined;
+  const applies = shown ? ctx.applies(rule.name) : true;
+  const ownDisabled = useRef<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null>(null);
+
+  // A conditional rule owns only its own disabled flag, never a caller's disabled state.
+  useIsomorphicLayoutEffect(() => {
+    const control = controlNamed(document.getElementById(id), rule.name);
+    if (visible && !applies && (control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement) && !control.disabled) {
+      control.disabled = true;
+      ownDisabled.current = control;
+    }
+    return () => {
+      if (ownDisabled.current) ownDisabled.current.disabled = false;
+      ownDisabled.current = null;
+    };
+  }, [visible, applies, id, rule.name]);
 
   const applied = useRef<HTMLElement | null>(null);
   // Takes our id (and our own invalid mark) back off the control we wrote to.
@@ -124,5 +139,5 @@ export function FieldCheck({ rule }: { rule: FieldRule }) {
   useIsomorphicLayoutEffect(() => () => release.current(), []);
 
   if (!visible) return null;
-  return <FieldCheckView id={id} line={fieldCheckLine(rule, result, touched)} />;
+  return <FieldCheckView id={id} line={fieldCheckLine(rule, result, touched, applies)} />;
 }

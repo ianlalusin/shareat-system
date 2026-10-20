@@ -16,6 +16,9 @@ import { accessRepo, leaveRepo, advisoryLocksRepo, transaction, type Tx } from '
 import { authorize, heldCapabilities, type Actor } from '@shareat/auth';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { gone } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { SETTINGS_LEAVE_CAP_RULES, SETTINGS_LEAVE_KIND_RULES } from '../field-rules/settings';
+import { ATTENDANCE_LEAVE_RECORD_RULES, ATTENDANCE_LEAVE_REQUEST_RULES, ATTENDANCE_LEAVE_VOID_RULES } from '../field-rules/attendance';
 import { audit } from './audit';
 import { checkAndPrice, computeSilBalance, loadEmployment, withinEmployment, type DayIn } from './checks';
 import { cmpIso, isoAfter } from './dates';
@@ -37,6 +40,8 @@ export interface LeaveRequestInput {
   birthDate?: string | null;
   /** Record only: the pay mode the manager chooses. Ignored where the kind cannot be paid. */
   paid?: boolean;
+  /** The screen's raw date fields (T-440 S9): when given, judged by the screen's own rules once the gate has passed. */
+  screen?: { from: string | null; to: string | null; birthDate: string | null };
 }
 
 const MAX_DAYS = 366;
@@ -99,6 +104,11 @@ const payload = (r: { personId: string; employmentId: string; leaveType: string 
 // ---------------------------------------------------------------------------------------------
 // Create: a request (pending) or a manager's record (approved at once)
 
+/** The WHO gate of a request or a record: a manager's capability at the job's store, unless a person files their own request. */
+async function authorizeRequester(tx: Tx, actor: Actor, storeId: string, origin: 'request' | 'record', isSelf: boolean): Promise<void> {
+  if (origin === 'record' || !isSelf) await authorize(tx, actor, 'manage_attendance', { storeId });
+}
+
 async function create(
   tx: Tx,
   actor: Actor,
@@ -112,7 +122,12 @@ async function create(
 
   // WHO (D5). A request: the person themself (an identity check, no capability) or a manage_attendance holder on their behalf.
   // A record is always a manager's act.
-  if (origin === 'record' || !isSelf) await authorize(tx, actor, 'manage_attendance', { storeId: employment.storeId });
+  await authorizeRequester(tx, actor, employment.storeId, origin, isSelf);
+  // T-440 S9 (ii): the screen's own rules, only once the gate has passed (a person filing their own request has no capability gate).
+  if (input.screen) {
+    if (origin === 'record') assertFieldRules(ATTENDANCE_LEAVE_RECORD_RULES, input.screen);
+    else assertFieldRules(ATTENDANCE_LEAVE_REQUEST_RULES, input.screen);
+  }
   if (origin === 'record' && isSelf) {
     if (!(await isSuperAdmin(tx, actor))) {
       throw leaveRefusal('LEAVE_OWN_APPROVAL', 'You cannot record your own leave: another manager has to enter it.');
@@ -424,6 +439,8 @@ export function voidLeave(
   return run(tx, async (trx) => {
     const found = await lockedRequest(trx, actor, input.requestId);
     await authorize(trx, actor, 'manage_attendance', { storeId: found.storeId });
+    // T-440 S9 (ii): the screen's own rule, only once the gate has passed.
+    assertFieldRules(ATTENDANCE_LEAVE_VOID_RULES, { reason: input.reason });
     const reason = typeof input.reason === 'string' ? input.reason.trim() : '';
     if (!reason) throw leaveRefusal('LEAVE_REASON_REQUIRED', 'Voiding leave needs a reason.');
 
@@ -479,8 +496,12 @@ export function setLeaveCap(
     const storeId = input.storeId ?? null;
     const positionId = input.positionId ?? null;
     // A store's own caps are a manage_attendance act there; an org-wide default is a people-admin act (admin and above).
-    if (storeId) await authorize(trx, actor, 'manage_attendance', { storeId });
-    else await authorize(trx, actor, 'manage_users');
+    await authorize(trx, actor, storeId ? 'manage_attendance' : 'manage_users', storeId ? { storeId } : {});
+    // T-440 S9 (ii): the screen's own rules, only once the gate has passed.
+    assertFieldRules(SETTINGS_LEAVE_CAP_RULES, {
+      monthlyCap: input.monthlyCap == null ? null : String(input.monthlyCap),
+      yearlyCap: input.yearlyCap == null ? null : String(input.yearlyCap),
+    });
 
     const type = await leaveRepo.resolveType(trx, actor.orgId, input.leaveType);
     if (!type) throw leaveRefusal('LEAVE_TYPE_UNKNOWN', `"${String(input.leaveType)}" is not a kind of leave this business uses.`);
@@ -529,6 +550,8 @@ export function addLeaveType(
 ): Promise<{ id: string }> {
   return run(tx, async (trx) => {
     await authorize(trx, actor, 'manage_users');
+    // T-440 S9 (ii): the screen's own rules, only once the gate has passed.
+    assertFieldRules(SETTINGS_LEAVE_KIND_RULES, { code: input.code, label: input.label });
     const code = String(input.code ?? '').trim().toLowerCase();
     const label = String(input.label ?? '').trim();
     if (!/^[a-z][a-z0-9_]{1,39}$/.test(code) || !label) {

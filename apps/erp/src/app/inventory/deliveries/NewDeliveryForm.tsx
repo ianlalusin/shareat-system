@@ -1,4 +1,6 @@
 'use client';
+import { INVENTORY_DELIVERY_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { CheckedForm } from '@/components/forms';
 
 /**
  * The "New delivery" form — T-166 / DEF-135. One document for a supplier delivery or a cash
@@ -40,7 +42,7 @@ interface LineDraft {
 }
 
 export function NewDeliveryForm({
-  action,
+  action: createDeliveryAction,
   storeId,
   suppliers,
   items,
@@ -105,15 +107,15 @@ export function NewDeliveryForm({
   }
 
   return (
-    <form action={action} className="mt-3 space-y-4">
+    <CheckedForm rules={INVENTORY_DELIVERY_RULES} action={createDeliveryAction} className="mt-3 space-y-4">
       <input type="hidden" name="storeId" value={storeId} />
 
       <FormSection title="Document">
         <FormGrid layout="fields">
-          <Field width="code" label="Kind" className={FLABEL}>
-            <Select
-              name="kind"
-              required
+          <Field rule={INVENTORY_DELIVERY_RULES.kind} width="code" label="Kind" className={FLABEL}>
+            <Select {...nativeAttrs(INVENTORY_DELIVERY_RULES.kind)}
+
+
               value={kind}
               onChange={(e) => setKind(e.target.value === 'purchase' ? 'purchase' : 'supplier')}
               className={FULL}
@@ -123,8 +125,8 @@ export function NewDeliveryForm({
             </Select>
           </Field>
           {kind === 'supplier' ? (
-            <Field width="long" label="Supplier" className={FLABEL}>
-              <Select name="supplierId" required defaultValue="" className={FULL}>
+            <Field rule={INVENTORY_DELIVERY_RULES.supplierId} width="long" label="Supplier" className={FLABEL}>
+              <Select {...nativeAttrs(INVENTORY_DELIVERY_RULES.supplierId)}   defaultValue="" className={FULL}>
                 <option value="" disabled>
                   Choose…
                 </option>
@@ -136,8 +138,8 @@ export function NewDeliveryForm({
               </Select>
             </Field>
           ) : (
-            <Field width="long" label="Supplier (optional)" className={FLABEL}>
-              <Select name="supplierId" defaultValue="" className={FULL}>
+            <Field rule={INVENTORY_DELIVERY_RULES.supplierId} width="long" label="Supplier (optional)" className={FLABEL}>
+              <Select {...nativeAttrs(INVENTORY_DELIVERY_RULES.supplierId)}  defaultValue="" className={FULL}>
                 <option value="">— none, cash purchase —</option>
                 {suppliers.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -150,8 +152,8 @@ export function NewDeliveryForm({
           <Field width="code" label="Reference no. (DR/invoice)" className={FLABEL}>
             <Input name="referenceNo" placeholder="DR-0001" className={FULL} />
           </Field>
-          <Field width="date" label="Delivered on" className={FLABEL}>
-            <Input name="deliveredOn" type="date" required defaultValue={today} className={FULL} />
+          <Field rule={INVENTORY_DELIVERY_RULES.deliveredOn} width="date" label="Delivered on" className={FLABEL}>
+            <Input {...nativeAttrs(INVENTORY_DELIVERY_RULES.deliveredOn)}  type="date"  defaultValue={today} className={FULL} />
           </Field>
         </FormGrid>
       </FormSection>
@@ -284,6 +286,6 @@ export function NewDeliveryForm({
       <Button type="submit" variant="primary">
         Save
       </Button>
-    </form>
+    </CheckedForm>
   );
 }

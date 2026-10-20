@@ -4,7 +4,8 @@ import { addLeaveTypeAction, saveLeaveCapAction, setLeaveTypeActiveAction, updat
 import { leaveSettingsFor, liveConfigFor, listStores } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { SETTINGS_ATTENDANCE_POLICY_RULES, SETTINGS_LEAVE_CAP_RULES, SETTINGS_LEAVE_KIND_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Button, Checkbox, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
@@ -90,22 +91,25 @@ export default async function AttendanceSettingsPage({
           This store has no attendance config yet.
         </p>
       ) : (
-        <EditableRecord action={updateAttendanceConfigAction} label="attendance policy" hidden={{ storeId }} typed={typedFor(sp, ATTENDANCE_POLICY, storeId, actor.personId)}>
+        <EditableRecord action={updateAttendanceConfigAction} label="attendance policy" hidden={{ storeId }} typed={typedFor(sp, ATTENDANCE_POLICY, storeId, actor.personId)} rules={SETTINGS_ATTENDANCE_POLICY_RULES}>
           <div className="space-y-6">
-          <label className="flex flex-col gap-1">
-            <span className={LABEL}>Effective from</span>
+          <Field
+            label="Effective from"
+            rule={SETTINGS_ATTENDANCE_POLICY_RULES.effectiveFrom}
+            hint={
+              <>
+                ⛔ Must be after {cfg.effectiveFrom} (today&rsquo;s live policy) and cannot fall on or
+                before a day already adjudicated.
+              </>
+            }
+          >
             <Input
-              name="effectiveFrom"
+              {...nativeAttrs(SETTINGS_ATTENDANCE_POLICY_RULES.effectiveFrom)}
               type="date"
-              required
               defaultValue={defaultEffectiveFrom}
               className="w-full"
             />
-            <span className="text-xs text-neutral-500">
-              ⛔ Must be after {cfg.effectiveFrom} (today&rsquo;s live policy) and cannot fall on or
-              before a day already adjudicated.
-            </span>
-          </label>
+          </Field>
 
           <Group title="Shift & capture">
             <NumField label="Required hours / shift" name="requiredHoursPerShift" defaultValue={cfg.requiredHoursPerShift} />
@@ -266,7 +270,7 @@ export default async function AttendanceSettingsPage({
               ))}
             </ul>
           )}
-          <form action={saveLeaveCapAction} className="space-y-3 rounded border border-surface-border p-4">
+          <CheckedForm rules={SETTINGS_LEAVE_CAP_RULES} action={saveLeaveCapAction} className="space-y-3 rounded border border-surface-border p-4">
             <input type="hidden" name="storeId" value={storeId} />
             <FormGrid>
               <Field label="Kind of leave">
@@ -296,17 +300,17 @@ export default async function AttendanceSettingsPage({
                   ))}
                 </Select>
               </Field>
-              <Field label="Days per month" hint="Empty = no limit.">
-                <Input name="monthlyCap" inputMode="numeric" className="mt-1 w-full" />
+              <Field label="Days per month" hint="Empty = no limit." rule={SETTINGS_LEAVE_CAP_RULES.monthlyCap}>
+                <Input {...nativeAttrs(SETTINGS_LEAVE_CAP_RULES.monthlyCap)} className="mt-1 w-full" />
               </Field>
-              <Field label="Days per year" hint="Empty = no limit.">
-                <Input name="yearlyCap" inputMode="numeric" className="mt-1 w-full" />
+              <Field label="Days per year" hint="Empty = no limit." rule={SETTINGS_LEAVE_CAP_RULES.yearlyCap}>
+                <Input {...nativeAttrs(SETTINGS_LEAVE_CAP_RULES.yearlyCap)} className="mt-1 w-full" />
               </Field>
             </FormGrid>
             <Button type="submit" variant="primary">
               Save leave limit
             </Button>
-          </form>
+          </CheckedForm>
 
           <h3 className="font-medium">Kinds of leave</h3>
           <ul className="space-y-2">
@@ -333,15 +337,15 @@ export default async function AttendanceSettingsPage({
               </li>
             ))}
           </ul>
-          <form action={addLeaveTypeAction} className="space-y-3 rounded border border-surface-border p-4">
+          <CheckedForm rules={SETTINGS_LEAVE_KIND_RULES} action={addLeaveTypeAction} className="space-y-3 rounded border border-surface-border p-4">
             <input type="hidden" name="storeId" value={storeId} />
             <h4 className="text-sm font-medium">Add a kind of leave (administrators)</h4>
             <FormGrid>
-              <Field label="Name">
-                <Input name="label" required className="mt-1 w-full" />
+              <Field label="Name" rule={SETTINGS_LEAVE_KIND_RULES.label}>
+                <Input {...nativeAttrs(SETTINGS_LEAVE_KIND_RULES.label)} className="mt-1 w-full" />
               </Field>
-              <Field label="Short code" hint="Letters, digits, underscores. Cannot be changed.">
-                <Input name="code" required className="mt-1 w-full" />
+              <Field label="Short code" hint="Letters, digits, underscores. Cannot be changed." rule={SETTINGS_LEAVE_KIND_RULES.code}>
+                <Input {...nativeAttrs(SETTINGS_LEAVE_KIND_RULES.code)} className="mt-1 w-full" />
               </Field>
               <Field label="Pay">
                 <Select name="paid" defaultValue="unpaid" className="mt-1 w-full">
@@ -354,7 +358,7 @@ export default async function AttendanceSettingsPage({
             <Button type="submit" variant="secondary">
               Add kind
             </Button>
-          </form>
+          </CheckedForm>
         </section>
       )}
     </Page>

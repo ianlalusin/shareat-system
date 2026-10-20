@@ -1,3 +1,5 @@
+import { OWNERS_CREATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { CheckedForm } from '@/components/forms';
 import Link from 'next/link';
 import { requirePageAccess } from '../../lib/page-access';
 import { createOwnerAction } from './actions';
@@ -12,7 +14,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, FlashBanner, Input, LinkRow, RowLink, Select , FormGrid, FormSection} from '@/components/ui';
+import { Banner, Button, FlashBanner, Input, LinkRow, RowLink, Select , FormGrid, FormSection, Field } from '@/components/ui';
 
 export const metadata = { title: 'Owners — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -156,13 +158,13 @@ export default async function OwnersPage({
           </p>
         </div>
 
-        <form action={createOwnerAction} className="space-y-4">
+        <CheckedForm rules={OWNERS_CREATE_RULES} action={createOwnerAction} className="space-y-4">
           <>
             <FormSection title="Ownership">
               <FormGrid layout="fields">
                 <div className="min-w-0">
-                  <Field label="Store">
-                    <Select name="storeId" required defaultValue="" className="w-full">
+                  <Field rule={OWNERS_CREATE_RULES.storeId} label="Store">
+                    <Select {...nativeAttrs(OWNERS_CREATE_RULES.storeId)}   defaultValue="" className="w-full">
                       <option value="" disabled>
                         Choose…
                       </option>
@@ -175,8 +177,8 @@ export default async function OwnersPage({
                   </Field>
                 </div>
                 <div className="min-w-0 erp-field-long">
-                  <Field label="Who">
-                    <Select name="personId" required defaultValue="" className="w-full">
+                  <Field rule={OWNERS_CREATE_RULES.personId} label="Who">
+                    <Select {...nativeAttrs(OWNERS_CREATE_RULES.personId)}   defaultValue="" className="w-full">
                       <option value="" disabled>
                         Choose…
                       </option>
@@ -194,11 +196,11 @@ export default async function OwnersPage({
                   </Field>
                 </div>
                 <div className="min-w-0 erp-field-short">
-                  <Field
+                  <Field rule={OWNERS_CREATE_RULES.ownershipPercentage}
                     label="Ownership %"
                     hint="Indicative only — nothing checks that these add to 100, because a store mid-restructure legitimately does not."
                   >
-                    <input name="ownershipPercentage" inputMode="decimal" className={INPUT} />
+                    <Input {...nativeAttrs(OWNERS_CREATE_RULES.ownershipPercentage)} className="w-full" />
                   </Field>
                 </div>
               </FormGrid>
@@ -206,8 +208,8 @@ export default async function OwnersPage({
             <FormSection title="Drawings policy">
               <FormGrid layout="fields">
                 <div className="min-w-0">
-                  <Field label="Drawing limit" hint="Leave both blank for no limit.">
-                    <input name="drawingLimit" inputMode="decimal" className={INPUT} />
+                  <Field rule={OWNERS_CREATE_RULES.drawingLimit} label="Drawing limit" hint="Leave both blank for no limit.">
+                    <Input {...nativeAttrs(OWNERS_CREATE_RULES.drawingLimit)} className="w-full" />
                   </Field>
                 </div>
                 <div className="min-w-0">
@@ -245,29 +247,8 @@ export default async function OwnersPage({
           <Button type="submit" variant="primary">
             Save
           </Button>
-        </form>
+        </CheckedForm>
       </section>
     </Page>
-  );
-}
-
-const INPUT =
-  'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
-
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
-      {children}
-      {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </label>
   );
 }

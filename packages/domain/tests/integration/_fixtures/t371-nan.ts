@@ -3,6 +3,7 @@ import { expect } from 'vitest';
 import { sql as dsql } from 'drizzle-orm';
 import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
+import { checkField, type FieldRule } from '@shareat/domain/field-rules';
 import { seedChartOfAccounts } from '../../../../db/seed/chart-of-accounts';
 import { testItemCode } from './item-code';
 
@@ -68,10 +69,18 @@ export async function refusalOf(p: Promise<unknown>): Promise<{ text: string | n
 }
 
 /** The four plain-refusal assertions. `field` is a regex for the human word(s) the sentence must use for the field. */
-export function expectPlainRefusal(got: { text: string | null; raw: boolean }, typed: string, field: RegExp, what: string): void {
+export function expectPlainRefusal(got: { text: string | null; raw: boolean }, typed: string, field: RegExp, what: string, rule?: FieldRule): void {
   expect(got.text, `${what}: ${JSON.stringify(typed)} was ACCEPTED`).not.toBeNull();
   expect(got.raw, `${what}: a raw error (not a written sentence) reached the person: ${got.text}`).toBe(false);
-  expect(got.text, `${what}: the sentence does not quote the typed value`).toContain(`"${typed}"`);
+  if (rule) {
+    // T-440: a ruled field refuses with the RULE's sentence (the one the screen shows) and never echoes the typed value.
+    const c = checkField(rule, typed);
+    if (c.ok) throw new Error(`${what}: the rule accepts ${JSON.stringify(typed)}`);
+    expect(got.text, `${what}: the sentence is not the rule's requirement`).toBe(c.requirement);
+    if (!c.requirement.includes(typed)) expect(got.text, `${what}: the sentence echoes the typed value`).not.toContain(typed);
+  } else {
+    expect(got.text, `${what}: the sentence does not quote the typed value`).toContain(`"${typed}"`);
+  }
   expect(got.text, `${what}: the sentence does not name the field`).toMatch(field);
   expect(got.text).not.toMatch(UUID);
   expect(got.text).not.toMatch(DB_VOCAB);

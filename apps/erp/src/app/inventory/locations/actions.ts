@@ -11,10 +11,13 @@
  * `commissary/catalogue/actions.ts` established.
  */
 import { redirectWithFlash } from '@/lib/flash';
+import { can } from '@shareat/auth';
+import { INVENTORY_LOCATION_RULES } from '@shareat/domain/field-rules';
 import { keepTyping } from '@/lib/keep-typing';
 import { LOCATION_EDIT } from './typed-forms';
 import { revalidatePath } from 'next/cache';
 import {
+  assertFieldRules,
   createLocation,
   deactivateLocation,
   ensureLocationTypes,
@@ -102,8 +105,11 @@ export async function createLocationAction(fd: FormData): Promise<void> {
 
   let message = '';
   try {
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      createLocation(tx, actor, {
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): the field check runs only for a caller `createLocation`'s first authorize() would let in
+      // ('manage_locations' at this store); anyone else is refused by that gate before any field sentence.
+      if (await can(tx, actor, 'manage_locations', { storeId })) assertFieldRules(INVENTORY_LOCATION_RULES, fd);
+      return createLocation(tx, actor, {
         storeId,
         code: str(fd, 'code'),
         name: str(fd, 'name'),
@@ -111,8 +117,8 @@ export async function createLocationAction(fd: FormData): Promise<void> {
         role: str(fd, 'role'),
         purpose: fd.get('isReceiving') === 'on' ? 'receiving' : 'normal',
         isDefault: fd.get('isDefault') === 'on',
-      }),
-    );
+      });
+    });
     message = 'Room created.';
   } catch (err) {
     return await redirectWithFlash('/inventory/locations', { store: storeId }, { error: errorMessage(err) });

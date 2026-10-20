@@ -12,12 +12,14 @@
  * `tests/unit/no-client-supplied-actor.test.ts` fails the build if that ever changes.
  */
 import {
+  assertFieldRules,
   previewChannelSettlement,
   recordChannelSettlement,
   setChannelPayoutDestination,
   voidChannelSettlement,
   type SettlementPreview,
 } from '@shareat/domain';
+import { CHANNEL_SETTLEMENT_VOID_RULES } from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -110,15 +112,11 @@ export async function recordSettlementAction(formData: FormData): Promise<void> 
   const actor = await requireActor();
 
   try {
+    // T-440: the screen's rule set (CHANNEL_SETTLEMENT_RECORD_RULES) is asserted in recordChannelSettlement, AFTER authorize().
     const channelId = str(formData, 'channelId');
     const salesDayId = str(formData, 'salesDayId');
     if (!channelId) throw new Error('Choose the channel this payout is for.');
-    if (!salesDayId) {
-      throw new Error(
-        'Choose the day this payout settles. A settlement clears one verified channel-day — ' +
-          'a payout covering several days is one settlement per day, sharing a reference.',
-      );
-    }
+    // the blank-day refusal lives in recordChannelSettlement, AFTER authorize() and the field rules.
 
     // S5.5v Amendment A2 item 1 — raw strings, unvalidated: the blank/parse refusal for gross/net
     // now lives in the domain, AFTER authorize(), never before it.
@@ -130,7 +128,7 @@ export async function recordSettlementAction(formData: FormData): Promise<void> 
     // schema's own CHECK refuses the pair anyway. Treated as "no loan" rather than surfaced as a
     // constraint error, because that is what the person meant.
     const loanAmount = str(formData, 'loanAmount');
-    const hasLoan = loanId !== '' && loanAmount !== '' && Number(loanAmount) !== 0;
+    const hasLoan = loanAmount !== '' && Number(loanAmount) !== 0; // loanId may be blank: the domain rules see the amount, then drop the pair
 
     await withOrgPrincipal(actor.orgId, (tx) =>
       recordChannelSettlement(tx, actor, {
@@ -172,12 +170,10 @@ export async function voidSettlementAction(formData: FormData): Promise<void> {
 
   try {
     const reason = str(formData, 'reason');
-    if (!reason) {
-      throw new Error('Say why this settlement is being voided — a reversal with no reason is a gap.');
-    }
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const settlementId = str(formData, 'settlementId');
     const target = await loadDestructiveTarget(actor, 'channel_settlement', settlementId, ['record_ar_collection']);
+    assertFieldRules(CHANNEL_SETTLEMENT_VOID_RULES, formData);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'record_ar_collection' });
     await withOrgPrincipal(actor.orgId, async (tx) => {
       await voidChannelSettlement(tx, actor, { settlementId, reason });
@@ -205,7 +201,6 @@ export async function setPayoutDestinationAction(formData: FormData): Promise<vo
   try {
     channelId = str(formData, 'channelId');
     const moneyAccountId = str(formData, 'moneyAccountId');
-    if (!moneyAccountId) throw new Error('Choose the account this channel pays into.');
     await withOrgPrincipal(actor.orgId, (tx) => setChannelPayoutDestination(tx, actor, { channelId, moneyAccountId }));
   } catch (err) {
     return await redirectWithFlash('/channel-settlements', {}, { error: errorMessage(err), typed: keepTyping(formData, PAYOUT_DESTINATION_EDIT, str(formData, 'channelId'), { actorId: actor.personId }) });

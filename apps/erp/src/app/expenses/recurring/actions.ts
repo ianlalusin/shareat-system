@@ -65,7 +65,7 @@ export async function updateTemplateAction(formData: FormData): Promise<void> {
         templateId: str(formData, 'templateId'),
         name: str(formData, 'name'),
         categoryId: str(formData, 'categoryId'),
-        supplierId: str(formData, 'supplierId') || undefined,
+        supplierId: formData.has('supplierId') ? str(formData, 'supplierId') : undefined,
         defaultAmount: str(formData, 'defaultAmount'),
         defaultMoneyAccountId: str(formData, 'defaultMoneyAccountId') || null,
         interval: interval ? (interval as RecurringInterval) : undefined,

@@ -36,7 +36,6 @@ export async function payReimbursementAction(formData: FormData): Promise<void> 
   let flash: Flash;
   try {
     const amount = str(formData, 'amount');
-    if (!amount) throw new Error('Enter the amount to pay.');
 
     // The override is forwarded only when the payout's date really is in a CLOSED month: otherwise an
     // ordinary save would leave an audit row for an override nobody needed.

@@ -233,10 +233,10 @@ const templates = (storeId: string) =>
   sql<{ id: string; anchor_day: number; interval: string }[]>`select id, anchor_day, interval from recurring_expenses where store_id = ${storeId} order by created_at`;
 
 describe('T5 — a weekly template with a blank / hex / exponent day is refused; no template', () => {
-  it('"" -> "The day — enter a whole number from 0 to 31." (HEAD, via the action\'s Number(\'\'): a Sunday template)', async () => {
+  it('"" -> "The day is required." (HEAD, via the action\'s Number(\'\'): a Sunday template)', async () => {
     const f = await recurringStore('t5');
     const refused = await rejection(create(f, 'weekly', ''), 'a blank anchor day');
-    expect(refused.userMessage ?? `NO userMessage — raw: ${refused.message}`).toBe('The day — enter a whole number from 0 to 31.');
+    expect(refused.userMessage ?? `NO userMessage — raw: ${refused.message}`).toBe('The day is required.');
     expect(await templates(f.storeId)).toHaveLength(0);
   });
 
@@ -244,7 +244,7 @@ describe('T5 — a weekly template with a blank / hex / exponent day is refused;
     const f = await recurringStore('t5b');
     for (const typed of ['0x5', '1e1']) {
       const refused = await rejection(create(f, 'weekly', typed), `anchor day ${typed}`);
-      expect(refused.userMessage ?? `NO userMessage — raw: ${refused.message}`, `typed ${typed}`).toBe(`The day — "${typed}" is not a whole number from 0 to 31.`);
+      expect(refused.userMessage ?? `NO userMessage — raw: ${refused.message}`, `typed ${typed}`).toBe(`The day must be a whole number from 0 to 31.`);
     }
     expect(await templates(f.storeId)).toHaveLength(0);
   });
@@ -289,7 +289,7 @@ describe('T7 — updateRecurringTemplate', () => {
       asOrg(f.orgId, (tx) => updateRecurringTemplate(tx, f.manager, { templateId: id, anchorDay: '' } as never)),
       'a blank anchor day on update',
     );
-    expect(refused.userMessage ?? `NO userMessage — raw: ${refused.message}`).toBe('The day — enter a whole number from 0 to 31.');
+    expect(refused.userMessage ?? `NO userMessage — raw: ${refused.message}`).toBe('The day is required.');
     expect((await sql<{ anchor_day: number }[]>`select anchor_day from recurring_expenses where id = ${id}`)[0]!.anchor_day).toBe(5);
 
     await asOrg(f.orgId, (tx) => updateRecurringTemplate(tx, f.manager, { templateId: id, anchorDay: '7' } as never));
@@ -343,7 +343,7 @@ describe('T10 — createAsset / updateAssetTerms refuse a hex or exponent useful
       asOrg(f.orgId, (tx) => updateAssetTerms(tx, f.admin, id, { ...input, usefulLifeMonths: '0x10' })),
       'updateAssetTerms life 0x10',
     );
-    expect(refused.userMessage ?? `NO userMessage — raw: ${refused.message}`).toBe(LIFE_SENTENCE('0x10'));
+    expect(refused.userMessage ?? `NO userMessage — raw: ${refused.message}`).toBe('The useful life must be a whole number from 1 to 1200.');
     expect((await assetRows(f.storeId))[0]!.life).toBe(24);
   });
 });
@@ -392,7 +392,7 @@ describe('F5 — an actor without the permission gets AuthorizationError, never 
     expect(denied.err, `got: ${denied.message}`).toBeInstanceOf(AuthorizationError);
     expect(await templates(f.storeId)).toHaveLength(0);
     const judged = await rejection(create(f, 'weekly', 'abc'), 'manager recurring create "abc"');
-    expect(judged.userMessage ?? judged.message).toBe('The day — "abc" is not a whole number from 0 to 31.');
+    expect(judged.userMessage ?? judged.message).toBe('The day must be a whole number from 0 to 31.');
   });
 
   it('createAsset: staff + "0x10" -> AuthorizationError; no asset; control: the admin IS judged', async () => {
@@ -415,7 +415,7 @@ describe('F5 — an actor without the permission gets AuthorizationError, never 
     expect(denied.err, `got: ${denied.message}`).toBeInstanceOf(AuthorizationError);
     expect((await assetRows(f.storeId))[0]!.life).toBe(24);
     const judged = await rejection(asOrg(f.orgId, (tx) => updateAssetTerms(tx, f.admin, id, input)), 'admin updateAssetTerms "0x10"');
-    expect(judged.userMessage ?? judged.message).toBe(LIFE_SENTENCE('0x10'));
+    expect(judged.userMessage ?? judged.message).toBe('The useful life must be a whole number from 1 to 1200.');
   });
 });
 

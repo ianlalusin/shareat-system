@@ -48,6 +48,8 @@ import { parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { createMoneyTransfer, voidMoneyTransfer } from '../money-transfers';
 import { recordRemittanceEvent } from './audit';
 import { parseDecimalInput } from '../shared/money-input';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { CASH_POLICY_RULES } from '../field-rules/remittance';
 import { allocateFifo, type DayOwed } from './allocate';
 
 export { allocateFifo } from './allocate';
@@ -853,6 +855,8 @@ export async function setStoreCashPolicy(
   },
 ): Promise<void> {
   await authorize(tx, actor, 'set_cash_policy', { storeId: input.storeId });
+  // T-440 / S9: the screen's own rule judges the box AFTER the gate (T-364 order). Moved here from the action.
+  assertFieldRules(CASH_POLICY_RULES, { unremittedCeiling: input.unremittedCeiling });
 
   // T-371 R5 — parsed after `authorize()`, before anything is written.
   const unremittedCeiling = parseDecimalInput(

@@ -6,7 +6,9 @@
  * Thin adapters: read the form, call the domain (packages/domain/src/menu), redirect with a banner. The gate lives INSIDE the
  * domain function (`manage_menu`, `add_menu_item`), not here. A blank text box means "not sent".
  */
-import { createMenuCategory, createMenuItem, editMenuCategory, retireMenuCategory } from '@shareat/domain';
+import { assertFieldRules, createMenuCategory, createMenuItem, editMenuCategory, retireMenuCategory } from '@shareat/domain';
+import { authorize, can } from '@shareat/auth';
+import { MENU_CATEGORY_RULES, MENU_ITEM_ADD_RULES } from '@shareat/domain/field-rules';
 import type { MenuItemType } from '@shareat/db/schema';
 import { requireActor } from '../../lib/session';
 import { redirectWithFlash } from '@/lib/flash';
@@ -21,6 +23,8 @@ const PATH = '/menu';
 export async function createCategoryAction(fd: FormData): Promise<void> {
   const actor = await requireActor(PATH);
   try {
+    // The whole-number parser can refuse too; prove the domain's manage_menu gate before parsing.
+    await withOrgPrincipal(actor.orgId, (tx) => authorize(tx, actor, 'manage_menu', {}));
     const sortOrder = wholeNumber(fd, 'sortOrder', 'The sort order');
     const parentId = opt(fd, 'parentId');
     await withOrgPrincipal(actor.orgId, (tx) =>
@@ -36,12 +40,17 @@ export async function editCategoryAction(fd: FormData): Promise<void> {
   const actor = await requireActor(PATH);
   const categoryId = str(fd, 'id');
   try {
+    await withOrgPrincipal(actor.orgId, (tx) => authorize(tx, actor, 'manage_menu', {}));
     const id = requireId(fd, 'id', 'Choose a category.');
     const name = opt(fd, 'name');
     const sortOrder = wholeNumber(fd, 'sortOrder', 'The sort order');
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      editMenuCategory(actor, { id, ...(name !== undefined ? { name } : {}), ...(sortOrder !== undefined ? { sortOrder } : {}) }, tx),
-    );
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): `editMenuCategory` also serves retire (no name), so the name check stays here, and runs only for a caller its
+      // first authorize() ('manage_menu') would let in; anyone else is refused by that gate before any field sentence.
+      // An edit that sends no name leaves the name alone ("a blank box is not sent"); one that sends it must send a real one.
+      if (fd.has('name') && (await can(tx, actor, 'manage_menu', {}))) assertFieldRules(MENU_CATEGORY_RULES, fd);
+      return editMenuCategory(actor, { id, ...(name !== undefined ? { name } : {}), ...(sortOrder !== undefined ? { sortOrder } : {}) }, tx);
+    });
   } catch (err) {
     return await redirectWithFlash(PATH, {}, { error: menuErrorMessage(err), typed: keepTyping(fd, MENU_CATEGORY, categoryId, { actorId: actor.personId }) });
   }
@@ -70,13 +79,16 @@ export async function createItemAction(fd: FormData): Promise<void> {
   try {
     const categoryId = requireId(fd, 'categoryId', 'Choose a category for the item.');
     const description = opt(fd, 'description');
-    created = await withOrgPrincipal(actor.orgId, (tx) =>
-      createMenuItem(
+    created = await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): `createMenuItem` also runs on a request's approval, so the field check stays here, and runs only for a caller
+      // its first authorize() ('add_menu_item') would let in; anyone else is refused by that gate before any field sentence.
+      if (await can(tx, actor, 'add_menu_item', {})) assertFieldRules(MENU_ITEM_ADD_RULES, fd);
+      return createMenuItem(
         actor,
         { categoryId, name: str(fd, 'name'), itemType: str(fd, 'itemType') as MenuItemType, ...(description !== undefined ? { description } : {}) },
         tx,
-      ),
-    );
+      );
+    });
   } catch (err) {
     return await redirectWithFlash(PATH, {}, { error: menuErrorMessage(err) });
   }

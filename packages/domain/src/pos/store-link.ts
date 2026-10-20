@@ -23,6 +23,8 @@ import { POS_V1_TAX_TYPES, type PosV1TaxType } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import type { BusinessDate } from '@shareat/core/datetime';
 import { gone, humanDate, refuse } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { SETTINGS_POS_LINK_RULES } from '../field-rules/settings';
 
 const CAPABILITY = 'manage_chart_of_accounts' as const;
 
@@ -39,10 +41,15 @@ export interface LinkStoreToPosInput {
 export async function linkStoreToPos(tx: Tx, actor: Actor, input: LinkStoreToPosInput): Promise<{ linkId: string }> {
   await authorize(tx, actor, CAPABILITY, { storeId: input.storeId });
 
-  const posStoreId = input.posStoreId.trim();
-  const posStoreName = input.posStoreName.trim();
-  if (!posStoreId) throw refuse('linkStoreToPos: posStoreId is blank', 'Choose or enter the POS store this store sells under.');
-  if (!posStoreName) throw refuse('linkStoreToPos: posStoreName is blank', 'Give the POS store a name so people can recognise it.');
+  // T-440: what each box needs (and the sentence) is ONE rule set shared with the POS link screen (field-rules/settings.ts).
+  const fields = assertFieldRules(SETTINGS_POS_LINK_RULES, {
+    posStoreId: input.posStoreId,
+    posStoreName: input.posStoreName,
+    salesChannelId: input.salesChannelId,
+    posTaxType: input.posTaxType,
+  });
+  const posStoreId = fields.posStoreId ?? '';
+  const posStoreName = fields.posStoreName ?? '';
   if (!(POS_V1_TAX_TYPES as readonly string[]).includes(input.posTaxType)) {
     throw refuse(`linkStoreToPos: unknown tax type ${String(input.posTaxType)}`, "Choose the tax type shown in the POS store's settings.");
   }

@@ -11,12 +11,15 @@
  * (guard G1b: no wrapper redirects).
  */
 import {
+  assertFieldRules,
   cancelScheduledOffer,
   cancelScheduledOptionOffer,
   setMenuOffer,
   setOptionOffer,
   withdrawMenuOffer,
 } from '@shareat/domain';
+import { authorize, can } from '@shareat/auth';
+import { MENU_OPTION_PRICE_RULES, MENU_PRICE_RULES } from '@shareat/domain/field-rules';
 import type { MenuChannel, MenuPricingMode } from '@shareat/db/schema';
 import { refuse } from '@shareat/db';
 import { requireActor } from '../../../lib/session';
@@ -32,6 +35,8 @@ export async function setPriceAction(fd: FormData): Promise<void> {
   if (!isUuid(storeId)) return await redirectWithFlash(PATH, {}, { error: CHOOSE_STORE });
   const scheduled = opt(fd, 'effectiveFrom') !== undefined;
   try {
+    // Raw whole-number/date parsers can refuse before the later rule check; use setMenuOffer's gate first.
+    await withOrgPrincipal(actor.orgId, (tx) => authorize(tx, actor, 'set_menu_price', { storeId }));
     const variantId = requireId(fd, 'variantId', 'Choose a variant.');
     const pricingMode = opt(fd, 'pricingMode');
     const amount = opt(fd, 'amount');
@@ -40,8 +45,11 @@ export async function setPriceAction(fd: FormData): Promise<void> {
     const bundleHeads = wholeNumber(fd, 'bundleHeads', 'The number of guests in a bundle');
     const extraHeadAmount = opt(fd, 'extraHeadAmount');
     const effectiveFrom = manilaInstant(opt(fd, 'effectiveFrom'));
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      setMenuOffer(
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): the field check stays here, and runs only for a caller `setMenuOffer`'s first authorize()
+      // ('set_menu_price' at this store) would let in; anyone else is refused by that gate before any field sentence.
+      if (await can(tx, actor, 'set_menu_price', { storeId })) assertFieldRules(MENU_PRICE_RULES, fd);
+      return setMenuOffer(
         actor,
         {
           storeId,
@@ -56,8 +64,8 @@ export async function setPriceAction(fd: FormData): Promise<void> {
           ...(effectiveFrom !== undefined ? { effectiveFrom } : {}),
         },
         tx,
-      ),
-    );
+      );
+    });
   } catch (err) {
     return await redirectWithFlash(PATH, { store: storeId }, { error: menuErrorMessage(err) });
   }
@@ -100,15 +108,20 @@ export async function setOptionPriceAction(fd: FormData): Promise<void> {
   if (!isUuid(storeId)) return await redirectWithFlash(PATH, {}, { error: CHOOSE_STORE });
   const withdrawing = str(fd, 'withdraw') === '1';
   try {
+    await withOrgPrincipal(actor.orgId, (tx) => authorize(tx, actor, 'set_menu_price', { storeId }));
+    // Withdraw posts this form too, and a withdrawal ignores whatever is in the price box.
     const optionValueId = requireId(fd, 'optionValueId', 'Choose an option.');
     const priceDelta = withdrawing ? null : opt(fd, 'priceDelta');
     if (priceDelta === undefined) {
       throw refuse('setOptionPriceAction: priceDelta is blank and withdraw is not set.', 'Enter the price change (0.00 for none), or choose Withdraw to stop offering the option.');
     }
     const effectiveFrom = manilaInstant(opt(fd, 'effectiveFrom'));
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      setOptionOffer(actor, { storeId, optionValueId, channel: str(fd, 'channel') as MenuChannel, priceDelta, ...(effectiveFrom !== undefined ? { effectiveFrom } : {}) }, tx),
-    );
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): the field check stays here, and runs only for a caller `setOptionOffer`'s first authorize()
+      // ('set_menu_price' at this store) would let in; anyone else is refused by that gate before any field sentence.
+      if (!withdrawing && (await can(tx, actor, 'set_menu_price', { storeId }))) assertFieldRules(MENU_OPTION_PRICE_RULES, fd);
+      return setOptionOffer(actor, { storeId, optionValueId, channel: str(fd, 'channel') as MenuChannel, priceDelta, ...(effectiveFrom !== undefined ? { effectiveFrom } : {}) }, tx);
+    });
   } catch (err) {
     return await redirectWithFlash(PATH, { store: storeId }, { error: menuErrorMessage(err) });
   }

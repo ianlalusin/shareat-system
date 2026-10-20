@@ -33,6 +33,8 @@ import { FREEZING_STATUSES } from '@shareat/db/schema';
 import { commitCountSession, type CountLineInput, type VarianceLine } from './count-sessions';
 import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from './receipt-posting';
 import { quantity, type Quantity } from './quantity';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { INVENTORY_COUNT_LINE_RULES, INVENTORY_COUNT_OPEN_RULES } from '../field-rules/inventory';
 import { parseRequiredQuantity } from './quantity-field';
 
 // -------------------------------------------------------------------------------------------
@@ -57,6 +59,8 @@ export async function openCountSession(
   input: OpenCountSessionInput,
 ): Promise<OpenCountSessionOutcome> {
   await authorize(tx, actor, 'open_count_session', { storeId: input.storeId });
+  // T-440 S9: the field check runs AFTER the gate, so a caller without the right is refused, never told what is wrong.
+  assertFieldRules(INVENTORY_COUNT_OPEN_RULES, { countedOn: input.countedOn });
 
   const locationIds = [...new Set(input.locationIds)];
   if (locationIds.length === 0) {
@@ -115,6 +119,7 @@ export async function recordCount(
   if (!session) return { ok: false, reason: `count session ${input.sessionId} does not exist` };
 
   await authorize(tx, actor, 'record_stock_movement', { storeId: session.storeId });
+  assertFieldRules(INVENTORY_COUNT_LINE_RULES, { itemId: input.itemId, locationId: input.locationId, countedQuantity: input.countedQuantity });
   const countedQuantity = parseRequiredQuantity(input.countedQuantity, 'recordCount: the counted quantity', 'Counted quantity');
 
   if (session.status !== 'open' && session.status !== 'counting') {

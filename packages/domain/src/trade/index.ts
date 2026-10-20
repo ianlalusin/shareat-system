@@ -81,6 +81,8 @@ import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from '../stock/receipt-posting';
 import { closedStockPeriodSentence, closedStockPeriodSentenceToday } from '../stock/period-guard';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { refuse } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { TRADE_ORDER_RULES } from '../field-rules/trade';
 import { notActiveItemSentence } from '../items/not-active';
 import type { StockMovementKind } from '@shareat/db/schema';
 
@@ -184,6 +186,14 @@ export async function createTradeOrder(
 ): Promise<{ orderId: string; totalAmount: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_buyer', { storeId: input.storeId });
+    // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
+    assertFieldRules(TRADE_ORDER_RULES, {
+      storeId: input.storeId,
+      customerId: input.customerId,
+      orderDate: input.orderDate,
+      deliveryFee: input.deliveryFee,
+      otherFees: input.otherFees,
+    });
 
     const customer = await customersRepo.getById(trx, actor.orgId, input.customerId);
     if (!customer) throw new Error(`createTradeOrder: customer ${input.customerId} does not exist.`);

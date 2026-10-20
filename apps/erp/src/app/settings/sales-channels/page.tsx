@@ -10,7 +10,8 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { SETTINGS_SALES_CHANNEL_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Banner, Button, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
@@ -130,13 +131,25 @@ export default async function SalesChannelsSettingsPage({
 
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Add a channel</h2>
-        <form action={createSalesChannelAction} className="space-y-4 text-sm">
+        <CheckedForm rules={SETTINGS_SALES_CHANNEL_RULES} action={createSalesChannelAction} className="space-y-4 text-sm">
           <input type="hidden" name="storeId" value={storeId} />
-          <ChannelFields accounts={accounts} />
+          <ChannelFields
+            accounts={accounts}
+            nameField={
+              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Channel name</span>} rule={SETTINGS_SALES_CHANNEL_RULES.name}>
+                <Input
+                  {...nativeAttrs(SETTINGS_SALES_CHANNEL_RULES.name)}
+                  defaultValue=""
+                  placeholder="Walk-in, Foodpanda, GrabFood…"
+                  className="mt-1 w-full"
+                />
+              </Field>
+            }
+          />
           <Button type="submit" variant="primary">
             Save
           </Button>
-        </form>
+        </CheckedForm>
       </section>
 
       {retired.length > 0 && (
@@ -247,8 +260,22 @@ function ChannelCard({
         label={channel.name}
         hidden={{ storeId, channelId: channel.id }}
         typed={typedFor(sp, SALES_CHANNEL_EDIT, channel.id, actorId)}
+        rules={SETTINGS_SALES_CHANNEL_RULES}
       >
-        <ChannelFields accounts={accounts} channel={channel} />
+        <ChannelFields
+          accounts={accounts}
+          channel={channel}
+          nameField={
+            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Channel name</span>} rule={SETTINGS_SALES_CHANNEL_RULES.name}>
+              <Input
+                {...nativeAttrs(SETTINGS_SALES_CHANNEL_RULES.name)}
+                defaultValue={channel.name}
+                placeholder="Walk-in, Foodpanda, GrabFood…"
+                className="mt-1 w-full"
+              />
+            </Field>
+          }
+        />
       </EditableRecord>
 
       <form action={setSalesChannelActiveAction}>
@@ -281,23 +308,16 @@ function ChannelCard({
 function ChannelFields({
   accounts,
   channel,
+  nameField,
 }: {
   accounts: { code: string; name: string }[];
   channel?: SalesChannelAdminRow;
+  /** The name box, drawn by the caller INSIDE its own form so the live rule sits in the form that owns it (T-440 G2). */
+  nameField: React.ReactNode;
 }) {
   return (
     <div className="space-y-4 text-sm">
-      <FormGrid>
-        <Field label={<span className="text-neutral-600 dark:text-neutral-400">Channel name</span>}>
-          <Input
-            name="name"
-            required
-            defaultValue={channel?.name ?? ''}
-            placeholder="Walk-in, Foodpanda, GrabFood…"
-            className="mt-1 w-full"
-          />
-        </Field>
-      </FormGrid>
+      <FormGrid>{nameField}</FormGrid>
 
       <fieldset className="space-y-2">
         <legend className="text-neutral-600 dark:text-neutral-400">Where does this money go?</legend>

@@ -31,8 +31,10 @@ import {
   suggestItemCode,
   undoDuplicateDismissal,
   updateItem,
+  assertFieldRules,
   type ItemCodeSuggestion,
 } from '@shareat/domain';
+import { ITEMS_REJECT_RULES, ITEMS_RENAME_RULES, ITEMS_REQUEST_RULES } from '@shareat/domain/field-rules';
 import { AuthorizationError, can } from '@shareat/auth';
 import { itemsRepo, type BaseUnit, type ItemKind } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
@@ -85,6 +87,7 @@ export async function requestItemAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   let warning = '';
   try {
+    // T-386 I3: a request takes no code; the domain judges only name, kind and unit, so a posted `code` is neither read nor judged.
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       requestItem(tx, actor, {
         name: str(formData, 'name'),
@@ -126,8 +129,11 @@ export async function requestItemAction(formData: FormData): Promise<void> {
 export async function createItemAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   try {
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      createItem(tx, actor, {
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): `createItem` is also called by the master-data script, so the field check stays here, and runs only for
+      // a caller its first authorize() ('approve_item') would let in; anyone else is refused by that gate before any field sentence.
+      if (await can(tx, actor, 'approve_item', {})) assertFieldRules(ITEMS_REQUEST_RULES, formData);
+      return createItem(tx, actor, {
         // T-386 R5/R7: blank or absent allocates from the name; a typed code is a super-admin override.
         code: str(formData, 'code') || undefined,
         name: str(formData, 'name'),
@@ -140,8 +146,8 @@ export async function createItemAction(formData: FormData): Promise<void> {
         isPurchasable: flag(formData, 'isPurchasable'),
         sellableRetail: flag(formData, 'sellableRetail'),
         sellableWholesale: flag(formData, 'sellableWholesale'),
-      }),
-    );
+      });
+    });
   } catch (err) {
     return await redirectWithFlash('/items', {}, { error: errorMessage(err) });
   }
@@ -253,15 +259,18 @@ export async function renameItemAction(formData: FormData): Promise<void> {
   const itemId = str(formData, 'itemId');
   let message = '';
   try {
-    const { changed } = await withOrgPrincipal(actor.orgId, (tx) =>
-      renameItem(tx, actor, {
+    const { changed } = await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): the field check stays here, and runs only for a caller `renameItem`'s first authorize()
+      // ('approve_item') would let in; anyone else is refused by that gate before any field sentence.
+      if (await can(tx, actor, 'approve_item', {})) assertFieldRules(ITEMS_RENAME_RULES, formData);
+      return renameItem(tx, actor, {
         itemId,
         name: str(formData, 'name'),
         code: str(formData, 'code'),
         // T-386 R8 (q4): the code stays unless this tick is on.
         adoptSuggestedCode: flag(formData, 'adoptSuggestedCode'),
-      }),
-    );
+      });
+    });
     message = changed ? 'Renamed.' : 'Nothing to change.';
   } catch (err) {
     if (err instanceof AuthorizationError) {
@@ -348,12 +357,15 @@ export async function suggestItemCodeAction(name: string, forItemId?: string): P
 export async function rejectItemRequestAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   try {
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      rejectItemRequest(tx, actor, {
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): the field check stays here, and runs only for a caller `rejectItemRequest`'s first authorize()
+      // ('approve_item') would let in; anyone else is refused by that gate before any field sentence.
+      if (await can(tx, actor, 'approve_item', {})) assertFieldRules(ITEMS_REJECT_RULES, formData);
+      return rejectItemRequest(tx, actor, {
         requestId: str(formData, 'requestId'),
         note: str(formData, 'note'),
-      }),
-    );
+      });
+    });
   } catch (err) {
     return await redirectWithFlash('/items', {}, { error: errorMessage(err) });
   }

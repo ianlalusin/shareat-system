@@ -3,15 +3,16 @@
 /** The "New transfer" form. From/To exclusivity is `TwoWayPicker`'s job — shared with
  *  money-transfers rather than reimplemented here (see that component's header). */
 import { Button, Field, FormGrid, Input, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { INVENTORY_TRANSFER_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { createTransferAction } from './actions';
 import { TwoWayPicker, type PickerOption } from '../../../components/two-way-picker';
 
 export function NewTransferForm({
-  action,
   storeId,
   locations,
   items,
 }: {
-  action: (fd: FormData) => void | Promise<void>;
   storeId: string;
   locations: readonly PickerOption[];
   items: readonly { id: string; name: string }[];
@@ -20,7 +21,7 @@ export function NewTransferForm({
   const fieldSelect = 'mt-1 block w-full min-h-11 rounded-[10px] border border-field-border bg-field px-2 py-1.5 text-sm';
 
   return (
-    <form action={action} className="mt-3 space-y-3">
+    <CheckedForm rules={INVENTORY_TRANSFER_RULES} action={createTransferAction} className="mt-3 space-y-3">
       <input type="hidden" name="storeId" value={storeId} />
       <FormGrid>
 
@@ -32,8 +33,8 @@ export function NewTransferForm({
         selectClassName={fieldSelect}
       />
 
-      <Field label="Item" className={fieldLabel}>
-        <Select name="itemId" required className="mt-1 block w-full">
+      <Field label="Item" className={fieldLabel} rule={INVENTORY_TRANSFER_RULES.itemId}>
+        <Select {...nativeAttrs(INVENTORY_TRANSFER_RULES.itemId)} className="mt-1 block w-full">
           {items.map((i) => (
             <option key={i.id} value={i.id}>
               {i.name}
@@ -41,8 +42,8 @@ export function NewTransferForm({
           ))}
         </Select>
       </Field>
-      <Field label="Quantity" className={fieldLabel}>
-        <Input name="quantity" required inputMode="decimal" placeholder="0.000" className="mt-1 block w-full tabular-nums" />
+      <Field label="Quantity" className={fieldLabel} rule={INVENTORY_TRANSFER_RULES.quantity}>
+        <Input {...nativeAttrs(INVENTORY_TRANSFER_RULES.quantity)} placeholder="0.000" className="mt-1 block w-full tabular-nums" />
       </Field>
       <Field label="Mode" className={fieldLabel}>
         <Select name="mode" className="mt-1 block w-full">
@@ -57,6 +58,6 @@ export function NewTransferForm({
       <Button type="submit" variant="primary">
         Transfer
       </Button>
-    </form>
+    </CheckedForm>
   );
 }

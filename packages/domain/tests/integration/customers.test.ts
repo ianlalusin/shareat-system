@@ -420,7 +420,7 @@ async function item(f: Fixture, label: string, name: string, baseUnit = 'kg'): P
       asOrg(f.orgId, (tx) =>
         setPrice(tx, f.admin, { priceListId: list.id, itemId: oddId, rate: '-5.00' }),
       ),
-    ).rejects.toThrow(/cannot be negative/);
+    ).rejects.toMatchObject({ name: 'RefusalError', userMessage: 'A rate cannot be negative. A negative price is a discount.' });
   });
 });
 

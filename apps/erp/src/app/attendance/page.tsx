@@ -87,7 +87,7 @@ export default async function AttendanceReviewPage({
         </PageDescription>
       </div>
 
-      <form className="flex flex-wrap items-end gap-3">
+      <form method="get" className="flex flex-wrap items-end gap-3">
         <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
           Store
           <Select name="store" defaultValue={storeId} className="w-full">

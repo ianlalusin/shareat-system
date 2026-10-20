@@ -5,7 +5,9 @@
  *
  * ⛔ The gates live in the services, not here. A gate in a server action protects one caller.
  */
+import { LOAN_REVERSE_RULES } from '@shareat/domain/field-rules';
 import {
+  assertFieldRules,
   createLoan,
   disburseLoan,
   recordLoanPayment,
@@ -30,7 +32,6 @@ export async function createLoanAction(formData: FormData): Promise<void> {
   let id = '';
   try {
     const storeId = str(formData, 'storeId');
-    if (!storeId) throw new Error('Choose a store.');
     // T-351 / DEF-481 — the raw string, unparsed: `createLoan` parses it AFTER `authorize()`, in
     // the domain (`whole-number-input.ts`'s `parseWholeNumberInput`), never here.
     const created = await withOrgPrincipal(actor.orgId, (tx) =>
@@ -108,9 +109,9 @@ export async function reverseEntryAction(formData: FormData): Promise<void> {
   const id = str(formData, 'loanId');
   try {
     const reason = str(formData, 'reason');
-    if (!reason) throw new Error('Say why this is being reversed.');
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const target = await loadDestructiveTarget(actor, 'loan', id, ['record_ap_payment']);
+    assertFieldRules(LOAN_REVERSE_RULES, formData);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'record_ap_payment' });
     const entryId = str(formData, 'entryId');
     await withOrgPrincipal(actor.orgId, async (tx) => {

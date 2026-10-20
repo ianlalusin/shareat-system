@@ -31,6 +31,7 @@ export async function createRequestAction(formData: FormData): Promise<void> {
   const requestedFor = str(formData, 'requestedFor');
   if (!requestedFor) return await redirectWithFlash('/cash-requests', {}, { error: 'Say who is holding the money.', field: 'requested-for' });
   try {
+    // T-440 / S9: the screen's rule set (one definition) is judged in the domain, right after its authorize().
     const created = await withOrgPrincipal(actor.orgId, (tx) =>
       createCashRequest(tx, actor, {
         storeId,
@@ -58,7 +59,6 @@ export async function decideAction(formData: FormData): Promise<void> {
   try {
     if (decision === 'reject') {
       const reason = str(formData, 'reason');
-      if (!reason) throw new Error('A refusal needs a reason.');
       await withOrgPrincipal(actor.orgId, (tx) =>
         decideCashRequest(tx, actor, { requestId: id, decision: 'reject', reason }),
       );

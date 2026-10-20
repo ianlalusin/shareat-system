@@ -21,6 +21,8 @@ import { compare, money, subtract, ZERO } from '@shareat/core/money';
 import { postEntry } from '../ledger/post-entry';
 import { checkDraw } from '../money-accounts/overdraft';
 import { parseMoneyInput } from '../shared/money-input';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { SERVICE_CHARGE_DISTRIBUTE_RULES } from '../field-rules/service-charge';
 // ⭐ Shared spelling of these codes, not a fourth copy — same constant `expenses/routing.ts`
 // already uses for the identical decision.
 import { EXPENSE_FUNDING_ACCOUNTS } from '../expenses/routing';
@@ -43,6 +45,8 @@ export async function distributeServiceCharge(
 ): Promise<{ entryId: string; created: boolean; warning?: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_expense', { storeId: input.storeId });
+    // T-440 S9 (ii): the screen's own rules, only once the gate has passed.
+    assertFieldRules(SERVICE_CHARGE_DISTRIBUTE_RULES, { amount: input.amount, moneyAccountId: input.moneyAccountId, paidOn: input.paidOn });
     // ⛔ T-366 S1 / DEF-374 — serialise per store before the float cap is read.
     await advisoryLocksRepo.lockServiceChargeFloat(trx, input.storeId);
 

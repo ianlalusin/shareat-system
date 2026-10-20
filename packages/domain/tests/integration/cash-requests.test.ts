@@ -544,7 +544,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
           storeId: f.storeId, requestedFor: f.staffId, purpose: 'Run', amount: '0.004', on: '2026-01-05',
         }),
       ),
-    ).rejects.toThrow(/createCashRequest: the amount.*"0\.004"/);
+    ).rejects.toMatchObject({"name":"RefusalError","message":"cash-requests.create.amount: money check failed","userMessage":"The amount requested — \"0.004\" is not a valid amount. Use at most two decimal places."});
   });
 
   it('createCashRequest refuses "1.234" too — the "quieter" defect DEF-272 also corrects for: three decimal places silently rounded away', async () => {
@@ -555,7 +555,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
           storeId: f.storeId, requestedFor: f.staffId, purpose: 'Run', amount: '1.234', on: '2026-01-05',
         }),
       ),
-    ).rejects.toThrow(/"1\.234"/);
+    ).rejects.toMatchObject({"name":"RefusalError","message":"cash-requests.create.amount: money check failed","userMessage":"The amount requested — \"1.234\" is not a valid amount. Use at most two decimal places."});
   });
 
   it('an ordinary amount still works, and the EXACT parsed value is what reaches the row', async () => {
@@ -580,7 +580,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
       asOrg(f.orgId, (tx) =>
         decideCashRequest(tx, f.manager, { requestId: req.id, decision: 'approve', amount: '0.004' }),
       ),
-    ).rejects.toThrow(/decideCashRequest: the approved amount.*"0\.004"/);
+    ).rejects.toMatchObject({"name":"RefusalError","message":"cash-requests.approve.amount: money check failed","userMessage":"The approved amount — \"0.004\" is not a valid amount. Use at most two decimal places."});
   });
 
   // ⭐ Found by reading releaseCashRequest fully, NOT by the mechanical shape scanner — its guard is
@@ -603,6 +603,6 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
           requestId: req.id, amount: '0.004', fromMoneyAccountId: f.till, on: '2026-01-05',
         }),
       ),
-    ).rejects.toThrow(/releaseCashRequest: the amount.*"0\.004"/);
+    ).rejects.toMatchObject({"name":"RefusalError","message":"cash-requests.release.amount: money check failed","userMessage":"The amount released — \"0.004\" is not a valid amount. Use at most two decimal places."});
   });
 });

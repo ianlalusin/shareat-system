@@ -10,11 +10,12 @@
 import { toBusinessDate } from '@shareat/core/datetime';
 import { redirectWithFlash, type Nav } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
-import { recordReturn, refundSupplierCredit, voidReturn } from '@shareat/domain';
+import { assertFieldRules, recordReturn, refundSupplierCredit, voidReturn } from '@shareat/domain';
+import { INVENTORY_RETURN_RULES, INVENTORY_RETURN_VOID_RULES } from '@shareat/domain/field-rules';
 import { requireActor } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { errorMessage } from '@/lib/constraint-messages';
-import { verifyAdminApproval } from '@shareat/auth';
+import { can, verifyAdminApproval } from '@shareat/auth';
 import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
@@ -39,8 +40,11 @@ export async function recordReturnAction(fd: FormData): Promise<void> {
   const keep: Nav = storeId ? { store: storeId } : {};
   let result: Awaited<ReturnType<typeof recordReturn>>;
   try {
-    result = await withOrgPrincipal(actor.orgId, (tx) =>
-      recordReturn(tx, {
+    result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): the field check runs only for a caller `recordReturn`'s first authorize() would let in
+      // ('record_supplier_return' at this store); anyone else is refused by that gate before any field sentence.
+      if (await can(tx, actor, 'record_supplier_return', { storeId })) assertFieldRules(INVENTORY_RETURN_RULES, fd);
+      return recordReturn(tx, {
         storeId,
         supplierId,
         deliveryId,
@@ -49,8 +53,8 @@ export async function recordReturnAction(fd: FormData): Promise<void> {
         // T-371 S3: the raw figure goes to the domain, which parses it after `authorize()` (R5).
         lines: [{ itemId, itemKind, locationId, quantity: qty, deliveryLineId }],
         actor,
-      }),
-    );
+      });
+    });
   } catch (err) {
     return await redirectWithFlash('/inventory/returns', keep, { error: errorMessage(err) });
   }
@@ -73,6 +77,7 @@ export async function voidReturnAction(fd: FormData): Promise<void> {
   try {
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store (not the form's `store`).
     const target = await loadDestructiveTarget(actor, 'supplier_return', returnId, ['void_supplier_return']);
+    assertFieldRules(INVENTORY_RETURN_VOID_RULES, fd);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'void_supplier_return' });
     result = await withOrgPrincipal(actor.orgId, async (tx) => {
       const voided = await voidReturn(tx, actor, returnId, reason);

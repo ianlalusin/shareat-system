@@ -13,7 +13,9 @@ import {
 } from './lib';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
-import { Badge, Button, FlashBanner, FormGrid, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
+import { Badge, Button, Field, FlashBanner, FormGrid, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { COMMISSARY_ORDER_NEW_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -188,15 +190,14 @@ function NewOrderForm({ choice, branchStoreId }: { choice: CommissaryChoice; bra
     );
   }
   return (
-    <form action={createOrderAction} className="space-y-3 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
+    <CheckedForm rules={COMMISSARY_ORDER_NEW_RULES} action={createOrderAction} className="space-y-3 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
       <input type="hidden" name="branchStoreId" value={branchStoreId} />
       <input type="hidden" name="commissaryStoreId" value={choice.id} />
       <span className="block text-sm font-medium">From {choice.name}</span>
       <FormGrid>
-        <label className={`${LABEL} min-w-0`}>
-          Order date
-          <Input name="orderDate" type="date" required defaultValue={today()} className="w-full" />
-        </label>
+        <Field label="Order date" className={`${LABEL} min-w-0`} rule={COMMISSARY_ORDER_NEW_RULES.orderDate}>
+          <Input {...nativeAttrs(COMMISSARY_ORDER_NEW_RULES.orderDate)} type="date" defaultValue={today()} className="w-full" />
+        </Field>
         <label className={`${LABEL} min-w-0 [@container_(min-width:29rem)]:col-span-2`}>
           Notes (optional)
           <Input name="notes" className="w-full" />
@@ -236,6 +237,6 @@ function NewOrderForm({ choice, branchStoreId }: { choice: CommissaryChoice; bra
       <Button type="submit" variant="primary">
         Save draft
       </Button>
-    </form>
+    </CheckedForm>
   );
 }

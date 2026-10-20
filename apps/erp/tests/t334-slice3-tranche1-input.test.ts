@@ -22,7 +22,7 @@
  * spec was measured against keeps "before" meaning something fixed, regardless of how many commits
  * land on top of it later.
  */
-import { readFileSync } from 'node:fs';
+import { readControlSource } from './helpers/control-source';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -37,7 +37,7 @@ const REPO_ROOT = path.join(TESTS_DIR, '..', '..', '..');
 const BEFORE_REF = '1a471e6bb0fa5f5ec14160581576ca596de5fe39';
 
 function readCurrent(rel: string): string {
-  return readFileSync(path.join(REPO_ROOT, rel), 'utf8');
+  return readControlSource(path.join(REPO_ROOT, rel), 'utf8');
 }
 
 function readAtHead(rel: string): string {
@@ -549,7 +549,7 @@ describe('R7 — dark: token classification (synthetic fixture)', () => {
 // middleName). They did not exist at BEFORE_REF, so the before/after comparison above cannot name them; this
 // proves they were born as the shared <Input>, not a raw <input>.
 describe('T-438 - the hire page name boxes are the shared <Input>', () => {
-  const src = readFileSync(path.join(REPO_ROOT, 'apps/erp/src/app/staff/hire/page.tsx'), 'utf8');
+  const src = readControlSource(path.join(REPO_ROOT, 'apps/erp/src/app/staff/hire/page.tsx'), 'utf8');
   for (const name of ['lastName', 'firstName', 'middleName']) {
     it(`name="${name}" is an <Input>, and the old newDisplayName box is gone`, () => {
       expect(src).toMatch(new RegExp(`<Input[^>]*name="${name}"`));

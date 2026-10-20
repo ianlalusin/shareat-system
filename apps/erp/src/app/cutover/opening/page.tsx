@@ -27,6 +27,8 @@ import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { CUTOVER_ASSET_RULES, CUTOVER_FIGURE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Opening balances — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -147,11 +149,11 @@ export default async function OpeningPage({
       {/* ── Add a figure ─────────────────────────────────────────────────────────────── */}
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="text-sm font-medium">Add a figure</h2>
-        <form action={addOpeningFigureAction} className="mt-3 space-y-3">
+        <CheckedForm rules={CUTOVER_FIGURE_RULES} action={addOpeningFigureAction} className="mt-3 space-y-3">
           <input type="hidden" name="entryDate" value={CONVERSION_DATE} />
           <FormGrid>
-            <Field label="Account">
-              <Select name="accountCode" required className="mt-1 w-full">
+            <Field label="Account" rule={CUTOVER_FIGURE_RULES.accountCode}>
+              <Select {...nativeAttrs(CUTOVER_FIGURE_RULES.accountCode)} className="mt-1 w-full">
                 {accounts.map((a) => (
                   <option key={a.code} value={a.code}>
                     {a.code} — {a.name}
@@ -159,8 +161,8 @@ export default async function OpeningPage({
                 ))}
               </Select>
             </Field>
-            <Field label="Store">
-              <Select name="storeId" required className="mt-1 w-full">
+            <Field label="Store" rule={CUTOVER_FIGURE_RULES.storeId}>
+              <Select {...nativeAttrs(CUTOVER_FIGURE_RULES.storeId)} className="mt-1 w-full">
                 {stores.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
@@ -168,18 +170,16 @@ export default async function OpeningPage({
                 ))}
               </Select>
             </Field>
-            <Field label="Owns or owes">
-              <Select name="direction" required className="mt-1 w-full">
+            <Field label="Owns or owes" rule={CUTOVER_FIGURE_RULES.direction}>
+              <Select {...nativeAttrs(CUTOVER_FIGURE_RULES.direction)} className="mt-1 w-full">
                 {/* Plain words, because "debit" and "credit" are the thing people get backwards. */}
                 <option value="debit">We have this (asset)</option>
                 <option value="credit">We owe this (liability)</option>
               </Select>
             </Field>
-            <Field label="Amount">
+            <Field label="Amount" rule={CUTOVER_FIGURE_RULES.amount}>
               <input
-                name="amount"
-                required
-                inputMode="decimal"
+                {...nativeAttrs(CUTOVER_FIGURE_RULES.amount)}
                 placeholder="0.00"
                 className="mt-1 w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm"
               />
@@ -206,7 +206,7 @@ export default async function OpeningPage({
           <Button type="submit" variant="secondary" className="w-full sm:w-auto">
             Save
           </Button>
-        </form>
+        </CheckedForm>
       </section>
 
       {/* ── Value the count (R5) ─────────────────────────────────────────────────────── */}
@@ -243,26 +243,26 @@ export default async function OpeningPage({
         ) : (
           <div className="mt-3 space-y-3">
             {shells.map((a) => (
-              <form key={a.id} action={valueOpeningAssetAction} className="space-y-2 rounded border border-neutral-200 p-3 dark:border-neutral-800">
+              <CheckedForm key={a.id} rules={CUTOVER_ASSET_RULES} action={valueOpeningAssetAction} className="space-y-2 rounded border border-neutral-200 p-3 dark:border-neutral-800">
                 <input type="hidden" name="assetId" value={a.id} />
                 <p className="text-sm font-medium">
                   {a.name} <span className="text-xs font-normal text-neutral-500">{storeName(a.storeId)}</span>
                 </p>
                 <FormGrid>
-                  <Field label="Book value on the conversion date">
-                    <input name="bookValue" required inputMode="decimal" placeholder="0.00" className={INPUT} />
+                  <Field label="Book value on the conversion date" rule={CUTOVER_ASSET_RULES.bookValue}>
+                    <input {...nativeAttrs(CUTOVER_ASSET_RULES.bookValue)} placeholder="0.00" className={INPUT} />
                   </Field>
-                  <Field label="Remaining life (whole months)">
-                    <input name="remainingLifeMonths" required inputMode="numeric" placeholder="e.g. 18" className={INPUT} />
+                  <Field label="Remaining life (whole months)" rule={CUTOVER_ASSET_RULES.remainingLifeMonths}>
+                    <input {...nativeAttrs(CUTOVER_ASSET_RULES.remainingLifeMonths)} placeholder="e.g. 18" className={INPUT} />
                   </Field>
-                  <Field label="Salvage value (optional)">
-                    <input name="salvageValue" inputMode="decimal" placeholder="0.00" className={INPUT} />
+                  <Field label="Salvage value (optional)" rule={CUTOVER_ASSET_RULES.salvageValue}>
+                    <input {...nativeAttrs(CUTOVER_ASSET_RULES.salvageValue)} placeholder="0.00" className={INPUT} />
                   </Field>
                 </FormGrid>
                 <button type="submit" className={BUTTON}>
                   Save
                 </button>
-              </form>
+              </CheckedForm>
             ))}
           </div>
         )}

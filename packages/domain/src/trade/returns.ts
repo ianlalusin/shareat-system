@@ -55,6 +55,8 @@ import { postWastage } from '../stock/consumption-posting';
 import type { ConsumedLine } from '../stock/layers';
 import { compareQuantity, isPositiveQuantity, quantity, subtractQuantity, type Quantity } from '../stock/quantity';
 import { recordCollection } from '../ar';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { RETURN_RECORD_RULES } from '../field-rules/trade';
 import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from '../stock/receipt-posting';
 import { closedStockPeriodSentence, closedStockPeriodSentenceToday } from '../stock/period-guard';
 
@@ -175,6 +177,8 @@ export async function recordCustomerReturn(
     const order = await tradeRepo.getOrderById(trx, input.orgId, input.tradeOrderId);
     if (!order) return { ok: false, reason: `trade order ${input.tradeOrderId} does not exist.` };
     await authorize(trx, input.actor, 'record_customer_return', { storeId: order.storeId });
+    // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
+    for (const line of input.lines) assertFieldRules(RETURN_RECORD_RULES, { quantity: line.quantity, reason: input.reason });
     const closed = await closedStockPeriodSentence(trx, input.orgId, input.returnedOn, 'returned');
     if (closed) return { ok: false, reason: closed };
 

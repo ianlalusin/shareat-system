@@ -261,7 +261,7 @@ describe('W2 — admin, termPeriods="000012": saves as 12', () => {
 });
 
 describe('W3 (guard) — admin, termPeriods="100000": refused, no row', () => {
-  it('"The number of payments — "100000" is not a whole number from 1 to 99999."', async () => {
+  it('"The number of payments must be a whole number from 1 to 99999."', async () => {
     const f = await fixture('w3');
     ACTOR_HOLDER.actor = f.admin;
     const fd = new FormData();
@@ -271,7 +271,7 @@ describe('W3 (guard) — admin, termPeriods="100000": refused, no row', () => {
       startDate: '2026-01-01', termPeriods: '100000',
     })) fd.set(k, v);
     const to = await expectRedirectTo(() => actionsLoans.createLoanAction(fd));
-    expect(errorOf(to), `redirect URL was: ${to}`).toBe('The number of payments — "100000" is not a whole number from 1 to 99999.');
+    expect(errorOf(to), `redirect URL was: ${to}`).toBe('The number of payments must be a whole number from 1 to 99999.');
     const [row] = await sql<{ c: string }[]>`select count(*)::text as c from loans where org_id = ${f.orgId}`;
     const c = row!.c;
     expect(c).toBe('0');

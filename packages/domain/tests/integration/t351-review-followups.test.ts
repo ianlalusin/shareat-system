@@ -339,7 +339,7 @@ describe('D1 — confirmPrepaidTerm direct, coverageMonths as a NUMBER with a fr
       );
       expect(err, 'expected a refusal at all').toBeInstanceOf(Error);
       expect(err?.userMessage, 'was red: a raw Error, no userMessage').toBe(
-        'The coverage — "1.5" is not a whole number of months from 1 to 120.',
+        'The coverage in months must be a whole number from 1 to 120.',
       );
     },
   );

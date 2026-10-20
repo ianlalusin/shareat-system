@@ -38,6 +38,8 @@ vi.mock('@/components/forms', async (orig) => {
 
 import { setExpenseBudget } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
+import { BUDGET_CAP_RULES } from '@shareat/domain/field-rules';
+import { requirementOf } from '../helpers/rule-sentence';
 import { actor, asOrg, captureRedirect, closeAfterAll, keepTypingLegs, outcomeOf, person, resetJar, sql, uid } from './t389-s3-common';
 
 closeAfterAll();
@@ -89,7 +91,7 @@ keepTypingLegs<C>({
     const o = outcomeOf(signal);
     return { signal, error: o.flash.error, ok: o.flash.ok };
   },
-  expectError: /cannot be negative/i,
+  expectError: requirementOf(BUDGET_CAP_RULES.amount, '-5.55'),
   expectedFields: () => ({ amount: '-5.55', autoReissue: 'on', reissueInterval: 'weekly' }),
   neverKept: () => ['storeId', 'periodKey', 'categoryId'],
   // The box left UNticked and changed: it must reopen unticked, so it rides as an empty array.

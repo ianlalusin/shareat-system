@@ -5,7 +5,7 @@
  *
  * ⛔ Nothing here repeats a typed value in a sentence (government numbers are personal data, Audit A5).
  */
-import { checkField, rulesOf, ruleHint, type FieldCheck, type FieldRule, type FieldRuleSetLike } from '@shareat/domain/field-rules';
+import { checkField, ruleApplies, rulesOf, ruleHint, type FieldCheck, type FieldRule, type FieldRuleSetLike } from '@shareat/domain/field-rules';
 
 export interface CheckedFormState {
   /** What each ruled control currently holds, by name. */
@@ -52,6 +52,7 @@ export interface CheckCtx {
   failing: string[];
   result(name: string): FieldCheck | undefined;
   touched(name: string): boolean;
+  applies(name: string): boolean;
 }
 
 const INACTIVE: CheckCtx = {
@@ -61,6 +62,7 @@ const INACTIVE: CheckCtx = {
   failing: [],
   result: () => undefined,
   touched: () => false,
+  applies: () => true,
 };
 
 export function checkContextValue(set: FieldRuleSetLike, state: CheckedFormState): CheckCtx {
@@ -68,8 +70,11 @@ export function checkContextValue(set: FieldRuleSetLike, state: CheckedFormState
   const results = new Map<string, FieldCheck>();
   const failing: string[] = [];
   const requirements: string[] = [];
+  const applicable = new Map<string, boolean>();
   for (const rule of rulesOf(set)) {
-    const c = checkField(rule, state.values[rule.name] ?? '');
+    const applies = ruleApplies(rule, state.values);
+    applicable.set(rule.name, applies);
+    const c: FieldCheck = applies ? checkField(rule, state.values[rule.name] ?? '') : { ok: true, value: null };
     results.set(rule.name, c);
     if (!c.ok) {
       failing.push(rule.name);
@@ -86,6 +91,7 @@ export function checkContextValue(set: FieldRuleSetLike, state: CheckedFormState
     failing,
     result: (name) => results.get(name),
     touched: (name) => state.touched[name] === true,
+    applies: (name) => applicable.get(name) !== false,
   };
 }
 
@@ -130,7 +136,8 @@ export interface FieldCheckLine {
 }
 
 /** Before typing (or with no result): the muted requirement. Touched and failing: the progress words. Touched and passing: "Good". */
-export function fieldCheckLine(rule: FieldRule, result: FieldCheck | undefined, touched: boolean): FieldCheckLine {
+export function fieldCheckLine(rule: FieldRule, result: FieldCheck | undefined, touched: boolean, applies = true): FieldCheckLine {
+  if (!applies && rule.when) return { kind: 'muted', text: rule.when.says };
   if (!result || !touched) return { kind: 'muted', text: ruleHint(rule) };
   return result.ok ? { kind: 'passing', text: 'Good' } : { kind: 'failing', text: result.progress };
 }

@@ -6,7 +6,8 @@ import { getSupplier, getPosition, listOpenItems, listInvoices, moneyAccountsFor
 import { SUPPLIER_CLASSIFICATIONS, SUPPLIER_STATUSES, SUPPLIER_VAT_STATUSES } from '@shareat/db';
 import { CLASSIFICATION_LABEL, VAT_STATUS_LABEL, maskAccountNumber } from '../../lib';
 import { Page } from '@/components/shell/Page';
-import { EditableRecord } from '@/components/forms';
+import { EditableRecord, FieldCheck } from '@/components/forms';
+import { SUPPLIER_ADD_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { Badge, FlashBanner, FormGrid, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { AutoAllocatePaymentForm } from './AutoAllocatePaymentForm';
 import { withFlash } from '@/lib/flash';
@@ -122,7 +123,7 @@ export default async function SupplierDetailPage({
           existed in the repo with no caller — so a typo in a name was permanent. */}
       <details {...(typed ? { open: true } : {})} className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <summary className="cursor-pointer text-sm font-medium">Edit this supplier</summary>
-        <EditableRecord action={editSupplierAction} label={supplier.name} hidden={{ supplierId: supplier.id }} typed={typed}>
+        <EditableRecord rules={SUPPLIER_ADD_RULES} action={editSupplierAction} label={supplier.name} hidden={{ supplierId: supplier.id }} typed={typed}>
           <div className="mt-4 space-y-4">
 
           <FormGrid>
@@ -198,22 +199,13 @@ export default async function SupplierDetailPage({
                 <option value="credit">On credit (AP)</option>
               </Select>
             </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Days to pay</span>
-              <Input
-                type="number"
-                name="creditTermsDays"
-                min="0"
-                max="365"
-                step="1"
-                defaultValue={supplier.creditTermsDays ?? ''}
-                className="w-full"
-              />
-              <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                Cash on delivery means Credit (AP) cannot be used. On credit means Credit is allowed, and is
-                pre-selected when a bill is recorded against a verified invoice.
-              </span>
-            </label>
+            <Field
+              label="Days to pay"
+              hint="Cash on delivery means Credit (AP) cannot be used. On credit means Credit is allowed, and is pre-selected when a bill is recorded against a verified invoice."
+              rule={SUPPLIER_ADD_RULES.creditTermsDays}
+            >
+              <Input {...nativeAttrs(SUPPLIER_ADD_RULES.creditTermsDays)} defaultValue={supplier.creditTermsDays ?? ''} className="w-full" />
+            </Field>
           </fieldset>
 
           <fieldset className="grid gap-3 rounded border border-neutral-200 p-3 sm:grid-cols-3 dark:border-neutral-800">
@@ -377,13 +369,21 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
+function Field({ label, hint, rule, children }: { label: string; hint?: string; rule?: FieldRule; children: React.ReactNode }) {
+  const body = (
+    <>
       <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
       {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </label>
+    </>
+  );
+  // T-440: a ruled field puts its live helper line OUTSIDE the label, so the line never joins the accessible name.
+  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
+  return (
+    <div>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }
 

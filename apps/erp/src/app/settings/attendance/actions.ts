@@ -113,11 +113,9 @@ export async function updateAttendanceConfigAction(formData: FormData): Promise<
 // T-436: leave limits and kinds. Every gate is in the domain (`setLeaveCap` authorizes manage_attendance at the store, or people
 // admin for the business-wide default; a statutory limit cannot be lowered). These actions only turn the form into its input.
 
-/** A whole number of days, or empty for "no limit". Anything else goes to the domain as NaN and is refused there, in words. */
-function capField(fd: FormData, key: string): number | null {
-  const v = str(fd, key);
-  if (v === '') return null;
-  return /^[0-9]+$/.test(v) ? Number(v) : Number.NaN;
+/** A cap the rule set already judged: a whole number of days, or null for "no limit". */
+function capOf(checked: string | null): number | null {
+  return checked === null ? null : Number(checked);
 }
 
 export async function saveLeaveCapAction(formData: FormData): Promise<void> {
@@ -129,8 +127,8 @@ export async function saveLeaveCapAction(formData: FormData): Promise<void> {
         leaveType: str(formData, 'leaveType'),
         storeId: str(formData, 'scope') === 'org' ? null : store,
         positionId: str(formData, 'positionId') || null,
-        monthlyCap: capField(formData, 'monthlyCap'),
-        yearlyCap: capField(formData, 'yearlyCap'),
+        monthlyCap: capOf(str(formData, 'monthlyCap') || null),
+        yearlyCap: capOf(str(formData, 'yearlyCap') || null),
       }),
     );
   } catch (err) {

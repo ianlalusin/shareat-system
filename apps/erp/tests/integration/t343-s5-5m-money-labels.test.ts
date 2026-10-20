@@ -194,7 +194,7 @@ describe('H3 — createTradeOrder: deliveryFee "abc" → The delivery fee', () =
     }
     expect(caught).toBeInstanceOf(Error);
     expect(errorMessage(caught)).toBe(`The delivery fee${SUFFIX('abc')}`);
-    expect((caught as Error).message).toBe(`createTradeOrder: the delivery fee${SUFFIX('abc')}`);
+    expect((caught as Error).message).toBe('trade.createTradeOrder.deliveryFee: money check failed');
   });
 });
 
@@ -218,6 +218,6 @@ describe('H4 — createCashRequest: amount "abc" → The amount requested', () =
     }
     expect(caught).toBeInstanceOf(Error);
     expect(errorMessage(caught)).toBe(`The amount requested${SUFFIX('abc')}`);
-    expect((caught as Error).message).toBe(`createCashRequest: the amount${SUFFIX('abc')}`);
+    expect((caught as Error).message).toBe('cash-requests.create.amount: money check failed');
   });
 });
