@@ -1,6 +1,9 @@
 # T-448 — Apply Ian's ERP multi-device UI skill to dashboards and detail views
 
 Status: in progress, authorized 2026-10-20: install the supplied skill and start with every dashboard and detail view.
+Owner review: screenshots identify the dashboard. Pad Waiting tiles horizontally; use AR/AP's row for more cards;
+use the blank space beside By channel. Revision adds Assets and Books cards and moves operations beside channels.
+PR #41 remains held for revised preview review and final gates. First commit 79d4c4f; preview uses port 9008.
 
 ## Contract
 

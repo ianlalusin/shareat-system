@@ -441,6 +441,9 @@
 @media (min-width: 768px) {
   .erp-metric-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
 }
+@media (min-width: 1024px) {
+  .erp-metric-strip[data-columns="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
 @media (min-width: 1024px) and (pointer: fine) {
   .erp-page[data-view="detail"] > :where(section),
   .erp-page[data-view="detail"] .erp-detail-layout :where(section) { padding-block: 0.75rem; }

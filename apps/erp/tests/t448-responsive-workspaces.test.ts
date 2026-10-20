@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Page } from '../src/components/shell/Page';
 import { MetricStrip } from '../src/components/dashboard/MetricStrip';
+import { OutlineCount } from '../src/components/dashboard/OutlineCount';
 import Loading from '../src/app/loading';
 
 const root = join(import.meta.dirname, '..', 'src');
@@ -14,6 +15,14 @@ function pages(dir: string): string[] {
 }
 
 describe('T-448 responsive dashboards and record details', () => {
+  it('pads every waiting tile on both horizontal edges', () => {
+    const html = renderToStaticMarkup(h(OutlineCount, { href: '/findings', count: 0, label: 'Findings', hint: 'Open' }));
+    expect(html).toContain('px-3');
+  });
+  it('allows a full-width financial strip to use four desktop columns', () => {
+    const html = renderToStaticMarkup(h(MetricStrip, { label: 'Financial position', columns: 4, children: 'Figures' }));
+    expect(html).toContain('data-columns="4"');
+  });
   it('shows a neutral loading state without inventing balances or record data', () => {
     const html = renderToStaticMarkup(h(Loading));
     expect(html).toContain('role="status"');

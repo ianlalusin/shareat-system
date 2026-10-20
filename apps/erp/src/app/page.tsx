@@ -263,17 +263,18 @@ export default async function DashboardPage({
           />
         </section>
 
-        <MetricStrip label="Outstanding balances">
+        <MetricStrip label="Financial position" columns={4}>
           {[
             { label: 'AR outstanding', value: fmtNum(arAging.totals.total), note: `as of ${shortDay(today)}`, href: '/reports/ar-aging' },
             { label: 'AP outstanding', value: fmtNum(apAging.totals.total), note: `as of ${shortDay(today)}`, href: '/reports/ap-aging' },
+            { label: 'Assets', value: fmtNum(balanceSheet.assets), note: `as of ${shortDay(today)}`, href: '/reports/balance-sheet' },
+            { label: 'Books', value: balanceSheet.ties ? 'Ties' : 'DOES NOT TIE', currency: false, note: 'Assets = liabilities + equity', href: '/reports/balance-sheet' },
           ].map((s) => (
             <StatCard key={s.label} {...s} className="sm:border-r sm:last:border-r-0" />
           ))}
         </MetricStrip>
 
-        <section className="grid min-w-0 gap-6 lg:grid-cols-2">
-          {showByStore ? <StoreBars rows={storeRows} subtitle={`share of ${rangeText}`} /> : null}
+        <section aria-label="Channel and operations" className="grid min-w-0 items-start gap-6 lg:grid-cols-2">
           {channelRows.length > 0 ? (
             <ChannelDonut rows={channelRows} subtitle="where the orders came from" />
           ) : (
@@ -282,6 +283,14 @@ export default async function DashboardPage({
               <EmptyState message={`No sales ${fromDate} to ${toDate}.`} />
             </div>
           )}
+          <div className="min-w-0 space-y-4">
+            <RightNowBand
+              onShift={onShift}
+              onTheRoad={onTheRoad}
+              receivedNote={`₱${fmtNum(received.goodsReceivedValue)} received from commissary, ${rangeText}`}
+            />
+            {showByStore ? <StoreBars rows={storeRows} subtitle={`share of ${rangeText}`} /> : null}
+          </div>
         </section>
 
         <section className="flex flex-col gap-2">
@@ -330,27 +339,20 @@ export default async function DashboardPage({
           </section>
         ) : null}
 
-        <RightNowBand
-          onShift={onShift}
-          onTheRoad={onTheRoad}
-          receivedNote={`₱${fmtNum(received.goodsReceivedValue)} received from commissary, ${rangeText}`}
-          booksTie={balanceSheet.ties}
-          assets={fmtNum(balanceSheet.assets)}
-        />
       </div>
     </Page>
   );
 }
 
 /** One summary figure: label, peso amount, a muted note, the whole card linking to its report. */
-function StatCard({ label, value, note, href, className = '' }: { label: string; value: string; note: string; href: string; className?: string }) {
+function StatCard({ label, value, note, href, className = '', currency = true }: { label: string; value: string; note: string; href: string; className?: string; currency?: boolean }) {
   return (
     // The caller's borders sit on a wrapper so the Link's own className stays static for the T-262 control sweep.
     <div className={`border-surface-border ${className}`}>
       <Link href={href} className="dash-rise flex h-full min-h-11 min-w-0 flex-col gap-1 px-3 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-inset hover:bg-canvas">
         <span className="text-xs font-bold uppercase tracking-[0.14em] text-muted">{label}</span>
         <span className="break-words font-display text-2xl font-bold leading-tight tabular-nums">
-          <span className="mr-0.5 text-[0.5em] text-muted">₱</span>
+          {currency && <span className="mr-0.5 text-[0.5em] text-muted">₱</span>}
           {value}
         </span>
         <span className="text-[13px] text-muted">{note}</span>
