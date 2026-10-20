@@ -46,16 +46,43 @@ const seedDoc = (id: string, over: Record<string, unknown>) =>
     createdBy: { uid: 'cashier', name: 'Cora Cashier' }, createdAtClientMs: NOON, voidedAt: null, voidedBy: null, ...over,
   });
 // v1's increment leaves 0 entries behind after a reversal; drop them before comparing.
-const strip = (s: string) => s.replace(/"(Cash|GCash)":0,?/g, '').replace(/,}/g, '}');
+const strip = (s: string) => s.replace(/,?"source":"(?:delta-server|payment-conversion)"/g, "").replace(/"(Cash|GCash)":0,?/g, '').replace(/,}/g, '}');
 
 beforeEach(async () => {
   fs = createFakeFirestore();
   seedStaff(fs);
   seedStore(fs);
-  await seedSale(fs, { id: 'r1', lines: [{ id: 'l1', unit: 1000, qty: 1 }], total: 1000, mop: { Cash: 500, GCash: 500 } });
+  await seedSale(fs, { id: 'r1', lines: [{ id: 'l1', unit: 1000, qty: 1 }], total: 1000, mop: { Cash: 500, GCash: 500 } }, { nowMs: NOON });
 });
 
 describe('Acceptance 6 - a valid void', () => {
+  it('an unconfirmed failed void gives an honest retry message and leaves the original conversion active', async () => {
+    await make(NOON);
+    const before = canonicalAnalytics(fs);
+    fs.failNextCommit(new Error('synthetic void commit failed'));
+    const first = await voidIt(R1);
+    expect(first.status).toBe(503);
+    expect(first.body.error).toBe("We couldn't confirm whether this conversion was voided. Retry this same request or check today's conversions before trying another void.");
+    expect(fs.get(`stores/${STORE}/paymentConversions/${R1}`)!.status).toBe('active');
+    expect(canonicalAnalytics(fs)).toBe(before);
+    expect((await voidIt(R1)).body).toMatchObject({ ok: true, skipped: false });
+    expect(byMethodOf(fs, 'analytics', D14)).toEqual({ Cash: 500, GCash: 500 });
+  });
+
+  it('a void commit with a lost acknowledgment is recovered without reversing twice', async () => {
+    await make(NOON);
+    const d = makeDeps(fs, { nowMs: () => NOON });
+    const run = d.deps.db.runTransaction;
+    d.deps.db.runTransaction = async (fn) => { await run(fn); throw new Error('synthetic void acknowledgment lost'); };
+    const first = await voidIt(R1, { deps: d });
+    expect(first.status).toBe(200);
+    expect(first.body).toMatchObject({ ok: true, conversionId: R1, skipped: true });
+    expect(byMethodOf(fs, 'analytics', D14)).toEqual({ Cash: 500, GCash: 500 });
+    const before = canonicalAnalytics(fs);
+    expect((await voidIt(R1)).body).toMatchObject({ ok: true, skipped: true });
+    expect(canonicalAnalytics(fs)).toBe(before);
+  });
+
   it('reverses exactly, marks the doc voided with voidedVia pos2 (M5, M8)', async () => {
     const before = canonicalAnalytics(fs);
     await make(NOON);

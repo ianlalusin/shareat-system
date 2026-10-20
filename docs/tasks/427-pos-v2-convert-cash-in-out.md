@@ -119,6 +119,10 @@ Firestore field meanings (additive only) · `packages/**` · `apps/erp/**` · v1
 (0.5%) between 00:00 and 05:00. The negative-day risk is real but rare, so the ERP-side fix is a follow-up, not a
 go-live blocker.
 
+### S1 audit checkpoint, 20 October
+Routes and scoped tests are implemented locally; S2/S3 are still unfinished and this branch must not merge. DEF-695 and DEF-703 were reproduced with advisory read failure, failed metadata commit, and committed-then-lost acknowledgments of create/void before correcting them. A conversion writes additive advisoryPending=true in its atomic money transaction; after the advisory read a metadata-only transaction records either clear or negative outcome. Retries return the persisted outcome; pending checks give a truthful Recorded/office-check warning. A lost metadata acknowledgment is recovered by reading the conversion. An unexpected primary commit error is confirmed by the same id/status when possible, otherwise answered as an unconfirmed 503; recovery never repeats the money move. Concurrent-create tests now distinguish the two money transactions from the two metadata-only transactions rather than treating every transaction as a money event. Forty-four route checks pass. POS typecheck is blocked only by the existing missing S2/S3 convert-sheet-logic and convert-net modules (five errors); full POS/build/cap gates remain unmet.
+S3 audit finding DEF-704: the existing cash-name substring fallback and tester callback both mistake GCash for cash. Supporting S3 scope must include the cash-method classifier and its explicit Cash/GCash regression; configured cash identities remain authoritative. No live Firestore operation has run.
+
 ## For the orchestrator
 The ERP day feed refuses a day with a negative method total; Convert legitimately produces one (cash-in before GCash
 sales). Today every v1 store carries this risk. Suggested ERP task: import `paymentConversions` as cash<->wallet transfers

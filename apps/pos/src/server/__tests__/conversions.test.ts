@@ -40,6 +40,7 @@ const R2 = 'a7c4e1b2-5d6f-4a8b-9c0d-1e2f3a4b5c6d';
 const NO_SHIFT = 'Open the till shift in ERP before recording a cash-in or cash-out.';
 const TOO_LARGE = 'That amount is too large for one conversion. Split it or check the number.';
 const WARNING = "Recorded. Today's GCash total is below zero for now; the office will check this day if it stays that way.";
+const ADVISORY_PENDING = "Recorded. The payment totals could not be checked just now; the office must check this day's payment methods.";
 
 const body = (over: Record<string, unknown> = {}) => ({ storeId: STORE, deviceId: DEVICE, requestId: R1, direction: 'cash_in', walletMethod: 'GCash', amountCentavos: 50000, note: 'Maria', ...over });
 
@@ -70,8 +71,8 @@ beforeEach(async () => {
   fs.seed('staff/waiter', { uid: 'waiter', status: 'active', role: 'waiter', assignedStoreIds: [STORE], displayName: 'Wally Waiter' });
   seedStore(fs);
   // Today's sales: Cash 1000 and GCash 800, so a cash-in of up to 800 keeps GCash non-negative.
-  await seedSale(fs, { id: 'r1', lines: [{ id: 'l1', unit: 1000, qty: 1 }], total: 1000, mop: { Cash: 1000 } });
-  await seedSale(fs, { id: 'r2', lines: [{ id: 'l1', unit: 800, qty: 1 }], total: 800, mop: { GCash: 800 } });
+  await seedSale(fs, { id: 'r1', lines: [{ id: 'l1', unit: 1000, qty: 1 }], total: 1000, mop: { Cash: 1000 } }, { nowMs: NOON });
+  await seedSale(fs, { id: 'r2', lines: [{ id: 'l1', unit: 800, qty: 1 }], total: 800, mop: { GCash: 800 } }, { nowMs: NOON });
 });
 
 describe('Acceptance 1 - direction and the figures', () => {
@@ -113,15 +114,15 @@ describe('Acceptance 1 - direction and the figures', () => {
     const twin = createFakeFirestore();
     seedStaff(twin);
     seedStore(twin);
-    await seedSale(twin, { id: 'r1', lines: [{ id: 'l1', unit: 1000, qty: 1 }], total: 1000, mop: { Cash: 1000 } });
-    await seedSale(twin, { id: 'r2', lines: [{ id: 'l1', unit: 800, qty: 1 }], total: 800, mop: { GCash: 800 } });
+    await seedSale(twin, { id: 'r1', lines: [{ id: 'l1', unit: 1000, qty: 1 }], total: 1000, mop: { Cash: 1000 } }, { nowMs: NOON });
+    await seedSale(twin, { id: 'r2', lines: [{ id: 'l1', unit: 800, qty: 1 }], total: 800, mop: { GCash: 800 } }, { nowMs: NOON });
     await createPaymentConversionServer(twin.admin as any, STORE, { amount: 500, fromMethod: 'GCash', toMethod: 'Cash', note: 'Maria' }, { uid: 'cashier', name: 'Cora Cashier' }, new Date(NOON));
     const before = canonicalAnalytics(fs);
     await convert(body());
     expect(canonicalAnalytics(fs)).toBe(canonicalAnalytics(twin));
     const out = await voidPaymentConversionServer(fs.admin as any, STORE, R1, { uid: 'x', name: 'y' }, new Date(NOON));
     expect(out).toEqual({ skipped: false });
-    const strip = (s: string) => s.replace(/"(Cash|GCash)":0,?/g, '');
+    const strip = (s: string) => s.replace(/,?"source":"(?:delta-server|payment-conversion)"/g, "").replace(/"(Cash|GCash)":0,?/g, '');
     expect(strip(canonicalAnalytics(fs))).toBe(strip(before));
   });
 
@@ -159,7 +160,11 @@ describe('Acceptance 2 - two tabs, idempotency', () => {
     expect(convs()).toHaveLength(2);
     expect(byMethodOf(fs, 'analytics', DAY)).toEqual({ Cash: 1500, GCash: 300 });
     expect(byMethodOf(fs, 'analyticsMonths', DAY.slice(0, 6))).toEqual({ Cash: 1500, GCash: 300 });
-    expect(fs.commits.filter((c) => c.kind === 'transaction')).toHaveLength(2);
+    const transactions = fs.commits.filter((c) => c.kind === 'transaction');
+    // Two money transactions plus one advisory-only outcome for each request.
+    expect(transactions).toHaveLength(4);
+    expect(transactions.filter((c) => c.writes.some((w) => w.op === 'create' && w.path.includes('/paymentConversions/')))).toHaveLength(2);
+    expect(transactions.filter((c) => c.writes.every((w) => w.op === 'update' && w.path.includes('/paymentConversions/')))).toHaveLength(2);
   });
 
   it('the SAME requestId from two overlapping tabs: one document, one move, no server error (M3)', async () => {
@@ -214,7 +219,7 @@ describe('Acceptance 3 - the till shift gate', () => {
 
 describe('Acceptance 4 - amounts and methods', () => {
   it('exactly 50,000 pesos is allowed; one centavo more is refused with the sentence (M6)', async () => {
-    await seedSale(fs, { id: 'big', lines: [{ id: 'l1', unit: 60000, qty: 1 }], total: 60000, mop: { GCash: 60000 } });
+    await seedSale(fs, { id: 'big', lines: [{ id: 'l1', unit: 60000, qty: 1 }], total: 60000, mop: { GCash: 60000 } }, { nowMs: NOON });
     const ok = await convert(body({ amountCentavos: 5_000_000 }));
     expect(ok.status, JSON.stringify(ok.body)).toBe(200);
     const before = canonicalAnalytics(fs);
@@ -260,6 +265,103 @@ describe('Acceptance 4 - amounts and methods', () => {
 });
 
 describe('Acceptance 5 - a negative day is recorded, flagged, never refused', () => {
+  it('an advisory outage that also blocks the confirmation read still reports the known committed conversion', async () => {
+    const d = makeDeps(fs, { nowMs: () => NOON });
+    const doc = d.deps.db.doc;
+    d.deps.db.doc = (path: string) => {
+      const ref = doc(path);
+      const get = ref.get;
+      let reads = 0;
+      ref.get = async () => {
+        if (path === `stores/${STORE}/analytics/${DAY}` ||
+            (path === `stores/${STORE}/paymentConversions/${R1}` && ++reads > 1)) throw new Error('synthetic read outage');
+        return get();
+      };
+      return ref;
+    };
+    const first = await convert(body({ amountCentavos: 100000 }), { deps: d });
+    expect(first.status).toBe(200);
+    expect(first.body).toMatchObject({ ok: true, warning: ADVISORY_PENDING });
+    expect(convs()).toHaveLength(1);
+    expect(byMethodOf(fs, 'analytics', DAY)).toEqual({ Cash: 2000, GCash: -200 });
+  });
+
+  it('a failed primary commit writes nothing and gives an honest unconfirmed response, never Recorded', async () => {
+    const before = canonicalAnalytics(fs);
+    fs.failNextCommit(new Error('synthetic primary commit failed'));
+    const result = await convert(body());
+    expect(result.status).toBe(503);
+    expect(result.body.ok).toBe(false);
+    expect(result.body.error).toBe("We couldn't confirm whether this conversion was recorded. Retry this same request or check today's conversions before entering it again.");
+    expect(convs()).toHaveLength(0);
+    expect(canonicalAnalytics(fs)).toBe(before);
+  });
+
+  it('a primary commit with a lost acknowledgment is recovered by request id; replay never moves money again', async () => {
+    const d = makeDeps(fs, { nowMs: () => NOON });
+    const run = d.deps.db.runTransaction;
+    d.deps.db.runTransaction = async (fn) => { await run(fn); throw new Error('synthetic primary acknowledgment lost'); };
+    const first = await convert(body({ amountCentavos: 100000 }), { deps: d });
+    expect(first.status).toBe(200);
+    expect(first.body).toMatchObject({ ok: true, conversionId: R1, replayed: true, warning: ADVISORY_PENDING });
+    expect(byMethodOf(fs, 'analytics', DAY)).toEqual({ Cash: 2000, GCash: -200 });
+    const before = canonicalAnalytics(fs);
+    const again = await convert(body({ amountCentavos: 100000 }));
+    expect(again.body).toMatchObject({ ok: true, replayed: true, warning: ADVISORY_PENDING });
+    expect(canonicalAnalytics(fs)).toBe(before);
+    expect(convs()).toHaveLength(1);
+  });
+
+  it('a committed advisory write whose acknowledgment fails is recovered from the conversion, preserving its exact warning', async () => {
+    const d = makeDeps(fs, { nowMs: () => NOON });
+    const run = d.deps.db.runTransaction;
+    let calls = 0;
+    d.deps.db.runTransaction = async (fn) => {
+      const result = await run(fn);
+      if (++calls === 2) throw new Error('synthetic advisory acknowledgment lost');
+      return result;
+    };
+    const first = await convert(body({ amountCentavos: 100000 }), { deps: d });
+    expect(first.status).toBe(200);
+    expect(first.body).toMatchObject({ ok: true, warning: WARNING });
+    const before = canonicalAnalytics(fs);
+    const again = await convert(body({ amountCentavos: 100000 }));
+    expect(again.body).toMatchObject({ ok: true, replayed: true, warning: WARNING });
+    expect(canonicalAnalytics(fs)).toBe(before);
+    expect(convs()).toHaveLength(1);
+  });
+
+  it.each(['read', 'flag-write'] as const)('an advisory %s failure after commit still says Recorded, and replay never moves money again', async (failure) => {
+    const d = makeDeps(fs, { nowMs: () => NOON });
+    const originalDoc = d.deps.db.doc;
+    d.deps.db.doc = (path: string) => {
+      const ref = originalDoc(path);
+      if (path === `stores/${STORE}/analytics/${DAY}`) {
+        const originalGet = ref.get;
+        ref.get = async () => {
+          if (failure === 'read') throw new Error('synthetic advisory read failed');
+          const snap = await originalGet();
+          fs.failNextCommit(new Error('synthetic advisory write failed'));
+          return snap;
+        };
+      }
+      return ref;
+    };
+    const first = await convert(body({ amountCentavos: 100000 }), { deps: d });
+    expect(first.status).toBe(200);
+    expect(first.body).toMatchObject({ ok: true, conversionId: R1, replayed: false, warning: ADVISORY_PENDING });
+    expect(first.body.error).toBeUndefined();
+    expect(convs()).toHaveLength(1);
+    expect(byMethodOf(fs, 'analytics', DAY)).toEqual({ Cash: 2000, GCash: -200 });
+    expect(fs.get(`stores/${STORE}/paymentConversions/${R1}`)!.advisoryPending).toBe(true);
+    const beforeReplay = canonicalAnalytics(fs);
+    const commits = fs.commits.length;
+    const again = await convert(body({ amountCentavos: 100000 }));
+    expect(again.body).toMatchObject({ ok: true, conversionId: R1, replayed: true, warning: ADVISORY_PENDING });
+    expect(canonicalAnalytics(fs)).toBe(beforeReplay);
+    expect(fs.commits.length).toBe(commits);
+  });
+
   it("a cash-in larger than the day's GCash: 200, the exact warning, warnedNegativeAtWrite true, the money moved (M10)", async () => {
     const r = await convert(body({ amountCentavos: 100000 })); // 1000 against 800 of GCash sales -> -200
     expect(r.status).toBe(200);

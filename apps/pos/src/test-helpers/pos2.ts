@@ -171,12 +171,12 @@ export function receiptDoc(r: ReceiptSpec) {
 }
 
 /** Seeds a paid receipt and (default) books its sale with v1's REAL delta code, as v1's server did, so the day docs exist. */
-export async function seedSale(fs: FakeFirestore, spec: ReceiptSpec, opts: { book?: boolean } = {}) {
+export async function seedSale(fs: FakeFirestore, spec: ReceiptSpec, opts: { book?: boolean; nowMs?: number } = {}) {
   const doc = receiptDoc(spec);
   fs.seed(`stores/${STORE}/receipts/${spec.id}`, doc);
   if (opts.book !== false) {
     await fs.admin.runTransaction(async (tx) => {
-      applyAnalyticsDeltaServer(fs.admin as any, STORE, null, doc as any, tx as any, new Date(NOW));
+      applyAnalyticsDeltaServer(fs.admin as any, STORE, null, doc as any, tx as any, new Date(opts.nowMs ?? NOW));
     });
     fs.seed(`stores/${STORE}/receipts/${spec.id}`, { ...doc, analyticsApplied: true });
   }
