@@ -1,7 +1,9 @@
 import { dirname, join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
+const packageVersion = JSON.parse(readFileSync(join(here, 'package.json'), 'utf8')).version;
 
 // Two build modes (T-417 ruling 3): default = server build (`next start`);
 // BUILD_TARGET=capacitor = static export to out/ for the Android APK.
@@ -10,6 +12,8 @@ const cap = process.env.BUILD_TARGET === 'capacitor';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Publish only this scalar, never the dependency manifest, into the client bundle.
+  env: { NEXT_PUBLIC_APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION || packageVersion || 'dev' },
   reactStrictMode: true,
   trailingSlash: cap,
   images: cap
