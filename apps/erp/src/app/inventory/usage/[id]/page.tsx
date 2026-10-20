@@ -48,7 +48,7 @@ export default async function UsageRecordPage({
   const canVoid = record.status === 'posted' && !fromLivePull;
 
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div>
         <Link href={`/inventory/usage?store=${record.storeId}`} className="text-sm underline underline-offset-4">
           ← Usage &amp; wastage

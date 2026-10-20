@@ -75,7 +75,7 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
   const storeName = (storeId: string) => data.stores.find((s) => s.id === storeId)?.name ?? '';
 
   return (
-    <Page density="table" className="space-y-6">
+    <Page view="detail" sectioned density="table" className="space-y-6">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">{item.name}</h1>

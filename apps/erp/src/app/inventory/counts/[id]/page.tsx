@@ -122,7 +122,7 @@ export default async function CountSessionPage({
   const rows = [...detail.sheet, ...detail.extras];
 
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div>
         <Link href={`/inventory/counts?store=${detail.storeId}`} className="text-sm underline underline-offset-4">
           ← Physical counts

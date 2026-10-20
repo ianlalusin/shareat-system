@@ -77,7 +77,7 @@ export default async function DeliveryPage({
   const goods = doc.lines.reduce((n, l) => n + Number(l.orderedQuantity) * Number(l.unitCost), 0);
 
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div>
         <Link href={`/inventory/deliveries?store=${doc.storeId}`} className="text-sm underline underline-offset-4">
           ← Deliveries

@@ -59,7 +59,7 @@ export default async function OwnerPage({
   const owes = compare(money(owner.position.receivable), ZERO) > 0;
 
   return (
-    <Page density="table">
+    <Page view="detail" density="table">
       <div>
         <Link href="/owners" className="text-sm underline underline-offset-2">
           ← Owners

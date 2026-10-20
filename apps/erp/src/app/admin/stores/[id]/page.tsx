@@ -51,7 +51,7 @@ export default async function StoreDetailPage({
   // T-222 smoketest is what caught it. A refusal is a sentence, never a stack trace.
   if (!readiness) {
     return (
-      <Page density="table" className="space-y-4">
+      <Page view="detail" sectioned density="table" className="space-y-4">
         <Link href="/admin/stores" className="text-sm underline underline-offset-2">
           ← Stores
         </Link>
@@ -69,7 +69,7 @@ export default async function StoreDetailPage({
   const blocking = readiness.filter((c) => !c.ok && c.blocking);
 
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div>
         <Link href="/admin/stores" className="text-sm underline underline-offset-2">
           ← Stores

@@ -167,7 +167,7 @@ export function SalesLine({
         preserveAspectRatio="none"
         role="img"
         aria-label={chartLabel}
-        className="block h-[300px] w-full overflow-visible sm:h-[360px]"
+        className="block aspect-[5/3] w-full overflow-visible"
       >
         {[40, 143, 247].map((y) => (
           <line

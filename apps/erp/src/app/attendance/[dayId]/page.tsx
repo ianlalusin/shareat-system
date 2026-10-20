@@ -77,7 +77,7 @@ export default async function AttendanceDayPage({
   const locked = lockedReason !== null;
 
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div className="space-y-1">
         <Link href="/attendance" className="text-sm underline underline-offset-2">
           ← Attendance review

@@ -85,13 +85,13 @@ export interface DetailLayoutProps {
 
 export function DetailLayout({ summary, children }: DetailLayoutProps) {
   return (
-    <div className="space-y-6 min-[1440px]:grid min-[1440px]:grid-cols-[minmax(0,1fr)_20rem] min-[1440px]:gap-6 min-[1440px]:space-y-0">
+    <div className="erp-detail-layout min-w-0 space-y-4 min-[1440px]:grid min-[1440px]:grid-cols-[minmax(0,1fr)_20rem] min-[1440px]:gap-4 min-[1440px]:space-y-0">
       {/*
         `self-start`, because a grid item stretches to the row by default and a stretched item
         cannot stick. `top-6` matches the page's own `md:py-6`; `TopBar` is `md:hidden`, so at these
         widths there is no bar for the rail to slide under.
       */}
-      <div className="min-[1440px]:sticky min-[1440px]:top-6 min-[1440px]:col-start-2 min-[1440px]:row-start-1 min-[1440px]:self-start">
+      <div className="min-w-0 min-[1440px]:sticky min-[1440px]:top-6 min-[1440px]:col-start-2 min-[1440px]:row-start-1 min-[1440px]:self-start">
         {summary}
       </div>
       {/*
@@ -99,7 +99,7 @@ export function DetailLayout({ summary, children }: DetailLayoutProps) {
         wider than its share and pushes the rail off the screen. DEF-149's shape, two levels in.
         `space-y-6` reproduces the gap these sections had as direct children of `Page`.
       */}
-      <div className="min-w-0 space-y-6 min-[1440px]:col-start-1 min-[1440px]:row-start-1">
+      <div className="min-w-0 space-y-4 min-[1440px]:col-start-1 min-[1440px]:row-start-1">
         {children}
       </div>
     </div>

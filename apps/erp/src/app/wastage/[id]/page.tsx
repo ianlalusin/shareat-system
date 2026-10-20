@@ -83,7 +83,7 @@ export default async function WastageDetailPage({
     (Date.now() - row.resolvedAt.getTime()) / 86_400_000 <= 30;
 
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div>
         <Link href={`/wastage?store=${row.storeId}`} className="text-sm underline underline-offset-4">
           ← Order wastage

@@ -55,7 +55,7 @@ export default async function CashRequestPage({
   const canCancel = req.status === 'requested' || req.status === 'approved';
 
   return (
-    <Page density="table">
+    <Page view="detail" density="table">
       <div>
         <Link href="/cash-requests" className="text-sm underline underline-offset-2">
           ← Cash requests

@@ -15,6 +15,7 @@ import { seriesColor } from '@/components/dashboard/chart-colors';
 import { ChannelDonut } from '@/components/dashboard/ChannelDonut';
 import { OutlineCount } from '@/components/dashboard/OutlineCount';
 import { RightNowBand } from '@/components/dashboard/RightNowBand';
+import { MetricStrip } from '@/components/dashboard/MetricStrip';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 
@@ -199,8 +200,8 @@ export default async function DashboardPage({
       : 'none open';
 
   return (
-    <Page density="wide">
-      <div className="flex flex-col gap-12">
+    <Page density="wide" view="dashboard">
+      <div className="flex min-w-0 flex-col gap-6">
         <div className="flex flex-col gap-4">
           <div>
             <h1 className="text-2xl font-semibold">Dashboard</h1>
@@ -218,8 +219,8 @@ export default async function DashboardPage({
           />
         </div>
 
-        <section className="grid items-start gap-10 lg:grid-cols-2">
-          <div className="flex min-w-0 flex-col gap-8">
+        <section className="grid min-w-0 items-start gap-6 lg:grid-cols-2">
+          <div className="flex min-w-0 flex-col gap-4">
             <HeroNumber
               kicker={`Sales · ${rangeText} · ${storeLabel.toLowerCase()}`}
               value={Number(totalNow)}
@@ -227,7 +228,7 @@ export default async function DashboardPage({
               delta={{ same: isZero(diff), pct, abs: fmtNum(Number(up ? diff : negate(diff))), up, against }}
               lede={lede}
             />
-            <div className="grid grid-cols-1 border-t border-surface-border sm:grid-cols-2">
+            <MetricStrip label="Sales summary">
               {[
                 { label: 'Average a day', value: fmtNum(Number(totalNow) / days), note: `over ${days} ${days === 1 ? 'day' : 'days'}`, href: '/reports/sales-rollup' },
                 {
@@ -243,7 +244,7 @@ export default async function DashboardPage({
               ].map((s) => (
                 <StatCard key={s.label} {...s} className="border-b sm:border-r sm:even:border-r-0" />
               ))}
-            </div>
+            </MetricStrip>
           </div>
           <SalesLine
             points={points}
@@ -262,16 +263,16 @@ export default async function DashboardPage({
           />
         </section>
 
-        <section className="grid grid-cols-1 border-y border-surface-border sm:grid-cols-2">
+        <MetricStrip label="Outstanding balances">
           {[
             { label: 'AR outstanding', value: fmtNum(arAging.totals.total), note: `as of ${shortDay(today)}`, href: '/reports/ar-aging' },
             { label: 'AP outstanding', value: fmtNum(apAging.totals.total), note: `as of ${shortDay(today)}`, href: '/reports/ap-aging' },
           ].map((s) => (
             <StatCard key={s.label} {...s} className="sm:border-r sm:last:border-r-0" />
           ))}
-        </section>
+        </MetricStrip>
 
-        <section className="grid gap-14 lg:grid-cols-2">
+        <section className="grid min-w-0 gap-6 lg:grid-cols-2">
           {showByStore ? <StoreBars rows={storeRows} subtitle={`share of ${rangeText}`} /> : null}
           {channelRows.length > 0 ? (
             <ChannelDonut rows={channelRows} subtitle="where the orders came from" />
@@ -346,9 +347,9 @@ function StatCard({ label, value, note, href, className = '' }: { label: string;
   return (
     // The caller's borders sit on a wrapper so the Link's own className stays static for the T-262 control sweep.
     <div className={`border-surface-border ${className}`}>
-      <Link href={href} className="dash-rise flex h-full min-h-11 flex-col gap-2 px-6 py-6">
+      <Link href={href} className="dash-rise flex h-full min-h-11 min-w-0 flex-col gap-1 px-3 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-inset hover:bg-canvas">
         <span className="text-xs font-bold uppercase tracking-[0.14em] text-muted">{label}</span>
-        <span className="font-display text-[40px] font-bold leading-[0.95] tabular-nums">
+        <span className="break-words font-display text-2xl font-bold leading-tight tabular-nums">
           <span className="mr-0.5 text-[0.5em] text-muted">₱</span>
           {value}
         </span>

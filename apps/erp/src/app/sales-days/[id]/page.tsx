@@ -148,7 +148,7 @@ export default async function SalesDayDetailPage({
 
   const hasPlatformRows = channels.some((r) => platformChannels.some((c) => c.id === r.channelId));
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div className="flex items-start justify-between gap-4">
         <div>
           <a
