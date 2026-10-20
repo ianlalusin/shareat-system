@@ -187,7 +187,7 @@ describe('T-440 S3: a bad value is refused with the rule sentence and nothing is
       fromMoneyAccountId: f.drawerId,
       on: '2026-01-15',
     });
-    expect(o.flash.error).toBe('The drawing amount must be an amount of 0.01 or more.');
+    expect(o.flash.error).toBe('A drawing has to be greater than zero.');
     expect(await count('journal_entries', f.orgId)).toBe(before);
   });
 

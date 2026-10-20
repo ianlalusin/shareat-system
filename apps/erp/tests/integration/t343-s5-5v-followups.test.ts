@@ -429,7 +429,7 @@ describe('Comma legs — SAFE: disburseLoanAction / recordPaymentAction already 
     fd.set('intoMoneyAccountId', drawerId);
     fd.set('on', '2026-01-10');
     const to = await expectRedirectTo(() => disburseLoanAction(fd));
-    expectRuleSentence(errorOf(to), LOAN_DRAW_RULES.amount, '');
+    expect(errorOf(to)).toBe('The loan amount — "1,5" is not a valid amount. Use at most two decimal places.');
   });
 
   it('recordPaymentAction amount="1,5" refuses', async () => {
@@ -507,7 +507,7 @@ describe('O3 (DEF-472) — chargeAction amount="1.234" (extra decimal place, val
       fd.set('againstAccountCode', '6100');
       fd.set('on', '2026-01-10');
       const to = await expectRedirectTo(() => chargeAction(fd));
-      expectRuleSentence(errorOf(to), LIABILITY_CHARGE_RULES.amount, '0');
+      expect(errorOf(to)).toBe('The charge amount — "1.234" is not a valid amount. Use at most two decimal places.');
       expect(await liabilityChargeCount(f.orgId), 'nothing should have posted').toBe(0);
     },
   );
@@ -693,7 +693,7 @@ describe('owners drawing/settle comma legs (Tier 2)', () => {
       fd.set('intoMoneyAccountId', drawerId);
       fd.set('on', '2026-01-10');
       const to = await expectRedirectTo(() => settleAction(fd));
-      expectRuleSentence(errorOf(to), OWNERS_SETTLE_RULES.amount, '1,5');
+      expect(errorOf(to)).toBe(SETTLE_ABC_SENTENCE);
     },
   );
 });
