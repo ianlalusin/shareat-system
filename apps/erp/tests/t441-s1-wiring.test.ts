@@ -255,3 +255,46 @@ describe('M23/M6 - what the control renders (server render of the initial state)
     expect(html).toMatch(new RegExp(`<img[^>]*src="/files/${FID}`));
   });
 });
+
+// ------------------------------------------------------------------ Smoke fix L1 - lightbox overflow (source-reading)
+describe('Smoke fix L1 - the lightbox keeps a large picture inside the dialog', () => {
+  const lb = () => read(`${UP}/Lightbox.tsx`);
+  const tokens = (s: string) =>
+    [...s.matchAll(/className="([^"]*)"/g)].map((m) => (m[1] ?? '').split(/\s+/).filter(Boolean));
+  // anchored on the JSX attributes (header comments also contain "<img src>" and "<dialog>", so a bare tag match is wrong)
+  const JSX = { dialog: /<dialog\s+ref=/, img: /<img\s+src=\{/ } as const;
+  const tagTokens = (s: string, tag: keyof typeof JSX): string[] => {
+    const i = s.search(JSX[tag]);
+    expect(i, `the <${tag} element is not in Lightbox.tsx`).toBeGreaterThan(-1);
+    const m = /className="([^"]*)"/.exec(s.slice(i));
+    if (!m) throw new Error(`the <${tag} element has no className`);
+    return (m[1] ?? '').split(/\s+/).filter(Boolean);
+  };
+
+  it('M-L1 the dialog uses open:flex and has NO bare flex token (a bare flex shows a closed lightbox)', () => {
+    const t = tagTokens(lb(), 'dialog');
+    expect(t, 'dialog must carry `open:flex`').toContain('open:flex');
+    expect(t, 'dialog must not carry a bare `flex` token').not.toContain('flex');
+  });
+
+  it('M-L2 the image cap is not viewport-only: max-h-[calc(...)] present, max-h-[90vh] absent', () => {
+    const t = tagTokens(lb(), 'img');
+    expect(t, 'image must not keep the viewport-only max-h-[90vh] cap').not.toContain('max-h-[90vh]');
+    expect(t.some((c) => c.startsWith('max-h-[calc(')), 'image needs a max-h-[calc(...)] cap that leaves room for the Close row').toBe(true);
+  });
+
+  it('M-L3 the dialog has overflow-hidden', () => {
+    expect(tagTokens(lb(), 'dialog')).toContain('overflow-hidden');
+  });
+
+  it('M-L4 the image box scrolls inside the dialog: overflow-auto with min-h-0 and flex-1', () => {
+    const box = tokens(lb()).find((t) => t.includes('overflow-auto'));
+    expect(box, 'no element in Lightbox.tsx carries overflow-auto (the image box)').toBeDefined();
+    expect(box, 'image box needs min-h-0').toContain('min-h-0');
+    expect(box, 'image box needs flex-1').toContain('flex-1');
+  });
+
+  it('M-L5 the image keeps the whole picture: object-contain', () => {
+    expect(tagTokens(lb(), 'img')).toContain('object-contain');
+  });
+});
