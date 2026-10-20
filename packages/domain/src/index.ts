@@ -32,6 +32,7 @@ export * from './payroll';
 export * from './remittance';
 export * from './till';
 export * from './files';
+export * from './files/backfill-links';
 export * from './loans';
 export * from './cash-requests';
 export * from './owners';

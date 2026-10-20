@@ -172,3 +172,6 @@ Tests added: M13 (output privacy), M14 (purpose guard), M15 (race resolves as cl
 constraint on T-441 S2's trade pay-now builder; brief S2 with it before S2 starts.
 
 **Status:** AUDITED 2026-10-17. Build after T-441 S2 (the trade pay-now link fix) so the backfill and new uploads use the same link targets; production run by Ian after deploy.
+
+## S1 external audit, 20 October
+The original wrong-purpose --check test contradicted the any-referenced-unlinked census contract. Corrected oracle reproduced exit 0 instead of 1; script now counts wrong-purpose files without writing them. DEF-693 records it. Two new raw domain errors exceeded the existing ceiling (DEF-694); standard refusal producers preserve the ceiling. Real PostgreSQL: 21 passed / three TODO; root typecheck and 91 caller/argument/ratchet/boundary/register checks passed. This is an S1 checkpoint, not S2 completion or permission to run in production.

@@ -56,6 +56,7 @@
     "backfill-fiscal-periods": "tsx scripts/backfill-fiscal-periods.ts",
     "backfill-canonical-positions": "tsx scripts/backfill-canonical-positions.ts",
     "backfill-store-attendance-config": "tsx scripts/backfill-store-attendance-config.ts",
+    "backfill-file-links": "tsx scripts/backfill-file-links.ts",
     "deploy-preflight": "tsx scripts/deploy-preflight.ts",
     "db-backup": "tsx scripts/db-backup.ts",
     "restore-drill": "tsx scripts/restore-drill.ts"
