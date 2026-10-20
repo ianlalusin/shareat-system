@@ -64,6 +64,7 @@ vi.mock('@shareat/auth', async (importOriginal) => {
     // `withOrgPrincipal` passthrough below cannot satisfy — P4(a) is about `revokeGrantById`'s
     // throw, not this gate, so it is stubbed permissive here.
     authorize: vi.fn(async () => undefined),
+    can: vi.fn(async () => true),
   };
 });
 

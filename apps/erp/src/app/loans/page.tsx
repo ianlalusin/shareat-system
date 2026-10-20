@@ -162,7 +162,7 @@ export default async function LoansPage({
               <FormGrid layout="fields">
                 <div className="min-w-0">
                   <Field rule={LOAN_ADD_RULES.interestRate} label="Interest rate (%)">
-                    <input {...nativeAttrs(LOAN_ADD_RULES.interestRate)}
+                    <input {...nativeAttrs(LOAN_ADD_RULES.interestRate)} inputMode="decimal"
 
 
 

@@ -31,6 +31,9 @@ class RedirectSignal extends Error {
   }
 }
 
+// T-440: this wrapper unit harness has no database; real auth-first refusals are covered by PostgreSQL controls.
+vi.mock('@shareat/auth', async (orig) => ({ ...(await orig<object>()), can: vi.fn(async () => true) }));
+
 vi.mock('next/navigation', () => ({
   redirect: (to: string) => {
     throw new RedirectSignal(to);

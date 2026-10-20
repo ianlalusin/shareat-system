@@ -37,3 +37,20 @@ and removing four ungated fallbacks in money-transfer/trade actions. G6 then pas
 Additional supporting files outside S9 B's short list: check-dom.ts, check-state.ts and FieldCheck.tsx are required for
 controller reads, applicability state and disabled-control ownership; three existing supplier regression files and the
 S4 parity fixture update the explicitly revised blank sentence without removing their data/rollback assertions.
+
+## 2026-10-20 continuation
+Post-commit combined guard/affected run: 605 passed across 13 files. Final ERP build passed on 1cb70ce.
+PR #40 CI on 1cb70ce: POS/customer builds passed; main unit job found 48 failures in 11 files, predominantly older
+action-wrapper mocks reaching the now-auth-first database capability check (`tx.select is not a function`). Held.
+The published head is 683669b (adds the T-447 audit inventory); its full CI is required. New user priority is T-448,
+applying the supplied multi-device UI skill to dashboards and details in an isolated worktree.
+
+### T-440 CI harness repairs
+The auth-first change requires the existing wrapper unit harnesses to supply the permission they already assume:
+`staff-positions-action`, `t438-hire-action`, `t343-s5-1d-wrapper-refusals`, `t343-s5-5m-remittance-rewrap`,
+`t374-s2-posted-dates`, `t343-s7-wrapper-refusals`, `t376-s2-return-banners`, `t343-s7-admin-refusals`
+(all under apps/erp/tests). Only these unit files stub can(); real PostgreSQL auth-first tests retain real authorization.
+The remittance harness also supplies its missing fake principal. Sentence and domain-call assertions remain unchanged.
+`t342-no-null-tx-from-actions` updates the existing per-asset depreciation exception from line 225 to 228, not its scope.
+DEF-682's literal OR pipes are escaped for the register table; the loan interest input retains explicit decimal mode.
+Local reproduction: 47 failed / 94 passed; after repair, all 141 checks across the same 11 files passed.

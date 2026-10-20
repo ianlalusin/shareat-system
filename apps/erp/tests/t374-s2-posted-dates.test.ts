@@ -13,6 +13,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * and after.
  */
 const captured: Record<string, unknown> = {};
+// T-440: this wrapper unit harness has no database; real auth-first refusals are covered by PostgreSQL controls.
+vi.mock('@shareat/auth', async (orig) => ({ ...(await orig<object>()), can: vi.fn(async () => true) }));
+
 vi.mock('next/navigation', () => ({ redirect: (u: string) => { throw new Error(`redirect:${u}`); } }));
 vi.mock('next/cache', () => ({ revalidatePath: () => undefined }));
 vi.mock('../src/lib/session', () => ({ requireActor: async () => ({ orgId: 'org', personId: 'p' }) }));
