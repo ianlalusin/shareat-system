@@ -108,6 +108,43 @@ unless that is shown. We use the same exclusive-consumption rule for seniors, so
     a shorter period is Ian's question.
 
 ## Slices
+### S1 implementation scope clarification, 20 October
+Existing shares/capture/bill-math controls currently report 64 failures and 3 passes.
+Keep line adjustment math in one place: extract the existing exact line stages from tax.ts
+unchanged into `src/lib/money/line-amounts.ts`, consumed by both tax and statutory shares.
+Supporting scope includes types.ts, statutory/shares.ts and capture.ts. No test oracle is
+imported into production. Frozen T-423 parity remains the control for existing bill behavior;
+receipt/caller/UI/export slices still have to land before this branch can pass full CI.
+The ordinary promo/loyalty/VAT stages are also shared via `src/lib/money/ordinary-bill.ts`;
+mixed statutory totals live in `src/lib/statutory/totals.ts`. No production test-helper imports.
+DEF-713 reports two spec/test rounding gaps found after the existing 84 checks passed:
+six one-cent qualifying shares can allocate both a discount and VAT cent to the same diner,
+making their exempt amount negative; a one-cent fixed promo split over two one-cent shares
+can invent negative VAT at a non-VAT store. New independent boundary tests failed first.
+Explicit correction: cap each VAT allocation at that diner's share after discount and
+redistribute the excess with the existing allocator. For promo winners, quantize their
+aggregate promo discount before deriving the remaining payable VAT split; keep fixed promo
+parts within its one centavo budget. Preserve ordinary remainder and all-statutory rounding.
+A third red control uses two separate P449.95 dishes, each with its own 10% discount:
+rounding each line's share independently exceeds the bill's 809.91 budget by a centavo and
+refuses an otherwise valid all-qualifying bill. Allocate the one rounded bill line budget
+over exact line-net weights before splitting package heads or assigning dishes. Supporting
+scope adds allocateExact in money/centavos.ts; the existing numeric allocator delegates to
+the same algorithm while preserving its six-decimal weight contract. No float weights.
+DEF-714 extends payment blockers with invalid-diner and duplicate-id: stored session data
+must revalidate kind/name/actual ID and dish-list shape before any payment writes. Do not
+trust stored idNoNormalized to prove a different person. Five independent forged/incomplete
+entry tests failed first; required entry fields cannot be enforced only by the add form.
+Local checkpoint: the three original files moved from 64 failures/3 passes to green;
+113 selected math/capture/money checks and POS typecheck pass. Eight independent audit
+controls were red first (three rounding, five validation); another three small-value sweep
+checks cover 4,860 bills. Capture UI, payment/receipt/caller/print/logbook wiring and runtime
+remain unfinished. No baseline regeneration may disguise those missing production callers.
+A further red regression control preserves normalization of stored numeric percentage
+strings before Exact consumes the rate; it is not a claim that live rates are malformed.
+Final checkpoint checks: 132 selected math/capture/money/refund tests, POS typecheck and
+normal/cap builds pass. Cap restored all 34 moved files byte-for-byte, no stash remains.
+
 **T** tester: `statutoryShares` and the bill math (golden: no diners = T-423 result exactly; with diners vs a
 BigInt-fraction oracle; VAT incl / excl / non-VAT; 1 of 4, 2 of 4, all diners; bundle; à la carte; promo + loyalty on
 the remainder only); capture rules (required fields, count ≤ heads, one entry per person); the hidden popover presets;

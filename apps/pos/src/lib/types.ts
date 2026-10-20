@@ -3,6 +3,18 @@ import { Timestamp } from "firebase/firestore";
 
 export type UserRole = 'admin' | 'manager' | 'cashier' | 'kitchen' | 'server' | 'pending';
 
+/** Full ID belongs only to the open session and receipt; closed copies omit normalization. */
+export interface StatutoryDiner {
+  id: string;
+  kind: 'senior' | 'pwd';
+  name: string;
+  idNo: string;
+  idNoNormalized?: string;
+  addedByUid: string;
+  addedAtClientMs: number;
+  dishLineIds: string[];
+}
+
 export interface User {
   uid: string;
   email: string | null;
