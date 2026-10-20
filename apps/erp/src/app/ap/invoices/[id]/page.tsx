@@ -134,7 +134,7 @@ export default async function InvoiceDetailPage({
   const goodsTotal = subtract(subtract(money(invoice.totalAmount), deliveryFee), otherFees);
 
 return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div className="flex items-start justify-between gap-4">
         <div>
           <a href="/ap" className="text-sm text-neutral-500 underline hover:no-underline dark:text-neutral-400">

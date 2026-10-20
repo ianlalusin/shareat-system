@@ -151,7 +151,7 @@ export default async function CustomerDetailPage({
   const canActOnCharge = (c: { storeId: string }) => canWriteOffAt(c.storeId) || canVoidAt(c.storeId);
 
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Link

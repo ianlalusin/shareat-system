@@ -457,7 +457,9 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     //   dismissed-pairs list (summary, links, Undo), the Variation-of selects on the request form and approve row, and the item page's
     //   Variations section (links, select, Save). Measured 1362 -> 1374; all 12 new controls are >= 24px (the 5 that were 20px got py-0.5).
     // T-444: one new Review and approvals disclosure summary; all existing controls remain.
-    expect(results.length).toBe(1375);
+    // T-448 owner review: the Books link moves from RightNowBand into the financial StatCard map.
+    // Assets and Books both render balance-sheet links (SSR assertion); the scanner sees one fewer static link site.
+    expect(results.length).toBe(1374);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

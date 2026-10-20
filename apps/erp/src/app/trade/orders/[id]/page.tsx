@@ -101,7 +101,7 @@ export default async function TradeOrderPage({
   const isSale = (order.status === 'dispatched' || order.status === 'received') && !isInternal;
 
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div>
         <Link href={`/trade/orders?store=${order.storeId}`} className="text-sm underline underline-offset-4">
           ← Trade orders

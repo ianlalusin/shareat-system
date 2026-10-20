@@ -35,7 +35,7 @@ export default async function PriceListPage({
   if (!list) notFound();
 
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div>
         <Link href="/customers/price-lists" className="text-sm underline underline-offset-2">
           ← Price lists

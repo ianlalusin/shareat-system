@@ -93,7 +93,7 @@ export default async function ItemDetailPage({
   ] as const;
 
   return (
-    <Page density="table">
+    <Page view="detail" density="table">
       <div>
         <a href="/items" className="text-sm text-neutral-500 underline underline-offset-2 dark:text-neutral-400">
           ← Items
