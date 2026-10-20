@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  addDoc, collection, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp,
+  collection, getDocsFromServer, limit, onSnapshot, orderBy, query,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { useStoreContext } from "@/context/store-context";
@@ -21,6 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getDayIdFromTimestamp } from "@/lib/analytics/daily";
 import { computeHandoverCash, getShiftDayStartMs } from "@/lib/cash/handover";
 import { buildHandoverRecord, computeExpectedCash, convertLineText, handoverReadFrom, NEGATIVE_METHOD_NOTICE, parseCashAdjustment } from '@/lib/cash/convert-net';
+import { commitHandover, readHandoverAttempt, saveHandoverAttempt, type HandoverAttempt } from '@/lib/cash/handover-submit';
 import { parsePesoInput, storedPesosToCentavos, toWirePesos } from '@/lib/money/centavos';
 import { exportToXlsx } from "@/lib/export/export-xlsx-client";
 import type { CashHandover, CashHandoverDeduction } from "@/lib/types";
@@ -62,6 +63,34 @@ export function CashHandoverClient() {
   const [notes, setNotes] = useState<string>("");
   const [computingSales, setComputingSales] = useState(false);
   const [saving, setSaving] = useState(false);
+  const savingNow = useRef(false);
+  const [attempt, setAttempt] = useState<HandoverAttempt | null>(null);
+  const [attemptReady, setAttemptReady] = useState(false);
+  const [attemptProblem, setAttemptProblem] = useState('');
+  const [priorReady, setPriorReady] = useState(false);
+  const [priorProblem, setPriorProblem] = useState('');
+  const [priorRetry, setPriorRetry] = useState(0);
+  const identity = activeStore?.id && appUser?.uid ? `${activeStore.id}:${appUser.uid}` : '';
+  const identityNow = useRef(identity); identityNow.current = identity;
+  const storageKey = identity ? `shareat:cash-handover:${identity}` : '';
+
+  useEffect(() => {
+    setAttemptReady(false); setAttempt(null); setAttemptProblem('');
+    if (!storageKey || !activeStore?.id || !appUser?.uid) return;
+    try {
+      const saved = readHandoverAttempt(localStorage, storageKey, activeStore.id, appUser.uid);
+      setAttempt(saved);
+      if (saved) {
+        const p = saved.payload;
+        setPeriodStartMs(p.periodStartMs); setHasPrior(Boolean(p.periodStartExclusive));
+        setStartingCash(String(p.startingCash)); setCashSales(String(p.cashSales)); setConvertNet(p.convertNet ?? 0);
+        setManualCashAdjustment(String(p.manualCashAdjustment ?? 0)); setAdjustmentReason(p.manualCashAdjustmentReason ?? '');
+        setDeductions(p.deductions); setCountedCash(String(p.countedCash)); setOutgoing(p.outgoingCashierName);
+        setIncoming(p.incomingCashierName); setNotes(p.notes ?? '');
+      }
+    } catch (error) { setAttemptProblem((error as Error).message); }
+    setAttemptReady(true);
+  }, [storageKey, activeStore?.id, appUser?.uid]);
 
   // Live history of handovers.
   useEffect(() => {
@@ -83,12 +112,13 @@ export function CashHandoverClient() {
   // the new starting float, and start the new period where the last one ended.
   // Then auto-suggest cash sales for the window.
   useEffect(() => {
-    if (!activeStore?.id) return;
+    if (!activeStore?.id || !attemptReady || attempt || attemptProblem) return;
     let cancelled = false;
+    setPriorReady(false); setPriorProblem('');
     setComputedForStore(null); setManualCashAdjustment(''); setAdjustmentReason('');
     (async () => {
       try {
-        const snap = await getDocs(query(
+        const snap = await getDocsFromServer(query(
           collection(db, "stores", activeStore.id, "cashHandovers"),
           orderBy("createdAtClientMs", "desc"),
           limit(1),
@@ -99,14 +129,15 @@ export function CashHandoverClient() {
         setPeriodStartMs(start);
         setHasPrior(Boolean(prior));
         setStartingCash(String(prior?.countedCash ?? 0));
+        setPriorReady(true);
         await recompute(start, Boolean(prior));
       } catch {
-        // keep defaults
+        if (!cancelled) setPriorProblem('Could not load the previous handover. Recompute to retry before saving.');
       }
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeStore?.id]);
+  }, [activeStore?.id, attemptReady, attempt, attemptProblem, priorRetry]);
 
   useEffect(() => {
     if (appUser && !outgoing) {
@@ -167,8 +198,9 @@ export function CashHandoverClient() {
     setDedReason("");
   };
 
+  const formLocked = saving || Boolean(attempt) || !attemptReady || Boolean(attemptProblem);
   const canSave =
-    !saving &&
+    !formLocked && priorReady && !!appUser?.uid &&
     !computingSales && computedForStore === activeStore?.id && parsed.ok && parsed.counted !== null &&
     (parsed.adjustment === 0 || adjustmentReason.trim().length > 0) &&
     !!activeStore?.id &&
@@ -177,45 +209,54 @@ export function CashHandoverClient() {
     incoming.trim().length > 0;
 
   const handleSave = async () => {
-    if (!canSave || !activeStore?.id || !parsed.ok || parsed.counted === null) return;
-    setSaving(true);
+    if (savingNow.current || !activeStore?.id || !appUser?.uid || !attemptReady || attemptProblem || (!attempt && !canSave)) return;
+    if (attempt && (attempt.storeId !== activeStore.id || attempt.payload.createdByUid !== appUser.uid)) return;
+    const submittingIdentity = identity;
+    const submittingKey = storageKey;
+    savingNow.current = true; setSaving(true);
     try {
-      const now = Date.now();
-      const fresh = await computeHandoverCash(activeStore.id, handoverReadFrom(periodStartMs, hasPrior), now);
-      if (storeNow.current !== activeStore.id) throw new Error('The store changed. Review this handover again before saving.');
-      const figures = buildHandoverRecord({ startingCash: toWirePesos(parsed.starting), cashSales: fresh.cashSales, convertNet: fresh.convertNet,
-        manualCashAdjustment: toWirePesos(parsed.adjustment), manualCashAdjustmentReason: adjustmentReason,
-        deductions: deductionsTotal, countedCash: toWirePesos(parsed.counted) });
-      setCashSales(String(fresh.cashSales)); setConvertNet(fresh.convertNet); setNegativeMethodNames(fresh.negativeMethodNames);
-      await addDoc(collection(db, "stores", activeStore.id, "cashHandovers"), {
-        shiftDayId: getDayIdFromTimestamp(now),
-        periodStartMs,
-        periodEndMs: now,
-        periodStartExclusive: hasPrior,
-        ...figures,
-        deductions,
-        outgoingCashierName: outgoing.trim(),
-        incomingCashierName: incoming.trim(),
-        notes: notes.trim() || null,
-        createdAt: serverTimestamp(),
-        createdAtClientMs: now,
-        createdByUid: appUser?.uid ?? null,
-        createdByName: appUser?.displayName || appUser?.name || null,
-      });
-      toast({ title: "Handover logged", description: `${outgoing.trim()} → ${incoming.trim()} · ${peso(figures.countedCash)}` });
+      let request = attempt;
+      if (!request) {
+        if (!parsed.ok || parsed.counted === null) return;
+        const now = Date.now();
+        const fresh = await computeHandoverCash(activeStore.id, handoverReadFrom(periodStartMs, hasPrior), now);
+        if (identityNow.current !== submittingIdentity) throw new Error('The store or staff member changed. Review this handover again before saving.');
+        const figures = buildHandoverRecord({ startingCash: toWirePesos(parsed.starting), cashSales: fresh.cashSales, convertNet: fresh.convertNet,
+          manualCashAdjustment: toWirePesos(parsed.adjustment), manualCashAdjustmentReason: adjustmentReason,
+          deductions: deductionsTotal, countedCash: toWirePesos(parsed.counted) });
+        request = { id: crypto.randomUUID(), storeId: activeStore.id, payload: {
+          shiftDayId: getDayIdFromTimestamp(now), periodStartMs, periodEndMs: now, periodStartExclusive: hasPrior,
+          ...figures, deductions, outgoingCashierName: outgoing.trim(), incomingCashierName: incoming.trim(),
+          notes: notes.trim() || null, createdAtClientMs: now, createdByUid: appUser.uid,
+          createdByName: appUser.displayName || appUser.name || null,
+        } };
+        saveHandoverAttempt(localStorage, submittingKey, request);
+        setAttempt(request);
+        setCashSales(String(fresh.cashSales)); setConvertNet(fresh.convertNet); setNegativeMethodNames(fresh.negativeMethodNames);
+      }
+      await commitHandover(request);
+      const figures = request.payload;
+      try { localStorage.removeItem(submittingKey); }
+      catch {
+        toast({ title: 'Handover logged', description: 'The saved retry could not be cleared on this device. Retry the same handover to confirm it; do not log another copy.' });
+        return;
+      }
+      if (identityNow.current !== submittingIdentity) return;
+      setAttempt(null);
+      toast({ title: "Handover logged", description: `${figures.outgoingCashierName} → ${figures.incomingCashierName} · ${peso(figures.countedCash)}` });
       // Reset for the next handover: new float = just-counted cash, new window from now.
       setStartingCash(String(figures.countedCash)); setHasPrior(true); setManualCashAdjustment(''); setAdjustmentReason('');
-      setPeriodStartMs(now);
+      setPeriodStartMs(figures.periodEndMs);
       setDeductions([]);
       setCountedCash("");
       setNotes("");
-      setOutgoing(incoming.trim());
+      setOutgoing(figures.incomingCashierName);
       setIncoming("");
-      await recompute(now, true);
+      await recompute(figures.periodEndMs, true);
     } catch (e: any) {
-      toast({ variant: "destructive", title: "Save failed", description: e?.message });
+      toast({ variant: "destructive", title: "Handover needs checking", description: e?.message || 'Retry this same handover before logging another.' });
     } finally {
-      setSaving(false);
+      savingNow.current = false; setSaving(false);
     }
   };
 
@@ -277,6 +318,10 @@ export function CashHandoverClient() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {attemptProblem && <p role="alert" className="text-sm text-destructive">{attemptProblem}</p>}
+            {!attempt && priorProblem && <p role="alert" className="text-sm text-destructive">{priorProblem}</p>}
+            {attempt && <p role="status" className="rounded border p-3 text-sm">A handover is awaiting confirmation: {fmtDateTime(attempt.payload.periodStartMs)} to {fmtDateTime(attempt.payload.periodEndMs)}, counted {peso(attempt.payload.countedCash)}. Retry below to confirm this same record.</p>}
+            <fieldset disabled={formLocked} className="min-w-0 space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label>Starting cash (float)</Label>
@@ -285,7 +330,7 @@ export function CashHandoverClient() {
               <div className="space-y-1">
                 <Label className="flex items-center justify-between">
                   Cash sales
-                  <Button type="button" variant="ghost" size="sm" className="min-h-11 px-2 text-xs lg:min-h-9" onClick={() => recompute(periodStartMs)} disabled={computingSales || saving}>
+                  <Button type="button" variant="ghost" size="sm" className="min-h-11 px-2 text-xs lg:min-h-9" onClick={() => priorReady ? recompute(periodStartMs) : setPriorRetry(n => n + 1)} disabled={computingSales || saving}>
                     {computingSales ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                     <span className="ml-1">Recompute</span>
                   </Button>
@@ -371,9 +416,10 @@ export function CashHandoverClient() {
               <Input value={notes} onChange={(e) => setNotes(e.target.value.slice(0, 120))} placeholder="Anything worth noting" disabled={saving} />
             </div>
 
-            <Button onClick={handleSave} disabled={!canSave} className="sticky bottom-0 min-h-11 w-full md:static lg:min-h-9">
+            </fieldset>
+            <Button onClick={handleSave} disabled={saving || !attemptReady || Boolean(attemptProblem) || (!attempt && !canSave)} className="sticky bottom-0 min-h-11 w-full md:static lg:min-h-9">
               {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-              Log handover
+              {attempt ? 'Retry same handover' : 'Log handover'}
             </Button>
           </CardContent>
         </Card>

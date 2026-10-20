@@ -135,6 +135,26 @@ Sheet, cashier launcher, retry-envelope logic, handover range/cash classifier/ca
 The old raw no-change browser transport fallback is corrected under DEF-705; new audit calendar controls under DEF-709 were red first. Command source guards distinguish the existing local Map accumulator from direct/chained database mutations, with positive controls. No live Firestore audit or write has run. Normal build/final guards, full POS CI, safe cap build and visual/runtime sign-off are still required. T-426 remains separate unfinished work on this branch.
 
 ## For the orchestrator
+
+### DEF-710 supporting release scope, 20 October
+Preserve one handover id and its complete closing payload before posting; retry that exact
+window and values after an unknown outcome or reload. Supporting files are
+`src/lib/cash/handover-submit.ts`, its test, CashHandoverClient and its wiring test.
+An atomic read-before-set treats an identical saved record as success, refuses conflicting
+payloads, and confirms an uncertain commit by server read. Persist per store/staff in browser
+storage; failed persistence stops posting. Never re-read a later sales window on a retry.
+No background/offline posting. Existing Firestore authorization rules remain the gate.
+New tests were red for the absent recovery module before implementation; no live writes.
+Implemented locally: 107 affected checks, POS typecheck and normal/cap builds pass. The
+eight recovery tests include same-id concurrency and a committed write with both its ack
+and recovery read lost. Browser storage is durable across reload/reopen, scoped to store
+and staff. A pending attempt freezes the form; only explicit Retry posts it. The first
+submission refreshes totals through its captured close, while every retry reuses that
+unchanged payload. Prior-close seeding now requires a server read. DEF-712 separately
+records distinct-id window overlap; this checkpoint does not claim a shared closing lock.
+DEF-706 supporting check: if loading the prior close fails, Recompute retries that lookup;
+it cannot enable saving a default shift-start window without a confirmed previous-close read.
+
 The ERP day feed refuses a day with a negative method total; Convert legitimately produces one (cash-in before GCash
 sales). Today every v1 store carries this risk. Suggested ERP task: import `paymentConversions` as cash<->wallet transfers
 (or net them out before the negative check). Until then, `makesDayNegative` marks the affected v2 days.
