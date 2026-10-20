@@ -407,6 +407,58 @@
   top: 0;
   z-index: 20;
 }
+
+/* T-448: a named, keyboard-scrollable summary strip becomes a grid when space permits.
+   Numbers remain real text: wrap at extreme magnification instead of clipping or ellipsizing. */
+.erp-metric-strip {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  border-block: 1px solid var(--surface-border);
+}
+.erp-metric-strip > * {
+  flex: 0 0 80%;
+  min-width: 0;
+  scroll-snap-align: start;
+  overflow-wrap: anywhere;
+}
+.erp-metric-strip:focus-visible {
+  outline: 2px solid var(--brand-ink);
+  outline-offset: 2px;
+}
+.erp-detail-layout { min-width: 0; }
+@media (min-width: 768px) and (max-width: 1023px) {
+  .erp-page[data-view] :where(input:not([type]), input[type="text"], input[type="email"], input[type="tel"], input[type="search"], input[type="password"], input[type="number"], input[type="date"], input[type="month"], input[type="time"], input[type="url"], select) {
+    min-height: 44px;
+    padding-block: 0.5rem;
+  }
+}
+.erp-page[data-view="detail"] :where(section, form, dl) { min-width: 0; }
+.erp-page[data-view="detail"] :where(dt, dd) { overflow-wrap: anywhere; }
+.erp-page[data-view="detail"] :where(h2) { line-height: 1.4; }
+@media (min-width: 768px) {
+  .erp-metric-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+}
+@media (min-width: 1024px) {
+  .erp-metric-strip[data-columns="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (min-width: 1024px) and (pointer: fine) {
+  .erp-page[data-view="detail"] > :where(section),
+  .erp-page[data-view="detail"] .erp-detail-layout :where(section) { padding-block: 0.75rem; }
+  .erp-page[data-view="detail"] > :where(section) + :where(section) { margin-top: 1rem; }
+}
+@media (min-width: 1440px) {
+  .erp-page[data-view="detail"][data-sectioned] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 1rem;
+  }
+  .erp-page[data-view="detail"][data-sectioned] > * { grid-column: 1 / -1; margin-block: 0; min-width: 0; }
+  .erp-page[data-view="detail"][data-sectioned] > section:not(:has(table)) { grid-column: auto; }
+}
 @media (min-width: 1024px) and (pointer: fine) {
   .erp-page tbody > tr {
     height: 36px;

@@ -54,3 +54,7 @@ The remittance harness also supplies its missing fake principal. Sentence and do
 `t342-no-null-tx-from-actions` updates the existing per-asset depreciation exception from line 225 to 228, not its scope.
 DEF-682's literal OR pipes are escaped for the register table; the loan interest input retains explicit decimal mode.
 Local reproduction: 47 failed / 94 passed; after repair, all 141 checks across the same 11 files passed.
+
+## Release progress, 20 October
+PR #39 passed full CI 39349212629 and merged as e34a979. T-449 repairs the eager payroll refusal-test promises without weakening assertions. PR #41 passed full CI 39351822583 and merged as fd8af80; Ian approved its dashboard corrections in be47f67. Production CI 39353485354 is running; this revision is not yet claimed live.
+T-440 now includes fd8af80: preserve both register additions; the action scanner measures 1390 after Books moves into StatCard. Combined build and root/ERP typechecks passed; 43 focused UI/auth/census checks passed. Number-field checks: 58 passed / four 5-second cold-import timeouts; the affected file passes all 20 with a local 30-second test budget. Repository/CI timeout settings and assertions are unchanged. Full CI must verify this combined head.

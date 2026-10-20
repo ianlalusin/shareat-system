@@ -81,7 +81,7 @@ export default async function AssetDetailPage({
   const postedSet = new Set(periods);
 
   return (
-    <Page density="table">
+    <Page view="detail" density="table">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <a href={`/fixed-assets?${carry.toString()}`} className="text-sm underline hover:no-underline">

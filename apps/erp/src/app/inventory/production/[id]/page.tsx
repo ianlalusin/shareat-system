@@ -39,7 +39,7 @@ export default async function ProductionRecordPage({
   const warnings = Array.isArray(record.softWarnings) ? (record.softWarnings as string[]) : [];
 
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">{KIND_LABEL[record.kind] ?? record.kind}</h1>

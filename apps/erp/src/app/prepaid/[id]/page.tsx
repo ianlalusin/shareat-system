@@ -62,7 +62,7 @@ export default async function PrepaidItemPage({
   const active = item.status === 'active';
 
   return (
-    <Page density="table">
+    <Page view="detail" density="table">
       <div>
         <Link href="/prepaid" className="text-sm underline underline-offset-2">
           ← Prepaid expenses

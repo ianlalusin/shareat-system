@@ -55,7 +55,7 @@ export default async function LiabilityPage({
   const owing = compare(money(liability.position.outstanding), ZERO);
 
   return (
-    <Page density="table">
+    <Page view="detail" density="table">
       <div>
         <Link href="/liabilities" className="text-sm underline underline-offset-2">
           ← Liabilities

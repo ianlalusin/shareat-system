@@ -1,9 +1,10 @@
-FINDINGS: audit in progress; two unfinished branches are not merge-ready
-- codex/compact-form-fields: Ian reviewed the refreshed local preview and approved: "better now go". PR #38 merged as 758a48c; main CI 39272611434 and Deploy 39275146755 both succeeded. Compact white UI is live at erp2.shareat.net.
-- lane/t442-l1: PR #39 original CI passed; combined head 8d692b6 passed 52 affected tests and all integration tests but failed Next's font build. Audit head 99a176f requests fresh CI, still queued. Uncommitted file-link backfill remains separate in wt-t403.
-- lane/t440-sweep: draft PR #40, head 1cb70ce, combined with main 758a48c. 1,491 unit / 215 PostgreSQL tests, both typechecks and an ERP build passed; two later raw-error corrections passed 69 refusal checks, 342 affected checks and 32 PostgreSQL checks. Final build, broader guards and full CI pending.
-- MED · T-440 G6 accepted an OR condition with an ungated path; four missing-record fallbacks exposed field sentences before can(). Red control reproduced it; checker and action conditions corrected in the working tree.
-- claude/pos-v2-907a29: baseline 635 passed / 161 failed / 1 skipped; two incorrect offline test oracles corrected in 54372a5 (42 affected checks pass). Post-commit guards: 82 passed / two census failures (test helpers and stale clearQueue). Statutory/Convert implementations remain absent; held from merge.
-- Local preview refusal traced to an expired synthetic session (confirmed expired=true); refreshed for eight hours. Personal email sign-in is not part of this synthetic fixture.
-- CHECKED CLEAN: branch inventory excludes already-merged heads; unrelated docs/operations/ remains excluded; no force/reset/stash or reference-repository writes.
-FOR IAN: the approved UI is live; green work ships first as requested. Lightbox full CI and validation/POS completion continue separately.
+FINDINGS: audit in progress; POS and backfill remain unfinished
+- PR #38 merged as 758a48c; main CI and Deploy succeeded. Compact white UI is live.
+- PR #39 passed full CI 39349212629 and merged as e34a979; payroll refusal-test promises were repaired under T-449, preserving assertions.
+- PR #41 passed full CI 39351822583 and merged as fd8af80; Ian approved the dashboard corrections. Production CI 39353485354 is running; this revision is not yet claimed live.
+- PR #40 now includes fd8af80. Combined production build, root/ERP typechecks and 43 UI/auth/census checks pass; full CI is required again.
+- Local number checks: 58 passed / four 5-second cold-import timeouts; all 20 checks in the affected file pass with a 30-second local budget. CI settings and assertions remain unchanged.
+- POS baseline: 635 passed / 161 failed / one skipped; two incorrect offline oracles corrected in 54372a5 (42 checks pass). Convert server implementation is in progress; statutory, UI and handover work remains unfinished.
+- File-link backfill remains uncommitted in wt-t403 and separate from the lightbox release.
+CHECKED CLEAN: already-merged heads excluded; unrelated root CLAUDE.md and docs/operations/ preserved; no force/reset/stash or reference-repository writes.
+FOR IAN: clean releases ship first; dashboard deployment is pending and unfinished work stays separate.

@@ -105,7 +105,7 @@ export default async function BranchOrderPage({
   const heroLine = nextLineFor(stage, commissarySide ? 'commissary' : 'branch');
 
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div>
         <Link href={`/commissary/orders?store=${branchSide ? branch.id : commissary.id}`} className="text-sm underline underline-offset-4">
           ← Branch orders

@@ -459,8 +459,9 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     //   dismissed-pairs list (summary, links, Undo), the Variation-of selects on the request form and approve row, and the item page's
     //   Variations section (links, select, Save). Measured 1362 -> 1374; all 12 new controls are >= 24px (the 5 that were 20px got py-0.5).
     // T-444: one new Review and approvals disclosure summary; all existing controls remain.
-    // Combined T-440 and T-443/T-444 changes: preserve both sets of controls; verified by the census below.
-    expect(results.length).toBe(1391);
+    // Combined T-440 controls plus T-448: Books moves into the financial StatCard map.
+    // SSR checks retain Assets and Books links; this removes one static scanner site.
+    expect(results.length).toBe(1390);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {
