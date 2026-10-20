@@ -10,7 +10,8 @@
     "./datetime": "./src/datetime.ts",
     "./logger": "./src/logger.ts",
     "./env": "./src/env.ts",
-    "./exif": "./src/exif.ts"
+    "./exif": "./src/exif.ts",
+    "./sentence": "./src/sentence.ts"
   },
   "dependencies": {
     "pino": "^9.6.0",

@@ -14,6 +14,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) throw new Error('Refusing to run agai
 
 import { closeDb } from '@shareat/db';
 import { closeDrawingMonth, createOwner } from '@shareat/domain';
+import { OWNERS_CREATE_RULES } from '../../src/field-rules/owners';
 import { NAN_INPUTS, asOrg, bootstrap, count, expectPlainRefusal, refusalOf } from './_fixtures/t371-nan';
 
 const sql = postgres(url, { max: 5 });
@@ -35,7 +36,7 @@ describe.each([
       const before = await count(sql, 'owners', k.orgId);
       const over = field === 'drawingLimit' ? { drawingLimit: typed, drawingLimitPeriod: 'monthly' } : { [field]: typed };
       const got = await refusalOf(asOrg(k.orgId, (tx) => createOwner(tx, k.admin, owner(k, over) as never)));
-      expectPlainRefusal(got, typed, label, `createOwner.${field}`);
+      expectPlainRefusal(got, typed, label, `createOwner.${field}`, field === 'ownershipPercentage' ? OWNERS_CREATE_RULES.ownershipPercentage : undefined);
       expect(await count(sql, 'owners', k.orgId), 'a refused owner wrote a row').toBe(before);
       const ok = await refusalOf(asOrg(k.orgId, (tx) => createOwner(tx, k.admin, owner(k, valid) as never)));
       expect(ok.text, `the control was refused: ${ok.text}`).toBeNull();

@@ -210,6 +210,7 @@ export default async function CountPage({
                     <Field label={<span className="sr-only">Cost per {r.baseUnit}</span>} rule={CUTOVER_COUNT_RULES.unitCost}>
                       <input
                         {...nativeAttrs(CUTOVER_COUNT_RULES.unitCost)}
+                        inputMode="decimal"
                         placeholder={`Cost per ${r.baseUnit}`}
                         className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm"
                       />
@@ -240,6 +241,7 @@ export default async function CountPage({
                     <Field label={<span className="sr-only">Cost per {r.baseUnit}</span>} rule={CUTOVER_COUNT_RULES.unitCost}>
                       <input
                         {...nativeAttrs(CUTOVER_COUNT_RULES.unitCost)}
+                        inputMode="decimal"
                         defaultValue={r.unitCost ?? ''}
                         placeholder={`Cost per ${r.baseUnit}`}
                         className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm"

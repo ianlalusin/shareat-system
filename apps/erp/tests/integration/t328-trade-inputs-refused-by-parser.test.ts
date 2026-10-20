@@ -171,8 +171,9 @@ describe('T-328 Test 2(a) — trade\'s inputs are refused by the parser, not by 
     ).toBeNull();
     expect(err).toBeInstanceOf(Error);
     expect(
-      (err as Error).message,
+      (err as { userMessage?: string }).userMessage,
       `expected parseMoneyInput's own sentence ending "${PARSER_SUFFIX}", got: ${(err as Error).message}`,
     ).toContain(PARSER_SUFFIX);
+    expect((err as Error).message).toBe('trade.createTradeOrder.deliveryFee: money check failed');
   });
 });

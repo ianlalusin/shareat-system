@@ -161,6 +161,7 @@ export default async function ItemsPage({
                 {canOverride && (
                   <Field label={<span className="text-xs text-neutral-500 dark:text-neutral-400">Use a different code (super-admin)</span>} rule={ITEMS_REQUEST_RULES.code} className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
                     <Input {...nativeAttrs(ITEMS_REQUEST_RULES.code)}
+                      pattern="[A-Za-z0-9]{4}-[0-9]{3}"
 
                       type="text"
                       autoComplete="off"
@@ -399,6 +400,7 @@ export default async function ItemsPage({
                     {canOverride && (
                       <Field label={<span className="text-xs text-neutral-500 dark:text-neutral-400">Use a different code</span>} rule={ITEMS_APPROVE_RULES.code} className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
                         <Input {...nativeAttrs(ITEMS_APPROVE_RULES.code)}
+                          pattern="[A-Za-z0-9]{4}-[0-9]{3}"
 
                           autoComplete="off"
 

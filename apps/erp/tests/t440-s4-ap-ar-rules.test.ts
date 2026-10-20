@@ -1,6 +1,6 @@
 /**
  * T-440 S4 (TESTER) - parity fixture for every S4 rule set (ap, customers, liabilities, loans, prepaid, trade). Spec:
- * docs/tasks/440-live-field-checks.md section 3, Audit A5 (a sentence never echoes the typed value), "one rule definition used
+ * docs/tasks/440-live-field-checks.md section 3, Audit A5 (non-money values never echo; Ian permits quoted money amounts), "one rule definition used
  * by client and server". Node, no database.
  *
  * The rule sets are IMPORTED, never copied. For each rule the table holds a passing value, failing values with the exact
@@ -34,7 +34,7 @@ type Row = {
 };
 
 const BLANK = '   ';
-const MONEY_BAD = (label: string): [string, string] => ['abc', `${label} — that is not a valid amount. Use at most two decimal places.`];
+const MONEY_BAD = (label: string): [string, string] => ['abc', `${label} — "abc" is not a valid amount. Use at most two decimal places.`];
 const MONEY_BLANK = (label: string) => `${label} — can't be left blank. Enter an amount.`;
 const REAL_DATE = (label: string): [string, string] => ['soon', `${label} must be a real date.`];
 
@@ -53,7 +53,7 @@ const optDate = (label: string): Row => ({ ok: '2026-10-01', bad: [REAL_DATE(lab
 /** A date rule that carries its own sentence: a bad value and a blank both give it. */
 const dateReq = (sentence: string): Row => ({ ok: '2026-10-01', bad: [['soon', sentence]], blank: sentence });
 /** money, min 0.01, with the sentence of its own */
-const moneyPos = (sentence: string): Row => ({ ok: '10.5', stored: '10.50', bad: [['abc', sentence], ['0', sentence], ['-5', sentence]], blank: sentence });
+const moneyPos = (sentence: string): Row => ({ ok: '10.5', stored: '10.50', bad: [MONEY_BAD(sentence.split(' must')[0] ?? sentence), ['0', sentence], ['-5', sentence]], blank: sentence });
 /** money, min 0, no sentence of its own, required */
 const money0 = (label: string): Row => ({
   ok: '0', stored: '0.00',
@@ -95,7 +95,7 @@ const ROWS: Record<string, Row> = {
   'customers.reconcileCustomer.asOf': dateReq('Say which date they were verified at zero.'),
   'customers.createPriceList.name': req('A price list needs a name.'),
   'customers.setPrice.itemId': req('Choose an item.'),
-  'customers.setPrice.rate': money0('The rate'),
+  'customers.setPrice.rate': { ...money0('The rate'), bad: [MONEY_BAD('The rate'), ['-1', 'A rate cannot be negative. A negative price is a discount.']] },
   'customers.recordCollection.amount': moneyPos('The amount collected must be an amount greater than zero.'),
   'customers.recordCollection.platformFee': optMoney0('The platform fee'),
   'customers.recordCollection.collectionDate': date('The collection date'),
@@ -232,7 +232,7 @@ describe('T-440 S4 payables and receivables: the table covers exactly the rules 
   });
 });
 
-describe('T-440 S4 payables and receivables: client rule === server refusal, exact sentences, never the typed value', () => {
+describe('T-440 S4 payables and receivables: client rule === server refusal, exact sentences, money-only input quoting', () => {
   for (const { set, rule: r, key } of ALL_RULES) {
     const row = ROWS[key];
     if (!row) continue;
@@ -260,7 +260,7 @@ describe('T-440 S4 payables and receivables: client rule === server refusal, exa
           const err = thrown as RefusalError;
           expect(err.userMessage).toBe(c.requirement);
           expect(err.message).toBe(`${set.form}.${r.name}: ${r.kind} check failed`);
-          for (const text of [c.requirement, c.progress, err.message, err.userMessage]) {
+          for (const text of (r.kind === 'money' ? [c.progress, err.message] : [c.requirement, c.progress, err.message, err.userMessage])) {
             expect(echoes(text, value), 'a sentence must not contain the typed value').toBe(false);
           }
         });

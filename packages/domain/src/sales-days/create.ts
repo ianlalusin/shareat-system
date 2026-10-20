@@ -86,7 +86,14 @@ export async function createSalesDay(
 async function runCreate(tx: Tx, actor: Actor, input: CreateSalesDayInput): Promise<{ id: string }> {
   await authorize(tx, actor, 'submit_sales_day', { storeId: input.storeId });
   // T-440 / S9: the screen's own rule judges the box AFTER the gate (T-364 order). Moved here from the action.
-  assertFieldRules(SALES_DAY_CREATE_RULES, { businessDate: input.businessDate });
+  // PostgreSQL and the existing duplicate-day refusal accept unpadded month/day spellings.
+  // Pad only that spelling for the strict calendar check; the domain's existing input and refusal remain unchanged.
+  const dateForCheck = typeof input.businessDate === 'string'
+    ? input.businessDate.replace(/^(\d{4})-(\d{1,2})-(\d{1,2})$/, (_all, year: string, month: string, day: string) =>
+      `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`,
+    )
+    : input.businessDate;
+  assertFieldRules(SALES_DAY_CREATE_RULES, { businessDate: dateForCheck });
   // T-375 S3 (R13): a LINKED store takes its sales from POS - the typed path refuses (store row FOR KEY SHARE first).
   await assertStoreTakesTypedDays(tx, actor, input.storeId, 'createSalesDay');
 

@@ -619,7 +619,7 @@ describe('A10 — a blank reason, and a disposed asset', () => {
     const { f, assetId } = await assetHoleFixture('a10-reason');
     await expect(
       book(f.admin, { schedule: 'depreciation', subjectId: assetId, belongsToPeriod: '2026-04', reason: '   ' }),
-    ).rejects.toThrow(/reason is required/);
+    ).rejects.toMatchObject({ name: 'RefusalError', userMessage: 'Say why this month is being booked now.' });
   });
 
   it('/is disposed/', async () => {

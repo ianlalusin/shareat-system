@@ -1555,7 +1555,7 @@ describe('⛔ DEF-157 — payReimbursement settles 2130, which nothing previousl
           fromMoneyAccountId: f.cashDrawerId, on: '2026-01-16',
         }),
       ),
-    ).rejects.toThrow(/payReimbursement: the amount.*"0\.004"/);
+    ).rejects.toMatchObject({"name":"RefusalError","message":"expenses.reimbursement.amount: money check failed","userMessage":"The reimbursement amount — \"0.004\" is not a valid amount. Use at most two decimal places."});
   });
 });
 

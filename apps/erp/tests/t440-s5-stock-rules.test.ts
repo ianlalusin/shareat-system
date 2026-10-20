@@ -1,6 +1,6 @@
 /**
  * T-440 S5 (TESTER) - parity fixture for every S5 rule set (inventory, items, commissary, wastage, cutover, menu). Spec:
- * docs/tasks/440-live-field-checks.md section 3, Audit A5 (a sentence never echoes the typed value), "one rule definition used
+ * docs/tasks/440-live-field-checks.md section 3, Audit A5 (non-money values never echo; Ian permits quoted money amounts), "one rule definition used
  * by client and server". Node, no database.
  *
  * The rule sets are IMPORTED, never copied. For each rule the table holds a passing value, failing values with the exact
@@ -34,7 +34,7 @@ type Row = {
 };
 
 const BLANK = '   ';
-const MONEY_BAD = (label: string): [string, string] => ['abc', `${label} — that is not a valid amount. Use at most two decimal places.`];
+const MONEY_BAD = (label: string): [string, string] => ['abc', `${label} — "abc" is not a valid amount. Use at most two decimal places.`];
 const MONEY_BLANK = (label: string) => `${label} — can't be left blank. Enter an amount.`;
 const REAL_DATE = (label: string): [string, string] => ['soon', `${label} must be a real date.`];
 /** A required text rule that carries its own sentence: blank and whitespace both give it. */
@@ -141,8 +141,11 @@ const ROWS: Record<string, Row> = {
   },
   'cutover.valueOpeningAsset.remainingLifeMonths': { ok: '36', bad: [['0', LIFE], ['601', LIFE], ['1.5', LIFE], ['abc', LIFE]], blank: LIFE },
   'cutover.valueOpeningAsset.salvageValue': { ok: '0', stored: '0.00', bad: [MONEY_BAD('The salvage value'), ['-1', 'The salvage value must be an amount of 0 or more.']] },
-  'cutover.recordOpeningCount.quantity': { ok: '0', bad: [['abc', QTY_COUNT], ['-1', QTY_COUNT]], blank: QTY_COUNT },
-  'cutover.recordOpeningCount.unitCost': optNum0('The cost per unit'),
+  'cutover.recordOpeningCount.quantity': { ok: '0', bad: [['abc', QTY_COUNT], ['-1', 'A count cannot be negative.']], blank: QTY_COUNT },
+  'cutover.recordOpeningCount.unitCost': {
+    ok: '.5', bad: [['abc', 'The cost per unit must be a non-negative number with up to four decimal places.'],
+      ['-1', 'The cost per unit must be a non-negative number with up to four decimal places.']],
+  },
   // ---- menu
   'menu.category.name': req('A category needs a name.'),
   'menu.category.sortOrder': optInt('The sort order'),
@@ -206,7 +209,7 @@ describe('T-440 S5 stock and menu: the table covers exactly the rules that exist
   });
 });
 
-describe('T-440 S5 stock and menu: client rule === server refusal, exact sentences, never the typed value', () => {
+describe('T-440 S5 stock and menu: client rule === server refusal, exact sentences, money-only input quoting', () => {
   for (const { set, rule: r, key } of ALL_RULES) {
     const row = ROWS[key];
     if (!row) continue;
@@ -234,7 +237,7 @@ describe('T-440 S5 stock and menu: client rule === server refusal, exact sentenc
           const err = thrown as RefusalError;
           expect(err.userMessage).toBe(c.requirement);
           expect(err.message).toBe(`${set.form}.${r.name}: ${r.kind} check failed`);
-          for (const text of [c.requirement, c.progress, err.message, err.userMessage]) {
+          for (const text of (r.kind === 'money' ? [c.progress, err.message] : [c.requirement, c.progress, err.message, err.userMessage])) {
             expect(echoes(text, value), 'a sentence must not contain the typed value').toBe(false);
           }
         });
@@ -320,5 +323,12 @@ describe('T-440 S5 stock and menu: boundaries and shape', () => {
   });
   it('a date refuses 2026-02-30 (mutant: shape-only date check)', () => {
     expect(checkField(ruleOf('inventory.openCountSession.countedOn'), '2026-02-30').ok).toBe(false);
+  });
+});
+
+describe('T440 existing manual cost shapes', () => {
+  it('accepts leading/trailing-dot four-decimal costs and refuses negative, excess-precision and non-number values', () => {
+    for (const value of ['.5', '1.', '005', '0.1234']) expect(checkField(cutover.CUTOVER_COUNT_RULES.unitCost, value).ok, value).toBe(true);
+    for (const value of ['-1', '1.12345', '.', 'abc', '1e3']) expect(checkField(cutover.CUTOVER_COUNT_RULES.unitCost, value).ok, value).toBe(false);
   });
 });

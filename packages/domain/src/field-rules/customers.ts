@@ -23,7 +23,7 @@ export const PRICE_LIST_ADD_RULES = defineFieldRules('customers.createPriceList'
 /** "Set a rate" on a price list (setPriceAction). Zero is allowed: a sample is genuinely free. */
 export const PRICE_SET_RULES = defineFieldRules('customers.setPrice', {
   itemId: { label: 'The item', kind: 'text', requires: 'Choose an item.' },
-  rate: { label: 'The rate', kind: 'money', min: 0 },
+  rate: { label: 'The rate', kind: 'money', min: 0, rangeSays: 'A rate cannot be negative. A negative price is a discount.' },
 });
 
 /** "Record payment" on a customer page (recordCollectionAction). The per-charge allocation boxes are a repeated-line family (S8). */

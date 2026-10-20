@@ -15,14 +15,14 @@ export const ASSET_CREATE_RULES = defineFieldRules('fixed-assets.create', {
   acquiredOn: { label: 'The acquisition date', kind: 'date', notAfterToday: true },
   inServiceOn: { label: 'The specific in-service date', optional: true, kind: 'date' },
   cost: { label: "The asset's cost", kind: 'money', min: 0.01 },
-  salvageValue: { label: 'The salvage value', optional: true, kind: 'money', min: 0 },
+  salvageValue: { label: 'The salvage value', optional: true, kind: 'money', min: 0, rangeSays: 'The salvage value cannot be negative.' },
   usefulLifeMonths: { label: 'The useful life', optional: true, kind: 'number', integer: true, min: 1, max: MAX_LIFE },
 });
 
 export const ASSET_TERMS_RULES = defineFieldRules('fixed-assets.terms', {
   name: { label: 'The asset name', kind: 'text', max: 200, requires: 'Give the asset a name (up to 200 characters).' },
   usefulLifeMonths: { label: 'The useful life', kind: 'number', integer: true, min: 1, max: MAX_LIFE },
-  salvageValue: { label: 'The salvage value', optional: true, kind: 'money', min: 0 },
+  salvageValue: { label: 'The salvage value', optional: true, kind: 'money', min: 0, rangeSays: 'The salvage value cannot be negative.' },
 });
 
 export const ASSET_IN_SERVICE_RULES = defineFieldRules('fixed-assets.inService', {

@@ -3,6 +3,7 @@
  * ("An opening figure has to be greater than zero."); a count of zero is a real answer, so it is allowed.
  */
 import { defineFieldRules } from './check';
+import { MANUAL_COST_PATTERN } from '../shared/manual-cost-pattern';
 
 /** Add an opening figure (/cutover/opening). Which accounts take a party, and which are generated, is the domain's call. */
 export const CUTOVER_FIGURE_RULES = defineFieldRules('cutover.addOpeningFigure', {
@@ -28,6 +29,9 @@ export const CUTOVER_ASSET_RULES = defineFieldRules('cutover.valueOpeningAsset',
 
 /** One opening count row. A blank cost is allowed (the cost source stays empty); a zero count is a real answer. */
 export const CUTOVER_COUNT_RULES = defineFieldRules('cutover.recordOpeningCount', {
-  quantity: { label: 'The count', kind: 'number', min: 0, requires: 'A count cannot be negative: use a number of 0 or more, with at most three decimal places.' },
-  unitCost: { label: 'The cost per unit', optional: true, kind: 'number', min: 0 },
+  quantity: { label: 'The count', kind: 'number', min: 0, rangeSays: 'A count cannot be negative.', requires: 'A count cannot be negative: use a number of 0 or more, with at most three decimal places.' },
+  unitCost: {
+    label: 'The cost per unit', optional: true, kind: 'pattern', pattern: MANUAL_COST_PATTERN.source,
+    patternSays: 'a non-negative number with up to four decimal places',
+  },
 });

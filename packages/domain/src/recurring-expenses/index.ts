@@ -237,9 +237,16 @@ export async function updateRecurringTemplate(
     const template = await recurringExpensesRepo.getById(trx, actor.orgId, input.templateId);
     if (!template) throw new Error('that template does not exist.');
     await authorize(trx, actor, 'manage_recurring_expenses', { storeId: template.storeId });
-    // T-440 / S9: the screen's own rules, AFTER the gate. The edit form carries no supplier box or start date (the action
-    // sent the form's own absent keys); an absent anchor day stays absent so the rule judges it exactly as the form did.
-    assertFieldRules(RECURRING_TEMPLATE_RULES, {
+    // Updates are patches: omission preserves the stored field, while a supplied blank is judged by its rule.
+    // The form submits its ruled fields; other callers may change only one field.
+    assertFieldRules({
+      form: RECURRING_TEMPLATE_RULES.form,
+      ...(input.name !== undefined ? { name: RECURRING_TEMPLATE_RULES.name } : {}),
+      ...(input.supplierId !== undefined ? { supplierId: RECURRING_TEMPLATE_RULES.supplierId } : {}),
+      ...(input.categoryId !== undefined ? { categoryId: RECURRING_TEMPLATE_RULES.categoryId } : {}),
+      ...(input.defaultAmount !== undefined ? { defaultAmount: RECURRING_TEMPLATE_RULES.defaultAmount } : {}),
+      ...(input.anchorDay !== undefined ? { anchorDay: RECURRING_TEMPLATE_RULES.anchorDay } : {}),
+    }, {
       name: input.name,
       supplierId: input.supplierId,
       categoryId: input.categoryId,

@@ -752,7 +752,7 @@ describe('the refusals', () => {
       asOrg(f.orgId, (tx) =>
         recordDrawing(tx, f.admin, { ownerId: id, amount: '0.00', fromMoneyAccountId: f.till, on: '2026-01-08' }),
       ),
-    ).rejects.toThrow(/greater than zero/);
+    ).rejects.toMatchObject({ name: 'RefusalError', userMessage: 'A drawing has to be greater than zero.' });
   });
 });
 
@@ -765,7 +765,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
           storeId: f.storeId, personId: f.anaId, drawingLimit: '0.004', drawingLimitPeriod: 'monthly',
         }),
       ),
-    ).rejects.toThrow(/createOwner: the drawing limit.*"0\.004"/);
+    ).rejects.toMatchObject({"name":"RefusalError","message":"owners.createOwner.drawingLimit: money check failed","userMessage":"The drawing limit — \"0.004\" is not a valid amount. Use at most two decimal places."});
   });
 
   it('an ordinary drawing limit still works', async () => {
@@ -782,6 +782,6 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
       asOrg(f.orgId, (tx) =>
         recordContribution(tx, f.admin, { ownerId: id, amount: '0.004', intoMoneyAccountId: f.till, on: '2026-01-08' }),
       ),
-    ).rejects.toThrow(/recordContribution: the amount.*"0\.004"/);
+    ).rejects.toMatchObject({"name":"RefusalError","message":"owners.contribution.amount: money check failed","userMessage":"The contribution amount — \"0.004\" is not a valid amount. Use at most two decimal places."});
   });
 });

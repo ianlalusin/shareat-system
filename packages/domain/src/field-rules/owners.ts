@@ -9,7 +9,7 @@ export const OWNERS_CREATE_RULES = defineFieldRules('owners.createOwner', {
   storeId: { label: 'The store', kind: 'text', requires: 'Choose a store.' },
   personId: { label: 'The person', kind: 'text', requires: 'Choose who this is.' },
   ownershipPercentage: { label: 'The ownership percentage', optional: true, kind: 'number', min: 0.001, max: 100 },
-  drawingLimit: { label: 'The drawing limit', optional: true, kind: 'money', min: 0.01 },
+  drawingLimit: { label: 'The drawing limit', optional: true, kind: 'money', min: 0.01, rangeSays: 'A drawing limit has to be greater than zero.' },
 });
 
 /**
@@ -32,7 +32,7 @@ export const OWNERS_CONTRIBUTION_RULES = defineFieldRules('owners.contribution',
 
 /** Drawing out. */
 export const OWNERS_DRAWING_RULES = defineFieldRules('owners.drawing', {
-  amount: { label: 'The drawing amount', kind: 'money', min: 0.01 },
+  amount: { label: 'The drawing amount', kind: 'money', min: 0.01, rangeSays: 'A drawing has to be greater than zero.' },
   fromMoneyAccountId: { label: 'The account', kind: 'text' },
   on: { label: 'The date', kind: 'date' },
 });

@@ -1,6 +1,6 @@
 /**
  * T-440 S3 (TESTER) - parity fixture for every S3 "people" rule set (staff, payroll, attendance, admin, setup, owners; sign-in has none).
- * Spec: docs/tasks/440-live-field-checks.md section 3 (mechanism), Audit A5 (a sentence never echoes the typed value), the
+ * Spec: docs/tasks/440-live-field-checks.md section 3 (mechanism), Audit A5 (non-money values never echo; Ian permits quoted money amounts), the
  * "one rule definition used by client and server" ruling. Node, no database.
  *
  * The rule sets are IMPORTED (never copied). For each rule the table below holds a passing value, failing values with the exact
@@ -69,14 +69,14 @@ const ROWS: Record<string, Row> = {
   'payroll.addStatutoryRate.effectiveFrom': { ok: DATE, bad: [['soon', EFFECTIVE]], blank: EFFECTIVE },
   'payroll.addStatutoryRate.eeRate': { ok: '0.05', bad: [['abc', 'The employee rate must be a number of 0 or more.'], ['-0.5', 'The employee rate must be a number of 0 or more.']] },
   'payroll.addStatutoryRate.erRate': { ok: '0.10', bad: [['abc', 'The employer rate must be a number of 0 or more.']] },
-  'payroll.addStatutoryRate.floor': { ok: '5000.00', bad: [['12x', `The floor ${DASH} that is not a valid amount. Use at most two decimal places.`]] },
-  'payroll.addStatutoryRate.ceiling': { ok: '35000.00', bad: [['12x', `The ceiling ${DASH} that is not a valid amount. Use at most two decimal places.`]] },
-  'payroll.addStatutoryRate.step': { ok: '500.00', bad: [['12x', `The step ${DASH} that is not a valid amount. Use at most two decimal places.`]] },
-  'payroll.addStatutoryRate.lowThreshold': { ok: '1500.00', bad: [['12x', `The low-band threshold ${DASH} that is not a valid amount. Use at most two decimal places.`]] },
+  'payroll.addStatutoryRate.floor': { ok: '5000.00', bad: [['12x', `The floor ${DASH} "12x" is not a valid amount. Use at most two decimal places.`]] },
+  'payroll.addStatutoryRate.ceiling': { ok: '35000.00', bad: [['12x', `The ceiling ${DASH} "12x" is not a valid amount. Use at most two decimal places.`]] },
+  'payroll.addStatutoryRate.step': { ok: '500.00', bad: [['12x', `The step ${DASH} "12x" is not a valid amount. Use at most two decimal places.`]] },
+  'payroll.addStatutoryRate.lowThreshold': { ok: '1500.00', bad: [['12x', `The low-band threshold ${DASH} "12x" is not a valid amount. Use at most two decimal places.`]] },
   'payroll.addStatutoryRate.lowEeRate': { ok: '0.01', bad: [['abc', 'The low-band employee rate must be a number of 0 or more.']] },
-  'payroll.addStatutoryRate.ecThreshold': { ok: '14750.00', bad: [['12x', `The EC threshold ${DASH} that is not a valid amount. Use at most two decimal places.`]] },
-  'payroll.addStatutoryRate.ecLow': { ok: '10.00', bad: [['12x', `The lower EC amount ${DASH} that is not a valid amount. Use at most two decimal places.`]] },
-  'payroll.addStatutoryRate.ecHigh': { ok: '30.00', bad: [['12x', `The higher EC amount ${DASH} that is not a valid amount. Use at most two decimal places.`]] },
+  'payroll.addStatutoryRate.ecThreshold': { ok: '14750.00', bad: [['12x', `The EC threshold ${DASH} "12x" is not a valid amount. Use at most two decimal places.`]] },
+  'payroll.addStatutoryRate.ecLow': { ok: '10.00', bad: [['12x', `The lower EC amount ${DASH} "12x" is not a valid amount. Use at most two decimal places.`]] },
+  'payroll.addStatutoryRate.ecHigh': { ok: '30.00', bad: [['12x', `The higher EC amount ${DASH} "12x" is not a valid amount. Use at most two decimal places.`]] },
   'payroll.addStatutoryRate.sourceRef': {
     ok: 'SSS Circular 2025-001',
     bad: [['  ', 'Say where this rate comes from (the circular or law), so it can be checked.']],
@@ -162,7 +162,7 @@ const ROWS: Record<string, Row> = {
       ['0.0005', 'The ownership percentage must be a number from 0.001 to 100.'],
     ],
   },
-  'owners.createOwner.drawingLimit': { ok: '20000.00', bad: [['-7', 'The drawing limit must be an amount of 0.01 or more.']] },
+  'owners.createOwner.drawingLimit': { ok: '20000.00', bad: [['-7', 'A drawing limit has to be greater than zero.']] },
   'owners.settle.how': { ok: 'cash', bad: [['  ', 'Choose how this is being settled.']], blank: 'Choose how this is being settled.' },
   'owners.settle.amount': { ok: '500.00', bad: [['-7', 'The amount settled must be an amount of 0.01 or more.']] },
   'owners.settle.on': { ok: DATE, bad: [['soon', REAL('The date')]] },
@@ -170,7 +170,7 @@ const ROWS: Record<string, Row> = {
   'owners.contribution.amount': { ok: '500.00', bad: [['-7', 'The contribution amount must be an amount of 0.01 or more.']] },
   'owners.contribution.intoMoneyAccountId': { ok: 'acct-1', bad: [['  ', REQ('The account')]] },
   'owners.contribution.on': { ok: DATE, bad: [['soon', REAL('The date')]] },
-  'owners.drawing.amount': { ok: '500.00', bad: [['-7', 'The drawing amount must be an amount of 0.01 or more.']] },
+  'owners.drawing.amount': { ok: '500.00', bad: [['-7', 'A drawing has to be greater than zero.']] },
   'owners.drawing.fromMoneyAccountId': { ok: 'acct-1', bad: [['  ', REQ('The account')]] },
   'owners.drawing.on': { ok: DATE, bad: [['soon', REAL('The date')]] },
   'owners.closeMonth.acknowledgedAmount': { ok: '1200.00', bad: [['-7', 'The agreed amount must be an amount of 0 or more.']] },
@@ -214,7 +214,7 @@ describe('T-440 S3 people: the table covers exactly the rules that exist', () =>
   });
 });
 
-describe('T-440 S3 people: client rule === server refusal, exact sentences, never the typed value', () => {
+describe('T-440 S3 people: client rule === server refusal, exact sentences, money-only input quoting', () => {
   for (const { set, rule, key } of ALL_RULES) {
     const row = ROWS[key];
     if (!row) continue;
@@ -243,7 +243,7 @@ describe('T-440 S3 people: client rule === server refusal, exact sentences, neve
           expect(err.userMessage).toBe(c.requirement);
           expect(err.message).toBe(`${set.form}.${rule.name}: ${rule.kind} check failed`);
           // A5: nothing the person typed comes back in a sentence, a progress line or the raw diagnostic.
-          for (const text of [c.requirement, c.progress, err.message, err.userMessage]) {
+          for (const text of (rule.kind === 'money' ? [c.progress, err.message] : [c.requirement, c.progress, err.message, err.userMessage])) {
             expect(echoes(text, value), `"${text}" must not contain the typed value`).toBe(false);
           }
         });

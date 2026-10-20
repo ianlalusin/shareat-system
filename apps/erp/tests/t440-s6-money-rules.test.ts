@@ -1,7 +1,7 @@
 /**
  * T-440 S6 (TESTER) - parity fixture for every S6 "money" rule set: cash-requests, channel-settlements, expenses, money-accounts,
  * money-transfers, remittance, sales-days, service-charge, statutory-discounts, till, budgets, fixed-assets. Node, no database.
- * Spec: docs/tasks/440-live-field-checks.md section 3, Audit A5 (a sentence never echoes the typed value), the "one rule
+ * Spec: docs/tasks/440-live-field-checks.md section 3, Audit A5 (non-money values never echo; Ian permits quoted money amounts), the "one rule
  * definition used by client and server" ruling.
  *
  * The rule sets are IMPORTED (never copied). For each rule the table holds a failing value with the exact sentence (and the blank
@@ -55,7 +55,7 @@ const M = (label: string, min: string): Row => ({
   ],
 });
 /** A money rule with no floor: only a non-amount fails (parseMoneyInput's own sentence, with the figure replaced by "that"). */
-const MF = (label: string): Row => ({ bad: [['12x', `${label} ${DASH} that is not a valid amount. Use at most two decimal places.`]] });
+const MF = (label: string): Row => ({ bad: [['12x', `${label} ${DASH} "12x" is not a valid amount. Use at most two decimal places.`]] });
 /** A date rule. */
 const D = (label: string): Row => ({ bad: [['soon', `${label} must be a real date.`]] });
 /** A date that may not be in the future. */
@@ -111,7 +111,7 @@ const ROWS: Record<string, Row> = {
   'money-accounts.create.name': NAME('Give the account a name (up to 120 characters).', 120),
   'money-accounts.create.storeId': R('Choose a store - money always sits somewhere.'),
   'money-accounts.rename.name': NAME('Give the account a name (up to 120 characters).', 120),
-  'money-accounts.rename.overdraftLimit': M('The overdraft limit', '0'),
+  'money-accounts.rename.overdraftLimit': { bad: [['-7', 'An overdraft limit is how far below zero the drawer may go, so enter it as a positive number. Zero means it may never go below zero at all.']] },
 
   // ---- money-transfers ----
   'money-transfers.record.amountOut': M('The amount that left', '0.01'),
@@ -168,11 +168,11 @@ const ROWS: Record<string, Row> = {
   'fixed-assets.create.acquiredOn': DF('The acquisition date'),
   'fixed-assets.create.inServiceOn': D('The specific in-service date'),
   'fixed-assets.create.cost': M("The asset's cost", '0.01'),
-  'fixed-assets.create.salvageValue': M('The salvage value', '0'),
+  'fixed-assets.create.salvageValue': { bad: [['-7', 'The salvage value cannot be negative.']] },
   'fixed-assets.create.usefulLifeMonths': { ok: '60', bad: ['abc', '0', '1201', '1.5'].map((v): [string, string] => [v, LIFE]) },
   'fixed-assets.terms.name': NAME('Give the asset a name (up to 200 characters).', 200),
   'fixed-assets.terms.usefulLifeMonths': { ok: '60', bad: ['abc', '0', '1201'].map((v): [string, string] => [v, LIFE]) },
-  'fixed-assets.terms.salvageValue': M('The salvage value', '0'),
+  'fixed-assets.terms.salvageValue': { bad: [['-7', 'The salvage value cannot be negative.']] },
   'fixed-assets.inService.inServiceOn': D('The specific date'),
   'fixed-assets.inService.reason': R('A reason is required - an audit trail with no reason is unauditable.'),
   'fixed-assets.inServiceConfirm.reason': R('A reason is required - an audit trail with no reason is unauditable.'),
@@ -222,7 +222,7 @@ describe('T-440 S6 money: the table covers exactly the rules that exist', () => 
   });
 });
 
-describe('T-440 S6 money: client rule === server refusal, exact sentences, never the typed value', () => {
+describe('T-440 S6 money: client rule === server refusal, exact sentences, money-only input quoting', () => {
   for (const { set, rule, key } of ALL_RULES) {
     const row = ROWS[key];
     if (!row) continue;
@@ -252,7 +252,7 @@ describe('T-440 S6 money: client rule === server refusal, exact sentences, never
           expect(err.userMessage).toBe(c.requirement);
           expect(err.message).toBe(`${set.form}.${rule.name}: ${rule.kind} check failed`);
           // A5: nothing the person typed comes back in a sentence, a progress line or the raw diagnostic.
-          for (const text of [c.requirement, c.progress, err.message, err.userMessage]) {
+          for (const text of (rule.kind === 'money' ? [c.progress, err.message] : [c.requirement, c.progress, err.message, err.userMessage])) {
             expect(echoes(text, value), `"${text.slice(0, 80)}" must not contain the typed value`).toBe(false);
           }
         });
@@ -351,9 +351,9 @@ describe('T-440 S6 money: boundaries and the Manila date', () => {
     }
     expect(checkField(rule('money-transfers.record.transferDate'), next).ok).toBe(true);
   });
-  it('a money amount typed as 12x is refused without quoting it back (A5: the money sentence says "that", never the figure)', () => {
+  it('an invalid money amount is quoted per Ian while progress still hides it', () => {
     const c = checkField(rule('statutory-discounts.record.grossAmount'), '12x');
     expect(c.ok).toBe(false);
-    if (!c.ok) expect(c.requirement).not.toContain('12x');
+    if (!c.ok) { expect(c.requirement).toContain('"12x"'); expect(c.progress).not.toContain('12x'); }
   });
 });

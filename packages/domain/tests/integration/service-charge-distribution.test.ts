@@ -567,7 +567,7 @@ describe('T-187 ROUND 2 — a fractional-cent amount is refused, guarding the se
       caught = e as Error;
     }
     expect(caught).toBeInstanceOf(Error);
-    expect(caught!.message).toMatch(/at most two decimal places|not a valid amount/i);
+    expect(caught).toMatchObject({ name: 'RefusalError', message: 'service-charge.distribute.amount: money check failed', userMessage: 'The amount — "10.005" is not a valid amount. Use at most two decimal places.' });
 
     // ⛔ A guard that throws AFTER writing is the DEF-358 shape — and this one sits BEFORE the cap,
     // so nothing about invariant 1 or invariant 3 excuses skipping this check.

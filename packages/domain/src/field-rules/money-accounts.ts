@@ -10,5 +10,5 @@ export const MONEY_ACCOUNT_CREATE_RULES = defineFieldRules('money-accounts.creat
 
 export const MONEY_ACCOUNT_RENAME_RULES = defineFieldRules('money-accounts.rename', {
   name: { label: 'The account name', kind: 'text', max: 120, requires: 'Give the account a name (up to 120 characters).' },
-  overdraftLimit: { label: 'The overdraft limit', optional: true, kind: 'money', min: 0 },
+  overdraftLimit: { label: 'The overdraft limit', optional: true, kind: 'money', min: 0, rangeSays: 'An overdraft limit is how far below zero the drawer may go, so enter it as a positive number. Zero means it may never go below zero at all.' },
 });

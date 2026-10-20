@@ -1,6 +1,6 @@
 /**
  * T-440 S7 (TESTER) - parity fixture for every S7 rule set (settings, findings, reports; clock has none). Spec:
- * docs/tasks/440-live-field-checks.md section 3 (mechanism), Audit A5 (a sentence never echoes the typed value), the
+ * docs/tasks/440-live-field-checks.md section 3 (mechanism), Audit A5 (non-money values never echo; Ian permits quoted money amounts), the
  * "one rule definition used by client and server" ruling. Node, no database.
  *
  * The rule sets are IMPORTED (never copied). For each rule the table holds a passing value, failing values with the exact
@@ -110,7 +110,7 @@ describe('T-440 S7 settings: the table covers exactly the rules that exist', () 
   });
 });
 
-describe('T-440 S7 settings: client rule === server refusal, exact sentences, never the typed value', () => {
+describe('T-440 S7 settings: client rule === server refusal, exact sentences, money-only input quoting', () => {
   for (const { set, rule: r, key } of ALL_RULES) {
     const row = ROWS[key];
     if (!row) continue;
@@ -139,7 +139,7 @@ describe('T-440 S7 settings: client rule === server refusal, exact sentences, ne
           expect(err.userMessage).toBe(c.requirement);
           expect(err.message).toBe(`${set.form}.${r.name}: ${r.kind} check failed`);
           // A5: nothing the person typed comes back in a sentence, a progress line or the raw diagnostic.
-          for (const text of [c.requirement, c.progress, err.message, err.userMessage]) {
+          for (const text of (r.kind === 'money' ? [c.progress, err.message] : [c.requirement, c.progress, err.message, err.userMessage])) {
             expect(echoes(text, value), 'a sentence must not contain the typed value').toBe(false);
           }
         });

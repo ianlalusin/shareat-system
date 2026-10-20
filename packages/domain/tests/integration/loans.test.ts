@@ -388,7 +388,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
       asOrg(f.orgId, (tx) =>
         disburseLoan(tx, f.admin, { loanId: f.loanId, amount: '0.004', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
       ),
-    ).rejects.toThrow(/disburseLoan: the amount.*"0\.004"/);
+    ).rejects.toMatchObject({"name":"RefusalError","message":"loans.disburseLoan.amount: money check failed","userMessage":"The loan amount — \"0.004\" is not a valid amount. Use at most two decimal places."});
   });
 
   it('disburseLoan refuses "1.234" too', async () => {
@@ -397,7 +397,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
       asOrg(f.orgId, (tx) =>
         disburseLoan(tx, f.admin, { loanId: f.loanId, amount: '1.234', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
       ),
-    ).rejects.toThrow(/"1\.234"/);
+    ).rejects.toMatchObject({"name":"RefusalError","message":"loans.disburseLoan.amount: money check failed","userMessage":"The loan amount — \"1.234\" is not a valid amount. Use at most two decimal places."});
   });
 
   it('an ordinary disbursement still works, and the exact value reaches the row', async () => {
@@ -420,6 +420,6 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
       asOrg(f.orgId, (tx) =>
         recordLoanPayment(tx, f.admin, { loanId: f.loanId, amount: '0.004', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
       ),
-    ).rejects.toThrow(/recordLoanPayment: the amount.*"0\.004"/);
+    ).rejects.toMatchObject({"name":"RefusalError","message":"loans.recordLoanPayment.amount: money check failed","userMessage":"The payment amount — \"0.004\" is not a valid amount. Use at most two decimal places."});
   });
 });

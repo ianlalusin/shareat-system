@@ -4,7 +4,8 @@
  *
  * ⛔ A CLIENT-SAFE LEAF. A `'use client'` file imports this through `@shareat/domain/field-rules`, so it may import only
  * `./*`, `../shared/money-input` (the one money parser, DEF-272), `@shareat/core/datetime` (Manila dates) and
- * `@shareat/core/money`. No `@shareat/db`, no `refuse` (Audit A1: the server half is `shared/field-rules-assert.ts`).
+ * `@shareat/core/money`, the pure core sentence leaf and the manual-cost pattern. No `@shareat/db`, no `refuse`
+ * (Audit A1: the server half is `shared/field-rules-assert.ts`).
  *
  * Rules are plain DATA (a regex is a pattern SOURCE string), so a rule set crosses the server-to-client prop boundary.
  * ⛔ No sentence here ever interpolates the typed value (government numbers are personal data, Audit A5); the one exception
@@ -12,6 +13,7 @@
  */
 import { parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { compare, money as exactMoney } from '@shareat/core/money';
+import { screenSentence } from '@shareat/core/sentence';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 
 export type FieldKind = 'text' | 'digits' | 'pattern' | 'number' | 'money' | 'date';
@@ -39,8 +41,10 @@ export interface FieldRule {
   /** date: judged against the Manila business date, never the browser's. */
   readonly notAfterToday?: true;
   readonly notBeforeToday?: true;
-  /** One full sentence that replaces every generated requirement of this rule (an existing server sentence kept verbatim). */
+  /** Existing requirement wording, except malformed money keeps the parser sentence per Ian. */
   readonly requires?: string;
+  /** Existing number/money bound sentence; never replaces blank or malformed-input requirements. */
+  readonly rangeSays?: string;
 }
 
 export type FieldRuleDef = Omit<FieldRule, 'name'>;
@@ -151,11 +155,11 @@ function blankSentence(rule: FieldRule): string {
   return rule.kind === 'money' ? moneyBlankSentence(rule) : `${rule.label} is required.`;
 }
 
-function bad(rule: FieldRule, requirement: string, progress: string): FieldCheck {
-  return { ok: false, requirement: rule.requires ?? requirement, progress };
+function bad(rule: FieldRule, requirement: string, progress: string, rangeSays?: string): FieldCheck {
+  return { ok: false, requirement: rangeSays ?? rule.requires ?? requirement, progress };
 }
 
-/** Checks one raw value against one rule. `raw` may be null/undefined (= blank). Pure; never interpolates the value. */
+/** Checks one raw value against one rule. Only money requirements may quote the input (Ian, 20 October). */
 export function checkField(rule: FieldRule, raw: string | null | undefined): FieldCheck {
   if (raw !== null && raw !== undefined && typeof raw !== 'string') {
     throw new TypeError(`field-rules: ${rule.name} was given a ${typeof raw}, not a string`);
@@ -198,7 +202,7 @@ export function checkField(rule: FieldRule, raw: string | null | undefined): Fie
       const n = Number(v);
       // "-0" / "-00" read as zero but are a minus sign in front of nothing: not a number of days (or anything else).
       if (Object.is(n, -0) || (rule.min !== undefined && lt(n, rule.min)) || (rule.max !== undefined && lt(rule.max, n))) {
-        return bad(rule, numberSentence(rule), Object.is(n, -0) && rule.min === undefined ? 'Numbers only' : numberRangeProgress(rule));
+        return bad(rule, numberSentence(rule), Object.is(n, -0) && rule.min === undefined ? 'Numbers only' : numberRangeProgress(rule), rule.rangeSays);
       }
       return { ok: true, value: v };
     }
@@ -207,15 +211,14 @@ export function checkField(rule: FieldRule, raw: string | null | undefined): Fie
       try {
         money = String(parseMoneyInput(v, rule.name, rule.label));
       } catch (e) {
-        // parseMoneyInput's sentence quotes the figure ("12abc" is not a valid amount); the screen never repeats what was typed.
+        // Money alone keeps the parser's exact sentence, including the mistyped amount. Raw diagnostics and progress stay private.
         const said = (e as { userMessage?: string }).userMessage;
-        const text = said ? said.split(`"${v}"`).join('that') : `${rule.label} must be an amount like 1250.00.`;
-        return bad(rule, text, 'Enter an amount like 1250.00');
+        return { ok: false, requirement: screenSentence(said ?? `${rule.label} must be an amount like 1250.00.`), progress: 'Enter an amount like 1250.00' };
       }
       const amount = exactMoney(money);
       if ((rule.min !== undefined && compare(amount, exactMoney(String(rule.min))) < 0) ||
           (rule.max !== undefined && compare(amount, exactMoney(String(rule.max))) > 0)) {
-        return bad(rule, `${rule.label} must be an amount ${rangeWords(rule)}.`, numberRangeProgress(rule));
+        return bad(rule, `${rule.label} must be an amount ${rangeWords(rule)}.`, numberRangeProgress(rule), rule.rangeSays);
       }
       return { ok: true, value: money };
     }

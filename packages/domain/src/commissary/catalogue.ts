@@ -27,6 +27,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { decimal, type Decimal } from '@shareat/core/money';
 import { gone, refuse } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
+import { MANUAL_COST_PATTERN } from '../shared/manual-cost-pattern';
 import { COMMISSARY_LINK_RULES, COMMISSARY_MAP_RULES, COMMISSARY_OFFERING_RULES } from '../field-rules/commissary';
 
 export type LinkStatus = (typeof LINK_STATUSES)[number];
@@ -48,7 +49,6 @@ export type LinkStatus = (typeof LINK_STATUSES)[number];
 // for every user of this pattern: `parseFourDecimalCost`'s callers (deliveries, cutover, and AP
 // invoice lines since T-351) and `upsertOffering`'s own manual cost (`:207`). The lookahead still
 // requires at least one digit, so "" and "." are still structurally rejected. Code is unchanged.
-const MANUAL_COST_PATTERN = /^(?=.*\d)\d*(?:\.\d{0,4})?$/;
 
 /**
  * The `MANUAL_COST_PATTERN` shape, wrapped as a sentence-producing entry point — same relationship
