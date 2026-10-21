@@ -25,6 +25,7 @@ import { KIOSK_HEADER } from './kiosk';
 import { SIDEBAR_COOKIE_NAME, parseSidebarState } from './sidebar-state';
 import { Sidebar, SidebarProvider } from './Sidebar';
 import { TopBar } from './TopBar';
+import { PhoneTableCards } from '../ui/PhoneTableCards';
 
 export async function AppShell({ children }: { children: React.ReactNode }) {
   const session = await currentSession();
@@ -63,7 +64,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
         <Sidebar allowedHrefs={allowedHrefs} />
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar />
-          <main className="erp-workspace min-w-0 flex-1">{children}</main>
+          <main className="erp-workspace min-w-0 flex-1"><PhoneTableCards>{children}</PhoneTableCards></main>
         </div>
       </div>
     </SidebarProvider>

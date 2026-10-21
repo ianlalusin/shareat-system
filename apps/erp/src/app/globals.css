@@ -408,6 +408,61 @@
   z-index: 20;
 }
 
+/* T-450 / Ian: phones use labeled cards; tablets (including exactly 768px) retain tables.
+   Screen-only rules leave native print layout and existing column widths untouched. */
+@media screen and (max-width: 767.98px) {
+  [data-phone-table-root] table[data-phone-cards] {
+    display: block;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100%;
+    border: 0;
+    background: transparent;
+    table-layout: auto;
+  }
+  [data-phone-table-root] table[data-phone-cards] > colgroup { display: none; }
+  [data-phone-table-root] table[data-phone-cards] > caption { display: block; padding: 0.75rem; text-align: left; }
+  /* Visually hidden, not display:none: retain the column headings for assistive technology. */
+  [data-phone-table-root] table[data-phone-cards] > thead:not([data-card-controls]) {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); clip-path: inset(50%); white-space: nowrap;
+  }
+  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot),
+  [data-phone-table-root] table[data-phone-cards] > thead[data-card-controls] { display: block; min-width: 0; }
+  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot, thead[data-card-controls]) > tr {
+    display: block; height: auto; min-width: 0; margin: 0 0 0.75rem; padding: 0.375rem;
+    border: 1px solid var(--surface-border); border-radius: 0.75rem;
+  }
+  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot, thead[data-card-controls]) > tr > :is(td, th) {
+    display: block; width: auto !important; min-width: 0 !important; max-width: 100%; height: auto;
+    padding: 0.5rem 0.75rem; border: 0; text-align: left !important;
+    white-space: normal !important; overflow-wrap: anywhere;
+  }
+  [data-phone-table-root] [data-card-label]::before {
+    content: attr(data-card-label) / "";
+    display: block; margin-block-end: 0.25rem;
+    color: var(--muted); font-size: 0.75rem; font-weight: 500; line-height: 1.4;
+  }
+  [data-phone-table-root] [data-card-span="full"]::before { content: none; }
+  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr > [data-card-span="full"] {
+    font-weight: 600;
+  }
+  [data-phone-table-root] table[data-phone-cards] :is(a, button, select, textarea, input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])) {
+    min-height: 44px; max-width: 100%;
+  }
+  [data-phone-table-root] table[data-phone-cards] a { display: inline-flex; align-items: center; overflow-wrap: anywhere; }
+  [data-phone-table-root] table[data-phone-cards] :is(button, select, input, textarea) { box-sizing: border-box; }
+  [data-phone-table-root] table[data-phone-cards] form { min-width: 0; max-width: 100%; flex-wrap: wrap; }
+  [data-phone-table-root] table[data-phone-cards] :is(.truncate, .text-ellipsis, .line-clamp-1, .line-clamp-2) {
+    overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; -webkit-line-clamp: unset;
+  }
+  [data-phone-table-root] table[data-phone-cards] :is(button, a, input, select, textarea):focus-visible {
+    outline: 2px solid var(--brand-ink); outline-offset: 2px;
+  }
+  [data-phone-table-root] .catalogue-table { max-height: none; }
+  [data-phone-table-root] .catalogue-table thead th { position: static; }
+}
+
 /* T-448: a named, keyboard-scrollable summary strip becomes a grid when space permits.
    Numbers remain real text: wrap at extreme magnification instead of clipping or ellipsizing. */
 .erp-metric-strip {

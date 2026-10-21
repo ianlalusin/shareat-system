@@ -163,7 +163,7 @@ export default async function ExpenseDetailPage({
 
         <div className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
           <h2 className="mb-3 font-medium">Payments</h2>
-          <table className="w-full border-collapse">
+          <table data-card-columns="Payment method|Paid from|Amount" className="w-full border-collapse">
             <tbody>
               {payments.map((p) => (
                 <tr key={p.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
