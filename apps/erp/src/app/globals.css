@@ -495,10 +495,10 @@
     display: block; position: relative; z-index: 10; grid-column: -2 / -1; grid-row: 1 / span 2; align-self: center;
   }
   [data-phone-table-root] [data-card-toggle] {
-    display: grid; place-items: center; min-width: 52px; min-height: 44px; border-radius: 0.5rem;
-    color: var(--muted); background: var(--workspace-stripe); border: 1px solid var(--surface-border);
+    display: grid; place-items: center; min-width: 52px; min-height: 44px;
+    color: var(--muted); background: transparent; border: 0;
   }
-  [data-phone-table-root] [data-card-toggle]:hover { background: var(--workspace-stripe); }
+  [data-phone-table-root] [data-card-toggle]:hover { color: var(--ink); }
   [data-phone-table-root] [data-card-toggle][aria-expanded="true"] { transform: rotate(180deg); }
   [data-phone-table-root] [data-card-label]::before {
     content: attr(data-card-label) / "";

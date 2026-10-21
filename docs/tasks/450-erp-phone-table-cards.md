@@ -49,6 +49,8 @@ the prior layout, not a completed visual release check.
 
 ### Return-state and disclosure correction — Ian, 2026-10-21
 Use a wider 52px Details button with an actual SVG double chevron, not a letter-like glyph.
+Ian's later correction: remove the square frame/background; the shared control is flat, transparent
+and borderless, including hover. Keep the 52px by 44px target and keyboard focus indicator.
 Collapse the new-item request form into a native disclosure card with an Add affordance at the far right;
 keep its original form mounted and all fields/actions intact. Opening must work without JavaScript.
 The shared shell remembers presentation state per account and tab: URL filters, document and inner-panel

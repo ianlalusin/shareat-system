@@ -38,6 +38,19 @@ function tableInventory() {
 }
 
 describe('T-450 entire ERP table rollout', () => {
+  it('keeps the double-chevron flat while retaining the wider phone tap target', () => {
+    const css = postcss.parse(read('apps/erp/src/app/globals.css'));
+    const declarations: Record<string, string> = {};
+    css.walkRules(rule => {
+      if (rule.selector === '[data-phone-table-root] [data-card-toggle]') {
+        rule.walkDecls(declaration => { declarations[declaration.prop] = declaration.value; });
+      }
+    });
+    expect(declarations['background']).toBe('transparent');
+    expect(declarations['border']).toBe('0');
+    expect(declarations['min-width']).toBe('52px');
+    expect(declarations['min-height']).toBe('44px');
+  });
   it('exposes shared hierarchy metadata without per-page card markup or styles', () => {
     const html = renderToStaticMarkup(h(Table, { card: { title: 'Item', subtitle: 'Kind', keys: ['Priced per'] } }, 'Fixture'));
     expect(html).toContain('data-card-title="Item"'); expect(html).toContain('data-card-subtitle="Kind"');

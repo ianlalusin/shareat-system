@@ -15,7 +15,7 @@ remain usable. No repeated title labels, copied forms or a vertical dump of ever
 Set `Table card={{ title: 'Item', subtitle: 'Kind', keys: ['Priced per'] }}` to choose hierarchy;
 native tables use equivalent data-card-title / data-card-subtitle / data-card-keys attributes.
 No pictures are invented; image availability does not change the layout contract.
-Details uses a 52px button with a double-chevron SVG. Return navigation restores URL filters,
+Details uses a flat, borderless 52px button with a double-chevron SVG and no square background. Return navigation restores URL filters,
 scroll positions and open sections in the same account/tab. Existing ancestor links beginning
 with ←, or explicitly marked data-screen-return links, restore the last filtered list URL.
 
