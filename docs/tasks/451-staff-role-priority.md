@@ -1,5 +1,5 @@
 # T-451 — role-first staff display and privileged-role position removal
-Status: built locally 21 October; visual/runtime release check and full PR CI pending. Latest chat ruling supersedes the earlier universal-position assumption.
+Status: Ian visually approved 21 October ("screen good now deploy"); full PR CI must pass before merge. Latest chat ruling supersedes the earlier universal-position assumption.
 Display active Super admin / Admin / Manager first; only Staff uses its primary position, never an arbitrary secondary.
 Privileged-role hires need no position. Existing assignments can be cleared explicitly on the employment page;
 do not delete historical assignments automatically or change a person's role, scope, manual grants or role-derived permissions.
@@ -20,3 +20,10 @@ ID cards retain photo/initials, name, role, tenure, employment status, live stat
 Supporting CI guard scope: apps/erp/tests/action-link-sweep.test.ts (count the new removal button);
 apps/erp/tests/t384-s3-lock-and-save-guard.test.ts (register its explicit removal command, retain label checks).
 Done: affected checks, real PostgreSQL, typecheck, self-review; runtime/visual release gate and full exact-head CI before merge.
+
+Supporting full-CI fixture scope (11 failures reproduced on real PostgreSQL before edits):
+apps/erp/tests/integration/t389-s2-staff-web.test.ts uses a separate Staff subject, unchanged admin actors/typing assertions;
+packages/auth/tests/integration/t349-s2c-supersede-elevation.test.ts E3 and
+packages/domain/tests/integration/t341-position-grants-per-store.test.ts P8 seed historical privileged assignments,
+then use setPositionDefault to invoke the real reconciliation through its existing public caller.
+The internal primitive stays unexported with its closed importer list unchanged. Keep all supersede/self-skip/authorization assertions.

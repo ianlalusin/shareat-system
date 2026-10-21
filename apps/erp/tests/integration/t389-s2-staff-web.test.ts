@@ -50,9 +50,13 @@ interface StaffCtx extends BaseCtx {
 async function staffCtx(hint: string): Promise<StaffCtx> {
   const f = await fixture(`staff-${hint}`);
   await asOrg(f.orgId, (tx) => seedCanonicalPositions(tx, f.orgId));
+  // T-451: administrators edit a staff subject; their own role has no position picker.
+  const [subject] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${f.orgId}, 'Staff Subject') returning id`;
+  if (!subject) throw new Error('Staff subject fixture was not inserted.');
+  await sql`insert into person_roles (person_id, org_id, role) values (${subject.id}, ${f.orgId}, 'staff')`;
   const [emp] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${f.orgId}, ${f.storeId}, ${f.admin.personId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+    values (${f.orgId}, ${f.storeId}, ${subject.id}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
   const ps = await sql<{ id: string }[]>`select id from positions where org_id = ${f.orgId} and store_id is null order by name limit 3`;
   const [p1, p2, p3] = [ps[0]!.id, ps[1]!.id, ps[2]!.id];
   await asOrg(f.orgId, (tx) => setEmploymentPositions(tx, f.admin, { employmentId: emp!.id, positionIds: [p1], primaryPositionId: p1 }));
