@@ -290,21 +290,18 @@ describe('P7 (guard, matrix invariant 6) — removing store scope refuses on sco
   });
 });
 
-describe('P8 (self-skip, bible §7 rule 5) — an admin hiring themselves gains no position row; another hire does', () => {
+describe('P8 (self-skip, bible §7 rule 5) — an admin with a legacy assignment gains no position grant; another hire does', () => {
   it('admin stays without the row; a second, ordinary hire in the same store gets it', async () => {
     const f = await fixture('p8');
-    await setDefault(f.orgId, f.admin, f.cashierId, f.storeAId, 'record_sale', true);
 
-    await asOrg(f.orgId, (tx) =>
-      createEmployment(tx, f.admin, {
-        storeId: f.storeAId,
-        personId: f.adminId,
-        employmentStatus: 'probationary',
-        startedOn: '2026-01-05',
-        positionIds: [f.cashierId],
-        primaryPositionId: f.cashierId,
-      }),
-    );
+    // T-451: keep the self-grant invariant on a historical assignment, which cannot be newly created today.
+    const [legacy] = await sql<{ id: string }[]>`
+      insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+      values (${f.orgId}, ${f.storeAId}, ${f.adminId}, 'SE-001', 'probationary', '2026-01-05') returning id`;
+    if (!legacy) throw new Error('Legacy admin employment fixture was not inserted.');
+    await sql`insert into employment_positions (employment_id, position_id, is_primary) values (${legacy.id}, ${f.cashierId}, true)`;
+    const result = await setDefault(f.orgId, f.admin, f.cashierId, f.storeAId, 'record_sale', true);
+    expect(result.skippedSelf).toBe(true);
     const adminGrants = await activeGrants(f.adminId);
     expect(adminGrants.map((g) => g.grant_name)).not.toContain('record_sale');
 

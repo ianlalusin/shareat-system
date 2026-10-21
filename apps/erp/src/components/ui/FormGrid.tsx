@@ -28,7 +28,7 @@ import { FieldCheck } from '@/components/forms/FieldCheck';
 
 export interface FormGridProps {
   /** T-445: content-sized fields wrap within their container; existing grids remain unchanged. */
-  readonly layout?: 'grid' | 'fields';
+  readonly layout?: 'grid' | 'fields' | 'pairs';
   readonly className?: string;
   readonly children?: ReactNode;
 }
@@ -42,6 +42,7 @@ function hasWideSpan(children: ReactNode): boolean {
 }
 
 export function FormGrid({ layout, className, children }: FormGridProps) {
+  if (layout === 'pairs') return <div className={`erp-form-pairs${className ? ` ${className}` : ''}`}><div className="erp-form-pairs-grid">{children}</div></div>;
   // Entry forms share compact defaults; grid-specific callers retain the layout their spans require.
   const resolved = layout ?? (hasWideSpan(children) || /grid-cols-|grid-template-columns/.test(className ?? '') ? 'grid' : 'fields');
   if (resolved === 'fields') return <div className={`erp-form-fields${className ? ` ${className}` : ''}`}>{children}</div>;
@@ -80,7 +81,7 @@ function inferredWidth(children: ReactNode): FieldProps['width'] {
   const { type, name = '', inputMode } = control.props;
   if (/^(date|month|time)$/.test(type ?? '')) return 'date';
   if (/^(baseUnit|purchaseUnit|unit|quantity|creditTermsDays|days|year|month|vatPercent)$/.test(name)) return 'short';
-  if (/amount|rate|price|cost|total|fee|balance|limit/i.test(name)) return 'code';
+  if (/amount|rate|price|cost|total|fee|balance|limit|deposit|gross|deduction|principal|interest/i.test(name)) return 'code';
   if (/code|reference|invoiceNo/i.test(name)) return 'code';
   if (/kind|vatType|customerGroup/i.test(name)) return 'code';
   if (/description|notes|reason|address/i.test(name)) return 'long';
@@ -90,14 +91,14 @@ function inferredWidth(children: ReactNode): FieldProps['width'] {
 
 export function Field({ label, hint, span, width, className, rule, children }: FieldProps) {
   const resolvedWidth = width ?? (span ? undefined : inferredWidth(children));
-  const outer = `min-w-0${span ? SPAN[span] : ''}${resolvedWidth ? ` erp-field-${resolvedWidth}` : ''}${className ? ` ${className}` : ''}`;
+  const outer = `erp-form-field min-w-0${span ? SPAN[span] : ''}${resolvedWidth ? ` erp-field-${resolvedWidth}` : ''}${className ? ` ${className}` : ''}`;
   const inner = (
     <>
-      <span className="block text-ink">{label}</span>
+      <span className="erp-field-label block text-sm font-medium leading-5 text-ink">{label}</span>
+      <span className="erp-field-control mt-1 block min-w-0">{children}</span>
       {hint !== undefined && hint !== null && (
-        <span className="mt-0.5 block text-xs text-ink/70">{hint}</span>
+        <span className="erp-field-hint mt-1 block text-xs leading-5 text-ink/70">{hint}</span>
       )}
-      {children}
     </>
   );
   if (!rule) return <label className={`block ${outer}`}>{inner}</label>;

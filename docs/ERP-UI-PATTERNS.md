@@ -32,6 +32,12 @@ Use DisclosureCard for an optional creation form: a compact header with Add at t
 expanded through native details/summary. Keep the actual form mounted and validation intact.
 
 ## Reuse and checks
+Compact record cards use the shared paired field tracks: two columns when the container has
+24rem, one on phones; normal entry forms up to 42rem use the same pattern. Wider entry forms
+retain content-sized rows. Labels, inputs, hints and validation occupy separate aligned tracks.
+Use FormGrid layout="pairs" for explicit paired groups; do not copy grid CSS onto pages.
+Long helper/account text belongs below the control, with short visible labels above.
+Use SplitWorkspace for wide settlement entry plus its check/preview; keep one native form.
 Extend the shared pattern when a common requirement appears. Per-page metadata is allowed;
 per-page copies of responsive card/table/form CSS are not the default. Keep loading, empty,
 error, focus, hover and disabled states, full money values, and all existing workflows.
