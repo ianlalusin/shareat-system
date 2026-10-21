@@ -108,3 +108,21 @@ Ported from v1 into `src/server/pos2/` (the vendored fixtures below are the pari
 
 New in T-425, not from v1: `src/lib/terminal/db.ts`, `src/lib/outbox/**`, `src/lib/offline/offlineRules.ts`, `src/lib/printing/xSlipFormatter.ts`, `src/lib/money/format.ts`, `src/lib/appVersion.ts`, `src/hooks/useConnectivity.ts`, `src/hooks/useOutboxStatus.ts`, `src/app/api/pos2/health/route.ts`, `src/components/shared/{OutboxSync,UnsentBanner,XSlipScheduler}.tsx`, `src/components/settings/OutboxSection.tsx`, `scripts/pos2-soak-verify.mjs`.
 
+## Later hardening edits (recorded during T-455 integrity check)
+
+- `src/app/receipt/page.tsx` (T-426): pass recorded per-diner statutory data to the receipt view.
+- `src/components/cashier/CashHandoverClient.tsx` (T-427): computed cash sales plus the separate audited manual adjustment and conversion totals.
+- `src/components/cashier/bill-adjustments.tsx` (T-426): prevent duplicate bill-level statutory discount application.
+- `src/components/cashier/bill-totals.tsx` (T-426): use per-diner statutory calculation and qualifying share breakdown.
+- `src/components/cashier/session-detail-view.tsx` (T-426): mount statutory capture and carry qualifying records through billing.
+- `src/components/cashier/session-list-view.tsx` (T-427): expose Convert and its connectivity restriction.
+- `src/components/receipt/receipt-view.tsx` (T-426/T-453): per-diner statutory display, exact staged item amounts, modifiers and current adjustments.
+- `src/lib/logs/describe-log.ts` (T-426): readable statutory change descriptions without government identifiers.
+- `src/lib/printing/receiptFormatter.ts` (T-426/T-453): statutory summary and exact staged item amounts; exclude free/void quantities and include modifiers.
+
+## T-455 edits (explicit local demo emulator profile)
+
+- `src/firebase/config.ts`: select fixed demo configuration only for the explicit emulator profile; normal configuration retained.
+- `src/lib/firebase/client.ts`: connect Auth, Firestore and Storage to local emulators before requests; reject mismatched project configuration.
+- `src/lib/api-base.ts`: explicit emulator profile overrides both API destinations to the local POS server.
+

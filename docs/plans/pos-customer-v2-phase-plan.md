@@ -7,7 +7,32 @@
 | **Inputs** | posv2 plan data + Ian's 13 Oct answers (128 answer files) · `pos-v1-study.md` and `customer-v1-study.md` (15 Oct, read-only) · Ian's 15 Oct rulings · CI timings from GitHub (run of 15 Oct 12:15 UTC) |
 | **Does not** | amend the bible or ADR-015 (task PC-1 does) · write task specs (listed in §6, written next in plan mode) |
 
-## 1. Bottom line
+## Owner direction — 21 October 2026
+
+Ian reviewed the phases, said **"start now"**, and requested **"use emulator to test it when build"**.
+This updates the work order below; the October 15 dates remain historical draft targets, not renewed commitments.
+
+- Deliver POS as an Android APK. Keep unsent sales and a durable outbox on the device; synchronize through
+  authenticated server APIs into the **same PostgreSQL backend as ERP**. Never connect the APK directly to Postgres.
+- Begin **P1 now**, preserving the tested P0 billing, receipts and offline ledger. An interim Firebase production
+  rollout is no longer the default prerequisite. Firebase retirement still requires completing each ownership move.
+- Device storage does not require Firebase. **SQLite adoption is undecided**: test existing IndexedDB persistence
+  first, then scope any native storage change and migration separately. Do not describe SQLite as installed or approved.
+- Use an isolated Android emulator and local Firebase **demo-shareat-pos2** emulators for remaining legacy paths.
+  These local checks do not require a separate cloud Firebase project. A TEST store inside live Firebase remains
+  prohibited; no live Firebase or production payment writes are authorized by this testing direction.
+- Emulator checks cover APK installation, offline persistence, restart and reconnect where implemented. Real tablet,
+  printer, payment, visual and offline-soak gates remain before release; an emulator pass does not replace them.
+
+Current sequence: **T-455 emulator harness → P1 enrollment/shared sign-in and reference snapshots → P2 receipts,
+payments and till into Postgres → P3 tables/KDS/Customer → P4 remaining rollout/extras**.
+P1 must prove tablet possession rather than trust a public device UUID, reuse shared permissions/session services,
+and specify offline verifier expiry/revocation behavior. Offline refunds remain prohibited by the later T-425 ruling.
+See [T-454](../tasks/454-pos-shared-postgres-p1.md) and the
+[bounded assessment](../discovery/pos-p1-shared-backend-start.md). This records direction, not completed migration
+or POS release approval; planner synchronization of historical dates and bible decision rows remains outstanding.
+
+## 1. Original 15 October recommendation
 
 1. **Going live on 1 January itself is not safe. Go live in the first store (Lipa) on Monday 11 January 2027.**
    1 Jan is the ERP cutover day (purge, opening entry, first POST). Putting the first POS v2 store on the same

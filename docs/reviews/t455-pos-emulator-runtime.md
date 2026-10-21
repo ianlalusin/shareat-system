@@ -1,0 +1,14 @@
+# T-455 — emulator harness checkpoint, 21 October
+Explicit local demo profile; dedicated net.shareat.pos2.emulator APK; no live Firebase or payment writes.
+Target red: 3 failed/2 passed before wiring; fixture/release control red: 1 failed/5 passed; final focused 6 passed.
+Final POS suite: 910 passed, 1 existing skip, 86 files; postcommit checks pending.
+TypeScript noEmit passed; static export and APK build passed; incremental native repeat passed (111 tasks).
+Real Gradle preReleaseBuild refused demo assets with the intended message; no timeout or security baseline widened.
+All 34 temporarily moved tracked server/API/middleware files byte-identical to HEAD; no .cap-stash remains.
+Android API35: installed, synthetic manager signed in; offline force-stop/reopen retained login; reconnect loaded store/session data.
+Offline Ala Carte session survived force-stop/reopen and synced exactly one session after reconnect; first dish failed (DEF-722), so paid-sale persistence is NOT verified.
+Root checks: 239 passed/2 failed initially; copy log omissions corrected and 20 passed; unchanged artifact scan repeat 20 passed.
+Copy-log supporting scope expanded in T-455; phase plan/runbook updated under Ian's explicit documentation request.
+Physical tablet/printer/payment/visual/soak, local server approvals and shared-auth migration remain unverified.
+## FOR IAN
+Emulator testing now works and found an offline selling defect. Harness checkpoint is not POS release approval.

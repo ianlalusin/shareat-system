@@ -1,0 +1,22 @@
+# T-455 — isolated POS emulator APK and local runtime
+Status: harness built and exercised 21 October; offline first-dish defect DEF-722 blocks sale acceptance.
+Ian explicitly requested emulator checks for builds. Report: docs/reviews/t455-pos-emulator-runtime.md.
+Use fixed demo-shareat-pos2 project and explicit emulator profile. Default builds retain existing behavior.
+Never launch the current live-config APK for tests. Emulator SDKs connect before any request; no fallback to live.
+Auth9099, Firestore8080 and Storage9199 are local only. Android reaches host through10.0.2.2;
+desktop helper callers use127.0.0.1. API calls target local POS9009, never app.shareat.net/pos2.shareat.net.
+Separate Android build type/package .emulator with local-only cleartext configuration; release transport stays strict.
+No service-account keys, cloud projects, production credentials or live payment calls in this workflow.
+Demo rules/seed are synthetic runtime fixtures; they do not prove production Firestore authorization parity.
+Scope: apps/pos/config/emulator-profile.{mjs,d.mts}; apps/pos/src/lib/emulator-profile.test.ts;
+apps/pos/src/firebase/config.ts; apps/pos/src/lib/firebase/client.ts; apps/pos/src/lib/api-base.ts;
+apps/pos/next.config.mjs; apps/pos/capacitor.config.ts; apps/pos/android/app/build.gradle;
+apps/pos/android/app/src/emulator/**; apps/pos/scripts/{build-emulator.mjs,seed-emulator.mjs};
+apps/pos/emulator/**; apps/pos/package.json; apps/pos/README.md; this task; T-454/discovery;
+docs/reviews/t455-pos-emulator-runtime.md. Supporting tests and defect log for actual findings only.
+Supporting scope: apps/pos/V1-COPY.md, required by the copy-integrity guard to record the emulator changes
+and previously omitted T-426/T-427/T-453 hand edits; no source-copy baseline or assertion is relaxed.
+Acceptance: profile rejects external hosts; demo project is fixed; all SDKs explicitly use emulator;
+non-emulator/release native configuration unchanged; separate test app; Android launch/sign-in with synthetic data;
+save/reopen and offline/reconnect checks reported from actual emulator results, never inferred from builds.
+Build-cap must restore all moved source byte-identically. Physical printer/device and full soak remain separate gates.

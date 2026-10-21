@@ -7,7 +7,23 @@ their ERP v2 PIN. It runs as `shareat-pos.service` on **159.223.46.224** (our pr
 
 Written by the T-424 lane. **The lane does not apply any of this**; the orchestrator and Ian do (spec Ruling 12).
 
-## 0. What each part needs (in the order to do them)
+## 21 October update — local emulator testing and shared-backend work
+
+Ian authorized starting P1 now and testing APK builds on an Android emulator. The destination architecture is
+APK device storage/outbox → authenticated server API → the shared ERP PostgreSQL backend. SQLite is only a
+candidate; existing IndexedDB is retained while persistence is measured. See T-454 and the phase plan.
+
+For **local runtime checks**, the separate cloud TEST-project prerequisite below is superseded by the isolated
+T-455 demo profile. Start local Auth/Firestore/Storage emulators with project **demo-shareat-pos2**, seed synthetic
+data, and build the dedicated emulator APK. Never use a TEST store in live `shareat-hub-v2`, production credentials,
+or real payments. The demo profile is not a production deployment configuration or production-rules parity test.
+
+The server instructions below describe the existing T-424 Firebase transition, not a completed P1 migration.
+Starting local Firebase emulators alone does not configure the POS server, ERP approvals or PostgreSQL APIs.
+Real device/printer/payment/visual checks and offline soak remain release gates. No interim Firebase launch is
+required by default; retain these server instructions for paths that still depend on it until their owner changes.
+
+## 0. Historical T-424 server prerequisites (cloud transition only)
 
 | # | Step | Who | Done when |
 |---|---|---|---|
