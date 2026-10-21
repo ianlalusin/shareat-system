@@ -1,6 +1,6 @@
 # T-450 — ERP tables become phone cards
 
-Status: built; 244 affected checks, typecheck and corrected production build pass. Visual check and full PR CI pending.
+Status: shared defaults built; Ian requested another visual correction and return-state preservation on 2026-10-21. Release pending.
 Ian approved 2026-10-21; cards below 768px, tablets retain tables.
 
 ## Goal
@@ -9,6 +9,8 @@ Every ERP table row reads as a labeled card on a phone without losing fields, fo
 ## Scope
 - apps/erp/src/components/shell/PhoneTableCards.tsx and ui/phone-table-cards.ts
 - apps/erp/src/components/shell/AppShell.tsx; apps/erp/src/app/globals.css
+- apps/erp/src/components/shell/ScreenState.tsx and screen-state.ts; apps/erp/tests/t450-screen-state.test.ts
+- apps/erp/src/app/items/[id]/page.tsx (mark return link); components/ui/DisclosureCard.tsx and its tests (reusable native disclosure)
 - apps/erp/src/components/ui/Table.tsx, ui/index.ts (shared card metadata API); docs/ERP-UI-PATTERNS.md
 - apps/erp/src/components/ui/FormGrid.tsx; apps/erp/tests/t445-compact-forms.test.ts and t384-s2-full-width.test.ts (shared default contract)
 - apps/erp/src/app/admin/access-defaults/grid.tsx; apps/erp/src/app/liabilities/unpaid/page.tsx
@@ -16,6 +18,7 @@ Every ERP table row reads as a labeled card on a phone without losing fields, fo
 - apps/erp/src/components/reports/BalanceSheetTable.tsx, CashFlowTable.tsx, IncomeStatementTable.tsx
 - apps/erp/src/app/expenses/[id]/page.tsx; apps/erp/src/app/cutover/count/sheet/page.tsx
 - apps/erp/tests/t450-phone-table-cards.test.ts and t450-phone-table-coverage.test.ts
+- apps/erp/tests/action-link-sweep.test.ts (measure the added 44px disclosure; no exemption/baseline change)
 - existing affected breakpoint assertions under apps/erp/tests, only when asserting the former 640px rule
 - package.json and package-lock.json (Happy DOM, development dependency only)
 - docs/discovery/erp-phone-table-cards.md; docs/reviews/t450-table-inventory.json; docs/reviews/t450-phone-tables.md; this task
@@ -43,6 +46,18 @@ retain grid behavior. Field widths infer familiar control semantics when no expl
 Tests: compact hierarchy, image reuse/initials, expand/collapse, no hidden editors, dynamic toggle
 cleanup, original node identity and tablet/print exclusion. User screenshots are a rejection of
 the prior layout, not a completed visual release check.
+
+### Return-state and disclosure correction — Ian, 2026-10-21
+Use a wider 52px Details button with an actual SVG double chevron, not a letter-like glyph.
+Collapse the new-item request form into a native disclosure card with an Add affordance at the far right;
+keep its original form mounted and all fields/actions intact. Opening must work without JavaScript.
+The shared shell remembers presentation state per account and tab: URL filters, document and inner-panel
+scroll offsets, open disclosures and expanded phone rows. Browser Back and explicit marked return links
+restore it after content arrives. Respect explicit fragment navigation; do not retain input values,
+passwords, fetched records or session tokens. Blocked/corrupt browser storage must never block navigation.
+Do not patch router internals or history state. Bound stored pages and stop restoration when the user interacts.
+Tests first: double-chevron SVG, disclosure semantics and retained form; saved scroll/expansion after remount,
+query-aware return link, account isolation, malformed/blocked storage, streamed content and cleanup.
 
 ## Invariants
 Discovery: docs/discovery/erp-phone-table-cards.md. Same DOM forms, ids, entered values, disabled states,

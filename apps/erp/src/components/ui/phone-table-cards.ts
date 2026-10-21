@@ -97,7 +97,11 @@ function summarizeRow(table: HTMLTableElement, row: HTMLTableRowElement) {
     toggleCell = table.ownerDocument.createElement('td');
     toggleCell.setAttribute('data-card-toggle-cell', ''); toggleCell.setAttribute('role', table.getAttribute('role') === 'grid' ? 'gridcell' : 'cell');
     const button = table.ownerDocument.createElement('button'); button.type = 'button';
-    button.setAttribute('data-card-toggle', ''); button.textContent = '⌄';
+    button.setAttribute('data-card-toggle', '');
+    const svg = table.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    for (const [name, value] of Object.entries({ viewBox: '0 0 24 24', width: '24', height: '24', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.5', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' })) svg.setAttribute(name, value);
+    const path = table.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'm7 6 5 5 5-5M7 13l5 5 5-5'); svg.append(path); button.append(svg);
     toggleCell.append(button); row.append(toggleCell);
   }
   const button = toggleCell.querySelector('button');

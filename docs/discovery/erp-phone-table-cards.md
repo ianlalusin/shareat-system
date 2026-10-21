@@ -22,3 +22,18 @@ Scope: one shell adapter, one CSS card presentation, explicit labels for five he
 two breakpoint corrections, an inventory and affected tests. Zero database changes or runtime packages.
 No mounted copies of controls, additional requests, hidden money, row removal or payment logic. Print remains tabular.
 Before hydration or with JavaScript disabled, the original scrollable table remains the usable fallback.
+
+## Return-state correction — 2026-10-21
+Verdict: add a shared, tab-local presentation snapshot, plus a native disclosure for item entry.
+Ian reproduced losing his position on return; 106 native table definitions share this shell. Actual
+navigation frequency is unavailable. No application-level scroll restoration exists here; bounded
+read-only searches of all four reference apps found no scroll-restoration helper worth reusing.
+[Next Link](https://nextjs.org/docs/app/api-reference/components/link) already restores browser
+back/forward scrolling, but ordinary return anchors, custom scrolling panels and card expansion need
+explicit state. Retain Next routing rather than patching history or installing a second router.
+[next-scroll-restoration](https://github.com/javascripter/next-scroll-restoration) (MIT, self-hosted)
+supports panel scrolling; it does not cover our disclosure/card state. Do not add the dependency:
+one shared snapshot helper and shell component cover the required presentation without record storage.
+Scope: URL-keyed positions/disclosures, account isolation, bounded sessionStorage and streamed content;
+no input persistence, database work, remote API, new records or changes to validation. Native details
+keeps the Add interaction available without JavaScript. Three requested improvements, zero runtime dependencies.

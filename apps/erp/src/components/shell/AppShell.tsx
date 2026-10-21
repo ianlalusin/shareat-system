@@ -14,6 +14,7 @@
  * this reads it via `headers()`. ⛔ Presentation only — it decides chrome, never access.
  */
 import { cookies, headers } from 'next/headers';
+import { Suspense } from 'react';
 // ⛔ From the CHOKEPOINT, not from `@shareat/db` — T-261 §B6. That module is where the
 //    constraint-refusal counter lives; a direct import silently bypasses it.
 import { withOrgPrincipal } from '../../app/expenses/lib';
@@ -26,6 +27,7 @@ import { SIDEBAR_COOKIE_NAME, parseSidebarState } from './sidebar-state';
 import { Sidebar, SidebarProvider } from './Sidebar';
 import { TopBar } from './TopBar';
 import { PhoneTableCards } from './PhoneTableCards';
+import { ScreenState } from './ScreenState';
 
 export async function AppShell({ children }: { children: React.ReactNode }) {
   const session = await currentSession();
@@ -64,7 +66,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
         <Sidebar allowedHrefs={allowedHrefs} />
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar />
-          <main className="erp-workspace min-w-0 flex-1"><PhoneTableCards>{children}</PhoneTableCards></main>
+          <main className="erp-workspace min-w-0 flex-1"><PhoneTableCards><Suspense fallback={null}><ScreenState scope={`${session.actor.orgId}:${session.actor.personId}`} /></Suspense>{children}</PhoneTableCards></main>
         </div>
       </div>
     </SidebarProvider>

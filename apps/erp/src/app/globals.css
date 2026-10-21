@@ -409,6 +409,11 @@
 }
 
 [data-phone-table-root] [data-card-toggle-cell] { display: none; }
+.erp-disclosure-card > summary::-webkit-details-marker { display: none; }
+.erp-disclosure-card > summary:focus-visible { outline: 2px solid var(--brand-ink); outline-offset: 2px; }
+.erp-disclosure-card > summary:hover .erp-disclosure-action { background: var(--workspace-stripe); }
+.erp-disclosure-card[open] > summary .erp-disclosure-action svg { transform: rotate(45deg); }
+.split-workspace-grid:has(> section:first-child > .erp-disclosure-card:not([open])) { grid-template-columns: minmax(0, 1fr); }
 
 /* T-450 / Ian: phones use compact summaries; tablets (including exactly 768px) retain tables.
    Screen-only rules leave native print layout and existing column widths untouched. */
@@ -444,10 +449,10 @@
     grid-template-columns: 44px minmax(0, 1fr) auto;
   }
   [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-has-extra]:not([data-card-has-keys]) {
-    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    grid-template-columns: 44px minmax(0, 1fr) 52px;
   }
   [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-has-extra][data-card-has-keys] {
-    grid-template-columns: 44px minmax(0, 1fr) auto 44px;
+    grid-template-columns: 44px minmax(0, 1fr) auto 52px;
   }
   [data-phone-table-root] tr[data-card-kind="summary"]::before {
     content: attr(data-card-avatar) / ""; grid-column: 1; grid-row: 1 / span 2;
@@ -490,8 +495,8 @@
     display: block; position: relative; z-index: 10; grid-column: -2 / -1; grid-row: 1 / span 2; align-self: center;
   }
   [data-phone-table-root] [data-card-toggle] {
-    display: grid; place-items: center; min-width: 44px; min-height: 44px; border-radius: 0.5rem;
-    color: var(--muted); background: transparent; font-size: 1.25rem;
+    display: grid; place-items: center; min-width: 52px; min-height: 44px; border-radius: 0.5rem;
+    color: var(--muted); background: var(--workspace-stripe); border: 1px solid var(--surface-border);
   }
   [data-phone-table-root] [data-card-toggle]:hover { background: var(--workspace-stripe); }
   [data-phone-table-root] [data-card-toggle][aria-expanded="true"] { transform: rotate(180deg); }

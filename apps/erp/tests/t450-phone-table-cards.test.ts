@@ -27,6 +27,9 @@ describe('T-450 original table nodes become labeled phone cards', () => {
     expect(cell(root, 'tbody tr').dataset.cardAvatar).toBe('A');
     expect(root.querySelectorAll('[data-card-slot="extra"]')).toHaveLength(2);
     const toggle = cell(root, '[data-card-toggle]');
+    expect(toggle.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 24 24');
+    expect(toggle.querySelector('path')?.getAttribute('d')).toBe('m7 6 5 5 5-5M7 13l5 5 5-5');
+    expect(toggle.textContent).toBe('');
     expect(toggle.getAttribute('aria-expanded')).toBe('false'); toggle.click();
     expect(cell(root, 'tbody tr').dataset.cardExpanded).toBe('true');
     expect(toggle.getAttribute('aria-expanded')).toBe('true'); toggle.click();
