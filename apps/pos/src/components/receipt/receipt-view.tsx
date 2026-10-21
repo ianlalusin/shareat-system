@@ -8,6 +8,8 @@ import type { ModeOfPayment, SessionBillLine, Store, ReceiptData, ReceiptSetting
 import { toJsDate } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
 import { maskIdNo } from '@/lib/statutory/capture';
+import { receiptLineAmounts } from '@/lib/printing/receipt-line-amounts';
+import { formatCentavos } from '@/lib/money/format';
 
 interface ReceiptViewProps {
     data: ReceiptData | null;
@@ -38,10 +40,7 @@ export function ReceiptView({ data, paymentMethods = [] }: ReceiptViewProps) {
 
     const paymentMethodMap = useMemo(() => new Map(paymentMethods.map(p => [p.id, p.name])), [paymentMethods]);
 
-    const activeLines = useMemo(() => (lines || [])
-        .filter(line => (line.qtyOrdered - (line.voidedQty || 0)) > 0)
-        // Pin the package/bundle line to the top (dine-in); stable for the rest.
-        .sort((a, b) => (a.type === 'package' ? 0 : 1) - (b.type === 'package' ? 0 : 1)), [lines]);
+    const activeLines = useMemo(() => receiptLineAmounts(lines || [], store), [lines, store]);
 
     const freeItems = useMemo(() => {
         const map = new Map<string, { qty: number }>();
@@ -148,34 +147,11 @@ export function ReceiptView({ data, paymentMethods = [] }: ReceiptViewProps) {
                     <span>Item</span>
                     <span className="text-right">Total</span>
                 </div>
-                {activeLines.map(line => {
-                    const billableQty = line.qtyOrdered - (line.voidedQty || 0);
-                    const modTotal = Number((line as any).modifiersTotal || 0);
-                    const lineTotal = billableQty * (line.unitPrice + modTotal);
-
-                    const hasDiscount = (line.discountValue ?? 0) > 0 && line.discountQty > 0;
-                    
-                    let lineDiscountAmount = 0;
-                    if (hasDiscount && store) {
-                        const taxRate = (store.taxRatePct || 0) / 100;
-                        const isVatInclusive = store.taxType === "VAT_INCLUSIVE";
-                        const discountedQty = Math.min(line.discountQty, billableQty);
-                        
-                        const discountBaseUnit = isVatInclusive && taxRate > 0
-                          ? (line.unitPrice / (1 + taxRate))
-                          : line.unitPrice;
-
-                        if (line.discountType === "percent") {
-                           lineDiscountAmount = (discountedQty * discountBaseUnit) * (line.discountValue! / 100);
-                        } else { // fixed
-                           lineDiscountAmount = Math.min(discountBaseUnit, (line.discountValue ?? 0)) * discountedQty;
-                        }
-                    }
-
+                {activeLines.map(({ line, activeQty, grossCentavos, discountCentavos, chargeCentavos }) => {
                     return (
                         <div key={line.id} className="receipt-item-row mb-1">
                              <div className="grid grid-cols-[20px,1fr,auto] gap-x-2 items-start">
-                                <span>{billableQty}</span>
+                                <span>{activeQty}</span>
                                 <div className="min-w-0">
                                   <div className="whitespace-normal break-words leading-tight">
                                     {line.itemName}
@@ -185,6 +161,7 @@ export function ReceiptView({ data, paymentMethods = [] }: ReceiptViewProps) {
                                       — {(line as any).modifiersText}
                                     </div>
                                   )}
+                                  {line.freeQty > 0 && <div className="text-xs pl-2">Free: {line.freeQty}</div>}
                                   {(line as any).note && (
                                     <div className="text-xs italic pl-2 opacity-80 break-words leading-tight">
                                       Note: {(line as any).note}
@@ -192,14 +169,17 @@ export function ReceiptView({ data, paymentMethods = [] }: ReceiptViewProps) {
                                   )}
                                 </div>
                                 <span className="text-right whitespace-nowrap">
-                                  {lineTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  {formatCentavos(grossCentavos)}
                                 </span>
                             </div>
-                             {hasDiscount && settings.showDiscountBreakdown && (
+                             {discountCentavos > 0 && settings.showDiscountBreakdown && (
                                 <div className="pl-4 italic">
-                                    <span>Discount ({line.discountQty}x)</span>
-                                    <span className="text-right whitespace-nowrap">- {lineDiscountAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    <span>Discount</span>
+                                    <span className="text-right whitespace-nowrap">- {formatCentavos(discountCentavos)}</span>
                                 </div>
+                            )}
+                            {chargeCentavos > 0 && settings.showChargeBreakdown && (
+                              <div className="pl-4 italic flex justify-between gap-2"><span>Charge</span><span>+ {formatCentavos(chargeCentavos)}</span></div>
                             )}
                         </div>
                     );

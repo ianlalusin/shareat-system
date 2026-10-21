@@ -3,6 +3,8 @@
 import { toJsDate } from "@/lib/utils/date";
 import type { ReceiptData, SessionBillLine } from "@/lib/types";
 import { format } from "date-fns";
+import { receiptLineAmounts } from './receipt-line-amounts';
+import { formatCentavos } from '@/lib/money/format';
 
 /**
  * Formats receipt data into plain text for thermal printing (ESC/POS).
@@ -60,15 +62,18 @@ export function formatReceiptText(
   const headerRow = 'Qty'.padEnd(qtyWidth) + 'Item'.padEnd(nameWidth) + 'Total'.padStart(priceWidth);
   lines.push(headerRow);
 
-  const activeLines = (data.lines || [])
-    .filter(l => (l.qtyOrdered - (l.voidedQty || 0)) > 0)
-    // Pin the package/bundle line to the top (dine-in); stable for the rest.
-    .sort((a, b) => ((a.type === 'package' ? 0 : 1) - (b.type === 'package' ? 0 : 1)));
-  activeLines.forEach(line => {
-    const billableQty = line.qtyOrdered - (line.voidedQty || 0);
-    const lineTotal = (billableQty * line.unitPrice).toFixed(2);
+  const activeLines = receiptLineAmounts(data.lines || [], data.store);
+  activeLines.forEach(({ line, activeQty, grossCentavos }) => {
+    const lineTotal = formatCentavos(grossCentavos);
     const name = line.itemName.substring(0, nameWidth - 1);
-    lines.push(String(billableQty).padEnd(qtyWidth) + name.padEnd(nameWidth) + lineTotal.padStart(priceWidth));
+    lines.push(String(activeQty).padEnd(qtyWidth) + name.padEnd(nameWidth) + lineTotal.padStart(priceWidth));
+    // Wrap descriptive details to the printer width without truncating the amount above.
+    for (const detail of [line.modifiersText, line.freeQty > 0 ? `Free: ${line.freeQty}` : null]) {
+      if (!detail) continue;
+      for (let start = 0; start < detail.length; start += charsPerLine - qtyWidth) {
+        lines.push(' '.repeat(qtyWidth) + detail.slice(start, start + charsPerLine - qtyWidth));
+      }
+    }
   });
 
   lines.push(hr());
