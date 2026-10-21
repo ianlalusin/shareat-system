@@ -112,7 +112,7 @@ export function CashFlowTable({
 }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-      <table className="w-full min-w-[560px] border-collapse text-sm">
+      <table data-card-columns="Activity|Amount" className="w-full min-w-[560px] border-collapse text-sm">
         <tbody>
           <SectionHeading label="Operating activities" />
           <tr>

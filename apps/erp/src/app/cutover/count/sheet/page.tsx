@@ -108,7 +108,7 @@ export default async function CountSheetPage({ searchParams }: { searchParams: P
           {items.length === 0 && <p className="text-xs">Nothing has moved in this room in the last 90 days. Use the blank rows.</p>}
 
           <h2 className="pt-2 text-sm font-medium">Found here, not listed</h2>
-          <table className="w-full border-collapse text-sm">
+          <table data-card-columns="Item|Unit|Count" className="w-full border-collapse text-sm">
             <tbody>
               {Array.from({ length: BLANK_ROWS }, (_, k) => (
                 <tr key={k} className="border-b border-neutral-300">
