@@ -6,7 +6,7 @@ import { sql as dsql } from 'drizzle-orm';
 
 /**
  * T-442 S1 TESTER - docs/tasks/442-receipt-photo-link-backfill.md section 5 (M1-M10), audit A1/A2/A3/A4/A5 (M13, M14,
- * census-on-every-write-path). M11/M12/M15 are S2 (sweep hardening) and are NOT here.
+ * census-on-every-write-path), plus S2 M11/M12/M15 and the combined census/cap scheduler output.
  *
  * ASSUMED CONTRACT (the builder must provide exactly these names):
  *   @shareat/db   filesRepo.FILE_REFERENCES: readonly { table; column; label }[]            (packages/db/src/repo/files.ts)
@@ -42,6 +42,8 @@ import {
   claimUpload,
   setStaffPhoto,
   setStaffSignature,
+  sweepOrphanedFiles,
+  runOrphanFileSweep,
 } from '@shareat/domain';
 
 const sql = postgres(url, { max: 8 });
@@ -528,6 +530,66 @@ describe('M13 the script never prints a guarded file, its owner, a path, a name 
 });
 
 // ================================================================== census on every write path (the lasting guard)
+
+describe('S2 referenced files survive the orphan sweep (M11/M12/M15)', () => {
+  it('M11 excludes every registry source even while still unlinked, with an unreferenced positive control', async () => {
+    const org = await mkOrg('s2-candidates');
+    const referenced: FileInfo[] = [];
+    for (const source of SOURCES) {
+      const file = await mkFile(org, source.purpose); await mkRef(source.key, org, file.id); referenced.push(file);
+    }
+    const shared = await mkFile(org, 'receipt_photo'); await mkRef('inv', org, shared.id); await mkRef('inv', org, shared.id); referenced.push(shared);
+    const otherOrg = await mkOrg('s2-other'), otherFile = await mkFile(otherOrg, 'receipt_photo'); await mkRef('inv', otherOrg, otherFile.id);
+    const orphan = await mkFile(org, 'receipt_photo');
+    const candidates = await asOrg(org, tx => filesRepo.listOrphans(tx, org, 24));
+    expect(candidates.map(file => file.id)).toEqual([orphan.id]);
+    const result = await sweepOrphanedFiles(org, 24);
+    expect(result).toMatchObject({ candidates: 1, removed: 1, claimed: 0, referencedUnlinked: 7, failed: [] });
+    for (const file of referenced) expect(driver.files.has(file.path)).toBe(true);
+    expect(driver.files.has(orphan.path)).toBe(false);
+  });
+
+  it('M12 sweeps only unreferenced files after confirm and records the remaining unlinked census', async () => {
+    const org = await mkOrg('s2-confirm'), receipt = await mkFile(org, 'receipt_photo');
+    await mkRef('inv', org, receipt.id); await backfill(org, true);
+    const orphan = await mkFile(org, 'receipt_photo');
+    const result = await sweepOrphanedFiles(org, 24);
+    expect(result).toMatchObject({ candidates: 1, removed: 1, referencedUnlinked: 0, failed: [] });
+    expect(driver.files.has(receipt.path)).toBe(true); expect(driver.files.has(orphan.path)).toBe(false);
+    const unlinked = await mkFile(org, 'receipt_photo'); await mkRef('inv', org, unlinked.id);
+    const run = await runOrphanFileSweep({ orgId: org, trigger: 'manual' });
+    expect(run.hadFailures).toBe(false);
+    expect(run.outcomes[0]?.detail).toBe('referencedUnlinked 1');
+  });
+
+  it('M15 treats a reference committed after candidate selection as claimed and keeps its bytes', async () => {
+    const org = await mkOrg('s2-race');
+    const early = await mkFile(org, 'receipt_photo', { ageHours: 72 });
+    const late = await mkFile(org, 'receipt_photo', { ageHours: 48 });
+    const originalRemove = driver.remove.bind(driver);
+    driver.remove = async path => {
+      if (path === early.path) await mkRef('inv', org, late.id);
+      return originalRemove(path);
+    };
+    const result = await sweepOrphanedFiles(org, 24);
+    expect(result).toMatchObject({ candidates: 2, removed: 1, claimed: 1, failed: [] });
+    expect(driver.files.has(late.path)).toBe(true);
+    expect(await linkedTo(late.id)).toBeNull();
+    expect((await sql`select id from stored_files where id = ${late.id}`)).toHaveLength(1);
+  });
+
+  it('keeps the referenced count and candidate-cap warning together in the real scheduler output', { timeout: 60_000 }, async () => {
+    const org = await mkOrg('s2-cap'), referenced = await mkFile(org, 'receipt_photo');
+    await mkRef('inv', org, referenced.id);
+    for (let index = 0; index <= filesRepo.ORPHAN_SWEEP_BATCH_LIMIT; index++) await mkFile(org, 'receipt_photo');
+    const run = await runOrphanFileSweep({ orgId: org, trigger: 'manual' });
+    expect(run.hadFailures).toBe(false);
+    expect(run.outcomes[0]?.posted).toBe(filesRepo.ORPHAN_SWEEP_BATCH_LIMIT);
+    expect(run.outcomes[0]?.detail).toBe(`referencedUnlinked 1 · hit the ${filesRepo.ORPHAN_SWEEP_BATCH_LIMIT}-candidate cap — more orphans may remain in this org`);
+    expect(driver.files.has(referenced.path)).toBe(true);
+    expect((await asOrg(org, tx => filesRepo.listOrphans(tx, org, 24)))).toHaveLength(1);
+  });
+});
 
 async function expectCensusClean(orgId: string) {
   expect(await unlinkedList(orgId)).toEqual([]);

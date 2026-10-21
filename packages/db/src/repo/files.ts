@@ -150,6 +150,7 @@ export async function listOrphans(
         eq(storedFiles.orgId, orgId),
         isNull(storedFiles.linkedTo),
         lt(storedFiles.uploadedAt, sql`now() - make_interval(hours => ${hours})`),
+        hasNoReferences(orgId),
       ),
     )
     .orderBy(asc(storedFiles.uploadedAt))
@@ -180,7 +181,7 @@ export async function listOrphans(
 export async function deleteFile(tx: Tx, orgId: string, id: string): Promise<boolean> {
   const deleted = await tx
     .delete(storedFiles)
-    .where(and(eq(storedFiles.id, id), eq(storedFiles.orgId, orgId), isNull(storedFiles.linkedTo)))
+    .where(and(eq(storedFiles.id, id), eq(storedFiles.orgId, orgId), isNull(storedFiles.linkedTo), hasNoReferences(orgId)))
     .returning({ id: storedFiles.id });
   return deleted.length > 0;
 }
@@ -257,10 +258,26 @@ export interface UnreferencedRow {
 function referencesCte(orgId: string) {
   const branches = FILE_REFERENCES.map(
     (r) =>
-      sql`select ${r.label}::text as source, t.id as owner_id, t.${sql.raw(r.column)} as file_id
-            from ${sql.raw(r.table)} t where t.org_id = ${orgId} and t.${sql.raw(r.column)} is not null`,
+      sql`select ${r.label}::text as source, t.id as owner_id, t.${sql.identifier(r.column)} as file_id
+            from ${sql.identifier(r.table)} t where t.org_id = ${orgId} and t.${sql.identifier(r.column)} is not null`,
   );
   return sql`refs as (${sql.join(branches, sql` union all `)})`;
+}
+
+/** Same predicate at selection and deletion: a committed reference makes a file ineligible. FK RESTRICT remains the backstop. */
+function hasNoReferences(orgId: string) {
+  return sql`not exists (with ${referencesCte(orgId)} select 1 from refs r where r.file_id = ${storedFiles.id})`;
+}
+
+/** Files, not referencing rows: a shared file counts once. All purposes count, including wrong-purpose references. */
+export async function countReferencedUnlinked(tx: Tx, orgId: string): Promise<number> {
+  const rows = await tx.execute(sql`
+    with ${referencesCte(orgId)}
+    select count(distinct sf.id)::int as n from stored_files sf
+    join refs r on r.file_id = sf.id
+    where sf.org_id = ${orgId} and sf.linked_to is null`);
+  const [row] = rows as unknown as { n: number }[];
+  return row?.n ?? 0;
 }
 
 /** Every reference whose file is in this org and still has `linked_to IS NULL`, lowest owner id first per file. */

@@ -1,6 +1,6 @@
 # T-442: Link the files already saved (DEF-672 backfill + census)
 
-**Status:** SPEC AUDITED 2026-10-18, WAITING ON T-441 S2; production run by Ian after that deploys.
+**Status:** S1 + S2 implemented 2026-10-21; 53 affected PostgreSQL checks, 249 unit checks, typecheck and production build pass. Full CI and T-441 writer/link-target dependency pending; production run remains Ian's after deployment.
 
 ## 1. The problem, measured in code (not assumed)
 
@@ -175,3 +175,15 @@ constraint on T-441 S2's trade pay-now builder; brief S2 with it before S2 start
 
 ## S1 external audit, 20 October
 The original wrong-purpose --check test contradicted the any-referenced-unlinked census contract. Corrected oracle reproduced exit 0 instead of 1; script now counts wrong-purpose files without writing them. DEF-693 records it. Two new raw domain errors exceeded the existing ceiling (DEF-694); standard refusal producers preserve the ceiling. Real PostgreSQL: 21 passed / three TODO; root typecheck and 91 caller/argument/ratchet/boundary/register checks passed. This is an S1 checkpoint, not S2 completion or permission to run in production.
+
+## S2 execution scope, 21 October
+Ian authorized continuing unfinished work unattended. Complete the already approved sweep hardening in:
+packages/db/src/repo/files.ts, packages/domain/src/files/index.ts, packages/domain/src/scheduler/index.ts,
+packages/domain/tests/integration/t442-backfill-file-links.test.ts and files.test.ts; update this task and
+docs/reviews/t442-s2-sweep.md. Add M11/M12/M15 and the scheduler count assertion before implementation.
+The observed S1 numeric-guard failure is recorded in DEFECTS-REGISTER.md as DEF-717; identifiers use
+Drizzle's quoting API rather than raw SQL, without changing any accepted guard set.
+Use one shared registry-based NOT EXISTS predicate in candidate selection and deletion; report a distinct
+same-org referenced-unlinked file count without ids. Keep cross-org FK failures visible per A7.
+Use only shareat_test_codex_t442s2 locally. This does not authorize a production backfill or close the
+three T-441 write-path TODOs. Main was reconciled first, retaining both branches' defect register entries.
