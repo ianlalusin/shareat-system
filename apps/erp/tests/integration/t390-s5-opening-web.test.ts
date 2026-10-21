@@ -88,7 +88,9 @@ interface FormInfo {
 async function formsOf(root: unknown): Promise<FormInfo[]> {
   const forms: El[] = [];
   await walk(root, (el) => {
-    if (el.type === 'form' || (el.props['action'] !== undefined && el.props['hidden'] !== undefined)) forms.push(el);
+    // T-440: an ADD form is a <CheckedForm action=...> (a client component that renders the <form>); treat it as the form.
+    const isCheckedForm = typeof el.type === 'function' && (el.type as { name?: string }).name === 'CheckedForm';
+    if (el.type === 'form' || isCheckedForm || (el.props['action'] !== undefined && el.props['hidden'] !== undefined)) forms.push(el);
   });
   const out: FormInfo[] = [];
   for (const fm of forms) {

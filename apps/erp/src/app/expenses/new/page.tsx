@@ -7,6 +7,8 @@ import { createExpenseAction } from '../actions';
 import { budgetsRepo } from '@shareat/db';
 import { withOrgPrincipal } from '../lib';
 import { BudgetHint } from './BudgetHint';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import { EXPENSE_CREATE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -86,7 +88,7 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
             </Select>
           </label>
         </FilterRow>
-        <form action={createExpenseAction} className="space-y-6">
+        <CheckedForm rules={EXPENSE_CREATE_RULES} action={createExpenseAction} className="space-y-6">
           <input type="hidden" name="storeId" value={storeId} />
           {/* ⭐ T-215. The cap matters at the moment of spending — a report at month end is a
               post-mortem. Renders nothing until a capped category is picked. */}
@@ -104,11 +106,15 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
           )}
           {/* ⭐ No orgId, no "acting as" — the session supplies both (T-138). */}
           <FormGrid>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
-                Supplier invoice <span className="italic">(sets the date and the supplier)</span>
-              </span>
-              <Select name="supplierInvoiceId" required defaultValue="">
+            <Field
+              label={
+                <>
+                  Supplier invoice <span className="italic">(sets the date and the supplier)</span>
+                </>
+              }
+              rule={EXPENSE_CREATE_RULES.supplierInvoiceId}
+            >
+              <Select {...nativeAttrs(EXPENSE_CREATE_RULES.supplierInvoiceId)} defaultValue="">
                 <option value="" disabled>
                   {invoices.length === 0 ? 'No open invoices yet' : 'Select…'}
                 </option>
@@ -119,11 +125,10 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
                   </option>
                 ))}
               </Select>
-            </label>
+            </Field>
 
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Category</span>
-              <Select name="categoryId" required defaultValue="">
+            <Field label="Category" rule={EXPENSE_CREATE_RULES.categoryId}>
+              <Select {...nativeAttrs(EXPENSE_CREATE_RULES.categoryId)} defaultValue="">
                 <option value="" disabled>
                   Select a category
                 </option>
@@ -142,13 +147,12 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
                   );
                 })}
               </Select>
-            </label>
+            </Field>
           </FormGrid>
 
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Particulars — what this was actually for</span>
-            <Input type="text" name="particulars" required />
-          </label>
+          <Field label="Particulars — what this was actually for" rule={EXPENSE_CREATE_RULES.particulars}>
+            <Input type="text" {...nativeAttrs(EXPENSE_CREATE_RULES.particulars)} />
+          </Field>
 
           <div>
             <h2 className="mb-2 text-sm font-medium">
@@ -169,9 +173,22 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
           <Button type="submit" variant="primary">
             Save draft
           </Button>
-        </form>
+        </CheckedForm>
         </>
       )}
     </Page>
+  );
+}
+
+function Field({ label, rule, className, children }: { label: React.ReactNode; rule: FieldRule; className?: string; children: React.ReactNode }) {
+  // T-440: the label keeps its look; the live helper line sits OUTSIDE it (never part of the accessible name).
+  return (
+    <div className={className}>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{label}</span>
+        {children}
+      </label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }

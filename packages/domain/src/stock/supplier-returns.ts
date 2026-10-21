@@ -29,6 +29,8 @@
 import { add, compare, decimal, money, multiplyToMoney, ZERO, type Decimal, type Money } from '@shareat/core/money';
 import { advisoryLocksRepo, apRepo, deliveriesRepo, moneyAccountsRepo, stockLayersRepo, supplierReturnsRepo, type Tx } from '@shareat/db';
 import { parseMoneyInput } from '../shared/money-input';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { INVENTORY_REFUND_RULES } from '../field-rules/inventory';
 import { refuse } from '../shared/refusal';
 import { authorize, type Actor } from '@shareat/auth';
 import { consume, reverseConsumption } from './consume';
@@ -402,6 +404,7 @@ export type RefundCreditOutcome =
  */
 export async function refundSupplierCredit(tx: Tx, input: RefundCreditInput): Promise<RefundCreditOutcome> {
   await authorize(tx, input.actor, 'apply_supplier_credit', { storeId: input.storeId });
+  assertFieldRules(INVENTORY_REFUND_RULES, { amount: input.amount });
   const orgId = input.actor.orgId; // T-231/DEF-210 — see recordReturn.
 
   const amount = parseMoneyInput(input.amount, 'refundSupplierCredit: the amount', 'The refund amount');

@@ -12,6 +12,15 @@ import {
   peso,
   today,
 } from '../lib';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import {
+  CASH_REQUEST_APPROVE_RULES,
+  CASH_REQUEST_REFUSE_RULES,
+  CASH_REQUEST_RELEASE_RULES,
+  CASH_REQUEST_SETTLE_RULES,
+  nativeAttrs,
+  type FieldRule,
+} from '@shareat/domain/field-rules';
 import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -110,17 +119,16 @@ export default async function CashRequestPage({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <form action={decideAction} className="space-y-3">
+            <CheckedForm rules={CASH_REQUEST_APPROVE_RULES} action={decideAction} className="space-y-3">
               <input type="hidden" name="requestId" value={req.id} />
               <input type="hidden" name="decision" value="approve" />
               <Field
                 label="Approve for"
                 hint="May differ from what was asked — less is common, more is allowed."
+                rule={CASH_REQUEST_APPROVE_RULES.amount}
               >
                 <input
-                  name="amount"
-                  required
-                  inputMode="decimal"
+                  {...nativeAttrs(CASH_REQUEST_APPROVE_RULES.amount)}
                   defaultValue={req.requestedAmount}
                   className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink"
                 />
@@ -128,18 +136,18 @@ export default async function CashRequestPage({
               <Button type="submit" variant="primary">
                 Approve
               </Button>
-            </form>
+            </CheckedForm>
 
-            <form action={decideAction} className="space-y-3">
+            <CheckedForm rules={CASH_REQUEST_REFUSE_RULES} action={decideAction} className="space-y-3">
               <input type="hidden" name="requestId" value={req.id} />
               <input type="hidden" name="decision" value="reject" />
-              <Field label="Refuse, because" hint="A refusal without a reason is not recorded.">
-                <Input name="reason" required className="w-full" />
+              <Field label="Refuse, because" hint="A refusal without a reason is not recorded." rule={CASH_REQUEST_REFUSE_RULES.reason}>
+                <Input {...nativeAttrs(CASH_REQUEST_REFUSE_RULES.reason)} className="w-full" />
               </Field>
               <Button type="submit" variant="secondary">
                 Refuse
               </Button>
-            </form>
+            </CheckedForm>
           </div>
         </section>
       )}
@@ -155,20 +163,18 @@ export default async function CashRequestPage({
               {holder?.displayName ?? 'the holder'}.
             </p>
           </div>
-          <form action={releaseAction} className="space-y-4">
+          <CheckedForm rules={CASH_REQUEST_RELEASE_RULES} action={releaseAction} className="space-y-4">
             <input type="hidden" name="requestId" value={req.id} />
             <div className="grid gap-4 sm:grid-cols-3">
-              <Field label="Amount">
+              <Field label="Amount" rule={CASH_REQUEST_RELEASE_RULES.amount}>
                 <input
-                  name="amount"
-                  required
-                  inputMode="decimal"
+                  {...nativeAttrs(CASH_REQUEST_RELEASE_RULES.amount)}
                   defaultValue={req.approvedAmount ?? ''}
                   className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink"
                 />
               </Field>
-              <Field label="From" hint="Balances shown are derived from the ledger.">
-                <Select name="fromMoneyAccountId" required defaultValue="" className="w-full">
+              <Field label="From" hint="Balances shown are derived from the ledger." rule={CASH_REQUEST_RELEASE_RULES.fromMoneyAccountId}>
+                <Select {...nativeAttrs(CASH_REQUEST_RELEASE_RULES.fromMoneyAccountId)} defaultValue="" className="w-full">
                   <option value="" disabled>
                     Choose…
                   </option>
@@ -179,14 +185,14 @@ export default async function CashRequestPage({
                   ))}
                 </Select>
               </Field>
-              <Field label="On">
-                <Input name="on" type="date" required defaultValue={today()} className="w-full" />
+              <Field label="On" rule={CASH_REQUEST_RELEASE_RULES.on}>
+                <Input {...nativeAttrs(CASH_REQUEST_RELEASE_RULES.on)} type="date" defaultValue={today()} className="w-full" />
               </Field>
             </div>
             <Button type="submit" variant="primary">
               Release
             </Button>
-          </form>
+          </CheckedForm>
         </section>
       )}
 
@@ -205,11 +211,11 @@ export default async function CashRequestPage({
               <strong>back</strong>, and what does not.
             </p>
           </div>
-          <form action={settleAction} className="space-y-4">
+          <CheckedForm rules={CASH_REQUEST_SETTLE_RULES} action={settleAction} className="space-y-4">
             <input type="hidden" name="requestId" value={req.id} />
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Returned" hint="Cash physically handed back. Leave blank if none.">
-                <input name="returnedAmount" inputMode="decimal" className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink" />
+              <Field label="Returned" hint="Cash physically handed back. Leave blank if none." rule={CASH_REQUEST_SETTLE_RULES.returnedAmount}>
+                <input {...nativeAttrs(CASH_REQUEST_SETTLE_RULES.returnedAmount)} className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink" />
               </Field>
               <Field label="Into" hint="Where the returned cash landed.">
                 <Select name="toMoneyAccountId" defaultValue="" className="w-full">
@@ -224,20 +230,21 @@ export default async function CashRequestPage({
               <Field
                 label="Short"
                 hint="Unaccounted-for. Becomes a receivable from the holder, not a write-off."
+                rule={CASH_REQUEST_SETTLE_RULES.shortAmount}
               >
-                <input name="shortAmount" inputMode="decimal" className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink" />
+                <input {...nativeAttrs(CASH_REQUEST_SETTLE_RULES.shortAmount)} className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink" />
               </Field>
               <Field label="Short because" hint="Required if anything is short.">
                 <Input name="shortReason" className="w-full" />
               </Field>
-              <Field label="On">
-                <Input name="on" type="date" required defaultValue={today()} className="w-full" />
+              <Field label="On" rule={CASH_REQUEST_SETTLE_RULES.on}>
+                <Input {...nativeAttrs(CASH_REQUEST_SETTLE_RULES.on)} type="date" defaultValue={today()} className="w-full" />
               </Field>
             </div>
             <Button type="submit" variant="primary">
               Record
             </Button>
-          </form>
+          </CheckedForm>
         </section>
       )}
 
@@ -311,21 +318,21 @@ function Figure({ label, value, emphasis }: { label: string; value: string; emph
   );
 }
 
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
+function Field({ label, hint, rule, children }: { label: string; hint?: string; rule?: FieldRule; children: React.ReactNode }) {
+  const body = (
+    <>      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
       {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </label>
+    
+    </>
+  );
+  // T-440: a ruled field keeps its label and puts the live helper line OUTSIDE it (never part of the accessible name).
+  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
+  return (
+    <div>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }
 

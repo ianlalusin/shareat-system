@@ -55,6 +55,8 @@ function leaveInput(fd: FormData) {
     days: expandRange(str(fd, 'from'), str(fd, 'to') || str(fd, 'from'), restDaySet(fd)),
     note: str(fd, 'note') || null,
     birthDate: str(fd, 'birthDate') || null,
+    // T-440 S9: the raw date fields travel to the domain, which judges them once the gate has passed.
+    screen: { from: str(fd, 'from'), to: str(fd, 'to'), birthDate: str(fd, 'birthDate') },
   };
 }
 

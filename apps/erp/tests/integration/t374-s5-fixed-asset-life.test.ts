@@ -90,7 +90,7 @@ async function submit(f: Fixture, fd: FormData): Promise<string> {
 const param = (to: string, k: string) => paramsOf(to).get(k);
 const lives = async (storeId: string) =>
   (await sql<{ u: number }[]>`select useful_life_months as u from fixed_assets where store_id = ${storeId} order by created_at`).map((r) => r.u);
-const sentence = (typed: string) => `The useful life — "${typed}" is not a whole number of months from 1 to 1200.`;
+const sentence = (_typed: string) => 'The useful life must be a whole number from 1 to 1200.';
 
 describe('DEF-584 web — a hex / exponent useful life is refused in words, nothing saved', () => {
   for (const typed of ['0x10', '1e1', '1201']) {

@@ -24,6 +24,8 @@ import { compare, fromCentavos, isZero, money, negate, toCentavos, ZERO, type Mo
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { CHANNEL_PAYOUT_DESTINATION_RULES, CHANNEL_SETTLEMENT_RECORD_RULES } from '../field-rules/channel-settlements';
 import { refuse } from '../shared/refusal';
 
 const R = channelSettlementsRepo;
@@ -497,12 +499,31 @@ export async function previewChannelSettlement(
 export async function recordChannelSettlement(
   tx: Tx | null,
   actor: Actor,
-  input: RecordSettlementInput,
+  rawInput: RecordSettlementInput,
 ): Promise<SettlementResult> {
   const run = async (trx: Tx): Promise<SettlementResult> => {
     // ⭐ One POSTED settlement per channel-day, one destination account, one store. The partial
     // unique index refuses a duplicate too — this says WHY, and it is the same context the
     // preview reads, so a screen cannot show a green light this then refuses.
+    // T-440 — authorize() first, then the typed-field rules (gross, net, loan amount, reference, date),
+    // THEN the channel/day lookups: a malformed figure is named before any business check can mask it.
+    await authorize(trx, actor, 'record_ar_collection', { storeId: rawInput.storeId });
+    assertFieldRules(CHANNEL_SETTLEMENT_RECORD_RULES, {
+      grossAmount: rawInput.grossAmount,
+      netDeposited: rawInput.netDeposited,
+      loanAmount: rawInput.loan?.amount,
+      reference: rawInput.reference,
+      settledOn: rawInput.settledOn,
+    });
+    // An amount docked with no loan picked is a picker left open: the rules above saw it, the books do not.
+    const input: RecordSettlementInput = { ...rawInput, loan: rawInput.loan?.loanId ? rawInput.loan : null };
+    if (!rawInput.salesDayId) {
+      throw refuse(
+        'recordChannelSettlement: no sales day selected',
+        'Choose the day this payout settles. A settlement clears one verified channel-day — ' +
+          'a payout covering several days is one settlement per day, sharing a reference.',
+      );
+    }
     const ctx = await gatherSettlementContext(trx, actor, input);
     const figures = assertSettlementFigures('recordChannelSettlement', input);
     const config = ctx.config;
@@ -734,6 +755,8 @@ export async function setChannelPayoutDestination(
     }
     // T-350 (DEF-477). Ian, 2026-09-28: admin only — replaces `manage_store_settings`.
     await authorize(trx, actor, 'set_channel_payout', { storeId: config.storeId });
+    // T-440 / S9: the screen's own rule judges the box AFTER the gate (T-364 order). Moved here from the action.
+    assertFieldRules(CHANNEL_PAYOUT_DESTINATION_RULES, { moneyAccountId: input.moneyAccountId });
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.moneyAccountId);
     if (!account) {

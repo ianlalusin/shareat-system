@@ -22,7 +22,8 @@ import { withFlash } from '@/lib/flash';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
 import { BUDGET_CAP_EDIT } from './typed-forms';
 import { accountLabel } from '@/lib/account-label';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { BUDGET_CAP_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Banner, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Budgets — Shareat System' };
@@ -282,48 +283,65 @@ function CapForm({
   /** T-389: the typing of a refused save of THIS cap, or the too-long notice. */
   typed?: TypedView | null;
 }) {
-  const fields = (
-    <FormGrid>
-      <Field label="Cap">
-        <Input
-          name="amount"
-          required
-          inputMode="decimal"
-          defaultValue={defaultAmount ?? ''}
-          placeholder="0.00"
-          className="w-full text-right"
-        />
-      </Field>
-      <Checkbox name="autoReissue" defaultChecked={defaultAutoReissue ?? false} label="renew automatically" />
-      <Field label="How often">
-        <Select name="reissueInterval" defaultValue={defaultInterval ?? 'monthly'} className="w-full">
-          {REISSUE_INTERVALS.map((i) => (
-            <option key={i} value={i}>
-              {INTERVAL_LABEL[i] ?? i}
-            </option>
-          ))}
-        </Select>
-      </Field>
-    </FormGrid>
-  );
   const hidden = { storeId, periodKey, categoryId };
   // An existing cap is locked until Edit (T-384 L1); a category with no cap yet is an add form and ends in Save.
+  // The fields are written out in BOTH branches on purpose: the live-check guard (T-440 G2) requires each control to sit
+  // lexically inside the form that owns its rule set, so one shared `fields` constant would be invisible to it.
   if (defaultAmount !== undefined) {
     return (
-      <EditableRecord action={setBudgetAction} label="cap" hidden={hidden} typed={typed ?? null}>
-        {fields}
+      <EditableRecord action={setBudgetAction} label="cap" hidden={hidden} typed={typed ?? null} rules={BUDGET_CAP_RULES}>
+      <FormGrid>
+        <Field label="Cap" rule={BUDGET_CAP_RULES.amount}>
+          <Input
+            {...nativeAttrs(BUDGET_CAP_RULES.amount)}
+            defaultValue={defaultAmount ?? ''}
+            placeholder="0.00"
+            className="w-full text-right"
+          />
+        </Field>
+        <Checkbox name="autoReissue" defaultChecked={defaultAutoReissue ?? false} label="renew automatically" />
+        <Field label="How often">
+          <Select name="reissueInterval" defaultValue={defaultInterval ?? 'monthly'} className="w-full">
+            {REISSUE_INTERVALS.map((i) => (
+              <option key={i} value={i}>
+                {INTERVAL_LABEL[i] ?? i}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </FormGrid>
+
       </EditableRecord>
     );
   }
   return (
-    <form action={setBudgetAction}>
+    <CheckedForm rules={BUDGET_CAP_RULES} action={setBudgetAction}>
       <input type="hidden" name="storeId" value={storeId} />
       <input type="hidden" name="periodKey" value={periodKey} />
       <input type="hidden" name="categoryId" value={categoryId} />
-      {fields}
+      <FormGrid>
+        <Field label="Cap" rule={BUDGET_CAP_RULES.amount}>
+          <Input
+            {...nativeAttrs(BUDGET_CAP_RULES.amount)}
+            placeholder="0.00"
+            className="w-full text-right"
+          />
+        </Field>
+        <Checkbox name="autoReissue" label="renew automatically" />
+        <Field label="How often">
+          <Select name="reissueInterval" defaultValue="monthly" className="w-full">
+            {REISSUE_INTERVALS.map((i) => (
+              <option key={i} value={i}>
+                {INTERVAL_LABEL[i] ?? i}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </FormGrid>
+
       <SubmitButton className="mt-3" variant="secondary" pendingLabel="Saving…">
         Save
       </SubmitButton>
-    </form>
+    </CheckedForm>
   );
 }

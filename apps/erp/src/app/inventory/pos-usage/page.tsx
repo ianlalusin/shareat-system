@@ -7,7 +7,9 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, Field, FlashBanner, Input, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { INVENTORY_POS_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Daily POS usage pull — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -316,20 +318,19 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
               <p className="mt-1 text-xs text-neutral-500">
                 Removes the usage draft this pull made, and reverses any usage a manager already posted from it, so the day can be pulled again. All of it or none.
               </p>
-              <form action={voidPullAction} className="mt-3 flex flex-wrap items-end gap-3">
+              <CheckedForm rules={INVENTORY_POS_VOID_RULES} action={voidPullAction} className="mt-3 flex flex-wrap items-end gap-3">
                 <input type="hidden" name="storeId" value={storeId} />
                 <input type="hidden" name="salesDayId" value={pull.salesDayId} />
                 <input type="hidden" name="pullId" value={pull.id} />
-                <label className="grow text-sm">
-                  <span className="block text-neutral-600 dark:text-neutral-400">Why is it being voided?</span>
-                  <Input name="reason" required className="w-full" />
-                </label>
+                <Field label={<span className="text-neutral-600 dark:text-neutral-400">Why is it being voided?</span>} className="grow text-sm" rule={INVENTORY_POS_VOID_RULES.reason}>
+                  <Input {...nativeAttrs(INVENTORY_POS_VOID_RULES.reason)} className="w-full" />
+                </Field>
                 <ConfirmDestructive
                   tier="admin-pin"
                   label="Void this pull"
                   consequence="Reverses every usage record this pull made. An administrator must approve with their own PIN."
                 />
-              </form>
+              </CheckedForm>
             </section>
           )}
         </>

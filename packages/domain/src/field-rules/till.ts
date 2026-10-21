@@ -1,5 +1,9 @@
 /**
- * T-440 field rules for app/till. Created empty in S1 (Audit A9) so no sweep worker edits index.ts.
- * The sweep adds: export const <NAME>_RULES = defineFieldRules('<area>.<form>', { ... }) here, importing from './check'.
+ * T-440 field rules for app/till (S6): open a shift. The per-pocket count boxes (`count:${id}`) are templated and stay in the
+ * guard's EXEMPT list (S8).
  */
-export {};
+import { defineFieldRules } from './check';
+
+export const TILL_OPEN_SHIFT_RULES = defineFieldRules('till.openShift', {
+  businessDate: { label: 'The trading date', kind: 'date' },
+});

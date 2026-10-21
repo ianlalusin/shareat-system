@@ -9,7 +9,9 @@ import { listStores, withOrgPrincipal } from '../../../expenses/lib';
 import { enrolCardAction, enrolFingerprintAction, revokeCredentialAction } from './actions';
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
-import { Button, ConfirmDestructive, FlashBanner, Input, Textarea } from '@/components/ui';
+import { Button, ConfirmDestructive, Field, FlashBanner, Input, Textarea } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { STAFF_CARD_RULES, STAFF_CREDENTIAL_REVOKE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 
@@ -122,17 +124,19 @@ export default async function CredentialsPage({
                     Enrolled {fmt(c.enrolledAt)}
                   </div>
                 </div>
-                <form action={revokeCredentialAction} className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:min-w-64 sm:flex-1 sm:justify-end">
+                <CheckedForm rules={STAFF_CREDENTIAL_REVOKE_RULES} action={revokeCredentialAction} className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:min-w-64 sm:flex-1 sm:justify-end">
                   <input type="hidden" name="credentialId" value={c.id} />
                   <input type="hidden" name="employmentId" value={employmentId} />
-                  <Input name="reason" required placeholder="Reason to revoke" className="w-full sm:w-auto sm:min-w-48 sm:flex-1" />
+                  <Field label="Reason to revoke" rule={STAFF_CREDENTIAL_REVOKE_RULES.reason} className="w-full sm:w-auto sm:min-w-48 sm:flex-1">
+                    <Input {...nativeAttrs(STAFF_CREDENTIAL_REVOKE_RULES.reason)} placeholder="Reason to revoke" className="w-full" />
+                  </Field>
                   <ConfirmDestructive
                     tier="retype"
                     label="Revoke credential"
                     consequence="Revokes this credential."
                     expectedName={personName ?? ''}
                   />
-                </form>
+                </CheckedForm>
               </li>
             ))}
           </ul>
@@ -145,16 +149,15 @@ export default async function CredentialsPage({
           Type the card id, or scan it with a keyboard-wedge reader — it types the digits and Enter
           exactly like a keyboard, the same interface the clock terminal&rsquo;s own scan box uses.
         </p>
-        <form action={enrolCardAction} className="flex flex-wrap items-end gap-3">
+        <CheckedForm rules={STAFF_CARD_RULES} action={enrolCardAction} className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="employmentId" value={employmentId} />
-          <label className="min-w-0 flex-1 text-sm sm:min-w-48">
-            <span className="block text-neutral-600 dark:text-neutral-400">Card id</span>
-            <Input name="cardId" required autoFocus placeholder="Scan or type" className="w-full" />
-          </label>
+          <Field label="Card id" rule={STAFF_CARD_RULES.cardId} className="min-w-0 flex-1 sm:min-w-48">
+            <Input {...nativeAttrs(STAFF_CARD_RULES.cardId)} autoFocus placeholder="Scan or type" className="w-full" />
+          </Field>
           <Button type="submit" variant="primary">
             Enrol card
           </Button>
-        </form>
+        </CheckedForm>
       </section>
 
       <section className="space-y-3 rounded-lg border border-warning bg-warning-soft p-4">

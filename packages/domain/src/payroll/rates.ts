@@ -11,6 +11,7 @@ import { parseDecimalInput } from '../shared/money-input';
 import { gone, refuse } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { STAFF_GOV_ID_RULES } from '../field-rules/staff';
+import { PAYROLL_BRACKET_SET_RULES, PAYROLL_MIN_WAGE_RULES, PAYROLL_STATUTORY_RATE_RULES } from '../field-rules/payroll';
 
 const CAPABILITY = 'manage_payroll_rates' as const;
 const AGENCIES = ['sss', 'philhealth', 'pagibig'] as const;
@@ -60,6 +61,8 @@ export interface AddStatutoryRateInput {
 export function addStatutoryRate(tx: Tx | null, actor: Actor, input: AddStatutoryRateInput): Promise<{ id: string }> {
   return run(tx, async (trx) => {
     await authorize(trx, actor, CAPABILITY);
+    // T-440 S9 (ii): the screen's own rules, only once the gate has passed.
+    assertFieldRules(PAYROLL_STATUTORY_RATE_RULES, { ...input });
     if (!AGENCIES.includes(input.agency)) {
       throw refuse(`addStatutoryRate: unknown agency ${input.agency}`, 'The agency must be SSS, PhilHealth or Pag-IBIG.');
     }
@@ -172,6 +175,12 @@ export function addWithholdingBracketSet(
 ): Promise<{ ids: string[] }> {
   return run(tx, async (trx) => {
     await authorize(trx, actor, CAPABILITY);
+    // T-440 S9 (ii): the screen's own rules, only once the gate has passed.
+    assertFieldRules(PAYROLL_BRACKET_SET_RULES, {
+      effectiveFrom: input.effectiveFrom,
+      rows: input.rows.map((r) => [r.over, r.baseTax, r.rate].join(',')).join(String.fromCharCode(10)),
+      sourceRef: input.sourceRef,
+    });
     if (!FREQUENCIES.includes(input.frequency)) {
       throw refuse(`addWithholdingBracketSet: unknown frequency ${input.frequency}`, 'The pay frequency must be monthly, semi-monthly or weekly.');
     }
@@ -238,6 +247,8 @@ export function addMinimumWage(
 ): Promise<{ id: string }> {
   return run(tx, async (trx) => {
     await authorize(trx, actor, CAPABILITY);
+    // T-440 S9 (ii): the screen's own rules, only once the gate has passed.
+    assertFieldRules(PAYROLL_MIN_WAGE_RULES, { ...input });
     assertDate('addMinimumWage', input.effectiveFrom, 'The effective date');
     await assertNotPaidAlready(trx, actor.orgId, 'addMinimumWage', input.effectiveFrom);
     if (!input.wageOrderRef.trim()) {

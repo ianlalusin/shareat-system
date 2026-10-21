@@ -34,6 +34,8 @@ import {
 import { compare, isZero, money, ZERO } from '@shareat/core/money';
 import { parseDecimalInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { MONEY_ACCOUNT_CREATE_RULES, MONEY_ACCOUNT_RENAME_RULES } from '../field-rules/money-accounts';
 
 export interface CreateMoneyAccountInput {
   storeId: string;
@@ -83,6 +85,8 @@ async function runCreate(
   input: CreateMoneyAccountInput,
 ): Promise<{ id: string }> {
   await authorize(tx, actor, 'manage_chart_of_accounts', {});
+  // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
+  assertFieldRules(MONEY_ACCOUNT_CREATE_RULES, { name: input.name, storeId: input.storeId });
 
   const name = input.name.trim();
   if (!name) {
@@ -221,6 +225,8 @@ export async function renameMoneyAccount(
 ): Promise<void> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_chart_of_accounts', {});
+    // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
+    assertFieldRules(MONEY_ACCOUNT_RENAME_RULES, { name: input.name, overdraftLimit: input.overdraftLimit });
     const name = input.name.trim();
     if (!name) {
       throw new Error('renameMoneyAccount: a money account needs a name people will recognise.');

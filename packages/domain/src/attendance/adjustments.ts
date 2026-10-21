@@ -16,6 +16,8 @@ import {
 import type { AdjustmentKind } from '@shareat/db/schema';
 import { refuse } from '../shared/refusal';
 import { parseWholeNumberInput } from '../shared/whole-number-input';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { ATTENDANCE_EARLY_OUT_RULES, ATTENDANCE_OVERTIME_RULES, ATTENDANCE_START_ANCHOR_RULES } from '../field-rules/attendance';
 import { adjudicateDay } from './adjudicate';
 import { type DayAdjustments, type DayPolicy } from './compute-day';
 import { parseShiftDay, shiftDayOffsetMsForHour, type RawShiftDay, type ShiftDay } from './shift-day';
@@ -151,6 +153,13 @@ export async function recordAdjustment(
         ? undefined
         : parseMinutes(input.approvedOtMinutes, 'approvedOtMinutes', MINUTE_LABELS.approvedOtMinutes),
   };
+
+  // T-440: the minute boxes' rule sets (the very ones the screen checks live) are asserted here, AFTER authorize() and
+  // after the pinned sentences above, so a non-holder still sees only the authorization refusal (T-352) and nobody sees a
+  // new sentence for a value `parseMinutes` already accepted. Whenever parseMinutes passed, these pass.
+  if (parsed.chosenAnchorMinute !== undefined) assertFieldRules(ATTENDANCE_START_ANCHOR_RULES, { chosenAnchorMinute: String(parsed.chosenAnchorMinute) });
+  if (parsed.effectiveOutMinute !== undefined) assertFieldRules(ATTENDANCE_EARLY_OUT_RULES, { effectiveOutMinute: String(parsed.effectiveOutMinute) });
+  if (parsed.approvedOtMinutes !== undefined) assertFieldRules(ATTENDANCE_OVERTIME_RULES, { approvedOtMinutes: String(parsed.approvedOtMinutes) });
 
   // ⛔ Self-adjudication. Bible §7 rule 6: *"no one approves, pays, adjusts, or scores their own
   // record. Admins may be exempted, explicitly and auditably."* The exemption is explicit here and

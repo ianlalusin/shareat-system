@@ -10,6 +10,8 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { Badge, Banner, Button, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { MENU_OPTION_PRICE_RULES, MENU_PRICE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import {
   cancelScheduledOptionPriceAction,
   cancelScheduledPriceAction,
@@ -219,7 +221,7 @@ function Panel({
       ))}
 
       {canPrice && (
-        <form action={setPriceAction} className="space-y-3">
+        <CheckedForm rules={MENU_PRICE_RULES} action={setPriceAction} className="space-y-3">
           {hidden}
           <FormGrid>
             {channel === 'online' && (
@@ -232,27 +234,27 @@ function Panel({
               </Field>
             )}
             {itemType !== 'refill' && (
-              <Field label={channel === 'online' ? 'Fixed price' : 'New price'} className="text-sm">
-                <Input name="amount" inputMode="decimal" className="w-full" />
+              <Field label={channel === 'online' ? 'Fixed price' : 'New price'} className="text-sm" rule={MENU_PRICE_RULES.amount}>
+                <Input {...nativeAttrs(MENU_PRICE_RULES.amount)} className="w-full" />
               </Field>
             )}
             {channel === 'online' && (
               <>
-                <Field label="Percent over" className="text-sm">
-                  <Input name="markupPercent" inputMode="decimal" className="w-full" />
+                <Field label="Percent over" className="text-sm" rule={MENU_PRICE_RULES.markupPercent}>
+                  <Input {...nativeAttrs(MENU_PRICE_RULES.markupPercent)} className="w-full" />
                 </Field>
-                <Field label="Pesos over" className="text-sm">
-                  <Input name="fixedMarkupAmount" inputMode="decimal" className="w-full" />
+                <Field label="Pesos over" className="text-sm" rule={MENU_PRICE_RULES.fixedMarkupAmount}>
+                  <Input {...nativeAttrs(MENU_PRICE_RULES.fixedMarkupAmount)} className="w-full" />
                 </Field>
               </>
             )}
             {itemType === 'package' && channel === 'store' && (
               <>
-                <Field label="Bundle covers (guests)" className="text-sm">
-                  <Input name="bundleHeads" inputMode="numeric" className="w-full" />
+                <Field label="Bundle covers (guests)" className="text-sm" rule={MENU_PRICE_RULES.bundleHeads}>
+                  <Input {...nativeAttrs(MENU_PRICE_RULES.bundleHeads)} className="w-full" />
                 </Field>
-                <Field label="Each extra guest" className="text-sm">
-                  <Input name="extraHeadAmount" inputMode="decimal" className="w-full" />
+                <Field label="Each extra guest" className="text-sm" rule={MENU_PRICE_RULES.extraHeadAmount}>
+                  <Input {...nativeAttrs(MENU_PRICE_RULES.extraHeadAmount)} className="w-full" />
                 </Field>
               </>
             )}
@@ -263,7 +265,7 @@ function Panel({
           <Button type="submit" variant="secondary">
             Save
           </Button>
-        </form>
+        </CheckedForm>
       )}
 
       {canPrice && row && !row.withdrawn && (
@@ -313,13 +315,13 @@ function OptionPrices({ data, storeId, canPrice }: { data: PricesPageData; store
                     </div>
                   ))}
                   {canPrice && (
-                    <form action={setOptionPriceAction} className="space-y-3">
+                    <CheckedForm rules={MENU_OPTION_PRICE_RULES} action={setOptionPriceAction} className="space-y-3">
                       <input type="hidden" name="storeId" value={storeId} />
                       <input type="hidden" name="optionValueId" value={o.id} />
                       <input type="hidden" name="channel" value={ch} />
                       <FormGrid>
-                        <Field label="Price change" className="text-sm">
-                          <Input name="priceDelta" inputMode="decimal" className="w-full" />
+                        <Field label="Price change" className="text-sm" rule={MENU_OPTION_PRICE_RULES.priceDelta}>
+                          <Input {...nativeAttrs(MENU_OPTION_PRICE_RULES.priceDelta)} className="w-full" />
                         </Field>
                         <Field label="From (Manila time, empty = now)" className="text-sm">
                           <Input type="datetime-local" name="effectiveFrom" className="w-full" />
@@ -333,7 +335,7 @@ function OptionPrices({ data, storeId, canPrice }: { data: PricesPageData; store
                           Withdraw
                         </Button>
                       </div>
-                    </form>
+                    </CheckedForm>
                   )}
                 </div>
               );

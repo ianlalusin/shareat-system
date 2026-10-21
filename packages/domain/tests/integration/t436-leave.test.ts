@@ -573,8 +573,8 @@ describe('T-436 case 24 - every transition is audited with who, when, whom, whic
   it('void needs a reason (blank refused, request stays approved); rejecting a non-pending request is LEAVE_NOT_PENDING', async () => {
     const f = await fixture('a24c');
     const r = await record(f, f.mgr);
-    await refusedAny(asOrg(f.orgId, (tx) => voidLeave(tx, f.mgr, { requestId: r.requestId, reason: '   ' } as never)));
-    await refusedAny(asOrg(f.orgId, (tx) => voidLeave(tx, f.mgr, { requestId: r.requestId } as never)));
+    await expect(asOrg(f.orgId, (tx) => voidLeave(tx, f.mgr, { requestId: r.requestId, reason: '   ' } as never))).rejects.toMatchObject({ name: 'RefusalError', userMessage: 'The reason is required.' });
+    await expect(asOrg(f.orgId, (tx) => voidLeave(tx, f.mgr, { requestId: r.requestId } as never))).rejects.toMatchObject({ name: 'RefusalError', userMessage: 'The reason is required.' });
     expect(await statusOf(f, r.requestId)).toBe('approved');
     await refused(
       asOrg(f.orgId, (tx) => rejectLeave(tx, f.mgr, { requestId: r.requestId, reason: 'late' } as never)),

@@ -12,7 +12,8 @@ import { redirectWithFlash } from '@/lib/flash';
 import { authorize } from '@shareat/auth';
 
 import { toBusinessDate } from '@shareat/core/datetime';
-import { deferDiscrepancy, resolveDiscrepancy, type Disposition } from '@shareat/domain';
+import { assertFieldRules, deferDiscrepancy, resolveDiscrepancy, type Disposition } from '@shareat/domain';
+import { COMMISSARY_DEFER_RULES, COMMISSARY_RETURN_RULES } from '@shareat/domain/field-rules';
 import { requireActor } from '../../../lib/session';
 import { errorMessage, outcomeMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from '../../expenses/lib';
@@ -37,6 +38,9 @@ export async function resolveDiscrepancyAction(fd: FormData): Promise<void> {
       if (disposition === 'charge') {
         await authorize(tx, actor, 'charge_staff_for_discrepancy', { storeId });
       }
+      // The branch's recount-and-return form always says "return"; that disposition must carry its note (the decide form's
+      // note is optional, so it is not asserted for the other dispositions).
+      if (disposition === 'return') assertFieldRules(COMMISSARY_RETURN_RULES, fd);
       return resolveDiscrepancy(tx, {
         orgId: actor.orgId,
         discrepancyId: str(fd, 'id'),
@@ -71,6 +75,7 @@ export async function deferDiscrepancyAction(fd: FormData): Promise<void> {
   try {
     result = await withOrgPrincipal(actor.orgId, async (tx) => {
       await authorize(tx, actor, 'resolve_trade_discrepancy', { storeId });
+      assertFieldRules(COMMISSARY_DEFER_RULES, fd);
       return deferDiscrepancy(tx, {
         orgId: actor.orgId,
         discrepancyId: str(fd, 'id'),

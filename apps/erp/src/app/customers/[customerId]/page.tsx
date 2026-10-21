@@ -33,6 +33,14 @@ import {
 import { Page } from '@/components/shell/Page';
 import { withFlash } from '@/lib/flash';
 import { Badge, Button, ConfirmDestructive, FlashBanner, Input, LinkRow, RowAction, RowLink } from '@/components/ui';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import {
+  CHARGE_VOID_RULES,
+  CHARGE_WRITE_OFF_RULES,
+  COLLECTION_VOID_RULES,
+  nativeAttrs,
+  type FieldRule,
+} from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Customer — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -346,42 +354,41 @@ export default async function CustomerDetailPage({
                   <span className="ml-2 text-xs font-normal text-neutral-500">{storeName(c.storeId)}</span>
                 </p>
                 {compare(money(c.outstanding), ZERO) > 0 && canWriteOffAt(c.storeId) && (
-                  <form action={writeOffChargeAction} className="flex flex-wrap items-end gap-2">
+                  <CheckedForm rules={CHARGE_WRITE_OFF_RULES} action={writeOffChargeAction} className="flex flex-wrap items-end gap-2">
                     <input type="hidden" name="customerId" value={customerId} />
                     <input type="hidden" name="storeId" value={storeId} />
                     <input type="hidden" name="chargeId" value={c.chargeId} />
-                    <Field label="Write off" className="min-w-[8rem] flex-1">
+                    <Field label="Write off" className="min-w-[8rem] flex-1" rule={CHARGE_WRITE_OFF_RULES.amount}>
                       <Input
-                        name="amount"
-                        inputMode="decimal"
+                        {...nativeAttrs(CHARGE_WRITE_OFF_RULES.amount)}
                         defaultValue={c.outstanding}
                         className="w-full"
                       />
                     </Field>
-                    <Field label="Why is it uncollectible?" className="min-w-[14rem] flex-[2]">
-                      <Input name="reason" required className="w-full" />
+                    <Field label="Why is it uncollectible?" className="min-w-[14rem] flex-[2]" rule={CHARGE_WRITE_OFF_RULES.reason}>
+                      <Input {...nativeAttrs(CHARGE_WRITE_OFF_RULES.reason)} className="w-full" />
                     </Field>
                     <ConfirmDestructive
                       tier="admin-pin"
                       label="Write off as bad debt"
                       consequence="Writes this charge off to bad debt. An administrator must approve with their own PIN."
                     />
-                  </form>
+                  </CheckedForm>
                 )}
                 {canVoidAt(c.storeId) && (
-                  <form action={voidChargeAction} className="flex flex-wrap items-end gap-2">
+                  <CheckedForm rules={CHARGE_VOID_RULES} action={voidChargeAction} className="flex flex-wrap items-end gap-2">
                     <input type="hidden" name="customerId" value={customerId} />
                     <input type="hidden" name="storeId" value={storeId} />
                     <input type="hidden" name="chargeId" value={c.chargeId} />
-                    <Field label="Void this charge — why?" className="min-w-[14rem] flex-[2]">
-                      <Input name="reason" required className="w-full" />
+                    <Field label="Void this charge — why?" className="min-w-[14rem] flex-[2]" rule={CHARGE_VOID_RULES.reason}>
+                      <Input {...nativeAttrs(CHARGE_VOID_RULES.reason)} className="w-full" />
                     </Field>
                     <ConfirmDestructive
                       tier="admin-pin"
                       label="Void charge"
                       consequence="Voids this charge and reverses its entry. An administrator must approve with their own PIN."
                     />
-                  </form>
+                  </CheckedForm>
                 )}
               </div>
             ))}
@@ -463,23 +470,23 @@ export default async function CustomerDetailPage({
                       {c.status}
                       {c.status === 'posted' && (
                         <RowAction className="mt-1 flex">
-                          <form action={voidCollectionAction} className="flex flex-wrap items-center gap-1">
+                          <CheckedForm rules={COLLECTION_VOID_RULES} action={voidCollectionAction} className="flex flex-wrap items-center gap-1">
                             <input type="hidden" name="customerId" value={customerId} />
                             <input type="hidden" name="storeId" value={storeId} />
                             <input type="hidden" name="collectionId" value={c.collectionId} />
-                            <Input
-                              name="reason"
-                              required
-                              placeholder="why?"
-                              aria-label="Why is this collection being voided?"
-                              className="w-28 text-xs"
-                            />
+                            <Field label={<span className="sr-only">Why is this collection being voided?</span>} rule={COLLECTION_VOID_RULES.reason}>
+                              <Input
+                                {...nativeAttrs(COLLECTION_VOID_RULES.reason)}
+                                placeholder="why?"
+                                className="w-28 text-xs"
+                              />
+                            </Field>
                             <ConfirmDestructive
                               tier="admin-pin"
                               label="Void collection"
                               consequence="Voids this collection and reverses its entry; the charges it settled open again. An administrator must approve with their own PIN."
                             />
-                          </form>
+                          </CheckedForm>
                         </RowAction>
                       )}
                     </td>
@@ -505,19 +512,29 @@ export default async function CustomerDetailPage({
 function Field({
   label,
   hint,
+  rule,
   className,
   children,
 }: {
-  label: string;
+  label: React.ReactNode;
   hint?: string;
+  rule?: FieldRule;
   className?: string;
   children: React.ReactNode;
 }) {
-  return (
-    <label className={`flex flex-col gap-1${className ? ` ${className}` : ''}`}>
+  const body = (
+    <>
       <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
       {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </label>
+    </>
+  );
+  // T-440: a ruled field puts its live helper line OUTSIDE the label, so the line never joins the accessible name.
+  if (!rule) return <label className={`flex flex-col gap-1${className ? ` ${className}` : ''}`}>{body}</label>;
+  return (
+    <div className={className}>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }

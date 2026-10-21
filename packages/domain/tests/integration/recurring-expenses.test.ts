@@ -312,7 +312,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
     const f = await fixture('def272-create');
     await expect(
       createRecurringTemplateAsOrg(f.orgId, f.manager, { ...base(f), defaultAmount: '0.004' }),
-    ).rejects.toThrow(/createRecurringTemplate: the default amount.*"0\.004"/);
+    ).rejects.toMatchObject({"name":"RefusalError","message":"expenses.recurringTemplate.defaultAmount: money check failed","userMessage":"The default amount — \"0.004\" is not a valid amount. Use at most two decimal places."});
   });
 
   it('an ordinary template still works, and the exact value is stored', async () => {
@@ -327,6 +327,33 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
     const { id } = await createRecurringTemplateAsOrg(f.orgId, f.manager, base(f));
     await expect(
       updateRecurringTemplateAsOrg(f.orgId, f.manager, { templateId: id, defaultAmount: '0.004' }),
-    ).rejects.toThrow(/updateRecurringTemplate: the default amount.*"0\.004"/);
+    ).rejects.toMatchObject({"name":"RefusalError","message":"expenses.recurringTemplate.defaultAmount: money check failed","userMessage":"The default amount — \"0.004\" is not a valid amount. Use at most two decimal places."});
+  });
+});
+
+// T-440: domain edits are patches; supplied blanks still reach the corresponding rule.
+describe('T440 recurring patch presence', () => {
+  it('omitted fields stay stored, while an explicit blank is refused before the row changes', async () => {
+    const { checkField, RECURRING_TEMPLATE_RULES } = await import('../../src/field-rules');
+    const f = await fixture('t440patch');
+    const { id } = await createRecurringTemplateAsOrg(f.orgId, f.manager, base(f));
+    const before = await asOrg(f.orgId, (tx) => recurringExpensesRepo.getById(tx, f.orgId, id));
+    for (const key of ['name', 'supplierId', 'categoryId', 'defaultAmount', 'anchorDay'] as const) {
+      const wanted = checkField(RECURRING_TEMPLATE_RULES[key], '');
+      if (wanted.ok) throw new Error('The patch control must be required.');
+      let refusal: { userMessage?: string } | undefined;
+      try { await updateRecurringTemplateAsOrg(f.orgId, f.manager, { templateId: id, [key]: '' }); }
+      catch (err) { refusal = err as typeof refusal; }
+      expect(refusal?.userMessage, key).toBe(wanted.requirement);
+      expect(await asOrg(f.orgId, (tx) => recurringExpensesRepo.getById(tx, f.orgId, id)), key).toEqual(before);
+    }
+    await updateRecurringTemplateAsOrg(f.orgId, f.manager, { templateId: id, name: 'Corrected rent' });
+    const after = await asOrg(f.orgId, (tx) => recurringExpensesRepo.getById(tx, f.orgId, id));
+    expect(after?.name).toBe('Corrected rent');
+    expect(after?.supplierId).toBe(before?.supplierId);
+    expect(after?.categoryId).toBe(before?.categoryId);
+    expect(after?.defaultAmount).toBe(before?.defaultAmount);
+    expect(after?.anchorDay).toBe(before?.anchorDay);
+    expect(after?.nextDueDate).toBe(before?.nextDueDate);
   });
 });

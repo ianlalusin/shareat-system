@@ -33,6 +33,8 @@ vi.mock('@/lib/constraint-messages', async () => await import('../../src/lib/con
 
 import { setThresholdAction } from '../../src/app/inventory/low-stock/actions';
 import { urlOf } from '../helpers/flash-jar';
+import { INVENTORY_THRESHOLD_RULES } from '@shareat/domain/field-rules';
+import { expectRuleSentence } from '../helpers/rule-sentence';
 import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
 const sql = postgres(url, { max: 3 });
@@ -78,7 +80,8 @@ describe('setThresholdAction — refusal is a redirect with ?error=, not an unca
     expect(to, 'the action threw instead of redirecting').not.toBeNull();
     expect(to!.pathname).toBe('/inventory/low-stock');
     expect(to!.searchParams.get('store')).toBe(f.storeId);
-    expect(to!.searchParams.get('error')).toBe('Low-stock threshold — "abc" is not a valid quantity. Use at most three decimal places.');
+    // T-440: the sentence is the rule's requirement (never the typed value).
+    expectRuleSentence(to!.searchParams.get('error'), INVENTORY_THRESHOLD_RULES.threshold, 'abc');
     expect(await rows(f.orgId)).toBe(0);
 
     const ok = await redirectOf(() => setThresholdAction(fd({ storeId: f.storeId, itemId: f.itemId, threshold: '5' })));

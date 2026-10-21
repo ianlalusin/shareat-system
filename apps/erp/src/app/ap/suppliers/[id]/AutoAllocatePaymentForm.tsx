@@ -84,6 +84,8 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import { compare, money, ZERO } from '@shareat/core/money';
 import type { AutoAllocateRequest, AutoAllocateResponse } from '../../actions';
 import { Button, Input, Select } from '@/components/ui';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import { SUPPLIER_PAYMENT_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 
 export interface PayableItem {
   expenseId: string;
@@ -116,18 +118,27 @@ function peso(v: string): string {
     : v;
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
+function Field({ label, hint, rule, children }: { label: string; hint?: string; rule?: FieldRule; children: React.ReactNode }) {
+  const body = (
+    <>
       <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
       {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </label>
+    </>
+  );
+  // T-440: a ruled field puts its live helper line OUTSIDE the label, so the line never joins the accessible name.
+  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
+  return (
+    <div>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }
 
 export function AutoAllocatePaymentForm({
-  postAction,
+  // T-440: the prop is the page's `recordPaymentAction`; it keeps that name here so the form's server action is the one the guard traces.
+  postAction: recordPaymentAction,
   previewAction,
   supplierId,
   storeId,
@@ -267,7 +278,7 @@ export function AutoAllocatePaymentForm({
   }
 
   return (
-    <form action={postAction} className="space-y-3">
+    <CheckedForm rules={SUPPLIER_PAYMENT_RULES} action={recordPaymentAction} className="space-y-3">
       <input type="hidden" name="supplierId" value={supplierId} />
       <input type="hidden" name="storeId" value={storeId} />
       <div className="space-y-1">
@@ -326,19 +337,17 @@ export function AutoAllocatePaymentForm({
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        <Field label="Total handed over">
+        <Field label="Total handed over" rule={SUPPLIER_PAYMENT_RULES.amount}>
           <Input
-            name="amount"
-            required
-            inputMode="decimal"
+            {...nativeAttrs(SUPPLIER_PAYMENT_RULES.amount)}
             placeholder="0.00"
             value={totalAmount}
             onChange={(e) => setTotal(e.target.value)}
             className="w-full"
           />
         </Field>
-        <Field label="Pay from" hint={hasUnroutedFloat ? 'A cash request at this store has no staff cash account yet; it can be spent on a new expense.' : undefined}>
-          <Select name="source" required defaultValue="" className="w-full">
+        <Field label="Pay from" hint={hasUnroutedFloat ? 'A cash request at this store has no staff cash account yet; it can be spent on a new expense.' : undefined} rule={SUPPLIER_PAYMENT_RULES.source}>
+          <Select {...nativeAttrs(SUPPLIER_PAYMENT_RULES.source)} defaultValue="" className="w-full">
             <option value="" disabled>Choose…</option>
             {/* T-432 ruling 2: staff cash is reached only through a request. */}
             {wallets
@@ -353,8 +362,8 @@ export function AutoAllocatePaymentForm({
             ))}
           </Select>
         </Field>
-        <Field label="Date">
-          <Input type="date" name="businessDate" required defaultValue={today} className="w-full" />
+        <Field label="Date" rule={SUPPLIER_PAYMENT_RULES.businessDate}>
+          <Input type="date" {...nativeAttrs(SUPPLIER_PAYMENT_RULES.businessDate)} defaultValue={today} className="w-full" />
         </Field>
       </div>
       <Field label="Reference no." hint="Optional.">
@@ -363,6 +372,6 @@ export function AutoAllocatePaymentForm({
       <Button type="submit" variant="primary">
         Record payment
       </Button>
-    </form>
+    </CheckedForm>
   );
 }

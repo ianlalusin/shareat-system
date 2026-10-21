@@ -11,12 +11,13 @@
  * what makes `void_statutory_discount` being a different capability from `record_statutory_discount`
  * mean anything at all.
  */
-import { recordStatutoryDiscount, voidStatutoryDiscount } from '@shareat/domain';
+import { assertFieldRules, recordStatutoryDiscount, voidStatutoryDiscount } from '@shareat/domain';
+import { STATUTORY_DISCOUNT_RECORD_RULES, STATUTORY_DISCOUNT_VOID_RULES } from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from '../expenses/lib';
 import { requireActor } from '../../lib/session';
 import { redirectWithFlash, type Nav } from '@/lib/flash';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
-import { verifyAdminApproval } from '@shareat/auth';
+import { can, verifyAdminApproval } from '@shareat/auth';
 import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
@@ -61,8 +62,11 @@ export async function recordStatutoryDiscountAction(formData: FormData): Promise
   const kind = str(formData, 'kind');
 
   try {
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      recordStatutoryDiscount(tx, actor, {
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 / S9 pattern iii: the rule stays in the action because the domain input is lossy (a blank discount kind arrives
+      // as 'senior'); judged only once the actor holds the gate - capability copied from recordStatutoryDiscount's first authorize().
+      if (await can(tx, actor, 'record_statutory_discount', { storeId })) assertFieldRules(STATUTORY_DISCOUNT_RECORD_RULES, formData);
+      return recordStatutoryDiscount(tx, actor, {
         storeId,
         businessDate: str(formData, 'businessDate'),
         invoiceNumber: str(formData, 'invoiceNumber'),
@@ -74,8 +78,8 @@ export async function recordStatutoryDiscountAction(formData: FormData): Promise
         discountAmount: str(formData, 'discountAmount'),
         signatory: str(formData, 'signatory') || null,
         notes: str(formData, 'notes') || null,
-      }),
-    );
+      });
+    });
   } catch (err) {
     return await redirectWithFlash('/statutory-discounts', navOf(formData), { error: errorMessage(err) });
   }
@@ -89,6 +93,7 @@ export async function voidStatutoryDiscountAction(formData: FormData): Promise<v
     const discountId = str(formData, 'id');
     const target = await loadDestructiveTarget(actor, 'statutory_discount', discountId, ['void_statutory_discount']);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'void_statutory_discount' });
+    assertFieldRules(STATUTORY_DISCOUNT_VOID_RULES, formData);
     await withOrgPrincipal(actor.orgId, async (tx) => {
       await voidStatutoryDiscount(tx, actor, { id: discountId, reason: str(formData, 'voidReason') });
       await recordApproval(tx, actor, approval, { capability: 'void_statutory_discount', entityType: 'statutory_discount', entityId: discountId, storeId: target.storeId });

@@ -13,6 +13,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) throw new Error('Refusing to run agai
 
 import { closeDb } from '@shareat/db';
 import { createLoan } from '@shareat/domain';
+import { LOAN_ADD_RULES } from '@shareat/domain/field-rules';
 import { NAN_INPUTS, asOrg, bootstrap, count, expectPlainRefusal, refusalOf, uid } from './_fixtures/t371-nan';
 
 const sql = postgres(url, { max: 5 });
@@ -33,7 +34,7 @@ describe.each([['interestRate', /interest|rate/i], ['principalAmount', /principa
       const k = await bootstrap(sql, `ln-${field}-${typed}`);
       const before = await count(sql, 'loans', k.orgId);
       const got = await refusalOf(asOrg(k.orgId, (tx) => createLoan(tx, k.admin, loan(k, { [field]: typed }) as never)));
-      expectPlainRefusal(got, typed, label, `createLoan.${field}`);
+      expectPlainRefusal(got, typed, label, `createLoan.${field}`, LOAN_ADD_RULES[field]);
       expect(await count(sql, 'loans', k.orgId), 'a refused loan wrote a row').toBe(before);
       const ok = await refusalOf(asOrg(k.orgId, (tx) => createLoan(tx, k.admin, loan(k) as never)));
       expect(ok.text, `the control was refused: ${ok.text}`).toBeNull();

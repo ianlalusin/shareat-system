@@ -2,6 +2,8 @@ import { compare, money, ZERO } from '@shareat/core/money';
 import { requirePageAccess } from '../../lib/page-access';
 import { distributeAction } from './actions';
 import { floatBalance, listStores, moneyAccounts, peso, today } from './lib';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import { SERVICE_CHARGE_DISTRIBUTE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -101,18 +103,16 @@ export default async function ServiceChargePage({
           </p>
         </div>
         {hasFloat && (
-          <form action={distributeAction} className="space-y-3">
+          <CheckedForm rules={SERVICE_CHARGE_DISTRIBUTE_RULES} action={distributeAction} className="space-y-3">
             <input type="hidden" name="storeId" value={storeId} />
-            <Field label="Amount" hint={`Up to ${peso(balance)} available.`}>
+            <Field label="Amount" hint={`Up to ${peso(balance)} available.`} rule={SERVICE_CHARGE_DISTRIBUTE_RULES.amount}>
               <input
-                name="amount"
-                required
-                inputMode="decimal"
+                {...nativeAttrs(SERVICE_CHARGE_DISTRIBUTE_RULES.amount)}
                 className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink"
               />
             </Field>
-            <Field label="From" hint="Balances shown are derived from the ledger.">
-              <Select name="moneyAccountId" required defaultValue="" className="w-full">
+            <Field label="From" hint="Balances shown are derived from the ledger." rule={SERVICE_CHARGE_DISTRIBUTE_RULES.moneyAccountId}>
+              <Select {...nativeAttrs(SERVICE_CHARGE_DISTRIBUTE_RULES.moneyAccountId)} defaultValue="" className="w-full">
                 <option value="" disabled>
                   Choose…
                 </option>
@@ -123,31 +123,31 @@ export default async function ServiceChargePage({
                 ))}
               </Select>
             </Field>
-            <Field label="Payday">
-              <Input name="paidOn" type="date" required defaultValue={today()} className="w-full" />
+            <Field label="Payday" rule={SERVICE_CHARGE_DISTRIBUTE_RULES.paidOn}>
+              <Input {...nativeAttrs(SERVICE_CHARGE_DISTRIBUTE_RULES.paidOn)} type="date" defaultValue={today()} className="w-full" />
             </Field>
             <SubmitButton pendingLabel="Saving…">Distribute</SubmitButton>
-          </form>
+          </CheckedForm>
         )}
       </section>
     </Page>
   );
 }
 
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
+function Field({ label, hint, rule, className, children }: { label: React.ReactNode; hint?: string; rule?: FieldRule; className?: string; children: React.ReactNode }) {
+  const body = (
+    <>      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
       {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </label>
+    
+    </>
+  );
+  // T-440: a ruled field keeps its label and puts the live helper line OUTSIDE it (never part of the accessible name).
+  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
+  return (
+    <div className={className}>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }

@@ -14,6 +14,8 @@ import { menuRepo, type Tx } from '@shareat/db';
 import { gone, refuse } from '../shared/refusal';
 import { createMenuItem } from './catalog';
 import { audit, inTx, requireName } from './shared';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { MENU_REQUEST_REJECT_RULES } from '../field-rules/menu';
 
 export interface PossibleDuplicate {
   readonly id: string;
@@ -113,6 +115,7 @@ export async function markMenuItemRequestDuplicate(actor: Actor, input: { id: st
 export async function rejectMenuItemRequest(actor: Actor, input: { id: string; note: string }, tx?: Tx): Promise<{ id: string }> {
   return inTx(tx, async (trx) => {
     await authorize(trx, actor, 'add_menu_item', {});
+    assertFieldRules(MENU_REQUEST_REJECT_RULES, { note: input.note });
     const note = typeof input.note === 'string' ? input.note.trim() : '';
     if (!note) throw refuse('rejectMenuItemRequest: a reason is required.', 'Say why the request is rejected, so the requester knows.');
     const row = await openRequest(trx, actor, input.id, 'rejectMenuItemRequest');

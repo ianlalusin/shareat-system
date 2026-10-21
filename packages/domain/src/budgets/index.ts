@@ -17,6 +17,8 @@ import { authorize, type Actor } from '@shareat/auth';
 import { compare, ZERO } from '@shareat/core/money';
 import { parseDecimalInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { BUDGET_CAP_RULES } from '../field-rules/budgets';
 
 export interface SetBudgetInput {
   storeId: string;
@@ -42,6 +44,8 @@ export async function setExpenseBudget(
 ): Promise<{ id: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_expense_budgets', { storeId: input.storeId });
+    // T-440 S9 (ii): the screen's own rule, only once the gate has passed.
+    assertFieldRules(BUDGET_CAP_RULES, { amount: input.amount });
 
     if (!/^\d{6}$/.test(input.periodKey)) {
       throw new Error(`setExpenseBudget: '${input.periodKey}' is not a YYYYMM period.`);

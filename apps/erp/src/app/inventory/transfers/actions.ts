@@ -9,7 +9,9 @@
  * statement, not repeated here.
  */
 import { revalidatePath } from 'next/cache';
+import { INVENTORY_TRANSFER_RULES, INVENTORY_TRANSFER_VOID_RULES } from '@shareat/domain/field-rules';
 import {
+  assertFieldRules,
   dispatch,
   receiveTransfer,
   saveDraft,
@@ -18,7 +20,7 @@ import {
 } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
-import { verifyAdminApproval } from '@shareat/auth';
+import { can, verifyAdminApproval } from '@shareat/auth';
 import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 import { redirectWithFlash } from '@/lib/flash';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -48,9 +50,12 @@ export async function createTransferAction(fd: FormData): Promise<void> {
     actor,
   };
 
-  const result = await withOrgPrincipal(actor.orgId, (tx) =>
-    mode === 'two_step' ? saveDraft(tx, input) : transferNow(tx, input),
-  );
+  const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+    // T-440 S9 (iii): the field check runs only for a caller `transferNow`/`saveDraft`'s first authorize() would let in
+    // ('transfer_stock' at this store); anyone else is refused by that gate before any field sentence.
+    if (await can(tx, actor, 'transfer_stock', { storeId })) assertFieldRules(INVENTORY_TRANSFER_RULES, fd);
+    return mode === 'two_step' ? saveDraft(tx, input) : transferNow(tx, input);
+  });
   if (!result.ok) throw new Error(result.reason);
 
   revalidatePath('/inventory/transfers');
@@ -79,6 +84,7 @@ export async function voidTransferAction(fd: FormData): Promise<void> {
   try {
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const target = await loadDestructiveTarget(actor, 'stock_transfer', transferId, ['void_transfer']);
+    assertFieldRules(INVENTORY_TRANSFER_VOID_RULES, fd);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'void_transfer' });
     const result = await withOrgPrincipal(actor.orgId, async (tx) => {
       const voided = await voidTransfer(tx, actor, transferId, reason);

@@ -13,9 +13,11 @@ import {
   reviewCount,
 } from './lib';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import { PREPAID_ADD_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Banner, FlashBanner, Input, LinkRow, RowLink, Select, statusTone , FormGrid, FormSection} from '@/components/ui';
+import { Badge, Banner, FlashBanner, Input, LinkRow, RowLink, Select, statusTone , FormGrid, FormSection, type FieldProps } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Prepaid expenses — Shareat System' };
@@ -178,18 +180,18 @@ export default async function PrepaidPage({
           </p>
         </div>
 
-        <form action={createPrepaidItemAction} className="space-y-4">
+        <CheckedForm rules={PREPAID_ADD_RULES} action={createPrepaidItemAction} className="space-y-4">
           <>
             <FormSection title="Prepaid item">
               <FormGrid layout="fields">
                 <div className="min-w-0 erp-field-name">
-                  <Field label="Name" hint="What it is, as somebody would say it out loud">
-                    <Input name="name" required maxLength={120} placeholder="Fire insurance 2026" className="w-full" />
+                  <Field rule={PREPAID_ADD_RULES.name} label="Name" hint="What it is, as somebody would say it out loud">
+                    <Input {...nativeAttrs(PREPAID_ADD_RULES.name)}    placeholder="Fire insurance 2026" className="w-full" />
                   </Field>
                 </div>
                 <div className="min-w-0">
-                  <Field label="Store">
-                    <Select name="storeId" required defaultValue="" className="w-full">
+                  <Field rule={PREPAID_ADD_RULES.storeId} label="Store">
+                    <Select {...nativeAttrs(PREPAID_ADD_RULES.storeId)}   defaultValue="" className="w-full">
                       <option value="">Choose a store…</option>
                       {stores.map((s) => (
                         <option key={s.id} value={s.id}>
@@ -215,30 +217,30 @@ export default async function PrepaidPage({
             <FormSection title="Coverage and cost">
               <FormGrid layout="fields">
                 <div className="min-w-0">
-                  <Field label="Total cost">
-                    <input
-                      name="totalCost"
-                      required
-                      inputMode="decimal"
+                  <Field rule={PREPAID_ADD_RULES.totalCost} label="Total cost">
+                    <input {...nativeAttrs(PREPAID_ADD_RULES.totalCost)}
+
+
+
                       placeholder="0.00"
                       className={INPUT}
                     />
                   </Field>
                 </div>
                 <div className="min-w-0 erp-field-date">
-                  <Field label="Coverage starts" hint="The first month the cover actually applies to">
-                    <Input name="coverageStartDate" type="date" required className="w-full" />
+                  <Field rule={PREPAID_ADD_RULES.coverageStartDate} label="Coverage starts" hint="The first month the cover actually applies to">
+                    <Input {...nativeAttrs(PREPAID_ADD_RULES.coverageStartDate)}  type="date"  className="w-full" />
                   </Field>
                 </div>
                 <div className="min-w-0 erp-field-short">
-                  <Field
+                  <Field rule={PREPAID_ADD_RULES.coverageMonths}
                     label="Coverage months"
                     hint="The CONTRACT's term — read it off the document, don't estimate"
                   >
-                    <input
-                      name="coverageMonths"
-                      inputMode="numeric"
-                      required
+                    <input {...nativeAttrs(PREPAID_ADD_RULES.coverageMonths)}
+
+
+
                       defaultValue={12}
                       className={INPUT}
                     />
@@ -260,7 +262,7 @@ export default async function PrepaidPage({
           </p>
 
           <SubmitButton pendingLabel="Recording…">Record prepaid item</SubmitButton>
-        </form>
+        </CheckedForm>
       </section>
     </Page>
   );
@@ -270,20 +272,9 @@ export default async function PrepaidPage({
 const INPUT =
   'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
 
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
-      {children}
-      {hint && <span className="text-xs text-neutral-400 dark:text-neutral-600">{hint}</span>}
-    </label>
-  );
+function Field({ width, label, hint, rule, children }: FieldProps) {
+  const body = <><span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>{children}{hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}</>;
+  const sizing = width ? ` erp-field-${width}` : '';
+  if (!rule) return <label className={`flex min-w-0 flex-col gap-1${sizing}`}>{body}</label>;
+  return <div className={`min-w-0${sizing}`}><label className="flex min-w-0 flex-col gap-1">{body}</label><FieldCheck rule={rule} /></div>;
 }

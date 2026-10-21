@@ -62,6 +62,8 @@ import { createSupplier, recordInvoice, verifyInvoice } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../../packages/db/seed/expense-categories';
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
+import { SUPPLIER_INVOICE_LOG_RULES } from '@shareat/domain/field-rules';
+import { expectRuleSentence } from '../helpers/rule-sentence';
 import { paramsOf } from '../helpers/flash-jar';
 import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
@@ -269,11 +271,11 @@ describe('W2 (control) — a blank fee changes nothing', () => {
 });
 
 describe('W3 — fee refusals come back in words', () => {
-  it("deliveryFee -5 -> \"The delivery fee can't be less than zero.\"; fees above the total -> the feesTooBig sentence; neither writes a bill", async () => {
+  it("deliveryFee -5 -> the rule's sentence; fees above the total -> the feesTooBig sentence; neither writes a bill", async () => {
     const f = await fixture('w3');
     const s = await supplier(f, 'w3');
     const neg = await logBill(f, s, { totalAmount: '1000.00', deliveryFee: '-5' });
-    expect(errorOf(neg.to) ?? `no error: ${neg.to}`).toBe("The delivery fee can't be less than zero.");
+    expectRuleSentence(errorOf(neg.to) ?? `no error: ${neg.to}`, SUPPLIER_INVOICE_LOG_RULES.deliveryFee, '-5');
     const big = await logBill(f, s, { totalAmount: '1000.00', deliveryFee: '800.00', otherFees: '300.00' });
     expect(errorOf(big.to) ?? `no error: ${big.to}`).toBe("The delivery and other fees can't be more than the invoice total.");
     expect(await billCount(f.orgId), 'a refused fee wrote a bill').toBe(0);

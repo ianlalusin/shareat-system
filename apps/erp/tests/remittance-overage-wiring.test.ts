@@ -71,7 +71,7 @@
  *     break, because the field's absence elsewhere is otherwise indistinguishable from a body that
  *     correctly ignores it.
  */
-import { readFileSync } from 'node:fs';
+import { readControlSource } from './helpers/control-source';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -81,8 +81,8 @@ import { parseMoneyInput } from '@shareat/domain/money-input';
 const here = dirname(fileURLToPath(import.meta.url));
 const pagePath = resolve(here, '..', 'src', 'app', 'remittance', 'page.tsx');
 const actionsPath = resolve(here, '..', 'src', 'app', 'remittance', 'actions.ts');
-const pageSource = readFileSync(pagePath, 'utf8');
-const actionsSource = readFileSync(actionsPath, 'utf8');
+const pageSource = readControlSource(pagePath, 'utf8');
+const actionsSource = readControlSource(actionsPath, 'utf8');
 
 /**
  * From just after an opening '(' at `openIdx`, scans to its matching ')', skipping characters

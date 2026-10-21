@@ -58,6 +58,7 @@ const voidSalesDay = vi.fn<(...args: unknown[]) => Promise<never>>(async () => {
 });
 
 vi.mock('@shareat/domain', () => ({
+  assertFieldRules: () => ({}),
   createSalesDay: vi.fn(),
   submitSalesDay: vi.fn(),
   verifySalesDay: vi.fn(),

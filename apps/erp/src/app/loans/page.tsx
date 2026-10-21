@@ -1,3 +1,5 @@
+import { LOAN_ADD_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
+import { CheckedForm, FieldCheck } from '@/components/forms';
 import { INTEREST_METHODS, PAYMENT_FREQUENCIES, RATE_PERIODS } from '@shareat/db';
 import { requirePageAccess } from '../../lib/page-access';
 import { createLoanAction } from './actions';
@@ -5,7 +7,7 @@ import { METHOD_LABEL, listRegister, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Button, FlashBanner, Input, LinkRow, RowLink, Select , FormGrid, FormSection} from '@/components/ui';
+import { Badge, Button, FlashBanner, Input, LinkRow, RowLink, Select , FormGrid, FormSection, type FieldProps } from '@/components/ui';
 
 export const metadata = { title: 'Loans — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -117,23 +119,23 @@ export default async function LoansPage({
           </p>
         </div>
 
-        <form action={createLoanAction} className="space-y-4">
+        <CheckedForm rules={LOAN_ADD_RULES} action={createLoanAction} className="space-y-4">
           <>
             <FormSection title="Loan and lender">
               <FormGrid layout="fields">
                 <div className="min-w-0 erp-field-name">
-                  <Field label="What it is called">
-                    <Input name="name" required maxLength={120} placeholder="Grab cash advance" className="w-full" />
+                  <Field rule={LOAN_ADD_RULES.name} label="What it is called">
+                    <Input {...nativeAttrs(LOAN_ADD_RULES.name)}    placeholder="Grab cash advance" className="w-full" />
                   </Field>
                 </div>
                 <div className="min-w-0 erp-field-name">
-                  <Field label="Lender">
-                    <Input name="lenderName" required maxLength={120} placeholder="Grab" className="w-full" />
+                  <Field rule={LOAN_ADD_RULES.lenderName} label="Lender">
+                    <Input {...nativeAttrs(LOAN_ADD_RULES.lenderName)}    placeholder="Grab" className="w-full" />
                   </Field>
                 </div>
                 <div className="min-w-0">
-                  <Field label="Store">
-                    <Select name="storeId" required defaultValue="" className="w-full">
+                  <Field rule={LOAN_ADD_RULES.storeId} label="Store">
+                    <Select {...nativeAttrs(LOAN_ADD_RULES.storeId)}   defaultValue="" className="w-full">
                       <option value="">Choose a store…</option>
                       {stores.map((s) => (
                         <option key={s.id} value={s.id}>
@@ -144,11 +146,11 @@ export default async function LoansPage({
                   </Field>
                 </div>
                 <div className="min-w-0">
-                  <Field label="Amount agreed">
-                    <input
-                      name="principalAmount"
-                      required
-                      inputMode="decimal"
+                  <Field rule={LOAN_ADD_RULES.principalAmount} label="Amount agreed">
+                    <input {...nativeAttrs(LOAN_ADD_RULES.principalAmount)}
+
+
+
                       placeholder="0.00"
                       className={INPUT}
                     />
@@ -159,11 +161,11 @@ export default async function LoansPage({
             <FormSection title="Interest">
               <FormGrid layout="fields">
                 <div className="min-w-0">
-                  <Field label="Interest rate (%)">
-                    <input
-                      name="interestRate"
-                      required
-                      inputMode="decimal"
+                  <Field rule={LOAN_ADD_RULES.interestRate} label="Interest rate (%)">
+                    <input {...nativeAttrs(LOAN_ADD_RULES.interestRate)} inputMode="decimal"
+
+
+
                       className={INPUT}
                     />
                   </Field>
@@ -172,8 +174,8 @@ export default async function LoansPage({
                 MONTHLY on new ones, with nothing on the row to tell them apart — so the same "2"
                 described two very different debts. */}
                 <div className="min-w-0 erp-field-code">
-                  <Field label="…per" hint="A month is 30 days and a year is 365. Say which.">
-                    <Select name="ratePeriod" required defaultValue="" className="w-full">
+                  <Field rule={LOAN_ADD_RULES.ratePeriod} label="…per" hint="A month is 30 days and a year is 365. Say which.">
+                    <Select {...nativeAttrs(LOAN_ADD_RULES.ratePeriod)}   defaultValue="" className="w-full">
                       <option value="">Choose…</option>
                       {RATE_PERIODS.map((p) => (
                         <option key={p} value={p}>
@@ -210,13 +212,13 @@ export default async function LoansPage({
                   </Field>
                 </div>
                 <div className="min-w-0 erp-field-short">
-                  <Field label="Number of payments">
-                    <input name="termPeriods" inputMode="numeric" required defaultValue={12} className={INPUT} />
+                  <Field rule={LOAN_ADD_RULES.termPeriods} label="Number of payments">
+                    <input {...nativeAttrs(LOAN_ADD_RULES.termPeriods)}    defaultValue={12} className={INPUT} />
                   </Field>
                 </div>
                 <div className="min-w-0 erp-field-date">
-                  <Field label="Starts">
-                    <Input name="startDate" type="date" required defaultValue={today()} className="w-full" />
+                  <Field rule={LOAN_ADD_RULES.startDate} label="Starts">
+                    <Input {...nativeAttrs(LOAN_ADD_RULES.startDate)}  type="date"  defaultValue={today()} className="w-full" />
                   </Field>
                 </div>
               </FormGrid>
@@ -229,7 +231,7 @@ export default async function LoansPage({
           <Button type="submit" variant="primary">
             Record loan
           </Button>
-        </form>
+        </CheckedForm>
       </section>
     </Page>
   );
@@ -238,20 +240,9 @@ export default async function LoansPage({
 const INPUT =
   'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
 
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
-      {children}
-      {hint && <span className="text-xs text-neutral-400 dark:text-neutral-600">{hint}</span>}
-    </label>
-  );
+function Field({ width, label, hint, rule, children }: FieldProps) {
+  const body = <><span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>{children}{hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}</>;
+  const sizing = width ? ` erp-field-${width}` : '';
+  if (!rule) return <label className={`flex min-w-0 flex-col gap-1${sizing}`}>{body}</label>;
+  return <div className={`min-w-0${sizing}`}><label className="flex min-w-0 flex-col gap-1">{body}</label><FieldCheck rule={rule} /></div>;
 }

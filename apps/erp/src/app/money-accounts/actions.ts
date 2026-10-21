@@ -31,7 +31,6 @@ export async function createMoneyAccountAction(formData: FormData): Promise<void
 
   try {
     const storeId = str(formData, 'storeId');
-    if (!storeId) throw new Error('Choose a store — money always sits somewhere.');
 
     await withOrgPrincipal(actor.orgId, (tx) =>
       createMoneyAccount(tx, actor, {

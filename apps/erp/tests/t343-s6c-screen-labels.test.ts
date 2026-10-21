@@ -330,7 +330,16 @@ describe('I1 — items list: meat_slab / meat_sliced show their label; the kind 
     const optionValues = [...selectBlock!.matchAll(/<option[^>]*value="([^"]*)"/g)].map((m) => m[1]!);
     // T-446: concise placeholder, still blank and required: a kind is never silently chosen.
     expect(optionValues).toEqual(['', ...ITEM_KINDS]);
-    const identity = /<div class="erp-form-fields erp-item-identity">([\s\S]*?)<\/div>/.exec(html)?.[1] ?? '';
+    const identityStart = html.indexOf('<div class="erp-form-fields erp-item-identity">');
+    expect(identityStart).toBeGreaterThanOrEqual(0);
+    // FieldCheck adds per-field div wrappers; match the complete identity container, including those descendants.
+    let depth = 0;
+    let identityEnd = identityStart;
+    for (const tag of html.slice(identityStart).matchAll(/<div\b[^>]*>|<\/div>/g)) {
+      depth += tag[0].startsWith('</') ? -1 : 1;
+      if (depth === 0) { identityEnd = identityStart + (tag.index ?? 0) + tag[0].length; break; }
+    }
+    const identity = html.slice(identityStart, identityEnd);
     for (const name of ['name', 'kind', 'baseUnit']) expect(identity).toContain(`name="${name}"`);
     const selling = /<div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">([\s\S]*?)<\/div>/.exec(html)?.[1] ?? '';
     for (const name of ['isPurchasable', 'sellableRetail', 'sellableWholesale']) expect(selling).toContain(`name="${name}"`);

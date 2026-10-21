@@ -18,6 +18,8 @@ import type { CustomerGroup, CustomerTreatment } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { gone, refuse } from '../shared/refusal';
 import { parseMoneyInput } from '../shared/money-input';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { CUSTOMER_RECONCILE_RULES, PRICE_LIST_ADD_RULES, PRICE_SET_RULES } from '../field-rules/customers';
 import { compare, isZero, money, ZERO } from '@shareat/core/money';
 
 export { treatmentOf } from '@shareat/db';
@@ -145,6 +147,8 @@ export async function reconcileCustomer(
 ): Promise<{ balanceAtStamp: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_chart_of_accounts', {});
+    // T-440 / S9: the screen's own rule judges the box(es) AFTER the gate (T-364 order). Moved here from the action.
+    assertFieldRules(CUSTOMER_RECONCILE_RULES, { asOf: input.asOf });
     const customer = await customersRepo.getById(trx, actor.orgId, input.customerId);
     if (!customer) throw gone(`reconcileCustomer: customer ${input.customerId} does not exist.`, 'customer');
 
@@ -181,6 +185,8 @@ export async function createPriceList(
 ): Promise<{ id: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_chart_of_accounts', {});
+    // T-440 / S9: the screen's own rule judges the box(es) AFTER the gate (T-364 order). Moved here from the action.
+    assertFieldRules(PRICE_LIST_ADD_RULES, { name: input.name });
     const name = input.name.trim();
     if (!name) throw refuse('createPriceList: a price list needs a name.', 'A price list needs a name.');
     return customersRepo.insertPriceList(trx, {
@@ -208,6 +214,8 @@ export async function setPrice(
 ): Promise<void> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_chart_of_accounts', {});
+    // T-440 / S9: the screen's own rule judges the box(es) AFTER the gate (T-364 order). Moved here from the action.
+    assertFieldRules(PRICE_SET_RULES, { itemId: input.itemId, rate: input.rate });
     const list = await customersRepo.getPriceList(trx, actor.orgId, input.priceListId);
     if (!list) throw gone(`setPrice: price list ${input.priceListId} does not exist.`, 'price list');
 

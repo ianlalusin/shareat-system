@@ -2,7 +2,6 @@
   "files": [
     "app/reports/sales-rollup/page.tsx",
     "app/reports/store-comparison/page.tsx",
-    "app/setup/page.tsx",
     "components/dashboard/RangeForm.tsx",
     "components/reports/AgingFilters.tsx",
     "components/reports/BalanceSheetFilters.tsx",

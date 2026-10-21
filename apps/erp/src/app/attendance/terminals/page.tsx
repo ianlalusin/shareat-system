@@ -7,7 +7,9 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
+import { ConfirmDestructive, Field, FlashBanner, Input, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { ATTENDANCE_TERMINAL_REVOKE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Clock terminals — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -152,17 +154,19 @@ export default async function TerminalsPage({
                       <td className="px-3 py-2">
                         <div className="flex flex-col items-start gap-2">
                           <RepairButton terminalId={t.id} label={t.label} action={mintTerminalTokenAction} />
-                          <form action={revokeTerminalAction} className="flex flex-wrap items-center gap-2">
+                          <CheckedForm rules={ATTENDANCE_TERMINAL_REVOKE_RULES} action={revokeTerminalAction} className="flex flex-wrap items-center gap-2">
                             <input type="hidden" name="terminalId" value={t.id} />
                             <input type="hidden" name="storeId" value={storeId} />
-                            <Input name="reason" required placeholder="Reason to revoke" />
+                            <Field label="Reason to revoke" rule={ATTENDANCE_TERMINAL_REVOKE_RULES.reason}>
+                              <Input {...nativeAttrs(ATTENDANCE_TERMINAL_REVOKE_RULES.reason)} placeholder="Reason to revoke" />
+                            </Field>
                             <ConfirmDestructive
                               tier="retype"
                               label="Revoke terminal"
                               consequence="Revokes this terminal. It can no longer punch, and it cannot be revived."
                               expectedName={t.label}
                             />
-                          </form>
+                          </CheckedForm>
                         </div>
                       </td>
                     </tr>

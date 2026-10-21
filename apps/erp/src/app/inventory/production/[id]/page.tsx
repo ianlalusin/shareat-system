@@ -6,7 +6,9 @@ import { productionRecordDetail } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, ConfirmDestructive, FlashBanner, Input, statusLabel } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, Field, FlashBanner, Input, statusLabel } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { INVENTORY_PRODUCTION_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Production record — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -84,18 +86,17 @@ export default async function ProductionRecordPage({
           </form>
         )}
         {record.status === 'posted' && (
-          <form action={voidProductionAction} className="flex flex-wrap items-end gap-2 gap-y-2">
+          <CheckedForm rules={INVENTORY_PRODUCTION_VOID_RULES} action={voidProductionAction} className="flex flex-wrap items-end gap-2 gap-y-2">
             <input type="hidden" name="recordId" value={record.id} />
-            <label className="text-sm">
-              <span className="block text-neutral-600 dark:text-neutral-400">Void reason</span>
-              <Input name="reason" required />
-            </label>
+            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Void reason</span>} className="text-sm" rule={INVENTORY_PRODUCTION_VOID_RULES.reason}>
+              <Input {...nativeAttrs(INVENTORY_PRODUCTION_VOID_RULES.reason)} />
+            </Field>
             <ConfirmDestructive
               tier="admin-pin"
               label="Void production"
               consequence="Reverses this production record and restores the stock. An administrator must approve with their own PIN."
             />
-          </form>
+          </CheckedForm>
         )}
       </section>
     </Page>

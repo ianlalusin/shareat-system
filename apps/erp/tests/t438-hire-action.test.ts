@@ -13,6 +13,9 @@ const redirectWithFlash = vi.fn(async (..._a: unknown[]): Promise<never> => {
 const createPerson = vi.fn(async (..._a: unknown[]) => ({ id: 'person-new' }));
 const createEmployment = vi.fn(async (..._a: unknown[]) => ({ id: 'emp-1' }));
 
+// T-440: this wrapper unit harness has no database; real auth-first refusals are covered by PostgreSQL controls.
+vi.mock('@shareat/auth', async (orig) => ({ ...(await orig<object>()), can: vi.fn(async () => true) }));
+
 vi.mock('@/lib/flash', () => ({ redirectWithFlash: (...a: unknown[]) => redirectWithFlash(...a) }));
 vi.mock('../src/lib/session', () => ({ requireActor: vi.fn(async () => ({ orgId: 'org-1', personId: 'p1' })) }));
 vi.mock('../src/app/staff/lib', () => ({

@@ -43,6 +43,20 @@ const server = () => import('../../src/shared/field-rules-assert');
 const refusal = () => import('../../src/shared/refusal');
 const moneyInput = () => import('../../src/shared/money-input');
 
+it('money range checks keep the amount in core money, never Number()', async () => {
+  const source = readFileSync(join(LEAF_DIR, 'check.ts'), 'utf8');
+  const moneyCase = source.slice(source.indexOf("case 'money':"), source.indexOf("case 'date':"));
+  expect(moneyCase).not.toMatch(/\bNumber\s*\(/);
+  const { checkField, defineFieldRules } = await leaf();
+  const set = defineFieldRules('t440.money-boundary', {
+    amount: { label: 'The amount', kind: 'money', min: 0.01, max: 999999999999.98 },
+  });
+  expect(checkField(set.amount, '0.00').ok).toBe(false);
+  expect(checkField(set.amount, '0.01')).toEqual({ ok: true, value: '0.01' });
+  expect(checkField(set.amount, '999999999999.98')).toEqual({ ok: true, value: '999999999999.98' });
+  expect(checkField(set.amount, '999999999999.99').ok).toBe(false);
+});
+
 type Rule = Record<string, unknown> & { name: string; label: string; kind: string; optional?: true };
 type Check = { ok: true; value: string | null } | { ok: false; requirement: string; progress: string };
 
@@ -162,16 +176,16 @@ describe('T-S1-2 money uses parseMoneyInput itself (mutant: Number(x) > 0)', () 
       expected = (e as { userMessage?: string }).userMessage;
     }
     expect(expected, 'parseMoneyInput itself refuses it').toBeTruthy();
-    // Audit (c): the rule refuses exactly what parseMoneyInput refuses, but its words never quote the typed value.
+    // Ian, 20 October: money alone keeps the parser's exact quoted-amount sentence.
     const f = failed(await check(s.amount!, raw));
-    expect(f.requirement).toContain('The amount');
-    expect(f.requirement).not.toContain(raw);
+    expect(f.requirement).toBe(expected);
     expect(f.progress).not.toContain(raw);
   });
-  it.each(['12abc', '1,250.00x', 'SECRET9'])('(c) typing "%s": neither the requirement, the progress nor the live-check summary contains the typed value', async (raw) => {
+  it.each(['12abc', '1,250.00x', 'SECRET9'])('money typing "%s": only the user-facing requirement quotes the amount, never the raw diagnostic or progress', async (raw) => {
     const s = await fixtureSet();
     const f = failed(await check(s.amount!, raw));
-    expect(JSON.stringify([f.requirement, f.progress])).not.toContain(raw);
+    expect(f.requirement).toContain(raw);
+    expect(f.progress).not.toContain(raw);
     const { assertFieldRules } = await server();
     let err: { message: string; userMessage: string } | undefined;
     try {
@@ -180,7 +194,8 @@ describe('T-S1-2 money uses parseMoneyInput itself (mutant: Number(x) > 0)', () 
       err = e as typeof err;
     }
     expect(err?.userMessage).toBe(f.requirement);
-    expect(JSON.stringify([err?.message, err?.userMessage])).not.toContain(raw);
+    expect(err?.message).not.toContain(raw);
+    expect(err?.userMessage).toContain(raw);
   });
   it('"1250.00" passes', async () => {
     const s = await fixtureSet();
@@ -267,10 +282,10 @@ describe('T-S1-7 the leaf is pure (mutant: a leaf importing @shareat/db)', () =>
     return out;
   }
   const ALLOWED = (s: string) =>
-    /^\.\/[A-Za-z0-9_-]+$/.test(s) || s === '../shared/money-input' || s === '@shareat/core/datetime' || s === '@shareat/core/money';
+    /^\.\/[A-Za-z0-9_-]+$/.test(s) || s === '../shared/money-input' || s === '../shared/manual-cost-pattern' || s === '@shareat/core/datetime' || s === '@shareat/core/money' || s === '@shareat/core/sentence';
   const offenders = (source: string) => specifiers(source).filter((s) => !ALLOWED(s));
 
-  it('positive controls: the detector flags db, auth, refusal, the barrel and a deep relative; allows the four legal shapes', () => {
+  it('positive controls: the detector flags db, auth, refusal, the barrel and a deep relative; allows the legal pure leaves/core modules', () => {
     const src = [
       "import { db } from '@shareat/db';",
       "import { a } from '@shareat/auth';",
@@ -280,6 +295,7 @@ describe('T-S1-7 the leaf is pure (mutant: a leaf importing @shareat/db)', () =>
       "const z = require('postgres');",
       "import { ok } from './check';",
       "import { m } from '../shared/money-input';",
+      "import { cost } from '../shared/manual-cost-pattern';",
       "import { d } from '@shareat/core/datetime';",
       "import { u } from '@shareat/core/money';",
     ].join('\n');
@@ -298,6 +314,8 @@ describe('T-S1-7 the leaf is pure (mutant: a leaf importing @shareat/db)', () =>
       for (const s of offenders(readFileSync(join(LEAF_DIR, f), 'utf8'))) bad.push(`${f} imports ${s}`);
     }
     expect(bad).toEqual([]);
+    expect(specifiers(readFileSync(join(SRC, 'shared/manual-cost-pattern.ts'), 'utf8'))).toEqual([]);
+    expect(specifiers(readFileSync(join(ROOT, 'packages/core/src/sentence.ts'), 'utf8'))).toEqual([]);
   });
   it('A9: one file per sweep area exists and index.ts re-exports each (no sweep worker edits index.ts)', () => {
     const AREAS = [
@@ -329,9 +347,30 @@ describe('T-S1-7 the leaf is pure (mutant: a leaf importing @shareat/db)', () =>
 });
 
 describe('T-S1-3 parity: the server throws the very sentence the screen shows (mutant: edit one server sentence)', () => {
+  it('money hints hide pasted identifiers and collapse whitespace exactly as server refusals do', async () => {
+    const { defineFieldRules, checkField } = await leaf();
+    const { assertFieldRules } = await server();
+    const set = defineFieldRules('money-privacy', { amount: { label: 'The amount', kind: 'money' } });
+    for (const [raw, quoted] of [
+      ['a1234567-1234-1234-1234-123456789abc', '[hidden]'],
+      ['1,\n0OO', '1, 0OO'],
+      ['1,0OO', '1,0OO'],
+    ] as const) {
+      const sentence = `The amount — "${quoted}" is not a valid amount. Use at most two decimal places.`;
+      expect(checkField(set.amount, raw)).toEqual({ ok: false, requirement: sentence, progress: 'Enter an amount like 1250.00' });
+      try {
+        assertFieldRules(set, { amount: raw });
+        expect.unreachable('invalid amount must be refused');
+      } catch (e) {
+        expect((e as { userMessage: string }).userMessage).toBe(sentence);
+        expect((e as Error).message).toBe('money-privacy.amount: money check failed');
+      }
+    }
+  });
   const CANDIDATES = [
     '', '   ', 'abc', '!', '-1', '1.5', '0.004', '1e400', '1,250.00', '12', '123', '4815162342x', '99999999999999999999',
     '123456789012345678901234567890', 'x'.repeat(600), '2026-02-30', '1900-01-01', '2999-12-31', 'bad value',
+    'a1234567-1234-1234-1234-123456789abc', '1,\n0OO',
   ];
   /** The rule alone, as a set of one, so the others cannot fail first. */
   async function solo(set: { form: string }, rule: Rule) {
@@ -411,10 +450,10 @@ describe('T-S1-3 parity: the server throws the very sentence the screen shows (m
   });
 });
 
-describe('T-S1-15 no echo (A5): a failing value appears in no sentence, progress or error (mutant: the diagnostic interpolates the value)', () => {
-  // Money is no exception any more (audit c): the rule's words never quote the figure either.
+describe('T-S1-15 no echo (A5): non-money never echoes; money progress and diagnostics never echo', () => {
+  // Ian, 20 October: money requirements may quote the amount; raw diagnostics and progress never do.
   const TOKENS = ['4815162342x', 'SECRETSECRET', 'SECRET-9', 'SECRETDATE'];
-  it('fixture and every exported set: requirement, progress, RefusalError.message and .userMessage never contain the typed value', async () => {
+  it('fixture and every exported set preserve non-money privacy and the money-only requirement exception', async () => {
     const { assertFieldRules } = await server();
     const { defineFieldRules } = await leaf();
     let exercised = 0;
@@ -432,7 +471,7 @@ describe('T-S1-15 no echo (A5): a failing value appears in no sentence, progress
           } catch (e) {
             err = e as { message: string; userMessage: string };
           }
-          const all = JSON.stringify([c.requirement, c.progress, err?.message, err?.userMessage]);
+          const all = JSON.stringify(rule.kind === 'money' ? [c.progress, err?.message] : [c.requirement, c.progress, err?.message, err?.userMessage]);
           expect(all, `${set.form}.${rule.name} leaked ${raw}`).not.toContain(raw);
           exercised += 1;
         }
@@ -458,7 +497,7 @@ describe('pilot rule sets exist with the spec\'s rules (staff government IDs, su
     const name = (await setWithRule('name'))['name']!;
     expect(failed(await check(name, '   ')).progress).toBe('Required');
     expect(await check(name, '  ABC Meat  ')).toEqual({ ok: true, value: 'ABC Meat' });
-    expect(await check(sup.creditTermsDays!, '')).toEqual({ ok: true, value: null });
+    expect(await check(sup.creditTermsDays!, '')).toEqual({ ok: false, requirement: 'Days to pay is required.', progress: 'Required' });
     expect((await check(sup.creditTermsDays!, '365')).ok).toBe(true);
     // audit (b): "-0" is not a number of days; the rule is the ONE definition and the server speaks it.
     for (const bad of ['366', '-1', '-0', '-00', ' -0 ', '+5', '1.5', 'x']) expect((await check(sup.creditTermsDays!, bad)).ok, bad).toBe(false);
@@ -475,5 +514,15 @@ describe('payroll/rates.ts source: the inline digits() helper is deleted and the
     expect(fn).not.toMatch(/const digits\s*=/);
     expect(fn).not.toMatch(/has the wrong shape/);
     expect(fn).not.toMatch(/"\$\{v\}"/);
+  });
+});
+
+describe('T440 existing bound sentences', () => {
+  it('a range-only sentence does not replace the blank or malformed-money sentence', async () => {
+    const { defineFieldRules, checkField } = await leaf();
+    const s = defineFieldRules('range-example', { amount: { kind: 'money', label: 'The amount', min: 0.01, rangeSays: 'The amount has to be greater than zero.' } });
+    expect(checkField(s.amount, '0')).toMatchObject({ ok: false, requirement: 'The amount has to be greater than zero.' });
+    expect(checkField(s.amount, '')).toMatchObject({ ok: false, requirement: "The amount — can't be left blank. Enter an amount." });
+    expect(checkField(s.amount, 'abc')).toMatchObject({ ok: false, requirement: 'The amount — "abc" is not a valid amount. Use at most two decimal places.' });
   });
 });

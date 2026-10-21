@@ -1,3 +1,5 @@
+import { INVENTORY_POS_MAP_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { CheckedForm } from '@/components/forms';
 import Link from 'next/link';
 import { can } from '@shareat/auth';
 import { requireSession } from '../../../lib/session';
@@ -104,19 +106,19 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
       {canEditMap && (
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="text-sm font-medium">New / edit mapping</h2>
-          <form action={upsertPosItemMapAction} className="mt-3 space-y-3">
+          <CheckedForm rules={INVENTORY_POS_MAP_RULES} action={upsertPosItemMapAction} className="mt-3 space-y-3">
             <input type="hidden" name="storeId" value={storeId} />
             <>
               <FormSection title="POS item">
                 <FormGrid layout="fields">
                   <div className="min-w-0 erp-field-code">
-                    <Field label={<span className="text-neutral-600 dark:text-neutral-400">POS item key</span>} className="text-sm">
-                      <Input name="posItemKey" required className="w-full" />
+                    <Field rule={INVENTORY_POS_MAP_RULES.posItemKey} label={<span className="text-neutral-600 dark:text-neutral-400">POS item key</span>} className="text-sm">
+                      <Input {...nativeAttrs(INVENTORY_POS_MAP_RULES.posItemKey)}   className="w-full" />
                     </Field>
                   </div>
                   <div className="min-w-0 erp-field-name">
-                    <Field label={<span className="text-neutral-600 dark:text-neutral-400">POS item name</span>} className="text-sm">
-                      <Input name="posItemName" required className="w-full" />
+                    <Field rule={INVENTORY_POS_MAP_RULES.posItemName} label={<span className="text-neutral-600 dark:text-neutral-400">POS item name</span>} className="text-sm">
+                      <Input {...nativeAttrs(INVENTORY_POS_MAP_RULES.posItemName)}   className="w-full" />
                     </Field>
                   </div>
                 </FormGrid>
@@ -184,7 +186,7 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
             <Button type="submit" variant="primary">
               Save
             </Button>
-          </form>
+          </CheckedForm>
       </section>
       )}
 

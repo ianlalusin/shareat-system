@@ -1,3 +1,10 @@
+import {
+  ATTENDANCE_LEAVE_RECORD_RULES,
+  ATTENDANCE_LEAVE_REQUEST_RULES,
+  ATTENDANCE_LEAVE_VOID_RULES,
+  nativeAttrs,
+} from '@shareat/domain/field-rules';
+import { CheckedForm } from '@/components/forms';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { requireSession } from '../../../lib/session';
 import {
@@ -140,7 +147,7 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
             You have no open job on record, so there is nothing to request leave against.
           </p>
         ) : (
-            <form action={requestLeaveAction} className="space-y-3 rounded border border-surface-border p-4">
+            <CheckedForm rules={ATTENDANCE_LEAVE_REQUEST_RULES} action={requestLeaveAction} className="space-y-3 rounded border border-surface-border p-4">
               <>
                 <FormSection title="Leave request">
                   <FormGrid layout="fields">
@@ -175,13 +182,13 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
                 <FormSection title="Dates and entitlement">
                   <FormGrid layout="fields">
                     <div className="min-w-0 erp-field-date">
-                      <Field label="First day">
-                        <Input name="from" type="date" required className="mt-1 w-full" />
+                      <Field rule={ATTENDANCE_LEAVE_REQUEST_RULES.from} label="First day">
+                        <Input {...nativeAttrs(ATTENDANCE_LEAVE_REQUEST_RULES.from)}  type="date"  className="mt-1 w-full" />
                       </Field>
                     </div>
                     <div className="min-w-0 erp-field-date">
-                      <Field label="Last day" hint="Leave empty for a single day.">
-                        <Input name="to" type="date" className="mt-1 w-full" />
+                      <Field rule={ATTENDANCE_LEAVE_REQUEST_RULES.to} label="Last day" hint="Leave empty for a single day.">
+                        <Input {...nativeAttrs(ATTENDANCE_LEAVE_REQUEST_RULES.to)}  type="date" className="mt-1 w-full" />
                       </Field>
                     </div>
                     <div className="min-w-0 erp-field-short">
@@ -190,8 +197,8 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
                       </Field>
                     </div>
                     <div className="min-w-0 erp-field-date">
-                      <Field label="Date of the birth" hint="Maternity and paternity leave only.">
-                        <Input name="birthDate" type="date" className="mt-1 w-full" />
+                      <Field rule={ATTENDANCE_LEAVE_REQUEST_RULES.birthDate} label="Date of the birth" hint="Maternity and paternity leave only.">
+                        <Input {...nativeAttrs(ATTENDANCE_LEAVE_REQUEST_RULES.birthDate)}  type="date" className="mt-1 w-full" />
                       </Field>
                     </div>
                   </FormGrid>
@@ -209,7 +216,7 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
               <Button type="submit" variant="primary">
                 Request leave
               </Button>
-            </form>
+            </CheckedForm>
         )}
 
         {mine.requests.length > 0 && (
@@ -249,7 +256,7 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
       {isManager && (
         <section className="space-y-4">
           <h2 className="text-lg font-semibold">Decide leave</h2>
-          <form className="flex flex-wrap items-end gap-3">
+          <form method="get" className="flex flex-wrap items-end gap-3">
             <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
               Store
               <Select name="store" defaultValue={storeId} className="w-full">
@@ -340,13 +347,15 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
                       <li key={g.requestId} className="space-y-2 rounded border border-surface-border p-3">
                         <RequestHead group={g} kinds={kinds} />
                         <div className="flex flex-wrap items-end gap-3">
-                          <form action={voidLeaveAction} className="flex flex-wrap items-end gap-2">
+                          <CheckedForm rules={ATTENDANCE_LEAVE_VOID_RULES} action={voidLeaveAction} className="flex flex-wrap items-end gap-2">
                             <input type="hidden" name="requestId" value={g.requestId} />
-                            <Input name="reason" placeholder="Why void it?" required aria-label="Reason to void" />
+                            <Field label="Reason to void" rule={ATTENDANCE_LEAVE_VOID_RULES.reason}>
+                              <Input {...nativeAttrs(ATTENDANCE_LEAVE_VOID_RULES.reason)} placeholder="Why void it?" />
+                            </Field>
                             <Button type="submit" variant="secondary">
                               Void
                             </Button>
-                          </form>
+                          </CheckedForm>
                           <Certificate group={g} />
                         </div>
                       </li>
@@ -355,7 +364,7 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
                 )}
               </div>
 
-              <form action={recordLeaveAction} className="space-y-3 rounded border border-surface-border p-4">
+              <CheckedForm rules={ATTENDANCE_LEAVE_RECORD_RULES} action={recordLeaveAction} className="space-y-3 rounded border border-surface-border p-4">
                 <h3 className="font-medium">Record an absence that already happened</h3>
                 <FormGrid>
                   <Field label="Person">
@@ -377,11 +386,11 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
                       ))}
                     </Select>
                   </Field>
-                  <Field label="First day">
-                    <Input name="from" type="date" required max={today} className="mt-1 w-full" />
+                  <Field label="First day" rule={ATTENDANCE_LEAVE_RECORD_RULES.from}>
+                    <Input type="date" {...nativeAttrs(ATTENDANCE_LEAVE_RECORD_RULES.from)} className="mt-1 w-full" />
                   </Field>
-                  <Field label="Last day" hint="Leave empty for a single day.">
-                    <Input name="to" type="date" max={today} className="mt-1 w-full" />
+                  <Field label="Last day" hint="Leave empty for a single day." rule={ATTENDANCE_LEAVE_RECORD_RULES.to}>
+                    <Input type="date" {...nativeAttrs(ATTENDANCE_LEAVE_RECORD_RULES.to)} className="mt-1 w-full" />
                   </Field>
                   <Field label="Pay">
                     <Select name="pay" defaultValue="" className="mt-1 w-full">
@@ -390,8 +399,8 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
                       <option value="unpaid">Unpaid</option>
                     </Select>
                   </Field>
-                  <Field label="Date of the birth" hint="Maternity and paternity only.">
-                    <Input name="birthDate" type="date" className="mt-1 w-full" />
+                  <Field label="Date of the birth" hint="Maternity and paternity only." rule={ATTENDANCE_LEAVE_RECORD_RULES.birthDate}>
+                    <Input type="date" {...nativeAttrs(ATTENDANCE_LEAVE_RECORD_RULES.birthDate)} className="mt-1 w-full" />
                   </Field>
                   <Field label="Note" hint="Only managers of this store can read it." span="full">
                     <Textarea name="note" rows={2} className="mt-1 w-full" />
@@ -400,7 +409,7 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
                 <Button type="submit" variant="primary">
                   Record absence
                 </Button>
-              </form>
+              </CheckedForm>
             </>
           )}
         </section>

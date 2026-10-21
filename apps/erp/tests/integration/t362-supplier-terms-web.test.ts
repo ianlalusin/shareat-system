@@ -188,7 +188,7 @@ function editFormData(supplier: { id: string; name: string }, overrides: Record<
   return fd;
 }
 
-const TERMS_BLANK = 'Enter how many days of credit this supplier gives (0 to 365), or choose Cash on delivery.';
+const TERMS_BLANK = 'Days to pay is required.';
 // T-440 (row 363): ONE rule; the server refuses with the rule's own sentence, which never quotes the typed value.
 const RULE_SENTENCE = (() => {
   const c = checkField(SUPPLIER_ADD_RULES.creditTermsDays, 'x');
@@ -539,5 +539,52 @@ describe('W13 (render; Amendment A1 §2b) — /ap/suppliers list with a supplier
     const codCount = (html.match(/Cash on delivery/g) ?? []).length;
     expect(codCount, `"Cash on delivery" appeared ${codCount} times — the 0-day row must not be one of them`).toBe(1);
     expect(html).toMatch(/0 days/);
+  });
+});
+
+// =================================================================================================
+// W14-W15 - T-440 S9e part B: "Days to pay" applies only when Payment terms = On credit (spec 440, section B).
+// =================================================================================================
+// The sentence the rule gives when it DOES apply and the box is blank: the rule's own, with `optional` and `when` removed.
+const RULE_BLANK_SENTENCE = (() => {
+  const rule = { ...SUPPLIER_ADD_RULES.creditTermsDays, optional: undefined, when: undefined } as unknown as typeof SUPPLIER_ADD_RULES.creditTermsDays;
+  const c = checkField(rule, '');
+  if (c.ok) throw new Error('rule accepted a blank');
+  return c.requirement;
+})();
+
+describe('W14 (T-440 S9e B) - createSupplierAction, termsMode=cod, creditTermsDays=abc (a leftover typed before switching to COD)', () => {
+  it('saves: redirect ok, new row has terms null - mutant: `when` ignored (refused with the days sentence)', async () => {
+    const f = await fixture('w14');
+    ACTOR_HOLDER.actor = f.admin;
+    const { createSupplierAction } = await import('../../src/app/ap/actions');
+    const name = `W14 ${uid('s')}`;
+    const fd = new FormData();
+    fd.set('name', name);
+    fd.set('termsMode', 'cod');
+    fd.set('creditTermsDays', 'abc');
+    const to = await expectRedirectTo(() => createSupplierAction(fd));
+    expect(errorOf(to), `redirect URL was: ${to}`).toBeNull();
+    expect(urlOf(to).pathname).toBe('/ap');
+    const [row] = await sql<{ credit_terms_days: number | null }[]>`select credit_terms_days from suppliers where name = ${name}`;
+    expect(row, 'expected the new supplier row to exist').toBeDefined();
+    expect(row!.credit_terms_days).toBeNull();
+  });
+});
+
+describe('W15 (T-440 S9e B) - createSupplierAction, termsMode=credit, creditTermsDays= (blank)', () => {
+  it('refused with the rule\'s blank sentence; no row - mutant: rule left optional / domain sentence still wins', async () => {
+    const f = await fixture('w15');
+    ACTOR_HOLDER.actor = f.admin;
+    const { createSupplierAction } = await import('../../src/app/ap/actions');
+    const name = `W15 ${uid('s')}`;
+    const fd = new FormData();
+    fd.set('name', name);
+    fd.set('termsMode', 'credit');
+    fd.set('creditTermsDays', '');
+    const to = await expectRedirectTo(() => createSupplierAction(fd));
+    expect(errorOf(to), `redirect URL was: ${to}`).toBe(RULE_BLANK_SENTENCE);
+    const rows = await sql`select id from suppliers where name = ${name}`;
+    expect(rows.length).toBe(0);
   });
 });

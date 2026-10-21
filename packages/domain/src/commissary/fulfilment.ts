@@ -52,6 +52,8 @@ import {
   refuseIfReady,
   resolveBranchRate,
 } from './orders';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { COMMISSARY_LINE_EDIT_RULES, COMMISSARY_ORDER_LINE_RULES } from '../field-rules/commissary';
 
 function refuseUnless(stage: ReturnType<typeof branchOrderStage>, allowed: readonly string[], verb: string): void {
   if (!allowed.includes(stage)) {
@@ -141,6 +143,7 @@ export async function fulfilLine(tx: Tx | null, actor: Actor, input: FulfilLineI
   const run = async (trx: Tx) => {
     const order = await loadBranchOrder(trx, actor.orgId, input.orderId, { forUpdate: true });
     await authorize(trx, actor, 'fulfil_branch_order', { storeId: order.storeId });
+    assertFieldRules(COMMISSARY_LINE_EDIT_RULES, { quantity: input.quantity, rate: input.rate });
     const stage = branchOrderStage(order);
     refuseIfReady(stage, order, 'fulfilLine');
     refuseUnless(stage, ['accepted'], 'fulfilLine');
@@ -186,6 +189,7 @@ export async function proposeLine(tx: Tx | null, actor: Actor, input: ProposeLin
   const run = async (trx: Tx) => {
     const order = await loadBranchOrder(trx, actor.orgId, input.orderId, { forUpdate: true });
     await authorize(trx, actor, 'fulfil_branch_order', { storeId: order.storeId });
+    assertFieldRules(COMMISSARY_ORDER_LINE_RULES, { itemId: input.itemId, quantity: input.quantity, rate: input.rate });
     const stage = branchOrderStage(order);
     refuseIfReady(stage, order, 'proposeLine');
     refuseUnless(stage, ['accepted'], 'proposeLine');
