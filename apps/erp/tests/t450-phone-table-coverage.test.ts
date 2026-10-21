@@ -38,7 +38,7 @@ describe('T-450 entire ERP table rollout', () => {
   it('mounts the adapter once around the authenticated app content', () => {
     const shell = read('apps/erp/src/components/shell/AppShell.tsx');
     expect(shell).toContain('<PhoneTableCards>{children}</PhoneTableCards>');
-    const adapter = read('apps/erp/src/components/ui/PhoneTableCards.tsx');
+    const adapter = read('apps/erp/src/components/shell/PhoneTableCards.tsx');
     expect(adapter).toContain('observePhoneTables(root.current)');
     expect(adapter).toContain('data-phone-table-root');
   });

@@ -1,13 +1,13 @@
 # T-450 — ERP tables become phone cards
 
-Status: built; 100 local checks, typecheck and production build pass. Visual check and full PR CI pending.
+Status: built; 244 affected checks, typecheck and corrected production build pass. Visual check and full PR CI pending.
 Ian approved 2026-10-21; cards below 768px, tablets retain tables.
 
 ## Goal
 Every ERP table row reads as a labeled card on a phone without losing fields, forms or actions.
 
 ## Scope
-- apps/erp/src/components/ui/PhoneTableCards.tsx and phone-table-cards.ts
+- apps/erp/src/components/shell/PhoneTableCards.tsx and ui/phone-table-cards.ts
 - apps/erp/src/components/shell/AppShell.tsx; apps/erp/src/app/globals.css
 - apps/erp/src/app/admin/access-defaults/grid.tsx; apps/erp/src/app/liabilities/unpaid/page.tsx
 - apps/erp/src/components/reports/BalanceSheetTable.tsx, CashFlowTable.tsx, IncomeStatementTable.tsx
@@ -36,7 +36,7 @@ No JavaScript is a native scrollable-table fallback; do not claim cards before h
 ## Tests (before implementation)
 DOM: labels, actual node identity and values, action clicks, idempotence, grouped headers, colspan totals,
 header controls, explicit headerless labels, late rows/tables, changed header text, observer cleanup,
-React rerender/removal, nested tables, existing roles and hidden inputs. Source/CSS: exact 768px rule,
+React rerender/removal, nested tables, existing roles, hidden inputs and malformed span dimensions. Source/CSS: exact 768px rule,
 screen-only cards, shell coverage, existing card pairs, every headerless source explicitly labeled.
 
 ## Out of scope

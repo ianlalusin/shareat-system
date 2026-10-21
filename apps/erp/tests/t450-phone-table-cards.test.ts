@@ -50,6 +50,16 @@ describe('T-450 original table nodes become labeled phone cards', () => {
     expect(cell(root, 'tbody tr:last-child td').dataset.cardSpan).toBe('full');
     expect(cell(root, '#total').id).toBe('total');
   });
+  it('bounds malformed span dimensions before expanding the logical column grid', () => {
+    // Two headings keep the negative control bounded even when span validation is deleted.
+    const root = fixture('<table><thead><tr><th>Item</th><th>Amount</th></tr></thead><tbody><tr><td>Rice</td><td>₱1.00</td></tr></tbody></table>');
+    const header = root.querySelector('th'); if (!header) throw new Error('Missing header');
+    Object.defineProperty(header, 'colSpan', { value: Number.NaN });
+    Object.defineProperty(header, 'rowSpan', { value: Number.POSITIVE_INFINITY });
+    enhancePhoneTables(root);
+    expect(cell(root, 'tbody td').dataset.cardLabel).toBe('Item');
+    expect(root.querySelectorAll('tbody td')).toHaveLength(2);
+  });
   it('keeps interactive header controls visible and omits their action text from field labels', () => {
     const root = fixture('<table><thead><tr><th>Position<form><button>Retire</button></form></th><th>Amount</th></tr></thead><tbody><tr><td>Cashier</td><td>0.00</td></tr></tbody></table>');
     enhancePhoneTables(root);

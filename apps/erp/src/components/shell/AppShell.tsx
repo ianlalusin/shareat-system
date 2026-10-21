@@ -25,7 +25,7 @@ import { KIOSK_HEADER } from './kiosk';
 import { SIDEBAR_COOKIE_NAME, parseSidebarState } from './sidebar-state';
 import { Sidebar, SidebarProvider } from './Sidebar';
 import { TopBar } from './TopBar';
-import { PhoneTableCards } from '../ui/PhoneTableCards';
+import { PhoneTableCards } from './PhoneTableCards';
 
 export async function AppShell({ children }: { children: React.ReactNode }) {
   const session = await currentSession();

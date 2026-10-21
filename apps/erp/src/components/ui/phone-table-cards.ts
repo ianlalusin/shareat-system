@@ -15,7 +15,9 @@ function headerText(cell: Element): string {
   return (copy.textContent ?? '').replace(/\s+/g, ' ').trim();
 }
 function span(cell: HTMLTableCellElement, name: 'colSpan' | 'rowSpan', remaining: number): number {
-  const value = cell[name]; return value === 0 ? remaining : Math.max(1, Math.min(value, 1000));
+  const value = cell[name];
+  if (!Number.isSafeInteger(value)) return 1;
+  return value === 0 ? remaining : Math.max(1, Math.min(value, 1000));
 }
 /** HTML's logical columns include slots occupied by earlier rowspans. */
 function cellGrid(rows: HTMLTableRowElement[]): HTMLTableCellElement[][] {
@@ -26,9 +28,11 @@ function cellGrid(rows: HTMLTableRowElement[]): HTMLTableCellElement[][] {
       while (slots[x]) x++;
       const height = Math.min(span(cell, 'rowSpan', rows.length - y), rows.length - y);
       const width = span(cell, 'colSpan', 1);
-      for (let dy = 0; dy < height; dy++) {
+      // Expand validated DOM span counts, never relational comparisons on parsed text/money.
+      const columns = Array.from({ length: width }, (_, offset) => offset);
+      for (const dy of Array.from({ length: height }, (_, offset) => offset)) {
         const target = grid[y + dy] ?? (grid[y + dy] = []);
-        for (let dx = 0; dx < width; dx++) target[x + dx] = cell;
+        for (const dx of columns) target[x + dx] = cell;
       }
       x += width;
     });
@@ -43,7 +47,7 @@ function enhanceTable(table: HTMLTableElement) {
   const headers = cellGrid(headRows);
   const explicit = table.getAttribute('data-card-columns')?.split('|').map(label => label.trim());
   const columnCount = Math.max(explicit?.length ?? 0, ...rows.map(row =>
-    Array.from(row.cells).reduce((count, cell) => count + cell.colSpan, 0)), 0);
+    Array.from(row.cells).reduce((count, cell) => count + span(cell, 'colSpan', 1), 0)), 0);
   const labels = Array.from({ length: columnCount }, (_, x) => explicit?.[x]
     ?? distinct(headers.flatMap(row => row[x] ? [headerText(row[x])] : [])).join(' · '));
   role(table, 'table');

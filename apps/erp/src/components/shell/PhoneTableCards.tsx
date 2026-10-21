@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
-import { observePhoneTables } from './phone-table-cards';
+import { observePhoneTables } from '../ui/phone-table-cards';
 
 const useBeforePaint = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
