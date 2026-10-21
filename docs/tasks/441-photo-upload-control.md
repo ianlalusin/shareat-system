@@ -176,6 +176,9 @@ movements, orders and file rows. Existing pay-now and dispatch action checks als
 Local total: 321 unit/guard checks across 12 files; 61 PostgreSQL checks across five files,
 one channel-certificate TODO retained. Typecheck and production build passed with no local
 server for this checkout. No running-app approval is claimed; browser policy remains blocked.
+Postcommit combined run: 320 passed, one server-module import exceeded five seconds (DEF-722,
+logged in the register as supporting audit scope). Earlier run passed; serial repeat and fresh
+CI remain required. No timeout, assertion or guard allowance was changed.
 
 ### S3 - staff photo (circle) - ⛔ runs BEFORE S5, never alongside it (both edit `staff-media.ts`, `staff/actions.ts`, `staff/[employmentId]/page.tsx`)
 `setStaffPhoto` accepts `{ fileId } | { contentType, bytes }`; page passes `existing` only when `canViewPhoto`.
