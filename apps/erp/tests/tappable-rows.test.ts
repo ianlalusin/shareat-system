@@ -12,14 +12,14 @@
  * that IS mechanical: the structural pieces the technique depends on are actually present in source,
  * and a future edit can't silently drop one half of the pattern.
  */
-import { readFileSync } from 'node:fs';
+import { readControlSource } from './helpers/control-source';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pagePath = resolve(here, '..', 'src', 'app', 'customers', '[customerId]', 'page.tsx');
-const content = readFileSync(pagePath, 'utf8');
+const content = readControlSource(pagePath, 'utf8');
 
 describe('whole-row tap target — T-258 / DEF-244', () => {
   it('never wraps a <tr> in <a> (invalid HTML — <tr> only accepts <td>/<th>)', () => {

@@ -10,7 +10,8 @@
 import { revalidatePath } from 'next/cache';
 import { authorize } from '@shareat/auth';
 import { posV1Repo, storesRepo } from '@shareat/db';
-import { createTender, linkStoreToPos, setTenderActive, unlinkStoreFromPos, updateTender } from '@shareat/domain';
+import { assertFieldRules, createTender, linkStoreToPos, setTenderActive, unlinkStoreFromPos, updateTender } from '@shareat/domain';
+import { SETTINGS_POS_UNLINK_RULES } from '@shareat/domain/field-rules';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { redirectWithFlash } from '../../../lib/flash';
@@ -202,6 +203,8 @@ export async function unlinkStoreFromPosAction(fd: FormData): Promise<void> {
     // name IT loads.
     const target = await loadDestructiveTarget(actor, 'store', storeId, ['unlink_store_from_pos']);
     if (!retypeMatches(str(fd, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
+    // T-440: the reason's rule is the one the form shows live (field-rules/settings.ts); judged after the gate and the retype.
+    assertFieldRules(SETTINGS_POS_UNLINK_RULES, fd);
     storeName = await withOrgPrincipal(actor.orgId, async (tx) => {
       await authorize(tx, actor, 'unlink_store_from_pos', {});
       await unlinkStoreFromPos(tx, actor, { storeId, reason });

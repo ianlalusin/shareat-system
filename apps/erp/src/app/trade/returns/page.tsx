@@ -10,7 +10,9 @@ import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Button, Checkbox, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
+import { Badge, Button, Checkbox, ConfirmDestructive, Field, FlashBanner, Input, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { RETURN_RECORD_RULES, RETURN_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Customer returns — Shareat System' };
@@ -187,18 +189,21 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
                 </td>
                 <td className="py-2 pr-4 text-right tabular-nums">{l.cap}</td>
                 <td className="py-2">
-                  <form action={recordReturnAction} className="flex flex-wrap items-center gap-2">
+                  <CheckedForm rules={RETURN_RECORD_RULES} action={recordReturnAction} className="flex flex-wrap items-center gap-2">
                     <input type="hidden" name="store" value={storeId} />
                     <input type="hidden" name="tradeOrderId" value={l.order_id} />
                     <input type="hidden" name="tradeOrderLineId" value={l.line_id} />
-                    <Input
-                      name="quantity"
-                      placeholder={`up to ${l.cap}`}
-                      inputMode="decimal"
-                      required
-                      className="w-24 text-xs tabular-nums"
-                    />
-                    <Input name="reason" placeholder="reason" required className="w-32 text-xs" />
+                    <Field label={<span className="sr-only">Quantity returned</span>} rule={RETURN_RECORD_RULES.quantity}>
+                      <Input
+                        {...nativeAttrs(RETURN_RECORD_RULES.quantity)}
+                        placeholder={`up to ${l.cap}`}
+                        inputMode="decimal"
+                        className="w-24 text-xs tabular-nums"
+                      />
+                    </Field>
+                    <Field label={<span className="sr-only">Reason for the return</span>} rule={RETURN_RECORD_RULES.reason}>
+                      <Input {...nativeAttrs(RETURN_RECORD_RULES.reason)} placeholder="reason" className="w-32 text-xs" />
+                    </Field>
                     {!l.isInternal && (
                       <Checkbox name="saleable" value="false" label="unsellable" />
                     )}
@@ -211,7 +216,7 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
                     <Button type="submit" variant="secondary">
                       Return
                     </Button>
-                  </form>
+                  </CheckedForm>
                 </td>
               </tr>
             ))}
@@ -246,16 +251,18 @@ export default async function CustomerReturnsPage({ searchParams }: { searchPara
                 </td>
                 <td className="py-2">
                   {r.status === 'posted' && (
-                    <form action={voidReturnAction} className="flex items-center gap-1">
+                    <CheckedForm rules={RETURN_VOID_RULES} action={voidReturnAction} className="flex items-center gap-1">
                       <input type="hidden" name="returnId" value={r.id} />
                       <input type="hidden" name="store" value={storeId} />
-                      <Input name="reason" placeholder="void reason" required className="w-28 text-xs" />
+                      <Field label={<span className="sr-only">Why this return is being voided</span>} rule={RETURN_VOID_RULES.reason}>
+                        <Input {...nativeAttrs(RETURN_VOID_RULES.reason)} placeholder="void reason" className="w-28 text-xs" />
+                      </Field>
                       <ConfirmDestructive
                         tier="admin-pin"
                         label="Void customer return"
                         consequence="Reverses this return and its posting. An administrator must approve with their own PIN."
                       />
-                    </form>
+                    </CheckedForm>
                   )}
                 </td>
               </tr>

@@ -19,11 +19,13 @@ import {
   recordOrderWastage,
   resolveOrderWastage,
   reverseAutoCharge,
+  assertFieldRules,
 } from '@shareat/domain';
+import { WASTAGE_RECORD_RULES, WASTAGE_REVERSE_RULES } from '@shareat/domain/field-rules';
 import { requireActor } from '../../lib/session';
 import { withOrgPrincipal } from '../expenses/lib';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
-import { verifyAdminApproval } from '@shareat/auth';
+import { can, verifyAdminApproval } from '@shareat/auth';
 import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
@@ -82,9 +84,13 @@ export async function recordOrderWastageAction(fd: FormData): Promise<void> {
     .filter((a) => a.personId && a.percent);
 
   try {
-    const salesDay = await withOrgPrincipal(actor.orgId, (tx) =>
-      salesDaysRepo.findByBusinessDate(tx, actor.orgId, storeId, businessDate),
-    );
+    const salesDay = await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): the field check runs only for a caller `recordOrderWastage`'s first authorize() ('record_order_wastage' at
+      // this store) would let in; anyone else is refused by that gate before any field sentence. It stays here, not in the domain,
+      // because this action defaults a blank date to today before the domain sees it, and the raw form's blank date is refused.
+      if (await can(tx, actor, 'record_order_wastage', { storeId })) assertFieldRules(WASTAGE_RECORD_RULES, fd);
+      return salesDaysRepo.findByBusinessDate(tx, actor.orgId, storeId, businessDate);
+    });
     if (!salesDay) {
       return await redirectWithFlash('/wastage', { store: storeId }, { error: `No sales day exists for ${businessDate} at this store yet — record one first. If that day was withdrawn, only a manager can enter the date again, so ask a manager.` });
     }
@@ -194,6 +200,7 @@ export async function reverseAutoChargeAction(fd: FormData): Promise<void> {
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store. The domain call below gets the
     // record's store too, not the form's `storeId`.
     const target = await loadDestructiveTarget(actor, 'order_wastage', id, ['reverse_auto_charge']);
+    assertFieldRules(WASTAGE_REVERSE_RULES, fd);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'reverse_auto_charge' });
     const result = await withOrgPrincipal(actor.orgId, async (tx) => {
       const reversed = await reverseAutoCharge(tx, actor, { wastageId: id, storeId: target.storeId ?? storeId, reason, reversedOn: toBusinessDate() });

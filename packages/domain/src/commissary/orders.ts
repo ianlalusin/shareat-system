@@ -50,6 +50,8 @@ import { branchPriceFor } from '../items';
 import { notActiveItemSentence } from '../items/not-active';
 import { lineCost } from '../stock/layers';
 import { isPositiveQuantity, quantity, type Quantity } from '../stock/quantity';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { COMMISSARY_LINE_EDIT_RULES, COMMISSARY_ORDER_LINE_RULES, COMMISSARY_ORDER_NEW_RULES } from '../field-rules/commissary';
 
 // -----------------------------------------------------------------------------------------------
 // The derived stage
@@ -370,6 +372,7 @@ export async function saveBranchOrderDraft(
 ): Promise<{ orderId: string; totalAmount: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'place_branch_order', { storeId: input.branchStoreId });
+    assertFieldRules(COMMISSARY_ORDER_NEW_RULES, { orderDate: input.orderDate });
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.orderDate)) {
       throw new Error('saveBranchOrderDraft: the order date must be YYYY-MM-DD.');
@@ -438,6 +441,7 @@ export async function addBranchOrderLine(
   const run = async (trx: Tx) => {
     const order = await loadBranchOrder(trx, actor.orgId, input.orderId, { forUpdate: true });
     await authorize(trx, actor, 'place_branch_order', { storeId: order.requestedByStoreId });
+    assertFieldRules(COMMISSARY_ORDER_LINE_RULES, { itemId: input.itemId, quantity: input.quantity, rate: input.rate });
     const stage = branchOrderStage(order);
     if (stage !== 'draft') {
       throw new Error(`addBranchOrderLine: the order is ${BRANCH_ORDER_STAGE_LABEL[stage].toLowerCase()} — only a draft takes new lines.`);
@@ -460,6 +464,7 @@ export async function updateBranchOrderLine(
   const run = async (trx: Tx) => {
     const order = await loadBranchOrder(trx, actor.orgId, input.orderId, { forUpdate: true });
     await authorize(trx, actor, 'place_branch_order', { storeId: order.requestedByStoreId });
+    assertFieldRules(COMMISSARY_LINE_EDIT_RULES, { quantity: input.quantity, rate: input.rate });
     const stage = branchOrderStage(order);
     if (stage !== 'draft') {
       throw new Error(`updateBranchOrderLine: the order is ${BRANCH_ORDER_STAGE_LABEL[stage].toLowerCase()} — the ask is frozen after submit.`);

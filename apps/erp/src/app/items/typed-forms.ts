@@ -12,3 +12,4 @@ export const ITEM_STORE_SELLABILITY = defineTypedForm({
   form: 'item.storeSellability',
   fields: ['isPurchasable', 'sellableRetail', 'sellableWholesale', 'note'],
 });
+export const ITEM_VARIANT = defineTypedForm({ form: 'item.variant', fields: ['parentId'] }); // T-443

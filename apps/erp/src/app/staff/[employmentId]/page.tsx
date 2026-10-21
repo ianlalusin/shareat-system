@@ -7,20 +7,23 @@ import {
   issuePinAction,
   removeStaffPhotoAction,
   removeStaffSignatureAction,
+  renamePersonAction,
+  setGovernmentIdsAction,
   setPositionsAction,
   setStaffPhotoAction,
   setStaffSignatureAction,
   viewStaffSignatureAction,
 } from '../actions';
-import { employmentDetail, livePinFor, mediaFor, otherOpenBranchesFor, positionsForStore } from '../lib';
+import { employmentDetail, governmentIdsFor, livePinFor, mediaFor, otherOpenBranchesFor, positionsForStore } from '../lib';
 import { PhotoInput } from '@/components/PhotoInput';
 import { SignaturePad } from '@/components/SignaturePad';
 import { Page } from '@/components/shell/Page';
-import { EditableRecord } from '@/components/forms';
-import { Banner, Button, ConfirmDestructive, FlashBanner, Input } from '@/components/ui';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { STAFF_END_RULES, STAFF_GOV_ID_RULES, STAFF_PIN_RULES, STAFF_RENAME_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
-import { STAFF_POSITIONS } from '../typed-forms';
+import { STAFF_POSITIONS, STAFF_RENAME } from '../typed-forms';
 
 export const metadata = { title: 'Employment — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -44,19 +47,21 @@ export default async function EmploymentDetailPage({
   if (!detail) notFound();
 
   const isEnded = detail.employment.endedOn !== null;
-  const [positions, livePin, otherBranches, media] = await Promise.all([
+  const [positions, livePin, otherBranches, govIds, media] = await Promise.all([
     positionsForStore(actor.orgId, detail.employment.storeId),
     livePinFor(actor, detail.employment.personId),
     // ⭐ T-302 — read BEFORE the form renders, because the warning it feeds has to be on screen
     // before the button is pressed, not in a toast after the write.
     otherOpenBranchesFor(actor, detail.employment.personId, detail.employment.storeId),
+    // T-190 - personal data, shown only to someone holding enrol_staff at this store (null hides the section).
+    governmentIdsFor(actor, detail.employment.personId, detail.employment.storeId),
     mediaFor(actor, employmentId),
   ]);
   const assignedIds = new Set(detail.positions.map((p) => p.positionId));
   const primaryId = detail.positions.find((p) => p.isPrimary)?.positionId;
 
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div>
         <a href="/staff" className="text-sm text-neutral-500 underline underline-offset-2 dark:text-neutral-400">
           ← Staff
@@ -77,6 +82,30 @@ export default async function EmploymentDetailPage({
       </div>
 
       <FlashBanner flash={sp} />
+
+      {!isEnded && (
+        <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <h2 className="font-medium">Name</h2>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            {detail.nameParts.lastName === null
+              ? `Saved as "${detail.personName}" (one box, from before names were split). Type the last, first and middle name once to fix it; it then reads "Last, First M.".`
+              : 'Shown everywhere as "Last, First M.". Saving rewrites it.'}
+          </p>
+          <EditableRecord action={renamePersonAction} label="name" hidden={{ employmentId }} typed={typedFor(sp, STAFF_RENAME, employmentId, actor.personId)} rules={STAFF_RENAME_RULES}>
+            <FormGrid>
+              <Field label="Last name" rule={STAFF_RENAME_RULES.lastName}>
+                <Input {...nativeAttrs(STAFF_RENAME_RULES.lastName)} defaultValue={detail.nameParts.lastName ?? ''} className="mt-1 w-full" />
+              </Field>
+              <Field label="First name" rule={STAFF_RENAME_RULES.firstName}>
+                <Input {...nativeAttrs(STAFF_RENAME_RULES.firstName)} defaultValue={detail.nameParts.firstName ?? ''} className="mt-1 w-full" />
+              </Field>
+              <Field label="Middle name (optional)">
+                <Input name="middleName" defaultValue={detail.nameParts.middleName ?? ''} className="mt-1 w-full" />
+              </Field>
+            </FormGrid>
+          </EditableRecord>
+        </section>
+      )}
 
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Positions</h2>
@@ -155,26 +184,15 @@ export default async function EmploymentDetailPage({
           </Banner>
         )}
         {!isEnded && (
-          <form action={issuePinAction} className="flex flex-wrap items-end gap-3">
+          <CheckedForm rules={STAFF_PIN_RULES} action={issuePinAction} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="employmentId" value={employmentId} />
-            <label className="min-w-0 flex-1 text-sm sm:min-w-48">
-              <span className="block text-neutral-600 dark:text-neutral-400">
-                {livePin ? 'New PIN' : 'PIN'} (6 digits)
-              </span>
-              <Input
-                name="pin"
-                required
-                pattern="[0-9]{6}"
-                maxLength={6}
-                inputMode="numeric"
-                placeholder="000000"
-                className="w-full font-mono"
-              />
-            </label>
+            <Field label={`${livePin ? 'New PIN' : 'PIN'} (6 digits)`} rule={STAFF_PIN_RULES.pin} className="flex-1 sm:min-w-48">
+              <Input {...nativeAttrs(STAFF_PIN_RULES.pin)} placeholder="000000" className="w-full font-mono" />
+            </Field>
             <Button type="submit" variant="primary">
               {livePin ? 'Re-issue PIN' : 'Issue PIN'}
             </Button>
-          </form>
+          </CheckedForm>
         )}
         {livePin && (
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -183,6 +201,32 @@ export default async function EmploymentDetailPage({
           </p>
         )}
       </section>
+
+      {govIds && (
+        <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <h2 className="font-medium">Government numbers</h2>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            Payroll deducts SSS, PhilHealth and Pag-IBIG only for an agency whose number is filled in here. A blank box means that agency is
+            not deducted from this person&rsquo;s payslips (and nothing is caught up later). Digits only; dashes and spaces are ignored.
+          </p>
+          <EditableRecord action={setGovernmentIdsAction} label="government numbers" hidden={{ employmentId }} typed={null} rules={STAFF_GOV_ID_RULES}>
+            <FormGrid>
+              <Field label="SSS number (10 digits)" rule={STAFF_GOV_ID_RULES.sssNo}>
+                <Input {...nativeAttrs(STAFF_GOV_ID_RULES.sssNo)} defaultValue={govIds.sssNo ?? ''} className="w-full font-mono" />
+              </Field>
+              <Field label="PhilHealth number (12 digits)" rule={STAFF_GOV_ID_RULES.philhealthNo}>
+                <Input {...nativeAttrs(STAFF_GOV_ID_RULES.philhealthNo)} defaultValue={govIds.philhealthNo ?? ''} className="w-full font-mono" />
+              </Field>
+              <Field label="Pag-IBIG number (12 digits)" rule={STAFF_GOV_ID_RULES.pagibigNo}>
+                <Input {...nativeAttrs(STAFF_GOV_ID_RULES.pagibigNo)} defaultValue={govIds.pagibigNo ?? ''} className="w-full font-mono" />
+              </Field>
+              <Field label="TIN (9 to 12 digits)" rule={STAFF_GOV_ID_RULES.tin}>
+                <Input {...nativeAttrs(STAFF_GOV_ID_RULES.tin)} defaultValue={govIds.tin ?? ''} className="w-full font-mono" />
+              </Field>
+            </FormGrid>
+          </EditableRecord>
+        </section>
+      )}
 
       <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Role and access</h2>
@@ -275,15 +319,13 @@ export default async function EmploymentDetailPage({
             Ended {detail.employment.endedOn} as {detail.employment.employmentStatus.replace(/-/g, ' ')}.
           </p>
         ) : (
-          <form action={endEmploymentAction} className="flex flex-wrap items-end gap-3">
+          <CheckedForm rules={STAFF_END_RULES} action={endEmploymentAction} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="employmentId" value={employmentId} />
-            <label className="min-w-0 flex-1 text-sm sm:min-w-48">
-              <span className="block text-neutral-600 dark:text-neutral-400">End date</span>
-              <Input type="date" name="endedOn" required defaultValue={toBusinessDate()} className="w-full" />
-            </label>
-            <label className="min-w-0 flex-1 text-sm sm:min-w-48">
-              <span className="block text-neutral-600 dark:text-neutral-400">Status</span>
-              <select name="employmentStatus" required defaultValue="" className={`${INPUT} mt-1 w-full`}>
+            <Field label="End date" rule={STAFF_END_RULES.endedOn} className="flex-1 sm:min-w-48">
+              <Input type="date" {...nativeAttrs(STAFF_END_RULES.endedOn)} defaultValue={toBusinessDate()} className="w-full" />
+            </Field>
+            <Field label="Status" rule={STAFF_END_RULES.employmentStatus} className="flex-1 sm:min-w-48">
+              <select {...nativeAttrs(STAFF_END_RULES.employmentStatus)} defaultValue="" className={`${INPUT} mt-1 w-full`}>
                 <option value="" disabled>
                   Select
                 </option>
@@ -293,13 +335,13 @@ export default async function EmploymentDetailPage({
                   </option>
                 ))}
               </select>
-            </label>
+            </Field>
             <ConfirmDestructive
               tier="admin-pin"
               label="End employment"
               consequence="Ends this employment. The record stays visible. An administrator must approve with their own PIN."
             />
-          </form>
+          </CheckedForm>
         )}
       </section>
     </Page>

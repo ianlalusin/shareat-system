@@ -111,12 +111,19 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-424 S5: registering a POS v2 tablet as an ERP terminal person (dotted: new, never in 0197's copy list).
   def('pos_terminal_link.provision', 'settings', 'high', 'store', 'pos_terminal_links', 'T-424'),
   def('pos_terminal_link.revoke', 'settings', 'high', 'store', 'pos_terminal_links', 'T-424'),
+  // T-190: a change to the statutory tables (rate row, withholding table, minimum wage): add, confirm or discard. ONE entry (the catalogue
+  // size is capped); `after.table` / `after.event` say which. Dotted: new. Org-scoped, admin-readable; rows are immutable once confirmed.
+  // T-190: a person's government numbers were set or cleared. Records FIELD NAMES only, never a number.
+  def('staff_gov_ids.changed', 'security', 'high', 'store', 'persons', 'T-190', { viewers: 'admin' }),
+  def('payroll_rate.change', 'money', 'high', 'org', 'statutory_rates', 'T-190', ADMIN),
   def('create_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('update_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('reactivate_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('retire_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('edit_sales_day', 'money', 'high', 'store', 'sales_days', 'T-375'),
   def('reimport_sales_day', 'money', 'high', 'store', 'sales_days', 'T-375'),
+  // T-396: the 06:00 Manila timer (or `--manual`) drafted a sales day from POS; the actor is the person who vouched for the store's link. Dotted: the catalogue only, never 0197's list.
+  def('sales_day.auto_imported', 'money', 'normal', 'store', 'sales_days', 'T-396'),
   def('set_platform_sales', 'money', 'normal', 'store', 'sales_days', 'T-375'),
   def('dual_run.compare', 'money', 'normal', 'org', 'dual_run', 'T-392', { viewers: 'admin' }),
   def('dual_run.disposition', 'money', 'normal', 'store', 'dual_run_dispositions', 'T-392', { viewers: 'admin' }),
@@ -215,8 +222,33 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('staff_signature.removed', 'security', 'high', 'either', 'persons', 'T-434', { viewers: 'admin' }),
   def('staff_signature.viewed', 'security', 'high', 'either', 'persons', 'T-434', { viewers: 'admin' }),
   def('staff_signature.view_refused', 'security', 'high', 'either', 'persons', 'T-434', { viewers: 'admin' }),
+  // T-438 (bible row 360): a person renamed on the staff page (before/after displayName ONLY), and a hire that overrode the same-name guard.
+  def('person.renamed', 'staff', 'normal', 'store', 'persons', 'T-438'),
+  def('person.same_name_confirmed', 'staff', 'normal', 'store', 'persons', 'T-438'),
   def('employment.positions_set', 'staff', 'normal', 'store', 'employments', 'T-402'),
   def('position.reactivated', 'staff', 'normal', 'store', 'positions', 'T-402'),
+
+  // ---- T-436: leave and absence tracking. Payloads carry person, dates and kind - NEVER the note (bible row 353) or a file id. ----
+  def('leave.requested', 'staff', 'normal', 'store', 'leave_requests', 'T-436'),
+  def('leave.approved', 'staff', 'normal', 'store', 'leave_requests', 'T-436'),
+  // A super_admin approved their own leave: the one allowed exception to "nobody approves their own".
+  def('leave.self_approved', 'staff', 'high', 'store', 'leave_requests', 'T-436'),
+  def('leave.rejected', 'staff', 'normal', 'store', 'leave_requests', 'T-436'),
+  def('leave.cancelled', 'staff', 'normal', 'store', 'leave_requests', 'T-436'),
+  def('leave.recorded', 'staff', 'normal', 'store', 'leave_requests', 'T-436'),
+  def('leave.voided', 'staff', 'normal', 'store', 'leave_requests', 'T-436'),
+  // Approved or recorded with a pay mode other than the kind's default (a sixth SIL day as unpaid, a sick day as paid).
+  def('leave.paid_override', 'staff', 'normal', 'store', 'leave_requests', 'T-436'),
+  // Punches arrived on an approved, not-yet-paid leave date: the day is worked, not leave (written by the attendance recompute).
+  def('leave.superseded_by_work', 'staff', 'normal', 'store', 'leave_requests', 'T-436', { actor: 'system' }),
+  // A cap row set or changed. Org-wide defaults carry no store.
+  def('leave_cap.changed', 'settings', 'normal', 'either', 'leave_caps', 'T-436'),
+  def('leave_type.changed', 'settings', 'normal', 'org', 'leave_types', 'T-436'),
+  // The year-end / final-pay cash payout of unused Service Incentive Leave was taken by a pay run or a separation.
+  def('sil.commuted', 'money', 'normal', 'store', 'leave_commutations', 'T-436'),
+  // A medical certificate was opened, or somebody tried and was refused. Admin-viewed: who looks at a certificate is itself sensitive.
+  def('leave_document.viewed', 'security', 'normal', 'store', 'leave_requests', 'T-436', ADMIN),
+  def('leave_document.view_refused', 'security', 'high', 'store', 'leave_requests', 'T-436', ADMIN),
 
   // ---- S3 (money / data steps before posting): the 15 S3_LIVE entries are live; expense.submitted/rejected, sales_day.reopened, remittance.confirmed and data.* stay reserved (no verb, C4/C5) ----
   def('expense.drafted', 'money', 'normal', 'store', 'expenses', 'T-402'),

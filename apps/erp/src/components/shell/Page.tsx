@@ -51,6 +51,10 @@ const WIDTH: Record<PageDensity, string> = {
 
 export interface PageProps {
   readonly density: PageDensity;
+  /** Presentation only; never changes route access or record content. */
+  readonly view?: 'dashboard' | 'detail';
+  /** Independent record sections may share a row; tables and document-wide content retain full width. */
+  readonly sectioned?: boolean;
   /**
    * ⚠️ Optional, and the T-234 sweep passes NEITHER this nor `actions`.
    *
@@ -84,12 +88,14 @@ export interface PageProps {
   readonly children: ReactNode;
 }
 
-export function Page({ density, title, description, actions, className, children }: PageProps) {
+export function Page({ density, view, sectioned = false, title, description, actions, className, children }: PageProps) {
   return (
     <div
+      data-view={view}
+      data-sectioned={sectioned || undefined}
       // ⚠️ `w-full` matters: without it a short page inside a flex shell can shrink-to-fit and the
       // `mx-auto` centring silently stops applying.
-      className={`mx-auto w-full${WIDTH[density] ? ` ${WIDTH[density]}` : ''} px-4 py-4 md:px-6 md:py-6 xl:px-8 ${className ?? 'space-y-6'}`}
+      className={`erp-page mx-auto w-full${WIDTH[density] ? ` ${WIDTH[density]}` : ''} px-4 py-4 md:px-6 md:py-6 xl:px-6 xl:py-4 ${className ?? 'space-y-6 xl:space-y-4'}`}
     >
       {title !== undefined && (
         <PageHeader title={title} description={description} actions={actions} />

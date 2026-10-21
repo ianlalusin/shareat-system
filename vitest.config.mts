@@ -28,6 +28,7 @@ const alias = {
   '@shareat/core/logger': `${root}packages/core/src/logger.ts`,
   '@shareat/core/env': `${root}packages/core/src/env.ts`,
   '@shareat/core/exif': `${root}packages/core/src/exif.ts`,
+  '@shareat/core/sentence': `${root}packages/core/src/sentence.ts`,
   '@shareat/core': `${root}packages/core/src/index.ts`,
   '@shareat/db/pos-v1/wire': `${root}packages/db/src/pos-v1/wire.ts`,
   '@shareat/db/schema': `${root}packages/db/schema/index.ts`,
@@ -39,6 +40,8 @@ const alias = {
   '@shareat/domain/money-input': `${root}packages/domain/src/shared/money-input.ts`,
   // T-386 - the item-code rule is a client-safe leaf (ItemCodeField imports it in the browser); exact entry before the bare name.
   '@shareat/domain/item-code': `${root}packages/domain/src/item-code.ts`,
+  // T-441 - the upload control's db-free limits leaf (browser import); exact entry before the bare name.
+  '@shareat/domain/files/limits': `${root}packages/domain/src/files/limits.ts`,
   // T-343 S5.0 — mirrors the two subpaths above: `refusal-leaf.ts` has no `@shareat/db` import
   // deliberately (a `'use client'` component may reach for `humanDate`/`internalFault` directly),
   // so it needs its own exact entry the same reason the other leaves above do.
@@ -51,6 +54,8 @@ const alias = {
   // `@shareat/domain/*` wildcard (only the root tsconfig does), so this leaf needs its own exact
   // entry rather than relying on the wildcard the way `npm run typecheck` (root config) does.
   '@shareat/domain/service-charge': `${root}packages/domain/src/service-charge/index.ts`,
+  // T-440 - the field-rule leaf (CheckedForm / FieldCheck import it in the browser); exact entry before the bare name.
+  '@shareat/domain/field-rules': `${root}packages/domain/src/field-rules/index.ts`,
   '@shareat/domain': `${root}packages/domain/src/index.ts`,
   // ⚠️ The subpath goes BEFORE the bare name: these are exact-match aliases applied in order, and
   // T-237's `@shareat/auth/errors` leaf (the error classes without `@shareat/db` behind them) is
@@ -99,7 +104,8 @@ export default defineConfig({
           // database with "relation does not exist". Convention: anything under a
           // `tests/integration/` directory, anywhere, is an integration test.
           // T-422: apps/pos has its own vitest config (`@` -> apps/pos/src); the ERP alias must never resolve its files.
-          exclude: ['**/node_modules/**', '**/.next/**', '**/tests/integration/**', 'apps/pos/**'],
+          // T-437: apps/customer has its own vitest config too (same reason).
+          exclude: ['**/node_modules/**', '**/.next/**', '**/tests/integration/**', 'apps/pos/**', 'apps/customer/**'],
           environment: 'node',
           // T-380 S1a / REV-2: an empty `next/headers` jar for any test that renders a page which
           // calls `withFlash` without mocking cookies itself (a test's own vi.mock still wins).

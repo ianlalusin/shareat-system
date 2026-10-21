@@ -106,6 +106,12 @@ export const SCHEDULER_JOBS = [
    * (`stock/usage-auto-post.ts`). A draft it cannot post is a failure line, so the run is `partial` and the script exits non-zero.
    */
   'usage_auto_post',
+  /**
+   * `pos_day_import` - T-396, DAILY 06:00 Manila. Drafts yesterday's sales day (and any missed day in the 7-day window)
+   * for every store linked to POS v1, as an `open` draft: it never submits, verifies or posts. A refusal is a failure
+   * line; a day POS has no sales for is a notice. Needs migration 0209's widening of `scheduler_runs_job_check`.
+   */
+  'pos_day_import',
 ] as const;
 export type SchedulerJob = (typeof SCHEDULER_JOBS)[number];
 
@@ -175,7 +181,7 @@ export const schedulerRuns = pgTable(
       // build the database and this file does not — but the NEXT widening migration is written by
       // copying this list, and copying the short one would silently drop a job from the constraint
       // and break it at its next run. Both are corrected together in 0136; keep them together.
-      sql`${t.job} in ('depreciation', 'amortisation', 'attendance_sweep', 'mirror_publish', 'inbox_relay', 'order_wastage_backstop', 'finding_observation', 'budget_reissue', 'recurring_expenses', 'orphan_file_sweep', 'fiscal_period_seed', 'usage_auto_post')`,
+      sql`${t.job} in ('depreciation', 'amortisation', 'attendance_sweep', 'mirror_publish', 'inbox_relay', 'order_wastage_backstop', 'finding_observation', 'budget_reissue', 'recurring_expenses', 'orphan_file_sweep', 'fiscal_period_seed', 'usage_auto_post', 'pos_day_import')`,
     ),
     check('scheduler_runs_outcome_check', sql`${t.outcome} in ('ok', 'partial', 'failed')`),
     check('scheduler_runs_period_shape_check', sql`${t.period} ~ '^[0-9]{4}-[0-9]{2}$'`),

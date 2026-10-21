@@ -69,7 +69,9 @@ import { createStore } from '../stores/service';
 // one of them back — an import cycle that resolved only because every symbol crossing it was a
 // hoisted `function` declaration. They now live in a leaf module both sides import, so a future
 // module-scope `const` in either file cannot become a TDZ crash at boot. `identifiers.ts` says why.
-import { normaliseDigits, normaliseBranchCode } from './identifiers';
+import { normaliseBranchCode } from './identifiers';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { SETTINGS_ORGANIZATION_RULES } from '../field-rules/settings';
 
 /** ⭐ Re-exported so no caller changed when the cycle was broken — the store screen and
  *  `setOrganizationIdentity` both normalise a branch code the same way. */
@@ -502,7 +504,8 @@ export async function setOrganizationIdentity(
 
   await organizationsRepo.setIdentity(tx, actor.orgId, {
     legalName: blankToNull(input.legalName),
-    tin: normaliseDigits(input.tin, 'A TIN', 9, 12),
+    // T-440: the TIN's shape, sentence and stripping live in one rule set shared with the screen (the value is never echoed).
+    tin: assertFieldRules(SETTINGS_ORGANIZATION_RULES, { tin: input.tin }).tin ?? null,
     taxType: input.taxType,
   });
 }

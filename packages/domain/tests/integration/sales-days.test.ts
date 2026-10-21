@@ -924,3 +924,17 @@ describe('T-343 S5.1 — sales-days refusals carry a human sentence', () => {
   });
 });
 
+
+describe('T440 missing sales-day date', () => {
+  it('blank or absent dates get the field refusal with no row, while a canonical date succeeds', async () => {
+    const f = await setup('t440-missing-date');
+    for (const businessDate of ['', undefined]) {
+      await expect(asPerson(f.orgId, (tx) => createSalesDay(tx, actor(f.orgId, f.staffId), { ...simpleDay(f.storeId, D1), businessDate } as never)))
+        .rejects.toMatchObject({ name: 'RefusalError', userMessage: 'The business date is required.' });
+      const rows = await sql`select id from sales_days where org_id = ${f.orgId}`;
+      expect(rows).toHaveLength(0);
+    }
+    const { id } = await asPerson(f.orgId, (tx) => createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, D1)));
+    expect(await dayRow(id)).toBeDefined();
+  });
+});

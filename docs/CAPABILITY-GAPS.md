@@ -584,3 +584,7 @@ roster cannot draw its "scheduled" band. Ian, 2026-10-10 (`t387-q6` = a): build 
 schedules as their own feature. The UI reference is the `StaffRoster` board (`docs/design/t387/StaffRoster.dc.html`),
 which draws the scheduled band as a dashed box. **Owner: unassigned.** It would need a schedule table (a migration).
 
+
+## Added 2026-10-17 — government salary loans, found while specifying T-193
+
+**SSS and Pag-IBIG salary-loan deductions.** Staff with an SSS or Pag-IBIG salary loan have a fixed monthly amount the employer must deduct from pay and remit with the contributions. v2 payroll (T-190) deducts contributions and withholding only; no task owns loan deductions or their remittance. Out of scope for T-193 by its spec. Owner: unassigned; needs a payroll-deductions task before payroll runs on v2.

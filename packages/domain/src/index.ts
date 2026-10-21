@@ -7,6 +7,7 @@ export * from './shared/constraint-refusals';
  *  action so the two cannot disagree about what a document allows. */
 export * from './shared/money-lines';
 export * from './shared/refusal'; // T-343 S5.0
+export * from './shared/field-rules-assert'; // T-440 (server half; the client-safe rules are `@shareat/domain/field-rules`)
 export * from './ledger/post-entry';
 export * from './ledger/inter-store';
 export * from './ledger/reverse-entry';
@@ -104,6 +105,7 @@ export * from './pos/usage-pull';
 export * from './pos/depletion-source';
 // T-210 — the daily sales pull, for the POS-day reconciliation report.
 export * from './pos/v1-recheck';
+export * from './pos/day-import-job';
 // T-375 S1 - the POS v1 day feed: the bridge fetchers and the store link.
 export * from './pos/v1-feed';
 export * from './pos/store-link';
@@ -147,3 +149,6 @@ export * from './menu';
 
 // T-402 S3 - the R10 offline envelope: recordClientEvents (no caller until the POS v2 receipts spec, ADR-015 P2).
 export * from './activity/client-events';
+
+// T-436 - leave and absence tracking: requests, caps, the SIL balance, medical-certificate photos.
+export * from './leave';

@@ -11,7 +11,9 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Button, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
+import { Badge, Button, ConfirmDestructive, Field, FlashBanner, Input, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { INVENTORY_REFUND_RULES, INVENTORY_RETURN_RULES, INVENTORY_RETURN_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Supplier returns — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -150,15 +152,17 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
             {[...credits.entries()].map(([supplierId, balance]) => (
               <li key={supplierId} className="flex items-center justify-between gap-3 py-1">
                 <span>{supplierName.get(supplierId) ?? supplierId}: ₱{balance}</span>
-                <form action={refundCreditAction} className="flex min-w-0 flex-1 items-center justify-end gap-2">
+                <CheckedForm rules={INVENTORY_REFUND_RULES} action={refundCreditAction} className="flex min-w-0 flex-1 items-center justify-end gap-2">
                   <input type="hidden" name="storeId" value={storeId} />
                   <input type="hidden" name="supplierId" value={supplierId} />
                   <input type="hidden" name="moneyAccountId" value={moneyAccountId ?? ''} />
-                  <Input name="amount" placeholder="refund amount" inputMode="decimal" className="min-w-0 flex-1" />
+                  <Field label={<span className="sr-only">Refund amount</span>} className="min-w-0 flex-1" rule={INVENTORY_REFUND_RULES.amount}>
+                    <Input {...nativeAttrs(INVENTORY_REFUND_RULES.amount)} placeholder="refund amount" className="min-w-0 w-full" />
+                  </Field>
                   <Button type="submit" variant="secondary" disabled={!moneyAccountId}>
                     Refund
                   </Button>
-                </form>
+                </CheckedForm>
               </li>
             ))}
           </ul>
@@ -193,7 +197,7 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
                 </td>
                 <td className="py-2 pr-4 text-right tabular-nums">{l.returnable}</td>
                 <td className="py-2">
-                  <form action={recordReturnAction} className="flex flex-wrap items-center gap-2">
+                  <CheckedForm rules={INVENTORY_RETURN_RULES} action={recordReturnAction} className="flex flex-wrap items-center gap-2">
                     <input type="hidden" name="storeId" value={storeId} />
                     <input type="hidden" name="supplierId" value={l.supplier_id} />
                     <input type="hidden" name="deliveryId" value={l.delivery_id} />
@@ -201,12 +205,16 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
                     <input type="hidden" name="itemId" value={l.item_id} />
                     <input type="hidden" name="itemKind" value={l.item_kind} />
                     <input type="hidden" name="locationId" value={l.location_id ?? ''} />
-                    <Input name="quantity" placeholder={`up to ${l.returnable}`} inputMode="decimal" required className="w-24 tabular-nums" />
-                    <Input name="reason" placeholder="reason" required className="w-32" />
+                    <Field label={<span className="sr-only">Quantity</span>} rule={INVENTORY_RETURN_RULES.quantity}>
+                      <Input {...nativeAttrs(INVENTORY_RETURN_RULES.quantity)} placeholder={`up to ${l.returnable}`} className="w-24 tabular-nums" />
+                    </Field>
+                    <Field label={<span className="sr-only">Reason</span>} rule={INVENTORY_RETURN_RULES.reason}>
+                      <Input {...nativeAttrs(INVENTORY_RETURN_RULES.reason)} placeholder="reason" className="w-32" />
+                    </Field>
                     <Button type="submit" variant="secondary" disabled={!l.location_id}>
                       Return
                     </Button>
-                  </form>
+                  </CheckedForm>
                 </td>
               </tr>
             ))}
@@ -239,16 +247,18 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
                 </td>
                 <td className="py-2">
                   {r.status === 'posted' && (
-                    <form action={voidReturnAction} className="flex items-center gap-1">
+                    <CheckedForm rules={INVENTORY_RETURN_VOID_RULES} action={voidReturnAction} className="flex items-center gap-1">
                       <input type="hidden" name="returnId" value={r.id} />
                       <input type="hidden" name="store" value={storeId} />
-                      <Input name="reason" placeholder="void reason" required className="w-28" />
+                      <Field label={<span className="sr-only">Void reason</span>} rule={INVENTORY_RETURN_VOID_RULES.reason}>
+                        <Input {...nativeAttrs(INVENTORY_RETURN_VOID_RULES.reason)} placeholder="void reason" className="w-28" />
+                      </Field>
                       <ConfirmDestructive
                         tier="admin-pin"
                         label="Void supplier return"
                         consequence="Gives the stock back and reverses the credit. An administrator must approve with their own PIN."
                       />
-                    </form>
+                    </CheckedForm>
                   )}
                 </td>
               </tr>

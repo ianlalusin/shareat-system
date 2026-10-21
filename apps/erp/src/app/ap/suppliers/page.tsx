@@ -61,7 +61,7 @@ export default async function SuppliersPage({
       <FlashBanner flash={sp} />
 
       <form className="flex flex-wrap items-end gap-3">
-        <label className="flex min-w-[14rem] flex-1 flex-col gap-1">
+        <label className="flex min-w-0 flex-col gap-1 erp-field-long w-full">
           <span className={LABEL}>Search</span>
           <Input name="q" defaultValue={q} placeholder="Name, TIN, contact, bank…" className="w-full" />
         </label>

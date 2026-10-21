@@ -13,12 +13,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * and after.
  */
 const captured: Record<string, unknown> = {};
+// T-440: this wrapper unit harness has no database; real auth-first refusals are covered by PostgreSQL controls.
+vi.mock('@shareat/auth', async (orig) => ({ ...(await orig<object>()), can: vi.fn(async () => true) }));
+
 vi.mock('next/navigation', () => ({ redirect: (u: string) => { throw new Error(`redirect:${u}`); } }));
 vi.mock('next/cache', () => ({ revalidatePath: () => undefined }));
 vi.mock('../src/lib/session', () => ({ requireActor: async () => ({ orgId: 'org', personId: 'p' }) }));
 vi.mock('../src/app/expenses/lib', () => ({ withOrgPrincipal: async (_org: string, fn: (tx: unknown) => unknown) => fn({}) }));
 vi.mock('@/lib/constraint-messages', () => ({ errorMessage: (e: unknown) => String(e) }));
 vi.mock('@shareat/domain', () => ({
+  assertFieldRules: () => ({}),
   recordReturn: async (_tx: unknown, i: { returnedOn: string }) => ((captured.supplierReturnedOn = i.returnedOn), { ok: true }),
   refundSupplierCredit: async (_tx: unknown, i: { businessDate: string }) => ((captured.refundBusinessDate = i.businessDate), { ok: true }),
   voidReturn: async () => ({ ok: true }),

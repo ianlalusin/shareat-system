@@ -53,6 +53,8 @@ describe('14. the signature file id appears in no list, wall, card or export', (
     'apps/erp/src/app/staff/actions.ts',
     'apps/erp/src/components/SignaturePad.tsx',
     'apps/erp/src/components/signature-pad-export.ts',
+    // T-441: GUARDED_PURPOSES names staff_signature so the shared upload control never thumbnails it
+    'apps/erp/src/components/upload/upload-rules.ts',
   ];
   const NAMES = /signatureFileId|signature_file_id|staff_signature|staffSignature|StaffSignature|signatureForPrint|view_staff_signature/;
   it('no other app file mentions the signature column, purpose or its functions', () => {

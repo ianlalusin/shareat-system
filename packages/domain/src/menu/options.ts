@@ -10,6 +10,8 @@ import { menuRepo, type Tx } from '@shareat/db';
 import { MENU_SELECTION_MODES, type MenuSelectionMode, type MenuStatus } from '@shareat/db/schema';
 import { gone, refuse } from '../shared/refusal';
 import { audit, changedFields, inTx, requireName } from './shared';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { MENU_OPTION_VALUE_RULES } from '../field-rules/menu';
 
 // -------------------------------------------------------------------------------------------------------------------
 // Option groups (R4): required = min_selections > 0, never a separate flag
@@ -97,6 +99,7 @@ export async function addOptionValue(
 ): Promise<{ id: string }> {
   return inTx(tx, async (trx) => {
     await authorize(trx, actor, 'manage_menu', {});
+    assertFieldRules(MENU_OPTION_VALUE_RULES, { name: input.name });
     const name = requireName(input.name, 'addOptionValue', 'An option');
     const group = await menuRepo.getOptionGroup(trx, actor.orgId, input.optionGroupId);
     if (!group) throw gone(`addOptionValue: option group ${input.optionGroupId} does not exist.`, 'option group');

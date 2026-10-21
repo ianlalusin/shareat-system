@@ -112,6 +112,16 @@ export async function listLinks(tx: Tx, orgId: string): Promise<PosV1StoreLinkRo
   return tx.select(linkColumns).from(posV1StoreLinks).where(eq(posV1StoreLinks.orgId, orgId));
 }
 
+/** T-396: the LIVE links of the org (unlinked rows left out), with the store's name, in store-name order: the morning import's work list. */
+export async function listLiveLinks(tx: Tx, orgId: string): Promise<(PosV1StoreLinkRow & { storeName: string })[]> {
+  return tx
+    .select({ ...linkColumns, storeName: stores.name })
+    .from(posV1StoreLinks)
+    .innerJoin(stores, eq(stores.id, posV1StoreLinks.storeId))
+    .where(and(eq(posV1StoreLinks.orgId, orgId), isNull(posV1StoreLinks.unlinkedAt)))
+    .orderBy(asc(stores.name), asc(posV1StoreLinks.storeId));
+}
+
 export interface InsertLinkInput {
   readonly orgId: string;
   readonly storeId: string;

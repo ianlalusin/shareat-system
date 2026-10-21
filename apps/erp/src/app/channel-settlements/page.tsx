@@ -7,7 +7,6 @@ import { add, compare, money, ZERO } from '@shareat/core/money';
 import { requireSession } from '../../lib/session';
 import {
   previewSettlementAction,
-  recordSettlementAction,
   setPayoutDestinationAction,
   voidSettlementAction,
 } from './actions';
@@ -26,8 +25,9 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { PAYOUT_DESTINATION_EDIT } from './typed-forms';
-import { EditableRecord } from '@/components/forms';
-import { Button, ConfirmDestructive, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { CHANNEL_PAYOUT_DESTINATION_RULES, CHANNEL_SETTLEMENT_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { Button, ConfirmDestructive, Field, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
 
 export const metadata = { title: 'Channel settlements — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -172,8 +172,9 @@ export default async function ChannelSettlementsPage({
           <div className="space-y-2">
             {unwired.map((c) =>
               canSetChannelPayoutAt(c.storeId) ? (
-                <form
+                <CheckedForm
                   key={c.id}
+                  rules={CHANNEL_PAYOUT_DESTINATION_RULES}
                   action={setPayoutDestinationAction}
                   className="flex flex-wrap items-center gap-2"
                 >
@@ -181,22 +182,24 @@ export default async function ChannelSettlementsPage({
                   <span className="min-w-40 text-sm font-medium text-warning-ink">
                     {c.storeName} — {c.name}
                   </span>
-                  <Select name="moneyAccountId" required defaultValue="">
-                    <option value="" disabled>
-                      Choose an account…
-                    </option>
-                    {accounts
-                      .filter((a) => a.storeId === c.storeId)
-                      .map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name} ({a.custodian} · {accountLabel(a.glAccountCode)})
-                        </option>
-                      ))}
-                  </Select>
+                  <Field label="Payout account" rule={CHANNEL_PAYOUT_DESTINATION_RULES.moneyAccountId}>
+                    <Select {...nativeAttrs(CHANNEL_PAYOUT_DESTINATION_RULES.moneyAccountId)} defaultValue="">
+                      <option value="" disabled>
+                        Choose an account…
+                      </option>
+                      {accounts
+                        .filter((a) => a.storeId === c.storeId)
+                        .map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name} ({a.custodian} · {accountLabel(a.glAccountCode)})
+                          </option>
+                        ))}
+                    </Select>
+                  </Field>
                   <Button type="submit" variant="secondary">
                     Save
                   </Button>
-                </form>
+                </CheckedForm>
               ) : (
                 // T-350: a non-holder sees the channel named, but no picker — an admin has to do this.
                 <div
@@ -271,24 +274,26 @@ export default async function ChannelSettlementsPage({
                                 label={`${c.name} payout account`}
                                 hidden={{ channelId: c.id }}
                                 typed={typedFor(sp, PAYOUT_DESTINATION_EDIT, c.id, actor.personId)}
+                                rules={CHANNEL_PAYOUT_DESTINATION_RULES}
                               >
-                                <Select
-                                  name="moneyAccountId"
-                                  required
-                                  defaultValue={currentRetired ? '' : c.destinationMoneyAccountId}
-                                  className="w-full"
-                                >
-                                  {currentRetired && (
-                                    <option value="" disabled>
-                                      — choose the new account —
-                                    </option>
-                                  )}
-                                  {storeAccounts.map((a) => (
-                                    <option key={a.id} value={a.id}>
-                                      {a.name} ({a.custodian} · {accountLabel(a.glAccountCode)})
-                                    </option>
-                                  ))}
-                                </Select>
+                                <Field label="Payout account" rule={CHANNEL_PAYOUT_DESTINATION_RULES.moneyAccountId}>
+                                  <Select
+                                    {...nativeAttrs(CHANNEL_PAYOUT_DESTINATION_RULES.moneyAccountId)}
+                                    defaultValue={currentRetired ? '' : c.destinationMoneyAccountId}
+                                    className="w-full"
+                                  >
+                                    {currentRetired && (
+                                      <option value="" disabled>
+                                        — choose the new account —
+                                      </option>
+                                    )}
+                                    {storeAccounts.map((a) => (
+                                      <option key={a.id} value={a.id}>
+                                        {a.name} ({a.custodian} · {accountLabel(a.glAccountCode)})
+                                      </option>
+                                    ))}
+                                  </Select>
+                                </Field>
                               </EditableRecord>
                             )}
                           </div>
@@ -389,7 +394,6 @@ export default async function ChannelSettlementsPage({
           </p>
         </div>
         <SettlementForm
-          postAction={recordSettlementAction}
           previewAction={previewSettlementAction}
           channels={channels
             .filter((c) => c.isActive)
@@ -497,17 +501,19 @@ export default async function ChannelSettlementsPage({
                     </td>
                     <td className="px-3 py-2 text-right">
                       {s.status === 'posted' && (
-                        <form action={voidSettlementAction} className="flex justify-end gap-1">
+                        <CheckedForm rules={CHANNEL_SETTLEMENT_VOID_RULES} action={voidSettlementAction} className="flex justify-end gap-1">
                           <input type="hidden" name="settlementId" value={s.id} />
                           {/* A void without a reason is a gap, so the reason is part of the same
                               control rather than a confirmation step that can be skipped. */}
-                          <Input name="reason" required placeholder="Reason…" className="w-28" />
+                          <Field label={<span className="sr-only">Reason</span>} rule={CHANNEL_SETTLEMENT_VOID_RULES.reason}>
+                            <Input {...nativeAttrs(CHANNEL_SETTLEMENT_VOID_RULES.reason)} placeholder="Reason…" className="w-28" />
+                          </Field>
                           <ConfirmDestructive
                             tier="admin-pin"
                             label="Void settlement"
                             consequence="Reverses this settlement. An administrator must approve with their own PIN."
                           />
-                        </form>
+                        </CheckedForm>
                       )}
                     </td>
                   </tr>

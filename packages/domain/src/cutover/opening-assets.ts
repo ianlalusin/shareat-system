@@ -11,6 +11,8 @@ import { compare, ZERO } from '@shareat/core/money';
 import { parseMoneyInput } from '../shared/money-input';
 import { gone, refuse, RefusalError } from '../shared/refusal';
 import { CONVERSION_DATE } from './tie-out';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { CUTOVER_ASSET_RULES } from '../field-rules/cutover';
 
 export interface ValueOpeningAssetInput {
   assetId: string;
@@ -24,6 +26,12 @@ export async function valueOpeningAsset(tx: Tx | null, actor: Actor, input: Valu
     const asset = await cutoverRepo.assetOf(trx, actor.orgId, input.assetId);
     if (!asset) throw gone(`valueOpeningAsset: asset ${input.assetId} does not exist.`, 'asset');
     await authorize(trx, actor, 'run_cutover', { storeId: asset.storeId });
+    // T-440 S9 (ii): the screen's own rules, only once the gate has passed.
+    assertFieldRules(CUTOVER_ASSET_RULES, {
+      bookValue: input.bookValue,
+      remainingLifeMonths: String(input.remainingLifeMonths),
+      salvageValue: input.salvageValue,
+    });
 
     // R13: the shared lock BEFORE the R8 check, so C5 (exclusive) cannot post between the check and the write.
     await cutoverRepo.lockOpeningShared(trx, actor.orgId);

@@ -18,7 +18,8 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { MONEY_ACCOUNT_RENAME } from './typed-forms';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord, FieldCheck } from '@/components/forms';
+import { MONEY_ACCOUNT_CREATE_RULES, MONEY_ACCOUNT_RENAME_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { Banner, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 
@@ -129,15 +130,15 @@ export default async function MoneyAccountsPage({
                       Retire button that always errors would teach people to distrust buttons.
                     */}
                     {a.isActive && a.isFoundation && (
-                      <EditableRecord action={renameMoneyAccountAction} label={a.name} hidden={{ moneyAccountId: a.id }} typed={typedFor(sp, MONEY_ACCOUNT_RENAME, a.id, actor.personId)}>
+                      <EditableRecord action={renameMoneyAccountAction} label={a.name} hidden={{ moneyAccountId: a.id }} typed={typedFor(sp, MONEY_ACCOUNT_RENAME, a.id, actor.personId)} rules={MONEY_ACCOUNT_RENAME_RULES}>
                         <div className="flex flex-wrap justify-end gap-1">
-                        <Input
-                          name="name"
-                          required
-                          defaultValue={a.name}
-                          maxLength={120}
-                          className="w-40 text-xs"
-                        />
+                        <Field label={<span className="sr-only">Account name</span>} rule={MONEY_ACCOUNT_RENAME_RULES.name}>
+                          <Input
+                            {...nativeAttrs(MONEY_ACCOUNT_RENAME_RULES.name)}
+                            defaultValue={a.name}
+                            className="w-40 text-xs"
+                          />
+                        </Field>
                         {/* ⭐ Only a cashier drawer consults this — office and staff balances are
                             complete and block at zero regardless (row 154), so offering the field
                             there would imply an overdraft they do not have. */}
@@ -150,13 +151,14 @@ export default async function MoneyAccountsPage({
                           </span>
                         )}
                         {a.custodian === 'cashier' && (
-                          <input
-                            name="overdraftLimit"
-                            inputMode="decimal"
-                            defaultValue={a.overdraftLimit}
-                            title="How far below zero this drawer may go before a draw is refused. Entered positive; 0 means never."
-                            className="w-24 rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-ink text-xs"
-                          />
+                          <Field label={<span className="sr-only">Overdraft limit</span>} rule={MONEY_ACCOUNT_RENAME_RULES.overdraftLimit}>
+                            <input
+                              {...nativeAttrs(MONEY_ACCOUNT_RENAME_RULES.overdraftLimit)}
+                              defaultValue={a.overdraftLimit}
+                              title="How far below zero this drawer may go before a draw is refused. Entered positive; 0 means never."
+                              className="w-24 rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-ink text-xs"
+                            />
+                          </Field>
                         )}
                         </div>
                       </EditableRecord>
@@ -190,13 +192,13 @@ export default async function MoneyAccountsPage({
           </p>
         </div>
 
-        <form action={createMoneyAccountAction} className="space-y-4">
+        <CheckedForm rules={MONEY_ACCOUNT_CREATE_RULES} action={createMoneyAccountAction} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Name" hint="What staff call it — “GCash — cashier”, “BDO — office”">
-              <Input name="name" required maxLength={120} placeholder="GCash — cashier" className="w-full" />
+            <Field label="Name" hint="What staff call it — “GCash — cashier”, “BDO — office”" rule={MONEY_ACCOUNT_CREATE_RULES.name}>
+              <Input {...nativeAttrs(MONEY_ACCOUNT_CREATE_RULES.name)} placeholder="GCash — cashier" className="w-full" />
             </Field>
-            <Field label="Store">
-              <Select name="storeId" required defaultValue="" className="w-full">
+            <Field label="Store" rule={MONEY_ACCOUNT_CREATE_RULES.storeId}>
+              <Select {...nativeAttrs(MONEY_ACCOUNT_CREATE_RULES.storeId)} defaultValue="" className="w-full">
                 <option value="">Choose a store…</option>
                 {stores.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -241,27 +243,27 @@ export default async function MoneyAccountsPage({
           </p>
 
           <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
-        </form>
+        </CheckedForm>
       </section>
     </Page>
   );
 }
 
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
+function Field({ label, hint, rule, className, children }: { label: React.ReactNode; hint?: string; rule?: FieldRule; className?: string; children: React.ReactNode }) {
+  const body = (
+    <>      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
       {hint && <span className="text-xs text-neutral-400 dark:text-neutral-600">{hint}</span>}
-    </label>
+    
+    </>
+  );
+  // T-440: a ruled field keeps its label and puts the live helper line OUTSIDE it (never part of the accessible name).
+  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
+  return (
+    <div className={className}>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }
 

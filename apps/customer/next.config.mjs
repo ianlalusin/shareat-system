@@ -10,6 +10,8 @@ const cap = process.env.BUILD_TARGET === 'capacitor';
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // @shareat/core is TypeScript source (money): compile it with the app.
+  transpilePackages: ['@shareat/core'],
   trailingSlash: cap,
   images: { unoptimized: cap },
   ...(cap ? { output: 'export' } : {}),

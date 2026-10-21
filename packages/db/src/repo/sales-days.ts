@@ -8,7 +8,7 @@
  * and is pooled across them (T-136, bible row 128); putting it on the day is exactly the v1 shape
  * that makes pooling impossible.
  */
-import { and, asc, desc, eq, inArray, lt, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lt, lte, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { refuse } from '../refusal';
 import { recordGone } from './record-gone';
@@ -405,6 +405,63 @@ export async function findByBusinessDate(
     )
     .limit(1);
   return row;
+}
+
+/**
+ * T-396: the day on this store and date in ANY status, voided included (the morning import's "already there"
+ * question; a voided date is a manager's decision to re-enter, never the timer's). The live day wins over a voided one.
+ */
+export async function findAnyByBusinessDate(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  businessDate: string,
+): Promise<{ id: string; status: SalesDayStatus } | undefined> {
+  const [row] = await tx
+    .select({ id: salesDays.id, status: salesDays.status })
+    .from(salesDays)
+    .where(and(eq(salesDays.orgId, orgId), eq(salesDays.storeId, storeId), eq(salesDays.businessDate, businessDate)))
+    .orderBy(sql`(${salesDays.status} = 'voided') asc`, desc(salesDays.createdAt))
+    .limit(1);
+  return row as { id: string; status: SalesDayStatus } | undefined;
+}
+
+/** T-396: every business date in [from, to] that has a sales day in ANY status (voided included). */
+export async function datesWithAnyDay(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  from: string,
+  to: string,
+): Promise<Set<string>> {
+  const rows = await tx
+    .select({ d: sql<string>`${salesDays.businessDate}::text` })
+    .from(salesDays)
+    .where(
+      and(
+        eq(salesDays.orgId, orgId),
+        eq(salesDays.storeId, storeId),
+        gte(salesDays.businessDate, from),
+        lte(salesDays.businessDate, to),
+      ),
+    );
+  return new Set(rows.map((r) => r.d));
+}
+
+/** T-396: how many POS-imported days of this store are still open or submitted (the morning import's backlog notice). */
+export async function countUnverifiedFeedDays(tx: Tx, orgId: string, storeId: string): Promise<number> {
+  const [row] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(salesDays)
+    .where(
+      and(
+        eq(salesDays.orgId, orgId),
+        eq(salesDays.storeId, storeId),
+        eq(salesDays.source, 'pos_v1_day_feed'),
+        inArray(salesDays.status, [...UNVERIFIED_STATUSES]),
+      ),
+    );
+  return row?.n ?? 0;
 }
 
 /** Whether a day for this store and date was ever voided - the fact that makes re-entering the date a

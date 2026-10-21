@@ -35,6 +35,8 @@ export interface StartRunInput {
   job: SchedulerJob;
   period: string;
   trigger: 'cron' | 'manual';
+  /** T-396: the run's own clock when the caller injects one (the POS day import is driven by `now`); absent = the database's. */
+  startedAt?: Date;
 }
 
 /**

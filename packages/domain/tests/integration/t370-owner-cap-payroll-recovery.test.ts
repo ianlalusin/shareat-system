@@ -29,6 +29,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
   throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — the database name must contain "_test".`);
 }
 
+import { seedStatutoryRates } from './_fixtures/statutory-rates';
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, ownersRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
@@ -80,6 +81,7 @@ async function fixture(hint: string, opts: { drawingLimit?: string; drawingLimit
   const anaId = await mk('Ana', 'staff', storeId);
   const admin = actor(orgId, adminId);
   const ana = actor(orgId, anaId);
+  await seedStatutoryRates(orgId, admin, [storeId, storeId2]);
 
   const [office] = await sql<{ id: string }[]>`select id from money_accounts where store_id = ${storeId} and instrument = 'cash' and custodian = 'office' and is_foundation`;
   await asOrg(orgId, (tx) =>

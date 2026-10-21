@@ -131,7 +131,7 @@ describe('T-181 invariant 1 — the change and its intent commit together', () =
     const e = await hire(f);
     await sql`delete from mirror_outbox where org_id = ${f.orgId}`;
     const [pos] = await sql<{ id: string }[]>`
-      select id from positions where org_id = ${f.orgId} and name = 'Cook'`;
+      select id from positions where org_id = ${f.orgId} and name = 'Kitchen Staff'`;
     await sql`
       insert into employment_positions (employment_id, position_id, is_primary)
       values (${e.id}, ${pos!.id}, false)`;

@@ -16,7 +16,7 @@
  */
 import { formatBusinessDateTime, toBusinessDate } from '@shareat/core/datetime';
 import { schedulerRepo, type SchedulerJob } from '@shareat/db';
-import { withOrgPrincipal } from '../app/expenses/lib';
+import { listStores, withOrgPrincipal } from '../app/expenses/lib';
 import { containsIdentifier } from '../lib/error-shape';
 import { Banner } from '@/components/ui/Banner';
 
@@ -41,14 +41,25 @@ function monthsSince(date: Date): number {
   return (ny - dy) * 12 + (nm - dm);
 }
 
+/** The command that runs each job by hand, named on the never-run banner. */
+const JOB_COMMAND: Partial<Record<SchedulerJob, string>> = { pos_day_import: 'npm run pos-day-import' };
+
+const DAILY_STALE_MS = 26 * 3_600_000;
+
 export async function SchedulerStatus({
   orgId,
   job,
   label,
+  cadence = 'monthly',
+  visibleSubjectIds,
 }: {
   orgId: string;
   job: SchedulerJob;
   label: string;
+  /** `monthly` (default): stale after 2 calendar months. `daily`: stale after 26 h (T-396 S2). */
+  cadence?: 'daily' | 'monthly';
+  /** When given, only lines whose `subjectId` is in this list are shown (per-store visibility, T-396 S2). */
+  visibleSubjectIds?: readonly string[];
 }) {
   const [last, unfinished] = await withOrgPrincipal(orgId, async (tx) => [
     await schedulerRepo.lastRunFor(tx, orgId, job),
@@ -58,6 +69,15 @@ export async function SchedulerStatus({
   // ⛔ NEVER RUN AT ALL. The loudest state, and the one v1 was in for its entire life while its
   // seed data claimed a cron existed.
   if (!last) {
+    if (cadence === 'daily') {
+      return (
+        <Banner tone="warning">
+          <strong className="font-medium">The {label.toLowerCase()} has never run.</strong> Nothing is drafting
+          the stores&apos; days on a schedule. Until the timer is armed, or someone runs{' '}
+          <code className="font-mono">{JOB_COMMAND[job] ?? job}</code> by hand, days are only typed in.
+        </Banner>
+      );
+    }
     return (
       <Banner tone="warning">
         <strong className="font-medium">{label} has never run.</strong> Nothing is posting it on a
@@ -68,7 +88,8 @@ export async function SchedulerStatus({
     );
   }
 
-  const stale = monthsSince(last.startedAt) >= 2;
+  const stale =
+    cadence === 'daily' ? Date.now() - last.startedAt.getTime() > DAILY_STALE_MS : monthsSince(last.startedAt) >= 2;
   const stuck = unfinished.filter((r) => r.job === job);
   const when = toBusinessDate(last.startedAt);
 
@@ -84,9 +105,14 @@ export async function SchedulerStatus({
     );
   }
 
+  // A viewer who cannot see every store gets the run-level text (error, all-store counts) only as a generic line: it can name
+  // another store. A viewer who sees all of the org's stores gets it whole.
+  const orgWide = !visibleSubjectIds || (await listStores(orgId)).every((st) => visibleSubjectIds.includes(st.id));
+
   // T-368: a `kind: 'notice'` entry is said, not failed - it never renders as a failure.
-  const failureRows = (last.failures ?? []).filter((f) => f.kind !== 'notice');
-  const notices = (last.failures ?? []).filter((f) => f.kind === 'notice');
+  const shown = (last.failures ?? []).filter((f) => !visibleSubjectIds || visibleSubjectIds.includes(f.subjectId));
+  const failureRows = shown.filter((f) => f.kind !== 'notice');
+  const notices = shown.filter((f) => f.kind === 'notice');
 
   if (last.outcome !== 'ok') {
     return (
@@ -94,8 +120,14 @@ export async function SchedulerStatus({
         <strong className="font-medium">
           The last {label.toLowerCase()} run ({last.period}, {when}) did not complete cleanly.
         </strong>{' '}
-        {last.postedCount} posted, {last.failedCount} failed.
-        {last.error && <div className="mt-1">{redactDetail(last.error)}</div>}
+        {!orgWide ? (
+          <div className="mt-1">The last morning import had problems at stores you don&apos;t manage.</div>
+        ) : (
+          <>
+            {last.postedCount} posted, {last.failedCount} failed.
+            {last.error && <div className="mt-1">{redactDetail(last.error)}</div>}
+          </>
+        )}
         {/* ⚠️ Verbatim WHEN id-free, on the page. The likeliest reason is mundane — "no fiscal
             period covers 2026-06-30" — and it is only actionable if somebody can read it; an
             id-bearing one is redacted above (`redactSubject`/`redactDetail`, T-343 S4b). */}
@@ -127,7 +159,9 @@ export async function SchedulerStatus({
         <strong className="font-medium">
           {label} last ran {when}, for {last.period}.
         </strong>{' '}
-        That is more than a month ago. The schedule may have stopped.
+        {cadence === 'daily'
+          ? 'That is more than a day ago. The schedule may have stopped.'
+          : 'That is more than a month ago. The schedule may have stopped.'}
       </Banner>
     );
   }

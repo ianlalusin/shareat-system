@@ -54,6 +54,10 @@ export const ALLOWED: Record<string, Allowed> = {
   // :54 manilaDay(ms): shifts a GIVEN event instant (ms argument) to its Manila day, not the current instant. T-402 S2.
   'packages/auth/src/security-events.ts': { count: 1, reason: 'manila-offset-ratchet' },
   'packages/domain/src/attendance/sweep.ts': { count: 1, reason: 'manila-offset-ratchet' },
+  // T-436: pure calendar arithmetic on a GIVEN date string (day + n, anniversary), never the current instant.
+  'apps/erp/src/app/attendance/leave/lib.ts': { count: 1, reason: 'utc-calendar-arithmetic' },
+  'apps/erp/src/app/attendance/leave/page.tsx': { count: 1, reason: 'utc-calendar-arithmetic' },
+  'packages/domain/src/leave/sil.ts': { count: 1, reason: 'utc-calendar-arithmetic' },
   'packages/domain/src/fiscal-periods/holes.ts': { count: 3, reason: 'utc-calendar-arithmetic' },
   'packages/domain/src/payroll/periods.ts': { count: 2, reason: 'utc-calendar-arithmetic' },
   'packages/domain/src/recurring-expenses/index.ts': { count: 2, reason: 'manila-offset-ratchet' },

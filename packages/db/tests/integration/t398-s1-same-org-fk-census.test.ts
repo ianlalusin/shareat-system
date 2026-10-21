@@ -391,7 +391,7 @@ async function readNoFkColumns(q: Q): Promise<string[]> {
     select c.relname as t, a.attname as col
     from pg_class c join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
     where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p') and not c.relispartition
-      and (a.attname like '%\_id' or a.attname like '%\_ids' or a.attname like '%\_by')
+      and (a.attname like '%\\_id' or a.attname like '%\\_ids' or a.attname like '%\\_uid' or a.attname like '%\\_by')
       and a.attname <> 'org_id'
       and not exists (select 1 from pg_constraint k where k.conrelid = c.oid and k.contype = 'f' and a.attnum = any(k.conkey))
     order by 1, 2`;

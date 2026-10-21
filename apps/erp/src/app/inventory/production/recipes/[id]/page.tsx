@@ -55,7 +55,7 @@ export default async function RecipePage({
   const retired = recipe.status !== 'active';
 
   return (
-    <Page density="table" className="space-y-6">
+    <Page view="detail" sectioned density="table" className="space-y-6">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">{recipe.name}</h1>

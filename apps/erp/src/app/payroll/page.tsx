@@ -18,7 +18,9 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Banner, Button, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
+import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, Input, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { PAYROLL_PAY_RATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Payroll — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -105,7 +107,7 @@ export default async function PayrollPage({
         </span>
       </div>
 
-      <form className="flex flex-wrap items-end gap-3">
+      <form method="get" className="flex flex-wrap items-end gap-3">
         <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1">
           <span className={LABEL}>Store</span>
           <Select name="store" defaultValue={storeId} className="w-full">
@@ -262,20 +264,42 @@ export default async function PayrollPage({
             </Banner>
           )}
 
+          {pv.unconfirmedRates.length > 0 && (
+            <Banner tone="warning">
+              ⚠️ <strong>Rates not confirmed:</strong> {pv.unconfirmedRates.join('; ')}. The figures below use them, but the run
+              cannot be posted until the accountant approves them under
+              Payroll rates (in the menu).
+            </Banner>
+          )}
+
+          {pv.missingGovernmentIds.length > 0 && (
+            <Banner tone="warning">
+              ⚠️ <strong>Missing government numbers — not deducted:</strong>{' '}
+              {pv.missingGovernmentIds
+                .map((m) => `${m.personName} (${m.agency === 'sss' ? 'SSS' : m.agency === 'philhealth' ? 'PhilHealth' : 'Pag-IBIG'})`)
+                .join(', ')}
+              . An agency with no number on file is skipped for that person (both shares), and not caught up later; add the number on the
+              staff page.
+            </Banner>
+          )}
+
           {pv.slips.length === 0 ? (
             <p className="rounded border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500 dark:border-neutral-700">
               Nothing payable in this period.
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[46rem] text-sm">
+              <table className="w-full min-w-[60rem] text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-neutral-500">
                     <th className="py-1 pr-3 font-medium">Person</th>
                     <th className="py-1 pr-3 text-right font-medium">Days</th>
                     <th className="py-1 pr-3 text-right font-medium">Basic</th>
                     <th className="py-1 pr-3 text-right font-medium">OT + ND + Hol</th>
+                    <th className="py-1 pr-3 text-right font-medium">Leave + SIL payout</th>
                     <th className="py-1 pr-3 text-right font-medium">Gross</th>
+                    <th className="py-1 pr-3 text-right font-medium">SSS / PhilHealth / Pag-IBIG</th>
+                    <th className="py-1 pr-3 text-right font-medium">Tax</th>
                     <th className="py-1 pr-3 text-right font-medium">Advance</th>
                     <th className="py-1 text-right font-medium">Net</th>
                   </tr>
@@ -294,8 +318,22 @@ export default async function PayrollPage({
                       <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-neutral-500">
                         {peso(Number(s.otPay) + Number(s.nightDiffPay) + Number(s.holidayPay))}
                       </td>
+                      <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-neutral-500">
+                        {peso(Number(s.leavePay) + Number(s.silConversionPay))}
+                      </td>
                       <td className="py-1.5 pr-3 text-right font-mono tabular-nums">
                         {peso(Number(s.grossPay))}
+                      </td>
+                      <td className="py-1.5 pr-3 text-right font-mono text-xs tabular-nums">
+                        {peso(Number(s.sssEe))} / {peso(Number(s.philhealthEe))} / {peso(Number(s.pagibigEe))}
+                        {s.skippedAgencies.length > 0 && (
+                          <div className="font-sans text-warning-ink">
+                            not deducted: no {s.skippedAgencies.map((a) => (a === 'sss' ? 'SSS' : a === 'philhealth' ? 'PhilHealth' : 'Pag-IBIG')).join(', ')} no.
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-1.5 pr-3 text-right font-mono tabular-nums">
+                        {s.isMwe ? 'MWE' : peso(Number(s.withholding))}
                       </td>
                       <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-warning-ink">
                         {compare(money(s.advanceRecovered), ZERO) > 0 ? `−${peso(Number(s.advanceRecovered))}` : '—'}
@@ -367,30 +405,28 @@ export default async function PayrollPage({
                     )}
                   </td>
                   <td className="py-2">
-                    <form action={setPayRateAction} className="flex flex-wrap items-end gap-2">
+                    <CheckedForm rules={PAYROLL_PAY_RATE_RULES} action={setPayRateAction} className="flex flex-wrap items-end gap-2">
                       <input type="hidden" name="storeId" value={storeId} />
                       <input type="hidden" name="employmentId" value={r.id} />
                       <Select name="basis" defaultValue="daily" className="w-24">
                         <option value="daily">daily</option>
                         <option value="hourly">hourly</option>
                       </Select>
-                      <input
-                        name="amount"
-                        inputMode="decimal"
-                        placeholder="0.00"
-                        // raw <input>: t343-s5-5v-number-boxes.test.ts scans the source for this tag; kit field tokens by hand
-                        className="w-28 rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink"
-                      />
-                      <Input
-                        name="effectiveFrom"
-                        type="date"
-                        defaultValue={periodStart}
-                        className="w-40"
-                      />
+                      <Field label="Rate" rule={PAYROLL_PAY_RATE_RULES.amount}>
+                        <Input {...nativeAttrs(PAYROLL_PAY_RATE_RULES.amount)} placeholder="0.00" className="w-28" />
+                      </Field>
+                      <Field label="From" rule={PAYROLL_PAY_RATE_RULES.effectiveFrom}>
+                        <Input
+                          type="date"
+                          {...nativeAttrs(PAYROLL_PAY_RATE_RULES.effectiveFrom)}
+                          defaultValue={periodStart}
+                          className="w-40"
+                        />
+                      </Field>
                       <Button type="submit" variant="secondary">
                         Save
                       </Button>
-                    </form>
+                    </CheckedForm>
                   </td>
                 </tr>
               ))}
@@ -428,6 +464,9 @@ export default async function PayrollPage({
                       <span className="font-mono">{peso(Number(s.netPay))}</span>
                       {compare(money(s.advanceRecovered), ZERO) > 0 &&
                         ` (advance −${peso(Number(s.advanceRecovered))})`}
+                      {` · SSS ${peso(Number(s.sssEe))}, PhilHealth ${peso(Number(s.philhealthEe))}, Pag-IBIG ${peso(Number(s.pagibigEe))}, tax ${peso(Number(s.withholding))}`}
+                      {s.skippedAgencies.length > 0 &&
+                        ` · not deducted: no ${s.skippedAgencies.map((x) => (x === 'sss' ? 'SSS' : x === 'philhealth' ? 'PhilHealth' : 'Pag-IBIG')).join(', ')} no.`}
                     </li>
                   ))}
                 </ul>

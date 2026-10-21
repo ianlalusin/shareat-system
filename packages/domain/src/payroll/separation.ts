@@ -23,6 +23,8 @@ import { reverseEntry } from '../ledger/reverse-entry';
 import { advanceToRecover } from './compute';
 import { outstandingAdvance, PAYROLL_ADVANCE_ACCOUNT } from './index';
 import { THIRTEENTH_MONTH_ACCOUNT } from './thirteenth-month';
+// T-436: unused Service Incentive Leave is paid in final pay when this is the person's last job (spec D12).
+import { releaseSilOfSeparation, settleSilAtSeparation } from '../leave/payroll';
 
 /** `6150 salary additions` — already in the approved chart. Separation pay is exactly "an
  *  addition to what is otherwise owed," which is what 6150 already means; no new account. */
@@ -212,6 +214,18 @@ export async function postSeparation(
       await separationsRepo.setSeparationEntry(trx, separationId, posted.entryId);
     }
 
+    // ⭐ T-436 (D12): a person whose LAST job this is leaves with their unused SIL days paid in cash, in the same transaction, instead
+    // of waiting for a year end they will not be here for. Its own journal entry; voiding the separation releases and reverses it.
+    await settleSilAtSeparation(trx, actor, {
+      storeId: input.storeId,
+      employmentId: input.employmentId,
+      personId: employment.personId,
+      separationId,
+      separationDate: input.separationDate,
+      entryDate,
+      moneyAccountGlCode: account.glAccountCode,
+    });
+
     return { id: separationId, netPay: netPay };
   };
   if (tx) return run(tx);
@@ -253,6 +267,13 @@ export async function voidSeparation(
       reason,
     });
     if (!ok) throw new Error('voidSeparation: this separation was voided by someone else first.');
+
+    // ⭐ T-436: release the SIL payout this separation took (and reverse its entry), so the year-end run can pay it instead.
+    await releaseSilOfSeparation(trx, actor, {
+      separationId: input.id,
+      reason,
+      reversalDate: input.on ?? separation.separationDate,
+    });
 
     return { reversed };
   };

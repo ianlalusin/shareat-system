@@ -20,6 +20,8 @@
 import { authorize, AuthorizationError, canAt, heldCapabilities, type Actor } from '@shareat/auth';
 import { money, toCentavos } from '@shareat/core/money';
 import { refuse } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { REPORTS_DUAL_RUN_DISPOSITION_RULES } from '../field-rules/reports';
 import { accessRepo, advisoryLocksRepo, auditLogRepo, dualRunReadsRepo, dualRunRepo, schema, type Tx } from '@shareat/db';
 
 export type DualRunKindName = (typeof schema.DUAL_RUN_KINDS)[number];
@@ -30,7 +32,6 @@ export type DispositionClassName = (typeof DISPOSITION_CLASS_OPTIONS)[number];
 /** Classes the comparator settles before dispositions: a row against such a line would be dead (compare.ts). */
 const SETTLED_CLASSES: ReadonlySet<string> = new Set(['TIES', 'INVENTORY_BASIS', 'SUPPLIER_ADVANCE_1240', 'UNMAPPED_KEY']);
 
-const REF_PATTERN = /^DEF-[0-9]+$/;
 const WEEK_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export interface RecordDualRunDispositionInput {
@@ -89,9 +90,10 @@ export async function recordDualRunDisposition(
   if (!(DISPOSITION_CLASS_OPTIONS as readonly string[]).includes(input.class)) {
     throw refuse(`recordDualRunDisposition: class ${String(input.class)} is not V1_DEFECT or V2_DEFECT`, 'A disposition says whose defect it is: the old system (V1_DEFECT) or the new one (V2_DEFECT).');
   }
-  if (!REF_PATTERN.test(input.ref)) throw refuse(`recordDualRunDisposition: ref ${String(input.ref)} is not DEF-nnn`, 'The defect reference must look like DEF-123.');
-  const note = typeof input.note === 'string' ? input.note.trim() : '';
-  if (note.length < 1 || note.length > 500) throw refuse('recordDualRunDisposition: note must be 1-500 characters', 'The note is required and may be at most 500 characters.');
+  // T-440: the reference's shape and the note's length are ONE rule set shared with the week page's form (field-rules/reports.ts).
+  const fields = assertFieldRules(REPORTS_DUAL_RUN_DISPOSITION_RULES, { ref: input.ref, note: input.note });
+  const ref = fields.ref ?? '';
+  const note = fields.note ?? '';
   if (!(schema.DUAL_RUN_KINDS as readonly string[]).includes(input.kind)) throw refuse(`recordDualRunDisposition: unknown kind ${String(input.kind)}`, 'That kind of line does not exist.');
   if (typeof input.weekStart !== 'string' || !WEEK_PATTERN.test(input.weekStart)) throw refuse('recordDualRunDisposition: weekStart is not a date', 'The week must be a date.');
   if (typeof input.lineKey !== 'string' || input.lineKey === '') throw refuse('recordDualRunDisposition: lineKey is empty', 'Choose the line to record against.');
@@ -128,7 +130,7 @@ export async function recordDualRunDisposition(
     lineKey: input.lineKey,
     deltaAt,
     class: input.class,
-    ref: input.ref,
+    ref,
     note,
     createdBy: actor.personId,
   });
@@ -143,7 +145,7 @@ export async function recordDualRunDisposition(
       kind: input.kind,
       lineKey: input.lineKey,
       class: input.class,
-      ref: input.ref,
+      ref,
       deltaAt,
       reportId: current.id,
     },

@@ -31,7 +31,8 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { CASH_POLICY_EDIT } from './typed-forms';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord, FieldCheck } from '@/components/forms';
+import { CASH_POLICY_RULES, REMITTANCE_RECORD_RULES, REMITTANCE_REVERSE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { Button, ConfirmDestructive, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 
@@ -417,7 +418,7 @@ export default async function RemittancePage({
             </p>
           </div>
 
-          <form action={createRemittanceAction} className="space-y-4">
+          <CheckedForm rules={REMITTANCE_RECORD_RULES} action={createRemittanceAction} className="space-y-4">
             <input type="hidden" name="storeId" value={storeId} />
 
             <div className="space-y-3">
@@ -466,17 +467,16 @@ export default async function RemittancePage({
             </div>
 
             <FormGrid>
-              <Field label="Date">
+              <Field label="Date" rule={REMITTANCE_RECORD_RULES.remittedOn}>
                 <Input
-                  name="remittedOn"
+                  {...nativeAttrs(REMITTANCE_RECORD_RULES.remittedOn)}
                   type="date"
-                  required
                   defaultValue={today()}
                   className="w-full"
                 />
               </Field>
-              <Field label="Reference">
-                <Input name="reference" maxLength={120} className="w-full" />
+              <Field label="Reference" rule={REMITTANCE_RECORD_RULES.reference}>
+                <Input {...nativeAttrs(REMITTANCE_RECORD_RULES.reference)} className="w-full" />
               </Field>
             </FormGrid>
             <Field label="Notes">
@@ -484,7 +484,7 @@ export default async function RemittancePage({
             </Field>
 
             <SubmitButton pendingLabel="Saving…">Record handover</SubmitButton>
-          </form>
+          </CheckedForm>
         </section>
       )}
 
@@ -517,16 +517,18 @@ export default async function RemittancePage({
                     </td>
                     <td className="px-3 py-2 text-right">
                       {r.status === 'posted' && (
-                        <form action={reverseRemittanceAction} className="flex justify-end gap-1">
+                        <CheckedForm rules={REMITTANCE_REVERSE_RULES} action={reverseRemittanceAction} className="flex justify-end gap-1">
                           <input type="hidden" name="remittanceId" value={r.id} />
                           <input type="hidden" name="storeId" value={storeId} />
-                          <Input name="reason" required placeholder="Reason…" className="w-28 text-xs" />
+                          <Field label={<span className="sr-only">Reason</span>} rule={REMITTANCE_REVERSE_RULES.reason}>
+                            <Input {...nativeAttrs(REMITTANCE_REVERSE_RULES.reason)} placeholder="Reason…" className="w-28 text-xs" />
+                          </Field>
                           <ConfirmDestructive
                             tier="admin-pin"
                             label="Reverse remittance"
                             consequence="Reverses this remittance; the days it settled are owed again. An administrator must approve with their own PIN."
                           />
-                        </form>
+                        </CheckedForm>
                       )}
                     </td>
                   </tr>
@@ -559,7 +561,7 @@ export default async function RemittancePage({
               whatever this says — that is the control, and it is not what this changes.
             </p>
           </div>
-          <EditableRecord action={setCashPolicyAction} label="cash policy" hidden={{ storeId }} typed={typedFor(sp, CASH_POLICY_EDIT, storeId, actor.personId)}>
+          <EditableRecord action={setCashPolicyAction} label="cash policy" hidden={{ storeId }} typed={typedFor(sp, CASH_POLICY_EDIT, storeId, actor.personId)} rules={CASH_POLICY_RULES}>
 <FormGrid>
             {/* ⚠️ Both fields carry a hint so the control row lines up. With only one hinted, the
                 select and the text input sat at different heights under `items-end`. */}
@@ -579,10 +581,10 @@ export default async function RemittancePage({
             <Field
               label="Un-remitted ceiling"
               hint="Required for any cadence but daily. Leave blank only when remitting daily."
+              rule={CASH_POLICY_RULES.unremittedCeiling}
             >
               <Input
-                name="unremittedCeiling"
-                inputMode="decimal"
+                {...nativeAttrs(CASH_POLICY_RULES.unremittedCeiling)}
                 defaultValue={policy.unremittedCeiling ?? ''}
                 placeholder="e.g. 20000.00"
                 className="w-full"
@@ -601,20 +603,20 @@ export default async function RemittancePage({
   );
 }
 
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
+function Field({ label, hint, rule, className, children }: { label: React.ReactNode; hint?: string; rule?: FieldRule; className?: string; children: React.ReactNode }) {
+  const body = (
+    <>      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
       {hint && <span className="text-xs text-neutral-400 dark:text-neutral-600">{hint}</span>}
-    </label>
+    
+    </>
+  );
+  // T-440: a ruled field keeps its label and puts the live helper line OUTSIDE it (never part of the accessible name).
+  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
+  return (
+    <div className={className}>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }

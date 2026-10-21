@@ -19,7 +19,8 @@
 import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
 import { createFirestoreTerminalDriver } from '@shareat/sync-firestore';
-import { mintTerminalToken, provisionTerminal, revokeTerminal } from '@shareat/domain';
+import { assertFieldRules, mintTerminalToken, provisionTerminal, revokeTerminal } from '@shareat/domain';
+import { ATTENDANCE_TERMINAL_REVOKE_RULES } from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
@@ -92,6 +93,7 @@ export async function revokeTerminalAction(formData: FormData): Promise<void> {
   try {
     // T-412 Tier R: the person retypes the terminal's label; the server compares it with the label IT loads.
     const target = await loadDestructiveTarget(actor, 'clock_terminal', terminalId, ['provision_clock_terminal']);
+    assertFieldRules(ATTENDANCE_TERMINAL_REVOKE_RULES, formData);
     if (!retypeMatches(str(formData, 'confirmName'), target.name ?? '')) throw retypeRefusalError(target.name ?? '');
     await withOrgPrincipal(actor.orgId, (tx) =>
       revokeTerminal(tx, actor, createFirestoreTerminalDriver(), { terminalId, reason }),

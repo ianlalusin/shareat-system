@@ -8,7 +8,10 @@
  * function (`manage_menu`, `add_menu_item`, `set_menu_depletion`); nothing here decides who may. A blank text box means "not
  * sent". Quantities stay TEXT all the way to the domain. Each action redirects for itself (guard G1b: no wrapper redirects).
  */
+import { authorize, can } from '@shareat/auth';
+import { MENU_ITEM_EDIT_RULES, MENU_OPTION_GROUP_RULES, MENU_OPTION_VALUE_RULES } from '@shareat/domain/field-rules';
 import {
+  assertFieldRules,
   addMenuVariant,
   addOptionValue,
   createOptionGroup,
@@ -40,13 +43,18 @@ export async function editItemAction(fd: FormData): Promise<void> {
   const actor = await requireActor(path);
   if (!valid) return await redirectWithFlash(path, {}, { error: OPEN_FIRST });
   try {
+    await withOrgPrincipal(actor.orgId, (tx) => authorize(tx, actor, 'manage_menu', {}));
     const name = opt(fd, 'name');
     const description = opt(fd, 'description');
     const categoryId = opt(fd, 'categoryId');
     const status = opt(fd, 'status');
     const sortOrder = wholeNumber(fd, 'sortOrder', 'The sort order');
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      editMenuItem(
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): `editMenuItem` also serves retire (no name), so the field check stays here, and runs only for a caller its
+      // first authorize() ('manage_menu') would let in; anyone else is refused by that gate before any field sentence.
+      // An edit that sends no name leaves the name alone ("a blank box is not sent"); one that sends it must send a real one.
+      if (fd.has('name') && (await can(tx, actor, 'manage_menu', {}))) assertFieldRules(MENU_ITEM_EDIT_RULES, fd);
+      return editMenuItem(
         actor,
         {
           id: menuItemId,
@@ -57,8 +65,8 @@ export async function editItemAction(fd: FormData): Promise<void> {
           ...(status !== undefined ? { status: status as MenuStatus } : {}),
         },
         tx,
-      ),
-    );
+      );
+    });
   } catch (err) {
     return await redirectWithFlash(path, {}, { error: menuErrorMessage(err), typed: keepTyping(fd, MENU_ITEM, menuItemId, { actorId: actor.personId }) });
   }
@@ -114,6 +122,7 @@ export async function createOptionGroupAction(fd: FormData): Promise<void> {
   const actor = await requireActor(path);
   if (!valid) return await redirectWithFlash(path, {}, { error: OPEN_FIRST });
   try {
+    await withOrgPrincipal(actor.orgId, (tx) => authorize(tx, actor, 'manage_menu', {}));
     const names = str(fd, 'values')
       .split(/\r?\n/)
       .map((n) => n.trim())
@@ -121,6 +130,9 @@ export async function createOptionGroupAction(fd: FormData): Promise<void> {
     const minSelections = wholeNumber(fd, 'minSelections', 'The minimum');
     const maxSelections = wholeNumber(fd, 'maxSelections', 'The maximum');
     await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): three domain calls run here, so the field check stays here, and runs only for a caller `createOptionGroup`'s
+      // first authorize() ('manage_menu') would let in; anyone else is refused by that gate before any field sentence.
+      if (await can(tx, actor, 'manage_menu', {})) assertFieldRules(MENU_OPTION_GROUP_RULES, fd);
       const group = await createOptionGroup(
         actor,
         {
@@ -146,14 +158,19 @@ export async function editOptionGroupAction(fd: FormData): Promise<void> {
   const groupId = str(fd, 'id');
   if (!valid) return await redirectWithFlash(path, {}, { error: OPEN_FIRST });
   try {
+    await withOrgPrincipal(actor.orgId, (tx) => authorize(tx, actor, 'manage_menu', {}));
     const id = requireId(fd, 'id', 'Choose an option group.');
     const name = opt(fd, 'name');
     const selectionMode = opt(fd, 'selectionMode');
     const status = opt(fd, 'status');
     const minSelections = wholeNumber(fd, 'minSelections', 'The minimum');
     const maxSelections = wholeNumber(fd, 'maxSelections', 'The maximum');
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      editOptionGroup(
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): the name check is conditional (a retire or restore posts no name), so it stays here, and runs only for a
+      // caller `editOptionGroup`'s first authorize() ('manage_menu') would let in; anyone else is refused by that gate first.
+      // An edit that sends no name leaves the name alone; one that sends it must send a real one.
+      if (fd.has('name') && (await can(tx, actor, 'manage_menu', {}))) assertFieldRules(MENU_OPTION_GROUP_RULES, fd);
+      return editOptionGroup(
         actor,
         {
           id,
@@ -164,8 +181,8 @@ export async function editOptionGroupAction(fd: FormData): Promise<void> {
           ...(status !== undefined ? { status: status as MenuStatus } : {}),
         },
         tx,
-      ),
-    );
+      );
+    });
   } catch (err) {
     return await redirectWithFlash(path, {}, { error: menuErrorMessage(err), typed: keepTyping(fd, MENU_OPTION_GROUP, groupId, { actorId: actor.personId }) });
   }
@@ -191,17 +208,21 @@ export async function editOptionValueAction(fd: FormData): Promise<void> {
   const valueId = str(fd, 'id');
   if (!valid) return await redirectWithFlash(path, {}, { error: OPEN_FIRST });
   try {
+    await withOrgPrincipal(actor.orgId, (tx) => authorize(tx, actor, 'manage_menu', {}));
     const id = requireId(fd, 'id', 'Choose an option.');
     const name = opt(fd, 'name');
     const status = opt(fd, 'status');
     const sortOrder = wholeNumber(fd, 'sortOrder', 'The sort order');
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      editOptionValue(
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): the name check is conditional (the Retire / Restore button posts no name; a rename must send a real one),
+      // so it stays here, and runs only for a caller `editOptionValue`'s first authorize() ('manage_menu') would let in.
+      if (fd.has('name') && (await can(tx, actor, 'manage_menu', {}))) assertFieldRules(MENU_OPTION_VALUE_RULES, fd);
+      return editOptionValue(
         actor,
         { id, ...(name !== undefined ? { name } : {}), ...(sortOrder !== undefined ? { sortOrder } : {}), ...(status !== undefined ? { status: status as MenuStatus } : {}) },
         tx,
-      ),
-    );
+      );
+    });
   } catch (err) {
     return await redirectWithFlash(path, {}, { error: menuErrorMessage(err), typed: keepTyping(fd, MENU_OPTION_VALUE, valueId, { actorId: actor.personId }) });
   }

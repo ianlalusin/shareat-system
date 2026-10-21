@@ -533,6 +533,20 @@ export async function personMaySignInToOrg(tx: Tx, personId: string, orgId: stri
   return row?.ok === true;
 }
 
+/**
+ * T-438 N8 (row 361): email (Firebase) sign-in needs an ACTIVE manager / admin / super_admin role in the org; staff and
+ * role-less people sign in by PIN. Deliberately NOT part of `personMaySignInToOrg`, which PIN approvals also use.
+ */
+export async function personMayUseEmailSignIn(tx: Tx, personId: string, orgId: string): Promise<boolean> {
+  const [row] = (await tx.execute(sql`
+    select exists (
+      select 1 from person_roles
+      where person_id = ${personId} and org_id = ${orgId} and revoked_at is null and role in ('manager', 'admin', 'super_admin')
+    ) as ok
+  `)) as unknown as { ok: boolean }[];
+  return row?.ok === true;
+}
+
 /** Whether `storeId` belongs to `orgId` at all — a defence against `authorize()` being
  * called with a storeId from the wrong org (a caller bug, or a mis-scoped store-scope
  * row): even if a person somehow holds a scope row for a store outside their org, this

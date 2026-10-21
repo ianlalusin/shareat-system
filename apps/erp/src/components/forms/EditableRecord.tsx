@@ -18,8 +18,13 @@
  *
  * The behaviour is a plain reducer plus a plain registry so it is unit-tested in node, without jsdom.
  */
-import { useEffect, useId, useLayoutEffect, useReducer, useRef, type Ref, type ReactNode } from 'react';
+import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, type FormEvent, type Ref, type ReactNode } from 'react';
+import { ruleInputNames, type FieldRuleSetLike } from '@shareat/domain/field-rules';
 import type { TypedView } from '@/lib/keep-typing';
+import { CheckContext } from './context';
+import { CheckSummary } from './CheckSummary';
+import { CHECKED_FORM_INITIAL, checkContextValue, checkedFormReducer, onCheckedSubmit, watchFormReset } from './check-state';
+import { focusControl, readRuledValues, ruledTarget } from './check-dom';
 
 export const OTHER_DIRTY_MESSAGE = 'Save or cancel the changes you are making first.';
 /** T-389 R3: the typing was too big to keep (lib/flash.ts), so the record stays locked and says why. */
@@ -313,6 +318,11 @@ export interface EditableRecordProps {
    * typing was too long to keep.
    */
   typed: TypedView | null;
+  /**
+   * T-440: this record's field rules. While EDITING, each `Field rule=` shows its live line and Save is truly `disabled` until
+   * every rule passes, with an aria-live line saying what is missing. LOCKED: nothing is checked and nothing changes (row 289).
+   */
+  rules?: FieldRuleSetLike;
 }
 
 export interface EditableRecordViewProps extends EditableRecordProps {
@@ -322,11 +332,14 @@ export interface EditableRecordViewProps extends EditableRecordProps {
   onCancel?: () => void;
   formRef?: Ref<HTMLFormElement>;
   editRef?: Ref<HTMLButtonElement>;
+  /** T-440: the delegated input/change and submit handlers of the live checks. */
+  onFormInput?: (e: FormEvent<HTMLFormElement>) => void;
+  onFormSubmit?: (e: FormEvent<HTMLFormElement>) => void;
 }
 
 // Single string literals (no template or `+`): the touch-target census resolves only literal initializers.
 const PRIMARY =
-  'inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium border border-transparent bg-brand text-white hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
+  'inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium border border-transparent bg-brand text-white hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:pointer-events-none disabled:opacity-50';
 const SECONDARY =
   'inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium border border-surface-border bg-surface text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
 
@@ -338,6 +351,8 @@ export function EditableRecordView({
   onCancel,
   formRef,
   editRef,
+  onFormInput,
+  onFormSubmit,
   action,
   label,
   hidden,
@@ -346,9 +361,12 @@ export function EditableRecordView({
   saveLabel = 'Save',
 }: EditableRecordViewProps) {
   const editing = mode === 'editing';
+  // T-440: a failing rule makes Save truly disabled. LOCKED never reads the context, whatever it says.
+  const check = useContext(CheckContext);
+  const blocked = editing && check?.blocked === true;
   return (
     <>
-      <form action={action} ref={formRef}>
+      <form action={action} ref={formRef} onInput={onFormInput} onChange={onFormInput} onSubmit={onFormSubmit}>
         {Object.entries(hidden).map(([name, value]) => (
           <input key={name} type="hidden" name={name} value={value} />
         ))}
@@ -358,7 +376,7 @@ export function EditableRecordView({
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {editing ? (
             <>
-              <button type="submit" className={PRIMARY}>
+              <button type="submit" className={PRIMARY} disabled={blocked} data-check-aware="true">
                 {saveLabel}
               </button>
               <button type="button" className={SECONDARY} onClick={onCancel}>
@@ -376,6 +394,7 @@ export function EditableRecordView({
             </span>
           ) : null}
         </div>
+        <CheckSummary active={editing && check?.active === true} summary={check?.summary ?? null} />
       </form>
       {editing ? extra : null}
     </>
@@ -383,13 +402,36 @@ export function EditableRecordView({
 }
 
 export function EditableRecord(props: EditableRecordProps) {
+  const { rules } = props;
   const [state, dispatch] = useReducer(editableRecordReducer, props.typed, editableRecordInitialState);
+  const [checks, checkDispatch] = useReducer(checkedFormReducer, CHECKED_FORM_INITIAL);
   const formRef = useRef<HTMLFormElement>(null);
   const editRef = useRef<HTMLButtonElement>(null);
   const wasEditing = useRef(false);
   const seenView = useRef<string | null | undefined>(undefined);
   const id = useId();
   const editing = state.mode === 'editing';
+  const editingRef = useRef(editing);
+  const names = useMemo(() => new Set(rules ? ruleInputNames(rules) : []), [rules]);
+  const ctx = useMemo(() => (rules ? checkContextValue(rules, checks) : null), [rules, checks]);
+
+  // T-440: while EDITING read the form's values and check them; LOCKED switches the checks off. Declared BEFORE the typed-view
+  // effect so that effect's input events (a T-389 reopen) land after this read and are checked too.
+  const reread = useCallback(() => {
+    const form = formRef.current;
+    if (rules && form && editingRef.current) checkDispatch({ type: 'read', values: readRuledValues(form, rules) });
+  }, [rules]);
+  useIsomorphicLayoutEffect(() => {
+    editingRef.current = editing;
+    if (!rules) return;
+    if (editing) reread();
+    else checkDispatch({ type: 'off' });
+  }, [editing, rules, reread]);
+  // `reset` covers Cancel, the registry's close() and a bare form.reset(); none of them fires `input`.
+  useEffect(() => {
+    const form = formRef.current;
+    return rules && form ? watchFormReset(form, reread) : undefined;
+  }, [rules, reread]);
 
   // R3: put the typing into the controls before paint. The first view is already in the initial state. A LATER, different
   // view (the page re-rendered in place instead of remounting) also reopens or relocks the record.
@@ -429,7 +471,7 @@ export function EditableRecord(props: EditableRecordProps) {
     wasEditing.current = editing;
   }, [editing]);
 
-  return (
+  const view = (
     <EditableRecordView
       {...props}
       mode={state.mode}
@@ -444,6 +486,24 @@ export function EditableRecord(props: EditableRecordProps) {
         formRef.current?.reset();
         dispatch({ type: 'cancel' });
       }}
+      onFormInput={
+        rules
+          ? (e) => {
+              const hit = ruledTarget(e.target, names);
+              if (hit) checkDispatch({ type: 'input', name: hit.name, value: hit.value });
+            }
+          : undefined
+      }
+      onFormSubmit={
+        ctx
+          ? (e) =>
+              void onCheckedSubmit(e, ctx, {
+                touch: (n) => checkDispatch({ type: 'touch', names: n }),
+                focus: (n) => focusControl(formRef.current, n),
+              })
+          : undefined
+      }
     />
   );
+  return ctx ? <CheckContext.Provider value={ctx}>{view}</CheckContext.Provider> : view;
 }

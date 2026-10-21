@@ -219,6 +219,8 @@ describe('DEF-224 — a uid that was unlinked can be linked again', () => {
 describe('unlinkCredential — the row and the sessions, together', () => {
   it('⭐ case 3 + 4: revokes the credential, ends the live sessions, and says how many', async () => {
     const f = await setup('unlink');
+    // T-438: email sign-in needs a manager/admin role (staff are PIN-only); this case tests unlink + session revocation, so the person is a manager.
+    await mkRole(f.orgId, f.personId, 'manager');
     const externalId = uid('firebase');
     const { credentialId } = await asOrg(f.orgId, (tx) =>
       linkFirebaseCredential(tx, f.admin, { personId: f.personId, uid: externalId }),

@@ -14,7 +14,8 @@ import { withFlash } from '@/lib/flash';
 import { personName } from '@/lib/person-name';
 import { typedFor } from '@/lib/keep-typing';
 import { EXPENSE_DRAFT_EDIT } from '../typed-forms';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord, FieldCheck } from '@/components/forms';
+import { EXPENSE_VOID_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { accountCodeAndName } from '@/lib/account-label';
 import { Badge, Button, ConfirmDestructive, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 
@@ -117,7 +118,7 @@ export default async function ExpenseDetailPage({
   );
 
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div className="flex items-start justify-between gap-4">
         <div>
           <a href={`/expenses?${carry}`} className="text-sm text-neutral-500 underline hover:no-underline dark:text-neutral-400">
@@ -287,7 +288,8 @@ export default async function ExpenseDetailPage({
       )}
 
       {isPosted && (
-        <form
+        <CheckedForm
+          rules={EXPENSE_VOID_RULES}
           action={voidExpenseAction}
           className="space-y-3 rounded-lg border border-danger p-4 text-sm"
         >
@@ -298,14 +300,16 @@ export default async function ExpenseDetailPage({
             visible, and both sides remain in the ledger. A reason is required.
           </p>
           <div className="flex gap-2">
-            <Input name="reason" required placeholder="Why is this being voided?" className="flex-1" />
+            <Field label={<span className="sr-only">Reason</span>} rule={EXPENSE_VOID_RULES.reason} className="flex-1">
+              <Input {...nativeAttrs(EXPENSE_VOID_RULES.reason)} placeholder="Why is this being voided?" />
+            </Field>
             <ConfirmDestructive
               tier="admin-pin"
               label="Void expense"
               consequence="Reverses this posted expense. An administrator must approve with their own PIN."
             />
           </div>
-        </form>
+        </CheckedForm>
       )}
     </Page>
   );
@@ -355,6 +359,19 @@ function LedgerTable({ lines }: { lines: EntryLineWithAccountCode[] }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function Field({ label, rule, className, children }: { label: React.ReactNode; rule: FieldRule; className?: string; children: React.ReactNode }) {
+  // T-440: the label keeps its look; the live helper line sits OUTSIDE it (never part of the accessible name).
+  return (
+    <div className={className}>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{label}</span>
+        {children}
+      </label>
+      <FieldCheck rule={rule} />
     </div>
   );
 }

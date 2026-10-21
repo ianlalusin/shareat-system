@@ -384,6 +384,12 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'validator',
     reason: "An item's unit cannot change once it has history (0186, T-378) - reads other tables' CURRENT rows, so it must stay silent on a replica-mode restore.",
   },
+  items_variant_guard: {
+    table: 'items',
+    mode: 'origin',
+    kind: 'validator',
+    reason: 'A variation is one level, the same kind as its parent, and its parent is not merged (0210/0211, T-443; serialized per org) - reads the parent row and the child rows as they are NOW, so it must stay silent on a replica-mode restore.',
+  },
   items_check_parent_slab_unit_trg: {
     table: 'items',
     mode: 'origin',
@@ -646,5 +652,29 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     mode: 'always',
     kind: 'history_guard',
     reason: 'A usage-source switch is never deleted (0196, ENABLE ALWAYS). Decides only from TG_OP.',
+  },
+  statutory_rates_immutable: {
+    table: 'statutory_rates',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A confirmed statutory rate is never edited or deleted (0206, T-190). Decides only from OLD/NEW.',
+  },
+  withholding_brackets_immutable: {
+    table: 'withholding_brackets',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A confirmed withholding bracket is never edited or deleted (0206, T-190). Decides only from OLD/NEW.',
+  },
+  minimum_wages_immutable: {
+    table: 'minimum_wages',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A confirmed minimum wage is never edited or deleted (0206, T-190). Decides only from OLD/NEW.',
+  },
+  withholding_brackets_set_closed: {
+    table: 'withholding_brackets',
+    mode: 'origin',
+    kind: 'validator',
+    reason: 'No row may join a bracket set that already holds a confirmed row (0206, T-190). Reads other rows of the set.',
   },
 } as const;

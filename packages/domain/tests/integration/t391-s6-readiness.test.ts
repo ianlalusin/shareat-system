@@ -365,7 +365,7 @@ describe('S6 readiness - who counts as an encoder or a verifier (S8, row 303)', 
       await seedDefaults(e, 'LIPA'); // Cashier: both; Cook: neither; Inventory Staff: receive_delivery only
       await toggleDefault(e, 'LIPA', 'Server', 'create_expense', true); // Server: create_expense only
       const yes = await employ(e, 'LIPA', 'Real Cashier', 'Cashier');
-      await employ(e, 'LIPA', 'Just A Cook', 'Cook');
+      await employ(e, 'LIPA', 'Just A Cook', 'Kitchen Staff');
       await employ(e, 'LIPA', 'Half Server', 'Server');
       await employ(e, 'LIPA', 'Half Inventory', 'Inventory Staff');
       await employ(e, 'LIPA', 'Left Cashier', 'Cashier', { ended: true });
@@ -403,16 +403,16 @@ describe('S6 readiness - who counts as an encoder or a verifier (S8, row 303)', 
         for (const c of caps) await sql`insert into person_grants (person_id, grant_name, granted_by, grant_source, store_id) values (${personId}, ${c}, ${e.superA.personId}, 'grant', ${e.stores[sc]!})`;
       };
       const scope = (personId: string, sc: string) => sql`insert into person_store_scope (person_id, store_id) values (${personId}, ${e.stores[sc]!})`;
-      const yes = await employ(e, 'LIPA', 'Granted Cook', 'Cook');
+      const yes = await employ(e, 'LIPA', 'Granted Cook', 'Kitchen Staff');
       await grant(yes.personId, 'LIPA', both);
-      const elsewhere = await employ(e, 'LIPA', 'Grant At Malvar Cook', 'Cook');
+      const elsewhere = await employ(e, 'LIPA', 'Grant At Malvar Cook', 'Kitchen Staff');
       await grant(elsewhere.personId, 'MLVR', both);
       await scope(elsewhere.personId, 'MLVR');
-      const noScope = await employ(e, 'LIPA', 'Unscoped Cook', 'Cook');
+      const noScope = await employ(e, 'LIPA', 'Unscoped Cook', 'Kitchen Staff');
       await grant(noScope.personId, 'LIPA', both);
       await sql`delete from person_store_scope where person_id = ${noScope.personId} and store_id = ${e.stores.LIPA!}`;
       await scope(noScope.personId, 'MLVR');
-      const revoked = await employ(e, 'LIPA', 'Revoked Grant Cook', 'Cook');
+      const revoked = await employ(e, 'LIPA', 'Revoked Grant Cook', 'Kitchen Staff');
       await grant(revoked.personId, 'LIPA', both);
       await sql`update person_grants set revoked_at = now(), revoke_reason = 'test' where person_id = ${revoked.personId}`;
       const r = await reportA(e, { storeCodes: ['LIPA'] });
@@ -426,13 +426,13 @@ describe('S6 readiness - who counts as an encoder or a verifier (S8, row 303)', 
     async () => {
       const e = await env('PA');
       await seedDefaults(e, 'LIPA');
-      const mgr = await employ(e, 'LIPA', 'Pa Manager', 'Cook');
+      const mgr = await employ(e, 'LIPA', 'Pa Manager', 'Kitchen Staff');
       await setRole(e, mgr.personId, 'manager');
-      const adm = await employ(e, 'LIPA', 'Pa Admin', 'Cook');
+      const adm = await employ(e, 'LIPA', 'Pa Admin', 'Kitchen Staff');
       await setRole(e, adm.personId, 'admin');
       const cashier = await employ(e, 'LIPA', 'Pa Cashier', 'Cashier');
-      const rawCook = await employ(e, 'LIPA', 'Pa Raw Default Cook', 'Cook');
-      const cookPos = await canonicalPositionId(e.orgId, 'Cook');
+      const rawCook = await employ(e, 'LIPA', 'Pa Raw Default Cook', 'Kitchen Staff');
+      const cookPos = await canonicalPositionId(e.orgId, 'Kitchen Staff');
       for (const c of ['create_expense', 'receive_delivery']) {
         await sql`insert into position_capability_defaults (org_id, position_id, store_id, capability, set_by)
           values (${e.orgId}, ${cookPos}, ${e.stores.LIPA!}, ${c}, ${e.superA.personId})`;
@@ -520,10 +520,10 @@ describe('S6 readiness - what loaded against the plan', () => {
       await addLink(e, 'position', L, 'p1');
       await addLink(e, 'position', L, 'p2');
       await addLink(e, 'person', L, 'ignored-person'); // persons are not a column of the report
-      await employ(e, 'LIPA', 'Open One', 'Cook');
+      await employ(e, 'LIPA', 'Open One', 'Kitchen Staff');
       await employ(e, 'LIPA', 'Open Two', 'Server');
-      await employ(e, 'LIPA', 'Ended Three', 'Cook', { ended: true });
-      await employ(e, 'MLVR', 'Malvar One', 'Cook');
+      await employ(e, 'LIPA', 'Ended Three', 'Kitchen Staff', { ended: true });
+      await employ(e, 'MLVR', 'Malvar One', 'Kitchen Staff');
       const r = await reportA(e, { storeCodes: ['LIPA', 'MLVR'] });
       expect(storeOf(r, 'LIPA').loaded).toEqual({ items: 3, suppliers: 2, customers: 1, staff: 2, positions: 2 });
       expect(storeOf(r, 'MLVR').loaded).toEqual({ items: 1, suppliers: 0, customers: 0, staff: 1, positions: 0 });
@@ -536,13 +536,13 @@ describe('S6 readiness - what loaded against the plan', () => {
     async () => {
       const e = await env('PL');
       const st = (store: string, over: Record<string, unknown> = {}) => ({
-        id: `st${++seq}`, store, staffCode: '', fullName: `P ${seq}`, positions: ['Cook'], employmentStatus: 'regular', dateHired: '2026-01-05T00:00:00.000Z', isActive: true, ...over,
+        id: `st${++seq}`, store, staffCode: '', fullName: `P ${seq}`, positions: ['Kitchen Staff'], employmentStatus: 'regular', dateHired: '2026-01-05T00:00:00.000Z', isActive: true, ...over,
       });
       const snapshot = {
         version: 1, stores: [], items: [], suppliers: [], arCustomers: [], staffIdentities: [],
         staff: [st(L), st(L), st(L, { isActive: false }), st(L, { employmentStatus: 'resigned' }), st(M)],
       };
-      await employ(e, 'LIPA', 'Loaded One', 'Cook');
+      await employ(e, 'LIPA', 'Loaded One', 'Kitchen Staff');
       const withSnap = storeOf(await reportA(e, { storeCodes: ['LIPA'], snapshot }), 'LIPA');
       expect(withSnap.planned).toEqual({ staff: 2 });
       expect(withSnap.loaded.staff).toBe(1);

@@ -159,6 +159,15 @@ function confirmWindows(src: string): string[] {
   const parts = src.split('<ConfirmDestructive');
   return parts.slice(1).map((p) => p.slice(0, 900));
 }
+/**
+ * T-440 S1 (A3 / T-S1-16): the form a ConfirmDestructive sits in is a native `<form` OR a `<CheckedForm` (an add form converted to
+ * live checks). Looking for the text `<form` only would make every converted form fail "a <form precedes its ConfirmDestructive".
+ */
+const FORM_END = /<\/(?:form|CheckedForm)>/;
+function enclosingForm(src: string, at: number): { start: number; between: string } {
+  const start = Math.max(src.lastIndexOf('<form', at), src.lastIndexOf('<CheckedForm', at));
+  return { start, between: start < 0 ? '' : src.slice(start, at) };
+}
 const tierOf = (w: string) => /tier=\{?\s*['"](admin-pin|retype)['"]/.exec(w)?.[1];
 
 function functionBody(src: string, name: string): string | undefined {
@@ -243,10 +252,9 @@ describe('every file: ConfirmDestructive count by tier, and what is left bare (V
         // ... and it sits inside the form that submits to THAT row's action (a label guarding the wrong action is no guard)
         if (hit && r.action) {
           const at = src.indexOf(hit);
-          const formAt = src.lastIndexOf('<form', at);
-          const between = formAt < 0 ? '' : src.slice(formAt, at);
-          expect(formAt, `${r.visible ?? r.label}: a <form precedes its ConfirmDestructive`).toBeGreaterThan(-1);
-          expect(between, `${r.visible ?? r.label}: no </form> between its <form and the button`).not.toMatch(/<\/form>/);
+          const { start: formAt, between } = enclosingForm(src, at);
+          expect(formAt, `${r.visible ?? r.label}: a <form> or <CheckedForm> precedes its ConfirmDestructive`).toBeGreaterThan(-1);
+          expect(between, `${r.visible ?? r.label}: no form end tag between its form and the button`).not.toMatch(FORM_END);
           expect(between, `${r.visible ?? r.label}: its <form submits to ${r.action}`).toMatch(new RegExp('action=' + BS + '{[^}]*(?<![A-Za-z0-9_])' + r.action + '(?![A-Za-z0-9_])'));
         }
       }
@@ -334,6 +342,8 @@ describe('DEF-654: no destructive SERVER ACTION hides behind a non-danger button
     'app/menu/prices/actions.ts#cancelScheduledPriceAction': 'clears a FUTURE menu price offer; no ledger, no stock',
     'app/menu/prices/actions.ts#cancelScheduledOptionPriceAction': 'clears a FUTURE option price offer; no ledger, no stock',
     'app/staff/actions.ts#reopenPinSignInAction': 'lifts a staff sign-in lock; not a money record',
+    'app/attendance/leave/actions.ts#cancelLeaveAction': 'T-436: withdraws a pending leave request; nothing is paid or posted yet',
+    'app/attendance/leave/actions.ts#voidLeaveAction': 'T-436: voids a leave day; a day frozen to a pay run is refused (LEAVE_DAY_PAID), so no posted money moves',
   };
   // Tier P by BRANCH: a select-driven form (no danger button, no ConfirmDestructive) whose action only forgives money on one
   // branch. It cannot be a row in `rows` (those are controls with a ConfirmDestructive); it is classified here and asserted below.
@@ -501,5 +511,31 @@ describe('ConfirmDestructive.tsx and retype.ts have the shape the spec fixes (S2
   it('retype.ts exists and exports retypeMatches', () => {
     expect(existsSync(join(SRC, 'lib/retype.ts')), 'lib/retype.ts exists').toBe(true);
     expect(read('lib/retype.ts')).toMatch(/export function retypeMatches/);
+  });
+});
+
+describe('T-S1-16 (T-440 A3): a ConfirmDestructive inside a <CheckedForm action={x}> satisfies the census (mutant: the tag search reverted to <form only)', () => {
+  const src = `<CheckedForm rules={R} action={voidThingAction}>
+    <ConfirmDestructive tier="admin-pin" label="Void thing" consequence="x" />
+  </CheckedForm>`;
+  const at = () => src.indexOf(confirmWindows(src)[0]!);
+  it('the enclosing form is found, nothing closes it, and its action is the one named', () => {
+    const { start, between } = enclosingForm(src, at());
+    expect(start, 'a <CheckedForm precedes the button').toBeGreaterThan(-1);
+    expect(between).not.toMatch(FORM_END);
+    expect(between).toMatch(new RegExp('action=' + BS + '{[^}]*(?<![A-Za-z0-9_])voidThingAction(?![A-Za-z0-9_])'));
+  });
+  it('a CheckedForm CLOSED before the button no longer encloses it (the end-tag check sees </CheckedForm>)', () => {
+    const closed = `<CheckedForm action={a}></CheckedForm><ConfirmDestructive tier="retype" label="x" consequence="y" />`;
+    const { start, between } = enclosingForm(closed, closed.indexOf(confirmWindows(closed)[0]!));
+    expect(start).toBeGreaterThan(-1);
+    expect(between).toMatch(FORM_END);
+  });
+  it('a native <form> still works, and the nearest opener wins', () => {
+    const mixed = `<form action={a}><CheckedForm action={b}><ConfirmDestructive tier="retype" label="x" consequence="y" /></CheckedForm></form>`;
+    const { between } = enclosingForm(mixed, mixed.indexOf(confirmWindows(mixed)[0]!));
+    expect(between.startsWith('<CheckedForm')).toBe(true);
+    const plain = `<form action={a}><ConfirmDestructive tier="retype" label="x" consequence="y" /></form>`;
+    expect(enclosingForm(plain, plain.indexOf(confirmWindows(plain)[0]!)).start).toBe(0);
   });
 });

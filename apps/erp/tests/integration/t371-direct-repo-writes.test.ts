@@ -1,6 +1,8 @@
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
+import { INVENTORY_THRESHOLD_RULES } from '@shareat/domain/field-rules';
+import { expectRuleSentence } from '../helpers/rule-sentence';
 
 /**
  * T-371 S0 — app actions that write a constrained numeric column WITHOUT a domain function in the path. `docs/tasks/371-nan-sweep.md` §B
@@ -103,7 +105,8 @@ describe('setThresholdAction — the typed threshold goes straight to the repo t
       const out = await delivered(() => setThresholdAction(fd({ storeId: f.storeId, itemId: f.itemId, threshold: typed })));
       expect(out.text, `the action accepted ${JSON.stringify(typed)} as a threshold`).not.toBeNull();
       expect(out.text, `a raw database error reached the person: ${out.text}`).not.toMatch(/^RAW:/);
-      expect(out.text).toContain(`"${typed}"`);
+      // T-440: the sentence is the rule's requirement; it names the threshold and never echoes what was typed.
+      expectRuleSentence(out.text, INVENTORY_THRESHOLD_RULES.threshold, typed);
       expect(out.text!.toLowerCase()).toContain('threshold');
       expect(out.text).not.toMatch(UUID);
       expect(out.text).not.toMatch(DB_VOCAB);

@@ -3,7 +3,9 @@ import { currentSession, readSetupIdentity } from '../../lib/session';
 import { createFirstRunAction } from './actions';
 import { setupView, systemIsAlreadySetUp } from './lib';
 import { SubmitButton } from './SubmitButton';
-import { FlashBanner, Input } from '@/components/ui';
+import { Field, FlashBanner, Input } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { SETUP_FIRST_RUN_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Set up Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -86,25 +88,21 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
           </p>
         </div>
 
-        <form action={createFirstRunAction} className="space-y-4 text-sm">
-          <label className="flex flex-col gap-1">
-            <span className={LABEL}>Organisation code</span>
-            <Input name="code" required autoComplete="off" placeholder="SHAREAT_OPC" className="w-full" />
+        <CheckedForm rules={SETUP_FIRST_RUN_RULES} action={createFirstRunAction} className="space-y-4 text-sm">
+          <Field label={<span className={LABEL}>Organisation code</span>} rule={SETUP_FIRST_RUN_RULES.code}>
+            <Input {...nativeAttrs(SETUP_FIRST_RUN_RULES.code)} autoComplete="off" placeholder="SHAREAT_OPC" className="w-full" />
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               Short, unique and permanent — it is the stable handle for this business.
             </span>
-          </label>
+          </Field>
 
-          <label className="flex flex-col gap-1">
-            <span className={LABEL}>Organisation name</span>
-            <Input name="name" required autoComplete="off" placeholder="SHAREAT OPC" className="w-full" />
-          </label>
+          <Field label={<span className={LABEL}>Organisation name</span>} rule={SETUP_FIRST_RUN_RULES.name}>
+            <Input {...nativeAttrs(SETUP_FIRST_RUN_RULES.name)} autoComplete="off" placeholder="SHAREAT OPC" className="w-full" />
+          </Field>
 
-          <label className="flex flex-col gap-1">
-            <span className={LABEL}>Your name</span>
+          <Field label={<span className={LABEL}>Your name</span>} rule={SETUP_FIRST_RUN_RULES.adminDisplayName}>
             <Input
-              name="adminDisplayName"
-              required
+              {...nativeAttrs(SETUP_FIRST_RUN_RULES.adminDisplayName)}
               autoComplete="name"
               defaultValue={view.suggestedName}
               className="w-full"
@@ -113,18 +111,15 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
               Your real name. Every entry in the books is attributed to it, so it is not a login
               label.
             </span>
-          </label>
+          </Field>
 
-          <label className="flex flex-col gap-1">
-            <span className={LABEL}>First store code</span>
-            <Input name="storeCode" required autoComplete="off" placeholder="LIPA" className="w-full" />
-          </label>
+          <Field label={<span className={LABEL}>First store code</span>} rule={SETUP_FIRST_RUN_RULES.storeCode}>
+            <Input {...nativeAttrs(SETUP_FIRST_RUN_RULES.storeCode)} autoComplete="off" placeholder="LIPA" className="w-full" />
+          </Field>
 
-          <label className="flex flex-col gap-1">
-            <span className={LABEL}>First store name</span>
+          <Field label={<span className={LABEL}>First store name</span>} rule={SETUP_FIRST_RUN_RULES.storeName}>
             <Input
-              name="storeName"
-              required
+              {...nativeAttrs(SETUP_FIRST_RUN_RULES.storeName)}
               autoComplete="off"
               placeholder="SharEat Lipa"
               className="w-full"
@@ -132,18 +127,13 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               You can add the rest from Stores once you are in.
             </span>
-          </label>
+          </Field>
 
-          <label className="flex flex-col gap-1">
-            <span className={LABEL}>Your 6-digit PIN</span>
+          <Field label={<span className={LABEL}>Your 6-digit PIN</span>} rule={SETUP_FIRST_RUN_RULES.pin}>
             <input
-              name="pin"
+              {...nativeAttrs(SETUP_FIRST_RUN_RULES.pin)}
               type="password"
-              inputMode="numeric"
-              pattern="[0-9]{6}"
               autoComplete="new-password"
-              required
-              maxLength={6}
               placeholder="••••••"
               // Touch-first, and copied from `sign-in/page.tsx:79-90` on purpose: this is the same
               // credential, typed on the same tablet, and it should not look like a different one.
@@ -153,13 +143,13 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
               Choose it now — this is what signs you in at the store terminal. It is never shown
               back to you, and you can change it later from Staff.
             </span>
-          </label>
+          </Field>
 
           {/* ⛔ Disables itself on submit. First run takes a second or two, and a second click
               would land the "already set up" refusal on a screen the person is still filling in —
               which reads like a failure when it was a success. See SubmitButton.tsx. */}
           <SubmitButton pendingLabel="Creating…">Create the organisation</SubmitButton>
-        </form>
+        </CheckedForm>
 
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           This screen works once. After it, people are added from Users and stores from Stores.

@@ -1,0 +1,236 @@
+import { config } from 'dotenv';
+import { randomUUID } from 'node:crypto';
+import { afterAll, describe, expect, it, vi } from 'vitest';
+import postgres from 'postgres';
+
+/**
+ * T-440 S4 (TESTER) - one refusal per S4 action whose rule set the sweep wired into the SERVER path (Q5: a field marked required or
+ * bounded on screen but never checked by the action). Each case runs the REAL server action with ONE bad value (every other field of
+ * the rule set good, so that rule is the first to fail) and proves two things: the person is told the rule's exact sentence (read
+ * from the imported rule set, never a copy) and NOTHING was written (the action's own table keeps its row count).
+ *
+ * S9: authorization comes first. Targets exist in the actor's store; generic passing text never replaces real scope ids.
+ *
+ * Session mocked (t412 idiom); redirects captured; the banner read through the flash jar. Every case names the mutant it kills;
+ * the mutant is "the assertFieldRules call is removed from that action" unless stated otherwise.
+ */
+config({ path: '.env.local' });
+
+const url = process.env.TEST_DATABASE_URL;
+if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
+if (!/shareat_test|_test(\?|$)/.test(url)) {
+  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - name must contain "_test".`);
+}
+
+const h = vi.hoisted(() => ({ actor: null as null | { personId: string; orgId: string } }));
+vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
+vi.mock('next/navigation', async () => (await import('../../../../tests/helpers/flash-jar-core')).nextNavigationMock());
+vi.mock('../../../../apps/erp/src/lib/session', () => ({
+  requireActor: vi.fn(async () => h.actor),
+  requireSession: vi.fn(async () => ({ actor: h.actor, sessionId: 'session-1', credentialKind: 'pin' as const, storeId: null, expiresAt: new Date('2099-01-01') })),
+}));
+
+import { closeDb } from '@shareat/db';
+import { captureRedirect, outcomeOf, resetJar } from '../../../../tests/helpers/flash-jar';
+import { moneyFixture, pendingInvoice } from './_fixtures/t402-s3-money';
+import { asOrgOn } from './_fixtures/pos-s6';
+import { createCustomer, createItem, createTradeOrder, dispatchTradeOrder, recordCollection, recordCustomerReturn, receiveDelivery, quantity } from '@shareat/domain';
+import { toBusinessDate } from '@shareat/core/datetime';
+import { checkField, rulesOf, type FieldRule, type FieldRuleSetLike } from '../../src/field-rules/check';
+import {
+  INVOICE_EXPENSE_RULES, INVOICE_VOID_RULES, PAYMENT_VOID_RULES, SUPPLIER_INVOICE_LOG_RULES, SUPPLIER_PAYMENT_RULES,
+} from '../../src/field-rules/ap';
+import {
+  CHARGE_VOID_RULES, CHARGE_WRITE_OFF_RULES, COLLECTION_RECORD_RULES, COLLECTION_VOID_RULES, CUSTOMER_ADD_RULES,
+  CUSTOMER_RECONCILE_RULES, PRICE_LIST_ADD_RULES, PRICE_SET_RULES,
+} from '../../src/field-rules/customers';
+import { LIABILITY_ADD_RULES, LIABILITY_CHARGE_RULES, LIABILITY_PAY_RULES } from '../../src/field-rules/liabilities';
+import { LOAN_ADD_RULES, LOAN_DRAW_RULES, LOAN_PAYMENT_RULES, LOAN_REVERSE_RULES } from '../../src/field-rules/loans';
+import {
+  PREPAID_ADD_RULES, PREPAID_MONTH_REVERSE_RULES, PREPAID_RELEASE_RULES, PREPAID_TERM_RULES, PREPAID_WRITE_OFF_RULES,
+} from '../../src/field-rules/prepaid';
+import {
+  RETURN_RECORD_RULES, RETURN_VOID_RULES, TRADE_DISPATCH_RULES, TRADE_ORDER_RULES, TRADE_RECEIVE_RULES, TRADE_VOID_RULES,
+} from '../../src/field-rules/trade';
+
+const sql = postgres(url, { max: 5 });
+const APP = '../../../../apps/erp/src/app';
+
+afterAll(async () => {
+  await closeDb();
+  await sql.end({ timeout: 5 });
+});
+
+let fixtureStep = 'money base';
+async function createFixture() {
+  const f = await moneyFixture(sql, 't440s4');
+  await sql`update person_roles set role = 'super_admin' where person_id = ${f.adminId} and org_id = ${f.orgId}`;
+  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${f.orgId}::uuid, d::date, (d + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2026-03-01'::date, '2026-12-01'::date, '1 month') d`;
+  fixtureStep = 'pending invoice';
+  const invoiceId = await pendingInvoice(sql, f, '100.00');
+  // A valid draft payment needs no journal yet; it is never posted by these refusal cases.
+  const [payment] = await sql<{ id: string }[]>`insert into ap_payments (org_id, store_id, supplier_id, business_date, amount, money_account_id, created_by) values (${f.orgId}, ${f.storeId}, ${f.supplierId}, '2026-01-10', '1.00', ${f.drawerId}, ${f.adminId}) returning id`;
+  const [liability] = await sql<{ id: string }[]>`insert into liabilities (org_id, store_id, name, created_by) values (${f.orgId}, ${f.storeId}, 'Synthetic obligation', ${f.adminId}) returning id`;
+  const [loan] = await sql<{ id: string }[]>`insert into loans (org_id, store_id, name, lender_name, principal_amount, interest_rate, rate_period, interest_method, payment_frequency, term_periods, start_date, created_by) values (${f.orgId}, ${f.storeId}, 'Synthetic loan', 'Synthetic lender', '1000.00', '0', 'month', 'straight', 'monthly', 12, '2026-01-01', ${f.adminId}) returning id`;
+  const [prepaid] = await sql<{ id: string }[]>`insert into prepaid_items (org_id, store_id, name, category, coverage_start_date, coverage_months, total_cost, created_by) values (${f.orgId}, ${f.storeId}, 'Synthetic policy', 'insurance', '2026-01-01', 12, '12000.00', ${f.adminId}) returning id`;
+  fixtureStep = 'customer';
+  const customer = await asOrgOn(f.orgId, (tx) => createCustomer(tx, f.admin, { name: 'Synthetic buyer' }));
+  fixtureStep = 'item';
+  const item = await asOrgOn(f.orgId, (tx) => createItem(tx, f.admin, { name: 'Synthetic stock', kind: 'raw_material', baseUnit: 'kg', sellableWholesale: true }));
+  fixtureStep = 'delivery headers';
+  const [type] = await sql<{ id: string }[]>`insert into location_types (org_id, code, name) values (${f.orgId}, 'STK', 'Stockroom') returning id`;
+  const [location] = await sql<{ id: string }[]>`insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by) values (${f.orgId}, ${f.storeId}, 'A', 'Stockroom A', ${type!.id}, 'operating', true, ${f.adminId}) returning id`;
+  const [file] = await sql<{ id: string }[]>`insert into stored_files (org_id, store_id, purpose, storage_path, content_type, byte_size, checksum, uploaded_by) values (${f.orgId}, ${f.storeId}, 'receipt_photo', ${`orgs/${f.orgId}/receipt_photo/synthetic.jpg`}, 'image/jpeg', 100, 'synthetic', ${f.adminId}) returning id`;
+  const [delivery] = await sql<{ id: string }[]>`insert into deliveries (org_id, store_id, kind, delivered_on, proof_file_id, created_by) values (${f.orgId}, ${f.storeId}, 'purchase', '2026-01-01', ${file!.id}, ${f.adminId}) returning id`;
+  fixtureStep = 'delivery receipt';
+  await asOrgOn(f.orgId, (tx) => receiveDelivery(tx, { orgId: f.orgId, storeId: f.storeId, deliveryId: delivery!.id, deliveredOn: '2026-01-01', receivedBy: f.adminId, locations: [{ id: location!.id, role: 'operating', purpose: 'normal', isDefault: true, status: 'active' }], lines: [{ lineId: '1', itemId: item.id, itemKind: 'raw_material', receivedQuantity: quantity('10'), conversionFactor: '1', unitCost: '50.0000', locationId: location!.id }] }));
+  fixtureStep = 'trade order';
+  const order = await asOrgOn(f.orgId, (tx) => createTradeOrder(tx, f.admin, { storeId: f.storeId, customerId: customer.id, orderDate: '2026-01-10', lines: [{ itemId: item.id, quantity: '1', rate: '100.00' }] }));
+  fixtureStep = 'dispatch';
+  const dispatched = await asOrgOn(f.orgId, (tx) => dispatchTradeOrder(tx, f.admin, { orderId: order.orderId }));
+  const [line] = await sql<{ id: string }[]>`select id from trade_order_lines where order_id = ${order.orderId}`;
+  fixtureStep = 'customer return';
+  const returned = await asOrgOn(f.orgId, (tx) => recordCustomerReturn(tx, { actor: f.admin, tradeOrderId: order.orderId, returnedOn: toBusinessDate(), reason: 'Synthetic return', lines: [{ tradeOrderLineId: line!.id, quantity: '0.1' }] }));
+  if (!returned.ok || !dispatched.chargeId) throw new Error('Synthetic sale/return failed');
+  const chargeId = dispatched.chargeId;
+  fixtureStep = 'collection';
+  const collection = await asOrgOn(f.orgId, (tx) => recordCollection(tx, f.admin, { storeId: f.storeId, customerId: customer.id, collectionDate: toBusinessDate(), amount: '1.00', moneyAccountId: f.drawerId, allocations: [{ chargeId, amountApplied: '1.00' }] }));
+  return { ...f, invoiceId, paymentId: payment!.id, liabilityId: liability!.id, loanId: loan!.id, prepaidItemId: prepaid!.id, customerId: customer.id, chargeId: dispatched.chargeId, collectionId: collection.collectionId, orderId: order.orderId, tradeOrderId: order.orderId, tradeOrderLineId: line!.id, returnId: returned.returnId };
+}
+type Fx = Awaited<ReturnType<typeof createFixture>>;
+let fxPromise: Promise<Fx> | null = null;
+const fixture = () => (fxPromise ??= createFixture().catch((cause) => { throw new Error(`T-440 S4 fixture failed during ${fixtureStep}`, { cause }); }));
+
+const GOOD: Record<string, string> = { text: 'Something', money: '500.00', date: '2020-01-02', number: '15', digits: '1234', pattern: 'abc' };
+
+/** Every rule of the set filled with a passing value, so one rule can be broken at a time. `good` overrides (pattern rules need a real shape). */
+function goodFields(set: FieldRuleSetLike, good: Record<string, string> = {}): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const r of rulesOf(set)) out[r.name] = good[r.name] ?? GOOD[r.kind] ?? '';
+  return out;
+}
+
+/** The sentence the SCREEN shows for this value: the rule set's own, so client === server is the thing under test. */
+function sentence(rule: FieldRule, value: string): string {
+  const c = checkField(rule, value);
+  if (c.ok) throw new Error(`the fixture value ${JSON.stringify(value.slice(0, 12))} passes ${rule.name}; pick a failing one`);
+  return c.requirement;
+}
+
+async function count(table: string, orgId: string): Promise<number> {
+  const rows = await sql.unsafe<{ n: number }[]>(`select count(*)::int as n from ${table} where org_id = '${orgId}'`);
+  return rows[0]?.n ?? 0;
+}
+
+type Case = {
+  title: string;
+  mod: string;
+  action: string;
+  set: FieldRuleSetLike;
+  rule: string;
+  value: string;
+  /** The table the action would write to. */
+  table: string;
+  /** Fields the action reads BEFORE / besides the rule set (ids, a decision, the store). */
+  extra?: Record<string, string>;
+  /** Passing values for rules whose shape GOOD does not satisfy. */
+  good?: Record<string, string>;
+  mutant?: string;
+};
+
+const FAKE = () => randomUUID();
+const CASES: Case[] = [
+  // ---- ap
+  { title: 'ap recordInvoiceAction: an invoice total of 0', mod: 'ap/actions', action: 'recordInvoiceAction', set: SUPPLIER_INVOICE_LOG_RULES, rule: 'totalAmount', value: '0', table: 'supplier_invoices', mutant: 'min 0.01 loosened to 0', extra: { supplierId: FAKE() } },
+  { title: 'ap recordInvoiceAction: an invoice date that is not a date', mod: 'ap/actions', action: 'recordInvoiceAction', set: SUPPLIER_INVOICE_LOG_RULES, rule: 'invoiceDate', value: 'soon', table: 'supplier_invoices', extra: { supplierId: FAKE() } },
+  { title: 'ap recordInvoiceAction: a negative delivery fee', mod: 'ap/actions', action: 'recordInvoiceAction', set: SUPPLIER_INVOICE_LOG_RULES, rule: 'deliveryFee', value: '-1', table: 'supplier_invoices', mutant: 'optional fee min 0 dropped', extra: { supplierId: FAKE() } },
+  { title: 'ap recordPaymentAction: a payment of 0', mod: 'ap/actions', action: 'recordPaymentAction', set: SUPPLIER_PAYMENT_RULES, rule: 'amount', value: '0', table: 'ap_payments', mutant: 'min 0.01 loosened to 0', extra: { supplierId: FAKE() } },
+  { title: 'ap recordPaymentAction: no source of money', mod: 'ap/actions', action: 'recordPaymentAction', set: SUPPLIER_PAYMENT_RULES, rule: 'source', value: '  ', table: 'ap_payments', extra: { supplierId: FAKE() } },
+  { title: 'ap voidInvoiceAction: a blank reason', mod: 'ap/actions', action: 'voidInvoiceAction', set: INVOICE_VOID_RULES, rule: 'reason', value: '  ', table: 'supplier_invoices', extra: { invoiceId: FAKE() } },
+  { title: 'ap recordInvoiceExpenseAction: no category', mod: 'ap/actions', action: 'recordInvoiceExpenseAction', set: INVOICE_EXPENSE_RULES, rule: 'categoryId', value: '  ', table: 'expenses', extra: { supplierInvoiceId: FAKE() } },
+  { title: 'ap recordInvoiceExpenseAction: blank particulars', mod: 'ap/actions', action: 'recordInvoiceExpenseAction', set: INVOICE_EXPENSE_RULES, rule: 'particulars', value: '  ', table: 'expenses', extra: { supplierInvoiceId: FAKE() }, mutant: 'the hand-off runs without the rule judged first' },
+  { title: 'ap voidPaymentAction: a blank reason', mod: 'ap/actions', action: 'voidPaymentAction', set: PAYMENT_VOID_RULES, rule: 'reason', value: '  ', table: 'ap_payments', extra: { paymentId: FAKE() } },
+  { title: 'ap voidPaymentAction: a reversal date that is not a date', mod: 'ap/actions', action: 'voidPaymentAction', set: PAYMENT_VOID_RULES, rule: 'voidOn', value: 'soon', table: 'ap_payments', extra: { paymentId: FAKE() }, mutant: 'optional date never checked when typed' },
+  // ---- customers
+  { title: 'customers createCustomerAction: a blank name', mod: 'customers/actions', action: 'createCustomerAction', set: CUSTOMER_ADD_RULES, rule: 'name', value: '  ', table: 'customers' },
+  { title: 'customers reconcileCustomerAction: an anchor date that is not a date', mod: 'customers/actions', action: 'reconcileCustomerAction', set: CUSTOMER_RECONCILE_RULES, rule: 'asOf', value: 'soon', table: 'customers', extra: { customerId: FAKE() } },
+  { title: 'customers recordCollectionAction: an amount of 0', mod: 'customers/actions', action: 'recordCollectionAction', set: COLLECTION_RECORD_RULES, rule: 'amount', value: '0', table: 'ar_collections', mutant: 'min 0.01 loosened to 0', extra: { customerId: FAKE() } },
+  { title: 'customers recordCollectionAction: no account the money went into', mod: 'customers/actions', action: 'recordCollectionAction', set: COLLECTION_RECORD_RULES, rule: 'moneyAccountId', value: '  ', table: 'ar_collections', extra: { customerId: FAKE() } },
+  { title: 'customers recordCollectionAction: a negative platform fee', mod: 'customers/actions', action: 'recordCollectionAction', set: COLLECTION_RECORD_RULES, rule: 'platformFee', value: '-1', table: 'ar_collections', extra: { customerId: FAKE() } },
+  { title: 'customers voidCollectionAction: a blank reason', mod: 'customers/actions', action: 'voidCollectionAction', set: COLLECTION_VOID_RULES, rule: 'reason', value: '  ', table: 'ar_collections', extra: { customerId: FAKE(), collectionId: FAKE() } },
+  { title: 'customers voidChargeAction: a blank reason', mod: 'customers/actions', action: 'voidChargeAction', set: CHARGE_VOID_RULES, rule: 'reason', value: '  ', table: 'ar_charges', extra: { customerId: FAKE(), chargeId: FAKE() } },
+  { title: 'customers writeOffChargeAction: a write-off of 0', mod: 'customers/actions', action: 'writeOffChargeAction', set: CHARGE_WRITE_OFF_RULES, rule: 'amount', value: '0', table: 'ar_charges', extra: { customerId: FAKE(), chargeId: FAKE() }, mutant: 'min 0.01 loosened to 0' },
+  { title: 'customers writeOffChargeAction: a blank reason', mod: 'customers/actions', action: 'writeOffChargeAction', set: CHARGE_WRITE_OFF_RULES, rule: 'reason', value: '  ', table: 'ar_charges', extra: { customerId: FAKE(), chargeId: FAKE() } },
+  { title: 'customers createPriceListAction: a blank name', mod: 'customers/actions', action: 'createPriceListAction', set: PRICE_LIST_ADD_RULES, rule: 'name', value: '  ', table: 'price_lists' },
+  { title: 'customers setPriceAction: a negative rate', mod: 'customers/actions', action: 'setPriceAction', set: PRICE_SET_RULES, rule: 'rate', value: '-1', table: 'price_list_items', extra: { priceListId: FAKE() }, mutant: 'rate min 0 dropped' },
+  { title: 'customers setPriceAction: no item picked', mod: 'customers/actions', action: 'setPriceAction', set: PRICE_SET_RULES, rule: 'itemId', value: '  ', table: 'price_list_items', extra: { priceListId: FAKE() } },
+  // ---- liabilities
+  { title: 'liabilities createLiabilityAction: a blank name', mod: 'liabilities/actions', action: 'createLiabilityAction', set: LIABILITY_ADD_RULES, rule: 'name', value: '  ', table: 'liabilities' },
+  { title: 'liabilities createLiabilityAction: a due date that is not a date', mod: 'liabilities/actions', action: 'createLiabilityAction', set: LIABILITY_ADD_RULES, rule: 'dueOn', value: 'soon', table: 'liabilities' },
+  { title: 'liabilities chargeAction: a charge of 0', mod: 'liabilities/actions', action: 'chargeAction', set: LIABILITY_CHARGE_RULES, rule: 'amount', value: '0', table: 'journal_entries', extra: { liabilityId: FAKE() }, mutant: 'min 0.01 loosened to 0' },
+  { title: 'liabilities chargeAction: nothing chosen for what it was for', mod: 'liabilities/actions', action: 'chargeAction', set: LIABILITY_CHARGE_RULES, rule: 'againstAccountCode', value: '  ', table: 'journal_entries', extra: { liabilityId: FAKE() } },
+  { title: 'liabilities payAction: a payment of 0', mod: 'liabilities/actions', action: 'payAction', set: LIABILITY_PAY_RULES, rule: 'amount', value: '0', table: 'journal_entries', extra: { liabilityId: FAKE() }, mutant: 'min 0.01 loosened to 0' },
+  { title: 'liabilities payAction: no account to pay from', mod: 'liabilities/actions', action: 'payAction', set: LIABILITY_PAY_RULES, rule: 'fromMoneyAccountId', value: '  ', table: 'journal_entries', extra: { liabilityId: FAKE() } },
+  // ---- loans
+  { title: 'loans createLoanAction: a blank loan name (asserted in the domain, after the gate)', mod: 'loans/actions', action: 'createLoanAction', set: LOAN_ADD_RULES, rule: 'name', value: '  ', table: 'loans', good: { interestRate: '12' } },
+  { title: 'loans createLoanAction: a 121-character lender', mod: 'loans/actions', action: 'createLoanAction', set: LOAN_ADD_RULES, rule: 'lenderName', value: 'x'.repeat(121), table: 'loans', good: { interestRate: '12' }, mutant: 'max 120 dropped' },
+  { title: 'loans createLoanAction: an interest rate with five decimals', mod: 'loans/actions', action: 'createLoanAction', set: LOAN_ADD_RULES, rule: 'interestRate', value: '1.23456', table: 'loans', good: { interestRate: '12' }, mutant: 'rate pattern loosened' },
+  { title: 'loans createLoanAction: 0 payments', mod: 'loans/actions', action: 'createLoanAction', set: LOAN_ADD_RULES, rule: 'termPeriods', value: '0', table: 'loans', good: { interestRate: '12' }, mutant: 'termPeriods min 1 dropped' },
+  { title: 'loans disburseLoanAction: a draw of 0', mod: 'loans/actions', action: 'disburseLoanAction', set: LOAN_DRAW_RULES, rule: 'amount', value: '0', table: 'journal_entries', extra: { loanId: FAKE() }, mutant: 'min 0.01 loosened to 0' },
+  { title: 'loans disburseLoanAction: no account', mod: 'loans/actions', action: 'disburseLoanAction', set: LOAN_DRAW_RULES, rule: 'intoMoneyAccountId', value: '  ', table: 'journal_entries', extra: { loanId: FAKE() } },
+  { title: 'loans recordPaymentAction: a payment of 0', mod: 'loans/actions', action: 'recordPaymentAction', set: LOAN_PAYMENT_RULES, rule: 'amount', value: '0', table: 'journal_entries', extra: { loanId: FAKE() }, mutant: 'min 0.01 loosened to 0' },
+  { title: 'loans recordPaymentAction: a payment date that is not a date', mod: 'loans/actions', action: 'recordPaymentAction', set: LOAN_PAYMENT_RULES, rule: 'on', value: 'soon', table: 'journal_entries', extra: { loanId: FAKE() } },
+  { title: 'loans reverseEntryAction: a blank reason', mod: 'loans/actions', action: 'reverseEntryAction', set: LOAN_REVERSE_RULES, rule: 'reason', value: '  ', table: 'journal_entries', extra: { loanId: FAKE(), entryId: FAKE() } },
+  // ---- prepaid
+  { title: 'prepaid createPrepaidItemAction: a blank name (asserted in the domain, after the gate)', mod: 'prepaid/actions', action: 'createPrepaidItemAction', set: PREPAID_ADD_RULES, rule: 'name', value: '  ', table: 'prepaid_items', extra: { category: 'insurance' } },
+  { title: 'prepaid createPrepaidItemAction: a total cost of 0', mod: 'prepaid/actions', action: 'createPrepaidItemAction', set: PREPAID_ADD_RULES, rule: 'totalCost', value: '0', table: 'prepaid_items', extra: { category: 'insurance' }, mutant: 'min 0.01 loosened to 0' },
+  { title: 'prepaid createPrepaidItemAction: 121 months of coverage', mod: 'prepaid/actions', action: 'createPrepaidItemAction', set: PREPAID_ADD_RULES, rule: 'coverageMonths', value: '121', table: 'prepaid_items', extra: { category: 'insurance' }, mutant: 'max 120 dropped' },
+  { title: 'prepaid amortiseAction: a release month of 2026-13', mod: 'prepaid/actions', action: 'amortiseAction', set: PREPAID_RELEASE_RULES, rule: 'asOfPeriod', value: '2026-13', table: 'journal_entries', extra: { prepaidItemId: FAKE() }, good: { asOfPeriod: '2026-10' }, mutant: 'month pattern loosened' },
+  { title: 'prepaid confirmTermAction: 0 months (asserted in the domain, after the gate)', mod: 'prepaid/actions', action: 'confirmTermAction', set: PREPAID_TERM_RULES, rule: 'coverageMonths', value: '0', table: 'prepaid_items', extra: { prepaidItemId: FAKE() }, mutant: 'min 1 dropped' },
+  { title: 'prepaid confirmTermAction: a start date that is not a date', mod: 'prepaid/actions', action: 'confirmTermAction', set: PREPAID_TERM_RULES, rule: 'coverageStartDate', value: 'soon', table: 'prepaid_items', extra: { prepaidItemId: FAKE() } },
+  { title: 'prepaid reverseMonthAction: a blank reason', mod: 'prepaid/actions', action: 'reverseMonthAction', set: PREPAID_MONTH_REVERSE_RULES, rule: 'reason', value: '  ', table: 'journal_entries', extra: { prepaidItemId: FAKE(), period: '2026-10' } },
+  { title: 'prepaid writeOffAction: a 201-character reason', mod: 'prepaid/actions', action: 'writeOffAction', set: PREPAID_WRITE_OFF_RULES, rule: 'reason', value: 'x'.repeat(201), table: 'journal_entries', extra: { prepaidItemId: FAKE() }, mutant: 'max 200 dropped' },
+  { title: 'prepaid writeOffAction: a negative refund', mod: 'prepaid/actions', action: 'writeOffAction', set: PREPAID_WRITE_OFF_RULES, rule: 'refundAmount', value: '-1', table: 'journal_entries', extra: { prepaidItemId: FAKE() } },
+  // ---- trade
+  { title: 'trade/orders createOrderAction: no customer', mod: 'trade/orders/actions', action: 'createOrderAction', set: TRADE_ORDER_RULES, rule: 'customerId', value: '  ', table: 'trade_orders' },
+  { title: 'trade/orders createOrderAction: a negative delivery fee', mod: 'trade/orders/actions', action: 'createOrderAction', set: TRADE_ORDER_RULES, rule: 'deliveryFee', value: '-1', table: 'trade_orders' },
+  { title: 'trade/orders dispatchOrderAction: an amount paid now of 0', mod: 'trade/orders/actions', action: 'dispatchOrderAction', set: TRADE_DISPATCH_RULES, rule: 'payNowAmount', value: '0', table: 'ar_collections', extra: { orderId: FAKE() }, mutant: 'min 0.01 loosened to 0' },
+  { title: 'trade/orders receiveOrderAction: a received-on date that is not a date', mod: 'trade/orders/actions', action: 'receiveOrderAction', set: TRADE_RECEIVE_RULES, rule: 'receivedOn', value: 'soon', table: 'trade_orders', extra: { orderId: FAKE() }, mutant: 'optional date never checked when typed' },
+  { title: 'trade/orders voidOrderAction: a blank reason', mod: 'trade/orders/actions', action: 'voidOrderAction', set: TRADE_VOID_RULES, rule: 'reason', value: '  ', table: 'trade_orders', extra: { orderId: FAKE() } },
+  { title: 'trade/returns recordReturnAction: a quantity of 0', mod: 'trade/returns/actions', action: 'recordReturnAction', set: RETURN_RECORD_RULES, rule: 'quantity', value: '0', table: 'customer_returns', good: { quantity: '1' }, extra: { tradeOrderId: FAKE(), tradeOrderLineId: FAKE() }, mutant: 'quantity pattern loosened to allow zero' },
+  { title: 'trade/returns recordReturnAction: a quantity with four decimals', mod: 'trade/returns/actions', action: 'recordReturnAction', set: RETURN_RECORD_RULES, rule: 'quantity', value: '1.2345', table: 'customer_returns', good: { quantity: '1' }, extra: { tradeOrderId: FAKE(), tradeOrderLineId: FAKE() }, mutant: 'three-decimal cap dropped' },
+  { title: 'trade/returns recordReturnAction: a blank reason', mod: 'trade/returns/actions', action: 'recordReturnAction', set: RETURN_RECORD_RULES, rule: 'reason', value: '  ', table: 'customer_returns', good: { quantity: '1' }, extra: { tradeOrderId: FAKE(), tradeOrderLineId: FAKE() } },
+  { title: 'trade/returns voidReturnAction: a blank reason', mod: 'trade/returns/actions', action: 'voidReturnAction', set: RETURN_VOID_RULES, rule: 'reason', value: '  ', table: 'customer_returns', extra: { returnId: FAKE() } },
+];
+
+describe('T-440 S4: a bad value is refused with the rule sentence and nothing is written', () => {
+  for (const c of CASES) {
+    it(`${c.title} (mutant: ${c.mutant ?? 'assertFieldRules removed from the action'})`, async () => {
+      const f = await fixture();
+      const rule = (c.set as unknown as Record<string, FieldRule>)[c.rule];
+      if (!rule) throw new Error(`${c.set.form} has no rule ${c.rule}`);
+      const before = await count(c.table, f.orgId);
+      const beforeRows = Array.from(await sql.unsafe(`select * from ${c.table} where org_id = $1 order by id`, [f.orgId]));
+
+      const mod = (await import(/* @vite-ignore */ `${APP}/${c.mod}`)) as Record<string, (fd: FormData) => Promise<void>>;
+      const act = mod[c.action];
+      if (!act) throw new Error(`${c.mod} exports no ${c.action}`);
+      resetJar();
+      h.actor = f.admin;
+      const fd = new FormData();
+      // Keep real scope/record ids: generic text examples must not overwrite the fixture's authorization context.
+      const fields: Record<string, string> = { ...goodFields(c.set, c.good), ...(c.extra ?? {}), storeId: f.storeId };
+      for (const key of Object.keys(fields)) {
+        const real = f[key as keyof Fx];
+        if (typeof real === 'string' && key.endsWith('Id')) fields[key] = real;
+      }
+      fields[c.rule] = c.value;
+      for (const [k, v] of Object.entries(fields)) fd.set(k, v);
+      const o = outcomeOf(await captureRedirect(() => act(fd)));
+
+      expect(o.flash.error).toBe(sentence(rule, c.value));
+      expect(await count(c.table, f.orgId)).toBe(before);
+      expect(Array.from(await sql.unsafe(`select * from ${c.table} where org_id = $1 order by id`, [f.orgId]))).toEqual(beforeRows);
+    });
+  }
+});

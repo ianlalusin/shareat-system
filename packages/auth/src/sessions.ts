@@ -406,6 +406,7 @@ async function appendFirebaseSignIn(tx: Tx, orgId: string, result: SignInResult)
 
 const NOT_LINKED = 'Sign-in failed: this account is not linked to a person in this system.';
 const NO_ACCESS = 'Sign-in failed: this account no longer has access. Ask an admin if this is wrong.';
+const PIN_ONLY = 'Sign-in failed: staff sign in with their PIN. Ask an admin if this is wrong.';
 
 async function runFirebaseSignIn(tx: Tx, input: { verifiedUid: string }): Promise<{ result: SignInResult; orgId: string }> {
   const credential = await sessionsRepo.findActiveCredentialByExternalId(tx, input.verifiedUid);
@@ -443,6 +444,11 @@ async function runFirebaseSignIn(tx: Tx, input: { verifiedUid: string }): Promis
   if (!(await accessRepo.personMaySignInToOrg(tx, credential.personId, credential.personOrgId))) {
     enqueueSigninRefused(credential.personOrgId, credential.personId, 'employment_ended');
     throw new AuthenticationError(NO_ACCESS);
+  }
+  // T-438 N8 (row 361): email sign-in is for manager / admin / super_admin; everyone else signs in by PIN. After the employment check (A7).
+  if (!(await accessRepo.personMayUseEmailSignIn(tx, credential.personId, credential.personOrgId))) {
+    enqueueSigninRefused(credential.personOrgId, credential.personId, 'pin_only_role');
+    throw new AuthenticationError(PIN_ONLY);
   }
   const result = await issue(tx, {
     personId: credential.personId,

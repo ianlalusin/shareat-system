@@ -1,4 +1,6 @@
 'use client';
+import { INVENTORY_DELIVERY_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { CheckedForm } from '@/components/forms';
 
 /**
  * The "New delivery" form — T-166 / DEF-135. One document for a supplier delivery or a cash
@@ -13,7 +15,7 @@
  */
 import { PhotoInput } from '@/components/PhotoInput';
 import { useState } from 'react';
-import { Button, FormGrid, Field, Input, Select } from '@/components/ui';
+import { Button, FormGrid, FormSection, Field, Input, Select } from '@/components/ui';
 
 interface ItemOption {
   id: string;
@@ -40,7 +42,7 @@ interface LineDraft {
 }
 
 export function NewDeliveryForm({
-  action,
+  action: createDeliveryAction,
   storeId,
   suppliers,
   items,
@@ -93,7 +95,7 @@ export function NewDeliveryForm({
 
   const FULL = 'mt-1 block w-full';
   const FLABEL = 'text-xs text-neutral-600 dark:text-neutral-400';
-  const label = 'flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400';
+  const label = 'flex min-w-0 flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400';
   const photo = 'rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm';
 
   if (items.length === 0) {
@@ -105,54 +107,59 @@ export function NewDeliveryForm({
   }
 
   return (
-    <form action={action} className="mt-3 space-y-4">
+    <CheckedForm rules={INVENTORY_DELIVERY_RULES} action={createDeliveryAction} className="mt-3 space-y-4">
       <input type="hidden" name="storeId" value={storeId} />
 
-      <FormGrid>
-        <Field label="Kind" className={FLABEL}>
-          <Select
-            name="kind"
-            required
-            value={kind}
-            onChange={(e) => setKind(e.target.value === 'purchase' ? 'purchase' : 'supplier')}
-            className={FULL}
-          >
-            <option value="supplier">Supplier delivery</option>
-            <option value="purchase">Cash purchase</option>
-          </Select>
-        </Field>
-        {kind === 'supplier' ? (
-          <Field label="Supplier" className={FLABEL}>
-            <Select name="supplierId" required defaultValue="" className={FULL}>
-              <option value="" disabled>
-                Choose…
-              </option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
+      <FormSection title="Document">
+        <FormGrid layout="fields">
+          <Field rule={INVENTORY_DELIVERY_RULES.kind} width="code" label="Kind" className={FLABEL}>
+            <Select {...nativeAttrs(INVENTORY_DELIVERY_RULES.kind)}
+
+
+              value={kind}
+              onChange={(e) => setKind(e.target.value === 'purchase' ? 'purchase' : 'supplier')}
+              className={FULL}
+            >
+              <option value="supplier">Supplier delivery</option>
+              <option value="purchase">Cash purchase</option>
             </Select>
           </Field>
-        ) : (
-          <Field label="Supplier (optional)" className={FLABEL}>
-            <Select name="supplierId" defaultValue="" className={FULL}>
-              <option value="">— none, cash purchase —</option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
+          {kind === 'supplier' ? (
+            <Field rule={INVENTORY_DELIVERY_RULES.supplierId} width="long" label="Supplier" className={FLABEL}>
+              <Select {...nativeAttrs(INVENTORY_DELIVERY_RULES.supplierId)}   defaultValue="" className={FULL}>
+                <option value="" disabled>
+                  Choose…
                 </option>
-              ))}
-            </Select>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : (
+            <Field rule={INVENTORY_DELIVERY_RULES.supplierId} width="long" label="Supplier (optional)" className={FLABEL}>
+              <Select {...nativeAttrs(INVENTORY_DELIVERY_RULES.supplierId)}  defaultValue="" className={FULL}>
+                <option value="">— none, cash purchase —</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+          <Field width="code" label="Reference no. (DR/invoice)" className={FLABEL}>
+            <Input name="referenceNo" placeholder="DR-0001" className={FULL} />
           </Field>
-        )}
-        <Field label="Reference no. (DR/invoice)" className={FLABEL}>
-          <Input name="referenceNo" placeholder="DR-0001" className={FULL} />
-        </Field>
-        <Field label="Delivered on" className={FLABEL}>
-          <Input name="deliveredOn" type="date" required defaultValue={today} className={FULL} />
-        </Field>
-        <Field label="Photo of the paper" span="full" className={FLABEL}>
+          <Field rule={INVENTORY_DELIVERY_RULES.deliveredOn} width="date" label="Delivered on" className={FLABEL}>
+            <Input {...nativeAttrs(INVENTORY_DELIVERY_RULES.deliveredOn)}  type="date"  defaultValue={today} className={FULL} />
+          </Field>
+        </FormGrid>
+      </FormSection>
+
+      <FormSection title="Receipt evidence">
+        <Field width="long" label="Photo of the paper" span="full" className={FLABEL}>
           {/* ⭐ T-296 — compressed to under 1 MB before submit; a PDF passes through untouched. */}
           <PhotoInput
             name="proofPhoto"
@@ -161,13 +168,13 @@ export function NewDeliveryForm({
             className={`${photo} ${FULL}`}
           />
         </Field>
-      </FormGrid>
+      </FormSection>
       <p className="text-xs text-neutral-500 dark:text-neutral-500">
         ⭐ Required — a real anti-fraud control, not a nicety. Upload the actual photo of the
         delivery receipt or invoice; a link or a typed reference is not evidence.
       </p>
 
-      <div className="space-y-2">
+      <FormSection title="Items received" className="erp-delivery-lines space-y-2">
         <div className="flex items-baseline justify-between">
           <h3 className="text-sm font-medium">Lines</h3>
           <Button type="button" variant="secondary" onClick={addLine} className="text-xs">
@@ -177,9 +184,9 @@ export function NewDeliveryForm({
         {lines.map((l) => (
           <div
             key={l.key}
-            className="grid grid-cols-2 gap-2 rounded-md border border-neutral-200 p-2 sm:grid-cols-3 lg:grid-cols-7 lg:items-end dark:border-neutral-800"
+            className="erp-delivery-line grid grid-cols-2 gap-2 rounded-md border border-neutral-200 p-2 dark:border-neutral-800"
           >
-            <label className={`${label} col-span-2 lg:col-span-2`}>
+            <label className={`${label} col-span-2`}>
               Item
               <Select
                 name="itemId"
@@ -274,11 +281,11 @@ export function NewDeliveryForm({
             </Button>
           </div>
         ))}
-      </div>
+      </FormSection>
 
       <Button type="submit" variant="primary">
         Save
       </Button>
-    </form>
+    </CheckedForm>
   );
 }

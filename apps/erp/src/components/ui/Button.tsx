@@ -94,6 +94,7 @@ export function Button({
 }: ButtonProps) {
   return (
     <button
+      data-erp-control="single"
       type={type}
       className={`${BASE_CLASSES} ${VARIANT_CLASSES[variant]}${className ? ` ${className}` : ''}`}
       {...rest}

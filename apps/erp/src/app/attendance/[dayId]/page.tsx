@@ -15,7 +15,9 @@ import { isBlockingAnomaly } from '@shareat/domain';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, ConfirmDestructive, FlashBanner, Input, Select, statusLabel } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, Field, FlashBanner, Input, Select, statusLabel } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { ATTENDANCE_EARLY_OUT_RULES, ATTENDANCE_OVERTIME_RULES, ATTENDANCE_START_ANCHOR_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 /**
  * Plain-language names for the engine's anomaly codes.
@@ -77,7 +79,7 @@ export default async function AttendanceDayPage({
   const locked = lockedReason !== null;
 
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div className="space-y-1">
         <Link href="/attendance" className="text-sm underline underline-offset-2">
           ← Attendance review
@@ -222,7 +224,7 @@ function Ident({ day }: { day: Day }) {
 function Overtime({ day, locked }: { day: Day; locked: boolean }) {
   if (day.pendingOtMinutes === 0) return null;
   return (
-    <form action={approveOvertimeAction} className={`${CARD} space-y-2`}>
+    <CheckedForm rules={ATTENDANCE_OVERTIME_RULES} action={approveOvertimeAction} className={`${CARD} space-y-2`}>
       <Ident day={day} />
       <h3 className="text-sm font-medium">
         Overtime — {asHours(day.pendingOtMinutes)} recorded
@@ -238,26 +240,20 @@ function Overtime({ day, locked }: { day: Day; locked: boolean }) {
           : '⛔ Pending overtime pays nothing until decided. Approving 0 is a decision; leaving it undecided is not.'}
       </p>
       <div className="flex flex-wrap items-end gap-2">
-        <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
-          Minutes to pay
-          <Input
-            name="approvedOtMinutes"
-            inputMode="numeric"
-            defaultValue={day.approvedOtMinutes ?? day.pendingOtMinutes}
-            className="w-full"
-          />
-        </label>
+        <Field label="Minutes to pay" rule={ATTENDANCE_OVERTIME_RULES.approvedOtMinutes} className="basis-40 flex-1">
+          <Input {...nativeAttrs(ATTENDANCE_OVERTIME_RULES.approvedOtMinutes)} defaultValue={day.approvedOtMinutes ?? day.pendingOtMinutes} className="w-full" />
+        </Field>
         <Button type="submit" variant="primary" disabled={locked}>
           Decide
         </Button>
       </div>
-    </form>
+    </CheckedForm>
   );
 }
 
 function StartAnchor({ day, locked }: { day: Day; locked: boolean }) {
   return (
-    <form action={setStartAnchorAction} className={`${CARD} space-y-2`}>
+    <CheckedForm rules={ATTENDANCE_START_ANCHOR_RULES} action={setStartAnchorAction} className={`${CARD} space-y-2`}>
       <Ident day={day} />
       <h3 className="text-sm font-medium">
         Paid from
@@ -272,26 +268,20 @@ function StartAnchor({ day, locked }: { day: Day; locked: boolean }) {
         PAID from. The tap itself does not move.
       </p>
       <div className="flex flex-wrap items-end gap-2">
-        <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
-          Minute of shift day
-          <Input
-            name="chosenAnchorMinute"
-            inputMode="numeric"
-            defaultValue={day.anchorMinute ?? 0}
-            className="w-full"
-          />
-        </label>
+        <Field label="Minute of shift day" rule={ATTENDANCE_START_ANCHOR_RULES.chosenAnchorMinute} className="basis-40 flex-1">
+          <Input {...nativeAttrs(ATTENDANCE_START_ANCHOR_RULES.chosenAnchorMinute)} defaultValue={day.anchorMinute ?? 0} className="w-full" />
+        </Field>
         <Button type="submit" variant="secondary" disabled={locked}>
           Save
         </Button>
       </div>
-    </form>
+    </CheckedForm>
   );
 }
 
 function EarlyOut({ day, locked }: { day: Day; locked: boolean }) {
   return (
-    <form action={approveEarlyOutAction} className={`${CARD} space-y-2`}>
+    <CheckedForm rules={ATTENDANCE_EARLY_OUT_RULES} action={approveEarlyOutAction} className={`${CARD} space-y-2`}>
       <Ident day={day} />
       <h3 className="text-sm font-medium">
         Paid until
@@ -306,20 +296,14 @@ function EarlyOut({ day, locked }: { day: Day; locked: boolean }) {
         than to the actual tap.
       </p>
       <div className="flex flex-wrap items-end gap-2">
-        <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
-          Minute of shift day
-          <Input
-            name="effectiveOutMinute"
-            inputMode="numeric"
-            defaultValue={day.endMinute ?? 0}
-            className="w-full"
-          />
-        </label>
+        <Field label="Minute of shift day" rule={ATTENDANCE_EARLY_OUT_RULES.effectiveOutMinute} className="basis-40 flex-1">
+          <Input {...nativeAttrs(ATTENDANCE_EARLY_OUT_RULES.effectiveOutMinute)} defaultValue={day.endMinute ?? 0} className="w-full" />
+        </Field>
         <Button type="submit" variant="secondary" disabled={locked}>
           Approve
         </Button>
       </div>
-    </form>
+    </CheckedForm>
   );
 }
 

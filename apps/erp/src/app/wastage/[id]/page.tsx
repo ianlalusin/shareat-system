@@ -15,7 +15,9 @@ import {
 } from '../actions';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Banner, Button, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, FlashBanner, Field, Input, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { WASTAGE_REVERSE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { withFlash } from '@/lib/flash';
 import { personName } from '@/lib/person-name';
 
@@ -83,7 +85,7 @@ export default async function WastageDetailPage({
     (Date.now() - row.resolvedAt.getTime()) / 86_400_000 <= 30;
 
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div>
         <Link href={`/wastage?store=${row.storeId}`} className="text-sm underline underline-offset-4">
           ← Order wastage
@@ -183,16 +185,18 @@ export default async function WastageDetailPage({
         <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="font-medium">Reverse the backstop&apos;s decision</h2>
           {canReverse ? (
-            <form action={reverseAutoChargeAction} className="mt-3 space-y-2 text-sm">
+            <CheckedForm rules={WASTAGE_REVERSE_RULES} action={reverseAutoChargeAction} className="mt-3 space-y-2 text-sm">
               <input type="hidden" name="id" value={row.id} />
               <input type="hidden" name="storeId" value={row.storeId} />
-              <Input name="reason" required placeholder="Why is this being reversed?" className="w-full" />
+              <Field label="Reason" rule={WASTAGE_REVERSE_RULES.reason}>
+                <Input {...nativeAttrs(WASTAGE_REVERSE_RULES.reason)} placeholder="Why is this being reversed?" className="w-full" />
+              </Field>
               <ConfirmDestructive
                 tier="admin-pin"
                 label="Reverse auto charge"
                 consequence="Reverses this auto-charge so it can be resolved again. An administrator must approve with their own PIN."
               />
-            </form>
+            </CheckedForm>
           ) : (
             <p className="mt-1 text-sm text-neutral-500">More than 30 days since the backstop resolved this — no longer reversible here.</p>
           )}

@@ -10,7 +10,9 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
-import { Banner, Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Banner, Button, Field, FlashBanner, Input, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { COMMISSARY_DEFER_RULES, COMMISSARY_RETURN_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Transit discrepancies — Shareat System' };
@@ -212,20 +214,24 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
                     </Button>
                   </form>
 
-                  <form action={deferDiscrepancyAction} className="space-y-2 text-sm">
+                  <CheckedForm rules={COMMISSARY_DEFER_RULES} action={deferDiscrepancyAction} className="space-y-2 text-sm">
                     <input type="hidden" name="id" value={row.id} />
                     <input type="hidden" name="storeId" value={storeId} />
-                    <label className="block">
-                      <span className="text-neutral-600 dark:text-neutral-400">
-                        Or decide later — <strong>once</strong>
-                      </span>
+                    <Field
+                      label={
+                        <span className="text-neutral-600 dark:text-neutral-400">
+                          Or decide later — <strong>once</strong>
+                        </span>
+                      }
+                      rule={COMMISSARY_DEFER_RULES.deferredTo}
+                    >
                       <Input
                         type="date"
-                        name="deferredTo"
+                        {...nativeAttrs(COMMISSARY_DEFER_RULES.deferredTo)}
                         defaultValue={today}
                         className="mt-1 block"
                       />
-                    </label>
+                    </Field>
                     {/* ⚠️ v1's rule, and the whole reason defer is safe to offer: a dispute cannot
                         be pushed down the road indefinitely. The database refuses the second one. */}
                     <p className="text-xs text-neutral-500">
@@ -234,7 +240,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
                     <Button type="submit" variant="secondary">
                       Defer
                     </Button>
-                  </form>
+                  </CheckedForm>
                 </div>
               )}
             </article>
@@ -262,21 +268,22 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
                     view order
                   </Link>
                 </p>
-                <form action={resolveDiscrepancyAction} className="mt-3 space-y-2 text-sm">
+                <CheckedForm rules={COMMISSARY_RETURN_RULES} action={resolveDiscrepancyAction} className="mt-3 space-y-2 text-sm">
                   <input type="hidden" name="id" value={r.id} />
                   <input type="hidden" name="storeId" value={storeId} />
                   <input type="hidden" name="resolvedOn" value={today} />
                   <input type="hidden" name="disposition" value="return" />
-                  <Input
-                    name="note"
-                    required
-                    placeholder="Who carried it back and when, or that you recounted"
-                    className="w-full"
-                  />
+                  <Field label="Note" rule={COMMISSARY_RETURN_RULES.note}>
+                    <Input
+                      {...nativeAttrs(COMMISSARY_RETURN_RULES.note)}
+                      placeholder="Who carried it back and when, or that you recounted"
+                      className="w-full"
+                    />
+                  </Field>
                   <Button type="submit" variant="secondary">
                     Return
                   </Button>
-                </form>
+                </CheckedForm>
               </article>
             ))}
           </div>

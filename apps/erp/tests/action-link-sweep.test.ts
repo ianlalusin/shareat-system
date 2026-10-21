@@ -205,7 +205,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
   //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
   //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 147 FAIL / 47 UNRESOLVED', () => {
+  it('accepted-baseline totals: 147 FAIL / 48 UNRESOLVED', () => {
     // 62 -> 63 UNRESOLVED, T-386 S4 2026-10-09: the rename "use the suggested code" checkbox on app/items/ItemCodeField.tsx
     // (an intrinsic checkbox box; baselined in touch-target-baseline.json per Ian's §6.1 ruling).
     // 63 -> 66 UNRESOLVED, T-387 S3 2026-10-10. +3: the kit's new native `<select>` (Select.tsx) and `<textarea>` (Textarea.tsx)
@@ -226,7 +226,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 116 FAIL / 1259 total, T-411 2026-10-15: 30 tables' row links are full-height rows (h-11).
     // components/ui/Table.tsx UNRESOLVED (T-411): RowLink's tap target is its stretched ::after (absolute inset-0) over the
     // enclosing LinkRow, which is h-11 (44px); RowLink's own class carries no height by design.
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 116, unresolved: 47 });
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 116, unresolved: 48 });
+    // 47 -> 48 UNRESOLVED, T-440 (17 Oct): expenses/recurring gained a second intrinsic checkbox box (touch-target-baseline.json entry added).
   });
 
   // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
@@ -444,7 +445,23 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // +6 (16 Oct): T-433 order page — Print delivery receipt link, BIR invoice no. input + save button, pay-now amount, money account select, receipt photo
     // -1 (16 Oct): T-433 BIR invoice no. form moved into EditableRecord, so its Save button leaves the census
     // +7 (16 Oct): T-434 staff detail page photo and signature controls (net +7 measured, 1259 -> 1266; the "View signature" link is a per-click link).
-    expect(results.length).toBe(1266);
+    // +4 (17 Oct): T-386 /staff Positions tab - the third view-switch link, the per-position <details> summary, and the holder link (plus the add form's controls, measured net +4, 1266 -> 1270).
+    // +45 (17 Oct): T-436 leave tracking - attendance/leave page (request, record, approve, reject, cancel, void, certificate attach/view) and settings/attendance leave kinds and caps controls (1266 -> 1311 measured).
+    // = 1315 after both merged (17 Oct)
+    // +35 (17 Oct): T-190 payroll screens (rates page, government IDs on the staff page, payslip lines; net +35 measured on its older base).
+    // = 1352 after T-190 merged onto main (17 Oct; expected 1350, measured 1352: the two extra controls come from where the T-190 screens meet T-436/T-386 on the same pages)
+    // +5 (17 Oct): T-438 hire name boxes and rename form
+    // +6 (17 Oct): T-441 S1 shared photo control on /ap (Lightbox dialog/Close/Open PDF, PhotoUpload shape button/file input/action button; 1357 -> 1363 measured).
+    // -1 (17 Oct): T-440 S1 supplier add form - Days-to-pay loses type=number, a Button becomes SubmitButton (1357 -> 1356 measured).
+    // = 1362 with both merged (17 Oct)
+    // +16 (17 Oct): T-440 S3-S7 sweep - ruled fields moved onto Field/CheckedForm (helper lines, SubmitButton, the owners SettleForm split; 1362 -> 1378 measured).
+    // +12 (18 Oct): T-443 items page - kind filter chips (6), the look-alike panel's note box + "Different items" button (per pair), the
+    //   dismissed-pairs list (summary, links, Undo), the Variation-of selects on the request form and approve row, and the item page's
+    //   Variations section (links, select, Save). Measured 1362 -> 1374; all 12 new controls are >= 24px (the 5 that were 20px got py-0.5).
+    // T-444: one new Review and approvals disclosure summary; all existing controls remain.
+    // Combined T-440 controls plus T-448: Books moves into the financial StatCard map.
+    // SSR checks retain Assets and Books links; this removes one static scanner site.
+    expect(results.length).toBe(1390);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

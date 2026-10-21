@@ -520,6 +520,18 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'What a job pays. A franchise reading another org’s rates would learn its labour cost.',
   },
+  statutory_rates: {
+    scope: 'org_column',
+    reason: 'T-190. An org’s own confirmed statutory rates; each org (Padre Garcia included) confirms its own, so none is shared.',
+  },
+  withholding_brackets: {
+    scope: 'org_column',
+    reason: 'T-190. An org’s own withholding tables, confirmed per org (same reasoning as pay_rates).',
+  },
+  minimum_wages: {
+    scope: 'org_column',
+    reason: 'T-190. A store’s minimum daily wage, confirmed per org; another org reading it would learn nothing it should act on.',
+  },
   pay_runs: {
     scope: 'org_column',
     reason: 'Which periods an org has paid, and from which account.',
@@ -662,6 +674,12 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     reason:
       'Pending and decided item requests, including the near-duplicate warnings shown to the ' +
       'approver. Org-scoped like the item master it governs.',
+  },
+  item_duplicate_dismissals: {
+    scope: 'org_column',
+    reason:
+      'Which look-alike item pairs a super-admin said are different products (T-443). Org-scoped like the item master ' +
+      'it qualifies; another org must never see, or undo, what this org decided.',
   },
   supplier_items: {
     scope: 'org_column',
@@ -832,6 +850,32 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'person’s movements, which is exactly the field-level concern bible §7 rule 10 raises about ' +
       'store membership implying too much. UPDATE and DELETE REVOKEd from the app role (0170, ' +
       'T-356), so an attempt is a loud 42501.',
+  },
+
+  // ---- T-436: leave and absence tracking (migration 0205) --------------------------------
+  leave_types: {
+    scope: 'org_column',
+    reason:
+      'The kinds of leave. org_id is NULL for the platform seed every org reads and non-null for a kind an org added; ' +
+      'the policies read both and WRITE only the org’s own. Not personal data, but an org must not edit another’s kinds.',
+  },
+  leave_caps: {
+    scope: 'org_column',
+    reason: 'Monthly and yearly leave limits per kind, store and position: an org’s own staffing policy.',
+  },
+  leave_requests: {
+    scope: 'org_column',
+    reason:
+      'Who asked for or was recorded absent, when, and why. The note is a reason or a medical note (bible row 353): personal ' +
+      'data that must never cross an org boundary, and is further narrowed inside the org by the domain loader.',
+  },
+  leave_request_days: {
+    scope: 'org_column',
+    reason: 'One row per leave date: names a person and a date they were absent. Per-org like its request.',
+  },
+  leave_commutations: {
+    scope: 'org_column',
+    reason: 'What a person is owed in cash for unused leave: compensation data, scoped like payslips.',
   },
 
   // ---- T-157: the adjudicated day (Phase 4, lane B) -------------------------------------

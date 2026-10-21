@@ -388,7 +388,7 @@
       </div>
     </div>
     <div class="wave">
-      <div class="wave-head"><h3>Cash, bills, trade and recurring, 16&ndash;17 Oct</h3><span class="chip c-done">live and in release</span><span class="why">PR #32 and #33 live; T-433 and T-424 wait in release PR #34.</span></div>
+      <div class="wave-head"><h3>Cash, bills, trade and recurring, 16&ndash;17 Oct</h3><span class="chip c-done">live and in release</span><span class="why">PR #32 to #35 live; production is d335959 (PR #35, 17 Oct).</span></div>
       <div class="tasks">
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-415</div><div class="task-what">Every move of money in or out of a cash request locks the request first (DEF-657/658)</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-416</div><div class="task-what">Administrator-PIN approvals get a per-person miss cap (DEF-653)</div></div>
@@ -396,7 +396,7 @@
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-430</div><div class="task-what">Recurring templates: a starting period, and catch-up drafting</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-431</div><div class="task-what">&ldquo;Everything unpaid&rdquo;: one read-only view of what the business owes</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-432</div><div class="task-what">The supplier payment form can pay a booked bill from a cash request</div></div>
-        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-433</div><div class="task-what">Business customers on trade orders: pay now, printable delivery receipt, BIR booklet, credit-limit warning</div><div class="task-note">In release PR #34, not yet live</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-433</div><div class="task-what">Business customers on trade orders: pay now, printable delivery receipt, BIR booklet, credit-limit warning</div><div class="task-note">Live 17 Oct (PR #34); POS v2 not in use yet</div></div>
       </div>
     </div>
   </section>
@@ -446,7 +446,7 @@
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-388</div><div class="task-what">A POS usage pull posts every line with stock and holds back only the short item, named in words; finalized only when nothing is held (row 297)</div><div class="task-note">Built and smoked 10 Oct (931c921); DEF-618..622 fixed; live 10 Oct (PR #8)</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-389</div><div class="task-what">A refused save keeps what you typed, on every saved record (DEF-617); guard G10</div><div class="task-note">Done 10 Oct: S1-S5, all 33 saved-record forms keep typing; typed required; DEF-617, 633 fixed. S1 live (PR #8); S2/S3 in PR #10; S4/S5 on main</div></div>
         <div class="task t-active"><div class="task-id"><span class="dot"></span>T-390</div><div class="task-what">Opening stock per room from the count; opening sub-ledger tie-out; count sheets (DEF-623)</div><div class="task-note">S1 (0191, live), S2, S3, S5 done; S5 screens smoked 11 Oct (count → value → red/green tie-out → POST; asset valuation unmet). S1-S5 in PR #16 except S1 (live). S4 waits on the T-391 apply</div></div>
-        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-391, T-393, T-396, T-397</div><div class="task-what">Master data load · nightly backup + restore · link 3 stores + morning import · payroll bridge</div><div class="task-note">T-391 S4-S6 live 13 Oct; rollout with Ian next. T-393 backups built, NOT switched on (before 1 Nov). T-396 needs Ian&rsquo;s POS ids and keys. T-398 S1 live</div></div>
+        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-391, T-393, T-396, T-397</div><div class="task-what">Master data load · nightly backup + restore · link 3 stores + morning import · payroll bridge</div><div class="task-note">T-391 Lipa master data loaded on production 17 Oct (227 items, 33 suppliers, 6 customers); Lipa staff roster waits on HR start dates; no encoder/verifier yet (Ian hiring). T-393 backups built, NOT switched on (before 1 Nov). T-396 S1+S2 (06:00 Manila day-import, 0209) built, not released; S3/S4 wait on Ian&rsquo;s POS store ids by Fri 23 Oct. T-398 S1 live</div></div>
         <div class="task t-active"><div class="task-id"><span class="dot"></span>T-392</div><div class="task-what">Dual-run comparator: v1 channel receivables, document matching, dual-run screens (/reports/dual-run), go/no-go pack, admin-only dispositions</div><div class="task-note">S3+S4 live 13 Oct (PR #21, 0195). S1b, S4b, S5 built, audited and combined 14 Oct (release PR, not deployed): build complete. Left: Lipa&rsquo;s real week on production; dual run starts 2 Nov</div></div>
         <div class="task t-active"><div class="task-id"><span class="dot"></span>T-394</div><div class="task-what">Purge and opening rehearsal on a restored copy: guards, start/migrate/predump/purge/mark, verify, sanitised report</div><div class="task-note">S1+S2 done 14 Oct; S3 runbook DRAFTED 15 Oct (PR #27, live; durations/owners at S4, sign-off pending Ian). Next: S4 the 13 Nov rehearsal</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-401</div><div class="task-what">ERP menu and price master: one menu per org, per-store append-only prices, online price rules, item requests, the v1 POS link and per-store usage switch; S6 usage drafts that auto-post (first POS v2 / customer v2 prerequisite)</div><div class="task-note">DONE 16 Oct. S1+S2 live 13 Oct (0196); S3-S5 14 Oct; S6 merged a879264 (PR #28, migration 0198): the v1 pull creates pre-filled usage drafts, unposted ones auto-post 14:00 next day, day-close warning, month-close block, scorecard (rows 341-342). Ian: install the auto-post timer on the droplet</div></div>
@@ -547,7 +547,7 @@
   <section id="p5" class="inv">
     <h2>Phase 5 &middot; Payroll</h2>
     <div class="wave">
-      <div class="wave-head"><h3>Pay runs</h3><span class="chip c-part">16 of 19</span><span class="why">T-190 and T-436 are built on lanes, not merged; T-193 follows T-190.</span></div>
+      <div class="wave-head"><h3>Pay runs</h3><span class="chip c-part">16 of 19</span><span class="why">T-190 and T-436 live 17 Oct (PR #34/#35); T-193 waits on Ian Q1-Q4.</span></div>
       <div class="tasks">
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-189</div><div class="task-what">Pay rates, and the pay run that finally pays somebody</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-189b</div><div class="task-what">Overtime priced two ways, hours in half-hour steps, holiday per type</div></div>
@@ -565,9 +565,9 @@
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-201</div><div class="task-what">The attendance &amp; payroll settings screen &mdash; added this session, not in the original 17</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-191</div><div class="task-what">13th-month pay</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-192</div><div class="task-what">Separation, final pay and clearance (first slice)</div></div>
-        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-190</div><div class="task-what">Statutory contributions and withholding</div><div class="task-note">Built on a lane (migration 0206), not merged; BIR 1601-E supplier withholding closed as not applicable (row 354)</div></div>
-        <div class="task"><div class="task-id"><span class="dot"></span>T-193</div><div class="task-what">Statutory remittance, settling 2210&ndash;2240</div><div class="task-note">After T-190 merges</div></div>
-        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-436</div><div class="task-what">Leave and absence tracking (monthly and yearly caps, paid vs unpaid)</div><div class="task-note">Built on a lane (migration 0205), not merged</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-190</div><div class="task-what">Statutory contributions and withholding</div><div class="task-note">Live 17 Oct (PR #35, migration 0206); posting refused until rates are confirmed; BIR 1601-E supplier withholding closed as not applicable (row 354)</div></div>
+        <div class="task"><div class="task-id"><span class="dot"></span>T-193</div><div class="task-what">Statutory remittance, settling 2210&ndash;2240</div><div class="task-note">Spec audited; waits on Ian Q1-Q4</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-436</div><div class="task-what">Leave and absence tracking (monthly and yearly caps, paid vs unpaid)</div><div class="task-note">Live 17 Oct (PR #34, migration 0205)</div></div>
       </div>
     </div>
   </section>
@@ -642,8 +642,16 @@
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-341</div><div class="task-what">A position grant authorises only at the store whose default produced it (DEF-414, DEF-429)</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-342</div><div class="task-what">The org's own admin can use the cutover screens again (DEF-417 part 1)</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-349</div><div class="task-what">&ldquo;Hold in their own right&rdquo; keeps the grant at the job&apos;s store (DEF-456)</div></div>
-        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-434</div><div class="task-what">Staff photo and signature: upload, replace, remove; signature guarded</div><div class="task-note">In release PR #34, not yet live</div></div>
-        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-435</div><div class="task-what">Personal-data access gates for payroll, customers, staff and trade</div><div class="task-note">In release PR #34, not yet live</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-434</div><div class="task-what">Staff photo and signature: upload, replace, remove; signature guarded</div><div class="task-note">Live 17 Oct (PR #34); POS v2 not in use yet</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-435</div><div class="task-what">Personal-data access gates for payroll, customers, staff and trade</div><div class="task-note">Live 17 Oct (PR #34); POS v2 not in use yet</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-437</div><div class="task-what">Customer v2 skeleton (sample data only)</div><div class="task-note">Live 17 Oct (PR #35)</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-438</div><div class="task-what">Hire by last/first/middle name; staff PIN-only</div><div class="task-note">Live 17 Oct (PR #35, migration 0207)</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-439</div><div class="task-what">Cook renamed Kitchen Staff; Staff Positions tab</div><div class="task-note">Live 17 Oct (PR #35, migration 0208)</div></div>
+        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-440</div><div class="task-what">Live field checks (S1+S2 mechanism, pilots, coverage guard)</div><div class="task-note">Built on main, not released. S3-S7 (~384 fields) on branch lane/t440-sweep, 2 failing tests, not merged. S9 auth-first spec audited</div></div>
+        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-441</div><div class="task-what">Shared photo-upload control (S1, POST /files/upload, /ap pilot)</div><div class="task-note">Built on main, not released. S2-S7 spec audited, waiting</div></div>
+        <div class="task "><div class="task-id"><span class="dot"></span>T-442</div><div class="task-what">Receipt-photo link backfill</div><div class="task-note">Spec audited; after T-441 S2</div></div>
+        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-396 S1+S2</div><div class="task-what">06:00 Manila POS day-import, failure status on /sales-days, heartbeat alert (0209)</div><div class="task-note">Built on main, not released. S3/S4 wait on Ian&rsquo;s POS store ids by Fri 23 Oct</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>DEF-656 &middot; DEF-675</div><div class="task-what">DEF-656 fix live 17 Oct; DEF-675 app bound to 127.0.0.1</div><div class="task-note">DEF-675 built, not released</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>DEF-664</div><div class="task-what">Re-adding a retired store position now brings it back; the Staff page is retitled</div><div class="task-note">Live (PR #33)</div></div>
         <div class="task t-active"><div class="task-id"><span class="dot"></span>Staff Positions tab</div><div class="task-what">Expandable position cards on the Staff page</div><div class="task-note">Built on a lane, not merged</div></div>
       </div>
@@ -693,9 +701,11 @@
         <div class="task"><div class="task-id"><span class="dot"></span>T-314</div><div class="task-what">Fingerprint capture</div><div class="task-note">Blocked on a tablet and the reader model</div></div>
         <div class="task"><div class="task-id"><span class="dot"></span>T-363</div><div class="task-what">Managers and admins can flag any expense as doubtful</div><div class="task-note">After launch, your ruling</div></div>
         <div class="task t-done"><div class="task-id"><span class="dot"></span>T-422 &middot; T-423</div><div class="task-what">POS v2: v1 floor screens copied into apps/pos; money in centavos and one receipt series per tablet</div><div class="task-note">Live (PR #32); T-417 empty shells also live</div></div>
-        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-424</div><div class="task-what">POS v2 server: manager-PIN approvals, refunds, tender corrections, server-gated void</div><div class="task-note">In release PR #34, not yet live</div></div>
-        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-425</div><div class="task-what">POS v2 offline rules (PC-5)</div><div class="task-note">Spec in review; PC-6 senior/PWD discounts next</div></div>
-        <div class="task"><div class="task-id"><span class="dot"></span>T-398 S2&ndash;S7</div><div class="task-what">Padre Garcia franchise organisation, remaining slices</div></div>
+        <div class="task t-done"><div class="task-id"><span class="dot"></span>T-424</div><div class="task-what">POS v2 server: manager-PIN approvals, refunds, tender corrections, server-gated void</div><div class="task-note">Live 17 Oct (PR #34); POS v2 not in use yet</div></div>
+        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-425</div><div class="task-what">POS v2 offline rules (PC-5)</div><div class="task-note">Built on branch claude/pos-v2-907a29 (WIP, not audited, not merged)</div></div>
+        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-398 S2&ndash;S7</div><div class="task-what">Padre Garcia franchise organisation, remaining slices</div><div class="task-note">S2a (DEF-421 ratchet) built, not released. S2b-S6 spec audited and buildable (B1-B14, C1-C6). S7 waits on Ian Q11 + data</div></div>
+        <div class="task t-active"><div class="task-id"><span class="dot"></span>T-426 &middot; T-427</div><div class="task-what">POS v2 senior/PWD discounts and Convert</div><div class="task-note">Specs + red tests on branch claude/pos-v2-907a29, not merged</div></div>
+        <div class="task "><div class="task-id"><span class="dot"></span>T-428 &middot; T-429</div><div class="task-what">POS v2 till screen &middot; reserved</div><div class="task-note">T-428 research done; T-429 reserved</div></div>
         <div class="task"><div class="task-id"><span class="dot"></span>DEF-585</div><div class="task-what">Production has no fiscal period before October 2026</div></div>
       </div>
     </div>

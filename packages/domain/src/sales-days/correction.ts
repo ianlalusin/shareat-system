@@ -22,6 +22,8 @@ import { parseBusinessDate } from '@shareat/core/datetime';
 import { postEntry, type PostEntryLine } from '../ledger/post-entry';
 import { deriveSalesDay } from '../pos/v1-derive';
 import { gone, humanDate, internalFault, refuse } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { SALES_DAY_CORRECTION_RULES } from '../field-rules/sales-days';
 import { routeInputForDay } from './compose';
 import { routeSalesDay } from './routing';
 
@@ -57,6 +59,8 @@ export async function postPosCorrection(tx: Tx, actor: Actor, input: PostPosCorr
   if (!day) throw gone(`postPosCorrection: sales day ${input.salesDayId} does not exist in org ${orgId}`, 'sales day');
 
   await authorize(tx, actor, 'verify_sales_day', { storeId: day.storeId });
+  // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
+  assertFieldRules(SALES_DAY_CORRECTION_RULES, { entryDate: input.entryDate, reason: input.reason });
 
   const when = dayLabel(day.businessDate);
   if (day.status !== 'verified' || day.source !== 'pos_v1_day_feed' || !day.journalEntryId) {

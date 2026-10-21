@@ -45,7 +45,7 @@ const fake = (): Any => ({
 const MAP = parseStoreMap(
   ['v1_store_id,name,role,org_code,store_code', `${L},Lipa,own,SE,LIPA`, `${M},Malvar,own,SE,MLVR`].join('\r\n'),
 );
-const CANON = ['Cashier', 'Cook', 'Server', 'Dishwasher', 'Slicer', 'Inventory Staff'].map((name, i) => ({ id: `p${i}`, name, storeCode: null }));
+const CANON = ['Cashier', 'Kitchen Staff', 'Server', 'Dishwasher', 'Slicer', 'Inventory Staff'].map((name, i) => ({ id: `p${i}`, name, storeCode: null }));
 
 async function extracted(): Promise<{ rates: Any[]; roster: Any[] }> {
   const dir = mkdtempSync(join(tmpdir(), 't391-s5-rates-'));

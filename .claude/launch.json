@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 9008
+    },
+    {
+      "name": "customer",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:customer"],
+      "port": 9010
     }
   ]
 }

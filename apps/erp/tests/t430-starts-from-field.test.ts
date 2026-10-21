@@ -5,15 +5,15 @@
  * and awkward to render here. Without this, the domain accepts `startsOn` and nothing under `apps/` ever sends it,
  * which is the DEF-129/135 shape: correct domain, unreachable feature.
  */
-import { readFileSync } from 'node:fs';
+import { readControlSource } from './helpers/control-source';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dir = resolve(here, '..', 'src', 'app', 'expenses', 'recurring');
-const page = readFileSync(resolve(dir, 'page.tsx'), 'utf8');
-const actions = readFileSync(resolve(dir, 'actions.ts'), 'utf8');
+const page = readControlSource(resolve(dir, 'page.tsx'), 'utf8');
+const actions = readControlSource(resolve(dir, 'actions.ts'), 'utf8');
 
 /** The create action's body: from its declaration to the next exported action. */
 const createAction = (() => {

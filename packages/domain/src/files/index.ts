@@ -18,59 +18,32 @@
  */
 import { createHash } from 'node:crypto';
 import { authorize, type Actor, can } from '@shareat/auth';
-import { filesRepo, goneSentence, RefusalError, transaction, withSystemOrgPrincipal, type FilePurpose, type Tx } from '@shareat/db';
+import { filesRepo, goneSentence, refuse, RefusalError, transaction, UUID_SHAPE, withSystemOrgPrincipal, type FilePurpose, type Tx } from '@shareat/db';
 import { stripImageMetadata } from '@shareat/core/exif';
 import { logger } from '@shareat/core/logger';
 import { resolveStorageDriver } from './driver';
+import {
+  decideLeaveDocumentRead,
+  LEAVE_DOCUMENT_LINK_SECONDS,
+  recordLeaveDocumentViewed,
+  recordLeaveDocumentViewRefused,
+} from '../leave/document-access';
 import { signatureUrl } from './signature';
+import { fileBytesMatchType } from './magic';
 
 export * from './driver';
 export { mayViewSignature, SIGNATURE_LINK_SECONDS } from './signature';
+export { fileBytesMatchType } from './magic';
 
-/**
- * What each purpose may hold, and how big. ⚠️ v1 used one blanket 25 MB with *"no content-type
- * restriction"* because a single rule had to cover images, PDFs and Word documents at once.
- * Per-purpose limits make the blanket unnecessary.
- */
-export const PURPOSE_LIMITS: Record<
-  FilePurpose,
-  { readonly types: readonly string[]; readonly maxBytes: number }
-> = {
-  receipt_photo: { types: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'], maxBytes: 8 * 1024 * 1024 },
-  ar_collection_proof: { types: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'], maxBytes: 8 * 1024 * 1024 },
-  memo_document: { types: ['application/pdf', 'image/jpeg', 'image/png'], maxBytes: 15 * 1024 * 1024 },
-  wastage_dispute: { types: ['image/jpeg', 'image/png', 'image/webp'], maxBytes: 8 * 1024 * 1024 },
-  onboarding_document: { types: ['application/pdf', 'image/jpeg', 'image/png'], maxBytes: 25 * 1024 * 1024 },
-  // T-434. The staff ID-card photo, and the on-screen signature (PNG only, under the app-wide 1 MB image ceiling).
-  staff_photo: { types: ['image/jpeg', 'image/png', 'image/webp'], maxBytes: 8 * 1024 * 1024 },
-  staff_signature: { types: ['image/png'], maxBytes: 1024 * 1024 },
-};
+import { isImageContentType, MAX_IMAGE_BYTES, PURPOSE_LIMITS, type LimitPurpose } from './limits';
 
-/**
- * ⭐ **T-296 — Ian, 2026-09-12: *"every uploaded photo accross the app to not exceed 1mb"*.**
- *
- * ONE ceiling for every image, applied on top of the per-purpose limit below. ⛔ Deliberately not
- * a per-purpose `maxImageBytes` field: Ian said *"across the app"*, and five copies of one rule is
- * five places for it to drift — a new purpose would silently inherit whatever its author typed.
- *
- * ⚠️ **Exactly 1 MB, and the browser aims at 950 KB** (`PHOTO_TARGET_BYTES` in
- * `apps/erp/src/components/photo-compression.ts`). The gap is deliberate: the client aims under the
- * line so a marginal encode is not refused by the layer that cannot explain itself as well.
- *
- * ⛔ **This is the guarantee, not the compression.** With JavaScript disabled no compression runs
- * at all; this is what makes "no stored photo exceeds 1 MB" provable from `stored_files.byte_size`
- * rather than merely likely.
- *
- * ⚠️ **PDFs are NOT subject to it.** They cannot be re-encoded, and the rule is about photos —
- * a 25 MB onboarding PDF stays legal under its own purpose limit, which is also why
- * `next.config.js`'s 26 MB body limit (T-282/DEF-317) must not be lowered to match this.
- */
-export const MAX_IMAGE_BYTES = 1024 * 1024;
+// T-441 (audit A7): the limits live in a db-free leaf the browser imports; this is the same object, re-exported.
+export { isImageContentType, MAX_IMAGE_BYTES, PURPOSE_LIMITS } from './limits';
 
-/** Whether `MAX_IMAGE_BYTES` applies. Images only — see its note. */
-export function isImageContentType(contentType: string): boolean {
-  return contentType.toLowerCase().startsWith('image/');
-}
+/** Compile-time check: the leaf's purpose list equals the schema's `FILE_PURPOSES`. A drift in either fails `typecheck`. */
+type _SamePurposes = [LimitPurpose] extends [FilePurpose] ? ([FilePurpose] extends [LimitPurpose] ? true : never) : never;
+const purposesMatchSchema: _SamePurposes = true;
+void purposesMatchSchema;
 
 /** The capability that governs the THING, not a generic "may upload". */
 const PURPOSE_CAPABILITY: Record<FilePurpose, Parameters<typeof authorize>[2]> = {
@@ -84,6 +57,9 @@ const PURPOSE_CAPABILITY: Record<FilePurpose, Parameters<typeof authorize>[2]> =
   memo_document: 'manage_users',
   wastage_dispute: 'record_wastage',
   onboarding_document: 'enrol_staff',
+  // T-436: this governs UPLOAD only (attaching a certificate is a manage_attendance act). ⛔ READING a leave_document never goes
+  // through this map - see `readFileUrl`'s leave branch and `leave/document-access.ts` (bible row 353).
+  leave_document: 'manage_attendance',
   staff_photo: 'enrol_staff',
   // ⛔ T-434: this governs UPLOAD of a signature only. Signature READS never use it: see `./signature` (`mayViewSignature`).
   staff_signature: 'enrol_staff',
@@ -120,6 +96,15 @@ export async function uploadFile(
   return transaction((trx) => runUpload(trx, actor, input));
 }
 
+/**
+ * T-441: whether this actor may upload this purpose at this store - the SAME capability `runUpload` gates on, asked with the
+ * non-logging `can`, so the upload route can refuse a person who lacks it BEFORE it reads the request body. A presentation of
+ * the gate, not a replacement: `uploadFile` still authorizes.
+ */
+export async function canUploadFile(tx: Tx, actor: Actor, purpose: FilePurpose, storeId: string | null): Promise<boolean> {
+  return can(tx, actor, PURPOSE_CAPABILITY[purpose], { ...(storeId ? { storeId } : {}) });
+}
+
 async function runUpload(tx: Tx, actor: Actor, input: UploadInput): Promise<UploadResult> {
   const limits = PURPOSE_LIMITS[input.purpose];
   if (!limits) throw new Error(`uploadFile: ${input.purpose} is not a known kind of file.`);
@@ -138,6 +123,10 @@ async function runUpload(tx: Tx, actor: Actor, input: UploadInput): Promise<Uplo
     );
   }
   if (input.bytes.length === 0) throw new Error('uploadFile: the file is empty.');
+  // T-441: the declared type is not trusted - the first bytes must match it, on EVERY path (route and no-JS action alike).
+  if (!fileBytesMatchType(input.contentType, input.bytes)) {
+    throw new Error(`uploadFile: the file does not look like the ${input.contentType} it says it is.`);
+  }
   // ⭐ T-296. The app-wide photo ceiling, checked BEFORE the per-purpose limit so an oversized
   //    image gets the message about photos rather than the one about its purpose's larger cap.
   if (isImageContentType(input.contentType) && input.bytes.length > MAX_IMAGE_BYTES) {
@@ -237,6 +226,9 @@ export async function canReadFiles(tx: Tx, actor: Actor, fileIds: readonly strin
     const files = await filesRepo.getByIds(tx, actor.orgId, [...new Set(fileIds)]);
     const verdicts = new Map<string, boolean>();
     for (const file of files) {
+      // ⛔ T-436: a leave document is never offered on the strength of the UPLOAD capability. The screens ask this to draw a
+      // "View photo" link; for a certificate the only reader is `openLeaveDocument` (row 353), so no link is ever drawn from here.
+      if (file.purpose === 'leave_document') continue;
       // ⛔ T-434: a signature is NEVER decided here (the shared verdict is keyed by capability + store, the wrong question for it).
       if (file.purpose === 'staff_signature') continue;
       const key = `${PURPOSE_CAPABILITY[file.purpose]}|${file.storeId ?? ''}`;
@@ -275,6 +267,22 @@ export async function readFileUrl(
       // from an internal fault (a 500), and a bare Error cannot be told from either.
       throw new FileNotFoundError(`readFileUrl: file ${input.fileId} does not exist in this org.`);
     }
+    // ⛔ T-436 (bible row 353): a medical certificate is opened by its OWN rule, never by `PURPOSE_CAPABILITY` (which governs upload).
+    // A viewer who may not open it gets the SAME not-found as a missing id (so a guessed id confirms nothing), the attempt is
+    // written in a separate transaction so it survives this one rolling back, and the link lasts 60 seconds whatever was asked.
+    if (file.purpose === 'leave_document') {
+      const verdict = await decideLeaveDocumentRead(trx, actor, file);
+      if (!verdict.allowed) {
+        await recordLeaveDocumentViewRefused(actor, verdict);
+        throw new FileNotFoundError(`readFileUrl: file ${input.fileId} does not exist in this org.`);
+      }
+      await recordLeaveDocumentViewed(trx, actor, verdict);
+      const leaveUrl = await resolveStorageDriver().signedUrl(
+        file.storagePath,
+        Math.min(input.expiresInSeconds ?? LEAVE_DOCUMENT_LINK_SECONDS, LEAVE_DOCUMENT_LINK_SECONDS),
+      );
+      return { url: leaveUrl, contentType: file.contentType };
+    }
     // ⛔ T-434: a signature goes through its own rule, its own 60 s link and its own audit - never `assertCanRead`.
     if (file.purpose === 'staff_signature') return signatureUrl(trx, actor, file);
     await assertCanRead(trx, actor, file);
@@ -287,6 +295,56 @@ export async function readFileUrl(
   };
   if (tx) return run(tx);
   return transaction(run);
+}
+
+/**
+ * T-441 (audit A1/A2) - THE claim of an upload-on-pick file by the record that now owns it. ONE conditional
+ * UPDATE in the repo (`claimFile`): the file must be this person's own unlinked upload of this purpose and store,
+ * under 24 h old on the database clock, and it is linked in the same statement - so two concurrent Saves cannot
+ * both win and the orphan sweep (which deletes only `linked_to IS NULL`) cannot take a claimed file.
+ *
+ * Every failure - missing, someone else's, another org's, wrong purpose or store, already taken, expired,
+ * malformed id - is the SAME sentence, so a probe learns nothing. Call it after the record insert, in the same
+ * transaction, for both the upload-first path and the no-JS path.
+ */
+export async function claimUpload(
+  tx: Tx,
+  actor: Actor,
+  input: { fileId: string; purpose: FilePurpose; storeId: string | null; linkTo: string },
+): Promise<void> {
+  const unavailable = () => refuse('claimUpload: not claimable', 'That photo is no longer available - pick it again.');
+  if (!UUID_SHAPE.test(input.fileId) || !UUID_SHAPE.test(input.linkTo)) throw unavailable();
+  const claimed = await filesRepo.claimFile(tx, {
+    orgId: actor.orgId,
+    id: input.fileId,
+    uploadedBy: actor.personId,
+    purpose: input.purpose,
+    storeId: input.storeId,
+    linkedTo: input.linkTo,
+  });
+  if (!claimed) throw unavailable();
+}
+
+/** T-441 ruling: one person may hold at most this many unclaimed uploads younger than 24 h. */
+export const UNCLAIMED_UPLOAD_CAP = 30;
+
+/** Thrown by `assertUnclaimedUploadRoom`; the upload route turns exactly this into a 429. */
+export class UploadCapError extends RefusalError {
+  constructor() {
+    super(
+      'upload cap reached',
+      'You have too many photos waiting to be saved. Save or remove some, then try again.',
+    );
+    this.name = 'UploadCapError';
+  }
+}
+
+/** Refuses when this person already holds `UNCLAIMED_UPLOAD_CAP` unclaimed uploads under 24 h old (a flood guard, not a quota). */
+export async function assertUnclaimedUploadRoom(tx: Tx, actor: Actor): Promise<void> {
+  // The per-person lock is held to COMMIT, so the count and the insert that follows are one step for this person.
+  await filesRepo.lockUnclaimedUploads(tx, actor.orgId, actor.personId);
+  const held = await filesRepo.countUnclaimedBy(tx, actor.orgId, actor.personId, 24);
+  if (held >= UNCLAIMED_UPLOAD_CAP) throw new UploadCapError();
 }
 
 /** Claims a file, so the orphan sweep leaves it alone. */

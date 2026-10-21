@@ -1,4 +1,4 @@
-import { PhotoInput } from '@/components/PhotoInput';
+import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import Link from 'next/link';
 import { requireSession } from '../../lib/session';
 import { createSupplierAction, recordInvoiceAction } from './actions';
@@ -6,7 +6,10 @@ import { listSuppliersWithPosition, listInvoices, listStores, peso, today } from
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Button, FlashBanner, Input, LinkRow, RowLink, Select, FormGrid, FormSection, type FieldProps } from '@/components/ui';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import { SubmitButton } from '@/components/feedback/SubmitButton';
+import { SUPPLIER_ADD_RULES, SUPPLIER_INVOICE_LOG_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { ACTION_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Accounts payable — Shareat System' };
@@ -98,27 +101,35 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
       <div className="grid gap-6 md:grid-cols-2">
         <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="font-medium">Record a supplier</h2>
-          <form action={createSupplierAction} className="space-y-3">
-            <Field label="Name">
-              <Input name="name" required placeholder="ABC Meat Supply" className="w-full" />
-            </Field>
-            <Field label="Address" hint="Optional.">
-              <Input name="address" className="w-full" />
-            </Field>
-            <Field label="Contact no." hint="Optional.">
-              <Input name="contactNo" className="w-full" />
-            </Field>
-            <Field label="Payment terms">
-              <Select name="termsMode" defaultValue="cod" className="w-full">
-                <option value="cod">Cash on delivery (no credit)</option>
-                <option value="credit">On credit (AP)</option>
-              </Select>
-            </Field>
-            <Field label="Days to pay" hint="Only for On credit. 0 to 365.">
-              <Input type="number" name="creditTermsDays" min="0" max="365" step="1" className="w-full" />
-            </Field>
-            <Button type="submit" variant="secondary">Save</Button>
-          </form>
+          <CheckedForm rules={SUPPLIER_ADD_RULES} action={createSupplierAction} className="space-y-3">
+            <FormSection title="Supplier details">
+              <FormGrid layout="fields">
+                <Field width="name" label="Name" rule={SUPPLIER_ADD_RULES.name}>
+                  <Input {...nativeAttrs(SUPPLIER_ADD_RULES.name)} placeholder="ABC Meat Supply" className="w-full" />
+                </Field>
+                <Field width="long" label="Address" hint="Optional.">
+                  <Input name="address" className="w-full" />
+                </Field>
+                <Field width="code" label="Contact no." hint="Optional.">
+                  <Input name="contactNo" className="w-full" />
+                </Field>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Payment terms">
+              <FormGrid layout="fields">
+                <Field label="Payment terms">
+                  <Select name="termsMode" defaultValue="cod" className="w-full">
+                    <option value="cod">Cash on delivery (no credit)</option>
+                    <option value="credit">On credit (AP)</option>
+                  </Select>
+                </Field>
+                <Field width="short" label="Days to pay" hint="Only for On credit. 0 to 365." rule={SUPPLIER_ADD_RULES.creditTermsDays}>
+                  <Input {...nativeAttrs(SUPPLIER_ADD_RULES.creditTermsDays)} className="w-full" />
+                </Field>
+              </FormGrid>
+            </FormSection>
+            <SubmitButton variant="secondary">Save</SubmitButton>
+          </CheckedForm>
         </section>
 
         <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
@@ -128,96 +139,91 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
               Pending until verified. No expense can be recorded against it before then.
             </p>
           </div>
-          <form action={recordInvoiceAction} className="space-y-3">
-            <Field label="Store">
-              <Select name="storeId" required defaultValue="" className="w-full">
-                <option value="" disabled>Choose…</option>
-                {stores.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Supplier">
-              <Select name="supplierId" required defaultValue="" className="w-full">
-                <option value="" disabled>Choose…</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </Select>
-            </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Invoice no." hint="Optional.">
-                <Input name="invoiceNo" className="w-full" />
+          <CheckedForm rules={SUPPLIER_INVOICE_LOG_RULES} action={recordInvoiceAction} className="space-y-3">
+            <FormSection title="Invoice document">
+              <FormGrid layout="fields">
+                <Field rule={SUPPLIER_INVOICE_LOG_RULES.storeId} label="Store">
+                  <Select {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.storeId)}   defaultValue="" className="w-full">
+                    <option value="" disabled>Choose…</option>
+                    {stores.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field rule={SUPPLIER_INVOICE_LOG_RULES.supplierId} label="Supplier">
+                  <Select {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.supplierId)}   defaultValue="" className="w-full">
+                    <option value="" disabled>Choose…</option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field width="code" label="Invoice no." hint="Optional.">
+                  <Input name="invoiceNo" className="w-full" />
+                </Field>
+                <Field rule={SUPPLIER_INVOICE_LOG_RULES.totalAmount} width="code" label="Total amount">
+                  <Input {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.totalAmount)}   placeholder="0.00" className="w-full" />
+                </Field>
+                <Field rule={SUPPLIER_INVOICE_LOG_RULES.deliveryFee} width="code" label="Delivery fee" hint="Optional.">
+                  <Input {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.deliveryFee)}   placeholder="0.00" className="w-full" />
+                </Field>
+                <Field rule={SUPPLIER_INVOICE_LOG_RULES.otherFees} width="code" label="Other fees" hint="Optional.">
+                  <Input {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.otherFees)}   placeholder="0.00" className="w-full" />
+                </Field>
+                <p className="col-span-2 text-xs text-neutral-500 dark:text-neutral-500">
+                  Part of the total above. Both are added to the items&apos; cost; neither is a line.
+                </p>
+                <Field rule={SUPPLIER_INVOICE_LOG_RULES.invoiceDate} width="date" label="Invoice date">
+                  <Input {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.invoiceDate)} type="date"   defaultValue={today()} className="w-full" />
+                </Field>
+                <Field rule={SUPPLIER_INVOICE_LOG_RULES.dueDate} width="date" label="Due date" hint="Leave blank to use the supplier's terms.">
+                  <Input {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.dueDate)} type="date"  className="w-full" />
+                </Field>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Tax details">
+              <FormGrid layout="fields">
+                <Field label="Official receipt?">
+                  <Select name="isOfficialReceipt" defaultValue="" className="w-full">
+                    <option value="">Supplier&apos;s usual</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </Select>
+                </Field>
+                <Field label="VAT type">
+                  <Select name="vatType" defaultValue="supplier_default" className="w-full">
+                    <option value="supplier_default">Supplier&apos;s usual</option>
+                    <option value="vatable">Vatable</option>
+                    <option value="zero_rated">Zero-rated</option>
+                    <option value="exempt">Exempt</option>
+                    <option value="non_vat">Non-VAT</option>
+                  </Select>
+                </Field>
+                <Field rule={SUPPLIER_INVOICE_LOG_RULES.vatAmount} width="code" label="VAT amount (as printed)" hint="Type the VAT shown on the paper. Only for a vatable bill.">
+                  <Input {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.vatAmount)}   placeholder="0.00" className="w-full" />
+                </Field>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Receipt evidence">
+              <Field
+                label="Photo of the receipt"
+                hint="Required before it can be verified. Upload the actual photo — a link or a typed reference is not evidence."
+              >
+                {/* T-441: one upload control. The photo is shrunk (T-296), sent on pick with real progress, and claimed when the invoice is saved. */}
+                <PhotoUpload name="receiptPhoto" purpose="receipt_photo" label="Receipt photo" storeField="storeId" />
               </Field>
-              <Field label="Total amount">
-                <Input name="totalAmount" required placeholder="0.00" className="w-full" />
-              </Field>
-              <Field label="Delivery fee" hint="Optional.">
-                <Input name="deliveryFee" inputMode="decimal" placeholder="0.00" className="w-full" />
-              </Field>
-              <Field label="Other fees" hint="Optional.">
-                <Input name="otherFees" inputMode="decimal" placeholder="0.00" className="w-full" />
-              </Field>
-              <p className="col-span-2 text-xs text-neutral-500 dark:text-neutral-500">
-                Part of the total above. Both are added to the items&apos; cost; neither is a line.
-              </p>
-              <Field label="Invoice date">
-                <Input type="date" name="invoiceDate" required defaultValue={today()} className="w-full" />
-              </Field>
-              <Field label="Due date" hint="Leave blank to use the supplier's terms.">
-                <Input type="date" name="dueDate" className="w-full" />
-              </Field>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Official receipt?">
-                <Select name="isOfficialReceipt" defaultValue="" className="w-full">
-                  <option value="">Supplier&apos;s usual</option>
-                  <option value="yes">Yes</option>
-                  <option value="no">No</option>
-                </Select>
-              </Field>
-              <Field label="VAT type">
-                <Select name="vatType" defaultValue="supplier_default" className="w-full">
-                  <option value="supplier_default">Supplier&apos;s usual</option>
-                  <option value="vatable">Vatable</option>
-                  <option value="zero_rated">Zero-rated</option>
-                  <option value="exempt">Exempt</option>
-                  <option value="non_vat">Non-VAT</option>
-                </Select>
-              </Field>
-              <Field label="VAT amount (as printed)" hint="Type the VAT shown on the paper. Only for a vatable bill.">
-                <Input name="vatAmount" inputMode="decimal" placeholder="0.00" className="w-full" />
-              </Field>
-            </div>
-            <Field
-              label="Photo of the receipt"
-              hint="Required before it can be verified. Upload the actual photo — a link or a typed reference is not evidence."
-            >
-              {/* ⭐ T-296 — compresses a photo to under 1 MB before submit. A PDF passes through.
-                  The server's own 1 MB image ceiling is what guarantees it (Ian, 2026-09-12). */}
-              <PhotoInput
-                name="receiptPhoto"
-                accept="image/jpeg,image/png,image/webp,application/pdf"
-                className={FILE_INPUT}
-              />
-            </Field>
+            </FormSection>
             <Button type="submit" variant="primary">Log invoice</Button>
-          </form>
+          </CheckedForm>
         </section>
       </div>
     </Page>
   );
 }
 
-// PhotoInput is a file input, which the kit does not wrap; it takes the field tokens directly.
-const FILE_INPUT = 'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 text-sm text-ink';
-
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
-      {children}
-      {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </label>
-  );
+function Field({ width, label, hint, rule, children }: FieldProps) {
+  const body = <><span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>{children}{hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}</>;
+  const sizing = width ? ` erp-field-${width}` : '';
+  if (!rule) return <label className={`flex min-w-0 flex-col gap-1${sizing}`}>{body}</label>;
+  return <div className={`min-w-0${sizing}`}><label className="flex min-w-0 flex-col gap-1">{body}</label><FieldCheck rule={rule} /></div>;
 }

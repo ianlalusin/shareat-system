@@ -9,7 +9,8 @@ import { categoriesForAdmin, mappableAccounts } from './lib';
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { SETTINGS_EXPENSE_CATEGORY_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Button, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
@@ -123,14 +124,14 @@ export default async function ExpenseCategoriesSettingsPage({
                     {c.isSystem ? (
                       c.category
                     ) : (
-                      <EditableRecord action={renameCategoryAction} label={c.category} hidden={{ categoryId: c.id }} typed={typedFor(sp, EXPENSE_CATEGORY_RENAME, c.id, actor.personId)}>
-                        <Input
-                          name="category"
-                          defaultValue={c.category}
-                          required
-                          aria-label={`Name of ${c.category}`}
-                          className="w-full py-1"
-                        />
+                      <EditableRecord action={renameCategoryAction} label={c.category} hidden={{ categoryId: c.id }} typed={typedFor(sp, EXPENSE_CATEGORY_RENAME, c.id, actor.personId)} rules={SETTINGS_EXPENSE_CATEGORY_RULES}>
+                        <Field label={<span className="sr-only">{`Name of ${c.category}`}</span>} rule={SETTINGS_EXPENSE_CATEGORY_RULES.category}>
+                          <Input
+                            {...nativeAttrs(SETTINGS_EXPENSE_CATEGORY_RULES.category)}
+                            defaultValue={c.category}
+                            className="w-full py-1"
+                          />
+                        </Field>
                       </EditableRecord>
                     )}
                     {isUnmapped && (
@@ -234,10 +235,10 @@ export default async function ExpenseCategoriesSettingsPage({
           with a seeded one by case or spacing — bible §4.4 rule 3, DEF-205. */}
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Add a category</h2>
-        <form action={createCategoryAction} className="mt-3 space-y-3 text-sm">
+        <CheckedForm rules={SETTINGS_EXPENSE_CATEGORY_RULES} action={createCategoryAction} className="mt-3 space-y-3 text-sm">
           <FormGrid>
-            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>}>
-              <Input name="category" required placeholder="Scooter rental" className="w-full" />
+            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>} rule={SETTINGS_EXPENSE_CATEGORY_RULES.category}>
+              <Input {...nativeAttrs(SETTINGS_EXPENSE_CATEGORY_RULES.category)} placeholder="Scooter rental" className="w-full" />
             </Field>
             <Field label={<span className="text-neutral-600 dark:text-neutral-400">Group</span>}>
               <Select name="group" defaultValue="OPEX" className="w-full">
@@ -261,7 +262,7 @@ export default async function ExpenseCategoriesSettingsPage({
           <Button type="submit" variant="primary">
             Save
           </Button>
-        </form>
+        </CheckedForm>
         <p className="mt-3 text-xs text-neutral-500 dark:text-neutral-400">
           Names are compared ignoring case and spacing, so <code>Rent</code> and{' '}
           <code>rent&nbsp;</code> are the same category and the second is refused by the database.

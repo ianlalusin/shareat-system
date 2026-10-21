@@ -11,7 +11,8 @@ import {
 } from './actions';
 import { listStores, locationsPageData } from './lib';
 import { Page } from '@/components/shell/Page';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { INVENTORY_LOCATION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Button, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -218,17 +219,17 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
           </div>
 
           <h3 className="border-t border-neutral-200 pt-3 font-medium dark:border-neutral-800">Add a room</h3>
-          <form action={createLocationAction} className="space-y-3">
+          <CheckedForm rules={INVENTORY_LOCATION_RULES} action={createLocationAction} className="space-y-3">
             <input type="hidden" name="storeId" value={storeId} />
             <FormGrid>
-              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Code</span>} className="text-sm">
-                <Input name="code" required className="w-full" />
+              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Code</span>} className="text-sm" rule={INVENTORY_LOCATION_RULES.code}>
+                <Input {...nativeAttrs(INVENTORY_LOCATION_RULES.code)} className="w-full" />
               </Field>
-              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>} className="text-sm">
-                <Input name="name" required className="w-full" />
+              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>} className="text-sm" rule={INVENTORY_LOCATION_RULES.name}>
+                <Input {...nativeAttrs(INVENTORY_LOCATION_RULES.name)} className="w-full" />
               </Field>
-              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Type</span>} className="text-sm">
-                <Select name="typeId" required defaultValue="" className="w-full">
+              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Type</span>} className="text-sm" rule={INVENTORY_LOCATION_RULES.typeId}>
+                <Select {...nativeAttrs(INVENTORY_LOCATION_RULES.typeId)} defaultValue="" className="w-full">
                   <option value="" disabled>
                     Select a type
                   </option>
@@ -254,7 +255,7 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
             <Button type="submit" variant="primary">
               Save
             </Button>
-          </form>
+          </CheckedForm>
         </section>
       )}
     </Page>

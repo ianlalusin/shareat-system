@@ -18,6 +18,8 @@ import {
   type ShiftView,
   type TillCountRow,
 } from './lib';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import { TILL_OPEN_SHIFT_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -103,13 +105,12 @@ export default async function TillPage({
             ⛔ A store may have only one open shift at a time — the database enforces it, because
             two open shifts mean two people believe they hold the same cash.
           </p>
-          <form action={openShiftAction} className="space-y-3">
+          <CheckedForm rules={TILL_OPEN_SHIFT_RULES} action={openShiftAction} className="space-y-3">
             <input type="hidden" name="storeId" value={storeId} />
             <FormGrid>
-            <label className="flex flex-col gap-1">
-              <span className={LABEL}>Trading date</span>
-              <Input name="businessDate" type="date" defaultValue={today()} className="w-full" />
-            </label>
+            <Field label="Trading date" rule={TILL_OPEN_SHIFT_RULES.businessDate}>
+              <Input {...nativeAttrs(TILL_OPEN_SHIFT_RULES.businessDate)} type="date" defaultValue={today()} className="w-full" />
+            </Field>
             {handoverFrom && (
               <label className="flex flex-col gap-1">
                 <span className={LABEL}>Taking over from</span>
@@ -124,7 +125,7 @@ export default async function TillPage({
             )}
             </FormGrid>
             <SubmitButton pendingLabel="Saving…">Open shift</SubmitButton>
-          </form>
+          </CheckedForm>
         </section>
       )}
 
@@ -356,3 +357,16 @@ function CountTable({ counts }: { counts: TillCountRow[] }) {
 }
 
 const LABEL = 'text-xs font-medium text-neutral-600 dark:text-neutral-400';
+
+function Field({ label, rule, children }: { label: string; rule: FieldRule; children: React.ReactNode }) {
+  // T-440: the label keeps its look; the live helper line sits OUTSIDE it (never part of the accessible name).
+  return (
+    <div>
+      <label className="flex flex-col gap-1">
+        <span className={LABEL}>{label}</span>
+        {children}
+      </label>
+      <FieldCheck rule={rule} />
+    </div>
+  );
+}

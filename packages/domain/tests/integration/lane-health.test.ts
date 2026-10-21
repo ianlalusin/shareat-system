@@ -311,7 +311,7 @@ describe('⛔ T-183 invariant 3 — Discard needs a reason, a human, and never d
       asOrg(f.orgId, (tx) =>
         discardQuarantined(tx, f.admin, { quarantineId: id, storeId: f.storeId, reason: '   ' }),
       ),
-    ).rejects.toBeInstanceOf(LaneHealthError);
+    ).rejects.toMatchObject({ name: 'RefusalError', userMessage: 'The reason is required.' });
     const [row] = await sql<{ resolved_at: Date | null }[]>`
       select resolved_at from inbox_quarantine where id = ${id}`;
     expect(row!.resolved_at).toBeNull();

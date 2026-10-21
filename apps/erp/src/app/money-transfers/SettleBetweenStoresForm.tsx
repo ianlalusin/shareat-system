@@ -8,6 +8,9 @@
  */
 import { useState } from 'react';
 import { Button, Input, Select } from '@/components/ui';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import { TRANSFER_SETTLE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
+import { settleBetweenStoresAction } from './actions';
 
 export interface SettlePairOption {
   /** "Lipa owes Malvar ₱650.00" - in words. */
@@ -18,23 +21,29 @@ export interface SettlePairOption {
   to: { id: string; label: string }[];
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
+function Field({ label, hint, rule, className, children }: { label: React.ReactNode; hint?: string; rule?: FieldRule; className?: string; children: React.ReactNode }) {
+  const body = (
+    <>      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
       {hint && <span className="text-xs text-neutral-400 dark:text-neutral-600">{hint}</span>}
-    </label>
+    
+    </>
+  );
+  // T-440: a ruled field keeps its label and puts the live helper line OUTSIDE it (never part of the accessible name).
+  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
+  return (
+    <div className={className}>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }
 
 export function SettleBetweenStoresForm({
-  action,
   pairs,
   settlementId,
   today,
 }: {
-  action: (fd: FormData) => void | Promise<void>;
   pairs: readonly SettlePairOption[];
   settlementId: string;
   today: string;
@@ -44,7 +53,7 @@ export function SettleBetweenStoresForm({
   if (!pair) return null;
 
   return (
-    <form action={action} className="space-y-4">
+    <CheckedForm rules={TRANSFER_SETTLE_RULES} action={settleBetweenStoresAction} className="space-y-4">
       <input type="hidden" name="settlementId" value={settlementId} />
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Who owes whom">
@@ -64,8 +73,8 @@ export function SettleBetweenStoresForm({
         <div />
 
         {/* Re-keyed on the pair so the amount and the account lists reset when another pair is chosen. */}
-        <Field label="From — the paying store's account" hint="An office account of the store that owes">
-          <Select key={`from-${index}`} name="fromMoneyAccountId" required className="w-full" defaultValue={pair.from[0]?.id}>
+        <Field label="From — the paying store's account" hint="An office account of the store that owes" rule={TRANSFER_SETTLE_RULES.fromMoneyAccountId}>
+          <Select key={`from-${index}`} {...nativeAttrs(TRANSFER_SETTLE_RULES.fromMoneyAccountId)} className="w-full" defaultValue={pair.from[0]?.id}>
             {pair.from.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.label}
@@ -73,8 +82,8 @@ export function SettleBetweenStoresForm({
             ))}
           </Select>
         </Field>
-        <Field label="To — the receiving store's account" hint="An office account of the store that is owed">
-          <Select key={`to-${index}`} name="toMoneyAccountId" required className="w-full" defaultValue={pair.to[0]?.id}>
+        <Field label="To — the receiving store's account" hint="An office account of the store that is owed" rule={TRANSFER_SETTLE_RULES.toMoneyAccountId}>
+          <Select key={`to-${index}`} {...nativeAttrs(TRANSFER_SETTLE_RULES.toMoneyAccountId)} className="w-full" defaultValue={pair.to[0]?.id}>
             {pair.to.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.label}
@@ -83,25 +92,23 @@ export function SettleBetweenStoresForm({
           </Select>
         </Field>
 
-        <Field label="Amount that left" hint="Up to what is owed — a smaller amount settles part of it">
+        <Field label="Amount that left" hint="Up to what is owed — a smaller amount settles part of it" rule={TRANSFER_SETTLE_RULES.amountOut}>
           <Input
             key={`out-${index}`}
-            name="amountOut"
-            required
-            inputMode="decimal"
+            {...nativeAttrs(TRANSFER_SETTLE_RULES.amountOut)}
             defaultValue={pair.owed}
             className="w-full"
           />
         </Field>
-        <Field label="Amount that arrived" hint="Leave blank unless a bank fee was deducted">
-          <Input name="amountIn" inputMode="decimal" placeholder="Same as above" className="w-full" />
+        <Field label="Amount that arrived" hint="Leave blank unless a bank fee was deducted" rule={TRANSFER_SETTLE_RULES.amountIn}>
+          <Input {...nativeAttrs(TRANSFER_SETTLE_RULES.amountIn)} placeholder="Same as above" className="w-full" />
         </Field>
 
-        <Field label="Date">
-          <Input name="transferDate" type="date" required defaultValue={today} className="w-full" />
+        <Field label="Date" rule={TRANSFER_SETTLE_RULES.transferDate}>
+          <Input {...nativeAttrs(TRANSFER_SETTLE_RULES.transferDate)} type="date" defaultValue={today} className="w-full" />
         </Field>
-        <Field label="Reference" hint="The bank or wallet reference, if there is one">
-          <Input name="reference" maxLength={120} className="w-full" />
+        <Field label="Reference" hint="The bank or wallet reference, if there is one" rule={TRANSFER_SETTLE_RULES.reference}>
+          <Input {...nativeAttrs(TRANSFER_SETTLE_RULES.reference)} className="w-full" />
         </Field>
       </div>
 
@@ -112,6 +119,6 @@ export function SettleBetweenStoresForm({
       <Button type="submit" variant="secondary">
         Settle
       </Button>
-    </form>
+    </CheckedForm>
   );
 }

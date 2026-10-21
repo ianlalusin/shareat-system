@@ -141,6 +141,8 @@ DEF-002.
 | **unlinked store** (T-382) | A store whose `pos_v1_store_links` row has `unlinked_at` set. It takes typed sales days again; days already imported from POS stay as they are (verified ones frozen by the 0185 lock, hardened by 0187). Its row keeps its POS id, so no other store can link that POS store. An admin can relink it (an UPDATE of the same row). "Linked" means a LIVE row |
 | **tender (master)** (T-375) | A store's tender definition (`tenders`): a name, `cash` or `wallet`, the money account a wallet pays into, and how POS v1 spells it. **Not** `sales_day_tenders`, which is one day's wallet rows (where that day's money went). The master is what a till will sell against; `sales_day_tenders` is what a day recorded |
 | **platform sales** (T-375) | Foodpanda, Grab and similar: typed per day on the store's NON-remitted channels, kept outside the figures POS derives. One removable seam, until platforms are rung through POS |
+| **wholesale (item flag)** ⚠️ 🔸 (T-443) | `items.sellable_wholesale`. ⚠️ Not "sold in bulk": it means the item may be sold to **another store, a franchisee or an outside buyer (e.g. Xlice) — anyone who is not a diner**. The commonest case is the commissary (Lipa) selling to the company's own branches. The word is kept in code and in `soldAsLabel`; screens say "Sold to other stores or buyers (wholesale)". v1 called the own-branch case commissary → branch sales (`computeBranchPrice`) |
+| **variation (item)** (T-443) | An item grouped under a top-level parent through `items.variant_of_item_id` (`Kimchi 250g` under `Kimchi`). ⚠️ **Each variation is a full item** — own code, stock, price history — not a pack size of one pool (Ian, R-A). One level only; a variation has the same kind as its parent. Not `purchase_unit` (a buying container) and not `parent_slab_item_id` (slab to slices) and not `menu_item_variants` (the MENU side) |
 | **refunds (sales day)** (T-375) | `sales_days.refunds`: POS refunds of the day, **contra-revenue 4950**, on a feed-sourced day only. **Never `comps`** — comps keep their meaning (complimentary items). Derived as the amount by which POS's method totals exceed its paid total, above the rounding band |
 
 ## Money and books
@@ -166,6 +168,7 @@ DEF-002.
 | Term | Meaning |
 |---|---|
 | **person** | One **human being**, independent of how they authenticate. A staff member who is also a loyalty customer is **one** person |
+| **`display_name`** ⚠️ | A person's name as shown everywhere. Since T-438 (migration 0207) it is DERIVED when `last_name` / `first_name` / `middle_name` are set: `Last, First M.` (the CHECK `persons_name_parts_check` enforces it). Legacy rows, terminals and the usage author have NULL parts and keep a free-text `display_name`; parts are never guessed from it, they are retyped once on the staff page |
 | **person_identity** | One way a person is recognised: `firebase_uid`, `phone`, `email`, `staff_no`, `device_hash`. Many per person. **Phone is an identity, never a primary key** — it changes. DEF-009 |
 | **staff vs diner** | A *role*, not a table. Both are persons |
 | **platformAdmin** ✅ | A Firebase custom claim granting cross-store admin. Distinct from `staff/{uid}.status === 'active'`; either passes CUSTOMER's admin gate |

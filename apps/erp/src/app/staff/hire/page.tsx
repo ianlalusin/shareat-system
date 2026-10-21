@@ -6,6 +6,8 @@ import { positionsForStore, searchPersonsFor, staffStoresFor } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { Button, FlashBanner, FormGrid, Field, Input } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { STAFF_HIRE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 
@@ -91,13 +93,13 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
       {query && (
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           {results.length === 0
-            ? `Nobody matches "${query}" — pick "create new person" below.`
+            ? `Nobody matches "${query}" — type their name below.`
             : `${results.length} match${results.length === 1 ? '' : 'es'} for "${query}".`}
         </p>
       )}
 
       <h2 className="text-lg font-medium">Hire someone</h2>
-      <form action={hireAction} className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+      <CheckedForm rules={STAFF_HIRE_RULES} action={hireAction} className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <input type="hidden" name="storeId" value={storeId} />
 
         <fieldset className="space-y-2 rounded border border-neutral-200 p-3 dark:border-neutral-800">
@@ -106,18 +108,29 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
           </legend>
           {results.map((p) => (
             <label key={p.id} className="flex items-center gap-2 text-sm">
-              <input type="radio" name="personChoice" value={`existing:${p.id}`} required className="h-4 w-4" />
+              <input type="radio" name="personChoice" value={`existing:${p.id}`} className="h-4 w-4" />
               Use this person: <strong>{p.displayName}</strong>{'branches' in p && ` (works at ${p.branches.join(', ')})`}
             </label>
           ))}
-          <label className="flex flex-wrap items-center gap-2 text-sm">
-            <input type="radio" name="personChoice" value="new" required className="h-4 w-4" />
-            Create new person named:
-            <Input name="newDisplayName" placeholder="Full name" className="w-full sm:w-auto sm:min-w-48 sm:flex-1" />
+          <p className="pt-1 text-sm font-medium">Or type a new person&rsquo;s name</p>
+          <FormGrid>
+            <Field label="Last name">
+              <Input name="lastName" placeholder="Santos" className="mt-1 w-full" />
+            </Field>
+            <Field label="First name">
+              <Input name="firstName" placeholder="Maria" className="mt-1 w-full" />
+            </Field>
+            <Field label="Middle name (optional)">
+              <Input name="middleName" placeholder="Clara" className="mt-1 w-full" />
+            </Field>
+          </FormGrid>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="sameNameConfirmed" className="h-4 w-4" />
+            This is a different person with the same name
           </label>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            ⚠️ Nothing is created until you submit, and only the option you pick is used — searching
-            never creates a person by itself.
+            ⚠️ Nothing is created until you submit. Pick a person above OR type a name, not both —
+            searching never creates a person by itself. A typed name shows as &ldquo;Last, First M.&rdquo;.
           </p>
         </fieldset>
 
@@ -131,8 +144,8 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
               ))}
             </select>
           </Field>
-          <Field label="Start date">
-            <Input type="date" name="startedOn" required defaultValue={toBusinessDate()} className="mt-1 w-full" />
+          <Field label="Start date" rule={STAFF_HIRE_RULES.startedOn}>
+            <Input type="date" {...nativeAttrs(STAFF_HIRE_RULES.startedOn)} defaultValue={toBusinessDate()} className="mt-1 w-full" />
           </Field>
         </FormGrid>
 
@@ -170,7 +183,7 @@ export default async function HireStaffPage({ searchParams }: { searchParams: Pr
         <Button type="submit" variant="primary">
           Save
         </Button>
-      </form>
+      </CheckedForm>
     </Page>
   );
 }

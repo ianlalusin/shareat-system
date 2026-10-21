@@ -33,6 +33,8 @@
 import { authorize, type Actor } from '@shareat/auth';
 import { expensesRepo, transaction, type Tx } from '@shareat/db';
 import { RefusalError, refuse, gone } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { SETTINGS_EXPENSE_CATEGORY_RULES } from '../field-rules/settings';
 
 /**
  * Org-scoped, admin-only. ⭐ **One capability for the whole screen — create, map, rename and
@@ -176,9 +178,8 @@ export interface CreateCategoryInput {
 }
 
 function cleanCategoryName(raw: string): string {
-  const name = raw.trim();
-  if (!name) throw refuse('createCategory: a category needs a name.', 'A category needs a name.');
-  return name;
+  // T-440: the rule (and its sentence) is the one the settings screen shows live (field-rules/settings.ts).
+  return assertFieldRules(SETTINGS_EXPENSE_CATEGORY_RULES, { category: raw }).category ?? '';
 }
 
 /**

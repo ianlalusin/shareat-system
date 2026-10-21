@@ -21,8 +21,16 @@ import {
 } from './actions';
 import { actorStoreIds, orderView, peso, today, type OrderView } from '../lib';
 import { Page } from '@/components/shell/Page';
-import { EditableRecord } from '@/components/forms';
-import { branchOrderSteps, Button, ConfirmDestructive, exitStepFromTimestamps, FlashBanner, FormGrid, Input, isExitStage, nextLineFor, Select, StatusHero, type StatusIconKind, stepIndexFor, type Tone } from '@/components/ui';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import {
+  COMMISSARY_LINE_EDIT_RULES,
+  COMMISSARY_ORDER_LINE_RULES,
+  COMMISSARY_RECEIVE_RULES,
+  COMMISSARY_REJECT_RULES,
+  COMMISSARY_WITHDRAW_RULES,
+  nativeAttrs,
+} from '@shareat/domain/field-rules';
+import { branchOrderSteps, Button, ConfirmDestructive, exitStepFromTimestamps, Field, FlashBanner, FormGrid, Input, isExitStage, nextLineFor, Select, StatusHero, type StatusIconKind, stepIndexFor, type Tone } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
@@ -97,7 +105,7 @@ export default async function BranchOrderPage({
   const heroLine = nextLineFor(stage, commissarySide ? 'commissary' : 'branch');
 
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div>
         <Link href={`/commissary/orders?store=${branchSide ? branch.id : commissary.id}`} className="text-sm underline underline-offset-4">
           ← Branch orders
@@ -177,7 +185,7 @@ export default async function BranchOrderPage({
         {lines.length === 0 && <p className="text-sm text-neutral-500">Nothing on this order yet.</p>}
 
         {receiving ? (
-          <form id="receive-order-form" action={receiveOrderAction} className="space-y-3">
+          <CheckedForm id="receive-order-form" rules={COMMISSARY_RECEIVE_RULES} action={receiveOrderAction} className="space-y-3">
             <input type="hidden" name="orderId" value={order.id} />
             {lines.map((l) => (
               <LineCard key={l.id} line={l} view={view} branchSide={branchSide} commissarySide={commissarySide} receiving typedUpdate={typedFor(sp, COMMISSARY_LINE_UPDATE, l.id, actor.personId)} typedFulfil={typedFor(sp, COMMISSARY_LINE_FULFIL, l.id, actor.personId)} />
@@ -191,12 +199,11 @@ export default async function BranchOrderPage({
                   any shortfall opens a transit discrepancy for the commissary to dispose of.
                 </p>
               </div>
-              <label className={LABEL}>
-                Received on
-                <Input name="receivedOn" type="date" defaultValue={today()} />
-              </label>
+              <Field label="Received on" className={LABEL} rule={COMMISSARY_RECEIVE_RULES.receivedOn}>
+                <Input {...nativeAttrs(COMMISSARY_RECEIVE_RULES.receivedOn)} type="date" defaultValue={today()} />
+              </Field>
             </div>
-          </form>
+          </CheckedForm>
         ) : (
           lines.map((l) => (
             <LineCard key={l.id} line={l} view={view} branchSide={branchSide} commissarySide={commissarySide} receiving={false} typedUpdate={typedFor(sp, COMMISSARY_LINE_UPDATE, l.id, actor.personId)} typedFulfil={typedFor(sp, COMMISSARY_LINE_FULFIL, l.id, actor.personId)} />
@@ -220,11 +227,10 @@ export default async function BranchOrderPage({
       {draft && branchSide && (
         <section className={PANEL}>
           <h2 className="font-medium">Add a line</h2>
-          <form action={addLineAction} className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_7rem_9rem_auto] sm:items-end">
+          <CheckedForm rules={COMMISSARY_ORDER_LINE_RULES} action={addLineAction} className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_7rem_9rem_auto] sm:items-end">
             <input type="hidden" name="orderId" value={order.id} />
-            <label className={`${LABEL} col-span-2 sm:col-span-1`}>
-              Item (the commissary&rsquo;s catalogue)
-              <Select name="itemId" required defaultValue="">
+            <Field label="Item (the commissary&rsquo;s catalogue)" className={`${LABEL} col-span-2 sm:col-span-1`} rule={COMMISSARY_ORDER_LINE_RULES.itemId}>
+              <Select {...nativeAttrs(COMMISSARY_ORDER_LINE_RULES.itemId)} defaultValue="">
                 <option value="">— pick —</option>
                 {catalogue.map((c) => (
                   <option key={c.commissaryItemId} value={c.commissaryItemId}>
@@ -233,19 +239,17 @@ export default async function BranchOrderPage({
                   </option>
                 ))}
               </Select>
-            </label>
-            <label className={LABEL}>
-              Quantity
-              <Input name="quantity" required inputMode="decimal" placeholder="0.000" className="tabular-nums" />
-            </label>
-            <label className={LABEL}>
-              Rate ₱ (blank = default)
-              <Input name="rate" inputMode="decimal" className="tabular-nums" />
-            </label>
+            </Field>
+            <Field label="Quantity" className={LABEL} rule={COMMISSARY_ORDER_LINE_RULES.quantity}>
+              <Input {...nativeAttrs(COMMISSARY_ORDER_LINE_RULES.quantity)} placeholder="0.000" className="tabular-nums" />
+            </Field>
+            <Field label="Rate ₱ (blank = default)" className={LABEL} rule={COMMISSARY_ORDER_LINE_RULES.rate}>
+              <Input {...nativeAttrs(COMMISSARY_ORDER_LINE_RULES.rate)} className="tabular-nums" />
+            </Field>
             <Button type="submit" variant="secondary">
               Save
             </Button>
-          </form>
+          </CheckedForm>
           <div className="flex flex-wrap items-end gap-3 border-t border-neutral-200 pt-3 dark:border-neutral-800">
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               Submit is refused while any line is unmapped or has no expense category — fix those under{' '}
@@ -279,11 +283,10 @@ export default async function BranchOrderPage({
             A proposed line counts toward nothing until the branch approves it, and the order cannot be marked ready
             until they answer — the reason goes on the thread.
           </p>
-          <form action={proposeLineAction} className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6 sm:items-end">
+          <CheckedForm rules={COMMISSARY_ORDER_LINE_RULES} action={proposeLineAction} className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6 sm:items-end">
             <input type="hidden" name="orderId" value={order.id} />
-            <label className={`${LABEL} col-span-2 sm:col-span-1`}>
-              Item
-              <Select name="itemId" required defaultValue="">
+            <Field label="Item" className={`${LABEL} col-span-2 sm:col-span-1`} rule={COMMISSARY_ORDER_LINE_RULES.itemId}>
+              <Select {...nativeAttrs(COMMISSARY_ORDER_LINE_RULES.itemId)} defaultValue="">
                 <option value="">— pick —</option>
                 {items.map((i) => (
                   <option key={i.id} value={i.id}>
@@ -291,15 +294,13 @@ export default async function BranchOrderPage({
                   </option>
                 ))}
               </Select>
-            </label>
-            <label className={LABEL}>
-              Quantity
-              <Input name="quantity" required inputMode="decimal" className="tabular-nums" />
-            </label>
-            <label className={LABEL}>
-              Rate ₱ (blank = default)
-              <Input name="rate" inputMode="decimal" className="tabular-nums" />
-            </label>
+            </Field>
+            <Field label="Quantity" className={LABEL} rule={COMMISSARY_ORDER_LINE_RULES.quantity}>
+              <Input {...nativeAttrs(COMMISSARY_ORDER_LINE_RULES.quantity)} className="tabular-nums" />
+            </Field>
+            <Field label="Rate ₱ (blank = default)" className={LABEL} rule={COMMISSARY_ORDER_LINE_RULES.rate}>
+              <Input {...nativeAttrs(COMMISSARY_ORDER_LINE_RULES.rate)} className="tabular-nums" />
+            </Field>
             <label className={LABEL}>
               From room
               <Select name="sourceLocationId" defaultValue="">
@@ -331,7 +332,7 @@ export default async function BranchOrderPage({
             <Button type="submit" variant="secondary" className="col-span-2 sm:col-span-1">
               Propose
             </Button>
-          </form>
+          </CheckedForm>
         </section>
       )}
 
@@ -350,25 +351,23 @@ export default async function BranchOrderPage({
 
       {/* ---- Withdraw / void ------------------------------------------------------------------ */}
       {((draft || stage === 'submitted' || packing) && (branchSide || commissarySide)) && (
-        <form action={withdrawOrderAction} className="flex flex-wrap items-end gap-3">
+        <CheckedForm rules={COMMISSARY_WITHDRAW_RULES} action={withdrawOrderAction} className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="orderId" value={order.id} />
-          <label className={`${LABEL} min-w-[14rem] flex-1`}>
-            {branchSide ? 'Withdraw this order — say why' : 'Cancel this order — say why'}
-            <Input name="reason" required placeholder="reason" className="w-full" />
-          </label>
+          <Field label={branchSide ? 'Withdraw this order — say why' : 'Cancel this order — say why'} className={`${LABEL} min-w-[14rem] flex-1`} rule={COMMISSARY_WITHDRAW_RULES.reason}>
+            <Input {...nativeAttrs(COMMISSARY_WITHDRAW_RULES.reason)} placeholder="reason" className="w-full" />
+          </Field>
           <Button type="submit" variant="danger">
             {branchSide ? 'Withdraw' : 'Cancel order'}
           </Button>
           <span className="text-xs text-neutral-500 dark:text-neutral-400">Nothing has moved; nothing posts.</span>
-        </form>
+        </CheckedForm>
       )}
       {stage === 'dispatched' && commissarySide && !receiving && (
-        <form action={withdrawOrderAction} className="flex flex-wrap items-end gap-3">
+        <CheckedForm rules={COMMISSARY_WITHDRAW_RULES} action={withdrawOrderAction} className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="orderId" value={order.id} />
-          <label className={`${LABEL} min-w-[14rem] flex-1`}>
-            Void the dispatch — say why
-            <Input name="reason" required placeholder="truck never left" className="w-full" />
-          </label>
+          <Field label="Void the dispatch — say why" className={`${LABEL} min-w-[14rem] flex-1`} rule={COMMISSARY_WITHDRAW_RULES.reason}>
+            <Input {...nativeAttrs(COMMISSARY_WITHDRAW_RULES.reason)} placeholder="truck never left" className="w-full" />
+          </Field>
           <ConfirmDestructive
             tier="admin-pin"
             label="Void dispatch"
@@ -377,7 +376,7 @@ export default async function BranchOrderPage({
           <span className="text-xs text-neutral-500 dark:text-neutral-400">
             The in-transit posting is <strong>reversed</strong>, never deleted, and the stock returns to its layers.
           </span>
-        </form>
+        </CheckedForm>
       )}
 
       {/* ---- The facts ------------------------------------------------------------------------ */}
@@ -452,16 +451,15 @@ export default async function BranchOrderPage({
 
 function RejectForm({ orderId }: { orderId: string }) {
   return (
-    <form action={rejectOrderAction} className="flex flex-wrap items-end gap-2">
+    <CheckedForm rules={COMMISSARY_REJECT_RULES} action={rejectOrderAction} className="flex flex-wrap items-end gap-2">
       <input type="hidden" name="orderId" value={orderId} />
-      <label className={`${LABEL} min-w-[14rem] flex-1`}>
-        Reject — say why
-        <Input name="reason" required placeholder="the branch reads this" className="w-full" />
-      </label>
+      <Field label="Reject — say why" className={`${LABEL} min-w-[14rem] flex-1`} rule={COMMISSARY_REJECT_RULES.reason}>
+        <Input {...nativeAttrs(COMMISSARY_REJECT_RULES.reason)} placeholder="the branch reads this" className="w-full" />
+      </Field>
       <Button type="submit" variant="danger">
         Reject
       </Button>
-    </form>
+    </CheckedForm>
   );
 }
 
@@ -546,16 +544,14 @@ function LineCard({
       {editAsk && (
         <div className="mt-3 flex flex-wrap items-end gap-2">
           <div className="min-w-[14rem] flex-1">
-            <EditableRecord action={updateLineAction} label={`${l.itemName} line`} hidden={{ orderId: order.id, lineId: l.id }} typed={typedUpdate}>
+            <EditableRecord action={updateLineAction} rules={COMMISSARY_LINE_EDIT_RULES} label={`${l.itemName} line`} hidden={{ orderId: order.id, lineId: l.id }} typed={typedUpdate}>
               <FormGrid>
-                <label className={`${LABEL} min-w-0`}>
-                  Quantity ({l.unit})
-                  <Input name="quantity" inputMode="decimal" defaultValue={l.requestedQuantity ?? l.quantity} className="w-full tabular-nums" />
-                </label>
-                <label className={`${LABEL} min-w-0`}>
-                  Rate ₱
-                  <Input name="rate" inputMode="decimal" defaultValue={l.rate} className="w-full tabular-nums" />
-                </label>
+                <Field label={`Quantity (${l.unit})`} className={`${LABEL} min-w-0`} rule={COMMISSARY_LINE_EDIT_RULES.quantity}>
+                  <Input {...nativeAttrs(COMMISSARY_LINE_EDIT_RULES.quantity)} defaultValue={l.requestedQuantity ?? l.quantity} className="w-full tabular-nums" />
+                </Field>
+                <Field label="Rate ₱" className={`${LABEL} min-w-0`} rule={COMMISSARY_LINE_EDIT_RULES.rate}>
+                  <Input {...nativeAttrs(COMMISSARY_LINE_EDIT_RULES.rate)} defaultValue={l.rate} className="w-full tabular-nums" />
+                </Field>
               </FormGrid>
             </EditableRecord>
           </div>
@@ -572,16 +568,14 @@ function LineCard({
       {editPack && (
         <div className="mt-3">
           {packed !== null ? (
-            <EditableRecord action={fulfilLineAction} label={`${l.itemName} packing`} hidden={{ orderId: order.id, lineId: l.id }} typed={typedFulfil}>
+            <EditableRecord action={fulfilLineAction} rules={COMMISSARY_LINE_EDIT_RULES} label={`${l.itemName} packing`} hidden={{ orderId: order.id, lineId: l.id }} typed={typedFulfil}>
               <FormGrid>
-              <label className={`${LABEL} min-w-0`}>
-                Send ({l.unit}) — 0 means none
-                <Input name="quantity" inputMode="decimal" defaultValue={packed ?? l.quantity} className="w-full tabular-nums" />
-              </label>
-              <label className={`${LABEL} min-w-0`}>
-                Rate ₱
-                <Input name="rate" inputMode="decimal" defaultValue={l.rate} className="w-full tabular-nums" />
-              </label>
+              <Field label={`Send (${l.unit}) — 0 means none`} className={`${LABEL} min-w-0`} rule={COMMISSARY_LINE_EDIT_RULES.quantity}>
+                <Input {...nativeAttrs(COMMISSARY_LINE_EDIT_RULES.quantity)} defaultValue={packed ?? l.quantity} className="w-full tabular-nums" />
+              </Field>
+              <Field label="Rate ₱" className={`${LABEL} min-w-0`} rule={COMMISSARY_LINE_EDIT_RULES.rate}>
+                <Input {...nativeAttrs(COMMISSARY_LINE_EDIT_RULES.rate)} defaultValue={l.rate} className="w-full tabular-nums" />
+              </Field>
               <label className={`${LABEL} min-w-0`}>
                 From room
                 <Select name="sourceLocationId" defaultValue={l.sourceLocationId ?? ''} className="w-full">
@@ -596,18 +590,16 @@ function LineCard({
             </FormGrid>
             </EditableRecord>
           ) : (
-            <form action={fulfilLineAction}>
+            <CheckedForm rules={COMMISSARY_LINE_EDIT_RULES} action={fulfilLineAction}>
               <input type="hidden" name="orderId" value={order.id} />
               <input type="hidden" name="lineId" value={l.id} />
               <FormGrid>
-              <label className={`${LABEL} min-w-0`}>
-                Send ({l.unit}) — 0 means none
-                <Input name="quantity" inputMode="decimal" defaultValue={packed ?? l.quantity} className="w-full tabular-nums" />
-              </label>
-              <label className={`${LABEL} min-w-0`}>
-                Rate ₱
-                <Input name="rate" inputMode="decimal" defaultValue={l.rate} className="w-full tabular-nums" />
-              </label>
+              <Field label={`Send (${l.unit}) — 0 means none`} className={`${LABEL} min-w-0`} rule={COMMISSARY_LINE_EDIT_RULES.quantity}>
+                <Input {...nativeAttrs(COMMISSARY_LINE_EDIT_RULES.quantity)} defaultValue={packed ?? l.quantity} className="w-full tabular-nums" />
+              </Field>
+              <Field label="Rate ₱" className={`${LABEL} min-w-0`} rule={COMMISSARY_LINE_EDIT_RULES.rate}>
+                <Input {...nativeAttrs(COMMISSARY_LINE_EDIT_RULES.rate)} defaultValue={l.rate} className="w-full tabular-nums" />
+              </Field>
               <label className={`${LABEL} min-w-0`}>
                 From room
                 <Select name="sourceLocationId" defaultValue={l.sourceLocationId ?? ''} className="w-full">
@@ -623,7 +615,7 @@ function LineCard({
               <Button type="submit" variant="secondary" className="mt-3">
                 Save
               </Button>
-            </form>
+            </CheckedForm>
           )}
         </div>
       )}

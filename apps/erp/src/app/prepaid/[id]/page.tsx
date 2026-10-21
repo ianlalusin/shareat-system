@@ -14,6 +14,15 @@ import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Banner, Button, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import {
+  PREPAID_MONTH_REVERSE_RULES,
+  PREPAID_RELEASE_RULES,
+  PREPAID_TERM_RULES,
+  PREPAID_WRITE_OFF_RULES,
+  nativeAttrs,
+  type FieldRule,
+} from '@shareat/domain/field-rules';
 import { MONEY_ACCOUNT_CODES, accountLabel } from '@/lib/account-label';
 import { withFlash } from '@/lib/flash';
 
@@ -53,7 +62,7 @@ export default async function PrepaidItemPage({
   const active = item.status === 'active';
 
   return (
-    <Page density="table">
+    <Page view="detail" density="table">
       <div>
         <Link href="/prepaid" className="text-sm underline underline-offset-2">
           ← Prepaid expenses
@@ -109,30 +118,27 @@ export default async function PrepaidItemPage({
               </>
             )}
           </div>
-          <form action={confirmTermAction} className="flex flex-wrap items-end gap-3">
+          <CheckedForm rules={PREPAID_TERM_RULES} action={confirmTermAction} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="prepaidItemId" value={item.id} />
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-warning-ink">Starts</span>
+            <Field label="Starts" rule={PREPAID_TERM_RULES.coverageStartDate} tone="warning">
               <Input
-                name="coverageStartDate"
                 type="date"
-                required
+                {...nativeAttrs(PREPAID_TERM_RULES.coverageStartDate)}
                 defaultValue={item.coverageStartDate}
                 className="w-full"
               />
-            </label>
-            <label className="flex min-w-[6rem] flex-1 flex-col gap-1">
-              <span className="text-xs font-medium text-warning-ink">Months</span>
+            </Field>
+            <Field label="Months" rule={PREPAID_TERM_RULES.coverageMonths} className="min-w-[6rem] flex-1" tone="warning">
               <input
+                {...nativeAttrs(PREPAID_TERM_RULES.coverageMonths)}
                 name="coverageMonths"
                 inputMode="numeric"
-                required
                 defaultValue={item.coverageMonths}
                 className={INPUT}
               />
-            </label>
+            </Field>
             <Button type="submit" variant="primary">Confirm term</Button>
-          </form>
+          </CheckedForm>
         </section>
         </Banner>
       )}
@@ -142,24 +148,20 @@ export default async function PrepaidItemPage({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-medium">Schedule</h2>
           {active && (
-            <form action={amortiseAction} className="flex flex-wrap items-end gap-2 gap-y-2">
+            <CheckedForm rules={PREPAID_RELEASE_RULES} action={amortiseAction} className="flex flex-wrap items-end gap-2 gap-y-2">
               <input type="hidden" name="prepaidItemId" value={item.id} />
-              <label className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">
-                  Release through
-                </span>
+              <Field label="Release through" rule={PREPAID_RELEASE_RULES.asOfPeriod}>
                 <Input
-                  name="asOfPeriod"
                   type="month"
-                  required
+                  {...nativeAttrs(PREPAID_RELEASE_RULES.asOfPeriod)}
                   defaultValue={thisPeriod()}
                   className="w-full"
                 />
-              </label>
+              </Field>
               <Button type="submit" variant="secondary">
                 Release
               </Button>
-            </form>
+            </CheckedForm>
           )}
         </div>
 
@@ -208,16 +210,18 @@ export default async function PrepaidItemPage({
                       entry IS the fix, with no column to repair.
                     */}
                     {p.posted && (
-                      <form action={reverseMonthAction} className="flex justify-end gap-1">
+                      <CheckedForm rules={PREPAID_MONTH_REVERSE_RULES} action={reverseMonthAction} className="flex justify-end gap-1">
                         <input type="hidden" name="prepaidItemId" value={item.id} />
                         <input type="hidden" name="period" value={p.period} />
-                        <Input name="reason" required placeholder="Reason…" className="w-28 text-xs" />
+                        <Field label={<span className="sr-only">Reason for reversing this month</span>} rule={PREPAID_MONTH_REVERSE_RULES.reason}>
+                          <Input {...nativeAttrs(PREPAID_MONTH_REVERSE_RULES.reason)} placeholder="Reason…" className="w-28 text-xs" />
+                        </Field>
                         <ConfirmDestructive
                           tier="admin-pin"
                           label="Reverse month"
                           consequence="Reverses this month's release. An administrator must approve with their own PIN."
                         />
-                      </form>
+                      </CheckedForm>
                     )}
                   </td>
                 </tr>
@@ -237,28 +241,27 @@ export default async function PrepaidItemPage({
               is cash returning, not income.
             </p>
           </div>
-          <form action={writeOffAction} className="space-y-4">
+          <CheckedForm rules={PREPAID_WRITE_OFF_RULES} action={writeOffAction} className="space-y-4">
             <input type="hidden" name="prepaidItemId" value={item.id} />
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Date">
+              <Field label="Date" rule={PREPAID_WRITE_OFF_RULES.writtenOffOn}>
                 <Input
-                  name="writtenOffOn"
                   type="date"
-                  required
+                  {...nativeAttrs(PREPAID_WRITE_OFF_RULES.writtenOffOn)}
                   defaultValue={sp.writtenOffOn ?? toBusinessDate()}
                   className="w-full"
                 />
               </Field>
-              <Field label="Reason">
-                <Input name="reason" required maxLength={200} defaultValue={sp.reason ?? ''} className="w-full" />
+              <Field label="Reason" rule={PREPAID_WRITE_OFF_RULES.reason}>
+                <Input {...nativeAttrs(PREPAID_WRITE_OFF_RULES.reason)} defaultValue={sp.reason ?? ''} className="w-full" />
               </Field>
               <Field
                 label="Refunded"
                 hint={`Leave blank if nothing came back. At most ${peso(item.remaining)}`}
+                rule={PREPAID_WRITE_OFF_RULES.refundAmount}
               >
                 <Input
-                  name="refundAmount"
-                  inputMode="decimal"
+                  {...nativeAttrs(PREPAID_WRITE_OFF_RULES.refundAmount)}
                   defaultValue={sp.refundAmount ?? ''}
                   className="w-full"
                 />
@@ -289,7 +292,7 @@ export default async function PrepaidItemPage({
               label="Write it off"
               consequence="Writes off what is left of this prepaid item. An administrator must approve with their own PIN."
             />
-          </form>
+          </CheckedForm>
         </section>
       )}
 
@@ -332,17 +335,31 @@ function Figure({
 function Field({
   label,
   hint,
+  rule,
+  className,
+  tone,
   children,
 }: {
-  label: string;
+  label: React.ReactNode;
   hint?: string;
+  rule?: FieldRule;
+  className?: string;
+  tone?: 'warning';
   children: React.ReactNode;
 }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
+  const body = (
+    <>
+      <span className={`text-xs font-medium ${tone === 'warning' ? 'text-warning-ink' : 'text-neutral-600 dark:text-neutral-400'}`}>{label}</span>
       {children}
-      {hint && <span className="text-xs text-neutral-400 dark:text-neutral-600">{hint}</span>}
-    </label>
+      {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
+    </>
+  );
+  // T-440: a ruled field puts its live helper line OUTSIDE the label, so the line never joins the accessible name.
+  if (!rule) return <label className={`flex flex-col gap-1${className ? ` ${className}` : ''}`}>{body}</label>;
+  return (
+    <div className={className}>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }

@@ -6,10 +6,13 @@ import {
   asHours,
   defaultRange,
   listStores,
+  loadLeaveGrid,
   loadQueue,
   loadRoster,
 } from './lib';
 import type { QueuedDay, ReviewDayRow } from './lib';
+import type { LeaveRow } from '@shareat/domain';
+import { ACTION_LINK } from '@/components/action-link';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Button, Input, LinkRow, RowLink, Select } from '@/components/ui';
@@ -67,9 +70,10 @@ export default async function AttendanceReviewPage({
   const from = sp.from || fallback.from;
   const to = sp.to || fallback.to;
 
-  const [queued, roster] = await Promise.all([
+  const [queued, roster, leave] = await Promise.all([
     loadQueue(actor.orgId, actor, { storeId, from, to }),
     loadRoster(actor.orgId, actor, { storeId, from, to }),
+    loadLeaveGrid(actor.orgId, actor, { storeId, from, to }),
   ]);
 
   return (
@@ -83,7 +87,7 @@ export default async function AttendanceReviewPage({
         </PageDescription>
       </div>
 
-      <form className="flex flex-wrap items-end gap-3">
+      <form method="get" className="flex flex-wrap items-end gap-3">
         <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
           Store
           <Select name="store" defaultValue={storeId} className="w-full">
@@ -156,7 +160,65 @@ export default async function AttendanceReviewPage({
           </div>
         )}
       </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">
+          Leave in the period <span className="text-sm font-normal text-neutral-500">({leave.length})</span>
+        </h2>
+        {leave.length === 0 ? (
+          <p className="rounded border border-dashed border-surface-border p-6 text-center text-sm text-neutral-500">
+            No leave in this range. Ask for or decide leave on{' '}
+            <a href="/attendance/leave" className={ACTION_LINK}>
+              the leave page
+            </a>
+            .
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[40rem] text-sm">
+              <thead className="text-left text-xs uppercase tracking-wide text-neutral-500">
+                <tr>
+                  <th className="py-2 pr-4">Day</th>
+                  <th className="pr-4">Person</th>
+                  <th className="pr-4">Kind</th>
+                  <th className="pr-2">Pay</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leave.map((l) => (
+                  <LeaveGridRow key={`${l.requestId}:${l.date}`} row={l} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </Page>
+  );
+}
+
+/** One leave date. Paid / Unpaid is the badge; a clash flag means punches also exist on that date (the date would be paid twice). */
+function LeaveGridRow({ row }: { row: LeaveRow }) {
+  return (
+    <tr className="border-t border-surface-border">
+      <td className="py-2 pr-4 tabular-nums">{row.date}</td>
+      <td className="pr-4">{row.personName}</td>
+      <td className="pr-4">
+        {row.leaveType.replace(/_/g, ' ')}
+        {row.kind === 'rest_day' ? ' · rest day' : ''}
+        {row.status === 'pending' ? ' · pending' : ''}
+      </td>
+      <td className="pr-2">
+        {row.kind === 'rest_day' ? (
+          <Badge tone="closed" label="Rest day" />
+        ) : row.paid ? (
+          <Badge tone="success" label="Paid" />
+        ) : (
+          <Badge tone="closed" label="Unpaid" />
+        )}
+        {row.clash && <Badge tone="warning" label="Clash: punches that day" className="ml-2" />}
+      </td>
+    </tr>
   );
 }
 

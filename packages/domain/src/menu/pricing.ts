@@ -15,6 +15,8 @@ import type { Decimal } from '@shareat/core/money';
 import { gone, refuse } from '../shared/refusal';
 import { assertNoPlannedPullAtLinkedSwitchedStores } from '../pos/depletion-source';
 import { audit, inTx, parseMarkupPercent, requireUsableRuleTarget, requireHistorySlot, parseMenuAmount, parseMenuQuantity, requireNotBackdated, requireScheduled } from './shared';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { MENU_DEPLETION_RULES } from '../field-rules/menu';
 
 // -------------------------------------------------------------------------------------------------------------------
 // Depletion rules (R6): the pos_item_maps shape, per variant, effective-dated
@@ -34,6 +36,7 @@ export interface SetDepletionRuleInput {
 export async function setDepletionRule(actor: Actor, input: SetDepletionRuleInput, tx?: Tx): Promise<{ id: string }> {
   return inTx(tx, async (trx) => {
     await authorize(trx, actor, 'set_menu_depletion', {});
+    assertFieldRules(MENU_DEPLETION_RULES, { quantityPerSale: input.quantityPerSale });
     if (!(MENU_DEPLETION_MODES as readonly unknown[]).includes(input.mode)) {
       throw refuse('setDepletionRule: mode must be direct, recipe or no_stock.', 'Choose what a sale uses: a stock item, a recipe, or nothing.');
     }

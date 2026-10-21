@@ -41,6 +41,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
   foreignKey,
@@ -56,7 +57,7 @@ import { stores } from './stores';
  */
 export const CANONICAL_POSITIONS = [
   'Cashier',
-  'Cook',
+  'Kitchen Staff', // T-439 (bible row 362, migration 0208): was 'Cook'
   'Server',
   'Dishwasher',
   'Slicer',
@@ -130,6 +131,8 @@ export const positions = pgTable(
     createdBy: uuid('created_by').references(() => persons.id, { onDelete: 'restrict' }),
   },
   (t) => [
+    // T-436 (migration 0205): the target of leave_caps' same-org composite FK.
+    unique('positions_org_id_id_unique').on(t.orgId, t.id),
     index('positions_org_id_idx').on(t.orgId),
     index('positions_store_id_idx').on(t.storeId),
     /**
@@ -206,6 +209,8 @@ export const employments = pgTable(
     createdBy: uuid('created_by').references(() => persons.id, { onDelete: 'restrict' }),
   },
   (t) => [
+    // T-436 (migration 0205): the target of the leave tables' same-org composite FKs.
+    unique('employments_org_id_id_unique').on(t.orgId, t.id),
     index('employments_org_id_idx').on(t.orgId),
     index('employments_store_id_idx').on(t.storeId),
     index('employments_person_id_idx').on(t.personId),

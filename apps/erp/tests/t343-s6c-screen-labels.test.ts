@@ -232,6 +232,11 @@ vi.mock('../src/app/items/lib', async (importOriginal) => {
     // T-386 S4: the page asks for each pending request's render-time code; I1/I2 prove labels only, so an empty answer.
     pendingRequestCodes: async () => new Map(),
     duplicateCandidates: (...a: unknown[]) => duplicateCandidatesMock(...a),
+    // T-443: the list page also reads the dismissed pairs, the kind counts and the variation parents; the item page its variations.
+    dismissedPairs: async () => [],
+    itemKindCounts: async () => ({}),
+    variationParentOptions: async () => [],
+    variationsOf: async () => [],
     getItem: (...a: unknown[]) => getItemMock(...a),
     itemPrices: (...a: unknown[]) => itemPricesMock(...a),
     sellabilityByStore: (...a: unknown[]) => sellabilityByStoreMock(...a),
@@ -262,6 +267,10 @@ vi.mock('../src/app/items/actions', () => ({
   renameItemAction: vi.fn(),
   setItemStatusAction: vi.fn(),
   suggestItemCodeAction: vi.fn(),
+  // T-443
+  dismissDuplicatePairAction: vi.fn(),
+  undoDuplicateDismissalAction: vi.fn(),
+  setItemVariantOfAction: vi.fn(),
 }));
 
 const whoSellsMock = vi.fn();
@@ -319,9 +328,22 @@ describe('I1 — items list: meat_slab / meat_sliced show their label; the kind 
     const selectBlock = /<select\s+name="kind"[^>]*>([\s\S]*?)<\/select>/.exec(html)?.[1];
     expect(selectBlock, 'expected the kind <select>').toBeTruthy();
     const optionValues = [...selectBlock!.matchAll(/<option[^>]*value="([^"]*)"/g)].map((m) => m[1]!);
-    // T-378 S1: the kind has no default, so the <select> opens on a blank "Choose a kind" option before the ITEM_KINDS.
+    // T-446: concise placeholder, still blank and required: a kind is never silently chosen.
     expect(optionValues).toEqual(['', ...ITEM_KINDS]);
-    expect(/<option[^>]*value=""[^>]*>([^<]*)<\/option>/.exec(selectBlock!)?.[1]).toBe('Choose a kind');
+    const identityStart = html.indexOf('<div class="erp-form-fields erp-item-identity">');
+    expect(identityStart).toBeGreaterThanOrEqual(0);
+    // FieldCheck adds per-field div wrappers; match the complete identity container, including those descendants.
+    let depth = 0;
+    let identityEnd = identityStart;
+    for (const tag of html.slice(identityStart).matchAll(/<div\b[^>]*>|<\/div>/g)) {
+      depth += tag[0].startsWith('</') ? -1 : 1;
+      if (depth === 0) { identityEnd = identityStart + (tag.index ?? 0) + tag[0].length; break; }
+    }
+    const identity = html.slice(identityStart, identityEnd);
+    for (const name of ['name', 'kind', 'baseUnit']) expect(identity).toContain(`name="${name}"`);
+    const selling = /<div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">([\s\S]*?)<\/div>/.exec(html)?.[1] ?? '';
+    for (const name of ['isPurchasable', 'sellableRetail', 'sellableWholesale']) expect(selling).toContain(`name="${name}"`);
+    expect(/<option[^>]*value=""[^>]*>([^<]*)<\/option>/.exec(selectBlock!)?.[1]).toBe('Kind…');
   });
 });
 

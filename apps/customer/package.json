@@ -6,16 +6,22 @@
     "dev": "next dev -p 9010",
     "build": "next build",
     "build:cap": "node scripts/build-cap.mjs",
-    "start": "next start -p 9010 -H 127.0.0.1"
+    "start": "next start -p 9010 -H 127.0.0.1",
+    "test": "vitest run --config vitest.config.mts"
   },
   "dependencies": {
     "@capacitor/core": "^6.2.1",
+    "@shareat/core": "*",
+    "lucide-react": "^0.475.0",
     "next": "^16.1.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@capacitor/android": "^6.2.1",
-    "@capacitor/cli": "^6.2.1"
+    "@capacitor/cli": "^6.2.1",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.1",
+    "vitest": "^4.1.8"
   }
 }

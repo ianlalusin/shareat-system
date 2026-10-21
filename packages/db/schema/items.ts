@@ -142,6 +142,14 @@ export const items = pgTable(
      */
     parentSlabItemId: uuid('parent_slab_item_id'),
     /**
+     * ⭐ T-443 R1 (migration 0210). One level of variations: `Kimchi 250g` / `Kimchi 500g` / `Kimchi 10kg` are each a full item
+     * (own code, stock, price history) grouped under a top-level `Kimchi`. Not a pack size of one pool (Ian, R-A).
+     * NOTE: hand-added in migration 0210 - the same-org composite FK `items_variant_of_same_org_fk` (items_org_id_id_unique),
+     * the CHECK `items_variant_not_self_check`, and the BEFORE INSERT OR UPDATE trigger `items_variant_guard` (serialized per org in migration 0211) (one level, parent
+     * not merged, same kind, a parent cannot change kind or merge while it has variations).
+     */
+    variantOfItemId: uuid('variant_of_item_id'),
+    /**
      * T-391 S1 (migration 0193). A DEFAULT buying unit and its ratio to the base unit: box of 24 pcs = `box` / `24`.
      * Both or neither; never equal to the base unit. A default only: invoice and delivery lines snapshot their own
      * factor. Written by `setItemPurchaseUnit` alone; `createItem` does not take it.
@@ -167,6 +175,9 @@ export const items = pgTable(
      *  duplicate names across v1's stores is exactly how a price chart stops summing. */
     uniqueIndex('items_org_name_key').on(t.orgId, sql`lower(${t.name})`),
     index('items_org_status_idx').on(t.orgId, t.status),
+    // T-443 R1 (0210): partial in the SQL (WHERE variant_of_item_id IS NOT NULL); the FK check and "list its variations" use it.
+    index('items_variant_of_idx').on(t.variantOfItemId),
+    check('items_variant_not_self_check', sql`${t.variantOfItemId} IS NULL OR ${t.variantOfItemId} <> ${t.id}`),
     check('items_code_not_blank_check', sql`length(trim(${t.code})) > 0`),
     // T-386 S6 (migration 0192): 4 letters/digits, a dash, 3 digits, never 000. Added NOT VALID then validated.
     check('items_code_shape_check', sql`${t.code} ~ '^[A-Z0-9]{4}-[0-9]{3}$' and right(${t.code}, 3) <> '000'`),
@@ -192,6 +203,12 @@ export const items = pgTable(
       columns: [t.orgId, t.createdBy],
       foreignColumns: [persons.orgId, persons.id],
       name: 'items_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    // T-443 R1 (0210): a variation's parent is an item of the SAME org. Targets `items_org_id_id_unique` (migration 0196).
+    foreignKey({
+      columns: [t.orgId, t.variantOfItemId],
+      foreignColumns: [t.orgId, t.id],
+      name: 'items_variant_of_same_org_fk',
     }).onDelete('restrict'),
   ],
 );
@@ -260,6 +277,8 @@ export const itemRequests = pgTable(
     sellableRetail: boolean('sellable_retail').notNull().default(false),
     sellableWholesale: boolean('sellable_wholesale').notNull().default(false),
     reason: text('reason'),
+    /** T-443 R1 (0210). The top-level item this request is a variation of; copied to the item at approval (the approver may change it). */
+    variantOfItemId: uuid('variant_of_item_id'),
     status: text('status', { enum: ITEM_REQUEST_STATUSES }).notNull().default('requested'),
     /** ⚠️ Frozen at request time. Recomputing at approval would answer a different question — the
      *  catalogue moves — and the approver needs to see what the requester was shown. */
@@ -275,6 +294,9 @@ export const itemRequests = pgTable(
   },
   (t) => [
     index('item_requests_org_status_idx').on(t.orgId, t.status),
+    // T-443 R4 (0210): the database backstop of the request-time duplicate guard. Partial in the SQL: WHERE status = 'requested'.
+    // Two identical OPEN requests cannot exist; a decided one never blocks a new ask.
+    uniqueIndex('item_requests_open_name_key').on(t.orgId, sql`lower(${t.name})`).where(sql`${t.status} = 'requested'`),
     // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons FKs above
     // (see the note in schema/persons.ts for the unique they reference).
     foreignKey({
@@ -286,6 +308,55 @@ export const itemRequests = pgTable(
       columns: [t.orgId, t.decidedBy],
       foreignColumns: [persons.orgId, persons.id],
       name: 'item_requests_decided_by_same_org_fk',
+    }).onDelete('restrict'),
+    // T-443 R1 (0210): same-org twin for the requested parent; targets `items_org_id_id_unique` (migration 0196).
+    foreignKey({
+      columns: [t.orgId, t.variantOfItemId],
+      foreignColumns: [items.orgId, items.id],
+      name: 'item_requests_variant_of_same_org_fk',
+    }).onDelete('restrict'),
+  ],
+);
+
+/**
+ * ⭐ T-443 R2 (migration 0210). "These two look alike and are NOT the same item" (Samyang Cheese / Samyang 4 Cheese). A pair
+ * is stored once, ordered (`item_a_id < item_b_id`), and `findDuplicateCandidates` skips it. Deleting the row (Undo) brings the
+ * pair back. Org-scoped; a super-admin dismissed it.
+ *
+ * NOTE: hand-added in migration 0210 - ENABLE + FORCE RLS and the policy `item_duplicate_dismissals_org_isolation`
+ * (app_current_org()), the CHECK `item_duplicate_dismissals_order_check` (a < b), and the grants (SELECT, INSERT, DELETE; no
+ * UPDATE: a dismissal is made or undone, never edited).
+ */
+export const itemDuplicateDismissals = pgTable(
+  'item_duplicate_dismissals',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    itemAId: uuid('item_a_id').notNull(),
+    itemBId: uuid('item_b_id').notNull(),
+    note: text('note'),
+    dismissedBy: uuid('dismissed_by').notNull(),
+    dismissedAt: timestamp('dismissed_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('item_duplicate_dismissals_pair_key').on(t.orgId, t.itemAId, t.itemBId),
+    check('item_duplicate_dismissals_order_check', sql`${t.itemAId} < ${t.itemBId}`),
+    foreignKey({
+      columns: [t.orgId, t.itemAId],
+      foreignColumns: [items.orgId, items.id],
+      name: 'item_duplicate_dismissals_item_a_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.itemBId],
+      foreignColumns: [items.orgId, items.id],
+      name: 'item_duplicate_dismissals_item_b_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.dismissedBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'item_duplicate_dismissals_dismissed_by_same_org_fk',
     }).onDelete('restrict'),
   ],
 );

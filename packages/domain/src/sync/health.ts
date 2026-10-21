@@ -33,6 +33,8 @@ import {
   type Tx,
 } from '@shareat/db';
 import type { QuarantineReason } from '@shareat/db/schema';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { ATTENDANCE_DISCARD_RULES } from '../field-rules/attendance';
 import { ingestEvents, type IngestReport } from './ingestor';
 
 export class LaneHealthError extends Error {
@@ -406,6 +408,8 @@ export async function discardQuarantined(
 ): Promise<InboxQuarantineRow> {
   const row = await requireOpen(tx, input.quarantineId);
   await gate(tx, actor, row, input.storeId, 'provision_clock_terminal');
+  // T-440 S9 (ii): the screen's own rule, only once the gate has passed.
+  assertFieldRules(ATTENDANCE_DISCARD_RULES, { reason: input.reason });
 
   const reason = input.reason.trim();
   if (!reason) {

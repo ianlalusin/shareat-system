@@ -27,6 +27,7 @@ import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { apRepo, closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import { createSupplier, editSupplier } from '@shareat/domain';
+import { SUPPLIER_ADD_RULES, checkField } from '@shareat/domain/field-rules';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -111,8 +112,14 @@ async function thirtyDaySupplier(f: Fixture, hint: string): Promise<string> {
   return id;
 }
 
-const TERMS_BLANK = 'Enter how many days of credit this supplier gives (0 to 365), or choose Cash on delivery.';
-const M = (v: string) => `Payment terms — "${v}" is not a whole number of days from 0 to 365.`;
+const TERMS_BLANK = 'Days to pay is required.';
+// T-440 (row 363): ONE rule; the server refuses with the rule's own sentence, which never quotes the typed value.
+const RULE_SENTENCE = (() => {
+  const c = checkField(SUPPLIER_ADD_RULES.creditTermsDays, 'x');
+  if (c.ok) throw new Error('rule accepted x');
+  return c.requirement;
+})();
+const M = (_typed: string) => RULE_SENTENCE;
 
 describe('D1 — createSupplier, creditTermsDays: 30', () => {
   it('row has 30 — was red today: stored null (the key is ignored)', async () => {
@@ -239,6 +246,7 @@ describe('D10 — refusals, each on a fresh COD supplier', () => {
     ["'-5'", '-5', M('-5')],
     ["'1e2'", '1e2', M('1e2')],
     ["'366'", '366', M('366')],
+    ["'-0'", '-0', M('-0')],
   ];
   for (const [label, value, sentence] of cases) {
     it(`creditTermsDays: ${label} rejects with userMessage ${JSON.stringify(sentence)}; nothing written — was red today: resolves`, async () => {
@@ -249,6 +257,10 @@ describe('D10 — refusals, each on a fresh COD supplier', () => {
           editSupplier(tx, f.manager, { supplierId: id, creditTermsDays: value } as Parameters<typeof editSupplier>[2]),
         ),
       ).rejects.toMatchObject({ userMessage: sentence });
+      const refusal = await asOrg(f.orgId, (tx) =>
+        editSupplier(tx, f.manager, { supplierId: id, creditTermsDays: value } as Parameters<typeof editSupplier>[2]),
+      ).catch((e) => e);
+      expect((refusal as { userMessage?: string }).userMessage ?? '', 'the refusal never quotes the typed value').not.toContain(`"${String(value)}"`);
       expect(await creditTermsOf(id)).toBeNull();
       expect(await auditRowsFor(id)).toHaveLength(0);
     });

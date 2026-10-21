@@ -7,6 +7,7 @@ import { EditableRecord } from '@/components/forms';
 import { Banner, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
+import { SETTINGS_ORGANIZATION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { ORGANIZATION_IDENTITY } from './typed-forms';
 
 export const metadata = { title: 'Organisation — Shareat System' };
@@ -93,7 +94,7 @@ export default async function OrganizationSettingsPage({
         </Banner>
       )}
 
-      <EditableRecord action={setOrganizationIdentityAction} label="Organisation" hidden={{}} typed={typedFor(sp, ORGANIZATION_IDENTITY, '', actor.personId)}>
+      <EditableRecord action={setOrganizationIdentityAction} label="Organisation" hidden={{}} typed={typedFor(sp, ORGANIZATION_IDENTITY, '', actor.personId)} rules={SETTINGS_ORGANIZATION_RULES}>
         <FormGrid className="text-sm">
           <Field
             span="full"
@@ -120,11 +121,11 @@ export default async function OrganizationSettingsPage({
                 TIN <span className="text-neutral-400">— digits; dashes are fine and are removed</span>
               </span>
             }
+            rule={SETTINGS_ORGANIZATION_RULES.tin}
           >
             <Input
-              name="tin"
+              {...nativeAttrs(SETTINGS_ORGANIZATION_RULES.tin)}
               defaultValue={identity.tin ?? ''}
-              inputMode="numeric"
               placeholder="123-456-789"
               className="mt-1 w-full tabular-nums"
             />

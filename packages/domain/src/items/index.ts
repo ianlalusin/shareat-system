@@ -17,6 +17,7 @@ import {
   type InvoiceLineInput,
   type ItemRequestRow,
   type MergeReport,
+  type OpenRequestHit,
   type SimilarItem,
   type Tx,
 } from '@shareat/db';
@@ -28,13 +29,85 @@ import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { parseQuantityInput } from '../shared/quantity-input';
 import { isPositiveQuantity, toThousandths, type Quantity } from '../stock/quantity';
 import { parseFourDecimalCost } from '../commissary/catalogue';
-import { gone, refuse } from '../shared/refusal';
+import { gone, humanDate, refuse } from '../shared/refusal';
+import { toBusinessDate } from '@shareat/core/datetime';
 import { notActiveItemSentence } from './not-active';
 import { formatItemCode, itemCodeStem, parseItemCode } from './code';
 import { allocateItemCode, requireItemCodeStem, validateItemCodeOverride } from './code-allocation';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { ITEMS_APPROVE_RULES, ITEMS_REQUEST_RULES, ITEMS_UNIT_RULES } from '../field-rules/items';
 
 export { ITEM_CODE_RE, formatItemCode, itemCodeStem, parseItemCode } from './code';
 export { allocateItemCode, requireItemCodeStem } from './code-allocation';
+
+/**
+ * ⭐ T-443 R4. Every item and request NAME is written trimmed with inner whitespace collapsed to one space, so
+ * "Pork  belly" and "Pork belly" are one name to the guard, the unique index and the person reading the list.
+ */
+export function normaliseItemName(raw: string): string {
+  return raw.trim().replace(/\s+/g, ' ');
+}
+
+/** T-443: one sentence for both the normal refusal and a request that lost a concurrent insert race. */
+export function openItemRequestSentence(open: Pick<OpenRequestHit, 'name' | 'requestedByName' | 'requestedAt'>): string {
+  return `${open.requestedByName} already asked for "${open.name}" on ${humanDate(toBusinessDate(open.requestedAt))}; it is waiting for a super-admin.`;
+}
+
+/**
+ * ⭐ T-443 R4/R5. The one sentence for "that name is taken", used by the request-time guard AND the approval-time guard so the
+ * two say the same thing. Any status counts: a retired or merged item still owns its name (`items_org_name_key` is status-blind).
+ * Throws a plain-English refusal naming the existing item and its code; returns when the name is free. `items_org_name_key`
+ * stays the backstop for the race between this read and the write.
+ */
+async function assertItemNameFree(trx: Tx, orgId: string, name: string): Promise<void> {
+  const hit = await itemsRepo.findItemByName(trx, orgId, name);
+  if (!hit) return;
+  const label = `"${hit.name}" (${hit.code})`;
+  let sentence: string;
+  if (hit.status === 'merged') {
+    const into = hit.mergedIntoName ? `"${hit.mergedIntoName}"${hit.mergedIntoCode ? ` (${hit.mergedIntoCode})` : ''}` : 'another item';
+    sentence = `An item called ${label} already exists, but it was merged into ${into}. Use that item instead.`;
+  } else if (hit.status === 'inactive') {
+    sentence = `An item called ${label} already exists and is retired. Ask a super-admin to reactivate it instead of adding it again.`;
+  } else {
+    sentence = `An item called ${label} already exists. Use that item, or choose a different name.`;
+  }
+  throw refuse(`item name already in use: ${hit.id}`, sentence);
+}
+
+/**
+ * ⭐ T-443 R1. The domain's plain-English mirror of the database trigger `items_variant_guard` (the rule lives there; this
+ * exists to speak). `child.id` is the item being made a variation, absent for a request that has no item yet.
+ */
+async function assertCanBeVariationOf(
+  trx: Tx,
+  orgId: string,
+  parentId: string,
+  child: { id?: string; kind: ItemKind },
+): Promise<void> {
+  if (child.id !== undefined && child.id === parentId) {
+    const s = 'An item cannot be a variation of itself.';
+    throw refuse(s, s);
+  }
+  const parent = await itemsRepo.getItemById(trx, orgId, parentId);
+  if (!parent) throw gone(`variant parent ${parentId} does not exist.`, 'item');
+  if (parent.variantOfItemId !== null) {
+    const s = `"${parent.name}" is itself a variation, and variations go one level only. Pick its top-level item instead.`;
+    throw refuse(s, s);
+  }
+  if (parent.status === 'merged') {
+    const s = `"${parent.name}" was merged into another item, so it cannot have variations. Use the item it was merged into.`;
+    throw refuse(s, s);
+  }
+  if (parent.kind !== child.kind) {
+    const s = `A variation must be the same kind as "${parent.name}" (${parent.kind}), not ${child.kind}.`;
+    throw refuse(s, s);
+  }
+  if (child.id !== undefined && (await itemsRepo.countVariationsOf(trx, orgId, child.id)) > 0) {
+    const s = 'This item already has variations of its own, so it cannot become a variation. Move or detach its variations first.';
+    throw refuse(s, s);
+  }
+}
 
 export interface CreateItemInput {
   /**
@@ -46,6 +119,8 @@ export interface CreateItemInput {
   kind: ItemKind;
   baseUnit: BaseUnit;
   notes?: string | null;
+  /** ⭐ T-443 R1. Optional: make the new item a variation of this top-level item. */
+  variantOfItemId?: string | null;
   /** ⭐ T-149. Default: purchasable, sold to nobody — the commonest case by far. */
   isPurchasable?: boolean;
   sellableRetail?: boolean;
@@ -63,10 +138,13 @@ export interface CreateItemInput {
 export async function createItem(tx: Tx | null, actor: Actor, input: CreateItemInput): Promise<{ id: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_item', {});
-    const name = input.name.trim();
+    const name = normaliseItemName(input.name);
     if (!name) throw new Error('createItem: an item needs a name people will recognise.');
     // T-386 R5: the name must yield a stem even when a code is typed - the name rule is independent of the code.
     const stem = requireItemCodeStem(name);
+    // T-443 R5: refuse a taken name BEFORE a code is allocated (a late unique violation would burn a number).
+    await assertItemNameFree(trx, actor.orgId, name);
+    if (input.variantOfItemId) await assertCanBeVariationOf(trx, actor.orgId, input.variantOfItemId, { kind: input.kind });
     const typed = (input.code ?? '').trim();
     const code = typed
       ? await validateItemCodeOverride(trx, actor.orgId, typed)
@@ -79,6 +157,7 @@ export async function createItem(tx: Tx | null, actor: Actor, input: CreateItemI
       baseUnit: input.baseUnit,
       notes: input.notes?.trim() || null,
       createdBy: actor.personId,
+      variantOfItemId: input.variantOfItemId || null,
       isPurchasable: input.isPurchasable ?? true,
       sellableRetail: input.sellableRetail ?? false,
       sellableWholesale: input.sellableWholesale ?? false,
@@ -145,6 +224,7 @@ export async function changeItemBaseUnit(
 ): Promise<{ changed: boolean }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_item', {});
+    assertFieldRules(ITEMS_UNIT_RULES, { baseUnit: input.baseUnit });
     const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
     if (!item) throw gone(`changeItemBaseUnit: item ${input.itemId} does not exist.`, 'item');
     if (item.baseUnit === input.baseUnit) return { changed: false };
@@ -254,7 +334,7 @@ export async function renameItem(
     await authorize(trx, actor, 'approve_item', {});
     const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
     if (!item) throw gone(`renameItem: item ${input.itemId} does not exist.`, 'item');
-    const name = input.name.trim();
+    const name = normaliseItemName(input.name); // T-443 R4: trim + collapse inner whitespace
     const typed = input.code.trim();
     let code: string;
     if (input.adoptSuggestedCode === true) {
@@ -722,6 +802,8 @@ export interface RequestItemInput {
   kind: ItemKind;
   baseUnit: BaseUnit;
   reason?: string | null;
+  /** ⭐ T-443 R1. Optional: the top-level item this is a size/variation of (`Kimchi` for `Kimchi 250g`). */
+  variantOfItemId?: string | null;
   /** ⭐ T-378 R7 (DEF-599). Omitted means the DB default: purchasable, sold to nobody. */
   isPurchasable?: boolean;
   sellableRetail?: boolean;
@@ -749,8 +831,19 @@ export async function requestItem(
 ): Promise<RequestItemResult> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_items', {});
-    const name = input.name.trim();
+    assertFieldRules(ITEMS_REQUEST_RULES, { name: input.name, kind: input.kind, baseUnit: input.baseUnit });
+    const name = normaliseItemName(input.name);
     if (!name) throw new Error('requestItem: an item needs a name people will recognise.');
+    // T-443 R4 (guard 1): refuse a name an item already has, and a name someone has already asked for.
+    await assertItemNameFree(trx, actor.orgId, name);
+    const open = await itemsRepo.findOpenRequestByName(trx, actor.orgId, name);
+    if (open) {
+      throw refuse(
+        `item request already open: ${open.id}`,
+        openItemRequestSentence(open),
+      );
+    }
+    if (input.variantOfItemId) await assertCanBeVariationOf(trx, actor.orgId, input.variantOfItemId, { kind: input.kind });
     // T-386 R6: a request takes NO code (I3). It stores a frozen preview - the next code at this moment, a preview and not a
     // promise: approval allocates. Nothing is locked or written to the counters here.
     const stem = requireItemCodeStem(name);
@@ -771,6 +864,7 @@ export async function requestItem(
       sellableRetail: input.sellableRetail,
       sellableWholesale: input.sellableWholesale,
       reason: input.reason?.trim() || null,
+      variantOfItemId: input.variantOfItemId || null,
       similarWarning,
       requestedBy: actor.personId,
     });
@@ -797,15 +891,23 @@ export async function approveItemRequest(
     isPurchasable?: boolean;
     sellableRetail?: boolean;
     sellableWholesale?: boolean;
+    /** ⭐ T-443 R1. `undefined` keeps the request's choice; `null` clears it; an id sets it (the approver may change it). */
+    variantOfItemId?: string | null;
   },
 ): Promise<{ itemId: string; code: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_item', {});
+    assertFieldRules(ITEMS_APPROVE_RULES, { code: input.code, baseUnit: input.baseUnit });
     const req = await itemsRepo.getItemRequestById(trx, actor.orgId, input.requestId);
     if (!req) throw new Error(`approveItemRequest: request ${input.requestId} does not exist.`);
     if (req.status !== 'requested') {
       throw new Error(`approveItemRequest: request is already ${req.status}.`);
     }
+    // T-443 R5 (guard 2): the name may have been taken since the request was made. Refuse BEFORE a code is allocated (no number is
+    // burned) and leave the request `requested` - the approver rejects it with a note.
+    await assertItemNameFree(trx, actor.orgId, req.name);
+    const variantOf = input.variantOfItemId === undefined ? req.variantOfItemId : input.variantOfItemId;
+    if (variantOf) await assertCanBeVariationOf(trx, actor.orgId, variantOf, { kind: req.kind });
     // T-386 R5: the code is allocated HERE, never copied from the request (its stored code is only the requester's preview).
     const stem = requireItemCodeStem(req.name);
     const typed = (input.code ?? '').trim();
@@ -823,6 +925,7 @@ export async function approveItemRequest(
       isPurchasable: input.isPurchasable ?? req.isPurchasable,
       sellableRetail: input.sellableRetail ?? req.sellableRetail,
       sellableWholesale: input.sellableWholesale ?? req.sellableWholesale,
+      variantOfItemId: variantOf ?? null,
     });
     await itemsRepo.decideItemRequest(trx, actor.orgId, req.id, {
       status: 'approved',
@@ -919,6 +1022,12 @@ export async function mergeItems(
     if (winner.status === 'merged') {
       throw new Error(`mergeItems: ${winner.name} is itself merged — merge into the surviving item.`);
     }
+    // T-443 R1: a family header cannot be merged away while it still has variations (they would point at a merged parent).
+    // A variation MAY be merged; merging into a winner keeps the winner's own parent.
+    if ((await itemsRepo.countVariationsOf(trx, actor.orgId, loser.id)) > 0) {
+      const s = `"${loser.name}" has variations, so it cannot be merged into another item. Move or detach its variations first.`;
+      throw refuse(`mergeItems: ${loser.id} has variations`, s);
+    }
     // ⛔ Different base units means these are not the same thing, or one of them is wrong. Either
     // way, merging would silently reinterpret every past price: in v1's real data `Bean sprout` is
     // kg and `Beans Sprout` is pcs, and combining those turns the ratio into a number with no
@@ -934,6 +1043,70 @@ export async function mergeItems(
   };
   if (tx) return run(tx);
   return transaction(run);
+}
+
+/**
+ * ⭐ T-443 R1. Make an item a variation of a top-level item, or detach it (`parentId: null`). Super-admin only (`approve_item`):
+ * it changes how the catalogue is grouped. The rules live in the database trigger `items_variant_guard`; `assertCanBeVariationOf`
+ * mirrors them in words. Takes a transaction, never opens one (T-398 S2). Not audited: the audit catalogue is a closed list backed by a database table (migration 0197), and
+ * adding actions to it is its own change.
+ */
+export async function setItemVariantOf(
+  tx: Tx,
+  actor: Actor,
+  input: { itemId: string; parentId: string | null },
+): Promise<{ changed: boolean }> {
+  await authorize(tx, actor, 'approve_item', {});
+  const item = await itemsRepo.getItemById(tx, actor.orgId, input.itemId);
+  if (!item) throw gone(`setItemVariantOf: item ${input.itemId} does not exist.`, 'item');
+  if ((item.variantOfItemId ?? null) === input.parentId) return { changed: false };
+  if (input.parentId !== null) {
+    if (item.status === 'merged') {
+      const s = 'This item was merged into another, so it cannot become a variation.';
+      throw refuse(`setItemVariantOf: ${item.id} is merged`, s);
+    }
+    await assertCanBeVariationOf(tx, actor.orgId, input.parentId, { id: item.id, kind: item.kind });
+  }
+  await itemsRepo.updateItem(tx, actor.orgId, input.itemId, { variantOfItemId: input.parentId });
+  return { changed: true };
+}
+
+/**
+ * ⭐ T-443 R2. "These two look alike and are different items": the pair stops appearing in the look-alike panel. Super-admin only
+ * (`approve_item`). The ids are ordered in the repo (the table stores `a < b`); asking twice is a no-op. Undo is `undoDuplicateDismissal`.
+ */
+export async function dismissDuplicatePair(
+  tx: Tx,
+  actor: Actor,
+  input: { itemAId: string; itemBId: string; note?: string | null },
+): Promise<{ dismissalId: string; created: boolean }> {
+  await authorize(tx, actor, 'approve_item', {});
+  if (input.itemAId === input.itemBId) {
+    const s = 'An item cannot be a duplicate of itself.';
+    throw refuse(s, s);
+  }
+  const a = await itemsRepo.getItemById(tx, actor.orgId, input.itemAId);
+  const b = await itemsRepo.getItemById(tx, actor.orgId, input.itemBId);
+  if (!a) throw gone(`dismissDuplicatePair: item ${input.itemAId} does not exist.`, 'item');
+  if (!b) throw gone(`dismissDuplicatePair: item ${input.itemBId} does not exist.`, 'item');
+  const { id, created } = await itemsRepo.insertDismissal(tx, {
+    orgId: actor.orgId,
+    aId: input.itemAId,
+    bId: input.itemBId,
+    note: input.note?.trim() || null,
+    dismissedBy: actor.personId,
+  });
+  return { dismissalId: id, created };
+}
+
+/** ⭐ T-443 R2. Undo a dismissal: the pair is asked about again. Super-admin only (`approve_item`). */
+export async function undoDuplicateDismissal(
+  tx: Tx,
+  actor: Actor,
+  input: { dismissalId: string },
+): Promise<{ removed: boolean }> {
+  await authorize(tx, actor, 'approve_item', {});
+  return { removed: await itemsRepo.deleteDismissal(tx, actor.orgId, input.dismissalId) };
 }
 
 /** What the super-admin review queue reads. Any manager may LOOK; only a super-admin decides. */
