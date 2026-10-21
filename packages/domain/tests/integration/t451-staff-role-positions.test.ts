@@ -42,6 +42,18 @@ describe('T-451 privileged roles do not require staff positions', () => {
     expect(await asOrg(f.orgId, tx => employmentRepo.listEmploymentPositions(tx, hired.id))).toEqual([]);
   });
 
+  it.each(['manager', 'admin', 'super_admin'] as const)('%s cannot be assigned a staff job through an old form', async role => {
+    const f = await roleFixture(`451-refuse-${role}`);
+    const target = role === 'manager' ? f.manager : role === 'admin' ? f.admin : f.superAdmin;
+    const hired = await asOrg(f.orgId, tx => createEmployment(tx, f.admin, { personId: target.personId, storeId: f.storeId, startedOn: '2026-01-01', employmentStatus: 'regular' }));
+    const [cashier] = await sql`select id from positions where org_id=${f.orgId} and name='Cashier'`;
+    if (!cashier) throw new Error('Canonical Cashier fixture is missing.');
+    await expect(asOrg(f.orgId, tx => setEmploymentPositions(tx, f.admin, { employmentId: hired.id, positionIds: [cashier.id], primaryPositionId: cashier.id })))
+      .rejects.toThrow('Managers and administrators use their role, not a staff position. Remove the position assignments.');
+    expect(await asOrg(f.orgId, tx => employmentRepo.listEmploymentPositions(tx, hired.id))).toEqual([]);
+    expect((await asOrg(f.orgId, tx => accessRepo.activeRoleForPerson(tx, target.personId, f.orgId)))?.role).toBe(role);
+  });
+
   it('staff cannot clear the primary position, including a revoked former manager', async () => {
     const f = await roleFixture('451-staff');
     await sql`insert into person_roles (person_id,org_id,role,revoked_at) values (${f.staff.personId},${f.orgId},'manager',now())`;

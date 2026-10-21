@@ -436,16 +436,14 @@ describe('T-289 case 9 — retiring the store-invented position revokes its rows
 describe('T-289 case 10 — an actor holding the position is skipped and reported', () => {
   it('everyone else is still written; the primitive itself reports the skip with no write', async () => {
     const f = await fixture('c10');
-    await asOrg(f.orgId, (tx) =>
-      createEmployment(tx, f.admin, {
-        storeId: f.storeAId,
-        personId: f.adminId,
-        employmentStatus: 'regular',
-        startedOn: '2026-01-05',
-        positionIds: [f.cashierId],
-        primaryPositionId: f.cashierId,
-      }),
-    );
+    // T-451: this self-skip invariant concerns an existing pre-ruling assignment,
+    // not permission to create a new admin job assignment through today's hire service.
+    const [legacy] = await sql<{ id: string }[]>`
+      insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on, created_by)
+      values (${f.orgId}, ${f.storeAId}, ${f.adminId}, 'SE-001', 'regular', '2026-01-05', ${f.adminId}) returning id`;
+    if (!legacy) throw new Error('Legacy admin employment fixture was not inserted.');
+    await sql`insert into employment_positions (employment_id, position_id, is_primary)
+      values (${legacy.id}, ${f.cashierId}, true)`;
     const other = await hireStaff(f, { storeId: f.storeAId, positionIds: [f.cashierId] });
 
     const direct = await asOrg(f.orgId, (tx) => reconcilePositionGrants(tx, f.admin, { personId: f.adminId, storeId: f.storeAId }));
@@ -554,17 +552,15 @@ describe('T-289 case 12 — an elevated manager in an adminless org keeps the ca
       select id from positions where org_id = ${orgId} and store_id is null and name = 'Cashier'`;
 
     const m2Actor = actor(orgId, m2!.id);
-    // m2 hires m1 (m2 already holds enrol_staff natively as a manager).
-    await asOrg(orgId, (tx) =>
-      createEmployment(tx, m2Actor, {
-        storeId,
-        personId: m1!.id,
-        employmentStatus: 'regular',
-        startedOn: '2026-01-05',
-        positionIds: [cashier!.id],
-        primaryPositionId: cashier!.id,
-      }),
-    );
+    // T-451 forbids NEW manager job assignments. This case tests the lifecycle of a
+    // historical position grant, so seed the pre-ruling employment/assignment as fixture data.
+    // The real default toggle, role arrival, revocation and authorization assertions stay unchanged.
+    const [legacy] = await sql<{ id: string }[]>`
+      insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on, created_by)
+      values (${orgId}, ${storeId}, ${m1!.id}, 'SE-001', 'regular', '2026-01-05', ${m2!.id}) returning id`;
+    if (!legacy) throw new Error('Legacy manager employment fixture was not inserted.');
+    await sql`insert into employment_positions (employment_id, position_id, is_primary)
+      values (${legacy.id}, ${cashier!.id}, true)`;
 
     let grants = await activeGrants(m1!.id);
     expect(grants.find((g) => g.grant_name === 'manage_users')!.grant_source).toBe('elevation');
