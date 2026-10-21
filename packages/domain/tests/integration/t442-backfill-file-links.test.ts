@@ -644,7 +644,7 @@ describe('census: a save through the real path leaves no referenced-but-unlinked
     await expectCensusClean(w.orgId);
   });
 
-  it.todo('ar_collections.receipt_file_id: customer payment (/customers) and trade pay-now - flips on in T-441 S2 (link target = the ar_collections id, A5)');
-  it.todo('deliveries.proof_file_id: record a delivery with a proof photo - flips on in T-441 S2 (link target = the deliveries row id)');
+  // T-441 S2 actual customer/trade/delivery actions, both upload paths and failed-claim rollback:
+  // apps/erp/tests/integration/t441-s2-receipt-actions.test.ts. Kept at the app layer so packages never import an app.
   it.todo('channel_settlements.withholding_certificate_file_id: settle a channel with a certificate - flips on in T-441 S2');
 });

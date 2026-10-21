@@ -187,3 +187,10 @@ Use one shared registry-based NOT EXISTS predicate in candidate selection and de
 same-org referenced-unlinked file count without ids. Keep cross-org FK failures visible per A7.
 Use only shareat_test_codex_t442s2 locally. This does not authorize a production backfill or close the
 three T-441 write-path TODOs. Main was reconciled first, retaining both branches' defect register entries.
+
+21 October continuation: T-441 S2's actual actions now cover the customer/trade collection and
+delivery census requirements, both upload paths and rollback on a refused claim, in
+`apps/erp/tests/integration/t441-s2-receipt-actions.test.ts`. Their two TODOs here are replaced by
+that cross-reference, keeping app imports out of packages. The channel-certificate TODO remains:
+T-441 S2 lists no channel-settlement writer, so its ownership is a recorded spec gap, not a
+silently completed requirement. Production backfill and closure of DEF-672 remain gated.

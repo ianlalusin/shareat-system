@@ -6,7 +6,7 @@ import { requireSession } from '../../../../lib/session';
 import { dispatchOrderAction, receiveOrderAction, setBirInvoiceNoAction, voidOrderAction } from '../actions';
 import { canSeeCreditLimit, creditPreview, orderDetail, peso, storeMoneyAccounts, today } from '../lib';
 import { ACTION_LINK } from '@/components/action-link';
-import { PhotoInput } from '@/components/PhotoInput';
+import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { TRADE_DISPATCH_RULES, TRADE_RECEIVE_RULES, TRADE_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { TREATMENT_LABEL, TREATMENT_TONE } from '../../../customers/lib';
@@ -153,7 +153,7 @@ export default async function TradeOrderPage({
                     </Select>
                   </Field>
                   <Field label="Proof of payment (required for GCash or bank)" span="full">
-                    <PhotoInput name="receiptPhoto" className="text-sm" />
+                    <PhotoUpload name="receiptPhoto" purpose="receipt_photo" storeId={order.storeId} label="Proof of payment" />
                   </Field>
                 </FormGrid>
               </fieldset>
