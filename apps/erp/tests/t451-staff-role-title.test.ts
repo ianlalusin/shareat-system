@@ -18,11 +18,11 @@ describe('T-451 role-first staff presentation', () => {
       if (role !== 'staff') expect(html).not.toContain('Cashier');
     }
   });
-  it('uses compact flat cards without hanging badges', () => {
+  it('preserves the lanyard ID-card design with role-first titles', () => {
     const html = renderToStaticMarkup(createElement(CardWall, { people: [{ id: 'e', displayName: 'Synthetic Person', primaryPosition: 'Cashier', employmentStatus: 'regular', startedOn: '2026-01-01', photoFileId: null }], storeName: 'Test', today: '2026-10-21', states: null }));
     expect(html).toContain('data-staff-card');
-    expect(html).toContain('erp-staff-summary');
-    expect(html).not.toContain('rounded-t-[14px]');
-    expect(html).not.toContain('hover:-rotate');
+    expect(html).toContain('rounded-b-[50%]');
+    expect(html).toContain('rounded-t-[14px]');
+    expect(html).toContain('hover:-rotate');
   });
 });

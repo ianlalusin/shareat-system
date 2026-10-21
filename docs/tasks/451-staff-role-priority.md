@@ -15,5 +15,8 @@ retain all elevation, admin-arrival, grant provenance and switch-off assertions 
 Reuse existing accessRepo role reader; no schema change. Preserve authorize/enrol_staff and reconciliation/audit on replacement.
 Tests first: three privileged roles clear all assignments and refuse new jobs via stale forms; staff cannot lose primary; no role/permission changes;
 hire with existing privileged role gets no default position; revoked role does not bypass requirements; role-first rendered cards/roster.
-Compact staff cards retain photo/initials, name, role, tenure, employment status, live state and navigation.
+Ian correction (21 October): retain the existing lanyard ID-card design; only role titles change.
+ID cards retain photo/initials, name, role, tenure, employment status, live state and navigation.
+Supporting CI guard scope: apps/erp/tests/action-link-sweep.test.ts (count the new removal button);
+apps/erp/tests/t384-s3-lock-and-save-guard.test.ts (register its explicit removal command, retain label checks).
 Done: affected checks, real PostgreSQL, typecheck, self-review; runtime/visual release gate and full exact-head CI before merge.
