@@ -49,6 +49,10 @@ import type {
 } from '@/lib/types';
 
 import { stripUndefined } from '@/lib/firebase/utils';
+import { statutoryInputOf, receiptStatutoryDiners } from '@/lib/statutory/session';
+import { maskDinersForClosedSession, statutoryPaymentBlockers } from '@/lib/statutory/capture';
+import { assertStatutoryPaymentReady } from '@/lib/statutory/payment';
+import { assertBillDiscountAllowed } from './statutory-presets';
 import { printKitchenTicketBackup } from '@/lib/printing/kitchenBackupPrint';
 import { makeKitchenBackupDeps } from '@/lib/printing/kitchenBackupDeps';
 import { roundHalfUp, storedPesosToCentavos, toWirePesos } from '@/lib/money/centavos';
@@ -117,6 +121,7 @@ export async function getCurrentSessionBillingState(storeId: string, sessionId: 
   if (!sessionData) throw new Error(`Session ${sessionId} does not exist.`);
   return {
     billingRevision: Number((sessionData as any).billingRevision ?? 0),
+    session: sessionData,
     billDiscount: ((sessionData as any).billDiscount ?? null) as Discount | null,
     customAdjustments: Array.isArray((sessionData as any).customAdjustments)
       ? ((sessionData as any).customAdjustments as Adjustment[])
@@ -425,8 +430,11 @@ export async function completePaymentFromUnits(
 
   const billingState = await getCurrentSessionBillingState(storeId, sessionId);
   const { billLines, billDiscount, customAdjustments, loyaltyRedemptions } = billingState;
+  assertBillDiscountAllowed(billDiscount);
+  await assertStatutoryPaymentReady({ storeId, session: billingState.session, lines: billLines, loyalty: loyaltyRedemptions });
+  const statutory = statutoryInputOf(billingState.session);
   const loyaltyDiscountInput = (loyaltyRedemptions || []).map((r) => ({ type: r.type, value: r.value }));
-  const finalTotals = calculateBillTotals(billLines, store, billDiscount, customAdjustments, loyaltyDiscountInput);
+  const finalTotals = calculateBillTotals(billLines, store, billDiscount, customAdjustments, loyaltyDiscountInput, statutory);
   const amountDue = finalTotals.grandTotal;
   const amountDueCents = storedPesosToCentavos(amountDue);
   if (typeof expectedTotal === "number" && Math.abs(storedPesosToCentavos(expectedTotal) - amountDueCents) > 1) {
@@ -494,6 +502,12 @@ export async function completePaymentFromUnits(
     const currentBillingRevision = Number((sessionData as any).billingRevision ?? 0);
     if (currentBillingRevision !== billingState.billingRevision) {
       throw new Error("Bill changed during payment. Review the bill and try again.");
+    }
+    const currentStatutory = statutoryInputOf(sessionData);
+    if (JSON.stringify(currentStatutory) !== JSON.stringify(statutory)) throw new Error('Bill changed during payment. Review the bill and try again.');
+    if (currentStatutory) {
+      const blocked = statutoryPaymentBlockers({ ...currentStatutory, lines: billLines, loyaltyRedemptions });
+      if (blocked[0]) throw new Error(blocked[0].message);
     }
 
     sessionContextForLog = {
@@ -592,6 +606,7 @@ export async function completePaymentFromUnits(
     // close session
     tx.update(sessionRef, {
       status: 'closed',
+      ...(statutory ? { statutoryDiners: maskDinersForClosedSession(statutory.diners) } : {}),
       isPaid: true,
       closedByUid: actor.uid,
       closedByUsername: actor.username,
@@ -606,6 +621,7 @@ export async function completePaymentFromUnits(
       const projectionData = activeProjectionSnap.data();
       tx.set(closedProjectionRef, {
         ...projectionData,
+        ...(statutory ? { statutoryDiners: maskDinersForClosedSession(statutory.diners) } : {}),
         status: 'closed',
         customerAccessEnabled: false,
         updatedAt: serverTimestamp(),
@@ -616,6 +632,7 @@ export async function completePaymentFromUnits(
     } else {
         tx.set(closedProjectionRef, {
             ...sessionData,
+            ...(statutory ? { statutoryDiners: maskDinersForClosedSession(statutory.diners) } : {}),
             status: 'closed',
             customerAccessEnabled: false,
             updatedAt: serverTimestamp(),
@@ -642,6 +659,7 @@ export async function completePaymentFromUnits(
       terminalNo: reserved.terminalNo, terminalSeq: reserved.terminalSeq, deviceId: reserved.deviceId,
       createdAtClientMs: Date.now(), lines: billLines, billDiscount: billDiscount ?? null, customAdjustments: customAdjustments ?? [], receiptId: sessionId,
       loyaltyRedemptions: loyaltyRedemptions ?? [],
+      ...(statutory ? { statutoryDiners: receiptStatutoryDiners(statutory, finalTotals) } : {}),
     } as Omit<Receipt, 'createdAt'>);
 
     const salesAnalytics = billLines.reduce(
@@ -711,6 +729,7 @@ export async function completePaymentFromUnits(
       subtotal: finalTotals.subtotal, discountsTotal: finalTotals.totalDiscounts, chargesTotal: finalTotals.chargesTotal,
       taxAmount: finalTotals.taxTotal, vatableSales: finalTotals.vatableSales, vatExemptSales: finalTotals.vatExemptSales,
       grandTotal: finalTotals.grandTotal, totalPaid, change, mop: mopMap,
+      statutoryDiscountTotal: finalTotals.statutoryDiscountTotal, statutoryVatRemovedTotal: finalTotals.statutoryVatRemovedTotal,
       salesByItem: salesAnalytics.salesByItem, salesByCategory: salesAnalytics.salesByCategory,
       servedRefillsByName: sessionData.servedRefillsByName || {},
       serveCountByType: sessionData.serveCountByType || {},

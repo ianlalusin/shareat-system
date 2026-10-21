@@ -1,7 +1,6 @@
 # T-426: POS v2 — senior and PWD discount per qualifying diner, with name and ID (P0, PC-6)
 
-**Status:** spec written 2026-10-17 (Opus planner, POS v2 lane); revised after the Opus review and a law check (✎R);
-second review: N1-N3 and minors applied (✎R2); ready to build
+**Status:** S1-S4 local implementation checkpoint, 2026-10-21: 893 POS tests pass (one existing skip), typecheck, web build and Capacitor export pass; 100 affected root guards passed before final presentation/export corrections. Full exact-head CI, separate test Firebase backend and runtime/visual checks remain release gates.
 **Model:** Sonnet tester -> Sonnet builder -> Sonnet auditor (money lane).
 **Migration:** none (no Postgres change; the ERP register and day-feed changes are named below for the orchestrator).
 **Authority:** plan §6 PC-6 · ADR-015 L42 (P0 captures SC/PWD name + ID, row 218) and L194 (one price per head) · bible
@@ -144,6 +143,40 @@ A further red regression control preserves normalization of stored numeric perce
 strings before Exact consumes the rate; it is not a claim that live rates are malformed.
 Final checkpoint checks: 132 selected math/capture/money/refund tests, POS typecheck and
 normal/cap builds pass. Cap restored all 34 moved files byte-for-byte, no stash remains.
+S2 supporting files include statutory/session.ts, payment.ts and its tests, plus the capture
+panel and preview artifact. Desktop: compact kind/name/ID row and diner table left, bill
+effect preview right. Tablet: retain the diner table with 44px controls (Ian, 2026-10-20).
+Tables become cards only below 768px; 768px and above retains tables, with local scrolling when needed. Phone: stacked form and
+diner cards with sticky Add action. Loading, empty, error, focus/hover and locked states
+must be explicit; no full ID in saved lists. Preview is synthetic, not a runtime smoke.
+Online all-qualifying bills reverse existing points through the same authenticated DELETE
+endpoint the current reward card uses, then refuse payment for review. Offline refuses
+without a server call and requires reconnecting to release points before payment; no new
+offline effect queue is invented. Unknown release responses never claim points were released.
+S3 supporting scope explicitly includes `src/app/receipt/page.tsx` and
+`src/app/receipts/page.tsx`: both real receipt-data factories must forward statutoryDiners
+to preview and print. Formatter tests alone could pass on synthetic data while both real
+pages drop the full identity records. Two new source-wiring controls were red first (DEF-715).
+Capture supporting scope includes statutory/mutations.ts and tests, StatutoryDinersPanel,
+types.ts activity tags and lib/logs/describe-log.ts labels. Session change and both existing
+masked activity logs commit in one transaction; current bill status and assigned lines are
+read again. Capture retains the existing online billing-edit requirement; already captured
+qualifiers apply to offline payment. Pruning uses current line data. Two repair controls
+were red before allowing excess/duplicate records to be removed one at a time; payment
+validation remains strict. The 155dd37 post-commit run passed 132 affected checks and 91
+guards; the one red census gate named eight then-unwired S2 helpers. Baseline unchanged.
+S3 privacy correction, 21 October: Ruling 10 requires masked IDs on screens, but the S3 receipt
+test's prose demanded a full ID in the on-screen preview. Keep full receipt identity data and
+thermal/printed IDs, but render the preview ID through the existing mask helper and expose the
+full value only under print media. The new rendered regression fails before this correction;
+existing thermal receipt full-ID/signature assertions remain unchanged (DEF-719).
+Final audit: the new panel's payable total must wrap rather than ellipsize (DEF-720). S4's
+management CSV must encode formula-like text as literal spreadsheet text (DEF-721), preserving
+raw receipt records and all numeric columns. These are presentation/export corrections within
+the existing panel, wiring test, logbook helper and logbook test scope; both controls fail first.
+CSV mitigation follows [OWASP's spreadsheet-viewing guidance](https://community.owasp.org/attacks/CSV_Injection):
+quote and tab-prefix dangerous text, including full-width variants. This is a management viewing
+export, not a lossless reimport format; raw receipt records and money columns are untouched.
 
 **T** tester: `statutoryShares` and the bill math (golden: no diners = T-423 result exactly; with diners vs a
 BigInt-fraction oracle; VAT incl / excl / non-VAT; 1 of 4, 2 of 4, all diners; bundle; à la carte; promo + loyalty on

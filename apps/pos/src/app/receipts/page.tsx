@@ -365,6 +365,7 @@ export default function ReceiptsPage() {
                     createdByUsername: receiptDocData.createdByUsername,
                     receiptNumber: receiptDocData.receiptNumber,
                     analytics: receiptDocData.analytics,
+                    statutoryDiners: receiptDocData.statutoryDiners ?? [],
                     isRefund: receiptDocData.isRefund ?? false,
                     createdByEmail: receiptDocData.createdByEmail ?? null,
                 } as any);
@@ -660,6 +661,3 @@ export default function ReceiptsPage() {
         </RoleGuard>
     )
 }
-
-
-    

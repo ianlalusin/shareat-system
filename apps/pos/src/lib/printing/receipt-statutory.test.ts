@@ -16,7 +16,7 @@
  *     - per diner: a heading with the kind ("SENIOR CITIZEN" or "PWD"), the name, the FULL ID number, the discount amount (2 decimals) and a line
  *       "Signature: ________" (at least 6 underscores); a diner with `promoWasHigher` is also marked "promo was higher".
  *     - a receipt with NO `statutoryDiners` prints none of this: no "Signature", no "Less: VAT exemption", no "SC/PWD".
- *   ReceiptView (components/receipt/receipt-view.tsx) shows the same: the "Less: VAT exemption (SC/PWD)" row, each diner's name and full ID, a signature line.
+ *   ReceiptView shows the same amounts/name/signature; Ruling 10 masks screen IDs and retains the full ID for print.
  */
 import fc from 'fast-check';
 import { createElement } from 'react';
@@ -187,12 +187,16 @@ describe('the printed receipt adds up on every generated bill (property; kills a
 
 describe('the on-screen receipt (ReceiptView)', () => {
   const html = renderToStaticMarkup(createElement(ReceiptView as any, { data: workedReceipt(), paymentMethods: [] }));
-  it('shows the VAT exemption row, the diner\'s name and full ID, the discount and a signature line', () => {
+  it('includes the VAT exemption row, name, complete print ID, discount and signature line', () => {
     expect(html).toMatch(/Less: VAT exemption \(SC\/PWD\)/i);
     expect(html).toContain('Lola Remedios Cruz');
     expect(html).toContain('OSCA-2024-001187');
     expect(html).toMatch(/Signature:\s*_{6,}/);
     expect(html).toMatch(/80\.18/);
     expect(html).toMatch(/320\.71/);
+  });
+  it('masks the screen ID and keeps the complete ID exclusively in the print presentation (Ruling 10)', () => {
+    expect(html).toContain('<span class="print:hidden">****1187</span>');
+    expect(html).toContain('<span class="hidden print:inline">OSCA-2024-001187</span>');
   });
 });

@@ -14,8 +14,6 @@
 //   7. final day totals with negative payment methods (counts and related conversion ids, never amounts)
 // It only ever calls `.get()`: no write, no update, no delete. Exit code 0 when everything is clean, 2 when anything is listed, 1 on error.
 import { readFileSync } from 'node:fs';
-import { initializeApp, cert } from 'firebase-admin/app';
-import { FieldPath, getFirestore } from 'firebase-admin/firestore';
 import { auditDayOf as dayOf, auditRange, classifyConversion, negativeDays } from './pos2-audit-lib.mjs';
 
 const args = process.argv.slice(2);
@@ -25,17 +23,50 @@ const [to] = flag('to');
 const onlyStores = flag('store');
 const keyFile = (process.env.POS_FIREBASE_SA_KEY_FILE ?? '').trim();
 const range = auditRange(from, to);
+const logbook = args.includes('--statutory-logbook');
+const fixtureFile = logbook ? process.env.POS2_AUDIT_FIXTURE : null;
 
-if (!keyFile || !range) {
+if ((!keyFile && !fixtureFile) || !range) {
   console.error('Usage: POS_FIREBASE_SA_KEY_FILE=<service-account.json> node apps/pos/scripts/pos2-audit.mjs --from=YYYYMMDD --to=YYYYMMDD [--store=<pos store id>]...');
   process.exit(1);
 }
 
 const { fromMs, toMs } = range;
 
-const credential = JSON.parse(readFileSync(keyFile, 'utf8'));
-const app = initializeApp({ credential: cert(credential), projectId: credential.project_id }, 'pos2-audit');
-const db = getFirestore(app);
+async function openDatabase() {
+  const [{ cert, initializeApp }, { FieldPath, getFirestore }] = await Promise.all([
+    import('firebase-admin/app'), import('firebase-admin/firestore'),
+  ]);
+  const credential = JSON.parse(readFileSync(keyFile, 'utf8'));
+  const app = initializeApp({ credential: cert(credential), projectId: credential.project_id }, 'pos2-audit');
+  return { db: getFirestore(app), FieldPath };
+}
+
+// Explicit management export only; the default detector still prints no identities or amounts.
+if (logbook) {
+  const { statutoryLogbookRows, renderStatutoryLogbook } = await import('./lib/statutory-logbook.mjs');
+  const rows = [];
+  if (fixtureFile) {
+    const fixture = JSON.parse(readFileSync(fixtureFile, 'utf8'));
+    const stores = onlyStores.length ? onlyStores : Object.keys(fixture.stores ?? {}).sort();
+    for (const storeId of stores) rows.push(...statutoryLogbookRows(storeId, fixture.stores?.[storeId]?.receipts ?? [], range));
+  } else {
+    const { db } = await openDatabase();
+    const stores = onlyStores.length ? onlyStores : (await db.collection('stores').select().get()).docs.map(doc => doc.id).sort();
+    for (const storeId of stores) {
+      const collection = db.collection(`stores/${storeId}/receipts`);
+      const [sales, refunds] = await Promise.all([
+        collection.where('createdAtClientMs', '>=', fromMs).where('createdAtClientMs', '<=', toMs).get(),
+        collection.where('isRefund', '==', true).get(),
+      ]);
+      rows.push(...statutoryLogbookRows(storeId, [...sales.docs, ...refunds.docs].map(doc => ({ id: doc.id, data: doc.data() })), range));
+    }
+  }
+  process.stdout.write(renderStatutoryLogbook(rows, { from, to }));
+  process.exit(0);
+}
+
+const { db, FieldPath } = await openDatabase();
 
 const storeIds = onlyStores.length ? onlyStores : (await db.collection('stores').select().get()).docs.map((d) => d.id);
 let listed = 0;

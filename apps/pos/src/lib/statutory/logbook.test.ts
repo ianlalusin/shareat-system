@@ -24,7 +24,7 @@
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative, resolve, isAbsolute, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { need } from '@/test-helpers/statutoryOracle';
@@ -60,6 +60,16 @@ const RECEIPTS = [
 const RANGE = { fromMs: ms('2026-10-01T00:00:00+08:00'), toMs: ms('2026-10-31T23:59:59+08:00') };
 
 describe('statutoryLogbookRows', () => {
+  it('exports formula-looking text as literal spreadsheet text without changing money columns', async () => {
+    const { rows, render } = await lib();
+    const first = rows('S1', RECEIPTS, RANGE)[0];
+    if (!first) throw new Error('Missing synthetic receipt');
+    for (const prefix of ['=', '+', '-', '@', '\t', '\r', '\n', ' =', '＝', '＋', '－', '＠']) {
+      const out = render([{ ...first, name: `${prefix}1+1`, idNo: `${prefix}1+1` }], { from: '20261001', to: '20261031' });
+      expect(out).toContain(`"\t${prefix}1+1"`);
+      expect(out).toContain(',449.00,80.18,320.71,48.11,yes');
+    }
+  });
   it('one row per diner of every sale receipt in range, sorted; refund receipts, receipts without diners and out-of-range ones give none', async () => {
     const { rows } = await lib();
     const out = rows('S1', RECEIPTS, RANGE);
@@ -115,7 +125,11 @@ describe('renderStatutoryLogbook', () => {
 
 describe('the CLI: node apps/pos/scripts/pos2-audit.mjs --statutory-logbook (injected data source)', { timeout: 60_000 }, () => {
   const dir = mkdtempSync(join(tmpdir(), 't426-logbook-'));
-  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  afterAll(() => {
+    const within = relative(resolve(tmpdir()), resolve(dir));
+    if (isAbsolute(within) || within.includes(sep) || !within.startsWith('t426-logbook-')) throw new Error('Unsafe fixture cleanup path');
+    rmSync(dir, { recursive: true, force: true });
+  });
   const fixture = join(dir, 'fixture.json');
   writeFileSync(fixture, JSON.stringify({ stores: { S1: { receipts: RECEIPTS }, S2: { receipts: [{ id: 'x1', data: { receiptNumber: 'S2-01-000001', createdAtClientMs: ms('2026-10-05T10:00:00+08:00'), statutoryDiners: [diner('pwd', 'Other Store Diner', 'PWD-S2')] } }] } } }));
   const run = (args: string[], env: Record<string, string | undefined> = {}) => {

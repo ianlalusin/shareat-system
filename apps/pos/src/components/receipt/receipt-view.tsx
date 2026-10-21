@@ -7,6 +7,7 @@ import Image from "next/image";
 import type { ModeOfPayment, SessionBillLine, Store, ReceiptData, ReceiptSettings } from "@/lib/types";
 import { toJsDate } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
+import { maskIdNo } from '@/lib/statutory/capture';
 
 interface ReceiptViewProps {
     data: ReceiptData | null;
@@ -214,6 +215,8 @@ export function ReceiptView({ data, paymentMethods = [] }: ReceiptViewProps) {
                  {(chargesTotal > 0) && (
                     <ReceiptRow label="Charges" value={chargesTotal} isCurrency prefix="+ " />
                 )}
+                {!!data.statutoryDiners?.length && (analytics.statutoryVatRemovedTotal ?? 0) > 0 &&
+                  <ReceiptRow label="Less: VAT exemption (SC/PWD)" value={analytics.statutoryVatRemovedTotal} isCurrency prefix="− " />}
              </section>
              
              {(taxAmount > 0 || vatExemptSales > 0) && (
@@ -221,8 +224,8 @@ export function ReceiptView({ data, paymentMethods = [] }: ReceiptViewProps) {
                     <hr className="border-dashed border-black my-2" />
                     <section className="space-y-px mb-2 receipt-section">
                          <ReceiptRow label="VATable Sales" value={vatableSales} isCurrency />
-                         <ReceiptRow label="VAT-Exempt Sales" value={vatExemptSales} isCurrency />
-                         <ReceiptRow label={`VAT (${store?.taxRatePct || 12}%)`} value={taxAmount} isCurrency />
+                         <ReceiptRow label={settings.vatType === 'NON_VAT' && data.statutoryDiners?.length ? 'SC/PWD Sales' : 'VAT-Exempt Sales'} value={vatExemptSales} isCurrency />
+                         <ReceiptRow label={`VAT (${store?.taxRatePct ?? 12}%)`} value={taxAmount} isCurrency />
                     </section>
                 </>
              )}
@@ -240,6 +243,13 @@ export function ReceiptView({ data, paymentMethods = [] }: ReceiptViewProps) {
                  <ReceiptRow label={isRefundReceipt ? "Total Refunded" : "Total Paid"} value={isRefundReceipt ? -Math.abs(totalPaid) : totalPaid} isCurrency />
                  <ReceiptRow label="CHANGE" value={change} isBold={true} isCurrency />
              </section>
+             {data.statutoryDiners?.map((diner, index) => <section key={index} className="receipt-section my-3 space-y-1 break-words">
+               <p className="font-bold">{diner.kind === 'senior' ? 'SENIOR CITIZEN' : 'PWD'}</p>
+               <p>{diner.name}</p><p className="break-all">ID: <span className="print:hidden">{maskIdNo(diner.idNo)}</span><span className="hidden print:inline">{diner.idNo}</span></p>
+               <ReceiptRow label="Discount" value={diner.discount} isCurrency />
+               {diner.promoWasHigher && <p>promo was higher</p>}
+               <p>Signature: ________________</p>
+             </section>)}
 
              {freeItems.length > 0 && (
                 <>
@@ -260,5 +270,3 @@ export function ReceiptView({ data, paymentMethods = [] }: ReceiptViewProps) {
         </div>
     );
 }
-
-    

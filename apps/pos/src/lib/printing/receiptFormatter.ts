@@ -74,12 +74,25 @@ export function formatReceiptText(
   lines.push(hr());
 
   const analytics = data.analytics || {};
+  const statutory = data.statutoryDiners ?? [];
   lines.push(justify("SUBTOTAL", (analytics.subtotal || 0).toFixed(2)));
   if ((analytics.discountsTotal || 0) > 0) {
     lines.push(justify("DISCOUNTS", `(-${analytics.discountsTotal.toFixed(2)})`));
   }
   if ((analytics.chargesTotal || 0) > 0) {
     lines.push(justify("CHARGES", `+${analytics.chargesTotal.toFixed(2)}`));
+  }
+  if (statutory.length && (analytics.statutoryVatRemovedTotal || 0) > 0) {
+    const label = 'Less: VAT exemption (SC/PWD)';
+    const amount = `-${analytics.statutoryVatRemovedTotal.toFixed(2)}`;
+    if (label.length + amount.length + 1 > charsPerLine) lines.push(label, amount.padStart(charsPerLine));
+    else lines.push(justify(label, amount));
+  }
+  if (statutory.length && ((analytics.taxAmount || 0) > 0 || (analytics.vatExemptSales || 0) > 0)) {
+    lines.push(hr());
+    lines.push(justify('VATABLE SALES', (analytics.vatableSales || 0).toFixed(2)));
+    lines.push(justify(settings.vatType === 'NON_VAT' ? 'SC/PWD SALES' : 'VAT-EXEMPT SALES', (analytics.vatExemptSales || 0).toFixed(2)));
+    lines.push(justify(`VAT (${data.store?.taxRatePct || 0}%)`, (analytics.taxAmount || 0).toFixed(2)));
   }
 
   lines.push(hr());
@@ -92,6 +105,12 @@ export function formatReceiptText(
   });
   lines.push(justify("TOTAL PAID", (analytics.totalPaid || 0).toFixed(2)));
   lines.push(justify("CHANGE", (analytics.change || 0).toFixed(2)));
+  for (const diner of statutory) {
+    lines.push(hr(), diner.kind === 'senior' ? 'SENIOR CITIZEN' : 'PWD', diner.name, `ID: ${diner.idNo}`);
+    lines.push(justify('Discount', diner.discount.toFixed(2)));
+    if (diner.promoWasHigher) lines.push('promo was higher');
+    lines.push('Signature: ________________');
+  }
 
   lines.push("");
   if (settings.footerText) lines.push(center(settings.footerText));

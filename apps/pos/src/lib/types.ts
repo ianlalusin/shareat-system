@@ -1273,6 +1273,8 @@ export type PendingSession = {
   billDiscount?: Discount | null;
   customAdjustments?: Adjustment[];
   billingRevision?: number;
+  statutoryDiners?: StatutoryDiner[] | null;
+  statutoryHeadCount?: number | null;
 };
 
 /**
@@ -1507,6 +1509,8 @@ export type ReceiptAnalyticsV2 = {
   // Optional: historical receipts predate these and fall back at render time.
   vatableSales?: number;
   vatExemptSales?: number;
+  statutoryDiscountTotal?: number;
+  statutoryVatRemovedTotal?: number;
   grandTotal: number;
   totalPaid: number;
   change: number;
@@ -1547,6 +1551,8 @@ export type Receipt = {
     customerAddress?: string | null;
     customerTin?: string | null;
     lines: SessionBillLine[];
+    statutoryDiners?: { kind: 'senior' | 'pwd'; name: string; idNo: string; share: number;
+      discount: number; vatRemoved: number; vatExempt: number; promoWasHigher: boolean }[];
     total: number;
     totalPaid: number;
     change: number;
@@ -1639,8 +1645,9 @@ export type ActivityLog = {
   sessionId: string;
   storeId: string;
 
-  action: "SESSION_STARTED" | "SESSION_VOIDED" | "SESSION_VERIFIED" | "SESSION_AUDIT_FLAGGED" | "SESSION_AUDIT_CLEARED" | "DISCOUNT_APPLIED" | "DISCOUNT_EDITED" | "DISCOUNT_REMOVED" | "BILL_DISCOUNT_APPLIED" | "BILL_DISCOUNT_REMOVED" | "CUSTOM_CHARGE_ADDED" | "CUSTOM_CHARGE_REMOVED" | "MARK_FREE" | "UNMARK_FREE" | "VOID_TICKETS" | "UNVOID" | "PRICE_OVERRIDE" | "PAYMENT_COMPLETED" | "edit_line" | "PACKAGE_QTY_OVERRIDE_SET" | "PACKAGE_QTY_RESYNC_APPROVED_CHANGE" | "BUNDLE_EXTRA_PAX_SYNCED" | "RECEIPT_DELETED" | "RECEIPT_EDITED" | "RECEIPT_VOIDED" | "RECEIPT_REFUND" | "ADDON_ADDED" | "REFILL_ADDED" | "GUEST_COUNT_REQUESTED" | "GUEST_COUNT_APPROVED" | "GUEST_COUNT_REJECTED" | "PACKAGE_CHANGE_REQUESTED" | "PACKAGE_CHANGE_APPROVED" | "PACKAGE_CHANGE_REJECTED" | "TICKET_SERVED" | "TICKET_CANCELLED" | "TICKET_BATCH_SERVED" | "TICKET_REMAINING_CANCELLED" | "CUSTOMER_PARTICIPANT_JOINED" | "CUSTOMER_PARTICIPANT_REJOINED" | "CUSTOMER_PARTICIPANT_REVOKED" | "CUSTOMER_PARTICIPANTS_RESET" | "CUSTOMER_REQUEST_CREATED" | "CUSTOMER_REQUEST_COMPLETED";
+  action: "SESSION_STARTED" | "SESSION_VOIDED" | "SESSION_VERIFIED" | "SESSION_AUDIT_FLAGGED" | "SESSION_AUDIT_CLEARED" | "DISCOUNT_APPLIED" | "DISCOUNT_EDITED" | "DISCOUNT_REMOVED" | "BILL_DISCOUNT_APPLIED" | "BILL_DISCOUNT_REMOVED" | "CUSTOM_CHARGE_ADDED" | "CUSTOM_CHARGE_REMOVED" | "MARK_FREE" | "UNMARK_FREE" | "VOID_TICKETS" | "UNVOID" | "PRICE_OVERRIDE" | "PAYMENT_COMPLETED" | "edit_line" | "PACKAGE_QTY_OVERRIDE_SET" | "PACKAGE_QTY_RESYNC_APPROVED_CHANGE" | "BUNDLE_EXTRA_PAX_SYNCED" | "RECEIPT_DELETED" | "RECEIPT_EDITED" | "RECEIPT_VOIDED" | "RECEIPT_REFUND" | "ADDON_ADDED" | "REFILL_ADDED" | "GUEST_COUNT_REQUESTED" | "GUEST_COUNT_APPROVED" | "GUEST_COUNT_REJECTED" | "PACKAGE_CHANGE_REQUESTED" | "PACKAGE_CHANGE_APPROVED" | "PACKAGE_CHANGE_REJECTED" | "TICKET_SERVED" | "TICKET_CANCELLED" | "TICKET_BATCH_SERVED" | "TICKET_REMAINING_CANCELLED" | "CUSTOMER_PARTICIPANT_JOINED" | "CUSTOMER_PARTICIPANT_REJOINED" | "CUSTOMER_PARTICIPANT_REVOKED" | "CUSTOMER_PARTICIPANTS_RESET" | "CUSTOMER_REQUEST_CREATED" | "CUSTOMER_REQUEST_COMPLETED" | "STATUTORY_DINER_ADDED" | "STATUTORY_DINER_REMOVED";
 
+  createdAtClientMs?: number;
   actorUid: string;
   actorRole?: string | null;
   actorName?: string | null;
@@ -1667,6 +1674,7 @@ export type ActivityLog = {
   tableDisplayName?: string | null;
 
   meta?: {
+    statutory?: { type: string; kind: "senior" | "pwd"; idMasked: string; byUid: string; atClientMs: number };
     itemId?: string;
     itemName?: string;
     discountType?: "fixed" | "percent" | null;
@@ -1887,4 +1895,5 @@ export type ReceiptData = {
     createdByUsername?: string;
     receiptNumber?: string;
     analytics?: any;
+    statutoryDiners?: Receipt['statutoryDiners'];
 };

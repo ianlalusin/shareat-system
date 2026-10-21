@@ -19,6 +19,10 @@ import type { AppUser } from "@/context/auth-context";
 import type { Payment, Store, ModeOfPayment } from "@/lib/types";
 import { stripUndefined } from "@/lib/firebase/utils";
 import { calculateBillTotals } from "@/lib/tax";
+import { statutoryInputOf, receiptStatutoryDiners } from '@/lib/statutory/session';
+import { maskDinersForClosedSession } from '@/lib/statutory/capture';
+import { assertStatutoryPaymentReady } from '@/lib/statutory/payment';
+import { assertBillDiscountAllowed } from './statutory-presets';
 import {
   getActorStamp,
   getCurrentSessionBillingState,
@@ -67,8 +71,11 @@ export async function completePaymentOffline(
   // 1. Billing state + totals (cache-served reads).
   const billingState = await getCurrentSessionBillingState(storeId, sessionId);
   const { billLines, billDiscount, customAdjustments, loyaltyRedemptions } = billingState;
+  assertBillDiscountAllowed(billDiscount);
+  await assertStatutoryPaymentReady({ storeId, session: billingState.session, lines: billLines, loyalty: loyaltyRedemptions, offline: true });
+  const statutory = statutoryInputOf(billingState.session);
   const loyaltyDiscountInput = (loyaltyRedemptions || []).map((r) => ({ type: r.type, value: r.value }));
-  const finalTotals = calculateBillTotals(billLines, store, billDiscount, customAdjustments, loyaltyDiscountInput);
+  const finalTotals = calculateBillTotals(billLines, store, billDiscount, customAdjustments, loyaltyDiscountInput, statutory);
   const amountDue = finalTotals.grandTotal;
   if (typeof expectedTotal === "number" && Math.abs(storedPesosToCentavos(expectedTotal) - storedPesosToCentavos(amountDue)) > 1) {
     throw new Error(`Bill changed before payment could be finalized. Review the bill and collect ₱${amountDue.toFixed(2)}.`);
@@ -96,6 +103,7 @@ export async function completePaymentOffline(
 
   // Billing-revision concurrency guard (same as online).
   const currentBillingRevision = Number(sessionData.billingRevision ?? 0);
+  if (JSON.stringify(statutoryInputOf(sessionData)) !== JSON.stringify(statutory)) throw new Error('Bill changed during payment. Review the bill and try again.');
   if (currentBillingRevision !== billingState.billingRevision) {
     throw new Error("Bill changed during payment. Review the bill and try again.");
   }
@@ -163,6 +171,7 @@ export async function completePaymentOffline(
         path: `stores/${storeId}/sessions/${sessionId}`,
         data: {
           status: "closed",
+          ...(statutory ? { statutoryDiners: maskDinersForClosedSession(statutory.diners) } : {}),
           isPaid: true,
           closedByUid: actor.uid,
           closedByUsername: actor.username,
@@ -179,6 +188,7 @@ export async function completePaymentOffline(
         path: `stores/${storeId}/closedSessions/${sessionId}`,
         data: {
           ...(encodeLedgerValue(projectionSource) as Record<string, unknown>),
+          ...(statutory ? { statutoryDiners: maskDinersForClosedSession(statutory.diners) } : {}),
           status: "closed",
           customerAccessEnabled: false,
           updatedAt: TS,
@@ -217,6 +227,7 @@ export async function completePaymentOffline(
         billDiscount: billDiscount ?? null,
         customAdjustments: customAdjustments ?? [],
         loyaltyRedemptions: loyaltyRedemptions ?? [],
+        ...(statutory ? { statutoryDiners: receiptStatutoryDiners(statutory, finalTotals) } : {}),
         ...(checks.length > 0 ? { tendersToCheck: checks } : {}),
         // Print-critical analytics baked in immediately so the receipt renders correct money totals + MOP offline. Server-only aggregates
         // (salesByItem, salesByCategory, servedRefillsByName, serveCountByType, serveTimeMsTotalByType, guestCountSnapshot) are DEFERRED —
@@ -229,6 +240,8 @@ export async function completePaymentOffline(
           taxAmount: finalTotals.taxTotal,
           vatableSales: finalTotals.vatableSales,
           vatExemptSales: finalTotals.vatExemptSales,
+          statutoryDiscountTotal: finalTotals.statutoryDiscountTotal,
+          statutoryVatRemovedTotal: finalTotals.statutoryVatRemovedTotal,
           grandTotal: finalTotals.grandTotal,
           totalPaid: summary.totalPaid,
           change: summary.change,
