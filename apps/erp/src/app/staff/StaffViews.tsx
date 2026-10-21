@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { Badge } from '@/components/ui';
 import { businessDayRange, toBusinessDate } from '@shareat/core/datetime';
 import { formatTenure } from './tenure';
+import { staffRoleTitle } from './role-title';
 
 export type LiveState = 'on' | 'break' | 'off';
 export interface LiveEntry {
@@ -19,6 +20,7 @@ export interface LiveEntry {
 }
 
 export interface StaffPerson {
+  role?: string | null;
   id: string;
   displayName: string;
   employmentStatus: string;
@@ -119,7 +121,7 @@ export function ViewSwitch({ view, storeId }: { view: 'cards' | 'roster' | 'posi
 // ---- the ID-card wall ---------------------------------------------------------------------------
 
 const CARD_LINK =
-  'relative flex min-h-11 w-full flex-col items-center overflow-hidden rounded-[18px] border border-surface-border bg-surface pb-5 text-ink shadow-sm motion-safe:transition-transform motion-safe:hover:-rotate-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-canvas';
+  'erp-staff-summary flex min-h-11 w-full items-center gap-3 rounded-lg border border-surface-border bg-surface p-4 text-ink hover:border-ink/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
 
 export function CardWall({
   people,
@@ -133,26 +135,20 @@ export function CardWall({
   states: Record<string, LiveEntry> | null;
 }) {
   return (
-    <ul data-view="cards" className="grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-x-7 gap-y-9">
+    <ul data-view="cards" className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,20rem),1fr))] gap-3">
       {people.map((p) => (
-        <li key={p.id} data-staff-card className="flex flex-col items-center">
-          <span aria-hidden="true" className="h-8 w-4 rounded-t-sm bg-brand" />
-          <span aria-hidden="true" className="-mb-0.5 h-3 w-6 rounded-t-[14px] border-[3px] border-b-0 border-closed" />
+        <li key={p.id} data-staff-card className="min-w-0">
           <Link href={`/staff/${p.id}`} className={CARD_LINK}>
-            <span aria-hidden="true" className="absolute inset-x-[-10%] top-0 h-24 rounded-b-[50%] bg-brand" />
-            <span aria-hidden="true" className="absolute left-1/2 top-2.5 h-2 w-7 -translate-x-1/2 rounded-full bg-canvas opacity-90" />
-            <Avatar person={p} className="relative mt-11 h-24 w-24 rounded-full border-4 border-surface text-4xl" />
-            <span className="mt-3 px-3 text-center font-display text-xl font-extrabold uppercase leading-tight">{p.displayName}</span>
-            <span className="mt-1 text-xs font-bold uppercase tracking-wide text-brand-ink">{p.primaryPosition ?? 'No position'}</span>
-            <span className="mt-0.5 text-xs text-muted">
-              {storeName} · {formatTenure(p.startedOn, today)}
+            <Avatar person={p} className="h-14 w-14 shrink-0 rounded-full text-xl" />
+            <span className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="break-words text-sm font-semibold leading-5">{p.displayName}</span>
+              <span className="text-xs text-muted">{staffRoleTitle(p.role, p.primaryPosition)} · {p.employmentStatus.replace(/-/g, ' ')}</span>
+              <span className="text-xs text-muted">{storeName}</span>
             </span>
-            <span className="mt-1 text-xs capitalize text-muted">{p.employmentStatus.replace(/-/g, ' ')}</span>
-            {states ? (
-              <span className="mt-3">
-                <LiveChip entry={states[p.id]} />
-              </span>
-            ) : null}
+            <span className="flex shrink-0 flex-col items-end gap-2 text-xs text-muted">
+              {states ? <LiveChip entry={states[p.id]} /> : null}
+              <span>{formatTenure(p.startedOn, today)}</span>
+            </span>
           </Link>
         </li>
       ))}
@@ -263,7 +259,7 @@ export function Roster({
                       {p.displayName}
                     </Link>
                     <span className="text-xs text-muted">
-                      {p.primaryPosition ?? 'No position'} · {formatTenure(p.startedOn, today)}
+                      {staffRoleTitle(p.role, p.primaryPosition)} · {formatTenure(p.startedOn, today)}
                     </span>
                   </span>
                 </span>

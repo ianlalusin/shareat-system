@@ -76,13 +76,14 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
     people = await Promise.all(
       roster.map(async (r) => {
         const fileId = photoIds.get(r.id) ?? null;
-        const primary = r.positions.find((p) => p.isPrimary) ?? r.positions[0];
+        const primary = r.positions.find((p) => p.isPrimary);
         return {
           id: r.id,
           displayName: r.displayName,
           employmentStatus: r.employmentStatus,
           startedOn: r.startedOn,
           primaryPosition: primary?.name ?? null,
+          role: r.role,
           photoFileId: fileId && (await canViewPhoto(actor, fileId)) ? fileId : null,
         };
       }),
@@ -149,7 +150,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
         </p>
         <ul className="space-y-2 text-sm">
           {positions.map((p) => {
-            const holders = roster.filter((r) => r.positions.some((a) => a.positionId === p.id));
+            const holders = roster.filter((r) => r.role === 'staff' && r.positions.some((a) => a.positionId === p.id));
             return (
               <li key={p.id} className="rounded-lg border border-neutral-200 dark:border-neutral-800">
                 <details>

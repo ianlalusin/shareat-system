@@ -323,6 +323,70 @@
   padding: 0;
   border: 0;
 }
+/* T-452: compact record cards share two columns sized by their own available width.
+   Subgrid aligns labels, controls, help and validation separately within each pair. */
+.erp-form-pairs, .erp-record-fields, form:has(.erp-form-fields) { container-type: inline-size; }
+.erp-field-short .erp-field-control { max-inline-size: min(100%, 8rem); }
+.erp-field-code .erp-field-control { max-inline-size: min(100%, 14rem); }
+.erp-field-date .erp-field-control { max-inline-size: min(100%, 11rem); }
+.erp-form-pairs-grid, .erp-record-fields .erp-form-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: 1.25rem;
+  row-gap: 0.35rem;
+  max-width: 40rem;
+  min-width: 0;
+}
+.erp-form-pairs-grid > *, .erp-record-fields .erp-form-fields > * {
+  min-width: 0;
+  max-width: none;
+  width: auto;
+  margin-bottom: 0.75rem;
+  grid-row: span 4;
+}
+.erp-form-pairs-grid > .erp-form-field,
+.erp-record-fields .erp-form-fields > .erp-form-field {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 4;
+}
+:is(.erp-form-pairs-grid, .erp-record-fields .erp-form-fields) > .erp-form-field > label { display: contents; }
+:is(.erp-form-pairs-grid, .erp-record-fields .erp-form-fields) .erp-field-label { grid-row: 1; }
+:is(.erp-form-pairs-grid, .erp-record-fields .erp-form-fields) .erp-field-control { grid-row: 2; margin-top: 0; }
+:is(.erp-form-pairs-grid, .erp-record-fields .erp-form-fields) .erp-field-hint { grid-row: 3; margin-top: 0; }
+:is(.erp-form-pairs-grid, .erp-record-fields .erp-form-fields) > .erp-form-field > p { grid-row: 4; margin-top: 0; }
+:is(.erp-form-pairs-grid, .erp-record-fields .erp-form-fields) > .erp-field-long { grid-column: 1 / -1; }
+@container (min-width: 24rem) {
+  .erp-form-pairs-grid, .erp-record-fields .erp-form-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Other entry forms keep their wide-screen rows; a narrow form gets the same paired tracks. */
+@container (max-width: 42rem) {
+  .erp-form-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1.25rem;
+    row-gap: 0.35rem;
+  }
+  .erp-form-fields > :is(label, div, fieldset, section) {
+    max-width: none;
+    width: auto;
+    grid-row: span 4;
+    margin-bottom: 0.75rem;
+  }
+  .erp-form-fields > .erp-form-field { display: grid; grid-template-rows: subgrid; }
+  .erp-form-fields > .erp-form-field > label { display: contents; }
+  .erp-form-fields .erp-field-label { grid-row: 1; }
+  .erp-form-fields .erp-field-control { grid-row: 2; margin-top: 0; }
+  .erp-form-fields .erp-field-hint { grid-row: 3; margin-top: 0; }
+  .erp-form-fields > .erp-form-field > p { grid-row: 4; margin-top: 0; }
+  .erp-form-fields > .erp-field-long { grid-column: 1 / -1; }
+}
+@container (max-width: 23.999rem) {
+  .erp-form-fields { grid-template-columns: minmax(0, 1fr); }
+}
+@media screen and (max-width: 767px) {
+  .erp-form-pairs-grid, .erp-record-fields .erp-form-fields, form .erp-form-fields { grid-template-columns: minmax(0, 1fr); }
+}
 .erp-form-section > legend { margin-bottom: 0.5rem; padding: 0; }
 .erp-form-section + .erp-form-section { border-top: 1px solid var(--surface-border); padding-top: 0.75rem; }
 .erp-item-form { container-type: inline-size; }

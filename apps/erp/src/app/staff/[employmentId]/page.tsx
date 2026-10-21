@@ -19,6 +19,7 @@ import { PhotoInput } from '@/components/PhotoInput';
 import { SignaturePad } from '@/components/SignaturePad';
 import { Page } from '@/components/shell/Page';
 import { CheckedForm, EditableRecord } from '@/components/forms';
+import { staffRoleTitle } from '../role-title';
 import { STAFF_END_RULES, STAFF_GOV_ID_RULES, STAFF_PIN_RULES, STAFF_RENAME_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
@@ -47,6 +48,7 @@ export default async function EmploymentDetailPage({
   if (!detail) notFound();
 
   const isEnded = detail.employment.endedOn !== null;
+  const roleOnly = detail.role === 'manager' || detail.role === 'admin' || detail.role === 'super_admin';
   const [positions, livePin, otherBranches, govIds, media] = await Promise.all([
     positionsForStore(actor.orgId, detail.employment.storeId),
     livePinFor(actor, detail.employment.personId),
@@ -125,6 +127,18 @@ export default async function EmploymentDetailPage({
               ))
             )}
           </ul>
+        ) : roleOnly ? (
+          <div className="space-y-3 text-sm">
+            <p className="font-medium">{staffRoleTitle(detail.role, null)}</p>
+            <p className="text-muted">This role does not need a staff position. Access continues to follow the role and store scope.</p>
+            {detail.positions.length > 0 && (
+              <form action={setPositionsAction} className="space-y-2">
+                <input type="hidden" name="employmentId" value={employmentId} />
+                <p className="text-xs text-muted">Previous assignments: {detail.positions.map(p => p.name).join(', ')}.</p>
+                <Button type="submit" variant="secondary">Remove staff positions</Button>
+              </form>
+            )}
+          </div>
         ) : (
           <EditableRecord action={setPositionsAction} label="positions" hidden={{ employmentId }} typed={typedFor(sp, STAFF_POSITIONS, employmentId, actor.personId)}>
             <div className="space-y-2">
@@ -210,17 +224,17 @@ export default async function EmploymentDetailPage({
             not deducted from this person&rsquo;s payslips (and nothing is caught up later). Digits only; dashes and spaces are ignored.
           </p>
           <EditableRecord action={setGovernmentIdsAction} label="government numbers" hidden={{ employmentId }} typed={null} rules={STAFF_GOV_ID_RULES}>
-            <FormGrid>
-              <Field label="SSS number (10 digits)" rule={STAFF_GOV_ID_RULES.sssNo}>
+            <FormGrid layout="pairs">
+              <Field width="code" label="SSS number" hint="10 digits" rule={STAFF_GOV_ID_RULES.sssNo}>
                 <Input {...nativeAttrs(STAFF_GOV_ID_RULES.sssNo)} defaultValue={govIds.sssNo ?? ''} className="w-full font-mono" />
               </Field>
-              <Field label="PhilHealth number (12 digits)" rule={STAFF_GOV_ID_RULES.philhealthNo}>
+              <Field width="code" label="PhilHealth number" hint="12 digits" rule={STAFF_GOV_ID_RULES.philhealthNo}>
                 <Input {...nativeAttrs(STAFF_GOV_ID_RULES.philhealthNo)} defaultValue={govIds.philhealthNo ?? ''} className="w-full font-mono" />
               </Field>
-              <Field label="Pag-IBIG number (12 digits)" rule={STAFF_GOV_ID_RULES.pagibigNo}>
+              <Field width="code" label="Pag-IBIG number" hint="12 digits" rule={STAFF_GOV_ID_RULES.pagibigNo}>
                 <Input {...nativeAttrs(STAFF_GOV_ID_RULES.pagibigNo)} defaultValue={govIds.pagibigNo ?? ''} className="w-full font-mono" />
               </Field>
-              <Field label="TIN (9 to 12 digits)" rule={STAFF_GOV_ID_RULES.tin}>
+              <Field width="code" label="TIN" hint="9 to 12 digits" rule={STAFF_GOV_ID_RULES.tin}>
                 <Input {...nativeAttrs(STAFF_GOV_ID_RULES.tin)} defaultValue={govIds.tin ?? ''} className="w-full font-mono" />
               </Field>
             </FormGrid>
