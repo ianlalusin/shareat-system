@@ -207,7 +207,7 @@ export default async function ItemsPage({
         </nav>
         {items.length > 0 ? (
           <div className="catalogue-table min-w-0 rounded-lg border border-surface-border bg-surface">
-            <table className="w-full min-w-[560px] border-collapse text-sm">
+            <table data-card-title="Item" data-card-subtitle="Kind" data-card-keys="Priced per" className="w-full min-w-[560px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
                   <th scope="col" className="px-3 py-2 font-medium">Item</th>

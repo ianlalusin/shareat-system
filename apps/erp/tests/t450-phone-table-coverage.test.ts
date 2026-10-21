@@ -2,6 +2,9 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import ts from 'typescript';
 import postcss from 'postcss';
+import { createElement as h } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { Table } from '../src/components/ui/Table';
 import { describe, expect, it } from 'vitest';
 
 const repo = process.cwd();
@@ -35,6 +38,19 @@ function tableInventory() {
 }
 
 describe('T-450 entire ERP table rollout', () => {
+  it('exposes shared hierarchy metadata without per-page card markup or styles', () => {
+    const html = renderToStaticMarkup(h(Table, { card: { title: 'Item', subtitle: 'Kind', keys: ['Priced per'] } }, 'Fixture'));
+    expect(html).toContain('data-card-title="Item"'); expect(html).toContain('data-card-subtitle="Kind"');
+    expect(html).toContain('data-card-keys="Priced per"');
+    const items = read('apps/erp/src/app/items/page.tsx');
+    expect(items).toContain('data-card-title="Item" data-card-subtitle="Kind" data-card-keys="Priced per"');
+    expect(items).not.toContain('data-card-toggle');
+    const css = read('apps/erp/src/app/globals.css');
+    expect(css).toContain('grid-template-columns: 44px minmax(0, 1fr) auto');
+    expect(css).toContain('tr:not([data-card-expanded]) > [data-card-slot="extra"]');
+    expect(css).toContain('[data-phone-table-root] [data-card-toggle-cell] { display: none; }');
+    expect(read('docs/ERP-UI-PATTERNS.md')).toContain('FormGrid, Field, FormSection');
+  });
   it('mounts the adapter once around the authenticated app content', () => {
     const shell = read('apps/erp/src/components/shell/AppShell.tsx');
     expect(shell).toContain('<PhoneTableCards>{children}</PhoneTableCards>');

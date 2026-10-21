@@ -293,9 +293,9 @@ describe('T-384 S2a G5 - positive controls (literal fixtures)', () => {
 // ---------------------------------------------------------------- G6
 describe('T-384 S2a G6 - FormGrid and Field', () => {
   const load = async () => await import('../src/components/ui/FormGrid');
-  it('FormGrid renders the container-adaptive auto-fit template with min(100%,14rem)', async () => {
+  it('explicit grid layout retains the container-adaptive auto-fit template with min(100%,14rem)', async () => {
     const { FormGrid } = await load();
-    const html = renderToStaticMarkup(createElement(FormGrid as never, null, 'x'));
+    const html = renderToStaticMarkup(createElement(FormGrid as never, { layout: 'grid' }, 'x'));
     expect(html).toContain('grid');
     expect(html).toContain('gap-4');
     expect(html).toContain('repeat(auto-fit,minmax(min(100%,14rem),1fr))');
@@ -314,7 +314,7 @@ describe('T-384 S2a G6 - FormGrid and Field', () => {
   it('Field span=wide is EXACTLY a 29rem container-query span; FormGrid is the container', async () => {
     const { FormGrid, Field } = await load();
     const wide = renderToStaticMarkup(createElement(Field as never, { label: 'R', span: 'wide' }, createElement('input')));
-    const grid = renderToStaticMarkup(createElement(FormGrid as never, null, 'x'));
+    const grid = renderToStaticMarkup(createElement(FormGrid as never, null, createElement(Field as never, { label: 'Reason', span: 'wide' }, 'Text')));
     expect(wide, 'wide must not use a viewport breakpoint span').not.toMatch(/(?:sm|md|lg|xl|2xl):[^\s"]*col-span/);
     expect(wide, 'wide must be a conditional container span, never unconditional').toContain('[@container_(min-width:29rem)]:col-span-2');
     expect(wide, 'wide must not carry an unconditional or other-width span').not.toMatch(/(?:^|[\s"])col-span-2/);

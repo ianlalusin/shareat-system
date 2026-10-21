@@ -18,6 +18,30 @@ const sample = '<table id="orders"><thead><tr><th>Item</th><th>Amount</th><th></
 const tick = () => new Promise(resolve => setTimeout(resolve, 20));
 
 describe('T-450 original table nodes become labeled phone cards', () => {
+  it('summarizes an item with one title/subtitle and right-side unit, retaining secondary fields behind Details', () => {
+    const root = fixture('<table data-card-title="Item" data-card-subtitle="Kind" data-card-keys="Priced per"><thead><tr><th>Item</th><th>Code</th><th>Kind</th><th>Priced per</th><th>Sold as</th></tr></thead><tbody><tr><td><a href="/items/apple">Apple</a></td><td>APPL-001</td><td>Raw material</td><td>kg</td><td>—</td></tr></tbody></table>');
+    stops.push(observePhoneTables(root));
+    expect(root.querySelectorAll('[data-card-slot="title"]')).toHaveLength(1);
+    expect(root.querySelectorAll('[data-card-slot="subtitle"]')).toHaveLength(1);
+    expect(cell(root, '[data-card-slot="key"]').textContent).toBe('kg');
+    expect(cell(root, 'tbody tr').dataset.cardAvatar).toBe('A');
+    expect(root.querySelectorAll('[data-card-slot="extra"]')).toHaveLength(2);
+    const toggle = cell(root, '[data-card-toggle]');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false'); toggle.click();
+    expect(cell(root, 'tbody tr').dataset.cardExpanded).toBe('true');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true'); toggle.click();
+    expect(cell(root, 'tbody tr').hasAttribute('data-card-expanded')).toBe(false);
+    enhancePhoneTables(root); expect(root.querySelectorAll('[data-card-toggle]')).toHaveLength(1);
+    expect(cell(root, '[data-card-slot="extra"]').textContent).toBe('APPL-001');
+  });
+  it('reuses an existing image and keeps editors visible rather than hiding them as secondary fields', () => {
+    const root = fixture('<table><thead><tr><th>Photo</th><th>Item</th><th>Type</th><th>Amount</th><th>Note</th></tr></thead><tbody><tr><td><img src="/synthetic.png" alt="Apple"></td><td>Apple</td><td>Supply</td><td>₱100.00</td><td><input value="Keep visible"></td></tr></tbody></table>');
+    const image = root.querySelector('img'), input = root.querySelector('input'); enhancePhoneTables(root);
+    expect(root.querySelector('img')).toBe(image); expect(root.querySelector('input')).toBe(input);
+    expect(cell(root, 'tbody td').dataset.cardSlot).toBe('media');
+    expect(cell(root, 'tbody td:last-child').dataset.cardSlot).toBe('actions');
+    expect(cell(root, 'tbody tr').hasAttribute('data-card-has-image')).toBe(true);
+  });
   it('adds field labels and native roles without replacing controls, ids, values or handlers', () => {
     const root = fixture(sample), input = root.querySelector('input'), button = cell(root, 'button');
     if (!input) throw new Error('Missing input'); input.value = '17'; let clicks = 0;
@@ -111,6 +135,23 @@ describe('T-450 original table nodes become labeled phone cards', () => {
     expect(host.querySelector('input')).toBe(input); expect(input.value).toBe('Edited');
     expect(cell(host, 'td').dataset.cardLabel).toBe('Description');
     await act(async () => react.render(render('Description', false))); expect(host.querySelectorAll('td')).toHaveLength(0);
+    await act(async () => react.unmount());
+  });
+  it('cleans up owned Details controls after React removes secondary columns without disturbing live editors', async () => {
+    const host = fixture(''), react = createRoot(host);
+    const render = (includeCode: boolean) => {
+      const columns = ['Item', 'Kind', ...(includeCode ? ['Code'] : []), 'Amount', 'Note'];
+      return h('table', null, h('thead', null, h('tr', null, columns.map(name => h('th', { key: name }, name)))),
+        h('tbody', null, h('tr', null, columns.map(name => h('td', { key: name }, name === 'Note'
+          ? h('input', { defaultValue: 'Original note' }) : name === 'Item' ? 'Apple' : name === 'Amount' ? '₱10.00' : name)))));
+    };
+    await act(async () => react.render(render(true))); const stop = observePhoneTables(host); stops.push(stop);
+    const input = host.querySelector('input'); if (!input) throw new Error('Missing editor'); input.value = 'Edited note';
+    expect(host.querySelectorAll('[data-card-toggle]')).toHaveLength(1);
+    await act(async () => react.render(render(false))); await tick();
+    expect(host.querySelectorAll('[data-card-toggle]')).toHaveLength(0);
+    expect(host.querySelector('input')).toBe(input); expect(input.value).toBe('Edited note');
+    expect(host.querySelectorAll('tbody td')).toHaveLength(4);
     await act(async () => react.unmount());
   });
 });

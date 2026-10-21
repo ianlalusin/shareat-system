@@ -408,9 +408,12 @@
   z-index: 20;
 }
 
-/* T-450 / Ian: phones use labeled cards; tablets (including exactly 768px) retain tables.
+[data-phone-table-root] [data-card-toggle-cell] { display: none; }
+
+/* T-450 / Ian: phones use compact summaries; tablets (including exactly 768px) retain tables.
    Screen-only rules leave native print layout and existing column widths untouched. */
 @media screen and (max-width: 767.98px) {
+  [data-phone-table-root] :where(div.overflow-x-auto, div.overflow-auto):has(> table[data-phone-cards]:only-child) { border: 0; background: transparent; }
   [data-phone-table-root] table[data-phone-cards] {
     display: block;
     width: 100% !important;
@@ -430,20 +433,74 @@
   [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot),
   [data-phone-table-root] table[data-phone-cards] > thead[data-card-controls] { display: block; min-width: 0; }
   [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot, thead[data-card-controls]) > tr {
-    display: block; height: auto; min-width: 0; margin: 0 0 0.75rem; padding: 0.375rem;
+    display: block; height: auto; min-width: 0; margin: 0 0 0.5rem; padding: 0.75rem;
     border: 1px solid var(--surface-border); border-radius: 0.75rem;
   }
-  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot, thead[data-card-controls]) > tr > :is(td, th) {
+  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-kind="summary"] {
+    position: relative; display: grid; grid-template-columns: 44px minmax(0, 1fr);
+    column-gap: 0.625rem; align-items: start;
+  }
+  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-has-keys] {
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+  }
+  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-has-extra]:not([data-card-has-keys]) {
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+  }
+  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-has-extra][data-card-has-keys] {
+    grid-template-columns: 44px minmax(0, 1fr) auto 44px;
+  }
+  [data-phone-table-root] tr[data-card-kind="summary"]::before {
+    content: attr(data-card-avatar) / ""; grid-column: 1; grid-row: 1 / span 2;
+    display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%;
+    border: 1px solid var(--surface-border); background: var(--workspace-stripe); color: var(--muted);
+    font-size: 0.875rem; font-weight: 600;
+  }
+  [data-phone-table-root] tr[data-card-has-image]::before { visibility: hidden; }
+  [data-phone-table-root] :where(table[data-phone-cards] > :is(tbody, tfoot, thead[data-card-controls]) > tr > :is(td, th)) {
     display: block; width: auto !important; min-width: 0 !important; max-width: 100%; height: auto;
-    padding: 0.5rem 0.75rem; border: 0; text-align: left !important;
+    padding: 0; border: 0; text-align: left !important;
     white-space: normal !important; overflow-wrap: anywhere;
   }
+  [data-phone-table-root] [data-card-slot="title"] {
+    grid-column: 2; grid-row: 1; font-size: 1rem; font-weight: 600; line-height: 1.4;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap !important;
+  }
+  [data-phone-table-root] [data-card-slot="subtitle"] {
+    grid-column: 2; grid-row: 2; color: var(--muted); font-size: 0.75rem; line-height: 1.4;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap !important;
+  }
+  [data-phone-table-root] [data-card-slot="key"] {
+    position: relative; z-index: 10; grid-column: 3; grid-row: 1;
+    text-align: right !important; font-weight: 600; font-variant-numeric: tabular-nums; max-width: min(40vw, 10rem);
+  }
+  [data-phone-table-root] [data-card-slot="key"][data-card-key-order="2"] {
+    grid-row: 2; font-size: 0.75rem; font-weight: 400; color: var(--muted);
+  }
+  [data-phone-table-root] [data-card-slot="media"] { grid-column: 1; grid-row: 1 / span 2; }
+  [data-phone-table-root] [data-card-image] { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; }
+  [data-phone-table-root] [data-card-slot="title"] [data-card-image] { position: absolute; left: 0.75rem; top: 0.75rem; }
+  [data-phone-table-root] [data-card-slot="title"]:has([data-card-image]) { overflow: visible; white-space: normal !important; }
+  [data-phone-table-root] [data-card-slot="title"] a:has([data-card-image]) { position: static; }
+  [data-phone-table-root] [data-card-slot="actions"],
+  [data-phone-table-root] [data-card-slot="extra"] {
+    position: relative; z-index: 10; grid-column: 2 / -1; margin-top: 0.75rem;
+  }
+  [data-phone-table-root] tr:not([data-card-expanded]) > [data-card-slot="extra"] { display: none !important; }
+  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr > [data-card-toggle-cell] {
+    display: block; position: relative; z-index: 10; grid-column: -2 / -1; grid-row: 1 / span 2; align-self: center;
+  }
+  [data-phone-table-root] [data-card-toggle] {
+    display: grid; place-items: center; min-width: 44px; min-height: 44px; border-radius: 0.5rem;
+    color: var(--muted); background: transparent; font-size: 1.25rem;
+  }
+  [data-phone-table-root] [data-card-toggle]:hover { background: var(--workspace-stripe); }
+  [data-phone-table-root] [data-card-toggle][aria-expanded="true"] { transform: rotate(180deg); }
   [data-phone-table-root] [data-card-label]::before {
     content: attr(data-card-label) / "";
     display: block; margin-block-end: 0.25rem;
     color: var(--muted); font-size: 0.75rem; font-weight: 500; line-height: 1.4;
   }
-  [data-phone-table-root] [data-card-span="full"]::before { content: none; }
+  [data-phone-table-root] :is([data-card-span="full"], [data-card-slot="title"], [data-card-slot="subtitle"], [data-card-slot="key"], [data-card-slot="media"])::before { content: none; }
   [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr > [data-card-span="full"] {
     font-weight: 600;
   }
@@ -451,6 +508,9 @@
     min-height: 44px; max-width: 100%;
   }
   [data-phone-table-root] table[data-phone-cards] a { display: inline-flex; align-items: center; overflow-wrap: anywhere; }
+  [data-phone-table-root] [data-card-slot="title"] a,
+  [data-phone-table-root] [data-card-slot="key"] a { min-height: 0 !important; }
+  [data-phone-table-root] [data-card-slot="title"] a { display: inline; text-decoration: none; }
   [data-phone-table-root] table[data-phone-cards] :is(button, select, input, textarea) { box-sizing: border-box; }
   [data-phone-table-root] table[data-phone-cards] form { min-width: 0; max-width: 100%; flex-wrap: wrap; }
   [data-phone-table-root] table[data-phone-cards] :is(.truncate, .text-ellipsis, .line-clamp-1, .line-clamp-2) {
@@ -459,7 +519,7 @@
   [data-phone-table-root] table[data-phone-cards] :is(button, a, input, select, textarea):focus-visible {
     outline: 2px solid var(--brand-ink); outline-offset: 2px;
   }
-  [data-phone-table-root] .catalogue-table { max-height: none; }
+  [data-phone-table-root] .catalogue-table { max-height: none; border: 0; background: transparent; }
   [data-phone-table-root] .catalogue-table thead th { position: static; }
 }
 
