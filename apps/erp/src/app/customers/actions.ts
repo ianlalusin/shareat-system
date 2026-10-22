@@ -17,7 +17,7 @@ import {
   reconcileCustomer,
   recordCollection,
   setPrice,
-  uploadFile,
+  claimUpload,
   voidCharge,
   voidCollection,
   writeOffCharge,
@@ -30,6 +30,7 @@ import { redirectWithFlash } from '@/lib/flash';
 import { errorMessage } from '@/lib/constraint-messages';
 import { can, verifyAdminApproval } from '@shareat/auth';
 import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
+import { resolveUploadedFile } from '@/lib/uploaded-file';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -189,24 +190,12 @@ export async function recordCollectionAction(formData: FormData): Promise<void> 
     // strips EXIF, derives the storage path from the session, and writes a `stored_files` row.
     // ⚠️ Upload and post share ONE transaction, so a collection can never reference a file that
     // was not written; a failed post leaves orphan bytes for T-141's sweep, the cheaper failure.
-    const proof = formData.get('receiptPhoto');
-    const hasProof = proof instanceof File && proof.size > 0;
-
     const result = await withOrgPrincipal(actor.orgId, async (tx) => {
       // Judged only once the actor holds the gate: capability copied from recordCollection's first authorize() (S9 pattern iii;
       // the domain function is also called by trade returns).
       if (await can(tx, actor, 'record_ar_collection', { storeId })) assertFieldRules(COLLECTION_RECORD_RULES, formData);
-      let receiptFileId: string | null = null;
-      if (hasProof) {
-        const uploaded = await uploadFile(tx, actor, {
-          purpose: 'receipt_photo',
-          storeId,
-          contentType: (proof as File).type,
-          bytes: new Uint8Array(await (proof as File).arrayBuffer()),
-        });
-        receiptFileId = uploaded.fileId;
-      }
-      return recordCollection(tx, actor, {
+      const receiptFileId = await resolveUploadedFile(tx, actor, formData, 'receiptPhoto', { purpose: 'receipt_photo', storeId });
+      const saved = await recordCollection(tx, actor, {
         storeId,
         customerId,
         collectionDate: str(formData, 'collectionDate'),
@@ -229,6 +218,8 @@ export async function recordCollectionAction(formData: FormData): Promise<void> 
         ...(creditApplied ? { creditApplied } : {}),
         allocations,
       });
+      if (receiptFileId) await claimUpload(tx, actor, { fileId: receiptFileId, purpose: 'receipt_photo', storeId, linkTo: saved.collectionId });
+      return saved;
     });
     // ⚠️ Says where a surplus WENT. v1 showed a floating `unallocatedAmount` and no way to spend
     // it; here it is a real `2140` balance the next collection can draw on.

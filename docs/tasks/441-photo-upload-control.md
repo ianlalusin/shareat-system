@@ -1,6 +1,6 @@
 # T-441: One photo-upload control with progress and preview
 
-**Status:** 2026-10-22: S1 merged (PR #36); L1 lightbox fix merged (PR #39) and live. S2 (customer delivery and trade receipt claims) in open draft PR #43, fixes pushed 22 Oct, not merged. S3-S7 not started.
+**Status:** 2026-10-22: S1 merged (PR #36); L1 lightbox fix merged (PR #39) and live. S2 (customer delivery and trade receipt claims) in PR #43, fixes pushed 22 Oct, not merged. S3, S4, S6 built and audited on lanes (not merged); S5 in progress; S7 after #43 merges.
 **Ruling:** bible row 364 (Ian, 2026-10-17). Also row 353 (personal data strictly guarded; signatures strictest), row 171 /
 §1.2c (one family of patterns), row 289 (an add form ends in Save), T-296 (1 MB photo cap, browser compression), T-141
 (file broker), T-369 S2 (`/files/[fileId]`), T-434 (staff photo + signature), T-436 (leave certificates).
@@ -161,6 +161,24 @@ Customers payment, new delivery, trade pay-now. Each: swap `PhotoInput` for `Pho
 `resolveUploadedFile`. **Tester:** `apps/erp/tests/t441-s2-receipt-callers.test.ts` (per caller: control present, action
 reads `<name>FileId`, fallback kept). **Builder:** `AutoAllocateCollectionForm.tsx`, `customers/actions.ts`,
 `NewDeliveryForm.tsx`, `inventory/deliveries/actions.ts`, `trade/orders/[id]/page.tsx`, `trade/orders/actions.ts`.
+
+S2 execution clarification (21 October): A5 in T-442 requires the trade proof to link to the
+collection, not the order. Extend scope to `packages/domain/src/trade/index.ts` solely to forward
+the existing `recordChargeWithCollection.collectionId` through `DispatchResult` (null for other
+dispatches), and to real-PostgreSQL S2 action tests plus the T-442 census tests and review report.
+The channel-settlement TODO in T-442 is outside the three S2 receipt callers; retain it visibly
+pending a separately scoped writer change. No production backfill is authorized.
+Verification: seven new wiring checks failed before implementation; all eight now pass.
+Real PostgreSQL action coverage proves both preuploaded-id and native File saves for each of the
+three callers, exact collection/delivery ownership and empty unlinked/problem censuses. Three
+foreign-uploader refusals pin the exact sentence and unchanged documents, ledger, layers,
+movements, orders and file rows. Existing pay-now and dispatch action checks also pass.
+Local total: 321 unit/guard checks across 12 files; 61 PostgreSQL checks across five files,
+one channel-certificate TODO retained. Typecheck and production build passed with no local
+server for this checkout. No running-app approval is claimed; browser policy remains blocked.
+Postcommit combined run: 320 passed, one server-module import exceeded five seconds (DEF-722,
+logged in the register as supporting audit scope). Earlier run passed; serial repeat and fresh
+CI remain required. No timeout, assertion or guard allowance was changed.
 
 ### S3 - staff photo (circle) - ⛔ runs BEFORE S5, never alongside it (both edit `staff-media.ts`, `staff/actions.ts`, `staff/[employmentId]/page.tsx`)
 `setStaffPhoto` accepts `{ fileId } | { contentType, bytes }`; page passes `existing` only when `canViewPhoto`.

@@ -12,7 +12,8 @@
 import { revalidatePath } from 'next/cache';
 import { tradeRepo } from '@shareat/db';
 import { compare, money, ZERO } from '@shareat/core/money';
-import { assertFieldRules, createTradeOrder, dispatchTradeOrder, receiveTradeOrder, setBirInvoiceNo, uploadFile, voidTradeOrder } from '@shareat/domain';
+import { assertFieldRules, claimUpload, createTradeOrder, dispatchTradeOrder, receiveTradeOrder, setBirInvoiceNo, voidTradeOrder } from '@shareat/domain';
+import { resolveUploadedFile } from '@/lib/uploaded-file';
 import { TRADE_DISPATCH_RULES, TRADE_RECEIVE_RULES, TRADE_VOID_RULES } from '@shareat/domain/field-rules';
 import { SHORTAGE_REASONS, type ShortageReason } from '@shareat/db/schema';
 import { peso, withOrgPrincipal } from './lib';
@@ -84,8 +85,6 @@ export async function dispatchOrderAction(fd: FormData): Promise<void> {
     const payNowAmount = str(fd, 'payNowAmount');
     // ⭐ The proof is UPLOADED, never typed (same path as the customer page's collection). Upload, bill and collect share
     // ONE transaction, so a payment can never reference a file that was not written, nor a bill exist without its payment.
-    const proof = fd.get('receiptPhoto');
-    const hasProof = proof instanceof File && proof.size > 0;
     const result = await withOrgPrincipal(actor.orgId, async (tx) => {
       // T-440 / S9 pattern iii (dispatchTradeOrder is also reached by commissary fulfilment): judged only once the actor holds the
       // gate. Capability copied from dispatchTradeOrder's first authorize(): 'dispatch_branch_order' for a branch order, else
@@ -96,19 +95,9 @@ export async function dispatchOrderAction(fd: FormData): Promise<void> {
       }
       let payNow: { amount: string; moneyAccountId: string; receiptFileId: string | null; referenceNo: string | null } | null = null;
       if (payNowAmount) {
-        let receiptFileId: string | null = null;
-        if (hasProof) {
-          const order = await tradeRepo.getOrderById(tx, actor.orgId, orderId);
-          if (order) {
-            const uploaded = await uploadFile(tx, actor, {
-              purpose: 'receipt_photo',
-              storeId: order.storeId,
-              contentType: (proof as File).type,
-              bytes: new Uint8Array(await (proof as File).arrayBuffer()),
-            });
-            receiptFileId = uploaded.fileId;
-          }
-        }
+        const receiptFileId = order
+          ? await resolveUploadedFile(tx, actor, fd, 'receiptPhoto', { purpose: 'receipt_photo', storeId: order.storeId })
+          : null;
         payNow = {
           amount: payNowAmount,
           moneyAccountId: str(fd, 'moneyAccountId'),
@@ -116,11 +105,15 @@ export async function dispatchOrderAction(fd: FormData): Promise<void> {
           referenceNo: str(fd, 'payNowReferenceNo') || null,
         };
       }
-      return dispatchTradeOrder(tx, actor, {
+      const dispatched = await dispatchTradeOrder(tx, actor, {
         orderId,
         creditOverrideReason: str(fd, 'creditOverrideReason') || null,
         payNow,
       });
+      if (payNow?.receiptFileId && dispatched.collectionId && order) {
+        await claimUpload(tx, actor, { fileId: payNow.receiptFileId, purpose: 'receipt_photo', storeId: order.storeId, linkTo: dispatched.collectionId });
+      }
+      return dispatched;
     });
     // ⭐ Says what the treatment DID to the books — "internal" and "external" are one word apart
     // and a world apart (the customers screen makes the same point).
