@@ -89,6 +89,7 @@ import {
   closeDb,
   manilaToday,
   schedulerRepo,
+  systemTransaction,
   transaction,
   withSystemOrgPrincipal,
   type Tx,
@@ -203,10 +204,11 @@ function parseArgs(argv: readonly string[]): { confirm: boolean } {
 
 async function main(): Promise<void> {
   const { confirm } = parseArgs(process.argv.slice(2));
-  // ⛔ A bare `transaction`, not `withSystemOrgPrincipal` and not `systemTransaction` — `organizations`
-  // carries no `org_id` column to scope against, so it is visible with no principal set at all, the
-  // same read `backfill-fiscal-periods.ts` already relies on.
-  const orgs = await transaction((tx) => schedulerRepo.listOrgsToRun(tx));
+  // DEF-742: `organizations` has FORCE ROW LEVEL SECURITY. A bare `transaction()` (no principal) is
+  // filtered to zero rows, so the plan would say "organizations found : 0" while orgs exist. Listing
+  // every org has no single principal to scope to, so it runs on the system connection, the same
+  // reason as scripts/backfill-canonical-positions.ts. The per-store work below is unchanged.
+  const orgs = await systemTransaction((tx) => schedulerRepo.listOrgsToRun(tx));
   const effectiveFrom = await transaction((tx) => manilaToday(tx));
 
   console.log('');
