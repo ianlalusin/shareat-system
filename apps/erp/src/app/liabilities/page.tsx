@@ -8,7 +8,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { ACTION_LINK } from '@/components/action-link';
-import { Banner, Button, FlashBanner, Input, LinkRow, RowLink, Select , FormGrid, FormSection} from '@/components/ui';
+import { Banner, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, RowLink, Select } from '@/components/ui';
 
 export const metadata = { title: 'Liabilities — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -37,17 +37,77 @@ export default async function LiabilitiesPage({
 
   return (
     <Page density="table">
-      <div>
-        <h1 className="text-2xl font-semibold">Liabilities</h1>
-        <PageDescription>
-          What the business owes that nothing else already tracks. Supplier invoices, loans, wages
-          and statutory contributions each have their own home —{' '}
-          <strong>this is the residual</strong>, and naming it precisely is what stops it becoming a
-          dumping ground.
-        </PageDescription>
-        <Link href="/liabilities/unpaid" className={ACTION_LINK}>
-          Everything unpaid
-        </Link>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-semibold">Liabilities</h1>
+          <PageDescription>
+            What the business owes that nothing else already tracks. Supplier invoices, loans, wages
+            and statutory contributions each have their own home —{' '}
+            <strong>this is the residual</strong>, and naming it precisely is what stops it becoming a
+            dumping ground.
+          </PageDescription>
+          <Link href="/liabilities/unpaid" className={ACTION_LINK}>
+            Everything unpaid
+          </Link>
+        </div>
+        {/* T-448: the add form is a modal opened from the header. */}
+        <FormModal
+          trigger="+ Record obligation"
+          title="Record an obligation"
+          description="This records what it is. Nothing is owed until it is charged, the same separation as a loan that has not been drawn."
+          size="md"
+        >
+          <form action={createLiabilityAction} className="space-y-4">
+            <FormSection title="Obligation">
+              <FormGrid layout="fields">
+                <Field label="Store" width="name">
+                  <Select name="storeId" required defaultValue="" className="w-full">
+                    <option value="" disabled>
+                      Choose…
+                    </option>
+                    {stores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="What it is" width="name">
+                  <Input name="name" required placeholder="Accrued rent — January" className="w-full" />
+                </Field>
+                <Field label="Category" width="code">
+                  <Select name="category" defaultValue="other" className="w-full">
+                    {LIABILITY_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>
+                        {CATEGORY_LABEL[c] ?? c}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Due date and details">
+              <FormGrid layout="fields">
+                <Field
+                  label="Due"
+                  width="date"
+                  hint="Optional — but an obligation with no due date can never be reported late."
+                >
+                  <Input name="dueOn" type="date" defaultValue={today()} className="w-full" />
+                </Field>
+                <Field label="Description" width="name" hint="Optional.">
+                  <Input name="description" className="w-full" />
+                </Field>
+                <Field label="Notes" width="name" hint="Optional.">
+                  <Input name="notes" className="w-full" />
+                </Field>
+              </FormGrid>
+            </FormSection>
+            <Button type="submit" variant="primary">
+              Record obligation
+            </Button>
+          </form>
+        </FormModal>
       </div>
 
       <FlashBanner flash={sp} />
@@ -134,98 +194,6 @@ export default async function LiabilitiesPage({
       ) : (
         <p className="text-sm text-neutral-500 dark:text-neutral-400">No obligations recorded.</p>
       )}
-
-      <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <div>
-          <h2 className="font-medium">Record an obligation</h2>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            ⚠️ This records <strong>what it is</strong>. Nothing is owed until it is charged — the
-            same separation as a loan that has not been drawn.
-          </p>
-        </div>
-
-        <form action={createLiabilityAction} className="space-y-4">
-          <>
-            <FormSection title="Obligation">
-              <FormGrid layout="fields">
-                <div className="min-w-0">
-                  <Field label="Store">
-                    <Select name="storeId" required defaultValue="" className="w-full">
-                      <option value="" disabled>
-                        Choose…
-                      </option>
-                      {stores.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                </div>
-                <div className="min-w-0 erp-field-name">
-                  <Field label="What it is">
-                    <Input name="name" required placeholder="Accrued rent — January" className="w-full" />
-                  </Field>
-                </div>
-                <div className="min-w-0">
-                  <Field label="Category">
-                    <Select name="category" defaultValue="other" className="w-full">
-                      {LIABILITY_CATEGORIES.map((c) => (
-                        <option key={c} value={c}>
-                          {CATEGORY_LABEL[c] ?? c}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                </div>
-              </FormGrid>
-            </FormSection>
-            <FormSection title="Due date and details">
-              <FormGrid layout="fields">
-                <div className="min-w-0 erp-field-date">
-                  <Field
-                    label="Due"
-                    hint="Optional — but an obligation with no due date can never be reported late."
-                  >
-                    <Input name="dueOn" type="date" defaultValue={today()} className="w-full" />
-                  </Field>
-                </div>
-                <div className="min-w-0 erp-field-long">
-                  <Field label="Description" hint="Optional.">
-                    <Input name="description" className="w-full" />
-                  </Field>
-                </div>
-                <div className="min-w-0 erp-field-long">
-                  <Field label="Notes" hint="Optional.">
-                    <Input name="notes" className="w-full" />
-                  </Field>
-                </div>
-              </FormGrid>
-            </FormSection>
-          </>
-          <Button type="submit" variant="primary">
-            Record obligation
-          </Button>
-        </form>
-      </section>
     </Page>
-  );
-}
-
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
-      {children}
-      {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </label>
   );
 }

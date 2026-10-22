@@ -60,7 +60,7 @@ function Illustration({ name }: { readonly name: EmptyStateIllustration }) {
 
 export function EmptyState({ illustration, title, body, action }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-[14px] border border-dashed border-surface-border p-8 text-center">
+    <div className="flex flex-col items-center gap-2 rounded-[20px] border border-dashed border-surface-border p-8 text-center">
       <Illustration name={illustration} />
       <b className="text-lg font-bold text-ink">{title}</b>
       {body ? <p className="text-sm text-muted">{body}</p> : null}

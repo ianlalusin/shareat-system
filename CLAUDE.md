@@ -97,6 +97,12 @@ The roadmap and the board are updated at **every commit**, not only at wrap-up.
 §3.1a, row 184).** Every subagent a lane dispatches for Sonnet-able work passes `model: "sonnet"`
 regardless.
 
+⛔ **Check the model before EVERY subagent — Ian, 2026-10-14, re-stated 2026-10-22 after it was missed.**
+**Haiku**: discovery, greps, file lookups, census/count bumps, mechanical sweeps, simple test/fixture
+fixes. **Sonnet**: builders, testers, auditors (always Sonnet on money, auth or schema code). **Opus**
+(the main session): specs, rulings, verification only — it does not write implementation code itself.
+Always pass `model` explicitly; never let a subagent inherit Opus.
+
 ⭐ **As of 2026-09-09 all four lane terminals run `opusplan`, and that changes the mechanism.**
 `opusplan` selects Opus **in plan mode** and Sonnet otherwise, so row 184 is now automatic — nobody
 types `/model` and no banner is needed. ⛔ **The catch, and it is load-bearing: a spec written as

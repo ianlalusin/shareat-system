@@ -37,7 +37,7 @@ describe('Input — T-334 slice 2 contract', () => {
   // T-387 S2 (L2): snapshots rewritten — rounded-[10px] (Amendment 7), bg-field, border-field-border
   // (valid), a 44px height (t387-q4 = a, `min-h-11`), invalid = a 2px border-danger. Focus unchanged.
   const VALID_SNAPSHOT =
-    'rounded-[10px] border bg-field px-3 py-2 min-h-11 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:bg-canvas disabled:text-muted border-field-border aria-[invalid=true]:border-danger'; // T-440 S1: the live field check marks an invalid field via aria-invalid
+    'rounded-[12px] border bg-field px-3 py-2 min-h-11 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:bg-canvas disabled:text-muted border-field-border aria-[invalid=true]:border-danger'; // T-440 S1: the live field check marks an invalid field via aria-invalid // T-448 A2: 10px -> 12px
   const sorted = (s: string | Set<string>) => [...(typeof s === 'string' ? s.split(/\s+/).filter(Boolean) : s)].sort();
 
   it('valid state: the rendered class-token set equals the snapshot exactly (T-387 S2)', () => {
@@ -72,7 +72,7 @@ describe('Input — T-334 slice 2 contract', () => {
 
   it('shape and height: rounded-[10px], bg-field, min-h-11; never rounded-md or bg-surface as the fill', () => {
     const t = classTokens(renderToStaticMarkup(createElement(Input, { name: 'x' })));
-    expect(t.has('rounded-[10px]')).toBe(true);
+    expect(t.has('rounded-[12px]')).toBe(true); // T-448 A2: 10px -> 12px
     expect(t.has('bg-field')).toBe(true);
     expect(t.has('border-field-border')).toBe(true);
     expect(t.has('min-h-11')).toBe(true);

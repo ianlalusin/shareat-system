@@ -58,7 +58,9 @@ const TONE: Record<FieldCheckLine['kind'], string> = {
  */
 export function FieldCheckView({ id, line }: { id: string; line: FieldCheckLine }) {
   return (
-    <p id={id} className={`mt-1 flex items-start gap-1.5 text-xs ${TONE[line.kind]}`}>
+    // T-448 (Ian: hints waste vertical space): only a FAILING line is drawn. The requirement and "Good" lines stay
+    // in the DOM for aria-describedby, visually hidden; a required field is marked with * on its label instead.
+    <p id={id} className={line.kind === 'failing' ? `mt-1 flex items-start gap-1.5 text-xs ${TONE[line.kind]}` : 'sr-only'}>
       {line.kind === 'passing' ? <CheckIcon /> : line.kind === 'failing' ? <WarnIcon /> : null}
       <span>{line.text}</span>
     </p>

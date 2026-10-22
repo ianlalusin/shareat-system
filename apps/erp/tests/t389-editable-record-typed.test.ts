@@ -283,8 +283,9 @@ describe('K4 the render (renderToStaticMarkup through the real EditableRecord)',
     const html = await render({ kind: 'typed', fields: { name: 'Typed Name Zed' } });
     expect(html).toContain('<fieldset');
     expect(html).not.toContain('<fieldset disabled');
-    expect(html).toMatch(/<button[^>]*type="submit"[^>]*>\s*Save\s*<\/button>/);
-    expect(html).toMatch(/>\s*Cancel\s*</);
+    // T-448: Save and Cancel are icon buttons named by aria-label.
+    expect(html).toMatch(/<button[^>]*type="submit"[^>]*aria-label="Save"[^>]*><svg/);
+    expect(html).toMatch(/<button[^>]*type="button"[^>]*aria-label="Cancel"[^>]*><svg/);
     expect(html).not.toContain('aria-label="Edit Gcash"');
     expect(html).toContain('RETIRE-MARKER');
     expect(html, 'the page draws stored values; the typing is applied in the browser (R3)').toContain('value="Gcash"');

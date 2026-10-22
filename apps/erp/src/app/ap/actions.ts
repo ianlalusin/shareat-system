@@ -141,9 +141,9 @@ export async function createSupplierAction(formData: FormData): Promise<void> {
     );
     id = created.id;
   } catch (err) {
-    return await redirectWithFlash('/ap', {}, { error: errorMessage(err) });
+    return await redirectWithFlash('/ap/suppliers', {}, { error: errorMessage(err) });
   }
-  return await redirectWithFlash('/ap', { supplier: id }, { ok: `Supplier recorded.` });
+  return await redirectWithFlash('/ap/suppliers', { supplier: id }, { ok: `Supplier recorded.` });
 }
 
 /**

@@ -39,7 +39,10 @@ vi.mock('../src/lib/session', () => ({
   requireSession: vi.fn(async () => ({ actor: ACTOR })),
 }));
 
+// T-448: the shared Dialog (inside EditableRecord) reads the address with usePathname/useSearchParams, so the mock must supply them.
 vi.mock('next/navigation', () => ({
+  usePathname: () => '/',
+  useSearchParams: () => new URLSearchParams(),
   notFound: () => {
     throw new Error('notFound() called unexpectedly — every render fixture in this file resolves');
   },

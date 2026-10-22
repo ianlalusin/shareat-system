@@ -98,11 +98,13 @@ describe('FieldCheckView', () => {
     expect(html).not.toContain('role="status"');
     expect(html).not.toContain('role="alert"');
   });
-  it('passing: the text "Good" AND an aria-hidden icon (not colour alone), success-toned', async () => {
+  // T-448 (Ian, 2026-10-22: under-field text wastes vertical space): only a failing line is drawn; "Good" stays for
+  // aria-describedby, visually hidden.
+  it('passing: the text "Good" stays for screen readers but is visually hidden (T-448)', async () => {
     const html = await view({ kind: 'passing', text: 'Good' });
     expect(html).toMatch(/>\s*Good\s*</);
     expect(html).toMatch(/<svg\b[^>]*aria-hidden="true"/);
-    expect(html).toContain('text-success');
+    expect(html).toContain('class="sr-only"');
     expect(html).not.toContain('text-danger');
   });
   it('failing: the progress words AND an icon, danger-toned', async () => {

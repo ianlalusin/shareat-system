@@ -283,7 +283,10 @@ describe('Guard 10 — no \'use client\', no hooks (§9 R4)', () => {
   it('none of the three component sources carries the client directive or a forbidden hook', () => {
     // T-412: ConfirmDestructive is the ONE client island in this kit, by the spec's own words ('use client'; it holds the "reveal the
     // panel" state inside an existing server-action form). apps/erp/tests/t412-destructive-census.test.ts guards its shape instead.
-    for (const file of COMPONENT_FILES.filter((f) => !/ConfirmDestructive\.tsx$/.test(f))) {
+    // T-448: Dialog (the modal: open/close state) and HelpTip (the (?) toggletip) are the two further client islands;
+    // both are leaves a server component renders, never wrappers a server-action form must import from.
+    // T-448: TooltipLayer (the one hover/focus name tip, mounted once in the layout) is the third.
+    for (const file of COMPONENT_FILES.filter((f) => !/(ConfirmDestructive|Dialog|HelpTip|TooltipLayer)\.tsx$/.test(f))) {
       expect(findClientDirectiveOrHook(readFileSync(file, 'utf8')), file).toBeNull();
     }
   });

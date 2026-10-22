@@ -49,9 +49,22 @@ export function Toaster({ token, ok, stamp }: ToasterProps) {
 
   return (
     <>
-      <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-5 right-5 z-50 max-w-[calc(100vw-2.5rem)]">
+      {/* T-448 (Ian, 2026-10-22): every toast shows in the middle of the screen, not the bottom-right corner. Below the
+          VOID/POSTED stamp when both show, so they never cover each other. */}
+      <div
+        role="status"
+        aria-live="polite"
+        className={`pointer-events-none fixed inset-0 z-50 flex justify-center px-5 ${word ? 'items-end pb-[22vh]' : 'items-center'}`}
+      >
         {text ? (
-          <div className="toast-in rounded-2xl bg-ink px-[18px] py-3.5 text-[15px] text-canvas shadow-lg">{text}</div>
+          <div className="toast-in flex max-w-md items-center gap-3 rounded-[20px] bg-ink py-3 pl-3 pr-5 text-[15px] font-medium text-canvas shadow-2xl ring-1 ring-black/5">
+            <span aria-hidden="true" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-success text-white">
+              <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round" focusable="false">
+                <path d="M5 12.5l4.5 4.5L19 7.5" />
+              </svg>
+            </span>
+            <span>{text}</span>
+          </div>
         ) : null}
       </div>
       {word ? (

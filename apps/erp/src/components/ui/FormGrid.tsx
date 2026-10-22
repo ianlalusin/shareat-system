@@ -24,6 +24,7 @@
 import type { ReactNode } from 'react';
 import type { FieldRule } from '@shareat/domain/field-rules';
 import { FieldCheck } from '@/components/forms/FieldCheck';
+import { HelpTip } from './HelpTip';
 
 export interface FormGridProps {
   /** T-445: content-sized fields wrap within their container; existing grids remain unchanged. */
@@ -66,11 +67,15 @@ export function Field({ label, hint, span, width, className, rule, children }: F
   const outer = `min-w-0${span ? SPAN[span] : ''}${width ? ` erp-field-${width}` : ''}${className ? ` ${className}` : ''}`;
   const inner = (
     <>
-      <span className="block text-ink">{label}</span>
-      {hint !== undefined && hint !== null && (
-        <span className="mt-0.5 block text-xs text-ink/70">{hint}</span>
-      )}
-      {children}
+      {/* T-448: the hint is a (?) beside the label, not a line under it, so neighbouring controls line up. */}
+      <span className="flex items-center text-sm text-ink">
+        {label}
+        {rule && rule.optional !== true ? <span aria-hidden="true" className="ml-0.5 text-danger">*</span> : null}
+        {hint !== undefined && hint !== null && hint !== false && (
+          <HelpTip label={typeof label === 'string' ? label : undefined}>{hint}</HelpTip>
+        )}
+      </span>
+      <span className="mt-1 block">{children}</span>
     </>
   );
   if (!rule) return <label className={`block ${outer}`}>{inner}</label>;
@@ -80,6 +85,12 @@ export function Field({ label, hint, span, width, className, rule, children }: F
       <FieldCheck rule={rule} />
     </div>
   );
+}
+
+/** T-448: sibling cards share a row when they fit (auto-fit, 24rem minimum each). */
+export function CardGrid({ children, className, min }: { readonly children?: ReactNode; readonly className?: string; readonly min?: 'sm' | 'md' | 'lg' }) {
+  const style = min ? ({ '--erp-card-min': min === 'sm' ? '18rem' : min === 'lg' ? '32rem' : '24rem' } as Record<string, string>) : undefined;
+  return <div className={`erp-card-grid${className ? ` ${className}` : ''}`} style={style}>{children}</div>;
 }
 
 /** A named, visible group; does not introduce a form or alter submission/validation. */

@@ -15,6 +15,9 @@ vi.mock('../src/lib/session', () => ({
   requireSession: vi.fn(async () => ({ actor: ACTOR })),
 }));
 vi.mock('next/navigation', () => ({
+  // T-448: the page's "+ New record" FormModal reads the address to close itself after a save.
+  usePathname: () => '/inventory/usage',
+  useSearchParams: () => new URLSearchParams(),
   notFound: () => {
     throw new Error('notFound() called unexpectedly');
   },

@@ -12,7 +12,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, FlashBanner, Input, LinkRow, RowLink, Select , FormGrid, FormSection} from '@/components/ui';
+import { Banner, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, RowLink, Select } from '@/components/ui';
 
 export const metadata = { title: 'Owners — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -46,13 +46,95 @@ export default async function OwnersPage({
 
   return (
     <Page density="table">
-      <div>
-        <h1 className="text-2xl font-semibold">Owners</h1>
-        <PageDescription>
-          What each owner has put in, taken out, and still owes. Every figure is summed from the
-          ledger — <strong>no total is stored anywhere</strong>, so none of them can drift from the
-          books.
-        </PageDescription>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-semibold">Owners</h1>
+          <PageDescription>
+            What each owner has put in, taken out, and still owes. Every figure is summed from the
+            ledger — <strong>no total is stored anywhere</strong>, so none of them can drift from the
+            books.
+          </PageDescription>
+        </div>
+        {/* T-448: the add form is a modal opened from the header. */}
+        <FormModal
+          trigger="+ Record owner"
+          title="Record an owner"
+          description="Who they are and what they are allowed to withdraw. No money moves; this is the record, not a contribution."
+          size="md"
+        >
+          <form action={createOwnerAction} className="space-y-4">
+            <FormSection title="Ownership">
+              <FormGrid layout="fields">
+                <Field label="Store" width="name">
+                  <Select name="storeId" required defaultValue="" className="w-full">
+                    <option value="" disabled>
+                      Choose…
+                    </option>
+                    {stores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Who" width="name">
+                  <Select name="personId" required defaultValue="" className="w-full">
+                    <option value="" disabled>
+                      Choose…
+                    </option>
+                    {persons.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.displayName}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Role" width="code" hint="Managing Partner, Silent Partner…">
+                  <Input name="role" className="w-full" />
+                </Field>
+                <Field
+                  label="Ownership %"
+                  width="short"
+                  hint="Indicative only — nothing checks that these add to 100, because a store mid-restructure legitimately does not."
+                >
+                  <input name="ownershipPercentage" inputMode="decimal" className={INPUT} />
+                </Field>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Drawings policy">
+              <FormGrid layout="fields">
+                <Field label="Drawing limit" width="short" hint="Leave both blank for no limit.">
+                  <input name="drawingLimit" inputMode="decimal" className={INPUT} />
+                </Field>
+                <Field label="Limit period" width="code">
+                  <Select name="drawingLimitPeriod" defaultValue="" className="w-full">
+                    <option value="">—</option>
+                    <option value="monthly">Monthly — resets each calendar month</option>
+                    <option value="total">Total — across all time</option>
+                  </Select>
+                </Field>
+                <Field
+                  label="Personal expenses"
+                  width="code"
+                  hint="Decides where a personal expense lands. It is the line the tax treatment turns on, so it is a stated policy rather than a per-expense guess."
+                >
+                  <Select name="personalExpenseTreatment" defaultValue="repayable" className="w-full">
+                    <option value="repayable">{TREATMENT_LABEL.repayable}</option>
+                    <option value="drawing">{TREATMENT_LABEL.drawing}</option>
+                  </Select>
+                </Field>
+              </FormGrid>
+            </FormSection>
+            <FormGrid layout="fields">
+              <Field label="Notes" width="long" hint="Optional.">
+                <Input name="notes" className="w-full" />
+              </Field>
+            </FormGrid>
+            <Button type="submit" variant="primary">
+              Save
+            </Button>
+          </form>
+        </FormModal>
       </div>
 
       <FlashBanner flash={sp} />
@@ -145,129 +227,8 @@ export default async function OwnersPage({
       ) : (
         <p className="text-sm text-neutral-500 dark:text-neutral-400">No owners recorded.</p>
       )}
-
-      {/* ── Add one ──────────────────────────────────────────────────────────────────── */}
-      <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <div>
-          <h2 className="font-medium">Record an owner</h2>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            Who they are and what they are allowed to withdraw. ⚠️ No money moves — this is the
-            record, not a contribution.
-          </p>
-        </div>
-
-        <form action={createOwnerAction} className="space-y-4">
-          <>
-            <FormSection title="Ownership">
-              <FormGrid layout="fields">
-                <div className="min-w-0">
-                  <Field label="Store">
-                    <Select name="storeId" required defaultValue="" className="w-full">
-                      <option value="" disabled>
-                        Choose…
-                      </option>
-                      {stores.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                </div>
-                <div className="min-w-0 erp-field-long">
-                  <Field label="Who">
-                    <Select name="personId" required defaultValue="" className="w-full">
-                      <option value="" disabled>
-                        Choose…
-                      </option>
-                      {persons.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.displayName}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                </div>
-                <div className="min-w-0 erp-field-code">
-                  <Field label="Role" hint="Managing Partner, Silent Partner…">
-                    <Input name="role" className="w-full" />
-                  </Field>
-                </div>
-                <div className="min-w-0 erp-field-short">
-                  <Field
-                    label="Ownership %"
-                    hint="Indicative only — nothing checks that these add to 100, because a store mid-restructure legitimately does not."
-                  >
-                    <input name="ownershipPercentage" inputMode="decimal" className={INPUT} />
-                  </Field>
-                </div>
-              </FormGrid>
-            </FormSection>
-            <FormSection title="Drawings policy">
-              <FormGrid layout="fields">
-                <div className="min-w-0">
-                  <Field label="Drawing limit" hint="Leave both blank for no limit.">
-                    <input name="drawingLimit" inputMode="decimal" className={INPUT} />
-                  </Field>
-                </div>
-                <div className="min-w-0">
-                  <Field label="Limit period">
-                    <Select name="drawingLimitPeriod" defaultValue="" className="w-full">
-                      <option value="">—</option>
-                      <option value="monthly">Monthly — resets each calendar month</option>
-                      <option value="total">Total — across all time</option>
-                    </Select>
-                  </Field>
-                </div>
-                <div className="min-w-0">
-                  <Field
-                    label="Personal expenses"
-                    hint="Decides where a personal expense lands. It is the line the tax treatment turns on, so it is a stated policy rather than a per-expense guess."
-                  >
-                    <Select name="personalExpenseTreatment" defaultValue="repayable" className="w-full">
-                      <option value="repayable">{TREATMENT_LABEL.repayable}</option>
-                      <option value="drawing">{TREATMENT_LABEL.drawing}</option>
-                    </Select>
-                  </Field>
-                </div>
-              </FormGrid>
-            </FormSection>
-            <FormSection title="Notes">
-              <FormGrid layout="fields">
-                <div className="min-w-0 erp-field-long">
-                  <Field label="Notes" hint="Optional.">
-                    <Input name="notes" className="w-full" />
-                  </Field>
-                </div>
-              </FormGrid>
-            </FormSection>
-          </>
-          <Button type="submit" variant="primary">
-            Save
-          </Button>
-        </form>
-      </section>
     </Page>
   );
 }
 
-const INPUT =
-  'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
-
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
-      {children}
-      {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </label>
-  );
-}
+const INPUT = 'w-full min-h-11 rounded-[10px] border border-field-border bg-field px-3 py-2 text-sm text-ink';

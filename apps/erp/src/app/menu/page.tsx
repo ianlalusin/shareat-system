@@ -7,7 +7,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { EditableRecord } from '@/components/forms';
-import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select } from '@/components/ui';
 import { createCategoryAction, createItemAction, editCategoryAction, retireCategoryAction } from './actions';
 import { listCategories, listOverviewItems, storesInScope, withOrgPrincipal } from './lib';
 import { MENU_CATEGORY } from './typed-forms';
@@ -62,6 +62,61 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
             What the stores sell: categories, items and their variants, what each sale uses up from stock, and the options guests can pick.
             Prices are set per store.
           </PageDescription>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* T-448: the add forms open from header buttons. */}
+          {canManage && (
+            <FormModal trigger="+ Category" title="Add category" size="sm">
+              <form action={createCategoryAction} className="space-y-3">
+                <FormGrid layout="fields">
+                  <Field label="Name" width="name">
+                    <Input name="name" required />
+                  </Field>
+                  <Field label="Sort order (optional)" width="short">
+                    <Input name="sortOrder" inputMode="numeric" />
+                  </Field>
+                </FormGrid>
+                <Button type="submit" variant="primary">
+                  Save
+                </Button>
+              </form>
+            </FormModal>
+          )}
+          {canAddItem && (
+            <FormModal trigger="+ Item" title="Add item" size="md">
+              <form action={createItemAction} className="space-y-3">
+                <FormGrid layout="fields">
+                  <Field label="Category" width="name">
+                    <Select name="categoryId" required>
+                      {categories
+                        .filter((c) => c.status === 'active')
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                    </Select>
+                  </Field>
+                  <Field label="Name" width="name">
+                    <Input name="name" required />
+                  </Field>
+                  <Field label="Type" width="name">
+                    <Select name="itemType" defaultValue="a_la_carte">
+                      <option value="a_la_carte">A la carte</option>
+                      <option value="package">Package</option>
+                      <option value="refill">Refill</option>
+                    </Select>
+                  </Field>
+                  <Field label="Description (optional)" width="long">
+                    <Input name="description" />
+                  </Field>
+                </FormGrid>
+                <Button type="submit" variant="primary">
+                  Save
+                </Button>
+              </form>
+            </FormModal>
+          )}
         </div>
         <div className="flex flex-wrap gap-4 text-sm">
           <Link href="/menu/prices" className="inline-flex min-h-6 items-center underline underline-offset-4">
@@ -143,16 +198,19 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
             </div>
             {canManage && c.status === 'active' && (
               <>
-                <p className="text-xs text-muted">
-                  Retiring a category hides it, and every item in it, from every store menu. It is refused while the category still holds active items.
-                </p>
+                <div className="flex items-center gap-1 text-xs text-muted">
+                  Retiring a category
+                  <HelpTip label="Retiring a category">
+                    Retiring a category hides it, and every item in it, from every store menu. It is refused while the category still holds active items.
+                  </HelpTip>
+                </div>
                 <EditableRecord action={editCategoryAction} label={c.name} hidden={{ id: c.id }} typed={typedFor(sp, MENU_CATEGORY, c.id, actor.personId)}>
-                  <FormGrid>
-                    <Field label="Name" className="text-sm">
-                      <Input name="name" defaultValue={c.name} required className="w-full" />
+                  <FormGrid layout="fields">
+                    <Field label="Name" width="name">
+                      <Input name="name" defaultValue={c.name} required />
                     </Field>
-                    <Field label="Sort order" className="text-sm">
-                      <Input name="sortOrder" inputMode="numeric" defaultValue={String(c.sortOrder)} className="w-full" />
+                    <Field label="Sort order" width="short">
+                      <Input name="sortOrder" inputMode="numeric" defaultValue={String(c.sortOrder)} />
                     </Field>
                   </FormGrid>
                 </EditableRecord>
@@ -178,62 +236,6 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
           </section>
         );
       })}
-
-      {canManage && (
-        <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
-          <h2 className="text-lg font-semibold">Add category</h2>
-          <form action={createCategoryAction} className="space-y-3">
-            <FormGrid>
-              <Field label="Name" className="text-sm">
-                <Input name="name" required className="w-full" />
-              </Field>
-              <Field label="Sort order (optional)" className="text-sm">
-                <Input name="sortOrder" inputMode="numeric" className="w-full" />
-              </Field>
-            </FormGrid>
-            <Button type="submit" variant="primary">
-              Save
-            </Button>
-          </form>
-        </section>
-      )}
-
-      {canAddItem && (
-        <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
-          <h2 className="text-lg font-semibold">Add item</h2>
-          <form action={createItemAction} className="space-y-3">
-            <FormGrid>
-              <Field label="Category" className="text-sm">
-                <Select name="categoryId" required className="w-full">
-                  {categories
-                    .filter((c) => c.status === 'active')
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                </Select>
-              </Field>
-              <Field label="Name" className="text-sm">
-                <Input name="name" required className="w-full" />
-              </Field>
-              <Field label="Type" className="text-sm">
-                <Select name="itemType" defaultValue="a_la_carte" className="w-full">
-                  <option value="a_la_carte">A la carte</option>
-                  <option value="package">Package</option>
-                  <option value="refill">Refill</option>
-                </Select>
-              </Field>
-              <Field label="Description (optional)" className="text-sm">
-                <Input name="description" className="w-full" />
-              </Field>
-            </FormGrid>
-            <Button type="submit" variant="primary">
-              Save
-            </Button>
-          </form>
-        </section>
-      )}
     </Page>
   );
 }

@@ -6,7 +6,7 @@ export { Input } from './Input';
 export type { InputProps } from './Input';
 export { Card } from './Card';
 export type { CardProps } from './Card';
-export { FormGrid, Field, FormSection } from './FormGrid';
+export { FormGrid, Field, FormSection, CardGrid } from './FormGrid';
 export type { FormGridProps, FieldProps } from './FormGrid';
 // T-387 S3: the missing kit.
 export { Badge } from './Badge';
@@ -36,3 +36,9 @@ export { ConfirmDestructive } from './ConfirmDestructive';
 export type { ConfirmDestructiveProps } from './ConfirmDestructive';
 
 export { SplitWorkspace } from './SplitWorkspace';
+
+// T-448: forms live in modals; long help lives behind (?).
+export { Dialog, FormModal } from './Dialog';
+export type { DialogProps, DialogSize, FormModalProps } from './Dialog';
+export { HelpTip } from './HelpTip';
+export type { HelpTipProps } from './HelpTip';

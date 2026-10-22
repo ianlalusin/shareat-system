@@ -4,6 +4,7 @@ import { Baloo_2, Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
 import { AppShell } from '../components/shell/AppShell';
 import { Toaster } from '../components/feedback/Toaster';
+import { TooltipLayer } from '@/components/ui/TooltipLayer';
 import { readToastFlash } from '../lib/flash-toast';
 import { THEME_COOKIE_NAME, parseTheme } from '../components/shell/theme-state';
 
@@ -71,6 +72,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <AppShell>{children}</AppShell>
         {/* T-387 S4: outside AppShell on purpose (L13) - sign-in and the kiosk get bare children and still need toasts. */}
         <Toaster token={toast?.token} ok={toast?.ok} stamp={toast?.stamp} />
+        <TooltipLayer />
       </body>
     </html>
   );

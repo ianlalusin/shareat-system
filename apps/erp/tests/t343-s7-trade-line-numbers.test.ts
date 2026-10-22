@@ -118,7 +118,8 @@ describe('N3 — NewOrderForm shows a visible line number per row, with every co
       expect(html).toContain('name="itemId"');
       expect(html).toContain('name="quantity"');
       expect(html).toContain('name="rate"');
-      expect(html).toContain('+ Add line');
+      // T-448: "+ Add line" is a round icon button; its accessible name is "Add line" (leading "+ " dropped).
+      expect(html).toContain('aria-label="Add line"');
       expect(html).toContain('Remove');
     },
     30000,

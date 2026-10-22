@@ -12,7 +12,7 @@ import {
 import { listStores, locationsPageData } from './lib';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
-import { Button, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Button, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -113,7 +113,51 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
         </section>
       ) : (
         <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-          <h2 className="font-medium">Rooms</h2>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-medium">Rooms</h2>
+            {/* T-448: the add-room form opens from a button. */}
+            <FormModal trigger="+ Add room" title="Add a room" size="md">
+              <form action={createLocationAction} className="space-y-3">
+                <input type="hidden" name="storeId" value={storeId} />
+                <FormGrid layout="fields">
+                  <Field label="Code" width="code">
+                    <Input name="code" required />
+                  </Field>
+                  <Field label="Name" width="name">
+                    <Input name="name" required />
+                  </Field>
+                  <Field label="Type" width="name">
+                    <Select name="typeId" required defaultValue="">
+                      <option value="" disabled>
+                        Select a type
+                      </option>
+                      {types.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="Role" width="name">
+                    <Select name="role" defaultValue="storage">
+                      {LOCATION_ROLES.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </FormGrid>
+                <div className="flex flex-wrap gap-4">
+                  <Checkbox name="isReceiving" label="This is the Receiving room" />
+                  <Checkbox name="isDefault" label="Make it the default" />
+                </div>
+                <Button type="submit" variant="primary">
+                  Save
+                </Button>
+              </form>
+            </FormModal>
+          </div>
           <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
             <table className="w-full min-w-[720px] border-collapse text-sm">
               <thead>
@@ -140,7 +184,7 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
                     <td className="px-3 py-2">{loc.isDefault ? '★ default' : ''}</td>
                     <td className="px-3 py-2">{loc.status}</td>
                     <td className="px-3 py-2">
-                      <div className="flex flex-col gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <EditableRecord
                           action={updateLocationAction}
                           label={loc.name}
@@ -174,7 +218,7 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
                             )}
                           </div>
                         </EditableRecord>
-                        <div className="flex flex-wrap gap-2">
+                        <>
                           {loc.status === 'active' && !loc.isDefault && (
                             <form action={setDefaultAction}>
                               <input type="hidden" name="storeId" value={storeId} />
@@ -187,7 +231,7 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
                           {loc.status === 'active' && loc.isDefault ? (
                             // ⚠️ The default room cannot be retired (the service refuses it —
                             // review 2026-09-03); say so instead of offering a button that fails.
-                            <span className="text-xs text-neutral-500">default — pick another default to retire this room</span>
+                            <HelpTip label="Default room">Default room: pick another default to retire this room.</HelpTip>
                           ) : loc.status === 'active' ? (
                             <form action={deactivateLocationAction}>
                               <input type="hidden" name="storeId" value={storeId} />
@@ -208,7 +252,7 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
                               </Button>
                             </form>
                           )}
-                        </div>
+                        </>
                       </div>
                     </td>
                   </tr>
@@ -216,45 +260,6 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
               </tbody>
             </table>
           </div>
-
-          <h3 className="border-t border-neutral-200 pt-3 font-medium dark:border-neutral-800">Add a room</h3>
-          <form action={createLocationAction} className="space-y-3">
-            <input type="hidden" name="storeId" value={storeId} />
-            <FormGrid>
-              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Code</span>} className="text-sm">
-                <Input name="code" required className="w-full" />
-              </Field>
-              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>} className="text-sm">
-                <Input name="name" required className="w-full" />
-              </Field>
-              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Type</span>} className="text-sm">
-                <Select name="typeId" required defaultValue="" className="w-full">
-                  <option value="" disabled>
-                    Select a type
-                  </option>
-                  {types.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Role</span>} className="text-sm">
-                <Select name="role" defaultValue="storage" className="w-full">
-                  {LOCATION_ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Checkbox name="isReceiving" label="This is the Receiving room" />
-              <Checkbox name="isDefault" label="Make it the default" />
-            </FormGrid>
-            <Button type="submit" variant="primary">
-              Save
-            </Button>
-          </form>
         </section>
       )}
     </Page>

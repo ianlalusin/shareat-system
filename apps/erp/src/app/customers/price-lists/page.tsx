@@ -5,7 +5,7 @@ import { listLists } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input } from '@/components/ui';
+import { Button, CardGrid, Field, FlashBanner, FormGrid, FormModal, Input } from '@/components/ui';
 
 export const metadata = { title: 'Price lists — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -26,25 +26,43 @@ export default async function PriceListsPage({
 
   return (
     <Page density="table">
-      <div>
-        <Link href="/customers" className="text-sm underline underline-offset-2">
-          ← Customers
-        </Link>
-        <h1 className="mt-2 text-2xl font-semibold">Price lists</h1>
-        <PageDescription>
-          What the business charges, per item. A customer names one, and an order line takes its
-          rate. ⛔ <strong>No volume breaks or dated promotions</strong> — one rate per item per
-          list is what the business does today, and a pricing-rule engine is generality nothing has
-          asked for yet.
-        </PageDescription>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <Link href="/customers" className="text-sm underline underline-offset-2">
+            ← Customers
+          </Link>
+          <h1 className="mt-2 text-2xl font-semibold">Price lists</h1>
+          <PageDescription>
+            What the business charges, per item. A customer names one, and an order line takes its
+            rate. ⛔ <strong>No volume breaks or dated promotions</strong> — one rate per item per
+            list is what the business does today, and a pricing-rule engine is generality nothing has
+            asked for yet.
+          </PageDescription>
+        </div>
+        {/* T-448: the add form opens from the header instead of sitting under the list. */}
+        <FormModal trigger="+ New price list" title="New price list" size="sm">
+          <form action={createPriceListAction} className="space-y-3">
+            <FormGrid layout="fields">
+              <Field width="name" label="Name">
+                <Input name="name" required placeholder="Wholesale — meat" className="w-full" />
+              </Field>
+              <Field width="long" label="Description" hint="Optional.">
+                <Input name="description" className="w-full" />
+              </Field>
+            </FormGrid>
+            <Button type="submit" variant="primary">
+              Save
+            </Button>
+          </form>
+        </FormModal>
       </div>
 
       <FlashBanner flash={sp} />
 
       {lists.length > 0 ? (
-        <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-200 dark:divide-neutral-900 dark:border-neutral-800">
+        <CardGrid min="sm">
           {lists.map((l) => (
-            <li key={l.id} className="px-4 py-3">
+            <div key={l.id} className="rounded-lg border border-neutral-200 px-4 py-3 dark:border-neutral-800">
               <Link
                 href={`/customers/price-lists/${l.id}`}
                 className="underline underline-offset-2"
@@ -56,31 +74,12 @@ export default async function PriceListsPage({
                   {l.description}
                 </div>
               )}
-            </li>
+            </div>
           ))}
-        </ul>
+        </CardGrid>
       ) : (
         <p className="text-sm text-neutral-500 dark:text-neutral-400">No price lists yet.</p>
       )}
-
-      <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="font-medium">New price list</h2>
-        <form action={createPriceListAction} className="space-y-3">
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Name</span>
-            <Input name="name" required placeholder="Wholesale — meat" className="w-full" />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">
-              Description
-            </span>
-            <Input name="description" className="w-full" />
-          </label>
-          <Button type="submit" variant="primary">
-            Save
-          </Button>
-        </form>
-      </section>
     </Page>
   );
 }
