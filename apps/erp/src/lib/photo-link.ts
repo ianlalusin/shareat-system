@@ -7,6 +7,7 @@
  */
 import { logger } from '@shareat/core/logger';
 import type { Actor } from '@shareat/auth';
+import { filesRepo } from '@shareat/db';
 import { canReadFile } from '@shareat/domain';
 import { withOrgPrincipal } from '../app/expenses/lib';
 
@@ -18,4 +19,20 @@ export async function canViewPhoto(actor: Actor, fileId: string | null): Promise
     logger.error({ kind: 'fault', errorName: err instanceof Error ? err.name : typeof err }, 'photo link: could not check who may open a photo');
     return false;
   }
+}
+
+/**
+ * The real kind of each stored file ('pdf' for application/pdf, else 'image'), for a thumbnail that must not guess.
+ * Call it only for ids the screen's own read gate already allowed. A fault logs only its kind and falls back to 'image'.
+ */
+export async function photoKinds(actor: Actor, fileIds: readonly string[]): Promise<Map<string, 'image' | 'pdf'>> {
+  const kinds = new Map<string, 'image' | 'pdf'>();
+  if (fileIds.length === 0) return kinds;
+  try {
+    const rows = await withOrgPrincipal(actor.orgId, (tx) => filesRepo.getByIds(tx, actor.orgId, fileIds));
+    for (const r of rows) kinds.set(r.id, r.contentType === 'application/pdf' ? 'pdf' : 'image');
+  } catch (err) {
+    logger.error({ kind: 'fault', errorName: err instanceof Error ? err.name : typeof err }, 'photo link: could not read a photo kind');
+  }
+  return kinds;
 }

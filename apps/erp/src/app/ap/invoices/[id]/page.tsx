@@ -4,7 +4,7 @@ import { authorize, heldCapabilities, can } from '@shareat/auth';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { compare, money, subtract, ZERO } from '@shareat/core/money';
 import { expensesRepo, apRepo } from '@shareat/db';
-import { canViewPhoto } from '../../../../lib/photo-link';
+import { canViewPhoto, photoKinds } from '../../../../lib/photo-link';
 import { peso } from '../../../../lib/format';
 import { requireSession } from '../../../../lib/session';
 import { verifyInvoiceAction, voidInvoiceAction, setInvoiceLinesAction, voidPaymentAction, recordInvoiceExpenseAction } from '../../actions';
@@ -25,6 +25,7 @@ import {
   type FieldRule,
 } from '@shareat/domain/field-rules';
 import { ACTION_LINK } from '@/components/action-link';
+import { PhotoThumb } from '@/components/upload/PhotoThumb';
 import { Badge, Button, ConfirmDestructive, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -119,6 +120,7 @@ export default async function InvoiceDetailPage({
   });
   // The photo link is drawn only for someone who can actually open it (the same check the route makes).
   const canViewReceipt = await canViewPhoto(actor, invoice.receiptFileId);
+  const receiptKind = canViewReceipt && invoice.receiptFileId ? ((await photoKinds(actor, [invoice.receiptFileId])).get(invoice.receiptFileId) ?? 'image') : 'image';
   // T-432 ruling 7 - "Pay this bill": only a booked bill with open items, and only for someone who may pay at its store.
   const canPayBill =
     invoice.status === 'verified' &&
@@ -194,14 +196,12 @@ return (
         <div className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
           <h2 className="mb-3 font-medium">Evidence</h2>
           {invoice.receiptFileId ? (
-            <span className="text-success">
+            <div className="text-success">
               photo attached &mdash; uploaded, not typed{' '}
               {canViewReceipt && (
-                <a href={`/files/${invoice.receiptFileId}`} target="_blank" rel="noopener noreferrer" className={ACTION_LINK}>
-                  View photo
-                </a>
+                <PhotoThumb purpose="receipt_photo" label="Receipt photo" existing={{ fileId: invoice.receiptFileId, kind: receiptKind }} size="sm" />
               )}
-            </span>
+            </div>
           ) : (
             <span className="text-warning-ink">none &mdash; required to verify</span>
           )}

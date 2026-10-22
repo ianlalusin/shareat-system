@@ -8,6 +8,7 @@
  */
 import Link from 'next/link';
 import { Badge } from '@/components/ui';
+import { PhotoThumb } from '@/components/upload/PhotoThumb';
 import { businessDayRange, toBusinessDate } from '@shareat/core/datetime';
 import { formatTenure } from './tenure';
 import { staffRoleTitle } from './role-title';
@@ -67,10 +68,18 @@ function LiveChip({ entry }: { entry: LiveEntry | undefined }) {
   );
 }
 
-function Avatar({ person, className }: { person: StaffPerson; className: string }) {
+function Avatar({ person, className, inLink = false }: { person: StaffPerson; className: string; inLink?: boolean }) {
   if (person.photoFileId) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={`/files/${person.photoFileId}`} alt="" className={`${className} object-cover`} />;
+    return (
+      <PhotoThumb
+        purpose="staff_photo"
+        label={person.displayName}
+        existing={{ fileId: person.photoFileId, kind: 'image' }}
+        size="fill"
+        className={className}
+        inLink={inLink}
+      />
+    );
   }
   return (
     <span aria-hidden="true" className={`${className} flex items-center justify-center font-display font-extrabold ${toneFor(person.id)}`}>
@@ -143,7 +152,7 @@ export function CardWall({
           <Link href={`/staff/${p.id}`} className={CARD_LINK}>
             <span aria-hidden="true" className="absolute inset-x-[-10%] top-0 h-24 rounded-b-[50%] bg-brand" />
             <span aria-hidden="true" className="absolute left-1/2 top-2.5 h-2 w-7 -translate-x-1/2 rounded-full bg-canvas opacity-90" />
-            <Avatar person={p} className="relative mt-11 h-24 w-24 rounded-full border-4 border-surface text-4xl" />
+            <Avatar person={p} inLink className="relative mt-11 h-24 w-24 rounded-full border-4 border-surface text-4xl" />
             <span className="mt-3 px-3 text-center font-display text-xl font-extrabold uppercase leading-tight">{p.displayName}</span>
             <span className="mt-1 text-xs font-bold uppercase tracking-wide text-brand-ink">{staffRoleTitle(p.role, p.primaryPosition)}</span>
             <span className="mt-0.5 text-xs text-muted">

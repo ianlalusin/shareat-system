@@ -3,7 +3,8 @@ import { notFound } from 'next/navigation';
 import { compare, money, ZERO } from '@shareat/core/money';
 import { authorize, heldCapabilities, can } from '@shareat/auth';
 import { canReadFiles } from '@shareat/domain';
-import { ACTION_LINK } from '@/components/action-link';
+import { photoKinds } from '../../../lib/photo-link';
+import { PhotoThumb } from '@/components/upload/PhotoThumb';
 import { requirePageAccess, StoreNotAvailable } from '../../../lib/page-access';
 import {
   recordCollectionAction,
@@ -135,6 +136,7 @@ export default async function CustomerDetailPage({
   const viewableReceipts = await withOrgPrincipal(orgId, (tx) =>
     canReadFiles(tx, actor, collections.map((c) => c.receiptFileId).filter((x): x is string => !!x)),
   );
+  const receiptKinds = await photoKinds(actor, [...viewableReceipts]);
   const now = today();
   const storeName = (id: string) => storeOptions.find((s) => s.storeId === id)?.storeName ?? '—';
 
@@ -442,14 +444,7 @@ export default async function CustomerDetailPage({
                       {c.referenceNo && <div className="text-neutral-400">{c.referenceNo}</div>}
                       {c.receiptFileId && viewableReceipts.has(c.receiptFileId) && (
                         <RowAction>
-                          <a
-                            href={`/files/${c.receiptFileId}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={ACTION_LINK}
-                          >
-                            View photo
-                          </a>
+                          <PhotoThumb purpose="receipt_photo" label="Receipt photo" existing={{ fileId: c.receiptFileId, kind: receiptKinds.get(c.receiptFileId) ?? 'image' }} size="sm" />
                         </RowAction>
                       )}
                     </td>
