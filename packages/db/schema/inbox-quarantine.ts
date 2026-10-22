@@ -139,5 +139,11 @@ export const inboxQuarantine = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'inbox_quarantine_store_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `device_id` FK (RLS checks only this row's org_id); references `clock_terminals_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.deviceId],
+      foreignColumns: [clockTerminals.orgId, clockTerminals.id],
+      name: 'inbox_quarantine_device_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

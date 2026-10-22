@@ -101,5 +101,23 @@ export const missedMonthAdjustments = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'missed_month_adjustments_booked_by_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `fixed_asset_id` FK (RLS checks only this row's org_id); references `fixed_assets_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.fixedAssetId],
+      foreignColumns: [fixedAssets.orgId, fixedAssets.id],
+      name: 'missed_month_adjustments_fixed_asset_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.journalEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+      name: 'missed_month_adjustments_journal_entry_id_same_org_fk',
+    }).onDelete('cascade'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `prepaid_item_id` FK (RLS checks only this row's org_id); references `prepaid_items_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.prepaidItemId],
+      foreignColumns: [prepaidItems.orgId, prepaidItems.id],
+      name: 'missed_month_adjustments_prepaid_item_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

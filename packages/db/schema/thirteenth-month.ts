@@ -22,6 +22,7 @@ import { moneyAccounts } from './money-accounts';
 import { organizations } from './organizations';
 import { persons } from './persons';
 import { stores } from './stores';
+import { journalEntries } from './journal';
 
 export const THIRTEENTH_MONTH_RUN_STATUSES = ['draft', 'posted', 'voided'] as const;
 export type ThirteenthMonthRunStatus = (typeof THIRTEENTH_MONTH_RUN_STATUSES)[number];
@@ -117,6 +118,9 @@ export const thirteenthMonthRuns = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'thirteenth_month_runs_voided_by_same_org_fk',
     }).onDelete('restrict'),
+    // NOTE: thirteenth_month_runs_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0212 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES thirteenth_month_runs (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );
 
@@ -185,6 +189,24 @@ export const thirteenthMonthPayouts = pgTable(
       columns: [t.orgId, t.personId],
       foreignColumns: [persons.orgId, persons.id],
       name: 'thirteenth_month_payouts_person_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `employment_id` FK (RLS checks only this row's org_id); references `employments_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.employmentId],
+      foreignColumns: [employments.orgId, employments.id],
+      name: 'thirteenth_month_payouts_employment_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.journalEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+      name: 'thirteenth_month_payouts_journal_entry_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `run_id` FK (RLS checks only this row's org_id); references `thirteenth_month_runs_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.runId],
+      foreignColumns: [thirteenthMonthRuns.orgId, thirteenthMonthRuns.id],
+      name: 'thirteenth_month_payouts_run_id_same_org_fk',
     }).onDelete('restrict'),
   ],
 );

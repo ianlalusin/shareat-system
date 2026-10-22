@@ -230,6 +230,27 @@ export const tradeOrders = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'trade_orders_voided_by_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `ar_charge_id` FK (RLS checks only this row's org_id); references `ar_charges_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.arChargeId],
+      foreignColumns: [arCharges.orgId, arCharges.id],
+      name: 'trade_orders_ar_charge_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `customer_id` FK (RLS checks only this row's org_id); references `customers_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.customerId],
+      foreignColumns: [customers.orgId, customers.id],
+      name: 'trade_orders_customer_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.journalEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+      name: 'trade_orders_journal_entry_id_same_org_fk',
+    }).onDelete('restrict'),
+    // NOTE: trade_orders_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0212 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES trade_orders (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );
 
@@ -364,5 +385,32 @@ export const tradeOrderLines = pgTable(
     check('trade_order_lines_received_quantity_non_negative_check', sql`${t.receivedQuantity} is null or ${t.receivedQuantity} >= 0`),
     check('trade_order_lines_dispatch_cost_finite_check', sql`${t.dispatchCost} > '-Infinity'::numeric and ${t.dispatchCost} < 'Infinity'::numeric`),
     check('trade_order_lines_suggested_quantity_finite_check', sql`${t.suggestedQuantity} > '-Infinity'::numeric and ${t.suggestedQuantity} < 'Infinity'::numeric`),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `expense_category_id` FK (RLS checks only this row's org_id); references `expense_categories_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.expenseCategoryId],
+      foreignColumns: [expenseCategories.orgId, expenseCategories.id],
+      name: 'trade_order_lines_expense_category_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `item_id` FK (RLS checks only this row's org_id); references `items_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.itemId],
+      foreignColumns: [items.orgId, items.id],
+      name: 'trade_order_lines_item_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `order_id` FK (RLS checks only this row's org_id); references `trade_orders_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.orderId],
+      foreignColumns: [tradeOrders.orgId, tradeOrders.id],
+      name: 'trade_order_lines_order_id_same_org_fk',
+    }).onDelete('cascade'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `source_location_id` FK (RLS checks only this row's org_id); references `stock_locations_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.sourceLocationId],
+      foreignColumns: [stockLocations.orgId, stockLocations.id],
+      name: 'trade_order_lines_source_location_id_same_org_fk',
+    }).onDelete('restrict'),
+    // NOTE: trade_order_lines_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0212 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES trade_order_lines (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );

@@ -112,6 +112,9 @@ export const remittances = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'remittances_store_id_same_org_fk',
     }).onDelete('restrict'),
+    // NOTE: remittances_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0212 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES remittances (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );
 
@@ -296,6 +299,24 @@ export const remittanceVariances = pgTable(
       columns: [t.orgId, t.resolvedBy],
       foreignColumns: [persons.orgId, persons.id],
       name: 'remittance_variances_resolved_by_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.journalEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+      name: 'remittance_variances_journal_entry_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `remittance_id` FK (RLS checks only this row's org_id); references `remittances_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.remittanceId],
+      foreignColumns: [remittances.orgId, remittances.id],
+      name: 'remittance_variances_remittance_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `sales_day_id` FK (RLS checks only this row's org_id); references `sales_days_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.salesDayId],
+      foreignColumns: [salesDays.orgId, salesDays.id],
+      name: 'remittance_variances_sales_day_id_same_org_fk',
     }).onDelete('restrict'),
   ],
 );

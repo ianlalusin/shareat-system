@@ -105,5 +105,11 @@ export const positionCapabilityDefaults = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'position_capability_defaults_store_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `position_id` FK (RLS checks only this row's org_id); references `positions_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.positionId],
+      foreignColumns: [positions.orgId, positions.id],
+      name: 'position_capability_defaults_position_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

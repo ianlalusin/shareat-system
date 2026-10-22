@@ -177,5 +177,14 @@ export const loans = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'loans_store_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `lender_id` FK (RLS checks only this row's org_id); references `suppliers_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.lenderId],
+      foreignColumns: [suppliers.orgId, suppliers.id],
+      name: 'loans_lender_id_same_org_fk',
+    }).onDelete('restrict'),
+    // NOTE: loans_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0212 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES loans (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );

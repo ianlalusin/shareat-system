@@ -133,6 +133,24 @@ export const posItemMaps = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'pos_item_maps_store_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `item_id` FK (RLS checks only this row's org_id); references `items_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.itemId],
+      foreignColumns: [items.orgId, items.id],
+      name: 'pos_item_maps_item_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `location_id` FK (RLS checks only this row's org_id); references `stock_locations_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.locationId],
+      foreignColumns: [stockLocations.orgId, stockLocations.id],
+      name: 'pos_item_maps_location_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `recipe_id` FK (RLS checks only this row's org_id); references `production_recipes_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.recipeId],
+      foreignColumns: [productionRecipes.orgId, productionRecipes.id],
+      name: 'pos_item_maps_recipe_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -265,6 +283,24 @@ export const posUsagePulls = pgTable(
       columns: [t.orgId, t.voidedBy],
       foreignColumns: [persons.orgId, persons.id],
       name: 'pos_usage_pulls_voided_by_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `location_id` FK (RLS checks only this row's org_id); references `stock_locations_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.locationId],
+      foreignColumns: [stockLocations.orgId, stockLocations.id],
+      name: 'pos_usage_pulls_location_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `pos_v1_day_feed_id` FK (RLS checks only this row's org_id); references `pos_v1_day_feeds_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.posV1DayFeedId],
+      foreignColumns: [posV1DayFeeds.orgId, posV1DayFeeds.id],
+      name: 'pos_usage_pulls_pos_v1_day_feed_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `sales_day_id` FK (RLS checks only this row's org_id); references `sales_days_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.salesDayId],
+      foreignColumns: [salesDays.orgId, salesDays.id],
+      name: 'pos_usage_pulls_sales_day_id_same_org_fk',
     }).onDelete('restrict'),
   ],
 );

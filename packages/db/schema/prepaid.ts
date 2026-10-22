@@ -167,5 +167,14 @@ export const prepaidItems = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'prepaid_items_written_off_by_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `source_expense_id` FK (RLS checks only this row's org_id); references `expenses_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.sourceExpenseId],
+      foreignColumns: [expenses.orgId, expenses.id],
+      name: 'prepaid_items_source_expense_id_same_org_fk',
+    }).onDelete('restrict'),
+    // NOTE: prepaid_items_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0212 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES prepaid_items (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );

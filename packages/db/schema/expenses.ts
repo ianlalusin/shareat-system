@@ -102,6 +102,9 @@ export const expenseCategories = pgTable(
     // "rent" in COGS, which is the duplicate the index exists to refuse.
     index('expense_categories_org_id_group_idx').on(t.orgId, t.group),
     check('expense_categories_group_check', sql`${t.group} in ('OPEX', 'COGS', 'CAPEX', 'PERSONAL')`),
+    // NOTE: expense_categories_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0212 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES expense_categories (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );
 
@@ -221,6 +224,39 @@ export const expenses = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'expenses_voided_by_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `category_id` FK (RLS checks only this row's org_id); references `expense_categories_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.categoryId],
+      foreignColumns: [expenseCategories.orgId, expenseCategories.id],
+      name: 'expenses_category_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.journalEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+      name: 'expenses_journal_entry_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `owner_id` FK (RLS checks only this row's org_id); references `owners_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.ownerId],
+      foreignColumns: [owners.orgId, owners.id],
+      name: 'expenses_owner_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `supplier_id` FK (RLS checks only this row's org_id); references `suppliers_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.supplierId],
+      foreignColumns: [suppliers.orgId, suppliers.id],
+      name: 'expenses_supplier_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `supplier_invoice_id` FK (RLS checks only this row's org_id); references `supplier_invoices_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.supplierInvoiceId],
+      foreignColumns: [supplierInvoices.orgId, supplierInvoices.id],
+      name: 'expenses_supplier_invoice_id_same_org_fk',
+    }).onDelete('restrict'),
+    // NOTE: expenses_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0212 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES expenses (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );
 

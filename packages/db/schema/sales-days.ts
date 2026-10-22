@@ -176,6 +176,9 @@ export const salesChannels = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'sales_channels_store_id_same_org_fk',
     }).onDelete('restrict'),
+    // NOTE: sales_channels_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0212 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES sales_channels (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );
 
@@ -369,6 +372,21 @@ export const salesDays = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'sales_days_voided_by_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.journalEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+      name: 'sales_days_journal_entry_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `pos_v1_day_feed_id` FK (RLS checks only this row's org_id); references `pos_v1_day_feeds_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.posV1DayFeedId],
+      foreignColumns: [posV1DayFeeds.orgId, posV1DayFeeds.id],
+      name: 'sales_days_pos_v1_day_feed_id_same_org_fk',
+    }).onDelete('restrict'),
+    // NOTE: sales_days_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0212 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES sales_days (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );
 

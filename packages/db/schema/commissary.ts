@@ -101,6 +101,12 @@ export const commissaryItemOfferings = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'commissary_item_offerings_created_by_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `item_id` FK (RLS checks only this row's org_id); references `items_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.itemId],
+      foreignColumns: [items.orgId, items.id],
+      name: 'commissary_item_offerings_item_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -161,6 +167,24 @@ export const commissaryItemMap = pgTable(
       columns: [t.orgId, t.createdBy],
       foreignColumns: [persons.orgId, persons.id],
       name: 'commissary_item_map_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `branch_item_id` FK (RLS checks only this row's org_id); references `items_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.branchItemId],
+      foreignColumns: [items.orgId, items.id],
+      name: 'commissary_item_map_branch_item_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `commissary_item_id` FK (RLS checks only this row's org_id); references `items_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.commissaryItemId],
+      foreignColumns: [items.orgId, items.id],
+      name: 'commissary_item_map_commissary_item_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `expense_category_id` FK (RLS checks only this row's org_id); references `expense_categories_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.expenseCategoryId],
+      foreignColumns: [expenseCategories.orgId, expenseCategories.id],
+      name: 'commissary_item_map_expense_category_id_same_org_fk',
     }).onDelete('restrict'),
   ],
 );

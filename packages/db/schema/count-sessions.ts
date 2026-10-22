@@ -41,6 +41,7 @@ import { persons } from './persons';
 import { stockLocations } from './stock-locations';
 import { stockMovements } from './stock-ledger';
 import { stores } from './stores';
+import { journalEntries } from './journal';
 
 /**
  * ⭐ `open` and `counting` and `reviewing` all FREEZE. Only `closed` and `cancelled` release.
@@ -102,6 +103,12 @@ export const countSessions = pgTable(
       columns: [t.orgId, t.storeId],
       foreignColumns: [stores.orgId, stores.id],
       name: 'count_sessions_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.journalEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+      name: 'count_sessions_journal_entry_id_same_org_fk',
     }).onDelete('restrict'),
   ],
 );

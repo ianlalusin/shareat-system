@@ -61,6 +61,12 @@ export const storeItemThresholds = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'store_item_thresholds_store_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `item_id` FK (RLS checks only this row's org_id); references `items_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.itemId],
+      foreignColumns: [items.orgId, items.id],
+      name: 'store_item_thresholds_item_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -97,5 +103,11 @@ export const tradeOrderMessages = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'trade_order_messages_author_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `order_id` FK (RLS checks only this row's org_id); references `trade_orders_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.orderId],
+      foreignColumns: [tradeOrders.orgId, tradeOrders.id],
+      name: 'trade_order_messages_order_id_same_org_fk',
+    }).onDelete('cascade'),
   ],
 );

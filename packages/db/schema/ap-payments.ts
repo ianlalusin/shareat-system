@@ -128,6 +128,24 @@ export const apPayments = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'ap_payments_voided_by_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `cash_request_id` FK (RLS checks only this row's org_id); references `cash_requests_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.cashRequestId],
+      foreignColumns: [cashRequests.orgId, cashRequests.id],
+      name: 'ap_payments_cash_request_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.journalEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+      name: 'ap_payments_journal_entry_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `supplier_id` FK (RLS checks only this row's org_id); references `suppliers_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.supplierId],
+      foreignColumns: [suppliers.orgId, suppliers.id],
+      name: 'ap_payments_supplier_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

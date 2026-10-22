@@ -124,5 +124,20 @@ export const expenseBudgets = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'expense_budgets_store_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `category_id` FK (RLS checks only this row's org_id); references `expense_categories_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.categoryId],
+      foreignColumns: [expenseCategories.orgId, expenseCategories.id],
+      name: 'expense_budgets_category_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `reissued_from_id` FK (RLS checks only this row's org_id); references `expense_budgets_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.reissuedFromId],
+      foreignColumns: [t.orgId, t.id],
+      name: 'expense_budgets_reissued_from_id_same_org_fk',
+    }).onDelete('restrict'),
+    // NOTE: expense_budgets_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0212 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES expense_budgets (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );

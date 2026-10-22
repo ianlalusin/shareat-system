@@ -86,6 +86,12 @@ export const productionRecipes = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'production_recipes_created_by_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `output_item_id` FK (RLS checks only this row's org_id); references `items_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.outputItemId],
+      foreignColumns: [items.orgId, items.id],
+      name: 'production_recipes_output_item_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -194,6 +200,24 @@ export const productionRecords = pgTable(
       columns: [t.orgId, t.voidedBy],
       foreignColumns: [persons.orgId, persons.id],
       name: 'production_records_voided_by_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.journalEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+      name: 'production_records_journal_entry_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `location_id` FK (RLS checks only this row's org_id); references `stock_locations_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.locationId],
+      foreignColumns: [stockLocations.orgId, stockLocations.id],
+      name: 'production_records_location_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `recipe_id` FK (RLS checks only this row's org_id); references `production_recipes_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.recipeId],
+      foreignColumns: [productionRecipes.orgId, productionRecipes.id],
+      name: 'production_records_recipe_id_same_org_fk',
     }).onDelete('restrict'),
   ],
 );

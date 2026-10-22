@@ -173,6 +173,30 @@ export const orderWastages = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'order_wastages_store_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `channel_id` FK (RLS checks only this row's org_id); references `sales_channels_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.channelId],
+      foreignColumns: [salesChannels.orgId, salesChannels.id],
+      name: 'order_wastages_channel_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.journalEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+      name: 'order_wastages_journal_entry_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `sales_day_id` FK (RLS checks only this row's org_id); references `sales_days_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.salesDayId],
+      foreignColumns: [salesDays.orgId, salesDays.id],
+      name: 'order_wastages_sales_day_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `settlement_id` FK (RLS checks only this row's org_id); references `channel_settlements_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.settlementId],
+      foreignColumns: [channelSettlements.orgId, channelSettlements.id],
+      name: 'order_wastages_settlement_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

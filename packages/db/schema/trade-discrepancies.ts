@@ -181,5 +181,23 @@ export const tradeDiscrepancies = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'trade_discrepancies_store_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.journalEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+      name: 'trade_discrepancies_journal_entry_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `order_id` FK (RLS checks only this row's org_id); references `trade_orders_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.orderId],
+      foreignColumns: [tradeOrders.orgId, tradeOrders.id],
+      name: 'trade_discrepancies_order_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `order_line_id` FK (RLS checks only this row's org_id); references `trade_order_lines_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.orderLineId],
+      foreignColumns: [tradeOrderLines.orgId, tradeOrderLines.id],
+      name: 'trade_discrepancies_order_line_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
