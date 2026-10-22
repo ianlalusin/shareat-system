@@ -409,9 +409,12 @@ export async function setStaffPhotoAction(formData: FormData): Promise<void> {
   const actor = await requireActor('/staff');
   const employmentId = str(formData, 'employmentId');
   try {
-    const part = await filePart(formData, 'photo');
-    if (!part) throw new Error('Choose or take a photo first.');
-    await withOrgPrincipal(actor.orgId, (tx) => setStaffPhoto(tx, actor, { employmentId, ...part }));
+    // T-441: the control's uploaded id is claimed by setStaffPhoto AFTER its gates. With JavaScript off the File's bytes go to
+    // setStaffPhoto's own bytes path, which uploads only after those gates - so a refused save never leaves orphan bytes in storage.
+    const posted = str(formData, 'photoFileId');
+    const part = posted ? null : await filePart(formData, 'photo');
+    if (!posted && !part) throw new Error('Choose or take a photo first.');
+    await withOrgPrincipal(actor.orgId, (tx) => setStaffPhoto(tx, actor, posted ? { employmentId, fileId: posted } : { employmentId, ...part! }));
   } catch (err) {
     return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
   }

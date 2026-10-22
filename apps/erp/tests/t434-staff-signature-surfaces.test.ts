@@ -82,11 +82,16 @@ describe('screens: only the detail page offers the signature, as a per-click lin
     expect(src).not.toMatch(/signatureFileId|signature_file_id/);
     expect(src).not.toMatch(/<img[^>]*signature/i);
   });
-  it('photo input asks for the front camera and image files only', () => {
-    expect(read('apps/erp/src/components/PhotoInput.tsx')).toMatch(/capture/);
+  it('photo input asks for the front camera and image files only', async () => {
     const src = read(page);
-    expect(src).toMatch(/accept=["']image\/\*["']/);
+    expect(src).toMatch(/<PhotoUpload/);
+    expect(src).toMatch(/purpose=["']staff_photo["']/);
     expect(src).toMatch(/capture=["']user["']/);
+    const { acceptFor, allowsPdf } = await import('../src/components/upload/upload-rules');
+    const accept = acceptFor('staff_photo').split(',');
+    expect(accept.length).toBeGreaterThan(0);
+    for (const t of accept) expect(t).toMatch(/^image\//);
+    expect(allowsPdf('staff_photo')).toBe(false);
   });
   it('the signature action takes a file part, never a data URL', () => {
     const src = read('apps/erp/src/app/staff/actions.ts');

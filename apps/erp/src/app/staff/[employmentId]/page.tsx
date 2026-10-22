@@ -15,7 +15,7 @@ import {
   viewStaffSignatureAction,
 } from '../actions';
 import { employmentDetail, governmentIdsFor, livePinFor, mediaFor, otherOpenBranchesFor, positionsForStore } from '../lib';
-import { PhotoInput } from '@/components/PhotoInput';
+import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import { SignaturePad } from '@/components/SignaturePad';
 import { Page } from '@/components/shell/Page';
 import { CheckedForm, EditableRecord } from '@/components/forms';
@@ -275,17 +275,23 @@ export default async function EmploymentDetailPage({
         </p>
         <div className="space-y-2 text-sm">
           <h3 className="font-medium">Photo</h3>
-          {media.photoFileId ? (
+          {isEnded && media.photoFileId && (
             <a href={`/files/${media.photoFileId}`} className="inline-block py-1 underline underline-offset-4">
               View photo
             </a>
-          ) : (
-            <p className="text-neutral-500 dark:text-neutral-400">No photo on file.</p>
           )}
+          {isEnded && <p className="text-neutral-500 dark:text-neutral-400">This employment has ended, so its photo cannot be changed.</p>}
           {!isEnded && (
             <form action={setStaffPhotoAction} className="flex flex-wrap items-end gap-3">
               <input type="hidden" name="employmentId" value={employmentId} />
-              <PhotoInput name="photo" required accept="image/*" capture="user" />
+              <PhotoUpload
+                name="photo"
+                purpose="staff_photo"
+                label="Staff photo"
+                capture="user"
+                storeId={detail.employment.storeId}
+                existing={media.photoFileId ? { fileId: media.photoFileId, kind: 'image' } : undefined}
+              />
               <Button type="submit" variant="primary">
                 {media.photoFileId ? 'Replace photo' : 'Save photo'}
               </Button>

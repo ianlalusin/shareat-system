@@ -16,7 +16,7 @@
  */
 import { authorize, can, AuthorizationError, type Actor } from '@shareat/auth';
 import { accessRepo, auditLogRepo, employmentRepo, filesRepo, personsRepo, refuse, type Tx } from '@shareat/db';
-import { uploadFile } from '../files';
+import { claimUpload, uploadFile } from '../files';
 import { assertMayLearnSignatureAbsent, auditSignatureChange, mayViewSignature, signatureBytes, signatureUrl } from '../files/signature';
 
 const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
@@ -74,16 +74,28 @@ async function openEmploymentForPhoto(tx: Tx, actor: Actor, employmentId: string
 
 // ------------------------------------------------------------------ photo
 
+/**
+ * T-441: the photo arrives either as `{ fileId }` (the shared upload control already uploaded it; it is CLAIMED here, in the same
+ * transaction, after the gates) or as `{ contentType, bytes }` (no JavaScript: uploaded here). Both end linked to the employment.
+ */
 export async function setStaffPhoto(
   tx: Tx,
   actor: Actor,
-  input: { employmentId: string; contentType: string; bytes: Uint8Array },
+  input: { employmentId: string } & ({ fileId: string } | { contentType: string; bytes: Uint8Array }),
 ): Promise<{ fileId: string }> {
   const emp = await openEmploymentForPhoto(tx, actor, input.employmentId);
   const previous = (await employmentRepo.photoFileIds(tx, [emp.id])).get(emp.id) ?? null;
-  const up = await uploadFile(tx, actor, { purpose: 'staff_photo', storeId: emp.storeId, contentType: input.contentType, bytes: input.bytes });
-  await filesRepo.linkFile(tx, actor.orgId, up.fileId, emp.id);
-  await employmentRepo.setPhotoFileId(tx, emp.id, up.fileId);
+  let fileId: string;
+  if ('fileId' in input) {
+    // Store comes from the employment (read here), never from the caller. One refusal sentence for every unclaimable id.
+    await claimUpload(tx, actor, { fileId: input.fileId, purpose: 'staff_photo', storeId: emp.storeId, linkTo: emp.id });
+    fileId = input.fileId;
+  } else {
+    const up = await uploadFile(tx, actor, { purpose: 'staff_photo', storeId: emp.storeId, contentType: input.contentType, bytes: input.bytes });
+    await filesRepo.linkFile(tx, actor.orgId, up.fileId, emp.id);
+    fileId = up.fileId;
+  }
+  await employmentRepo.setPhotoFileId(tx, emp.id, fileId);
   await auditLogRepo.append(tx, actor.orgId, {
     actorPersonId: actor.personId,
     action: previous ? 'staff_photo.replaced' : 'staff_photo.set',
@@ -93,7 +105,7 @@ export async function setStaffPhoto(
     after: { hadPrevious: previous !== null },
     source: 'web',
   });
-  return { fileId: up.fileId };
+  return { fileId };
 }
 
 export async function removeStaffPhoto(tx: Tx, actor: Actor, input: { employmentId: string }): Promise<void> {
