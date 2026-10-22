@@ -51,7 +51,7 @@ project has no v1 server or reconcile cron). A production build leaves it unset 
 `/srv/shareat-shared/pos2.env` (persistent, never shipped, mode 600, owner `shareat`). Three values, all required:
 
 ```
-POS_FIREBASE_SA_KEY_FILE=/srv/shareat-shared/pos2-firebase-key.json
+POS_FIREBASE_SA_KEY_FILE=/srv/shareat-shared/secrets/pos2-firebase-key.json
 DATABASE_URL=<the same connection string the ERP uses (the RLS-enforcing app role), from /srv/shareat-shared/.env.local>
 POS_ORG_ID=<the ERP organisation id (uuid)>
 ```

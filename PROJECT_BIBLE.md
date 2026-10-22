@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1708` 13. Decision log
-- `1709–1728` 14. Amendment protocol
-- `1729–1733` 15. Engineering standards — the industry practices this project follows
-  - `1734–1739` 15.1 Build order: walking skeleton first
-  - `1740–1751` 15.2 Golden-master testing — the most important practice here
-  - `1752–1760` 15.3 Strangler Fig, not big-bang cutover
-  - `1761–1765` 15.4 No dual-write
-  - `1766–1774` 15.5 Expand/contract migrations
-  - `1775–1783` 15.6 Observability from day zero, not later
-  - `1784–1788` 15.7 CI gates
-  - `1789–1793` 15.8 Backups and a tested restore
-  - `1794–1798` 15.9 Twelve-Factor config
-  - `1799–1806` 15.10 Append-only ledgers — but not event sourcing
-  - `1807–1811` 15.11 Defence in depth
-  - `1812–1840` 15.12 Skills are lenses, not assurance
-  - `1841–1847` 15.13 Reconciliation is a permanent feature
-- `1848–1852` 16. The accounting spine
-  - `1853–1884` 16.0 What we are actually fixing — the diagnosis
-  - `1885–1928` 16.1 The ten invariants — non-negotiable
-  - `1929–1943` 16.2 The oracle: how "correct" is tested
-  - `1944–1965` 16.3 The model — header + lines, not legs
-  - `1966–1985` 16.4 Deliberately simpler than ERPNext
-  - `1986–2054` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2055–2079` 16.6 What v1 already gets right — preserve the intent
-  - `2080–2101` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2102–2116` 16.8 What v1's accounting already gets right
-  - `2117–2160` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2161–2211` 16.10 Posting patterns — one canonical pattern per business event
-  - `2212–2244` 16.11 Inventory's accounting integration
+- `1329–1710` 13. Decision log
+- `1711–1730` 14. Amendment protocol
+- `1731–1735` 15. Engineering standards — the industry practices this project follows
+  - `1736–1741` 15.1 Build order: walking skeleton first
+  - `1742–1753` 15.2 Golden-master testing — the most important practice here
+  - `1754–1762` 15.3 Strangler Fig, not big-bang cutover
+  - `1763–1767` 15.4 No dual-write
+  - `1768–1776` 15.5 Expand/contract migrations
+  - `1777–1785` 15.6 Observability from day zero, not later
+  - `1786–1790` 15.7 CI gates
+  - `1791–1795` 15.8 Backups and a tested restore
+  - `1796–1800` 15.9 Twelve-Factor config
+  - `1801–1808` 15.10 Append-only ledgers — but not event sourcing
+  - `1809–1813` 15.11 Defence in depth
+  - `1814–1842` 15.12 Skills are lenses, not assurance
+  - `1843–1849` 15.13 Reconciliation is a permanent feature
+- `1850–1854` 16. The accounting spine
+  - `1855–1886` 16.0 What we are actually fixing — the diagnosis
+  - `1887–1930` 16.1 The ten invariants — non-negotiable
+  - `1931–1945` 16.2 The oracle: how "correct" is tested
+  - `1946–1967` 16.3 The model — header + lines, not legs
+  - `1968–1987` 16.4 Deliberately simpler than ERPNext
+  - `1988–2056` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2057–2081` 16.6 What v1 already gets right — preserve the intent
+  - `2082–2103` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2104–2118` 16.8 What v1's accounting already gets right
+  - `2119–2162` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2163–2213` 16.10 Posting patterns — one canonical pattern per business event
+  - `2214–2246` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1705,6 +1705,8 @@ just a patch.**
 | 370 | 2026-10-17 | **THE COMMISSARY MAY NOT MARK A PADRE GARCIA ORDER "PAID NOW" WHEN IT SHIPS.** Each company records its own payment when money actually moves (T-398 B5 / E23: `payNow` on an inter-entity dispatch is refused) (t398-q12-pay-now a). | Ian, 2026-10-17, Open Questions page; as recommended. Recorded 2026-10-18 by the Opus planner | Yes |
 | 371 | 2026-10-17 | **STANDS ARE v1'S FIXED SET PER STORE, ONE USE AT A TIME, PICKED BY CLICK, NEVER TYPED (amends row 357).** Ian's words: "v1 has specific set of table stand and each can only be used once at a time so once a stand no is used take that out from roster of table instead of typing user must click only. no typing for pos but on notes and billing only." So: each store's stands are the set v1 already holds (v1 POS `stores/{storeId}/tables`, managed in v1's store settings); a stand in use is removed from the pick list until its order closes, so a double use cannot happen; the cashier picks a stand by tapping, and POS v2 has no free typing except in notes and billing. Replaces the option asked (refuse a typed number, plus a per-store range from Ian). Applies to T-429 (q-row357-stands, free text). | Ian, 2026-10-17, Open Questions page; recorded 2026-10-18 by the Opus planner | Yes |
 | 372 | 2026-10-17 | **A SENIOR'S OR PWD DINER'S DISCOUNTED SHARE = HER OWN PACKAGE HEAD PLUS DISHES MARKED AS HERS; SHARED DISHES GET NO DISCOUNT.** Matches DOJ Legal Opinion 45 (2024) and what T-426 is building (q-t426-senior-share a). | Ian, 2026-10-17, Open Questions page; as recommended. Recorded 2026-10-18 by the Opus planner | Yes |
+| 373 | 2026-10-22 | **ERP v2 AND POS v2 (LIPA) BOTH LIVE BY 1 JANUARY 2027; CUSTOMER v2 STAYS IN P3. WORK FASTER: AIM FOR LIPA ON v2 IN EARLY DECEMBER.** Ian chose option (b) over the recommended (a) (POS 11 Jan, one clean ERP week first), then added "work faster to ship earlier". **Amends row 348** (first store 11 Jan). So: POS v2 P0 ships to Lipa **on v1's Firebase** (the 21 Oct "no interim Firebase release by default" yields to this date; P1 is not ready by then). Because P0 writes v1's Firestore wire format unchanged (T-423), Lipa can switch before the ERP cutover without touching the ERP; target Mon 7 Dec, **1 Jan is the latest date, not the target**. No new store switches 21 Dec – 10 Jan (holidays + ERP cutover). Schedule in `docs/plans/pos-customer-v2-phase-plan.md` §0. | Ian, 2026-10-22, orchestrator session (POS v2 plan page https://claude.ai/artifact/HfjaBY6aXRxHVekXSaPB8T) | Yes |
+| 374 | 2026-10-22 | **POS v2 STARTS CLEAN: PRE-2027 POS DATA IS TEST DATA; A NIGHTLY PER-RECEIPT BRIDGE COPIES FIREBASE INTO POSTGRES FROM 1 JAN 2027.** (1) Lipa runs POS v2 on v1's Firebase in December (row 373); Firebase stays the POS's live working database until P1-P3 move each part. (2) From 1 Jan, a nightly job copies every receipt (lines, tenders, discounts, voids, refunds), not only day totals, from Firebase into Postgres for ALL stores, whether on v1 or v2; it extends the T-396 06:00 import and is read-only on Firebase. A store leaves the bridge when P2 moves its receipts to Postgres. (3) No v1 receipt, session or sales history is imported; 2026 POS data is test data, consistent with ADR-005 (2026 books close on v1). Carried over: master data only (staff, suppliers, stores, menu and alike). (4) Loyalty: **point balances only** are carried, per member; visit and earn/redeem history is not (narrows row 350's "v1 member data is migrated"). | Ian, 2026-10-22, orchestrator session; option (a) as recommended | Yes |
 
 ## 14. Amendment protocol
 
