@@ -8,7 +8,7 @@
  * reads (a by-id reader checks the ROW's store). Mutations still run through `packages/domain/src/people/index.ts`'s own
  * `authorize()` via `withOrgPrincipal`. `searchPersonsFor` carries `enrol_staff` and is scoped in the domain function.
  */
-import { employmentRepo, personsRepo, sessionsRepo, statutoryRepo, type EmploymentPositionRow, type EmploymentRow, type PersonRow, type PositionRow, type RosterRow, type Tx } from '@shareat/db';
+import { accessRepo, employmentRepo, personsRepo, sessionsRepo, statutoryRepo, type EmploymentPositionRow, type EmploymentRow, type PersonRow, type PositionRow, type RosterRow, type Tx } from '@shareat/db';
 import { authorize, can, type Actor, type Capability } from '@shareat/auth';
 import { searchPersons, staffMediaView } from '@shareat/domain';
 import { listStores, withOrgPrincipal, type StoreOption } from '../expenses/lib';
@@ -67,6 +67,7 @@ export async function positionsForStore(orgId: string, storeId: string): Promise
 }
 
 export interface EmploymentDetail {
+  role?: string | null;
   employment: EmploymentRow;
   personName: string;
   /** T-438: the stored parts; all null for a legacy person (never guessed, spec N3) - the Name form then shows empty boxes. */
@@ -90,7 +91,9 @@ export async function employmentDetail(actor: Actor, employmentId: string): Prom
     const nameParts = (await personsRepo.getNameParts(tx, orgId, employment.personId)) ?? { lastName: null, firstName: null, middleName: null };
     const store = stores.find((s) => s.id === employment.storeId);
     const positionRows = await employmentRepo.listEmploymentPositions(tx, employmentId);
+    const role = await accessRepo.activeRoleForPerson(tx, employment.personId, orgId);
     return {
+      role: role?.role ?? null,
       employment,
       personName: person?.displayName ?? '(unknown person)',
       nameParts,

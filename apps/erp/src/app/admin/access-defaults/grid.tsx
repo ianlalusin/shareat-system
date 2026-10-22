@@ -134,7 +134,7 @@ export function DesktopGrid({
   openCapability?: Capability;
 }) {
   return (
-    <div className="hidden overflow-x-auto rounded-lg border border-surface-border sm:block">
+    <div className="hidden overflow-x-auto rounded-lg border border-surface-border md:block">
       <table className="w-full min-w-[640px] table-fixed border-collapse text-sm">
         <GridColgroup positionCount={positions.length} />
         <thead className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
@@ -244,7 +244,7 @@ export function DesktopGrid({
 
 // -------------------------------------------------------------------------------------------
 // Mobile: one position per section, each capability a full-width touch row (§C5, the
-// `settings/sales-channels/page.tsx` Radio idiom). `sm:hidden`.
+// `settings/sales-channels/page.tsx` Radio idiom). `md:hidden`.
 //
 // T-337 §3 — three nesting levels: per-POSITION `<details>` (unchanged, first one open) ▸ per-
 // SCOPE `<details open>` ▸ per-AREA `<details>` (never open).
@@ -271,7 +271,7 @@ export function MobileSections({
   openPositionId?: string;
 }) {
   return (
-    <div className="space-y-3 sm:hidden">
+    <div className="space-y-3 md:hidden">
       {positions.map((p, i) => (
         <details
           key={p.id}

@@ -118,7 +118,7 @@ export function IncomeStatementTable({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-      <table className="w-full min-w-[560px] border-collapse text-sm">
+      <table data-card-columns="Account|Amount" className="w-full min-w-[560px] border-collapse text-sm">
         <tbody>
           <tr className="bg-neutral-50 dark:bg-neutral-900">
             <td className="px-3 py-2 font-semibold" colSpan={2}>

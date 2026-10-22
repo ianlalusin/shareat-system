@@ -1,0 +1,234 @@
+{
+  "scope": "FormGrid inside bordered section, outside EditableRecord; layout responds to actual form width",
+  "count": 57,
+  "sites": [
+    {
+      "file": "apps/erp/src/app/admin/stores/[id]/page.tsx",
+      "line": 245
+    },
+    {
+      "file": "apps/erp/src/app/ap/page.tsx",
+      "line": 106
+    },
+    {
+      "file": "apps/erp/src/app/ap/page.tsx",
+      "line": 119
+    },
+    {
+      "file": "apps/erp/src/app/ap/page.tsx",
+      "line": 144
+    },
+    {
+      "file": "apps/erp/src/app/ap/page.tsx",
+      "line": 185
+    },
+    {
+      "file": "apps/erp/src/app/commissary/catalogue/page.tsx",
+      "line": 333
+    },
+    {
+      "file": "apps/erp/src/app/customers/page.tsx",
+      "line": 167
+    },
+    {
+      "file": "apps/erp/src/app/customers/page.tsx",
+      "line": 202
+    },
+    {
+      "file": "apps/erp/src/app/customers/page.tsx",
+      "line": 228
+    },
+    {
+      "file": "apps/erp/src/app/cutover/opening/page.tsx",
+      "line": 154
+    },
+    {
+      "file": "apps/erp/src/app/cutover/opening/page.tsx",
+      "line": 251
+    },
+    {
+      "file": "apps/erp/src/app/inventory/counts/page.tsx",
+      "line": 107
+    },
+    {
+      "file": "apps/erp/src/app/inventory/counts/[id]/page.tsx",
+      "line": 195
+    },
+    {
+      "file": "apps/erp/src/app/inventory/locations/page.tsx",
+      "line": 224
+    },
+    {
+      "file": "apps/erp/src/app/inventory/pos-map/page.tsx",
+      "line": 113
+    },
+    {
+      "file": "apps/erp/src/app/inventory/pos-map/page.tsx",
+      "line": 127
+    },
+    {
+      "file": "apps/erp/src/app/inventory/pos-map/page.tsx",
+      "line": 169
+    },
+    {
+      "file": "apps/erp/src/app/inventory/production/page.tsx",
+      "line": 122
+    },
+    {
+      "file": "apps/erp/src/app/inventory/production/page.tsx",
+      "line": 140
+    },
+    {
+      "file": "apps/erp/src/app/liabilities/page.tsx",
+      "line": 152
+    },
+    {
+      "file": "apps/erp/src/app/liabilities/page.tsx",
+      "line": 186
+    },
+    {
+      "file": "apps/erp/src/app/loans/page.tsx",
+      "line": 125
+    },
+    {
+      "file": "apps/erp/src/app/loans/page.tsx",
+      "line": 162
+    },
+    {
+      "file": "apps/erp/src/app/loans/page.tsx",
+      "line": 202
+    },
+    {
+      "file": "apps/erp/src/app/menu/items/[id]/page.tsx",
+      "line": 183
+    },
+    {
+      "file": "apps/erp/src/app/menu/items/[id]/page.tsx",
+      "line": 230
+    },
+    {
+      "file": "apps/erp/src/app/menu/items/[id]/page.tsx",
+      "line": 392
+    },
+    {
+      "file": "apps/erp/src/app/menu/items/[id]/page.tsx",
+      "line": 411
+    },
+    {
+      "file": "apps/erp/src/app/menu/items/[id]/page.tsx",
+      "line": 440
+    },
+    {
+      "file": "apps/erp/src/app/menu/page.tsx",
+      "line": 187
+    },
+    {
+      "file": "apps/erp/src/app/menu/page.tsx",
+      "line": 206
+    },
+    {
+      "file": "apps/erp/src/app/menu/requests/page.tsx",
+      "line": 161
+    },
+    {
+      "file": "apps/erp/src/app/owners/page.tsx",
+      "line": 164
+    },
+    {
+      "file": "apps/erp/src/app/owners/page.tsx",
+      "line": 209
+    },
+    {
+      "file": "apps/erp/src/app/owners/page.tsx",
+      "line": 238
+    },
+    {
+      "file": "apps/erp/src/app/payroll/rates/page.tsx",
+      "line": 100
+    },
+    {
+      "file": "apps/erp/src/app/payroll/rates/page.tsx",
+      "line": 126
+    },
+    {
+      "file": "apps/erp/src/app/payroll/rates/page.tsx",
+      "line": 140
+    },
+    {
+      "file": "apps/erp/src/app/payroll/rates/page.tsx",
+      "line": 159
+    },
+    {
+      "file": "apps/erp/src/app/payroll/rates/page.tsx",
+      "line": 173
+    },
+    {
+      "file": "apps/erp/src/app/payroll/rates/page.tsx",
+      "line": 192
+    },
+    {
+      "file": "apps/erp/src/app/payroll/rates/page.tsx",
+      "line": 251
+    },
+    {
+      "file": "apps/erp/src/app/payroll/rates/page.tsx",
+      "line": 322
+    },
+    {
+      "file": "apps/erp/src/app/payroll/separations/page.tsx",
+      "line": 162
+    },
+    {
+      "file": "apps/erp/src/app/prepaid/page.tsx",
+      "line": 186
+    },
+    {
+      "file": "apps/erp/src/app/prepaid/page.tsx",
+      "line": 218
+    },
+    {
+      "file": "apps/erp/src/app/remittance/page.tsx",
+      "line": 228
+    },
+    {
+      "file": "apps/erp/src/app/remittance/page.tsx",
+      "line": 272
+    },
+    {
+      "file": "apps/erp/src/app/remittance/page.tsx",
+      "line": 425
+    },
+    {
+      "file": "apps/erp/src/app/remittance/page.tsx",
+      "line": 469
+    },
+    {
+      "file": "apps/erp/src/app/sales-days/[id]/page.tsx",
+      "line": 411
+    },
+    {
+      "file": "apps/erp/src/app/settings/attendance/page.tsx",
+      "line": 372
+    },
+    {
+      "file": "apps/erp/src/app/settings/expense-categories/page.tsx",
+      "line": 239
+    },
+    {
+      "file": "apps/erp/src/app/settings/pos-link/page.tsx",
+      "line": 202
+    },
+    {
+      "file": "apps/erp/src/app/till/page.tsx",
+      "line": 110
+    },
+    {
+      "file": "apps/erp/src/app/till/page.tsx",
+      "line": 200
+    },
+    {
+      "file": "apps/erp/src/app/wastage/page.tsx",
+      "line": 118
+    }
+  ]
+}

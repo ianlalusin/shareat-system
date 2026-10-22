@@ -3,13 +3,14 @@
  *
  * Ian, 2026-10-08: "i want all forms to adjust based on screen size and always use full width".
  *
- * `FormGrid` is an auto-fit grid: it adapts to the CONTAINER, not the viewport, so it is right
+ * In grid mode `FormGrid` adapts to the CONTAINER, not the viewport, so it is right
  * whether the sidebar is open or collapsed and needs no breakpoint. One column on a phone, more as
  * the space grows. `min(100%,14rem)` stops a 375 px phone from scrolling sideways (DEF-199).
  *
  * T-445 (Ian, 2026-10-19) supersedes stretching each individual control: the page stays full width,
  * while `layout='fields'` wraps content-sized fields and `Field width` gives a shrinkable ceiling.
- * Existing grid/span callers are unchanged. `Field` keeps label, hint, validation and control together.
+ * T-450: compact fields are the default; explicit grids, wide spans and grid-column overrides retain grid mode.
+ * `Field` keeps label, hint, validation and control together.
  * `span='wide'` takes two columns only when the grid's own width fits two 14rem tracks plus the gap (29rem, a container query, so it can never create an implicit column and scroll sideways); `span='full'` takes the row
  * (a textarea, a long reason, a line-items table).
  *
@@ -21,19 +22,30 @@
  * No `'use client'` and no hooks, like the other components in this folder, so a server component
  * or a server-action form can import it.
  */
-import type { ReactNode } from 'react';
+import { Children, Fragment, isValidElement, type ReactNode } from 'react';
 import type { FieldRule } from '@shareat/domain/field-rules';
 import { FieldCheck } from '@/components/forms/FieldCheck';
 
 export interface FormGridProps {
   /** T-445: content-sized fields wrap within their container; existing grids remain unchanged. */
-  readonly layout?: 'grid' | 'fields';
+  readonly layout?: 'grid' | 'fields' | 'pairs';
   readonly className?: string;
   readonly children?: ReactNode;
 }
 
-export function FormGrid({ layout = 'grid', className, children }: FormGridProps) {
-  if (layout === 'fields') return <div className={`erp-form-fields${className ? ` ${className}` : ''}`}>{children}</div>;
+function hasWideSpan(children: ReactNode): boolean {
+  return Children.toArray(children).some(child => {
+    if (!isValidElement<{ span?: string; className?: string; children?: ReactNode }>(child)) return false;
+    return child.props.span === 'wide' || /col-span-(?!full)/.test(child.props.className ?? '')
+      || (child.type === Fragment && hasWideSpan(child.props.children));
+  });
+}
+
+export function FormGrid({ layout, className, children }: FormGridProps) {
+  if (layout === 'pairs') return <div className={`erp-form-pairs${className ? ` ${className}` : ''}`}><div className="erp-form-pairs-grid">{children}</div></div>;
+  // Entry forms share compact defaults; grid-specific callers retain the layout their spans require.
+  const resolved = layout ?? (hasWideSpan(children) || /grid-cols-|grid-template-columns/.test(className ?? '') ? 'grid' : 'fields');
+  if (resolved === 'fields') return <div className={`erp-form-fields${className ? ` ${className}` : ''}`}>{children}</div>;
   return (
     <div
       className={`grid gap-4 [container-type:inline-size] [grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr))]${className ? ` ${className}` : ''}`}
@@ -62,15 +74,31 @@ const SPAN: Record<'wide' | 'full', string> = {
   full: ' col-span-full',
 };
 
+function inferredWidth(children: ReactNode): FieldProps['width'] {
+  const control = Children.toArray(children).find(child => isValidElement<{ type?: string; name?: string; inputMode?: string }>(child)
+    && child.props.type !== 'hidden' && (child.props.name || child.props.type || child.props.inputMode));
+  if (!isValidElement<{ type?: string; name?: string; inputMode?: string }>(control)) return undefined;
+  const { type, name = '', inputMode } = control.props;
+  if (/^(date|month|time)$/.test(type ?? '')) return 'date';
+  if (/^(baseUnit|purchaseUnit|unit|quantity|creditTermsDays|days|year|month|vatPercent)$/.test(name)) return 'short';
+  if (/amount|rate|price|cost|total|fee|balance|limit|deposit|gross|deduction|principal|interest/i.test(name)) return 'code';
+  if (/code|reference|invoiceNo/i.test(name)) return 'code';
+  if (/kind|vatType|customerGroup/i.test(name)) return 'code';
+  if (/description|notes|reason|address/i.test(name)) return 'long';
+  if (type === 'number' || inputMode === 'numeric' || inputMode === 'decimal') return 'short';
+  return undefined;
+}
+
 export function Field({ label, hint, span, width, className, rule, children }: FieldProps) {
-  const outer = `min-w-0${span ? SPAN[span] : ''}${width ? ` erp-field-${width}` : ''}${className ? ` ${className}` : ''}`;
+  const resolvedWidth = width ?? (span ? undefined : inferredWidth(children));
+  const outer = `erp-form-field min-w-0${span ? SPAN[span] : ''}${resolvedWidth ? ` erp-field-${resolvedWidth}` : ''}${className ? ` ${className}` : ''}`;
   const inner = (
     <>
-      <span className="block text-ink">{label}</span>
+      <span className="erp-field-label block text-sm font-medium leading-5 text-ink">{label}</span>
+      <span className="erp-field-control mt-1 block min-w-0">{children}</span>
       {hint !== undefined && hint !== null && (
-        <span className="mt-0.5 block text-xs text-ink/70">{hint}</span>
+        <span className="erp-field-hint mt-1 block text-xs leading-5 text-ink/70">{hint}</span>
       )}
-      {children}
     </>
   );
   if (!rule) return <label className={`block ${outer}`}>{inner}</label>;

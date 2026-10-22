@@ -161,7 +161,7 @@ export function BalanceSheetTable({
   const filter: DrillFilter = { storeId, fromDate: '2000-01-01', toDate: asOfDate, includeYearClose };
   return (
     <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-      <table className="w-full min-w-[560px] border-collapse text-sm">
+      <table data-card-columns="Account|Amount" className="w-full min-w-[560px] border-collapse text-sm">
         <tbody>
           <SectionHeading label="Assets" />
           <LineRows lines={assetLines} filter={filter} />

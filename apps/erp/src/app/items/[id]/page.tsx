@@ -96,7 +96,7 @@ export default async function ItemDetailPage({
   return (
     <Page view="detail" density="table">
       <div>
-        <a href="/items" className="text-sm text-neutral-500 underline underline-offset-2 dark:text-neutral-400">
+        <a data-screen-return href="/items" className="text-sm text-neutral-500 underline underline-offset-2 dark:text-neutral-400">
           ← Items
         </a>
         <h1 className="mt-1 text-2xl font-semibold">{item.name}</h1>

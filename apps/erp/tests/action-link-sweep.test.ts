@@ -461,7 +461,15 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // T-444: one new Review and approvals disclosure summary; all existing controls remain.
     // Combined T-440 controls plus T-448: Books moves into the financial StatCard map.
     // SSR checks retain Assets and Books links; this removes one static scanner site.
-    expect(results.length).toBe(1390);
+    // T-450: one new native DisclosureCard summary, authored min-h-11 (44px); no fail/unresolved exemption.
+    // T-451: one explicit Remove staff positions submit control; existing size/baseline checks still apply.
+    expect(results.length).toBe(1392);
+  });
+
+  it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
+    const disclosure = results.filter(result => result.file === 'components/ui/DisclosureCard.tsx');
+    expect(disclosure).toHaveLength(1);
+    expect(disclosure[0]).toMatchObject({ tag: 'summary', status: 'pass', px: 44 });
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

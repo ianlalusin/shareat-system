@@ -27,10 +27,23 @@ describe('T-445 approved compact controls', () => {
     expect(css).toContain('min-height: 32px');
     expect(css).toContain('[data-erp-control="single"]:not([type="file"]):not([type="checkbox"]):not([type="radio"])');
   });
-  it('adds field rows without replacing the default grid', () => {
+  it('defaults entry forms to shared compact fields and preserves an explicit grid', () => {
     const props = { layout: 'fields' } as unknown as Parameters<typeof forms.FormGrid>[0];
     expect(renderToStaticMarkup(createElement(forms.FormGrid, props, 'x'))).toContain('erp-form-fields');
-    expect(renderToStaticMarkup(createElement(forms.FormGrid, {}, 'x'))).toContain('repeat(auto-fit,minmax(min(100%,14rem),1fr))');
+    expect(renderToStaticMarkup(createElement(forms.FormGrid, {}, 'x'))).toContain('erp-form-fields');
+    expect(renderToStaticMarkup(createElement(forms.FormGrid, { layout: 'grid' }, 'x'))).toContain('repeat(auto-fit,minmax(min(100%,14rem),1fr))');
+  });
+  it('keeps wide spans and deliberate grid column overrides in a grid', () => {
+    expect(renderToStaticMarkup(createElement(forms.FormGrid, {}, createElement(forms.Field, { label: 'Reason', span: 'wide' }, 'Text')))).toContain('repeat(auto-fit');
+    expect(renderToStaticMarkup(createElement(forms.FormGrid, { className: 'md:grid-cols-3' }, 'Text'))).toContain('repeat(auto-fit');
+  });
+  it('infers short units, date and money widths while preserving explicit full and span widths', () => {
+    const render = (props: Parameters<typeof forms.Field>[0], control: Record<string, string>) => renderToStaticMarkup(createElement(forms.Field, props, createElement(Input, control)));
+    expect(render({ label: 'Unit' }, { name: 'baseUnit' })).toContain('erp-field-short');
+    expect(render({ label: 'Date' }, { type: 'date' })).toContain('erp-field-date');
+    expect(render({ label: 'Amount' }, { name: 'amount', inputMode: 'decimal' })).toContain('erp-field-code');
+    expect(render({ label: 'Full', width: 'full' }, { name: 'baseUnit' })).toContain('erp-field-full');
+    expect(render({ label: 'Wide', span: 'wide' }, { name: 'baseUnit' })).not.toContain('erp-field-short');
   });
   it('keeps a short field label and live rule wrapper together', () => {
     const props = { label: 'Unit', width: 'short' } as unknown as Parameters<typeof forms.Field>[0];

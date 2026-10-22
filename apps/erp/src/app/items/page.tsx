@@ -30,6 +30,7 @@ import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
 import { Banner, Button, Checkbox, FlashBanner, Input, LinkRow, RowLink, Select, FormGrid, FormSection, Field, SplitWorkspace } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { DisclosureCard } from '@/components/ui/DisclosureCard';
 
 export const metadata = { title: 'Items — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -74,8 +75,7 @@ export default async function ItemsPage({
         formTitle="Request or add an item"
         detailsTitle="Item catalogue"
         form={<>
-      <section id="new-item" className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="font-medium">Request a new item</h2>
+      <DisclosureCard id="new-item" title="Request a new item" action="Add">
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           Choose the unit used to measure stock and compare prices. Boxes and packs use conversions on the invoice.
         </p>
@@ -176,7 +176,7 @@ export default async function ItemsPage({
                 </Button>
               </div>
             </CheckedForm>
-      </section>
+      </DisclosureCard>
 
         </>}
         details={<div className="min-w-0 space-y-4">
@@ -206,8 +206,8 @@ export default async function ItemsPage({
           })}
         </nav>
         {items.length > 0 ? (
-          <div className="catalogue-table min-w-0 rounded-lg border border-surface-border bg-surface">
-            <table className="w-full min-w-[560px] border-collapse text-sm">
+          <div data-screen-scroll="catalogue" className="catalogue-table min-w-0 rounded-lg border border-surface-border bg-surface">
+            <table data-card-title="Item" data-card-subtitle="Kind" data-card-keys="Priced per" className="w-full min-w-[560px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
                   <th scope="col" className="px-3 py-2 font-medium">Item</th>

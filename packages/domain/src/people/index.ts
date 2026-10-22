@@ -484,9 +484,11 @@ export async function setEmploymentPositions(
   await authorize(tx, actor, 'enrol_staff', { storeId: existing.storeId, orgId: existing.orgId });
 
   const resolved = await resolvePositions(tx, actor, {
+    personId: existing.personId,
     storeId: existing.storeId,
     positionIds: input.positionIds,
     primaryPositionId: input.primaryPositionId,
+    requirePrimary: true,
   });
   await employmentRepo.replaceEmploymentPositions(tx, {
     employmentId: input.employmentId,
@@ -577,8 +579,9 @@ export async function seedCanonicalPositions(tx: Tx, orgId: string): Promise<{ i
 /**
  * Turn the caller's position intent into a validated `{ positionIds, primaryPositionId }`.
  *
- * Three rules, all of which exist because their absence is a real failure mode:
- *   - nothing given ⇒ the least-privileged default, as primary;
+ * T-451: managers/admins use their role; explicit legacy assignments may be cleared.
+ * Staff rules:
+ *   - nothing given on hire ⇒ the least-privileged default, as primary; edits require a primary;
  *   - a primary outside the assigned set is refused, not silently added — "primary" would
  *     otherwise mean something the list does not say;
  *   - one primary given with no explicit list ⇒ that one, alone.
@@ -586,9 +589,15 @@ export async function seedCanonicalPositions(tx: Tx, orgId: string): Promise<{ i
 async function resolvePositions(
   tx: Tx,
   actor: Actor,
-  input: { storeId: string; positionIds?: string[]; primaryPositionId?: string },
+  input: { personId: string; storeId: string; positionIds?: string[]; primaryPositionId?: string; requirePrimary?: boolean },
 ): Promise<{ positionIds: string[]; primaryPositionId: string }> {
   const requested = input.positionIds ?? (input.primaryPositionId ? [input.primaryPositionId] : []);
+  const role = await accessRepo.activeRoleForPerson(tx, input.personId, actor.orgId);
+  if (role && (role.role === 'manager' || role.role === 'admin' || role.role === 'super_admin')) {
+    if (requested.length > 0) throw new EmploymentError('Managers and administrators use their role, not a staff position. Remove the position assignments.');
+    return { positionIds: [], primaryPositionId: '' };
+  }
+  if (input.requirePrimary && input.positionIds?.length === 0) throw new EmploymentError('Choose a primary position for this staff member.');
 
   if (requested.length === 0) {
     const fallback = await employmentRepo.findPositionByName(tx, actor.orgId, null, DEFAULT_POSITION);
