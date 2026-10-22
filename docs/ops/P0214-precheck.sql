@@ -1,7 +1,7 @@
--- P0213 - READ ONLY pre-check for migration 0213 (T-398 S4 / DEF-491). Run as doadmin BEFORE the deploy.
+-- P0214 - READ ONLY pre-check for migration 0214 (T-398 S4 / DEF-491). Run as doadmin BEFORE the deploy.
 -- One row per guarded derived-scope foreign key (55). Every count must be 0: a non-zero count is a row whose
 -- reference points at another organisation's row, or at a row that does not exist. Selects only; changes nothing.
--- Same predicate as the pre-flight DO block in 0213: child org = the child's own org_id, or its header's org_id;
+-- Same predicate as the pre-flight DO block in 0214: child org = the child's own org_id, or its header's org_id;
 -- target org = the target's own org_id, or (a derived target) its header's org_id.
 
 SELECT 'ap_payment_allocations.expense_id->expenses' AS fk, count(*) AS violations FROM "ap_payment_allocations" c WHERE c."expense_id" IS NOT NULL AND ((SELECT h.org_id FROM "ap_payments" h WHERE h.id = c."ap_payment_id") IS NULL OR (SELECT t.org_id FROM "expenses" t WHERE t.id = c."expense_id") IS NULL OR (SELECT h.org_id FROM "ap_payments" h WHERE h.id = c."ap_payment_id") <> (SELECT t.org_id FROM "expenses" t WHERE t.id = c."expense_id"))

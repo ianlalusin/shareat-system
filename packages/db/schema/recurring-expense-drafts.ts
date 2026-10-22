@@ -68,19 +68,19 @@ export const recurringExpenseDrafts = pgTable(
     /** ⭐ The invariant itself. Read this file's header before changing its columns. */
     uniqueIndex('recurring_expense_drafts_once_idx').on(t.recurringExpenseId, t.dueDate),
     index('recurring_expense_drafts_expense_idx').on(t.expenseId),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `expense_id` FK (RLS checks only this row's org_id); references `expenses_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `expense_id` FK (RLS checks only this row's org_id); references `expenses_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.expenseId],
       foreignColumns: [expenses.orgId, expenses.id],
       name: 'recurring_expense_drafts_expense_id_same_org_fk',
     }).onDelete('set null'), // the SQL is ON DELETE SET NULL ("expense_id") (column-list form: org_id is NOT NULL)
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `recurring_expense_id` FK (RLS checks only this row's org_id); references `recurring_expenses_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `recurring_expense_id` FK (RLS checks only this row's org_id); references `recurring_expenses_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.recurringExpenseId],
       foreignColumns: [recurringExpenses.orgId, recurringExpenses.id],
       name: 'recurring_expense_drafts_recurring_expense_id_same_org_fk',
     }).onDelete('cascade'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `supplier_invoice_id` FK (RLS checks only this row's org_id); references `supplier_invoices_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `supplier_invoice_id` FK (RLS checks only this row's org_id); references `supplier_invoices_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.supplierInvoiceId],
       foreignColumns: [supplierInvoices.orgId, supplierInvoices.id],

@@ -40,7 +40,7 @@ export const ORG_LESS_TABLES: readonly string[] = [
   'etl_source_documents',
 ];
 
-/** The ratchet. S3 and S4 deleted what they fixed: empty since T-398 S4 (0213). A new gap must be fixed, not listed. */
+/** The ratchet. S3 and S4 deleted what they fixed: empty since T-398 S4 (0214). A new gap must be fixed, not listed. */
 export const OPEN_DEF_491: readonly OpenFkEntry[] = [];
 
 /**

@@ -169,31 +169,31 @@ export const stockMovements = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'stock_movements_store_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `item_id` FK (RLS checks only this row's org_id); references `items_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `item_id` FK (RLS checks only this row's org_id); references `items_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.itemId],
       foreignColumns: [items.orgId, items.id],
       name: 'stock_movements_item_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.journalEntryId],
       foreignColumns: [journalEntries.orgId, journalEntries.id],
       name: 'stock_movements_journal_entry_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `location_id` FK (RLS checks only this row's org_id); references `stock_locations_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `location_id` FK (RLS checks only this row's org_id); references `stock_locations_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.locationId],
       foreignColumns: [stockLocations.orgId, stockLocations.id],
       name: 'stock_movements_location_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `reversal_of_id` FK (RLS checks only this row's org_id); references `stock_movements_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `reversal_of_id` FK (RLS checks only this row's org_id); references `stock_movements_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.reversalOfId],
       foreignColumns: [t.orgId, t.id],
       name: 'stock_movements_reversal_of_id_same_org_fk',
     }).onDelete('restrict'),
-    // NOTE: stock_movements_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0212 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // NOTE: stock_movements_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0213 (T-398 S3 / DEF-491), no Drizzle mirror here.
     // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES stock_movements (org_id, id)`
     // same-org FKs declared beside their own tables have a real unique target.
   ],

@@ -810,7 +810,7 @@ added since 0194 was guarded at creation, `CROSS_ORG_BY_DESIGN` is `[]`, and A11
 
 Counts re-measured and unchanged: DEF-421 ratchet 206 / 188; `OPEN_DEF_491` 223 (141 org->org, 77 derived->org, 3
 org->derived, 2 derived->derived); `NO_FK_PIN` 28; `JSONB_PIN` 9. Line numbers in A9 / trade have moved (re-grep, never
-trust a line number here). Migrations: **0212 = S3, 0213 = S4**. S3 merges before S4; S2b (no migration) runs after
+trust a line number here). Migrations: **0213 = S3, 0214 = S4 (0212 taken by T-464, PR #49)**. S3 merges before S4; S2b (no migration) runs after
 the T-441 merge (it shares `leave/` and `files/`).
 - **D1 (S3, blocker):** composite FKs carry `org_id`, which the purge never clears, so `purge.ts`'s "every FK child
   column is in clearColumns" check refuses (`fixed_assets.source_expense_id`, `recurring_expenses.last_drafted_expense_id`).
@@ -819,7 +819,7 @@ the T-441 merge (it shares `leave/` and `files/`).
   `t347-cutover-purge-shells.test.ts` join S3's paths.
 - **D2 (S3):** `pos_v1_day_feeds.batch_id` has no parent (a minted grouping id): reclassify as `idempotency-key`.
   S3 adds 4 ref-gap FKs, so **145 composites** and **38 new `UNIQUE (org_id, id)`** (7 parents already have one).
-  The parent list comes only from the `pg_constraint` query pasted in 0212's header (B6's hand list is wrong).
+  The parent list comes only from the `pg_constraint` query pasted in 0213's header (B6's hand list is wrong).
 - **D3 (S4):** 27 of the 82 derived FKs are the table's own RLS `via` header; the census treats those as guarded by
   construction (pinned list), and S4 builds **55** triggers. `packages/db/src/triggers/registry.ts` (55 entries,
   `validator`, `origin`) joins S4's paths.
@@ -829,7 +829,7 @@ the T-441 merge (it shares `leave/` and `files/`).
   `depreciateAsset`, `depreciationDrift` lose `| null` like the rest. T4 is a regression guard (already green).
 - **D6 (S2b):** T2 counts non-member `transaction(` calls and imports only; `tx.transaction(` savepoints are allowed.
 - **D7:** S3 and S4 each carry their own L1 leg (lock_timeout + budget header); the existing L1 is pinned to 0194.
-- **D8 (Ian):** before the merge that deploys 0212 / 0213, Ian runs the read-only prechecks P0212a/b, P0213 as doadmin
+- **D8 (Ian):** before the merge that deploys 0213 / 0214, Ian runs the read-only prechecks P0212a/b, P0214 as doadmin
   (scripts written by the builder lane under `C:\Users\ianla\shareat-master-data\`). Avoid deploying 05:30-07:00
-  Manila (the T-396 POS import locks sales_days / pos_v1_day_feeds). Time 0212 on a restore or synthetic volume; over
+  Manila (the T-396 POS import locks sales_days / pos_v1_day_feeds). Time 0213 on a restore or synthetic volume; over
   60 s -> split VALIDATE into a later deploy.

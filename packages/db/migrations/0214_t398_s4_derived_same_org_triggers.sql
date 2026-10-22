@@ -1,7 +1,7 @@
--- 0213 - T-398 S4 / DEF-491 part 3: the same-org validator trigger on every derived-scope foreign key.
+-- 0214 - T-398 S4 / DEF-491 part 3: the same-org validator trigger on every derived-scope foreign key.
 -- docs/tasks/398-padre-garcia-franchise-org.md S4, A1, A2, A11, C2, D3, D4, D7, D8. Hand-authored per ADR-012 s5.
 --
--- WHY. Same hole as 0194 / 0212, for the tables that carry NO org_id of their own (their organisation is their
+-- WHY. Same hole as 0194 / 0213, for the tables that carry NO org_id of their own (their organisation is their
 -- header's: remittance_lines belongs to a remittance, count_lines to a count session ...). As shareat_app with
 -- app.org_id = A, an INSERT/UPDATE that points an org-A child at an org-B money account, item or person is
 -- ACCEPTED: RLS checks the child's header, and the FK check runs as the table owner without consulting RLS on the
@@ -39,11 +39,11 @@
 --   * Lock mode: each trigger statement takes SHARE ROW EXCLUSIVE on its child table (conflicts with writes, not with
 --     reads); drizzle applies all pending migrations in ONE transaction (dialect.js:60), so the 55 children stay locked
 --     against writes until COMMIT. Nothing is rewritten; the only table scans are the pre-flight's read-only counts.
---   * Budget: 0.95 s end to end (drizzle migrate of 0213 alone, one transaction) on a local PG 18 scratch database at the full 0212 schema with empty tables; only the pre-flight scans child tables, so production should land in the low single seconds, far under the 60 s ceiling below. RUN-TIME COST of the triggers (A/B on one database, 55 triggers enabled vs disabled, median of 5, domain functions): postEntry of a 10-line journal entry (2 journal_lines triggers per line) 14.7 ms -> 24.8 ms (about 1.7x, roughly 0.5 ms per trigger call); receiveDelivery of 50 lines 165 ms -> 217 ms (1.3x); a 50-line stock count (50 recordCount + commitCount) 777 ms -> 881 ms (1.1x). Re-time on a restore before the deploy (D8) if row counts grew.
+--   * Budget: 0.95 s end to end (drizzle migrate of 0214 alone, one transaction) on a local PG 18 scratch database at the full 0213 schema with empty tables; only the pre-flight scans child tables, so production should land in the low single seconds, far under the 60 s ceiling below. RUN-TIME COST of the triggers (A/B on one database, 55 triggers enabled vs disabled, median of 5, domain functions): postEntry of a 10-line journal entry (2 journal_lines triggers per line) 14.7 ms -> 24.8 ms (about 1.7x, roughly 0.5 ms per trigger call); receiveDelivery of 50 lines 165 ms -> 217 ms (1.3x); a 50-line stock count (50 recordCount + commitCount) 777 ms -> 881 ms (1.1x). Re-time on a restore before the deploy (D8) if row counts grew.
 --   * The rule is a 60 s ceiling (D8). Do not deploy 05:30-07:00 Manila (the T-396 POS import locks sales_days).
 --
--- PRODUCTION PRE-CHECK (READ ONLY - Ian runs it as doadmin before the deploy, D8): P0213, one row per guarded FK
--- (55 rows, expect every count 0); the query lives in docs/ops/P0213-precheck.sql.
+-- PRODUCTION PRE-CHECK (READ ONLY - Ian runs it as doadmin before the deploy, D8): P0214, one row per guarded FK
+-- (55 rows, expect every count 0); the query lives in docs/ops/P0214-precheck.sql.
 --
 -- Every statement is its own breakpoint; the last statement closes the file.
 

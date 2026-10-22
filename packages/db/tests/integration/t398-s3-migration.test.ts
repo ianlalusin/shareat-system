@@ -1,10 +1,10 @@
 /**
- * T-398 S3 / DEF-491 -- migration 0212, its text (L1, D7) and its behaviour on scratch databases (M1, M2).
+ * T-398 S3 / DEF-491 -- migration 0213, its text (L1, D7) and its behaviour on scratch databases (M1, M2).
  * docs/tasks/398-padre-garcia-franchise-org.md S3, A1, A11, B6, C2, D2, D7. Real Postgres via TEST_DATABASE_URL,
  * `_test` name guard; scratch database names contain "_test".
  *
- * M1/M2 build a base database migrated to the entry BEFORE 0212 (the last journal entry whose number is
- * below 0212; derived from the journal, never typed), then clone it from a template. Seed rows are made
+ * M1/M2 build a base database migrated to the entry BEFORE 0213 (the last journal entry whose number is
+ * below 0213; derived from the journal, never typed), then clone it from a template. Seed rows are made
  * through the catalog-driven synthesizer in t398-s3-fixture.ts (replica mode, with CHECKs stripped on the
  * four tables the seeds touch, so the rest of the schema stays exactly as the migration will find it).
  *
@@ -49,23 +49,23 @@ function baseTag(): string {
   const below = journalFile().entries.filter((e) => entryNumber(e.tag) < 212);
   return below[below.length - 1]!.tag;
 }
-const s3Entry = () => journalFile().entries.find((e) => e.tag.startsWith('0212_'));
+const s3Entry = () => journalFile().entries.find((e) => e.tag.startsWith('0213_'));
 
 // =================================================================================================
-// L1 (D7) -- 0212's own text: lock_timeout first, a budget in the header, the pg_constraint query, a fail-closed pre-flight
+// L1 (D7) -- 0213's own text: lock_timeout first, a budget in the header, the pg_constraint query, a fail-closed pre-flight
 // =================================================================================================
 
-describe('L1 (D7) -- the 0212 migration text', () => {
+describe('L1 (D7) -- the 0213 migration text', () => {
   const text = (): string => {
     const e = s3Entry();
-    expect(e, 'no journal entry numbered 0212: the S3 migration does not exist yet').toBeDefined();
+    expect(e, 'no journal entry numbered 0213: the S3 migration does not exist yet').toBeDefined();
     return readFileSync(join(MIGRATIONS_FOLDER, `${e!.tag}.sql`), 'utf8');
   };
   const statements = (t: string) => t.split('\n').filter((l) => !l.trim().startsWith('--') && l.trim() !== '');
 
-  it('RED until the migration exists: the journal has exactly one 0212 entry, after 0211, and its file is LF-only UTF-8 with no BOM', () => {
-    const entries = journalFile().entries.filter((e) => e.tag.startsWith('0212_'));
-    expect(entries.length, 'journal entries numbered 0212').toBe(1);
+  it('RED until the migration exists: the journal has exactly one 0213 entry, after 0211, and its file is LF-only UTF-8 with no BOM', () => {
+    const entries = journalFile().entries.filter((e) => e.tag.startsWith('0213_'));
+    expect(entries.length, 'journal entries numbered 0213').toBe(1);
     const t = text();
     expect(t.includes('\r'), 'CRLF line endings').toBe(false);
     expect(t.charCodeAt(0), 'BOM').not.toBe(0xfeff);
@@ -101,7 +101,7 @@ describe('L1 (D7) -- the 0212 migration text', () => {
 });
 
 // =================================================================================================
-// M1 / M2 -- scratch databases at the entry before 0212
+// M1 / M2 -- scratch databases at the entry before 0213
 // =================================================================================================
 
 function buildFolderThroughTag(targetTag: string): string {
@@ -200,7 +200,7 @@ async function seededColumn(s: postgres.Sql, x: { child: string; id: string }, c
   return r!.v;
 }
 
-describe('M1 -- fail-closed pre-flight: cross-org rows seeded on a scratch DB before 0212, then everything pending is applied', () => {
+describe('M1 -- fail-closed pre-flight: cross-org rows seeded on a scratch DB before 0213, then everything pending is applied', () => {
   const dbName = `shareat_t398s3_test_m1_${stamp}`;
   let s: postgres.Sql | undefined;
   afterAll(async () => {
@@ -219,7 +219,7 @@ describe('M1 -- fail-closed pre-flight: cross-org rows seeded on a scratch DB be
     } catch (e) {
       err = e as Error;
     }
-    expect(err, "RED today: no 0212 exists, so migrate() ran nothing and raised nothing").toBeDefined();
+    expect(err, "RED today: no 0213 exists, so migrate() ran nothing and raised nothing").toBeDefined();
     const msg = `${err?.message ?? ''} ${(err as { cause?: Error } | undefined)?.cause?.message ?? ''}`;
     expect(msg, 'the pre-flight must name DEF-491 (a bare FK-violation error means the pre-flight is missing)').toMatch(/DEF-491/);
     for (const x of SEEDS) {
@@ -252,7 +252,7 @@ describe('M3 -- the pre-flight also refuses DANGLING references (a uuid that exi
     } catch (e) {
       err = e as Error;
     }
-    expect(err, 'RED today: no 0212, nothing raised').toBeDefined();
+    expect(err, 'RED today: no 0213, nothing raised').toBeDefined();
     const msg = `${err?.message ?? ''} ${(err as { cause?: Error } | undefined)?.cause?.message ?? ''}`;
     expect(msg).toMatch(/DEF-491/);
     for (const x of SEEDS) expect(msg, `the pre-flight must name ${x.child}.${x.col}`).toMatch(new RegExp(`${x.child}[._ -]+${x.col}`));
@@ -270,14 +270,14 @@ describe('M2 -- positive control: the same scratch technique with same-org data 
     await dropDb(url!, BASE_DB);
   }, 120_000);
 
-  it('0212 applies cleanly over same-org data: exactly 145 composites and 38 UNIQUE (org_id, id) are added, no FK is left bare, every parent has exactly one key, seeds intact', async () => {
+  it('0213 applies cleanly over same-org data: exactly 145 composites and 38 UNIQUE (org_id, id) are added, no FK is left bare, every parent has exactly one key, seeds intact', async () => {
     s = await cloneBase(dbName);
     const rows = await seed(s, 'same');
     const before = await constraintCounts(s);
     const bareBefore = (await readScope(s)).filter((e) => !e.hasComposite).length;
-    expect(bareBefore, 'sanity: the base has the 141 bare org->org FKs before 0212').toBe(141);
+    expect(bareBefore, 'sanity: the base has the 141 bare org->org FKs before 0213').toBe(141);
 
-    await expect(applyEverything(s), '0212 must apply over same-org data').resolves.toBeUndefined();
+    await expect(applyEverything(s), '0213 must apply over same-org data').resolves.toBeUndefined();
 
     const after = await constraintCounts(s);
     expect(after.applied, "RED today: no migration after the base exists, nothing was applied").toBeGreaterThan(before.applied);
@@ -285,7 +285,7 @@ describe('M2 -- positive control: the same scratch technique with same-org data 
     expect(after.uniques - before.uniques, 'D2: 38 new UNIQUE (org_id, id) (7 parents already had one, B6)').toBe(38);
 
     const scope = await readScope(s);
-    expect(scope.filter((e) => !e.hasComposite).map((e) => `${e.child}.${e.col}->${e.parent}`), 'bare org->org FKs after 0212').toEqual([]);
+    expect(scope.filter((e) => !e.hasComposite).map((e) => `${e.child}.${e.col}->${e.parent}`), 'bare org->org FKs after 0213').toEqual([]);
     expect((await readRefGaps(s)).filter((e) => !e.hasComposite).map((e) => `${e.child}.${e.col}`), 'ref-gap columns without a composite').toEqual([]);
     const parents = [...new Set(scope.map((e) => e.parent))];
     const counts = await orgIdUniqueCounts(s, parents);

@@ -89,19 +89,19 @@ export const arCharges = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'ar_charges_voided_by_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `customer_id` FK (RLS checks only this row's org_id); references `customers_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `customer_id` FK (RLS checks only this row's org_id); references `customers_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.customerId],
       foreignColumns: [customers.orgId, customers.id],
       name: 'ar_charges_customer_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.journalEntryId],
       foreignColumns: [journalEntries.orgId, journalEntries.id],
       name: 'ar_charges_journal_entry_id_same_org_fk',
     }).onDelete('restrict'),
-    // NOTE: ar_charges_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0212 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // NOTE: ar_charges_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0213 (T-398 S3 / DEF-491), no Drizzle mirror here.
     // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES ar_charges (org_id, id)`
     // same-org FKs declared beside their own tables have a real unique target.
   ],
@@ -173,19 +173,19 @@ export const arCollections = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'ar_collections_voided_by_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `customer_id` FK (RLS checks only this row's org_id); references `customers_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `customer_id` FK (RLS checks only this row's org_id); references `customers_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.customerId],
       foreignColumns: [customers.orgId, customers.id],
       name: 'ar_collections_customer_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.journalEntryId],
       foreignColumns: [journalEntries.orgId, journalEntries.id],
       name: 'ar_collections_journal_entry_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `receipt_file_id` FK (RLS checks only this row's org_id); references `stored_files_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `receipt_file_id` FK (RLS checks only this row's org_id); references `stored_files_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.receiptFileId],
       foreignColumns: [storedFiles.orgId, storedFiles.id],
@@ -245,13 +245,13 @@ export const arWriteOffs = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'ar_write_offs_written_off_by_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `ar_charge_id` FK (RLS checks only this row's org_id); references `ar_charges_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `ar_charge_id` FK (RLS checks only this row's org_id); references `ar_charges_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.arChargeId],
       foreignColumns: [arCharges.orgId, arCharges.id],
       name: 'ar_write_offs_ar_charge_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.journalEntryId],
       foreignColumns: [journalEntries.orgId, journalEntries.id],

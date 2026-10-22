@@ -1,9 +1,9 @@
 /**
- * T-398 S4 / DEF-491 part 3 -- D9: sign-in still works after 0213. The auth door writes `sessions` (person_id, store_id,
+ * T-398 S4 / DEF-491 part 3 -- D9: sign-in still works after 0214. The auth door writes `sessions` (person_id, store_id,
  * credential_id), which are guarded derived FKs, and it runs with no org principal on the Firebase path; a trigger that read
  * its header or target under the caller's RLS and failed closed would lock every user out.
  *
- * Real Postgres via TEST_DATABASE_URL (the lane database once the builder applies 0213), `_test` name guard, fresh ids per
+ * Real Postgres via TEST_DATABASE_URL (the lane database once the builder applies 0214), `_test` name guard, fresh ids per
  * test (any `_test` database works). Fixtures are committed as the owner; the sign-in functions are the real ones
  * (`signInWithPin`, `signInWithFirebase`) over the real auth door, as in t438 / terminal-sign-in.
  *
@@ -62,7 +62,7 @@ async function fixture(hint: string, role: 'manager' | 'staff') {
 const sessionsOf = (personId: string) =>
   sql<{ id: string; store_id: string | null; credential_id: string | null }[]>`select id, store_id, credential_id from sessions where person_id = ${personId}`;
 
-describe('D9 -- sign-in works after 0213', () => {
+describe('D9 -- sign-in works after 0214', () => {
   it('by PIN: a staff person signs in at their store; the session row is written (mutant: a trigger refusing the door\'s writes)', async () => {
     const f = await fixture('pin', 'staff');
     const r = await signInWithPin(null, { orgId: f.orgId, storeId: f.storeId, pin: f.pin });
@@ -87,7 +87,7 @@ describe('D9 -- sign-in works after 0213', () => {
     expect((await sessionsOf(f.personId)).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('RED until 0213: the sessions insert the door performs is subject to the S4 triggers (sessions.credential_id and sessions.store_id are guarded)', async () => {
+  it('RED until 0214: the sessions insert the door performs is subject to the S4 triggers (sessions.credential_id and sessions.store_id are guarded)', async () => {
     const rows = await sql<{ col: string }[]>`
       select encode(t.tgargs, 'hex') as col from pg_trigger t
       join pg_proc p on p.oid = t.tgfoid

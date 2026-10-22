@@ -255,7 +255,7 @@ export const employments = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'employments_store_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `photo_file_id` FK (RLS checks only this row's org_id); references `stored_files_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `photo_file_id` FK (RLS checks only this row's org_id); references `stored_files_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.photoFileId],
       foreignColumns: [storedFiles.orgId, storedFiles.id],

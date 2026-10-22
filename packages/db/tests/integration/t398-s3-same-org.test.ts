@@ -1,5 +1,5 @@
 /**
- * T-398 S3 / DEF-491 -- the remaining org->org parents get composite same-org foreign keys (migration 0212).
+ * T-398 S3 / DEF-491 -- the remaining org->org parents get composite same-org foreign keys (migration 0213).
  * docs/tasks/398-padre-garcia-franchise-org.md S3, A1, A11, B6, C2, D2, D7. Real Postgres via TEST_DATABASE_URL.
  *
  * Legs here: K1 (the census is whole), K2 (exactly one UNIQUE (org_id, id) per parent), F (a cross-org
@@ -12,10 +12,10 @@
  * journal-entry references D2 names. Today (0211) 141 of those FKs have no composite twin.
  *
  * Every write runs in a transaction that is ALWAYS rolled back, so the shared test database never keeps a
- * cross-org row (the builder applies 0212 to it, and the pre-flight would refuse over residue).
+ * cross-org row (the builder applies 0213 to it, and the pre-flight would refuse over residue).
  *
  * MUTANTS (each is named by the leg that must go red):
- *   - drop one composite from 0212                    -> K1 "every org->org FK has a composite twin" names it; its F and O legs go red
+ *   - drop one composite from 0213                    -> K1 "every org->org FK has a composite twin" names it; its F and O legs go red
  *   - drop one UNIQUE (org_id, id) the migration adds -> the composite cannot be created; K2 / M2 red
  *   - add a duplicate UNIQUE (org_id, id) on a parent -> K2 ("exactly one") names the parent
  *   - composite made (org_id, col) -> parent (id) wrongly -> K1's shape check (confkey = org_id, id) red
@@ -59,29 +59,29 @@ const label = (e: ScopeFk) => `${e.child}.${e.col} -> ${e.parent}`;
 // =================================================================================================
 
 describe('K1 -- every org->org FK in scope has a composite (org_id, col) -> parent (org_id, id) twin', () => {
-  it('sanity: the catalog scope is not trivially empty (141 bare FKs before 0212, 179 in all) and names a parent set', () => {
+  it('sanity: the catalog scope is not trivially empty (141 bare FKs before 0213, 179 in all) and names a parent set', () => {
     expect(catalogScope.length, 'scope read from pg_constraint').toBeGreaterThanOrEqual(141);
     expect(parents.length).toBeGreaterThanOrEqual(45);
   });
 
-  it('RED until 0212: no single-column org->org FK is left without its composite twin', () => {
+  it('RED until 0213: no single-column org->org FK is left without its composite twin', () => {
     const bare = catalogScope.filter((e) => !e.hasComposite).map(label);
-    expect(bare.length, `${bare.length} org->org FKs still lack a composite twin (spec: 141 before 0212); first: ${bare.slice(0, 8).join('; ')}`).toBe(0);
+    expect(bare.length, `${bare.length} org->org FKs still lack a composite twin (spec: 141 before 0213); first: ${bare.slice(0, 8).join('; ')}`).toBe(0);
   });
 
-  it('RED until 0212: each of the four ref-gap columns (D2) now has a composite FK to journal_entries (org_id, id)', () => {
+  it('RED until 0213: each of the four ref-gap columns (D2) now has a composite FK to journal_entries (org_id, id)', () => {
     const missing = refGaps.filter((e) => !e.hasComposite).map(label);
     expect(missing, 'ref-gap columns with no composite FK').toEqual([]);
   });
 
-  it('RED until 0212: the census is clean when OPEN_DEF_491 holds no org->org entry (the spec\'s "remove the 141, record the red")', () => {
+  it('RED until 0213: the census is clean when OPEN_DEF_491 holds no org->org entry (the spec\'s "remove the 141, record the red")', () => {
     const bareNotListed = catalogScope.filter((e) => !e.hasComposite).map(label);
     const stillListed = OPEN_DEF_491.filter((e) => e.kind === 'org->org').map((e) => e.fk);
     expect(stillListed.length, `OPEN_DEF_491 still lists ${stillListed.length} org->org entries; first: ${stillListed.slice(0, 5).join(', ')}`).toBe(0);
     expect(bareNotListed).toEqual([]);
   });
 
-  it("RED until 0212: each composite's ON DELETE action mirrors the single-column FK it twins (RESTRICT, CASCADE, SET NULL (col)); a blanket RESTRICT is the mutant", async () => {
+  it("RED until 0213: each composite's ON DELETE action mirrors the single-column FK it twins (RESTRICT, CASCADE, SET NULL (col)); a blanket RESTRICT is the mutant", async () => {
     const rows = await sql<{ child: string; col: string; single: string; comp: string; set_cols: string | null; comp_set: string | null }[]>`
       with fks as (select con.*, cardinality(con.conkey) n,
           (select attname from pg_attribute where attrelid = con.conrelid and attnum = con.conkey[1]) c1,
@@ -115,7 +115,7 @@ describe('K1 -- every org->org FK in scope has a composite (org_id, col) -> pare
 });
 
 describe('K1b -- the exemptions file after S3 (D2): no org->org left open, NO_FK 24, no ref-gap left, batch_id reclassified', () => {
-  // Not a count: S4 (0213) moves the 27 via-header FKs to VIA_HEADER_GUARDED and triggers the other 55, so OPEN_DEF_491 is now empty.
+  // Not a count: S4 (0214) moves the 27 via-header FKs to VIA_HEADER_GUARDED and triggers the other 55, so OPEN_DEF_491 is now empty.
   // What S3 guarantees is that no org->org FK sits in either list.
   it('no S3-scope org->org FK is still listed in OPEN_DEF_491 or VIA_HEADER_GUARDED, and no OPEN entry is kind org->org', () => {
     const s3 = new Set(catalogScope.map((e) => `${e.child}.${e.col}->${e.parent}`));

@@ -1,5 +1,5 @@
 /**
- * T-398 S4 / DEF-491 part 3 -- migration 0213: the same-org validator triggers on the derived-scope children.
+ * T-398 S4 / DEF-491 part 3 -- migration 0214: the same-org validator triggers on the derived-scope children.
  * docs/tasks/398-padre-garcia-franchise-org.md S3-S4 section, A1, A2, C2, D3, D4, D7 (the 2026-10-22 amendments win).
  * Real Postgres via TEST_DATABASE_URL, `_test` name guard; the behaviour legs run in a scratch database whose name
  * contains "_test" (built at head, CHECKs stripped, every user trigger disabled EXCEPT the S4 triggers).
@@ -30,7 +30,7 @@
  *   - function SECURITY DEFINER, or EXECUTE left on PUBLIC -> D6
  *   - registry entry missing / wrong kind or mode          -> D7
  *   - OPEN_DEF_491 not emptied, or an unlisted/unguarded derived FK -> D8
- *   - 0213 without lock_timeout first / budget / pre-flight -> L1
+ *   - 0214 without lock_timeout first / budget / pre-flight -> L1
  */
 import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -68,7 +68,7 @@ const VIA_PIN = { count: 27, sha256: '7bd75be8bb9c1b360306e18a96af8ebca287ebaf21
 /** sha of the 82 keys OPEN_DEF_491 holds after S3 (the S1 census file pins the same value): 55 triggered + 27 via. */
 const PRE_S4_OPEN = { count: 82, sha256: '2df148cd2e5e0757ca384cb3c9cc5522cf138f67179f5c30787ba40f584782cf' } as const;
 const TRIGGERED_COUNT = 55;
-/** TRIGGER_REGISTRY had 100 entries (69 origin, 57 validator) at 0212; S4 adds exactly 55 validator/origin entries. */
+/** TRIGGER_REGISTRY had 100 entries (69 origin, 57 validator) at 0213; S4 adds exactly 55 validator/origin entries. */
 const REGISTRY_BEFORE_S4 = 100;
 
 function pinMismatch(keys: readonly string[], pin: { count: number; sha256: string }): string | null {
@@ -184,11 +184,11 @@ describe('D1 -- 55 triggers, 27 pinned-by-construction, nothing else', () => {
     expect(pinMismatch(viaKeys, VIA_PIN)).toBeNull();
   });
 
-  it('RED until 0213: the function exists and exactly 55 triggers call it (one per guarded FK)', () => {
+  it('RED until 0214: the function exists and exactly 55 triggers call it (one per guarded FK)', () => {
     expect(triggers.length, `triggers calling ${FN}(): ${triggers.length}`).toBe(TRIGGERED_COUNT);
   });
 
-  it.each(triggered.map((r) => [label(r), r] as const))('RED until 0213: %s has exactly one trigger naming it (BEFORE ROW INSERT OR UPDATE OF, enabled origin)', (_n, r) => {
+  it.each(triggered.map((r) => [label(r), r] as const))('RED until 0214: %s has exactly one trigger naming it (BEFORE ROW INSERT OR UPDATE OF, enabled origin)', (_n, r) => {
     const t = triggerFor(r);
     expect(t.length, `triggers whose tgargs name ${label(r)} (mutant: one trigger dropped)`).toBe(1);
     const x = t[0]!;
@@ -247,17 +247,17 @@ describe('D1 -- 55 triggers, 27 pinned-by-construction, nothing else', () => {
 // =================================================================================================
 
 describe('D6 -- function properties', () => {
-  it('RED until 0213: assert_same_org_via_parent exists, is SECURITY INVOKER, and EXECUTE is not granted to PUBLIC', async () => {
+  it('RED until 0214: assert_same_org_via_parent exists, is SECURITY INVOKER, and EXECUTE is not granted to PUBLIC', async () => {
     const rows = await sql<{ secdef: boolean; acl: string | null; public_exec: boolean }[]>`
       select p.prosecdef as secdef, p.proacl::text as acl,
         coalesce((select bool_or(a.grantee = 0 and a.privilege_type = 'EXECUTE') from aclexplode(p.proacl) a), true) as public_exec
       from pg_proc p where p.proname = ${FN} and p.pronamespace = 'public'::regnamespace`;
-    expect(rows.length, 'the function does not exist yet (0213)').toBe(1);
+    expect(rows.length, 'the function does not exist yet (0214)').toBe(1);
     expect(rows[0]!.secdef, 'mutant: SECURITY DEFINER').toBe(false);
     expect(rows[0]!.acl, 'proacl NULL = the default, PUBLIC may execute').not.toBeNull();
     expect(rows[0]!.public_exec, 'mutant: EXECUTE left on PUBLIC').toBe(false);
   });
-  it('RED until 0213: the trigger is a trigger function (returns trigger) taking no SQL-level arguments', async () => {
+  it('RED until 0214: the trigger is a trigger function (returns trigger) taking no SQL-level arguments', async () => {
     const rows = await sql<{ ret: string; nargs: number }[]>`
       select p.prorettype::regtype::text as ret, p.pronargs::int as nargs from pg_proc p
       where p.proname = ${FN} and p.pronamespace = 'public'::regnamespace`;
@@ -271,7 +271,7 @@ describe('D6 -- function properties', () => {
 // =================================================================================================
 
 describe('D7 -- packages/db/src/triggers/registry.ts', () => {
-  it('RED until 0213: the registry grew by exactly 55 entries, all kind validator, mode origin', () => {
+  it('RED until 0214: the registry grew by exactly 55 entries, all kind validator, mode origin', () => {
     const n = Object.keys(TRIGGER_REGISTRY).length;
     expect(n, `registry size ${n}; 100 before S4`).toBe(REGISTRY_BEFORE_S4 + TRIGGERED_COUNT);
   });
@@ -287,7 +287,7 @@ describe('D7 -- packages/db/src/triggers/registry.ts', () => {
       }
       if (t.enabled !== 'O') bad.push(`${t.name}: tgenabled ${t.enabled}`);
     }
-    expect(triggers.length, 'no live triggers yet (0213)').toBe(TRIGGERED_COUNT);
+    expect(triggers.length, 'no live triggers yet (0214)').toBe(TRIGGERED_COUNT);
     expect(bad).toEqual([]);
   });
   it('the 55 new registry entries are exactly the 55 live triggers (no stale entry, none missing)', () => {
@@ -306,7 +306,7 @@ describe('D8 -- census after S4', () => {
   it('RED until the builder empties it: OPEN_DEF_491 is [] (82 - 55 triggered - 27 pinned-by-construction = 0)', () => {
     expect(exemptions.OPEN_DEF_491.length, `OPEN_DEF_491 still holds ${exemptions.OPEN_DEF_491.length} entries`).toBe(0);
   });
-  it('RED until 0213: every derived-scope FK is guarded by a trigger or pinned by construction; none is neither', () => {
+  it('RED until 0214: every derived-scope FK is guarded by a trigger or pinned by construction; none is neither', () => {
     const pinned = new Set(viaPinned);
     const unguarded = derivedFks.filter((r) => triggerFor(r).length === 0 && !pinned.has(keyOf(r))).map(keyOf);
     expect(unguarded.length, `${unguarded.length} unguarded derived FKs; first: ${unguarded.slice(0, 6).join(', ')}`).toBe(0);
@@ -319,22 +319,22 @@ describe('D8 -- census after S4', () => {
 });
 
 // =================================================================================================
-// L1 (D7) -- migration 0213's own text
+// L1 (D7) -- migration 0214's own text
 // =================================================================================================
 
-describe('L1 (D7) -- the 0213 migration text', () => {
+describe('L1 (D7) -- the 0214 migration text', () => {
   const journal = () => (JSON.parse(readFileSync(join(MIGRATIONS_FOLDER, 'meta', '_journal.json'), 'utf8')) as { entries: { idx: number; tag: string }[] }).entries;
   const text = (): string => {
-    const e = journal().find((x) => x.tag.startsWith('0213_'));
-    expect(e, 'no journal entry numbered 0213: the S4 migration does not exist yet').toBeDefined();
+    const e = journal().find((x) => x.tag.startsWith('0214_'));
+    expect(e, 'no journal entry numbered 0214: the S4 migration does not exist yet').toBeDefined();
     const f = join(MIGRATIONS_FOLDER, `${e!.tag}.sql`);
     expect(existsSync(f)).toBe(true);
     return readFileSync(f, 'utf8');
   };
   const statements = (t: string) => t.split('\n').filter((l) => !l.trim().startsWith('--') && l.trim() !== '');
 
-  it('RED until the migration exists: exactly one 0213 entry, LF-only, no BOM', () => {
-    expect(journal().filter((e) => e.tag.startsWith('0213_')).length).toBe(1);
+  it('RED until the migration exists: exactly one 0214 entry, LF-only, no BOM', () => {
+    expect(journal().filter((e) => e.tag.startsWith('0214_')).length).toBe(1);
     const t = text();
     expect(t.includes('\r'), 'CRLF').toBe(false);
     expect(t.charCodeAt(0), 'BOM').not.toBe(0xfeff);

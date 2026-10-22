@@ -1,8 +1,8 @@
 /**
- * T-398 S4 / DEF-491 part 3 -- migration 0213's pre-flight on scratch databases (M1, M2).
+ * T-398 S4 / DEF-491 part 3 -- migration 0214's pre-flight on scratch databases (M1, M2).
  * docs/tasks/398-padre-garcia-franchise-org.md S4, A1, A2. Real Postgres via TEST_DATABASE_URL, `_test` name guard.
  *
- * A base database is migrated to the journal entry just before 0213 (derived from the journal, never typed) and cloned from
+ * A base database is migrated to the journal entry just before 0214 (derived from the journal, never typed) and cloned from
  * a template per leg. Seeds use the catalog-driven synthesizer in t398-s3-fixture.ts (replica mode, CHECKs stripped).
  *
  * MUTANTS: pre-flight dropped -> M1 (no DEF-491 in the error, or no error at all);
@@ -142,7 +142,7 @@ describe('M1 -- fail-closed pre-flight: one cross-org row and one dangling row i
     } catch (e) {
       err = e as Error;
     }
-    expect(err, 'RED today: no 0213 exists, so migrate() ran nothing and raised nothing').toBeDefined();
+    expect(err, 'RED today: no 0214 exists, so migrate() ran nothing and raised nothing').toBeDefined();
     const msg = `${err?.message ?? ''} ${(err as { cause?: Error } | undefined)?.cause?.message ?? ''}`;
     expect(msg, 'mutant: pre-flight dropped (a bare error, or none)').toMatch(/DEF-491/);
     for (const x of SEEDS) {
@@ -167,11 +167,11 @@ describe('M2 -- positive control: the same two FKs with same-org data', () => {
     await dropDb(url!, BASE_DB);
   }, 120_000);
 
-  it('0213 applies cleanly and creates the function and exactly 55 triggers; seeds intact', async () => {
+  it('0214 applies cleanly and creates the function and exactly 55 triggers; seeds intact', async () => {
     s = await cloneBase(dbName);
     const rows = await seed(s, 'same');
     const before = await state(s);
-    await expect(applyEverything(s), '0213 must apply over same-org data').resolves.toBeUndefined();
+    await expect(applyEverything(s), '0214 must apply over same-org data').resolves.toBeUndefined();
     const after = await state(s);
     expect(after.applied, 'RED today: no migration after the base exists').toBeGreaterThan(before.applied);
     expect(after.fns).toBe(1);

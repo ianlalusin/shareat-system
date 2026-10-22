@@ -1,4 +1,4 @@
--- 0212 - T-398 S3 / DEF-491: every remaining org->org foreign key gets a composite same-org twin.
+-- 0213 - T-398 S3 / DEF-491: every remaining org->org foreign key gets a composite same-org twin.
 -- docs/tasks/398-padre-garcia-franchise-org.md S3, A1, A11, B6, C2, D2, D7, D8. Hand-authored per ADR-012 s5.
 --
 -- WHY. Same mechanism as 0194 (persons/stores) and 0171 (DEF-490): as shareat_app with app.org_id = A,

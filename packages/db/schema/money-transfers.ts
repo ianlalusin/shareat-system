@@ -164,7 +164,7 @@ export const moneyTransfers = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'money_transfers_voided_by_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.journalEntryId],
       foreignColumns: [journalEntries.orgId, journalEntries.id],

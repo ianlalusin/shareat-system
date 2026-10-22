@@ -189,13 +189,13 @@ export const separations = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'separations_voided_by_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `employment_id` FK (RLS checks only this row's org_id); references `employments_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `employment_id` FK (RLS checks only this row's org_id); references `employments_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.employmentId],
       foreignColumns: [employments.orgId, employments.id],
       name: 'separations_employment_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.journalEntryId],
       foreignColumns: [journalEntries.orgId, journalEntries.id],

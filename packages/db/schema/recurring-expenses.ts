@@ -169,25 +169,25 @@ export const recurringExpenses = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'recurring_expenses_store_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `category_id` FK (RLS checks only this row's org_id); references `expense_categories_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `category_id` FK (RLS checks only this row's org_id); references `expense_categories_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.categoryId],
       foreignColumns: [expenseCategories.orgId, expenseCategories.id],
       name: 'recurring_expenses_category_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `last_drafted_expense_id` FK (RLS checks only this row's org_id); references `expenses_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `last_drafted_expense_id` FK (RLS checks only this row's org_id); references `expenses_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.lastDraftedExpenseId],
       foreignColumns: [expenses.orgId, expenses.id],
       name: 'recurring_expenses_last_drafted_expense_id_same_org_fk',
     }).onDelete('set null'), // the SQL is ON DELETE SET NULL ("last_drafted_expense_id") (column-list form: org_id is NOT NULL)
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `supplier_id` FK (RLS checks only this row's org_id); references `suppliers_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `supplier_id` FK (RLS checks only this row's org_id); references `suppliers_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.supplierId],
       foreignColumns: [suppliers.orgId, suppliers.id],
       name: 'recurring_expenses_supplier_id_same_org_fk',
     }).onDelete('restrict'),
-    // NOTE: recurring_expenses_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0212 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // NOTE: recurring_expenses_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0213 (T-398 S3 / DEF-491), no Drizzle mirror here.
     // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES recurring_expenses (org_id, id)`
     // same-org FKs declared beside their own tables have a real unique target.
   ],

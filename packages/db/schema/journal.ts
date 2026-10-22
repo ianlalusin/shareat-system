@@ -127,19 +127,19 @@ export const journalEntries = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'journal_entries_posted_by_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `period_id` FK (RLS checks only this row's org_id); references `fiscal_periods_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `period_id` FK (RLS checks only this row's org_id); references `fiscal_periods_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.periodId],
       foreignColumns: [fiscalPeriods.orgId, fiscalPeriods.id],
       name: 'journal_entries_period_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `reversal_of_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `reversal_of_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.reversalOfEntryId],
       foreignColumns: [t.orgId, t.id],
       name: 'journal_entries_reversal_of_entry_id_same_org_fk',
     }).onDelete('restrict'),
-    // NOTE: journal_entries_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0212 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // NOTE: journal_entries_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0213 (T-398 S3 / DEF-491), no Drizzle mirror here.
     // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES journal_entries (org_id, id)`
     // same-org FKs declared beside their own tables have a real unique target.
   ],

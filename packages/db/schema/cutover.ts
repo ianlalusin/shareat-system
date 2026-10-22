@@ -129,13 +129,13 @@ export const openingCounts = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'opening_counts_store_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `item_id` FK (RLS checks only this row's org_id); references `items_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `item_id` FK (RLS checks only this row's org_id); references `items_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.itemId],
       foreignColumns: [items.orgId, items.id],
       name: 'opening_counts_item_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `location_id` FK (RLS checks only this row's org_id); references `stock_locations_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `location_id` FK (RLS checks only this row's org_id); references `stock_locations_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.locationId],
       foreignColumns: [stockLocations.orgId, stockLocations.id],

@@ -107,13 +107,13 @@ export const payRates = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'pay_rates_created_by_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `employment_id` FK (RLS checks only this row's org_id); references `employments_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `employment_id` FK (RLS checks only this row's org_id); references `employments_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.employmentId],
       foreignColumns: [employments.orgId, employments.id],
       name: 'pay_rates_employment_id_same_org_fk',
     }).onDelete('restrict'),
-    // NOTE: pay_rates_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0212 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // NOTE: pay_rates_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0213 (T-398 S3 / DEF-491), no Drizzle mirror here.
     // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES pay_rates (org_id, id)`
     // same-org FKs declared beside their own tables have a real unique target.
   ],
@@ -365,25 +365,25 @@ export const payslips = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'payslips_person_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `employment_id` FK (RLS checks only this row's org_id); references `employments_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `employment_id` FK (RLS checks only this row's org_id); references `employments_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.employmentId],
       foreignColumns: [employments.orgId, employments.id],
       name: 'payslips_employment_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.journalEntryId],
       foreignColumns: [journalEntries.orgId, journalEntries.id],
       name: 'payslips_journal_entry_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `pay_rate_id` FK (RLS checks only this row's org_id); references `pay_rates_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `pay_rate_id` FK (RLS checks only this row's org_id); references `pay_rates_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.payRateId],
       foreignColumns: [payRates.orgId, payRates.id],
       name: 'payslips_pay_rate_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `run_id` FK (RLS checks only this row's org_id); references `pay_runs_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `run_id` FK (RLS checks only this row's org_id); references `pay_runs_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.runId],
       foreignColumns: [payRuns.orgId, payRuns.id],

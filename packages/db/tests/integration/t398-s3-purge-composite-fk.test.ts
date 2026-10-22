@@ -8,9 +8,9 @@
  * recurring_expenses.last_drafted_expense_id. S3 makes that check ignore org_id: a composite is MATCH SIMPLE, so
  * clearing the other column to NULL satisfies it, and the dropped FK is re-added validated afterwards.
  *
- * Independence from 0212: the scratch database is migrated to head and then, if the two composites are not
- * there yet (they are not before 0212), this test ADDS them (plus the UNIQUE (org_id, id) on expenses) by hand,
- * so the leg is red today for the real reason and stays a regression guard after 0212.
+ * Independence from 0213: the scratch database is migrated to head and then, if the two composites are not
+ * there yet (they are not before 0213), this test ADDS them (plus the UNIQUE (org_id, id) on expenses) by hand,
+ * so the leg is red today for the real reason and stays a regression guard after 0213.
  *
  * MUTANT: purge.ts's step-1 check goes back to `fk.childColumns.every(c => clearColumns.includes(c))` (counting
  * org_id) -> "C2 performer"-free refusal "not in clearColumns" -> every `it` here goes red.
@@ -54,7 +54,7 @@ async function hasComposite(q: postgres.Sql, child: string, col: string): Promis
 
 beforeAll(async () => {
   s = await buildScratchAtHead(url, DB); // CHECKs and user triggers stripped: the rows below are crude on purpose
-  // The composites, exactly as 0212 will shape them, when 0212 is not applied yet.
+  // The composites, exactly as 0213 will shape them, when 0213 is not applied yet.
   const [u] = await s<{ n: number }[]>`
     select count(*)::int as n from pg_constraint u
     where u.conrelid = 'expenses'::regclass and u.contype = 'u' and cardinality(u.conkey) = 2

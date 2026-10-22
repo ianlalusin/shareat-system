@@ -129,13 +129,13 @@ export const owner_drawing_closes = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'owner_drawing_closes_store_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `adjustment_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `adjustment_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.adjustmentEntryId],
       foreignColumns: [journalEntries.orgId, journalEntries.id],
       name: 'owner_drawing_closes_adjustment_entry_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0212 - same-org twin of the single-column `owner_id` FK (RLS checks only this row's org_id); references `owners_org_id_id_unique`.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `owner_id` FK (RLS checks only this row's org_id); references `owners_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.ownerId],
       foreignColumns: [owners.orgId, owners.id],
