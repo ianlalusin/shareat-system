@@ -138,3 +138,7 @@ T-457 updates the v2-only `src/lib/terminal/claim.ts`: bounded ascending range p
 - `src/components/cashier/offlinePayment.ts`: an unavailable receipt/projection read remains unknown; other errors propagate. Reserve a durable per-store receipt intent before building the batch, reuse its original ops/number on matching retry, and refuse changed or uncertain history. Deferred effects reuse saved context and one queue item, including recovery after local close. Existing owner/tender/statutory checks remain.
 - V2-only `src/lib/outbox/ledger.ts` and `effects-store.ts`: atomic intent pointer in existing meta store; original counter/event transaction preserved; stable sale effects without resetting queued work. No v1 source was changed.
 
+## T-459 edits (saved payment receipt handoff)
+
+- `src/components/cashier/payment-modal.tsx`: after the offline sale is saved, resolve autoprint from cache through `src/lib/receipts/offline-payment-destination.ts`. An unknown optional preference logs a warning and opens that saved receipt for manual printing; it cannot report the durable sale as failed. Online path and existing success/receipt presentation retained.
+

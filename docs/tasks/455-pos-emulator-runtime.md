@@ -26,3 +26,6 @@ Build-cap must restore all moved source byte-identically. Physical printer/devic
 then synced exactly one receipt/payment/number mapping to demo services. All 34 build-moved files restored byte-identically.
 Overall payment UI is NOT green: subsequent uncached print-settings read falsely reports Payment failed (DEF-728).
 Follow-up-marker crash window reported DEF-729; physical device/printer/provider/24h soak remain outstanding.
+
+T-459 new own order cash100 opens EMU-01-000002 correctly offline, survives restart, then one receipt/payment on
+reconnect. Native Settings: unsent0, old000001 quarantined1 (DEF-730); earlier REST count did not prove old ledger acknowledgement.

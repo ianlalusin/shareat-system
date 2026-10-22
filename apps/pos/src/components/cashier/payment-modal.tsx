@@ -11,10 +11,11 @@ import { Numpad } from "@/components/shared/Numpad";
 import { useToast } from "@/hooks/use-toast";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocFromCache, getDocs, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { completePaymentFromUnits } from "@/components/cashier/firestore";
 import { completePaymentOffline } from "@/components/cashier/offlinePayment";
+import { offlinePaymentDestination } from '@/lib/receipts/offline-payment-destination';
 import type { Payment, ModeOfPayment, Store, Reservation, PosPaymentIntentDoc } from "@/lib/types";
 import type { AppUser } from "@/context/auth-context";
 import type { User } from "firebase/auth";
@@ -403,10 +404,12 @@ export function PaymentModal({
         // Same print trigger as the online path: hand off to the existing
         // receipt page, which builds/prints the receipt (works offline too)
         // and already reads this store's autoprint setting.
-        const settingsSnap = await getDoc(doc(db, "stores", storeId, "receiptSettings", "main"));
-        const autoPrint = settingsSnap.exists() && !!settingsSnap.data()?.autoPrintAfterPayment;
+        const destination = await offlinePaymentDestination(receiptId, async () => {
+          const settingsSnap = await getDocFromCache(doc(db, 'stores', storeId, 'receiptSettings', 'main'));
+          return settingsSnap.exists() ? settingsSnap.data() : null;
+        }, error => console.warn('[PaymentModal] Sale saved; print preference unavailable, use manual print.', error));
         setShowSuccess(true);
-        setPendingRedirect(`/receipt?id=${receiptId}${autoPrint ? "&autoprint=1" : ""}`);
+        setPendingRedirect(destination);
       } catch (e: any) {
         toast({ variant: "destructive", title: "Payment failed", description: e?.message ?? "Something went wrong." });
         setIsProcessing(false);

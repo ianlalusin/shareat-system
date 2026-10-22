@@ -1,5 +1,5 @@
 # T-459 — saved payment must reach its receipt (DEF-728)
-Status: specified after the actual T-458 Android payment test, 22 October.
+Status: corrected and Android demo verified 22 October; postcommit checks/release gates pending.
 Goal: an optional uncached print preference cannot turn a saved payment into a payment-failed message.
 Evidence: Android log confirms EMU-01-000001 saved; payment-modal.tsx:406 then reads receiptSettings/main,
 raises unavailable and enters Payment failed catch. Restart retains closed session; demo server later has one P760 receipt/payment.
