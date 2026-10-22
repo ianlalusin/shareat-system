@@ -54,6 +54,7 @@ describe('T461 action-only forms', () => {
     const { FormDisclosure } = await import('../src/components/forms/FormDisclosure');
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     const host = document.createElement('div'); document.body.append(host);
+    const account = document.createElement('span'); account.dataset.screenState = 'account-one'; document.body.append(account);
     const root = createRoot(host);
     try {
       await act(async () => { root.render(h(FormDisclosure, { children: h('form', { onSubmit: e => e.preventDefault() }, h('input', { name: 'name', defaultValue: 'Stored' })) })); });
@@ -62,14 +63,14 @@ describe('T461 action-only forms', () => {
       if (!details || !input || !form) throw new Error('Expected a mounted entry form');
       input.value = 'Retained typing';
       await act(async () => { form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
-      const key = `erp-called-form:${window.location.pathname}`;
+      const key = `erp-called-form:account-one:${window.location.pathname}`;
       expect(sessionStorage.getItem(key)).toBe(details.id.slice('form-'.length));
       expect(sessionStorage.getItem(key)).not.toContain('Retained');
       await act(async () => { const marker = document.createElement('span'); marker.dataset.formRefusal = 'true'; host.append(marker); await Promise.resolve(); });
       expect(details.open).toBe(true);
       expect(input.value).toBe('Retained typing');
       expect(sessionStorage.getItem(key)).toBeNull();
-    } finally { await act(async () => root.unmount()); host.remove(); sessionStorage.clear(); }
+    } finally { await act(async () => root.unmount()); host.remove(); account.remove(); sessionStorage.clear(); }
   });
   it('keeps native mutation entry forms behind a shared or existing explicit reveal across ERP', () => {
     const root = join(__dirname, '../src/app');

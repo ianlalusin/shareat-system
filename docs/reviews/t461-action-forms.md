@@ -11,9 +11,13 @@ Status: implemented; local checks recorded below. Visual approval and release CI
 - One older T-440 assertion assumed form was the root element. It now requires the disclosure plus the same inner form; all disabled/ARIA/status assertions retained.
 - Eight existing native disclosures explicitly mark their contained forms as called, avoiding a second prompt. Their existing refusal-driven opening is retained.
 - Production build passed with 9008 verified free and the main checkout's environment explicitly checked for localhost:5435/shareat_dev. NODE_ENV is explicitly production for build/start. An intermediate preview-environment build inherited development mode and failed global-error prerendering; the corrected production-mode build passed. An old local next-start listener was detected after the initial build; it was stopped before the repeat builds. No production deployment or data change occurred.
-- A later precommit repeat had 308 passed / 1 unchanged G3a 5-second timeout while building; no assertion/limit was weakened. The initial 309-pass run remains evidence, and a quiet postcommit repeat is required. One commit attempt was refused for CR bytes in the new task doc; line endings were corrected, not bypassed.
+- A later precommit repeat had 308 passed / 1 unchanged G3a 5-second timeout while building; no assertion/limit was weakened. The source d1d0d71 postcommit repeat then passed 311 tests across 12 files. One commit attempt was refused for CR bytes in the new task doc; line endings were corrected, not bypassed.
+- Followup: refusal presentation state is scoped to the existing account marker and browser tab. No account marker means no persistence. The account-scope change and existing screen restoration targets passed 13 tests; final followup gates remain required.
 - Self-review: all adopter changes are wrapper/import only, server actions untouched; no new nested form, no auth/schema/domain changes, no applied migration edits or baseline/timeout widening.
 - Saved ERP browser permission is denied; no browser/HTTP/Android bypass. Local server startup is not visual approval. Ian must check the new layout before release.
 
 ## FOR IAN
 The new default is prepared for local review. It is not deployed; POS changes remain preserved separately.
+
+## Next role (Ian, 2026-10-22)
+Finish the current work, commit and stop development. The old development heartbeat is paused. Ian will supply the exact time to START a read-only auditor schedule every five hours. Each run checks actual diffs first; no diff means skip quietly until the next five-hour run. No five-hour audit schedule is active yet. Audit findings do not authorize source fixes, merging or deployment.

@@ -39,7 +39,10 @@ export function formNeedsReveal(children: ReactNode): boolean {
   return entry;
 }
 
-const refusalKey = () => `erp-called-form:${window.location.pathname}`;
+const refusalKey = () => {
+  const scope = document.querySelector('[data-screen-state]')?.getAttribute('data-screen-state');
+  return scope ? `erp-called-form:${scope}:${window.location.pathname}` : null;
+};
 
 /** Native disclosure is closed in server HTML, works without scripts, and keeps controls mounted. */
 export function FormDisclosure({ children, label, called: calledByAction = false }: { children: ReactNode; label?: ReactNode; called?: boolean }) {
@@ -52,6 +55,7 @@ export function FormDisclosure({ children, label, called: calledByAction = false
     const reopen = () => {
       try {
         const key = refusalKey();
+        if (!key) return;
         // A redirect refusal must not hide retained typing, including an in-place server navigation.
         if (sessionStorage.getItem(key) === id && document.querySelector('[data-form-refusal]') && ref.current) {
           ref.current.open = true;
@@ -66,7 +70,7 @@ export function FormDisclosure({ children, label, called: calledByAction = false
   }, [reveal, id]);
   if (!reveal) return <>{children}</>;
   return <details ref={ref} id={`form-${id}`} className="erp-action-form min-w-0"
-    onSubmitCapture={() => { try { sessionStorage.setItem(refusalKey(), id); } catch { /* No typed values are stored. */ } }}
+    onSubmitCapture={() => { try { const key = refusalKey(); if (key) sessionStorage.setItem(key, id); } catch { /* No typed values are stored. */ } }}
     onInvalidCapture={() => { if (ref.current) ref.current.open = true; }}>
     <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-md border border-surface-border px-4 py-2.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink">
       <span>{label || formActionLabel(children) || 'Update'}</span>

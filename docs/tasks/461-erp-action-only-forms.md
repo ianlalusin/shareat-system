@@ -7,6 +7,7 @@ Ian, 2026-10-22: hide every ERP form; reveal through Add/Edit/Update or another 
 - apps/erp/src/components/forms/{CheckedForm,EditableRecord,index}.tsx/index.ts (existing exact files: CheckedForm.tsx, EditableRecord.tsx, index.ts)
 - apps/erp/src/components/ui/{DisclosureCard,FlashBanner}.tsx
 - apps/erp/src/app/globals.css
+- apps/erp/src/components/shell/ScreenState.tsx: expose the existing account scope to the local reveal marker; no persisted field values or cross-account reveal state.
 - apps/erp/tests/t461-action-forms.test.ts (new)
 - apps/erp/tests/t440-s1-checked-form.test.ts: adapt only the old root-form assertion to the new disclosure, preserving every form/disabled validation assertion.
 - apps/erp/src/app/expenses/reimbursements/page.tsx; apps/erp/src/app/admin/stores/page.tsx; apps/erp/src/app/payroll/rates/page.tsx: mark forms inside existing native disclosures as already called, avoiding a second prompt. Same marking for the existing scoped items/page.tsx and ap/invoices/[id]/page.tsx.

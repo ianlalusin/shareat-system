@@ -11,5 +11,5 @@ export function ScreenState({ scope }: { readonly scope: string }) {
     const root = marker.current?.closest('main');
     return root ? rememberScreen(root, scope) : undefined;
   }, [scope, pathname, search]);
-  return <span ref={marker} hidden data-screen-state="" />;
+  return <span ref={marker} hidden data-screen-state={scope} />;
 }
