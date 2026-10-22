@@ -102,7 +102,7 @@ export function SignaturePad({
   const tile = signatureFileId ? (
     <div className="flex items-center gap-2 text-sm">
       <span>Signature on file</span>
-      <button type="button" onClick={show} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700">
+      <button type="button" onClick={show} className="min-h-8 rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700">
         View
       </button>
     </div>
@@ -136,7 +136,7 @@ export function SignaturePad({
         className="w-full max-w-xl touch-none rounded-md border border-neutral-300 bg-white dark:border-neutral-700"
       />
       <div className="flex gap-2">
-        <button type="button" onClick={clear} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700">
+        <button type="button" onClick={clear} className="min-h-8 rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700">
           Clear
         </button>
         <button
@@ -151,7 +151,7 @@ export function SignaturePad({
       {error && (
         <p className="text-sm text-warning-ink">
           Failed: {error}{' '}
-          <button type="button" onClick={save} className="underline">
+          <button type="button" onClick={save} className="inline-flex min-h-8 items-center underline">
             Retry
           </button>
         </p>

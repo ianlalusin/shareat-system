@@ -64,7 +64,7 @@ export function PhotoThumb({ purpose, label, existing, size = 'md', className = 
           type="button"
           onClick={lightbox.show}
           aria-label={`${label}: open full size`}
-          className="flex h-full w-full items-center justify-center rounded-[inherit] text-sm text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+          className="flex h-full min-h-11 w-full min-w-11 items-center justify-center rounded-[inherit] text-sm text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
         >
           {inside}
         </button>

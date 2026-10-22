@@ -4,7 +4,7 @@
  * **Ian, 2026-09-12:** *"i want every uploaded photo accross the app to not exceed 1mb so compress
  * it before uploading."*
  *
- * ## ⭐ Why this file exists separately from `PhotoInput.tsx`
+ * ## ⭐ Why this file exists separately from `PhotoUpload.tsx`
  *
  * Canvas, `createImageBitmap` and `DataTransfer` cannot run in a node test. The *rules* — which
  * dimension to try, which quality, when to stop, when to give up — are the part that can be wrong

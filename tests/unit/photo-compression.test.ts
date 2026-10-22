@@ -10,7 +10,7 @@ import {
   isCompressibleImage,
   needsPreScale,
   scaleToEdge,
-} from '../../apps/erp/src/components/photo-compression';
+} from '../../apps/erp/src/components/upload/photo-compression';
 import { MAX_IMAGE_BYTES, PURPOSE_LIMITS, isImageContentType } from '@shareat/domain';
 
 /**

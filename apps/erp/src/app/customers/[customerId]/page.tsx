@@ -5,6 +5,7 @@ import { authorize, heldCapabilities, can } from '@shareat/auth';
 import { canReadFiles } from '@shareat/domain';
 import { photoKinds } from '../../../lib/photo-link';
 import { PhotoThumb } from '@/components/upload/PhotoThumb';
+import { ACTION_LINK } from '@/components/action-link';
 import { requirePageAccess, StoreNotAvailable } from '../../../lib/page-access';
 import {
   recordCollectionAction,
@@ -308,7 +309,7 @@ export default async function CustomerDetailPage({
                           <RowLink
                             href={`/reports/journal-lines?entry=${c.journalEntryId}`}
                             aria-label={`View journal entry — ${c.referenceNo ?? c.chargeDate}, ${peso(c.outstanding)} outstanding`}
-                            className="ml-2 text-xs text-neutral-500 dark:text-neutral-400"
+                            className={`ml-2 ${ACTION_LINK} text-neutral-500 dark:text-neutral-400`}
                           >
                             entry
                           </RowLink>
@@ -431,7 +432,7 @@ export default async function CustomerDetailPage({
                         <RowLink
                           href={`/reports/journal-lines?entry=${c.journalEntryId}`}
                           aria-label={`View journal entry — collection ${c.collectionDate}, ${peso(c.amount)}`}
-                          className="ml-2 text-xs text-neutral-500 dark:text-neutral-400"
+                          className={`ml-2 ${ACTION_LINK} text-neutral-500 dark:text-neutral-400`}
                         >
                           entry
                         </RowLink>

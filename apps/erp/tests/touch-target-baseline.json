@@ -350,9 +350,6 @@
     "components/ClosedMonthOverride.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
     ],
-    "components/PhotoInput.tsx": [
-      "className could not be resolved statically (dynamic expression outside the known shapes)"
-    ],
     "components/reports/AccountDrillLink.tsx": [
       "ancestry truncated — no font size resolvable"
     ],
