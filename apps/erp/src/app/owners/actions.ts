@@ -6,6 +6,7 @@
  * ⛔ The gates live in the services, not here. A gate in a server action protects one caller.
  */
 import {
+  assertFieldRules,
   closeDrawingMonth,
   createOwner,
   recordContribution,
@@ -15,6 +16,7 @@ import {
   writeOffReceivable,
 } from '@shareat/domain';
 import type { DrawingLimitPeriod, PersonalExpenseTreatment } from '@shareat/db/schema';
+import { OWNERS_SETTLE_RULES } from '@shareat/domain/field-rules';
 import { verifyAdminApproval } from '@shareat/auth';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
@@ -32,9 +34,7 @@ export async function createOwnerAction(formData: FormData): Promise<void> {
   let id = '';
   try {
     const storeId = str(formData, 'storeId');
-    if (!storeId) throw new Error('Choose a store.');
     const personId = str(formData, 'personId');
-    if (!personId) throw new Error('Choose who this is.');
     const limit = str(formData, 'drawingLimit');
     const period = str(formData, 'drawingLimitPeriod');
     const created = await withOrgPrincipal(actor.orgId, (tx) =>
@@ -103,6 +103,9 @@ export async function settleAction(formData: FormData): Promise<void> {
   const amount = str(formData, 'amount');
   let message = '';
   try {
+    // T-440 S9 (i-R): judged only once the actor holds the gate for the branch they chose (the record's own store).
+    const target = await loadDestructiveTarget(actor, 'owner', id, [how === 'cash' ? 'transfer_funds' : 'approve_expense']);
+    assertFieldRules(OWNERS_SETTLE_RULES, formData);
     if (how === 'cash') {
       const result = await withOrgPrincipal(actor.orgId, (tx) =>
         repayFromOwner(tx, actor, {
@@ -125,7 +128,6 @@ export async function settleAction(formData: FormData): Promise<void> {
     } else if (how === 'writeoff') {
       // T-412 Tier P (DEF-654): writing a posted receivable off is an administrator's PIN, checked on the server against the
       // RECORD's store. Only this branch is guarded: repaying in cash or from pay moves money back, it forgives nothing.
-      const target = await loadDestructiveTarget(actor, 'owner', id, ['approve_expense']);
       const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId!, pin: str(formData, 'adminPin'), capability: 'approve_expense' });
       const result = await withOrgPrincipal(actor.orgId, async (tx) => {
         const written = await writeOffReceivable(tx, actor, {

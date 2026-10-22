@@ -1,10 +1,13 @@
 import Link from 'next/link';
 import { requirePageAccess, StoreNotAvailable } from '../../lib/page-access';
 import { issueAdminPinAction, upsertStorePositionAction } from './actions';
+import { positionHolders } from './role-title';
 import { positionsForStore, rosterForStore, staffStoresFor, withOrgPrincipal } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
-import { Button, FlashBanner, Input } from '@/components/ui';
+import { Button, Field, FlashBanner, Input } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { STAFF_PIN_RULES, STAFF_POSITION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { can } from '@shareat/auth';
@@ -74,13 +77,14 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
     people = await Promise.all(
       roster.map(async (r) => {
         const fileId = photoIds.get(r.id) ?? null;
-        const primary = r.positions.find((p) => p.isPrimary) ?? r.positions[0];
+        const primary = r.positions.find((p) => p.isPrimary);
         return {
           id: r.id,
           displayName: r.displayName,
           employmentStatus: r.employmentStatus,
           startedOn: r.startedOn,
           primaryPosition: primary?.name ?? null,
+          role: r.role,
           photoFileId: fileId && (await canViewPhoto(actor, fileId)) ? fileId : null,
         };
       }),
@@ -147,7 +151,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
         </p>
         <ul className="space-y-2 text-sm">
           {positions.map((p) => {
-            const holders = roster.filter((r) => r.positions.some((a) => a.positionId === p.id));
+            const holders = positionHolders(roster, p.id);
             return (
               <li key={p.id} className="rounded-lg border border-neutral-200 dark:border-neutral-800">
                 <details>
@@ -165,6 +169,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
                           <Link href={`/staff/${h.id}`} className="inline-flex min-h-6 items-center underline">
                             {h.displayName}
                           </Link>
+                          {h.note && <span className="ml-2 text-xs text-neutral-500">{h.note}</span>}
                         </li>
                       ))}
                     </ul>
@@ -174,19 +179,19 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
             );
           })}
         </ul>
-        <form
+        <CheckedForm
+          rules={STAFF_POSITION_RULES}
           action={upsertStorePositionAction}
           className="flex flex-wrap items-end gap-3 border-t border-neutral-200 pt-3 dark:border-neutral-800"
         >
           <input type="hidden" name="storeId" value={storeId} />
-          <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">Add a position</span>
-            <Input name="name" required placeholder="Barista" />
-          </label>
+          <Field label="Add a position" rule={STAFF_POSITION_RULES.name}>
+            <Input {...nativeAttrs(STAFF_POSITION_RULES.name)} placeholder="Barista" />
+          </Field>
           <Button type="submit" variant="secondary">
             Save
           </Button>
-        </form>
+        </CheckedForm>
       </section>
       ) : (
       <section className="space-y-3">
@@ -221,17 +226,16 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
                     {a.role === 'super_admin' ? 'Super admin' : 'Admin'} · {a.hasPin ? 'PIN issued' : 'No PIN yet'}
                   </div>
                 </div>
-                <form action={issueAdminPinAction} className="flex flex-wrap items-end gap-2">
+                <CheckedForm rules={STAFF_PIN_RULES} action={issueAdminPinAction} className="flex flex-wrap items-end gap-2">
                   <input type="hidden" name="personId" value={a.personId} />
                   <input type="hidden" name="storeId" value={storeId} />
-                  <label className="text-sm">
-                    <span className="block text-neutral-600 dark:text-neutral-400">{a.hasPin ? 'New PIN' : 'PIN'} (6 digits)</span>
-                    <Input name="pin" type="password" inputMode="numeric" autoComplete="off" maxLength={6} pattern="[0-9]{6}" required />
-                  </label>
+                  <Field label={`${a.hasPin ? 'New PIN' : 'PIN'} (6 digits)`} rule={STAFF_PIN_RULES.pin}>
+                    <Input {...nativeAttrs(STAFF_PIN_RULES.pin)} type="password" autoComplete="off" />
+                  </Field>
                   <Button type="submit" variant="secondary">
                     {a.hasPin ? 'Re-issue PIN' : 'Issue PIN'}
                   </Button>
-                </form>
+                </CheckedForm>
               </li>
             ))}
           </ul>

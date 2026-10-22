@@ -1,3 +1,5 @@
+import { OWNERS_CREATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { CheckedForm } from '@/components/forms';
 import Link from 'next/link';
 import { requirePageAccess } from '../../lib/page-access';
 import { createOwnerAction } from './actions';
@@ -62,11 +64,11 @@ export default async function OwnersPage({
           description="Who they are and what they are allowed to withdraw. No money moves; this is the record, not a contribution."
           size="md"
         >
-          <form action={createOwnerAction} className="space-y-4">
+          <CheckedForm rules={OWNERS_CREATE_RULES} action={createOwnerAction} className="space-y-4">
             <FormSection title="Ownership">
               <FormGrid layout="fields">
-                <Field label="Store" width="name">
-                  <Select name="storeId" required defaultValue="" className="w-full">
+                <Field label="Store" width="name" rule={OWNERS_CREATE_RULES.storeId}>
+                  <Select {...nativeAttrs(OWNERS_CREATE_RULES.storeId)} defaultValue="" className="w-full">
                     <option value="" disabled>
                       Choose…
                     </option>
@@ -77,8 +79,8 @@ export default async function OwnersPage({
                     ))}
                   </Select>
                 </Field>
-                <Field label="Who" width="name">
-                  <Select name="personId" required defaultValue="" className="w-full">
+                <Field label="Who" width="name" rule={OWNERS_CREATE_RULES.personId}>
+                  <Select {...nativeAttrs(OWNERS_CREATE_RULES.personId)} defaultValue="" className="w-full">
                     <option value="" disabled>
                       Choose…
                     </option>
@@ -95,16 +97,17 @@ export default async function OwnersPage({
                 <Field
                   label="Ownership %"
                   width="short"
+                  rule={OWNERS_CREATE_RULES.ownershipPercentage}
                   hint="Indicative only — nothing checks that these add to 100, because a store mid-restructure legitimately does not."
                 >
-                  <input name="ownershipPercentage" inputMode="decimal" className={INPUT} />
+                  <Input {...nativeAttrs(OWNERS_CREATE_RULES.ownershipPercentage)} className="w-full" />
                 </Field>
               </FormGrid>
             </FormSection>
             <FormSection title="Drawings policy">
               <FormGrid layout="fields">
-                <Field label="Drawing limit" width="short" hint="Leave both blank for no limit.">
-                  <input name="drawingLimit" inputMode="decimal" className={INPUT} />
+                <Field label="Drawing limit" width="short" rule={OWNERS_CREATE_RULES.drawingLimit} hint="Leave both blank for no limit.">
+                  <Input {...nativeAttrs(OWNERS_CREATE_RULES.drawingLimit)} className="w-full" />
                 </Field>
                 <Field label="Limit period" width="code">
                   <Select name="drawingLimitPeriod" defaultValue="" className="w-full">
@@ -133,7 +136,7 @@ export default async function OwnersPage({
             <Button type="submit" variant="primary">
               Save
             </Button>
-          </form>
+          </CheckedForm>
         </FormModal>
       </div>
 
@@ -230,5 +233,3 @@ export default async function OwnersPage({
     </Page>
   );
 }
-
-const INPUT = 'w-full min-h-11 rounded-[10px] border border-field-border bg-field px-3 py-2 text-sm text-ink';

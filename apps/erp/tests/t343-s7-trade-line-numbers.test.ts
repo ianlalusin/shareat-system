@@ -45,6 +45,7 @@ vi.mock('@/lib/constraint-messages', async () => {
 
 const createTradeOrder = vi.fn();
 vi.mock('@shareat/domain', () => ({
+  assertFieldRules: () => ({}),
   createTradeOrder: (...args: unknown[]) => createTradeOrder(...args),
 }));
 

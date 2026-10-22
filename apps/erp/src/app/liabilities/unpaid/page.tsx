@@ -150,7 +150,7 @@ function KindSection({
             <p className="text-sm text-muted">Nothing unpaid</p>
           ) : (
             <>
-              <div data-layout="cards" className="space-y-2 sm:hidden">
+              <div data-layout="cards" className="space-y-2 md:hidden">
                 {lines.map((l, i) => (
                   <Link
                     key={`${l.href}-${i}`}
@@ -165,7 +165,7 @@ function KindSection({
                   </Link>
                 ))}
               </div>
-              <div data-layout="table" className="hidden sm:block">
+              <div data-layout="table" className="hidden md:block">
                 <Table>
                   <thead>
                     <tr>

@@ -5,7 +5,7 @@
  * ⭐ One class, at the lowest shared layer. Auth cannot import domain
  * (`packages/domain/package.json`: domain depends on auth and db; auth depends on db) so a class
  * defined only in `packages/domain/src/shared/` would be unreachable from `packages/auth/src`.
- * `RefusalError` therefore lives here, value-import-free like `packages/auth/src/errors.ts` (S2's
+ * `RefusalError` therefore lives here, importing only the pure core sentence leaf (S2's
  * leaf rule) — `packages/domain/src/shared/refusal.ts` re-exports it as the producer API domain
  * code actually calls.
  *
@@ -20,8 +20,8 @@
  *  `.source` strings equal (R1.4). Two UUID regex literals drifting apart is exactly the
  *  second-source-of-truth RULES.md §6 warns against, just for a pattern instead of a business
  *  rule. */
-export const UUID_SHAPE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
-const UUID_SHAPE_GLOBAL = new RegExp(UUID_SHAPE.source, 'gi');
+export { UUID_SHAPE } from '@shareat/core/sentence';
+import { screenSentence } from '@shareat/core/sentence';
 
 export class RefusalError extends Error {
   readonly userMessage: string;
@@ -37,11 +37,11 @@ export class RefusalError extends Error {
  *  UUID with `[hidden]`. Throws only when the sanitised result is empty — possible only with an
  *  empty/blank literal (R1.4); a real sentence never throws. */
 function sanitise(sentence: string): string {
-  const collapsed = sentence.replace(/\s+/g, ' ').trim();
+  const collapsed = screenSentence(sentence);
   if (!collapsed) {
     throw new Error('refuse: sentence produced an empty result');
   }
-  return collapsed.replace(UUID_SHAPE_GLOBAL, '[hidden]');
+  return collapsed;
 }
 
 /**

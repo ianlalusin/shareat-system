@@ -12,7 +12,9 @@ import {
 } from './lib';
 import { selectDefaultCommissaryStoreId } from './default-store';
 import { Page } from '@/components/shell/Page';
-import { Button, ConfirmDestructive, FlashBanner, FormGrid, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { COMMISSARY_LINK_RULES, COMMISSARY_MAP_RULES, COMMISSARY_OFFERING_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -132,14 +134,14 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
           </div>
         )}
 
-        <form
+        <CheckedForm
+          rules={COMMISSARY_LINK_RULES}
           action={upsertLinkAction}
           className="flex flex-wrap items-end gap-3 border-t border-neutral-200 pt-3 dark:border-neutral-800"
         >
           <input type="hidden" name="commissaryStoreId" value={commissaryStoreId} />
-          <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">Branch</span>
-            <Select name="branchStoreId" required defaultValue="">
+          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Branch</span>} className="text-sm" rule={COMMISSARY_LINK_RULES.branchStoreId}>
+            <Select {...nativeAttrs(COMMISSARY_LINK_RULES.branchStoreId)} defaultValue="">
               <option value="" disabled>
                 Select a store
               </option>
@@ -149,7 +151,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                 </option>
               ))}
             </Select>
-          </label>
+          </Field>
           <label className="text-sm">
             <span className="block text-neutral-600 dark:text-neutral-400">Status</span>
             <Select name="status" defaultValue="active">
@@ -160,7 +162,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
           <Button type="submit" variant="primary">
             Save
           </Button>
-        </form>
+        </CheckedForm>
       </section>
 
       {/* ---- Offerings ------------------------------------------------------------------ */}
@@ -213,14 +215,14 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
           </div>
         )}
 
-        <form
+        <CheckedForm
+          rules={COMMISSARY_OFFERING_RULES}
           action={upsertOfferingAction}
           className="flex flex-wrap items-end gap-3 border-t border-neutral-200 pt-3 dark:border-neutral-800"
         >
           <input type="hidden" name="commissaryStoreId" value={commissaryStoreId} />
-          <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">Item</span>
-            <Select name="itemId" required defaultValue="">
+          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Item</span>} className="text-sm" rule={COMMISSARY_OFFERING_RULES.itemId}>
+            <Select {...nativeAttrs(COMMISSARY_OFFERING_RULES.itemId)} defaultValue="">
               <option value="" disabled>
                 Select an item
               </option>
@@ -230,15 +232,14 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                 </option>
               ))}
             </Select>
-          </label>
-          <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">Manual cost (optional)</span>
-            <Input name="manualCost" inputMode="decimal" placeholder="tier 3 of the price fallback" className="w-full" />
-          </label>
+          </Field>
+          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Manual cost (optional)</span>} className="text-sm" rule={COMMISSARY_OFFERING_RULES.manualCost}>
+            <Input {...nativeAttrs(COMMISSARY_OFFERING_RULES.manualCost)} placeholder="tier 3 of the price fallback" className="w-full" />
+          </Field>
           <Button type="submit" variant="secondary">
             Save
           </Button>
-        </form>
+        </CheckedForm>
       </section>
 
       {/* ---- Item map --------------------------------------------------------------------- */}
@@ -322,16 +323,16 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
               </div>
             )}
 
-            <form
+            <CheckedForm
+              rules={COMMISSARY_MAP_RULES}
               action={upsertMapAction}
               className="space-y-3 border-t border-neutral-200 pt-3 dark:border-neutral-800"
             >
               <input type="hidden" name="commissaryStoreId" value={commissaryStoreId} />
               <input type="hidden" name="branchStoreId" value={branchStoreId} />
               <FormGrid>
-              <label className="min-w-0 text-sm">
-                <span className="block text-neutral-600 dark:text-neutral-400">Commissary item</span>
-                <Select name="commissaryItemId" required defaultValue="" className="w-full">
+              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Commissary item</span>} className="min-w-0 text-sm" rule={COMMISSARY_MAP_RULES.commissaryItemId}>
+                <Select {...nativeAttrs(COMMISSARY_MAP_RULES.commissaryItemId)} defaultValue="" className="w-full">
                   <option value="" disabled>
                     Select an offering
                   </option>
@@ -341,10 +342,9 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                     </option>
                   ))}
                 </Select>
-              </label>
-              <label className="min-w-0 text-sm">
-                <span className="block text-neutral-600 dark:text-neutral-400">Branch item</span>
-                <Select name="branchItemId" required defaultValue="" className="w-full">
+              </Field>
+              <Field label={<span className="text-neutral-600 dark:text-neutral-400">Branch item</span>} className="min-w-0 text-sm" rule={COMMISSARY_MAP_RULES.branchItemId}>
+                <Select {...nativeAttrs(COMMISSARY_MAP_RULES.branchItemId)} defaultValue="" className="w-full">
                   <option value="" disabled>
                     Select an item
                   </option>
@@ -354,7 +354,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                     </option>
                   ))}
                 </Select>
-              </label>
+              </Field>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" name="isLedgerOnly" />
                 Ledger only (no branch stock moves)
@@ -383,7 +383,7 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
               <Button type="submit" variant="secondary">
                 Save
               </Button>
-            </form>
+            </CheckedForm>
           </>
         )}
       </section>

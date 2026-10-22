@@ -17,13 +17,15 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 const h = vi.hoisted(() => ({ actor: null as null | { personId: string; orgId: string } }));
 
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
-vi.mock('next/navigation', async () => (await import('../../apps/erp/tests/helpers/flash-jar-core')).nextNavigationMock());
+vi.mock('next/navigation', async () => (await import('../../tests/helpers/flash-jar-core')).nextNavigationMock());
 vi.mock('../../apps/erp/src/lib/session', () => ({
   requireActor: vi.fn(async () => h.actor),
   requireSession: vi.fn(async () => ({ actor: h.actor, sessionId: 'session-1', credentialKind: 'pin' as const, storeId: null, expiresAt: new Date('2099-01-01') })),
 }));
 
-import { captureRedirect, outcomeOf, resetJar } from '../../apps/erp/tests/helpers/flash-jar';
+import { captureRedirect, outcomeOf, resetJar } from '../../tests/helpers/flash-jar';
+import { CUTOVER_ASSET_RULES, CUTOVER_COUNT_RULES } from '@shareat/domain/field-rules';
+import { expectRuleSentence } from '../helpers/rule-sentence';
 import { testItemCode } from '../../packages/domain/tests/integration/_fixtures/item-code';
 import { asOrg, CONVERSION, domain, fixture, mkShell, mkSupplier, sql, uid } from './t390-s3-common';
 
@@ -110,7 +112,7 @@ describe('recordCountAction passes the ROOM through (DEF-630 starts here: the ac
   it('a refusal in a room reaches the flash as the domain sentence, and the redirect stays in that room', async () => {
     const s = await setup('rc-refuse');
     const o = await run('recordCountAction', { storeId: s.f.storeA, locationId: s.frz, itemId: s.item, quantity: '-1' }, s.f.admin);
-    expect(o.flash.error).toBe('A count cannot be negative.');
+    expectRuleSentence(o.flash.error, CUTOVER_COUNT_RULES.quantity, '-1'); // T-440: the rule's sentence
     expect(o.path).toBe('/cutover/count');
     expect(o.nav.get('store')).toBe(s.f.storeA);
     expect(o.nav.get('room'), 'the room rides the redirect so the page reopens the same room').toBe(s.frz);
@@ -221,7 +223,7 @@ describe('valueOpeningAssetAction calls valueOpeningAsset; a refusal reaches the
     const s = await setup('va-zero');
     const shell = await mkShell(s.f, s.f.storeA);
     const o = await run('valueOpeningAssetAction', fields(shell.id, { bookValue: '0' }), s.f.admin);
-    expect(o.flash.error).toMatch(/book value has to be greater than zero/i);
+    expectRuleSentence(o.flash.error, CUTOVER_ASSET_RULES.bookValue, '0'); // T-440: the rule's sentence
     expect((await assetRow(shell.id)).status).toBe('pending_valuation');
   });
 

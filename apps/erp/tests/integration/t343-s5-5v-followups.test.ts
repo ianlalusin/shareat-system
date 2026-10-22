@@ -52,6 +52,8 @@ import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { createItem, createSupplier, openTillShift } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
+import { ASSET_CREATE_RULES, CASH_REQUEST_APPROVE_RULES, CASH_REQUEST_CREATE_RULES, CASH_REQUEST_RELEASE_RULES, CHANNEL_SETTLEMENT_RECORD_RULES, CUTOVER_FIGURE_RULES, LIABILITY_CHARGE_RULES, LIABILITY_PAY_RULES, LOAN_ADD_RULES, LOAN_DRAW_RULES, LOAN_PAYMENT_RULES, OWNERS_CONTRIBUTION_RULES, OWNERS_DRAWING_RULES, OWNERS_SETTLE_RULES, PRICE_SET_RULES, TRANSFER_RECORD_RULES } from '@shareat/domain/field-rules';
+import { expectRuleSentence } from '../helpers/rule-sentence';
 import { paramsOf } from '../helpers/flash-jar';
 import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 import { realPurge } from '../../../../tests/integration/t390-real-purge';
@@ -151,7 +153,7 @@ describe('Comma legs — SAFE sites (green pins, already parsed via parseMoneyIn
     const { createRequestAction } = await import('../../src/app/cash-requests/actions');
     const before = await requestCountFor(f.orgId);
     const to = await expectRedirectTo(() => createRequestAction(requestFormData(f, { amount: '1,5' })));
-    expect(errorOf(to), `redirect URL was: ${to}`).toBe('The amount requested — "1,5" is not a valid amount. Use at most two decimal places.');
+    expectRuleSentence(errorOf(to), CASH_REQUEST_CREATE_RULES.amount, '1,5');
     expect(await requestCountFor(f.orgId)).toBe(before);
   });
 
@@ -165,7 +167,7 @@ describe('Comma legs — SAFE sites (green pins, already parsed via parseMoneyIn
     fd.set('requestId', requestId);
     fd.set('amount', '1,5');
     const to = await expectRedirectTo(() => decideAction(fd));
-    expect(errorOf(to), `redirect URL was: ${to}`).toBe('The approved amount — "1,5" is not a valid amount. Use at most two decimal places.');
+    expectRuleSentence(errorOf(to), CASH_REQUEST_APPROVE_RULES.amount, '1,5');
   });
 });
 
@@ -194,7 +196,7 @@ describe('Comma legs — SAFE: releaseAction amount="1,5" already refuses by nam
     fd.set('fromMoneyAccountId', f.drawerId);
     fd.set('on', '2026-01-10');
     const to = await expectRedirectTo(() => releaseAction(fd));
-    expect(errorOf(to), `redirect URL was: ${to}`).toBe('The amount released — "1,5" is not a valid amount. Use at most two decimal places.');
+    expectRuleSentence(errorOf(to), CASH_REQUEST_RELEASE_RULES.amount, '1,5');
   });
 });
 
@@ -213,7 +215,7 @@ describe('C1/C2 (DEF-472) — releaseAction amount="0" / "-5" (no positivity gua
       fd.set('fromMoneyAccountId', f.drawerId);
       fd.set('on', '2026-01-10');
       const to = await expectRedirectTo(() => releaseAction(fd));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe('The amount released has to be greater than zero.');
+      expectRuleSentence(errorOf(to), CASH_REQUEST_RELEASE_RULES.amount, '0');
     },
   );
 
@@ -231,7 +233,7 @@ describe('C1/C2 (DEF-472) — releaseAction amount="0" / "-5" (no positivity gua
       fd.set('fromMoneyAccountId', f.drawerId);
       fd.set('on', '2026-01-10');
       const to = await expectRedirectTo(() => releaseAction(fd));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe('The amount released has to be greater than zero.');
+      expectRuleSentence(errorOf(to), CASH_REQUEST_RELEASE_RULES.amount, '0');
     },
   );
 });
@@ -245,7 +247,7 @@ describe('Converted guards — createRequestAction/decideAction amount="0" (exis
       ACTOR_HOLDER.actor = f.admin;
       const { createRequestAction } = await import('../../src/app/cash-requests/actions');
       const to = await expectRedirectTo(() => createRequestAction(requestFormData(f, { amount: '0' })));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe('The amount requested has to be greater than zero.');
+      expectRuleSentence(errorOf(to), CASH_REQUEST_CREATE_RULES.amount, '0');
     },
   );
 
@@ -262,7 +264,7 @@ describe('Converted guards — createRequestAction/decideAction amount="0" (exis
       fd.set('requestId', requestId);
       fd.set('amount', '0');
       const to = await expectRedirectTo(() => decideAction(fd));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe('The approved amount has to be greater than zero.');
+      expectRuleSentence(errorOf(to), CASH_REQUEST_APPROVE_RULES.amount, '0');
     },
   );
 });
@@ -309,7 +311,7 @@ describe('principal comma leg (Tier 2, no server parse)', () => {
       const { createLoanAction } = await import('../../src/app/loans/actions');
       const before = await loanCountFor(f.orgId);
       const to = await expectRedirectTo(() => createLoanAction(loanFormData(f, { principalAmount: '1,5' })));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe(PRINCIPAL_COMMA_SENTENCE);
+      expectRuleSentence(errorOf(to), LOAN_ADD_RULES.principalAmount, '1,5');
       expect(await loanCountFor(f.orgId)).toBe(before);
     },
   );
@@ -325,7 +327,7 @@ describe('P1 (DEF-472) — createLoanAction principalAmount="0" (unmapped CHECK 
       const { createLoanAction } = await import('../../src/app/loans/actions');
       const before = await loanCountFor(f.orgId);
       const to = await expectRedirectTo(() => createLoanAction(loanFormData(f, { principalAmount: '0' })));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe(PRINCIPAL_SENTENCE);
+      expectRuleSentence(errorOf(to), LOAN_ADD_RULES.principalAmount, '0');
       expect(await loanCountFor(f.orgId)).toBe(before);
     },
   );
@@ -340,7 +342,7 @@ describe('L1/L2 (DEF-472) — interestRate regex refusal', () => {
       ACTOR_HOLDER.actor = f.admin;
       const { createLoanAction } = await import('../../src/app/loans/actions');
       const to = await expectRedirectTo(() => createLoanAction(loanFormData(f, { interestRate: '1,5' })));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe(RATE_SENTENCE('1,5'));
+      expectRuleSentence(errorOf(to), LOAN_ADD_RULES.interestRate, '1,5');
     },
   );
 
@@ -352,7 +354,7 @@ describe('L1/L2 (DEF-472) — interestRate regex refusal', () => {
       ACTOR_HOLDER.actor = f.admin;
       const { createLoanAction } = await import('../../src/app/loans/actions');
       const to = await expectRedirectTo(() => createLoanAction(loanFormData(f, { interestRate: '-1' })));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe(RATE_SENTENCE('-1'));
+      expectRuleSentence(errorOf(to), LOAN_ADD_RULES.interestRate, '-1');
     },
   );
 
@@ -378,7 +380,7 @@ describe('L3/L4/L5 (DEF-472) — termPeriods (action-level Number(str()) today, 
       ACTOR_HOLDER.actor = f.admin;
       const { createLoanAction } = await import('../../src/app/loans/actions');
       const to = await expectRedirectTo(() => createLoanAction(loanFormData(f, { termPeriods: '1,5' })));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe(PAYMENTS_SENTENCE('1,5'));
+      expectRuleSentence(errorOf(to), LOAN_ADD_RULES.termPeriods, '1,5');
     },
   );
 
@@ -390,7 +392,7 @@ describe('L3/L4/L5 (DEF-472) — termPeriods (action-level Number(str()) today, 
       ACTOR_HOLDER.actor = f.admin;
       const { createLoanAction } = await import('../../src/app/loans/actions');
       const to = await expectRedirectTo(() => createLoanAction(loanFormData(f, { termPeriods: '0' })));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe(PAYMENTS_SENTENCE('0'));
+      expectRuleSentence(errorOf(to), LOAN_ADD_RULES.termPeriods, '0');
     },
   );
 
@@ -402,7 +404,7 @@ describe('L3/L4/L5 (DEF-472) — termPeriods (action-level Number(str()) today, 
       ACTOR_HOLDER.actor = f.admin;
       const { createLoanAction } = await import('../../src/app/loans/actions');
       const to = await expectRedirectTo(() => createLoanAction(loanFormData(f, { termPeriods: '' })));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe(PAYMENTS_BLANK_SENTENCE);
+      expectRuleSentence(errorOf(to), LOAN_ADD_RULES.termPeriods, '');
     },
   );
 });
@@ -427,7 +429,7 @@ describe('Comma legs — SAFE: disburseLoanAction / recordPaymentAction already 
     fd.set('intoMoneyAccountId', drawerId);
     fd.set('on', '2026-01-10');
     const to = await expectRedirectTo(() => disburseLoanAction(fd));
-    expect(errorOf(to), `redirect URL was: ${to}`).toBe('The loan amount — "1,5" is not a valid amount. Use at most two decimal places.');
+    expect(errorOf(to)).toBe('The loan amount — "1,5" is not a valid amount. Use at most two decimal places.');
   });
 
   it('recordPaymentAction amount="1,5" refuses', async () => {
@@ -449,7 +451,7 @@ describe('Comma legs — SAFE: disburseLoanAction / recordPaymentAction already 
     payFd.set('fromMoneyAccountId', drawerId);
     payFd.set('on', '2026-01-15');
     const to = await expectRedirectTo(() => recordPaymentAction(payFd));
-    expect(errorOf(to), `redirect URL was: ${to}`).toBe('The payment amount — "1,5" is not a valid amount. Use at most two decimal places.');
+    expectRuleSentence(errorOf(to), LOAN_PAYMENT_RULES.amount, '1,5');
   });
 });
 
@@ -470,7 +472,7 @@ describe('Converted guards — disburseLoanAction/recordPaymentAction amount="0"
       fd.set('intoMoneyAccountId', drawerId);
       fd.set('on', '2026-01-10');
       const to = await expectRedirectTo(() => disburseLoanAction(fd));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe('The loan amount has to be greater than zero.');
+      expectRuleSentence(errorOf(to), LOAN_DRAW_RULES.amount, '0');
     },
   );
 });
@@ -505,9 +507,7 @@ describe('O3 (DEF-472) — chargeAction amount="1.234" (extra decimal place, val
       fd.set('againstAccountCode', '6100');
       fd.set('on', '2026-01-10');
       const to = await expectRedirectTo(() => chargeAction(fd));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe(
-        'The charge amount — "1.234" is not a valid amount. Use at most two decimal places.',
-      );
+      expect(errorOf(to)).toBe('The charge amount — "1.234" is not a valid amount. Use at most two decimal places.');
       expect(await liabilityChargeCount(f.orgId), 'nothing should have posted').toBe(0);
     },
   );
@@ -526,9 +526,7 @@ describe('Comma legs — Tier 2: chargeAction/payAction amount="1,5" (no server 
       fd.set('againstAccountCode', '6100');
       fd.set('on', '2026-01-10');
       const to = await expectRedirectTo(() => chargeAction(fd));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe(
-        'The charge amount — "1,5" is not a valid amount. Use at most two decimal places.',
-      );
+      expectRuleSentence(errorOf(to), LIABILITY_CHARGE_RULES.amount, '1,5');
       expect(await liabilityChargeCount(f.orgId), 'nothing should have posted').toBe(0);
     },
   );
@@ -549,7 +547,7 @@ describe('Converted guards — chargeAction/payAction amount="0"', () => {
       fd.set('againstAccountCode', '6100');
       fd.set('on', '2026-01-10');
       const to = await expectRedirectTo(() => chargeAction(fd));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe('A charge has to be greater than zero.');
+      expectRuleSentence(errorOf(to), LIABILITY_CHARGE_RULES.amount, '0');
     },
   );
 
@@ -574,7 +572,7 @@ describe('Converted guards — chargeAction/payAction amount="0"', () => {
       payFd.set('fromMoneyAccountId', drawerId);
       payFd.set('on', '2026-01-12');
       const to = await expectRedirectTo(() => payAction(payFd));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe('A payment has to be greater than zero.');
+      expectRuleSentence(errorOf(to), LIABILITY_PAY_RULES.amount, '0');
     },
   );
 });
@@ -613,7 +611,7 @@ describe('Comma leg — customers setPriceAction rate="1,5" (Tier 2, no server p
       fd.set('itemId', f.itemId);
       fd.set('rate', '1,5');
       const to = await expectRedirectTo(() => setPriceAction(fd));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe(RATE_COMMA_SENTENCE);
+      expectRuleSentence(errorOf(to), PRICE_SET_RULES.rate, '1,5');
     },
   );
 
@@ -630,7 +628,7 @@ describe('Comma leg — customers setPriceAction rate="1,5" (Tier 2, no server p
       fd.set('itemId', f.itemId);
       fd.set('rate', '');
       const to = await expectRedirectTo(() => setPriceAction(fd));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe(RATE_BLANK_SENTENCE);
+      expectRuleSentence(errorOf(to), PRICE_SET_RULES.rate, '');
     },
   );
 });
@@ -675,7 +673,7 @@ describe('owners drawing/settle comma legs (Tier 2)', () => {
       fd.set('fromMoneyAccountId', drawerId);
       fd.set('on', '2026-01-10');
       const to = await expectRedirectTo(() => drawingAction(fd));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe(DRAWING_COMMA_SENTENCE);
+      expectRuleSentence(errorOf(to), OWNERS_DRAWING_RULES.amount, '1,5');
     },
   );
 
@@ -695,7 +693,7 @@ describe('owners drawing/settle comma legs (Tier 2)', () => {
       fd.set('intoMoneyAccountId', drawerId);
       fd.set('on', '2026-01-10');
       const to = await expectRedirectTo(() => settleAction(fd));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe(SETTLE_ABC_SENTENCE);
+      expect(errorOf(to)).toBe(SETTLE_ABC_SENTENCE);
     },
   );
 });
@@ -715,7 +713,7 @@ describe('Converted guards — drawingAction/contributionAction amount="0"', () 
       fd.set('fromMoneyAccountId', drawerId);
       fd.set('on', '2026-01-10');
       const to = await expectRedirectTo(() => drawingAction(fd));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe('A drawing has to be greater than zero.');
+      expectRuleSentence(errorOf(to), OWNERS_DRAWING_RULES.amount, '0');
     },
   );
 
@@ -734,7 +732,7 @@ describe('Converted guards — drawingAction/contributionAction amount="0"', () 
       fd.set('intoMoneyAccountId', drawerId);
       fd.set('on', '2026-01-10');
       const to = await expectRedirectTo(() => settleAction(fd));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe('The amount settled has to be greater than zero.');
+      expectRuleSentence(errorOf(to), OWNERS_SETTLE_RULES.amount, '0');
     },
   );
 
@@ -749,7 +747,7 @@ describe('Converted guards — drawingAction/contributionAction amount="0"', () 
     fd.set('intoMoneyAccountId', drawerId);
     fd.set('on', '2026-01-10');
     const to = await expectRedirectTo(() => contributionAction(fd));
-    expect(errorOf(to), `redirect URL was: ${to}`).toBe('a contribution has to be greater than zero.');
+    expectRuleSentence(errorOf(to), OWNERS_CONTRIBUTION_RULES.amount, '0');
   });
 });
 
@@ -765,7 +763,7 @@ describe('Comma legs — SAFE: contributionAction already refuses by name', () =
     fd.set('intoMoneyAccountId', drawerId);
     fd.set('on', '2026-01-10');
     const to = await expectRedirectTo(() => contributionAction(fd));
-    expect(errorOf(to), `redirect URL was: ${to}`).toBe('The contribution amount — "1,5" is not a valid amount. Use at most two decimal places.');
+    expectRuleSentence(errorOf(to), OWNERS_CONTRIBUTION_RULES.amount, '1,5');
   });
 });
 
@@ -787,7 +785,7 @@ describe('Comma leg — money-transfers createMoneyTransferAction amountOut="1,5
     fd.set('amountOut', '1,5');
     fd.set('transferDate', '2026-01-10');
     const to = await expectRedirectTo(() => createMoneyTransferAction(fd));
-    expect(errorOf(to), `redirect URL was: ${to}`).toBe('The amount sent — "1,5" is not a valid amount. Use at most two decimal places.');
+    expectRuleSentence(errorOf(to), TRANSFER_RECORD_RULES.amountOut, '1,5');
   });
 
   it('⛔ green, unedited — amountOut="" refuses at the app layer, meaning unchanged', async () => {
@@ -803,7 +801,7 @@ describe('Comma leg — money-transfers createMoneyTransferAction amountOut="1,5
     fd.set('amountOut', '');
     fd.set('transferDate', '2026-01-10');
     const to = await expectRedirectTo(() => createMoneyTransferAction(fd));
-    expect(errorOf(to), `redirect URL was: ${to}`).toBe('Enter the amount that left the source account.');
+    expectRuleSentence(errorOf(to), TRANSFER_RECORD_RULES.amountOut, '');
   });
 
   it('⛔ green, unedited — amountOut="   " (spaces-only) same as blank', async () => {
@@ -819,7 +817,7 @@ describe('Comma leg — money-transfers createMoneyTransferAction amountOut="1,5
     fd.set('amountOut', '   ');
     fd.set('transferDate', '2026-01-10');
     const to = await expectRedirectTo(() => createMoneyTransferAction(fd));
-    expect(errorOf(to), `redirect URL was: ${to}`).toBe('Enter the amount that left the source account.');
+    expectRuleSentence(errorOf(to), TRANSFER_RECORD_RULES.amountOut, '');
   });
 });
 
@@ -842,7 +840,7 @@ describe('Comma leg — cutover addOpeningFigureAction amount="1,5" ("This amoun
     fd.set('amount', '1,5');
     fd.set('entryDate', '2026-01-10');
     const to = await expectRedirectTo(() => addOpeningFigureAction(fd));
-    expect(errorOf(to), `redirect URL was: ${to}`).toBe('This amount — "1,5" is not a valid amount. Use at most two decimal places.');
+    expectRuleSentence(errorOf(to), CUTOVER_FIGURE_RULES.amount, '1,5');
   });
 });
 
@@ -874,7 +872,7 @@ describe('U1/U2 (DEF-472) — fixed-assets usefulLifeMonths (green pins, S5.5q a
     ACTOR_HOLDER.actor = f.admin;
     const { createAssetAction } = await import('../../src/app/fixed-assets/actions');
     const to = await expectRedirectTo(() => createAssetAction(assetFormData(f, { usefulLifeMonths: '1,5' })));
-    expect(errorOf(to), `redirect URL was: ${to}`).toBe('The useful life — "1,5" is not a whole number of months from 1 to 1200.');
+    expectRuleSentence(errorOf(to), ASSET_CREATE_RULES.usefulLifeMonths, '1,5');
   });
 
   it('U2: usefulLifeMonths="" saves the category default (green, unedited)', async () => {
@@ -956,7 +954,7 @@ describe('G1-G5 (Ian, Q1) — blank/spaces-only gross/net now REFUSE, on both sa
       const { recordSettlementAction } = await import('../../src/app/channel-settlements/actions');
       const before = await settlementCountFor(f.orgId);
       const to = await expectRedirectTo(() => recordSettlementAction(settlementFormData(f, { grossAmount: '' })));
-      expect(errorOf(to), `redirect URL was: ${to}`).toBe(GROSS_BLANK_SENTENCE);
+      expectRuleSentence(errorOf(to), CHANNEL_SETTLEMENT_RECORD_RULES.grossAmount, '');
       expect(await settlementCountFor(f.orgId), 'nothing should have posted').toBe(before);
     },
   );
@@ -967,7 +965,7 @@ describe('G1-G5 (Ian, Q1) — blank/spaces-only gross/net now REFUSE, on both sa
     const { recordSettlementAction } = await import('../../src/app/channel-settlements/actions');
     const before = await settlementCountFor(f.orgId);
     const to = await expectRedirectTo(() => recordSettlementAction(settlementFormData(f, { netDeposited: '' })));
-    expect(errorOf(to), `redirect URL was: ${to}`).toBe(NET_BLANK_SENTENCE);
+    expectRuleSentence(errorOf(to), CHANNEL_SETTLEMENT_RECORD_RULES.netDeposited, '');
     expect(await settlementCountFor(f.orgId)).toBe(before);
   });
 
@@ -976,7 +974,7 @@ describe('G1-G5 (Ian, Q1) — blank/spaces-only gross/net now REFUSE, on both sa
     ACTOR_HOLDER.actor = f.admin;
     const { recordSettlementAction } = await import('../../src/app/channel-settlements/actions');
     const to = await expectRedirectTo(() => recordSettlementAction(settlementFormData(f, { grossAmount: '   ' })));
-    expect(errorOf(to), `redirect URL was: ${to}`).toBe(GROSS_BLANK_SENTENCE);
+    expectRuleSentence(errorOf(to), CHANNEL_SETTLEMENT_RECORD_RULES.grossAmount, '');
   });
 
   it(

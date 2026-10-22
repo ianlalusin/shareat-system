@@ -9,6 +9,8 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Button, ConfirmDestructive, FlashBanner, Input, Select, statusLabel } from '@/components/ui';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import { LOAN_DRAW_RULES, LOAN_PAYMENT_RULES, LOAN_REVERSE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Loan — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -40,7 +42,7 @@ export default async function LoanPage({
   const owes = compare(money(loan.position.outstanding), ZERO) > 0;
 
   return (
-    <Page density="table">
+    <Page view="detail" density="table">
       <div>
         <Link href="/loans" className="text-sm underline underline-offset-2">
           ← Loans
@@ -87,19 +89,19 @@ export default async function LoanPage({
               loan with its own terms, not a bigger version of this one.
             </p>
           </div>
-          <form action={disburseLoanAction} className="grid gap-4 sm:grid-cols-3">
+          <CheckedForm rules={LOAN_DRAW_RULES} action={disburseLoanAction} className="grid gap-4 sm:grid-cols-3">
             <input type="hidden" name="loanId" value={loan.id} />
-            <Field label="Amount">
+            <Field label="Amount" rule={LOAN_DRAW_RULES.amount}>
               <input
+                {...nativeAttrs(LOAN_DRAW_RULES.amount)}
                 name="amount"
-                required
-                defaultValue={undrawn}
                 inputMode="decimal"
+                defaultValue={undrawn}
                 className={INPUT}
               />
             </Field>
-            <Field label="Into">
-              <Select name="intoMoneyAccountId" required defaultValue={accounts[0]?.id} className="w-full">
+            <Field label="Into" rule={LOAN_DRAW_RULES.intoMoneyAccountId}>
+              <Select {...nativeAttrs(LOAN_DRAW_RULES.intoMoneyAccountId)} defaultValue={accounts[0]?.id} className="w-full">
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
@@ -107,15 +109,15 @@ export default async function LoanPage({
                 ))}
               </Select>
             </Field>
-            <Field label="On">
-              <Input name="on" type="date" required defaultValue={today()} className="w-full" />
+            <Field label="On" rule={LOAN_DRAW_RULES.on}>
+              <Input type="date" {...nativeAttrs(LOAN_DRAW_RULES.on)} defaultValue={today()} className="w-full" />
             </Field>
             <div className="sm:col-span-3">
               <Button type="submit" variant="secondary">
                 Record the draw
               </Button>
             </div>
-          </form>
+          </CheckedForm>
         </section>
       )}
 
@@ -148,19 +150,19 @@ export default async function LoanPage({
             </div>
           </div>
 
-          <form action={recordPaymentAction} className="grid gap-4 sm:grid-cols-3">
+          <CheckedForm rules={LOAN_PAYMENT_RULES} action={recordPaymentAction} className="grid gap-4 sm:grid-cols-3">
             <input type="hidden" name="loanId" value={loan.id} />
-            <Field label="Amount paid">
+            <Field label="Amount paid" rule={LOAN_PAYMENT_RULES.amount}>
               <input
+                {...nativeAttrs(LOAN_PAYMENT_RULES.amount)}
                 name="amount"
-                required
                 inputMode="decimal"
                 placeholder={loan.instalment}
                 className={INPUT}
               />
             </Field>
-            <Field label="From">
-              <Select name="fromMoneyAccountId" required defaultValue={accounts[0]?.id} className="w-full">
+            <Field label="From" rule={LOAN_PAYMENT_RULES.fromMoneyAccountId}>
+              <Select {...nativeAttrs(LOAN_PAYMENT_RULES.fromMoneyAccountId)} defaultValue={accounts[0]?.id} className="w-full">
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name} — {peso(a.balance)}
@@ -168,15 +170,15 @@ export default async function LoanPage({
                 ))}
               </Select>
             </Field>
-            <Field label="On">
-              <Input name="on" type="date" required defaultValue={today()} className="w-full" />
+            <Field label="On" rule={LOAN_PAYMENT_RULES.on}>
+              <Input type="date" {...nativeAttrs(LOAN_PAYMENT_RULES.on)} defaultValue={today()} className="w-full" />
             </Field>
             <div className="sm:col-span-3">
               <Button type="submit" variant="primary">
                 Record payment
               </Button>
             </div>
-          </form>
+          </CheckedForm>
         </section>
       )}
 
@@ -210,16 +212,18 @@ export default async function LoanPage({
                     </td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(p.total)}</td>
                     <td className="px-3 py-2 text-right">
-                      <form action={reverseEntryAction} className="flex justify-end gap-1">
+                      <CheckedForm rules={LOAN_REVERSE_RULES} action={reverseEntryAction} className="flex justify-end gap-1">
                         <input type="hidden" name="loanId" value={loan.id} />
                         <input type="hidden" name="entryId" value={p.entryId} />
-                        <Input name="reason" required placeholder="Reason…" className="w-28" />
+                        <Field label={<span className="sr-only">Reason for reversing this entry</span>} rule={LOAN_REVERSE_RULES.reason}>
+                          <Input {...nativeAttrs(LOAN_REVERSE_RULES.reason)} placeholder="Reason…" className="w-28" />
+                        </Field>
                         <ConfirmDestructive
                           tier="admin-pin"
                           label="Reverse loan entry"
                           consequence="Reverses this entry; the debt goes back to what it was. An administrator must approve with their own PIN."
                         />
-                      </form>
+                      </CheckedForm>
                     </td>
                   </tr>
                 ))}
@@ -257,17 +261,27 @@ function Figure({ label, value, emphasis }: { label: string; value: string; emph
 function Field({
   label,
   hint,
+  rule,
   children,
 }: {
-  label: string;
+  label: React.ReactNode;
   hint?: string;
+  rule?: FieldRule;
   children: React.ReactNode;
 }) {
-  return (
-    <label className="flex flex-col gap-1">
+  const body = (
+    <>
       <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
-      {hint && <span className="text-xs text-neutral-400 dark:text-neutral-600">{hint}</span>}
-    </label>
+      {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
+    </>
+  );
+  // T-440: a ruled field puts its live helper line OUTSIDE the label, so the line never joins the accessible name.
+  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
+  return (
+    <div>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }

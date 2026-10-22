@@ -6,7 +6,8 @@ import { typedFor } from '@/lib/keep-typing';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { MENU_CATEGORY_RULES, MENU_ITEM_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select } from '@/components/ui';
 import { createCategoryAction, createItemAction, editCategoryAction, retireCategoryAction } from './actions';
 import { listCategories, listOverviewItems, storesInScope, withOrgPrincipal } from './lib';
@@ -67,27 +68,27 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
           {/* T-448: the add forms open from header buttons. */}
           {canManage && (
             <FormModal trigger="+ Category" title="Add category" size="sm">
-              <form action={createCategoryAction} className="space-y-3">
+              <CheckedForm rules={MENU_CATEGORY_RULES} action={createCategoryAction} className="space-y-3">
                 <FormGrid layout="fields">
-                  <Field label="Name" width="name">
-                    <Input name="name" required />
+                  <Field label="Name" width="name" rule={MENU_CATEGORY_RULES.name}>
+                    <Input {...nativeAttrs(MENU_CATEGORY_RULES.name)} />
                   </Field>
-                  <Field label="Sort order (optional)" width="short">
-                    <Input name="sortOrder" inputMode="numeric" />
+                  <Field label="Sort order (optional)" width="short" rule={MENU_CATEGORY_RULES.sortOrder}>
+                    <Input {...nativeAttrs(MENU_CATEGORY_RULES.sortOrder)} />
                   </Field>
                 </FormGrid>
                 <Button type="submit" variant="primary">
                   Save
                 </Button>
-              </form>
+              </CheckedForm>
             </FormModal>
           )}
           {canAddItem && (
             <FormModal trigger="+ Item" title="Add item" size="md">
-              <form action={createItemAction} className="space-y-3">
+              <CheckedForm rules={MENU_ITEM_ADD_RULES} action={createItemAction} className="space-y-3">
                 <FormGrid layout="fields">
-                  <Field label="Category" width="name">
-                    <Select name="categoryId" required>
+                  <Field label="Category" width="name" rule={MENU_ITEM_ADD_RULES.categoryId}>
+                    <Select {...nativeAttrs(MENU_ITEM_ADD_RULES.categoryId)}>
                       {categories
                         .filter((c) => c.status === 'active')
                         .map((c) => (
@@ -97,8 +98,8 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
                         ))}
                     </Select>
                   </Field>
-                  <Field label="Name" width="name">
-                    <Input name="name" required />
+                  <Field label="Name" width="name" rule={MENU_ITEM_ADD_RULES.name}>
+                    <Input {...nativeAttrs(MENU_ITEM_ADD_RULES.name)} />
                   </Field>
                   <Field label="Type" width="name">
                     <Select name="itemType" defaultValue="a_la_carte">
@@ -114,7 +115,7 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
                 <Button type="submit" variant="primary">
                   Save
                 </Button>
-              </form>
+              </CheckedForm>
             </FormModal>
           )}
         </div>
@@ -204,13 +205,13 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
                     Retiring a category hides it, and every item in it, from every store menu. It is refused while the category still holds active items.
                   </HelpTip>
                 </div>
-                <EditableRecord action={editCategoryAction} label={c.name} hidden={{ id: c.id }} typed={typedFor(sp, MENU_CATEGORY, c.id, actor.personId)}>
+                <EditableRecord action={editCategoryAction} rules={MENU_CATEGORY_RULES} label={c.name} hidden={{ id: c.id }} typed={typedFor(sp, MENU_CATEGORY, c.id, actor.personId)}>
                   <FormGrid layout="fields">
-                    <Field label="Name" width="name">
-                      <Input name="name" defaultValue={c.name} required />
+                    <Field label="Name" width="name" rule={MENU_CATEGORY_RULES.name}>
+                      <Input {...nativeAttrs(MENU_CATEGORY_RULES.name)} defaultValue={c.name} />
                     </Field>
-                    <Field label="Sort order" width="short">
-                      <Input name="sortOrder" inputMode="numeric" defaultValue={String(c.sortOrder)} />
+                    <Field label="Sort order" width="short" rule={MENU_CATEGORY_RULES.sortOrder}>
+                      <Input {...nativeAttrs(MENU_CATEGORY_RULES.sortOrder)} defaultValue={String(c.sortOrder)} />
                     </Field>
                   </FormGrid>
                 </EditableRecord>

@@ -20,6 +20,8 @@ import {
 } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { parseMoneyInput } from '../shared/money-input';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { PAYROLL_PAY_RATE_RULES } from '../field-rules/payroll';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { advanceToRecover, computePay, type DayInput } from './compute';
@@ -91,6 +93,8 @@ export async function setPayRate(
 ): Promise<{ id: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'set_pay_rate', { storeId: input.storeId });
+    // T-440 S9 (ii): the screen's own rules, only once the gate has passed.
+    assertFieldRules(PAYROLL_PAY_RATE_RULES, { amount: input.amount, effectiveFrom: input.effectiveFrom });
     const amount = parseMoneyInput(input.amount, 'setPayRate: the amount', 'The pay rate');
     if (compare(amount, ZERO) <= 0) {
       throw new Error('setPayRate: a pay rate has to be more than zero.');

@@ -107,7 +107,7 @@ describe('G6 — "101" is refused, with a sentence stating the ceiling (⚠️ m
       caught = err as Error & { userMessage?: string };
     }
     expect(caught, 'expected a refusal').toBeInstanceOf(Error);
-    expect(caught?.userMessage, 'wanted the ceiling named in the sentence').toMatch(/up to 100/);
+    expect(caught?.userMessage, 'wanted the ceiling named in the sentence').toBe('The ownership percentage must be a number from 0.001 to 100.');
     expect(await ownerCount(f.orgId, f.storeId), 'nothing should be written on refusal').toBe(0);
   });
 });
@@ -124,7 +124,7 @@ describe('G6 — "100.5" is refused, with a sentence stating the ceiling (⚠️
       caught = err as Error & { userMessage?: string };
     }
     expect(caught, 'expected a refusal').toBeInstanceOf(Error);
-    expect(caught?.userMessage, 'wanted the ceiling named in the sentence').toMatch(/up to 100/);
+    expect(caught?.userMessage, 'wanted the ceiling named in the sentence').toBe('The ownership percentage must be a number from 0.001 to 100.');
     expect(await ownerCount(f.orgId, f.storeId), 'nothing should be written on refusal').toBe(0);
   });
 });

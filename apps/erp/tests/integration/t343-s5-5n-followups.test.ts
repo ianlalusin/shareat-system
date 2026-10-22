@@ -57,6 +57,8 @@ import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { createCustomer, recordCharge, recordPayment, createSupplier } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
+import { COLLECTION_RECORD_RULES } from '@shareat/domain/field-rules';
+import { expectRuleSentence } from '../helpers/rule-sentence';
 import { paramsOf } from '../helpers/flash-jar';
 
 const sql = postgres(url, { max: 5 });
@@ -153,9 +155,7 @@ describe('C1 (DEF-457) — a comma-typed store credit is silently dropped, never
 
       // Was asserted directly against the pre-fix behaviour (no `error` param — the action
       // redirected with `ok` instead — and a collection row was written); green since eb40f35.
-      expect(params.get('error'), `redirect URL was: ${to}`).toBe(
-        'The store credit applied — "1,000" is not a valid amount. Use at most two decimal places.',
-      );
+      expectRuleSentence(params.get('error'), COLLECTION_RECORD_RULES.creditApplied, '1,000');
       const after = await collectionCountFor(f.customerId);
       expect(after, 'no collection row should have been written').toBe(before);
     },

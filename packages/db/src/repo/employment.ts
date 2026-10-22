@@ -37,6 +37,8 @@ export interface EmploymentRow {
 }
 
 export interface RosterRow {
+  /** Optional for older read fixtures; real roster reads always include the active role. */
+  role?: string | null;
   id: string;
   personId: string;
   staffCode: string;
@@ -435,10 +437,11 @@ export async function personHasEmploymentAtStores(tx: Tx, personId: string, stor
 /** The roster — reads the VIEW, which is the only answer to "who is active". */
 export async function listActiveRoster(tx: Tx, storeId: string): Promise<RosterRow[]> {
   const result = await tx.execute(sql`
-    select id, person_id, staff_code, display_name, employment_status, started_on
-    from v_active_employments
-    where store_id = ${storeId}
-    order by display_name`);
+    select e.id, e.person_id, e.staff_code, e.display_name, e.employment_status, e.started_on, r.role
+    from v_active_employments e
+    left join person_roles r on r.person_id = e.person_id and r.org_id = e.org_id and r.revoked_at is null
+    where e.store_id = ${storeId}
+    order by e.display_name`);
   return (result as unknown as Record<string, unknown>[]).map((r) => ({
     id: String(r.id),
     personId: String(r.person_id),
@@ -446,6 +449,7 @@ export async function listActiveRoster(tx: Tx, storeId: string): Promise<RosterR
     displayName: String(r.display_name),
     employmentStatus: r.employment_status as EmploymentStatus,
     startedOn: String(r.started_on),
+    role: r.role === null || r.role === undefined ? null : String(r.role),
   }));
 }
 

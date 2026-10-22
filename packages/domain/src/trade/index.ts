@@ -81,6 +81,8 @@ import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from '../stock/receipt-posting';
 import { closedStockPeriodSentence, closedStockPeriodSentenceToday } from '../stock/period-guard';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { refuse } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { TRADE_ORDER_RULES } from '../field-rules/trade';
 import { notActiveItemSentence } from '../items/not-active';
 import type { StockMovementKind } from '@shareat/db/schema';
 
@@ -184,6 +186,14 @@ export async function createTradeOrder(
 ): Promise<{ orderId: string; totalAmount: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_buyer', { storeId: input.storeId });
+    // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
+    assertFieldRules(TRADE_ORDER_RULES, {
+      storeId: input.storeId,
+      customerId: input.customerId,
+      orderDate: input.orderDate,
+      deliveryFee: input.deliveryFee,
+      otherFees: input.otherFees,
+    });
 
     const customer = await customersRepo.getById(trx, actor.orgId, input.customerId);
     if (!customer) throw new Error(`createTradeOrder: customer ${input.customerId} does not exist.`);
@@ -403,6 +413,8 @@ export async function confirmTradeOrder(
 }
 
 export interface DispatchResult {
+  /** T-441 S2: the proof belongs to the payment collection, never the order. */
+  collectionId: string | null;
   orderId: string;
   /** ⛔ Null for an INTERNAL transfer — a branch is not extended credit, so nothing is receivable. */
   chargeId: string | null;
@@ -462,6 +474,7 @@ export async function dispatchTradeOrder(
         treatment: order.arChargeId ? 'external' : 'internal',
         paidNow: null,
         balanceAfterPayment: null,
+        collectionId: null,
       };
     }
     if (order.status !== 'draft' && order.status !== 'confirmed') {
@@ -579,7 +592,7 @@ export async function dispatchTradeOrder(
       // is meaningless and is deliberately not consulted.
       return {
         orderId: order.id, chargeId: null, entryId: dispatched.entryId, creditOverridden: false, treatment: 'internal',
-        paidNow: null, balanceAfterPayment: null,
+        paidNow: null, balanceAfterPayment: null, collectionId: null,
       };
     }
 
@@ -598,9 +611,10 @@ export async function dispatchTradeOrder(
       notes: `Wholesale order ${order.referenceNo ?? order.id}`,
       creditOverrideReason: input.creditOverrideReason,
     };
-    const { chargeId, entryId, creditOverrideBy, creditOverrideReason } = input.payNow
+    const billed: Awaited<ReturnType<typeof recordCharge>> & { collectionId?: string } = input.payNow
       ? await recordChargeWithCollection(trx, actor, { ...chargeInput, payNow: input.payNow })
       : await recordCharge(trx, actor, chargeInput);
+    const { chargeId, entryId, creditOverrideBy, creditOverrideReason } = billed;
 
     // ---------------------------------------------------------------------------------------
     // ⭐ T-165 / DEF-125. COGS and inventory relief — T-132's own header called this a "stated
@@ -671,6 +685,7 @@ export async function dispatchTradeOrder(
     const paidNow = input.payNow ? parseMoneyInput(input.payNow.amount, 'dispatchTradeOrder: the payment', 'The amount paid now') : null;
     return {
       orderId: order.id, chargeId, entryId,
+      collectionId: billed.collectionId ?? null,
       creditOverridden: creditOverrideReason !== null, treatment: 'external',
       paidNow,
       balanceAfterPayment: paidNow ? subtract(money(order.totalAmount), paidNow) : null,

@@ -1,3 +1,5 @@
+import { CUSTOMER_ADD_RULES, CUSTOMER_RECONCILE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
+import { CheckedForm, FieldCheck } from '@/components/forms';
 import Link from 'next/link';
 import { CUSTOMER_GROUPS } from '@shareat/db/schema';
 import { requirePageAccess, StoreNotAvailable } from '../../lib/page-access';
@@ -118,16 +120,18 @@ export default async function CustomersPage({
                       c.reconciledAsOf
                     ) : (
                       <RowAction>
-                        <form action={reconcileCustomerAction} className="flex items-center gap-1">
+                        <CheckedForm rules={CUSTOMER_RECONCILE_RULES} action={reconcileCustomerAction} className="flex items-center gap-1">
                           <input type="hidden" name="customerId" value={c.id} />
-                          <Input name="asOf" type="date" defaultValue={today()} />
+                          <Field label={<span className="sr-only">Date verified at zero</span>} rule={CUSTOMER_RECONCILE_RULES.asOf}>
+                            <Input type="date" {...nativeAttrs(CUSTOMER_RECONCILE_RULES.asOf)} defaultValue={today()} />
+                          </Field>
                           <button
                             type="submit"
                             className="rounded border border-neutral-300 px-2 py-0.5 text-xs dark:border-neutral-700"
                           >
                             Anchor
                           </button>
-                        </form>
+                        </CheckedForm>
                       </RowAction>
                     )}
                   </td>
@@ -158,11 +162,11 @@ export default async function CustomersPage({
           </p>
         </div>
 
-        <form action={createCustomerAction} className="space-y-4">
+        <CheckedForm rules={CUSTOMER_ADD_RULES} action={createCustomerAction} className="space-y-4">
           <FormSection title="Customer identity">
             <FormGrid layout="fields">
-              <Field width="name" label="Name">
-                <Input name="name" required placeholder="Resto Bulacan" className="w-full" />
+              <Field rule={CUSTOMER_ADD_RULES.name} width="name" label="Name">
+                <Input {...nativeAttrs(CUSTOMER_ADD_RULES.name)}   placeholder="Resto Bulacan" className="w-full" />
               </Field>
               <Field
                 label="Counterparty"
@@ -233,28 +237,15 @@ export default async function CustomersPage({
           <Button type="submit" variant="primary">
             Save
           </Button>
-        </form>
+        </CheckedForm>
       </section>
     </Page>
   );
 }
 
-function Field({
-  width,
-  label,
-  hint,
-  children,
-}: {
-  width?: FieldProps['width'];
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className={`flex min-w-0 flex-col gap-1${width ? ` erp-field-${width}` : ''}`}>
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
-      {children}
-      {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </label>
-  );
+function Field({ width, label, hint, rule, children }: FieldProps) {
+  const body = <><span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>{children}{hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}</>;
+  const sizing = width ? ` erp-field-${width}` : '';
+  if (!rule) return <label className={`flex min-w-0 flex-col gap-1${sizing}`}>{body}</label>;
+  return <div className={`min-w-0${sizing}`}><label className="flex min-w-0 flex-col gap-1">{body}</label><FieldCheck rule={rule} /></div>;
 }

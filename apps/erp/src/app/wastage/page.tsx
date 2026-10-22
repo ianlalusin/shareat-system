@@ -7,6 +7,8 @@ import { peso } from '../../lib/format';
 import { requireSession } from '../../lib/session';
 import { listStores, withOrgPrincipal } from '../expenses/lib';
 import { recordOrderWastageAction } from './actions';
+import { WASTAGE_RECORD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { CheckedForm } from '@/components/forms';
 import { Page } from '@/components/shell/Page';
 import { Badge, Banner, Button, FlashBanner, FormGrid, Field, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
@@ -111,7 +113,7 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
 
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Record a wastage</h2>
-        <form action={recordOrderWastageAction} className="mt-3 space-y-3 text-sm">
+        <CheckedForm rules={WASTAGE_RECORD_RULES} action={recordOrderWastageAction} className="mt-3 space-y-3 text-sm">
           <input type="hidden" name="storeId" value={storeId} />
           <FormGrid>
             {/* ⭐ T-230 — a SELECT of configured channels, not free text with a datalist hint.
@@ -120,8 +122,8 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
                 creation to derive it. The second is a defect this closes on the way past — a typed
                 name nothing matched used to create a tracked wastage that no human and no backstop
                 could ever resolve, and it only surfaced days later at posting time. */}
-            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Channel</span>}>
-              <Select name="channel" required defaultValue="" className="mt-1 block w-full">
+            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Channel</span>} rule={WASTAGE_RECORD_RULES.channel}>
+              <Select {...nativeAttrs(WASTAGE_RECORD_RULES.channel)} defaultValue="" className="mt-1 block w-full">
                 <option value="" disabled>Choose a channel…</option>
                 {channels.map((c) => (
                   <option key={c.id} value={c.name}>
@@ -130,17 +132,17 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
                 ))}
               </Select>
             </Field>
-            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Business date</span>}>
-              <Input type="date" name="businessDate" defaultValue={toBusinessDate()} required className="mt-1 block w-full" />
+            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Business date</span>} rule={WASTAGE_RECORD_RULES.businessDate}>
+              <Input type="date" {...nativeAttrs(WASTAGE_RECORD_RULES.businessDate)} defaultValue={toBusinessDate()} className="mt-1 block w-full" />
             </Field>
             <Field label={<span className="text-neutral-600 dark:text-neutral-400">Platform order ref (optional)</span>}>
               <Input name="orderRef" className="mt-1 block w-full" />
             </Field>
-            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Amount</span>}>
-              <Input name="amount" inputMode="decimal" required placeholder="0.00" className="mt-1 block w-full tabular-nums" />
+            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Amount</span>} rule={WASTAGE_RECORD_RULES.amount}>
+              <Input {...nativeAttrs(WASTAGE_RECORD_RULES.amount)} placeholder="0.00" className="mt-1 block w-full tabular-nums" />
             </Field>
-            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Reason</span>} span="wide">
-              <Input name="reason" required className="mt-1 block w-full" />
+            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Reason</span>} span="wide" rule={WASTAGE_RECORD_RULES.reason}>
+              <Input {...nativeAttrs(WASTAGE_RECORD_RULES.reason)} className="mt-1 block w-full" />
             </Field>
           {/* ⛔ THE TWO MODE RADIOS ARE GONE — bible §13 row 180, Ian 2026-09-07. They let the
               person recording a loss mark it `instant` + `absorbed` and skip the Wastage Monitor,
@@ -198,7 +200,7 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
             .
           </p>
           <Button type="submit" variant="primary">Save</Button>
-        </form>
+        </CheckedForm>
       </section>
 
       {matches.length > 0 && (

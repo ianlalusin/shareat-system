@@ -6,6 +6,8 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Button, CardGrid, Field, FlashBanner, FormGrid, FormModal, Input } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { PRICE_LIST_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Price lists — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -41,10 +43,10 @@ export default async function PriceListsPage({
         </div>
         {/* T-448: the add form opens from the header instead of sitting under the list. */}
         <FormModal trigger="+ New price list" title="New price list" size="sm">
-          <form action={createPriceListAction} className="space-y-3">
+          <CheckedForm rules={PRICE_LIST_ADD_RULES} action={createPriceListAction} className="space-y-3">
             <FormGrid layout="fields">
-              <Field width="name" label="Name">
-                <Input name="name" required placeholder="Wholesale — meat" className="w-full" />
+              <Field width="name" label="Name" rule={PRICE_LIST_ADD_RULES.name}>
+                <Input {...nativeAttrs(PRICE_LIST_ADD_RULES.name)} placeholder="Wholesale — meat" className="w-full" />
               </Field>
               <Field width="long" label="Description" hint="Optional.">
                 <Input name="description" className="w-full" />
@@ -53,7 +55,7 @@ export default async function PriceListsPage({
             <Button type="submit" variant="primary">
               Save
             </Button>
-          </form>
+          </CheckedForm>
         </FormModal>
       </div>
 

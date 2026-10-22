@@ -1,6 +1,6 @@
 # T-440: Live field checks on every form field with a rule
 
-**Status:** BUILT, NOT RELEASED 2026-10-18 for S1+S2 (mechanism, pilots, coverage guard); IN PROGRESS S3-S7 on branch lane/t440-sweep (~384 fields converted, 2 failing tests, not merged); S9 auth-first SPEC AUDITED.
+**Status:** COMPLETE 2026-10-22: S1-S9 (field rules, auth-first, applies-when) merged to main in PR #40 (19 Oct). Deploy of PR #40 not recorded in docs; follow-ups in T-453.
 **Ruling:** bible row 363 (Ian, 2026-10-17). Also row 7 / §2.6 (no client-only rules), row 289 (locked records, Edit
 unlocks, an add form ends in Save), row 171 / §1.2c (one family of patterns, familiar but upgraded), T-389 (a refused
 save keeps typing), T-343 (`refuse()` / `userMessage`).
@@ -438,3 +438,12 @@ createSupplierAction with termsMode=cod, creditTermsDays="abc" saves with terms 
 **Smoke** /ap 1280 + 375: COD => days greyed, Save on; On credit => "Required", Save off; 30 => Good; saved supplier reads
 "On credit · 30 days". Edit page: credit -> COD -> Cancel restores select and field state.
 C (Lightbox overflow) is in `441-photo-upload-control.md`, "Smoke fix L1".
+
+## Ian ruling, 20 October: invalid money amounts
+Ian chose: **Quote invalid money amounts only**. This resolves DEF-698 and supersedes audit commit 3124504's blanket no-echo behavior for money. Money requirements keep parseMoneyInput's exact userMessage, including the invalid amount; money progress and raw diagnostics still do not echo it. Government IDs and all other non-money fields remain hidden. The original section 3 money exception stands. This ruling is recorded here for the planner to sync into the authority and Open Questions artifact.
+
+### Identifier and whitespace parity, external audit 20 October
+DEF-702: the money exception still uses the existing screen redaction policy. A UUID pasted into an amount must read `[hidden]`, and whitespace is collapsed, identically in the live hint and server refusal. The expanded parity control failed first on the fixture amount rule. The unchanged UUID pattern and text normalization now live in the import-free `packages/core/src/sentence.ts`; DB refusal reuses it and retains its empty-sentence check, raw diagnostic and class. This explicitly extends supporting scope to that leaf, its core package subpath, `packages/db/src/refusal.ts`, the Vitest subpath alias and parity tests. No DB/auth import reaches the browser and no accepted numeric input changes.
+
+### Range sentence compatibility, external audit 20 October
+`FieldRule.rangeSays?: string` preserves an existing number/money bound refusal only on a min/max failure. It takes precedence over the general requirement for that failure, but never replaces a blank or malformed-input requirement. This avoids telling someone a blank rate is negative and retains the established overdraft/drawing/salvage/rate/count explanations. New unit control was red before implementation; numeric thresholds and accepted values are unchanged. Supporting scope is the existing checker, affected area rules and parity fixtures.

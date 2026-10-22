@@ -112,7 +112,7 @@ async function thirtyDaySupplier(f: Fixture, hint: string): Promise<string> {
   return id;
 }
 
-const TERMS_BLANK = 'Enter how many days of credit this supplier gives (0 to 365), or choose Cash on delivery.';
+const TERMS_BLANK = 'Days to pay is required.';
 // T-440 (row 363): ONE rule; the server refuses with the rule's own sentence, which never quotes the typed value.
 const RULE_SENTENCE = (() => {
   const c = checkField(SUPPLIER_ADD_RULES.creditTermsDays, 'x');

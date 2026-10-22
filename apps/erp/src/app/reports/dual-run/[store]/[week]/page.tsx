@@ -6,7 +6,9 @@ import { recordDualRunDispositionAction } from '../../actions';
 import { EmptyState } from '@/components/reports/EmptyState';
 import { Page } from '@/components/shell/Page';
 import { withFlash } from '@/lib/flash';
+import { CheckedForm } from '@/components/forms';
 import { Badge, Button, Field, FlashBanner, FormGrid, Input, Select, Textarea } from '@/components/ui';
+import { REPORTS_DUAL_RUN_DISPOSITION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FAMILY_LABEL, VerdictBadge, isMonday, manilaDateTime, peso } from '../../ui';
 
 export const metadata = { title: 'Dual run week — Shareat System' };
@@ -200,7 +202,7 @@ export default async function DualRunWeekPage({
               ) : null}
 
               {canRecord && view.report.isCurrent && l.dispositionable ? (
-                <form action={recordDualRunDispositionAction} className="mt-3 flex flex-col gap-2 border-t border-surface-border pt-3">
+                <CheckedForm rules={REPORTS_DUAL_RUN_DISPOSITION_RULES} action={recordDualRunDispositionAction} className="mt-3 flex flex-col gap-2 border-t border-surface-border pt-3">
                   <input type="hidden" name="storeId" value={view.store.id} />
                   <input type="hidden" name="weekStart" value={view.report.weekStart} />
                   <input type="hidden" name="kind" value={l.kind} />
@@ -213,17 +215,18 @@ export default async function DualRunWeekPage({
                         <option value="V2_DEFECT">V2_DEFECT (new system is wrong)</option>
                       </Select>
                     </Field>
-                    <Field label="Defect reference">
-                      <Input name="ref" placeholder="DEF-123" pattern="DEF-[0-9]+" required className="w-full" />
+                    <Field label="Defect reference" rule={REPORTS_DUAL_RUN_DISPOSITION_RULES.ref}>
+                      {/* The browser pattern is the rule's own regex (anchored by HTML), so it is never stricter than the server. */}
+                      <Input {...nativeAttrs(REPORTS_DUAL_RUN_DISPOSITION_RULES.ref)} pattern="DEF-[0-9]+" placeholder="DEF-123" className="w-full" />
                     </Field>
-                    <Field label="Note" span="full">
-                      <Textarea name="note" required maxLength={500} className="w-full" />
+                    <Field label="Note" span="full" rule={REPORTS_DUAL_RUN_DISPOSITION_RULES.note}>
+                      <Textarea {...nativeAttrs(REPORTS_DUAL_RUN_DISPOSITION_RULES.note)} className="w-full" />
                     </Field>
                   </FormGrid>
                   <Button type="submit" variant="primary">
                     Record
                   </Button>
-                </form>
+                </CheckedForm>
               ) : null}
             </article>
           ))}

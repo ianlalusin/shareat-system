@@ -10,7 +10,7 @@
  * server refuses with the very same sentence. Checks start in a layout effect that reads the form's current values.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, type ComponentPropsWithoutRef, type FormEvent } from 'react';
-import { rulesOf, type FieldRuleSetLike } from '@shareat/domain/field-rules';
+import { ruleInputNames, type FieldRuleSetLike } from '@shareat/domain/field-rules';
 import { CheckContext } from './context';
 import { CheckSummary } from './CheckSummary';
 import { CHECKED_FORM_INITIAL, checkContextValue, checkedFormReducer, onCheckedSubmit, watchFormReset } from './check-state';
@@ -27,7 +27,7 @@ export interface CheckedFormProps extends Omit<ComponentPropsWithoutRef<'form'>,
 export function CheckedForm({ rules, action, children, ...formProps }: CheckedFormProps) {
   const [state, dispatch] = useReducer(checkedFormReducer, CHECKED_FORM_INITIAL);
   const formRef = useRef<HTMLFormElement>(null);
-  const names = useMemo(() => new Set(rulesOf(rules).map((r) => r.name)), [rules]);
+  const names = useMemo(() => new Set(ruleInputNames(rules)), [rules]);
   const ctx = useMemo(() => checkContextValue(rules, state), [rules, state]);
 
   const reread = useCallback(() => {

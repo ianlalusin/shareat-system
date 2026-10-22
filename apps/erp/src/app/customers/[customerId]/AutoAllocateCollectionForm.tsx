@@ -17,8 +17,10 @@
  */
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { compare, money, ZERO } from '@shareat/core/money';
-import { PhotoInput } from '@/components/PhotoInput';
+import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import { Button, Input, Select } from '@/components/ui';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import { COLLECTION_RECORD_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import type { AutoAllocateCollectionRequest, AutoAllocateCollectionResponse } from '../actions';
 
 export interface ReceivableItem {
@@ -42,18 +44,37 @@ function peso(v: string): string {
     : v;
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
+function Field({
+  label,
+  hint,
+  rule,
+  children,
+}: {
+  label: React.ReactNode;
+  hint?: string;
+  rule?: FieldRule;
+  children: React.ReactNode;
+}) {
+  const body = (
+    <>
       <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
       {hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}
-    </label>
+    </>
+  );
+  // T-440: a ruled field puts its live helper line OUTSIDE the label, so the line never joins the accessible name.
+  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
+  return (
+    <div>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }
 
 export function AutoAllocateCollectionForm({
-  postAction,
+  // T-440: the prop is the page's `recordCollectionAction`; it keeps that name here so the form's server action is the one the guard traces.
+  postAction: recordCollectionAction,
   previewAction,
   customerId,
   storeId,
@@ -183,7 +204,7 @@ export function AutoAllocateCollectionForm({
   }
 
   return (
-    <form action={postAction} className="space-y-3">
+    <CheckedForm rules={COLLECTION_RECORD_RULES} action={recordCollectionAction} className="space-y-3">
       <input type="hidden" name="customerId" value={customerId} />
       <input type="hidden" name="storeId" value={storeId} />
 
@@ -258,28 +279,26 @@ export function AutoAllocateCollectionForm({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="Total received (gross)">
+        <Field label="Total received (gross)" rule={COLLECTION_RECORD_RULES.amount}>
           <Input
-            name="amount"
-            required
-            inputMode="decimal"
+            {...nativeAttrs(COLLECTION_RECORD_RULES.amount)}
             placeholder="0.00"
             value={totalAmount}
             onChange={(e) => setTotal(e.target.value)}
             className="w-full"
           />
         </Field>
-        <Field label="Platform fee" hint="⛔ Booked here (platform and channel fees) and NOWHERE else. Never also as an expense.">
-          <Input name="platformFee" inputMode="decimal" placeholder="0.00" className="w-full" />
+        <Field label="Platform fee" hint="⛔ Booked here (platform and channel fees) and NOWHERE else. Never also as an expense." rule={COLLECTION_RECORD_RULES.platformFee}>
+          <Input {...nativeAttrs(COLLECTION_RECORD_RULES.platformFee)} placeholder="0.00" className="w-full" />
         </Field>
-        <Field label="Date">
-          <Input type="date" name="collectionDate" required defaultValue={today} className="w-full" />
+        <Field label="Date" rule={COLLECTION_RECORD_RULES.collectionDate}>
+          <Input type="date" {...nativeAttrs(COLLECTION_RECORD_RULES.collectionDate)} defaultValue={today} className="w-full" />
         </Field>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Into account">
-          <Select name="moneyAccountId" required defaultValue="" className="w-full">
+        <Field label="Into account" rule={COLLECTION_RECORD_RULES.moneyAccountId}>
+          <Select {...nativeAttrs(COLLECTION_RECORD_RULES.moneyAccountId)} defaultValue="" className="w-full">
             <option value="" disabled>Choose…</option>
             {wallets.map((w) => (
               <option key={w.id} value={w.id}>{w.name} ({w.custodian}) — {peso(w.balance)}</option>
@@ -295,8 +314,9 @@ export function AutoAllocateCollectionForm({
         <Field
           label="Store credit to apply"
           hint={`${peso(credit)} held as customer store credit. Spending it draws the liability down instead of taking cash.`}
+          rule={COLLECTION_RECORD_RULES.creditApplied}
         >
-          <Input name="creditApplied" inputMode="decimal" placeholder="0.00" className="w-full" />
+          <Input {...nativeAttrs(COLLECTION_RECORD_RULES.creditApplied)} placeholder="0.00" className="w-full" />
         </Field>
       )}
 
@@ -304,12 +324,12 @@ export function AutoAllocateCollectionForm({
         label="Proof of payment"
         hint="Required for an online or e-wallet account: the deposit slip or transfer screenshot."
       >
-        <PhotoInput name="receiptPhoto" accept="image/*" className="text-sm" />
+        <PhotoUpload name="receiptPhoto" purpose="receipt_photo" storeId={storeId} label="Proof of payment" />
       </Field>
 
       <Button type="submit" variant="primary">
         Record payment
       </Button>
-    </form>
+    </CheckedForm>
   );
 }

@@ -28,6 +28,7 @@ const alias = {
   '@shareat/core/logger': `${root}packages/core/src/logger.ts`,
   '@shareat/core/env': `${root}packages/core/src/env.ts`,
   '@shareat/core/exif': `${root}packages/core/src/exif.ts`,
+  '@shareat/core/sentence': `${root}packages/core/src/sentence.ts`,
   '@shareat/core': `${root}packages/core/src/index.ts`,
   '@shareat/db/pos-v1/wire': `${root}packages/db/src/pos-v1/wire.ts`,
   '@shareat/db/schema': `${root}packages/db/schema/index.ts`,

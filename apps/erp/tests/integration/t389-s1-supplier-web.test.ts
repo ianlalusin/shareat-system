@@ -114,7 +114,7 @@ async function supplier(f: Fixture, hint: string) {
 }
 
 const NOT_KEPT_HINT = 'The account number is not kept after a refused save. Check it before saving.';
-const TERMS_BLANK = 'Enter how many days of credit this supplier gives (0 to 365), or choose Cash on delivery.';
+const TERMS_BLANK = 'Days to pay is required.';
 
 /** What the browser posts when the user changed the form and got it refused: credit terms with the days box blank. */
 function refusedForm(s: { id: string }, over: Record<string, string | null> = {}): FormData {

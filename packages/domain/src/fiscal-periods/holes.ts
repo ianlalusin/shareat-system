@@ -9,6 +9,8 @@
 import { fiscalPeriodsRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { closeBlockers } from './index';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { FINDINGS_MISSING_PERIOD_RULES } from '../field-rules/findings';
 
 export type HolePieceClass = 'A' | 'B' | 'C' | 'D';
 
@@ -136,6 +138,8 @@ export async function createMissingClosedPeriod(
 ): Promise<CreateMissingClosedPeriodResult> {
   // 1.
   await authorize(tx, actor, 'create_missing_period', {});
+  // T-440 S9 (ii): the screen's own rule, only once the gate has passed.
+  assertFieldRules(FINDINGS_MISSING_PERIOD_RULES, { reason: input.reason });
 
   // 2.
   const reason = input.reason.trim();

@@ -210,7 +210,7 @@ describe('W1 (DEF-470 item 3) — ownershipPercentage "1,5" refuses by name (no 
     expect(caught, 'expected "1,5" to be refused at all').toBeInstanceOf(Error);
     const err = caught as Error & { userMessage?: string };
     expect(err.userMessage).toBe(
-      'The ownership percentage — "1,5" is not a percentage. Use a number above 0 and up to 100, with at most three decimal places.',
+      'The ownership percentage must be a number from 0.001 to 100.',
     );
     expect(await ownerCountFor(f.orgId), 'no owner row should have been created').toBe(before);
   });
@@ -231,7 +231,7 @@ describe('W2 (DEF-470 item 3) — ownershipPercentage "150" (out of range) refus
     expect(caught, 'expected "150" to be refused at all').toBeInstanceOf(Error);
     const err = caught as Error & { userMessage?: string };
     expect(err.userMessage).toBe(
-      'The ownership percentage — "150" is not a percentage. Use a number above 0 and up to 100, with at most three decimal places.',
+      'The ownership percentage must be a number from 0.001 to 100.',
     );
     expect(await ownerCountFor(f.orgId), 'no owner row should have been created').toBe(before);
   });
@@ -726,6 +726,7 @@ describe('Amount docked (DEF-470 item 8) — comma leg + negative range guard', 
     }
     expect(caught, 'expected loan amount "1,000" to be refused at all').toBeInstanceOf(Error);
     const err = caught as Error & { userMessage?: string };
+    // T-440: the rule's own sentence (CHANNEL_SETTLEMENT_RECORD_RULES.loanAmount) wins over the old domain sentence.
     expect(err.userMessage).toBe('The amount docked — "1,000" is not a valid amount. Use at most two decimal places.');
   });
 
@@ -756,7 +757,7 @@ describe('Amount docked (DEF-470 item 8) — comma leg + negative range guard', 
     }
     expect(caught, 'expected a negative loan amount to be refused at all').toBeInstanceOf(Error);
     const err = caught as Error & { userMessage?: string };
-    expect(err.userMessage).toBe('The amount docked cannot be negative.');
+    expect(err.userMessage).toBe('The amount docked must be an amount of 0 or more.');
   });
 });
 

@@ -13,6 +13,8 @@ import {
   reviewCount,
 } from './lib';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
+import { CheckedForm } from '@/components/forms';
+import { PREPAID_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Banner, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
@@ -69,14 +71,14 @@ export default async function PrepaidPage({
           description="Below ₱5,000 this is an ordinary expense, not a prepaid — the same threshold fixed assets use."
           size="md"
         >
-          <form action={createPrepaidItemAction} className="space-y-4">
+          <CheckedForm rules={PREPAID_ADD_RULES} action={createPrepaidItemAction} className="space-y-4">
             <FormSection title="Prepaid item">
               <FormGrid layout="fields">
-                <Field label="Name" width="name" hint="What it is, as somebody would say it out loud">
-                  <Input name="name" required maxLength={120} placeholder="Fire insurance 2026" className="w-full" />
+                <Field label="Name" width="name" hint="What it is, as somebody would say it out loud" rule={PREPAID_ADD_RULES.name}>
+                  <Input {...nativeAttrs(PREPAID_ADD_RULES.name)} placeholder="Fire insurance 2026" className="w-full" />
                 </Field>
-                <Field label="Store" width="name">
-                  <Select name="storeId" required defaultValue="" className="w-full">
+                <Field label="Store" width="name" rule={PREPAID_ADD_RULES.storeId}>
+                  <Select {...nativeAttrs(PREPAID_ADD_RULES.storeId)} defaultValue="" className="w-full">
                     <option value="">Choose a store…</option>
                     {stores.map((s) => (
                       <option key={s.id} value={s.id}>
@@ -98,27 +100,24 @@ export default async function PrepaidPage({
             </FormSection>
             <FormSection title="Coverage and cost">
               <FormGrid layout="fields">
-                <Field label="Total cost" width="code">
+                <Field label="Total cost" width="code" rule={PREPAID_ADD_RULES.totalCost}>
                   <input
-                    name="totalCost"
-                    required
-                    inputMode="decimal"
+                    {...nativeAttrs(PREPAID_ADD_RULES.totalCost)}
                     placeholder="0.00"
                     className={INPUT}
                   />
                 </Field>
-                <Field label="Coverage starts" width="date" hint="The first month the cover actually applies to">
-                  <Input name="coverageStartDate" type="date" required className="w-full" />
+                <Field label="Coverage starts" width="date" hint="The first month the cover actually applies to" rule={PREPAID_ADD_RULES.coverageStartDate}>
+                  <Input {...nativeAttrs(PREPAID_ADD_RULES.coverageStartDate)} type="date" className="w-full" />
                 </Field>
                 <Field
                   label="Coverage months"
                   width="short"
+                  rule={PREPAID_ADD_RULES.coverageMonths}
                   hint="The CONTRACT's term — read it off the document, don't estimate. Released monthly, evenly, from the coverage start, with any odd centavos landing on the final month so the total is exact."
                 >
                   <input
-                    name="coverageMonths"
-                    inputMode="numeric"
-                    required
+                    {...nativeAttrs(PREPAID_ADD_RULES.coverageMonths)}
                     defaultValue={12}
                     className={INPUT}
                   />
@@ -134,7 +133,7 @@ export default async function PrepaidPage({
                 charging it quarterly would recognise cost for months not yet covered, which is the
                 error prepaid accounting exists to prevent. */}
             <SubmitButton pendingLabel="Recording…">Record prepaid item</SubmitButton>
-          </form>
+          </CheckedForm>
         </FormModal>
       </div>
 

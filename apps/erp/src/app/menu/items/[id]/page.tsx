@@ -7,7 +7,15 @@ import { withFlash, type FlashFields } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import {
+  MENU_DEPLETION_RULES,
+  MENU_ITEM_EDIT_RULES,
+  MENU_OPTION_GROUP_RULES,
+  MENU_OPTION_VALUE_RULES,
+  MENU_VARIANT_RULES,
+  nativeAttrs,
+} from '@shareat/domain/field-rules';
 import { Badge, Banner, Button, Checkbox, Field, FlashBanner, FormGrid, Input, Select, Table, Td, Textarea, Th } from '@/components/ui';
 import {
   addOptionValueAction,
@@ -75,7 +83,7 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
   const storeName = (storeId: string) => data.stores.find((s) => s.id === storeId)?.name ?? '';
 
   return (
-    <Page density="table" className="space-y-6">
+    <Page view="detail" sectioned density="table" className="space-y-6">
       <div className="flex flex-wrap items-baseline justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">{item.name}</h1>
@@ -100,10 +108,10 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
       {canManage && (
         <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
           <h2 className="text-lg font-semibold">Item details</h2>
-          <EditableRecord action={editItemAction} label={item.name} hidden={{ menuItemId: item.id }} typed={typedFor(sp, MENU_ITEM, item.id, actor.personId)}>
+          <EditableRecord action={editItemAction} rules={MENU_ITEM_EDIT_RULES} label={item.name} hidden={{ menuItemId: item.id }} typed={typedFor(sp, MENU_ITEM, item.id, actor.personId)}>
             <FormGrid>
-              <Field label="Name" className="text-sm">
-                <Input name="name" defaultValue={item.name} required className="w-full" />
+              <Field label="Name" className="text-sm" rule={MENU_ITEM_EDIT_RULES.name}>
+                <Input {...nativeAttrs(MENU_ITEM_EDIT_RULES.name)} defaultValue={item.name} className="w-full" />
               </Field>
               <Field label="Description" className="text-sm">
                 <Input name="description" defaultValue={item.description ?? ''} className="w-full" />
@@ -119,8 +127,8 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
                     ))}
                 </Select>
               </Field>
-              <Field label="Sort order" className="text-sm">
-                <Input name="sortOrder" inputMode="numeric" defaultValue={String(item.sortOrder)} className="w-full" />
+              <Field label="Sort order" className="text-sm" rule={MENU_ITEM_EDIT_RULES.sortOrder}>
+                <Input {...nativeAttrs(MENU_ITEM_EDIT_RULES.sortOrder)} defaultValue={String(item.sortOrder)} className="w-full" />
               </Field>
               <Field label="Status" className="text-sm">
                 <Select name="status" defaultValue={item.status} className="w-full">
@@ -169,7 +177,7 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
                 </Table>
               )}
               {canRule && v.status === 'active' && (
-                <form action={setDepletionRuleAction} className="space-y-3">
+                <CheckedForm rules={MENU_DEPLETION_RULES} action={setDepletionRuleAction} className="space-y-3">
                   <input type="hidden" name="menuItemId" value={item.id} />
                   <input type="hidden" name="variantId" value={v.id} />
                   <FormGrid>
@@ -200,8 +208,8 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
                         ))}
                       </Select>
                     </Field>
-                    <Field label="Quantity per sale" className="text-sm">
-                      <Input name="quantityPerSale" inputMode="decimal" className="w-full" />
+                    <Field label="Quantity per sale" className="text-sm" rule={MENU_DEPLETION_RULES.quantityPerSale}>
+                      <Input {...nativeAttrs(MENU_DEPLETION_RULES.quantityPerSale)} className="w-full" />
                     </Field>
                     <Field label="From (Manila time, empty = now)" className="text-sm">
                       <Input type="datetime-local" name="effectiveFrom" className="w-full" />
@@ -210,24 +218,24 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
                   <Button type="submit" variant="secondary">
                     Save
                   </Button>
-                </form>
+                </CheckedForm>
               )}
             </div>
           );
         })}
         {canAddItem && (
-          <form action={addVariantAction} className="space-y-3 border-t border-surface-border pt-3">
+          <CheckedForm rules={MENU_VARIANT_RULES} action={addVariantAction} className="space-y-3 border-t border-surface-border pt-3">
             <input type="hidden" name="menuItemId" value={item.id} />
             <h3 className="font-medium">Add a variant</h3>
             <FormGrid>
-              <Field label="Label (for example Large)" className="text-sm">
-                <Input name="label" required className="w-full" />
+              <Field label="Label (for example Large)" className="text-sm" rule={MENU_VARIANT_RULES.label}>
+                <Input {...nativeAttrs(MENU_VARIANT_RULES.label)} className="w-full" />
               </Field>
             </FormGrid>
             <Button type="submit" variant="secondary">
               Save
             </Button>
-          </form>
+          </CheckedForm>
         )}
       </section>
 
@@ -346,10 +354,10 @@ function OptionGroups({ data, canManage, sp, actorId }: { data: ItemPageData; ca
                   )}
                 </div>
                 {canManage && (
-                  <EditableRecord action={editOptionValueAction} label={v.name} hidden={{ menuItemId: itemId, id: v.id }} typed={typedFor(sp, MENU_OPTION_VALUE, v.id, actorId)}>
+                  <EditableRecord action={editOptionValueAction} rules={MENU_OPTION_VALUE_RULES} label={v.name} hidden={{ menuItemId: itemId, id: v.id }} typed={typedFor(sp, MENU_OPTION_VALUE, v.id, actorId)}>
                     <FormGrid>
-                      <Field label="Option name" className="text-sm">
-                        <Input name="name" defaultValue={v.name} required className="w-full" />
+                      <Field label="Option name" className="text-sm" rule={MENU_OPTION_VALUE_RULES.name}>
+                        <Input {...nativeAttrs(MENU_OPTION_VALUE_RULES.name)} defaultValue={v.name} className="w-full" />
                       </Field>
                     </FormGrid>
                   </EditableRecord>
@@ -359,10 +367,10 @@ function OptionGroups({ data, canManage, sp, actorId }: { data: ItemPageData; ca
           </ul>
           {canManage && (
             <>
-              <EditableRecord action={editOptionGroupAction} label={g.group.name} hidden={{ menuItemId: itemId, id: g.group.id }} typed={typedFor(sp, MENU_OPTION_GROUP, g.group.id, actorId)}>
+              <EditableRecord action={editOptionGroupAction} rules={MENU_OPTION_GROUP_RULES} label={g.group.name} hidden={{ menuItemId: itemId, id: g.group.id }} typed={typedFor(sp, MENU_OPTION_GROUP, g.group.id, actorId)}>
                 <FormGrid>
-                  <Field label="Group name" className="text-sm">
-                    <Input name="name" defaultValue={g.group.name} required className="w-full" />
+                  <Field label="Group name" className="text-sm" rule={MENU_OPTION_GROUP_RULES.name}>
+                    <Input {...nativeAttrs(MENU_OPTION_GROUP_RULES.name)} defaultValue={g.group.name} className="w-full" />
                   </Field>
                   <Field label="Guests pick" className="text-sm">
                     <Select name="selectionMode" defaultValue={g.group.selectionMode} className="w-full">
@@ -370,26 +378,26 @@ function OptionGroups({ data, canManage, sp, actorId }: { data: ItemPageData; ca
                       <option value="multi">Several</option>
                     </Select>
                   </Field>
-                  <Field label="At least" className="text-sm">
-                    <Input name="minSelections" inputMode="numeric" defaultValue={String(g.group.minSelections)} className="w-full" />
+                  <Field label="At least" className="text-sm" rule={MENU_OPTION_GROUP_RULES.minSelections}>
+                    <Input {...nativeAttrs(MENU_OPTION_GROUP_RULES.minSelections)} defaultValue={String(g.group.minSelections)} className="w-full" />
                   </Field>
-                  <Field label="At most" className="text-sm">
-                    <Input name="maxSelections" inputMode="numeric" defaultValue={String(g.group.maxSelections)} className="w-full" />
+                  <Field label="At most" className="text-sm" rule={MENU_OPTION_GROUP_RULES.maxSelections}>
+                    <Input {...nativeAttrs(MENU_OPTION_GROUP_RULES.maxSelections)} defaultValue={String(g.group.maxSelections)} className="w-full" />
                   </Field>
                 </FormGrid>
               </EditableRecord>
-              <form action={addOptionValueAction} className="space-y-3">
+              <CheckedForm rules={MENU_OPTION_VALUE_RULES} action={addOptionValueAction} className="space-y-3">
                 <input type="hidden" name="menuItemId" value={itemId} />
                 <input type="hidden" name="optionGroupId" value={g.group.id} />
                 <FormGrid>
-                  <Field label="New option" className="text-sm">
-                    <Input name="name" required className="w-full" />
+                  <Field label="New option" className="text-sm" rule={MENU_OPTION_VALUE_RULES.name}>
+                    <Input {...nativeAttrs(MENU_OPTION_VALUE_RULES.name)} className="w-full" />
                   </Field>
                 </FormGrid>
                 <Button type="submit" variant="secondary">
                   Save
                 </Button>
-              </form>
+              </CheckedForm>
             </>
           )}
         </div>
@@ -426,12 +434,12 @@ function OptionGroups({ data, canManage, sp, actorId }: { data: ItemPageData; ca
               Save
             </Button>
           </form>
-          <form action={createOptionGroupAction} className="space-y-3">
+          <CheckedForm rules={MENU_OPTION_GROUP_RULES} action={createOptionGroupAction} className="space-y-3">
             <input type="hidden" name="menuItemId" value={itemId} />
             <h3 className="font-medium">Add option group</h3>
             <FormGrid>
-              <Field label="Group name (for example Flavour)" className="text-sm">
-                <Input name="name" required className="w-full" />
+              <Field label="Group name (for example Flavour)" className="text-sm" rule={MENU_OPTION_GROUP_RULES.name}>
+                <Input {...nativeAttrs(MENU_OPTION_GROUP_RULES.name)} className="w-full" />
               </Field>
               <Field label="Guests pick" className="text-sm">
                 <Select name="selectionMode" defaultValue="single" className="w-full">
@@ -439,11 +447,11 @@ function OptionGroups({ data, canManage, sp, actorId }: { data: ItemPageData; ca
                   <option value="multi">Several</option>
                 </Select>
               </Field>
-              <Field label="At least" className="text-sm">
-                <Input name="minSelections" inputMode="numeric" defaultValue="0" className="w-full" />
+              <Field label="At least" className="text-sm" rule={MENU_OPTION_GROUP_RULES.minSelections}>
+                <Input {...nativeAttrs(MENU_OPTION_GROUP_RULES.minSelections)} defaultValue="0" className="w-full" />
               </Field>
-              <Field label="At most" className="text-sm">
-                <Input name="maxSelections" inputMode="numeric" defaultValue="1" className="w-full" />
+              <Field label="At most" className="text-sm" rule={MENU_OPTION_GROUP_RULES.maxSelections}>
+                <Input {...nativeAttrs(MENU_OPTION_GROUP_RULES.maxSelections)} defaultValue="1" className="w-full" />
               </Field>
               <Field label="Options, one per line" span="full" className="text-sm">
                 <Textarea name="values" rows={3} className="w-full" />
@@ -452,7 +460,7 @@ function OptionGroups({ data, canManage, sp, actorId }: { data: ItemPageData; ca
             <Button type="submit" variant="primary">
               Save
             </Button>
-          </form>
+          </CheckedForm>
         </div>
       )}
     </section>

@@ -59,6 +59,8 @@ import { transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { createCustomer, createPrepaidItem, recordCharge, writeOffPrepaidItem } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
+import { COLLECTION_RECORD_RULES, PREPAID_WRITE_OFF_RULES } from '@shareat/domain/field-rules';
+import { expectRuleSentence } from '../helpers/rule-sentence';
 import { paramsOf } from '../helpers/flash-jar';
 import { givePin } from '../helpers/approval-pin';
 
@@ -164,9 +166,7 @@ describe('P1 (DEF-460) — a comma-typed refund is silently dropped, never reach
       );
       const params = paramsOf(to);
 
-      expect(params.get('error'), `redirect URL was: ${to}`).toBe(
-        'The refund amount — "1,000" is not a valid amount. Use at most two decimal places.',
-      );
+      expectRuleSentence(params.get('error'), PREPAID_WRITE_OFF_RULES.refundAmount, '1,000');
       expect(await journalEntryCountFor(f.itemId), 'no journal entry should have been posted').toBe(0);
       expect(await prepaidStatus(f.itemId), 'a refusal must not flip the item to written_off').toBe('active');
     },
@@ -348,7 +348,7 @@ describe('N1 (DEF-461) — a negative store credit refuses by name', () => {
       const before = await collectionCountFor(f.customerId);
       const to = await expectRedirectTo(() => recordCollectionAction(collectionFormData(f, '-5')));
       const params = paramsOf(to);
-      expect(params.get('error'), `redirect URL was: ${to}`).toBe('The store credit applied cannot be negative.');
+      expectRuleSentence(params.get('error'), COLLECTION_RECORD_RULES.creditApplied, '-5');
       const after = await collectionCountFor(f.customerId);
       expect(after, 'no collection row should have been written').toBe(before);
     },

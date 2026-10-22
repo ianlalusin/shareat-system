@@ -14,7 +14,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
  * PINNED HOOKS:
  *  - one `<section data-kind="<kindId>">` per kind, in the order given by the result, each with an `<h2>` holding the kind title
  *  - a kind with no lines (and visible) says "Nothing unpaid"
- *  - inside a section: `<div data-layout="cards" ...class contains sm:hidden>` and `<div data-layout="table" ...class contains hidden and sm:block>`
+ *  - inside a section: `<div data-layout="cards" ...class contains md:hidden>` and `<div data-layout="table" ...class contains hidden and md:block>`
  *  - cards: one `<a data-unpaid-line href=... data-amount="<raw>">` per line (the WHOLE card is the link)
  *  - table: a `<table>` (the `Table` component) with one `<tr data-unpaid-line data-amount="<raw>">` per line; it holds a `RowLink`
  *    (`<a href=...>` whose class has `after:absolute`)
@@ -213,13 +213,13 @@ describe('T-431 case 22 - the page', () => {
     }
   });
 
-  it('below sm: a card per line (sm:hidden); from sm up: a Table with RowLink rows (hidden sm:block)', async () => {
+  it('below md: a card per line (md:hidden); from md up: a Table with RowLink rows (hidden md:block)', async () => {
     const html = await render();
     const s = section(html, 'loans');
     const cards = /<div[^>]*data-layout="cards"[^>]*>/.exec(s)?.[0] ?? '';
     const table = /<div[^>]*data-layout="table"[^>]*>/.exec(s)?.[0] ?? '';
-    expect(cards).toMatch(/class="[^"]*\bsm:hidden\b/);
-    expect(table).toMatch(/class="[^"]*\bhidden\b[^"]*\bsm:block\b|class="[^"]*\bsm:block\b[^"]*\bhidden\b/);
+    expect(cards).toMatch(/class="[^"]*\bmd:hidden\b/);
+    expect(table).toMatch(/class="[^"]*\bhidden\b[^"]*\bmd:block\b|class="[^"]*\bmd:block\b[^"]*\bhidden\b/);
     const tableHtml = s.slice(s.indexOf('data-layout="table"'));
     expect(tableHtml).toContain('<table');
     const row = /<tr[^>]*data-unpaid-line[^>]*>[\s\S]*?<\/tr>/.exec(tableHtml)?.[0] ?? '';

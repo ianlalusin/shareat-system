@@ -15,7 +15,7 @@
  * this specific claim (same posture as this repo's own `touch-target-baseline.json`, class-keyed
  * against source). Flagged, not silently substituted — say if a real render is wanted instead.
  */
-import { readFileSync } from 'node:fs';
+import { readControlSource } from './helpers/control-source';
 import { resolve } from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -35,7 +35,7 @@ const repoRoot = resolve(__dirname, '..', '..', '..');
  * function silently returning whatever it happens to find first, or a vacuous pass.
  */
 function inputTagFor(filePath: string, nameLiteral: string): string {
-  const src = readFileSync(resolve(repoRoot, filePath), 'utf8');
+  const src = readControlSource(resolve(repoRoot, filePath), 'utf8');
   const needle = `name=${nameLiteral}`;
   const occurrences = src.split(needle).length - 1;
   expect(occurrences, `"${needle}" must appear exactly once in ${filePath}`).toBe(1);
@@ -103,7 +103,7 @@ function inputByName(html: string, name: string): string | undefined {
 
 async function renderTransferForm(): Promise<string> {
   const { RecordTransferForm } = await import('../src/app/money-transfers/RecordTransferForm');
-  return renderToStaticMarkup(createElement(RecordTransferForm, { action: () => {}, options: [], today: '2026-01-01' }));
+  return renderToStaticMarkup(createElement(RecordTransferForm, { options: [], today: '2026-01-01' }));
 }
 
 describe('R-legs — real render: RecordTransferForm.tsx amountIn', () => {
@@ -140,7 +140,6 @@ describe('R-legs — real render: SettlementForm.tsx deductions + loanAmount', (
     const { SettlementForm } = await import('../src/app/channel-settlements/SettlementForm');
     return renderToStaticMarkup(
       createElement(SettlementForm, {
-        postAction: () => {},
         previewAction: async () => ({ ok: false, error: 'unused' }) as never,
         channels: [
           {

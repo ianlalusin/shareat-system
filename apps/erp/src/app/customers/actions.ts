@@ -9,13 +9,15 @@ import { arRepo } from '@shareat/db';
 import { parseMoneyInput } from '@shareat/domain/money-input';
 import { logger } from '@shareat/core/logger';
 import { compare, money, ZERO } from '@shareat/core/money';
+import { CHARGE_VOID_RULES, CHARGE_WRITE_OFF_RULES, COLLECTION_RECORD_RULES, COLLECTION_VOID_RULES, CUSTOMER_ADD_RULES } from '@shareat/domain/field-rules';
 import {
+  assertFieldRules,
   createCustomer,
   createPriceList,
   reconcileCustomer,
   recordCollection,
   setPrice,
-  uploadFile,
+  claimUpload,
   voidCharge,
   voidCollection,
   writeOffCharge,
@@ -26,8 +28,9 @@ import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { redirectWithFlash } from '@/lib/flash';
 import { errorMessage } from '@/lib/constraint-messages';
-import { verifyAdminApproval } from '@shareat/auth';
+import { can, verifyAdminApproval } from '@shareat/auth';
 import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
+import { resolveUploadedFile } from '@/lib/uploaded-file';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -43,8 +46,11 @@ export async function createCustomerAction(formData: FormData): Promise<void> {
     const link = str(formData, 'counterparty');
     const [kind, id] = link ? link.split(':') : ['', ''];
 
-    const result = await withOrgPrincipal(actor.orgId, (tx) =>
-      createCustomer(tx, actor, {
+    const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      // Judged only once the actor holds the gate: capability copied from createCustomer's first authorize() (S9 pattern iii;
+      // the domain function also serves the master-data script, so the rule stays in the action).
+      if (await can(tx, actor, 'manage_chart_of_accounts', {})) assertFieldRules(CUSTOMER_ADD_RULES, formData);
+      return createCustomer(tx, actor, {
         name: str(formData, 'name'),
         address: str(formData, 'address') || null,
         contactNo: str(formData, 'contactNo') || null,
@@ -53,8 +59,8 @@ export async function createCustomerAction(formData: FormData): Promise<void> {
         priceListId: str(formData, 'priceListId') || null,
         customerGroup: (str(formData, 'customerGroup') || 'wholesale') as CustomerGroup,
         notes: str(formData, 'notes') || null,
-      }),
-    );
+      });
+    });
     // ⚠️ Says what the treatment MEANS, because "internal" alone does not tell anyone that the
     // movement will not be revenue.
     message =
@@ -74,7 +80,6 @@ export async function reconcileCustomerAction(formData: FormData): Promise<void>
   let message = '';
   try {
     const asOf = str(formData, 'asOf');
-    if (!asOf) throw new Error('Say which date they were verified at zero.');
     await withOrgPrincipal(actor.orgId, (tx) =>
       reconcileCustomer(tx, actor, { customerId: str(formData, 'customerId'), asOf }),
     );
@@ -185,21 +190,12 @@ export async function recordCollectionAction(formData: FormData): Promise<void> 
     // strips EXIF, derives the storage path from the session, and writes a `stored_files` row.
     // ⚠️ Upload and post share ONE transaction, so a collection can never reference a file that
     // was not written; a failed post leaves orphan bytes for T-141's sweep, the cheaper failure.
-    const proof = formData.get('receiptPhoto');
-    const hasProof = proof instanceof File && proof.size > 0;
-
     const result = await withOrgPrincipal(actor.orgId, async (tx) => {
-      let receiptFileId: string | null = null;
-      if (hasProof) {
-        const uploaded = await uploadFile(tx, actor, {
-          purpose: 'receipt_photo',
-          storeId,
-          contentType: (proof as File).type,
-          bytes: new Uint8Array(await (proof as File).arrayBuffer()),
-        });
-        receiptFileId = uploaded.fileId;
-      }
-      return recordCollection(tx, actor, {
+      // Judged only once the actor holds the gate: capability copied from recordCollection's first authorize() (S9 pattern iii;
+      // the domain function is also called by trade returns).
+      if (await can(tx, actor, 'record_ar_collection', { storeId })) assertFieldRules(COLLECTION_RECORD_RULES, formData);
+      const receiptFileId = await resolveUploadedFile(tx, actor, formData, 'receiptPhoto', { purpose: 'receipt_photo', storeId });
+      const saved = await recordCollection(tx, actor, {
         storeId,
         customerId,
         collectionDate: str(formData, 'collectionDate'),
@@ -222,6 +218,8 @@ export async function recordCollectionAction(formData: FormData): Promise<void> 
         ...(creditApplied ? { creditApplied } : {}),
         allocations,
       });
+      if (receiptFileId) await claimUpload(tx, actor, { fileId: receiptFileId, purpose: 'receipt_photo', storeId, linkTo: saved.collectionId });
+      return saved;
     });
     // ⚠️ Says where a surplus WENT. v1 showed a floating `unallocatedAmount` and no way to spend
     // it; here it is a real `2140` balance the next collection can draw on.
@@ -242,10 +240,10 @@ export async function voidCollectionAction(formData: FormData): Promise<void> {
   const storeId = str(formData, 'storeId');
   try {
     const reason = str(formData, 'reason');
-    if (!reason) throw new Error('Say why this collection is being voided.');
     // T-412 Tier P (DEF-654): an administrator's PIN, verified on the server against the RECORD's store.
     const collectionId = str(formData, 'collectionId');
     const target = await loadDestructiveTarget(actor, 'ar_collection', collectionId, ['record_ar_collection']);
+    assertFieldRules(COLLECTION_VOID_RULES, formData);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId!, pin: str(formData, 'adminPin'), capability: 'record_ar_collection' });
     await withOrgPrincipal(actor.orgId, async (tx) => {
       await voidCollection(tx, actor, { collectionId, reason });
@@ -268,10 +266,10 @@ export async function voidChargeAction(formData: FormData): Promise<void> {
   const storeId = str(formData, 'storeId');
   try {
     const reason = str(formData, 'reason');
-    if (!reason) throw new Error('Say why this charge is being voided.');
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const chargeId = str(formData, 'chargeId');
     const target = await loadDestructiveTarget(actor, 'ar_charge', chargeId, ['approve_buyer']);
+    assertFieldRules(CHARGE_VOID_RULES, formData);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'approve_buyer' });
     await withOrgPrincipal(actor.orgId, async (tx) => {
       await voidCharge(tx, actor, { chargeId, reason });
@@ -291,11 +289,11 @@ export async function writeOffChargeAction(formData: FormData): Promise<void> {
   try {
     const amount = str(formData, 'amount');
     const reason = str(formData, 'reason');
-    if (!reason) throw new Error('Say why this debt is uncollectible — a write-off without a reason is a hole.');
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store (not the `storeId` field above,
     // which only carries the page's navigation).
     const chargeId = str(formData, 'chargeId');
     const target = await loadDestructiveTarget(actor, 'ar_charge', chargeId, ['write_off_receivable']);
+    assertFieldRules(CHARGE_WRITE_OFF_RULES, formData);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'write_off_receivable' });
     const result = await withOrgPrincipal(actor.orgId, async (tx) => {
       const written = await writeOffCharge(tx, actor, { chargeId, amount, reason });

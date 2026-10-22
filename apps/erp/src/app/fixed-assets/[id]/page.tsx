@@ -8,7 +8,15 @@ import { disposeAssetAction, setAssetInServiceAction, updateTermsAction } from '
 import { CATEGORY_LABEL, INTERVAL_LABEL, getAsset, listStores } from '../lib';
 import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord, FieldCheck } from '@/components/forms';
+import {
+  ASSET_DISPOSE_RULES,
+  ASSET_IN_SERVICE_CONFIRM_RULES,
+  ASSET_IN_SERVICE_RULES,
+  ASSET_TERMS_RULES,
+  nativeAttrs,
+  type FieldRule,
+} from '@shareat/domain/field-rules';
 import { withFlash } from '@/lib/flash';
 import { Badge, Banner, Button, ConfirmDestructive, FlashBanner, Input, Select, Textarea } from '@/components/ui';
 import { typedFor } from '@/lib/keep-typing';
@@ -73,7 +81,7 @@ export default async function AssetDetailPage({
   const postedSet = new Set(periods);
 
   return (
-    <Page density="table">
+    <Page view="detail" density="table">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <a href={`/fixed-assets?${carry.toString()}`} className="text-sm underline hover:no-underline">
@@ -165,7 +173,7 @@ export default async function AssetDetailPage({
               </p>
             )}
             {sp.confirm && (
-              <form action={setAssetInServiceAction} className="space-y-3">
+              <CheckedForm rules={ASSET_IN_SERVICE_CONFIRM_RULES} action={setAssetInServiceAction} className="space-y-3">
                 <input type="hidden" name="assetId" value={asset.id} />
                 <input type="hidden" name="filterStore" value={sp.store ?? ''} />
                 <input type="hidden" name="mode" value={sp.mode ?? asset.inServiceSource ?? 'acquired'} />
@@ -173,21 +181,22 @@ export default async function AssetDetailPage({
                 {sp.reason !== undefined ? (
                   <input type="hidden" name="reason" value={sp.reason} />
                 ) : (
-                  <Field label="Reason" hint="Required — an audit trail with no reason is unauditable">
-                    <Input name="reason" required className="w-full" />
+                  <Field label="Reason" hint="Required — an audit trail with no reason is unauditable" rule={ASSET_IN_SERVICE_CONFIRM_RULES.reason}>
+                    <Input {...nativeAttrs(ASSET_IN_SERVICE_CONFIRM_RULES.reason)} className="w-full" />
                   </Field>
                 )}
                 <input type="hidden" name="confirmedPlan" value={sp.plan ?? ''} />
                 <Button type="submit" variant="primary">
                   Confirm change
                 </Button>
-              </form>
+              </CheckedForm>
             )}
             <EditableRecord
               action={setAssetInServiceAction}
               label={`${asset.name} in-service date`}
               hidden={{ assetId: asset.id, filterStore: sp.store ?? '' }}
               typed={typedFor(sp, ASSET_IN_SERVICE_EDIT, asset.id, actor.personId)}
+              rules={ASSET_IN_SERVICE_RULES}
             >
               <div className="space-y-3">
               {/* ⛔ A `<select>`, not radios — a native radio's box is unresolvable-by-construction
@@ -204,17 +213,16 @@ export default async function AssetDetailPage({
                   <option value="set">A specific date —</option>
                 </Select>
               </Field>
-              <Field label="Specific date" hint="Only used when 'A specific date' is chosen above">
+              <Field label="Specific date" hint="Only used when 'A specific date' is chosen above" rule={ASSET_IN_SERVICE_RULES.inServiceOn}>
                 <Input
                   type="date"
-                  name="inServiceOn"
-                  min={asset.acquiredOn ?? undefined}
+                  {...nativeAttrs(ASSET_IN_SERVICE_RULES.inServiceOn)}
                   defaultValue={sp.inServiceOn ?? asset.inServiceOn ?? ''}
                   className="w-full"
                 />
               </Field>
-              <Field label="Reason" hint="Required — an audit trail with no reason is unauditable">
-                <Input name="reason" required defaultValue={sp.reason ?? ''} className="w-full" />
+              <Field label="Reason" hint="Required — an audit trail with no reason is unauditable" rule={ASSET_IN_SERVICE_RULES.reason}>
+                <Input {...nativeAttrs(ASSET_IN_SERVICE_RULES.reason)} defaultValue={sp.reason ?? ''} className="w-full" />
               </Field>
               {/* ⛔ A hidden input, not a checkbox — clicking "Confirm change" IS the confirmation
                   (same one-button shape as the dispose form below); a checkbox here would be a
@@ -235,10 +243,11 @@ export default async function AssetDetailPage({
               label={asset.name}
               hidden={{ assetId: asset.id, filterStore: sp.store ?? '' }}
               typed={typedFor(sp, ASSET_TERMS_EDIT, asset.id, actor.personId)}
+              rules={ASSET_TERMS_RULES}
             >
               <div className="space-y-4">
-              <Field label="Name">
-                <Input name="name" required defaultValue={asset.name} maxLength={200} className="w-full" />
+              <Field label="Name" rule={ASSET_TERMS_RULES.name}>
+                <Input {...nativeAttrs(ASSET_TERMS_RULES.name)} defaultValue={asset.name} className="w-full" />
               </Field>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Category">
@@ -250,11 +259,9 @@ export default async function AssetDetailPage({
                     ))}
                   </Select>
                 </Field>
-                <Field label="Useful life (months)">
+                <Field label="Useful life (months)" rule={ASSET_TERMS_RULES.usefulLifeMonths}>
                   <input
-                    name="usefulLifeMonths"
-                    inputMode="numeric"
-                    required
+                    {...nativeAttrs(ASSET_TERMS_RULES.usefulLifeMonths)}
                     defaultValue={asset.usefulLifeMonths}
                     className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink"
                   />
@@ -268,10 +275,9 @@ export default async function AssetDetailPage({
                     ))}
                   </Select>
                 </Field>
-                <Field label="Salvage value">
+                <Field label="Salvage value" rule={ASSET_TERMS_RULES.salvageValue}>
                   <Input
-                    name="salvageValue"
-                    inputMode="decimal"
+                    {...nativeAttrs(ASSET_TERMS_RULES.salvageValue)}
                     defaultValue={asset.salvageValue ?? ''}
                     className="w-full"
                   />
@@ -352,23 +358,20 @@ export default async function AssetDetailPage({
                 <strong>{formatMoney(bookValue)}</strong> off to loss on disposal. This is a
                 write-off at zero proceeds — there is no sale-with-proceeds flow.
               </p>
-              <form action={disposeAssetAction} className="space-y-3">
+              <CheckedForm rules={ASSET_DISPOSE_RULES} action={disposeAssetAction} className="space-y-3">
                 <input type="hidden" name="assetId" value={asset.id} />
                 <input type="hidden" name="filterStore" value={sp.store ?? ''} />
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Disposed on">
+                  <Field label="Disposed on" rule={ASSET_DISPOSE_RULES.disposedOn}>
                     <Input
                       type="date"
-                      name="disposedOn"
-                      required
-                      max={toBusinessDate()}
-                      min={asset.acquiredOn ?? undefined}
+                      {...nativeAttrs(ASSET_DISPOSE_RULES.disposedOn)}
                       defaultValue={toBusinessDate()}
                       className="w-full"
                     />
                   </Field>
-                  <Field label="Reason" hint="Required — a write-off with no reason is unauditable">
-                    <Input name="reason" required placeholder="Compressor failed" className="w-full" />
+                  <Field label="Reason" hint="Required — a write-off with no reason is unauditable" rule={ASSET_DISPOSE_RULES.reason}>
+                    <Input {...nativeAttrs(ASSET_DISPOSE_RULES.reason)} placeholder="Compressor failed" className="w-full" />
                   </Field>
                 </div>
                 <ConfirmDestructive
@@ -376,7 +379,7 @@ export default async function AssetDetailPage({
                   label="Dispose this asset"
                   consequence="Disposes of this asset and posts the disposal. An administrator must approve with their own PIN."
                 />
-              </form>
+              </CheckedForm>
             </section>
           )}
         </section>
@@ -386,13 +389,21 @@ export default async function AssetDetailPage({
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
+function Field({ label, hint, rule, children }: { label: string; hint?: string; rule?: FieldRule; children: React.ReactNode }) {
+  const body = (
+    <>      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
       {hint && <span className="text-xs text-neutral-400 dark:text-neutral-600">{hint}</span>}
-    </label>
+    
+    </>
+  );
+  // T-440: a ruled field keeps its label and puts the live helper line OUTSIDE it (never part of the accessible name).
+  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
+  return (
+    <div>
+      <label className="flex flex-col gap-1">{body}</label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }
 

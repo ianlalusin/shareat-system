@@ -525,7 +525,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
           accountCode: '1110', storeId: f.storeId, direction: 'debit', amount: '0.004', entryDate: DATE,
         }),
       ),
-    ).rejects.toThrow(/addOpeningFigure: the amount.*"0\.004"/);
+    ).rejects.toMatchObject({"name":"RefusalError","message":"cutover.addOpeningFigure.amount: money check failed","userMessage":"This amount — \"0.004\" is not a valid amount. Use at most two decimal places."});
   });
 
   it('addOpeningFigure refuses "1.234" — previously silently truncated to "1.23" via toFixed(2)', async () => {
@@ -536,7 +536,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
           accountCode: '1110', storeId: f.storeId, direction: 'debit', amount: '1.234', entryDate: DATE,
         }),
       ),
-    ).rejects.toThrow(/"1\.234"/);
+    ).rejects.toMatchObject({"name":"RefusalError","message":"cutover.addOpeningFigure.amount: money check failed","userMessage":"This amount — \"1.234\" is not a valid amount. Use at most two decimal places."});
   });
 
   it('an ordinary figure still works, and the exact value posts on both legs', async () => {
@@ -586,8 +586,8 @@ describe('T-343 S5.3b — R2: addOpeningFigure’s amount refusal carries a huma
     );
 
     expect(caught, 'the bad amount was not refused at all').not.toBeNull();
-    // ⛔ Raw stays byte-identical — R1.5's own promise, re-asserted here (R2's ⛔ half).
-    expect(caught!.message).toBe('addOpeningFigure: the amount — "1.234" is not a valid amount. Use at most two decimal places.');
+    // T-440 uses a value-free field diagnostic; the quoted money sentence stays in userMessage per Ian.
+    expect(caught!.message).toBe('cutover.addOpeningFigure.amount: money check failed');
     const userMessage = (caught as unknown as { userMessage?: string }).userMessage;
     expect(userMessage, 'must carry a userMessage').toBeDefined();
     expect(userMessage).toMatch(/^[A-Z]/);

@@ -6,7 +6,8 @@ import { advanceCountAction, cancelCountAction, commitCountAction, recordCountAc
 import { requireSession } from '../../../../lib/session';
 import { Page } from '@/components/shell/Page';
 import { Button, FlashBanner, FormGrid, Field, Input, Select } from '@/components/ui';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { INVENTORY_COUNT_LINE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
@@ -45,40 +46,41 @@ function SheetRow({ line, sessionId, editable, typed }: { line: SheetLine; sessi
       <td className="py-2 pr-4">
         {editable ? (
           line.countedQuantity === null ? (
-            <form action={recordCountAction} className="flex items-center gap-2">
+            <CheckedForm rules={INVENTORY_COUNT_LINE_RULES} action={recordCountAction} className="flex items-center gap-2">
               <input type="hidden" name="sessionId" value={sessionId} />
               <input type="hidden" name="itemId" value={line.itemId} />
               <input type="hidden" name="locationId" value={line.locationId} />
-              <Input
-                name="countedQuantity"
-                required
-                inputMode="decimal"
-                placeholder="0.000"
-                defaultValue={line.countedQuantity ?? ''}
-                className="w-24 tabular-nums"
-              />
+              <Field label={<span className="sr-only">Counted quantity</span>} rule={INVENTORY_COUNT_LINE_RULES.countedQuantity}>
+                <Input
+                  {...nativeAttrs(INVENTORY_COUNT_LINE_RULES.countedQuantity)}
+                  placeholder="0.000"
+                  defaultValue={line.countedQuantity ?? ''}
+                  className="w-24 tabular-nums"
+                />
+              </Field>
               <span className="text-xs text-neutral-500">{line.baseUnit}</span>
               <Button type="submit" variant="secondary">
                 Save
               </Button>
-            </form>
+            </CheckedForm>
           ) : (
             <EditableRecord
               key={`${line.itemId}:${line.locationId}:${line.countedQuantity}`}
               action={recordCountAction}
+              rules={INVENTORY_COUNT_LINE_RULES}
               label={line.itemName}
               hidden={{ sessionId, itemId: line.itemId, locationId: line.locationId }}
               typed={typed}
             >
               <div className="flex items-center gap-2">
-                <Input
-                  name="countedQuantity"
-                  required
-                  inputMode="decimal"
-                  placeholder="0.000"
-                  defaultValue={line.countedQuantity}
-                  className="w-24 tabular-nums"
-                />
+                <Field label={<span className="sr-only">Counted quantity</span>} rule={INVENTORY_COUNT_LINE_RULES.countedQuantity}>
+                  <Input
+                    {...nativeAttrs(INVENTORY_COUNT_LINE_RULES.countedQuantity)}
+                    placeholder="0.000"
+                    defaultValue={line.countedQuantity}
+                    className="w-24 tabular-nums"
+                  />
+                </Field>
                 <span className="text-xs text-neutral-500">{line.baseUnit}</span>
               </div>
             </EditableRecord>
@@ -122,7 +124,7 @@ export default async function CountSessionPage({
   const rows = [...detail.sheet, ...detail.extras];
 
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div>
         <Link href={`/inventory/counts?store=${detail.storeId}`} className="text-sm underline underline-offset-4">
           ← Physical counts
@@ -188,11 +190,11 @@ export default async function CountSessionPage({
             Found something the ledger has no record of in this room? Add it — it will still show its
             true count against a ledger balance of zero, and post as counted LONG at commit.
           </p>
-          <form action={recordCountAction} className="mt-3 space-y-3">
+          <CheckedForm rules={INVENTORY_COUNT_LINE_RULES} action={recordCountAction} className="mt-3 space-y-3">
             <input type="hidden" name="sessionId" value={detail.id} />
             <FormGrid>
-              <Field label="Item">
-                <Select name="itemId" required defaultValue="" className="mt-1 block w-full tabular-nums">
+              <Field label="Item" rule={INVENTORY_COUNT_LINE_RULES.itemId}>
+                <Select {...nativeAttrs(INVENTORY_COUNT_LINE_RULES.itemId)} defaultValue="" className="mt-1 block w-full tabular-nums">
                   <option value="" disabled>
                     — pick —
                   </option>
@@ -203,8 +205,8 @@ export default async function CountSessionPage({
                   ))}
                 </Select>
               </Field>
-              <Field label="Room">
-                <Select name="locationId" required defaultValue={detail.locations[0]?.id ?? ''} className="mt-1 block w-full tabular-nums">
+              <Field label="Room" rule={INVENTORY_COUNT_LINE_RULES.locationId}>
+                <Select {...nativeAttrs(INVENTORY_COUNT_LINE_RULES.locationId)} defaultValue={detail.locations[0]?.id ?? ''} className="mt-1 block w-full tabular-nums">
                   {detail.locations.map((l) => (
                     <option key={l.id} value={l.id}>
                       {l.name}
@@ -212,14 +214,14 @@ export default async function CountSessionPage({
                   ))}
                 </Select>
               </Field>
-              <Field label="Quantity">
-                <Input name="countedQuantity" required inputMode="decimal" placeholder="0.000" className="mt-1 block w-full tabular-nums" />
+              <Field label="Quantity" rule={INVENTORY_COUNT_LINE_RULES.countedQuantity}>
+                <Input {...nativeAttrs(INVENTORY_COUNT_LINE_RULES.countedQuantity)} placeholder="0.000" className="mt-1 block w-full tabular-nums" />
               </Field>
             </FormGrid>
             <Button type="submit" variant="secondary">
               Save
             </Button>
-          </form>
+          </CheckedForm>
         </section>
       )}
 

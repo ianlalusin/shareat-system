@@ -325,6 +325,70 @@
   padding: 0;
   border: 0;
 }
+/* T-452: compact record cards share two columns sized by their own available width.
+   Subgrid aligns labels, controls, help and validation separately within each pair. */
+.erp-form-pairs, .erp-record-fields, form:has(.erp-form-fields) { container-type: inline-size; }
+.erp-field-short .erp-field-control { max-inline-size: min(100%, 8rem); }
+.erp-field-code .erp-field-control { max-inline-size: min(100%, 14rem); }
+.erp-field-date .erp-field-control { max-inline-size: min(100%, 11rem); }
+.erp-form-pairs-grid, .erp-record-fields .erp-form-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: 1.25rem;
+  row-gap: 0.35rem;
+  max-width: 40rem;
+  min-width: 0;
+}
+.erp-form-pairs-grid > *, .erp-record-fields .erp-form-fields > * {
+  min-width: 0;
+  max-width: none;
+  width: auto;
+  margin-bottom: 0.75rem;
+  grid-row: span 4;
+}
+.erp-form-pairs-grid > .erp-form-field,
+.erp-record-fields .erp-form-fields > .erp-form-field {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 4;
+}
+:is(.erp-form-pairs-grid, .erp-record-fields .erp-form-fields) > .erp-form-field > label { display: contents; }
+:is(.erp-form-pairs-grid, .erp-record-fields .erp-form-fields) .erp-field-label { grid-row: 1; }
+:is(.erp-form-pairs-grid, .erp-record-fields .erp-form-fields) .erp-field-control { grid-row: 2; margin-top: 0; }
+:is(.erp-form-pairs-grid, .erp-record-fields .erp-form-fields) .erp-field-hint { grid-row: 3; margin-top: 0; }
+:is(.erp-form-pairs-grid, .erp-record-fields .erp-form-fields) > .erp-form-field > p { grid-row: 4; margin-top: 0; }
+:is(.erp-form-pairs-grid, .erp-record-fields .erp-form-fields) > .erp-field-long { grid-column: 1 / -1; }
+@container (min-width: 24rem) {
+  .erp-form-pairs-grid, .erp-record-fields .erp-form-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Other entry forms keep their wide-screen rows; a narrow form gets the same paired tracks. */
+@container (max-width: 42rem) {
+  .erp-form-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1.25rem;
+    row-gap: 0.35rem;
+  }
+  .erp-form-fields > :is(label, div, fieldset, section) {
+    max-width: none;
+    width: auto;
+    grid-row: span 4;
+    margin-bottom: 0.75rem;
+  }
+  .erp-form-fields > .erp-form-field { display: grid; grid-template-rows: subgrid; }
+  .erp-form-fields > .erp-form-field > label { display: contents; }
+  .erp-form-fields .erp-field-label { grid-row: 1; }
+  .erp-form-fields .erp-field-control { grid-row: 2; margin-top: 0; }
+  .erp-form-fields .erp-field-hint { grid-row: 3; margin-top: 0; }
+  .erp-form-fields > .erp-form-field > p { grid-row: 4; margin-top: 0; }
+  .erp-form-fields > .erp-field-long { grid-column: 1 / -1; }
+}
+@container (max-width: 23.999rem) {
+  .erp-form-fields { grid-template-columns: minmax(0, 1fr); }
+}
+@media screen and (max-width: 767px) {
+  .erp-form-pairs-grid, .erp-record-fields .erp-form-fields, form .erp-form-fields { grid-template-columns: minmax(0, 1fr); }
+}
 .erp-form-section > legend { margin-bottom: 0.5rem; padding: 0; }
 .erp-form-section + .erp-form-section { border-top: 1px solid var(--surface-border); padding-top: 0.75rem; }
 .erp-item-form { container-type: inline-size; }
@@ -491,6 +555,178 @@
   position: sticky;
   top: 0;
   z-index: 20;
+}
+
+[data-phone-table-root] [data-card-toggle-cell] { display: none; }
+.erp-disclosure-card > summary::-webkit-details-marker { display: none; }
+.erp-disclosure-card > summary:focus-visible { outline: 2px solid var(--brand-ink); outline-offset: 2px; }
+.erp-disclosure-card > summary:hover .erp-disclosure-action { background: var(--workspace-stripe); }
+.erp-disclosure-card[open] > summary .erp-disclosure-action svg { transform: rotate(45deg); }
+.split-workspace-grid:has(> section:first-child > .erp-disclosure-card:not([open])) { grid-template-columns: minmax(0, 1fr); }
+
+/* T-450 / Ian: phones use compact summaries; tablets (including exactly 768px) retain tables.
+   Screen-only rules leave native print layout and existing column widths untouched. */
+@media screen and (max-width: 767.98px) {
+  [data-phone-table-root] :where(div.overflow-x-auto, div.overflow-auto):has(> table[data-phone-cards]:only-child) { border: 0; background: transparent; }
+  [data-phone-table-root] table[data-phone-cards] {
+    display: block;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100%;
+    border: 0;
+    background: transparent;
+    table-layout: auto;
+  }
+  [data-phone-table-root] table[data-phone-cards] > colgroup { display: none; }
+  [data-phone-table-root] table[data-phone-cards] > caption { display: block; padding: 0.75rem; text-align: left; }
+  /* Visually hidden, not display:none: retain the column headings for assistive technology. */
+  [data-phone-table-root] table[data-phone-cards] > thead:not([data-card-controls]) {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); clip-path: inset(50%); white-space: nowrap;
+  }
+  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot),
+  [data-phone-table-root] table[data-phone-cards] > thead[data-card-controls] { display: block; min-width: 0; }
+  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot, thead[data-card-controls]) > tr {
+    display: block; height: auto; min-width: 0; margin: 0 0 0.5rem; padding: 0.75rem;
+    border: 1px solid var(--surface-border); border-radius: 0.75rem;
+  }
+  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-kind="summary"] {
+    position: relative; display: grid; grid-template-columns: 44px minmax(0, 1fr);
+    column-gap: 0.625rem; align-items: start;
+  }
+  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-has-keys] {
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+  }
+  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-has-extra]:not([data-card-has-keys]) {
+    grid-template-columns: 44px minmax(0, 1fr) 52px;
+  }
+  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr[data-card-has-extra][data-card-has-keys] {
+    grid-template-columns: 44px minmax(0, 1fr) auto 52px;
+  }
+  [data-phone-table-root] tr[data-card-kind="summary"]::before {
+    content: attr(data-card-avatar) / ""; grid-column: 1; grid-row: 1 / span 2;
+    display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%;
+    border: 1px solid var(--surface-border); background: var(--workspace-stripe); color: var(--muted);
+    font-size: 0.875rem; font-weight: 600;
+  }
+  [data-phone-table-root] tr[data-card-has-image]::before { visibility: hidden; }
+  [data-phone-table-root] :where(table[data-phone-cards] > :is(tbody, tfoot, thead[data-card-controls]) > tr > :is(td, th)) {
+    display: block; width: auto !important; min-width: 0 !important; max-width: 100%; height: auto;
+    padding: 0; border: 0; text-align: left !important;
+    white-space: normal !important; overflow-wrap: anywhere;
+  }
+  [data-phone-table-root] [data-card-slot="title"] {
+    grid-column: 2; grid-row: 1; font-size: 1rem; font-weight: 600; line-height: 1.4;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap !important;
+  }
+  [data-phone-table-root] [data-card-slot="subtitle"] {
+    grid-column: 2; grid-row: 2; color: var(--muted); font-size: 0.75rem; line-height: 1.4;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap !important;
+  }
+  [data-phone-table-root] [data-card-slot="key"] {
+    position: relative; z-index: 10; grid-column: 3; grid-row: 1;
+    text-align: right !important; font-weight: 600; font-variant-numeric: tabular-nums; max-width: min(40vw, 10rem);
+  }
+  [data-phone-table-root] [data-card-slot="key"][data-card-key-order="2"] {
+    grid-row: 2; font-size: 0.75rem; font-weight: 400; color: var(--muted);
+  }
+  [data-phone-table-root] [data-card-slot="media"] { grid-column: 1; grid-row: 1 / span 2; }
+  [data-phone-table-root] [data-card-image] { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; }
+  [data-phone-table-root] [data-card-slot="title"] [data-card-image] { position: absolute; left: 0.75rem; top: 0.75rem; }
+  [data-phone-table-root] [data-card-slot="title"]:has([data-card-image]) { overflow: visible; white-space: normal !important; }
+  [data-phone-table-root] [data-card-slot="title"] a:has([data-card-image]) { position: static; }
+  [data-phone-table-root] [data-card-slot="actions"],
+  [data-phone-table-root] [data-card-slot="extra"] {
+    position: relative; z-index: 10; grid-column: 2 / -1; margin-top: 0.75rem;
+  }
+  [data-phone-table-root] tr:not([data-card-expanded]) > [data-card-slot="extra"] { display: none !important; }
+  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr > [data-card-toggle-cell] {
+    display: block; position: relative; z-index: 10; grid-column: -2 / -1; grid-row: 1 / span 2; align-self: center;
+  }
+  [data-phone-table-root] [data-card-toggle] {
+    display: grid; place-items: center; min-width: 52px; min-height: 44px;
+    color: var(--muted); background: transparent; border: 0;
+  }
+  [data-phone-table-root] [data-card-toggle]:hover { color: var(--ink); }
+  [data-phone-table-root] [data-card-toggle][aria-expanded="true"] { transform: rotate(180deg); }
+  [data-phone-table-root] [data-card-label]::before {
+    content: attr(data-card-label) / "";
+    display: block; margin-block-end: 0.25rem;
+    color: var(--muted); font-size: 0.75rem; font-weight: 500; line-height: 1.4;
+  }
+  [data-phone-table-root] :is([data-card-span="full"], [data-card-slot="title"], [data-card-slot="subtitle"], [data-card-slot="key"], [data-card-slot="media"])::before { content: none; }
+  [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr > [data-card-span="full"] {
+    font-weight: 600;
+  }
+  [data-phone-table-root] table[data-phone-cards] :is(a, button, select, textarea, input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])) {
+    min-height: 44px; max-width: 100%;
+  }
+  [data-phone-table-root] table[data-phone-cards] a { display: inline-flex; align-items: center; overflow-wrap: anywhere; }
+  [data-phone-table-root] [data-card-slot="title"] a,
+  [data-phone-table-root] [data-card-slot="key"] a { min-height: 0 !important; }
+  [data-phone-table-root] [data-card-slot="title"] a { display: inline; text-decoration: none; }
+  [data-phone-table-root] table[data-phone-cards] :is(button, select, input, textarea) { box-sizing: border-box; }
+  [data-phone-table-root] table[data-phone-cards] form { min-width: 0; max-width: 100%; flex-wrap: wrap; }
+  [data-phone-table-root] table[data-phone-cards] :is(.truncate, .text-ellipsis, .line-clamp-1, .line-clamp-2) {
+    overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; -webkit-line-clamp: unset;
+  }
+  [data-phone-table-root] table[data-phone-cards] :is(button, a, input, select, textarea):focus-visible {
+    outline: 2px solid var(--brand-ink); outline-offset: 2px;
+  }
+  [data-phone-table-root] .catalogue-table { max-height: none; border: 0; background: transparent; }
+  [data-phone-table-root] .catalogue-table thead th { position: static; }
+}
+
+/* T-448: a named, keyboard-scrollable summary strip becomes a grid when space permits.
+   Numbers remain real text: wrap at extreme magnification instead of clipping or ellipsizing. */
+.erp-metric-strip {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  border-block: 1px solid var(--surface-border);
+}
+.erp-metric-strip > * {
+  flex: 0 0 80%;
+  min-width: 0;
+  scroll-snap-align: start;
+  overflow-wrap: anywhere;
+}
+.erp-metric-strip:focus-visible {
+  outline: 2px solid var(--brand-ink);
+  outline-offset: 2px;
+}
+.erp-detail-layout { min-width: 0; }
+@media (min-width: 768px) and (max-width: 1023px) {
+  .erp-page[data-view] :where(input:not([type]), input[type="text"], input[type="email"], input[type="tel"], input[type="search"], input[type="password"], input[type="number"], input[type="date"], input[type="month"], input[type="time"], input[type="url"], select) {
+    min-height: 44px;
+    padding-block: 0.5rem;
+  }
+}
+.erp-page[data-view="detail"] :where(section, form, dl) { min-width: 0; }
+.erp-page[data-view="detail"] :where(dt, dd) { overflow-wrap: anywhere; }
+.erp-page[data-view="detail"] :where(h2) { line-height: 1.4; }
+@media (min-width: 768px) {
+  .erp-metric-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+}
+@media (min-width: 1024px) {
+  .erp-metric-strip[data-columns="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (min-width: 1024px) and (pointer: fine) {
+  .erp-page[data-view="detail"] > :where(section),
+  .erp-page[data-view="detail"] .erp-detail-layout :where(section) { padding-block: 0.75rem; }
+  .erp-page[data-view="detail"] > :where(section) + :where(section) { margin-top: 1rem; }
+}
+@media (min-width: 1440px) {
+  .erp-page[data-view="detail"][data-sectioned] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 1rem;
+  }
+  .erp-page[data-view="detail"][data-sectioned] > * { grid-column: 1 / -1; margin-block: 0; min-width: 0; }
+  .erp-page[data-view="detail"][data-sectioned] > section:not(:has(table)) { grid-column: auto; }
 }
 @media (min-width: 1024px) and (pointer: fine) {
   .erp-page tbody > tr {

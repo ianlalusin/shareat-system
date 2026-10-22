@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { Badge } from '@/components/ui';
 import { businessDayRange, toBusinessDate } from '@shareat/core/datetime';
 import { formatTenure } from './tenure';
+import { staffRoleTitle } from './role-title';
 
 export type LiveState = 'on' | 'break' | 'off';
 export interface LiveEntry {
@@ -19,6 +20,7 @@ export interface LiveEntry {
 }
 
 export interface StaffPerson {
+  role?: string | null;
   id: string;
   displayName: string;
   employmentStatus: string;
@@ -143,7 +145,7 @@ export function CardWall({
             <span aria-hidden="true" className="absolute left-1/2 top-2.5 h-2 w-7 -translate-x-1/2 rounded-full bg-canvas opacity-90" />
             <Avatar person={p} className="relative mt-11 h-24 w-24 rounded-full border-4 border-surface text-4xl" />
             <span className="mt-3 px-3 text-center font-display text-xl font-extrabold uppercase leading-tight">{p.displayName}</span>
-            <span className="mt-1 text-xs font-bold uppercase tracking-wide text-brand-ink">{p.primaryPosition ?? 'No position'}</span>
+            <span className="mt-1 text-xs font-bold uppercase tracking-wide text-brand-ink">{staffRoleTitle(p.role, p.primaryPosition)}</span>
             <span className="mt-0.5 text-xs text-muted">
               {storeName} · {formatTenure(p.startedOn, today)}
             </span>
@@ -263,7 +265,7 @@ export function Roster({
                       {p.displayName}
                     </Link>
                     <span className="text-xs text-muted">
-                      {p.primaryPosition ?? 'No position'} · {formatTenure(p.startedOn, today)}
+                      {staffRoleTitle(p.role, p.primaryPosition)} · {formatTenure(p.startedOn, today)}
                     </span>
                   </span>
                 </span>

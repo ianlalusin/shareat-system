@@ -64,6 +64,7 @@ vi.mock('@shareat/auth', async (importOriginal) => {
     // `withOrgPrincipal` passthrough below cannot satisfy — P4(a) is about `revokeGrantById`'s
     // throw, not this gate, so it is stubbed permissive here.
     authorize: vi.fn(async () => undefined),
+    can: vi.fn(async () => true),
   };
 });
 
@@ -94,6 +95,7 @@ vi.mock('../src/app/admin/users/lib', async (importOriginal) => {
 
 const setPositionDefault = vi.fn();
 vi.mock('@shareat/domain', () => ({
+  assertFieldRules: () => ({}),
   setPositionDefault: (...args: unknown[]) => setPositionDefault(...args),
   retireStorePosition: vi.fn(),
 }));

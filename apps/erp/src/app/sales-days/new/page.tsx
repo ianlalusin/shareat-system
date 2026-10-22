@@ -4,6 +4,8 @@ import { listStores, listChannels, listStoreMoneyAccounts, getStoreLink } from '
 import { requireSession } from '../../../lib/session';
 import { createSalesDayAction, importSalesDayAction } from '../actions';
 import { SalesDayForm } from '../SalesDayForm';
+import { CheckedForm, FieldCheck } from '@/components/forms';
+import { SALES_DAY_CREATE_RULES, SALES_DAY_IMPORT_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -98,7 +100,7 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
           )}
 
           {link ? (
-            <form action={importSalesDayAction} className="space-y-6 text-sm">
+            <CheckedForm rules={SALES_DAY_IMPORT_RULES} action={importSalesDayAction} className="space-y-6 text-sm">
               <input type="hidden" name="storeId" value={storeId} />
               <section className="grid gap-4 sm:grid-cols-2">
                 <div className="flex flex-col gap-1">
@@ -108,10 +110,9 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
                     {link.posStoreName}
                   </p>
                 </div>
-                <label className="flex flex-col gap-1">
-                  <span className={LABEL}>Business date</span>
-                  <Input type="date" name="businessDate" defaultValue={toBusinessDate()} />
-                </label>
+                <Field label="Business date" rule={SALES_DAY_IMPORT_RULES.businessDate}>
+                  <Input type="date" {...nativeAttrs(SALES_DAY_IMPORT_RULES.businessDate)} defaultValue={toBusinessDate()} />
+                </Field>
               </section>
               <p className="text-neutral-600 dark:text-neutral-400">
                 The figures are read from POS, never typed. Importing a date again while it is still open or
@@ -120,26 +121,44 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
               <Button type="submit" variant="primary">
                 Import from POS
               </Button>
-            </form>
+            </CheckedForm>
           ) : (
             <>
               <p className="text-sm text-neutral-600 dark:text-neutral-400">Typed — this store isn&apos;t linked to POS yet.</p>
-              <form action={createSalesDayAction} className="space-y-6 text-sm">
+              <CheckedForm rules={SALES_DAY_CREATE_RULES} action={createSalesDayAction} className="space-y-6 text-sm">
                 {/* ⭐ No orgId and no "acting as" — both come from the session now (T-138). */}
                 <input type="hidden" name="storeId" value={storeId} />
                 <SalesDayForm
                   storeLabel={`${stores.find((s) => s.id === storeId)?.name} (${stores.find((s) => s.id === storeId)?.code})`}
                   businessDate={toBusinessDate()}
                   dateEditable
+                  dateField={
+                    <Field label="Business date" rule={SALES_DAY_CREATE_RULES.businessDate}>
+                      <Input type="date" {...nativeAttrs(SALES_DAY_CREATE_RULES.businessDate)} defaultValue={toBusinessDate()} />
+                    </Field>
+                  }
                   channels={activeChannels}
                   wallets={wallets}
                   submitLabel="Save draft"
                 />
-              </form>
+              </CheckedForm>
             </>
           )}
         </>
       )}
     </Page>
+  );
+}
+
+function Field({ label, rule, children }: { label: string; rule: FieldRule; children: React.ReactNode }) {
+  // T-440: the label keeps its look; the live helper line sits OUTSIDE it (never part of the accessible name).
+  return (
+    <div>
+      <label className="flex flex-col gap-1">
+        <span className={LABEL}>{label}</span>
+        {children}
+      </label>
+      <FieldCheck rule={rule} />
+    </div>
   );
 }

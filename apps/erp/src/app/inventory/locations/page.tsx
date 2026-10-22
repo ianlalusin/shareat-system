@@ -11,7 +11,8 @@ import {
 } from './actions';
 import { listStores, locationsPageData } from './lib';
 import { Page } from '@/components/shell/Page';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { INVENTORY_LOCATION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Button, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -117,17 +118,17 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
             <h2 className="font-medium">Rooms</h2>
             {/* T-448: the add-room form opens from a button. */}
             <FormModal trigger="+ Add room" title="Add a room" size="md">
-              <form action={createLocationAction} className="space-y-3">
+              <CheckedForm rules={INVENTORY_LOCATION_RULES} action={createLocationAction} className="space-y-3">
                 <input type="hidden" name="storeId" value={storeId} />
                 <FormGrid layout="fields">
-                  <Field label="Code" width="code">
-                    <Input name="code" required />
+                  <Field label="Code" width="code" rule={INVENTORY_LOCATION_RULES.code}>
+                    <Input {...nativeAttrs(INVENTORY_LOCATION_RULES.code)} />
                   </Field>
-                  <Field label="Name" width="name">
-                    <Input name="name" required />
+                  <Field label="Name" width="name" rule={INVENTORY_LOCATION_RULES.name}>
+                    <Input {...nativeAttrs(INVENTORY_LOCATION_RULES.name)} />
                   </Field>
-                  <Field label="Type" width="name">
-                    <Select name="typeId" required defaultValue="">
+                  <Field label="Type" width="name" rule={INVENTORY_LOCATION_RULES.typeId}>
+                    <Select {...nativeAttrs(INVENTORY_LOCATION_RULES.typeId)} defaultValue="">
                       <option value="" disabled>
                         Select a type
                       </option>
@@ -155,7 +156,7 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
                 <Button type="submit" variant="primary">
                   Save
                 </Button>
-              </form>
+              </CheckedForm>
             </FormModal>
           </div>
           <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">

@@ -66,6 +66,7 @@ vi.mock('../src/app/expenses/lib', async (orig) => {
 vi.mock('../src/app/staff/lib', async (orig) => {
   const actual = await orig<typeof import('../src/app/staff/lib')>();
   const row = (p: { id: string; name: string }, startedOn: string, status: string, pos: string) => ({
+    role: 'staff',
     id: p.id,
     personId: `person-${p.id}`,
     staffCode: `C-${p.id}`,
@@ -217,6 +218,7 @@ describe('T-387 S7 - /staff views', () => {
   // One block per position card (text after each `<details` opener).
   const cardBlocks = (html: string) => html.split('<details').slice(1);
   const rowFor = (id: string, name: string, positionIds: string[]) => ({
+    role: 'staff',
     id,
     personId: `person-${id}`,
     staffCode: `C-${id}`,

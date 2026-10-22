@@ -12,9 +12,14 @@ import { auditLogRepo, moneyAccountsRepo, posV1Repo, type Tx } from '@shareat/db
 import { TENDER_KINDS, type TenderKind } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { gone, refuse } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { SETTINGS_TENDER_RULES } from '../field-rules/settings';
 import { normalizePosV1Alias } from './v1-methods';
 
 const CAPABILITY = 'manage_chart_of_accounts' as const;
+
+/** The tender screen's rules, as one set for an update (the same two rules the add form shows). */
+const TENDER_UPDATE_RULES = { form: SETTINGS_TENDER_RULES.form, name: SETTINGS_TENDER_RULES.name, kind: SETTINGS_TENDER_RULES.kind };
 
 const ACCOUNT_SENTENCE = "That money account isn't one of this store's.";
 
@@ -36,12 +41,6 @@ export interface UpdateTenderInput {
   readonly kind?: TenderKind;
   readonly posV1Alias?: string | null;
   readonly moneyAccountId?: string | null;
-}
-
-function cleanName(raw: string | undefined): string {
-  const name = (raw ?? '').trim();
-  if (!name) throw refuse('tenders: name is blank', 'Give the tender a name.');
-  return name;
 }
 
 /** '' and whitespace are no alias; an alias that normalizes to nothing is refused in words. */
@@ -109,7 +108,9 @@ function translate(err: unknown, name: string, alias: string | null): never {
 export async function createTender(tx: Tx, actor: Actor, input: CreateTenderInput): Promise<{ id: string }> {
   await authorize(tx, actor, CAPABILITY, { storeId: input.storeId });
 
-  const name = cleanName(input.name);
+  // T-440: the name and the kind choice are ONE rule set shared with the POS link screen (field-rules/settings.ts).
+  const checked = assertFieldRules(SETTINGS_TENDER_RULES, { name: input.name, kind: input.kind });
+  const name = checked.name ?? '';
   if (!(TENDER_KINDS as readonly string[]).includes(input.kind)) {
     throw refuse(`tenders: unknown kind ${String(input.kind)}`, 'Choose whether this tender is cash or a wallet.');
   }
@@ -175,7 +176,9 @@ export async function updateTender(tx: Tx, actor: Actor, input: UpdateTenderInpu
   assertFresh(before.version, input.expectedVersion, before.id);
 
   const patch: { name?: string; kind?: TenderKind; posV1Alias?: string | null; moneyAccountId?: string | null } = {};
-  if (input.name !== undefined) patch.name = cleanName(input.name);
+  // T-440: the same rule set as createTender. A field the caller did not send is judged as what is stored (never blank).
+  const checked = assertFieldRules(TENDER_UPDATE_RULES, { name: input.name ?? before.name, kind: input.kind ?? before.kind });
+  if (input.name !== undefined) patch.name = checked.name ?? '';
   if (input.posV1Alias !== undefined) patch.posV1Alias = cleanAlias(input.posV1Alias);
   if (input.kind !== undefined && !(TENDER_KINDS as readonly string[]).includes(input.kind)) {
     throw refuse(`tenders: unknown kind ${String(input.kind)}`, 'Choose whether this tender is cash or a wallet.');

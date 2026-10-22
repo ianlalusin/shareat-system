@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { LIABILITY_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { CheckedForm } from '@/components/forms';
 import { add, compare, money, ZERO } from '@shareat/core/money';
 import { LIABILITY_CATEGORIES } from '@shareat/db/schema';
 import { requirePageAccess } from '../../lib/page-access';
@@ -57,11 +59,11 @@ export default async function LiabilitiesPage({
           description="This records what it is. Nothing is owed until it is charged, the same separation as a loan that has not been drawn."
           size="md"
         >
-          <form action={createLiabilityAction} className="space-y-4">
+          <CheckedForm rules={LIABILITY_ADD_RULES} action={createLiabilityAction} className="space-y-4">
             <FormSection title="Obligation">
               <FormGrid layout="fields">
-                <Field label="Store" width="name">
-                  <Select name="storeId" required defaultValue="" className="w-full">
+                <Field label="Store" width="name" rule={LIABILITY_ADD_RULES.storeId}>
+                  <Select {...nativeAttrs(LIABILITY_ADD_RULES.storeId)} defaultValue="" className="w-full">
                     <option value="" disabled>
                       Choose…
                     </option>
@@ -72,8 +74,8 @@ export default async function LiabilitiesPage({
                     ))}
                   </Select>
                 </Field>
-                <Field label="What it is" width="name">
-                  <Input name="name" required placeholder="Accrued rent — January" className="w-full" />
+                <Field label="What it is" width="name" rule={LIABILITY_ADD_RULES.name}>
+                  <Input {...nativeAttrs(LIABILITY_ADD_RULES.name)} placeholder="Accrued rent — January" className="w-full" />
                 </Field>
                 <Field label="Category" width="code">
                   <Select name="category" defaultValue="other" className="w-full">
@@ -91,9 +93,10 @@ export default async function LiabilitiesPage({
                 <Field
                   label="Due"
                   width="date"
+                  rule={LIABILITY_ADD_RULES.dueOn}
                   hint="Optional — but an obligation with no due date can never be reported late."
                 >
-                  <Input name="dueOn" type="date" defaultValue={today()} className="w-full" />
+                  <Input {...nativeAttrs(LIABILITY_ADD_RULES.dueOn)} type="date" defaultValue={today()} className="w-full" />
                 </Field>
                 <Field label="Description" width="name" hint="Optional.">
                   <Input name="description" className="w-full" />
@@ -106,7 +109,7 @@ export default async function LiabilitiesPage({
             <Button type="submit" variant="primary">
               Record obligation
             </Button>
-          </form>
+          </CheckedForm>
         </FormModal>
       </div>
 

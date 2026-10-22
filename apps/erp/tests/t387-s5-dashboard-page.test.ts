@@ -194,6 +194,17 @@ async function render(sp: Record<string, string> = {}): Promise<{ html: string; 
 }
 
 describe('T-387 S5 - every block shows its value as text in the SSR output', () => {
+  it('T-448: the financial row has four useful cards, and channel analysis shares a row with operations', async () => {
+    const { html, text } = await render();
+    expect(html).toMatch(/aria-label="Financial position"[^>]*data-columns="4"|data-columns="4"[^>]*aria-label="Financial position"/);
+    expect(text).toContain('Assets');
+    expect(text).toContain('8,420,000.00');
+    expect(text).toContain('Books');
+    expect(html.match(/href="\/reports\/balance-sheet"/g)).toHaveLength(2);
+    const row = html.slice(html.indexOf('aria-label="Channel and operations"'), html.indexOf('Waiting on you'));
+    expect(row).toContain('By channel');
+    expect(row).toContain('aria-label="Right now"');
+  });
   it('hero total, delta against the previous equal-length range, and the previous range was actually queried', async () => {
     const { text } = await render();
     expect(text).toContain('125,000.00');

@@ -205,7 +205,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
   //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
   //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 116 FAIL / 49 UNRESOLVED', () => {
+  it('accepted-baseline totals: 116 FAIL / 50 UNRESOLVED', () => {
     // 62 -> 63 UNRESOLVED, T-386 S4 2026-10-09: the rename "use the suggested code" checkbox on app/items/ItemCodeField.tsx
     // (an intrinsic checkbox box; baselined in touch-target-baseline.json per Ian's §6.1 ruling).
     // 63 -> 66 UNRESOLVED, T-387 S3 2026-10-10. +3: the kit's new native `<select>` (Select.tsx) and `<textarea>` (Textarea.tsx)
@@ -229,7 +229,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 47 -> 49 UNRESOLVED, FAIL unmoved at 116, T-448 2026-10-22. +2, none undersized:
     //   components/ui/Button.tsx +1 (the round icon-button branch takes a caller className like the text branch; h-11 w-11 = 44px touch, 32px desktop by CSS);
     //   components/ui/Dialog.tsx +1 (its Close button, h-8 w-8 = 32px; the font size sits behind the component boundary).
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 116, unresolved: 49 });
+    // T-448 x main merge: main's own +1 (T-440 expenses/recurring checkbox) stacks on the +2 above, so 48 + 2 = 50 UNRESOLVED; FAIL still 116, none new.
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 116, unresolved: 50 });
   });
 
   // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
@@ -456,12 +457,14 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // +6 (17 Oct): T-441 S1 shared photo control on /ap (Lightbox dialog/Close/Open PDF, PhotoUpload shape button/file input/action button; 1357 -> 1363 measured).
     // -1 (17 Oct): T-440 S1 supplier add form - Days-to-pay loses type=number, a Button becomes SubmitButton (1357 -> 1356 measured).
     // = 1362 with both merged (17 Oct)
+    // +16 (17 Oct): T-440 S3-S7 sweep - ruled fields moved onto Field/CheckedForm (helper lines, SubmitButton, the owners SettleForm split; 1362 -> 1378 measured).
     // +12 (18 Oct): T-443 items page - kind filter chips (6), the look-alike panel's note box + "Different items" button (per pair), the
     //   dismissed-pairs list (summary, links, Undo), the Variation-of selects on the request form and approve row, and the item page's
     //   Variations section (links, select, Save). Measured 1362 -> 1374; all 12 new controls are >= 24px (the 5 that were 20px got py-0.5).
     // T-444: one new Review and approvals disclosure summary; all existing controls remain.
     // +9 (22 Oct): T-448 modal forms - the shared Dialog's Close button, every form's Save/Cancel/Edit now icon buttons, add forms moved into dialogs (1375 -> 1384 measured; the 9 new controls are 32px desktop / 44px touch icon buttons, or the 2 UNRESOLVED above).
-    expect(results.length).toBe(1384);
+    // T-448 x main merge: main's 1392 (T-450/T-451 controls) + this branch's +9 = 1401 measured.
+    expect(results.length).toBe(1401);
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

@@ -14,7 +14,8 @@ import { withFlash } from '@/lib/flash';
 import { personName } from '@/lib/person-name';
 import { typedFor } from '@/lib/keep-typing';
 import { EXPENSE_DRAFT_EDIT } from '../typed-forms';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { EXPENSE_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { accountCodeAndName } from '@/lib/account-label';
 import { Badge, Button, CardGrid, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 
@@ -117,7 +118,7 @@ export default async function ExpenseDetailPage({
   );
 
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div className="flex items-start justify-between gap-4">
         <div>
           <a href={`/expenses?${carry}`} className="text-sm text-neutral-500 underline hover:no-underline dark:text-neutral-400">
@@ -163,7 +164,7 @@ export default async function ExpenseDetailPage({
 
         <div className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
           <h2 className="mb-3 font-medium">Payments</h2>
-          <table className="w-full border-collapse">
+          <table data-card-columns="Payment method|Paid from|Amount" className="w-full border-collapse">
             <tbody>
               {payments.map((p) => (
                 <tr key={p.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
@@ -286,7 +287,8 @@ export default async function ExpenseDetailPage({
       )}
 
       {isPosted && (
-        <form
+        <CheckedForm
+          rules={EXPENSE_VOID_RULES}
           action={voidExpenseAction}
           className="space-y-3 rounded-lg border border-danger p-4 text-sm"
         >
@@ -297,14 +299,16 @@ export default async function ExpenseDetailPage({
             visible, and both sides remain in the ledger. A reason is required.
           </p>
           <div className="flex gap-2">
-            <Input name="reason" required placeholder="Why is this being voided?" className="flex-1" />
+            <Field label={<span className="sr-only">Reason</span>} rule={EXPENSE_VOID_RULES.reason} className="flex-1">
+              <Input {...nativeAttrs(EXPENSE_VOID_RULES.reason)} placeholder="Why is this being voided?" />
+            </Field>
             <ConfirmDestructive
               tier="admin-pin"
               label="Void expense"
               consequence="Reverses this posted expense. An administrator must approve with their own PIN."
             />
           </div>
-        </form>
+        </CheckedForm>
       )}
     </Page>
   );

@@ -4,6 +4,8 @@ import { openCountSessionAction } from './actions';
 import { requireSession } from '../../../lib/session';
 import { Page } from '@/components/shell/Page';
 import { Badge, Button, FlashBanner, FormGrid, Field, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { INVENTORY_COUNT_OPEN_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -87,7 +89,7 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
         {locations.length === 0 ? (
           <p className="mt-3 text-sm text-warning-ink">This store has no active rooms yet.</p>
         ) : (
-          <form action={openCountSessionAction} className="mt-3 space-y-3">
+          <CheckedForm rules={INVENTORY_COUNT_OPEN_RULES} action={openCountSessionAction} className="mt-3 space-y-3">
             <input type="hidden" name="storeId" value={storeId} />
             <fieldset className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {locations.map((l) => (
@@ -103,8 +105,8 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
               ))}
             </fieldset>
             <FormGrid>
-              <Field label="Counted on" className="text-xs text-neutral-600 dark:text-neutral-400">
-                <Input name="countedOn" type="date" defaultValue={today()} className="mt-1 block w-full" />
+              <Field label="Counted on" className="text-xs text-neutral-600 dark:text-neutral-400" rule={INVENTORY_COUNT_OPEN_RULES.countedOn}>
+                <Input {...nativeAttrs(INVENTORY_COUNT_OPEN_RULES.countedOn)} type="date" defaultValue={today()} className="mt-1 block w-full" />
               </Field>
               <Field label="Note (optional)" span="wide" className="text-xs text-neutral-600 dark:text-neutral-400">
                 <Input name="note" className="mt-1 block w-full" />
@@ -113,7 +115,7 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
             <Button type="submit" variant="primary">
               Open count
             </Button>
-          </form>
+          </CheckedForm>
         )}
       </section>
 

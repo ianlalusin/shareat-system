@@ -9,7 +9,8 @@ import { categoriesForAdmin, mappableAccounts } from './lib';
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { SETTINGS_EXPENSE_CATEGORY_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Button, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
@@ -123,13 +124,12 @@ export default async function ExpenseCategoriesSettingsPage({
                     {/* T-448: the name is always text; a non-seeded row adds an Edit button (modal). */}
                     <span className="mr-2">{c.category}</span>
                     {!c.isSystem && (
-                      <EditableRecord action={renameCategoryAction} label={c.category} hidden={{ categoryId: c.id }} typed={typedFor(sp, EXPENSE_CATEGORY_RENAME, c.id, actor.personId)}>
+                      <EditableRecord action={renameCategoryAction} label={c.category} hidden={{ categoryId: c.id }} typed={typedFor(sp, EXPENSE_CATEGORY_RENAME, c.id, actor.personId)} rules={SETTINGS_EXPENSE_CATEGORY_RULES}>
                         <FormGrid layout="fields">
-                          <Field label="Name" width="name">
+                          <Field label="Name" width="name" rule={SETTINGS_EXPENSE_CATEGORY_RULES.category}>
                             <Input
-                              name="category"
+                              {...nativeAttrs(SETTINGS_EXPENSE_CATEGORY_RULES.category)}
                               defaultValue={c.category}
-                              required
                               aria-label={`Name of ${c.category}`}
                               className="w-full"
                             />
@@ -250,10 +250,10 @@ export default async function ExpenseCategoriesSettingsPage({
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-medium">Add a category</h2>
           <FormModal trigger="+ Add category" title="Add a category" size="md">
-            <form action={createCategoryAction} className="space-y-3 text-sm">
+            <CheckedForm rules={SETTINGS_EXPENSE_CATEGORY_RULES} action={createCategoryAction} className="space-y-3 text-sm">
               <FormGrid layout="fields">
-                <Field label="Name" width="name">
-                  <Input name="category" required placeholder="Scooter rental" className="w-full" />
+                <Field label="Name" width="name" rule={SETTINGS_EXPENSE_CATEGORY_RULES.category}>
+                  <Input {...nativeAttrs(SETTINGS_EXPENSE_CATEGORY_RULES.category)} placeholder="Scooter rental" className="w-full" />
                 </Field>
                 <Field label="Group" width="name">
                   <Select name="group" defaultValue="OPEX" className="w-full">
@@ -277,7 +277,7 @@ export default async function ExpenseCategoriesSettingsPage({
               <Button type="submit" variant="primary">
                 Save
               </Button>
-            </form>
+            </CheckedForm>
           </FormModal>
         </div>
         <p className="mt-3 text-xs text-neutral-500 dark:text-neutral-400">

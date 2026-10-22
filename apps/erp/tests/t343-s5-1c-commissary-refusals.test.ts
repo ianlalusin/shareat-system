@@ -105,6 +105,7 @@ const saveBranchOrderDraft = vi.fn<(...args: unknown[]) => Promise<unknown>>(asy
   totalAmount: '0.00',
 }));
 vi.mock('@shareat/domain', () => ({
+  assertFieldRules: () => ({}),
   postOrderMessage: (...args: unknown[]) => postOrderMessage(...args),
   saveBranchOrderDraft: (...args: unknown[]) => saveBranchOrderDraft(...args),
   acceptOrder: vi.fn(),

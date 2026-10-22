@@ -21,6 +21,8 @@ import { compare, ZERO } from '@shareat/core/money';
 import { parseDecimalInput } from '../shared/money-input';
 import { parseWholeNumberInput } from '../shared/whole-number-input';
 import { refuse } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { RECURRING_TEMPLATE_RULES } from '../field-rules/expenses';
 import { firstDueDate, isAnchorValid, nextDueDate as nextDueDateAfter } from './recurrence';
 
 export interface CreateRecurringTemplateInput {
@@ -108,6 +110,15 @@ export async function createRecurringTemplate(
 ): Promise<{ id: string; nextDueDate: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_recurring_expenses', { storeId: input.storeId });
+    // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
+    assertFieldRules(RECURRING_TEMPLATE_RULES, {
+      name: input.name,
+      supplierId: input.supplierId,
+      categoryId: input.categoryId,
+      defaultAmount: input.defaultAmount,
+      anchorDay: String(input.anchorDay),
+      startsOn: input.startsOn,
+    });
 
     const name = input.name.trim();
     if (!name) throw new Error('give the template a name — "Lipa branch rent", not "expense 3".');
@@ -226,6 +237,22 @@ export async function updateRecurringTemplate(
     const template = await recurringExpensesRepo.getById(trx, actor.orgId, input.templateId);
     if (!template) throw new Error('that template does not exist.');
     await authorize(trx, actor, 'manage_recurring_expenses', { storeId: template.storeId });
+    // Updates are patches: omission preserves the stored field, while a supplied blank is judged by its rule.
+    // The form submits its ruled fields; other callers may change only one field.
+    assertFieldRules({
+      form: RECURRING_TEMPLATE_RULES.form,
+      ...(input.name !== undefined ? { name: RECURRING_TEMPLATE_RULES.name } : {}),
+      ...(input.supplierId !== undefined ? { supplierId: RECURRING_TEMPLATE_RULES.supplierId } : {}),
+      ...(input.categoryId !== undefined ? { categoryId: RECURRING_TEMPLATE_RULES.categoryId } : {}),
+      ...(input.defaultAmount !== undefined ? { defaultAmount: RECURRING_TEMPLATE_RULES.defaultAmount } : {}),
+      ...(input.anchorDay !== undefined ? { anchorDay: RECURRING_TEMPLATE_RULES.anchorDay } : {}),
+    }, {
+      name: input.name,
+      supplierId: input.supplierId,
+      categoryId: input.categoryId,
+      defaultAmount: input.defaultAmount,
+      anchorDay: input.anchorDay === undefined ? undefined : String(input.anchorDay),
+    });
 
     const interval = input.interval ?? template.interval;
     const suppliedAnchorDay = input.anchorDay === undefined ? undefined : parseAnchorDay(input.anchorDay);

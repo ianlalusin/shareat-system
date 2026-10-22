@@ -16,7 +16,8 @@ import { accountLabel, accountCodeAndName } from '@/lib/account-label';
 
 import { typedFor } from '@/lib/keep-typing';
 import { PLATFORM_SALES_EDIT } from '../typed-forms';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord, FieldCheck } from '@/components/forms';
+import { SALES_DAY_CORRECTION_RULES, SALES_DAY_VOID_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { ACTION_LINK } from '@/components/action-link';
 import { Badge, Banner, Button, ConfirmDestructive, FlashBanner, FormGrid, Input } from '@/components/ui';
 
@@ -148,7 +149,7 @@ export default async function SalesDayDetailPage({
 
   const hasPlatformRows = channels.some((r) => platformChannels.some((c) => c.id === r.channelId));
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div className="flex items-start justify-between gap-4">
         <div>
           <a
@@ -343,27 +344,23 @@ export default async function SalesDayDetailPage({
             </p>
           )}
           {drift && can.verify && (
-            <form action={postPosCorrectionAction} className="flex flex-wrap items-end gap-3">
+            <CheckedForm rules={SALES_DAY_CORRECTION_RULES} action={postPosCorrectionAction} className="flex flex-wrap items-end gap-3">
               {hiddenIds}
               <input type="hidden" name="feedId" value={drift.latestFeedId} />
-              <label className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Dated</span>
+              <Field label="Dated" rule={SALES_DAY_CORRECTION_RULES.entryDate}>
                 <Input
                   type="date"
-                  name="entryDate"
-                  required
-                  min={day.businessDate}
+                  {...nativeAttrs(SALES_DAY_CORRECTION_RULES.entryDate)}
                   defaultValue={toBusinessDate().localeCompare(day.businessDate) < 0 ? day.businessDate : toBusinessDate()}
                 />
-              </label>
-              <label className="flex min-w-[16rem] flex-1 flex-col gap-1">
-                <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Reason</span>
-                <Input name="reason" required placeholder="What changed in POS?" />
-              </label>
+              </Field>
+              <Field label="Reason" rule={SALES_DAY_CORRECTION_RULES.reason} className="min-w-[16rem] flex-1">
+                <Input {...nativeAttrs(SALES_DAY_CORRECTION_RULES.reason)} placeholder="What changed in POS?" />
+              </Field>
               <Button type="submit" variant="secondary">
                 Post correction
               </Button>
-            </form>
+            </CheckedForm>
           )}
         </section>
       )}
@@ -503,7 +500,7 @@ export default async function SalesDayDetailPage({
       </section>
 
       {unverified && can.void && (
-        <form action={voidSalesDayAction} className="space-y-3 rounded-lg border border-danger p-4 text-sm">
+        <CheckedForm rules={SALES_DAY_VOID_RULES} action={voidSalesDayAction} className="space-y-3 rounded-lg border border-danger p-4 text-sm">
           {hiddenIds}
           <h2 className="font-medium text-danger">Withdraw this unverified day</h2>
           <p className="text-neutral-600 dark:text-neutral-400">
@@ -513,16 +510,18 @@ export default async function SalesDayDetailPage({
             date again afterwards.
           </p>
           <div className="flex gap-2">
-            <Input name="reason" required placeholder="Why is this being withdrawn?" className="flex-1" />
+            <Field label={<span className="sr-only">Reason</span>} rule={SALES_DAY_VOID_RULES.reason} className="flex-1">
+              <Input {...nativeAttrs(SALES_DAY_VOID_RULES.reason)} placeholder="Why is this being withdrawn?" />
+            </Field>
             <Button type="submit" variant="danger">
               Withdraw day
             </Button>
           </div>
-        </form>
+        </CheckedForm>
       )}
 
       {day.status === 'verified' && can.void && (
-        <form action={voidSalesDayAction} className="space-y-3 rounded-lg border border-danger p-4 text-sm">
+        <CheckedForm rules={SALES_DAY_VOID_RULES} action={voidSalesDayAction} className="space-y-3 rounded-lg border border-danger p-4 text-sm">
           {hiddenIds}
           <h2 className="font-medium text-danger">Void (reverses the posting)</h2>
           <p className="text-neutral-600 dark:text-neutral-400">
@@ -530,14 +529,16 @@ export default async function SalesDayDetailPage({
             visible and both sides remain in the ledger. A reason is required.
           </p>
           <div className="flex gap-2">
-            <Input name="reason" required placeholder="Why is this being voided?" className="flex-1" />
+            <Field label={<span className="sr-only">Reason</span>} rule={SALES_DAY_VOID_RULES.reason} className="flex-1">
+              <Input {...nativeAttrs(SALES_DAY_VOID_RULES.reason)} placeholder="Why is this being voided?" />
+            </Field>
             <ConfirmDestructive
               tier="admin-pin"
               label="Void sales day"
               consequence="Reverses this verified day's posting. An administrator must approve with their own PIN."
             />
           </div>
-        </form>
+        </CheckedForm>
       )}
     </Page>
   );
@@ -595,6 +596,19 @@ function Row({ label, value, strong }: { label: string; value: React.ReactNode; 
     <div className={`flex justify-between gap-4 ${strong ? 'border-t border-neutral-200 pt-1.5 font-medium dark:border-neutral-800' : ''}`}>
       <dt className="text-neutral-500 dark:text-neutral-400">{label}</dt>
       <dd className="text-right tabular-nums">{value}</dd>
+    </div>
+  );
+}
+
+function Field({ label, rule, className, children }: { label: React.ReactNode; rule: FieldRule; className?: string; children: React.ReactNode }) {
+  // T-440: the label keeps its look; the live helper line sits OUTSIDE it (never part of the accessible name).
+  return (
+    <div className={className}>
+      <label className="flex flex-col gap-1">
+        <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{label}</span>
+        {children}
+      </label>
+      <FieldCheck rule={rule} />
     </div>
   );
 }

@@ -9,6 +9,7 @@
  *
  * R1: the store and the date are never edited, so on an edit the date is plain text, not an input.
  */
+import type { ReactNode } from 'react';
 import { Button, Input } from '@/components/ui';
 import { accountLabel } from '@/lib/account-label';
 import type { ChannelOption } from './lib';
@@ -30,6 +31,8 @@ export interface SalesDayFormProps {
   /** New: an editable date defaulting to this. Edit: shown as text, never an input (R1). */
   businessDate: string;
   dateEditable: boolean;
+  /** T-440: the editable date field, built by the page INSIDE its checked form (so the rule and the control sit in one lexical form). */
+  dateField?: ReactNode;
   channels: ChannelOption[];
   wallets: { id: string; name: string; custodian: string }[];
   defaults?: SalesDayDefaults;
@@ -39,7 +42,7 @@ export interface SalesDayFormProps {
   submitLabel: string;
 }
 
-export function SalesDayForm({ storeLabel, businessDate, dateEditable, channels, wallets, defaults, retiredTenders, submitLabel }: SalesDayFormProps) {
+export function SalesDayForm({ storeLabel, businessDate, dateEditable, dateField, channels, wallets, defaults, retiredTenders, submitLabel }: SalesDayFormProps) {
   const fig = (name: string) => defaults?.figures?.[name];
   return (
     <>
@@ -51,10 +54,7 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, channels,
           </p>
         </div>
         {dateEditable ? (
-          <label className="flex flex-col gap-1">
-            <span className={LABEL}>Business date</span>
-            <Input type="date" name="businessDate" defaultValue={businessDate} />
-          </label>
+          dateField
         ) : (
           <div className="flex flex-col gap-1">
             <span className={LABEL}>Business date</span>

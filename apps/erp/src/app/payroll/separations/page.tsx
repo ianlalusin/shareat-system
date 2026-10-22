@@ -3,6 +3,8 @@ import { SEPARATION_CAUSES } from '@shareat/db/schema';
 import { postSeparationAction, voidSeparationAction } from './actions';
 import { cashAccountsFor, payrollStoresFor, peso, preview, separationsFor, worklistFor } from './lib';
 import { Page } from '@/components/shell/Page';
+import { CheckedForm } from '@/components/forms';
+import { PAYROLL_SEPARATION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -146,7 +148,7 @@ export default async function SeparationsPage({
           {pvResult?.error && <Banner tone="error">{pvResult.error}</Banner>}
 
           {pvResult?.preview && (
-            <form action={postSeparationAction} className="space-y-3">
+            <CheckedForm rules={PAYROLL_SEPARATION_RULES} action={postSeparationAction} className="space-y-3">
               <input type="hidden" name="storeId" value={storeId} />
               <input type="hidden" name="employmentId" value={selected.employmentId} />
               <input type="hidden" name="separationDate" value={separationDate} />
@@ -167,8 +169,8 @@ export default async function SeparationsPage({
                     ))}
                   </Select>
                 </Field>
-                <Field label="Separation pay (₱)" hint="A decision, not a calculation — see above.">
-                  <input name="separationPayAmount" inputMode="decimal" defaultValue="0" className="mt-1 w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink" />
+                <Field label="Separation pay (₱)" hint="A decision, not a calculation — see above." rule={PAYROLL_SEPARATION_RULES.separationPayAmount}>
+                  <Input {...nativeAttrs(PAYROLL_SEPARATION_RULES.separationPayAmount)} defaultValue="0" className="mt-1 w-full" />
                 </Field>
                 <Field label="Pay from">
                   <Select name="moneyAccountId" className="mt-1 w-full">
@@ -198,7 +200,7 @@ export default async function SeparationsPage({
                 label="Post separation"
                 consequence="Pays out and ends this employment. An administrator must approve with their own PIN."
               />
-            </form>
+            </CheckedForm>
           )}
         </section>
       )}

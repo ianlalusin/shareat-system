@@ -4,14 +4,15 @@
  *  F2: FormGrid styles label text with house tokens, no raw hue.
  *  F3: the items/[id] "Name and code" rename section is an EditableRecord with FormGrid/Field, no fixed widths.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
+import { readControlSource } from './helpers/control-source';
 import { resolve } from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 const SRC = resolve(__dirname, '..', 'src');
-const read = (...p: string[]) => readFileSync(resolve(SRC, ...p), 'utf8');
+const read = (...p: string[]) => readControlSource(resolve(SRC, ...p), 'utf8');
 
 describe('F1: EditableRecord is in components/forms, not components/ui', () => {
   it('the file moved', () => {

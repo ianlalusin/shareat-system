@@ -1,3 +1,4 @@
+import { ITEMS_RENAME_RULES, ITEMS_UNIT_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { notFound } from 'next/navigation';
 import { requireSession } from '../../../lib/session';
 import { can } from '@shareat/auth';
@@ -93,9 +94,9 @@ export default async function ItemDetailPage({
   ] as const;
 
   return (
-    <Page density="table">
+    <Page view="detail" density="table">
       <div>
-        <a href="/items" className="text-sm text-neutral-500 underline underline-offset-2 dark:text-neutral-400">
+        <a data-screen-return href="/items" className="text-sm text-neutral-500 underline underline-offset-2 dark:text-neutral-400">
           ← Items
         </a>
         <h1 className="mt-1 text-2xl font-semibold">{item.name}</h1>
@@ -121,13 +122,13 @@ export default async function ItemDetailPage({
       <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Name and code</h2>
         {mayApproveItem ? (
-          <EditableRecord action={renameItemAction} label={item.name} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_RENAME, item.id, actor.personId)}>
+          <EditableRecord action={renameItemAction} rules={ITEMS_RENAME_RULES} label={item.name} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_RENAME, item.id, actor.personId)}>
             <FormGrid>
-              <Field width="name" label="Name">
-                <Input id="rename-name" name="name" type="text" required defaultValue={item.name} className="w-full" />
+              <Field rule={ITEMS_RENAME_RULES.name} width="name" label="Name">
+                <Input {...nativeAttrs(ITEMS_RENAME_RULES.name)} id="rename-name"  type="text"  defaultValue={item.name} className="w-full" />
               </Field>
-              <Field width="code" label="Code">
-                <Input name="code" type="text" required defaultValue={item.code} className="w-full" />
+              <Field rule={ITEMS_RENAME_RULES.code} width="code" label="Code">
+                <Input {...nativeAttrs(ITEMS_RENAME_RULES.code)}  type="text"  defaultValue={item.code} className="w-full" />
               </Field>
               {/* T-386 R10 (q4): the code stays on rename; the tick offers the new suggestion. */}
               <ItemCodeField
@@ -213,10 +214,10 @@ export default async function ItemDetailPage({
             Only a super-admin can change an item&apos;s unit. It is measured in {item.baseUnit}.
           </p>
         ) : (
-          <EditableRecord action={changeItemUnitAction} label={`${item.name} unit`} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_UNIT, item.id, actor.personId)}>
+          <EditableRecord action={changeItemUnitAction} rules={ITEMS_UNIT_RULES} label={`${item.name} unit`} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_UNIT, item.id, actor.personId)}>
             <FormGrid>
-              <Field width="short" label="Unit">
-                <Select name="baseUnit" required defaultValue={item.baseUnit} className="w-full">
+              <Field rule={ITEMS_UNIT_RULES.baseUnit} width="short" label="Unit">
+                <Select {...nativeAttrs(ITEMS_UNIT_RULES.baseUnit)}   defaultValue={item.baseUnit} className="w-full">
                   {BASE_UNITS.map((u) => (
                     <option key={u} value={u}>{u}</option>
                   ))}

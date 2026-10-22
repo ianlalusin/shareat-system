@@ -393,9 +393,7 @@ describe('F8 — the action never fills class A (open books) or class D (part-mo
 describe('F9 — a blank reason is refused', () => {
   it('whitespace-only reason', async () => {
     const f = await h3Shape('f9');
-    await expect(create(f.admin, { startsOn: '2026-04-01', endsOn: '2026-04-30', reason: '   ' })).rejects.toThrow(
-      /reason is required/,
-    );
+    await expect(create(f.admin, { startsOn: '2026-04-01', endsOn: '2026-04-30', reason: '   ' })).rejects.toMatchObject({ name: 'RefusalError', userMessage: 'Say why this month is being created now.' });
     expect(await periodStatus(f.orgId, '2026-04-01')).toBeUndefined();
   });
 });

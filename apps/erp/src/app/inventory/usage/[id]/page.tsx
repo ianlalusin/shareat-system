@@ -8,7 +8,9 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
 import { withFlash } from '@/lib/flash';
-import { Button, ConfirmDestructive, FlashBanner, Input, LinkRow, RowLink, statusLabel } from '@/components/ui';
+import { Button, ConfirmDestructive, Field, FlashBanner, Input, LinkRow, RowLink, statusLabel } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { INVENTORY_USAGE_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Usage record — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -48,7 +50,7 @@ export default async function UsageRecordPage({
   const canVoid = record.status === 'posted' && !fromLivePull;
 
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div>
         <Link href={`/inventory/usage?store=${record.storeId}`} className="text-sm underline underline-offset-4">
           ← Usage &amp; wastage
@@ -150,12 +152,11 @@ export default async function UsageRecordPage({
       )}
 
       {canVoid && (
-        <form action={voidUsageAction} className="flex flex-wrap items-end gap-3">
+        <CheckedForm rules={INVENTORY_USAGE_VOID_RULES} action={voidUsageAction} className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="recordId" value={record.id} />
-          <label className="flex min-w-0 grow flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
-            Void — say why
-            <Input name="reason" required placeholder="reason" className="w-full" />
-          </label>
+          <Field label="Void — say why" className="flex min-w-0 grow flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400" rule={INVENTORY_USAGE_VOID_RULES.reason}>
+            <Input {...nativeAttrs(INVENTORY_USAGE_VOID_RULES.reason)} placeholder="reason" className="w-full" />
+          </Field>
           <ConfirmDestructive
             tier="admin-pin"
             label="Void usage"
@@ -164,7 +165,7 @@ export default async function UsageRecordPage({
           <span className="max-w-xs text-xs text-neutral-500 dark:text-neutral-400">
             Stock, the FIFO layers and the original journal entry are all reversed together.
           </span>
-        </form>
+        </CheckedForm>
       )}
 
       <Link href={`/inventory?store=${record.storeId}`} className="inline-block text-sm underline underline-offset-4">

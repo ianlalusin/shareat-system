@@ -1,6 +1,6 @@
 # T-442: Link the files already saved (DEF-672 backfill + census)
 
-**Status:** SPEC AUDITED 2026-10-18, WAITING ON T-441 S2; production run by Ian after that deploys.
+**Status:** 2026-10-22: S1+S2 backfill in PR #43 (with part of T-441 S2), fixes pushed 22 Oct, main merged in 22 Oct; not merged, not deployed. Production run by Ian after deploy.
 
 ## 1. The problem, measured in code (not assumed)
 
@@ -64,7 +64,7 @@ Returns `{ linked: Record<purpose, n>; bySource: Record<label, n>; shared; misma
 **Script.** `scripts/backfill-file-links.ts`, `npm run backfill-file-links`. Args: `--confirm`, `--org=<uuid>`;
 anything else refused (same `parseArgs` shape). Default is dry run. Prints per org: would-link / linked per purpose
 and per source, then the three problem lists (file id, source, owner id; no personal data), then unreferenced counts.
-Exit 1 if any org failed, if no org was processed, or (with `--check`) if any referenced file is still unlinked:
+Exit 1 if any org failed, if no org was processed, or (with `--check`) if any LINKABLE referenced file is still unlinked (orchestrator ruling 2026-10-22: wrong-purpose, cross-org and mismatched files are printed but do not set the exit code, so the production `--check` can reach 0):
 `--check` is the read-only census Ian can run any time after.
 
 **Sweep hardening (S2, small).** `listOrphans` adds `AND NOT EXISTS` over `FILE_REFERENCES` (built from the same
@@ -172,3 +172,27 @@ Tests added: M13 (output privacy), M14 (purpose guard), M15 (race resolves as cl
 constraint on T-441 S2's trade pay-now builder; brief S2 with it before S2 starts.
 
 **Status:** AUDITED 2026-10-17. Build after T-441 S2 (the trade pay-now link fix) so the backfill and new uploads use the same link targets; production run by Ian after deploy.
+
+## S1 external audit, 20 October
+The original wrong-purpose --check test contradicted the any-referenced-unlinked census contract. Corrected oracle reproduced exit 0 instead of 1; script now counts wrong-purpose files without writing them. DEF-693 records it. Two new raw domain errors exceeded the existing ceiling (DEF-694); standard refusal producers preserve the ceiling. Real PostgreSQL: 21 passed / three TODO; root typecheck and 91 caller/argument/ratchet/boundary/register checks passed. This is an S1 checkpoint, not S2 completion or permission to run in production.
+
+## S2 execution scope, 21 October
+Ian authorized continuing unfinished work unattended. Complete the already approved sweep hardening in:
+packages/db/src/repo/files.ts, packages/domain/src/files/index.ts, packages/domain/src/scheduler/index.ts,
+packages/domain/tests/integration/t442-backfill-file-links.test.ts and files.test.ts; update this task and
+docs/reviews/t442-s2-sweep.md. Add M11/M12/M15 and the scheduler count assertion before implementation.
+The observed S1 numeric-guard failure is recorded in DEFECTS-REGISTER.md as DEF-717; identifiers use
+Drizzle's quoting API rather than raw SQL, without changing any accepted guard set.
+Use one shared registry-based NOT EXISTS predicate in candidate selection and deletion; report a distinct
+same-org referenced-unlinked file count without ids. Keep cross-org FK failures visible per A7.
+Use only shareat_test_codex_t442s2 locally. This does not authorize a production backfill or close the
+three T-441 write-path TODOs. Main was reconciled first, retaining both branches' defect register entries.
+
+21 October continuation: T-441 S2's actual actions now cover the customer/trade collection and
+delivery census requirements, both upload paths and rollback on a refused claim, in
+`apps/erp/tests/integration/t441-s2-receipt-actions.test.ts`. Their two TODOs here are replaced by
+that cross-reference, keeping app imports out of packages. The channel-certificate TODO remains:
+T-441 S2 lists no channel-settlement writer, so its ownership is a recorded spec gap, not a
+silently completed requirement. Production backfill and closure of DEF-672 remain gated.
+
+**Orchestrator ruling 2026-10-22 (supersedes the census note above):** `--check` exits 1 only for a linkable referenced file that is still unlinked. A wrong-purpose file can never be linked by the backfill, so counting it made the production `--check` unreachable. Test ~line 495 now expects exit 0 with the file printed.

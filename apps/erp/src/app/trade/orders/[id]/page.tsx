@@ -6,8 +6,9 @@ import { requireSession } from '../../../../lib/session';
 import { dispatchOrderAction, receiveOrderAction, setBirInvoiceNoAction, voidOrderAction } from '../actions';
 import { canSeeCreditLimit, creditPreview, orderDetail, peso, storeMoneyAccounts, today } from '../lib';
 import { ACTION_LINK } from '@/components/action-link';
-import { PhotoInput } from '@/components/PhotoInput';
-import { EditableRecord } from '@/components/forms';
+import { PhotoUpload } from '@/components/upload/PhotoUpload';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { TRADE_DISPATCH_RULES, TRADE_RECEIVE_RULES, TRADE_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { TREATMENT_LABEL, TREATMENT_TONE } from '../../../customers/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -101,7 +102,7 @@ export default async function TradeOrderPage({
   const isSale = (order.status === 'dispatched' || order.status === 'received') && !isInternal;
 
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div>
         <Link href={`/trade/orders?store=${order.storeId}`} className="text-sm underline underline-offset-4">
           ← Trade orders
@@ -122,7 +123,8 @@ export default async function TradeOrderPage({
 
       <StatusHero kind={hero.kind} word={statusLabel(order.status)} step={heroStep} steps={tradeOrderSteps} line={heroLine} tone={hero.tone}>
         {canDispatch && (
-          <form
+          <CheckedForm
+            rules={TRADE_DISPATCH_RULES}
             action={dispatchOrderAction}
             className="flex flex-wrap items-end gap-3"
           >
@@ -137,8 +139,8 @@ export default async function TradeOrderPage({
               <fieldset className="w-full rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
                 <legend className="px-1 text-xs text-neutral-500 dark:text-neutral-400">Paid on the spot? (optional)</legend>
                 <FormGrid>
-                  <Field label="Paid now (₱)">
-                    <Input name="payNowAmount" inputMode="decimal" placeholder="0.00" className="w-full text-right tabular-nums" />
+                  <Field label="Paid now (₱)" rule={TRADE_DISPATCH_RULES.payNowAmount}>
+                    <Input {...nativeAttrs(TRADE_DISPATCH_RULES.payNowAmount)} placeholder="0.00" className="w-full text-right tabular-nums" />
                   </Field>
                   <Field label="Into account">
                     <Select name="moneyAccountId" defaultValue="" className="w-full">
@@ -151,7 +153,7 @@ export default async function TradeOrderPage({
                     </Select>
                   </Field>
                   <Field label="Proof of payment (required for GCash or bank)" span="full">
-                    <PhotoInput name="receiptPhoto" className="text-sm" />
+                    <PhotoUpload name="receiptPhoto" purpose="receipt_photo" storeId={order.storeId} label="Proof of payment" />
                   </Field>
                 </FormGrid>
               </fieldset>
@@ -165,7 +167,7 @@ export default async function TradeOrderPage({
             <Button type="submit" variant="primary">
               Dispatch
             </Button>
-          </form>
+          </CheckedForm>
         )}
         {canReceive && (
           <Button type="submit" form="receive-trade-order-form" variant="primary">
@@ -179,7 +181,7 @@ export default async function TradeOrderPage({
         signed for, per line. THREE quantities (T-172) — ordered, packed, signed for — and the gap
         between the last two becomes a transit discrepancy (T-174) the commissary must dispose of.
       */}
-      <form id="receive-trade-order-form" action={receiveOrderAction} className="space-y-4">
+      <CheckedForm id="receive-trade-order-form" rules={TRADE_RECEIVE_RULES} action={receiveOrderAction} className="space-y-4">
         <input type="hidden" name="orderId" value={order.id} />
         <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
           <table className="w-full min-w-[640px] border-collapse text-sm">
@@ -275,13 +277,12 @@ export default async function TradeOrderPage({
                   : 'Records who signed for the goods, and when. Nothing further posts for a sale — the value moved at dispatch.'}
               </p>
             </div>
-            <label className="flex flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
-              Received on
-              <Input name="receivedOn" type="date" defaultValue={today()} />
-            </label>
+            <Field label="Received on" rule={TRADE_RECEIVE_RULES.receivedOn}>
+              <Input type="date" {...nativeAttrs(TRADE_RECEIVE_RULES.receivedOn)} defaultValue={today()} />
+            </Field>
           </div>
         )}
-      </form>
+      </CheckedForm>
 
       {order.notes && (
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -357,12 +358,11 @@ export default async function TradeOrderPage({
       )}
 
       {canVoid && (
-        <form action={voidOrderAction} className="flex flex-wrap items-end gap-3">
+        <CheckedForm rules={TRADE_VOID_RULES} action={voidOrderAction} className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="orderId" value={order.id} />
-          <label className="flex min-w-[14rem] flex-1 flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400">
-            Void — say why
-            <Input name="reason" required placeholder="reason" className="w-full" />
-          </label>
+          <Field label="Void — say why" rule={TRADE_VOID_RULES.reason} className="min-w-[14rem] flex-1">
+            <Input {...nativeAttrs(TRADE_VOID_RULES.reason)} placeholder="reason" className="w-full" />
+          </Field>
           <ConfirmDestructive
             tier="admin-pin"
             label="Void trade order"
@@ -373,7 +373,7 @@ export default async function TradeOrderPage({
               The posting is <strong>reversed</strong>, never deleted; the ledger keeps both halves.
             </span>
           )}
-        </form>
+        </CheckedForm>
       )}
     </Page>
   );

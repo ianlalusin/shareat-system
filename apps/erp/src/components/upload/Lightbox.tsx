@@ -65,11 +65,11 @@ export function Lightbox({
       onClick={(e) => {
         if (e.target === ref.current) onClose();
       }}
-      className="max-h-[95vh] max-w-[95vw] rounded-[10px] text-sm border border-field-border bg-surface p-3 text-ink backdrop:bg-black/60"
+      className="open:flex flex-col max-h-[95dvh] max-w-[95vw] overflow-hidden rounded-[10px] text-sm border border-field-border bg-surface p-3 text-ink backdrop:bg-black/60"
     >
       {open && (
-        <div className="flex flex-col gap-3">
-          <div className="flex justify-end">
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <div className="flex shrink-0 justify-end">
             <button
               type="button"
               autoFocus
@@ -80,8 +80,10 @@ export function Lightbox({
             </button>
           </div>
           {src && kind === 'image' && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={src} alt={label} className="max-h-[90vh] max-w-[95vw] object-contain" />
+            <div className="min-h-0 flex-1 overflow-auto">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={src} alt={label} className="block mx-auto h-auto w-auto max-w-full max-h-[calc(95dvh-5.5rem)] object-contain" />
+            </div>
           )}
           {src && kind === 'pdf' && (
             <a href={src} target="_blank" rel="noopener noreferrer" className="inline-block py-2 text-sm font-medium text-brand underline">

@@ -23,10 +23,17 @@ export function RowAction({ className, ...rest }: HTMLAttributes<HTMLDivElement>
   return <div className={join('relative z-10 inline-block', className)} {...rest} />;
 }
 
-export function Table({ className, children }: { readonly className?: string; readonly children?: ReactNode }) {
+/** Semantic metadata only; layout is the same shared default for every ERP list. */
+export interface TableCardSummary {
+  readonly title?: string;
+  readonly subtitle?: string;
+  readonly keys?: readonly string[];
+}
+
+export function Table({ className, children, card }: { readonly className?: string; readonly children?: ReactNode; readonly card?: TableCardSummary }) {
   return (
     <div className="min-w-0 overflow-x-auto rounded-[20px] border border-surface-border">
-      <table className={join('w-full border-collapse text-sm text-ink', className)}>{children}</table>
+      <table data-card-title={card?.title} data-card-subtitle={card?.subtitle} data-card-keys={card?.keys?.join('|')} className={join('w-full border-collapse text-sm text-ink', className)}>{children}</table>
     </div>
   );
 }

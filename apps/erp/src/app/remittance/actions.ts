@@ -7,12 +7,14 @@
  * each service, not here — a gate in a server action protects one caller.
  */
 import {
+  assertFieldRules,
   createRemittance,
   refuse,
   resolveRemittanceVariance,
   reverseRemittance,
   setStoreCashPolicy,
 } from '@shareat/domain';
+import { REMITTANCE_RECORD_RULES, REMITTANCE_REVERSE_RULES } from '@shareat/domain/field-rules';
 import { cashierAccounts, withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { redirectWithFlash } from '@/lib/flash';
@@ -21,7 +23,7 @@ import { CASH_POLICY_EDIT } from './typed-forms';
 import { errorMessage as sharedErrorMessage } from '@/lib/constraint-messages';
 import { add, compare, isZero, money, ZERO } from '@shareat/core/money';
 import { parseMoneyInput } from '@shareat/domain/money-input';
-import { verifyAdminApproval } from '@shareat/auth';
+import { can, verifyAdminApproval } from '@shareat/auth';
 import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
@@ -62,6 +64,11 @@ export async function createRemittanceAction(formData: FormData): Promise<void> 
   let summary = '';
 
   try {
+    // T-440 / S9 pattern iii: judged only once the actor holds the gate, and before the line parsing below (as before).
+    // Capability copied from createRemittance's first authorize(). The line-by-line figures stay the domain's.
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      if (await can(tx, actor, 'accept_remittance', { storeId })) assertFieldRules(REMITTANCE_RECORD_RULES, formData);
+    });
     // Fetched up front (T-328) so a malformed amount's own error can name the account, the same
     // way the orphaned-overage refusal below already does — a multi-row form where every row's
     // error says only "the amount handed over" leaves the operator to guess which of several
@@ -188,10 +195,10 @@ export async function reverseRemittanceAction(formData: FormData): Promise<void>
   const storeId = str(formData, 'storeId');
   try {
     const reason = str(formData, 'reason');
-    if (!reason) throw new Error('Say why this remittance is being reversed.');
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store (not the page's `storeId` field).
     const remittanceId = str(formData, 'remittanceId');
     const target = await loadDestructiveTarget(actor, 'remittance', remittanceId, ['accept_remittance']);
+    assertFieldRules(REMITTANCE_REVERSE_RULES, formData);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(formData, 'adminPin'), capability: 'accept_remittance' });
     await withOrgPrincipal(actor.orgId, async (tx) => {
       await reverseRemittance(tx, actor, { remittanceId, reason });

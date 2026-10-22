@@ -21,9 +21,12 @@
  * returns money; v1 filtered to `amount > 0` and silently overstated fees by exactly the credit.
  */
 import { accountLabel } from '@/lib/account-label';
-import { useMemo, useState, useTransition } from 'react';
-import { Banner, Button, FormGrid, Input, Select } from '@/components/ui';
-import type { PreviewRequest, PreviewResponse } from './actions';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { Banner, Button, Field, FormGrid, Input, Select, SplitWorkspace } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { SubmitButton } from '@/components/feedback/SubmitButton';
+import { CHANNEL_SETTLEMENT_RECORD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { recordSettlementAction, type PreviewRequest, type PreviewResponse } from './actions';
 
 export interface ChannelChoice {
   id: string;
@@ -77,7 +80,6 @@ type DeductionName = (typeof DEDUCTIONS)[number]['name'];
 
 const INPUT =
   'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
-const LABEL = 'flex flex-col gap-1 text-xs font-medium text-neutral-600 dark:text-neutral-400';
 
 function money(v: string): string {
   const n = Number(v);
@@ -90,7 +92,6 @@ function money(v: string): string {
 }
 
 export function SettlementForm({
-  postAction,
   previewAction,
   channels,
   days,
@@ -99,7 +100,6 @@ export function SettlementForm({
   preselectChannelId,
   preselectSalesDayId,
 }: {
-  postAction: (fd: FormData) => void | Promise<void>;
   previewAction: (req: PreviewRequest) => Promise<PreviewResponse>;
   channels: readonly ChannelChoice[];
   days: readonly DayChoice[];
@@ -132,6 +132,11 @@ export function SettlementForm({
   const [reference, setReference] = useState('');
   const [settledOn, setSettledOn] = useState(today);
   const [recognizeGain, setRecognizeGain] = useState(false);
+  // T-440: picking a channel or day sets the gross from React state, which fires no input event; tell the checked form.
+  const grossRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    grossRef.current?.dispatchEvent(new Event('input', { bubbles: true }));
+  }, [gross]);
 
   const [preview, setPreview] = useState<PreviewShape | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -225,7 +230,7 @@ export function SettlementForm({
   }
 
   return (
-    <form action={postAction} className="space-y-5">
+    <CheckedForm rules={CHANNEL_SETTLEMENT_RECORD_RULES} action={recordSettlementAction} className="space-y-5">
       <input type="hidden" name="storeId" value={channel?.storeId ?? ''} />
       <input type="hidden" name="salesDayId" value={salesDayId} />
       <input type="hidden" name="businessDate" value={day?.businessDate ?? ''} />
@@ -240,10 +245,12 @@ export function SettlementForm({
       */}
       <input type="hidden" name="recognizeGain" value={recognizeGain ? 'on' : ''} />
 
+      <SplitWorkspace formTitle="Payout details" detailsTitle="Payout check" form={(
+      <div className="space-y-5">
+
       {/* ── Which payout ─────────────────────────────────────────────────────────────── */}
-      <FormGrid>
-        <label className={LABEL}>
-          Channel
+      <FormGrid layout="pairs">
+        <Field label="Channel">
           <Select
             name="channelId"
             value={channelId}
@@ -266,10 +273,9 @@ export function SettlementForm({
               Banks into {channel.destinationAccountName}
             </span>
           )}
-        </label>
+        </Field>
 
-        <label className={LABEL}>
-          Day being settled
+        <Field label="Day being settled">
           <Select
             name="salesDayPicker"
             value={salesDayId}
@@ -290,41 +296,30 @@ export function SettlementForm({
               receivable — an unverified one has posted nothing to clear.
             </span>
           )}
-        </label>
+        </Field>
       </FormGrid>
 
       {/* ── The two observable figures ───────────────────────────────────────────────── */}
-      <FormGrid>
-        <label className={LABEL}>
-          Gross the platform settled
+      <FormGrid layout="pairs">
+        <Field label="Gross the platform settled" hint="Prefilled from the day, editable — the statement wins" rule={CHANNEL_SETTLEMENT_RECORD_RULES.grossAmount}>
           <input
-            name="grossAmount"
+            {...nativeAttrs(CHANNEL_SETTLEMENT_RECORD_RULES.grossAmount)}
+            ref={grossRef}
             value={gross}
             onChange={(e) => setGross(e.target.value)}
-            inputMode="decimal"
             placeholder="0.00"
-            required
             className={INPUT}
           />
-          <span className="text-neutral-400 dark:text-neutral-600">
-            Prefilled from the day, editable — the statement wins
-          </span>
-        </label>
-        <label className={LABEL}>
-          Net actually deposited
+        </Field>
+        <Field label="Net actually deposited" hint="What landed in the account. Both figures are on the payout statement" rule={CHANNEL_SETTLEMENT_RECORD_RULES.netDeposited}>
           <input
-            name="netDeposited"
+            {...nativeAttrs(CHANNEL_SETTLEMENT_RECORD_RULES.netDeposited)}
             value={net}
             onChange={(e) => setNet(e.target.value)}
-            inputMode="decimal"
             placeholder="0.00"
-            required
             className={INPUT}
           />
-          <span className="text-neutral-400 dark:text-neutral-600">
-            What landed in the account. Both figures are on the payout statement
-          </span>
-        </label>
+        </Field>
       </FormGrid>
 
       {/* ── The deductions, each its own signed line ─────────────────────────────────── */}
@@ -332,12 +327,9 @@ export function SettlementForm({
         <legend className="px-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">
           What the platform deducted — each line to its own account
         </legend>
-        <FormGrid>
+        <FormGrid layout="pairs">
           {DEDUCTIONS.map((d) => (
-            <label key={d.name} className={LABEL}>
-              <span>
-                {d.label} <span className="font-mono text-neutral-400">{accountLabel(d.account)}</span>
-              </span>
+            <Field key={d.name} label={d.label} hint={<>{accountLabel(d.account)} · {d.hint}</>}>
               <Input
                 name={d.name}
                 value={deductions[d.name]}
@@ -346,8 +338,7 @@ export function SettlementForm({
                 placeholder="0.00"
                 className="w-full"
               />
-              <span className="text-neutral-400 dark:text-neutral-600">{d.hint}</span>
-            </label>
+            </Field>
           ))}
         </FormGrid>
         <p className="text-xs text-neutral-500 dark:text-neutral-500">
@@ -362,9 +353,8 @@ export function SettlementForm({
         <legend className="px-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">
           Loan repayment docked out of the payout — optional
         </legend>
-        <FormGrid>
-          <label className={LABEL}>
-            Loan
+        <FormGrid layout="pairs">
+          <Field label="Loan">
             <Select
               name="loanId"
               value={loanId}
@@ -378,19 +368,17 @@ export function SettlementForm({
                 </option>
               ))}
             </Select>
-          </label>
-          <label className={LABEL}>
-            Amount docked
+          </Field>
+          <Field label="Amount docked" rule={CHANNEL_SETTLEMENT_RECORD_RULES.loanAmount}>
             <Input
-              name="loanAmount"
+              {...nativeAttrs(CHANNEL_SETTLEMENT_RECORD_RULES.loanAmount)}
               value={loanAmount}
               onChange={(e) => setLoanAmount(e.target.value)}
-              inputMode="decimal"
               placeholder="0.00"
               disabled={loanId === ''}
               className="w-full"
             />
-          </label>
+          </Field>
         </FormGrid>
         {crossStoreLoan && (
           <Banner tone="warning">
@@ -403,36 +391,40 @@ export function SettlementForm({
       </fieldset>
 
       {/* ── Provenance ───────────────────────────────────────────────────────────────── */}
-      <FormGrid>
-        <label className={LABEL}>
-          Payout reference
+      <FormGrid layout="pairs">
+        <Field label="Payout reference" rule={CHANNEL_SETTLEMENT_RECORD_RULES.reference}>
           <Input
-            name="reference"
+            {...nativeAttrs(CHANNEL_SETTLEMENT_RECORD_RULES.reference)}
             value={reference}
             onChange={(e) => setReference(e.target.value)}
-            maxLength={120}
             placeholder="The platform's payout reference"
             className="w-full"
           />
-        </label>
-        <label className={LABEL}>
-          Settled on
+        </Field>
+        <Field label="Settled on" hint="The entry dates on this, not on the sales day" rule={CHANNEL_SETTLEMENT_RECORD_RULES.settledOn}>
           <Input
-            name="settledOn"
+            {...nativeAttrs(CHANNEL_SETTLEMENT_RECORD_RULES.settledOn)}
             value={settledOn}
             onChange={(e) => setSettledOn(e.target.value)}
             type="date"
-            required
             className="w-full"
           />
-          <span className="text-neutral-400 dark:text-neutral-600">
-            The entry dates on this, not on the sales day
-          </span>
-        </label>
+        </Field>
       </FormGrid>
 
+      </div>
+      )} details={(
+      <div className="space-y-4">
       {/* ── ⭐ The preview. The reason this component exists ─────────────────────────── */}
       <div className="space-y-3 rounded-lg border border-neutral-300 bg-neutral-50 p-4 dark:border-neutral-700 dark:bg-neutral-900">
+        <h2 className="text-sm font-semibold">Check the payout</h2>
+        {channel && (
+          <dl className="space-y-2 text-xs">
+            <div><dt className="text-muted">Channel</dt><dd className="break-words font-medium">{channel.storeName} · {channel.name}</dd></div>
+            <div><dt className="text-muted">Waiting balance</dt><dd className="break-words font-mono">₱{channel.outstanding}</dd></div>
+            <div><dt className="text-muted">Verified day</dt><dd>{day?.businessDate ?? 'Choose the day being settled.'}</dd></div>
+          </dl>
+        )}
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" onClick={check} disabled={pending || salesDayId === ''} variant="secondary">
             {pending ? 'Checking…' : 'Check the numbers'}
@@ -490,9 +482,7 @@ export function SettlementForm({
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={!canPost} variant="primary">
-          Post this settlement
-        </Button>
+        <SubmitButton disabled={!canPost}>Post this settlement</SubmitButton>
         {!canPost && (
           <span className="text-xs text-neutral-500 dark:text-neutral-400">
             {salesDayId === ''
@@ -509,7 +499,9 @@ export function SettlementForm({
         same fee — that double-count cost ₱198,148.29 across two stores in the legacy system, and
         this screen is the single place these legs are written.
       </p>
-    </form>
+      </div>
+      )} />
+    </CheckedForm>
   );
 }
 

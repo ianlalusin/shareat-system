@@ -7,6 +7,8 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Badge, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { SUPPLIER_INVOICE_LOG_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { ACTION_LINK } from '@/components/action-link';
 
 export const metadata = { title: 'Accounts payable — Shareat System' };
@@ -50,19 +52,19 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
             description="Pending until verified. No expense can be recorded against it before then."
             size="lg"
           >
-            <form action={recordInvoiceAction} className="space-y-3">
+            <CheckedForm rules={SUPPLIER_INVOICE_LOG_RULES} action={recordInvoiceAction} className="space-y-3">
               <FormSection title="Invoice document">
                 <FormGrid layout="fields">
-                  <Field label="Store">
-                    <Select name="storeId" required defaultValue="" className="w-full">
+                  <Field rule={SUPPLIER_INVOICE_LOG_RULES.storeId} label="Store">
+                    <Select {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.storeId)} defaultValue="" className="w-full">
                       <option value="" disabled>Choose…</option>
                       {stores.map((s) => (
                         <option key={s.id} value={s.id}>{s.name}</option>
                       ))}
                     </Select>
                   </Field>
-                  <Field label="Supplier">
-                    <Select name="supplierId" required defaultValue="" className="w-full">
+                  <Field rule={SUPPLIER_INVOICE_LOG_RULES.supplierId} label="Supplier">
+                    <Select {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.supplierId)} defaultValue="" className="w-full">
                       <option value="" disabled>Choose…</option>
                       {suppliers.map((s) => (
                         <option key={s.id} value={s.id}>{s.name}</option>
@@ -72,22 +74,22 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
                   <Field width="code" label="Invoice no." hint="Optional.">
                     <Input name="invoiceNo" className="w-full" />
                   </Field>
-                  <Field width="short" label="Total amount">
-                    <Input name="totalAmount" required placeholder="0.00" className="w-full" />
+                  <Field rule={SUPPLIER_INVOICE_LOG_RULES.totalAmount} width="short" label="Total amount">
+                    <Input {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.totalAmount)} placeholder="0.00" className="w-full" />
                   </Field>
                 </FormGrid>
                 <FormGrid layout="fields">
-                  <Field width="short" label="Delivery fee" hint="Optional. Part of the total above, added to the items' cost; not a line.">
-                    <Input name="deliveryFee" inputMode="decimal" placeholder="0.00" className="w-full" />
+                  <Field rule={SUPPLIER_INVOICE_LOG_RULES.deliveryFee} width="short" label="Delivery fee" hint="Optional. Part of the total above, added to the items' cost; not a line.">
+                    <Input {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.deliveryFee)} placeholder="0.00" className="w-full" />
                   </Field>
-                  <Field width="short" label="Other fees" hint="Optional. Part of the total above, added to the items' cost; not a line.">
-                    <Input name="otherFees" inputMode="decimal" placeholder="0.00" className="w-full" />
+                  <Field rule={SUPPLIER_INVOICE_LOG_RULES.otherFees} width="short" label="Other fees" hint="Optional. Part of the total above, added to the items' cost; not a line.">
+                    <Input {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.otherFees)} placeholder="0.00" className="w-full" />
                   </Field>
-                  <Field width="date" label="Invoice date">
-                    <Input type="date" name="invoiceDate" required defaultValue={today()} className="w-full" />
+                  <Field rule={SUPPLIER_INVOICE_LOG_RULES.invoiceDate} width="date" label="Invoice date">
+                    <Input {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.invoiceDate)} type="date" defaultValue={today()} className="w-full" />
                   </Field>
-                  <Field width="date" label="Due date" hint="Leave blank to use the supplier's terms.">
-                    <Input type="date" name="dueDate" className="w-full" />
+                  <Field rule={SUPPLIER_INVOICE_LOG_RULES.dueDate} width="date" label="Due date" hint="Leave blank to use the supplier's terms.">
+                    <Input {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.dueDate)} type="date" className="w-full" />
                   </Field>
                 </FormGrid>
               </FormSection>
@@ -109,8 +111,8 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
                       <option value="non_vat">Non-VAT</option>
                     </Select>
                   </Field>
-                  <Field width="short" label="VAT amount (as printed)" hint="Type the VAT shown on the paper. Only for a vatable bill.">
-                    <Input name="vatAmount" inputMode="decimal" placeholder="0.00" className="w-full" />
+                  <Field rule={SUPPLIER_INVOICE_LOG_RULES.vatAmount} width="short" label="VAT amount (as printed)" hint="Type the VAT shown on the paper. Only for a vatable bill.">
+                    <Input {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.vatAmount)} placeholder="0.00" className="w-full" />
                   </Field>
                 </FormGrid>
               </FormSection>
@@ -124,7 +126,7 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
                 </Field>
               </FormSection>
               <Button type="submit" variant="primary">Log invoice</Button>
-            </form>
+            </CheckedForm>
           </FormModal>
         </div>
       </div>

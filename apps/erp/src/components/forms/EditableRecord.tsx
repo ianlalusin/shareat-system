@@ -19,7 +19,7 @@
  * The behaviour is a plain reducer plus a plain registry so it is unit-tested in node, without jsdom.
  */
 import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, type FormEvent, type Ref, type ReactNode } from 'react';
-import { rulesOf, type FieldRuleSetLike } from '@shareat/domain/field-rules';
+import { ruleInputNames, type FieldRuleSetLike } from '@shareat/domain/field-rules';
 import type { TypedView } from '@/lib/keep-typing';
 import { CheckContext } from './context';
 import { Dialog } from '@/components/ui/Dialog';
@@ -390,7 +390,7 @@ export function EditableRecordView({
           {Object.entries(hidden).map(([name, value]) => (
             <input key={name} type="hidden" name={name} value={value} />
           ))}
-          <fieldset disabled={!editing} className="min-w-0">
+          <fieldset disabled={!editing} className="erp-record-fields min-w-0">
             {children}
           </fieldset>
           {/* Locked renders no submit at all (a closed dialog's Save must not be reachable by an implicit submit). */}
@@ -427,7 +427,7 @@ export function EditableRecord(props: EditableRecordProps) {
   const id = useId();
   const editing = state.mode === 'editing';
   const editingRef = useRef(editing);
-  const names = useMemo(() => new Set(rules ? rulesOf(rules).map((r) => r.name) : []), [rules]);
+  const names = useMemo(() => new Set(rules ? ruleInputNames(rules) : []), [rules]);
   const ctx = useMemo(() => (rules ? checkContextValue(rules, checks) : null), [rules, checks]);
 
   // T-440: while EDITING read the form's values and check them; LOCKED switches the checks off. Declared BEFORE the typed-view

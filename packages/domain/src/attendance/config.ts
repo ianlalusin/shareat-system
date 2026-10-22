@@ -11,6 +11,8 @@ import { attendanceConfigRepo, findingsRepo, type AttendanceConfigRow, type Tx }
 import { parseShiftDay, type RawShiftDay, type ShiftDay } from './shift-day';
 import { maxPayoutGapDays } from '../payroll/periods';
 import { refuse } from '../shared/refusal';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { SETTINGS_ATTENDANCE_POLICY_RULES } from '../field-rules/settings';
 import { decimal, money, type Decimal, type Money } from '@shareat/core/money';
 import { parseConfigChanges, type ConfigChangesInput } from './config-input';
 
@@ -111,7 +113,8 @@ export async function supersedeConfig(
   await authorize(tx, actor, 'manage_store_settings', { storeId: input.storeId });
 
   const changes = parseConfigChanges(input.changes);
-  const effectiveFrom = parseShiftDay(input.effectiveFrom);
+  // T-440: the start day's rule is the one the settings screen shows live (field-rules/settings.ts); it still arrives raw and is judged AFTER authorize.
+  const effectiveFrom = parseShiftDay(assertFieldRules(SETTINGS_ATTENDANCE_POLICY_RULES, { effectiveFrom: input.effectiveFrom }).effectiveFrom ?? '');
 
   const live = await getLiveConfig(tx, { storeId: input.storeId });
 

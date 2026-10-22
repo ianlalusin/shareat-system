@@ -1,4 +1,6 @@
 'use client';
+import { INVENTORY_DELIVERY_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { CheckedForm } from '@/components/forms';
 
 /**
  * The "New delivery" form — T-166 / DEF-135. One document for a supplier delivery or a cash
@@ -7,11 +9,10 @@
  * same shape `NewOrderForm.tsx` (trade orders) and `NewUsageForm.tsx` (usage/wastage) already use
  * in this codebase.
  *
- * ⭐ The photo input is a plain `<input type="file">` inside a server-action `<form>` — Next.js
- * form actions carry `File` values in the `FormData` they submit, the same way `ap/page.tsx`'s
- * invoice form already does.
+ * Shared progress upload posts a file id; without JavaScript the native picker still posts
+ * the File. The action resolves either path and claims it onto the new delivery atomically.
  */
-import { PhotoInput } from '@/components/PhotoInput';
+import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import { useState } from 'react';
 import { Button, FormGrid, FormSection, Field, Input, Select } from '@/components/ui';
 
@@ -40,7 +41,7 @@ interface LineDraft {
 }
 
 export function NewDeliveryForm({
-  action,
+  action: createDeliveryAction,
   storeId,
   suppliers,
   items,
@@ -94,7 +95,6 @@ export function NewDeliveryForm({
   const FULL = 'mt-1 block w-full';
   const FLABEL = 'text-xs text-neutral-600 dark:text-neutral-400';
   const label = 'flex min-w-0 flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400';
-  const photo = 'rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm';
 
   if (items.length === 0) {
     return (
@@ -105,15 +105,15 @@ export function NewDeliveryForm({
   }
 
   return (
-    <form action={action} className="mt-3 space-y-4">
+    <CheckedForm rules={INVENTORY_DELIVERY_RULES} action={createDeliveryAction} className="mt-3 space-y-4">
       <input type="hidden" name="storeId" value={storeId} />
 
       <FormSection title="Document">
         <FormGrid layout="fields">
-          <Field width="code" label="Kind" className={FLABEL}>
-            <Select
-              name="kind"
-              required
+          <Field rule={INVENTORY_DELIVERY_RULES.kind} width="code" label="Kind" className={FLABEL}>
+            <Select {...nativeAttrs(INVENTORY_DELIVERY_RULES.kind)}
+
+
               value={kind}
               onChange={(e) => setKind(e.target.value === 'purchase' ? 'purchase' : 'supplier')}
               className={FULL}
@@ -123,8 +123,8 @@ export function NewDeliveryForm({
             </Select>
           </Field>
           {kind === 'supplier' ? (
-            <Field width="long" label="Supplier" className={FLABEL}>
-              <Select name="supplierId" required defaultValue="" className={FULL}>
+            <Field rule={INVENTORY_DELIVERY_RULES.supplierId} width="long" label="Supplier" className={FLABEL}>
+              <Select {...nativeAttrs(INVENTORY_DELIVERY_RULES.supplierId)}   defaultValue="" className={FULL}>
                 <option value="" disabled>
                   Choose…
                 </option>
@@ -136,8 +136,8 @@ export function NewDeliveryForm({
               </Select>
             </Field>
           ) : (
-            <Field width="long" label="Supplier (optional)" className={FLABEL}>
-              <Select name="supplierId" defaultValue="" className={FULL}>
+            <Field rule={INVENTORY_DELIVERY_RULES.supplierId} width="long" label="Supplier (optional)" className={FLABEL}>
+              <Select {...nativeAttrs(INVENTORY_DELIVERY_RULES.supplierId)}  defaultValue="" className={FULL}>
                 <option value="">— none, cash purchase —</option>
                 {suppliers.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -150,8 +150,8 @@ export function NewDeliveryForm({
           <Field width="code" label="Reference no. (DR/invoice)" className={FLABEL}>
             <Input name="referenceNo" placeholder="DR-0001" className={FULL} />
           </Field>
-          <Field width="date" label="Delivered on" className={FLABEL}>
-            <Input name="deliveredOn" type="date" required defaultValue={today} className={FULL} />
+          <Field rule={INVENTORY_DELIVERY_RULES.deliveredOn} width="date" label="Delivered on" className={FLABEL}>
+            <Input {...nativeAttrs(INVENTORY_DELIVERY_RULES.deliveredOn)}  type="date"  defaultValue={today} className={FULL} />
           </Field>
         </FormGrid>
       </FormSection>
@@ -159,11 +159,12 @@ export function NewDeliveryForm({
       <FormSection title="Receipt evidence">
         <Field width="long" label="Photo of the paper" span="full" className={FLABEL}>
           {/* ⭐ T-296 — compressed to under 1 MB before submit; a PDF passes through untouched. */}
-          <PhotoInput
+          <PhotoUpload
             name="proofPhoto"
-            accept="image/jpeg,image/png,image/webp,application/pdf"
+            purpose="receipt_photo"
+            storeId={storeId}
+            label="Photo of the paper"
             required
-            className={`${photo} ${FULL}`}
           />
         </Field>
       </FormSection>
@@ -284,6 +285,6 @@ export function NewDeliveryForm({
       <Button type="submit" variant="primary">
         Save
       </Button>
-    </form>
+    </CheckedForm>
   );
 }

@@ -8,11 +8,14 @@
  * server action protects one caller.
  */
 import {
+  assertFieldRules,
   chargeTillShortage,
   closeTillShift,
   openTillShift,
   recordTillCount,
 } from '@shareat/domain';
+import { can } from '@shareat/auth';
+import { TILL_OPEN_SHIFT_RULES } from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { redirectWithFlash } from '@/lib/flash';
@@ -63,14 +66,16 @@ export async function openShiftAction(formData: FormData): Promise<void> {
 
   let shiftNo = 0;
   try {
-    const r = await withOrgPrincipal(actor.orgId, (tx) =>
-      openTillShift(tx, actor, {
+    const r = await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 S9 (iii): judged only once the actor holds the gate; capability copied from openTillShift's first authorize() (the POS also calls it).
+      if (await can(tx, actor, 'record_till_count', { storeId })) assertFieldRules(TILL_OPEN_SHIFT_RULES, formData);
+      return openTillShift(tx, actor, {
         storeId,
         businessDate,
         prevShiftId: prevShiftId || null,
         notes: str(formData, 'notes') || null,
-      }),
-    );
+      });
+    });
     shiftNo = r.shiftNo;
   } catch (err) {
     return await redirectWithFlash('/till', { store: storeId }, { error: errorMessage(err) });

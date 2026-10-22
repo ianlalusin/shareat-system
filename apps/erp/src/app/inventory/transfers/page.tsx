@@ -3,7 +3,6 @@ import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { itemsRepo, schema } from '@shareat/db';
 import { listStores } from '../lib';
 import {
-  createTransferAction,
   dispatchTransferAction,
   receiveTransferAction,
   voidTransferAction,
@@ -14,7 +13,9 @@ import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Button, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
+import { Badge, Button, ConfirmDestructive, Field, FlashBanner, Input, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { INVENTORY_TRANSFER_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Stock transfers — Shareat System' };
@@ -125,7 +126,6 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
         <section className="mt-8 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="text-sm font-medium">New transfer</h2>
           <NewTransferForm
-            action={createTransferAction}
             storeId={storeId}
             locations={locations.map((l) => ({ id: l.id, label: l.name }))}
             items={items}
@@ -180,15 +180,17 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
                         </Button>
                       </form>
                     )}
-                    <form action={voidTransferAction} className="flex items-center gap-1">
+                    <CheckedForm rules={INVENTORY_TRANSFER_VOID_RULES} action={voidTransferAction} className="flex items-center gap-1">
                       <input type="hidden" name="transferId" value={t.id} />
-                      <Input name="reason" placeholder="void reason" required className="w-28" />
+                      <Field label={<span className="sr-only">Void reason</span>} rule={INVENTORY_TRANSFER_VOID_RULES.reason}>
+                        <Input {...nativeAttrs(INVENTORY_TRANSFER_VOID_RULES.reason)} placeholder="void reason" className="w-28" />
+                      </Field>
                       <ConfirmDestructive
                         tier="admin-pin"
                         label="Void transfer"
                         consequence="Reverses this stock transfer. An administrator must approve with their own PIN."
                       />
-                    </form>
+                    </CheckedForm>
                   </div>
                 </td>
               </tr>

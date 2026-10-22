@@ -535,7 +535,7 @@ describe('T-245 — prerequisite refusals are durably recorded', () => {
     const f = await fixture('t245-discrim');
     await expect(
       asOrg(f.orgId, (tx) => enrolCard(tx, f.admin, { employmentId: f.employment.id, cardId: '   ' })),
-    ).rejects.toBeInstanceOf(CredentialError);
+    ).rejects.toMatchObject({ name: 'RefusalError', userMessage: 'A card needs an id — that is the whole credential.' });
 
     const rows = await sql`select 1 from prerequisite_refusals where org_id = ${f.orgId}`;
     expect(rows.length).toBe(0);

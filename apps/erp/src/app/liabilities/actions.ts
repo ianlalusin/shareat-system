@@ -32,7 +32,6 @@ export async function createLiabilityAction(formData: FormData): Promise<void> {
   let id = '';
   try {
     const storeId = str(formData, 'storeId');
-    if (!storeId) throw new Error('Choose a store.');
     const created = await withOrgPrincipal(actor.orgId, (tx) =>
       createLiability(tx, actor, {
         storeId,

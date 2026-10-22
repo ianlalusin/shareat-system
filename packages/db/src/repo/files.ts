@@ -6,7 +6,7 @@
  */
 import { and, asc, count, eq, gt, inArray, isNull, lt, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
-import { storedFiles, type FilePurpose } from '../../schema/stored-files';
+import { FILE_PURPOSES, storedFiles, type FilePurpose } from '../../schema/stored-files';
 import { recordGone } from './record-gone';
 
 export interface StoredFileRow {
@@ -150,6 +150,7 @@ export async function listOrphans(
         eq(storedFiles.orgId, orgId),
         isNull(storedFiles.linkedTo),
         lt(storedFiles.uploadedAt, sql`now() - make_interval(hours => ${hours})`),
+        hasNoReferences(orgId),
       ),
     )
     .orderBy(asc(storedFiles.uploadedAt))
@@ -180,7 +181,7 @@ export async function listOrphans(
 export async function deleteFile(tx: Tx, orgId: string, id: string): Promise<boolean> {
   const deleted = await tx
     .delete(storedFiles)
-    .where(and(eq(storedFiles.id, id), eq(storedFiles.orgId, orgId), isNull(storedFiles.linkedTo)))
+    .where(and(eq(storedFiles.id, id), eq(storedFiles.orgId, orgId), isNull(storedFiles.linkedTo), hasNoReferences(orgId)))
     .returning({ id: storedFiles.id });
   return deleted.length > 0;
 }
@@ -194,4 +195,167 @@ export async function lockUnclaimedUploads(tx: Tx, orgId: string, personId: stri
   await tx.execute(
     sql`select pg_advisory_xact_lock(${UNCLAIMED_UPLOAD_LOCK_NAMESPACE}::int4, hashtext(${orgId}::text || ':' || ${personId}::text))`,
   );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-442 - the registry of every column that points at `stored_files`, and the census / backfill reads over it.
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** Purposes whose files are read through their own guarded rule (signature, staff photo, leave proof). */
+export const GUARDED_PURPOSES: readonly FilePurpose[] = ['staff_signature', 'staff_photo', 'leave_document'];
+
+export interface FileReference {
+  table: string;
+  column: string;
+  /** `table.column` - the key the reports use. */
+  label: string;
+  /** The purposes a file may have to be linked to a row of this source (T-442 audit A3). Fail closed: list them. */
+  allowedPurposes: readonly FilePurpose[];
+}
+
+const ref = (table: string, column: string, allowedPurposes: readonly FilePurpose[]): FileReference => ({
+  table,
+  column,
+  label: `${table}.${column}`,
+  allowedPurposes,
+});
+
+/**
+ * ⭐ T-442 - the ONE list of foreign keys into `stored_files`. A test reads `pg_constraint` and fails when a table
+ * gains a file column nobody added here. Every source lists the purposes it may point at (audit A3).
+ */
+export const FILE_REFERENCES: readonly FileReference[] = [
+  ref('supplier_invoices', 'receipt_file_id', ['receipt_photo']),
+  ref('ar_collections', 'receipt_file_id', ['receipt_photo', 'ar_collection_proof']),
+  ref('deliveries', 'proof_file_id', ['receipt_photo']),
+  ref('channel_settlements', 'withholding_certificate_file_id', FILE_PURPOSES.filter((p) => !GUARDED_PURPOSES.includes(p))),
+  ref('employments', 'photo_file_id', ['staff_photo']),
+  ref('persons', 'signature_file_id', ['staff_signature']),
+];
+
+export interface ReferenceRow {
+  fileId: string;
+  ownerId: string;
+  source: string;
+  purpose: FilePurpose;
+}
+
+export interface ReferenceProblem {
+  fileId: string;
+  ownerId: string;
+  source: string;
+  /** null when the file is not in this org (cross-org reference): its purpose cannot be read. */
+  purpose: FilePurpose | null;
+}
+
+export interface UnreferencedRow {
+  purpose: FilePurpose;
+  bucket: 'fresh' | 'older';
+  n: number;
+}
+
+/** One row per (source, owner row, file) of this org. Identifiers come from the constant registry, never from input. */
+function referencesCte(orgId: string) {
+  const branches = FILE_REFERENCES.map(
+    (r) =>
+      sql`select ${r.label}::text as source, t.id as owner_id, t.${sql.identifier(r.column)} as file_id
+            from ${sql.identifier(r.table)} t where t.org_id = ${orgId} and t.${sql.identifier(r.column)} is not null`,
+  );
+  return sql`refs as (${sql.join(branches, sql` union all `)})`;
+}
+
+/** Same predicate at selection and deletion: a committed reference makes a file ineligible. FK RESTRICT remains the backstop. */
+function hasNoReferences(orgId: string) {
+  return sql`not exists (with ${referencesCte(orgId)} select 1 from refs r where r.file_id = ${storedFiles.id})`;
+}
+
+/** Files, not referencing rows: a shared file counts once. All purposes count, including wrong-purpose references. */
+export async function countReferencedUnlinked(tx: Tx, orgId: string): Promise<number> {
+  const rows = await tx.execute(sql`
+    with ${referencesCte(orgId)}
+    select count(distinct sf.id)::int as n from stored_files sf
+    join refs r on r.file_id = sf.id
+    where sf.org_id = ${orgId} and sf.linked_to is null`);
+  const [row] = rows as unknown as { n: number }[];
+  return row?.n ?? 0;
+}
+
+/** Every reference whose file is in this org and still has `linked_to IS NULL`, lowest owner id first per file. */
+export async function listReferencedUnlinked(tx: Tx, orgId: string): Promise<ReferenceRow[]> {
+  const rows = await tx.execute(sql`
+    with ${referencesCte(orgId)}
+    select r.file_id::text as "fileId", r.owner_id::text as "ownerId", r.source as "source", sf.purpose as "purpose"
+      from refs r
+      join stored_files sf on sf.id = r.file_id and sf.org_id = ${orgId}
+     where sf.linked_to is null
+     order by r.file_id, r.owner_id`);
+  return rows as unknown as ReferenceRow[];
+}
+
+/**
+ * Reference problems the backfill reports and never writes:
+ *  - `shared`: a file referenced by 2+ rows; lists every reference except the lowest owner id (which owns the link).
+ *  - `mismatched`: the file is linked to an id that is not its referencing row's (shared non-owners are `shared` only).
+ *  - `crossOrg`: a row of this org references a file that has no `stored_files` row in this org (DEF-491 shape).
+ */
+export async function listReferenceProblems(
+  tx: Tx,
+  orgId: string,
+): Promise<{ shared: ReferenceProblem[]; mismatched: ReferenceProblem[]; crossOrg: ReferenceProblem[] }> {
+  const ranked = sql`
+    ranked as (
+      select r.file_id, r.owner_id, r.source, sf.purpose, sf.linked_to,
+             row_number() over (partition by r.file_id order by r.owner_id) as rn,
+             count(*) over (partition by r.file_id) as n
+        from refs r
+        join stored_files sf on sf.id = r.file_id and sf.org_id = ${orgId}
+    )`;
+  const cols = sql`file_id::text as "fileId", owner_id::text as "ownerId", source as "source", purpose as "purpose"`;
+  const shared = await tx.execute(sql`
+    with ${referencesCte(orgId)}, ${ranked}
+    select ${cols} from ranked where n > 1 and rn > 1 order by file_id, owner_id`);
+  const mismatched = await tx.execute(sql`
+    with ${referencesCte(orgId)}, ${ranked}
+    select ${cols} from ranked
+     where linked_to is not null and linked_to <> owner_id::text and not (n > 1 and rn > 1)
+     order by file_id, owner_id`);
+  const crossOrg = await tx.execute(sql`
+    with ${referencesCte(orgId)}
+    select r.file_id::text as "fileId", r.owner_id::text as "ownerId", r.source as "source", null::text as "purpose"
+      from refs r
+     where not exists (select 1 from stored_files sf where sf.id = r.file_id and sf.org_id = ${orgId})
+     order by r.file_id, r.owner_id`);
+  return {
+    shared: shared as unknown as ReferenceProblem[],
+    mismatched: mismatched as unknown as ReferenceProblem[],
+    crossOrg: crossOrg as unknown as ReferenceProblem[],
+  };
+}
+
+/** Files nothing links and nothing references, counted per purpose and age bucket. Report only: the sweep removes them. */
+export async function listUnreferenced(tx: Tx, orgId: string): Promise<UnreferencedRow[]> {
+  const rows = await tx.execute(sql`
+    with ${referencesCte(orgId)}
+    select sf.purpose as "purpose",
+           case when sf.uploaded_at < now() - interval '24 hours' then 'older' else 'fresh' end as "bucket",
+           count(*)::int as "n"
+      from stored_files sf
+     where sf.org_id = ${orgId} and sf.linked_to is null
+       and not exists (select 1 from refs r where r.file_id = sf.id)
+     group by 1, 2
+     order by 1, 2`);
+  return rows as unknown as UnreferencedRow[];
+}
+
+/**
+ * T-442 - link a file to the row that references it, only if nothing has linked it yet. Returns whether a row changed.
+ * ⛔ Not `linkFile`: that has no `linked_to IS NULL` guard and would overwrite an existing link.
+ */
+export async function backfillLink(tx: Tx, orgId: string, fileId: string, ownerId: string): Promise<boolean> {
+  const updated = await tx
+    .update(storedFiles)
+    .set({ linkedTo: ownerId })
+    .where(and(eq(storedFiles.id, fileId), eq(storedFiles.orgId, orgId), isNull(storedFiles.linkedTo)))
+    .returning({ id: storedFiles.id });
+  return updated.length > 0;
 }

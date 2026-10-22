@@ -30,6 +30,8 @@ import { scheduleInputFor } from '../fixed-assets/depreciate';
 import { checkFullyAmortised, prepaidSchedule } from '../prepaid';
 import { periodsThroughOf, type SchedulePeriod } from '../shared/straight-line';
 import { postEntry } from '../ledger/post-entry';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { FINDINGS_MISSED_MONTH_RULES } from '../field-rules/findings';
 
 const DEPRECIATION_EXPENSE_CODE = '6700';
 const ACCUMULATED_DEPRECIATION_CODE = '1590';
@@ -91,6 +93,8 @@ export async function bookMissedMonth(
   input: BookMissedMonthInput,
 ): Promise<BookMissedMonthResult> {
   await authorize(tx, actor, 'book_missed_month', {});
+  // T-440 S9 (ii): the screen's own rule, only once the gate has passed.
+  assertFieldRules(FINDINGS_MISSED_MONTH_RULES, { reason: input.reason });
 
   const reason = input.reason.trim();
   if (!reason) {

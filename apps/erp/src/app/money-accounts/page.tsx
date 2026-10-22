@@ -18,7 +18,8 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { MONEY_ACCOUNT_RENAME } from './typed-forms';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { MONEY_ACCOUNT_CREATE_RULES, MONEY_ACCOUNT_RENAME_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Banner, ConfirmDestructive, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 
@@ -134,10 +135,10 @@ export default async function MoneyAccountsPage({
                       Retire button that always errors would teach people to distrust buttons.
                     */}
                     {a.isActive && a.isFoundation && (
-                      <EditableRecord action={renameMoneyAccountAction} label={a.name} hidden={{ moneyAccountId: a.id }} typed={typedFor(sp, MONEY_ACCOUNT_RENAME, a.id, actor.personId)}>
+                      <EditableRecord action={renameMoneyAccountAction} label={a.name} hidden={{ moneyAccountId: a.id }} typed={typedFor(sp, MONEY_ACCOUNT_RENAME, a.id, actor.personId)} rules={MONEY_ACCOUNT_RENAME_RULES}>
                         <FormGrid layout="fields">
-                          <Field label="Name" width="name">
-                            <Input name="name" required defaultValue={a.name} maxLength={120} className="w-full" />
+                          <Field label="Name" width="name" rule={MONEY_ACCOUNT_RENAME_RULES.name}>
+                            <Input {...nativeAttrs(MONEY_ACCOUNT_RENAME_RULES.name)} defaultValue={a.name} className="w-full" />
                           </Field>
                           {/* ⭐ Only a cashier drawer consults this — office and staff balances are
                               complete and block at zero regardless (row 154), so offering the field
@@ -146,9 +147,10 @@ export default async function MoneyAccountsPage({
                             <Field
                               label="May go to −"
                               width="short"
+                              rule={MONEY_ACCOUNT_RENAME_RULES.overdraftLimit}
                               hint="How far below zero this drawer may go before a draw is refused. Entered positive; 0 means never."
                             >
-                              <Input name="overdraftLimit" inputMode="decimal" defaultValue={a.overdraftLimit} className="w-full" />
+                              <Input {...nativeAttrs(MONEY_ACCOUNT_RENAME_RULES.overdraftLimit)} defaultValue={a.overdraftLimit} className="w-full" />
                             </Field>
                           )}
                         </FormGrid>
@@ -179,13 +181,13 @@ export default async function MoneyAccountsPage({
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-medium">Add a money account</h2>
           <FormModal trigger="+ Add money account" title="Add a money account" size="md">
-            <form action={createMoneyAccountAction} className="space-y-4">
+            <CheckedForm rules={MONEY_ACCOUNT_CREATE_RULES} action={createMoneyAccountAction} className="space-y-4">
               <FormGrid layout="fields">
-                <Field label="Name" width="name" hint="What staff call it — “GCash — cashier”, “BDO — office”">
-                  <Input name="name" required maxLength={120} placeholder="GCash — cashier" className="w-full" />
+                <Field label="Name" width="name" hint="What staff call it — “GCash — cashier”, “BDO — office”" rule={MONEY_ACCOUNT_CREATE_RULES.name}>
+                  <Input {...nativeAttrs(MONEY_ACCOUNT_CREATE_RULES.name)} placeholder="GCash — cashier" className="w-full" />
                 </Field>
-                <Field label="Store" width="name">
-                  <Select name="storeId" required defaultValue="" className="w-full">
+                <Field label="Store" width="name" rule={MONEY_ACCOUNT_CREATE_RULES.storeId}>
+                  <Select {...nativeAttrs(MONEY_ACCOUNT_CREATE_RULES.storeId)} defaultValue="" className="w-full">
                     <option value="">Choose a store…</option>
                     {stores.map((s) => (
                       <option key={s.id} value={s.id}>
@@ -229,7 +231,7 @@ export default async function MoneyAccountsPage({
               </p>
 
               <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
-            </form>
+            </CheckedForm>
           </FormModal>
         </div>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">

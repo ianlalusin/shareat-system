@@ -23,7 +23,15 @@ import {
   withOrgPrincipal,
 } from '../lib';
 import { Page } from '@/components/shell/Page';
-import { Button, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
+import { Button, ConfirmDestructive, Field, FlashBanner, Input, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import {
+  ADMIN_ASSIGN_ROLE_RULES,
+  ADMIN_GRANT_REVOKE_RULES,
+  ADMIN_LINK_FIREBASE_RULES,
+  ADMIN_UNLINK_RULES,
+  nativeAttrs,
+} from '@shareat/domain/field-rules';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'User access — Shareat System' };
@@ -80,7 +88,7 @@ export default async function UserAccessPage({
   const storeNameById = new Map(stores.map((s) => [s.id, s.name]));
 
   return (
-    <Page density="table">
+    <Page view="detail" sectioned density="table">
       <div>
         <a href="/admin/users" className="text-sm text-neutral-500 underline underline-offset-2 dark:text-neutral-400">
           ← Users and roles
@@ -131,11 +139,10 @@ export default async function UserAccessPage({
           </p>
         ) : (
           <>
-            <form action={assignRoleAction} className="flex flex-wrap items-end gap-3">
+            <CheckedForm rules={ADMIN_ASSIGN_ROLE_RULES} action={assignRoleAction} className="flex flex-wrap items-end gap-3">
               <input type="hidden" name="personId" value={personId} />
-              <label className="min-w-0 flex-1 text-sm">
-                <span className="block text-neutral-600 dark:text-neutral-400">Role</span>
-                <Select name="role" required defaultValue={person.role ?? ''} className="w-full">
+              <Field label="Role" rule={ADMIN_ASSIGN_ROLE_RULES.role} className="flex-1">
+                <Select {...nativeAttrs(ADMIN_ASSIGN_ROLE_RULES.role)} defaultValue={person.role ?? ''} className="w-full">
                   <option value="" disabled>
                     Select
                   </option>
@@ -145,11 +152,11 @@ export default async function UserAccessPage({
                     </option>
                   ))}
                 </Select>
-              </label>
+              </Field>
               <Button type="submit" variant="primary">
                 {person.role ? 'Change role' : 'Assign role'}
               </Button>
-            </form>
+            </CheckedForm>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
               Appointing an <strong>admin</strong> requires super-admin, and grants them scope for
               every active store at that moment. A role change is recorded as a revoke plus a new
@@ -242,18 +249,20 @@ export default async function UserAccessPage({
                     </span>
                   </span>
                   {revocable ? (
-                    <form action={setCapabilityGrantAction} className="flex items-center gap-2">
+                    <CheckedForm rules={ADMIN_GRANT_REVOKE_RULES} action={setCapabilityGrantAction} className="flex items-center gap-2">
                       <input type="hidden" name="personId" value={personId} />
                       <input type="hidden" name="grantId" value={g.id} />
                       <input type="hidden" name="granted" value="false" />
-                      <Input name="reason" required placeholder="Reason to revoke" className="min-w-0 flex-1" />
+                      <Field label="Reason to revoke" rule={ADMIN_GRANT_REVOKE_RULES.reason} className="flex-1">
+                        <Input {...nativeAttrs(ADMIN_GRANT_REVOKE_RULES.reason)} placeholder="Reason to revoke" className="w-full" />
+                      </Field>
                       <ConfirmDestructive
                         tier="retype"
                         label="Revoke grant"
                         consequence="Takes this capability away from the person."
                         expectedName={capabilityTitle(g.grantName)}
                       />
-                    </form>
+                    </CheckedForm>
                   ) : (
                     // T-291 §C2 — a `'position'` row offers no revoke control here: the next
                     // `reconcilePositionGrants` would silently undo it. In its place, the seam to
@@ -406,25 +415,27 @@ export default async function UserAccessPage({
                     // ⚠️ `flex-wrap` is load-bearing: this sits inside a row that already wraps, and
                     //    on a phone in portrait the input has to drop under the account rather than
                     //    squeeze the uid beside it to nothing.
-                    <form
+                    <CheckedForm
+                      rules={ADMIN_UNLINK_RULES}
                       action={unlinkCredentialAction}
                       className="flex flex-wrap items-center gap-2"
                     >
                       <input type="hidden" name="personId" value={personId} />
                       <input type="hidden" name="credentialId" value={c.id} />
-                      <Input
-                        name="reason"
-                        required
-                        placeholder="Reason to unlink"
-                        className="min-w-0 flex-1"
-                      />
+                      <Field label="Reason to unlink" rule={ADMIN_UNLINK_RULES.reason} className="flex-1">
+                        <Input
+                          {...nativeAttrs(ADMIN_UNLINK_RULES.reason)}
+                          placeholder="Reason to unlink"
+                          className="w-full"
+                        />
+                      </Field>
                       <ConfirmDestructive
                         tier="retype"
                         label="Unlink sign-in"
                         consequence="Unlinks this sign-in account and signs the person out of every live session."
                         expectedName={person.displayName}
                       />
-                    </form>
+                    </CheckedForm>
                   )}
                 </li>
               );
@@ -432,18 +443,15 @@ export default async function UserAccessPage({
           </ul>
         )}
 
-        <form action={linkFirebaseAction} className="flex flex-wrap items-end gap-2">
+        <CheckedForm rules={ADMIN_LINK_FIREBASE_RULES} action={linkFirebaseAction} className="flex flex-wrap items-end gap-2">
           <input type="hidden" name="personId" value={personId} />
-          <label className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
-              Link an email account
-            </span>
-            <Input name="uid" required placeholder="Firebase uid" className="font-mono" />
-          </label>
+          <Field label="Link an email account" rule={ADMIN_LINK_FIREBASE_RULES.uid} className="flex-1">
+            <Input {...nativeAttrs(ADMIN_LINK_FIREBASE_RULES.uid)} placeholder="Firebase uid" className="w-full font-mono" />
+          </Field>
           <Button type="submit" variant="secondary">
             Link
           </Button>
-        </form>
+        </CheckedForm>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
           From the Firebase console — this is not an email address. The person signs in with their
           own email and password; this only says which person that account is.

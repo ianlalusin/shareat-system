@@ -19,6 +19,8 @@ import { reverseEntry } from '../ledger/reverse-entry';
 import { checkDraw } from '../money-accounts/overdraft';
 import { refuse } from '../shared/refusal';
 import { parseMoneyInput } from '../shared/money-input';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { LIABILITY_ADD_RULES, LIABILITY_CHARGE_RULES, LIABILITY_PAY_RULES } from '../field-rules/liabilities';
 import { compare, isZero, money, ZERO } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 
@@ -40,6 +42,8 @@ export async function createLiability(
 ): Promise<{ id: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_expense', { storeId: input.storeId });
+    // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
+    assertFieldRules(LIABILITY_ADD_RULES, { storeId: input.storeId, name: input.name, dueOn: input.dueOn });
     const name = input.name.trim();
     if (!name) throw new Error('createLiability: say what this obligation is.');
     return liabilitiesRepo.insertLiability(trx, {
@@ -80,6 +84,8 @@ export async function chargeLiability(
     const liability = await liabilitiesRepo.getById(trx, actor.orgId, input.liabilityId);
     if (!liability) throw new Error(`chargeLiability: liability ${input.liabilityId} does not exist.`);
     await authorize(trx, actor, 'approve_expense', { storeId: liability.storeId });
+    // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
+    assertFieldRules(LIABILITY_CHARGE_RULES, { amount: input.amount, againstAccountCode: input.againstAccountCode, on: input.on });
     // ⛔ T-366 S1b / DEF-529 — row-lock the liability before anything reads what it owes.
     await liabilitiesRepo.lockForPayment(trx, actor.orgId, liability.id);
     // Re-read under the lock: a retire that committed while we waited is now visible.
@@ -171,6 +177,8 @@ export async function payLiability(
     const liability = await liabilitiesRepo.getById(trx, actor.orgId, input.liabilityId);
     if (!liability) throw new Error(`payLiability: liability ${input.liabilityId} does not exist.`);
     await authorize(trx, actor, 'approve_expense', { storeId: liability.storeId });
+    // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
+    assertFieldRules(LIABILITY_PAY_RULES, { amount: input.amount, fromMoneyAccountId: input.fromMoneyAccountId, on: input.on });
     // ⛔ T-366 S1 / DEF-374 — row-lock the liability before `positionOf` reads what is owed.
     await liabilitiesRepo.lockForPayment(trx, actor.orgId, liability.id);
 

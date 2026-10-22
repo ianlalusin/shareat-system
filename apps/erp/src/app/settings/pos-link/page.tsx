@@ -9,7 +9,8 @@ import { createTenderAction, linkStoreToPosAction, setTenderActiveAction, unlink
 import { POS_LINK_EDIT, TENDER_EDIT } from './typed-forms';
 import { canUnlink, posLinkRows, posStoreOptions, storeTenders, tenderMapping, type PosLinkStoreRow, type StoreTenders, type TenderAdminRow } from './lib';
 import { Page } from '@/components/shell/Page';
-import { EditableRecord } from '@/components/forms';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { SETTINGS_POS_LINK_RULES, SETTINGS_POS_UNLINK_RULES, SETTINGS_TENDER_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select, Textarea } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
@@ -133,19 +134,132 @@ function StoreCard({
             label={row.storeName}
             hidden={{ storeId: row.storeId, storeName: row.storeName }}
             typed={typedFor(flash, POS_LINK_EDIT, row.storeId, actorId)}
+            rules={SETTINGS_POS_LINK_RULES}
           >
-            <LinkFields row={row} options={options} />
+            <FormGrid>
+            {options ? (
+              <>
+                <Field label="POS store" rule={SETTINGS_POS_LINK_RULES.posStoreId}>
+                  <Select {...nativeAttrs(SETTINGS_POS_LINK_RULES.posStoreId)} defaultValue={link?.posStoreId ?? ''} className="mt-1 w-full">
+                    <option value="" disabled>
+                      Choose a POS store
+                    </option>
+                    {options.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name || o.id}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                {/* Picker mode: the stored name is POS's own, taken from the list by the action. The box exists only so the one rule set holds in both modes. */}
+                <input type="hidden" name="posStoreName" value={link?.posStoreName ?? 'POS store'} />
+              </>
+            ) : (
+              <>
+                <Field label="POS store id" rule={SETTINGS_POS_LINK_RULES.posStoreId}>
+                  <Input {...nativeAttrs(SETTINGS_POS_LINK_RULES.posStoreId)} defaultValue={link?.posStoreId ?? ''} className="mt-1 w-full" />
+                </Field>
+                <Field label="POS store name" rule={SETTINGS_POS_LINK_RULES.posStoreName}>
+                  <Input {...nativeAttrs(SETTINGS_POS_LINK_RULES.posStoreName)} defaultValue={link?.posStoreName ?? ''} className="mt-1 w-full" />
+                </Field>
+              </>
+            )}
+
+            <Field
+              label="Sales channel POS's sales land in"
+              hint="Only channels whose money is remitted daily are offered: POS's sales are paid at the till."
+              rule={SETTINGS_POS_LINK_RULES.salesChannelId}
+            >
+              <Select {...nativeAttrs(SETTINGS_POS_LINK_RULES.salesChannelId)} defaultValue={link?.salesChannelId ?? ''} className="mt-1 w-full">
+                <option value="" disabled>
+                  Choose a channel
+                </option>
+                {row.channels.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field label="Tax type, as set in the POS store" rule={SETTINGS_POS_LINK_RULES.posTaxType}>
+              <Select {...nativeAttrs(SETTINGS_POS_LINK_RULES.posTaxType)} defaultValue={link?.posTaxType ?? ''} className="mt-1 w-full">
+                <option value="" disabled>
+                  Choose a tax type
+                </option>
+                <option value="vat_inclusive">VAT inclusive</option>
+                <option value="non_vat">Non-VAT</option>
+                <option value="vat_exclusive">VAT exclusive (not importable yet)</option>
+              </Select>
+            </Field>
+            </FormGrid>
           </EditableRecord>
         ) : (
           // An unlinked store's link form is an add form: it ends in Save (A0 L4).
-          <form action={linkStoreToPosAction} className="space-y-3">
+          <CheckedForm rules={SETTINGS_POS_LINK_RULES} action={linkStoreToPosAction} className="space-y-3">
             <input type="hidden" name="storeId" value={row.storeId} />
             <input type="hidden" name="storeName" value={row.storeName} />
-            <LinkFields row={row} options={options} />
+            <FormGrid>
+            {options ? (
+              <>
+                <Field label="POS store" rule={SETTINGS_POS_LINK_RULES.posStoreId}>
+                  <Select {...nativeAttrs(SETTINGS_POS_LINK_RULES.posStoreId)} defaultValue={''} className="mt-1 w-full">
+                    <option value="" disabled>
+                      Choose a POS store
+                    </option>
+                    {options.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name || o.id}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                {/* Picker mode: the stored name is POS's own, taken from the list by the action. The box exists only so the one rule set holds in both modes. */}
+                <input type="hidden" name="posStoreName" value={'POS store'} />
+              </>
+            ) : (
+              <>
+                <Field label="POS store id" rule={SETTINGS_POS_LINK_RULES.posStoreId}>
+                  <Input {...nativeAttrs(SETTINGS_POS_LINK_RULES.posStoreId)} defaultValue={''} className="mt-1 w-full" />
+                </Field>
+                <Field label="POS store name" rule={SETTINGS_POS_LINK_RULES.posStoreName}>
+                  <Input {...nativeAttrs(SETTINGS_POS_LINK_RULES.posStoreName)} defaultValue={''} className="mt-1 w-full" />
+                </Field>
+              </>
+            )}
+
+            <Field
+              label="Sales channel POS's sales land in"
+              hint="Only channels whose money is remitted daily are offered: POS's sales are paid at the till."
+              rule={SETTINGS_POS_LINK_RULES.salesChannelId}
+            >
+              <Select {...nativeAttrs(SETTINGS_POS_LINK_RULES.salesChannelId)} defaultValue={''} className="mt-1 w-full">
+                <option value="" disabled>
+                  Choose a channel
+                </option>
+                {row.channels.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field label="Tax type, as set in the POS store" rule={SETTINGS_POS_LINK_RULES.posTaxType}>
+              <Select {...nativeAttrs(SETTINGS_POS_LINK_RULES.posTaxType)} defaultValue={''} className="mt-1 w-full">
+                <option value="" disabled>
+                  Choose a tax type
+                </option>
+                <option value="vat_inclusive">VAT inclusive</option>
+                <option value="non_vat">Non-VAT</option>
+                <option value="vat_exclusive">VAT exclusive (not importable yet)</option>
+              </Select>
+            </Field>
+            </FormGrid>
             <Button type="submit" variant="secondary">
               Save
             </Button>
-          </form>
+          </CheckedForm>
         )}
       </div>
 
@@ -166,65 +280,6 @@ function StoreCard({
   );
 }
 
-/** The link form's fields, shared by the locked record (linked) and the add form (unlinked). */
-function LinkFields({ row, options }: { row: PosLinkStoreRow; options: { id: string; name: string }[] | null }) {
-  const link = row.link;
-  return (
-    <FormGrid>
-      {options ? (
-        <Field label="POS store">
-          <Select name="posStoreId" required defaultValue={link?.posStoreId ?? ''} className="mt-1 w-full">
-            <option value="" disabled>
-              Choose a POS store
-            </option>
-            {options.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name || o.id}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      ) : (
-        <>
-          <Field label="POS store id">
-            <Input name="posStoreId" required defaultValue={link?.posStoreId ?? ''} className="mt-1 w-full" />
-          </Field>
-          <Field label="POS store name">
-            <Input name="posStoreName" required defaultValue={link?.posStoreName ?? ''} className="mt-1 w-full" />
-          </Field>
-        </>
-      )}
-
-      <Field
-        label="Sales channel POS's sales land in"
-        hint="Only channels whose money is remitted daily are offered: POS's sales are paid at the till."
-      >
-        <Select name="salesChannelId" required defaultValue={link?.salesChannelId ?? ''} className="mt-1 w-full">
-          <option value="" disabled>
-            Choose a channel
-          </option>
-          {row.channels.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </Select>
-      </Field>
-
-      <Field label="Tax type, as set in the POS store">
-        <Select name="posTaxType" required defaultValue={link?.posTaxType ?? ''} className="mt-1 w-full">
-          <option value="" disabled>
-            Choose a tax type
-          </option>
-          <option value="vat_inclusive">VAT inclusive</option>
-          <option value="non_vat">Non-VAT</option>
-          <option value="vat_exclusive">VAT exclusive (not importable yet)</option>
-        </Select>
-      </Field>
-    </FormGrid>
-  );
-}
-
 /**
  * T-382 R13: the guarded unlink, shown to a super admin on a LINKED store. When R3 would refuse (an imported day still
  * open or submitted) it shows that sentence instead of the form. The action and `unlinkStoreFromPos` authorize again.
@@ -242,7 +297,7 @@ function UnlinkSection({ row, posStoreName }: { row: PosLinkStoreRow; posStoreNa
           withdraw them before unlinking it.
         </p>
       ) : (
-        <form action={unlinkStoreFromPosAction} className="space-y-3">
+        <CheckedForm rules={SETTINGS_POS_UNLINK_RULES} action={unlinkStoreFromPosAction} className="space-y-3">
           <input type="hidden" name="storeId" value={row.storeId} />
           <p className="text-neutral-700 dark:text-neutral-300">
             Unlinking {store} from POS store {posStoreName}: from the next sales day you type in, {store}&apos;s sales are typed, not imported. The{' '}
@@ -250,8 +305,8 @@ function UnlinkSection({ row, posStoreName }: { row: PosLinkStoreRow; posStoreNa
             manager can still withdraw an imported day and type it again. An admin can link the store again later.
           </p>
           <FormGrid>
-            <Field label={`Why is ${store} being unlinked?`} span="full">
-              <Textarea name="reason" required maxLength={500} rows={3} className="mt-1 w-full" />
+            <Field label={`Why is ${store} being unlinked?`} span="full" rule={SETTINGS_POS_UNLINK_RULES.reason}>
+              <Textarea {...nativeAttrs(SETTINGS_POS_UNLINK_RULES.reason)} rows={3} className="mt-1 w-full" />
             </Field>
           </FormGrid>
           <ConfirmDestructive
@@ -260,7 +315,7 @@ function UnlinkSection({ row, posStoreName }: { row: PosLinkStoreRow; posStoreNa
             consequence="Unlinks this store from POS. Its sales days are typed from now on."
             expectedName={store}
           />
-        </form>
+        </CheckedForm>
       )}
     </div>
   );
@@ -373,14 +428,14 @@ function TendersSection({
 
       <div className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
         <h4 className="font-medium">Add a tender</h4>
-        <form action={createTenderAction} autoComplete="off" className="space-y-3">
+        <CheckedForm rules={SETTINGS_TENDER_RULES} action={createTenderAction} autoComplete="off" className="space-y-3">
           <input type="hidden" name="storeId" value={storeId} />
           <FormGrid>
-            <Field label="Name">
-              <Input name="name" required placeholder="e.g. GCash" autoComplete="off" className="mt-1 w-full" />
+            <Field label="Name" rule={SETTINGS_TENDER_RULES.name}>
+              <Input {...nativeAttrs(SETTINGS_TENDER_RULES.name)} placeholder="e.g. GCash" autoComplete="off" className="mt-1 w-full" />
             </Field>
-            <Field label="Kind">
-              <Select name="kind" required defaultValue="" className="mt-1 w-full">
+            <Field label="Kind" rule={SETTINGS_TENDER_RULES.kind}>
+              <Select {...nativeAttrs(SETTINGS_TENDER_RULES.kind)} defaultValue="" className="mt-1 w-full">
                 <option value="">Choose cash or wallet</option>
                 <option value="cash">Cash</option>
                 <option value="wallet">Wallet</option>
@@ -403,7 +458,7 @@ function TendersSection({
           <Button type="submit" variant="secondary">
             Save
           </Button>
-        </form>
+        </CheckedForm>
       </div>
     </div>
   );
@@ -421,6 +476,7 @@ function TenderRecord({ storeId, x, t, typed }: { storeId: string; x: TenderAdmi
       label={x.name}
       hidden={{ storeId, tenderId: x.id, version: x.version }}
       typed={typed}
+      rules={SETTINGS_TENDER_RULES}
       extra={
         <form action={setTenderActiveAction} className="mt-2">
           <input type="hidden" name="storeId" value={storeId} />
@@ -437,11 +493,11 @@ function TenderRecord({ storeId, x, t, typed }: { storeId: string; x: TenderAdmi
       }
     >
       <FormGrid>
-        <Field label="Name">
-          <Input name="name" required defaultValue={x.name} autoComplete="off" className="mt-1 w-full" />
+        <Field label="Name" rule={SETTINGS_TENDER_RULES.name}>
+          <Input {...nativeAttrs(SETTINGS_TENDER_RULES.name)} defaultValue={x.name} autoComplete="off" className="mt-1 w-full" />
         </Field>
-        <Field label="Kind">
-          <Select name="kind" required defaultValue={x.kind} className="mt-1 w-full">
+        <Field label="Kind" rule={SETTINGS_TENDER_RULES.kind}>
+          <Select {...nativeAttrs(SETTINGS_TENDER_RULES.kind)} defaultValue={x.kind} className="mt-1 w-full">
             <option value="cash">Cash</option>
             <option value="wallet">Wallet</option>
           </Select>

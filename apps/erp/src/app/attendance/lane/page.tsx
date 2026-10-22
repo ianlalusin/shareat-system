@@ -8,7 +8,9 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Button, Field, FlashBanner, Input, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { ATTENDANCE_DISCARD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'The clock lane — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -405,20 +407,21 @@ function StuckEvent({
         )}
 
         {/* ⛔ Discard needs a reason. The row survives forever; nothing is ever deleted. */}
-        <form action={discardEventAction} className="flex-1 space-y-2 sm:flex sm:gap-2 sm:space-y-0">
+        <CheckedForm rules={ATTENDANCE_DISCARD_RULES} action={discardEventAction} className="flex-1 space-y-2 sm:flex sm:gap-2 sm:space-y-0">
           <input type="hidden" name="quarantineId" value={row.id} />
           <input type="hidden" name="storeId" value={storeId} />
-          <Input
-            type="text"
-            name="reason"
-            required
-            placeholder="Why this is not a real shift"
-            className="w-full"
-          />
+          <Field label="Reason to discard" rule={ATTENDANCE_DISCARD_RULES.reason} className="sm:flex-1">
+            <Input
+              type="text"
+              {...nativeAttrs(ATTENDANCE_DISCARD_RULES.reason)}
+              placeholder="Why this is not a real shift"
+              className="w-full"
+            />
+          </Field>
           <Button type="submit" variant="danger" className="w-full sm:w-auto">
             Discard
           </Button>
-        </form>
+        </CheckedForm>
       </div>
     </article>
   );

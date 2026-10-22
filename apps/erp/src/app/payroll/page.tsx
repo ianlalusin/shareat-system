@@ -19,6 +19,8 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { PAYROLL_PAY_RATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Payroll — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -106,7 +108,7 @@ export default async function PayrollPage({
       </div>
 
       {/* T-448: one compact filter row; widths by kind of value. */}
-      <form>
+      <form method="get">
         <FormGrid layout="fields">
           <Field label="Store" width="name">
             <Select name="store" defaultValue={storeId} className="w-full">
@@ -413,7 +415,7 @@ export default async function PayrollPage({
                       description="Takes effect from the date below; the current rate stays on past payslips."
                       size="sm"
                     >
-                      <form action={setPayRateAction}>
+                      <CheckedForm rules={PAYROLL_PAY_RATE_RULES} action={setPayRateAction}>
                         <input type="hidden" name="storeId" value={storeId} />
                         <input type="hidden" name="employmentId" value={r.id} />
                         <FormGrid layout="fields">
@@ -423,17 +425,11 @@ export default async function PayrollPage({
                               <option value="hourly">hourly</option>
                             </Select>
                           </Field>
-                          <Field label="Rate" width="short">
-                            <input
-                              name="amount"
-                              inputMode="decimal"
-                              placeholder="0.00"
-                              // raw <input>: t343-s5-5v-number-boxes.test.ts scans the source for this tag; kit field tokens by hand
-                              className="w-full min-h-11 rounded-[10px] border border-field-border bg-field px-3 py-2 text-sm text-ink"
-                            />
+                          <Field label="Rate" width="short" rule={PAYROLL_PAY_RATE_RULES.amount}>
+                            <Input {...nativeAttrs(PAYROLL_PAY_RATE_RULES.amount)} placeholder="0.00" className="w-full" />
                           </Field>
-                          <Field label="From" width="date">
-                            <Input name="effectiveFrom" type="date" defaultValue={periodStart} className="w-full" />
+                          <Field label="From" width="date" rule={PAYROLL_PAY_RATE_RULES.effectiveFrom}>
+                            <Input type="date" {...nativeAttrs(PAYROLL_PAY_RATE_RULES.effectiveFrom)} defaultValue={periodStart} className="w-full" />
                           </Field>
                           <div className="!flex-none self-end">
                             <Button type="submit" variant="secondary">
@@ -441,7 +437,7 @@ export default async function PayrollPage({
                             </Button>
                           </div>
                         </FormGrid>
-                      </form>
+                      </CheckedForm>
                     </FormModal>
                   </td>
                 </tr>

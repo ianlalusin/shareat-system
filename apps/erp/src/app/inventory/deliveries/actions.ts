@@ -15,7 +15,10 @@
  */
 import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
-import { createDeliveryDocument, receiveDeliveryDocument, uploadFile } from '@shareat/domain';
+import { can } from '@shareat/auth';
+import { assertFieldRules, claimUpload, createDeliveryDocument, receiveDeliveryDocument } from '@shareat/domain';
+import { resolveUploadedFile } from '@/lib/uploaded-file';
+import { INVENTORY_DELIVERY_RULES } from '@shareat/domain/field-rules';
 import type { ShortageReason } from '@shareat/db/schema';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
@@ -148,26 +151,25 @@ export async function createDeliveryAction(fd: FormData): Promise<void> {
   let deliveryId = '';
   let warning = '';
   try {
-    const photo = fd.get('proofPhoto');
-    if (!(photo instanceof File) || photo.size === 0) {
-      throw new Error('A photo of the paper is required — a link or a typed reference is not evidence.');
-    }
     const result = await withOrgPrincipal(actor.orgId, async (tx) => {
-      const uploaded = await uploadFile(tx, actor, {
-        purpose: 'receipt_photo',
-        storeId,
-        contentType: photo.type,
-        bytes: new Uint8Array(await photo.arrayBuffer()),
-      });
-      return createDeliveryDocument(tx, actor, {
+      // T-440 S9 (iii): the field check runs only for a caller `createDeliveryDocument`'s first authorize() would let in
+      // ('receive_delivery' at this store); anyone else is refused by that gate, and logged once, before any field sentence.
+      if (await can(tx, actor, 'receive_delivery', { storeId })) assertFieldRules(INVENTORY_DELIVERY_RULES, fd);
+      const proofFileId = await resolveUploadedFile(tx, actor, fd, 'proofPhoto', { purpose: 'receipt_photo', storeId });
+      if (!proofFileId) {
+        throw new Error('A photo of the paper is required — a link or a typed reference is not evidence.');
+      }
+      const saved = await createDeliveryDocument(tx, actor, {
         storeId,
         kind,
         supplierId: kind === 'supplier' ? supplierId : null,
         referenceNo,
         deliveredOn,
-        proofFileId: uploaded.fileId,
+        proofFileId,
         lines,
       });
+      await claimUpload(tx, actor, { fileId: proofFileId, purpose: 'receipt_photo', storeId, linkTo: saved.deliveryId });
+      return saved;
     });
     deliveryId = result.deliveryId;
     warning = result.warnings.map((w) => w.message).join(' ');

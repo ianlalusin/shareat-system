@@ -62,6 +62,8 @@ import { seedAttendanceConfig } from '../attendance/config';
 // this is the defensive default, not a fix for one measured.
 import { seedStoreAccessDefaults } from '../people/position-defaults';
 import { parseDecimalInput } from '../shared/money-input';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { ADMIN_STORE_DETAILS_RULES, ADMIN_STORE_OPENING_DATE_RULES } from '../field-rules/admin';
 
 const CAPABILITY = 'manage_stores' as const;
 
@@ -268,6 +270,9 @@ export async function updateStoreDetails(
   },
 ): Promise<void> {
   await authorize(tx, actor, CAPABILITY, {});
+  // T-440 S9 (ii): the screen's own rules, only once the gate has passed.
+  // A patch is Partial (absent = leave alone), so the screen's rules judge it only when the screen's name is present.
+  if (patch.name !== undefined) assertFieldRules(ADMIN_STORE_DETAILS_RULES, { name: patch.name, tinBranchCode: patch.tinBranchCode });
   // ⭐ Normalised the same way the org's TIN is, and refused with the same sentence — the database
   //   holds the identical rule as `stores_tin_branch_code_format_check` and is the authority.
   const normalised =
@@ -306,6 +311,8 @@ export async function setStoreOpeningDate(
   input: { openingDate: string | null; confirmedPlan?: string },
 ): Promise<void> {
   await authorize(tx, actor, CAPABILITY, {});
+  // T-440 S9 (ii): the screen's own rule, only once the gate has passed.
+  assertFieldRules(ADMIN_STORE_OPENING_DATE_RULES, { openingDate: input.openingDate });
 
   // Amendment R3.1 — a real calendar date, not merely shaped like one, before any comparison below
   // trusts it as a sortable string ('2026-3-1' sorts before '2026-03-01' despite naming a later day).

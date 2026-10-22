@@ -13,14 +13,14 @@
  * `FilterRow` GET form (`name="store"`) above the POST form; the POST form gets a read-only
  * `<input type="hidden" name="storeId">` instead of a `<select name="storeId">`.
  */
-import { readFileSync } from 'node:fs';
+import { readControlSource } from './helpers/control-source';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pagePath = resolve(here, '..', 'src', 'app', 'sales-days', 'new', 'page.tsx');
-const source = readFileSync(pagePath, 'utf8');
+const source = readControlSource(pagePath, 'utf8');
 
 /** The POST form: from `<form action={createSalesDayAction}` to its matching `</form>`. */
 function postFormSlice(src: string): string {

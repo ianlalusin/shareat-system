@@ -5,7 +5,9 @@ import { DesktopGrid, MobileSections } from './grid';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Button, FlashBanner, Select } from '@/components/ui';
+import { Button, Field, FlashBanner, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { ADMIN_COPY_DEFAULTS_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Position access defaults — Shareat System' };
@@ -164,22 +166,21 @@ export default async function AccessDefaultsPage({
             one. A store-invented position never copies — it belongs to its own store. This is a
             copy, not a link: the two stores&rsquo; rows do not stay in sync afterwards.
           </p>
-          <form action={copyDefaultsAction} className="flex flex-wrap items-end gap-3">
+          <CheckedForm rules={ADMIN_COPY_DEFAULTS_RULES} action={copyDefaultsAction} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="storeId" value={storeId} />
-            <label className="text-sm">
-              <span className="block text-neutral-600 dark:text-neutral-400">From</span>
-              <Select name="sourceStoreId" required>
+            <Field label="From" rule={ADMIN_COPY_DEFAULTS_RULES.sourceStoreId}>
+              <Select {...nativeAttrs(ADMIN_COPY_DEFAULTS_RULES.sourceStoreId)}>
                 {otherStores.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name} ({s.code})
                   </option>
                 ))}
               </Select>
-            </label>
+            </Field>
             <Button type="submit" variant="secondary">
               Copy
             </Button>
-          </form>
+          </CheckedForm>
         </section>
       )}
     </Page>

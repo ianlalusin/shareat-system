@@ -10,7 +10,7 @@
  * Harness: `t376-s2-return-banners.test.ts` (RedirectSignal; the real domain module with only the two customer-return
  * functions replaced, so `refuse` builds real refusals).
  */
-import { readFileSync } from 'node:fs';
+import { readControlSource } from './helpers/control-source';
 import { resolve } from 'node:path';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { paramsOf } from './helpers/flash-jar';
@@ -240,7 +240,7 @@ describe('B6 the sentences carry no amount and no id', () => {
 
 describe('W3 the record form carries the store', () => {
   it('the recordReturnAction form contains name="store" (HEAD: no hidden store input)', () => {
-    const src = readFileSync(resolve(__dirname, '../src/app/trade/returns/page.tsx'), 'utf8');
+    const src = readControlSource(resolve(__dirname, '../src/app/trade/returns/page.tsx'), 'utf8');
     const start = src.indexOf('<form action={recordReturnAction}');
     expect(start, 'the record form is gone from the page').toBeGreaterThanOrEqual(0);
     const end = src.indexOf('</form>', start);

@@ -18,7 +18,8 @@
  */
 import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
-import { deleteUsageDraft, postUsage, replenishAfterUsage, saveUsageDraft, voidUsage } from '@shareat/domain';
+import { assertFieldRules, deleteUsageDraft, postUsage, replenishAfterUsage, saveUsageDraft, voidUsage } from '@shareat/domain';
+import { INVENTORY_USAGE_VOID_RULES } from '@shareat/domain/field-rules';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
@@ -180,6 +181,7 @@ export async function voidUsageAction(fd: FormData): Promise<void> {
   try {
     // T-412 Tier P: an administrator's PIN, verified on the server against the RECORD's store.
     const target = await loadDestructiveTarget(actor, 'stock_usage_record', recordId, ['void_usage_record']);
+    assertFieldRules(INVENTORY_USAGE_VOID_RULES, fd);
     const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'void_usage_record' });
     result = await withOrgPrincipal(actor.orgId, async (tx) => {
       const voided = await voidUsage(tx, actor, { recordId, reason });
