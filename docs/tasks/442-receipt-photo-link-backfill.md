@@ -1,6 +1,6 @@
 # T-442: Link the files already saved (DEF-672 backfill + census)
 
-**Status:** S1 + S2 implemented 2026-10-21; 53 affected PostgreSQL checks, 249 unit checks, typecheck and production build pass. Full CI and T-441 writer/link-target dependency pending; production run remains Ian's after deployment.
+**Status:** 2026-10-22: S1+S2 backfill in PR #43 (with part of T-441 S2), fixes pushed 22 Oct, main merged in 22 Oct; not merged, not deployed. Production run by Ian after deploy.
 
 ## 1. The problem, measured in code (not assumed)
 

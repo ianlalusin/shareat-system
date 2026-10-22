@@ -1,0 +1,500 @@
+[
+  {
+    "file": "apps/erp/src/app/admin/access-defaults/grid.tsx",
+    "tables": 2,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/admin/prerequisite-refusals/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/admin/stores/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/admin/users/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/ap/invoices/[id]/page.tsx",
+    "tables": 2,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/ap/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/ap/suppliers/[id]/page.tsx",
+    "tables": 2,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/ap/suppliers/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/ap/vat/page.tsx",
+    "tables": 2,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/attendance/lane/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/attendance/page.tsx",
+    "tables": 2,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/attendance/terminals/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/cash-requests/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/channel-settlements/page.tsx",
+    "tables": 2,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/commissary/catalogue/page.tsx",
+    "tables": 3,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/commissary/orders/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/customers/[customerId]/page.tsx",
+    "tables": 2,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/customers/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/customers/price-lists/[id]/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/cutover/count/sheet/page.tsx",
+    "tables": 2,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/expenses/[id]/page.tsx",
+    "tables": 2,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/expenses/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/findings/scorecard/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/fixed-assets/[id]/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/fixed-assets/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/inventory/counts/[id]/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/inventory/counts/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/inventory/deliveries/[id]/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/inventory/deliveries/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/inventory/locations/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/inventory/low-stock/page.tsx",
+    "tables": 2,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/inventory/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/inventory/pos-map/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/inventory/pos-usage/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/inventory/production/[id]/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/inventory/production/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/inventory/production/recipes/[id]/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/inventory/production/recipes/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/inventory/returns/page.tsx",
+    "tables": 2,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/inventory/transfers/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/inventory/usage/[id]/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/inventory/usage/page.tsx",
+    "tables": 4,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/items/[id]/page.tsx",
+    "tables": 2,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/items/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/liabilities/[id]/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/liabilities/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/liabilities/unpaid/page.tsx",
+    "tables": 0,
+    "sharedTables": 1,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/loans/[id]/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/loans/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/menu/items/[id]/page.tsx",
+    "tables": 0,
+    "sharedTables": 2,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/menu/usage-source/page.tsx",
+    "tables": 0,
+    "sharedTables": 3,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/money-accounts/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/money-transfers/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/owners/[id]/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/owners/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/payroll/page.tsx",
+    "tables": 2,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/payroll/thirteenth-month/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/prepaid/[id]/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/prepaid/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/remittance/page.tsx",
+    "tables": 2,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/sales-days/[id]/page.tsx",
+    "tables": 3,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/sales-days/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/sales-days/SalesDayForm.tsx",
+    "tables": 2,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/settings/expense-categories/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/settings/pos-link/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/statutory-discounts/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/till/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/trade/orders/[id]/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/trade/orders/[id]/print/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/trade/orders/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/trade/returns/page.tsx",
+    "tables": 2,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/wastage/page.tsx",
+    "tables": 2,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/components/reports/ApAgingTable.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/components/reports/ArAgingTable.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/components/reports/BalanceSheetTable.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/components/reports/CashFlowTable.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/components/reports/IncomeStatementTable.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/components/reports/JournalLinesTable.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/components/reports/SalesRollupTable.tsx",
+    "tables": 3,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/components/reports/StoreComparisonTable.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/components/reports/TrialBalanceTable.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/components/ui/Table.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 1
+  }
+]

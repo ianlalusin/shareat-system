@@ -128,7 +128,12 @@ const ROWS: Record<string, Row> = {
   // ---- cutover
   'cutover.addOpeningFigure.accountCode': req('Choose the account.'),
   'cutover.addOpeningFigure.storeId': req('Choose the store.'),
-  'cutover.addOpeningFigure.direction': req('Choose whether the business has this or owes it.'),
+  // T-453 / DEF-727: only debit or credit passes; anything else is refused, never coerced.
+  'cutover.addOpeningFigure.direction': {
+    ok: 'debit',
+    bad: [['abc', 'Choose whether the business has this or owes it.'], [BLANK, 'Choose whether the business has this or owes it.']],
+    blank: 'Choose whether the business has this or owes it.',
+  },
   'cutover.addOpeningFigure.amount': {
     ok: '500', stored: '500.00',
     bad: [MONEY_BAD('This amount'), ['0', 'This amount must be an amount of 0.01 or more.']],

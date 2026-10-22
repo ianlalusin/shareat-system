@@ -1,6 +1,6 @@
 # T-443: Item variations, "not a duplicate" dismissal, kind filter, two duplicate guards, wholesale label
 
-**Status:** BUILT and locally audited 2026-10-19; release requires green full PR CI. Spec 2026-10-18. Ian's request the same day; his two rulings recorded below (bible rows to add at wrap-up).
+**Status:** MERGED 2026-10-19 (PR #37, migrations 0210, 0211); live per docs/reviews/t447-unmerged-branches.md (production at fd8af80 or later). Spec 2026-10-18. Ian's two rulings recorded below.
 
 ## Why
 

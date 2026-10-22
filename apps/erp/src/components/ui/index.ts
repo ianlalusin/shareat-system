@@ -21,6 +21,7 @@ export type { TextareaProps } from './Textarea';
 export { Checkbox } from './Checkbox';
 export type { CheckboxProps } from './Checkbox';
 export { Table, Th, Td, NumTd, LinkRow, RowLink, RowAction, ROW_LINK_STRETCH } from './Table';
+export type { TableCardSummary } from './Table';
 export { EmptyState } from './EmptyState';
 export type { EmptyStateProps, EmptyStateIllustration } from './EmptyState';
 export { StatusIcon, STATUS_ICON_KINDS } from './StatusIcon';
@@ -36,3 +37,4 @@ export { ConfirmDestructive } from './ConfirmDestructive';
 export type { ConfirmDestructiveProps } from './ConfirmDestructive';
 
 export { SplitWorkspace } from './SplitWorkspace';
+export { DisclosureCard } from './DisclosureCard';

@@ -354,7 +354,7 @@ describe('L1/L2 (DEF-472) — interestRate regex refusal', () => {
       ACTOR_HOLDER.actor = f.admin;
       const { createLoanAction } = await import('../../src/app/loans/actions');
       const to = await expectRedirectTo(() => createLoanAction(loanFormData(f, { interestRate: '-1' })));
-      expectRuleSentence(errorOf(to), LOAN_ADD_RULES.interestRate, '1,5');
+      expectRuleSentence(errorOf(to), LOAN_ADD_RULES.interestRate, '-1');
     },
   );
 

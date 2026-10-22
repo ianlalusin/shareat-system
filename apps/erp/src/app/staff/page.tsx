@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requirePageAccess, StoreNotAvailable } from '../../lib/page-access';
 import { issueAdminPinAction, upsertStorePositionAction } from './actions';
+import { positionHolders } from './role-title';
 import { positionsForStore, rosterForStore, staffStoresFor, withOrgPrincipal } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
@@ -76,13 +77,14 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
     people = await Promise.all(
       roster.map(async (r) => {
         const fileId = photoIds.get(r.id) ?? null;
-        const primary = r.positions.find((p) => p.isPrimary) ?? r.positions[0];
+        const primary = r.positions.find((p) => p.isPrimary);
         return {
           id: r.id,
           displayName: r.displayName,
           employmentStatus: r.employmentStatus,
           startedOn: r.startedOn,
           primaryPosition: primary?.name ?? null,
+          role: r.role,
           photoFileId: fileId && (await canViewPhoto(actor, fileId)) ? fileId : null,
         };
       }),
@@ -149,7 +151,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
         </p>
         <ul className="space-y-2 text-sm">
           {positions.map((p) => {
-            const holders = roster.filter((r) => r.positions.some((a) => a.positionId === p.id));
+            const holders = positionHolders(roster, p.id);
             return (
               <li key={p.id} className="rounded-lg border border-neutral-200 dark:border-neutral-800">
                 <details>
@@ -167,6 +169,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
                           <Link href={`/staff/${h.id}`} className="inline-flex min-h-6 items-center underline">
                             {h.displayName}
                           </Link>
+                          {h.note && <span className="ml-2 text-xs text-neutral-500">{h.note}</span>}
                         </li>
                       ))}
                     </ul>

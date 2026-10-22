@@ -22,7 +22,7 @@
  */
 import { accountLabel } from '@/lib/account-label';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { Banner, Button, Field, FormGrid, Input, Select } from '@/components/ui';
+import { Banner, Button, Field, FormGrid, Input, Select, SplitWorkspace } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 import { CHANNEL_SETTLEMENT_RECORD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
@@ -80,7 +80,6 @@ type DeductionName = (typeof DEDUCTIONS)[number]['name'];
 
 const INPUT =
   'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
-const LABEL = 'flex flex-col gap-1 text-xs font-medium text-neutral-600 dark:text-neutral-400';
 
 function money(v: string): string {
   const n = Number(v);
@@ -246,10 +245,12 @@ export function SettlementForm({
       */}
       <input type="hidden" name="recognizeGain" value={recognizeGain ? 'on' : ''} />
 
+      <SplitWorkspace formTitle="Payout details" detailsTitle="Payout check" form={(
+      <div className="space-y-5">
+
       {/* ── Which payout ─────────────────────────────────────────────────────────────── */}
-      <FormGrid>
-        <label className={LABEL}>
-          Channel
+      <FormGrid layout="pairs">
+        <Field label="Channel">
           <Select
             name="channelId"
             value={channelId}
@@ -272,10 +273,9 @@ export function SettlementForm({
               Banks into {channel.destinationAccountName}
             </span>
           )}
-        </label>
+        </Field>
 
-        <label className={LABEL}>
-          Day being settled
+        <Field label="Day being settled">
           <Select
             name="salesDayPicker"
             value={salesDayId}
@@ -296,11 +296,11 @@ export function SettlementForm({
               receivable — an unverified one has posted nothing to clear.
             </span>
           )}
-        </label>
+        </Field>
       </FormGrid>
 
       {/* ── The two observable figures ───────────────────────────────────────────────── */}
-      <FormGrid>
+      <FormGrid layout="pairs">
         <Field label="Gross the platform settled" hint="Prefilled from the day, editable — the statement wins" rule={CHANNEL_SETTLEMENT_RECORD_RULES.grossAmount}>
           <input
             {...nativeAttrs(CHANNEL_SETTLEMENT_RECORD_RULES.grossAmount)}
@@ -327,12 +327,9 @@ export function SettlementForm({
         <legend className="px-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">
           What the platform deducted — each line to its own account
         </legend>
-        <FormGrid>
+        <FormGrid layout="pairs">
           {DEDUCTIONS.map((d) => (
-            <label key={d.name} className={LABEL}>
-              <span>
-                {d.label} <span className="font-mono text-neutral-400">{accountLabel(d.account)}</span>
-              </span>
+            <Field key={d.name} label={d.label} hint={<>{accountLabel(d.account)} · {d.hint}</>}>
               <Input
                 name={d.name}
                 value={deductions[d.name]}
@@ -341,8 +338,7 @@ export function SettlementForm({
                 placeholder="0.00"
                 className="w-full"
               />
-              <span className="text-neutral-400 dark:text-neutral-600">{d.hint}</span>
-            </label>
+            </Field>
           ))}
         </FormGrid>
         <p className="text-xs text-neutral-500 dark:text-neutral-500">
@@ -357,9 +353,8 @@ export function SettlementForm({
         <legend className="px-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">
           Loan repayment docked out of the payout — optional
         </legend>
-        <FormGrid>
-          <label className={LABEL}>
-            Loan
+        <FormGrid layout="pairs">
+          <Field label="Loan">
             <Select
               name="loanId"
               value={loanId}
@@ -373,7 +368,7 @@ export function SettlementForm({
                 </option>
               ))}
             </Select>
-          </label>
+          </Field>
           <Field label="Amount docked" rule={CHANNEL_SETTLEMENT_RECORD_RULES.loanAmount}>
             <Input
               {...nativeAttrs(CHANNEL_SETTLEMENT_RECORD_RULES.loanAmount)}
@@ -396,7 +391,7 @@ export function SettlementForm({
       </fieldset>
 
       {/* ── Provenance ───────────────────────────────────────────────────────────────── */}
-      <FormGrid>
+      <FormGrid layout="pairs">
         <Field label="Payout reference" rule={CHANNEL_SETTLEMENT_RECORD_RULES.reference}>
           <Input
             {...nativeAttrs(CHANNEL_SETTLEMENT_RECORD_RULES.reference)}
@@ -417,8 +412,19 @@ export function SettlementForm({
         </Field>
       </FormGrid>
 
+      </div>
+      )} details={(
+      <div className="space-y-4">
       {/* ── ⭐ The preview. The reason this component exists ─────────────────────────── */}
       <div className="space-y-3 rounded-lg border border-neutral-300 bg-neutral-50 p-4 dark:border-neutral-700 dark:bg-neutral-900">
+        <h2 className="text-sm font-semibold">Check the payout</h2>
+        {channel && (
+          <dl className="space-y-2 text-xs">
+            <div><dt className="text-muted">Channel</dt><dd className="break-words font-medium">{channel.storeName} · {channel.name}</dd></div>
+            <div><dt className="text-muted">Waiting balance</dt><dd className="break-words font-mono">₱{channel.outstanding}</dd></div>
+            <div><dt className="text-muted">Verified day</dt><dd>{day?.businessDate ?? 'Choose the day being settled.'}</dd></div>
+          </dl>
+        )}
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" onClick={check} disabled={pending || salesDayId === ''} variant="secondary">
             {pending ? 'Checking…' : 'Check the numbers'}
@@ -493,6 +499,8 @@ export function SettlementForm({
         same fee — that double-count cost ₱198,148.29 across two stores in the legacy system, and
         this screen is the single place these legs are written.
       </p>
+      </div>
+      )} />
     </CheckedForm>
   );
 }

@@ -33,7 +33,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { accessRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { assignRole, authorize, grantCapabilityAsActor, type Actor } from '@shareat/auth';
-import { createEmployment, seedCanonicalPositions, setPositionDefault } from '@shareat/domain';
+import { seedCanonicalPositions, setPositionDefault } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -232,17 +232,13 @@ describe('E3 — the same supersede via the org-scoped hold path (positionGrantI
     await asOrg(f.orgId, (tx) => seedCanonicalPositions(tx, f.orgId));
     const [cashier] = await sql<{ id: string }[]>`select id from positions where org_id = ${f.orgId} and store_id is null and name = 'Cashier'`;
     const cashierId = cashier!.id;
+    // T-451: exercise superseding a historical manager's position grant, not a new job assignment.
+    const [legacy] = await sql<{ id: string }[]>`
+      insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
+      values (${f.orgId}, ${f.storeId}, ${f.targetId}, 'SE-001', 'probationary', '2026-01-05') returning id`;
+    if (!legacy) throw new Error('Legacy manager employment fixture was not inserted.');
+    await sql`insert into employment_positions (employment_id, position_id, is_primary) values (${legacy.id}, ${cashierId}, true)`;
     await asOrg(f.orgId, (tx) => setPositionDefault(tx, f.admin, { positionId: cashierId, storeId: f.storeId, capability: CAP, on: true }));
-    await asOrg(f.orgId, (tx) =>
-      createEmployment(tx, f.admin, {
-        storeId: f.storeId,
-        personId: f.targetId,
-        employmentStatus: 'probationary',
-        startedOn: '2026-01-05',
-        positionIds: [cashierId],
-        primaryPositionId: cashierId,
-      }),
-    );
     const [positionRow] = await sql<{ id: string }[]>`
       select id from person_grants
       where person_id = ${f.targetId} and grant_name = ${CAP} and grant_source = 'position' and revoked_at is null`;
