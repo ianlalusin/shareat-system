@@ -227,7 +227,7 @@ export async function canReadFiles(tx: Tx, actor: Actor, fileIds: readonly strin
     const verdicts = new Map<string, boolean>();
     for (const file of files) {
       // ⛔ T-436: a leave document is never offered on the strength of the UPLOAD capability. The screens ask this to draw a
-      // "View photo" link; for a certificate the only reader is `openLeaveDocument` (row 353), so no link is ever drawn from here.
+      // "View photo" link; a certificate's id reaches a screen only through `leaveProofFileId` (T-441 S4, row 353), so no link is ever drawn from here.
       if (file.purpose === 'leave_document') continue;
       // ⛔ T-434: a signature is NEVER decided here (the shared verdict is keyed by capability + store, the wrong question for it).
       if (file.purpose === 'staff_signature') continue;

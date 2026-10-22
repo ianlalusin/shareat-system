@@ -57,12 +57,19 @@ describe('T-436 - the screens never put the note or the proof file where everyon
     for (const p of listy) {
       expect(read(p), `${p} must not read the request note`).not.toMatch(/\.note\b|\bnote:/);
     }
+    // T-441 S4: the id the deciding loader hands out may be named `proofFileId` in exactly two files (the page and the Lightbox button).
+    const MAY_NAME_PROOF_ID = /attendance[\\/]leave[\\/](page\.tsx|CertificateView\.tsx)$/;
     for (const p of files) {
-      expect(read(p), `${p} must not expose a proof file id`).not.toMatch(/proofFileId|documentFileId|fileId.*leave|leave.*fileId/);
+      const text = read(p);
+      expect(text, `${p} must not expose a proof file id`).not.toMatch(/documentFileId|fileId.*leave|leave.*fileId/);
+      if (!MAY_NAME_PROOF_ID.test(p)) expect(text, `${p} must not name proofFileId`).not.toMatch(/proofFileId/);
     }
+    const page = read(files.find((p) => /attendance[\\/]leave[\\/]page\.tsx$/.test(p))!);
+    expect(page, 'page.tsx gets the id only from loadProofFileId(').toMatch(/=\s*await loadProofFileId\(/);
+    expect(page, 'no other way to read a proof id').not.toMatch(/proofFileOf|requestOfFile|leaveRepo|\.proofFileId\b/);
   });
 
-  it('the proof is opened only through the openLeaveDocument action (no direct /files link built from an id)', () => {
+  it('the proof is opened only through the shared Lightbox (no direct /files link built from an id in the leave screens)', () => {
     const text = sourceFiles(leaveDir).map(read).join('\n');
     expect(text).not.toMatch(/\/files\/\$\{/);
     expect(text).not.toMatch(/readFileUrl/);
