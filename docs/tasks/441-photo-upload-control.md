@@ -359,5 +359,5 @@ already); **drag-and-drop** onto every box; a **finish animation** when the uplo
 the box at once; images open **in-app, never in a new tab**, in one shared viewer modal with **drag to pan and click to
 zoom in/out**; app-wide. Spec in plan mode (Opus) after S3-S6 merge; the viewer adopts T-448's shared `Dialog` if it
 has landed. Guarded purposes keep A6 (one audited GET per open; panning/zooming never refetches).
-Also DEF-730: with JS on the picked file stays in the input and is re-posted on Save next to `<name>FileId` (ignored by
+Also DEF-739: with JS on the picked file stays in the input and is re-posted on Save next to `<name>FileId` (ignored by
 the server, extra payload); S7/S8 clears the input once a FileId is held, as §3 step 2 already says.
