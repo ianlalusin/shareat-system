@@ -188,3 +188,11 @@ Tests are written first, and each must fail for the right reason before the code
 2. Sign in with the badge code and PIN.
 3. Un-pair from another browser.
 4. The tablet falls back to today's screen.
+
+## Smoke test result (2026-10-23, 9008, throwaway DB `shareat_test_t464smoke`)
+The admin session was forged (`forge-session.ts`), so this proves the screens, not the email sign-in. Every step passed:
+1. An unpaired browser shows today's sign-in screen, unchanged.
+2. Hire (with no staff-code box) gave the new cashier `SE-001` automatically. Her PIN was issued on her Staff page.
+3. `/settings/pos-tablet` → **Pair this tablet** ("Smoke counter"). The admin was signed out, and `/sign-in` then showed only Employee ID + PIN plus "Manager sign-in". The cookie `shareat_pos_tablet` is httpOnly.
+4. `1` + a wrong PIN gave the flat sentence. `1` + her PIN signed her in and opened `/sales-days`.
+5. From a second browser, the admin used **Un-pair tablet** (retyping the label). The tablet's live session ended at once, and its next page load showed today's screen again, with the pairing cookie gone.
