@@ -1,4 +1,4 @@
--- 0214 - T-464: POS tablet pairing (pos_tablet_pairings), the per-Employee-ID PIN bucket, and the staff-code guarantees.
+-- 0212 - T-464: POS tablet pairing (pos_tablet_pairings), the per-Employee-ID PIN bucket, and the staff-code guarantees.
 -- docs/tasks/464-pos-tablet-sign-in.md; hand-authored per ADR-012 s5. Journal head when written: 0211 (0212/0213 belong to T-398 S3/S4).
 --
 -- PRECHECK - run these two SELECTs on the target database BEFORE this migration. Both must return ZERO rows.
@@ -21,10 +21,10 @@
 DO $$
 BEGIN
 	IF EXISTS (SELECT 1 FROM "employments" WHERE "staff_code" !~ '^SE-[0-9]{3,}$') THEN
-		RAISE EXCEPTION '0214 PRECHECK failed: employments.staff_code holds values that are not SE- plus 3 or more digits. Run the PRECHECK 1 SELECT at the top of this file and repair them by hand first.';
+		RAISE EXCEPTION '0212 PRECHECK failed: employments.staff_code holds values that are not SE- plus 3 or more digits. Run the PRECHECK 1 SELECT at the top of this file and repair them by hand first.';
 	END IF;
 	IF EXISTS (SELECT 1 FROM "employments" GROUP BY "store_id", ltrim(substring("staff_code" from 4), '0') HAVING count(*) > 1) THEN
-		RAISE EXCEPTION '0214 PRECHECK failed: two employments at one store share a staff-code number. Run the PRECHECK 2 SELECT at the top of this file and repair them by hand first.';
+		RAISE EXCEPTION '0212 PRECHECK failed: two employments at one store share a staff-code number. Run the PRECHECK 2 SELECT at the top of this file and repair them by hand first.';
 	END IF;
 END $$;
 --> statement-breakpoint

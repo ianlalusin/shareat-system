@@ -130,7 +130,7 @@ describe('T-321 Contract 2 / spec test 7 — migration 0153 refuses on pre-exist
   const dbName = `shareat_scratch_0153_refuse_collision_${Date.now()}`;
   let sql: ReturnType<typeof postgres>;
   const orgName = 'Collide Org';
-  const cardEmploymentStaffCode = 'SE-900001'; // T-464: staff codes must be SE-NNN (migration 0214)
+  const cardEmploymentStaffCode = 'SE-900001'; // T-464: staff codes must be SE-NNN (migration 0212)
 
   beforeAll(async () => {
     await createScratchDatabase(dbName);

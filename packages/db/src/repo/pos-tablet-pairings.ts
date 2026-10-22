@@ -1,5 +1,5 @@
 /**
- * The only place SQL is written for `pos_tablet_pairings` (T-464, migration 0214).
+ * The only place SQL is written for `pos_tablet_pairings` (T-464, migration 0212).
  * docs/tasks/464-pos-tablet-sign-in.md.
  *
  * Every org-principal read is org-scoped explicitly as well as by RLS. Nothing here deletes: a replaced or un-paired tablet is REVOKED.

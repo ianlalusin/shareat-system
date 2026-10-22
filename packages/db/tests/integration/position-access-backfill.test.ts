@@ -303,7 +303,7 @@ async function trackedRunCount(sql: ReturnType<typeof postgres>): Promise<number
 describe('T-318 slice B / migration 0152 — refuses when an open employment has no position', () => {
   const dbName = `shareat_scratch_0152_refuse_pos_${Date.now()}`;
   let sql: ReturnType<typeof postgres>;
-  const orphanStaffCode = 'SE-900002'; // T-464: staff codes must be SE-NNN (migration 0214)
+  const orphanStaffCode = 'SE-900002'; // T-464: staff codes must be SE-NNN (migration 0212)
 
   beforeAll(async () => {
     await createScratchDatabase(dbName);

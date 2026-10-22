@@ -4,7 +4,7 @@ import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
 
 /**
- * T-464 (migration 0214) - the database guarantees under the POS tablet sign-in:
+ * T-464 (migration 0212) - the database guarantees under the POS tablet sign-in:
  *   - employments.staff_code is ALWAYS `SE-` + 3 or more digits, and two codes at one store never share a NUMBER (SE-007 vs SE-0007);
  *   - the allocator reads only `SE-` + digits and survives a digit-heavy code (DEF-725);
  *   - pos_tablet_pairings: one LIVE pairing per store, same-org composite FKs, org-isolation RLS, no DELETE for the app role;

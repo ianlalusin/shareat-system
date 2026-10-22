@@ -236,8 +236,8 @@ export const employments = pgTable(
       sql`(${t.employmentStatus} in ('resigned','terminated')) = (${t.endedOn} is not null)`,
     ),
     // NOTE: `unique (store_id, lower(staff_code))` is an expression index, hand-added in the migration.,
-    // T-464 (migration 0214): the code is ALWAYS `SE-` plus 3+ digits, issued by `allocateStaffCode` (never typed), and two codes at one
-    // store never share a number: `unique (store_id, ltrim(substring(staff_code from 4), '0'))`, an expression index hand-added in 0214.
+    // T-464 (migration 0212): the code is ALWAYS `SE-` plus 3+ digits, issued by `allocateStaffCode` (never typed), and two codes at one
+    // store never share a number: `unique (store_id, ltrim(substring(staff_code from 4), '0'))`, an expression index hand-added in 0212.
     check('employments_staff_code_shape_check', sql`${t.staffCode} ~ '^SE-[0-9]{3,}$'`),
     // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
     // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a

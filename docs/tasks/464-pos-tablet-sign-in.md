@@ -1,7 +1,7 @@
 # T-464 — POS tablet sign-in: pair once, then Employee ID + PIN
 
 > **Status:** spec APPROVED by Ian, 2026-10-22. It was approved in plan mode in the side session started from T-448, and the Employee ID was amended the same day (decision 1 below). Not built yet.
-> **Numbers (orchestrator, 2026-10-22):** migration **0214** (0212 and 0213 belong to T-398 S3/S4; whichever PR lands second renumbers, by agreement and never out of order) · bible rows **381** and **382** · port 9008 only once the orchestrator clears it, served against a throwaway `_test` DB per `docs/SMOKETEST.md`.
+> **Numbers (orchestrator, 2026-10-22):** migration **0212** (renumbered from 0214 on 2026-10-23 by the orchestrator: this PR lands before T-398 S3/S4, which move to 0213/0214) · bible rows **381** and **382** · port 9008 only once the orchestrator clears it, served against a throwaway `_test` DB per `docs/SMOKETEST.md`.
 > **Bible rows to write (planner):** **381** records Ian's four answers below. **382** records the pairing lookup joining row 194's closed auth-door caller list.
 
 ## Context
@@ -39,7 +39,7 @@ What exists today:
   - **One live pairing per store** (partial unique index on `store_id where revoked_at is null`), following row 313.
   - Pairing a new tablet revokes the old pairing and ends its sessions in one transaction. The screen warns first: "This replaces the current POS tablet 'Lipa counter'."
   - The table is classified in `cutover/classification.ts` and `rls/registry.ts`.
-  - The migration is hand-authored (ADR-012 §5) as **0214**.
+  - The migration is hand-authored (ADR-012 §5) as **0212**.
 - **On the device:** one cookie, `shareat_pos_tablet`, holding 32 random bytes (base64url). It is httpOnly, Secure, SameSite=Lax, path `/`. Nothing goes in localStorage. No org or store id reaches the browser (T-304 invariant 9).
 - **How long it lasts:** until it is un-paired.
   - The cookie's max-age is 400 days (the browser cap), refreshed on each successful sign-in.
@@ -82,12 +82,12 @@ What exists today:
 Ian: *"make sure the id is issued automatically not manually to avoid duplicate and for any live code make sure no duplicate"*.
 - **No manual codes.** `createEmployment`'s T-391 S9 `staffCode` override goes away. Its only caller was the master-data load (`scripts/lib/master-data-apply.ts`, `packages/etl/src/master-data/staff-plan.ts`), and that load now leaves codes to v2, as t391-q6 = (b) already said. Every hire gets `allocateStaffCode`.
 - **Allocator fix (DEF-725).** The allocator reads only `^SE-[0-9]+$` codes, parses the digits as numeric (no `int` overflow), and pads to 3.
-- **Database guarantee (migration 0214).**
+- **Database guarantee (migration 0212).**
   - A CHECK requires `staff_code ~ '^SE-[0-9]{3,}$'`.
   - A UNIQUE index on `(store_id, ltrim(substring(staff_code from 4), '0'))` means `SE-007` and `SE-0007` can never coexist at one store.
   - Numbers are never reused, because the allocator takes max + 1 over every employment, ended ones included.
-- **Production precheck before 0214 deploys.** Two read-only SELECTs, which the orchestrator runs: one finds non-standard codes, the other finds duplicate numbers per store. Both must return zero rows, or the migration fails loudly.
-  - **Run on production 2026-10-22 by Ian** (read-only script `C:\Users\ianla\shareat-master-data\2026-10-22\staffcodes-check.sh`). Results: employments visible **2**, non-standard codes **0**, duplicate numbers per store **0**, so 0214 applies cleanly.
+- **Production precheck before 0212 deploys.** Two read-only SELECTs, which the orchestrator runs: one finds non-standard codes, the other finds duplicate numbers per store. Both must return zero rows, or the migration fails loudly.
+  - **Run on production 2026-10-22 by Ian** (read-only script `C:\Users\ianla\shareat-master-data\2026-10-22\staffcodes-check.sh`). Results: employments visible **2**, non-standard codes **0**, duplicate numbers per store **0**, so 0212 applies cleanly.
   - ⚠️ Lipa's full roster is not loaded yet. When the T-391 staff load runs, its codes come from `allocateStaffCode`, which this task enforces.
 
 ### 4. Signing in on a paired tablet
@@ -114,7 +114,7 @@ Ian: *"make sure the id is issued automatically not manually to avoid duplicate 
   - A test proves the refusal fires for that lookup: an unknown hash, a revoked row and a stale row each resolve to nothing, and no other table is reachable through it.
   - The closed-list guard test is updated to name it.
   - Everything after runs under `withOrgPrincipal(orgId)`, as in T-304.
-- **The staff-code bucket:** `pin_attempts` gains a nullable `staff_code` key column (normalised upper-case). `Bucket` gains `{ store, staffCode }` next to `store`, `org` and `actor`. Same migration, 0214.
+- **The staff-code bucket:** `pin_attempts` gains a nullable `staff_code` key column (normalised upper-case). `Bucket` gains `{ store, staffCode }` next to `store`, `org` and `actor`. Same migration, 0212.
 
 ### 5. Not in scope
 - The unpaired screen and the T-304 Firebase terminal path. Both stay as they are.
@@ -127,7 +127,7 @@ The `packages/*` list was sent to the orchestrator because of T-398 S3 overlap.
 - **DB:**
   - New: `packages/db/schema/pos-tablet-pairings.ts`, and the `schema/index` export.
   - `packages/db/schema/pin-attempts.ts` (the `staff_code` column).
-  - `packages/db/migrations/0214_t464_pos_tablet_pairings.sql` and `_journal.json`.
+  - `packages/db/migrations/0212_t464_pos_tablet_pairings.sql` and `_journal.json`.
   - New: `packages/db/src/repo/pos-tablet-pairings.ts`.
   - `packages/db/src/repo/pin-attempts.ts` (bucket).
   - `packages/db/src/repo/employment.ts`: read-only use of the staff-code lookup, or one small store-scoped finder without the `for update` lock.
@@ -142,7 +142,7 @@ The `packages/*` list was sent to the orchestrator because of T-398 S3 overlap.
 - **Docs:** `CAPABILITY-MATRIX.md`, `GLOSSARY.md`, and the T-304 runbook step. Bible rows 381 and 382 are written by the planner.
 
 ## Slices
-1. **Pairing:** migration 0214, the table, the capability, the `/settings/pos-tablet` pair and un-pair page, the cookie, audit rows.
+1. **Pairing:** migration 0212, the table, the capability, the `/settings/pos-tablet` pair and un-pair page, the cookie, audit rows.
 2. **Tablet sign-in:** the page switch, the form, the action, `signInWithStaffCodeAndPin`, the staff-code bucket.
 3. **Gates and smoke test:** full suite on a PR of its own (it carries a migration), then a smoke test on 9008 once the orchestrator clears it.
 

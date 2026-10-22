@@ -1,5 +1,5 @@
 /**
- * T-464 (migration 0214) - which browser is the store's paired POS tablet.
+ * T-464 (migration 0212) - which browser is the store's paired POS tablet.
  * docs/tasks/464-pos-tablet-sign-in.md.
  *
  * A manager or admin pairs a tablet once. The server mints 32 random bytes, keeps only their sha256 here (`cookie_digest`), and the
@@ -38,7 +38,7 @@ export const posTabletPairings = pgTable(
   },
   (t) => [
     uniqueIndex('pos_tablet_pairings_cookie_digest_unique').on(t.cookieDigest),
-    // NOTE: partial unique index, hand-added in migration 0214 - at most one LIVE pairing per store.
+    // NOTE: partial unique index, hand-added in migration 0212 - at most one LIVE pairing per store.
     uniqueIndex('pos_tablet_pairings_live_store_unique').on(t.storeId).where(sql`${t.revokedAt} is null`),
     index('pos_tablet_pairings_org_store_idx').on(t.orgId, t.storeId),
     check('pos_tablet_pairings_label_check', sql`length(btrim(${t.label})) > 0`),
