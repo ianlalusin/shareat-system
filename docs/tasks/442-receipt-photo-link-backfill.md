@@ -1,6 +1,6 @@
 # T-442: Link the files already saved (DEF-672 backfill + census)
 
-**Status:** SPEC AUDITED 2026-10-18, WAITING ON T-441 S2; production run by Ian after that deploys.
+**Status:** 2026-10-22: S1+S2 backfill in open draft PR #43 (with part of T-441 S2), fixes pushed 22 Oct; not merged, not deployed. Production run by Ian after deploy.
 
 ## 1. The problem, measured in code (not assumed)
 

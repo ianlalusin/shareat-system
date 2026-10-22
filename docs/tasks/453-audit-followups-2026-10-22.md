@@ -1,6 +1,6 @@
 # T-453 — Audit follow-ups on the 19–21 October merges
 
-**Status:** SPEC 2026-10-22 (Opus planner). Five findings from the audit of work merged 19–21 Oct (T-390/T-440 cutover,
+**Status:** IN PROGRESS 2026-10-22 on lane/t453-audit-followups; not merged. Spec 2026-10-22 (Opus planner). Five findings from the audit of work merged 19–21 Oct (T-390/T-440 cutover,
 T-443 PR #37, T-451 PR #45, T-450 screen state, T-343 L2a). Defects DEF-727, DEF-728, DEF-729. **No migration**
 (see item 2). Build on Sonnet; each item is independent and may land as its own slice.
 
