@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1708` 13. Decision log
-- `1709–1728` 14. Amendment protocol
-- `1729–1733` 15. Engineering standards — the industry practices this project follows
-  - `1734–1739` 15.1 Build order: walking skeleton first
-  - `1740–1751` 15.2 Golden-master testing — the most important practice here
-  - `1752–1760` 15.3 Strangler Fig, not big-bang cutover
-  - `1761–1765` 15.4 No dual-write
-  - `1766–1774` 15.5 Expand/contract migrations
-  - `1775–1783` 15.6 Observability from day zero, not later
-  - `1784–1788` 15.7 CI gates
-  - `1789–1793` 15.8 Backups and a tested restore
-  - `1794–1798` 15.9 Twelve-Factor config
-  - `1799–1806` 15.10 Append-only ledgers — but not event sourcing
-  - `1807–1811` 15.11 Defence in depth
-  - `1812–1840` 15.12 Skills are lenses, not assurance
-  - `1841–1847` 15.13 Reconciliation is a permanent feature
-- `1848–1852` 16. The accounting spine
-  - `1853–1884` 16.0 What we are actually fixing — the diagnosis
-  - `1885–1928` 16.1 The ten invariants — non-negotiable
-  - `1929–1943` 16.2 The oracle: how "correct" is tested
-  - `1944–1965` 16.3 The model — header + lines, not legs
-  - `1966–1985` 16.4 Deliberately simpler than ERPNext
-  - `1986–2054` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2055–2079` 16.6 What v1 already gets right — preserve the intent
-  - `2080–2101` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2102–2116` 16.8 What v1's accounting already gets right
-  - `2117–2160` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2161–2211` 16.10 Posting patterns — one canonical pattern per business event
-  - `2212–2244` 16.11 Inventory's accounting integration
+- `1329–1711` 13. Decision log
+- `1712–1731` 14. Amendment protocol
+- `1732–1736` 15. Engineering standards — the industry practices this project follows
+  - `1737–1742` 15.1 Build order: walking skeleton first
+  - `1743–1754` 15.2 Golden-master testing — the most important practice here
+  - `1755–1763` 15.3 Strangler Fig, not big-bang cutover
+  - `1764–1768` 15.4 No dual-write
+  - `1769–1777` 15.5 Expand/contract migrations
+  - `1778–1786` 15.6 Observability from day zero, not later
+  - `1787–1791` 15.7 CI gates
+  - `1792–1796` 15.8 Backups and a tested restore
+  - `1797–1801` 15.9 Twelve-Factor config
+  - `1802–1809` 15.10 Append-only ledgers — but not event sourcing
+  - `1810–1814` 15.11 Defence in depth
+  - `1815–1843` 15.12 Skills are lenses, not assurance
+  - `1844–1850` 15.13 Reconciliation is a permanent feature
+- `1851–1855` 16. The accounting spine
+  - `1856–1887` 16.0 What we are actually fixing — the diagnosis
+  - `1888–1931` 16.1 The ten invariants — non-negotiable
+  - `1932–1946` 16.2 The oracle: how "correct" is tested
+  - `1947–1968` 16.3 The model — header + lines, not legs
+  - `1969–1988` 16.4 Deliberately simpler than ERPNext
+  - `1989–2057` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2058–2082` 16.6 What v1 already gets right — preserve the intent
+  - `2083–2104` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2105–2119` 16.8 What v1's accounting already gets right
+  - `2120–2163` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2164–2214` 16.10 Posting patterns — one canonical pattern per business event
+  - `2215–2247` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1705,6 +1705,9 @@ just a patch.**
 | 370 | 2026-10-17 | **THE COMMISSARY MAY NOT MARK A PADRE GARCIA ORDER "PAID NOW" WHEN IT SHIPS.** Each company records its own payment when money actually moves (T-398 B5 / E23: `payNow` on an inter-entity dispatch is refused) (t398-q12-pay-now a). | Ian, 2026-10-17, Open Questions page; as recommended. Recorded 2026-10-18 by the Opus planner | Yes |
 | 371 | 2026-10-17 | **STANDS ARE v1'S FIXED SET PER STORE, ONE USE AT A TIME, PICKED BY CLICK, NEVER TYPED (amends row 357).** Ian's words: "v1 has specific set of table stand and each can only be used once at a time so once a stand no is used take that out from roster of table instead of typing user must click only. no typing for pos but on notes and billing only." So: each store's stands are the set v1 already holds (v1 POS `stores/{storeId}/tables`, managed in v1's store settings); a stand in use is removed from the pick list until its order closes, so a double use cannot happen; the cashier picks a stand by tapping, and POS v2 has no free typing except in notes and billing. Replaces the option asked (refuse a typed number, plus a per-store range from Ian). Applies to T-429 (q-row357-stands, free text). | Ian, 2026-10-17, Open Questions page; recorded 2026-10-18 by the Opus planner | Yes |
 | 372 | 2026-10-17 | **A SENIOR'S OR PWD DINER'S DISCOUNTED SHARE = HER OWN PACKAGE HEAD PLUS DISHES MARKED AS HERS; SHARED DISHES GET NO DISCOUNT.** Matches DOJ Legal Opinion 45 (2024) and what T-426 is building (q-t426-senior-share a). | Ian, 2026-10-17, Open Questions page; as recommended. Recorded 2026-10-18 by the Opus planner | Yes |
+| 373 | 2026-10-21 | **STAFFING IS ROLE-FIRST: MANAGERS, ADMINS AND SUPER ADMINS ARE KNOWN BY THEIR ROLE, NOT A STAFF POSITION; ONLY STAFF HOLD (AND MUST KEEP) A PRIMARY POSITION.** Screens show an active Super admin / Admin / Manager by role; only a Staff member is titled by a primary position, never an arbitrary secondary one. A privileged-role hire needs no position, and a new job assignment for a manager, admin or super admin is refused. Existing assignments are cleared only deliberately on the employment page (never deleted automatically); a person's role, scope, manual grants and role-derived permissions are untouched. Staff cannot lose their primary position. Revoked or foreign-org roles never qualify. The lanyard ID-card design stays; only role titles change. Applied by T-451 (DEF-723); legacy holders made visible by T-453 (DEF-729). | Ian, 2026-10-21, chat during T-451 (`docs/tasks/451-staff-role-priority.md:2-5`); recorded 2026-10-22 by the Opus planner | Yes |
+| 374 | 2026-10-18 | **AN ITEM'S SIZES ARE EACH THEIR OWN ITEM, GROUPED UNDER A PARENT (T-443 R-A).** Each size (Kimchi 250g / 500g / 10kg) is a full item with its own code, stock and price history, grouped one level under a parent item; not pack sizes of one kg pool. Rejected: one item with pack-size conversions, because it cannot count "12 jars of 250g". | Ian, 2026-10-18, T-443 rulings (`docs/tasks/443-item-variations-dismiss-guards.md`, R-A); recorded 2026-10-22 by the Opus planner | Yes |
+| 375 | 2026-10-18 | **THE WHOLESALE FLAG READS "SOLD TO OTHER STORES OR BUYERS (WHOLESALE)" (T-443 R-B).** `sellable_wholesale` keeps its meaning (sold to another store, a franchisee or an outside buyer, not to a diner); only the label changes, no schema change. Rejected: splitting it into two flags, which needs a database change and touches trade orders. | Ian, 2026-10-18, T-443 rulings (`docs/tasks/443-item-variations-dismiss-guards.md`, R-B); recorded 2026-10-22 by the Opus planner | Yes |
 
 ## 14. Amendment protocol
 
