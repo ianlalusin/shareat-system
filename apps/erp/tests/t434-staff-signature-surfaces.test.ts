@@ -50,6 +50,8 @@ describe('14. the signature file id appears in no list, wall, card or export', (
   // Only these files may name the signature column / purpose / domain calls.
   const ALLOWED = [
     'apps/erp/src/app/staff/[employmentId]/page.tsx',
+    // T-441 S5: mediaFor (the detail-page loader wrapper) carries signatureFileId; still never a list/card/export
+    'apps/erp/src/app/staff/lib.ts',
     'apps/erp/src/app/staff/actions.ts',
     'apps/erp/src/components/SignaturePad.tsx',
     'apps/erp/src/components/signature-pad-export.ts',
@@ -74,13 +76,14 @@ describe('14. the signature file id appears in no list, wall, card or export', (
   });
 });
 
-describe('screens: only the detail page offers the signature, as a per-click link', () => {
+describe('screens: only the detail page offers the signature, as a tile that opens the audited lightbox', () => {
   const page = 'apps/erp/src/app/staff/[employmentId]/page.tsx';
-  it('shows "Signature on file" text and never an inline signature image or id', () => {
+  it('shows the "Signature on file" tile (in the pad) and never an inline signature image', () => {
     const src = read(page);
-    expect(src).toContain('Signature on file');
-    expect(src).not.toMatch(/signatureFileId|signature_file_id/);
-    expect(src).not.toMatch(/<img[^>]*signature/i);
+    // T-441 S5: the tile text now lives in SignaturePad; the page only passes the id the loader allowed (row 353), never an <img>.
+    expect(read('apps/erp/src/components/SignaturePad.tsx')).toContain('Signature on file');
+    expect(src).not.toMatch(/signature_file_id/);
+    expect(src).not.toMatch(/<img/i);
   });
   it('photo input asks for the front camera and image files only', async () => {
     const src = read(page);

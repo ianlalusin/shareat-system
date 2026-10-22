@@ -12,7 +12,6 @@ import {
   setPositionsAction,
   setStaffPhotoAction,
   setStaffSignatureAction,
-  viewStaffSignatureAction,
 } from '../actions';
 import { employmentDetail, governmentIdsFor, livePinFor, mediaFor, otherOpenBranchesFor, positionsForStore } from '../lib';
 import { PhotoUpload } from '@/components/upload/PhotoUpload';
@@ -306,21 +305,23 @@ export default async function EmploymentDetailPage({
         </div>
         <div className="space-y-2 text-sm">
           <h3 className="font-medium">Signature</h3>
-          {media.hasSignature ? (
-            <p>Signature on file.</p>
+          {!media.hasSignature && <p className="text-neutral-500 dark:text-neutral-400">No signature on file.</p>}
+          {media.hasSignature && !media.signatureFileId && <p>Signature on file.</p>}
+          {!isEnded ? (
+            <SignaturePad
+              personId={detail.employment.personId}
+              employmentId={employmentId}
+              action={setStaffSignatureAction}
+              signatureFileId={media.signatureFileId}
+            />
           ) : (
-            <p className="text-neutral-500 dark:text-neutral-400">No signature on file.</p>
-          )}
-          {media.hasSignature && media.canViewSignature && (
-            <form action={viewStaffSignatureAction}>
-              <input type="hidden" name="employmentId" value={employmentId} />
-              <input type="hidden" name="personId" value={detail.employment.personId} />
-              <Button type="submit">View signature</Button>
-              <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">Each view is recorded. The link lasts one minute.</span>
-            </form>
-          )}
-          {!isEnded && (
-            <SignaturePad personId={detail.employment.personId} employmentId={employmentId} action={setStaffSignatureAction} />
+            <SignaturePad
+              personId={detail.employment.personId}
+              employmentId={employmentId}
+              action={setStaffSignatureAction}
+              signatureFileId={media.signatureFileId}
+              readOnly
+            />
           )}
           {!isEnded && media.hasSignature && (
             <form action={removeStaffSignatureAction}>

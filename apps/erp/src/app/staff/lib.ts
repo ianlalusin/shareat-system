@@ -187,10 +187,10 @@ function groupPositions(rows: EmploymentPositionRow[]): Map<string, PositionAssi
 export async function mediaFor(
   actor: Actor,
   employmentId: string,
-): Promise<{ hasSignature: boolean; canViewSignature: boolean; photoFileId: string | null }> {
+): Promise<{ hasSignature: boolean; canViewSignature: boolean; signatureFileId: string | null; photoFileId: string | null }> {
   try {
     return await withOrgPrincipal(actor.orgId, (tx) => staffMediaView(tx, actor, { employmentId }));
   } catch {
-    return { hasSignature: false, canViewSignature: false, photoFileId: null };
+    return { hasSignature: false, canViewSignature: false, signatureFileId: null, photoFileId: null };
   }
 }

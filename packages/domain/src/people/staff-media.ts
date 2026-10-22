@@ -9,7 +9,8 @@
  *
  * ## Who can SEE
  * Photo: `enrol_staff` at the file's store (the shared file rule, unchanged). Signature: only `files/signature.ts` decides - a separate,
- * narrower rule, audited per view. Nothing here returns a signature file id: callers learn `hasSignature` and `canViewSignature`.
+ * narrower rule, audited per view. The detail-page loader `staffMediaView` returns `signatureFileId` ONLY when `canViewSignature` is true (T-441 S5; the shared
+ * Lightbox opens it through the audited `/files/{id}` route, one audit row per open). No list, card or export loader ever returns it.
  *
  * ## Input is bytes, never a data URL
  * The signature arrives as PNG bytes (multipart, via the broker). A `data:` string is refused wherever it appears.
@@ -17,7 +18,7 @@
 import { authorize, can, AuthorizationError, type Actor } from '@shareat/auth';
 import { accessRepo, auditLogRepo, employmentRepo, filesRepo, personsRepo, refuse, type Tx } from '@shareat/db';
 import { claimUpload, uploadFile } from '../files';
-import { assertMayLearnSignatureAbsent, auditSignatureChange, mayViewSignature, signatureBytes, signatureUrl } from '../files/signature';
+import { assertMayLearnSignatureAbsent, auditSignatureChange, mayViewSignature, signatureBytes } from '../files/signature';
 
 const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
@@ -159,26 +160,21 @@ async function currentSignatureFile(tx: Tx, actor: Actor, personId: string, via:
   return file;
 }
 
-/** A 60 s link for the "View signature" click on the staff detail page. Gated, audited (viewed / view_refused). */
-export async function viewStaffSignatureUrl(tx: Tx, actor: Actor, input: { personId: string }): Promise<{ url: string; contentType: string }> {
-  return signatureUrl(tx, actor, await currentSignatureFile(tx, actor, input.personId, 'screen'));
-}
-
 /** For print routes (payslip, cash advance form, ID card): the image BYTES, server-side only, gated and audited like a view. Never a URL. */
 export async function signatureForPrint(tx: Tx, actor: Actor, input: { personId: string }): Promise<{ bytes: Uint8Array; contentType: string }> {
   return signatureBytes(tx, actor, await currentSignatureFile(tx, actor, input.personId, 'print'));
 }
 
 /**
- * The staff detail page's media loader. ⭐ Returns booleans for the signature, never its id, and the photo id only to a viewer who
- * holds `enrol_staff` at that store. The viewer must have store scope at the employment's store (else the same refusal as a
+ * The staff detail page's media loader. ⭐ Returns the signature file id ONLY to a viewer who may open it (`canViewSignature`), else null, and the photo id only to a
+ * viewer who holds `enrol_staff` at that store. The viewer must have store scope at the employment's store (else the same refusal as a
  * forged id).
  */
 export async function staffMediaView(
   tx: Tx,
   actor: Actor,
   input: { employmentId: string },
-): Promise<{ hasSignature: boolean; canViewSignature: boolean; photoFileId: string | null }> {
+): Promise<{ hasSignature: boolean; canViewSignature: boolean; signatureFileId: string | null; photoFileId: string | null }> {
   const emp = await employmentRepo.getEmployment(tx, input.employmentId);
   if (!emp || emp.orgId !== actor.orgId || !(await accessRepo.personHasStoreScope(tx, actor.personId, emp.storeId))) {
     throw refuse('staff media: not visible', 'That employment does not exist.');
@@ -188,9 +184,11 @@ export async function staffMediaView(
 
   const sigId = await personsRepo.getSignatureFileId(tx, actor.orgId, emp.personId);
   const file = sigId ? await filesRepo.getById(tx, actor.orgId, sigId) : undefined;
+  const canViewSignature = file !== undefined && (await mayViewSignature(tx, actor, file));
   return {
     hasSignature: file !== undefined,
-    canViewSignature: file !== undefined && (await mayViewSignature(tx, actor, file)),
+    canViewSignature,
+    signatureFileId: canViewSignature && file ? file.id : null,
     photoFileId,
   };
 }
