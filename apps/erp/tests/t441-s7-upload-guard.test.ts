@@ -58,18 +58,21 @@ export function filesImgViolations(files: Source[]): string[] {
 }
 
 /**
- * Rule 4: a server-action file ('use server' at the top) that reads formData.get(...) as a File must also go through
- * resolveUploadedFile, filePart, or the domain { contentType, bytes } path.
+ * Rule 4: a server-action file ('use server' at the top) that reads a posted File (formData.get(...) narrowed with
+ * instanceof File / as File, or any .arrayBuffer() call) must CALL resolveUploadedFile(, filePart( or pass a
+ * { contentType, bytes } object literal into a call. A bare mention of the helper name does not count.
  */
 export function unguardedServerFileReadViolations(files: Source[]): string[] {
   return files
     .filter((f) => /^\s*['"]use server['"]/.test(f.text))
-    .filter((f) => /formData\.get\(/.test(f.text))
-    .filter((f) => /instanceof\s+File\b|\bas\s+File\b/.test(f.text))
+    .filter((f) => {
+      const readsFile =
+        (/formData\.get\(/.test(f.text) && /instanceof\s+File\b|\bas\s+File\b/.test(f.text)) || /\.arrayBuffer\(\)/.test(f.text);
+      return readsFile;
+    })
     .filter((f) => {
       const guarded =
-        /\bresolveUploadedFile\b|\bfilePart\b/.test(f.text) ||
-        (/\bcontentType\s*:/.test(f.text) && /\bbytes\s*:/.test(f.text));
+        /\b(filePart|resolveUploadedFile)\s*\(/.test(f.text) || /\{[^{}]*\bcontentType\s*[:,][^{}]*\bbytes\b[^{}]*\}/.test(f.text);
       return !guarded;
     })
     .map((f) => f.path);
@@ -133,5 +136,12 @@ describe('each rule goes red on a planted violation (in memory, no files on disk
     const viaDomain = bare.replace('await store(f);', 'await save2({ contentType: f.type, bytes: new Uint8Array() });');
     expect(unguardedServerFileReadViolations([page(viaDomain)])).toEqual([]);
     expect(unguardedServerFileReadViolations([page(bare.replace("'use server';", "// not an action"))])).toEqual([]);
+  });
+
+  it('rule 4 reports a File read that only mentions filePart in a comment, and an arrayBuffer read with no safe path', () => {
+    const commentOnly = "'use server';\nexport async function save(formData: FormData) {\n  // filePart is the helper we should use\n  const f = formData.get('x');\n  if (f instanceof File) await store(f);\n}\n";
+    expect(unguardedServerFileReadViolations([page(commentOnly)])).toEqual(['apps/erp/src/app/demo/page.tsx']);
+    const buffer = "'use server';\nexport async function up(formData: FormData) {\n  const f = formData.get('x') as Blob;\n  const buf = await f.arrayBuffer();\n  await store(buf);\n}\n";
+    expect(unguardedServerFileReadViolations([page(buffer)])).toEqual(['apps/erp/src/app/demo/page.tsx']);
   });
 });
