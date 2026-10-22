@@ -19,6 +19,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import * as exemptions from '../../src/rls/same-org-fk-exemptions';
 import {
   CROSS_ORG_BY_DESIGN,
   JSONB_REFERENCES,
@@ -51,11 +52,15 @@ afterAll(async () => {
 const sha = (lines: readonly string[]) => createHash('sha256').update([...lines].sort().join('\n')).digest('hex');
 
 /**
+ * T-398 S4 (D3, 0213): OPEN_DEF_491 is EMPTY after S4 -- 82 = 55 triggered (assert_same_org_via_parent) + 27 whose FK is the
+ * table's own RLS via header (guarded by construction, pinned in VIA_HEADER_GUARDED). The S3 pin was 82 / 2df148cd...
+ * (the old comment below describes the post-S3 state).
+ *
  * OPEN_DEF_491 as it must stand AFTER S3 (T-398 S3 / D2): the 141 org->org gaps are closed by 0212,
  * leaving the 82 derived-scope entries (77 derived->org, 3 org->derived, 2 derived->derived) that S4 closes.
  * S1's pin was 223 / 341d656a...; the S3 tester lowered it (the ratchet only goes down).
  */
-const OPEN_BASELINE = { count: 82, sha256: '2df148cd2e5e0757ca384cb3c9cc5522cf138f67179f5c30787ba40f584782cf' } as const;
+const OPEN_BASELINE = { count: 0, sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' } as const;
 /** Planner-ruled permanent exceptions. Empty until S5 adds the inter-entity links. */
 const BY_DESIGN_PIN: readonly string[] = [];
 const ORG_LESS_PIN: readonly string[] = ['etl_quarantine', 'etl_reconciliation', 'etl_runs', 'etl_source_documents'];
@@ -148,8 +153,13 @@ interface Verdict {
 }
 const RULING_RE = /^(T-\d+ (R|A|S)\d+|bible row \d+)/;
 
+/** S4 (D3): FKs that ARE their table's RLS via header are guarded by construction; the list is pinned in the S4 test. */
+const VIA_GUARDED = new Set(
+  (((exemptions as Record<string, unknown>).VIA_HEADER_GUARDED as readonly (string | { fk: string })[] | undefined) ?? []).map((e) => (typeof e === 'string' ? e : e.fk)),
+);
+
 function isGuarded(r: FkRow): boolean {
-  return r.kind === 'org->org' ? r.hasTwin : r.hasTrigger;
+  return r.kind === 'org->org' ? r.hasTwin : r.hasTrigger || VIA_GUARDED.has(keyOf(r));
 }
 
 function census(fks: readonly FkRow[], lists: Lists): Verdict {

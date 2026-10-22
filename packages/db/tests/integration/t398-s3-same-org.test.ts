@@ -27,6 +27,7 @@ import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 
+import * as exemptions from '../../src/rls/same-org-fk-exemptions';
 import { NO_FK_REFERENCES, OPEN_DEF_491 } from '../../src/rls/same-org-fk-exemptions';
 import { APP_ROLE } from '../../src/rls/registry';
 import { buildScratchAtHead, dropDb, insertOrg, insertSynth, isNullable, orgIdUniqueCounts, readRefGaps, readScope, type ScopeFk } from './t398-s3-fixture';
@@ -113,10 +114,18 @@ describe('K1 -- every org->org FK in scope has a composite (org_id, col) -> pare
   });
 });
 
-describe('K1b -- the exemptions file after S3 (D2): OPEN 82, NO_FK 24, no ref-gap left, batch_id reclassified', () => {
-  it('RED until the builder deletes the 141 org->org entries: OPEN_DEF_491 has 82 entries and none is org->org', () => {
-    expect(OPEN_DEF_491.length, `OPEN_DEF_491 has ${OPEN_DEF_491.length} entries; S3 leaves 82 (77 derived->org + 3 org->derived + 2 derived->derived)`).toBe(82);
-    expect(OPEN_DEF_491.filter((e) => e.kind === 'org->org').length).toBe(0);
+describe('K1b -- the exemptions file after S3 (D2): no org->org left open, NO_FK 24, no ref-gap left, batch_id reclassified', () => {
+  // Not a count: S4 (0213) moves the 27 via-header FKs to VIA_HEADER_GUARDED and triggers the other 55, so OPEN_DEF_491 is now empty.
+  // What S3 guarantees is that no org->org FK sits in either list.
+  it('no S3-scope org->org FK is still listed in OPEN_DEF_491 or VIA_HEADER_GUARDED, and no OPEN entry is kind org->org', () => {
+    const s3 = new Set(catalogScope.map((e) => `${e.child}.${e.col}->${e.parent}`));
+    const viaList = ((exemptions as Record<string, unknown>).VIA_HEADER_GUARDED as readonly string[] | undefined) ?? [];
+    const orgOrgKind = OPEN_DEF_491.filter((e) => e.kind === 'org->org').map((e) => e.fk);
+    const s3InOpen = OPEN_DEF_491.map((e) => e.fk).filter((k) => s3.has(k));
+    const s3InVia = viaList.filter((k) => s3.has(k));
+    expect(orgOrgKind, 'OPEN_DEF_491 entries of kind org->org').toEqual([]);
+    expect(s3InOpen, 'S3-scope org->org FKs still in OPEN_DEF_491').toEqual([]);
+    expect(s3InVia, 'S3-scope org->org FKs in VIA_HEADER_GUARDED').toEqual([]);
   });
   it('RED until the builder edits NO_FK_REFERENCES: 24 entries, no ref-gap kind remains', () => {
     expect(NO_FK_REFERENCES.length, `NO_FK_REFERENCES has ${NO_FK_REFERENCES.length} entries; S3 leaves 24`).toBe(24);
