@@ -1,6 +1,6 @@
 # T-440: Live field checks on every form field with a rule
 
-**Status:** BUILT, NOT RELEASED 2026-10-18 for S1+S2 (mechanism, pilots, coverage guard); IN PROGRESS S3-S7 on branch lane/t440-sweep (~384 fields converted, 2 failing tests, not merged); S9 auth-first SPEC AUDITED.
+**Status:** COMPLETE 2026-10-22: S1-S9 (field rules, auth-first, applies-when) merged to main in PR #40 (19 Oct). Deploy of PR #40 not recorded in docs; follow-ups in T-453.
 **Ruling:** bible row 363 (Ian, 2026-10-17). Also row 7 / §2.6 (no client-only rules), row 289 (locked records, Edit
 unlocks, an add form ends in Save), row 171 / §1.2c (one family of patterns, familiar but upgraded), T-389 (a refused
 save keeps typing), T-343 (`refuse()` / `userMessage`).

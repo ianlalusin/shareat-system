@@ -1,6 +1,6 @@
 # T-450 — ERP tables become phone cards
 
-Status: shared defaults built; Ian requested another visual correction and return-state preservation on 2026-10-21. Release pending.
+Status: MERGED 2026-10-21 (PR #42). Deploy not recorded in docs.
 Ian approved 2026-10-21; cards below 768px, tablets retain tables.
 
 ## Goal

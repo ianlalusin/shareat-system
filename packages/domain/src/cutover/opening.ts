@@ -40,7 +40,7 @@ export interface OpeningFigureInput {
   accountCode: string;
   storeId: string;
   /** `debit` for what the business HAS, `credit` for what it OWES. */
-  direction: 'debit' | 'credit';
+  direction: string;
   amount: string;
   /** Required on the control accounts, forbidden elsewhere — the database enforces which. */
   partyType?: string | null;
@@ -71,6 +71,8 @@ export async function addOpeningFigure(
       direction: input.direction,
       amount: input.amount,
     });
+    // The rule above admits only these two, so the narrowing is safe (DEF-727).
+    const direction = input.direction.trim() as 'debit' | 'credit';
     // T-390 R13 + R8: the shared opening lock first, then the purge must have run and the books must not be open yet.
     await assertOpeningWritable(trx, actor.orgId, { requirePurge: true });
 
@@ -143,7 +145,7 @@ export async function addOpeningFigure(
     const real = {
       accountCode: input.accountCode,
       storeId: input.storeId,
-      ...(input.direction === 'debit' ? { debit: amountStr } : { credit: amountStr }),
+      ...(direction === 'debit' ? { debit: amountStr } : { credit: amountStr }),
       ...(input.partyId ? { partyType: input.partyType ?? null, partyId: input.partyId } : {}),
       lineMemo: memo,
     };
@@ -151,7 +153,7 @@ export async function addOpeningFigure(
     const equity = {
       accountCode: OPENING_EQUITY_CODE,
       storeId: input.storeId,
-      ...(input.direction === 'debit' ? { credit: amountStr } : { debit: amountStr }),
+      ...(direction === 'debit' ? { credit: amountStr } : { debit: amountStr }),
       lineMemo: memo,
     };
 

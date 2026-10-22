@@ -72,3 +72,39 @@ describe('T450 return to the same screen presentation', () => {
     expect(late.querySelector('[data-card-expanded]')).not.toBeNull();
   });
 });
+
+describe('T-453 T8 scroll writes are throttled', () => {
+  const setItems = (spy: { mock: { calls: unknown[][] } }) => spy.mock.calls.filter(c => c[0] === 'erp-screen:thr');
+  const storedY = () => JSON.parse(sessionStorage.getItem('erp-screen:thr')!)['/items'].y;
+  function scrolling() {
+    vi.useFakeTimers();
+    history.replaceState(null, '', '/items'); const root = mount();
+    let y = 0; vi.spyOn(window, 'scrollY', 'get').mockImplementation(() => y);
+    const setItem = vi.spyOn(root.ownerDocument.defaultView!.sessionStorage, 'setItem');
+    const stop = rememberScreen(root, 'thr'); stops.push(stop);
+    const scrollTo = (v: number) => { y = v; window.dispatchEvent(new Event('scroll')); };
+    return { stop, setItem, scrollTo };
+  }
+  afterEach(() => { vi.useRealTimers(); });
+  it('50 scroll events write at most once before the timer fires, then the LAST position is stored', () => {
+    const { setItem, scrollTo } = scrolling();
+    for (let i = 1; i <= 50; i++) scrollTo(i * 10);
+    expect(setItems(setItem).length).toBeLessThanOrEqual(1);
+    vi.advanceTimersByTime(400);
+    expect(setItems(setItem).length).toBeLessThanOrEqual(2);
+    expect(storedY()).toBe(500);
+  });
+  it('cleanup in the middle of the window stores the last position', () => {
+    const { stop, scrollTo } = scrolling();
+    scrollTo(100); scrollTo(900);
+    stop();
+    expect(storedY()).toBe(900);
+  });
+  it('after cleanup the pending timer writes nothing more', () => {
+    const { stop, setItem, scrollTo } = scrolling();
+    scrollTo(300); stop();
+    const before = setItems(setItem).length;
+    vi.advanceTimersByTime(1000);
+    expect(setItems(setItem).length).toBe(before);
+  });
+});

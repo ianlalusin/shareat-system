@@ -1,5 +1,5 @@
 # T-452 — shared two-column card forms with aligned controls
-Status: built locally 21 October; final production build passed, preview restarted on 9008; Ian visually approved 21 October; full PR CI pending.
+Status: MERGED 2026-10-21 (PR #45, with T-451). Deploy not recorded in docs.
 Goal: government numbers and other cramped record cards use two columns when their container fits, one on phones.
 AST sweep found 57 FormGrid groups in bordered sections outside EditableRecord; record their inventory in
 docs/discovery/card-form-inventory.json. Shared form containment applies pairs at widths up to 42rem,

@@ -101,6 +101,10 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('change_item_base_unit', 'stock', 'normal', 'org', 'items', 'T-391'),
   def('set_item_purchase_unit', 'stock', 'normal', 'org', 'items', 'T-391'),
   def('rename_item', 'stock', 'normal', 'org', 'items', 'T-391'),
+  // T-453 (DEF-728): the three T-443 catalogue writes that were unaudited.
+  def('item.variant_set', 'stock', 'normal', 'org', 'items', 'T-453'),
+  def('item_duplicate.dismissed', 'stock', 'normal', 'org', 'item_duplicate_dismissals', 'T-453'),
+  def('item_duplicate.dismissal_undone', 'stock', 'normal', 'org', 'item_duplicate_dismissals', 'T-453'),
   def('retire_item', 'stock', 'normal', 'org', 'items', 'T-383'),
   def('restore_item', 'stock', 'normal', 'org', 'items', 'T-383'),
   // One-time T-386 S5 recode script (removed): old rows carry it (0197's list); reserved so nothing new writes it.
