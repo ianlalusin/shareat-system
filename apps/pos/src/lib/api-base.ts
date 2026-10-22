@@ -1,4 +1,6 @@
 "use client";
+import { emulatorProfile } from '../../config/emulator-profile.mjs';
+const emulator = emulatorProfile(process.env.NEXT_PUBLIC_POS_EMULATOR_MODE, process.env.NEXT_PUBLIC_POS_EMULATOR_HOST);
 
 /**
  * Base URL for the server API.
@@ -9,13 +11,13 @@
  *   (loyalty, PINs, AI insights, admin tools). The offline cashier core uses the
  *   client Firestore SDK directly and needs none of these.
  */
-export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
+export const API_BASE = emulator?.apiBase ?? process.env.NEXT_PUBLIC_API_BASE ?? "";
 
 /**
  * T-424 Ruling 1: the POS v2 server (refunds, tender corrections, session voids, analytics port). Only "/api/pos2/..." calls go here; every
  * other "/api/..." call keeps API_BASE (v1's server). Defaults to https://pos2.shareat.net.
  */
-export const POS2_API_BASE = process.env.NEXT_PUBLIC_POS2_API_BASE || "https://pos2.shareat.net";
+export const POS2_API_BASE = emulator?.apiBase ?? (process.env.NEXT_PUBLIC_POS2_API_BASE || "https://pos2.shareat.net");
 
 const POS2_PREFIX = "/api/pos2/";
 

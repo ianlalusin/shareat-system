@@ -16,6 +16,7 @@ assetsMissingCapitalisation
 branchOrderDetail
 buildCoverageReport
 byMethodOf
+calculateBillTotalsCentavosT423
 cancelScheduledDepletionRule
 canonicalAnalytics
 capitalizeFromExpense
@@ -23,7 +24,6 @@ cashPayment
 catalogueProblems
 checkValuesMatch
 childLogger
-clearQueue
 closeAsLateReceipt
 closeYear
 collectActorUids
@@ -45,12 +45,14 @@ editPostedProductionAction
 elevateManager
 endShift
 expectedAccumulated
+fakeLocks
 fetchApplicableGlobalCharges
 fetchApplicableGlobalDiscounts
 findCurrentDocument
 findLiveOfKind
 findPostedSettlementForChannelDay
 firebaseFirestoreModule
+fixedPromo
 flushSecurityEvents
 formatConversionSummary
 formatCoverageReport
@@ -70,6 +72,7 @@ hasUnroutedFloatsForStore
 initiateAnonymousSignIn
 initiateEmailSignIn
 initiateEmailSignUp
+installFakeClock
 isConvertibleUnit
 isHeaderCode
 isRewardAllowedAtStore
@@ -89,6 +92,7 @@ listPayRates
 listPunchesForDay
 listRoster
 listWriteOffsForCharge
+loadMod
 makeDeps
 markReviewed
 memoryLocalStorage
@@ -96,7 +100,9 @@ middleware
 mintUniqueToken
 nameMatches
 newCorrelationId
+oldWholeBillSeniorDiscount
 openFloatsForStore
+oracleStat
 partitionVisibleRefills
 pendingItemRequests
 periodForDate
@@ -134,10 +140,12 @@ roundMoney
 runAnalyze
 runCapture
 runLoad
+saleOps
 sampleCandidates
 seedCanonicalPositions
 seedRefundRecord
 seedSale
+seedServerSession
 seedSession
 seedStaff
 seedStore
@@ -177,7 +185,9 @@ useFirestore
 useMemoFirebase
 useUser
 validateFingerprintTemplates
+voidOps
 voidPaymentConversionServer
 voidShift
 withPrincipal
+workedCase
 writtenReceipt

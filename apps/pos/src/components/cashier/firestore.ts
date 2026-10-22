@@ -49,12 +49,18 @@ import type {
 } from '@/lib/types';
 
 import { stripUndefined } from '@/lib/firebase/utils';
+import { statutoryInputOf, receiptStatutoryDiners } from '@/lib/statutory/session';
+import { maskDinersForClosedSession, statutoryPaymentBlockers } from '@/lib/statutory/capture';
+import { assertStatutoryPaymentReady } from '@/lib/statutory/payment';
+import { assertBillDiscountAllowed } from './statutory-presets';
 import { printKitchenTicketBackup } from '@/lib/printing/kitchenBackupPrint';
 import { makeKitchenBackupDeps } from '@/lib/printing/kitchenBackupDeps';
 import { roundHalfUp, storedPesosToCentavos, toWirePesos } from '@/lib/money/centavos';
-import { formatTerminalReceiptNumber, reserveNext } from '@/lib/terminal/counter';
 import { buildOfflinePaymentSummary } from '@/lib/offline/offlinePaymentSummary';
-import { addToQueue, getQueue } from '@/lib/offline/payment-queue';
+import { markAcknowledged, markSkipped, reserveOnlineEvent } from '@/lib/outbox/ledger';
+import { computeLinesHash } from '@/lib/outbox/linesHash';
+import { getConnectivityStore } from '@/hooks/useConnectivity';
+import { notifyOutboxChanged } from '@/lib/outbox/outboxStatus';
 import { computeSessionLabel } from '@/lib/utils/session';
 import { writeActivityLog } from '@/components/cashier/activity-log';
 import { commitLocalFirst } from '@/lib/offline/commit';
@@ -115,6 +121,7 @@ export async function getCurrentSessionBillingState(storeId: string, sessionId: 
   if (!sessionData) throw new Error(`Session ${sessionId} does not exist.`);
   return {
     billingRevision: Number((sessionData as any).billingRevision ?? 0),
+    session: sessionData,
     billDiscount: ((sessionData as any).billDiscount ?? null) as Discount | null,
     customAdjustments: Array.isArray((sessionData as any).customAdjustments)
       ? ((sessionData as any).customAdjustments as Adjustment[])
@@ -343,9 +350,9 @@ export async function startSession(storeId: string, payload: StartSessionPayload
 
   // Fire-and-forget backup print to the shared kitchen Bluetooth printer.
   // startSession has no React `isOnline` (it's a plain data-layer function),
-  // so it gates directly on navigator.onLine. Never awaited into the order
+  // so it asks the connectivity store (a probe of the POS server, T-425). Never awaited into the order
   // flow; any dep (or the kitchenLocations fetch) throwing is swallowed.
-  if (typeof navigator !== 'undefined' && !navigator.onLine && packageTicketPayload) {
+  if (!getConnectivityStore().getState().online && packageTicketPayload) {
     const ticketToPrint = packageTicketPayload;
     void (async () => {
       const klSnap = await getDocs(collection(db, 'stores', storeId, 'kitchenLocations'));
@@ -423,8 +430,11 @@ export async function completePaymentFromUnits(
 
   const billingState = await getCurrentSessionBillingState(storeId, sessionId);
   const { billLines, billDiscount, customAdjustments, loyaltyRedemptions } = billingState;
+  assertBillDiscountAllowed(billDiscount);
+  await assertStatutoryPaymentReady({ storeId, session: billingState.session, lines: billLines, loyalty: loyaltyRedemptions });
+  const statutory = statutoryInputOf(billingState.session);
   const loyaltyDiscountInput = (loyaltyRedemptions || []).map((r) => ({ type: r.type, value: r.value }));
-  const finalTotals = calculateBillTotals(billLines, store, billDiscount, customAdjustments, loyaltyDiscountInput);
+  const finalTotals = calculateBillTotals(billLines, store, billDiscount, customAdjustments, loyaltyDiscountInput, statutory);
   const amountDue = finalTotals.grandTotal;
   const amountDueCents = storedPesosToCentavos(amountDue);
   if (typeof expectedTotal === "number" && Math.abs(storedPesosToCentavos(expectedTotal) - amountDueCents) > 1) {
@@ -446,9 +456,27 @@ export async function completePaymentFromUnits(
 
   // T-423: ONE receipt number per payment from this tablet's own series, reserved BEFORE (and outside) the transaction
   // callback so a Firestore retry reuses it. A crash can skip a number, never reuse one. Refuses with no terminal claim.
-  const reserved = await reserveNext();
-  const receiptNumber = formatTerminalReceiptNumber(store.code, reserved.terminalNo, reserved.terminalSeq);
+  // T-425: through the sale ledger, so every number is explained: `reserved` now, `acknowledged` when the transaction committed, `skipped` when it
+  // failed for good (no money). A crash in between leaves `reserved`, which reconcile resolves by reading the server.
+  const ledgerEvent = await reserveOnlineEvent({
+    kind: 'sale',
+    storeCode: store.code,
+    receiptId: sessionId,
+    totalCentavos: amountDueCents,
+    linesHash: computeLinesHash(billLines as unknown[]),
+    tenders: payments.map((p) => ({
+      method: paymentMethods.find((m) => m.id === p.methodId)?.name || p.methodId || 'unknown',
+      centavos: storedPesosToCentavos(p.amount),
+      toCheck: false,
+      reference: typeof p.reference === 'string' && p.reference.trim() !== '' ? p.reference.trim() : null,
+    })),
+    createdAtClientMs: now,
+  });
+  notifyOutboxChanged();
+  const reserved = { terminalNo: ledgerEvent.terminalNo, terminalSeq: ledgerEvent.terminalSeq, deviceId: ledgerEvent.deviceId };
+  const receiptNumber = ledgerEvent.receiptNumber;
 
+  try {
   await runTransaction(db, async (tx: Transaction) => {
     // --- READ PHASE ---
     const sessionRef = doc(db, `stores/${storeId}/sessions`, sessionId);
@@ -474,6 +502,12 @@ export async function completePaymentFromUnits(
     const currentBillingRevision = Number((sessionData as any).billingRevision ?? 0);
     if (currentBillingRevision !== billingState.billingRevision) {
       throw new Error("Bill changed during payment. Review the bill and try again.");
+    }
+    const currentStatutory = statutoryInputOf(sessionData);
+    if (JSON.stringify(currentStatutory) !== JSON.stringify(statutory)) throw new Error('Bill changed during payment. Review the bill and try again.');
+    if (currentStatutory) {
+      const blocked = statutoryPaymentBlockers({ ...currentStatutory, lines: billLines, loyaltyRedemptions });
+      if (blocked[0]) throw new Error(blocked[0].message);
     }
 
     sessionContextForLog = {
@@ -572,6 +606,7 @@ export async function completePaymentFromUnits(
     // close session
     tx.update(sessionRef, {
       status: 'closed',
+      ...(statutory ? { statutoryDiners: maskDinersForClosedSession(statutory.diners) } : {}),
       isPaid: true,
       closedByUid: actor.uid,
       closedByUsername: actor.username,
@@ -586,6 +621,7 @@ export async function completePaymentFromUnits(
       const projectionData = activeProjectionSnap.data();
       tx.set(closedProjectionRef, {
         ...projectionData,
+        ...(statutory ? { statutoryDiners: maskDinersForClosedSession(statutory.diners) } : {}),
         status: 'closed',
         customerAccessEnabled: false,
         updatedAt: serverTimestamp(),
@@ -596,6 +632,7 @@ export async function completePaymentFromUnits(
     } else {
         tx.set(closedProjectionRef, {
             ...sessionData,
+            ...(statutory ? { statutoryDiners: maskDinersForClosedSession(statutory.diners) } : {}),
             status: 'closed',
             customerAccessEnabled: false,
             updatedAt: serverTimestamp(),
@@ -622,6 +659,7 @@ export async function completePaymentFromUnits(
       terminalNo: reserved.terminalNo, terminalSeq: reserved.terminalSeq, deviceId: reserved.deviceId,
       createdAtClientMs: Date.now(), lines: billLines, billDiscount: billDiscount ?? null, customAdjustments: customAdjustments ?? [], receiptId: sessionId,
       loyaltyRedemptions: loyaltyRedemptions ?? [],
+      ...(statutory ? { statutoryDiners: receiptStatutoryDiners(statutory, finalTotals) } : {}),
     } as Omit<Receipt, 'createdAt'>);
 
     const salesAnalytics = billLines.reduce(
@@ -691,6 +729,7 @@ export async function completePaymentFromUnits(
       subtotal: finalTotals.subtotal, discountsTotal: finalTotals.totalDiscounts, chargesTotal: finalTotals.chargesTotal,
       taxAmount: finalTotals.taxTotal, vatableSales: finalTotals.vatableSales, vatExemptSales: finalTotals.vatExemptSales,
       grandTotal: finalTotals.grandTotal, totalPaid, change, mop: mopMap,
+      statutoryDiscountTotal: finalTotals.statutoryDiscountTotal, statutoryVatRemovedTotal: finalTotals.statutoryVatRemovedTotal,
       salesByItem: salesAnalytics.salesByItem, salesByCategory: salesAnalytics.salesByCategory,
       servedRefillsByName: sessionData.servedRefillsByName || {},
       serveCountByType: sessionData.serveCountByType || {},
@@ -725,6 +764,20 @@ export async function completePaymentFromUnits(
       }
     }
   });
+  } catch (txErr) {
+    // A definite failure: this number carries no money. A network failure is AMBIGUOUS (the commit may have landed): leave it `reserved`
+    // and reconcile reads the server to decide.
+    const code = String((txErr as { code?: unknown } | null)?.code ?? '');
+    if (!['unavailable', 'deadline-exceeded', 'cancelled', 'unknown'].includes(code)) {
+      await markSkipped(ledgerEvent.deviceId, ledgerEvent.terminalSeq, txErr instanceof Error ? txErr.message : String(txErr)).catch(() => {});
+      notifyOutboxChanged();
+    }
+    throw txErr;
+  }
+  // The callback wrote a receipt only when it did not return early (already paid / already applied).
+  if (finalReceipt) await markAcknowledged(ledgerEvent.deviceId, ledgerEvent.terminalSeq).catch((e) => console.error('[ledger] could not acknowledge the sale', e));
+  else await markSkipped(ledgerEvent.deviceId, ledgerEvent.terminalSeq, 'This session was already paid.').catch(() => {});
+  notifyOutboxChanged();
 
   if (rtKdsUpdates.length > 0) {
     try {
@@ -1157,7 +1210,7 @@ export async function updateSessionBillLine(
   batch.update(lineRef, updatePayload);
   batch.update(sessionRef, { billingRevision: increment(1), updatedAt: serverTimestamp() });
   const affectsFlags = patchAffectsAdjustmentFlags(patch as Record<string, any>);
-  if (navigator.onLine) {
+  if (getConnectivityStore().getState().online) {
     await batch.commit();
     if (affectsFlags) await recomputeSessionAdjustmentFlags(storeId, sessionId);
   } else {
@@ -1193,7 +1246,7 @@ export async function removeLineAdjustment(
   const batch = writeBatch(db);
   batch.update(lineRef, updatePayload);
   batch.update(sessionRef, { billingRevision: increment(1), updatedAt: serverTimestamp() });
-  if (navigator.onLine) {
+  if (getConnectivityStore().getState().online) {
     await batch.commit();
     await recomputeSessionAdjustmentFlags(storeId, sessionId);
   } else {

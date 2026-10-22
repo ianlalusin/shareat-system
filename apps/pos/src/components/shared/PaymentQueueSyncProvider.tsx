@@ -2,7 +2,7 @@
 import { doc, getDoc, getDocFromServer } from "firebase/firestore";
 import { usePaymentQueueSync } from "@/hooks/use-payment-queue-sync";
 import { replayDeferredEffects } from "@/lib/offline/replayDeferredEffects";
-import { updateQueueItem } from "@/lib/offline/payment-queue";
+import { updateEffectItem } from "@/lib/outbox/effects-store";
 import { useAuthContext } from "@/context/auth-context";
 import { db } from "@/lib/firebase/client";
 
@@ -35,7 +35,7 @@ export function PaymentQueueSyncProvider() {
         const snap = await getDocFromServer(doc(db, "stores", storeId, "sessions", sessionId));
         return snap.exists() && (snap.data() as any)?.status === "voided";
       },
-      onEffectDone: (updated) => updateQueueItem(updated.id, { effects: updated.effects }),
+      onEffectDone: (updated) => { void updateEffectItem(updated.id, { effects: updated.effects }); },
     });
   }, !!firebaseUser);
 

@@ -17,6 +17,9 @@ import { formatTerminalReceiptNumber, reserveNext } from "@/lib/terminal/counter
 import { paidShares, unitsRefundCentavos } from "@/lib/money/refundShare";
 import { Pos2Error, postPos2 } from "@/lib/pos2/client";
 import { PIN_LENGTH, PinPad } from "@/components/pos2/PinPad";
+// T-425 (bible row 356): no refunds without the internet. The server needs the manager PIN and the real receipt, so it is refused here with a plain sentence.
+import { OFFLINE_REFUND_MESSAGE, canRefundOffline } from "@/lib/offline/offlineRules";
+import { useOnlineStatus } from "@/hooks/use-online-status";
 
 /**
  * T-424 S9 - the refund dialog. A refund is checked by the POS v2 server (never the tablet): it needs a manager's ERP PIN, prices each unit as
@@ -39,6 +42,8 @@ export const CASH_ONLY_SENTENCE = "E-wallet refunds come later; refund in cash f
 function RefundContent({ receipt, paymentMethods, onClose, onSuccess }: RefundReceiptDialogProps) {
   const { toast } = useToast();
   const { activeStore } = useStoreContext();
+  const isOnline = useOnlineStatus();
+  const offlineBlocked = !isOnline && !canRefundOffline();
   const [refundQtys, setRefundQtys] = useState<RefundQty>({});
   const [reason, setReason] = useState("");
   const [pin, setPin] = useState("");
@@ -73,7 +78,7 @@ function RefundContent({ receipt, paymentMethods, onClose, onSuccess }: RefundRe
   const peso = (c: number) => (c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const hasAnyQty = billableLines.some((l) => getRefundQty(l.id) > 0);
-  const canSubmit = hasAnyQty && !!reason.trim() && pin.length === PIN_LENGTH && !!chosenTender && !isSubmitting;
+  const canSubmit = !offlineBlocked && hasAnyQty && !!reason.trim() && pin.length === PIN_LENGTH && !!chosenTender && !isSubmitting;
 
   const handleSelectAll = () => {
     const all: RefundQty = {};
@@ -119,6 +124,9 @@ function RefundContent({ receipt, paymentMethods, onClose, onSuccess }: RefundRe
   return (
     <>
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {offlineBlocked && (
+          <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm font-medium text-destructive">{OFFLINE_REFUND_MESSAGE}</p>
+        )}
         {billableLines.length === 0 && (
           <div className="text-center text-muted-foreground py-10">All items on this receipt have already been fully refunded.</div>
         )}

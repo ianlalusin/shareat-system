@@ -93,6 +93,17 @@ jobs:
           NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
         run: npm run build
 
+      # >>> POS v2 (stripped by tests/unit/ci-app-jobs.test.ts case 13; the ERP bytes stay pinned)
+      # POS v2's web process (T-424 server routes, pos2.shareat.net). Web build only: the APK is built by
+      # app-build.yml with build:cap, which never ships server code. Runbook §6. A POS build failure must
+      # never block an ERP deploy: the step may fail, and the artifact then ships without POS.
+      - name: Build POS v2 (web)
+        continue-on-error: true
+        env:
+          NODE_ENV: production
+        run: npm run build -w @shareat/pos
+
+      # <<< POS v2
       - name: Prune devDependencies (bible §8 — runtime deps only from here on)
         run: npm ci --omit=dev --no-audit --no-fund
 
@@ -101,6 +112,12 @@ jobs:
           # apps/erp/public is optional — Next only needs it if it exists (no static assets today)
           PATHS="apps/erp/.next apps/erp/package.json apps/erp/next.config.js packages scripts package.json package-lock.json node_modules"
           [ -d apps/erp/public ] && PATHS="$PATHS apps/erp/public"
+          # >>> POS v2 (apps/pos/node_modules holds packages that clash with the root: firebase 10, T-422 rule 7)
+          if [ -d apps/pos/.next ]; then
+            PATHS="$PATHS apps/pos/.next apps/pos/package.json apps/pos/next.config.mjs apps/pos/public"
+            [ -d apps/pos/node_modules ] && PATHS="$PATHS apps/pos/node_modules"
+          fi
+          # <<< POS v2
           tar -czf /tmp/shareat-artifact.tar.gz \
             --exclude='.git' \
             --exclude='secrets' \
@@ -154,6 +171,11 @@ jobs:
             ln -sfn "$RELEASE" /srv/shareat.new
             mv -Tf /srv/shareat.new /srv/shareat
             sudo /usr/bin/systemctl restart shareat-erp.service
+            # >>> POS v2: restarts only once its unit is installed (runbook §4); a failure never stops the ERP deploy
+            if [ -f /etc/systemd/system/shareat-pos.service ]; then
+              sudo /usr/bin/systemctl restart shareat-pos.service || echo "POS v2 restart failed; ERP unaffected" >&2
+            fi
+            # <<< POS v2
 
             # Keep the last 3 releases only
             ls -1dt /srv/shareat-releases/*/ | tail -n +4 | xargs -r rm -rf
@@ -174,6 +196,27 @@ jobs:
             exit 1
           REMOTE
 
+      # >>> POS v2: after the ERP check, so a POS failure is visible without hiding a healthy ERP
+      - name: Confirm POS v2 is up (when installed)
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ env.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" bash -s <<'REMOTE'
+            set -euo pipefail
+            if [ ! -f /etc/systemd/system/shareat-pos.service ]; then
+              echo "POS v2 unit not installed yet: shipped, not started"
+              exit 0
+            fi
+            for i in 1 2 3 4 5 6; do
+              if curl -fsS -o /dev/null http://127.0.0.1:9009/api/pos2/health; then
+                echo "POS v2 healthy after ${i} attempt(s)"
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "POS v2 health check failed after 30s" >&2
+            exit 1
+          REMOTE
+
+      # <<< POS v2
       # A GitHub-hosted runner is thrown away after the job, taking the key with it. A self-hosted
       # runner (docs/ops/self-hosted-runner.md) is not, so the production SSH key and the artifact
       # are removed explicitly, pass or fail.

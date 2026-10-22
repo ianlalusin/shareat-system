@@ -8,6 +8,7 @@
  */
 import { auth } from "@/lib/firebase/client";
 import { getBrowserDeviceId } from "@/lib/offline/browserDevice";
+import { getConnectivityStore } from "@/hooks/useConnectivity";
 
 export class Pos2Error extends Error {
   constructor(readonly status: number, message: string) {
@@ -16,7 +17,7 @@ export class Pos2Error extends Error {
   }
 }
 
-export const POS2_UNREACHABLE = "Cannot reach the POS server. Check the internet connection and try again. Nothing was changed.";
+export const POS2_UNREACHABLE = "Cannot confirm the POS server's response. Check the internet connection, then retry the same request or check the record before entering it again.";
 
 export async function postPos2<T extends Record<string, unknown>>(path: string, body: Record<string, unknown>): Promise<T & { ok: true }> {
   const token = await auth.currentUser?.getIdToken();
@@ -29,11 +30,12 @@ export async function postPos2<T extends Record<string, unknown>>(path: string, 
       body: JSON.stringify({ ...body, deviceId: getBrowserDeviceId() }),
     });
   } catch {
+    getConnectivityStore().reportNetworkError(); // T-425: probe the server now instead of waiting for the interval
     throw new Pos2Error(0, POS2_UNREACHABLE);
   }
   const data = (await res.json().catch(() => null)) as ({ ok?: boolean; error?: string } & Record<string, unknown>) | null;
   if (!res.ok || !data || data.ok !== true) {
-    throw new Pos2Error(res.status, data?.error || (res.status === 503 ? "The POS server is not ready yet. Ask a manager." : "The POS server could not do that. Nothing was changed."));
+    throw new Pos2Error(res.status, data?.error || (res.status === 503 ? "The POS server is not ready yet. Ask a manager." : "Could not confirm the result. Retry the same request or check the record before entering it again."));
   }
   return data as T & { ok: true };
 }
