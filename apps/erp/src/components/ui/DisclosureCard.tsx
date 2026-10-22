@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { FormCalled } from '@/components/forms/FormDisclosure';
 
 /** Native disclosure: the form stays mounted, and opening works without JavaScript. */
 export function DisclosureCard({ id, title, action = 'Add', children }: {
@@ -15,6 +16,6 @@ export function DisclosureCard({ id, title, action = 'Add', children }: {
         <span>{action}</span>
       </span>
     </summary>
-    <div className="mt-3 space-y-3">{children}</div>
+    <FormCalled><div className="mt-3 space-y-3">{children}</div></FormCalled>
   </details>;
 }

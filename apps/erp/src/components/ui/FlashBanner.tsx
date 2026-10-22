@@ -17,6 +17,7 @@ export function FlashBanner({
   const label = flash.field ? fieldLabels?.[flash.field] : undefined;
   return (
     <>
+      {flash.error ? <span hidden data-form-refusal="true" /> : null}
       {flash.error ? (
         label && flash.field ? (
           <Banner tone="error" fieldId={flash.field} fieldLabel={label}>

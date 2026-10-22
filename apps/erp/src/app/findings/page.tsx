@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import Link from 'next/link';
 import { requireSession } from '../../lib/session';
 import {
@@ -246,7 +247,7 @@ function FindingGroup({
           <p className="text-sm text-neutral-700 dark:text-neutral-300">{f.detail}</p>
 
           {f.status === 'open' ? (
-            <form action={acknowledgeFindingAction} className="flex flex-wrap items-end gap-2">
+            <FormDisclosure><form action={acknowledgeFindingAction} className="flex flex-wrap items-end gap-2">
               <input type="hidden" name="findingKey" value={f.key} />
               <input type="hidden" name="period" value={period} />
               <Input
@@ -257,7 +258,7 @@ function FindingGroup({
               <Button type="submit" variant="secondary">
                 Accept for now
               </Button>
-            </form>
+            </form></FormDisclosure>
           ) : (
             <p className="text-xs text-neutral-500">
               Accepted — it expires on its own, and it is still counted above. ⛔ The only way it

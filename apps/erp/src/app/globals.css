@@ -474,6 +474,9 @@
 
 [data-phone-table-root] [data-card-toggle-cell] { display: none; }
 .erp-disclosure-card > summary::-webkit-details-marker { display: none; }
+.erp-action-form > summary::-webkit-details-marker { display: none; }
+.erp-action-form[open] > summary svg { transform: rotate(180deg); }
+.erp-record-fields[hidden] { display: none; }
 .erp-disclosure-card > summary:focus-visible { outline: 2px solid var(--brand-ink); outline-offset: 2px; }
 .erp-disclosure-card > summary:hover .erp-disclosure-action { background: var(--workspace-stripe); }
 .erp-disclosure-card[open] > summary .erp-disclosure-action svg { transform: rotate(45deg); }

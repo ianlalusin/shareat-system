@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import { authorize, heldCapabilities, can } from '@shareat/auth';
 import { logger } from '@shareat/core/logger';
 import { compare, money, ZERO } from '@shareat/core/money';
@@ -196,7 +197,7 @@ export default async function RemittancePage({
             holding it.
           </div>
           {variances.map((v) => (
-            <form
+            <FormDisclosure><form
               key={v.id}
               action={resolveVarianceAction}
               className="space-y-3 border-t border-warning pt-3"
@@ -298,7 +299,7 @@ export default async function RemittancePage({
                   </Button>
                 </>
               )}
-            </form>
+            </form></FormDisclosure>
           ))}
         </section>
       )}

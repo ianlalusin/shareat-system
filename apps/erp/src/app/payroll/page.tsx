@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import { requirePageAccess, StoreNotAvailable } from '../../lib/page-access';
 import { compare, money, ZERO } from '@shareat/core/money';
 import { postPayRunAction, setPayRateAction, voidPayRunAction } from './actions';
@@ -349,7 +350,7 @@ export default async function PayrollPage({
           )}
 
           {pv.slips.length > 0 && pv.unratedEmployments.length === 0 && (
-            <form
+            <FormDisclosure><form
               action={postPayRunAction}
               className="flex flex-wrap items-end gap-3 border-t border-neutral-200 pt-4 dark:border-neutral-800"
             >
@@ -370,7 +371,7 @@ export default async function PayrollPage({
               <Button type="submit" variant="primary">
                 Post {pv.slips.length} payslip(s)
               </Button>
-            </form>
+            </form></FormDisclosure>
           )}
         </section>
       )}
@@ -473,7 +474,7 @@ export default async function PayrollPage({
               )}
 
               {run.status === 'posted' && (
-                <form action={voidPayRunAction} className="flex flex-wrap items-end gap-2">
+                <FormDisclosure><form action={voidPayRunAction} className="flex flex-wrap items-end gap-2">
                   <input type="hidden" name="storeId" value={storeId} />
                   <input type="hidden" name="runId" value={run.id} />
                   <Input name="reason" placeholder="Why void it?" className="min-w-0 flex-1 basis-48" />
@@ -485,7 +486,7 @@ export default async function PayrollPage({
                   <span className="text-xs text-neutral-500">
                     ⭐ Reverses the entries and unfreezes the days, so the period is payable again.
                   </span>
-                </form>
+                </form></FormDisclosure>
               )}
             </div>
           ))

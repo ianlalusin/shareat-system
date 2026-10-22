@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { heldCapabilities } from '@shareat/auth';
@@ -254,7 +255,7 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
                 ) : data.refillChoices.length === 0 ? (
                   <p className="text-sm text-muted">There are no refill items yet.</p>
                 ) : (
-                  <form action={setPackageRefillsAction} className="flex flex-wrap items-center gap-4">
+                  <FormDisclosure><form action={setPackageRefillsAction} className="flex flex-wrap items-center gap-4">
                     <input type="hidden" name="menuItemId" value={item.id} />
                     <input type="hidden" name="packageVariantId" value={v.id} />
                     {data.refillChoices.map((r) => (
@@ -263,7 +264,7 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
                     <Button type="submit" variant="secondary">
                       Save
                     </Button>
-                  </form>
+                  </form></FormDisclosure>
                 )}
               </div>
             );
@@ -405,7 +406,7 @@ function OptionGroups({ data, canManage, sp, actorId }: { data: ItemPageData; ca
 
       {canManage && (
         <div className="space-y-4 border-t border-surface-border pt-3">
-          <form action={linkOptionGroupAction} className="space-y-3">
+          <FormDisclosure><form action={linkOptionGroupAction} className="space-y-3">
             <input type="hidden" name="menuItemId" value={itemId} />
             <h3 className="font-medium">Attach an existing group</h3>
             <FormGrid>
@@ -433,7 +434,7 @@ function OptionGroups({ data, canManage, sp, actorId }: { data: ItemPageData; ca
             <Button type="submit" variant="secondary">
               Save
             </Button>
-          </form>
+          </form></FormDisclosure>
           <CheckedForm rules={MENU_OPTION_GROUP_RULES} action={createOptionGroupAction} className="space-y-3">
             <input type="hidden" name="menuItemId" value={itemId} />
             <h3 className="font-medium">Add option group</h3>

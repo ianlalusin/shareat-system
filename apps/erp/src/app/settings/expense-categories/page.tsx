@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import { requirePageAccess } from '../../../lib/page-access';
 import {
   createCategoryAction,
@@ -198,7 +199,7 @@ export default async function ExpenseCategoriesSettingsPage({
                     </EditableRecord> 
                     ) : (
                       /* No account saved yet: an ADD, open with Save (A6 rule 1). */
-                      <form action={setCategoryAccountAction} className="space-y-2">
+                      <FormDisclosure><form action={setCategoryAccountAction} className="space-y-2">
                         <input type="hidden" name="categoryId" value={c.id} />
                         <input type="hidden" name="categoryLabel" value={c.category} />
                         <Select
@@ -220,7 +221,7 @@ export default async function ExpenseCategoriesSettingsPage({
                         <Button type="submit" variant="secondary">
                           Save
                         </Button>
-                      </form>
+                      </form></FormDisclosure>
                     )}
                   </td>
                 </tr>

@@ -110,7 +110,7 @@ export default async function ReimbursementsPage({
                       <summary className="inline-flex min-h-[44px] cursor-pointer items-center px-1 text-sm font-medium">
                         Pay
                       </summary>
-                      <CheckedForm rules={EXPENSE_REIMBURSEMENT_RULES} action={payReimbursementAction} className="mt-2">
+                      <CheckedForm rules={EXPENSE_REIMBURSEMENT_RULES} action={payReimbursementAction} className="mt-2" called>
                         <input type="hidden" name="storeId" value={store.id} />
                         <input type="hidden" name="employeeId" value={row.employeeId} />
                         {/* Minted per render, so a double click or a replayed POST posts once. */}

@@ -117,7 +117,7 @@ export default async function StoresPage({
           rules={ADMIN_STORE_CREATE_RULES}
           action={createStoreAction}
           className="space-y-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800"
-        >
+         called>
           <>
             <FormSection title="Branch identity">
               <FormGrid layout="fields">

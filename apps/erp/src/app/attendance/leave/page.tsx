@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import {
   ATTENDANCE_LEAVE_RECORD_RULES,
   ATTENDANCE_LEAVE_REQUEST_RULES,
@@ -307,7 +308,7 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
                         <RequestHead group={g} kinds={kinds} />
                         <PendingFacts group={g} balance={balances.get(`${g.personId}:${(g.dates[0] ?? g.restDays[0] ?? today).slice(0, 4)}`)} />
                         <div className="flex flex-wrap items-end gap-3">
-                          <form action={approveLeaveAction} className="flex flex-wrap items-end gap-2">
+                          <FormDisclosure><form action={approveLeaveAction} className="flex flex-wrap items-end gap-2">
                             <input type="hidden" name="requestId" value={g.requestId} />
                             <Select name="pay" defaultValue="" aria-label="Pay">
                               <option value="">Pay as the kind decides</option>
@@ -317,14 +318,14 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
                             <Button type="submit" variant="primary">
                               Approve
                             </Button>
-                          </form>
-                          <form action={rejectLeaveAction} className="flex flex-wrap items-end gap-2">
+                          </form></FormDisclosure>
+                          <FormDisclosure><form action={rejectLeaveAction} className="flex flex-wrap items-end gap-2">
                             <input type="hidden" name="requestId" value={g.requestId} />
                             <Input name="reason" placeholder="Reason (optional)" aria-label="Reason" />
                             <Button type="submit" variant="secondary">
                               Reject
                             </Button>
-                          </form>
+                          </form></FormDisclosure>
                           <Certificate group={g} />
                         </div>
                       </li>
@@ -463,13 +464,13 @@ function RequestHead({ group, kinds }: { group: RequestGroup; kinds: readonly { 
 function Certificate({ group }: { group: RequestGroup }) {
   return (
     <div className="flex flex-wrap items-end gap-2">
-      <form action={attachLeaveDocumentAction} className="flex flex-wrap items-end gap-2">
+      <FormDisclosure><form action={attachLeaveDocumentAction} className="flex flex-wrap items-end gap-2">
         <input type="hidden" name="requestId" value={group.requestId} />
         <PhotoInput name="certificate" accept="image/jpeg,image/png,image/webp" className={FILE_INPUT} />
         <Button type="submit" variant="secondary">
           Attach certificate
         </Button>
-      </form>
+      </form></FormDisclosure>
       {group.hasProof && (
         <form action={openLeaveDocumentAction} className="flex flex-wrap items-center gap-2">
           <input type="hidden" name="requestId" value={group.requestId} />

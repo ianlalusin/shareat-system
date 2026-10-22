@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import Link from 'next/link';
 import { isZero, money } from '@shareat/core/money';
 import { requireSession } from '../../lib/session';
@@ -245,7 +246,7 @@ export default async function CutoverPage({
                   {/* ⛔ No form on a verified step — a query decides it, and the domain refuses a
                       hand-tick anyway. The absence of a button IS the message. */}
                   {!s.done && !s.blockedBy && s.def.kind !== 'verified' && (
-                    <form action={attestStepAction} className="mt-3 space-y-2">
+                    <FormDisclosure><form action={attestStepAction} className="mt-3 space-y-2">
                       <input type="hidden" name="stepCode" value={s.def.code} />
                       <input type="hidden" name="storeId" value={s.storeId ?? ''} />
                       <Input
@@ -257,13 +258,13 @@ export default async function CutoverPage({
                       <Button type="submit" variant="secondary" className="w-full sm:w-auto">
                         I confirm this is done
                       </Button>
-                    </form>
+                    </form></FormDisclosure>
                   )}
 
                   {/* An A1/A2-style step is declared verified but cannot be checked here, so it
                       still takes an attestation — and says why above. */}
                   {!s.done && !s.blockedBy && s.def.kind === 'verified' && s.def.cannotVerifyHere && (
-                    <form action={attestStepAction} className="mt-3 space-y-2">
+                    <FormDisclosure><form action={attestStepAction} className="mt-3 space-y-2">
                       <input type="hidden" name="stepCode" value={s.def.code} />
                       <input type="hidden" name="storeId" value={s.storeId ?? ''} />
                       <Input
@@ -275,7 +276,7 @@ export default async function CutoverPage({
                       <Button type="submit" variant="secondary" className="w-full sm:w-auto">
                         I confirm this is done
                       </Button>
-                    </form>
+                    </form></FormDisclosure>
                   )}
                 </article>
               ))}

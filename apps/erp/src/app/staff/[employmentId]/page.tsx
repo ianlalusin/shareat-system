@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import { notFound } from 'next/navigation';
 import { ENDED_STATUSES } from '@shareat/db/schema';
 import { toBusinessDate } from '@shareat/core/datetime';
@@ -283,13 +284,13 @@ export default async function EmploymentDetailPage({
             <p className="text-neutral-500 dark:text-neutral-400">No photo on file.</p>
           )}
           {!isEnded && (
-            <form action={setStaffPhotoAction} className="flex flex-wrap items-end gap-3">
+            <FormDisclosure><form action={setStaffPhotoAction} className="flex flex-wrap items-end gap-3">
               <input type="hidden" name="employmentId" value={employmentId} />
               <PhotoInput name="photo" required accept="image/*" capture="user" />
               <Button type="submit" variant="primary">
                 {media.photoFileId ? 'Replace photo' : 'Save photo'}
               </Button>
-            </form>
+            </form></FormDisclosure>
           )}
           {!isEnded && media.photoFileId && (
             <form action={removeStaffPhotoAction}>

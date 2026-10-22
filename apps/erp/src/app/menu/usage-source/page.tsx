@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import Link from 'next/link';
 import { can, type Actor } from '@shareat/auth';
 import type { Tx } from '@shareat/db';
@@ -177,7 +178,7 @@ function Links({ data, storeId, canLink }: { data: UsageSourcePageData; storeId:
       {canLink ? (
         <>
           {data.unlinked.length > 0 && (
-            <form action={seedLinkAction} className="space-y-3 rounded-[14px] border border-surface-border p-4">
+            <FormDisclosure><form action={seedLinkAction} className="space-y-3 rounded-[14px] border border-surface-border p-4">
               <h3 className="text-sm font-semibold">Link from the POS map</h3>
               <p className="text-sm text-muted">Copies the POS item map exactly: its room, and, if the menu item has no stock rule yet, its rule.</p>
               <input type="hidden" name="storeId" value={storeId} />
@@ -204,9 +205,9 @@ function Links({ data, storeId, canLink }: { data: UsageSourcePageData; storeId:
               <Button type="submit" variant="secondary">
                 Seed from map
               </Button>
-            </form>
+            </form></FormDisclosure>
           )}
-          <form action={linkItemAction} className="space-y-3 rounded-[14px] border border-surface-border p-4">
+          <FormDisclosure><form action={linkItemAction} className="space-y-3 rounded-[14px] border border-surface-border p-4">
             <h3 className="text-sm font-semibold">Link to a menu item that already has a stock rule</h3>
             <input type="hidden" name="storeId" value={storeId} />
             <FormGrid>
@@ -236,7 +237,7 @@ function Links({ data, storeId, canLink }: { data: UsageSourcePageData; storeId:
             <Button type="submit" variant="secondary">
               Save link
             </Button>
-          </form>
+          </form></FormDisclosure>
         </>
       ) : (
         <p className="text-sm text-muted">You can read the links but not change them.</p>
@@ -288,7 +289,7 @@ function Compare({ data, storeId, canSwitch }: { data: UsageSourcePageData; stor
 
       {canSwitch ? (
         <div className="grid gap-4 md:grid-cols-2">
-          <form action={switchSourceAction} className="space-y-3 rounded-[14px] border border-surface-border p-4">
+          <FormDisclosure><form action={switchSourceAction} className="space-y-3 rounded-[14px] border border-surface-border p-4">
             <h3 className="text-sm font-semibold">Switch to menu rules</h3>
             <p className="text-sm text-muted">
               Refused with the first difference unless you accept them and say why. Also refused while a usage pull is still being finished.
@@ -302,7 +303,7 @@ function Compare({ data, storeId, canSwitch }: { data: UsageSourcePageData; stor
             <Button type="submit" variant="secondary">
               Switch to menu rules
             </Button>
-          </form>
+          </form></FormDisclosure>
           <form action={switchSourceAction} className="space-y-3 rounded-[14px] border border-surface-border p-4">
             <h3 className="text-sm font-semibold">Switch back</h3>
             <p className="text-sm text-muted">Goes back to the POS item maps at once. No comparison, nothing to type.</p>

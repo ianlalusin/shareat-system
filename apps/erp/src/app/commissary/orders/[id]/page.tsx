@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SHORTAGE_REASONS } from '@shareat/db/schema';
@@ -433,13 +434,13 @@ export default async function BranchOrderPage({
             </li>
           ))}
         </ul>
-        <form action={postMessageAction} className="mt-4 flex gap-2">
+        <FormDisclosure><form action={postMessageAction} className="mt-4 flex gap-2">
           <input type="hidden" name="orderId" value={order.id} />
           <Input name="body" placeholder="Say something about this order…" className="flex-1" />
           <Button type="submit" variant="secondary">
             Post
           </Button>
-        </form>
+        </form></FormDisclosure>
       </section>
 
       {goods.length === 0 && lines.length > 0 && (

@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import Link from 'next/link';
 import { heldCapabilities } from '@shareat/auth';
 import { menuRepo } from '@shareat/db';
@@ -107,7 +108,7 @@ export default async function MenuRequestsPage({ searchParams }: { searchParams:
                 </p>
                 {matches.length > 0 && <p className="text-sm">{`Looks like: ${matches.map((m) => m.name).join(', ')}`}</p>}
                 <div className="grid gap-4 md:grid-cols-3">
-                  <form action={approveItemRequestAction} className="space-y-2">
+                  <FormDisclosure><form action={approveItemRequestAction} className="space-y-2">
                     <Field label="Category for the new item" className="text-sm">
                       <Select name="categoryId" defaultValue={q.categoryId ?? activeCategories[0]?.id} className="w-full">
                         {activeCategories.map((c) => (
@@ -120,8 +121,8 @@ export default async function MenuRequestsPage({ searchParams }: { searchParams:
                     <Button type="submit" name="id" value={q.id} variant="primary">
                       Approve
                     </Button>
-                  </form>
-                  <form action={markItemRequestDuplicateAction} className="space-y-2">
+                  </form></FormDisclosure>
+                  <FormDisclosure><form action={markItemRequestDuplicateAction} className="space-y-2">
                     <Field label="Already on the menu as" className="text-sm">
                       <Select name="itemId" defaultValue={matches[0]?.id ?? ''} className="w-full">
                         <option value="">-</option>
@@ -135,7 +136,7 @@ export default async function MenuRequestsPage({ searchParams }: { searchParams:
                     <Button type="submit" name="id" value={q.id} variant="secondary">
                       Mark duplicate
                     </Button>
-                  </form>
+                  </form></FormDisclosure>
                   <CheckedForm rules={MENU_REQUEST_REJECT_RULES} action={rejectItemRequestAction} className="space-y-2">
                     <input type="hidden" name="id" value={q.id} />
                     <Field label="Reason" className="text-sm" rule={MENU_REQUEST_REJECT_RULES.note}>

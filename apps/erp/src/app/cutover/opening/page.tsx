@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import Link from 'next/link';
 import { compare, isZero, money, ZERO } from '@shareat/core/money';
 import { requirePageAccess } from '../../../lib/page-access';
@@ -318,7 +319,7 @@ export default async function OpeningPage({
                 </div>
                 {!st.done && why && <p className="mt-1 text-xs text-amber-800 dark:text-amber-400">{why}</p>}
                 {st.def.code === 'C3P' && !st.done && (
-                  <form action={attestStepAction} className="mt-2 space-y-2">
+                  <FormDisclosure><form action={attestStepAction} className="mt-2 space-y-2">
                     <input type="hidden" name="stepCode" value="C3P" />
                     <input type="hidden" name="returnTo" value="/cutover/opening" />
                     <input type="hidden" name="storeId" value="" />
@@ -326,7 +327,7 @@ export default async function OpeningPage({
                     <button type="submit" className={BUTTON}>
                       I confirm this is done
                     </button>
-                  </form>
+                  </form></FormDisclosure>
                 )}
               </div>
             );

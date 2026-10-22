@@ -94,7 +94,7 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
 
         <details className="border-t border-neutral-200 pt-3 dark:border-neutral-800">
           <summary className="cursor-pointer py-2.5 text-sm font-medium">Add a contribution row</summary>
-          <CheckedForm rules={PAYROLL_STATUTORY_RATE_RULES} action={addStatutoryRateAction} className="mt-3">
+          <CheckedForm rules={PAYROLL_STATUTORY_RATE_RULES} action={addStatutoryRateAction} className="mt-3" called>
             <>
               <FormSection title="Agency and effective date">
                 <FormGrid layout="fields">
@@ -247,7 +247,7 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
         )}
         <details className="border-t border-neutral-200 pt-3 dark:border-neutral-800">
           <summary className="cursor-pointer py-2.5 text-sm font-medium">Add a withholding table</summary>
-          <CheckedForm rules={PAYROLL_BRACKET_SET_RULES} action={addWithholdingBracketSetAction} className="mt-3">
+          <CheckedForm rules={PAYROLL_BRACKET_SET_RULES} action={addWithholdingBracketSetAction} className="mt-3" called>
 <FormGrid>
             <Field label="Pay frequency">
 <Select name="frequency" defaultValue="semi_monthly">

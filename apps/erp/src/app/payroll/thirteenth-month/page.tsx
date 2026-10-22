@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { requirePageAccess, StoreNotAvailable } from '../../../lib/page-access';
 import { compare, money, ZERO } from '@shareat/core/money';
@@ -143,7 +144,7 @@ export default async function ThirteenthMonthPage({
           )}
 
           {pv.payouts.length > 0 && (
-            <form
+            <FormDisclosure><form
               action={post13thMonthRunAction}
               className="flex flex-wrap items-end gap-3 border-t border-neutral-200 pt-4 dark:border-neutral-800"
             >
@@ -163,7 +164,7 @@ export default async function ThirteenthMonthPage({
               <Button type="submit" variant="primary">
                 Post {pv.payouts.length} payout(s)
               </Button>
-            </form>
+            </form></FormDisclosure>
           )}
         </section>
       )}
@@ -195,7 +196,7 @@ export default async function ThirteenthMonthPage({
               )}
 
               {run.status === 'posted' && (
-                <form action={void13thMonthRunAction} className="flex flex-wrap items-end gap-2">
+                <FormDisclosure><form action={void13thMonthRunAction} className="flex flex-wrap items-end gap-2">
                   <input type="hidden" name="storeId" value={storeId} />
                   <input type="hidden" name="year" value={run.year} />
                   <input type="hidden" name="runId" value={run.id} />
@@ -208,7 +209,7 @@ export default async function ThirteenthMonthPage({
                   <span className="text-xs text-neutral-500">
                     ⭐ Reverses the entries, so the year is payable again.
                   </span>
-                </form>
+                </form></FormDisclosure>
               )}
             </div>
           ))

@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import Link from 'next/link';
 import { requireSession } from '../../../../../lib/session';
 import { Page } from '@/components/shell/Page';
@@ -36,12 +37,12 @@ export default async function NewRecipePage({ searchParams }: { searchParams: Pr
       <FlashBanner flash={sp} />
 
       {canManage ? (
-        <form action={createRecipeAction} className="space-y-4">
+        <FormDisclosure><form action={createRecipeAction} className="space-y-4">
           <RecipeFields items={items} name="" outputItemId="" outputQuantity="" outputUnit={null} lines={[]} blankRows={BLANK_ROWS} />
           <Button type="submit" variant="primary">
             Save
           </Button>
-        </form>
+        </form></FormDisclosure>
       ) : (
         <Banner tone="warning">Only an admin can add a recipe.</Banner>
       )}

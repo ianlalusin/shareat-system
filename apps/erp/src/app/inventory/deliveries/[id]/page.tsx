@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SHORTAGE_REASONS } from '@shareat/db/schema';
@@ -107,7 +108,7 @@ export default async function DeliveryPage({
         )}
       </StatusHero>
 
-      <form id="receive-delivery-form" action={receiveDeliveryAction} className="space-y-4">
+      <FormDisclosure><form id="receive-delivery-form" action={receiveDeliveryAction} className="space-y-4">
         <input type="hidden" name="deliveryId" value={doc.id} />
         <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
           <table className="w-full min-w-[720px] border-collapse text-sm">
@@ -225,7 +226,7 @@ export default async function DeliveryPage({
             </div>
           </div>
         )}
-      </form>
+      </form></FormDisclosure>
 
       {(doc.status === 'received' || doc.status === 'void') && (
         <dl className="grid gap-x-6 gap-y-1 text-xs text-neutral-600 sm:grid-cols-2 dark:text-neutral-400">

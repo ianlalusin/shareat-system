@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import { requirePageAccess } from '../../../lib/page-access';
 import { setWastageMonitorAction } from './actions';
 import { listActivePersons, listStores, monitorView } from './lib';
@@ -177,7 +178,7 @@ export default async function WastageMonitorSettingsPage({
         </FormGrid>
       </EditableRecord> ) : (
         /* No Monitor saved yet: an ADD, rendered open with a Save button (A6 rule 1). */
-        <form action={setWastageMonitorAction} className="space-y-3">
+        <FormDisclosure><form action={setWastageMonitorAction} className="space-y-3">
           <input type="hidden" name="storeId" value={storeId} />
           <input type="hidden" name="personLabel" value="" />
           <FormGrid className="text-sm">
@@ -203,7 +204,7 @@ export default async function WastageMonitorSettingsPage({
           <Button type="submit" variant="primary">
             Save
           </Button>
-        </form>
+        </form></FormDisclosure>
       )}
 
       <p className="text-xs text-neutral-500 dark:text-neutral-400">

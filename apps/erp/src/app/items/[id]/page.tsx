@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import { ITEMS_RENAME_RULES, ITEMS_UNIT_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { notFound } from 'next/navigation';
 import { requireSession } from '../../../lib/session';
@@ -327,7 +328,7 @@ export default async function ItemDetailPage({
                       </div>
                     </EditableRecord>
                   ) : (
-                  <form action={setStoreSellabilityAction}>
+                  <FormDisclosure><form action={setStoreSellabilityAction}>
                     <input type="hidden" name="itemId" value={item.id} />
                     <input type="hidden" name="storeId" value={s.storeId} />
                     <div className="flex flex-wrap items-end gap-3">
@@ -362,7 +363,7 @@ export default async function ItemDetailPage({
                     <Button type="submit" variant="secondary" className="mt-3">
                       Save
                     </Button>
-                  </form>
+                  </form></FormDisclosure>
                   )}
                 </li>
               ))}

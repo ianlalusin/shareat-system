@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { compare, money, ZERO } from '@shareat/core/money';
@@ -258,7 +259,7 @@ export default async function CashRequestPage({
               is cleared rather than left behind.
             </p>
           </div>
-          <form action={cancelAction} className="flex flex-wrap items-end gap-3">
+          <FormDisclosure><form action={cancelAction} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="requestId" value={req.id} />
             <Field label="Because" hint="Optional.">
               <Input name="reason" className="w-full" />
@@ -266,7 +267,7 @@ export default async function CashRequestPage({
             <Button type="submit" variant="danger">
               Withdraw
             </Button>
-          </form>
+          </form></FormDisclosure>
         </section>
       )}
 

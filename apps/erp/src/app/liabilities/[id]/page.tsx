@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { compare, money, ZERO } from '@shareat/core/money';
@@ -220,7 +221,7 @@ export default async function LiabilityPage({
                       {e.paid === '0.00' ? '—' : peso(e.paid)}
                     </td>
                     <td className="px-3 py-2">
-                      <form action={reverseAction} className="flex items-center gap-2">
+                      <FormDisclosure><form action={reverseAction} className="flex items-center gap-2">
                         <input type="hidden" name="liabilityId" value={liability.id} />
                         <input type="hidden" name="entryId" value={e.entryId} />
                         <Input name="reason" placeholder="Reason…" className="w-32" />
@@ -229,7 +230,7 @@ export default async function LiabilityPage({
                           label="Reverse liability entry"
                           consequence="Reverses this entry; both stay on the ledger. An administrator must approve with their own PIN."
                         />
-                      </form>
+                      </form></FormDisclosure>
                     </td>
                   </tr>
                 ))}

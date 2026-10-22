@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import { requirePageAccess, StoreNotAvailable } from '../../../lib/page-access';
 import { SEPARATION_CAUSES } from '@shareat/db/schema';
 import { postSeparationAction, voidSeparationAction } from './actions';
@@ -225,7 +226,7 @@ export default async function SeparationsPage({
                 advance {peso(Number(s.advanceRecovered))} = net {peso(Number(s.netPay))}
               </p>
               {s.status === 'posted' && (
-                <form action={voidSeparationAction} className="flex flex-wrap items-end gap-2">
+                <FormDisclosure><form action={voidSeparationAction} className="flex flex-wrap items-end gap-2">
                   <input type="hidden" name="storeId" value={storeId} />
                   <input type="hidden" name="id" value={s.id} />
                   <Input name="reason" placeholder="Why void it?" className="min-w-0 flex-1 basis-48" />
@@ -234,7 +235,7 @@ export default async function SeparationsPage({
                     label="Void separation"
                     consequence="Voids this separation and reverses its entries. An administrator must approve with their own PIN."
                   />
-                </form>
+                </form></FormDisclosure>
               )}
             </div>
           ))

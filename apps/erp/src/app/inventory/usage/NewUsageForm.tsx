@@ -1,5 +1,6 @@
 'use client';
 
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 /**
  * The "New record" form — T-168 / DEF-135. One document for a usage OR a wastage; the kind picked
  * here decides whether the reason field is shown (only meaningful for a wastage, `saveUsageDraft`
@@ -77,7 +78,7 @@ export function NewUsageForm({
   }
 
   return (
-    <form action={action} className="mt-3 space-y-4">
+    <FormDisclosure><form action={action} className="mt-3 space-y-4">
       <input type="hidden" name="storeId" value={storeId} />
 
       <FormGrid>
@@ -186,6 +187,6 @@ export function NewUsageForm({
       <Button type="submit" variant="primary">
         Save draft
       </Button>
-    </form>
+    </form></FormDisclosure>
   );
 }

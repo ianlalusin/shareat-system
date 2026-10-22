@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import { CheckedForm } from '@/components/forms';
 import { ITEMS_APPROVE_RULES, ITEMS_REJECT_RULES, ITEMS_REQUEST_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { requireSession } from '../../lib/session';
@@ -303,14 +304,14 @@ export default async function ItemsPage({
                   </div>
                 )}
                 {/* T-443 R2: a real pair (Samyang Cheese / Samyang 4 Cheese) is dismissed, not merged, and stops being suggested. */}
-                <form action={dismissDuplicatePairAction} className="mt-2 flex flex-wrap items-end gap-2">
+                <FormDisclosure called><form action={dismissDuplicatePairAction} className="mt-2 flex flex-wrap items-end gap-2">
                   <input type="hidden" name="itemAId" value={d.aId} />
                   <input type="hidden" name="itemBId" value={d.bId} />
                   <Input name="note" placeholder="Note (optional)" className="min-w-[10rem]" />
                   <Button type="submit" variant="ghost">
                     Different items — stop asking
                   </Button>
-                </form>
+                </form></FormDisclosure>
               </li>
             ))}
           </ul>
@@ -377,7 +378,7 @@ export default async function ItemsPage({
                   </Banner>
                 )}
                 <div className="mt-2 flex flex-wrap items-end gap-2">
-                  <CheckedForm rules={ITEMS_APPROVE_RULES} action={approveItemRequestAction} className="flex flex-wrap items-end gap-2 gap-y-2">
+                  <CheckedForm rules={ITEMS_APPROVE_RULES} action={approveItemRequestAction} className="flex flex-wrap items-end gap-2 gap-y-2" called>
                     <input type="hidden" name="requestId" value={r.id} />
                     {/* T-378 R5: the approver confirms the unit (pre-selected to the requester's choice) and the three ticks. */}
                     <Field label={<span className="text-xs text-neutral-500 dark:text-neutral-400">Measured in</span>} rule={ITEMS_APPROVE_RULES.baseUnit} className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
@@ -414,7 +415,7 @@ export default async function ItemsPage({
                     <Checkbox name="sellableWholesale" defaultChecked={r.sellableWholesale} label="Sold to other stores/buyers" />
                     <Button type="submit" variant="secondary">Approve</Button>
                   </CheckedForm>
-                  <CheckedForm rules={ITEMS_REJECT_RULES} action={rejectItemRequestAction} className="flex flex-wrap items-end gap-2 gap-y-2">
+                  <CheckedForm rules={ITEMS_REJECT_RULES} action={rejectItemRequestAction} className="flex flex-wrap items-end gap-2 gap-y-2" called>
                     <input type="hidden" name="requestId" value={r.id} />
                     <Field label={<span className="text-xs text-neutral-500 dark:text-neutral-400">Why not?</span>} rule={ITEMS_REJECT_RULES.note}><Input {...nativeAttrs(ITEMS_REJECT_RULES.note)}   placeholder="Why not?" /></Field>
                     <Button type="submit" variant="danger">

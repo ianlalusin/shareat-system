@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { eq } from 'drizzle-orm';
@@ -170,7 +171,7 @@ export default async function CredentialsPage({
           line. It is useful only for seeding test data or as a target for a future reader
           integration; it is <strong>not</strong> how a real fingerprint gets enrolled today.
         </p>
-        <form action={enrolFingerprintAction} className="space-y-2">
+        <FormDisclosure><form action={enrolFingerprintAction} className="space-y-2">
           <input type="hidden" name="employmentId" value={employmentId} />
           <Textarea
             name="templates"
@@ -181,7 +182,7 @@ export default async function CredentialsPage({
           <Button type="submit" variant="secondary">
             Enrol fingerprint (test/dev only)
           </Button>
-        </form>
+        </form></FormDisclosure>
       </section>
     </Page>
   );

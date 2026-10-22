@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import { INVENTORY_POS_MAP_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { CheckedForm } from '@/components/forms';
 import Link from 'next/link';
@@ -84,7 +85,7 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
           <h2 className="text-sm font-medium">Requests waiting on a decision ({openRequests.length})</h2>
           <div className="mt-3 space-y-3">
             {openRequests.map((r) => (
-              <form key={r.id} action={decideMapRequestAction} className="flex flex-wrap items-center gap-2 text-sm">
+              <FormDisclosure><form key={r.id} action={decideMapRequestAction} className="flex flex-wrap items-center gap-2 text-sm">
                 <input type="hidden" name="storeId" value={storeId} />
                 <input type="hidden" name="requestId" value={r.id} />
                 <span className="font-medium">{r.posItemName}</span>
@@ -97,7 +98,7 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
                 <Button type="submit" name="decision" value="rejected" variant="secondary">
                   Reject
                 </Button>
-              </form>
+              </form></FormDisclosure>
             ))}
           </div>
         </section>

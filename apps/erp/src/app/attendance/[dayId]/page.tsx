@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireSession } from '../../../lib/session';
@@ -309,7 +310,7 @@ function EarlyOut({ day, locked }: { day: Day; locked: boolean }) {
 
 function HalfDay({ day, locked }: { day: Day; locked: boolean }) {
   return (
-    <form action={overrideHalfDayAction} className={`${CARD} space-y-2`}>
+    <FormDisclosure><form action={overrideHalfDayAction} className={`${CARD} space-y-2`}>
       <Ident day={day} />
       <h3 className="text-sm font-medium">
         Half day
@@ -339,7 +340,7 @@ function HalfDay({ day, locked }: { day: Day; locked: boolean }) {
           Override
         </Button>
       </div>
-    </form>
+    </form></FormDisclosure>
   );
 }
 
@@ -364,7 +365,7 @@ function VerifyVoid({ day, locked }: { day: Day; locked: boolean }) {
         </Button>
       </form>
 
-      <form action={voidDayAction} className="space-y-1 border-t border-surface-border pt-3">
+      <FormDisclosure><form action={voidDayAction} className="space-y-1 border-t border-surface-border pt-3">
         <Ident day={day} />
         <p className="text-xs text-neutral-500">
           ⛔ A voided day contributes nothing to payroll. The punches survive — the evidence outlives
@@ -387,7 +388,7 @@ function VerifyVoid({ day, locked }: { day: Day; locked: boolean }) {
             />
           )}
         </div>
-      </form>
+      </form></FormDisclosure>
     </div>
   );
 }

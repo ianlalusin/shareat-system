@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { convertUnit, quantity } from '@shareat/domain';
@@ -78,7 +79,7 @@ export default async function RecipePage({
 
       {canManage && stuck.length === 0 ? (
         <>
-          <form action={editRecipeAction} className="space-y-4">
+          <FormDisclosure><form action={editRecipeAction} className="space-y-4">
             <input type="hidden" name="recipeId" value={recipe.id} />
             <RecipeFields
               items={items}
@@ -92,7 +93,7 @@ export default async function RecipePage({
             <Button type="submit" variant="primary">
               Save recipe
             </Button>
-          </form>
+          </form></FormDisclosure>
           <StatusForm recipeId={recipe.id} recipeName={recipe.name} retired={retired} />
         </>
       ) : null}

@@ -370,7 +370,7 @@ export function EditableRecordView({
         {Object.entries(hidden).map(([name, value]) => (
           <input key={name} type="hidden" name={name} value={value} />
         ))}
-        <fieldset disabled={!editing} className="erp-record-fields min-w-0">
+        <fieldset disabled={!editing} hidden={!editing} className="erp-record-fields min-w-0">
           {children}
         </fieldset>
         <div className="mt-3 flex flex-wrap items-center gap-2">

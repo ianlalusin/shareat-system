@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import { formatMoney, money } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { ASSET_CATEGORIES } from '@shareat/db';
@@ -126,7 +127,7 @@ export default async function FixedAssetsPage({
           second press posts nothing and a missed month is caught up by pressing it again. That is
           the whole DEF-044 answer, and the button says so because a user who believes it is safe
           is a user who runs it. */}
-      <form
+      <FormDisclosure><form
         action={runDepreciationAction}
         className="flex flex-wrap items-end gap-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-800 dark:bg-neutral-900"
       >
@@ -144,7 +145,7 @@ export default async function FixedAssetsPage({
           Safe to run more than once — periods already posted are skipped, and a month that was
           missed is caught up by running it again.
         </p>
-      </form>
+      </form></FormDisclosure>
 
       <form
         method="GET"

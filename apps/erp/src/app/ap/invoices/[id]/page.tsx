@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import { accountLabel } from '@/lib/account-label';
 import { notFound } from 'next/navigation';
 import { authorize, heldCapabilities, can } from '@shareat/auth';
@@ -377,7 +378,7 @@ return (
       )}
 
       {invoice.status === 'pending' && (
-        <form
+        <FormDisclosure><form
           action={verifyInvoiceAction}
           className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
         >
@@ -415,7 +416,7 @@ return (
           <Button type="submit" variant="primary">
             Verify &mdash; all four must be checked
           </Button>
-        </form>
+        </form></FormDisclosure>
       )}
 
       {linkedExpenses.length > 0 && (
@@ -472,7 +473,7 @@ return (
                     <summary className="inline-flex min-h-[44px] cursor-pointer items-center px-1 text-sm font-medium">
                       Void this payment
                     </summary>
-                    <CheckedForm rules={PAYMENT_VOID_RULES} action={voidPaymentAction} className="mt-2 space-y-3">
+                    <CheckedForm rules={PAYMENT_VOID_RULES} action={voidPaymentAction} className="mt-2 space-y-3" called>
                       <input type="hidden" name="paymentId" value={p.paymentId} />
                       <input type="hidden" name="supplierId" value={p.supplierId} />
                       <input type="hidden" name="invoiceId" value={invoice.id} />

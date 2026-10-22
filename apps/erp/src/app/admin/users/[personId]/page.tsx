@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import { notFound } from 'next/navigation';
 import { pinAttemptsRepo } from '@shareat/db';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
@@ -502,7 +503,7 @@ function GrantPicker({ personId, offerable }: { personId: string; offerable: rea
   })).filter((g) => g.items.length > 0);
 
   return (
-    <form action={setCapabilityGrantAction} className="space-y-4">
+    <FormDisclosure><form action={setCapabilityGrantAction} className="space-y-4">
       <input type="hidden" name="personId" value={personId} />
       <input type="hidden" name="granted" value="true" />
 
@@ -542,6 +543,6 @@ function GrantPicker({ personId, offerable }: { personId: string; offerable: rea
       <Button type="submit" variant="secondary">
         Grant selected
       </Button>
-    </form>
+    </form></FormDisclosure>
   );
 }

@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import Link from 'next/link';
 import { asc, eq } from 'drizzle-orm';
 import { discrepancyDispositionLabel, lowStockRepo, schema } from '@shareat/db';
@@ -160,7 +161,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
                 </p>
               ) : (
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <form action={resolveDiscrepancyAction} className="space-y-2 text-sm">
+                  <FormDisclosure><form action={resolveDiscrepancyAction} className="space-y-2 text-sm">
                     <input type="hidden" name="id" value={row.id} />
                     <input type="hidden" name="storeId" value={storeId} />
                     <input type="hidden" name="resolvedOn" value={today} />
@@ -212,7 +213,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
                     <Button type="submit" variant="secondary">
                       Decide
                     </Button>
-                  </form>
+                  </form></FormDisclosure>
 
                   <CheckedForm rules={COMMISSARY_DEFER_RULES} action={deferDiscrepancyAction} className="space-y-2 text-sm">
                     <input type="hidden" name="id" value={row.id} />

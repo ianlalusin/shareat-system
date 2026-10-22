@@ -15,6 +15,7 @@ import { CheckContext } from './context';
 import { CheckSummary } from './CheckSummary';
 import { CHECKED_FORM_INITIAL, checkContextValue, checkedFormReducer, onCheckedSubmit, watchFormReset } from './check-state';
 import { focusControl, readRuledValues, ruledTarget, syncForeignSubmits } from './check-dom';
+import { FormDisclosure, formActionLabel } from './FormDisclosure';
 
 /** `useLayoutEffect` warns when a component renders on the server; the effect is browser-only, so use `useEffect` there. */
 const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
@@ -22,9 +23,11 @@ const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : us
 export interface CheckedFormProps extends Omit<ComponentPropsWithoutRef<'form'>, 'action' | 'onSubmit' | 'onInput' | 'onChange'> {
   readonly rules: FieldRuleSetLike;
   readonly action: (formData: FormData) => void | Promise<void>;
+  /** An existing native disclosure/action already called this entry form. */
+  readonly called?: boolean;
 }
 
-export function CheckedForm({ rules, action, children, ...formProps }: CheckedFormProps) {
+export function CheckedForm({ rules, action, children, called, ...formProps }: CheckedFormProps) {
   const [state, dispatch] = useReducer(checkedFormReducer, CHECKED_FORM_INITIAL);
   const formRef = useRef<HTMLFormElement>(null);
   const names = useMemo(() => new Set(ruleInputNames(rules)), [rules]);
@@ -56,6 +59,7 @@ export function CheckedForm({ rules, action, children, ...formProps }: CheckedFo
 
   return (
     <CheckContext.Provider value={ctx}>
+      <FormDisclosure label={formActionLabel(children)} called={called}>
       <form
         {...formProps}
         action={action}
@@ -72,6 +76,7 @@ export function CheckedForm({ rules, action, children, ...formProps }: CheckedFo
         {children}
         <CheckSummary active={ctx.active} summary={ctx.summary} />
       </form>
+      </FormDisclosure>
     </CheckContext.Provider>
   );
 }

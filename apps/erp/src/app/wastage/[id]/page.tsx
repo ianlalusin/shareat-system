@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { asc, eq } from 'drizzle-orm';
@@ -139,7 +140,7 @@ export default async function WastageDetailPage({
       {row.status !== 'resolved' && (
         <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="font-medium">Decide</h2>
-          <form action={resolveOrderWastageAction} className="mt-3 space-y-3 text-sm">
+          <FormDisclosure><form action={resolveOrderWastageAction} className="mt-3 space-y-3 text-sm">
             <input type="hidden" name="id" value={row.id} />
             <input type="hidden" name="storeId" value={row.storeId} />
             <input type="hidden" name="resolvedOn" value={toBusinessDate()} />
@@ -167,7 +168,7 @@ export default async function WastageDetailPage({
               ))}
             </div>
             <Button type="submit" variant="primary">Resolve</Button>
-          </form>
+          </form></FormDisclosure>
 
           {row.status === 'open' && row.typeMode === 'tracked' && (
             <form action={disputeOrderWastageAction} className="mt-4">

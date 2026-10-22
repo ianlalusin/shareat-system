@@ -421,7 +421,8 @@ describe('T-S1-11 first render equals the server render (mutant: initial state c
         createElement(SubmitButton, { children: 'Save' }),
       ),
     );
-    expect(html).toMatch(/^<form\b/);
+    expect(html).toMatch(/^<details\b/); // T-461: entry fields are hidden until the action is called.
+    expect(html).toMatch(/<form\b/);
     expect(save(html)).not.toMatch(/\sdisabled=""/);
     expect(save(html)).not.toContain('aria-disabled');
     expect(html).not.toContain('role="status"');

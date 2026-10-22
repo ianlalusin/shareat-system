@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import Link from 'next/link';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
 import { requireSession } from '../../../lib/session';
@@ -58,7 +59,7 @@ function SectionTable({
       {lines.length === 0 ? (
         <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">Nothing here today.</p>
       ) : (
-        <form action={finalizeSectionAction} className="mt-3 space-y-2">
+        <FormDisclosure><form action={finalizeSectionAction} className="mt-3 space-y-2">
           <input type="hidden" name="storeId" value={storeId} />
           <input type="hidden" name="salesDayId" value={salesDayId} />
           <input type="hidden" name="pullId" value={pullId} />
@@ -117,13 +118,13 @@ function SectionTable({
               Finalize {title.toLowerCase()}
             </Button>
           )}
-        </form>
+        </form></FormDisclosure>
       )}
 
       {section === 'orphan' &&
         !viewOnly &&
         confirmable.map((l) => (
-          <form key={`req-${l.lineKey}`} action={requestMapFromPullAction} className="mt-2 flex items-center gap-2 text-xs">
+          <FormDisclosure><form key={`req-${l.lineKey}`} action={requestMapFromPullAction} className="mt-2 flex items-center gap-2 text-xs">
             <input type="hidden" name="storeId" value={storeId} />
             <input type="hidden" name="salesDayId" value={salesDayId} />
             <input type="hidden" name="pullId" value={pullId} />
@@ -134,7 +135,7 @@ function SectionTable({
             <Button type="submit" variant="secondary">
               Flag as unmappable
             </Button>
-          </form>
+          </form></FormDisclosure>
         ))}
     </section>
   );
@@ -237,7 +238,7 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
       ) : (
         <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="text-sm font-medium">{pull ? 'Refresh plan' : 'Build plan'}</h2>
-          <form action={buildPlanAction} className="mt-3 flex flex-wrap items-end gap-3">
+          <FormDisclosure><form action={buildPlanAction} className="mt-3 flex flex-wrap items-end gap-3">
             <input type="hidden" name="storeId" value={storeId} />
             <input type="hidden" name="salesDayId" value={salesDayId} />
             <label className="text-sm">
@@ -253,7 +254,7 @@ export default async function PosUsagePage({ searchParams }: { searchParams: Pro
             <Button type="submit" variant="primary">
               {pull ? 'Refresh' : 'Build plan'}
             </Button>
-          </form>
+          </form></FormDisclosure>
           {pull && (
             <p className="mt-2 text-xs text-neutral-500">
               {pull.soldItemsFeed

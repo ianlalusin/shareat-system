@@ -1,5 +1,6 @@
 'use client';
 
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 /**
  * "Provision a new terminal" — T-203. A client component ONLY because the result carries a
  * one-time token that must never survive a `<form action>` + redirect (see `actions.ts`'s top
@@ -59,7 +60,7 @@ export function ProvisionForm({
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+    <FormDisclosure><form onSubmit={submit} className="flex flex-wrap items-end gap-3">
       <label className="min-w-0 flex-1 basis-48 text-sm">
         <span className="block text-neutral-600 dark:text-neutral-400">Label</span>
         <Input
@@ -74,6 +75,6 @@ export function ProvisionForm({
         {pending ? 'Provisioning…' : 'Provision terminal'}
       </Button>
       {error && <p className="w-full text-sm text-danger">{error}</p>}
-    </form>
+    </form></FormDisclosure>
   );
 }

@@ -1,3 +1,4 @@
+import { FormDisclosure } from '@/components/forms/FormDisclosure';
 import { requireSession } from '../../lib/session';
 import { listActingPersons } from '../expenses/lib';
 import {
@@ -187,7 +188,7 @@ function OpenShift({
       {counts.length > 0 && <CountTable counts={counts} />}
 
       {nextMoment && (
-      <form action={recordCountAction} className="space-y-3">
+      <FormDisclosure><form action={recordCountAction} className="space-y-3">
         <input type="hidden" name="storeId" value={storeId} />
         <input type="hidden" name="shiftId" value={shift.id} />
         <input type="hidden" name="moment" value={nextMoment} />
@@ -218,16 +219,16 @@ function OpenShift({
         <SubmitButton pendingLabel="Saving…">
           {nextMoment === 'open' ? 'Record opening count' : 'Record closing count'}
         </SubmitButton>
-      </form>
+      </form></FormDisclosure>
       )}
 
       {closeCounts.length > 0 && (
-        <form action={closeShiftAction} className="flex flex-wrap items-end gap-3 border-t border-neutral-200 pt-4 dark:border-neutral-800">
+        <FormDisclosure><form action={closeShiftAction} className="flex flex-wrap items-end gap-3 border-t border-neutral-200 pt-4 dark:border-neutral-800">
           <input type="hidden" name="storeId" value={storeId} />
           <input type="hidden" name="shiftId" value={shift.id} />
           <Input name="notes" placeholder="Handover notes (optional)" className="w-full min-w-0 flex-1 basis-64" />
           <Button type="submit">Close shift</Button>
-        </form>
+        </form></FormDisclosure>
       )}
     </section>
   );
@@ -276,7 +277,7 @@ function ClosedShift({
       ))}
 
       {shortages.map((c) => (
-        <form
+        <FormDisclosure><form
           key={c.id}
           action={chargeShortageAction}
           className="flex flex-wrap items-end gap-2 rounded border border-danger p-3"
@@ -302,7 +303,7 @@ function ClosedShift({
           <Input name="note" placeholder="Note (optional)" className="w-full" />
           </FormGrid>
           <Button type="submit">Charge to this person</Button>
-        </form>
+        </form></FormDisclosure>
       ))}
     </div>
   );
