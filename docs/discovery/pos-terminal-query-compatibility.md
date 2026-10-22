@@ -9,3 +9,5 @@ work to20 probes even when numbers have gaps. This costs more setup reads than o
 index, stored counter shape or native dependency. Terminal setup is infrequent; sale numbering remains local.
 Official query reference: https://firebase.google.com/docs/firestore/query-data/order-limit-data
 The bounded ascending shape still requires an actual local SDK/emulator control before implementation is claimed.
+Control executed: same local project/SDK and document-id range, desc → failed-precondition with the captured
+sentence; asc → accepted, zero rows. No live data used. Log: Temp/shareat-t457-sdk-query.log.

@@ -131,3 +131,5 @@ New in T-425, not from v1: `src/lib/terminal/db.ts`, `src/lib/outbox/**`, `src/l
 - `src/components/shared/AddonsPOSModal.tsx`: offline adds stage a fresh bill-line document with the existing payload, then use its id for kitchen tickets and optimistic display; no unavailable read is treated as absence. Repeated offline adds retain separate rows, while online grouping is unchanged.
 New helper: `src/lib/offline/addon-line.ts`; no read before staging the fresh document in the caller's existing batch.
 
+T-457 updates the v2-only `src/lib/terminal/claim.ts`: bounded ascending range probes replace the rejected descending-key scan; numbering format, release gap and claim transaction retained. No v1 source was changed.
+

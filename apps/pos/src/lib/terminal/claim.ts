@@ -8,7 +8,7 @@
  *                                                      released: { deviceId: null, releasedAt, releasedByUid, releaseEpoch }
  *   stores/{storeId}/receiptNumbers/{CODE-TT-NNNNNN}   written by payments, read here to find the highest number used.
  */
-import { normalizeStoreCode, readTerminal, saveTerminalClaim } from '@/lib/terminal/counter';
+import { MAX_TERMINAL_SEQ, normalizeStoreCode, readTerminal, saveTerminalClaim } from '@/lib/terminal/counter';
 
 /** The same-named functions of the modular `firebase/firestore` API, and the Firestore instance as `db`. */
 export interface FirestorePort {
@@ -39,22 +39,26 @@ function checkTerminalNo(terminalNo: number): void {
   }
 }
 
-/** Highest sequence already used on this prefix (0 when none): a document-id RANGE query, no composite index needed. */
+/** Highest used sequence: at most 20 ascending range probes; no descending key scan or composite index. */
 async function highestSeq(port: FirestorePort, storeId: string, code: string, terminalNo: number): Promise<number> {
   const prefix = `${code}-${tt(terminalNo)}-`;
-  const snap = await port.getDocs(
-    port.query(
-      port.collection(port.db, 'stores', storeId, 'receiptNumbers'),
-      port.where(port.documentId(), '>=', `${prefix}000000`),
-      port.where(port.documentId(), '<=', `${prefix}999999`),
-      port.orderBy(port.documentId(), 'desc'),
-      port.limit(1),
-    ),
-  );
-  const top = snap.docs[0];
-  if (!top) return 0;
-  const n = Number(String(top.id).slice(-6));
-  return Number.isInteger(n) ? n : 0;
+  let lower = 0;
+  let upper = MAX_TERMINAL_SEQ;
+  while (lower < upper) {
+    const mid = Math.ceil((lower + upper) / 2);
+    const snap = await port.getDocs(
+      port.query(
+        port.collection(port.db, 'stores', storeId, 'receiptNumbers'),
+        port.where(port.documentId(), '>=', `${prefix}${String(mid).padStart(6, '0')}`),
+        port.where(port.documentId(), '<=', `${prefix}999999`),
+        port.orderBy(port.documentId(), 'asc'),
+        port.limit(1),
+      ),
+    );
+    if (snap.docs.length > 0) lower = mid;
+    else upper = mid - 1;
+  }
+  return lower;
 }
 
 export async function claimTerminal(
