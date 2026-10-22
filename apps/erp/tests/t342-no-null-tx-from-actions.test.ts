@@ -59,7 +59,7 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
   // DISCOVERS the org and store, so there is no actor to scope a principal to; it opens the auth door / org principal itself.
   'app/sign-in/actions.ts:123',
   // signOut(null, token) - T-464: pairing ends the manager's own session (a raw session token, not an Actor), the same DEF-288 shape as above.
-  'app/settings/pos-tablet/actions.ts:46',
+  'app/settings/pos-tablet/actions.ts:47',
   // runDepreciation(null, actor, { through }) — Amendment A1 (spec ruling): deliberate, NOT the
   // DEF-417 shape. `packages/domain/src/fixed-assets/depreciate.ts:251-253` — "One transaction PER
   // ASSET is deliberate… one bad asset must not roll back the assets that posted cleanly" — and
