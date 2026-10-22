@@ -139,7 +139,8 @@ describe('the payment and void writers go through the ledger and the rules (Ruli
   it('offlinePayment.ts reserves through the ledger (not reserveNext), builds its batch with applyOpsToBatch, uses the offline rules, and queues effects in IndexedDB. Mutant: a sale outside the ledger', () => {
     const f = at('components/cashier/offlinePayment.ts');
     const c = code(f);
-    expect(c).toMatch(/\breserveOfflineEvent\b/);
+    expect(c).toMatch(/await\s+reserveOfflineSaleIntent\s*\(/);
+    expect(c).not.toMatch(/\breserveOfflineEvent\b/);
     expect(c).toMatch(/\bapplyOpsToBatch\b/);
     expect(c).not.toMatch(/\breserveNext\b/);
     expect(imports(f, /offline\/offlineRules/)).toBe(true);

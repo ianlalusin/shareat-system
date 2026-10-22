@@ -9,7 +9,7 @@
  *  - Unsent rows are never deleted; acknowledged and skipped rows are pruned after 7 days (they hold customer names and lines).
  */
 import { TERMINAL_ROW_KEY, formatTerminalReceiptNumber, planReservation, type TerminalRecord } from '@/lib/terminal/counter';
-import { STORE_EVENTS, STORE_TERMINAL, inTerminalTransaction } from '@/lib/terminal/db';
+import { STORE_EVENTS, STORE_META, STORE_TERMINAL, inTerminalTransaction } from '@/lib/terminal/db';
 
 export type LedgerKind = 'sale' | 'void' | 'skipped';
 export type LedgerStatus = 'reserved' | 'unsent' | 'acknowledged' | 'skipped' | 'quarantined' | 'rejected' | 'stuck';
@@ -38,6 +38,8 @@ export interface LedgerEvent {
   kind: LedgerKind;
   totalCentavos: number;
   linesHash: string;
+  /** T-458: complete payment-input fingerprint, separate from reconcile's lines-only hash. */
+  intentFingerprint?: string;
   tenders: LedgerTender[];
   createdAtClientMs: number;
   ops?: LedgerOp[];
@@ -159,31 +161,47 @@ class LogicFailure extends Error {
   constructor(readonly inner: Error) { super(inner.message); }
 }
 
+/** Must run inside the caller's counter+events transaction, with no awaits. */
+function writeReservation(tx: IDBTransaction, a: ReserveBase, buildOps: ReserveOffline['buildOps'] | null,
+  terminal: TerminalRecord | undefined, createdAtClientMs: number, intentFingerprint?: string): LedgerEvent {
+  const plan = planReservation(terminal);
+  const { terminalNo, terminalSeq, deviceId, storeId } = plan.reserved;
+  const receiptNumber = formatTerminalReceiptNumber(a.storeCode, terminalNo, terminalSeq);
+  const ev: LedgerEvent = {
+    deviceId, storeId, terminalNo, terminalSeq, receiptId: a.receiptId, receiptNumber, kind: a.kind,
+    totalCentavos: a.totalCentavos, linesHash: a.linesHash, tenders: a.tenders, createdAtClientMs,
+    status: buildOps ? 'unsent' : 'reserved', attempts: 0, lastError: null,
+    ...(intentFingerprint === undefined ? {} : { intentFingerprint }),
+  };
+  if (buildOps) ev.ops = normalizeOps(buildOps({ receiptNumber, terminalNo, terminalSeq, deviceId }));
+  tx.objectStore(STORE_EVENTS).add(ev);
+  tx.objectStore(STORE_TERMINAL).put(plan.next, TERMINAL_ROW_KEY);
+  return ev;
+}
+
 async function reserve(a: ReserveBase, buildOps: ReserveOffline['buildOps'] | null): Promise<LedgerEvent> {
   const createdAtClientMs = a.createdAtClientMs ?? Date.now();
   try {
-    return await inTerminalTransaction<LedgerEvent>([STORE_TERMINAL, STORE_EVENTS], 'readwrite', (tx, done, fail) => {
+    return await inTerminalTransaction<LedgerEvent>([STORE_TERMINAL, STORE_EVENTS, STORE_META], 'readwrite', (tx, done, fail) => {
       const term = tx.objectStore(STORE_TERMINAL);
-      const events = tx.objectStore(STORE_EVENTS);
       const req = term.get(TERMINAL_ROW_KEY);
       req.onerror = () => fail(req.error ?? new Error('Could not read the receipt counter.'));
       req.onsuccess = () => {
-        // Nothing below awaits: IndexedDB closes a transaction at the first await.
-        try {
-          const plan = planReservation(req.result as TerminalRecord | undefined);
-          const { terminalNo, terminalSeq, deviceId, storeId } = plan.reserved;
-          const receiptNumber = formatTerminalReceiptNumber(a.storeCode, terminalNo, terminalSeq);
-          const ev: LedgerEvent = {
-            deviceId, storeId, terminalNo, terminalSeq, receiptId: a.receiptId, receiptNumber, kind: a.kind,
-            totalCentavos: a.totalCentavos, linesHash: a.linesHash, tenders: a.tenders, createdAtClientMs,
-            status: buildOps ? 'unsent' : 'reserved', attempts: 0, lastError: null,
+        const terminal = req.result as TerminalRecord | undefined;
+        const write = () => {
+          // Nothing below awaits: IndexedDB closes a transaction at the first await.
+          try { done(writeReservation(tx, a, buildOps, terminal, createdAtClientMs)); }
+          catch (e) { fail(new LogicFailure(e instanceof Error ? e : new Error(String(e)))); }
+        };
+        if (a.kind === 'sale' && !buildOps && terminal) {
+          const pointer = tx.objectStore(STORE_META).get(['sale-intent', terminal.storeId, a.receiptId]);
+          pointer.onerror = () => fail(pointer.error ?? new Error('Could not read the saved payment intent.'));
+          pointer.onsuccess = () => {
+            if (pointer.result !== undefined) fail(new LogicFailure(new Error(PAYMENT_ATTEMPT_PENDING)));
+            else write();
           };
-          if (buildOps) ev.ops = normalizeOps(buildOps({ receiptNumber, terminalNo, terminalSeq, deviceId }));
-          events.add(ev);
-          term.put(plan.next, TERMINAL_ROW_KEY);
-          done(ev);
-        } catch (e) {
-          fail(new LogicFailure(e instanceof Error ? e : new Error(String(e))));
+        } else {
+          write();
         }
       };
     });
@@ -202,6 +220,86 @@ export function reserveOfflineEvent(a: ReserveOffline): Promise<LedgerEvent> {
 /** Online sale: number + a `reserved` event (no ops) in one transaction. */
 export function reserveOnlineEvent(a: ReserveOnline): Promise<LedgerEvent> {
   return reserve(a, null);
+}
+
+export const PAYMENT_ATTEMPT_PENDING = 'This payment already has a saved attempt. Sync it before taking another payment.';
+export const PAYMENT_INTENT_CHANGED = 'This payment differs from the sale already saved on this tablet. Sync it before taking another payment.';
+
+export interface ReserveOfflineSaleIntent extends ReserveOffline {
+  kind: 'sale';
+  storeId: string;
+  intentFingerprint: string;
+}
+
+/**
+ * T-458: the receipt intent, complete event and counter commit together. Pointer reads serialize with
+ * writes, including across tabs. A pointer outlives pruning as a small tombstone; it never means absence.
+ * Old ledger rows are checked before creating the first pointer, never silently adopted as an equal sale.
+ */
+export async function reserveOfflineSaleIntent(a: ReserveOfflineSaleIntent): Promise<{ event: LedgerEvent; created: boolean }> {
+  const createdAtClientMs = a.createdAtClientMs ?? Date.now();
+  try {
+    return await inTerminalTransaction([STORE_TERMINAL, STORE_EVENTS, STORE_META], 'readwrite', (tx, done, fail) => {
+      const termReq = tx.objectStore(STORE_TERMINAL).get(TERMINAL_ROW_KEY);
+      const refuse = (message: string) => fail(new LogicFailure(new Error(message)));
+      const storageError = () => fail(new Error('Could not read the saved payment intent.'));
+      termReq.onerror = storageError;
+      termReq.onsuccess = () => {
+        const terminal = termReq.result as TerminalRecord | undefined;
+        if (terminal && terminal.storeId !== a.storeId) {
+          refuse('This terminal belongs to another store. Set up this store before taking payment.');
+          return;
+        }
+        const meta = tx.objectStore(STORE_META);
+        const events = tx.objectStore(STORE_EVENTS);
+        const intentKey = ['sale-intent', a.storeId, a.receiptId];
+        const create = () => {
+          try {
+            const event = writeReservation(tx, a, a.buildOps, terminal, createdAtClientMs, a.intentFingerprint);
+            meta.put([event.deviceId, event.terminalSeq], intentKey);
+            done({ event, created: true });
+          } catch (e) { fail(new LogicFailure(e instanceof Error ? e : new Error(String(e)))); }
+        };
+        const pointerReq = meta.get(intentKey);
+        pointerReq.onerror = storageError;
+        pointerReq.onsuccess = () => {
+          if (pointerReq.result !== undefined) {
+            const eventReq = events.get(pointerReq.result as IDBValidKey);
+            eventReq.onerror = storageError;
+            eventReq.onsuccess = () => {
+              const event = eventReq.result as LedgerEvent | undefined;
+              if (!event || event.storeId !== a.storeId || event.receiptId !== a.receiptId || event.kind !== 'sale') {
+                refuse(PAYMENT_ATTEMPT_PENDING); return;
+              }
+              if (event.status === 'skipped') { create(); return; }
+              if (!['unsent', 'acknowledged'].includes(event.status) || (event.status === 'unsent' && !event.ops?.length)) {
+                refuse(PAYMENT_ATTEMPT_PENDING); return;
+              }
+              if (event.intentFingerprint !== a.intentFingerprint || event.totalCentavos !== a.totalCentavos ||
+                event.linesHash !== a.linesHash || JSON.stringify(event.tenders) !== JSON.stringify(a.tenders)) {
+                refuse(PAYMENT_INTENT_CHANGED); return;
+              }
+              done({ event, created: false });
+            };
+          } else {
+            // Compatibility path runs once per new intent; no global migration or erasure of old history.
+            const historyReq = events.getAll();
+            historyReq.onerror = storageError;
+            historyReq.onsuccess = () => {
+              const history = historyReq.result as LedgerEvent[];
+              if (history.some(e => e.storeId === a.storeId && e.receiptId === a.receiptId && e.kind === 'sale' && e.status !== 'skipped')) {
+                refuse(PAYMENT_ATTEMPT_PENDING); return;
+              }
+              create();
+            };
+          }
+        };
+      };
+    });
+  } catch (e) {
+    if (e instanceof LogicFailure) throw e.inner;
+    throw new Error(SALE_NOT_SAVED_MESSAGE);
+  }
 }
 
 // ---- reading and updating --------------------------------------------------------------------------------------------------------------------

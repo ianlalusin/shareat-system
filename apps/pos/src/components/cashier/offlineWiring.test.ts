@@ -77,6 +77,81 @@ beforeEach(async () => {
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('offline sale is ledger-first (Acceptance 1)', () => {
+  it('T-458: uncached receipt/projection reads are unknown offline, not a reason to lose the new cash sale', async () => {
+    seed();
+    const read = fs.getDoc;
+    vi.spyOn(fs, 'getDoc').mockImplementation(async ref => {
+      if (ref.path.includes('/receipts/') || ref.path.includes('/activeSessions/')) {
+        throw Object.assign(new Error('Failed to get document because the client is offline.'), { code: 'unavailable' });
+      }
+      return read(ref);
+    });
+    expect(await pay()).toEqual({ receiptId: 'sess1', receiptNumber: 'SHT-01-000005' });
+    expect((await ledger.listEvents())).toHaveLength(1);
+    expect(fs.get(`stores/${STORE_ID}/receipts/sess1`)).toMatchObject({ total: 598, receiptNumber: 'SHT-01-000005' });
+    expect(idb.rows('terminal')[0].nextSeq).toBe(6);
+  });
+
+  it('T-458: a permission failure is not converted to a missing receipt', async () => {
+    seed();
+    const read = fs.getDoc;
+    vi.spyOn(fs, 'getDoc').mockImplementation(async ref => {
+      if (ref.path.includes('/receipts/')) throw Object.assign(new Error('permission denied'), { code: 'permission-denied' });
+      return read(ref);
+    });
+    await expect(pay()).rejects.toThrow('permission denied');
+    expect(fs.commits).toHaveLength(0);
+    expect(idb.rows('events')).toHaveLength(0);
+    expect(idb.rows('terminal')[0].nextSeq).toBe(5);
+  });
+
+  it('T-458: concurrent payment taps reuse the exact receipt, saved ops and one deferred effect', async () => {
+    seed();
+    const results = await Promise.all([pay(), pay()]);
+    expect(results[0]).toEqual(results[1]);
+    expect((await ledger.listEvents())).toHaveLength(1);
+    expect(idb.rows('terminal')[0].nextSeq).toBe(6);
+    expect(await fx.listEffectItems()).toHaveLength(1);
+    expect(fs.commits[0]!.writes).toEqual(fs.commits[1]!.writes);
+  });
+
+  it('T-458: a saved event survives a lost SDK batch; retry replays stored ops without another number or effect', async () => {
+    seed();
+    fs.failNextCommit(Object.assign(new Error('offline queue lost'), { code: 'unavailable' }));
+    const first = await pay();
+    await settle();
+    const original = (await ledger.listEvents())[0]!;
+    expect(fs.get(`stores/${STORE_ID}/receipts/sess1`)).toBeUndefined();
+    expect(await pay()).toEqual(first);
+    expect(await ledger.listEvents()).toEqual([original]);
+    expect(idb.rows('terminal')[0].nextSeq).toBe(6);
+    expect(await fx.listEffectItems()).toHaveLength(1);
+    expect(fs.get(`stores/${STORE_ID}/receipts/sess1`)).toMatchObject({ analyticsApplyId: original.ops!.find(o => o.path.includes('/receipts/'))!.data!.analyticsApplyId });
+  });
+
+  it('T-458: a different tender after a lost batch cannot replace the saved sale', async () => {
+    seed();
+    fs.failNextCommit(Object.assign(new Error('offline queue lost'), { code: 'unavailable' }));
+    await pay();
+    await settle();
+    const events = await ledger.listEvents();
+    await expect(pay('sess1', [{ id: 'p2', methodId: 'm-cash', amount: 700 }])).rejects.toThrow(ledger.PAYMENT_INTENT_CHANGED);
+    expect(await ledger.listEvents()).toEqual(events);
+    expect(idb.rows('terminal')[0].nextSeq).toBe(6);
+    expect(fs.commits).toHaveLength(0);
+  });
+
+  it('T-458: reopening an already locally paid session repairs a lost effect marker without another write or number', async () => {
+    seed();
+    const first = await pay();
+    const effects = await fx.listEffectItems();
+    await fx.removeEffectItem(effects[0]!.id); // crash after the SDK batch, before the effects transaction
+    expect(await pay()).toEqual(first);
+    expect(await fx.listEffectItems()).toHaveLength(1);
+    expect(fs.commits).toHaveLength(1);
+    expect(idb.rows('terminal')[0].nextSeq).toBe(6);
+  });
+
   it('writes ONE ledger event (unsent, complete ops) and then the Firestore batch', async () => {
     seed();
     const r = await pay();

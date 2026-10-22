@@ -15,3 +15,18 @@ evidence, never a requirement to prove a new receipt absent. Reconcile remains t
 No SQLite, schema upgrade or new backend is justified merely to solve this intent problem.
 Research context: https://firebase.google.com/docs/firestore/manage-data/enable-offline
 Implementation needs a separately scoped T-458 contract, target tests, actual demo APK cash/restart/sync controls.
+
+## Bounded assessment and chosen S1, 22 October
+Verdict: extend the existing atomic ledger with a small intent pointer; no replacement storage engine.
+The reproduced sample is one failed offline cash payment; production offline-payment frequency was not queried.
+Without this correction every first offline receipt can fail, so it blocks the already authorized emulator acceptance.
+Existing counter/event transaction, meta store and strict transaction fake cover the required primitives.
+Firebase documents that uncached individual reads fail, and cached data may be incomplete:
+https://firebase.google.com/docs/firestore/manage-data/enable-offline#get_offline_data
+The transaction pattern is standard IndexedDB, scoped over all participating stores:
+https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/transaction
+Open-source candidate https://github.com/jakearchibald/idb (ISC) wraps IndexedDB promises; not adopted:
+the project already owns a transaction helper and adding a wrapper would not supply receipt-intent semantics.
+Scope is one local reservation protocol plus its payment wiring and demo verification; no new tables/dependencies.
+All reference apps remain untouched; this is a defect in the rebuild's existing ledger, not a request to copy legacy payment code.
+T-458 defines conservative legacy/unknown-state handling and preserves existing online reservations and history.

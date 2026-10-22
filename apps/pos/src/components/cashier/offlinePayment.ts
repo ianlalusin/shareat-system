@@ -36,13 +36,32 @@ import {
   SERVER_TIMESTAMP_MARKER as TS,
   applyOpsToBatch,
   encodeLedgerValue,
-  reserveOfflineEvent,
+  getEvent,
+  reserveOfflineSaleIntent,
+  type LedgerEvent,
   type LedgerOp,
 } from "@/lib/outbox/ledger";
 import { computeLinesHash } from "@/lib/outbox/linesHash";
-import { addEffectItem } from "@/lib/outbox/effects-store";
+import { ensureSaleEffectItem } from "@/lib/outbox/effects-store";
 import { rejectIfRefused } from "@/lib/outbox/refusal";
 import { notifyOutboxChanged } from "@/lib/outbox/outboxStatus";
+
+async function ensureDeferredSaleEffects(event: LedgerEvent, storeId: string, sessionId: string): Promise<void> {
+  const projection = event.ops?.find(o => o.path === `stores/${storeId}/closedSessions/${sessionId}`)?.data ?? {};
+  const receipt = event.ops?.find(o => o.path === `stores/${storeId}/receipts/${sessionId}`)?.data;
+  if (typeof receipt?.total !== 'number') return; // old online reservations have no replayable ops
+  const pin = projection.customerPin ? String(projection.customerPin) : null;
+  const phone = projection.linkedCustomerPhone ? String(projection.linkedCustomerPhone) : null;
+  try {
+    await ensureSaleEffectItem({
+      storeId, sessionId, receiptId: sessionId, ctx: { pin, phone, amount: receipt.total },
+      effects: { analytics: 'pending', loyaltyFinalize: 'pending', loyaltyEarn: phone ? 'pending' : 'skip',
+        pinFinalize: pin ? 'pending' : 'skip', loyaltyReverse: 'skip' },
+    });
+  } catch (e) {
+    console.error('[completePaymentOffline] could not queue the deferred effects', e);
+  }
+}
 
 /**
  * Records a completed sale entirely from the local Firestore cache — no
@@ -86,19 +105,36 @@ export async function completePaymentOffline(
   const receiptRef = doc(db, `stores/${storeId}/receipts`, sessionId);
   const activeProjectionRef = doc(db, `stores/${storeId}/activeSessions`, sessionId);
 
+  // Missing individual documents raise unavailable in the real offline SDK. Unknown is NOT server
+  // absence: the durable intent transaction below is the duplicate backstop. All other errors propagate.
+  const optionalCacheRead = async (ref: typeof receiptRef) => {
+    try { return await getDoc(ref); }
+    catch (e) {
+      if ((e as { code?: unknown } | null)?.code === 'unavailable') return null;
+      throw e;
+    }
+  };
   const [sessionSnap, receiptSnap, activeProjectionSnap] = await Promise.all([
     getDoc(sessionRef),
-    getDoc(receiptRef),
-    getDoc(activeProjectionRef),
+    optionalCacheRead(receiptRef),
+    optionalCacheRead(activeProjectionRef),
   ]);
 
   const sessionData = sessionSnap.data() as any;
   if (!sessionData) throw new Error(`Session ${sessionId} is not available offline. Open it while online first.`);
 
   // Idempotency: already finalized.
-  if ((receiptSnap.exists() && receiptSnap.data()?.analyticsApplied) || sessionData.status === "closed" || sessionData.isPaid === true) {
-    const existingNumber = (receiptSnap.data()?.receiptNumber as string) || "";
-    return { receiptId: receiptSnap.exists() ? receiptSnap.id : sessionId, receiptNumber: existingNumber };
+  if ((receiptSnap?.exists() && receiptSnap.data()?.analyticsApplied) || sessionData.status === "closed" || sessionData.isPaid === true) {
+    const existingNumber = receiptSnap?.data()?.receiptNumber as string | undefined;
+    if (!existingNumber) throw new Error('This session is already paid. Open its saved receipt before taking another payment.');
+    const receipt = receiptSnap?.data();
+    if (typeof receipt?.deviceId === 'string' && typeof receipt.terminalSeq === 'number') {
+      const saved = await getEvent(receipt.deviceId, receipt.terminalSeq);
+      if (saved?.storeId === storeId && saved.receiptId === sessionId && saved.kind === 'sale' && saved.status === 'unsent') {
+        await ensureDeferredSaleEffects(saved, storeId, sessionId);
+      }
+    }
+    return { receiptId: receiptSnap?.exists() ? receiptSnap.id : sessionId, receiptNumber: existingNumber };
   }
 
   // Billing-revision concurrency guard (same as online).
@@ -125,18 +161,23 @@ export async function completePaymentOffline(
     const tableSnap = await getDoc(doc(db, `stores/${storeId}/tables`, sessionData.tableId));
     freeTable = tableSnap.exists() && (tableSnap.data() as any).currentSessionId === sessionId;
   }
-  const projectionExists = activeProjectionSnap.exists();
-  const projectionSource = projectionExists ? activeProjectionSnap.data() : sessionData;
+  const projectionSource = activeProjectionSnap?.data() ?? sessionData;
   const analyticsApplyId = uuidv4();
   const checks = tendersToCheck(tenders);
 
   // 4. The ledger event: number + the COMPLETE write list, in ONE IndexedDB transaction. A failure here refuses the sale and writes nothing.
-  const event = await reserveOfflineEvent({
+  const { event } = await reserveOfflineSaleIntent({
     kind: "sale",
+    storeId,
     storeCode: store.code,
     receiptId: sessionId,
     totalCentavos: amountDueCents,
     linesHash: computeLinesHash(billLines as unknown[]),
+    intentFingerprint: computeLinesHash([
+      billLines, billDiscount, customAdjustments, loyaltyRedemptions, statutory,
+      finalTotals, billingState.billingRevision, actor.uid,
+      payments.map(p => ({ methodId: p.methodId, amount: p.amount, reference: p.reference ?? null })),
+    ]),
     tenders,
     createdAtClientMs: now,
     buildOps: (n): LedgerOp[] => {
@@ -196,7 +237,8 @@ export async function completePaymentOffline(
           closedAtClientMs: now,
         },
       });
-      if (projectionExists) ops.push({ op: "delete", path: `stores/${storeId}/activeSessions/${sessionId}` });
+      // Deleting an unknown/missing projection is idempotent; a cache miss is not proof it is absent remotely.
+      ops.push({ op: "delete", path: `stores/${storeId}/activeSessions/${sessionId}` });
 
       // receipt doc — analytics DEFERRED (analyticsApplied:false, no baked analytics). Additive field: tendersToCheck (e-wallet lines a
       // manager checks against the wallet later).
@@ -283,6 +325,7 @@ export async function completePaymentOffline(
     },
   });
   notifyOutboxChanged();
+  if (event.status === 'acknowledged') return { receiptId: sessionId, receiptNumber: event.receiptNumber };
 
   // 5. Build the Firestore batch FROM the stored ops (one code path) and commit it local-first (does not await the server ack that never
   // comes offline). A definite server refusal later marks the ledger row `rejected`; the SDK losing the write is reconcile's business.
@@ -298,28 +341,8 @@ export async function completePaymentOffline(
     void rejectIfRefused(event, err).then(() => notifyOutboxChanged());
   });
 
-  // 6. Record the deferred-finalization marker (analytics, loyalty, PINs): IndexedDB, and it waits for the ledger row to be acknowledged.
-  const projData: any = projectionExists ? activeProjectionSnap.data() : {};
-  const pin = projData.customerPin ? String(projData.customerPin) : null;
-  const phone = projData.linkedCustomerPhone ? String(projData.linkedCustomerPhone) : null;
-  try {
-    await addEffectItem({
-      storeId,
-      sessionId,
-      receiptId: sessionId,
-      ctx: { pin, phone, amount: amountDue },
-      effects: {
-        analytics: "pending",
-        loyaltyFinalize: "pending",
-        loyaltyEarn: phone ? "pending" : "skip",
-        pinFinalize: pin ? "pending" : "skip",
-        loyaltyReverse: "skip", // payment sales never reverse loyalty (void-only effect)
-      },
-    });
-  } catch (e) {
-    // The sale is already safe in the ledger; only its analytics/loyalty follow-up could not be queued.
-    console.error("[completePaymentOffline] could not queue the deferred effects", e);
-  }
+  // 6. Recover the ORIGINAL context and keep one effects item, waiting for acknowledgement.
+  await ensureDeferredSaleEffects(event, storeId, sessionId);
 
   return { receiptId: sessionId, receiptNumber: event.receiptNumber };
 }

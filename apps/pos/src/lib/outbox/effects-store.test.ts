@@ -46,6 +46,18 @@ const newItem = (sid: string) => ({
   effects: { analytics: 'pending', loyaltyFinalize: 'skip', loyaltyEarn: 'skip', pinFinalize: 'skip', loyaltyReverse: 'skip' } as any,
 });
 
+describe('T-458 sale effect recovery', () => {
+  it('concurrent retries keep one item and do not reset completed work or its original context', async () => {
+    const ensure = (fx as typeof fx & { ensureSaleEffectItem: typeof fx.addEffectItem }).ensureSaleEffectItem;
+    const [a, b] = await Promise.all([ensure(newItem('s1')), ensure(newItem('s1'))]);
+    expect(a.id).toBe(b.id);
+    await fx.updateEffectItem(a.id, { status: 'syncing', effects: { ...a.effects, analytics: 'done' } });
+    const retry = await ensure({ ...newItem('s1'), ctx: { amount: 900 } });
+    expect(retry).toMatchObject({ status: 'syncing', ctx: { amount: 100 }, effects: { analytics: 'done' } });
+    expect(await fx.listEffectItems()).toHaveLength(1);
+  });
+});
+
 describe('legacy localStorage queue migration (Acceptance 8)', () => {
   it('a queue of 3 items moves to IndexedDB in ONE transaction, same shapes and ids, and the key is removed', async () => {
     ls.setItem('offline_payment_queue', JSON.stringify(legacy(3)));

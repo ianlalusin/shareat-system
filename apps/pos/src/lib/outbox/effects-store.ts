@@ -74,6 +74,25 @@ export async function addEffectItem(item: Omit<QueuedPayment, 'id' | 'queuedAtMs
   return row;
 }
 
+/** Sale replay repairs a missing marker without duplicating or resetting work already queued. */
+export function ensureSaleEffectItem(item: Omit<QueuedPayment, 'id' | 'queuedAtMs' | 'status'>): Promise<QueuedPayment> {
+  return inTerminalTransaction(STORE_EFFECTS, 'readwrite', (tx, done, fail) => {
+    const effects = tx.objectStore(STORE_EFFECTS);
+    const req = effects.getAll();
+    req.onerror = () => fail(req.error ?? new Error('Could not read the deferred sale effects.'));
+    req.onsuccess = () => {
+      const existing = (req.result as QueuedPayment[]).find(e =>
+        e.storeId === item.storeId && e.receiptId === item.receiptId && e.kind !== 'void');
+      if (existing) { done(existing); return; }
+      const row: QueuedPayment = {
+        ...item, id: `sale:${JSON.stringify([item.storeId, item.receiptId])}`, queuedAtMs: Date.now(), status: 'pending',
+      };
+      effects.add(row);
+      done(row);
+    };
+  });
+}
+
 /** Read-modify-write of one item in one transaction; a missing item is left missing. */
 function change(id: string, fn: (cur: QueuedPayment) => QueuedPayment): Promise<void> {
   return inTerminalTransaction<void>(STORE_EFFECTS, 'readwrite', (tx, done, fail) => {
