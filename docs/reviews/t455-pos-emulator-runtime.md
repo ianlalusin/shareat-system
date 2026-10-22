@@ -6,7 +6,7 @@ TypeScript noEmit passed; static export and APK build passed; incremental native
 Real Gradle preReleaseBuild refused demo assets with the intended message; no timeout or security baseline widened.
 All 34 temporarily moved tracked server/API/middleware files byte-identical to HEAD; no .cap-stash remains.
 Android API35: installed, synthetic manager signed in; offline force-stop/reopen retained login; reconnect loaded store/session data.
-Offline Ala Carte session survived force-stop/reopen and synced exactly one session after reconnect; first dish failed (DEF-722), so paid-sale persistence is NOT verified.
+Offline session survived reopen and synced once; first dish failed (DEF-722), corrected and order-retested in T-456; paid-sale persistence remains unverified.
 Root checks: 239 passed/2 failed initially; copy log omissions corrected and 20 passed; unchanged artifact scan repeat 20 passed.
 Copy-log supporting scope expanded in T-455; phase plan/runbook updated under Ian's explicit documentation request.
 Physical tablet/printer/payment/visual/soak, local server approvals and shared-auth migration remain unverified.

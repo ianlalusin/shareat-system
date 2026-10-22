@@ -1,5 +1,6 @@
 # T-455 — isolated POS emulator APK and local runtime
-Status: harness built and exercised 21 October; offline first-dish defect DEF-722 blocks sale acceptance.
+Status: harness built and exercised 21 October; DEF-722 corrected locally in T-456 with Android order persistence
+verified 22 October. Paid-sale acceptance still requires terminal/server setup and its own runtime checks.
 Ian explicitly requested emulator checks for builds. Report: docs/reviews/t455-pos-emulator-runtime.md.
 Use fixed demo-shareat-pos2 project and explicit emulator profile. Default builds retain existing behavior.
 Never launch the current live-config APK for tests. Emulator SDKs connect before any request; no fallback to live.
