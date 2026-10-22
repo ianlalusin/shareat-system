@@ -183,11 +183,16 @@ describe('row 353 - signatureFileId lives only in the detail-page chain, in no l
     const offenders = walk(join(root, 'packages/domain/src')).map(rel).filter((f) => f !== MEDIA).filter((f) => /signatureFileId/.test(read(f)));
     expect(offenders).toEqual([]);
   });
-  it('S5i packages/db/src: only persons.ts (column accessors) and the schema name it; rosters (employment.ts) never do', () => {
+  it('S5i packages/db/src: only persons.ts (column accessors), the schema, and the T-442 file-reference registry (files.ts, ref() form only) name it; rosters (employment.ts) never do', () => {
     const offenders = walk(join(root, 'packages/db/src'))
       .map(rel)
       .filter((f) => !f.startsWith('packages/db/src/schema/') && f !== 'packages/db/src/repo/persons.ts')
-      .filter((f) => /signatureFileId|signature_file_id/.test(read(f)));
+      .filter((f) => {
+        let src = read(f);
+        // T-442 registry: ref('persons', 'signature_file_id', [...]) only returns the id to the sweep/backfill, never to a screen
+        if (f === 'packages/db/src/repo/files.ts') src = src.replace(/ref\(\s*'persons'\s*,\s*'signature_file_id'\s*,[^)]*\)/g, '');
+        return /signatureFileId|signature_file_id/.test(src);
+      });
     expect(offenders).toEqual([]);
   });
   it('S5i the staff list, wall and views still never mention a signature', () => {
