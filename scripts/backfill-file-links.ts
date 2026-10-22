@@ -60,11 +60,14 @@ const sum = (o: Record<string, number>): number => Object.values(o).reduce((a, b
 
 async function main(): Promise<number> {
   const { confirm, check, org } = parseArgs(process.argv.slice(2));
-  const { closeDb, schedulerRepo, transaction } = await import('@shareat/db');
+  const { closeDb, schedulerRepo, systemTransaction } = await import('@shareat/db');
   const { backfillFileLinks } = await import('@shareat/domain');
   try {
-    // A bare `transaction`, as backfill-store-attendance-config.ts: `organizations` has no org_id to scope against.
-    const orgs = await transaction((tx) => schedulerRepo.listOrgsToRun(tx, org ?? undefined));
+    // DEF-742: `organizations` has FORCE ROW LEVEL SECURITY, so a bare transaction (no principal)
+    // sees zero rows and this printed "No organizations exist". This script has no signed-in actor to
+    // scope to one org, and listing every org is the system-connection case, so it uses
+    // `systemTransaction` (same reason as scripts/backfill-canonical-positions.ts). The per-org work below is unchanged.
+    const orgs = await systemTransaction((tx) => schedulerRepo.listOrgsToRun(tx, org ?? undefined));
     if (orgs.length === 0) {
       console.log(org ? `No organization ${org} exists. Nothing processed.` : 'No organizations exist. Nothing processed.');
       return 1;

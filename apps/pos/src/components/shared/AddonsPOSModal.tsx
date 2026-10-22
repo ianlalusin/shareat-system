@@ -12,13 +12,14 @@ import { Badge } from "@/components/ui/badge";
 import { Search, Minus, Plus, Loader2, Layers } from "lucide-react";
 import Image from "next/image";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { collection, doc, writeBatch, serverTimestamp, runTransaction, increment, getDoc, getDocs, updateDoc } from "firebase/firestore";
+import { collection, doc, serverTimestamp, runTransaction, increment, getDocs, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthContext } from "@/context/auth-context";
 import { useStoreContext } from "@/context/store-context";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { commitLocalFirst } from "@/lib/offline/commit";
+import { stageOfflineAddonLine } from "@/lib/offline/addon-line";
 import { printKitchenTicketBackup } from "@/lib/printing/kitchenBackupPrint";
 import { makeKitchenBackupDeps } from "@/lib/printing/kitchenBackupDeps";
 import { getBrowserDeviceId } from "@/lib/offline/browserDevice";
@@ -288,7 +289,7 @@ function POSContent({
       const modHash = modifiers.length
         ? modifiers.map((m) => m.valueId).sort().join("-")
         : "";
-      const lineId = modHash
+      let lineId = modHash
         ? `addon_${addon.id}_${safeUnitPrice}_${modHash}`
         : `addon_${addon.id}_${safeUnitPrice}`;
       const actor = getActorStamp(appUser);
@@ -364,25 +365,9 @@ function POSContent({
           tx.update(sessionRef, { billingRevision: increment(1), updatedAt: serverTimestamp() });
         });
       } else {
-        // Offline: this is the one read-modify-write flow in the modal. `getDoc`
-        // resolves from Firestore's local cache (no network needed) so we can
-        // still decide increment-vs-create, then batch the same writes the online
-        // transaction would have made and commit local-first.
-        const lineRef = doc(db, `stores/${storeId}/sessions/${session.id}/sessionBillLines`, lineId);
+        // Each offline add is a fresh line: an uncached document read cannot prove absence.
         const sessionRef = doc(db, "stores", storeId, "sessions", session.id);
-        const lineSnap = await getDoc(lineRef); // cache-served offline
-
-        const batch = writeBatch(db);
-
-        if (lineSnap.exists()) {
-          batch.update(lineRef, {
-            qtyOrdered: increment(qty),
-            updatedAt: serverTimestamp(),
-            updatedByUid: actor.uid,
-            updatedByName: actor.username,
-          });
-        } else {
-          const newLinePayload = stripUndefined({
+        const newLinePayload = stripUndefined({
             id: lineId,
             type: "addon",
             itemId: addon.id,
@@ -407,8 +392,9 @@ function POSContent({
             modifiersTotal: modifiers.length ? modifiersTotal : null,
             note: lineNote || null,
           });
-          batch.set(lineRef, newLinePayload);
-        }
+        const staged = stageOfflineAddonLine(db, storeId, session.id, newLinePayload);
+        lineId = staged.lineId;
+        const batch = staged.batch;
 
         // Only items with a kitchen location produce a kitchen ticket. Items with
         // none are still billed (line above) but exempt from KDS so the order

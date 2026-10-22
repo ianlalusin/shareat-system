@@ -33,7 +33,7 @@ vi.mock('@/lib/analytics/applyReceiptDeltaServerFirst', () => ({ applyReceiptDel
 vi.mock('@/lib/analytics/applyKdsTicketDelta', () => ({ applyKdsTicketDelta: vi.fn(async () => {}) }));
 vi.mock('@/lib/analytics/applyKdsDeltaServerFirst', () => ({ applyKdsDeltaServerFirst: vi.fn(async () => {}) }));
 
-import { getQueue, type QueuedPayment } from '@/lib/offline/payment-queue';
+import type { QueuedPayment } from '@/lib/offline/payment-queue';
 import { replayDeferredEffects } from '@/lib/offline/replayDeferredEffects';
 
 let fs: FakeFirestore;
@@ -42,7 +42,6 @@ const TABLE = `stores/${STORE_ID}/tables/t1`;
 const TABLE_PROJ = `stores/${STORE_ID}/storeConfig/current/tables/t1`;
 const ticket = (id: string) => fs.get(`${SP}/kitchentickets/${id}`)!;
 const R = [{ redemptionId: 'R1', type: 'fixed' as const, value: 50 }, { redemptionId: 'R2', type: 'percent' as const, value: 10 }];
-const voidItems = () => getQueue().filter((q) => q.sessionId === 'sess1' && q.kind === 'void');
 
 beforeEach(() => {
   fs = createFakeFirestore();

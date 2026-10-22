@@ -20,12 +20,13 @@ export function stripUndefined<T>(obj: T): T {
       .map(item => stripUndefined(item)) as T;
   }
 
-  if (typeof obj !== 'object' || obj instanceof Date) {
-    // Return primitives, Dates, and other non-plain-objects as is.
-    // Firestore Timestamps are objects but should not be recursed into.
-    // A simple typeof check is sufficient for most cases.
+  if (typeof obj !== 'object') {
     return obj;
   }
+  // Preserve SDK Timestamp, FieldValue and DocumentReference instances for their SDK/ledger encoder.
+  // Copying enumerable properties destroys their transport and comparison semantics.
+  const prototype = Object.getPrototypeOf(obj);
+  if (prototype !== Object.prototype && prototype !== null) return obj;
   
   // It's a plain object, so we recurse on its properties.
   const newObj: { [key: string]: any } = {};

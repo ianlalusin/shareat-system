@@ -1,22 +1,10 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useConnectivity } from "@/hooks/useConnectivity";
 
-export function useOnlineStatus() {
-  const [isOnline, setIsOnline] = useState(
-    typeof navigator !== "undefined" ? navigator.onLine : true
-  );
-
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
-
-  return isOnline;
+/**
+ * T-425: a thin wrapper over the ONE connectivity store (a probe of the POS server, not `navigator.onLine`). Kept so the many call sites
+ * that only need a boolean do not change.
+ */
+export function useOnlineStatus(): boolean {
+  return useConnectivity().online;
 }

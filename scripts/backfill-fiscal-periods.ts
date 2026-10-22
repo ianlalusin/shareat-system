@@ -35,6 +35,7 @@ import { config } from 'dotenv';
 config({ path: '.env.local' });
 
 import { closeDb, transaction, type Tx } from '../packages/db/src/client';
+import { systemTransaction } from '@shareat/db';
 import * as schedulerRepo from '../packages/db/src/repo/scheduler';
 import * as fiscalPeriodsRepo from '../packages/db/src/repo/fiscal-periods';
 import { fiscalPeriodSeedWindow } from '../packages/domain/src/organizations';
@@ -86,7 +87,11 @@ function printReport(report: OrgReport): void {
 
 async function main(): Promise<void> {
   const confirm = process.argv.includes('--confirm');
-  const orgs = await transaction((tx) => schedulerRepo.listOrgsToRun(tx));
+  // DEF-742: `organizations` has FORCE ROW LEVEL SECURITY. A bare `transaction()` (no principal) sees
+  // zero rows, so the script would report "organizations found : 0" while orgs exist. Enumerating every
+  // org is the system-connection case (see scripts/backfill-canonical-positions.ts header), so use
+  // `systemTransaction`. The per-org seeding below keeps its own transaction.
+  const orgs = await systemTransaction((tx) => schedulerRepo.listOrgsToRun(tx));
 
   console.log('');
   console.log('backfill-fiscal-periods — the plan');

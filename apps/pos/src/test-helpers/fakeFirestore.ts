@@ -194,6 +194,11 @@ export class FakeFirestore {
 
   // ---- reads ----------------------------------------------------------------------------------
   getDoc = async (ref: DocRef) => new DocSnap(ref, this.docs.get(ref.path));
+  /** T-425: the plain (always-online) fake serves "from server" reads like any read and has nothing pending. */
+  getDocFromServer = async (ref: DocRef) => this.getDoc(ref);
+  waitForPendingWrites = async (_db?: unknown) => {};
+  /** T-425: a TABLET'S view of this server (offline mode, pending writes, local cache). See FakeClient at the end of this file. */
+  client = (name = 'tablet') => new FakeClient(this, name);
   getDocs = async (q: QueryRef | CollRef) => {
     const query: QueryRef = q.__kind === 'query' ? q : { __kind: 'query', coll: q, constraints: [], firestore: this };
     this.assertIndexed(query);
@@ -448,18 +453,128 @@ export const createFakeFirestore = () => new FakeFirestore();
 // ---------------------------------------------------------------------------------------------
 // vi.mock('firebase/firestore') support: functions that delegate to whichever fake is active.
 // ---------------------------------------------------------------------------------------------
-let active: FakeFirestore = new FakeFirestore();
-export const setActiveFake = (f: FakeFirestore) => { active = f; };
-export const getActiveFake = () => active;
+let active: any = new FakeFirestore();
+/** T-425: a FakeClient (a tablet's offline-capable view) can be made the active fake too. */
+export const setActiveFake = (f: FakeFirestore | FakeClient) => { active = f; };
+export const getActiveFake = () => active as FakeFirestore;
 
 /** The module object to return from a `vi.mock('firebase/firestore', ...)` factory. */
 export function firebaseFirestoreModule() {
   const d = <K extends keyof FakeFirestore>(name: K) => (...args: any[]) => (active[name] as any)(...args);
   return {
+    getDocFromServer: d('getDocFromServer'), waitForPendingWrites: d('waitForPendingWrites'),
     collection: d('collection'), doc: d('doc'), getDoc: d('getDoc'), getDocs: d('getDocs'), setDoc: d('setDoc'),
     updateDoc: d('updateDoc'), deleteDoc: d('deleteDoc'), query: d('query'), where: d('where'), orderBy: d('orderBy'),
     limit: d('limit'), documentId: d('documentId'), serverTimestamp: d('serverTimestamp'), deleteField: d('deleteField'),
     increment: d('increment'), arrayUnion: d('arrayUnion'), arrayRemove: d('arrayRemove'), writeBatch: d('writeBatch'),
     runTransaction: d('runTransaction'), Timestamp: FakeTimestamp,
   };
+}
+
+// ---------------------------------------------------------------------------------------------
+// T-425 slice T - a TABLET'S client of a shared fake server: offline mode, held (pending) writes delivered on reconnect,
+// a lost pending queue, a server-side refusal, getDocFromServer that throws while offline, waitForPendingWrites that resolves
+// only when the queue is empty, and a local cache view (getDoc = server + this tablet's pending writes), like the real SDK.
+// ---------------------------------------------------------------------------------------------
+export class FakeNetworkError extends Error {
+  code = 'unavailable';
+  constructor(m = 'unavailable: Failed to get document from server (the client is offline).') { super(m); this.name = 'FirebaseError'; }
+}
+
+interface PendingBatch { writes: Write[]; resolve: () => void; reject: (e: unknown) => void }
+
+export class FakeClient {
+  online = true;
+  pending: PendingBatch[] = [];
+  /** When it returns an Error for a batch, the server refuses that batch (e.g. code 'permission-denied') when it is delivered. */
+  refuse: ((writes: Write[]) => Error | null) | null = null;
+  delivered = 0;
+  refused = 0;
+  private waiters: (() => void)[] = [];
+  readonly db: any;
+  constructor(readonly server: FakeFirestore, readonly name: string) { this.db = { __fake: true, client: name }; }
+
+  get pendingCount() { return this.pending.length; }
+  goOffline() { this.online = false; }
+  goOnline() { this.online = true; this.flush(); }
+  /** The SDK "loses" its queue (cache cleared, app data wiped): the writes are gone and their promises never settle. */
+  dropPending() { this.pending = []; this.wake(); }
+
+  private wake() { if (this.pending.length === 0) for (const w of this.waiters.splice(0)) w(); }
+  /** Delivers held batches in order while online. A refused or failing batch leaves the queue and its promise rejects. */
+  flush() {
+    while (this.online && this.pending.length) {
+      const b = this.pending.shift()!;
+      try {
+        const refusal = this.refuse?.(b.writes) ?? null;
+        if (refusal) throw refusal;
+        this.server.commit('batch', b.writes, 1);
+        this.delivered++;
+        b.resolve();
+      } catch (e) {
+        this.refused++;
+        b.reject(e);
+      }
+    }
+    this.wake();
+  }
+
+  doc = (parent: any, ...rest: string[]) => this.server.doc(parent, ...rest);
+  collection = (parent: any, ...rest: string[]) => this.server.collection(parent, ...rest);
+  documentId = () => this.server.documentId();
+  serverTimestamp = () => this.server.serverTimestamp();
+  deleteField = () => this.server.deleteField();
+  increment = (n: number) => this.server.increment(n);
+  arrayUnion = (...v: unknown[]) => this.server.arrayUnion(...v);
+  arrayRemove = (...v: unknown[]) => this.server.arrayRemove(...v);
+
+  /** The tablet's local cache: the server's documents with this tablet's pending writes applied on top. */
+  private localView(): FakeFirestore {
+    const view = new FakeFirestore();
+    view.docs = new Map(this.server.docs);
+    for (const b of this.pending) { try { view.commit('batch', b.writes, 1); } catch { /* a write that fails on the server fails here too */ } }
+    return view;
+  }
+  getDoc = async (ref: DocRef) => this.localView().getDoc(ref);
+  getDocs = async (q: QueryRef | CollRef) => this.localView().getDocs(q);
+  getDocFromServer = async (ref: DocRef) => {
+    if (!this.online) throw new FakeNetworkError();
+    return this.server.getDoc(ref);
+  };
+  /** Resolves when no write is pending. Offline with writes held it stays pending (the caller applies its own time limit). */
+  waitForPendingWrites = (_db?: unknown): Promise<void> =>
+    this.pending.length === 0 ? Promise.resolve() : new Promise<void>((res) => { this.waiters.push(res); });
+
+  setDoc = (ref: DocRef, data: any, opts?: { merge?: boolean }) => this.enqueue([{ op: 'set', path: ref.path, data, merge: !!opts?.merge }]);
+  updateDoc = (ref: DocRef, data: any) => this.enqueue([{ op: 'update', path: ref.path, data }]);
+  deleteDoc = (ref: DocRef) => this.enqueue([{ op: 'delete', path: ref.path }]);
+  writeBatch = (_db?: unknown) => {
+    const writes: Write[] = [];
+    const b = {
+      set: (ref: DocRef, data: any, opts?: { merge?: boolean }) => { writes.push({ op: 'set', path: ref.path, data, merge: !!opts?.merge }); return b; },
+      update: (ref: DocRef, data: any) => { writes.push({ op: 'update', path: ref.path, data }); return b; },
+      delete: (ref: DocRef) => { writes.push({ op: 'delete', path: ref.path }); return b; },
+      commit: () => this.enqueue(writes),
+    };
+    return b;
+  };
+  private enqueue(writes: Write[]): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      this.pending.push({ writes: structuredCloneDeep(writes), resolve, reject });
+      if (this.online) queueMicrotask(() => this.flush());
+    });
+  }
+  /** Transactions need the server: while offline they reject like the SDK's. */
+  runTransaction = async <T>(db: unknown, fn: (tx: any) => Promise<T>): Promise<T> => {
+    if (!this.online) throw new FakeNetworkError('unavailable: transaction failed (the client is offline).');
+    return this.server.runTransaction(db, fn);
+  };
+
+  /** The port `runReconcilePass` takes (T-425 contract): this client's SDK surface. */
+  get reconcilePort() {
+    return {
+      db: this.db, doc: this.doc, getDocFromServer: this.getDocFromServer, waitForPendingWrites: this.waitForPendingWrites,
+      runTransaction: this.runTransaction, serverTimestamp: this.serverTimestamp, deleteField: this.deleteField, arrayRemove: this.arrayRemove,
+    };
+  }
 }

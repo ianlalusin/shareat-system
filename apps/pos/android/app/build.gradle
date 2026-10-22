@@ -34,6 +34,12 @@ android {
         }
     }
     buildTypes {
+        emulator {
+            initWith debug
+            applicationIdSuffix '.emulator'
+            matchingFallbacks = ['debug']
+            signingConfig signingConfigs.debug
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
@@ -44,6 +50,23 @@ android {
             // update over a debug-signed install — uninstall once at the cutover,
             // then every future build updates in place.
             signingConfig file("release.jks").exists() ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+}
+
+tasks.matching { it.name == 'preEmulatorBuild' }.configureEach {
+    doFirst {
+        def marker = file('src/main/assets/public/pos-emulator-profile.json')
+        if (!marker.exists() || !marker.text.contains('demo-shareat-pos2')) {
+            throw new GradleException('Build the isolated demo web bundle with npm run build:emulator first.')
+        }
+    }
+}
+
+tasks.matching { it.name == 'preReleaseBuild' }.configureEach {
+    doFirst {
+        if (file('src/main/assets/public/pos-emulator-profile.json').exists()) {
+            throw new GradleException('Refusing to package emulator assets in a release APK. Rebuild and sync the normal web bundle first.')
         }
     }
 }

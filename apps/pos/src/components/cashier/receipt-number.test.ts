@@ -42,6 +42,9 @@ vi.mock('@/lib/analytics/applyAnalyticsDeltaV2', () => ({ applyAnalyticsDeltaV2:
 vi.mock('@/lib/analytics/applyReceiptDeltaServerFirst', () => ({ applyReceiptDeltaServerFirst: vi.fn(async () => {}) }));
 vi.mock('@/lib/analytics/applyKdsTicketDelta', () => ({ applyKdsTicketDelta: vi.fn(async () => {}) }));
 vi.mock('@/lib/analytics/applyKdsDeltaServerFirst', () => ({ applyKdsDeltaServerFirst: vi.fn(async () => {}) }));
+// T-425: an offline sale is refused unless THIS tablet opened the table (session.ownerTerminalId === the device id), so the offline tests
+// below seed that owner and give the tablet the identity DEV-A.
+vi.mock('@/lib/offline/browserDevice', () => ({ getBrowserDeviceId: () => 'DEV-A' }));
 
 import * as counter from '@/lib/terminal/counter';
 import * as centavos from '@/lib/money/centavos';
@@ -59,6 +62,11 @@ const payOnline = (sessionId = 'sess1', amount = 600) =>
   completePaymentFromUnits(STORE_ID, sessionId, user, cashPayment(amount), store, paymentMethods, 598);
 const payOffline = (sessionId = 'sess1', amount = 600) =>
   completePaymentOffline(STORE_ID, sessionId, user, cashPayment(amount), store, paymentMethods, 598);
+/** The session as this tablet opened it (T-425 owner rule). */
+const ownIt = (sessionId = 'sess1') => {
+  const path = `stores/${STORE_ID}/sessions/${sessionId}`;
+  fs.seed(path, { ...fs.get(path)!, ownerTerminalId: 'DEV-A' });
+};
 const settle = async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0)); };
 
 beforeEach(() => {
@@ -220,9 +228,10 @@ describe('the wire format does not change (Acceptance 9)', () => {
 });
 
 describe('offline payment uses the same series (Acceptance 5, DEF-002, DEF-587)', () => {
-  it('numbers the offline sale from reserveNext(): same format, no OL prefix, no daily reset, additive fields, number doc in the batch', async () => {
+  it('numbers the offline sale from the terminal counter (through the ledger): same format, no OL prefix, no daily reset, additive fields, number doc in the batch', async () => {
     await claimThisTablet(5);
     seedSession(fs);
+    ownIt();
     const res = await payOffline();
     await settle();
     expect(res.receiptNumber).toBe('SHT-01-000005');
@@ -239,6 +248,7 @@ describe('offline payment uses the same series (Acceptance 5, DEF-002, DEF-587)'
     await claimThisTablet(5);
     seedSession(fs, { sessionId: 'sess1' });
     seedSession(fs, { sessionId: 'sess2' });
+    ownIt('sess2');
     await payOnline('sess1');
     const off = await payOffline('sess2');
     await settle();
@@ -249,6 +259,7 @@ describe('offline payment uses the same series (Acceptance 5, DEF-002, DEF-587)'
   it('does not use localStorage for numbering (works while every localStorage read of the old counter key would throw)', async () => {
     await claimThisTablet(5);
     seedSession(fs);
+    ownIt();
     const ls = memoryLocalStorage();
     const seen: string[] = [];
     vi.stubGlobal('localStorage', {
@@ -263,6 +274,7 @@ describe('offline payment uses the same series (Acceptance 5, DEF-002, DEF-587)'
 
   it('with no terminal claim the offline sale is refused with the plain message and nothing is written', async () => {
     seedSession(fs);
+    ownIt();
     await expect(payOffline()).rejects.toThrow("Connect to the internet and set up this tablet's terminal number in Settings.");
     await settle();
     expect(fs.commits).toHaveLength(0);

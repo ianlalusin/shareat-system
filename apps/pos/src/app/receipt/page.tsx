@@ -95,6 +95,7 @@ export default function ReceiptPage() {
                     createdByUsername: receiptDocData.createdByUsername,
                     receiptNumber: receiptDocData.receiptNumber,
                     analytics: receiptDocData.analytics,
+                    statutoryDiners: receiptDocData.statutoryDiners ?? [],
                 });
             } catch (err: any) {
                 setError(err.message);
