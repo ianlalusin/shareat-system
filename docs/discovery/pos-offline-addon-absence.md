@@ -1,4 +1,4 @@
-# DEF-722 — absence-safe offline add, 21 October
+# DEF-741 — absence-safe offline add, 21 October
 Goal: append a billable dish while disconnected, preserving any line the device has not cached.
 Observed Android SDK unavailable on getDoc of a never-cached deterministic bill-line id.
 [Firestore offline documentation](https://firebase.google.com/docs/firestore/manage-data/enable-offline)

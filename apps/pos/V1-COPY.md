@@ -126,7 +126,7 @@ New in T-425, not from v1: `src/lib/terminal/db.ts`, `src/lib/outbox/**`, `src/l
 - `src/lib/firebase/client.ts`: connect Auth, Firestore and Storage to local emulators before requests; reject mismatched project configuration.
 - `src/lib/api-base.ts`: explicit emulator profile overrides both API destinations to the local POS server.
 
-## T-456 edits (DEF-722 offline first dish)
+## T-456 edits (DEF-741 offline first dish)
 
 - `src/components/shared/AddonsPOSModal.tsx`: offline adds stage a fresh bill-line document with the existing payload, then use its id for kitchen tickets and optimistic display; no unavailable read is treated as absence. Repeated offline adds retain separate rows, while online grouping is unchanged.
 New helper: `src/lib/offline/addon-line.ts`; no read before staging the fresh document in the caller's existing batch.

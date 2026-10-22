@@ -1,5 +1,5 @@
 # T-463 — isolated POS emulator APK and local runtime
-Status: harness built and exercised 21 October; DEF-722 corrected locally in T-456 with Android order persistence
+Status: harness built and exercised 21 October; DEF-741 corrected locally in T-456 with Android order persistence
 verified 22 October. Paid-sale acceptance still requires terminal/server setup and its own runtime checks.
 Ian explicitly requested emulator checks for builds. Report: docs/reviews/t463-pos-emulator-runtime.md.
 Use fixed demo-shareat-pos2 project and explicit emulator profile. Default builds retain existing behavior.

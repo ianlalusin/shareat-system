@@ -8,7 +8,7 @@ const base = 'stores/test/sessions/session/sessionBillLines';
 const payload = { id: 'addon_dish_100', itemId: 'dish', unitPrice: 100, qtyOrdered: 2, freeQty: 0,
   modifiers: [{ valueId: 'spicy', priceDelta: 10 }], modifiersText: 'Spicy', note: 'No onion' };
 beforeEach(() => { fs = createFakeFirestore(); setActiveFake(fs); });
-describe('DEF-722 fresh offline add intent', () => {
+describe('DEF-741 fresh offline add intent', () => {
   it('does not read an uncached document before staging the line', async () => {
     vi.spyOn(fs, 'getDoc').mockRejectedValue(Object.assign(new Error('client is offline'), { code: 'unavailable' }));
     const staged = await stageOfflineAddonLine(fs.db as never, 'test', 'session', payload);

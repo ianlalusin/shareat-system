@@ -1,4 +1,4 @@
-# T-456 — DEF-722, 22 October
+# T-456 — DEF-741, 22 October
 Four target controls failed before correction; four pass after staging fresh offline add intents.
 POS suite: 914 passed, one existing skip, 87 files; tsc noEmit passed.
 APK/static build passed (111 native tasks); all 34 moved source files restored byte-identically; no cap stash.
