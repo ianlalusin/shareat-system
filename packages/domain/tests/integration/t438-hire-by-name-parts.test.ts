@@ -160,7 +160,7 @@ describe('T-438 H2c-f - the duplicate guard: folding, volume, and who may be tol
     const [s2] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${fx.orgId}, ${uid('S2')}, 'Second') returning id`;
     const existing = await legacy(fx.orgId, 'Maria Santos');
     await sql`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on, created_by)
-      values (${fx.orgId}, ${s2!.id}, ${existing}, ${uid('SE')}, 'regular', '2026-10-01', ${fx.adminActor.personId})`;
+      values (${fx.orgId}, ${s2!.id}, ${existing}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2026-10-01', ${fx.adminActor.personId})`;
     const scoped = await legacy(fx.orgId, 'Branch One Manager');
     await sql`insert into person_roles (person_id, org_id, role) values (${scoped}, ${fx.orgId}, 'manager')`;
     await sql`insert into person_store_scope (person_id, store_id) values (${scoped}, ${fx.storeId})`;
@@ -215,7 +215,7 @@ describe('T-438 S2b - renamePerson', () => {
     const personId = await legacy(fx.orgId, name);
     const [e] = await sql<{ id: string }[]>`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on, created_by)
-      values (${fx.orgId}, ${fx.storeId}, ${personId}, ${uid('SE')}, 'probationary', '2026-10-01', ${fx.adminActor.personId}) returning id`;
+      values (${fx.orgId}, ${fx.storeId}, ${personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'probationary', '2026-10-01', ${fx.adminActor.personId}) returning id`;
     return { personId, employmentId: e!.id };
   };
 
@@ -261,7 +261,7 @@ describe('T-438 S2b - renamePerson', () => {
     const termId = await legacy(fx.orgId, 'Terminal - Main', 'terminal');
     const [e] = await sql<{ id: string }[]>`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on, created_by)
-      values (${fx.orgId}, ${fx.storeId}, ${termId}, ${uid('SE')}, 'regular', '2026-10-01', ${fx.adminActor.personId}) returning id`;
+      values (${fx.orgId}, ${fx.storeId}, ${termId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2026-10-01', ${fx.adminActor.personId}) returning id`;
     await expect(rename(fx, fx.adminActor, { employmentId: e!.id, lastName: 'Santos', firstName: 'Maria' })).rejects.toThrow();
     expect((await row(termId)).display_name).toBe('Terminal - Main');
   });

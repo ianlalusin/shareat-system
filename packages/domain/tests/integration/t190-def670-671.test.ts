@@ -70,7 +70,7 @@ async function fixture(hint: string, minimumWage = '645.00') {
   const emp = async (startedOn: string, rate: string, endedOn: string | null = null, basis = 'daily') => {
     const [e] = await sql<{ id: string }[]>`
       insert into employments (org_id, person_id, store_id, staff_code, started_on, ended_on, employment_status, created_by)
-      values (${orgId}, ${workerId}, ${storeId}, ${uid('sc')}, ${startedOn}, ${endedOn}, ${endedOn ? 'resigned' : 'regular'}, ${adminId}) returning id`;
+      values (${orgId}, ${workerId}, ${storeId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, ${startedOn}, ${endedOn}, ${endedOn ? 'resigned' : 'regular'}, ${adminId}) returning id`;
     await sql`insert into pay_rates (org_id, employment_id, basis, amount, effective_from, created_by)
               values (${orgId}, ${e!.id}, ${basis}, ${rate}, ${startedOn}, ${adminId})`;
     return e!.id;

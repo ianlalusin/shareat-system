@@ -356,7 +356,6 @@ export async function loadStaffState(tx: Tx, orgId: string) {
   return {
     existingPositions: await employmentRepo.listOrgPositions(tx, orgId),
     existingPersons: await employmentRepo.listOrgPersons(tx, orgId),
-    existingStaffCodes: await employmentRepo.listStaffCodes(tx, orgId),
     links,
   };
 }
@@ -475,8 +474,7 @@ async function staffBody(tx: Tx, input: ApplyStaffInput, actor: Actor): Promise<
     linked++;
   };
 
-  // persons first; then every employment that keeps a v1 staff code (so an allocation never takes a number a v1 code
-  // still needs), then the rest, which v2 numbers after them
+  // persons first, then their employments; v2 numbers every hire itself (T-464: no staff code is carried over from v1)
   const people: Array<{ personId: string; employments: PlannedEmployment[] }> = [];
   for (const w of plan.writes) {
     if (w.entity !== 'person') continue;
@@ -491,10 +489,9 @@ async function staffBody(tx: Tx, input: ApplyStaffInput, actor: Actor): Promise<
     people.push({ personId, employments: w.employments });
   }
   let created = 0;
-  for (const withCode of [true, false]) {
+  {
     for (const p of people) {
       for (const e of p.employments) {
-        if ((e.staffCode !== null) !== withCode) continue;
         const ids = e.positions.map((n) => positionId(e.storeCode, n));
         const emp = await createEmployment(tx, actor, {
           storeId: storeFor(stores, e.storeCode, input.orgCode),
@@ -502,7 +499,6 @@ async function staffBody(tx: Tx, input: ApplyStaffInput, actor: Actor): Promise<
           employmentStatus: e.employmentStatus as never,
           startedOn: e.startedOn,
           ...(ids.length > 0 ? { positionIds: ids, primaryPositionId: positionId(e.storeCode, e.primaryPosition!) } : {}),
-          ...(e.staffCode !== null ? { staffCode: e.staffCode } : {}),
           source: 'etl',
         });
         created++;

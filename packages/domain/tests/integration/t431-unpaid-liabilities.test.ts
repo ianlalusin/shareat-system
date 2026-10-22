@@ -144,12 +144,12 @@ async function fixture(hint: string, opts: { noAttendanceConfig?: boolean } = {}
   for (const s of all) {
     const [emp] = await sql<{ id: string }[]>`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-      values (${orgId}, ${s}, ${staffId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+      values (${orgId}, ${s}, ${staffId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
     await grantEverydayPositionAccess(sql, { orgId, storeId: s, employmentId: emp!.id, personId: staffId, setBy: managerId });
   }
   const [workerEmp] = await sql<{ id: string }[]>`
     insert into employments (org_id, person_id, store_id, staff_code, started_on, employment_status, created_by)
-    values (${orgId}, ${workerId}, ${stores.A}, ${uid('wk')}, '2026-01-01', 'regular', ${adminId}) returning id`;
+    values (${orgId}, ${workerId}, ${stores.A}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, '2026-01-01', 'regular', ${adminId}) returning id`;
   let configId: string | null = null;
   if (!opts.noAttendanceConfig) {
     for (const s of all) {

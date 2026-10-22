@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1713` 13. Decision log
-- `1714–1733` 14. Amendment protocol
-- `1734–1738` 15. Engineering standards — the industry practices this project follows
-  - `1739–1744` 15.1 Build order: walking skeleton first
-  - `1745–1756` 15.2 Golden-master testing — the most important practice here
-  - `1757–1765` 15.3 Strangler Fig, not big-bang cutover
-  - `1766–1770` 15.4 No dual-write
-  - `1771–1779` 15.5 Expand/contract migrations
-  - `1780–1788` 15.6 Observability from day zero, not later
-  - `1789–1793` 15.7 CI gates
-  - `1794–1798` 15.8 Backups and a tested restore
-  - `1799–1803` 15.9 Twelve-Factor config
-  - `1804–1811` 15.10 Append-only ledgers — but not event sourcing
-  - `1812–1816` 15.11 Defence in depth
-  - `1817–1845` 15.12 Skills are lenses, not assurance
-  - `1846–1852` 15.13 Reconciliation is a permanent feature
-- `1853–1857` 16. The accounting spine
-  - `1858–1889` 16.0 What we are actually fixing — the diagnosis
-  - `1890–1933` 16.1 The ten invariants — non-negotiable
-  - `1934–1948` 16.2 The oracle: how "correct" is tested
-  - `1949–1970` 16.3 The model — header + lines, not legs
-  - `1971–1990` 16.4 Deliberately simpler than ERPNext
-  - `1991–2059` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2060–2084` 16.6 What v1 already gets right — preserve the intent
-  - `2085–2106` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2107–2121` 16.8 What v1's accounting already gets right
-  - `2122–2165` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2166–2216` 16.10 Posting patterns — one canonical pattern per business event
-  - `2217–2249` 16.11 Inventory's accounting integration
+- `1329–1715` 13. Decision log
+- `1716–1735` 14. Amendment protocol
+- `1736–1740` 15. Engineering standards — the industry practices this project follows
+  - `1741–1746` 15.1 Build order: walking skeleton first
+  - `1747–1758` 15.2 Golden-master testing — the most important practice here
+  - `1759–1767` 15.3 Strangler Fig, not big-bang cutover
+  - `1768–1772` 15.4 No dual-write
+  - `1773–1781` 15.5 Expand/contract migrations
+  - `1782–1790` 15.6 Observability from day zero, not later
+  - `1791–1795` 15.7 CI gates
+  - `1796–1800` 15.8 Backups and a tested restore
+  - `1801–1805` 15.9 Twelve-Factor config
+  - `1806–1813` 15.10 Append-only ledgers — but not event sourcing
+  - `1814–1818` 15.11 Defence in depth
+  - `1819–1847` 15.12 Skills are lenses, not assurance
+  - `1848–1854` 15.13 Reconciliation is a permanent feature
+- `1855–1859` 16. The accounting spine
+  - `1860–1891` 16.0 What we are actually fixing — the diagnosis
+  - `1892–1935` 16.1 The ten invariants — non-negotiable
+  - `1936–1950` 16.2 The oracle: how "correct" is tested
+  - `1951–1972` 16.3 The model — header + lines, not legs
+  - `1973–1992` 16.4 Deliberately simpler than ERPNext
+  - `1993–2061` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2062–2086` 16.6 What v1 already gets right — preserve the intent
+  - `2087–2108` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2109–2123` 16.8 What v1's accounting already gets right
+  - `2124–2167` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2168–2218` 16.10 Posting patterns — one canonical pattern per business event
+  - `2219–2251` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1710,6 +1710,8 @@ just a patch.**
 | 375 | 2026-10-18 | **THE WHOLESALE FLAG READS "SOLD TO OTHER STORES OR BUYERS (WHOLESALE)" (T-443 R-B).** `sellable_wholesale` keeps its meaning (sold to another store, a franchisee or an outside buyer, not to a diner); only the label changes, no schema change. Rejected: splitting it into two flags, which needs a database change and touches trade orders. | Ian, 2026-10-18, T-443 rulings (`docs/tasks/443-item-variations-dismiss-guards.md`, R-B); recorded 2026-10-22 by the Opus planner | Yes |
 | 376 | 2026-10-22 | **QRPH PAYMENTS LAND IN IAN'S MARIBANK ACCOUNT.** A QRPH payment taken at a store is received into Ian's Maribank account, so v2 records it against that account. Part answer to `q-t396-shared-accounts`; option A (each store holds its own share of each real account) and the bank-transfer, foodpanda and Davao parts are still open. | Ian, 2026-10-22, chat with the orchestrator | Yes, before the T-396 store links |
 | 377 | 2026-10-22 | **BANAY-BANAY IS CLOSING: DROP IT COMPLETELY FROM V2.** v2 does not link Banay-Banay to POS, does not import its sales days, leaves it out of the dual run, loads none of its master data or staff, and gives it no opening balances at cutover. Its history stays in v1. Closing date and where its last stock, cash and staff go are still open; the work is task T-454. | Ian, 2026-10-22, chat with the orchestrator | Yes, before T-396 S3/S4 and the cutover |
+| 381 | 2026-10-22 | **A DEDICATED POS TABLET IS PAIRED ONCE; AFTER THAT ITS SIGN-IN ASKS ONLY FOR THE EMPLOYEE ID AND PIN (T-464).** (1) The Employee ID is the person's existing staff code at that store (`employments.staff_code`, the badge code), typed as its **3-digit number only** (`007` = `SE-007`); no new staff number is created (Ian first picked a new org-wide number, then switched to the badge code: *"only use the number not the letters so i guess 3 digit number since we only have around 30 employees"*). (2) A **manager of that store or an admin** pairs and un-pairs a tablet (new capability `pair_pos_tablet`), audited. (3) **5 wrong PINs for one Employee ID pause that ID for 5 minutes** (POS v1's own rule); the store-wide tiers (10/min pause, 50/day stop) stay. (4) On a paired tablet the email form stays reachable behind a small **"Manager sign-in"** link (keeps T-304 invariant 7). The tablet holds a server-issued, revocable secret in an httpOnly cookie, one live pairing per store (row 313), dead after 30 days unused; day-to-day sign-in uses no Firebase. Unpaired devices keep today's screen. (5) **Staff codes are issued automatically only and never duplicate** — Ian: *"make sure the id is issued automatically not manually to avoid duplicate and for any live code make sure no duplicate"*. T-391 S9's manual override is removed; migration 0214 adds a CHECK (`SE-` + 3 or more digits) and a per-store UNIQUE index on the number (`SE-007` and `SE-0007` cannot coexist); the allocator's int overflow (DEF-725) is fixed. | Ian, 2026-10-22, side session from T-448 (plan approval + three answers); recorded by the Opus planner | Yes: un-pair every tablet and the old screen returns |
+| 382 | 2026-10-22 | **THE AUTH DOOR GAINS ONE LOOKUP: A POS TABLET'S PAIRING, BY THE HASH OF ITS COOKIE (T-464).** Resolving a paired tablet happens before anyone has signed in and before the organisation is known, so it cannot run under `withOrgPrincipal`; it is the same circularity as row 194's other lookups. It lives in `packages/auth/src/sessions.ts` (still the only file allowed to call `authTransaction`), returns only a live, recently-used pairing, and everything after it (the staff-code and PIN lookup, the session) runs under `withOrgPrincipal(orgId)`. Refusal tests cover an unknown, a revoked and a stale hash. Admitted by named ruling, not by analogy. | Ian's approval of the T-464 spec, 2026-10-22; numbers issued by the orchestrator | Yes: remove the tablet path and the lookup leaves |
 
 ## 14. Amendment protocol
 

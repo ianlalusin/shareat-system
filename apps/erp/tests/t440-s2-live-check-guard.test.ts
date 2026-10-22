@@ -411,6 +411,7 @@ const EXEMPT: Record<string, { count: number; reason: string }> = {
   'wastage/[id]/page.tsx': { count: 1, reason: 'repeated line family, S8' },
   'inventory/production/recipes/recipe-form.tsx': { count: 3, reason: 'repeated line family, S8' },
   'sign-in/EmailSignInForm.tsx': { count: 2, reason: 'credentials go to Firebase in the browser; no server action; client-only checks deliberately absent' },
+  'sign-in/TabletSignInForm.tsx': { count: 2, reason: 'T-464 pre-session POS tablet sign-in (Employee ID + PIN): no signed-in actor, no rule set; the server re-validates both (1-3 digits, 6-digit PIN) before any charge' },
   'sign-in/TerminalSignInForm.tsx': { count: 3, reason: 'credentials go to Firebase in the browser; no server action; client-only checks deliberately absent' },
   'till/page.tsx': { count: 1, reason: `count:\${a.id} per-denomination counts: ${REPEATED}` },
 };

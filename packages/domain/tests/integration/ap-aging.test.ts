@@ -84,7 +84,7 @@ async function fixture(hint: string) {
   }
   const [employment] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${orgId}, ${storeId}, ${staff!.id}, ${uid('SE')}, 'regular', '2025-01-01')
+    values (${orgId}, ${storeId}, ${staff!.id}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01')
     returning id
   `;
   await grantEverydayPositionAccess(sql, {
@@ -97,7 +97,7 @@ async function fixture(hint: string) {
   // only). Not the DEF-414 leak this fixture used to rely on — a genuine second-store hire.
   const [employment2] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${orgId}, ${store2Id}, ${staff!.id}, ${uid('SE')}, 'regular', '2025-01-01')
+    values (${orgId}, ${store2Id}, ${staff!.id}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01')
     returning id
   `;
   await grantEverydayPositionAccess(sql, {

@@ -130,7 +130,7 @@ describe('T-339 slice 5 / DEF-236 — migration 0158 backfills blank revoke reas
       insert into persons (org_id, display_name) values (${orgId}, 'Blank Reason Holder') returning id`;
     const [blankEmployment] = await sql<{ id: string }[]>`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-      values (${orgId}, ${storeId}, ${blankPerson!.id}, 'SC-BLANK-1', 'regular', '2025-01-01') returning id`;
+      values (${orgId}, ${storeId}, ${blankPerson!.id}, 'SE-083067045066076065078075045049', 'regular', '2025-01-01') returning id`;
     const [blankCred] = await sql<{ id: string }[]>`
       insert into attendance_credentials (org_id, store_id, employment_id, kind, card_id, enrolled_by, revoked_at, revoked_by, revoke_reason)
       values (${orgId}, ${storeId}, ${blankEmployment!.id}, 'card', 'CARD-BLANK', ${adminId}, now(), ${adminId}, '  ')
@@ -141,7 +141,7 @@ describe('T-339 slice 5 / DEF-236 — migration 0158 backfills blank revoke reas
       insert into persons (org_id, display_name) values (${orgId}, 'Lost Reason Holder') returning id`;
     const [lostEmployment] = await sql<{ id: string }[]>`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-      values (${orgId}, ${storeId}, ${lostPerson!.id}, 'SC-LOST-1', 'regular', '2025-01-01') returning id`;
+      values (${orgId}, ${storeId}, ${lostPerson!.id}, 'SE-083067045076079083084045049', 'regular', '2025-01-01') returning id`;
     const [lostCred] = await sql<{ id: string }[]>`
       insert into attendance_credentials (org_id, store_id, employment_id, kind, card_id, enrolled_by, revoked_at, revoked_by, revoke_reason)
       values (${orgId}, ${storeId}, ${lostEmployment!.id}, 'card', 'CARD-LOST', ${adminId}, now(), ${adminId}, 'Lost')
@@ -188,7 +188,7 @@ describe('T-339 slice 5 / DEF-236 — migration 0158 backfills blank revoke reas
     const [store] = await sql<{ id: string }[]>`select id from stores where org_id = ${org!.org_id} limit 1`;
     const [emp] = await sql<{ id: string }[]>`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-      values (${org!.org_id}, ${store!.id}, ${p!.id}, 'SC-FRESH-1', 'regular', '2025-01-01') returning id`;
+      values (${org!.org_id}, ${store!.id}, ${p!.id}, 'SE-083067045070082069083072045049', 'regular', '2025-01-01') returning id`;
     const [cred] = await sql<{ id: string }[]>`
       insert into attendance_credentials (org_id, store_id, employment_id, kind, card_id, enrolled_by)
       values (${org!.org_id}, ${store!.id}, ${emp!.id}, 'card', 'CARD-FRESH', ${p!.id}) returning id`;

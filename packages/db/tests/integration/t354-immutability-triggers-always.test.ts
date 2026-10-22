@@ -225,7 +225,7 @@ async function attendancePunchFixture(hint: string) {
   const personId = person!.id;
   const [employment] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${orgId}, ${storeId}, ${personId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+    values (${orgId}, ${storeId}, ${personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
   const employmentId = employment!.id;
   const [punch] = await sql<{ id: string }[]>`
     insert into attendance_punches
@@ -314,7 +314,7 @@ describe('D2 — replica · UPDATE a persons row with an employment', () => {
     const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Original Name') returning id`;
     await sql`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-      values (${orgId}, ${store!.id}, ${person!.id}, ${uid('SE')}, 'regular', '2025-01-01')`;
+      values (${orgId}, ${store!.id}, ${person!.id}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01')`;
 
     await inReplicaTx(async (tx) => {
       const before = await tx`select count(*)::int as c from mirror_outbox where entity_id = ${person!.id}`;

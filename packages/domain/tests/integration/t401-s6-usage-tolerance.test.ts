@@ -442,7 +442,7 @@ describe('the queue: many staff draft at once; all store staff see who recorded 
     await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${w.orgId}, 'staff')`;
     await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${w.a.storeId})`;
     const [emp] = await sql<{ id: string }[]>`
-      insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${w.orgId}, ${w.a.storeId}, ${p!.id}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+      insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${w.orgId}, ${w.a.storeId}, ${p!.id}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
     await grantEverydayPositionAccess(sql, { orgId: w.orgId, storeId: w.a.storeId, employmentId: emp!.id, personId: p!.id, setBy: w.manager.personId });
     return { personId: p!.id, orgId: w.orgId };
   }

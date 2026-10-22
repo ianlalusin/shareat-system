@@ -33,6 +33,13 @@ export const STOP_AUTO_REOPEN_MINUTES: number | null = null;
  */
 export const APPROVAL_DAILY_MISS_CAP = 5;
 export const APPROVAL_CAP_AUTO_LIFT_MINUTES = 1440;
+/**
+ * T-464: the per-Employee-ID bucket of a paired POS tablet. 5 wrong PINs for one Employee ID within 5 minutes pause THAT ID for 5 minutes;
+ * a success clears it; an unknown code pauses the same. It has no daily budget (a stop would need a manager to reopen a code that may not exist).
+ */
+export const STAFF_CODE_MISS_THRESHOLD = 5;
+export const STAFF_CODE_MISS_WINDOW_SECONDS = 300;
+export const STAFF_CODE_LOCK_COOLDOWN_SECONDS = 300;
 /** T-395 R11: rows older than this are purged lazily, 500 per charge. */
 export const ATTEMPT_RETENTION_DAYS = 90;
 const PURGE_BATCH = 500;
@@ -45,7 +52,10 @@ function toDate(v: Date | string | null | undefined): Date | null {
 type ReopenOpts = { stopAutoReopenMinutes?: number | null; dailyMissBudget?: number };
 
 /** T-416: a bucket is a store (sign-in), the organisation's own (0199), or a person (administrator-PIN approvals). */
-export type Bucket = { store: string } | { org: true } | { actor: string };
+export type Bucket = { store: string } | { org: true } | { actor: string } | { store: string; staffCode: string };
+
+/** T-464: the key of a per-Employee-ID bucket, normalised so `se-007` and `SE-007` are one bucket. */
+export const normaliseStaffCodeKey = (code: string): string => code.trim().toUpperCase();
 
 function autoReopen(opts: ReopenOpts): number | null {
   return opts.stopAutoReopenMinutes === undefined ? STOP_AUTO_REOPEN_MINUTES : opts.stopAutoReopenMinutes;
@@ -56,14 +66,16 @@ function autoReopen(opts: ReopenOpts): number | null {
 /** Row filter for one bucket. The org arm excludes actor rows, else the org bucket would count every person's misses. */
 function bucketFilter(col: string, orgId: string, b: Bucket) {
   const c = sql.identifier(col);
-  if ('store' in b) return sql`${c}.store_id = ${b.store}`;
+  if ('staffCode' in b) return sql`${c}.store_id = ${b.store} and ${c}.staff_code = ${normaliseStaffCodeKey(b.staffCode)}`;
+  if ('store' in b) return sql`${c}.store_id = ${b.store} and ${c}.staff_code is null`;
   if ('org' in b) return sql`${c}.org_id = ${orgId} and ${c}.store_id is null and ${c}.actor_person_id is null`;
   return sql`${c}.org_id = ${orgId} and ${c}.actor_person_id = ${b.actor}`;
 }
 
 /** ON CONFLICT target; the predicate must match the partial unique index exactly (else Postgres raises 42P10). */
 function bucketConflict(b: Bucket) {
-  if ('store' in b) return sql`on conflict (store_id)`;
+  if ('staffCode' in b) return sql`on conflict (store_id, staff_code) where staff_code is not null`;
+  if ('store' in b) return sql`on conflict (store_id) where staff_code is null`;
   if ('org' in b) return sql`on conflict (org_id) where store_id is null and actor_person_id is null`;
   return sql`on conflict (org_id, actor_person_id) where actor_person_id is not null`;
 }
@@ -94,16 +106,22 @@ export async function chargeAttempt(
   const { orgId, deviceId } = input;
   const b: Bucket = input.bucket ?? (input.storeId ? { store: input.storeId } : { org: true });
   const storeId = 'store' in b ? b.store : null;
+  const staffCode = 'staffCode' in b ? normaliseStaffCodeKey(b.staffCode) : null;
   const actorId = 'actor' in b ? b.actor : null;
   const auto = autoReopen(opts);
-  const budget = opts.dailyMissBudget ?? DAILY_MISS_BUDGET;
+  // T-464: a per-Employee-ID bucket never trips the daily stop (Infinity is never reached by a count) and has its own tier-1 numbers.
+  const budget = 'staffCode' in b ? Number.MAX_SAFE_INTEGER : (opts.dailyMissBudget ?? DAILY_MISS_BUDGET);
+  const tier1 =
+    'staffCode' in b
+      ? { threshold: STAFF_CODE_MISS_THRESHOLD, windowSecs: STAFF_CODE_MISS_WINDOW_SECONDS, cooldownSecs: STAFF_CODE_LOCK_COOLDOWN_SECONDS }
+      : { threshold: MISS_THRESHOLD, windowSecs: MISS_WINDOW_SECONDS, cooldownSecs: LOCK_COOLDOWN_SECONDS };
   const bucket = (col: string) => bucketFilter(col, orgId, b);
   const conflict = bucketConflict(b);
 
   // 1. LOCK. A no-op update on conflict still takes the row lock until commit.
   const locked = (await tx.execute(sql`
-    insert into pin_attempt_throttle (org_id, store_id, actor_person_id)
-    values (${orgId}, ${storeId}::uuid, ${actorId}::uuid)
+    insert into pin_attempt_throttle (org_id, store_id, actor_person_id, staff_code)
+    values (${orgId}, ${storeId}::uuid, ${actorId}::uuid, ${staffCode})
     ${conflict} do update set updated_at = pin_attempt_throttle.updated_at
     returning
       locked_until as "lockedUntil",
@@ -132,8 +150,8 @@ export async function chargeAttempt(
       sql`update pin_attempt_throttle set stopped_at = now(), updated_at = now() where ${bucket('pin_attempt_throttle')}`,
     );
     await tx.execute(sql`
-      insert into sign_in_attempts (org_id, store_id, actor_person_id, device_id, kind)
-      values (${orgId}, ${storeId}::uuid, ${actorId}::uuid, ${deviceId}::uuid, 'stopped')
+      insert into sign_in_attempts (org_id, store_id, actor_person_id, staff_code, device_id, kind)
+      values (${orgId}, ${storeId}::uuid, ${actorId}::uuid, ${staffCode}, ${deviceId}::uuid, 'stopped')
     `);
     return { refused: 'stopped', until: null, newlyStopped: true };
   }
@@ -145,19 +163,19 @@ export async function chargeAttempt(
   const bumped = (await tx.execute(sql`
     update pin_attempt_throttle set
       fail_count = case
-        when now() - window_started_at < make_interval(secs => ${MISS_WINDOW_SECONDS}) then fail_count + 1
+        when now() - window_started_at < make_interval(secs => ${tier1.windowSecs}) then fail_count + 1
         else 1
       end,
       window_started_at = case
-        when now() - window_started_at < make_interval(secs => ${MISS_WINDOW_SECONDS}) then window_started_at
+        when now() - window_started_at < make_interval(secs => ${tier1.windowSecs}) then window_started_at
         else now()
       end,
       locked_until = case
         when (case
-          when now() - window_started_at < make_interval(secs => ${MISS_WINDOW_SECONDS}) then fail_count + 1
+          when now() - window_started_at < make_interval(secs => ${tier1.windowSecs}) then fail_count + 1
           else 1
-        end) >= ${MISS_THRESHOLD}
-          then now() + make_interval(secs => ${LOCK_COOLDOWN_SECONDS})
+        end) >= ${tier1.threshold}
+          then now() + make_interval(secs => ${tier1.cooldownSecs})
         else null
       end,
       updated_at = now()
@@ -165,15 +183,15 @@ export async function chargeAttempt(
     returning (locked_until is not null) as "startedPause"
   `)) as unknown as Array<{ startedPause: boolean }>;
   const miss = (await tx.execute(sql`
-    insert into sign_in_attempts (org_id, store_id, actor_person_id, device_id, kind)
-    values (${orgId}, ${storeId}::uuid, ${actorId}::uuid, ${deviceId}::uuid, 'miss')
+    insert into sign_in_attempts (org_id, store_id, actor_person_id, staff_code, device_id, kind)
+    values (${orgId}, ${storeId}::uuid, ${actorId}::uuid, ${staffCode}, ${deviceId}::uuid, 'miss')
     returning id
   `)) as unknown as Array<{ id: string }>;
   let lockoutId: string | null = null;
   if (bumped[0]?.startedPause) {
     const lockout = (await tx.execute(sql`
-      insert into sign_in_attempts (org_id, store_id, actor_person_id, device_id, kind)
-      values (${orgId}, ${storeId}::uuid, ${actorId}::uuid, ${deviceId}::uuid, 'lockout')
+      insert into sign_in_attempts (org_id, store_id, actor_person_id, staff_code, device_id, kind)
+      values (${orgId}, ${storeId}::uuid, ${actorId}::uuid, ${staffCode}, ${deviceId}::uuid, 'lockout')
       returning id
     `)) as unknown as Array<{ id: string }>;
     lockoutId = lockout[0]!.id; // INSERT ... RETURNING always yields the row
@@ -226,8 +244,8 @@ export async function reopen(
     update pin_attempt_throttle t set
       stopped_at = null, reopened_at = now(), reopened_by = ${actorPersonId}::uuid,
       fail_count = 0, window_started_at = null, locked_until = null, updated_at = now()
-    from (select stopped_at from pin_attempt_throttle where store_id = ${storeId} and stopped_at is not null for update) old
-    where t.store_id = ${storeId} and t.stopped_at is not null
+    from (select stopped_at from pin_attempt_throttle where store_id = ${storeId} and staff_code is null and stopped_at is not null for update) old
+    where t.store_id = ${storeId} and t.staff_code is null and t.stopped_at is not null
     returning old.stopped_at as "stoppedAt", t.reopened_at as "reopenedAt"
   `)) as unknown as Array<{ stoppedAt: Date | string | null; reopenedAt: Date | string | null }>;
   return rows[0]
@@ -246,8 +264,10 @@ export async function clearOnSuccess(tx: Tx, orgId: string, bucket: Bucket): Pro
     .set({ failCount: 0, windowStartedAt: null, lockedUntil: null, updatedAt: sql`now()` })
     .where(
       and(
-        'store' in bucket
-          ? eq(pinAttemptThrottle.storeId, bucket.store)
+        'staffCode' in bucket
+          ? and(eq(pinAttemptThrottle.storeId, bucket.store), eq(pinAttemptThrottle.staffCode, normaliseStaffCodeKey(bucket.staffCode)))
+          : 'store' in bucket
+          ? and(eq(pinAttemptThrottle.storeId, bucket.store), sql`${pinAttemptThrottle.staffCode} is null`)
           : 'org' in bucket
             ? and(
                 eq(pinAttemptThrottle.orgId, orgId),
@@ -320,12 +340,12 @@ export async function statusForStore(tx: Tx, storeId: string): Promise<PinSignIn
            (t.locked_until is not null and t.locked_until > now()) as paused,
            t.locked_until as locked_until,
            (select count(*)::int from sign_in_attempts a
-             where a.store_id = t.store_id and a.kind = 'miss'
+             where a.store_id = t.store_id and a.staff_code is null and a.kind = 'miss'
                and a.occurred_at > greatest(now() - interval '24 hours', coalesce(t.reopened_at, '-infinity'::timestamptz))) as misses,
            (select count(*)::int from sign_in_attempts a
-             where a.store_id = t.store_id and a.kind = 'miss' and t.stopped_at is not null
+             where a.store_id = t.store_id and a.staff_code is null and a.kind = 'miss' and t.stopped_at is not null
                and a.occurred_at > t.stopped_at - interval '24 hours' and a.occurred_at <= t.stopped_at) as misses_before_stop
-      from pin_attempt_throttle t where t.store_id = ${storeId}
+      from pin_attempt_throttle t where t.store_id = ${storeId} and t.staff_code is null
   `)) as unknown as {
     stopped: boolean;
     stopped_at: Date | string | null;

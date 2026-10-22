@@ -463,7 +463,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // SSR checks retain Assets and Books links; this removes one static scanner site.
     // T-450: one new native DisclosureCard summary, authored min-h-11 (44px); no fail/unresolved exemption.
     // T-451: one explicit Remove staff positions submit control; existing size/baseline checks still apply.
-    expect(results.length).toBe(1392);
+    // T-464: +8 controls (measured), all >= 24px, none baselined: the paired-tablet sign-in form and /settings/pos-tablet.
+    expect(results.length).toBe(1400);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

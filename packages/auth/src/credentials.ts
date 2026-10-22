@@ -62,7 +62,7 @@ const SALT_BYTES = 16;
  * keeps them apart, and it is cheaper and less error-prone than a second environment variable
  * somebody will forget to set — which is exactly how DEF-062's secret came to be unset.
  */
-function derivedKey(label: 'pin-lookup' | 'session-token' | 'setup-identity' | 'flash'): string {
+function derivedKey(label: 'pin-lookup' | 'session-token' | 'setup-identity' | 'flash' | 'pos-tablet'): string {
   return createHmac('sha256', env().SESSION_SECRET).update(`shareat:${label}:v1`).digest('hex');
 }
 
@@ -153,6 +153,14 @@ export function newSessionToken(): string {
  */
 export function sessionTokenHash(token: string): string {
   return createHmac('sha256', derivedKey('session-token')).update(token).digest('hex');
+}
+
+/**
+ * T-464 - what we STORE for a POS tablet's pairing cookie: the same keyed-hash discipline as `sessionTokenHash`, under its own
+ * derived key so a pairing token and a session token are never interchangeable.
+ */
+export function posTabletTokenHash(token: string): string {
+  return createHmac('sha256', derivedKey('pos-tablet')).update(token).digest('hex');
 }
 
 // -------------------------------------------------------------------------------------

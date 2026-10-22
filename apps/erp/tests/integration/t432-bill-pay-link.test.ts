@@ -86,7 +86,7 @@ async function fixture() {
   const staffId = await person('Staffer', 'staff', [storeA]);
   const [emp] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${orgId}, ${storeA}, ${staffId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+    values (${orgId}, ${storeA}, ${staffId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
   await grantEverydayPositionAccess(sql, { orgId, storeId: storeA, employmentId: emp!.id, personId: staffId, setBy: adminId });
 
   const [period] = await sql<{ id: string }[]>`select id from fiscal_periods where org_id = ${orgId} limit 1`;

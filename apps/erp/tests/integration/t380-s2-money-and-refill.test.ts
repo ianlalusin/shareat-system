@@ -519,7 +519,7 @@ describe('W-S2 (B2) - posting a pay run keeps the net total out of the URL; the 
       const workerId = await mk('Worker', 'staff');
       const [emp] = await sql<{ id: string }[]>`
         insert into employments (org_id, person_id, store_id, staff_code, started_on, employment_status, created_by)
-        values (${orgId}, ${workerId}, ${storeId}, ${uid('sc')}, '2026-01-01', 'regular', ${adminId}) returning id`;
+        values (${orgId}, ${workerId}, ${storeId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, '2026-01-01', 'regular', ${adminId}) returning id`;
       const [office] = await sql<{ id: string }[]>`
         select id from money_accounts where store_id = ${storeId} and instrument = 'cash' and custodian = 'office' and is_foundation`;
       const admin = actor(orgId, adminId);

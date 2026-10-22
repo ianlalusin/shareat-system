@@ -344,7 +344,7 @@ describe('I11 (T-416, inverted) approval misses and sign-in misses are NOT one b
 async function employ(f: Fixture, personId: string, endedOn: string | null) {
   await sql`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on, ended_on)
-    values (${f.orgId}, ${f.storeId}, ${personId}, ${uid('SE')}, ${endedOn ? 'resigned' : 'regular'}, '2025-01-01', ${endedOn})`;
+    values (${f.orgId}, ${f.storeId}, ${personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, ${endedOn ? 'resigned' : 'regular'}, '2025-01-01', ${endedOn})`;
 }
 
 describe('A1 an admin whose employment ended and who holds no admin role any more is refused (admin path)', () => {

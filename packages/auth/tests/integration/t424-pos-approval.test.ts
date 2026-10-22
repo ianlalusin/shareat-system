@@ -132,7 +132,7 @@ async function org(hint: string): Promise<Fixture> {
     if (employedAt) {
       await sql`
         insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-        values (${orgId}, ${employedAt}, ${personId}, ${uid('SE')}, 'regular', '2025-01-01')`;
+        values (${orgId}, ${employedAt}, ${personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01')`;
     }
     const pin = nextPin();
     await sql`

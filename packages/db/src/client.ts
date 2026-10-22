@@ -192,11 +192,13 @@ export async function systemTransaction<T>(fn: (tx: Tx) => Promise<T>): Promise<
  * in"*, and sign-out silently does nothing. Not degraded — the whole application unusable, at
  * once. It fails CLOSED, so it is an availability wall and never a leak.
  *
- * ## ⛔ The closed list, and it is THREE lookups — not "the auth package"
+ * ## ⛔ The closed list, and it is FOUR lookups — not "the auth package"
  *
  *   - `findActiveCredentialByExternalId`  (Firebase sign-in, and T-304's terminal resolution)
  *   - `findLiveByTokenHash`               (every authenticated request, and sign-out's read)
  *   - `endSession`                        (sign-out's write)
+ *   - `posTabletPairingsRepo.findLiveByTokenHash` (T-464, bible row 382: a paired POS tablet's cookie -> its live pairing, before the
+ *                                          org is known; one table, four columns; unknown / revoked / 30-days-unused read as nothing)
  *
  * ⭐ **It was FOUR until T-302, and `findActiveCredentialByLookupHash` — the PIN lookup — LEFT.**
  * T-304's layer 1 authenticates the terminal first, so `signInWithPin` is handed an `orgId` before

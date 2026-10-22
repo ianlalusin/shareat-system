@@ -110,7 +110,7 @@ async function setup(hint: string): Promise<Fixture> {
     for (const storeId of [f.storeId, f.storeId2]) {
       await sql`insert into person_store_scope (person_id, store_id) values (${personId}, ${storeId})`;
       // T-407: the PIN door also needs the org-level rule (open employment / admin role / never-employed manager), so each fixture person is employed too.
-      await sql`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${orgId}, ${storeId}, ${personId}, ${`FX${++seq}`}, 'regular', '2020-01-01')`;
+      await sql`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${orgId}, ${storeId}, ${personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2020-01-01')`;
     }
   }
   return f;

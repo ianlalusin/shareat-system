@@ -68,7 +68,7 @@ async function fixture(hint: string) {
   const [drawer] = await sql<{ id: string }[]>`select id from money_accounts where store_id = ${storeId} and instrument = 'cash' and custodian = 'cashier' and is_foundation`;
   const [cashierEmployment] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${orgId}, ${storeId}, ${cashierId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+    values (${orgId}, ${storeId}, ${cashierId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
   await grantEverydayPositionAccess(sql, { orgId, storeId, employmentId: cashierEmployment!.id, personId: cashierId, setBy: adminId });
   return { orgId, storeId, adminId, cashierId, admin: actor(orgId, adminId), cashier: actor(orgId, cashierId), drawer: drawer!.id };
 }

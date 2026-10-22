@@ -175,7 +175,7 @@ async function mkRef(src: SrcKey, orgId: string, fileId: string, rowId: string =
         break;
       case 'emp':
         await t`insert into employments (id, org_id, store_id, person_id, staff_code, employment_status, started_on, photo_file_id)
-                values (${rowId}, ${orgId}, ${store}, ${id()}, ${uid('SC')}, 'regular', '2025-01-01', ${fileId})`;
+                values (${rowId}, ${orgId}, ${store}, ${id()}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01', ${fileId})`;
         break;
       case 'per':
         await t`insert into persons (id, org_id, display_name, signature_file_id) values (${rowId}, ${orgId}, ${PERSON_NAME}, ${fileId})`;
@@ -614,7 +614,7 @@ async function realWorld(hint: string) {
   const staffId = await mkPerson('Staff', 'staff');
   const [emp] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${orgId}, ${storeId}, ${staffId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+    values (${orgId}, ${storeId}, ${staffId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
   return { orgId, storeId, managerId, staffId, employmentId: emp!.id, manager: actor(orgId, managerId) };
 }
 

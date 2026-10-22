@@ -113,7 +113,7 @@ async function fixture(
   const workerId = await mk('Worker', 'staff');
   const [emp] = await sql<{ id: string }[]>`
     insert into employments (org_id, person_id, store_id, staff_code, started_on, employment_status, created_by)
-    values (${orgId}, ${workerId}, ${storeId}, ${uid('sc')}, '2026-01-01', 'regular', ${adminId}) returning id`;
+    values (${orgId}, ${workerId}, ${storeId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, '2026-01-01', 'regular', ${adminId}) returning id`;
   const [office] = await sql<{ id: string }[]>`
     select id from money_accounts where store_id = ${storeId} and instrument = 'cash' and custodian = 'office' and is_foundation`;
   return {
@@ -486,7 +486,7 @@ describe('T-190 - one person, voids, locks (cases 10, 11, 21)', () => {
     await sql`insert into person_store_scope (person_id, store_id) values (${a.adminId}, ${storeB}), (${a.workerId}, ${storeB})`;
     const [empB] = await sql<{ id: string }[]>`
       insert into employments (org_id, person_id, store_id, staff_code, started_on, employment_status, created_by)
-      values (${a.orgId}, ${a.workerId}, ${storeB}, ${uid('sc')}, '2026-01-01', 'regular', ${a.adminId}) returning id`;
+      values (${a.orgId}, ${a.workerId}, ${storeB}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, '2026-01-01', 'regular', ${a.adminId}) returning id`;
     const [officeB] = await sql<{ id: string }[]>`
       select id from money_accounts where store_id = ${storeB} and instrument = 'cash' and custodian = 'office' and is_foundation`;
     await insertMinimumWage(a, storeB);

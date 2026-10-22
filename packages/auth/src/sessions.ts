@@ -15,11 +15,12 @@
 import type { Tx } from '@shareat/db';
 // `transaction` remains for endShift / credential supersede — NOT auth-door work: both take a
 // person already resolved, and no caller passes null, so the fallback is unreached today.
-import { sessionsRepo, pinAttemptsRepo, accessRepo, auditLogRepo, authzDenialCountsRepo, authTransaction, refuse, transaction, withOrgPrincipal } from '@shareat/db';
+import { sessionsRepo, pinAttemptsRepo, accessRepo, employmentRepo, posTabletPairingsRepo, auditLogRepo, authzDenialCountsRepo, authTransaction, refuse, transaction, withOrgPrincipal } from '@shareat/db';
 import { logger } from '@shareat/core/logger';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
 import type { Actor } from './authorize';
 import { AuthenticationError } from './errors';
+import { tabletEmployeeIdToStaffCode } from './tablet-employee-id';
 import {
   enqueueFirebaseSignedIn,
   enqueuePinPaused,
@@ -34,6 +35,7 @@ import {
   isValidPinFormat,
   newSessionToken,
   pinLookupHash,
+  posTabletTokenHash,
   sessionTokenHash,
   verifyPin,
 } from './credentials';
@@ -171,7 +173,9 @@ export const APPROVAL_PIN_CAPPED =
   'Too many wrong administrator PINs from your account today. An administrator can clear this on your user page, or try again tomorrow.';
 
 type PinInput = { orgId: string; bucket: pinAttemptsRepo.Bucket; deviceId?: string };
-const storeOf = (input: PinInput): string | null => ('store' in input.bucket ? input.bucket.store : null);
+// T-464: a per-Employee-ID bucket writes NO store-level pause/stop event - the store's own bucket (charged first) already does.
+const storeOf = (input: PinInput): string | null =>
+  'store' in input.bucket && !('staffCode' in input.bucket) ? input.bucket.store : null;
 type AnyCharge = Awaited<ReturnType<typeof pinAttemptsRepo.chargeAttempt>>;
 
 /**
@@ -250,8 +254,15 @@ function refuseIfCharged(
   if (charge.refused === 'stopped') {
     throw new AuthenticationError('actor' in bucket ? APPROVAL_PIN_CAPPED : STOPPED_MESSAGE);
   }
-  if (charge.refused === 'locked') throw new AuthenticationError(cooldownMessage(charge.until!)); // 'locked' always carries locked_until
+  if (charge.refused === 'locked') {
+    // T-464: a paused Employee ID says so in its own sentence; it holds whether or not the code belongs to anyone.
+    if ('staffCode' in bucket) throw new AuthenticationError(STAFF_CODE_PAUSED);
+    throw new AuthenticationError(cooldownMessage(charge.until!)); // 'locked' always carries locked_until
+  }
 }
+
+/** T-464: the ONE sentence for a paused Employee ID on a paired tablet - same for a real code and an unknown one (5 misses in 5 minutes). */
+export const STAFF_CODE_PAUSED = 'Too many wrong PINs for this Employee ID. Wait 5 minutes.';
 
 /** T-303 §Q3.B — names the clock time rather than a duration, so nobody has to do arithmetic
  *  two minutes into a five-minute wait. Says "terminal", never "device": the counter is per
@@ -509,6 +520,126 @@ export async function resolveTerminalIdentity(tx: Tx | null, verifiedUid: string
   return authTransaction(run);
 }
 
+// -------------------------------------------------------------------------------------
+// T-464 - the paired POS tablet: Employee ID + PIN
+// -------------------------------------------------------------------------------------
+
+export interface PosTabletIdentity {
+  readonly pairingId: string;
+  readonly orgId: string;
+  readonly storeId: string;
+  readonly label: string;
+}
+
+/** What the cookie holds: 32 random bytes as base64url. Anything of another shape cannot be a pairing and never reaches the database. */
+const TABLET_TOKEN_SHAPE = /^[A-Za-z0-9_-]{43}$/;
+
+/**
+ * ⭐ T-464 / bible row 382 - the pre-sign-in lookup: a pairing cookie's token -> the live pairing it names, or null.
+ *
+ * This is the ONE lookup the paired tablet adds to `authTransaction`'s closed list: it must run before anyone knows the org, and it reads a
+ * single table (`pos_tablet_pairings`) through `findLiveByTokenHash`, which selects four columns. Unknown token, revoked pairing and a
+ * pairing unused for 30 days are all `null`. It mints nothing and writes nothing: `last_used_at` is stamped later, under the org principal.
+ * Re-resolved on EVERY submit (a revoke takes effect on the very next attempt), exactly as `resolveTerminalIdentity` is.
+ */
+export async function resolvePosTablet(tx: Tx | null, token: string | null | undefined): Promise<PosTabletIdentity | null> {
+  if (!token || !TABLET_TOKEN_SHAPE.test(token)) return null;
+  const run = async (trx: Tx): Promise<PosTabletIdentity | null> => {
+    const p = await posTabletPairingsRepo.findLiveByTokenHash(trx, posTabletTokenHash(token));
+    return p ? { pairingId: p.id, orgId: p.orgId, storeId: p.storeId, label: p.label } : null;
+  };
+  if (tx) return run(tx);
+  return authTransaction(run);
+}
+
+/** One flat sentence for every Employee ID + PIN failure: wrong PIN, unknown code, a code with no PIN, a malformed entry, a person who may not sign in here. */
+export const BAD_ID_OR_PIN = 'Sign-in failed: that Employee ID and PIN do not match.';
+
+/**
+ * ⭐ T-464 - sign in on a PAIRED tablet with Employee ID + PIN.
+ *
+ * `staffCode` is what was TYPED (1-3 digits); the server expands it (`7` -> `SE-007`) and refuses anything else before any charge.
+ * The pairing (`pairingId`, `orgId`, `storeId`) comes from `resolvePosTablet` on the httpOnly cookie, never from the form.
+ *
+ * Order (spec s4): 1. charge the STORE bucket (tiers 1 and 2, unchanged); 2. charge the Employee ID bucket (5 misses in 5 minutes pause
+ * THAT ID; an unknown code pauses identically); 3. one scrypt verify on every path; 4. the existing T-302/T-407 checks; 5. a session
+ * with `deviceId = pairing id`, and `last_used_at` stamped. Both charges commit before the lookup (production) so a miss survives the throw.
+ */
+export async function signInWithStaffCodeAndPin(
+  tx: Tx | null,
+  input: { orgId: string; storeId: string; pairingId: string; staffCode: string; pin: string },
+): Promise<SignInResult> {
+  const code = tabletEmployeeIdToStaffCode(input.staffCode);
+  // Public rules (1-3 digits, 6-digit PIN): refused before any charge, as `runPinSignIn` does for a malformed PIN.
+  if (code === null || !isValidPinFormat(input.pin)) throw new AuthenticationError(BAD_ID_OR_PIN);
+  return runChargedPinLookup(tx, { orgId: input.orgId, bucket: { store: input.storeId } }, () =>
+    runChargedPinLookup(tx, { orgId: input.orgId, bucket: { store: input.storeId, staffCode: code } }, (lookupTx) =>
+      runStaffCodeSignIn(lookupTx, { ...input, staffCode: code }),
+    ),
+  );
+}
+
+/** The flat refusal for a device with no live pairing: no cookie, a forged one, a revoked one, one unused for 30 days. Nothing is written. */
+export const TABLET_NOT_PAIRED = 'This tablet is not set up for Employee ID sign-in. Use Manager sign-in, or ask a manager to pair it.';
+
+/**
+ * ⭐ T-464 - the whole tablet sign-in from the COOKIE value: resolves the pairing FIRST (every submit, so a revoke bites on the next
+ * attempt), refuses flatly when there is none (no charge, no session, nothing written), else `signInWithStaffCodeAndPin` for the
+ * pairing's own org and store. The form supplies only `staffCode` and `pin`; org, store and pairing come from the cookie's row.
+ */
+export async function signInOnPairedTablet(
+  tx: Tx | null,
+  input: { cookieToken: string | null | undefined; staffCode: string; pin: string },
+): Promise<SignInResult & { pairing: PosTabletIdentity }> {
+  const pairing = await resolvePosTablet(tx, input.cookieToken);
+  if (!pairing) throw new AuthenticationError(TABLET_NOT_PAIRED);
+  const result = await signInWithStaffCodeAndPin(tx, {
+    orgId: pairing.orgId,
+    storeId: pairing.storeId,
+    pairingId: pairing.pairingId,
+    staffCode: input.staffCode,
+    pin: input.pin,
+  });
+  return { ...result, pairing };
+}
+
+async function runStaffCodeSignIn(
+  tx: Tx,
+  input: { orgId: string; storeId: string; pairingId: string; staffCode: string; pin: string },
+): Promise<SignInResult> {
+  // The LIVE employment at this store holding this number (read-only, no lock). Never throws on a non-standard stored code.
+  const employment = await employmentRepo.findLiveEmploymentByStaffNumber(tx, input.orgId, input.storeId, input.staffCode.slice(3));
+  const credential = employment
+    ? (await sessionsRepo.listLiveForPerson(tx, employment.personId)).find((c) => c.kind === 'pin' && !!c.secretHash)
+    : undefined;
+  // ⭐ Exactly one scrypt on every path: a missing employment or a missing PIN burns the dummy hash, so all of them cost the same.
+  const verified = await verifyPin(input.pin, credential?.secretHash ?? DUMMY_SCRYPT_HASH);
+  const allowed = employment ? await accessRepo.personMaySignInAtStore(tx, employment.personId, input.storeId) : false;
+  if (!employment || !credential || !verified || !allowed) throw new AuthenticationError(BAD_ID_OR_PIN);
+  // ⛔ Re-checked under the pairing's row lock before the session exists: an un-pair that landed after `resolvePosTablet` refuses here.
+  if (!(await posTabletPairingsRepo.touchLastUsed(tx, input.orgId, input.pairingId))) throw new AuthenticationError(TABLET_NOT_PAIRED);
+
+  const signedIn = await issue(tx, {
+    personId: employment.personId,
+    credentialId: credential.id,
+    credentialKind: 'pin',
+    storeId: input.storeId,
+    deviceId: input.pairingId,
+    ttlMs: PIN_SESSION_TTL_MS,
+  });
+  await auditLogRepo.append(tx, input.orgId, {
+    actorPersonId: signedIn.personId,
+    action: 'auth.pin_signin_succeeded',
+    storeId: input.storeId,
+    entityId: signedIn.personId,
+    before: null,
+    after: { sessionId: signedIn.sessionId, credentialKind: 'pin', via: 'pos_tablet' },
+    source: 'web',
+    deviceId: input.pairingId,
+  });
+  return signedIn;
+}
+
 async function issue(
   tx: Tx,
   input: {
@@ -678,12 +809,21 @@ export async function endShift(
  */
 export async function endAllForDevice(
   tx: Tx | null,
-  input: { deviceId: string; /** Who revoked it, when a person did (T-402 S2); omitted, the event has no actor. */ actorPersonId?: string },
+  input: {
+    deviceId: string;
+    /** Who revoked it, when a person did (T-402 S2); omitted, the event has no actor. */
+    actorPersonId?: string;
+    /**
+     * T-464: the org, when the caller already knows it. A POS tablet pairing's id is not a `persons` row, so `orgIdOfPerson(deviceId)` would
+     * find nothing and refuse the audit; a caller holding a pairing passes its org here.
+     */
+    orgId?: string;
+  },
 ): Promise<{ ended: number }> {
   const run = async (trx: Tx) => {
     const ended = await sessionsRepo.endAllForDevice(trx, input.deviceId, 'revoked');
     if (ended > 0) {
-      const orgId = await authzDenialCountsRepo.orgIdOfPerson(trx, input.deviceId);
+      const orgId = input.orgId ?? (await authzDenialCountsRepo.orgIdOfPerson(trx, input.deviceId));
       if (!orgId) throw refuse(UNRECORDABLE, UNRECORDABLE); // A4: an unrecorded change is refused, not skipped
       {
         // T-402 S2: one `session.ended_all` for the call (high), not one row per session.
@@ -715,7 +855,7 @@ export async function endAllForDevice(
   if (tx) return run(tx);
   // T-407 S1 (DEF-650): no caller transaction -> resolve the org with one read at the auth door, then run under a real
   // org principal so RLS shows the sessions and the audit row shares the UPDATE's transaction.
-  const orgId = await authTransaction((atx) => authzDenialCountsRepo.orgIdOfPerson(atx, input.deviceId));
+  const orgId = input.orgId ?? (await authTransaction((atx) => authzDenialCountsRepo.orgIdOfPerson(atx, input.deviceId)));
   if (!orgId) return { ended: 0 };
   return withOrgPrincipal(orgId, run);
 }

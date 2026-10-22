@@ -130,7 +130,7 @@ describe('T-321 Contract 2 / spec test 7 — migration 0153 refuses on pre-exist
   const dbName = `shareat_scratch_0153_refuse_collision_${Date.now()}`;
   let sql: ReturnType<typeof postgres>;
   const orgName = 'Collide Org';
-  const cardEmploymentStaffCode = 'SC-CARD-1';
+  const cardEmploymentStaffCode = 'SE-900001'; // T-464: staff codes must be SE-NNN (migration 0214)
 
   beforeAll(async () => {
     await createScratchDatabase(dbName);
@@ -158,7 +158,7 @@ describe('T-321 Contract 2 / spec test 7 — migration 0153 refuses on pre-exist
       insert into persons (org_id, display_name) values (${orgId}, 'Finger Holder') returning id`;
     const [fingerEmployment] = await sql<{ id: string }[]>`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-      values (${orgId}, ${storeId}, ${fingerPerson!.id}, 'SC-FINGER-1', 'regular', '2025-01-01')
+      values (${orgId}, ${storeId}, ${fingerPerson!.id}, 'SE-083067045070073078071069082045049', 'regular', '2025-01-01')
       returning id`;
 
     // Pre-existing collision, seeded BEFORE 0153 ever runs — exactly the state Contract 2 must

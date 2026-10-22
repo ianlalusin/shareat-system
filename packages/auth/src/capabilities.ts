@@ -241,6 +241,12 @@ export type Capability =
    * grantable to a position (a payroll clerk). Every view is audited.
    */
   | 'view_staff_signature'
+  /**
+   * T-464 (Ian, 2026-10-22). Pair a store's POS tablet - after which staff sign in there with Employee ID + PIN - and un-pair it. Store-scoped;
+   * manager, admin and super_admin hold it. A pairing is a revocable server-issued secret on one store's tablet, so a manager of another store
+   * must not hold it here.
+   */
+  | 'pair_pos_tablet'
   | 'provision_clock_terminal'
   // Configuration
   | 'manage_store_settings'
@@ -396,6 +402,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'run_payroll',
   'manage_payroll_rates',
   'view_staff_signature',
+  'pair_pos_tablet',
   'provision_clock_terminal',
   'manage_store_settings',
   'set_cash_policy',
@@ -583,6 +590,7 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   // T-190. The rate tables are per org (each org confirms its own), not per store.
   manage_payroll_rates: 'org',
   view_staff_signature: 'store',
+  pair_pos_tablet: 'store',
   provision_clock_terminal: 'store',
 
   manage_store_settings: 'store',
@@ -773,6 +781,7 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   run_payroll: 'staff',
   manage_payroll_rates: 'staff', // T-190
   view_staff_signature: 'staff',
+  pair_pos_tablet: 'staff', // T-464
   provision_clock_terminal: 'staff',
 
   run_cutover: 'books',
@@ -1001,6 +1010,8 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   manage_payroll_rates: { super_admin: true, admin: true, manager: false, staff: false },
   // T-434 (bible row 353): manager DENIED - a signature is forgeable. Position-grantable (a payroll clerk); never implies run_payroll.
   view_staff_signature: { super_admin: true, admin: true, manager: false, staff: false },
+  // T-464 (Ian, 2026-10-22): a manager of the store or an admin may pair and un-pair its POS tablet. Staff never.
+  pair_pos_tablet: { super_admin: true, admin: true, manager: true, staff: false },
   // ⭐ ADMIN-ONLY (Ian, 2026-08-29, bible row 165). A provisioned terminal is the ONLY principal
   // allowed to read the credential mirror, so whoever may create one may read every enrolled
   // fingerprint template and card id at that store. Manager was v1's level; this is tighter.
@@ -1249,6 +1260,7 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   run_payroll: 'run payroll',
   manage_payroll_rates: 'add or confirm the SSS, PhilHealth, Pag-IBIG and tax tables',
   view_staff_signature: "see a staff member's signature",
+  pair_pos_tablet: "pair or un-pair a store's POS tablet",
   provision_clock_terminal: 'set up a clock-in tablet',
   manage_store_settings: 'manage store settings',
   set_cash_policy: "set a store's cash policy",

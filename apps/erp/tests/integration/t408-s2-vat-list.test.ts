@@ -86,7 +86,7 @@ async function person(orgId: string, storeId: string, role: 'admin' | 'manager' 
   await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${storeId})`;
   const [e] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${orgId}, ${storeId}, ${p!.id}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+    values (${orgId}, ${storeId}, ${p!.id}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
   await grantEverydayPositionAccess(sql, { orgId, storeId, employmentId: e!.id, personId: p!.id, setBy: adminId ?? p!.id });
   return p!.id;
 }

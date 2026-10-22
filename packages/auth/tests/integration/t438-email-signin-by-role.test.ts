@@ -58,7 +58,7 @@ async function fixture(hint: string) {
     if (opts.employed !== false) {
       await sql`
         insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-        values (${orgId}, ${storeId}, ${personId}, ${uid('SC')}, 'regular', '2026-01-01')`;
+        values (${orgId}, ${storeId}, ${personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2026-01-01')`;
     }
     await sql`insert into person_store_scope (person_id, store_id, source) values (${personId}, ${storeId}, 'manual')`;
     let pin: string | null = null;
@@ -184,7 +184,7 @@ describe('A7 an ended-employment staff person still gets NO_ACCESS, not the new 
     const p = await f.person('Ex Staff', 'staff', { employed: false });
     await sql`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on, ended_on)
-      values (${f.orgId}, ${f.storeId}, ${p.personId}, ${uid('SC')}, 'terminated', '2026-01-01', '2026-03-01')`;
+      values (${f.orgId}, ${f.storeId}, ${p.personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'terminated', '2026-01-01', '2026-03-01')`;
     const e = await refused(p.externalId);
     expect(e.message, 'mutant: new check before the employment check').toBe(NO_ACCESS);
     expect((await refusals(f.orgId))[0]?.after.reason).toBe('employment_ended');
