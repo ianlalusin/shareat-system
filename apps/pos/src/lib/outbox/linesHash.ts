@@ -43,3 +43,35 @@ export function computeLinesHash(lines: unknown[]): string {
   const text = JSON.stringify(stable(Array.isArray(lines) ? lines : []));
   return `${cyrb53(text, 0).toString(16)}${cyrb53(text, 1).toString(16)}-${text.length.toString(16)}`;
 }
+
+/** T-460: the exact JSON shape produced by the old cleaner from an SDK Timestamp. */
+function legacyClock(value: unknown): boolean {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return false;
+  const keys = Object.keys(value);
+  const { seconds, nanoseconds } = value as Record<string, unknown>;
+  return keys.length === 2 && keys.includes('seconds') && keys.includes('nanoseconds') &&
+    typeof seconds === 'number' && Number.isSafeInteger(seconds) && seconds >= -62135596800 && seconds <= 253402300799 &&
+    typeof nanoseconds === 'number' && Number.isSafeInteger(nanoseconds) && nanoseconds >= 0 && nanoseconds <= 999999999;
+}
+
+/**
+ * Second comparison against the ORIGINAL saved hash, never a replacement hash or stored-data edit.
+ * The normal hash excludes SDK Timestamp instances. Repair only top-level line clock fields flattened
+ * by the old cleaner; preserve every financial field and all other metadata/sentinel maps.
+ */
+export function legacyClockLinesHash(lines: unknown[]): string | null {
+  let converted = false;
+  const candidate = lines.map(line => {
+    if (line === null || typeof line !== 'object' || Array.isArray(line)) return line;
+    const prototype = Object.getPrototypeOf(line);
+    if (prototype !== Object.prototype && prototype !== null) return line;
+    const copy = { ...line } as Record<string, unknown>;
+    for (const key of ['createdAt', 'updatedAt']) {
+      if (legacyClock(copy[key])) { delete copy[key]; converted = true; }
+    }
+    return copy;
+  });
+  return converted ? computeLinesHash(candidate) : null;
+}

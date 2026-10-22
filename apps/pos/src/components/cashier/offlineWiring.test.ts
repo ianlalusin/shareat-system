@@ -77,6 +77,25 @@ beforeEach(async () => {
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('offline sale is ledger-first (Acceptance 1)', () => {
+  it('T-460: a real SDK Timestamp from cached lines reaches the ledger as a timestamp marker, not a plain map', async () => {
+    seed();
+    const { Timestamp } = await vi.importActual<typeof import('firebase/firestore')>('firebase/firestore');
+    const stamp = Timestamp.fromMillis(1790000000123);
+    const read = fs.getDocs;
+    vi.spyOn(fs, 'getDocs').mockImplementation(async ref => {
+      const snap = await read(ref);
+      const path = ref.__kind === 'query' ? ref.coll.path : ref.path;
+      if (path.endsWith('/sessionBillLines')) for (const entry of snap.docs) {
+        const original = entry.data();
+        vi.spyOn(entry, 'data').mockReturnValue({ ...original, createdAt: stamp });
+      }
+      return snap;
+    });
+    await pay();
+    const event = (await ledger.listEvents())[0]!;
+    const receipt = event.ops!.find(op => op.path === `stores/${STORE_ID}/receipts/sess1`)!.data!;
+    expect((receipt.lines as any[])[0].createdAt).toEqual({ __timestampMs__: stamp.toMillis() });
+  });
   it('T-458: uncached receipt/projection reads are unknown offline, not a reason to lose the new cash sale', async () => {
     seed();
     const read = fs.getDoc;

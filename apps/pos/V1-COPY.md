@@ -142,3 +142,8 @@ T-457 updates the v2-only `src/lib/terminal/claim.ts`: bounded ascending range p
 
 - `src/components/cashier/payment-modal.tsx`: after the offline sale is saved, resolve autoprint from cache through `src/lib/receipts/offline-payment-destination.ts`. An unknown optional preference logs a warning and opens that saved receipt for manual printing; it cannot report the durable sale as failed. Online path and existing success/receipt presentation retained.
 
+## T-460 edits (SDK values and legacy receipt clocks)
+
+- `src/lib/firebase/utils.ts`: strip undefined values only from arrays/plain objects; preserve real SDK Timestamp, FieldValue and DocumentReference instances for the SDK or ledger encoder.
+- V2-only `src/lib/outbox/linesHash.ts` / `reconcile.ts`: keep the original hash, number and centavos checks; allow a second hash candidate that recognizes only exact valid timestamp maps in top-level line createdAt/updatedAt fields. No financial fields ignored and no historical receipt/quarantine rewritten.
+

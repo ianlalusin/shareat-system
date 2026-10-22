@@ -13,7 +13,7 @@
  * Only the real server state decides; the local Firestore cache is never read here.
  */
 import { storedPesosToCentavos } from '@/lib/money/centavos';
-import { computeLinesHash } from '@/lib/outbox/linesHash';
+import { computeLinesHash, legacyClockLinesHash } from '@/lib/outbox/linesHash';
 import { isServerRefusal, messageOf } from '@/lib/outbox/refusal';
 import {
   MAX_ATTEMPTS, applyOpsToBatch, listByStatus, markAcknowledged, markSkipped, patchEvent,
@@ -170,7 +170,8 @@ async function reconcileOne(ev: LedgerEvent, deps: ReconcileDeps, res: Reconcile
     const same =
       data.receiptNumber === ev.receiptNumber &&
       storedPesosToCentavos(data.total) === ev.totalCentavos &&
-      computeLinesHash(Array.isArray(data.lines) ? data.lines : []) === ev.linesHash;
+      (computeLinesHash(Array.isArray(data.lines) ? data.lines : []) === ev.linesHash ||
+        legacyClockLinesHash(Array.isArray(data.lines) ? data.lines : []) === ev.linesHash);
     if (same) {
       await markAcknowledged(ev.deviceId, ev.terminalSeq);
       res.acknowledged += 1;

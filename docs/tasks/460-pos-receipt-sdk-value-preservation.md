@@ -19,7 +19,7 @@ Tests must use real installed SDK types; a fake class without SDK properties is 
 
 ## S2: legacy comparison, only after target tests prove the cause
 Keep computeLinesHash and ORIGINAL event.linesHash contract unchanged. Keep receipt number and centavos checks mandatory.
-If normal hash comparison fails, a second candidate may recognize ONLY createdAt/updatedAt clock fields containing exactly
+If normal hash comparison fails, a second candidate may recognize ONLY top-level line createdAt/updatedAt clock fields containing exactly
 seconds/nanoseconds with valid timestamp bounds and no extra keys, treating these as the SDK timestamps already excluded by the hash.
 Candidate must equal original event.linesHash. Do not accept solely by hashing ops or skip any financial/identity field.
 Do not treat {_methodName:'serverTimestamp'} maps as live sentinels or erase arbitrary objects/nulls to force equality.

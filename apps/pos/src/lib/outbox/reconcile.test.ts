@@ -40,6 +40,7 @@ import * as counter from '@/lib/terminal/counter';
 import * as ledger from '@/lib/outbox/ledger';
 import { computeLinesHash } from '@/lib/outbox/linesHash';
 import * as reconcile from '@/lib/outbox/reconcile';
+import { Timestamp } from 'firebase/firestore';
 
 let idb: FakeIdbFactory;
 let fs: FakeFirestore;
@@ -80,6 +81,56 @@ async function deliver(ev: ledger.LedgerEvent) {
 const status = async (ev: ledger.LedgerEvent) => (await ledger.getEvent(ev.deviceId, ev.terminalSeq))!;
 const commitsNow = () => fs.commits.length;
 const receiptPath = (sid: string) => `stores/${STORE}/receipts/${sid}`;
+
+describe('T-460 legacy clock representation retains financial comparison', () => {
+  const stamp = Timestamp.fromMillis(1790000000123);
+  const local = [{ ...LINES[0], createdAt: stamp, updatedAt: stamp },
+    { id: 'old-marker-line', unitPrice: 0, qtyOrdered: 0, createdAt: { _methodName: 'serverTimestamp' } }];
+  const flattened = () => JSON.parse(JSON.stringify(local));
+  async function serverCopy(change?: (data: any) => void) {
+    const ev = await sell('legacy');
+    await ledger.patchEvent(ev.deviceId, ev.terminalSeq, { linesHash: computeLinesHash(local) });
+    const data = { receiptNumber: ev.receiptNumber, total: 598, lines: flattened() };
+    change?.(data);
+    fs.seed(receiptPath('legacy'), data);
+    return ev;
+  }
+  it('proves the original hash mismatch and acknowledges exact SDK clock maps without a server write', async () => {
+    expect(computeLinesHash(flattened())).not.toBe(computeLinesHash(local));
+    const ev = await serverCopy();
+    const before = commitsNow();
+    expect(await reconcile.runReconcilePass(deps())).toMatchObject({ acknowledged: 1, quarantined: 0, replayed: 0 });
+    expect((await status(ev)).status).toBe('acknowledged');
+    expect(commitsNow()).toBe(before);
+  });
+  it('keeps the normal real SDK timestamp comparison working without the compatibility path', async () => {
+    const ev = await serverCopy();
+    const port = { ...client.reconcilePort, getDocFromServer: async () => ({ exists: () => true,
+      data: () => ({ receiptNumber: ev.receiptNumber, total: 598, lines: local }) }) };
+    expect(await reconcile.runReconcilePass(deps({ port: port as any }))).toMatchObject({ acknowledged: 1, quarantined: 0 });
+  });
+  it.each(['qtyOrdered', 'unitPrice', 'discountQty', 'discountValue', 'discountType', 'itemId'])('still quarantines changed %s', async field => {
+    const ev = await serverCopy(data => { data.lines[0][field] = field === 'itemId' || field === 'discountType' ? 'different-value' : 23; });
+    expect(await reconcile.runReconcilePass(deps())).toMatchObject({ acknowledged: 0, quarantined: 1 });
+    expect((await status(ev)).status).toBe('quarantined');
+  });
+  it.each(['receiptNumber', 'total'])('still quarantines changed %s', async field => {
+    const ev = await serverCopy(data => { (data as any)[field] = field === 'total' ? 599 : 'OTHER-01-000005'; });
+    expect(await reconcile.runReconcilePass(deps())).toMatchObject({ acknowledged: 0, quarantined: 1 });
+    expect((await status(ev)).status).toBe('quarantined');
+  });
+  it.each([
+    { seconds: 1790000000, nanoseconds: 123000000, extra: 'not-a-timestamp' },
+    { seconds: 1790000000, nanoseconds: -1 },
+    { seconds: 253402300800, nanoseconds: 0 },
+    { seconds: '1790000000', nanoseconds: 123000000 },
+    null,
+  ])('does not discard an invalid/extra-key clock object: %j', async clock => {
+    const ev = await serverCopy(data => { data.lines[0].createdAt = clock; });
+    expect(await reconcile.runReconcilePass(deps())).toMatchObject({ acknowledged: 0, quarantined: 1 });
+    expect((await status(ev)).status).toBe('quarantined');
+  });
+});
 
 describe('linesHash (Acceptance 4)', () => {
   const local = [{ id: 'l1', type: 'package', itemName: 'Unli Pack', unitPrice: 299, qtyOrdered: 2, note: undefined }];
