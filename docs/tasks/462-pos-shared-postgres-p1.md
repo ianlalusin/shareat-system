@@ -1,4 +1,4 @@
-# T-454 — begin POS P1 on the shared PostgreSQL backend
+# T-462 — begin POS P1 on the shared PostgreSQL backend
 Status: started 21 October. Ian said "start now" after reviewing the POS phases and the
 APK/device-storage proposal; then requested emulator testing for builds.
 Goal: one identity, permissions and business backend shared with ERP; device storage supports offline work.
@@ -6,7 +6,7 @@ Preserve the working POS copy and its ledger; do not launch an interim Firebase 
 No decision to install SQLite yet: measure existing IndexedDB on the emulator and real tablets first.
 
 ## Bounded sequence
-1. T-455: isolated demo emulator build/runtime harness, with no live Firebase or payment destination.
+1. T-463: isolated demo emulator build/runtime harness, with no live Firebase or payment destination.
 2. Inventory and specify shared sign-in: tablet enrollment must prove possession, not trust its public device UUID.
    Reuse ERP PIN/session/throttle/capability services; no second role matrix, no secrets in browser storage.
 3. Implement online enrollment/sign-in/session revocation, then offline staff-verifier storage and expiry.
@@ -22,7 +22,7 @@ The terminal PIN session is bound to a server terminal-person id; the install UU
 Current ledger/counter are in one IndexedDB transaction; sync ops still encode Firestore document writes.
 Do not mistake changing the session token for completing the data-owner migration.
 
-Scope now: this plan, docs/discovery/pos-p1-shared-backend-start.md and the explicitly scoped T-455 files.
+Scope now: this plan, docs/discovery/pos-p1-shared-backend-start.md and the explicitly scoped T-463 files.
 Ian's "document this" additionally scopes the dated owner-direction updates in
 docs/plans/pos-customer-v2-phase-plan.md, docs/ops/pos2-runbook.md and apps/pos/README.md.
 Record the emulator alternative to a cloud test project and distinguish planned architecture from delivered code.

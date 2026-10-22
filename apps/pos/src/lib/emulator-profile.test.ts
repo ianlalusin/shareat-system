@@ -3,7 +3,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import { emulatorProfile } from '../../config/emulator-profile.mjs';
 
 afterEach(() => { vi.unstubAllEnvs(); vi.resetModules(); });
-describe('T-455 isolated emulator profile', () => {
+describe('T-463 isolated emulator profile', () => {
   it('is disabled unless explicitly selected', () => {
     expect(emulatorProfile(undefined)).toBeNull();
     expect(emulatorProfile('0')).toBeNull();

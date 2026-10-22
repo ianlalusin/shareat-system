@@ -478,3 +478,62 @@ describe('R1 concurrent database family changes', () => {
     }, 30000,
   );
 });
+
+/** T-453 (DEF-728) - the three item-catalogue writes leave an audit row, only when they changed something. */
+describe('T-453 item catalogue audit trail', () => {
+  type AuditRow = { entity: string; entity_id: string; before: Record<string, unknown> | null; after: Record<string, unknown> | null };
+  const auditOf = (orgId: string, action: string) => sql<AuditRow[]>`
+    select entity, entity_id, before, after from audit_log where org_id = ${orgId} and action = ${action} order by occurred_at, id`;
+
+  it('T3 set and clear a variation write one item.variant_set each, with the before/after parent; repeating a set writes nothing', async () => {
+    const f = await fixture('t453a');
+    const kimchi = await mkItem(f, 'Kimchi');
+    const k250 = await mkItem(f, 'Kimchi 250g');
+    expect(await setVariant(f, f.superAdmin, k250, kimchi)).toEqual({ changed: true });
+    expect(await setVariant(f, f.superAdmin, k250, kimchi)).toEqual({ changed: false });
+    expect(await auditOf(f.orgId, 'item.variant_set')).toHaveLength(1);
+    expect(await setVariant(f, f.superAdmin, k250, null)).toEqual({ changed: true });
+    const rows = await auditOf(f.orgId, 'item.variant_set');
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => [r.entity, r.entity_id])).toEqual([['items', k250], ['items', k250]]);
+    expect(rows[0]!.before).toMatchObject({ variantOfItemId: null });
+    expect(rows[0]!.after).toMatchObject({ variantOfItemId: kimchi });
+    expect(rows[1]!.before).toMatchObject({ variantOfItemId: kimchi });
+    expect(rows[1]!.after).toMatchObject({ variantOfItemId: null });
+  }, 30_000);
+
+  it('T4 dismiss writes one item_duplicate.dismissed (again: still one); undo writes one dismissal_undone carrying the pair in before (again: still one)', async () => {
+    const f = await fixture('t453b');
+    const a = await mkItem(f, 'Samyang Cheese');
+    const b = await mkItem(f, 'Samyang 4 Cheese');
+    const made = await asOrg(f.orgId, (tx) => dismissDuplicatePair(tx, f.superAdmin, { itemAId: a, itemBId: b, note: 'different products' }));
+    await asOrg(f.orgId, (tx) => dismissDuplicatePair(tx, f.superAdmin, { itemAId: b, itemBId: a }));
+    const dismissed = await auditOf(f.orgId, 'item_duplicate.dismissed');
+    expect(dismissed).toHaveLength(1);
+    expect(dismissed[0]!.entity).toBe('item_duplicate_dismissals');
+    expect(dismissed[0]!.entity_id).toBe(made.dismissalId);
+    const [lo, hi] = a < b ? [a, b] : [b, a];
+    expect(dismissed[0]!.after).toMatchObject({ itemAId: lo, itemBId: hi, note: 'different products' });
+
+    expect(await asOrg(f.orgId, (tx) => undoDuplicateDismissal(tx, f.superAdmin, { dismissalId: made.dismissalId }))).toEqual({ removed: true });
+    expect(await asOrg(f.orgId, (tx) => undoDuplicateDismissal(tx, f.superAdmin, { dismissalId: made.dismissalId }))).toEqual({ removed: false });
+    const undone = await auditOf(f.orgId, 'item_duplicate.dismissal_undone');
+    expect(undone).toHaveLength(1);
+    expect(undone[0]!.entity_id).toBe(made.dismissalId);
+    expect(undone[0]!.before).toMatchObject({ itemAId: lo, itemBId: hi, note: 'different products' });
+    expect(undone[0]!.after).toBeNull();
+    expect(await auditOf(f.orgId, 'item_duplicate.dismissed')).toHaveLength(1);
+  }, 30_000);
+
+  it('T5 a refused variant (merged item, cross-kind parent) writes no audit row', async () => {
+    const f = await fixture('t453c');
+    const kimchi = await mkItem(f, 'Kimchi');
+    const sauce = await mkItem(f, 'Kimchi sauce');
+    const old = await mkItem(f, 'Kimchi old');
+    await asOrg(f.orgId, (tx) => mergeItems(tx, f.superAdmin, { loserId: old, winnerId: sauce }));
+    const retail = await mkItem(f, 'Kimchi gift jar', 'retail');
+    await failure(setVariant(f, f.superAdmin, old, kimchi)); // merged item
+    await failure(setVariant(f, f.superAdmin, retail, kimchi)); // parent of another kind
+    expect(await auditOf(f.orgId, 'item.variant_set')).toHaveLength(0);
+  }, 30_000);
+});

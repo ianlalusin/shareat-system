@@ -8,7 +8,7 @@ apps/pos/src/lib/firebase/utils.ts and utils.test.ts;
 apps/pos/src/lib/outbox/linesHash.ts (separate legacy-clock comparison helper only), reconcile.ts, reconcile.test.ts;
 apps/pos/src/components/cashier/offlineWiring.test.ts (real SDK timestamp round-trip control);
 apps/pos/V1-COPY.md; this task; the discovery; docs/reviews/t460-receipt-sdk-values.md;
-docs/DEFECTS-REGISTER.md DEF-730; docs/tasks/455-pos-emulator-runtime.md (actual evidence only).
+docs/DEFECTS-REGISTER.md DEF-730; docs/tasks/463-pos-emulator-runtime.md (actual evidence only).
 No pricing, accounting, schema, receipt-number reset, history deletion, outbox-status bypass or auth change.
 
 ## S1: ordinary cleaner
@@ -33,4 +33,4 @@ Retain all old reconciliation/refusal/ownership/retry controls. Run affected/ful
 Stop dev before APK; preserve stale dev types safely; verify 34 moved sources restored byte-identically.
 NEW own Android demo order with a real timestamp-bearing line, offline cash/receipt/restart/reconnect:
 one receipt/payment/number and server-proven acknowledgement (unsent0 alone does not prove this if quarantine grew).
-No printer/provider/24h-soak claim; DEF-729 follow-up marker atomicity remains separately scoped.
+No printer/provider/24h-soak claim; DEF-735 follow-up marker atomicity remains separately scoped.

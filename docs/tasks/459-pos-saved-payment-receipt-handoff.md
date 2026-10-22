@@ -1,4 +1,4 @@
-# T-459 — saved payment must reach its receipt (DEF-728)
+# T-459 — saved payment must reach its receipt (DEF-734)
 Status: corrected and Android demo verified 22 October; postcommit checks/release gates pending.
 Goal: an optional uncached print preference cannot turn a saved payment into a payment-failed message.
 Evidence: Android log confirms EMU-01-000001 saved; payment-modal.tsx:406 then reads receiptSettings/main,
@@ -8,7 +8,7 @@ raises unavailable and enters Payment failed catch. Restart retains closed sessi
 apps/pos/src/components/cashier/payment-modal.tsx;
 apps/pos/src/lib/receipts/offline-payment-destination.ts and offline-payment-destination.test.ts;
 apps/pos/V1-COPY.md; this task; docs/reviews/t459-saved-payment-handoff.md;
-docs/DEFECTS-REGISTER.md DEF-728; docs/tasks/455-pos-emulator-runtime.md (runtime evidence only).
+docs/DEFECTS-REGISTER.md DEF-734; docs/tasks/463-pos-emulator-runtime.md (runtime evidence only).
 No money, reservation, ledger, receipt formatting or authorization changes; preserve the existing success/receipt UI.
 
 ## Contract

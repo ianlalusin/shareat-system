@@ -1,4 +1,4 @@
-# T-453 — accurate POS receipt item amounts (DEF-716)
+# T-461 — accurate POS receipt item amounts (DEF-716)
 Status: implemented locally 21 October; focused tests/typecheck/web build/Capacitor export passed. Postcommit checks/full CI/runtime gates pending.
 Goal: printed and preview item gross amounts include priced modifiers and exclude free/void units.
 Reuse T-423 lineAmounts and allocateExact: round each bill stage once, allocate its centavos
@@ -9,7 +9,7 @@ Preview discount breakdown must reuse the same allocated line-discount stage, in
 modern lineAdjustments, instead of recomputing the old VAT-exclusive discount base.
 Scope: apps/pos/src/lib/printing/{receipt-line-amounts.ts,receipt-line-amounts.test.ts,receiptFormatter.ts};
 apps/pos/src/components/receipt/receipt-view.tsx; this task; docs/DEFECTS-REGISTER.md;
-docs/reviews/t453-receipt-item-amounts.md. Supporting caller baseline only if the unchanged
+docs/reviews/t461-receipt-item-amounts.md. Supporting caller baseline only if the unchanged
 generator reports legitimate drift, with each name explained before regeneration.
 No receipt write, analytics recalculation, Firestore rule, data-shape or packages/ change.
 Checks: literal free/modifier/void cases; all-free zero; fractional quantities with a half-centavo

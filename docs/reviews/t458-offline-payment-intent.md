@@ -16,8 +16,8 @@ Status: core save/restart/reconnect verified in Android demo; NOT a POS release 
 - No storage engine/package/schema change or reference-repository write. Existing online/online and offline-void intent protocols unchanged.
 - Android own order P760, Wi-Fi/data off: actual log saved EMU-01-000001. Force-stop/reopen offline retained closed state (no active sessions).
 - Reconnect demo REST: one receipt P760, one payment G4Yea7DR4bWumgMepciA-p0 and one matching receipt-number mapping. Baseline receipt was HTTP404 with local emulator owner auth.
-- UI then reports Payment failed from uncached OPTIONAL receiptSettings read AFTER save (DEF-728). Overall payment/receipt UI gate is still red; no paid-flow completion claim.
-- DEF-729 recorded separately: follow-up marker is not atomic with the ledger; automatic recovery after acknowledgement is not established.
+- UI then reports Payment failed from uncached OPTIONAL receiptSettings read AFTER save (DEF-734). Overall payment/receipt UI gate is still red; no paid-flow completion claim.
+- DEF-735 recorded separately: follow-up marker is not atomic with the ledger; automatic recovery after acknowledgement is not established.
 - Screenshots/logs in Temp/shareat-t458-{paid,reopened}.png, shareat-t458-build-final.log, shareat-t458-full-final.log; physical printer/provider/24h soak unverified.
 
 ## FOR IAN

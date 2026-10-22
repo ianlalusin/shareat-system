@@ -1,6 +1,6 @@
 # T-456 — DEF-722: append an offline dish without an existence read
 Status: implemented and Android demo restart/reconnect verified; release/postcommit gates pending 22 October.
-Specified 21 October after T-455 Android reproduction; within authorized POS hardening.
+Specified 21 October after T-463 Android reproduction; within authorized POS hardening.
 Goal: a cashier can add the first dish offline without overwriting an unseen existing bill line.
 Pattern: append a fresh line per offline add intent. Online transaction grouping remains as it is.
 Each offline add receives a generated document id, writes its own quantity/modifiers/note/defaults, and uses
@@ -11,7 +11,7 @@ No changes to billing arithmetic, authorization, payment ledger, receipt numberi
 Scope: apps/pos/src/lib/offline/addon-line.ts and addon-line.test.ts;
 apps/pos/src/components/shared/AddonsPOSModal.tsx; apps/pos/V1-COPY.md;
 docs/discovery/pos-offline-addon-absence.md; this task; docs/reviews/t456-offline-first-addon.md;
-docs/DEFECTS-REGISTER.md (DEF-722) and T-455 report/status evidence only.
+docs/DEFECTS-REGISTER.md (DEF-722) and T-463 report/status evidence only.
 Tests first: uncached reads throw; staging still writes a fresh line; unseen grouped line and its discounts
 stay unchanged; consecutive adds differ; modifiers/notes/quantities survive; wiring retains returned id in tickets.
 Then Android demo APK: cached Test dish, disconnect, add twice, force-stop/reopen, reconnect; inspect local

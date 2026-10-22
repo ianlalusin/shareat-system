@@ -56,7 +56,7 @@ describe('T-417 ERP CI is untouched (case 13)', () => {
     expect(sha(lines.slice(s, e).join('\n').trimEnd())).toBe('0b3420dc93bec889ec9c1abca2f48b3cbca1cf1727f1d14ffda250c135e830a0');
   });
 
-  // Bible row 373: POS v2 ships beside the ERP. Its steps live only between `# >>> POS v2` and
+  // Bible row 378: POS v2 ships beside the ERP. Its steps live only between `# >>> POS v2` and
   // `# <<< POS v2` markers; with those blocks removed, every ERP byte is still 9c1704b's.
   const stripPos = (s: string) => {
     const out: string[] = [];

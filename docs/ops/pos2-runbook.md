@@ -11,10 +11,10 @@ Written by the T-424 lane. **The lane does not apply any of this**; the orchestr
 
 Ian authorized starting P1 now and testing APK builds on an Android emulator. The destination architecture is
 APK device storage/outbox → authenticated server API → the shared ERP PostgreSQL backend. SQLite is only a
-candidate; existing IndexedDB is retained while persistence is measured. See T-454 and the phase plan.
+candidate; existing IndexedDB is retained while persistence is measured. See T-462 and the phase plan.
 
 For **local runtime checks**, the separate cloud TEST-project prerequisite below is superseded by the isolated
-T-455 demo profile. Start local Auth/Firestore/Storage emulators with project **demo-shareat-pos2**, seed synthetic
+T-463 demo profile. Start local Auth/Firestore/Storage emulators with project **demo-shareat-pos2**, seed synthetic
 data, and build the dedicated emulator APK. Never use a TEST store in live `shareat-hub-v2`, production credentials,
 or real payments. The demo profile is not a production deployment configuration or production-rules parity test.
 

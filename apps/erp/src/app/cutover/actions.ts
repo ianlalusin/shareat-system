@@ -93,7 +93,7 @@ export async function addOpeningFigureAction(formData: FormData): Promise<void> 
         addOpeningFigure(tx, actor, {
           accountCode: str(formData, 'accountCode'),
           storeId: str(formData, 'storeId'),
-          direction: str(formData, 'direction') === 'credit' ? 'credit' : 'debit',
+          direction: str(formData, 'direction'),
           amount: str(formData, 'amount'),
           entryDate: str(formData, 'entryDate'),
           memo: str(formData, 'memo') || null,

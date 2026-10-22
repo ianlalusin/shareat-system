@@ -1,5 +1,5 @@
-# T-458 — durable offline payment intent (DEF-726 / DEF-727)
-Status: core save/restart/reconnect verified 22 October; post-save UI exposed DEF-728; overall POS gates pending.
+# T-458 — durable offline payment intent (DEF-732 / DEF-733)
+Status: core save/restart/reconnect verified 22 October; post-save UI exposed DEF-734; overall POS gates pending.
 Goal: an owning tablet can save a cash sale with no cached receipt, and concurrent/restarted retries cannot consume another number.
 
 ## Scope and sequence
@@ -10,8 +10,8 @@ apps/pos/src/test-helpers/fakeFirestore.ts: cache-miss fidelity and stable defer
 tests/unit/pos-v2-offline-guards.test.ts: require the new intent reservation API instead of the old generic API;
 retain every counter, rules, batch and effects boundary assertion. This supporting guard scope was added after its real failure.
 Documentation: this task; docs/discovery/pos-offline-receipt-intent.md;
-docs/reviews/t458-offline-payment-intent.md; docs/DEFECTS-REGISTER.md DEF-726/727;
-apps/pos/V1-COPY.md; docs/tasks/455-pos-emulator-runtime.md (evidence only).
+docs/reviews/t458-offline-payment-intent.md; docs/DEFECTS-REGISTER.md DEF-732/727;
+apps/pos/V1-COPY.md; docs/tasks/463-pos-emulator-runtime.md (evidence only).
 No SQLite, DB version change, new package, production operations, statutory-rule change or backend migration.
 
 ## S1 contract

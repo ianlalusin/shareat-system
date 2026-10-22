@@ -1,5 +1,5 @@
 # T-451 — role-first staff display and privileged-role position removal
-Status: Ian visually approved 21 October ("screen good now deploy"); full PR CI must pass before merge. Latest chat ruling supersedes the earlier universal-position assumption.
+Status: MERGED 2026-10-21 (PR #45). Deploy not recorded in docs. Latest chat ruling supersedes the earlier universal-position assumption.
 Display active Super admin / Admin / Manager first; only Staff uses its primary position, never an arbitrary secondary.
 Privileged-role hires need no position. Existing assignments can be cleared explicitly on the employment page;
 do not delete historical assignments automatically or change a person's role, scope, manual grants or role-derived permissions.

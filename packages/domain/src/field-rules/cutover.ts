@@ -9,7 +9,7 @@ import { MANUAL_COST_PATTERN } from '../shared/manual-cost-pattern';
 export const CUTOVER_FIGURE_RULES = defineFieldRules('cutover.addOpeningFigure', {
   accountCode: { label: 'The account', kind: 'text', requires: 'Choose the account.' },
   storeId: { label: 'The store', kind: 'text', requires: 'Choose the store.' },
-  direction: { label: 'Owns or owes', kind: 'text', requires: 'Choose whether the business has this or owes it.' },
+  direction: { label: 'Owns or owes', kind: 'pattern', pattern: '^(debit|credit)$', requires: 'Choose whether the business has this or owes it.' },
   amount: { label: 'This amount', kind: 'money', min: 0.01 },
 });
 

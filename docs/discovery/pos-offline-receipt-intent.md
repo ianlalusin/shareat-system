@@ -1,4 +1,4 @@
-# DEF-726 — offline receipt intent assessment, 22 October
+# DEF-732 — offline receipt intent assessment, 22 October
 Goal: cash paid once on the owning tablet remains recoverable through restart and reconnect, with one receipt number.
 Android demo confirmed valid Terminal01, own cached order and Cash P760 still fail on an uncached receipt getDoc.
 The existing fake returns a missing snapshot where the real SDK raises unavailable, masking this failure.

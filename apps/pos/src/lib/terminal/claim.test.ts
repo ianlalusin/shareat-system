@@ -18,7 +18,7 @@
  *     (TT zero padded); the same deviceId may re-claim (reinstall with the same browser profile). Decided inside runTransaction.
  *   - on success writes the doc and then `saveTerminalClaim({storeId, terminalNo, deviceId, nextSeq})` (counter.ts) to IndexedDB.
  *   - nextSeq = 1 + highest seq found by at most20 ascending document-id range probes with limit1 (0 when empty).
- *     T-457 corrects the original descending-key-only contract after actual SDK/emulator refusal (DEF-723).
+ *     T-457 corrects the original descending-key-only contract after actual SDK/emulator refusal (DEF-736).
  *     Queries still run without undeclared composite indexes; the original fake index harness alone did not prove backend compatibility.
  *   - when the previous terminal doc carries a release (releaseEpoch >= 1 and deviceId null), nextSeq = highest seq + 1000 instead.
  *   - the FIRST claim of a prefix (no terminal doc yet) first queries stores/{s}/receipts where receiptNumber >= `CODE-TT-` and
@@ -46,7 +46,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-describe('DEF-723 backend-compatible sequence discovery', () => {
+describe('DEF-736 backend-compatible sequence discovery', () => {
   function compatiblePort() {
     const port = fs.port;
     const read = port.getDocs;

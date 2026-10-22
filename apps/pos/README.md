@@ -11,10 +11,10 @@ shared-PostgreSQL migration.
 ## Current direction — 21 October
 
 P1 starts now: APK device storage and a durable outbox, authenticated APIs and the same PostgreSQL backend
-as ERP. Keep existing IndexedDB pending persistence evidence; SQLite is not adopted. See T-454 and the POS
+as ERP. Keep existing IndexedDB pending persistence evidence; SQLite is not adopted. See T-462 and the POS
 phase plan for enrollment, shared sign-in, reference snapshots and subsequent receipt/table ownership moves.
 
-## Isolated emulator checks — T-455
+## Isolated emulator checks — T-463
 
 Use only synthetic data in local project **demo-shareat-pos2**:
 

@@ -935,13 +935,21 @@ export async function insertDismissal(
   return { id: existing!.id, created: false }; // ON CONFLICT DO NOTHING fired, so the row exists
 }
 
-/** Undo. Returns whether a row was removed. */
-export async function deleteDismissal(tx: Tx, orgId: string, id: string): Promise<boolean> {
+/** Undo. Returns the removed pair (for the audit row), or null when nothing was removed. */
+export async function deleteDismissal(
+  tx: Tx,
+  orgId: string,
+  id: string,
+): Promise<{ itemAId: string; itemBId: string; note: string | null } | null> {
   const gone = await tx
     .delete(itemDuplicateDismissals)
     .where(and(eq(itemDuplicateDismissals.id, id), eq(itemDuplicateDismissals.orgId, orgId)))
-    .returning({ id: itemDuplicateDismissals.id });
-  return gone.length > 0;
+    .returning({
+      itemAId: itemDuplicateDismissals.itemAId,
+      itemBId: itemDuplicateDismissals.itemBId,
+      note: itemDuplicateDismissals.note,
+    });
+  return gone[0] ?? null;
 }
 
 export async function listDismissals(tx: Tx, orgId: string): Promise<DismissalRow[]> {

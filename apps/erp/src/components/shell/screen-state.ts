@@ -72,6 +72,10 @@ export function rememberScreen(root: HTMLElement, scope: string): () => void {
     delete pages[url]; pages[url] = capture(root, win);
     try { win.sessionStorage.setItem(key, JSON.stringify(Object.fromEntries(Object.entries(pages).slice(-30)))); } catch { /* Storage is optional. */ }
   };
+  let pending: number | undefined;
+  const cancelPending = () => { if (pending !== undefined) { win.clearTimeout(pending); pending = undefined; } };
+  const flush = () => { cancelPending(); write(); };
+  const schedule = () => { if (pending === undefined) pending = win.setTimeout(() => { pending = undefined; write(); }, 250); };
   const returnLinks = () => root.querySelectorAll<HTMLAnchorElement>('a[href]').forEach(link => {
     // Existing detail-page ancestor links share the same behavior without per-page copies.
     if (!link.hasAttribute('data-screen-return') && !link.textContent?.trim().startsWith('←')) return;
@@ -94,16 +98,16 @@ export function rememberScreen(root: HTMLElement, scope: string): () => void {
     // Slow streamed sections may arrive later; their observer remains until interaction or navigation.
   } else observer.observe(root, { childList: true, subtree: true });
   const interact = () => { stopRestoring(); };
-  const click = () => { stopRestoring(); write(); win.queueMicrotask(write); };
-  win.addEventListener('scroll', write, true);
-  root.addEventListener('toggle', write, true);
+  const click = () => { stopRestoring(); flush(); win.queueMicrotask(write); };
+  win.addEventListener('scroll', schedule, true);
+  root.addEventListener('toggle', flush, true);
   root.addEventListener('click', click, true);
-  win.addEventListener('pagehide', write);
+  win.addEventListener('pagehide', flush);
   for (const event of ['wheel', 'touchstart', 'pointerdown', 'keydown']) win.addEventListener(event, interact, { passive: true });
   return () => {
-    write(); disposed = true; stopRestoring(); observer.disconnect();
-    win.removeEventListener('scroll', write, true); root.removeEventListener('toggle', write, true);
-    root.removeEventListener('click', click, true); win.removeEventListener('pagehide', write);
+    flush(); disposed = true; stopRestoring(); observer.disconnect();
+    win.removeEventListener('scroll', schedule, true); root.removeEventListener('toggle', flush, true);
+    root.removeEventListener('click', click, true); win.removeEventListener('pagehide', flush);
     for (const event of ['wheel', 'touchstart', 'pointerdown', 'keydown']) win.removeEventListener(event, interact);
   };
 }
