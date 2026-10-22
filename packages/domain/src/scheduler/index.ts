@@ -981,9 +981,9 @@ async function runOrphanFileSweepForOrg(
       // Compared against the SAME constant `listOrphans` limits on (`filesRepo.ORPHAN_SWEEP_BATCH_LIMIT`)
       // rather than a duplicated literal, so changing the limit cannot silently stop this from firing.
       detail:
-        result.candidates === filesRepo.ORPHAN_SWEEP_BATCH_LIMIT
-          ? `hit the ${filesRepo.ORPHAN_SWEEP_BATCH_LIMIT}-candidate cap — more orphans may remain in this org`
-          : undefined,
+        `referencedUnlinked ${result.referencedUnlinked}` + (result.candidates === filesRepo.ORPHAN_SWEEP_BATCH_LIMIT
+          ? ` · hit the ${filesRepo.ORPHAN_SWEEP_BATCH_LIMIT}-candidate cap — more orphans may remain in this org`
+          : ''),
     };
   });
 }

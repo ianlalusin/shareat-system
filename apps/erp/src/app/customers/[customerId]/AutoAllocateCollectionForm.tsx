@@ -17,7 +17,7 @@
  */
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { compare, money, ZERO } from '@shareat/core/money';
-import { PhotoInput } from '@/components/PhotoInput';
+import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import { Button, Input, Select } from '@/components/ui';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import { COLLECTION_RECORD_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
@@ -324,7 +324,7 @@ export function AutoAllocateCollectionForm({
         label="Proof of payment"
         hint="Required for an online or e-wallet account: the deposit slip or transfer screenshot."
       >
-        <PhotoInput name="receiptPhoto" accept="image/*" className="text-sm" />
+        <PhotoUpload name="receiptPhoto" purpose="receipt_photo" storeId={storeId} label="Proof of payment" />
       </Field>
 
       <Button type="submit" variant="primary">

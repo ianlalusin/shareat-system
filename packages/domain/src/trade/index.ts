@@ -413,6 +413,8 @@ export async function confirmTradeOrder(
 }
 
 export interface DispatchResult {
+  /** T-441 S2: the proof belongs to the payment collection, never the order. */
+  collectionId: string | null;
   orderId: string;
   /** ⛔ Null for an INTERNAL transfer — a branch is not extended credit, so nothing is receivable. */
   chargeId: string | null;
@@ -472,6 +474,7 @@ export async function dispatchTradeOrder(
         treatment: order.arChargeId ? 'external' : 'internal',
         paidNow: null,
         balanceAfterPayment: null,
+        collectionId: null,
       };
     }
     if (order.status !== 'draft' && order.status !== 'confirmed') {
@@ -589,7 +592,7 @@ export async function dispatchTradeOrder(
       // is meaningless and is deliberately not consulted.
       return {
         orderId: order.id, chargeId: null, entryId: dispatched.entryId, creditOverridden: false, treatment: 'internal',
-        paidNow: null, balanceAfterPayment: null,
+        paidNow: null, balanceAfterPayment: null, collectionId: null,
       };
     }
 
@@ -608,9 +611,10 @@ export async function dispatchTradeOrder(
       notes: `Wholesale order ${order.referenceNo ?? order.id}`,
       creditOverrideReason: input.creditOverrideReason,
     };
-    const { chargeId, entryId, creditOverrideBy, creditOverrideReason } = input.payNow
+    const billed: Awaited<ReturnType<typeof recordCharge>> & { collectionId?: string } = input.payNow
       ? await recordChargeWithCollection(trx, actor, { ...chargeInput, payNow: input.payNow })
       : await recordCharge(trx, actor, chargeInput);
+    const { chargeId, entryId, creditOverrideBy, creditOverrideReason } = billed;
 
     // ---------------------------------------------------------------------------------------
     // ⭐ T-165 / DEF-125. COGS and inventory relief — T-132's own header called this a "stated
@@ -681,6 +685,7 @@ export async function dispatchTradeOrder(
     const paidNow = input.payNow ? parseMoneyInput(input.payNow.amount, 'dispatchTradeOrder: the payment', 'The amount paid now') : null;
     return {
       orderId: order.id, chargeId, entryId,
+      collectionId: billed.collectionId ?? null,
       creditOverridden: creditOverrideReason !== null, treatment: 'external',
       paidNow,
       balanceAfterPayment: paidNow ? subtract(money(order.totalAmount), paidNow) : null,
