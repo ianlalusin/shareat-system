@@ -64,7 +64,7 @@ Returns `{ linked: Record<purpose, n>; bySource: Record<label, n>; shared; misma
 **Script.** `scripts/backfill-file-links.ts`, `npm run backfill-file-links`. Args: `--confirm`, `--org=<uuid>`;
 anything else refused (same `parseArgs` shape). Default is dry run. Prints per org: would-link / linked per purpose
 and per source, then the three problem lists (file id, source, owner id; no personal data), then unreferenced counts.
-Exit 1 if any org failed, if no org was processed, or (with `--check`) if any referenced file is still unlinked:
+Exit 1 if any org failed, if no org was processed, or (with `--check`) if any LINKABLE referenced file is still unlinked (orchestrator ruling 2026-10-22: wrong-purpose, cross-org and mismatched files are printed but do not set the exit code, so the production `--check` can reach 0):
 `--check` is the read-only census Ian can run any time after.
 
 **Sweep hardening (S2, small).** `listOrphans` adds `AND NOT EXISTS` over `FILE_REFERENCES` (built from the same
@@ -194,3 +194,5 @@ delivery census requirements, both upload paths and rollback on a refused claim,
 that cross-reference, keeping app imports out of packages. The channel-certificate TODO remains:
 T-441 S2 lists no channel-settlement writer, so its ownership is a recorded spec gap, not a
 silently completed requirement. Production backfill and closure of DEF-672 remain gated.
+
+**Orchestrator ruling 2026-10-22 (supersedes the census note above):** `--check` exits 1 only for a linkable referenced file that is still unlinked. A wrong-purpose file can never be linked by the backfill, so counting it made the production `--check` unreachable. Test ~line 495 now expects exit 0 with the file printed.

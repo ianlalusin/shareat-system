@@ -492,12 +492,12 @@ describe('M10 script behaviour (domain entry + the real script)', { timeout: 180
     expect(await linkedTo(f.id)).toBeNull();
   });
 
-  it('--check exits 1 when the only unlinked referenced file is wrong-purpose, reports it, and writes nothing', async () => {
+  it('--check exits 0 when the only unlinked referenced file is wrong-purpose, still prints it, and writes nothing', async () => {
     const orgId = await mkOrg('m10w');
     const f = await mkFile(orgId, 'memo_document'); // a memo document referenced from an invoice receipt column: wrong purpose, not guarded (an employment/person source would be count-only), so its id is printable
     await mkRef('inv', orgId, f.id);
     const r = runScript(['--check', `--org=${orgId}`]);
-    expect(r.status).toBe(1);
+    expect(r.status).toBe(0); // wrong-purpose files never change the exit code (they can never be linked)
     expect(r.out).toContain(f.id);
     expect(await linkedTo(f.id)).toBeNull();
   });

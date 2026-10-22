@@ -4,7 +4,7 @@
  *
  *   npm run backfill-file-links                        dry run: prints what would be linked, writes nothing
  *   npm run backfill-file-links -- --confirm           links them
- *   npm run backfill-file-links -- --check             read-only census; exit 1 while a referenced file is unlinked
+ *   npm run backfill-file-links -- --check             read-only census; exit 1 while a linkable referenced file is unlinked
  *   add --org=<uuid> to any of these to run one organisation only
  *
  * Nothing is deleted and no bytes are touched. Shared files link once to the lowest owner id; other references are reported.
@@ -90,9 +90,9 @@ async function main(): Promise<number> {
         printProblems('wrong purpose for the row that references it (not linked)', r.wrongPurpose);
         console.log(`  unreferenced and unlinked (the sweep removes the old ones): ${sum(r.unreferenced)}`);
         for (const [k, n] of Object.entries(r.unreferenced)) console.log(`    ${k}: ${n}`);
-        // Every owned referenced unlinked file fails the census, including those the purpose guard refuses to link.
-        // The domain counts each file once, either under linked or wrongPurpose, after deduplicating shared references.
-        stillUnlinked += write ? 0 : sum(r.linked) + r.wrongPurpose.length;
+        // Only a LINKABLE referenced file fails the census. Wrong-purpose, cross-org and mismatched references are printed
+        // above but do not change the exit code (ruling, T-442).
+        stillUnlinked += write ? 0 : sum(r.linked);
       } catch (err) {
         failed++;
         console.log(`${o.name} (${o.id}) FAILED - ${err instanceof Error ? err.message : String(err)}`);
