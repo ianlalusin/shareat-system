@@ -9,6 +9,7 @@ Status: core save/restart/reconnect verified in Android demo; NOT a POS release 
 - Final full POS checkpoint: 941 passed / 1 existing skip / 88 files; static TypeScript phase and native APK build passed (111 tasks).
 - All 34 moved API/server/middleware sources restored byte-identically; no cap-stash remains.
 - Initial guards: 239 passed / 2 failed: old API-name assertion and unchanged 5s artifact-scan timeout. Supporting guard updated to REQUIRE the intent API; focused 55 passed, without widening any limit/exemption.
+- Source commit 9cca215 postcommit: 941 POS passed/1 existing skip; typecheck clean; guards 240 passed/1 unchanged artifact-scan timeout; unchanged focused boundary repeat 20 passed. Source pushed; combined guard invocation was not fully green.
 - Counter/event/pointer transaction is synchronous and resolves on commit; storage abort leaves no number consumed.
 - Pointer persists after payload pruning; old ambiguous/online-reserved attempts cannot silently become new offline sales.
 - Original saved ops drive replays and effect context. A queue retry preserves existing status and completed effect stages.
