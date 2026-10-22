@@ -62,7 +62,6 @@ formatLogDescription
 getActiveFake
 getAllocationsForPayment
 getCalendarWeatherIcon
-getEvent
 getGroupKey
 getKitchenTicketContribution
 getNonCentavoCount
