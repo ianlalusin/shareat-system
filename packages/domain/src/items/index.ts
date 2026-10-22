@@ -1048,8 +1048,8 @@ export async function mergeItems(
 /**
  * ⭐ T-443 R1. Make an item a variation of a top-level item, or detach it (`parentId: null`). Super-admin only (`approve_item`):
  * it changes how the catalogue is grouped. The rules live in the database trigger `items_variant_guard`; `assertCanBeVariationOf`
- * mirrors them in words. Takes a transaction, never opens one (T-398 S2). Not audited: the audit catalogue is a closed list backed by a database table (migration 0197), and
- * adding actions to it is its own change.
+ * mirrors them in words. Takes a transaction, never opens one (T-398 S2). Audited (T-453): `item.variant_set`, appended after the
+ * UPDATE and only when something changed.
  */
 export async function setItemVariantOf(
   tx: Tx,
@@ -1068,6 +1068,15 @@ export async function setItemVariantOf(
     await assertCanBeVariationOf(tx, actor.orgId, input.parentId, { id: item.id, kind: item.kind });
   }
   await itemsRepo.updateItem(tx, actor.orgId, input.itemId, { variantOfItemId: input.parentId });
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'item.variant_set',
+    storeId: null,
+    entityId: input.itemId,
+    before: { variantOfItemId: item.variantOfItemId ?? null },
+    after: { variantOfItemId: input.parentId },
+    source: 'web',
+  });
   return { changed: true };
 }
 
@@ -1096,6 +1105,18 @@ export async function dismissDuplicatePair(
     note: input.note?.trim() || null,
     dismissedBy: actor.personId,
   });
+  if (created) {
+    const [lo, hi] = [input.itemAId.toLowerCase(), input.itemBId.toLowerCase()].sort() as [string, string];
+    await auditLogRepo.append(tx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'item_duplicate.dismissed',
+      storeId: null,
+      entityId: id,
+      before: null,
+      after: { itemAId: lo, itemBId: hi, note: input.note?.trim() || null },
+      source: 'web',
+    });
+  }
   return { dismissalId: id, created };
 }
 
@@ -1106,7 +1127,18 @@ export async function undoDuplicateDismissal(
   input: { dismissalId: string },
 ): Promise<{ removed: boolean }> {
   await authorize(tx, actor, 'approve_item', {});
-  return { removed: await itemsRepo.deleteDismissal(tx, actor.orgId, input.dismissalId) };
+  const removed = await itemsRepo.deleteDismissal(tx, actor.orgId, input.dismissalId);
+  if (!removed) return { removed: false };
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'item_duplicate.dismissal_undone',
+    storeId: null,
+    entityId: input.dismissalId,
+    before: { itemAId: removed.itemAId, itemBId: removed.itemBId, note: removed.note },
+    after: null,
+    source: 'web',
+  });
+  return { removed: true };
 }
 
 /** What the super-admin review queue reads. Any manager may LOOK; only a super-admin decides. */
