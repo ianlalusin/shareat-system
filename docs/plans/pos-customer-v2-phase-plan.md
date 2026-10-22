@@ -15,7 +15,7 @@ unchanged, so Lipa can switch before the ERP cutover. The target is Mon 7 Dec; t
 
 | By | Step | Who |
 |---|---|---|
-| ~~31 Oct~~ **2 Nov** | Audit + full CI + merge `codex/pos-shared-backend` (T-425/426/427, T-456-460, T-461-463) as PR #47. Audit done 22 Oct (verdict MERGE); PR #47 ready at `ebce489`. GitHub Actions minutes ran out on 22 Oct; Ian chose to wait for the monthly reset (1 Nov) instead of paying, so no CI or deploy runs until then, and PR #47 merges only after a green run | orchestrator |
+| 22 Oct | Audit + full CI + merge `codex/pos-shared-backend` (T-425/426/427, T-456-460, T-461-463) as PR #47. Audit done 22 Oct (verdict MERGE). GitHub Actions minutes ran out on 22 Oct; Ian made the repo public the same day so CI runs; PR #47 merges after a green run | orchestrator |
 | 31 Oct | v2 APK signing key in GitHub; Lipa tablet model/Android/memory + printers; DNS `pos2.shareat.net` | Ian |
 | 7 Nov | POS v2 server switched on (runbook §0 steps 3-9); manager PINs + `approve_pos_correction` at Lipa | orchestrator + Ian |
 | 9 Nov | POS v1 feature freeze (row 348, unchanged) | — |
