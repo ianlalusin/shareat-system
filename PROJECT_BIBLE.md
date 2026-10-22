@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1711` 13. Decision log
-- `1712–1731` 14. Amendment protocol
-- `1732–1736` 15. Engineering standards — the industry practices this project follows
-  - `1737–1742` 15.1 Build order: walking skeleton first
-  - `1743–1754` 15.2 Golden-master testing — the most important practice here
-  - `1755–1763` 15.3 Strangler Fig, not big-bang cutover
-  - `1764–1768` 15.4 No dual-write
-  - `1769–1777` 15.5 Expand/contract migrations
-  - `1778–1786` 15.6 Observability from day zero, not later
-  - `1787–1791` 15.7 CI gates
-  - `1792–1796` 15.8 Backups and a tested restore
-  - `1797–1801` 15.9 Twelve-Factor config
-  - `1802–1809` 15.10 Append-only ledgers — but not event sourcing
-  - `1810–1814` 15.11 Defence in depth
-  - `1815–1843` 15.12 Skills are lenses, not assurance
-  - `1844–1850` 15.13 Reconciliation is a permanent feature
-- `1851–1855` 16. The accounting spine
-  - `1856–1887` 16.0 What we are actually fixing — the diagnosis
-  - `1888–1931` 16.1 The ten invariants — non-negotiable
-  - `1932–1946` 16.2 The oracle: how "correct" is tested
-  - `1947–1968` 16.3 The model — header + lines, not legs
-  - `1969–1988` 16.4 Deliberately simpler than ERPNext
-  - `1989–2057` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2058–2082` 16.6 What v1 already gets right — preserve the intent
-  - `2083–2104` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2105–2119` 16.8 What v1's accounting already gets right
-  - `2120–2163` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2164–2214` 16.10 Posting patterns — one canonical pattern per business event
-  - `2215–2247` 16.11 Inventory's accounting integration
+- `1329–1713` 13. Decision log
+- `1714–1733` 14. Amendment protocol
+- `1734–1738` 15. Engineering standards — the industry practices this project follows
+  - `1739–1744` 15.1 Build order: walking skeleton first
+  - `1745–1756` 15.2 Golden-master testing — the most important practice here
+  - `1757–1765` 15.3 Strangler Fig, not big-bang cutover
+  - `1766–1770` 15.4 No dual-write
+  - `1771–1779` 15.5 Expand/contract migrations
+  - `1780–1788` 15.6 Observability from day zero, not later
+  - `1789–1793` 15.7 CI gates
+  - `1794–1798` 15.8 Backups and a tested restore
+  - `1799–1803` 15.9 Twelve-Factor config
+  - `1804–1811` 15.10 Append-only ledgers — but not event sourcing
+  - `1812–1816` 15.11 Defence in depth
+  - `1817–1845` 15.12 Skills are lenses, not assurance
+  - `1846–1852` 15.13 Reconciliation is a permanent feature
+- `1853–1857` 16. The accounting spine
+  - `1858–1889` 16.0 What we are actually fixing — the diagnosis
+  - `1890–1933` 16.1 The ten invariants — non-negotiable
+  - `1934–1948` 16.2 The oracle: how "correct" is tested
+  - `1949–1970` 16.3 The model — header + lines, not legs
+  - `1971–1990` 16.4 Deliberately simpler than ERPNext
+  - `1991–2059` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2060–2084` 16.6 What v1 already gets right — preserve the intent
+  - `2085–2106` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2107–2121` 16.8 What v1's accounting already gets right
+  - `2122–2165` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2166–2216` 16.10 Posting patterns — one canonical pattern per business event
+  - `2217–2249` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1708,6 +1708,8 @@ just a patch.**
 | 373 | 2026-10-21 | **STAFFING IS ROLE-FIRST: MANAGERS, ADMINS AND SUPER ADMINS ARE KNOWN BY THEIR ROLE, NOT A STAFF POSITION; ONLY STAFF HOLD (AND MUST KEEP) A PRIMARY POSITION.** Screens show an active Super admin / Admin / Manager by role; only a Staff member is titled by a primary position, never an arbitrary secondary one. A privileged-role hire needs no position, and a new job assignment for a manager, admin or super admin is refused. Existing assignments are cleared only deliberately on the employment page (never deleted automatically); a person's role, scope, manual grants and role-derived permissions are untouched. Staff cannot lose their primary position. Revoked or foreign-org roles never qualify. The lanyard ID-card design stays; only role titles change. Applied by T-451 (DEF-723); legacy holders made visible by T-453 (DEF-729). | Ian, 2026-10-21, chat during T-451 (`docs/tasks/451-staff-role-priority.md:2-5`); recorded 2026-10-22 by the Opus planner | Yes |
 | 374 | 2026-10-18 | **AN ITEM'S SIZES ARE EACH THEIR OWN ITEM, GROUPED UNDER A PARENT (T-443 R-A).** Each size (Kimchi 250g / 500g / 10kg) is a full item with its own code, stock and price history, grouped one level under a parent item; not pack sizes of one kg pool. Rejected: one item with pack-size conversions, because it cannot count "12 jars of 250g". | Ian, 2026-10-18, T-443 rulings (`docs/tasks/443-item-variations-dismiss-guards.md`, R-A); recorded 2026-10-22 by the Opus planner | Yes |
 | 375 | 2026-10-18 | **THE WHOLESALE FLAG READS "SOLD TO OTHER STORES OR BUYERS (WHOLESALE)" (T-443 R-B).** `sellable_wholesale` keeps its meaning (sold to another store, a franchisee or an outside buyer, not to a diner); only the label changes, no schema change. Rejected: splitting it into two flags, which needs a database change and touches trade orders. | Ian, 2026-10-18, T-443 rulings (`docs/tasks/443-item-variations-dismiss-guards.md`, R-B); recorded 2026-10-22 by the Opus planner | Yes |
+| 376 | 2026-10-22 | **QRPH PAYMENTS LAND IN IAN'S MARIBANK ACCOUNT.** A QRPH payment taken at a store is received into Ian's Maribank account, so v2 records it against that account. Part answer to `q-t396-shared-accounts`; option A (each store holds its own share of each real account) and the bank-transfer, foodpanda and Davao parts are still open. | Ian, 2026-10-22, chat with the orchestrator | Yes, before the T-396 store links |
+| 377 | 2026-10-22 | **BANAY-BANAY IS CLOSING: DROP IT COMPLETELY FROM V2.** v2 does not link Banay-Banay to POS, does not import its sales days, leaves it out of the dual run, loads none of its master data or staff, and gives it no opening balances at cutover. Its history stays in v1. Closing date and where its last stock, cash and staff go are still open; the work is task T-454. | Ian, 2026-10-22, chat with the orchestrator | Yes, before T-396 S3/S4 and the cutover |
 
 ## 14. Amendment protocol
 
