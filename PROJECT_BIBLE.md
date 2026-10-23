@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1717` 13. Decision log
-- `1718–1737` 14. Amendment protocol
-- `1738–1742` 15. Engineering standards — the industry practices this project follows
-  - `1743–1748` 15.1 Build order: walking skeleton first
-  - `1749–1760` 15.2 Golden-master testing — the most important practice here
-  - `1761–1769` 15.3 Strangler Fig, not big-bang cutover
-  - `1770–1774` 15.4 No dual-write
-  - `1775–1783` 15.5 Expand/contract migrations
-  - `1784–1792` 15.6 Observability from day zero, not later
-  - `1793–1797` 15.7 CI gates
-  - `1798–1802` 15.8 Backups and a tested restore
-  - `1803–1807` 15.9 Twelve-Factor config
-  - `1808–1815` 15.10 Append-only ledgers — but not event sourcing
-  - `1816–1820` 15.11 Defence in depth
-  - `1821–1849` 15.12 Skills are lenses, not assurance
-  - `1850–1856` 15.13 Reconciliation is a permanent feature
-- `1857–1861` 16. The accounting spine
-  - `1862–1893` 16.0 What we are actually fixing — the diagnosis
-  - `1894–1937` 16.1 The ten invariants — non-negotiable
-  - `1938–1952` 16.2 The oracle: how "correct" is tested
-  - `1953–1974` 16.3 The model — header + lines, not legs
-  - `1975–1994` 16.4 Deliberately simpler than ERPNext
-  - `1995–2063` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2064–2088` 16.6 What v1 already gets right — preserve the intent
-  - `2089–2110` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2111–2125` 16.8 What v1's accounting already gets right
-  - `2126–2169` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2170–2220` 16.10 Posting patterns — one canonical pattern per business event
-  - `2221–2253` 16.11 Inventory's accounting integration
+- `1329–1718` 13. Decision log
+- `1719–1738` 14. Amendment protocol
+- `1739–1743` 15. Engineering standards — the industry practices this project follows
+  - `1744–1749` 15.1 Build order: walking skeleton first
+  - `1750–1761` 15.2 Golden-master testing — the most important practice here
+  - `1762–1770` 15.3 Strangler Fig, not big-bang cutover
+  - `1771–1775` 15.4 No dual-write
+  - `1776–1784` 15.5 Expand/contract migrations
+  - `1785–1793` 15.6 Observability from day zero, not later
+  - `1794–1798` 15.7 CI gates
+  - `1799–1803` 15.8 Backups and a tested restore
+  - `1804–1808` 15.9 Twelve-Factor config
+  - `1809–1816` 15.10 Append-only ledgers — but not event sourcing
+  - `1817–1821` 15.11 Defence in depth
+  - `1822–1850` 15.12 Skills are lenses, not assurance
+  - `1851–1857` 15.13 Reconciliation is a permanent feature
+- `1858–1862` 16. The accounting spine
+  - `1863–1894` 16.0 What we are actually fixing — the diagnosis
+  - `1895–1938` 16.1 The ten invariants — non-negotiable
+  - `1939–1953` 16.2 The oracle: how "correct" is tested
+  - `1954–1975` 16.3 The model — header + lines, not legs
+  - `1976–1995` 16.4 Deliberately simpler than ERPNext
+  - `1996–2064` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2065–2089` 16.6 What v1 already gets right — preserve the intent
+  - `2090–2111` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2112–2126` 16.8 What v1's accounting already gets right
+  - `2127–2170` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2171–2221` 16.10 Posting patterns — one canonical pattern per business event
+  - `2222–2254` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1714,6 +1714,7 @@ just a patch.**
 | 379 | 2026-10-22 | **POS v2 STARTS CLEAN: PRE-2027 POS DATA IS TEST DATA; A NIGHTLY PER-RECEIPT BRIDGE COPIES FIREBASE INTO POSTGRES FROM 1 JAN 2027.** (1) Lipa runs POS v2 on v1's Firebase in December (row 378); Firebase stays the POS's live working database until P1-P3 move each part. (2) From 1 Jan, a nightly job copies every receipt (lines, tenders, discounts, voids, refunds), not only day totals, from Firebase into Postgres for ALL stores, whether on v1 or v2; it extends the T-396 06:00 import and is read-only on Firebase. A store leaves the bridge when P2 moves its receipts to Postgres. (3) No v1 receipt, session or sales history is imported; 2026 POS data is test data, consistent with ADR-005 (2026 books close on v1). Carried over: master data only (staff, suppliers, stores, menu and alike). (4) Loyalty: **point balances only** are carried, per member; visit and earn/redeem history is not (narrows row 350's "v1 member data is migrated"). | Ian, 2026-10-22, orchestrator session; option (a) as recommended | Yes |
 | 381 | 2026-10-22 | **A DEDICATED POS TABLET IS PAIRED ONCE; AFTER THAT ITS SIGN-IN ASKS ONLY FOR THE EMPLOYEE ID AND PIN (T-464).** (1) The Employee ID is the person's existing staff code at that store (`employments.staff_code`, the badge code), typed as its **3-digit number only** (`007` = `SE-007`); no new staff number is created (Ian first picked a new org-wide number, then switched to the badge code: *"only use the number not the letters so i guess 3 digit number since we only have around 30 employees"*). (2) A **manager of that store or an admin** pairs and un-pairs a tablet (new capability `pair_pos_tablet`), audited. (3) **5 wrong PINs for one Employee ID pause that ID for 5 minutes** (POS v1's own rule); the store-wide tiers (10/min pause, 50/day stop) stay. (4) On a paired tablet the email form stays reachable behind a small **"Manager sign-in"** link (keeps T-304 invariant 7). The tablet holds a server-issued, revocable secret in an httpOnly cookie, one live pairing per store (row 313), dead after 30 days unused; day-to-day sign-in uses no Firebase. Unpaired devices keep today's screen. (5) **Staff codes are issued automatically only and never duplicate** — Ian: *"make sure the id is issued automatically not manually to avoid duplicate and for any live code make sure no duplicate"*. T-391 S9's manual override is removed; migration 0212 adds a CHECK (`SE-` + 3 or more digits) and a per-store UNIQUE index on the number (`SE-007` and `SE-0007` cannot coexist); the allocator's int overflow (DEF-725) is fixed. | Ian, 2026-10-22, side session from T-448 (plan approval + three answers); recorded by the Opus planner | Yes: un-pair every tablet and the old screen returns |
 | 382 | 2026-10-22 | **THE AUTH DOOR GAINS ONE LOOKUP: A POS TABLET'S PAIRING, BY THE HASH OF ITS COOKIE (T-464).** Resolving a paired tablet happens before anyone has signed in and before the organisation is known, so it cannot run under `withOrgPrincipal`; it is the same circularity as row 194's other lookups. It lives in `packages/auth/src/sessions.ts` (still the only file allowed to call `authTransaction`), returns only a live, recently-used pairing, and everything after it (the staff-code and PIN lookup, the session) runs under `withOrgPrincipal(orgId)`. Refusal tests cover an unknown, a revoked and a stale hash. Admitted by named ruling, not by analogy. | Ian's approval of the T-464 spec, 2026-10-22; numbers issued by the orchestrator | Yes: remove the tablet path and the lookup leaves |
+| 383 | 2026-10-23 | ⭐ **ONE SOURCE OF TRUTH FOR MENU ITEMS AND STORE PRICES: ON V1 IT IS POS V1; FROM V2 IT IS ERP V2 (THE V2 DATABASE, EDITED IN ERP — ROW 307, ROW 316). EVERY OTHER PLACE THAT SHOWS MENU ITEMS OR PRICES — POS V2, THE CUSTOMER APP, THE WEBSITE, THE `knowledge/` BASE AND ANY FUTURE AI — READS THEM FROM THAT SOURCE AND NEVER KEEPS ITS OWN EDITABLE COPY.** Ian, 2026-10-23 (knowledge-base session) | Extends row 307 to the website and the knowledge base. v1 keeps menu data in POS and copies it out one way (CUSTOMER `catalogCache`, ERP pulls); every hand-kept copy is a price that can go stale. The knowledge base already refuses to type prices (`.claude/skills/knowledge-intake/`) | Yes — a read path, not data; one table either way |
 
 ## 14. Amendment protocol
 

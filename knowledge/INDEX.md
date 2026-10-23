@@ -26,6 +26,10 @@ without updating this file.
 | `policies` | Store rules, safety, allergens, complaints, legal |
 | `planned` | Changes decided but **not live** — never present them as working today |
 
+⛔ **Menu items and prices are never written on a page.** Their single source of truth is POS v1
+today and ERP v2 from v2 (bible row 383). Pages point to the system; an AI reads current values
+from it.
+
 **must_be_exact: true** pages hold money, allergen or legal rules — quote them, never paraphrase
 loosely or fill gaps.
 
