@@ -13,7 +13,8 @@ import { Loader2 } from "lucide-react";
 import type { Receipt, SessionBillLine, ModeOfPayment } from "@/lib/types";
 import type { AppUser } from "@/context/auth-context";
 import { useStoreContext } from "@/context/store-context";
-import { formatTerminalReceiptNumber, reserveNext } from "@/lib/terminal/counter";
+import { reserveOnlineEvent, markAcknowledged } from "@/lib/outbox/ledger";
+import { computeLinesHash } from "@/lib/outbox/linesHash";
 import { paidShares, unitsRefundCentavos } from "@/lib/money/refundShare";
 import { Pos2Error, postPos2 } from "@/lib/pos2/client";
 import { PIN_LENGTH, PinPad } from "@/components/pos2/PinPad";
@@ -52,7 +53,7 @@ function RefundContent({ receipt, paymentMethods, onClose, onSuccess }: RefundRe
   const [tenderId, setTenderId] = useState<string>("");
   const chosenTender = tenderId || cashMethods[0]?.id || "";
   // One receipt number per distinct request: a retry (wrong PIN, lost connection) re-sends the SAME number, so the server can tell a retry from a new refund.
-  const reserved = useRef<{ key: string; number: string; terminalNo: number; terminalSeq: number } | null>(null);
+  const reserved = useRef<{ key: string; number: string; terminalNo: number; terminalSeq: number; deviceId: string } | null>(null);
 
   // The parent's own counters are client-writable, so they only shape this screen; the server counts the real refunds.
   const refundedQtys: Record<string, number> = (receipt as any).refundedQtys ?? {};
@@ -94,9 +95,16 @@ function RefundContent({ receipt, paymentMethods, onClose, onSuccess }: RefundRe
     setIsSubmitting(true);
     try {
       if (!reserved.current || reserved.current.key !== key) {
-        const r = await reserveNext();
+        const r = await reserveOnlineEvent({
+          kind: "refund",
+          storeCode: activeStore.code,
+          receiptId: receipt.receiptId ?? receipt.id,
+          totalCentavos: refundCentavos,
+          linesHash: computeLinesHash(asked),
+          tenders: [{ method: chosenTender, centavos: refundCentavos, toCheck: false, reference: null }],
+        });
         if (r.storeId !== receipt.storeId) throw new Error("This tablet is set up for a different store. Check Settings.");
-        reserved.current = { key, number: formatTerminalReceiptNumber(activeStore.code, r.terminalNo, r.terminalSeq), terminalNo: r.terminalNo, terminalSeq: r.terminalSeq };
+        reserved.current = { key, number: r.receiptNumber, terminalNo: r.terminalNo, terminalSeq: r.terminalSeq, deviceId: r.deviceId };
       }
       const res = await postPos2<{ refundReceiptId: string; receiptNumber: string }>("refunds", {
         storeId: receipt.storeId,
@@ -109,6 +117,8 @@ function RefundContent({ receipt, paymentMethods, onClose, onSuccess }: RefundRe
         receiptNumber: reserved.current.number,
         pin,
       });
+      // The server has the refund: the ledger row is proven. A ledger write failure must never show as "Refund not done".
+      await markAcknowledged(reserved.current.deviceId, reserved.current.terminalSeq).catch((e) => console.error("Could not mark the refund number acknowledged.", e));
       toast({ title: "Refund saved", description: `Refund receipt ${res.receiptNumber} has been saved.` });
       onSuccess(res.refundReceiptId);
       onClose();

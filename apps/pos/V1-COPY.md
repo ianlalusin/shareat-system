@@ -147,3 +147,8 @@ T-457 updates the v2-only `src/lib/terminal/claim.ts`: bounded ascending range p
 - `src/lib/firebase/utils.ts`: strip undefined values only from arrays/plain objects; preserve real SDK Timestamp, FieldValue and DocumentReference instances for the SDK or ledger encoder.
 - V2-only `src/lib/outbox/linesHash.ts` / `reconcile.ts`: keep the original hash, number and centavos checks; allow a second hash candidate that recognizes only exact valid timestamp maps in top-level line createdAt/updatedAt fields. No financial fields ignored and no historical receipt/quarantine rewritten.
 
+
+## T-470 edits (refund numbers through the sale ledger, DEF-731)
+
+- `src/components/receipts/RefundReceiptDialog.tsx`: reserve the refund number with `reserveOnlineEvent` (kind `refund`) instead of `reserveNext`; acknowledge the ledger row after the server answers; never mark it skipped here.
+- V2-only `src/lib/outbox/ledger.ts`: new ledger kind `refund` (reserved row, never unsent money). V2-only `src/lib/outbox/reconcile.ts`: a reserved refund is proven by `receiptNumbers/{number}` (same terminalSeq acknowledged, absent skipped, different seq left reserved with a note). No v1 source was changed.
