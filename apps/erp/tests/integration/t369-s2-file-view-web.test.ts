@@ -258,13 +258,13 @@ describe('T5 — an internal fault is a 500, never a 404, and leaks nothing', ()
 // The link — a route nobody can reach is DEF-198 again
 // -----------------------------------------------------------------------------------------------
 
-describe('View photo — the supplier-invoice page links the attached photo', () => {
+describe('photo thumbnail — the supplier-invoice page shows the attached photo', () => {
   let InvoiceDetailPage: typeof import('../../src/app/ap/invoices/[id]/page').default;
   beforeAll(async () => {
     InvoiceDetailPage = (await import('../../src/app/ap/invoices/[id]/page')).default;
   }, 30_000);
 
-  it('an invoice with a receipt shows a "View photo" link to /files/{id} that opens in a new tab with rel=noopener; an invoice with no receipt shows none', async () => {
+  it('an invoice with a receipt shows a photo thumbnail (img src /files/{id}); an invoice with no receipt shows none', async () => {
     const f = await fixture('link');
     const supplier = await asOrg(f.orgId, (tx) => createSupplier(tx, f.manager, { name: 'Link Supplier', creditTermsDays: 30 }));
     const withPhoto = await asOrg(f.orgId, (tx) =>
@@ -278,13 +278,7 @@ describe('View photo — the supplier-invoice page links the attached photo', ()
     const html = renderToStaticMarkup(
       (await InvoiceDetailPage({ params: Promise.resolve({ id: withPhoto.id }), searchParams: Promise.resolve({}) })) as never,
     );
-    const anchor = html.match(new RegExp(`<a[^>]*href="/files/${f.fileId}"[^>]*>[\\s\\S]*?</a>`));
-    expect(anchor, `no <a href="/files/${f.fileId}"> on the invoice page`).not.toBeNull();
-    expect(anchor![0]).toMatch(/View photo/);
-    expect(anchor![0]).toMatch(/target="_blank"/);
-    expect(anchor![0]).toMatch(/rel="[^"]*noopener/);
-    expect(html, 'the page must never embed the signed URL or the storage path').not.toMatch(/memory:\/\//);
-    expect(html).not.toContain(await pathOf(f.fileId));
+    expectPhotoThumbnail(html, f.fileId, await pathOf(f.fileId));
 
     // Positive control: where the domain refuses a photo-less invoice, this leg has nothing to compare;
     // where it allows one, the page must carry no photo link.
@@ -292,7 +286,7 @@ describe('View photo — the supplier-invoice page links the attached photo', ()
       const plain = renderToStaticMarkup(
         (await InvoiceDetailPage({ params: Promise.resolve({ id: without.id }), searchParams: Promise.resolve({}) })) as never,
       );
-      expect(plain).not.toMatch(/href="\/files\//);
+      expect(plain).not.toMatch(/\/files\//);
     }
   });
 });
@@ -301,24 +295,21 @@ describe('View photo — the supplier-invoice page links the attached photo', ()
 // View photo — the two other pages the spec names (deliveries/[id], customers/[customerId])
 // -----------------------------------------------------------------------------------------------
 
-/** The assertions every "View photo" anchor must satisfy, identical across the three pages. */
-function expectViewPhotoAnchor(html: string, fileId: string, storagePath: string) {
-  const anchor = html.match(new RegExp(`<a[^>]*href="/files/${fileId}"[^>]*>[\\s\\S]*?</a>`));
-  expect(anchor, `no <a href="/files/${fileId}"> in: ${html.slice(0, 600)}`).not.toBeNull();
-  expect(anchor![0]).toMatch(/View photo/);
-  expect(anchor![0]).toMatch(/target="_blank"/);
-  expect(anchor![0]).toMatch(/rel="[^"]*noopener/);
+/** The assertions every photo thumbnail must satisfy, identical across the three pages (PhotoThumb, T-441 S6). */
+function expectPhotoThumbnail(html: string, fileId: string, storagePath: string) {
+  expect(html, `no photo thumbnail (<img src="/files/${fileId}">) in: ${html.slice(0, 600)}`).toContain(`src="/files/${fileId}"`);
+  expect(html).toMatch(/aria-label="[^"]*: open full size"/);
   expect(html, 'the page must never embed the signed URL or the storage path').not.toMatch(/memory:\/\//);
   expect(html).not.toContain(storagePath);
 }
 
-describe('View photo — /inventory/deliveries/[id] shows the delivery proof', () => {
+describe('photo thumbnail — /inventory/deliveries/[id] shows the delivery proof', () => {
   let DeliveryPage: typeof import('../../src/app/inventory/deliveries/[id]/page').default;
   beforeAll(async () => {
     DeliveryPage = (await import('../../src/app/inventory/deliveries/[id]/page')).default;
   }, 30_000);
 
-  it('a delivery with proofFileId shows a "View photo" link to /files/{proofFileId} (new tab, rel=noopener); the page embeds no signed URL', async () => {
+  it('a delivery with proofFileId shows a photo thumbnail (img src /files/{proofFileId}); the page embeds no signed URL', async () => {
     const f = await fixture('dlv');
     const [type] = await sql<{ id: string }[]>`insert into location_types (org_id, code, name) values (${f.orgId}, 'STK', 'Stockroom') returning id`;
     const [kitchen] = await sql<{ id: string }[]>`
@@ -337,17 +328,17 @@ describe('View photo — /inventory/deliveries/[id] shows the delivery proof', (
 
     ACTOR_HOLDER.actor = f.manager;
     const html = renderToStaticMarkup((await DeliveryPage({ params: Promise.resolve({ id: deliveryId }), searchParams: Promise.resolve({}) })) as never);
-    expectViewPhotoAnchor(html, f.fileId, await pathOf(f.fileId));
+    expectPhotoThumbnail(html, f.fileId, await pathOf(f.fileId));
   });
 });
 
-describe('View photo — /customers/[customerId] shows a collection\'s receipt', () => {
+describe('photo thumbnail — /customers/[customerId] shows a collection\'s receipt', () => {
   let CustomerPage: typeof import('../../src/app/customers/[customerId]/page').default;
   beforeAll(async () => {
     CustomerPage = (await import('../../src/app/customers/[customerId]/page')).default;
   }, 30_000);
 
-  it('a collection with receiptFileId shows a "View photo" link to /files/{receiptFileId}; a collection without one shows none', async () => {
+  it('a collection with receiptFileId shows a photo thumbnail (img src /files/{receiptFileId}); a collection without one adds none', async () => {
     const f = await fixture('cust');
     const { createCustomer, recordCharge, recordCollection } = await import('@shareat/domain');
     const [cash] = await sql<{ id: string }[]>`
@@ -374,7 +365,7 @@ describe('View photo — /customers/[customerId] shows a collection\'s receipt',
         (await CustomerPage({ params: Promise.resolve({ customerId: customer.id }), searchParams: Promise.resolve({ store: f.storeId }) } as never)) as never,
       );
     const withReceipt = await render();
-    expectViewPhotoAnchor(withReceipt, f.fileId, await pathOf(f.fileId));
+    expectPhotoThumbnail(withReceipt, f.fileId, await pathOf(f.fileId));
 
     // Positive control: a collection recorded WITHOUT a receipt adds no second photo link.
     await asOrg(f.orgId, (tx) =>
@@ -384,7 +375,7 @@ describe('View photo — /customers/[customerId] shows a collection\'s receipt',
       }),
     );
     const html = await render();
-    expect((html.match(/href="\/files\//g) ?? []).length, 'exactly one photo link for the one collection that has a receipt').toBe(1);
+    expect((html.match(/src="\/files\//g) ?? []).length, 'exactly one photo thumbnail for the one collection that has a receipt').toBe(1);
   });
 });
 
@@ -392,7 +383,7 @@ describe('View photo — /customers/[customerId] shows a collection\'s receipt',
 // S2 AUDIT legs (A, B, C) — added after the auditor's findings.
 // -----------------------------------------------------------------------------------------------
 
-describe('AUDIT A — the "View photo" link is shown ONLY to people who hold the file\'s purpose capability at its store', () => {
+describe('AUDIT A — the photo thumbnail is shown ONLY to people who hold the file\'s purpose capability at its store', () => {
   let InvoicePage: typeof import('../../src/app/ap/invoices/[id]/page').default;
   let DeliveryPage: typeof import('../../src/app/inventory/deliveries/[id]/page').default;
   let CustomerPage: typeof import('../../src/app/customers/[customerId]/page').default;
@@ -401,9 +392,9 @@ describe('AUDIT A — the "View photo" link is shown ONLY to people who hold the
     DeliveryPage = (await import('../../src/app/inventory/deliveries/[id]/page')).default;
     CustomerPage = (await import('../../src/app/customers/[customerId]/page')).default;
   }, 30_000);
-  const links = (html: string) => (html.match(/href="\/files\//g) ?? []).length;
+  const links = (html: string) => (html.match(/src="\/files\//g) ?? []).length;
 
-  it('invoice page: a staff member WITHOUT record_supplier_invoice sees NO /files/ link (a link to a guaranteed 404 is a dead control); the manager sees exactly one', async () => {
+  it('invoice page: a staff member WITHOUT record_supplier_invoice sees NO photo thumbnail (a thumbnail of a file they cannot open is a dead control); the manager sees exactly one', async () => {
     const f = await fixture('auditA-inv');
     const supplier = await asOrg(f.orgId, (tx) => createSupplier(tx, f.manager, { name: 'Link Supplier', creditTermsDays: 30 }));
     const inv = await asOrg(f.orgId, (tx) =>
@@ -418,7 +409,7 @@ describe('AUDIT A — the "View photo" link is shown ONLY to people who hold the
     expect(links(await render(f.otherManager)), "a manager of ANOTHER store was handed a /files/ link").toBe(0);
   });
 
-  it('delivery page: the proof photo link shows for the holder and NOT for staff or another store\'s manager', async () => {
+  it('delivery page: the proof photo thumbnail shows for the holder and NOT for staff or another store\'s manager', async () => {
     const f = await fixture('auditA-dlv');
     const [type] = await sql<{ id: string }[]>`insert into location_types (org_id, code, name) values (${f.orgId}, 'STK', 'Stockroom') returning id`;
     const [kitchen] = await sql<{ id: string }[]>`
@@ -442,7 +433,7 @@ describe('AUDIT A — the "View photo" link is shown ONLY to people who hold the
     expect(links(await render(f.otherManager)), "another store's manager was handed a /files/ link").toBe(0);
   });
 
-  it("customer page: a collection receipt's link shows for the holder of record_ar_collection and NOT for staff without it", async () => {
+  it("customer page: a collection receipt's thumbnail shows for the holder of record_ar_collection and NOT for staff without it", async () => {
     const f = await fixture('auditA-cust');
     const { createCustomer, recordCharge, recordCollection } = await import('@shareat/domain');
     const [cash] = await sql<{ id: string }[]>`select id from money_accounts where store_id = ${f.storeId} and instrument = 'cash' and custodian = 'cashier' and is_foundation`;
@@ -507,7 +498,7 @@ describe('AUDIT C — only a "missing file / not yours" outcome becomes the unif
   });
 });
 
-describe('AUDIT D — a fault while deciding whether to draw the link never takes the bill page down', () => {
+describe('AUDIT D — a fault while deciding whether to draw the thumbnail never takes the bill page down', () => {
   let InvoicePage: typeof import('../../src/app/ap/invoices/[id]/page').default;
   beforeAll(async () => {
     InvoicePage = (await import('../../src/app/ap/invoices/[id]/page')).default;
@@ -516,7 +507,7 @@ describe('AUDIT D — a fault while deciding whether to draw the link never take
     CAN_READ_FILE_STUB.fn = null;
   });
 
-  it('canReadFile throwing an unexpected error (an unmapped purpose, a driver fault): the invoice page still renders its evidence panel, WITHOUT a "View photo" link — control: the unstubbed page draws exactly one', async () => {
+  it('canReadFile throwing an unexpected error (an unmapped purpose, a driver fault): the invoice page still renders its evidence panel, WITHOUT a photo thumbnail — control: the unstubbed page draws exactly one', async () => {
     const f = await fixture('auditD-fault');
     const supplier = await asOrg(f.orgId, (tx) => createSupplier(tx, f.manager, { name: 'Fault Supplier', creditTermsDays: 30 }));
     const inv = await asOrg(f.orgId, (tx) =>
@@ -526,7 +517,7 @@ describe('AUDIT D — a fault while deciding whether to draw the link never take
       ACTOR_HOLDER.actor = f.manager;
       return renderToStaticMarkup((await InvoicePage({ params: Promise.resolve({ id: inv.id }), searchParams: Promise.resolve({}) })) as never);
     };
-    const links = (h: string) => (h.match(/href="\/files\//g) ?? []).length;
+    const links = (h: string) => (h.match(/src="\/files\//g) ?? []).length;
     expect(links(await render()), 'positive control: the holder sees the link').toBe(1);
 
     CAN_READ_FILE_STUB.fn = async () => {
@@ -543,7 +534,7 @@ describe('AUDIT D — a fault while deciding whether to draw the link never take
     expect(html).not.toMatch(/Cannot read properties/);
   });
 
-  it('a receipt whose file row is gone/foreign (canReadFile false): the page renders, "photo attached" stays, and no link is drawn', async () => {
+  it('a receipt whose file row is gone/foreign (canReadFile false): the page renders, "photo attached" stays, and no thumbnail is drawn', async () => {
     const f = await fixture('auditD-gone');
     const supplier = await asOrg(f.orgId, (tx) => createSupplier(tx, f.manager, { name: 'Gone Supplier', creditTermsDays: 30 }));
     const inv = await asOrg(f.orgId, (tx) =>
@@ -553,6 +544,6 @@ describe('AUDIT D — a fault while deciding whether to draw the link never take
     ACTOR_HOLDER.actor = f.manager;
     const html = renderToStaticMarkup((await InvoicePage({ params: Promise.resolve({ id: inv.id }), searchParams: Promise.resolve({}) })) as never);
     expect(html).toMatch(/photo attached/);
-    expect(html).not.toMatch(/href="\/files\//);
+    expect(html).not.toMatch(/src="\/files\//);
   });
 });

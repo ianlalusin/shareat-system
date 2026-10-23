@@ -91,7 +91,7 @@ async function fixture(hint: string) {
   const workerId = await mk('Worker', 'staff', [storeA]);
   const [e] = await sql<{ id: string }[]>`
     insert into employments (org_id, person_id, store_id, staff_code, started_on, employment_status, created_by)
-    values (${orgId}, ${workerId}, ${storeA}, ${uid('sc')}, '2025-01-01', 'regular', ${adminId}) returning id`;
+    values (${orgId}, ${workerId}, ${storeA}, ${'SE-' + (100000 + Math.floor(Math.random() * 899999999))}, '2025-01-01', 'regular', ${adminId}) returning id`;
   const f = {
     orgId, storeA, storeB, employmentId: e!.id,
     admin: actor(orgId, adminId), mgr1: actor(orgId, mgr1), mgr2: actor(orgId, mgr2), mgrB: actor(orgId, mgrB), worker: actor(orgId, workerId),

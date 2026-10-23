@@ -68,7 +68,7 @@ async function mkPerson(orgId: string, name: string, role: string, storeIds: str
 async function mkEmployment(w: { orgId: string; admin: Person }, personId: string, storeId: string, endedOn: string | null = null): Promise<string> {
   const [e] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on, ended_on)
-    values (${w.orgId}, ${storeId}, ${personId}, ${uid('SC')}, ${endedOn ? 'resigned' : 'regular'}, '2025-01-01', ${endedOn}) returning id`;
+    values (${w.orgId}, ${storeId}, ${personId}, ${'SE-' + (100000 + Math.floor(Math.random() * 899999999))}, ${endedOn ? 'resigned' : 'regular'}, '2025-01-01', ${endedOn}) returning id`;
   await grantEverydayPositionAccess(sql, { orgId: w.orgId, storeId, employmentId: e!.id, personId, setBy: w.admin.id, capabilities: [] as never });
   return e!.id;
 }
