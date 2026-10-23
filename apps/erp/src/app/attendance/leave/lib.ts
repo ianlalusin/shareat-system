@@ -5,11 +5,12 @@
  * person's lock, and apply the caps, the SIL balance and the self-approval rule. This file only bridges form strings to them
  * and reads what the screen draws.
  *
- * ⛔ Personal data (bible row 353): no list here reads a note, and nothing here ever holds a stored file's id. A certificate is
- * opened only by the `openLeaveDocument` action, which redirects to a link good for 60 seconds.
+ * ⛔ Personal data (bible row 353): no list here reads a note, and the list rows hold `hasProof` only. A certificate's id comes
+ * from `loadProofFileId` (the deciding loader) and is opened only by the Lightbox, one audited view per open.
  */
 import {
   isoDateCompare,
+  leaveProofFileId,
   leaveRefusal,
   listLeave,
   loadLeaveRequest,
@@ -58,6 +59,14 @@ export async function loadRequestDetail(actor: Actor, requestId: string): Promis
     if (err instanceof AuthorizationError) return null;
     throw err;
   }
+}
+
+/**
+ * The certificate's file id for THIS viewer, or null (none, not allowed, unknown request - all alike). Decides through
+ * `decideLeaveDocumentRead` only and writes no audit row: the audited event is the Lightbox's GET of `/files/{id}`.
+ */
+export function loadProofFileId(actor: Actor, requestId: string): Promise<string | null> {
+  return withOrgPrincipal(actor.orgId, (tx) => leaveProofFileId(tx, actor, { requestId })).catch(() => null);
 }
 
 /** A person's Service Incentive Leave balance for a year, shown to the manager deciding their request. */

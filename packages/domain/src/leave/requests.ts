@@ -650,7 +650,7 @@ export interface LeaveRequestView {
   paid: boolean | null;
   birthDate: string | null;
   days: { date: string; kind: string; status: string; paid: boolean }[];
-  /** Whether a certificate is attached. ⛔ Never the file's id: the only way to open it is `openLeaveDocument`. */
+  /** Whether a certificate is attached. ⛔ Never the file's id: a permitted viewer gets it separately from `leaveProofFileId` (T-441 S4). */
   hasProof: boolean;
   /** ⛔ Present ONLY for the person and for a manage_attendance holder at the filing store (bible row 353). */
   note?: string | null;

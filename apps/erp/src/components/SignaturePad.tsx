@@ -3,24 +3,34 @@
 /**
  * T-434 - sign on screen. A canvas the manager (or the staff member, handed the device) draws on; Save exports a PNG Blob and sends
  * it to the server action as a file part. Nothing is stored in the browser and no data URL is ever built.
+ *
+ * T-441 S5: when the page passes `signatureFileId` (only a viewer allowed to open it gets one, bible row 353) the saved state is a
+ * "Signature on file" tile whose View button opens the shared Lightbox; the picture exists only while it is open. Never an <img> here.
  */
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { exportSignaturePng, signatureFormData } from './signature-pad-export';
+import { Lightbox, useLightbox } from './upload/Lightbox';
 
 export function SignaturePad({
   personId,
   employmentId,
   action,
+  signatureFileId,
+  readOnly = false,
 }: {
   personId: string;
   employmentId: string;
   action: (formData: FormData) => Promise<void>;
+  signatureFileId?: string | null;
+  /** An ended employment: the tile and View stay, the pad does not. */
+  readOnly?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
   const [inked, setInked] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const { open, count, show, hide } = useLightbox();
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -89,8 +99,31 @@ export function SignaturePad({
     });
   }
 
+  const tile = signatureFileId ? (
+    <div className="flex items-center gap-2 text-sm">
+      <span>Signature on file</span>
+      <button type="button" onClick={show} className="min-h-8 rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700">
+        View
+      </button>
+    </div>
+  ) : null;
+  const lightbox = signatureFileId ? (
+    <Lightbox open={open} count={count} onClose={hide} label="Signature" fileId={signatureFileId} kind="image" />
+  ) : null;
+
+  if (readOnly) {
+    return (
+      <div className="space-y-2">
+        {tile}
+        {lightbox}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2">
+      {tile}
+      {lightbox}
       <canvas
         ref={canvasRef}
         width={600}
@@ -103,7 +136,7 @@ export function SignaturePad({
         className="w-full max-w-xl touch-none rounded-md border border-neutral-300 bg-white dark:border-neutral-700"
       />
       <div className="flex gap-2">
-        <button type="button" onClick={clear} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700">
+        <button type="button" onClick={clear} className="min-h-8 rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700">
           Clear
         </button>
         <button
@@ -115,7 +148,14 @@ export function SignaturePad({
           {pending ? 'Saving…' : 'Save signature'}
         </button>
       </div>
-      {error && <p className="text-sm text-warning-ink">{error}</p>}
+      {error && (
+        <p className="text-sm text-warning-ink">
+          Failed: {error}{' '}
+          <button type="button" onClick={save} className="inline-flex min-h-8 items-center underline">
+            Retry
+          </button>
+        </p>
+      )}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SHORTAGE_REASONS } from '@shareat/db/schema';
-import { canViewPhoto } from '../../../../lib/photo-link';
+import { canViewPhoto, photoKinds } from '../../../../lib/photo-link';
 import { requireSession } from '../../../../lib/session';
 import { peso } from '../../../../lib/format';
 import { receiveDeliveryAction } from '../actions';
@@ -23,7 +23,7 @@ import {
   type Tone,
 } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { ACTION_LINK } from '@/components/action-link';
+import { PhotoThumb } from '@/components/upload/PhotoThumb';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Delivery — Shareat System' };
@@ -69,6 +69,7 @@ export default async function DeliveryPage({
   const { doc, locations } = detail;
 
   const canViewProof = await canViewPhoto(actor, doc.proofFileId);
+  const proofKind = canViewProof && doc.proofFileId ? ((await photoKinds(actor, [doc.proofFileId])).get(doc.proofFileId) ?? 'image') : 'image';
   const canReceive = doc.status === 'draft';
   const hero = DELIVERY_HERO[doc.status];
   if (!hero) throw new Error(`DeliveryPage: no hero for status ${doc.status}`);
@@ -91,9 +92,7 @@ export default async function DeliveryPage({
           {doc.referenceNo && <> · ref {doc.referenceNo}</>}
         </PageDescription>
         {doc.proofFileId && canViewProof && (
-          <a href={`/files/${doc.proofFileId}`} target="_blank" rel="noopener noreferrer" className={ACTION_LINK}>
-            View photo
-          </a>
+          <PhotoThumb purpose="receipt_photo" label="Delivery proof" existing={{ fileId: doc.proofFileId, kind: proofKind }} className="mt-2" />
         )}
       </div>
 

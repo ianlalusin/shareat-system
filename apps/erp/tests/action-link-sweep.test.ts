@@ -205,7 +205,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
   //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
   //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 147 FAIL / 48 UNRESOLVED', () => {
+  it('accepted-baseline totals: 147 FAIL / 47 UNRESOLVED', () => {
     // 62 -> 63 UNRESOLVED, T-386 S4 2026-10-09: the rename "use the suggested code" checkbox on app/items/ItemCodeField.tsx
     // (an intrinsic checkbox box; baselined in touch-target-baseline.json per Ian's §6.1 ruling).
     // 63 -> 66 UNRESOLVED, T-387 S3 2026-10-10. +3: the kit's new native `<select>` (Select.tsx) and `<textarea>` (Textarea.tsx)
@@ -226,7 +226,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 116 FAIL / 1259 total, T-411 2026-10-15: 30 tables' row links are full-height rows (h-11).
     // components/ui/Table.tsx UNRESOLVED (T-411): RowLink's tap target is its stretched ::after (absolute inset-0) over the
     // enclosing LinkRow, which is h-11 (44px); RowLink's own class carries no height by design.
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 116, unresolved: 48 });
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 116, unresolved: 47 });
+    // 48 -> 47 UNRESOLVED, T-441 S7 (22 Oct): components/PhotoInput.tsx deleted; its baseline entry removed from touch-target-baseline.json.
     // 47 -> 48 UNRESOLVED, T-440 (17 Oct): expenses/recurring gained a second intrinsic checkbox box (touch-target-baseline.json entry added).
   });
 
@@ -464,7 +465,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // T-450: one new native DisclosureCard summary, authored min-h-11 (44px); no fail/unresolved exemption.
     // T-451: one explicit Remove staff positions submit control; existing size/baseline checks still apply.
     // T-464: +8 controls (measured), all >= 24px, none baselined: the paired-tablet sign-in form and /settings/pos-tablet.
-    expect(results.length).toBe(1400);
+    // T-441 S7 (22 Oct): PhotoInput.tsx deleted (its 2 controls leave the census with it): 1400 -> 1398.
+    expect(results.length).toBe(1398);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

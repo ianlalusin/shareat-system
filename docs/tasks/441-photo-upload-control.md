@@ -351,3 +351,13 @@ image allowed `max-h-[90vh]`: 810 + ~76 > 855 px, and the dialog has no overflow
 **Smoke** (port 9008, `/ap` invoice receipt photo, 1800×1300 fixture; also a 600×3000 tall one): at 1280×900 and 375×812,
 `javascript_tool` reads `getBoundingClientRect()`: image bottom <= dialog bottom <= `innerHeight`, image right <= dialog right,
 Close visible without scrolling; the whole picture shows (natural aspect ratio == rendered ratio ± 1%); screenshots attached.
+
+## S8 - Ian's 22 Oct additions (relayed by the T-448 UI session; owned here because components/upload/* is T-441's)
+
+Ian, 2026-10-22: every photo upload is the rounded square box with an upload icon and no separate upload button (S1
+already); **drag-and-drop** onto every box; a **finish animation** when the upload completes, then the preview shows in
+the box at once; images open **in-app, never in a new tab**, in one shared viewer modal with **drag to pan and click to
+zoom in/out**; app-wide. Spec in plan mode (Opus) after S3-S6 merge; the viewer adopts T-448's shared `Dialog` if it
+has landed. Guarded purposes keep A6 (one audited GET per open; panning/zooming never refetches).
+Also DEF-739: with JS on the picked file stays in the input and is re-posted on Save next to `<name>FileId` (ignored by
+the server, extra payload); S7/S8 clears the input once a FileId is held, as §3 step 2 already says.

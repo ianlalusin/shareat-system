@@ -14,6 +14,7 @@ import {
   listStores,
   loadBalanceOf,
   loadMine,
+  loadProofFileId,
   loadRequestDetail,
   loadRoster,
   loadStoreLeave,
@@ -23,7 +24,6 @@ import {
   approveLeaveAction,
   attachLeaveDocumentAction,
   cancelLeaveAction,
-  openLeaveDocumentAction,
   recordLeaveAction,
   rejectLeaveAction,
   requestLeaveAction,
@@ -31,7 +31,8 @@ import {
 } from './actions';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { PhotoInput } from '@/components/PhotoInput';
+import { PhotoUpload } from '@/components/upload/PhotoUpload';
+import { CertificateView } from './CertificateView';
 import { Badge, Button, Field, FlashBanner, FormGrid, Input, Select, Textarea , FormSection} from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { ACTION_LINK } from '@/components/action-link';
@@ -48,7 +49,6 @@ interface SearchParams {
   error?: string;
 }
 
-const FILE_INPUT = 'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 text-sm text-ink';
 
 /*
   ⭐ **Leave: ask for a day off, and decide on it.** T-436.
@@ -59,8 +59,8 @@ const FILE_INPUT = 'w-full rounded-[10px] border border-field-border bg-field px
   leave" - is enforced in the domain, not on this page: the page only shows why something was refused.
 
   ⛔ A medical note and a certificate photo are personal data (bible row 353). The lists below show the KIND of leave only. The
-  note is read only on the person's own side of the page, and a certificate is opened only by the "View certificate" button, which
-  asks the server for a 60-second link and leaves a row in the activity log.
+  note is read only on the person's own side of the page, and a certificate is opened only by the certificate viewer (the shared Lightbox),
+  which is drawn only when `loadProofFileId` hands this viewer the id; each open leaves a row in the activity log.
 */
 export default async function LeavePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
@@ -85,6 +85,13 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
     } catch {
       managerError = 'You do not manage attendance at this store, so its leave is not shown.';
     }
+  }
+  // The certificate id, per request, only for a viewer the T-436 decision lets open it (decide only: no audit row is written here).
+  const proofFileIds = new Map<string, string>();
+  for (const g of groups) {
+    if (!g.hasProof) continue;
+    const id = await loadProofFileId(actor, g.requestId);
+    if (id) proofFileIds.set(g.requestId, id);
   }
   const pending = groups.filter((g) => g.status === 'pending');
   // The balance a manager needs to decide a pending request: that person's Service Incentive Leave in the year of its first date.
@@ -325,7 +332,7 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
                               Reject
                             </Button>
                           </form>
-                          <Certificate group={g} />
+                          <Certificate group={g} storeId={storeId ?? ''} proofFileId={proofFileIds.get(g.requestId) ?? null} />
                         </div>
                       </li>
                     ))}
@@ -356,7 +363,7 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
                               Void
                             </Button>
                           </CheckedForm>
-                          <Certificate group={g} />
+                          <Certificate group={g} storeId={storeId ?? ''} proofFileId={proofFileIds.get(g.requestId) ?? null} />
                         </div>
                       </li>
                     ))}
@@ -459,26 +466,19 @@ function RequestHead({ group, kinds }: { group: RequestGroup; kinds: readonly { 
   );
 }
 
-/** Attach a certificate photo (a manager's act) and, when one is attached, a button that asks the server for a 60-second link. */
-function Certificate({ group }: { group: RequestGroup }) {
+/** Attach a certificate photo (a manager's act) and, when the deciding loader handed over an id, a button that opens it in the Lightbox. */
+function Certificate({ group, storeId, proofFileId }: { group: RequestGroup; storeId: string; proofFileId: string | null }) {
   return (
     <div className="flex flex-wrap items-end gap-2">
       <form action={attachLeaveDocumentAction} className="flex flex-wrap items-end gap-2">
         <input type="hidden" name="requestId" value={group.requestId} />
-        <PhotoInput name="certificate" accept="image/jpeg,image/png,image/webp" className={FILE_INPUT} />
+        <PhotoUpload name="certificate" purpose="leave_document" label="Medical certificate" storeId={storeId} />
         <Button type="submit" variant="secondary">
           Attach certificate
         </Button>
       </form>
-      {group.hasProof && (
-        <form action={openLeaveDocumentAction} className="flex flex-wrap items-center gap-2">
-          <input type="hidden" name="requestId" value={group.requestId} />
-          <span className="text-xs text-neutral-500">Proof attached</span>
-          <Button type="submit" variant="secondary">
-            View certificate
-          </Button>
-        </form>
-      )}
+      {group.hasProof && !proofFileId && <span className="text-xs text-neutral-500">Proof attached</span>}
+      {proofFileId && <CertificateView fileId={proofFileId} />}
     </div>
   );
 }

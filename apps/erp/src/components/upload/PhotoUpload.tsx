@@ -17,7 +17,7 @@
  * picked previews from its local object URL (their own bytes; nothing is fetched).
  */
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import { formatBytes } from '../photo-compression';
+import { formatBytes } from './photo-compression';
 import { FileTile } from './FileTile';
 import { Lightbox, useLightbox } from './Lightbox';
 import { acceptFor, allowsPdf, GUARDED_PURPOSES, shapeFor, type UploadPurpose } from './upload-rules';

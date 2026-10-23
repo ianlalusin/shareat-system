@@ -10,12 +10,10 @@
  * ⚠️ One action per decision, never one generic action taking a `kind` from the form (the form would choose which decision was made).
  * ⚠️ No person id is read from the form: the actor is the session, and a request is filed under an EMPLOYMENT the domain checks.
  */
-import { redirect } from 'next/navigation';
 import {
   approveLeave,
   attachLeaveDocument,
   cancelLeave,
-  openLeaveDocument,
   recordLeave,
   rejectLeave,
   requestLeave,
@@ -120,35 +118,30 @@ export async function voidLeaveAction(formData: FormData): Promise<void> {
   return await redirectWithFlash(BACK, {}, { ok: 'Leave voided.' });
 }
 
-/** A manager attaches a medical-certificate photo. The domain stores it through the file broker; nothing about it is echoed back. */
+/**
+ * A manager attaches a medical-certificate photo. The control uploaded it on pick (`certificateFileId`), or, with JavaScript off,
+ * the form posts the file itself. Either way the domain does the work: it checks the right and the request's state FIRST, and
+ * only then claims the uploaded id or stores the posted bytes, so a refused save leaves nothing behind. The store is the
+ * request's own, read by the domain. Nothing about the file is echoed back.
+ */
 export async function attachLeaveDocumentAction(formData: FormData): Promise<void> {
   const { actor } = await requireSession();
+  const requestId = str(formData, 'requestId');
+  const fileId = str(formData, 'certificateFileId');
   const photo = formData.get('certificate');
-  if (!(photo instanceof File) || photo.size === 0) {
-    return await redirectWithFlash(BACK, {}, { error: 'Choose a photo of the certificate first.' });
-  }
+  const hasFile = photo instanceof File && photo.size > 0;
+  if (!fileId && !hasFile) return await redirectWithFlash(BACK, {}, { error: 'Choose a photo of the certificate first.' });
   try {
-    const bytes = new Uint8Array(await photo.arrayBuffer());
+    const bytes = !fileId && hasFile ? new Uint8Array(await photo.arrayBuffer()) : null;
     await withOrgPrincipal(actor.orgId, (tx) =>
-      attachLeaveDocument(tx, actor, { requestId: str(formData, 'requestId'), contentType: photo.type, bytes }),
+      attachLeaveDocument(
+        tx,
+        actor,
+        fileId ? { requestId, fileId } : { requestId, contentType: (photo as File).type, bytes: bytes! },
+      ),
     );
   } catch (err) {
     return await redirectWithFlash(BACK, {}, { error: errorMessage(err) });
   }
   return await redirectWithFlash(BACK, {}, { ok: 'Certificate attached.' });
-}
-
-/**
- * Opens a certificate: a link good for 60 seconds, and a row in the activity log. Anyone not allowed gets the same plain
- * message as for a certificate that does not exist.
- */
-export async function openLeaveDocumentAction(formData: FormData): Promise<void> {
-  const { actor } = await requireSession();
-  let url: string;
-  try {
-    ({ url } = await withOrgPrincipal(actor.orgId, (tx) => openLeaveDocument(tx, actor, { requestId: str(formData, 'requestId') })));
-  } catch {
-    return await redirectWithFlash(BACK, {}, { error: "This certificate isn't available to you." });
-  }
-  redirect(`${url}`);
 }
