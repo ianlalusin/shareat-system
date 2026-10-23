@@ -44,6 +44,12 @@ loosely or fill gaps.
 | [customer-experience/online-orders.md](customer-experience/online-orders.md) | Online orders — Foodpanda, GrabFood, website, Facebook, call and text | customer, cashier | public | Channels per store, rider-app delivery or pickup, pay online first, COD only via PandaGo. must_be_exact | 2026-10-23 |
 | [customer-experience/customer-app.md](customer-experience/customer-app.md) | The customer app during dine-in | customer, server, cook, manager | public | App buttons: refill, add griller, assistance, loyalty card, games, à la carte (if manager allows) | 2026-10-23 |
 
+### store-operations
+
+| Page | Title | About | Readers | Summary | Updated |
+|---|---|---|---|---|---|
+| [store-operations/opening-and-closing.md](store-operations/opening-and-closing.md) | Opening and closing the store — checklists | staff, manager | staff | Per-position checklists in ERP; prep starts after opening; closing open until 2 a.m.; photo items and AI checks set by manager; failures warn the manager; missed checklist = automatic infraction | 2026-10-23 |
+
 ### staff
 
 | Page | Title | About | Readers | Summary | Updated |
@@ -69,7 +75,7 @@ loosely or fill gaps.
 
 | Page | Title | About | Readers | Summary | Updated |
 |---|---|---|---|---|---|
-| [planned.md](planned.md) | Planned changes — not live | customer, cashier | managers | v2: request the bill from the customer app; future: Foodpanda/Grab orders in the POS | 2026-10-23 |
+| [planned.md](planned.md) | Planned changes — not live | customer, cashier | managers | v2: request the bill from the customer app; future: Foodpanda/Grab orders in the POS; v2: checklists in a slim staff-only ERP | 2026-10-23 |
 
 <!-- Row format, under a "### <topic>" heading:
 | Page | Title | About | Readers | Summary | Updated |

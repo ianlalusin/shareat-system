@@ -4,7 +4,7 @@ topic: staff/cashier-dine-in-sop
 about: [cashier]
 readers: staff
 must_be_exact: true
-related: [customer-experience/dine-in-journey, policies/leftover-policy, staff/server-and-kitchen-sop, policies/allergies-and-dietary-requests, staff/cashier-take-out-and-online-sop]
+related: [customer-experience/dine-in-journey, policies/leftover-policy, staff/server-and-kitchen-sop, policies/allergies-and-dietary-requests, staff/cashier-take-out-and-online-sop, store-operations/opening-and-closing]
 updated: 2026-10-23
 ---
 

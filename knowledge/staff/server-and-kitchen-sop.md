@@ -4,7 +4,7 @@ topic: staff/server-and-kitchen-sop
 about: [server, cook, cashier]
 readers: staff
 must_be_exact: false
-related: [customer-experience/dine-in-journey, customer-experience/customer-app, policies/leftover-policy, staff/cashier-dine-in-sop, policies/allergies-and-dietary-requests, customer-experience/take-out-in-store, staff/cashier-take-out-and-online-sop]
+related: [customer-experience/dine-in-journey, customer-experience/customer-app, policies/leftover-policy, staff/cashier-dine-in-sop, policies/allergies-and-dietary-requests, customer-experience/take-out-in-store, staff/cashier-take-out-and-online-sop, store-operations/opening-and-closing]
 updated: 2026-10-23
 ---
 
