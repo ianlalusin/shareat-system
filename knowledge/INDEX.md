@@ -40,6 +40,8 @@ loosely or fill gaps.
 | Page | Title | About | Readers | Summary | Updated |
 |---|---|---|---|---|---|
 | [customer-experience/dine-in-journey.md](customer-experience/dine-in-journey.md) | Dine-in customer journey — arrival to payment | customer, cashier, server, cook | public | The standard visit: greeting, order at cashier, QR code, rules, seating, refills, bill and payment at cashier, review | 2026-10-23 |
+| [customer-experience/take-out-in-store.md](customer-experience/take-out-in-store.md) | Walk-in take-out — ordering at the store | customer, cashier, cook | public | Order at cashier; waiting customers pay at order or pickup, leaving customers pay first. must_be_exact | 2026-10-23 |
+| [customer-experience/online-orders.md](customer-experience/online-orders.md) | Online orders — Foodpanda, GrabFood, website, Facebook, call and text | customer, cashier | public | Channels per store, rider-app delivery or pickup, pay online first, COD only via PandaGo. must_be_exact | 2026-10-23 |
 | [customer-experience/customer-app.md](customer-experience/customer-app.md) | The customer app during dine-in | customer, server, cook, manager | public | App buttons: refill, add griller, assistance, loyalty card, games, à la carte (if manager allows) | 2026-10-23 |
 
 ### staff
@@ -47,7 +49,14 @@ loosely or fill gaps.
 | Page | Title | About | Readers | Summary | Updated |
 |---|---|---|---|---|---|
 | [staff/cashier-dine-in-sop.md](staff/cashier-dine-in-sop.md) | Cashier SOP — dine-in | cashier | staff | Order taking, starting the session, billing; bill not invoice (not BIR-accredited); manual OR on request. must_be_exact | 2026-10-23 |
-| [staff/server-and-kitchen-dine-in-sop.md](staff/server-and-kitchen-dine-in-sop.md) | Server and kitchen SOP — dine-in | server, cook | staff | Greeting, seating, refills on device, kitchen display, bell, assistance alerts, leftover inspection | 2026-10-23 |
+| [staff/cashier-take-out-and-online-sop.md](staff/cashier-take-out-and-online-sop.md) | Cashier SOP — take-out and online orders | cashier, manager | staff | Walk-in take-out steps, online orders tab badge, rider booking, payment before dispatch, Foodpanda/Grab devices. must_be_exact | 2026-10-23 |
+| [staff/server-and-kitchen-sop.md](staff/server-and-kitchen-sop.md) | Server and kitchen SOP | server, cook, cashier | staff | Greeting, seating, refills on device, kitchen display, bell, assistance alerts, leftover inspection, take-out and platform orders in the kitchen | 2026-10-23 |
+
+### cash-and-payments
+
+| Page | Title | About | Readers | Summary | Updated |
+|---|---|---|---|---|---|
+| [cash-and-payments/platform-payouts.md](cash-and-payments/platform-payouts.md) | Foodpanda and Grab payouts | manager | managers | Customers pay the platforms; Grab pays next business day, Foodpanda weekly; not in the POS. must_be_exact | 2026-10-23 |
 
 ### policies
 
@@ -60,7 +69,7 @@ loosely or fill gaps.
 
 | Page | Title | About | Readers | Summary | Updated |
 |---|---|---|---|---|---|
-| [planned.md](planned.md) | Planned changes — not live | customer, cashier | managers | v2: request the bill from the customer app | 2026-10-23 |
+| [planned.md](planned.md) | Planned changes — not live | customer, cashier | managers | v2: request the bill from the customer app; future: Foodpanda/Grab orders in the POS | 2026-10-23 |
 
 <!-- Row format, under a "### <topic>" heading:
 | Page | Title | About | Readers | Summary | Updated |

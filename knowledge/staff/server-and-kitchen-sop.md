@@ -1,14 +1,14 @@
 ---
-title: Server and kitchen SOP — dine-in
-topic: staff/server-and-kitchen-dine-in-sop
-about: [server, cook]
+title: Server and kitchen SOP
+topic: staff/server-and-kitchen-sop
+about: [server, cook, cashier]
 readers: staff
 must_be_exact: false
-related: [customer-experience/dine-in-journey, customer-experience/customer-app, policies/leftover-policy, staff/cashier-dine-in-sop, policies/allergies-and-dietary-requests]
+related: [customer-experience/dine-in-journey, customer-experience/customer-app, policies/leftover-policy, staff/cashier-dine-in-sop, policies/allergies-and-dietary-requests, customer-experience/take-out-in-store, staff/cashier-take-out-and-online-sop]
 updated: 2026-10-23
 ---
 
-# Server and kitchen SOP — dine-in
+# Server and kitchen SOP
 
 ## Servers
 
@@ -33,3 +33,7 @@ updated: 2026-10-23
    and clean everything. Cook à la carte orders with an allergy note separately, with separate
    tongs. Buffet side dishes are batch-cooked and cannot be adjusted. Full rules:
    [allergies and dietary requests](../policies/allergies-and-dietary-requests.md).
+6. Take-out orders arrive on the kitchen tablet the same way as dine-in. Prepare them and bring
+   them to the cashier.
+7. If the Foodpanda tablet or the Grab Merchant phone is kept in the kitchen, handle those orders
+   directly from the device.

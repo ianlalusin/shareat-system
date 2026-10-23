@@ -4,7 +4,7 @@ topic: customer-experience/customer-app
 about: [customer, server, cook, manager]
 readers: public
 must_be_exact: false
-related: [customer-experience/dine-in-journey, staff/server-and-kitchen-dine-in-sop]
+related: [customer-experience/dine-in-journey, staff/server-and-kitchen-sop]
 updated: 2026-10-23
 ---
 

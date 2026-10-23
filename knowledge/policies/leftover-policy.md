@@ -4,7 +4,7 @@ topic: policies/leftover-policy
 about: [customer, server, cashier]
 readers: public
 must_be_exact: true
-related: [customer-experience/dine-in-journey, staff/cashier-dine-in-sop, staff/server-and-kitchen-dine-in-sop]
+related: [customer-experience/dine-in-journey, staff/cashier-dine-in-sop, staff/server-and-kitchen-sop]
 updated: 2026-10-23
 ---
 

@@ -4,7 +4,7 @@ topic: customer-experience/dine-in-journey
 about: [customer, cashier, server, cook]
 readers: public
 must_be_exact: false
-related: [customer-experience/customer-app, policies/leftover-policy, staff/cashier-dine-in-sop, staff/server-and-kitchen-dine-in-sop, policies/allergies-and-dietary-requests]
+related: [customer-experience/customer-app, policies/leftover-policy, staff/cashier-dine-in-sop, staff/server-and-kitchen-sop, policies/allergies-and-dietary-requests]
 updated: 2026-10-23
 ---
 
