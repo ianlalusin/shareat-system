@@ -41,7 +41,7 @@ export function ConfirmDestructive({ tier, label, consequence, expectedName }: C
 
   const ready = tier === 'retype' ? retypeMatches(typed, expectedName ?? '') : /^\d{6}$/.test(pin);
   return (
-    <div role="group" aria-label={label} className="flex flex-col gap-3 rounded-[12px] border border-danger p-3">
+    <div role="group" aria-label={label} className="flex flex-col gap-3 rounded-[20px] border border-danger p-3">
       <p className="text-sm text-ink">{consequence}</p>
       {tier === 'retype' ? (
         <label className="flex flex-col gap-1 text-sm text-ink">

@@ -1,6 +1,6 @@
 # T-441: One photo-upload control with progress and preview
 
-**Status:** 2026-10-22: S1 merged (PR #36); L1 lightbox fix merged (PR #39) and live. S2 (customer delivery and trade receipt claims) in open draft PR #43, fixes pushed 22 Oct, not merged. S3-S7 not started.
+**Status:** 2026-10-22: S1 merged (PR #36); L1 lightbox fix merged (PR #39) and live. S2 (customer delivery and trade receipt claims) in PR #43, fixes pushed 22 Oct, not merged. S3, S4, S6 built and audited on lanes (not merged); S5 in progress; S7 after #43 merges.
 **Ruling:** bible row 364 (Ian, 2026-10-17). Also row 353 (personal data strictly guarded; signatures strictest), row 171 /
 §1.2c (one family of patterns), row 289 (an add form ends in Save), T-296 (1 MB photo cap, browser compression), T-141
 (file broker), T-369 S2 (`/files/[fileId]`), T-434 (staff photo + signature), T-436 (leave certificates).
@@ -161,6 +161,24 @@ Customers payment, new delivery, trade pay-now. Each: swap `PhotoInput` for `Pho
 `resolveUploadedFile`. **Tester:** `apps/erp/tests/t441-s2-receipt-callers.test.ts` (per caller: control present, action
 reads `<name>FileId`, fallback kept). **Builder:** `AutoAllocateCollectionForm.tsx`, `customers/actions.ts`,
 `NewDeliveryForm.tsx`, `inventory/deliveries/actions.ts`, `trade/orders/[id]/page.tsx`, `trade/orders/actions.ts`.
+
+S2 execution clarification (21 October): A5 in T-442 requires the trade proof to link to the
+collection, not the order. Extend scope to `packages/domain/src/trade/index.ts` solely to forward
+the existing `recordChargeWithCollection.collectionId` through `DispatchResult` (null for other
+dispatches), and to real-PostgreSQL S2 action tests plus the T-442 census tests and review report.
+The channel-settlement TODO in T-442 is outside the three S2 receipt callers; retain it visibly
+pending a separately scoped writer change. No production backfill is authorized.
+Verification: seven new wiring checks failed before implementation; all eight now pass.
+Real PostgreSQL action coverage proves both preuploaded-id and native File saves for each of the
+three callers, exact collection/delivery ownership and empty unlinked/problem censuses. Three
+foreign-uploader refusals pin the exact sentence and unchanged documents, ledger, layers,
+movements, orders and file rows. Existing pay-now and dispatch action checks also pass.
+Local total: 321 unit/guard checks across 12 files; 61 PostgreSQL checks across five files,
+one channel-certificate TODO retained. Typecheck and production build passed with no local
+server for this checkout. No running-app approval is claimed; browser policy remains blocked.
+Postcommit combined run: 320 passed, one server-module import exceeded five seconds (DEF-722,
+logged in the register as supporting audit scope). Earlier run passed; serial repeat and fresh
+CI remain required. No timeout, assertion or guard allowance was changed.
 
 ### S3 - staff photo (circle) - ⛔ runs BEFORE S5, never alongside it (both edit `staff-media.ts`, `staff/actions.ts`, `staff/[employmentId]/page.tsx`)
 `setStaffPhoto` accepts `{ fileId } | { contentType, bytes }`; page passes `existing` only when `canViewPhoto`.
@@ -333,3 +351,13 @@ image allowed `max-h-[90vh]`: 810 + ~76 > 855 px, and the dialog has no overflow
 **Smoke** (port 9008, `/ap` invoice receipt photo, 1800×1300 fixture; also a 600×3000 tall one): at 1280×900 and 375×812,
 `javascript_tool` reads `getBoundingClientRect()`: image bottom <= dialog bottom <= `innerHeight`, image right <= dialog right,
 Close visible without scrolling; the whole picture shows (natural aspect ratio == rendered ratio ± 1%); screenshots attached.
+
+## S8 - Ian's 22 Oct additions (relayed by the T-448 UI session; owned here because components/upload/* is T-441's)
+
+Ian, 2026-10-22: every photo upload is the rounded square box with an upload icon and no separate upload button (S1
+already); **drag-and-drop** onto every box; a **finish animation** when the upload completes, then the preview shows in
+the box at once; images open **in-app, never in a new tab**, in one shared viewer modal with **drag to pan and click to
+zoom in/out**; app-wide. Spec in plan mode (Opus) after S3-S6 merge; the viewer adopts T-448's shared `Dialog` if it
+has landed. Guarded purposes keep A6 (one audited GET per open; panning/zooming never refetches).
+Also DEF-739: with JS on the picked file stays in the input and is re-posted on Save next to `<name>FileId` (ignored by
+the server, extra payload); S7/S8 clears the input once a FileId is held, as §3 step 2 already says.

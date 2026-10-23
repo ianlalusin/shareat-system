@@ -122,7 +122,7 @@ async function setup(hint: string): Promise<Fixture> {
   const managerId = await person(`${hint} Manager`, 'manager');
   const [employment] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${orgId}, ${storeId}, ${staffId}, ${uid('SE')}, 'regular', '2025-01-01')
+    values (${orgId}, ${storeId}, ${staffId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01')
     returning id
   `;
   await grantEverydayPositionAccess(sql, {
@@ -301,7 +301,7 @@ describe('T-266 §4 — an expense paid from a staff float', () => {
     await sql`insert into person_store_scope (person_id, store_id) values (${ben!.id}, ${f.storeId})`;
     const [benEmployment] = await sql<{ id: string }[]>`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-      values (${f.orgId}, ${f.storeId}, ${ben!.id}, ${uid('SE')}, 'regular', '2025-01-01')
+      values (${f.orgId}, ${f.storeId}, ${ben!.id}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01')
       returning id
     `;
     await grantEverydayPositionAccess(sql, {

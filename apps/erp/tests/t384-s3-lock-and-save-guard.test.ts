@@ -144,6 +144,7 @@ const COMMANDS: Record<string, string> = {
   'Open shift': 'opens a shift',
   'Settle': 'settles a balance',
   'Unlink': 'removes a link',
+  'Pair this tablet': "T-464: pairs this browser as the store's POS tablet and signs the manager out (a command that moves a device's status, not data entry)",
   // 2026-10-09 T-384 sweep fallout: 'Link store' removed (no button carries it any more). Added per A5/A6:
   'Apply to every store': 'fans one setting out to every store (a bulk write, not a record edit)',
   'Copy': 'copies a record into a new one',
@@ -173,7 +174,6 @@ const COMMANDS: Record<string, string> = {
   // T-434 staff photo/signature (managers only; bible rows 353/355)
   'Save photo': 'T-434 staff photo/signature (managers only; bible rows 353/355): uploads a photo; plain data entry that should read "Save"',
   'Remove photo': 'T-434 staff photo/signature (managers only; bible rows 353/355): removes the photo',
-  'View signature': 'T-434 staff photo/signature (managers only; bible rows 353/355): opens a signature, audited',
   'Remove signature': 'T-434 staff photo/signature (managers only; bible rows 353/355): removes the signature',
 };
 /** Forms that only navigate, filter, preview or retry. Not data entry, so G8 does not judge them (ruling 2). */
@@ -509,7 +509,7 @@ describe('T-S1-16 (T-440 A3): CheckedForm counts as a form, so the guards stay s
   });
   it('the live scan really contains a <CheckedForm> once the pilots are converted (the guard is exercised on real source, not only fixtures)', () => {
     const seen = scan((src, f) => (/<CheckedForm\b/.test(src) ? [{ file: f, line: 1, detail: 'uses CheckedForm' }] : []), true);
-    expect(seen.map((x) => x.file)).toContain('ap/page.tsx');
+    expect(seen.map((x) => x.file)).toContain('ap/suppliers/page.tsx');
   });
 });
 

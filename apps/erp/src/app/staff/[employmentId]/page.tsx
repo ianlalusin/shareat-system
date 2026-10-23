@@ -12,10 +12,9 @@ import {
   setPositionsAction,
   setStaffPhotoAction,
   setStaffSignatureAction,
-  viewStaffSignatureAction,
 } from '../actions';
 import { employmentDetail, governmentIdsFor, livePinFor, mediaFor, otherOpenBranchesFor, positionsForStore } from '../lib';
-import { PhotoInput } from '@/components/PhotoInput';
+import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import { SignaturePad } from '@/components/SignaturePad';
 import { Page } from '@/components/shell/Page';
 import { CheckedForm, EditableRecord } from '@/components/forms';
@@ -275,17 +274,23 @@ export default async function EmploymentDetailPage({
         </p>
         <div className="space-y-2 text-sm">
           <h3 className="font-medium">Photo</h3>
-          {media.photoFileId ? (
+          {isEnded && media.photoFileId && (
             <a href={`/files/${media.photoFileId}`} className="inline-block py-1 underline underline-offset-4">
               View photo
             </a>
-          ) : (
-            <p className="text-neutral-500 dark:text-neutral-400">No photo on file.</p>
           )}
+          {isEnded && <p className="text-neutral-500 dark:text-neutral-400">This employment has ended, so its photo cannot be changed.</p>}
           {!isEnded && (
             <form action={setStaffPhotoAction} className="flex flex-wrap items-end gap-3">
               <input type="hidden" name="employmentId" value={employmentId} />
-              <PhotoInput name="photo" required accept="image/*" capture="user" />
+              <PhotoUpload
+                name="photo"
+                purpose="staff_photo"
+                label="Staff photo"
+                capture="user"
+                storeId={detail.employment.storeId}
+                existing={media.photoFileId ? { fileId: media.photoFileId, kind: 'image' } : undefined}
+              />
               <Button type="submit" variant="primary">
                 {media.photoFileId ? 'Replace photo' : 'Save photo'}
               </Button>
@@ -300,21 +305,23 @@ export default async function EmploymentDetailPage({
         </div>
         <div className="space-y-2 text-sm">
           <h3 className="font-medium">Signature</h3>
-          {media.hasSignature ? (
-            <p>Signature on file.</p>
+          {!media.hasSignature && <p className="text-neutral-500 dark:text-neutral-400">No signature on file.</p>}
+          {media.hasSignature && !media.signatureFileId && <p>Signature on file.</p>}
+          {!isEnded ? (
+            <SignaturePad
+              personId={detail.employment.personId}
+              employmentId={employmentId}
+              action={setStaffSignatureAction}
+              signatureFileId={media.signatureFileId}
+            />
           ) : (
-            <p className="text-neutral-500 dark:text-neutral-400">No signature on file.</p>
-          )}
-          {media.hasSignature && media.canViewSignature && (
-            <form action={viewStaffSignatureAction}>
-              <input type="hidden" name="employmentId" value={employmentId} />
-              <input type="hidden" name="personId" value={detail.employment.personId} />
-              <Button type="submit">View signature</Button>
-              <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">Each view is recorded. The link lasts one minute.</span>
-            </form>
-          )}
-          {!isEnded && (
-            <SignaturePad personId={detail.employment.personId} employmentId={employmentId} action={setStaffSignatureAction} />
+            <SignaturePad
+              personId={detail.employment.personId}
+              employmentId={employmentId}
+              action={setStaffSignatureAction}
+              signatureFileId={media.signatureFileId}
+              readOnly
+            />
           )}
           {!isEnded && media.hasSignature && (
             <form action={removeStaffSignatureAction}>

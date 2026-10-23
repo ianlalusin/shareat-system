@@ -65,7 +65,7 @@ async function fixture(hint: string) {
   await sql`insert into person_store_scope (person_id, store_id) values (${staff!.id}, ${storeId})`;
   const [employment] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${orgId}, ${storeId}, ${staff!.id}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+    values (${orgId}, ${storeId}, ${staff!.id}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
   await grantEverydayPositionAccess(sql, { orgId, storeId, employmentId: employment!.id, personId: staff!.id, setBy: manager!.id });
 
   // A bare staff, position-grant-free — D6's non-holder (create_expense is position-granted,

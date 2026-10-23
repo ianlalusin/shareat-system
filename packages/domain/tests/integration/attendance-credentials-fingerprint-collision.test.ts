@@ -76,7 +76,7 @@ async function fixture(hint: string) {
       insert into persons (org_id, display_name) values (${orgId}, ${name}) returning id`;
     const [emp] = await sql<{ id: string }[]>`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-      values (${orgId}, ${storeId}, ${p!.id}, ${uid('SE')}, 'regular', '2025-01-01')
+      values (${orgId}, ${storeId}, ${p!.id}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01')
       returning id`;
     return emp!.id;
   };

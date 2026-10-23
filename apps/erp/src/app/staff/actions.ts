@@ -9,7 +9,6 @@
  * repeated here. Every mutation runs under the org's RLS principal (`withOrgPrincipal`), the same
  * way the items and commissary-catalogue actions do.
  */
-import { redirect } from 'next/navigation';
 import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
 import { STAFF_POSITIONS, STAFF_RENAME } from './typed-forms';
@@ -25,7 +24,6 @@ import {
   setStaffPhoto,
   setStaffSignature,
   upsertStorePosition,
-  viewStaffSignatureUrl,
   assertFieldRules,
   type CreateEmploymentInput,
 } from '@shareat/domain';
@@ -409,9 +407,12 @@ export async function setStaffPhotoAction(formData: FormData): Promise<void> {
   const actor = await requireActor('/staff');
   const employmentId = str(formData, 'employmentId');
   try {
-    const part = await filePart(formData, 'photo');
-    if (!part) throw new Error('Choose or take a photo first.');
-    await withOrgPrincipal(actor.orgId, (tx) => setStaffPhoto(tx, actor, { employmentId, ...part }));
+    // T-441: the control's uploaded id is claimed by setStaffPhoto AFTER its gates. With JavaScript off the File's bytes go to
+    // setStaffPhoto's own bytes path, which uploads only after those gates - so a refused save never leaves orphan bytes in storage.
+    const posted = str(formData, 'photoFileId');
+    const part = posted ? null : await filePart(formData, 'photo');
+    if (!posted && !part) throw new Error('Choose or take a photo first.');
+    await withOrgPrincipal(actor.orgId, (tx) => setStaffPhoto(tx, actor, posted ? { employmentId, fileId: posted } : { employmentId, ...part! }));
   } catch (err) {
     return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
   }
@@ -453,18 +454,4 @@ export async function removeStaffSignatureAction(formData: FormData): Promise<vo
     return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
   }
   return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Signature removed.' });
-}
-
-/** "View signature": mints a 60-second link per click (audited, refusals audited too) and sends the browser to it. Nothing is stored or logged. */
-export async function viewStaffSignatureAction(formData: FormData): Promise<void> {
-  const actor = await requireActor('/staff');
-  const employmentId = str(formData, 'employmentId');
-  const personId = str(formData, 'personId');
-  let url: string;
-  try {
-    ({ url } = await withOrgPrincipal(actor.orgId, (tx) => viewStaffSignatureUrl(tx, actor, { personId })));
-  } catch (err) {
-    return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
-  }
-  redirect(`${url}`);
 }

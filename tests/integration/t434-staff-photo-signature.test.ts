@@ -69,7 +69,6 @@ import {
   setStorageDriver,
 } from '@shareat/domain';
 import { grantEverydayPositionAccess } from '../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
-import { viewStaffSignatureAction } from '../../apps/erp/src/app/staff/actions';
 import { GET as filesRoute } from '../../apps/erp/src/app/files/[fileId]/route';
 
 const sql = postgres(url, { max: 5 });
@@ -124,7 +123,7 @@ async function mkPerson(orgId: string, name: string, role: string, storeIds: str
 async function mkEmployment(w: { orgId: string; admin: Person }, personId: string, storeId: string, startedOn = '2025-01-01', caps: string[] = []): Promise<string> {
   const [e] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${w.orgId}, ${storeId}, ${personId}, ${uid('SC')}, 'regular', ${startedOn}) returning id`;
+    values (${w.orgId}, ${storeId}, ${personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', ${startedOn}) returning id`;
   await grantEverydayPositionAccess(sql, { orgId: w.orgId, storeId, employmentId: e!.id, personId, setBy: w.admin.id, capabilities: caps as never });
   return e!.id;
 }
@@ -158,7 +157,13 @@ const dm = domain as unknown as Record<string, (...a: unknown[]) => Promise<any>
 const setSig = (w: W, who: Person, personId: string, bytes: Uint8Array = pngCopy(), contentType = 'image/png') =>
   asOrg(w.orgId, (tx) => dm.setStaffSignature!(tx, who.actor, { personId, contentType, bytes }));
 const removeSig = (w: W, who: Person, personId: string) => asOrg(w.orgId, (tx) => dm.removeStaffSignature!(tx, who.actor, { personId }));
-const viewSig = (w: W, who: Person, personId: string) => asOrg(w.orgId, (tx) => dm.viewStaffSignatureUrl!(tx, who.actor, { personId }));
+// T-441 S5: the screen view is GET /files/{id}, whose domain core is readFileUrl (the signature rule + audit). There is no per-person
+// view function any more: the helper names the person's CURRENT file id (a viewer never sees it; the page passes it only to a rightful viewer).
+const viewSig = async (w: W, who: Person, personId: string) => {
+  const fileId = await sigFileOf(personId);
+  if (!fileId) throw new Error('NO_FILE: no signature file for this person (the page offers no View, so no request exists)');
+  return asOrg(w.orgId, (tx) => readFileUrl(tx, who.actor, { fileId }));
+};
 const setPhoto = (w: W, who: Person, employmentId: string, bytes: Uint8Array = jpegWithGps(), contentType = 'image/jpeg') =>
   asOrg(w.orgId, (tx) => dm.setStaffPhoto!(tx, who.actor, { employmentId, contentType, bytes }));
 const removePhoto = (w: W, who: Person, employmentId: string) => asOrg(w.orgId, (tx) => dm.removeStaffPhoto!(tx, who.actor, { employmentId }));
@@ -371,9 +376,10 @@ describe('signature: who can view', () => {
       if (v) {
         expect(v.hasSignature).toBe(true);
         expect(v.canViewSignature).toBe(false);
+        // T-441 S5: the id exists on the result type but is null for a viewer without the right (row 353)
+        expect(v.signatureFileId ?? null).toBeNull();
         expect(JSON.stringify(v)).not.toContain(sig.fileId);
         expect(JSON.stringify(v)).not.toContain(path);
-        expect(Object.keys(v).join(',')).not.toMatch(/signatureFileId|signature_file_id/);
       }
       const err = await refused(viewSig(w, viewer, w.cook.id));
       const text = `${err.message} ${(err as AuthorizationError).userMessage ?? ''}`;
@@ -385,7 +391,7 @@ describe('signature: who can view', () => {
     const adminView = await mediaView(w, w.admin, w.cookEmp);
     expect(adminView.hasSignature).toBe(true);
     expect(adminView.canViewSignature).toBe(true);
-    expect(JSON.stringify(adminView)).not.toContain(sig.fileId);
+    expect(adminView.signatureFileId).toBe(sig.fileId); // T-441 S5: the rightful viewer gets the id (the Lightbox opens /files/{id})
   });
 
   it('13. the uploader (enrol_staff, employed-at-A since before the upload) can view the current signature, audited; not after the employment ends', async () => {
@@ -605,23 +611,23 @@ describe('print path, capability matrix, audit payloads', () => {
 
 // ---------------------------------------------------------------- existence oracle, print channel, throttle
 describe('refused views: no existence oracle, channel recorded, audit throttled', () => {
+  const FAKE_ID = '00000000-0000-4000-8000-000000000000';
   const NO_SIG = /There is no signature on file for this person\./;
   const normal = (t: string) => t.replace(UUID_G, '<id>').trim();
 
   /** What a refused viewer is told, per entry point: message + userMessage (domain) or the flash banner (action). */
   async function refusalTexts(w: W, who: Person, target: Person, employmentId: string) {
     const out: Record<string, string> = {};
-    const e1 = await refused(viewSig(w, who, target.id));
-    out.url = normal(`${e1.message} | ${(e1 as AuthorizationError).userMessage ?? ''}`);
+    // T-441 S5: with no signature file there is no id to request on screen, so only the print channel can be probed for that person.
+    if (await sigFileOf(target.id)) {
+      const e1 = await refused(viewSig(w, who, target.id));
+      out.url = normal(`${e1.message} | ${(e1 as AuthorizationError).userMessage ?? ''}`);
+    }
     const e2 = await refused(asOrg(w.orgId, (tx) => dm.signatureForPrint!(tx, who.actor, { personId: target.id })));
     out.print = normal(`${e2.message} | ${(e2 as AuthorizationError).userMessage ?? ''}`);
-    ACTOR_HOLDER.actor = who.actor;
-    FLASH.calls.length = 0;
-    const fd = new FormData();
-    fd.set('personId', target.id);
-    fd.set('employmentId', employmentId);
-    await refused(viewStaffSignatureAction(fd));
-    out.action = normal(FLASH.calls[0]?.flash?.error ?? '(no flash error)');
+    // T-441 S5: the screen entry point is now GET /files/{id} (the server-action redirect is gone). A viewer can only name a file id
+    // they were never given, so the oracle check is: an existing signature file and a random id answer byte-for-byte alike.
+    void employmentId;
     return out;
   }
 
@@ -633,11 +639,24 @@ describe('refused views: no existence oracle, channel recorded, audit throttled'
     for (const viewer of [w.cook, w.cashier]) {
       const has = await refusalTexts(w, viewer, w.clerk, withEmp);
       const none = await refusalTexts(w, viewer, w.managerA, withEmp);
-      for (const k of ['url', 'print', 'action']) {
+      for (const k of ['url', 'print']) {
+        if (has[k] === undefined || none[k] === undefined) continue;
         expect(none[k], `${k}: refusal for a person with NO signature differs from the one for a person WITH one`).toBe(has[k]);
         expect(none[k]!).not.toMatch(/no signature/i);
         expect(none[k]!).not.toMatch(/none on file/i);
       }
+    }
+    // T-441 S5 (replaces the action path): GET /files/{id} for the real signature and for an unknown id is the same uniform 404, audited.
+    const sigFile = await sql<{ id: string }[]>`select signature_file_id as id from persons where id = ${w.clerk.id}`;
+    const realId = sigFile[0]!.id;
+    for (const viewer of [w.cook, w.cashier]) {
+      ACTOR_HOLDER.actor = viewer.actor;
+      const real = await filesRoute(new Request('http://x/files/' + realId), { params: Promise.resolve({ fileId: realId }) });
+      const fake = await filesRoute(new Request('http://x/files/' + FAKE_ID), { params: Promise.resolve({ fileId: FAKE_ID }) });
+      expect(real.status).toBe(404);
+      expect(fake.status).toBe(404);
+      expect(real.headers.get('location')).toBeNull();
+      expect(await real.text()).toBe(await fake.text());
     }
     // both kinds of attempt are audited as refused (viewer x target x channel)
     const rows = await auditRows(w.orgId, 'staff_signature.view_refused');
@@ -648,19 +667,12 @@ describe('refused views: no existence oracle, channel recorded, audit throttled'
   it('A+. positive control: a rightful viewer asking for a person with NO signature is told so', async () => {
     const w = await world();
     for (const call of [
-      () => viewSig(w, w.admin, w.managerA.id),
       () => asOrg(w.orgId, (tx) => dm.signatureForPrint!(tx, w.admin.actor, { personId: w.managerA.id })),
     ]) {
       const err = await refused(call());
       expect(`${err.message} ${(err as AuthorizationError).userMessage ?? ''}`).toMatch(NO_SIG);
     }
-    ACTOR_HOLDER.actor = w.admin.actor;
-    FLASH.calls.length = 0;
-    const fd = new FormData();
-    fd.set('personId', w.managerA.id);
-    fd.set('employmentId', w.managerAEmp);
-    await refused(viewStaffSignatureAction(fd));
-    expect(FLASH.calls[0]?.flash?.error).toMatch(NO_SIG);
+    // the screen-path "none on file" (hasSignature false, signatureFileId null) is owned by t441-s5-signature-view ("no signature on file")
     // a rightful viewer's "none on file" is not a refused attempt
     expect(await auditRows(w.orgId, 'staff_signature.view_refused')).toHaveLength(0);
   });

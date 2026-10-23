@@ -4,6 +4,8 @@
  * This file holds the ONE rounding implementation in apps/pos (DEF-003).
  */
 
+import { Exact, ZERO } from './exact';
+
 let nonCentavoCount = 0;
 
 /** How many stored values since the last reset were not already a whole number of centavos. */
@@ -60,19 +62,26 @@ export function allocate(total: number, weights: number[]): number[] {
   if (!Number.isInteger(total)) throw new RangeError(`allocate: total must be an integer, got ${total}`);
   if (!Array.isArray(weights) || weights.length === 0) throw new RangeError('allocate: weights must not be empty');
   if (weights.some((w) => !Number.isFinite(w) || w < 0)) throw new RangeError('allocate: weights must be non-negative numbers');
-  if (total < 0) return allocate(-total, weights).map((v) => (v === 0 ? 0 : -v));
-  const w = weights.map((x) => BigInt(Math.floor(x * 1e6)));
-  const W = w.reduce((a, b) => a + b, 0n);
-  if (W === 0n) throw new RangeError('allocate: weights must not all be zero');
-  const T = BigInt(total);
-  const floors = w.map((x) => (T * x) / W);
-  const rems = w.map((x) => (T * x) % W);
-  let left = Number(T - floors.reduce((a, b) => a + b, 0n));
-  const order = rems.map((r, i) => ({ r, i })).sort((a, b) => (a.r === b.r ? a.i - b.i : a.r > b.r ? -1 : 1));
+  // Preserve the existing six-decimal numeric-weight contract.
+  return allocateExact(total, weights.map(weight => new Exact(BigInt(Math.floor(weight * 1e6)))));
+}
+
+/** The same largest-remainder allocator, with exact fractional weights for line adjustments. */
+export function allocateExact(total: number, weights: readonly Exact[]): number[] {
+  if (!Number.isInteger(total)) throw new RangeError('allocate: total must be an integer');
+  if (!weights.length || weights.some(weight => weight.d <= 0n || weight.n < 0n)) throw new RangeError('allocate: weights must be non-negative');
+  const sum = weights.reduce((sum, weight) => sum.add(weight), ZERO);
+  if (sum.isZero()) throw new RangeError('allocate: weights must not all be zero');
+  if (total < 0) return allocateExact(-total, weights).map(value => value === 0 ? 0 : -value);
+  const quotas = weights.map(weight => Exact.int(total).mul(weight).div(sum));
+  const floors = quotas.map(quota => quota.n / quota.d);
+  let left = total - Number(floors.reduce((sum, value) => sum + value, 0n));
+  const order = quotas.map((quota, i) => ({ r: new Exact(quota.n % quota.d, quota.d), i }))
+    .sort((a, b) => -a.r.cmp(b.r) || a.i - b.i);
   const out = floors.map((f) => Number(f));
   for (const { i } of order) {
     if (left <= 0) break;
-    out[i]! += 1;
+    out[i]! += 1; // Each index came from quotas, which has the same length as out.
     left -= 1;
   }
   return out;

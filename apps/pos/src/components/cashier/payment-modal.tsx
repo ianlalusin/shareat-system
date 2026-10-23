@@ -11,10 +11,11 @@ import { Numpad } from "@/components/shared/Numpad";
 import { useToast } from "@/hooks/use-toast";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocFromCache, getDocs, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { completePaymentFromUnits } from "@/components/cashier/firestore";
 import { completePaymentOffline } from "@/components/cashier/offlinePayment";
+import { offlinePaymentDestination } from '@/lib/receipts/offline-payment-destination';
 import type { Payment, ModeOfPayment, Store, Reservation, PosPaymentIntentDoc } from "@/lib/types";
 import type { AppUser } from "@/context/auth-context";
 import type { User } from "firebase/auth";
@@ -24,11 +25,13 @@ import { useLocalProfile } from "@/context/local-profile-context";
 import { PaymongoQrView } from "@/components/cashier/paymongo-qr-view";
 import { SessionCardBanner } from "@/components/cashier/SessionCardBanner";
 import { storedPesosToCentavos, toWirePesos } from "@/lib/money/centavos";
+// T-425: what a tablet may take WITHOUT the internet (cash; e-wallet with a reference; card / QR Ph / other are off).
+import { NEEDS_INTERNET, offlineTenderRule } from "@/lib/offline/offlineRules";
 // A peso amount made exact (whole centavos back to the peso number the form holds).
 import { roundMoney as normalizePesos } from "@/lib/money";
 
 // --- Validation ---
-function validatePayments(payments: Payment[], grandTotalCents: number, paymentMethods: ModeOfPayment[]): string | null {
+function validatePayments(payments: Payment[], grandTotalCents: number, paymentMethods: ModeOfPayment[], isOnline = true): string | null {
   if (!payments || payments.length === 0) return "Add at least one payment method.";
   for (const p of payments) {
     if (!p.methodId) return "Select a payment method.";
@@ -38,6 +41,11 @@ function validatePayments(payments: Payment[], grandTotalCents: number, paymentM
     if (!methodDetails) return "Payment method not found. It may have been deleted.";
     if (methodDetails.hasRef && (!p.reference || String(p.reference).trim().length === 0)) {
       return `Reference is required for ${methodDetails.name}.`;
+    }
+    if (!isOnline) {
+      const rule = offlineTenderRule(methodDetails);
+      if (!rule.enabled) return `${methodDetails.name}: ${NEEDS_INTERNET}. Use Cash or an e-wallet with a reference number.`;
+      if (rule.requiresReference && (!p.reference || String(p.reference).trim().length === 0)) return `Reference is required for ${methodDetails.name} while offline.`;
     }
     if (isPaymongoQrMethod(methodDetails) && (!p.reference || String(p.reference).trim().length === 0)) {
       return "Scan-to-pay tender isn't paid yet — generate the QR and wait for payment.";
@@ -354,7 +362,7 @@ export function PaymentModal({
   const handleComplete = async () => {
     if (isProcessing) return;
 
-    const err = validatePayments(payments, grandTotalCents, paymentMethods);
+    const err = validatePayments(payments, grandTotalCents, paymentMethods, isOnline);
     if (err) {
       toast({ variant: "destructive", title: "Cannot Complete", description: err });
       return;
@@ -396,10 +404,12 @@ export function PaymentModal({
         // Same print trigger as the online path: hand off to the existing
         // receipt page, which builds/prints the receipt (works offline too)
         // and already reads this store's autoprint setting.
-        const settingsSnap = await getDoc(doc(db, "stores", storeId, "receiptSettings", "main"));
-        const autoPrint = settingsSnap.exists() && !!settingsSnap.data()?.autoPrintAfterPayment;
+        const destination = await offlinePaymentDestination(receiptId, async () => {
+          const settingsSnap = await getDocFromCache(doc(db, 'stores', storeId, 'receiptSettings', 'main'));
+          return settingsSnap.exists() ? settingsSnap.data() : null;
+        }, error => console.warn('[PaymentModal] Sale saved; print preference unavailable, use manual print.', error));
         setShowSuccess(true);
-        setPendingRedirect(`/receipt?id=${receiptId}${autoPrint ? "&autoprint=1" : ""}`);
+        setPendingRedirect(destination);
       } catch (e: any) {
         toast({ variant: "destructive", title: "Payment failed", description: e?.message ?? "Something went wrong." });
         setIsProcessing(false);
@@ -545,7 +555,7 @@ export function PaymentModal({
           return (
             <div
               key={payment.id}
-              className={`rounded-lg border p-2.5 ${isPaidGatewayRow ? "cursor-default" : "cursor-pointer"} transition-colors ${isActive ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "border-border"} ${(method?.hasRef || isGatewayRow) ? "space-y-2" : ""}`}
+              className={`rounded-lg border p-2.5 ${isPaidGatewayRow ? "cursor-default" : "cursor-pointer"} transition-colors ${isActive ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "border-border"} ${(method?.hasRef || isGatewayRow || (!isOnline && !!method && offlineTenderRule(method).requiresReference)) ? "space-y-2" : ""}`}
               onClick={() => { if (!isPaidGatewayRow) focusPayment(payment.id); }}
             >
               {fromReservation && (
@@ -555,7 +565,10 @@ export function PaymentModal({
                 <Select value={payment.methodId} onValueChange={(val) => updatePayment(payment.id, { methodId: val })} disabled={isProcessing || isPaidGatewayRow}>
                   <SelectTrigger className="h-9 min-w-0 flex-1 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {paymentMethods.filter(m => shouldOfferPaymongoQr(m, isOnline)).map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+                    {paymentMethods.filter(m => shouldOfferPaymongoQr(m, isOnline) || !isOnline).map(m => {
+                      const off = !isOnline && !offlineTenderRule(m).enabled;
+                      return <SelectItem key={m.id} value={m.id} disabled={off}>{off ? `${m.name} — ${NEEDS_INTERNET}` : m.name}</SelectItem>;
+                    })}
                   </SelectContent>
                 </Select>
                 {/* Amount display — driven by numpad, no virtual keyboard */}
@@ -596,7 +609,7 @@ export function PaymentModal({
                   <CheckCircle2 className="h-4 w-4" /> Paid via QR Ph — locked
                 </div>
               )}
-              {!isGatewayRow && method?.hasRef && (
+              {!isGatewayRow && (method?.hasRef || (!isOnline && !!method && offlineTenderRule(method).requiresReference)) && (
                 <Input
                   placeholder="Reference #"
                   value={payment.reference || ""}

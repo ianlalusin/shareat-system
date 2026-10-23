@@ -13,11 +13,11 @@ import {
   reviewCount,
 } from './lib';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
-import { CheckedForm, FieldCheck } from '@/components/forms';
-import { PREPAID_ADD_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
+import { CheckedForm } from '@/components/forms';
+import { PREPAID_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Banner, FlashBanner, Input, LinkRow, RowLink, Select, statusTone , FormGrid, FormSection, type FieldProps } from '@/components/ui';
+import { Badge, Banner, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Prepaid expenses — Shareat System' };
@@ -55,13 +55,86 @@ export default async function PrepaidPage({
 
   return (
     <Page density="table">
-      <div>
-        <h1 className="text-2xl font-semibold">Prepaid expenses</h1>
-        <PageDescription>
-          Things already paid for but not yet used up — a year of insurance, a mayor&apos;s permit,
-          rent paid in advance. Each sits on the balance sheet and is released into the month it
-          actually covers.
-        </PageDescription>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-semibold">Prepaid expenses</h1>
+          <PageDescription>
+            Things already paid for but not yet used up — a year of insurance, a mayor&apos;s permit,
+            rent paid in advance. Each sits on the balance sheet and is released into the month it
+            actually covers.
+          </PageDescription>
+        </div>
+        {/* T-448: the add form is a modal opened from the header. */}
+        <FormModal
+          trigger="+ Record prepaid item"
+          title="Record a prepaid item"
+          description="Below ₱5,000 this is an ordinary expense, not a prepaid — the same threshold fixed assets use."
+          size="md"
+        >
+          <CheckedForm rules={PREPAID_ADD_RULES} action={createPrepaidItemAction} className="space-y-4">
+            <FormSection title="Prepaid item">
+              <FormGrid layout="fields">
+                <Field label="Name" width="name" hint="What it is, as somebody would say it out loud" rule={PREPAID_ADD_RULES.name}>
+                  <Input {...nativeAttrs(PREPAID_ADD_RULES.name)} placeholder="Fire insurance 2026" className="w-full" />
+                </Field>
+                <Field label="Store" width="name" rule={PREPAID_ADD_RULES.storeId}>
+                  <Select {...nativeAttrs(PREPAID_ADD_RULES.storeId)} defaultValue="" className="w-full">
+                    <option value="">Choose a store…</option>
+                    {stores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.code})
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Kind" width="code">
+                  <Select name="category" defaultValue="insurance" className="w-full">
+                    {PREPAID_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>
+                        {CATEGORY_LABEL[c] ?? c}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </FormGrid>
+            </FormSection>
+            <FormSection title="Coverage and cost">
+              <FormGrid layout="fields">
+                <Field label="Total cost" width="code" rule={PREPAID_ADD_RULES.totalCost}>
+                  <input
+                    {...nativeAttrs(PREPAID_ADD_RULES.totalCost)}
+                    placeholder="0.00"
+                    className={INPUT}
+                  />
+                </Field>
+                <Field label="Coverage starts" width="date" hint="The first month the cover actually applies to" rule={PREPAID_ADD_RULES.coverageStartDate}>
+                  <Input {...nativeAttrs(PREPAID_ADD_RULES.coverageStartDate)} type="date" className="w-full" />
+                </Field>
+                <Field
+                  label="Coverage months"
+                  width="short"
+                  rule={PREPAID_ADD_RULES.coverageMonths}
+                  hint="The CONTRACT's term — read it off the document, don't estimate. Released monthly, evenly, from the coverage start, with any odd centavos landing on the final month so the total is exact."
+                >
+                  <input
+                    {...nativeAttrs(PREPAID_ADD_RULES.coverageMonths)}
+                    defaultValue={12}
+                    className={INPUT}
+                  />
+                </Field>
+              </FormGrid>
+            </FormSection>
+            <FormGrid layout="fields">
+              <Field label="Notes" width="long">
+                <Input name="notes" className="w-full" />
+              </Field>
+            </FormGrid>
+            {/* ⭐ No interval selector, deliberately (§10). A 12-month policy covers 12 months;
+                charging it quarterly would recognise cost for months not yet covered, which is the
+                error prepaid accounting exists to prevent. */}
+            <SubmitButton pendingLabel="Recording…">Record prepaid item</SubmitButton>
+          </CheckedForm>
+        </FormModal>
       </div>
 
       <FlashBanner flash={sp} />
@@ -169,112 +242,9 @@ export default async function PrepaidPage({
           {onlyReview ? 'Nothing needs review.' : 'No prepaid items yet.'}
         </p>
       )}
-
-      {/* ── Add one ──────────────────────────────────────────────────────────────────── */}
-      <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <div>
-          <h2 className="font-medium">Record a prepaid item</h2>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            Below ₱5,000 this is an ordinary expense, not a prepaid — the same threshold fixed
-            assets use.
-          </p>
-        </div>
-
-        <CheckedForm rules={PREPAID_ADD_RULES} action={createPrepaidItemAction} className="space-y-4">
-          <>
-            <FormSection title="Prepaid item">
-              <FormGrid layout="fields">
-                <div className="min-w-0 erp-field-name">
-                  <Field rule={PREPAID_ADD_RULES.name} label="Name" hint="What it is, as somebody would say it out loud">
-                    <Input {...nativeAttrs(PREPAID_ADD_RULES.name)}    placeholder="Fire insurance 2026" className="w-full" />
-                  </Field>
-                </div>
-                <div className="min-w-0">
-                  <Field rule={PREPAID_ADD_RULES.storeId} label="Store">
-                    <Select {...nativeAttrs(PREPAID_ADD_RULES.storeId)}   defaultValue="" className="w-full">
-                      <option value="">Choose a store…</option>
-                      {stores.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} ({s.code})
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                </div>
-                <div className="min-w-0">
-                  <Field label="Kind">
-                    <Select name="category" defaultValue="insurance" className="w-full">
-                      {PREPAID_CATEGORIES.map((c) => (
-                        <option key={c} value={c}>
-                          {CATEGORY_LABEL[c] ?? c}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                </div>
-              </FormGrid>
-            </FormSection>
-            <FormSection title="Coverage and cost">
-              <FormGrid layout="fields">
-                <div className="min-w-0">
-                  <Field rule={PREPAID_ADD_RULES.totalCost} label="Total cost">
-                    <input {...nativeAttrs(PREPAID_ADD_RULES.totalCost)}
-
-
-
-                      placeholder="0.00"
-                      className={INPUT}
-                    />
-                  </Field>
-                </div>
-                <div className="min-w-0 erp-field-date">
-                  <Field rule={PREPAID_ADD_RULES.coverageStartDate} label="Coverage starts" hint="The first month the cover actually applies to">
-                    <Input {...nativeAttrs(PREPAID_ADD_RULES.coverageStartDate)}  type="date"  className="w-full" />
-                  </Field>
-                </div>
-                <div className="min-w-0 erp-field-short">
-                  <Field rule={PREPAID_ADD_RULES.coverageMonths}
-                    label="Coverage months"
-                    hint="The CONTRACT's term — read it off the document, don't estimate"
-                  >
-                    <input {...nativeAttrs(PREPAID_ADD_RULES.coverageMonths)}
-
-
-
-                      defaultValue={12}
-                      className={INPUT}
-                    />
-                  </Field>
-                </div>
-              </FormGrid>
-            </FormSection>
-          </>
-          <Field label="Notes">
-            <Input name="notes" className="w-full" />
-          </Field>
-
-          {/* ⭐ No interval selector, deliberately (§10). A 12-month policy covers 12 months;
-              charging it quarterly would recognise cost for months not yet covered, which is the
-              error prepaid accounting exists to prevent. */}
-          <p className="text-xs text-neutral-400 dark:text-neutral-600">
-            Released monthly, evenly, from the coverage start — with any odd centavos landing on
-            the final month so the total is exact.
-          </p>
-
-          <SubmitButton pendingLabel="Recording…">Record prepaid item</SubmitButton>
-        </CheckedForm>
-      </section>
     </Page>
   );
 }
 
 // Kept raw: t343-s5-5w-number-boxes.test.ts reads these two boxes' `<input` source text.
-const INPUT =
-  'w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink';
-
-function Field({ width, label, hint, rule, children }: FieldProps) {
-  const body = <><span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>{children}{hint && <span className="text-xs text-neutral-500 dark:text-neutral-500">{hint}</span>}</>;
-  const sizing = width ? ` erp-field-${width}` : '';
-  if (!rule) return <label className={`flex min-w-0 flex-col gap-1${sizing}`}>{body}</label>;
-  return <div className={`min-w-0${sizing}`}><label className="flex min-w-0 flex-col gap-1">{body}</label><FieldCheck rule={rule} /></div>;
-}
+const INPUT = 'w-full min-h-11 rounded-[10px] border border-field-border bg-field px-3 py-2 text-sm text-ink';

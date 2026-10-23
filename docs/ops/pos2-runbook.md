@@ -7,7 +7,23 @@ their ERP v2 PIN. It runs as `shareat-pos.service` on **159.223.46.224** (our pr
 
 Written by the T-424 lane. **The lane does not apply any of this**; the orchestrator and Ian do (spec Ruling 12).
 
-## 0. What each part needs (in the order to do them)
+## 21 October update — local emulator testing and shared-backend work
+
+Ian authorized starting P1 now and testing APK builds on an Android emulator. The destination architecture is
+APK device storage/outbox → authenticated server API → the shared ERP PostgreSQL backend. SQLite is only a
+candidate; existing IndexedDB is retained while persistence is measured. See T-462 and the phase plan.
+
+For **local runtime checks**, the separate cloud TEST-project prerequisite below is superseded by the isolated
+T-463 demo profile. Start local Auth/Firestore/Storage emulators with project **demo-shareat-pos2**, seed synthetic
+data, and build the dedicated emulator APK. Never use a TEST store in live `shareat-hub-v2`, production credentials,
+or real payments. The demo profile is not a production deployment configuration or production-rules parity test.
+
+The server instructions below describe the existing T-424 Firebase transition, not a completed P1 migration.
+Starting local Firebase emulators alone does not configure the POS server, ERP approvals or PostgreSQL APIs.
+Real device/printer/payment/visual checks and offline soak remain release gates. No interim Firebase launch is
+required by default; retain these server instructions for paths that still depend on it until their owner changes.
+
+## 0. Historical T-424 server prerequisites (cloud transition only)
 
 | # | Step | Who | Done when |
 |---|---|---|---|
@@ -35,7 +51,7 @@ project has no v1 server or reconcile cron). A production build leaves it unset 
 `/srv/shareat-shared/pos2.env` (persistent, never shipped, mode 600, owner `shareat`). Three values, all required:
 
 ```
-POS_FIREBASE_SA_KEY_FILE=/srv/shareat-shared/pos2-firebase-key.json
+POS_FIREBASE_SA_KEY_FILE=/srv/shareat-shared/secrets/pos2-firebase-key.json
 DATABASE_URL=<the same connection string the ERP uses (the RLS-enforcing app role), from /srv/shareat-shared/.env.local>
 POS_ORG_ID=<the ERP organisation id (uuid)>
 ```
@@ -104,7 +120,7 @@ every tablet is an ERP **terminal person** AND is linked to its **device id**.
 ## 8. The detector (read-only, run by a person)
 `POS_FIREBASE_SA_KEY_FILE=<key file> node apps/pos/scripts/pos2-audit.mjs --from=20261001 --to=20261016 [--store=<POS store id>]`
 Prints, per store and day, COUNTS and RECEIPT NUMBERS only: refunds without an approver, refunds without a receipt-number record, payment conversions not
-made by POS v2, and POS v2 corrections that v1 has since voided. Exit 0 = clean, 2 = something listed. It only ever reads.
+made by POS v2, POS v2 corrections that v1 has since voided, and (T-425) unpaid tables voided OFFLINE (`voidedOffline`, listed by session id for a manager to review). Exit 0 = clean, 2 = something listed. It only ever reads.
 
 ## 9. What this does NOT protect (until v1 retires at P2)
 POS v2 gates its OWN refund, correction and void actions. v1's server is still live and Firestore rules are still v1's loose ones (DEF-652), so while v1
@@ -121,3 +137,41 @@ type-only `as unknown as` so it compiles under both flag sets).
 Stop the unit (`sudo systemctl stop shareat-pos`). The tablets' refund, correction and online-void buttons then say they cannot reach the POS server and change
 nothing; sales, offline payment and the offline void are unaffected (they do not use the server). Re-enable v1's own refund path is NOT offered: it is the hole
 this task closes.
+
+## 12. Offline selling - T-425
+A tablet keeps selling for a day without the internet. Every sale is written to the tablet's own database (the **sale ledger**) before anything else, and
+the tablet only counts a sale as sent when it has READ it back from the server. Unsent sales exist only on that tablet.
+
+**Ship precondition.** The health route `GET /api/pos2/health` must be live on `pos2.shareat.net` before any tablet runs a v2 APK. Each tablet probes it every
+30 s (10 s while offline) and believes only the answer `{"ok":true,"version":"..."}`; if the route is missing every tablet reads "offline": card and QR Ph are
+disabled and every sale becomes an offline sale. Check from any laptop: `curl -s https://pos2.shareat.net/api/pos2/health` prints `{"ok":true,"version":"..."}`.
+The route needs no key, no database and no Firebase, so it also answers while those are down.
+
+**What a tablet does offline (bible row 356, ADR A3).**
+- Tenders: Cash; GCash and Maya only with a reference number (the sale is marked TO CHECK for the manager). Card and QR Ph show "Needs the internet".
+- Refunds: not offline ("Refunds need the internet.").
+- Unpaid-table void: only a signed-in manager or admin, only on a table that tablet opened. It is marked `voidedOffline`, listed in Settings under "Review after
+  outage" and by the detector (section 8).
+- Pay or void a table opened on ANOTHER tablet: refused ("This table was opened on another tablet. Pay it there, or wait for the internet.").
+- At 50,000.00 pesos of unsent sales a banner tells the manager. Selling never stops.
+- An **X-slip** (cash control, not a BIR document) prints every 4 hours of an offline period and on demand (Settings > Unsent sales > Print X-slip). With no
+  printer paired it shows on screen until someone prints it or confirms they wrote it down.
+
+**Installing, updating, reinstalling.** Unsent sales live only in the tablet's app data.
+- Never install a debug build on a store tablet. It is signed with a different key, cannot update the release app in place, and staff would have to uninstall
+  first, which deletes the unsent sales. Only the release APK built by CI (same release key every time) goes on a store tablet.
+- Never install an older APK over a newer one. The database is upgraded by the newer app and the older app then refuses to open it.
+- Before ANY update, Settings > Unsent sales must say `Unsent sales: 0`. The "Check for update" link is hidden while the count is above 0.
+- Never uninstall, "Clear data" or "Clear cache" the app while the count is above 0.
+- Test before each release: **an in-place update during an outage**. In a real outage drill, sell 5 offline, then update the APK in place over the installed one
+  (same key) while the tablet is still offline, open the app, and check the 5 sales are still listed as unsent and reach the server when the internet returns.
+  If any is missing, do NOT roll out.
+
+**When something is listed for a manager** (Settings > Unsent sales, managers and admins):
+- *Quarantined*: the server already had something different for that sale, or the table was paid/voided on another tablet. The server copy was never touched.
+  Decide by hand; the tablet will not retry it.
+- *Rejected*: the server refused the write (a permission or validation error). It will not be retried.
+- *Stuck*: 10 attempts failed (for example a long outage in the middle of a pass). Press Retry once the internet is back.
+- *Follow-ups that failed*: analytics, loyalty or PIN effects that hit a conflict. Retry, or fix the cause.
+
+Verify a terminal's numbers after a soak with `apps/pos/scripts/pos2-soak-verify.mjs` (see `docs/ops/pos2-soak.md`).

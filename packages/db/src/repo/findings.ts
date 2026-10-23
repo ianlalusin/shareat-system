@@ -2432,6 +2432,7 @@ export async function pinSignInFailures(tx: Tx, orgId: string): Promise<Detected
        where a.org_id = ${orgId}
          and (a.occurred_at at time zone 'Asia/Manila')::date >= ((now() at time zone 'Asia/Manila')::date - (${FINDING_LOOKBACK_DAYS}::int - 1))
          and a.kind in ('miss', 'lockout')
+         and a.staff_code is null
        group by a.store_id, a.device_id, (a.occurred_at at time zone 'Asia/Manila')::date
     ), totals as (
       select store_id, device_id, sum(pauses)::int as pauses_total, max(misses)::int as worst
@@ -2481,7 +2482,7 @@ export async function pinSignInStopped(tx: Tx, orgId: string): Promise<DetectedF
   const rows = (await tx.execute(sql`
     select t.store_id::text as store_id, s.name as store_name, t.stopped_at as stopped_at,
            (select count(*)::int from sign_in_attempts a
-             where a.store_id = t.store_id and a.kind = 'miss'
+             where a.store_id = t.store_id and a.staff_code is null and a.kind = 'miss'
                and a.occurred_at > t.stopped_at - interval '24 hours'
                and a.occurred_at <= t.stopped_at) as misses
       from pin_attempt_throttle t

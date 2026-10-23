@@ -164,6 +164,12 @@ const ALLOWLISTED_UNWRAPPED_NULL_TX_SITES: ReadonlySet<string> = new Set([
   // `verifyTerminalAction` (layer 1) and `signInWithTerminalPinAction` (layer 2's re-resolve,
   // orchestrator's carrier ruling, 2026-09-13) — one key here covers both call sites.
   'app/sign-in/actions.ts:resolveTerminalIdentity',
+  // T-464 - the paired POS tablet: `signInOnPairedTablet` resolves the pairing from the cookie (the lookup that DISCOVERS the org and store, on the auth door,
+  // bible row 382), so there is no `actor.orgId` yet; `resolvePosTablet` is the same lookup from the sign-in page; pairing's own `signOut(null, token)` ends the
+  // manager's session by raw token (DEF-288 shape, as above).
+  'app/sign-in/actions.ts:signInOnPairedTablet',
+  'app/sign-in/page.tsx:resolvePosTablet',
+  'app/settings/pos-tablet/actions.ts:signOut',
   'app/sign-in/lib.ts:signInWithFirebase',
   'lib/session.ts:resolveActor',
 ]);

@@ -3,6 +3,10 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 import { cast, expectSentenceError, fd, plain, render, run, sql, type Cast } from './t401-s4-common';
 import { testItemCode } from '../../../../packages/domain/tests/integration/_fixtures/item-code';
 
+// T-448: a known verb (Approve, Reject, Save recipe, ...) is an icon button: its words are the aria-label, not visible text.
+// Expose them to the text checks so "shows X" and "does not show X" both still mean something.
+const plainL = (html: string): string => plain(html.replace(/<button\b[^>]*aria-label="([^"]*)"[^>]*>/g, '<button> $1 '));
+
 /**
  * T-413 S2 - the recipe screens and their actions (docs/tasks/413-production-recipe-admin.md R6, invariant 11), built with
  * Q1 = (a), Q2 = (a). TESTER, not BUILDER. Red today: apps/erp/src/app/inventory/production/recipes/** does not exist (module
@@ -76,7 +80,7 @@ describe('invariant 11 - /inventory/production/recipes: the list', () => {
   it('a manager reads the list (name, "Makes 2 kg of Stew Out", ingredient count) and sees no New-recipe control. Mutant: buttons without the capability check', async () => {
     const w = await world('list-m');
     const html = await render(LIST, w.c.manager, {});
-    const t = plain(html);
+    const t = plainL(html);
     expect(t).toContain('Stew');
     expect(t).toContain('Stew Out');
     expect(t).toMatch(/Makes\s+2(\.0+)?\s*kg\s+of\s+Stew Out/);
@@ -88,20 +92,20 @@ describe('invariant 11 - /inventory/production/recipes: the list', () => {
   it('an admin sees the New-recipe control linking to /new', async () => {
     const w = await world('list-a');
     const html = await render(LIST, w.c.admin, {});
-    expect(plain(html)).toContain('New recipe');
+    expect(plainL(html)).toContain('New recipe');
     expect(html).toContain(`href="${BASE}/new"`);
     expect(html).toContain(`href="${BASE}/${w.stew}"`);
   });
 
   it('the filter: default = active only; ?status=retired = retired only; ?status=all = both. Mutant: retired recipes in the default list', async () => {
     const w = await world('list-f');
-    const def = plain(await render(LIST, w.c.admin, {}));
+    const def = plainL(await render(LIST, w.c.admin, {}));
     expect(def).toContain('Stew');
     expect(def).not.toContain('Old Chowder');
-    const ret = plain(await render(LIST, w.c.admin, { search: { status: 'retired' } }));
+    const ret = plainL(await render(LIST, w.c.admin, { search: { status: 'retired' } }));
     expect(ret).toContain('Old Chowder');
     expect(ret).not.toMatch(/Stew(?! Out)/);
-    const all = plain(await render(LIST, w.c.admin, { search: { status: 'all' } }));
+    const all = plainL(await render(LIST, w.c.admin, { search: { status: 'all' } }));
     expect(all).toContain('Old Chowder');
     expect(all).toMatch(/Stew(?! Out)/);
   });
@@ -110,7 +114,7 @@ describe('invariant 11 - /inventory/production/recipes: the list', () => {
     const w = await world('list-o1');
     const o = await world('list-o2');
     await sql`update production_recipes set name = 'Foreign Secret' where id = ${o.stew}`;
-    expect(plain(await render(LIST, w.c.admin, { search: { status: 'all' } }))).not.toContain('Foreign Secret');
+    expect(plainL(await render(LIST, w.c.admin, { search: { status: 'all' } }))).not.toContain('Foreign Secret');
   });
 });
 
@@ -120,7 +124,7 @@ describe('invariant 11 - /inventory/production/recipes/[id]: view, edit form, re
     const w = await world('det-m');
     for (const id of [w.stew, w.retired]) {
       const html = await render(DETAIL, w.c.manager, { params: { id } });
-      const t = plain(html);
+      const t = plainL(html);
       expect(t).toMatch(/Stew|Old Chowder/);
       expect(t).toContain('Rice');
       for (const bad of ['Save recipe', 'Retire recipe', 'Restore recipe']) expect(t, bad).not.toContain(bad);
@@ -132,7 +136,7 @@ describe('invariant 11 - /inventory/production/recipes/[id]: view, edit form, re
   it('an admin sees the form: label "Output quantity, in kg" for a kg output, per-line "Quantity, in kg" / "in pcs", no unit field. Mutants: label ignores the base unit; a unit control exists', async () => {
     const w = await world('det-a');
     const html = await render(DETAIL, w.c.admin, { params: { id: w.stew } });
-    const t = plain(html);
+    const t = plainL(html);
     expect(t).toContain('Save recipe');
     expect(t).toContain('Retire recipe');
     expect(t).not.toContain('Restore recipe');
@@ -148,12 +152,12 @@ describe('invariant 11 - /inventory/production/recipes/[id]: view, edit form, re
     const w = await world('det-pcs');
     const [r] = await sql<{ id: string }[]>`insert into production_recipes (org_id, name, output_item_id, output_quantity, created_by) values (${w.c.orgId}, 'Sauce batch', ${w.sauce}, 10, ${w.c.admin.personId}) returning id`;
     await sql`insert into production_recipe_lines (recipe_id, item_id, quantity, unit) values (${r!.id}, ${w.rice}, 1, 'kg')`;
-    expect(plain(await render(DETAIL, w.c.admin, { params: { id: r!.id } }))).toContain('Output quantity, in pcs');
+    expect(plainL(await render(DETAIL, w.c.admin, { params: { id: r!.id } }))).toContain('Output quantity, in pcs');
   });
 
   it('a retired recipe offers Restore, not Retire (admin); a legacy gram line is pre-filled converted to kg', async () => {
     const w = await world('det-r');
-    const t = plain(await render(DETAIL, w.c.admin, { params: { id: w.retired } }));
+    const t = plainL(await render(DETAIL, w.c.admin, { params: { id: w.retired } }));
     expect(t).toContain('Restore recipe');
     expect(t).not.toContain('Retire recipe');
     const g = await recipe(w.c, 'Gram recipe', w.stewOut, [[w.rice, '500', 'g']]);
@@ -187,7 +191,7 @@ describe('invariant 11 - /new', () => {
     }
     if (drawn !== null) {
       expect(drawn, 'a manager was given the create form').not.toMatch(/name="outputQuantity"/);
-      expect(plain(drawn)).not.toContain('Save recipe');
+      expect(plainL(drawn)).not.toContain('Save recipe');
     }
   });
 });
@@ -292,6 +296,6 @@ describe('/inventory/production links to the recipes screen', () => {
     await sql`insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by) values (${w.c.orgId}, ${w.c.storeA}, 'KIT', 'Kitchen', ${t!.id}, 'operating', true, ${w.c.admin.personId})`;
     const html = await render(PRODUCTION, w.c.manager, { search: { store: w.c.storeA } });
     expect(html).toContain(`href="${BASE}"`);
-    expect(plain(html)).toContain('Recipes');
+    expect(plainL(html)).toContain('Recipes');
   });
 });

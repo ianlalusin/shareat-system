@@ -206,3 +206,25 @@ report).
 ## Open questions
 1. Refunds always need a manager PIN (recommended; 7 refunds all-time) — or may a manager signed in on the tablet
    refund without typing it? Recommended: always the PIN, so the approver is recorded.
+
+## DEF-677 release audit scope — 2026-10-20
+
+Ian authorized auditing and correcting unfinished branches before merge. The existing T-424
+Capacitor script can delete saved source if the build recreates its destination; this blocks
+executing its required build gate. Scope: `apps/pos/scripts/build-cap.mjs`,
+`tests/unit/pos-v2-cap-restore.test.ts`, the existing stash tests, register and release report.
+Restore missing entries into existing directories, preserve both conflicting versions, and
+refuse a new build if any saved or unknown content remains. Never recursively delete the stash.
+Tests execute a copied script with a fake build in disposable temporary fixtures, never Next
+or the real workspace: three data-loss cases were red before implementation; build-failure
+and crashed-run recovery are positive controls. Real build:cap follows only after these pass.
+Verified: all eight focused checks pass; actual build:cap exits zero and restores all 34
+moved source files with identical SHA-256 hashes and no remaining stash. No droplet build.
+The actual export then exposed DEF-711: appVersion imported the whole manifest into the
+client, causing the unchanged APK boundary scan to find its firebase-admin dependency name.
+Supporting scope extends to `apps/pos/next.config.mjs`, `src/lib/appVersion.ts` and its test:
+inject only the version scalar at build time, retaining CI override/package fallback. Two
+focused controls failed first; retain the existing artifact scan without weakening its regex.
+Final normal/cap builds pass; 92 guard/census/artifact checks pass with the unchanged scan.
+The Windows artifact scan took six seconds, so the local command used --testTimeout 30000;
+repository and CI timeout settings are unchanged. Seven version/health controls also pass.

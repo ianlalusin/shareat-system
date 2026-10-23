@@ -87,7 +87,7 @@ async function setup(hint: string, pin = '123456'): Promise<Fixture> {
   const deviceId = await mkPerson(`${hint} Terminal`, 'terminal');
   await sql`insert into person_store_scope (person_id, store_id) values (${personId}, ${storeId})`;
   // T-407: the PIN door also needs the org-level rule, so the cashier is employed (open employment) as well as scoped.
-  await sql`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${orgId}, ${storeId}, ${personId}, ${`FX${++seq}`}, 'regular', '2020-01-01')`;
+  await sql`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${orgId}, ${storeId}, ${personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2020-01-01')`;
   await sql`
     insert into person_credentials (person_id, kind, store_id, secret_hash, lookup_hash)
     values (${personId}, 'pin', ${storeId}, ${await hashPin(pin)}, ${pinLookupHash(orgId, pin)})
@@ -270,7 +270,7 @@ describe('T-395 S1 — tier 2, the daily budget (tests 1-8)', () => {
     const [other] = await sql<{ id: string }[]>`
       insert into persons (org_id, display_name) values (${f.orgId}, 'Elsewhere') returning id`;
     await sql`insert into person_store_scope (person_id, store_id) values (${other!.id}, ${f.storeId2})`;
-    await sql`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${f.orgId}, ${f.storeId2}, ${other!.id}, ${`FX${++seq}`}, 'regular', '2020-01-01')`;
+    await sql`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${f.orgId}, ${f.storeId2}, ${other!.id}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2020-01-01')`;
     await sql`
       insert into person_credentials (person_id, kind, store_id, secret_hash, lookup_hash)
       values (${other!.id}, 'pin', ${f.storeId2}, ${await hashPin('654321')}, ${pinLookupHash(f.orgId, '654321')})`;
@@ -289,7 +289,7 @@ describe('T-395 S1 — tier 2, the daily budget (tests 1-8)', () => {
     const cols = await sql<{ column_name: string }[]>`
       select column_name from information_schema.columns
        where table_schema = 'public' and table_name = 'sign_in_attempts' order by column_name`;
-    expect(cols.map((c) => c.column_name)).toEqual(['actor_person_id', 'device_id', 'id', 'kind', 'occurred_at', 'org_id', 'store_id']);
+    expect(cols.map((c) => c.column_name)).toEqual(['actor_person_id', 'device_id', 'id', 'kind', 'occurred_at', 'org_id', 'staff_code', 'store_id']); // T-464: staff_code is the Employee ID bucket key (an ID like SE-007, never a PIN, hash or prefix)
   });
 });
 

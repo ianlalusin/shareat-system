@@ -1347,6 +1347,13 @@
       "breakpoints": true
     },
     {
+      "idx": 212,
+      "version": "7",
+      "when": 1804390307084,
+      "tag": "0212_t464_pos_tablet_pairings",
+      "breakpoints": true
+    },
+    {
       "idx": 213,
       "version": "7",
       "when": 1804476707084,

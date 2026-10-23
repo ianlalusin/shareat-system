@@ -59,6 +59,8 @@ export function actionLabel(a: ActivityLog["action"] | string): string {
     case "DISCOUNT_REMOVED": return "Discount Removed";
     case "DISCOUNT_EDITED": return "Discount Edited";
     case "BILL_DISCOUNT_APPLIED": return "Bill Discount";
+    case 'STATUTORY_DINER_ADDED': return 'Qualifying Diner Added';
+    case 'STATUTORY_DINER_REMOVED': return 'Qualifying Diner Removed';
     case "BILL_DISCOUNT_REMOVED": return "Bill Disc. Removed";
     case "CUSTOM_CHARGE_ADDED": return "Charge Added";
     case "CUSTOM_CHARGE_REMOVED": return "Charge Removed";
@@ -192,6 +194,9 @@ export function describeActivityLog(log: ActivityLog): DescribedLog {
       };
     case "BILL_DISCOUNT_APPLIED":
       return { type: "discount", title: "Bill discount applied", detail: meta.discountName || log.note || undefined, amount };
+    case 'STATUTORY_DINER_ADDED':
+    case 'STATUTORY_DINER_REMOVED':
+      return { type: 'discount', title: actionLabel(log.action), detail: log.note || undefined };
     case "BILL_DISCOUNT_REMOVED":
       return { type: "discount", title: "Bill discount removed", detail: meta.discountName || undefined, amount };
     case "CUSTOM_CHARGE_ADDED":

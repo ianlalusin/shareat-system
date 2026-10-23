@@ -4,7 +4,7 @@
  * `_test` name guard; scratch database names contain "_test".
  *
  * M1/M2 build a base database migrated to the entry BEFORE 0213 (the last journal entry whose number is
- * below 0213; derived from the journal, never typed), then clone it from a template. Seed rows are made
+ * below 0213, which is 0212; derived from the journal, never typed), then clone it from a template. Seed rows are made
  * through the catalog-driven synthesizer in t398-s3-fixture.ts (replica mode, with CHECKs stripped on the
  * four tables the seeds touch, so the rest of the schema stays exactly as the migration will find it).
  *
@@ -44,9 +44,9 @@ interface JournalEntry {
 const journalFile = () => JSON.parse(readFileSync(join(MIGRATIONS_FOLDER, 'meta', '_journal.json'), 'utf8')) as { entries: JournalEntry[] };
 const entryNumber = (tag: string) => Number(tag.slice(0, 4));
 
-/** The entry just before S3's (number < 212): the base the scratch databases are built to. */
+/** The entry just before S3's (number <= 212, i.e. 0212_t464_pos_tablet_pairings): the base the scratch databases are built to. */
 function baseTag(): string {
-  const below = journalFile().entries.filter((e) => entryNumber(e.tag) < 212);
+  const below = journalFile().entries.filter((e) => entryNumber(e.tag) <= 212);
   return below[below.length - 1]!.tag;
 }
 const s3Entry = () => journalFile().entries.find((e) => e.tag.startsWith('0213_'));

@@ -264,7 +264,7 @@ export async function mkPerson(f: Fixture, name: string, employedAt: string | nu
   if (employedAt) {
     await sql`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-      values (${f.orgId}, ${employedAt}, ${p!.id}, ${uid('SC')}, 'regular', '2025-01-01')`;
+      values (${f.orgId}, ${employedAt}, ${p!.id}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01')`;
   }
   return { id: p!.id, name: nm };
 }

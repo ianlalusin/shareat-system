@@ -201,38 +201,34 @@ export async function getPositionsByIds(tx: Tx, orgId: string, ids: string[]): P
  */
 export async function allocateStaffCode(tx: Tx, storeId: string): Promise<string> {
   await tx.execute(sql`select 1 from stores where id = ${storeId} for update`);
-  const result = await tx.execute<{ next: number }>(sql`
-    select coalesce(max(nullif(regexp_replace(staff_code, '\\D', '', 'g'), '')::int), 0) + 1 as next
-    from employments where store_id = ${storeId}`);
-  const next = Number((result as unknown as { next: number }[])[0]?.next ?? 1);
-  return `SE-${String(next).padStart(3, '0')}`;
+  // DEF-725 (T-464): read ONLY codes shaped `SE-` + digits, and take their digits as numeric. The old form stripped every non-digit
+  // from every code and cast to int, so one digit-heavy code overflowed int and blocked every later hire at the store.
+  const result = await tx.execute<{ next: string }>(sql`
+    select (coalesce(max(substring(staff_code from 4)::numeric), 0) + 1)::text as next
+    from employments where store_id = ${storeId} and staff_code ~ '^SE-[0-9]+$'`);
+  const next = String((result as unknown as { next: string }[])[0]?.next ?? '1');
+  return `SE-${next.padStart(3, '0')}`;
 }
 
 /**
- * T-391 S5 (S9). Is this staff code already used at this store? Case-insensitive, the comparison the
- * `unique (store_id, lower(staff_code))` index makes. It takes the same store-row lock as `allocateStaffCode`, so a
- * concurrent hire cannot take the code between this check and the insert. The index stays the backstop.
+ * T-464. The LIVE (not ended) employment at a store whose staff-code NUMBER is `number`, compared exactly as the unique index
+ * `(store_id, ltrim(substring(staff_code from 4), '0'))` compares - so `7`, `07`, `007` and a stored `SE-0007` are the same number.
+ * Read-only: no `for update` (a sign-in must not queue behind a hire). Returns nothing for a non-standard stored code; never throws on one.
  */
-export async function findEmploymentByStaffCode(tx: Tx, storeId: string, staffCode: string): Promise<EmploymentRow | undefined> {
-  await tx.execute(sql`select 1 from stores where id = ${storeId} for update`);
-  const [row] = await tx
-    .select()
-    .from(employments)
-    .where(and(eq(employments.storeId, storeId), sql`lower(${employments.staffCode}) = lower(${staffCode})`))
-    .limit(1);
-  return row as EmploymentRow | undefined;
-}
-
-/** T-391 S5. Every staff code an org holds, with its store's code, so the load's planner can see which are taken. */
-export async function listStaffCodes(tx: Tx, orgId: string): Promise<Array<{ storeCode: string; staffCode: string }>> {
+export async function findLiveEmploymentByStaffNumber(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  number: string,
+): Promise<{ id: string; personId: string; staffCode: string } | undefined> {
+  const wanted = number.replace(/^0+/, '');
   const result = await tx.execute(sql`
-    select s.code as store_code, e.staff_code
-    from employments e join stores s on s.id = e.store_id
-    where e.org_id = ${orgId}`);
-  return (result as unknown as Array<{ store_code: string; staff_code: string }>).map((r) => ({
-    storeCode: String(r.store_code),
-    staffCode: String(r.staff_code),
-  }));
+    select id, person_id, staff_code from employments
+     where org_id = ${orgId} and store_id = ${storeId} and ended_on is null
+       and staff_code ~ '^SE-[0-9]+$' and ltrim(substring(staff_code from 4), '0') = ${wanted}
+     limit 1`);
+  const r = (result as unknown as Array<{ id: string; person_id: string; staff_code: string }>)[0];
+  return r ? { id: String(r.id), personId: String(r.person_id), staffCode: String(r.staff_code) } : undefined;
 }
 
 /** T-391 S5. Positions of an org with their store's code (null = canonical, org-wide), for the load's planner. */

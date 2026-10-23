@@ -20,6 +20,6 @@ describe('T-453 T6 item audit actions are in the catalogue', () => {
     expect([e!.category, e!.sensitivity, e!.scope]).toEqual([rename.category, rename.sensitivity, rename.scope]);
   });
   it('the list stays under the ceiling (189 entries after this task)', () => {
-    expect(AUDIT_CATALOGUE.length).toBeLessThanOrEqual(190);
+    expect(AUDIT_CATALOGUE.length).toBeLessThanOrEqual(195); // T-464: raised with t402-s1b-catalogue (pos_tablet.paired / .unpaired)
   });
 });

@@ -228,7 +228,7 @@ const EXEMPT: Record<string, string> = {
 
   // ---- T-434 — staff signature (packages/domain/src/files/signature.ts) --------------------
   assertMayLearnSignatureAbsent:
-    'INTERNAL — `currentSignatureFile` (`people/staff-media.ts`), reached from `viewStaffSignatureUrl` and ' +
+    'INTERNAL — `currentSignatureFile` (`people/staff-media.ts`), reached from ' +
     '`signatureForPrint`, calls it when the person has no signature, so a non-viewer cannot tell "none" from "has one".',
   auditSignatureChange:
     'INTERNAL — `setStaffSignature` and `removeStaffSignature` (`people/staff-media.ts`) call it in the same ' +
@@ -239,7 +239,7 @@ const EXEMPT: Record<string, string> = {
   signatureBytes:
     'INTERNAL — `signatureForPrint` (`people/staff-media.ts`) is its only caller, for the print path.',
   signatureUrl:
-    'INTERNAL — `readFileUrl` (`files/index.ts`) and `viewStaffSignatureUrl` (`people/staff-media.ts`) call it to ' +
+    'INTERNAL — `readFileUrl` (`files/index.ts`) calls it to ' +
     'mint the 60-second link.',
   signatureForPrint:
     'UNWIRED — RESERVED: print routes for payslips/forms come later (T-434 spec: prints out of scope).',

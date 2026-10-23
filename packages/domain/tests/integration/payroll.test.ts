@@ -76,7 +76,7 @@ async function fixture(
 
   const [emp] = await sql<{ id: string }[]>`
     insert into employments (org_id, person_id, store_id, staff_code, started_on, employment_status, created_by)
-    values (${orgId}, ${workerId}, ${storeId}, ${uid('sc')}, '2026-01-01', 'regular', ${adminId}) returning id`;
+    values (${orgId}, ${workerId}, ${storeId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, '2026-01-01', 'regular', ${adminId}) returning id`;
 
   const [office] = await sql<{ id: string }[]>`
     select id from money_accounts where store_id = ${storeId}
@@ -449,7 +449,7 @@ describe('T-189 §8 — who may run payroll', () => {
     const f = await fixture('selfdeal');
     const [emp] = await sql<{ id: string }[]>`
       insert into employments (org_id, person_id, store_id, staff_code, started_on, employment_status, created_by)
-      values (${f.orgId}, ${f.adminId}, ${f.storeId}, ${uid('sc')}, '2026-01-01', 'regular', ${f.adminId}) returning id`;
+      values (${f.orgId}, ${f.adminId}, ${f.storeId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, '2026-01-01', 'regular', ${f.adminId}) returning id`;
     await asOrg(f.orgId, (tx) =>
       setPayRate(tx, f.admin, { employmentId: emp!.id, storeId: f.storeId, basis: 'daily', amount: '900.00', effectiveFrom: '2026-01-01' }));
     await sql`insert into attendance_days

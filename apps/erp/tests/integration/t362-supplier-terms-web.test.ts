@@ -30,6 +30,10 @@ class RedirectSignal extends Error {
   }
 }
 vi.mock('next/navigation', () => ({
+  // T-448: FormModal/Dialog read the address.
+  usePathname: () => '/',
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push() {}, replace() {}, refresh() {}, back() {}, forward() {}, prefetch() {} }),
   redirect: (to: string) => {
     throw new RedirectSignal(to);
   },
@@ -108,7 +112,7 @@ async function fixture(hint: string) {
   await sql`insert into person_store_scope (person_id, store_id) values (${adminId}, ${storeId})`;
   const [employment] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${orgId}, ${storeId}, ${adminId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+    values (${orgId}, ${storeId}, ${adminId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
   await grantEverydayPositionAccess(sql, { orgId, storeId, employmentId: employment!.id, personId: adminId, setBy: adminId });
   const admin_ = actor(orgId, adminId);
 
@@ -120,7 +124,7 @@ async function fixture(hint: string) {
   await sql`insert into person_store_scope (person_id, store_id) values (${verifierId}, ${storeId})`;
   const [verifierEmployment] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${orgId}, ${storeId}, ${verifierId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+    values (${orgId}, ${storeId}, ${verifierId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
   await grantEverydayPositionAccess(sql, { orgId, storeId, employmentId: verifierEmployment!.id, personId: verifierId, setBy: adminId });
   const verifier_ = actor(orgId, verifierId);
 
@@ -327,7 +331,7 @@ describe('W8 — createSupplierAction, name, termsMode=credit, creditTermsDays=1
     fd.set('creditTermsDays', '15');
     const to = await expectRedirectTo(() => createSupplierAction(fd));
     const url = urlOf(to);
-    expect(url.pathname, `redirect URL was: ${to}`).toBe('/ap');
+    expect(url.pathname, `redirect URL was: ${to}`).toBe('/ap/suppliers'); // T-448: the supplier add form moved to /ap/suppliers
     expect(url.searchParams.get('ok')).not.toBeNull();
     const [row] = await sql<{ id: string; credit_terms_days: number | null }[]>`select id, credit_terms_days from suppliers where name = ${name}`;
     expect(row, 'expected the new supplier row to exist').toBeDefined();
@@ -536,7 +540,8 @@ describe('W13 (render; Amendment A1 §2b) — /ap/suppliers list with a supplier
     // Amendment A1 §2b: the Terms cell must gate on `creditTermsDays === null`, never truthiness —
     // a truthy check would render the 0-day supplier as "Cash on delivery" too, so this counts
     // occurrences rather than merely matching once. Exactly ONE real COD supplier exists here.
-    const codCount = (html.match(/Cash on delivery/g) ?? []).length;
+    // T-448: the add form is always mounted on this page and has the option "Cash on delivery (no credit)"; count only the table cells.
+    const codCount = (html.match(/Cash on delivery(?! \(no credit\))/g) ?? []).length;
     expect(codCount, `"Cash on delivery" appeared ${codCount} times — the 0-day row must not be one of them`).toBe(1);
     expect(html).toMatch(/0 days/);
   });
@@ -565,7 +570,7 @@ describe('W14 (T-440 S9e B) - createSupplierAction, termsMode=cod, creditTermsDa
     fd.set('creditTermsDays', 'abc');
     const to = await expectRedirectTo(() => createSupplierAction(fd));
     expect(errorOf(to), `redirect URL was: ${to}`).toBeNull();
-    expect(urlOf(to).pathname).toBe('/ap');
+    expect(urlOf(to).pathname).toBe('/ap/suppliers'); // T-448: the supplier add form moved to /ap/suppliers
     const [row] = await sql<{ credit_terms_days: number | null }[]>`select credit_terms_days from suppliers where name = ${name}`;
     expect(row, 'expected the new supplier row to exist').toBeDefined();
     expect(row!.credit_terms_days).toBeNull();

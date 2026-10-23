@@ -18,9 +18,9 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { MONEY_ACCOUNT_RENAME } from './typed-forms';
-import { CheckedForm, EditableRecord, FieldCheck } from '@/components/forms';
-import { MONEY_ACCOUNT_CREATE_RULES, MONEY_ACCOUNT_RENAME_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
-import { Banner, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { MONEY_ACCOUNT_CREATE_RULES, MONEY_ACCOUNT_RENAME_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { Banner, ConfirmDestructive, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 
 export const metadata = { title: 'Money accounts — Shareat System' };
@@ -77,15 +77,16 @@ export default async function MoneyAccountsPage({
       {/* ── The register ─────────────────────────────────────────────────────────────── */}
       {accounts.length > 0 && (
         <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-          <table className="w-full min-w-[760px] border-collapse text-sm">
+          <table className="w-full min-w-[760px] table-fixed border-collapse text-sm">
             <thead>
               <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
                 <th className="px-3 py-2 font-medium">Account</th>
-                <th className="px-3 py-2 font-medium">Store</th>
-                <th className="px-3 py-2 font-medium">Kind</th>
-                <th className="px-3 py-2 font-medium">Held by</th>
+                <th className="w-20 px-3 py-2 font-medium">Store</th>
+                <th className="w-32 px-3 py-2 font-medium">Kind</th>
+                <th className="w-28 px-3 py-2 font-medium">Held by</th>
                 <th className="px-3 py-2 font-medium">Books</th>
-                <th className="px-3 py-2" />
+                <th className="w-28 px-3 py-2 text-right font-medium">Limit</th>
+                <th className="w-28 px-3 py-2" />
               </tr>
             </thead>
             <tbody>
@@ -117,10 +118,14 @@ export default async function MoneyAccountsPage({
                   <td className="px-3 py-2">
                     <CustodianBadge custodian={a.custodian} />
                   </td>
-                  <td className="px-3 py-2 text-xs text-neutral-500 dark:text-neutral-400">
+                  <td className="px-3 py-2 text-xs break-words text-neutral-500 dark:text-neutral-400">
                     {accountLabel(a.glAccountCode)}
                   </td>
-                  <td className="px-3 py-2 text-right">
+                  {/* T-448: the "may go to" limit is shown as text; the input lives in the Edit modal. */}
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {a.custodian === 'cashier' ? a.overdraftLimit : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
                     {/*
                       ⭐ THE FIVE GET A RENAME, NOT A RETIRE (bible row 156).
 
@@ -131,36 +136,24 @@ export default async function MoneyAccountsPage({
                     */}
                     {a.isActive && a.isFoundation && (
                       <EditableRecord action={renameMoneyAccountAction} label={a.name} hidden={{ moneyAccountId: a.id }} typed={typedFor(sp, MONEY_ACCOUNT_RENAME, a.id, actor.personId)} rules={MONEY_ACCOUNT_RENAME_RULES}>
-                        <div className="flex flex-wrap justify-end gap-1">
-                        <Field label={<span className="sr-only">Account name</span>} rule={MONEY_ACCOUNT_RENAME_RULES.name}>
-                          <Input
-                            {...nativeAttrs(MONEY_ACCOUNT_RENAME_RULES.name)}
-                            defaultValue={a.name}
-                            className="w-40 text-xs"
-                          />
-                        </Field>
-                        {/* ⭐ Only a cashier drawer consults this — office and staff balances are
-                            complete and block at zero regardless (row 154), so offering the field
-                            there would imply an overdraft they do not have. */}
-                        {a.custodian === 'cashier' && (
-                          <span
-                            className="self-center text-xs whitespace-nowrap text-neutral-500 dark:text-neutral-400"
-                            title="How far below zero this drawer may go before a draw is refused."
-                          >
-                            may go to −
-                          </span>
-                        )}
-                        {a.custodian === 'cashier' && (
-                          <Field label={<span className="sr-only">Overdraft limit</span>} rule={MONEY_ACCOUNT_RENAME_RULES.overdraftLimit}>
-                            <input
-                              {...nativeAttrs(MONEY_ACCOUNT_RENAME_RULES.overdraftLimit)}
-                              defaultValue={a.overdraftLimit}
-                              title="How far below zero this drawer may go before a draw is refused. Entered positive; 0 means never."
-                              className="w-24 rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-ink text-xs"
-                            />
+                        <FormGrid layout="fields">
+                          <Field label="Name" width="name" rule={MONEY_ACCOUNT_RENAME_RULES.name}>
+                            <Input {...nativeAttrs(MONEY_ACCOUNT_RENAME_RULES.name)} defaultValue={a.name} className="w-full" />
                           </Field>
-                        )}
-                        </div>
+                          {/* ⭐ Only a cashier drawer consults this — office and staff balances are
+                              complete and block at zero regardless (row 154), so offering the field
+                              there would imply an overdraft they do not have. */}
+                          {a.custodian === 'cashier' && (
+                            <Field
+                              label="May go to −"
+                              width="short"
+                              rule={MONEY_ACCOUNT_RENAME_RULES.overdraftLimit}
+                              hint="How far below zero this drawer may go before a draw is refused. Entered positive; 0 means never."
+                            >
+                              <Input {...nativeAttrs(MONEY_ACCOUNT_RENAME_RULES.overdraftLimit)} defaultValue={a.overdraftLimit} className="w-full" />
+                            </Field>
+                          )}
+                        </FormGrid>
                       </EditableRecord>
                     )}
                     {a.isActive && !a.isFoundation && (
@@ -183,87 +176,69 @@ export default async function MoneyAccountsPage({
       )}
 
       {/* ── Add one ──────────────────────────────────────────────────────────────────── */}
-      <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <div>
+      {/* T-448: the add form opens from a button, not sitting open on the page. */}
+      <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <div className="flex items-center justify-between gap-3">
           <h2 className="font-medium">Add a money account</h2>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            ⛔ <strong>Admin only.</strong> A money account is an account in the books, not a
-            setting — every peso entering it lands on the balance sheet.
-          </p>
+          <FormModal trigger="+ Add money account" title="Add a money account" size="md">
+            <CheckedForm rules={MONEY_ACCOUNT_CREATE_RULES} action={createMoneyAccountAction} className="space-y-4">
+              <FormGrid layout="fields">
+                <Field label="Name" width="name" hint="What staff call it — “GCash — cashier”, “BDO — office”" rule={MONEY_ACCOUNT_CREATE_RULES.name}>
+                  <Input {...nativeAttrs(MONEY_ACCOUNT_CREATE_RULES.name)} placeholder="GCash — cashier" className="w-full" />
+                </Field>
+                <Field label="Store" width="name" rule={MONEY_ACCOUNT_CREATE_RULES.storeId}>
+                  <Select {...nativeAttrs(MONEY_ACCOUNT_CREATE_RULES.storeId)} defaultValue="" className="w-full">
+                    <option value="">Choose a store…</option>
+                    {stores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.code})
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Kind" width="code">
+                  <Select name="instrument" defaultValue="ewallet" className="w-full">
+                    {MONEY_INSTRUMENTS.map((i) => (
+                      <option key={i} value={i}>
+                        {INSTRUMENT_LABEL[i] ?? i}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field
+                  label="Held by"
+                  width="code"
+                  hint="A staff float is per person — the ledger names which one on each line"
+                >
+                  <Select name="custodian" defaultValue="cashier" className="w-full">
+                    {CUSTODIANS.map((c) => (
+                      <option key={c} value={c}>
+                        {CUSTODIAN_LABEL[c] ?? c}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Notes" width="long">
+                  <Input name="notes" className="w-full" />
+                </Field>
+              </FormGrid>
+
+              {/* ⭐ No GL-code field, deliberately. The books account is DERIVED from kind + holder —
+                  putting the chart of accounts in a form is how a typo becomes a wallet that reports
+                  as cash. */}
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                The books account is chosen for you from the kind and the holder.
+              </p>
+
+              <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
+            </CheckedForm>
+          </FormModal>
         </div>
-
-        <CheckedForm rules={MONEY_ACCOUNT_CREATE_RULES} action={createMoneyAccountAction} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Name" hint="What staff call it — “GCash — cashier”, “BDO — office”" rule={MONEY_ACCOUNT_CREATE_RULES.name}>
-              <Input {...nativeAttrs(MONEY_ACCOUNT_CREATE_RULES.name)} placeholder="GCash — cashier" className="w-full" />
-            </Field>
-            <Field label="Store" rule={MONEY_ACCOUNT_CREATE_RULES.storeId}>
-              <Select {...nativeAttrs(MONEY_ACCOUNT_CREATE_RULES.storeId)} defaultValue="" className="w-full">
-                <option value="">Choose a store…</option>
-                {stores.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.code})
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Kind">
-              <Select name="instrument" defaultValue="ewallet" className="w-full">
-                {MONEY_INSTRUMENTS.map((i) => (
-                  <option key={i} value={i}>
-                    {INSTRUMENT_LABEL[i] ?? i}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field
-              label="Held by"
-              hint="A staff float is per person — the ledger names which one on each line"
-            >
-              <Select name="custodian" defaultValue="cashier" className="w-full">
-                {CUSTODIANS.map((c) => (
-                  <option key={c} value={c}>
-                    {CUSTODIAN_LABEL[c] ?? c}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          </div>
-          <Field label="Notes">
-            <Input name="notes" className="w-full" />
-          </Field>
-
-          {/* ⭐ No GL-code field, deliberately. The books account is DERIVED from kind + holder —
-              putting the chart of accounts in a form is how a typo becomes a wallet that reports
-              as cash. */}
-          <p className="text-xs text-neutral-400 dark:text-neutral-600">
-            The books account is chosen for you from the kind and the holder: cash lands in
-            the cashier, staff or office cash account by who holds it, and every e-wallet or bank
-            account shares the e-wallet account — the line names which one.
-          </p>
-
-          <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
-        </CheckedForm>
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          ⛔ <strong>Admin only.</strong> A money account is an account in the books, not a setting.
+        </p>
       </section>
     </Page>
-  );
-}
-
-function Field({ label, hint, rule, className, children }: { label: React.ReactNode; hint?: string; rule?: FieldRule; className?: string; children: React.ReactNode }) {
-  const body = (
-    <>      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
-      {children}
-      {hint && <span className="text-xs text-neutral-400 dark:text-neutral-600">{hint}</span>}
-    
-    </>
-  );
-  // T-440: a ruled field keeps its label and puts the live helper line OUTSIDE it (never part of the accessible name).
-  if (!rule) return <label className="flex flex-col gap-1">{body}</label>;
-  return (
-    <div className={className}>
-      <label className="flex flex-col gap-1">{body}</label>
-      <FieldCheck rule={rule} />
-    </div>
   );
 }
 

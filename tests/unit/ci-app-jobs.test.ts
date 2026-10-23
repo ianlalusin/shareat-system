@@ -56,8 +56,47 @@ describe('T-417 ERP CI is untouched (case 13)', () => {
     expect(sha(lines.slice(s, e).join('\n').trimEnd())).toBe('0b3420dc93bec889ec9c1abca2f48b3cbca1cf1727f1d14ffda250c135e830a0');
   });
 
-  it('deploy.yml is byte-identical to 9c1704b', () => {
-    expect(sha(readLf(wf('deploy.yml')))).toBe('13612895e9ee2e0e61e6df03a0edbf150c8cad0d88112c5fd411fa12977cd505');
+  // Bible row 378: POS v2 ships beside the ERP. Its steps live only between `# >>> POS v2` and
+  // `# <<< POS v2` markers; with those blocks removed, every ERP byte is still 9c1704b's.
+  const stripPos = (s: string) => {
+    const out: string[] = [];
+    let skip = false;
+    for (const line of s.split('\n')) {
+      if (line.includes('# >>> POS v2')) { skip = true; continue; }
+      if (line.includes('# <<< POS v2')) { skip = false; continue; }
+      if (!skip) out.push(line);
+    }
+    return out.join('\n');
+  };
+
+  it('deploy.yml minus the POS v2 blocks is byte-identical to 9c1704b. Mutant: any ERP step edit', () => {
+    expect(sha(stripPos(readLf(wf('deploy.yml'))))).toBe('13612895e9ee2e0e61e6df03a0edbf150c8cad0d88112c5fd411fa12977cd505');
+  });
+
+  it('a POS v2 failure can never block the ERP deploy. Mutant: fatal POS build or restart', () => {
+    const d = readLf(wf('deploy.yml'));
+    const opens = d.match(/# >>> POS v2/g)?.length ?? 0;
+    expect(opens).toBe(4);
+    expect(d.match(/# <<< POS v2/g)?.length).toBe(4);
+    expect(d).toMatch(/- name: Build POS v2 \(web\)\n\s+continue-on-error: true/);
+    expect(d).toMatch(/if \[ -d apps\/pos\/\.next \]; then/);
+    expect(d).toMatch(/restart shareat-pos\.service \|\| echo/);
+    expect(d.indexOf('Confirm POS v2 is up')).toBeGreaterThan(d.indexOf('- name: Confirm the app is up'));
+  });
+
+  // 22 Oct: `next start` crashed on the box because next.config.mjs imports ./config/*, which the
+  // artifact did not ship. Every local file next.config.mjs imports must be in the POS PATHS.
+  it('the artifact ships every local file apps/pos/next.config.mjs imports. Mutant: drop apps/pos/config', () => {
+    const cfg = readLf(path.join(repoRoot, 'apps', 'pos', 'next.config.mjs'));
+    const local = [...cfg.matchAll(/from\s+['"]\.\/([^'"]+)['"]/g)].map((m) => m[1]!);
+    expect(local.length, 'next.config.mjs imports nothing local: re-check this guard').toBeGreaterThan(0);
+    const pathsLine = readLf(wf('deploy.yml')).split('\n').find((l) => l.includes('PATHS="$PATHS apps/pos/.next'));
+    expect(pathsLine, 'POS PATHS line not found').toBeDefined();
+    const shipped = pathsLine!.match(/apps\/pos\/[^\s"]+/g) ?? [];
+    for (const rel of local) {
+      const top = `apps/pos/${rel.split('/')[0]}`;
+      expect(shipped, `${top} is imported by next.config.mjs but not shipped`).toContain(top);
+    }
   });
 });
 

@@ -13,6 +13,10 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetJar, seedSearch } from '../helpers/flash-jar';
 
 vi.mock('next/navigation', () => ({
+  // T-448: FormModal/Dialog read the address.
+  usePathname: () => '/',
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push() {}, replace() {}, refresh() {}, back() {}, forward() {}, prefetch() {} }),
   redirect: (to: string) => {
     throw new Error(`redirect:${to}`);
   },
@@ -32,7 +36,6 @@ vi.mock('../../src/lib/page-access', () => ({
 }));
 vi.mock('@/lib/constraint-messages', async () => await import('../../src/lib/constraint-messages'));
 vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
-vi.mock('@/components/PhotoInput', () => ({ PhotoInput: () => null }));
 vi.mock('@/components/shell/DetailLayout', () => ({
   DetailLayout: ({ summary, children }: { summary: unknown; children: unknown }) => [summary, children],
 }));

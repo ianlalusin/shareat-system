@@ -91,7 +91,8 @@ export function detailsOpenAround(html: string, marker: string): boolean | null 
   if (open < 0 || html.lastIndexOf('</details>', at) > open) return null;
   return /\bopen\b/.test(html.slice(open, html.indexOf('>', open)));
 }
-export const SAVE_BUTTON = /<button[^>]*type="submit"[^>]*>\s*Save[^<]*<\/button>/;
+// T-448: Save is an icon button now (words are aria-label + data-tip, not visible text).
+export const SAVE_BUTTON = /<button[^>]*type="submit"[^>]*aria-label="Save[^"]*"[^>]*>/;
 export const TOO_LONG_SENTENCE = 'What you typed was too long to keep. This shows what is saved. Press Edit and enter your change again.';
 
 export type TypedView = { kind?: string; fields?: Record<string, unknown>; hint?: string } | null | undefined;

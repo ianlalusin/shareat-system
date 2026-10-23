@@ -8,7 +8,7 @@ import { sql as dsql } from 'drizzle-orm';
  *
  * API contract (additional to the header of `t436-leave.test.ts`):
  *   attachLeaveDocument {requestId, contentType, bytes} -> {fileId}   (purpose `leave_document`, linked_to = request id)
- *   openLeaveDocument   {requestId} -> {url}                          (the ONLY reader; 60 s link; audits viewed / view_refused)
+ *   readFileUrl {fileId} -> {url}   (the ONLY reader, behind GET /files/{id}; 60 s link; audits viewed / view_refused)
  *   loadLeaveRequest / listLeave / leaveGrid / exportLeaveCsv expose `hasProof` (boolean) and NEVER the file id.
  *   New capability `view_leave_document` (store-scoped, position-grantable via person_grants).
  * Who may view: (a) pending - a manage_attendance holder at the store who is not the employee; once decided - only
@@ -37,7 +37,6 @@ import {
   leaveGrid,
   listLeave,
   loadLeaveRequest,
-  openLeaveDocument,
   readFileUrl,
   requestLeave,
   setStorageDriver,
@@ -108,7 +107,7 @@ async function fixture(hint: string) {
   const superId = await mk('Super', 'super_admin', [storeA]);
   const [e] = await sql<{ id: string }[]>`
     insert into employments (org_id, person_id, store_id, staff_code, started_on, employment_status, created_by)
-    values (${orgId}, ${workerId}, ${storeA}, ${uid('sc')}, '2025-01-01', 'regular', ${adminId}) returning id`;
+    values (${orgId}, ${workerId}, ${storeA}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, '2025-01-01', 'regular', ${adminId}) returning id`;
   const f = {
     orgId, storeA, storeB, workerId, employmentId: e!.id, mgr1Id: mgr1,
     admin: actor(orgId, adminId), mgr1: actor(orgId, mgr1), mgr2: actor(orgId, mgr2), mgrB: actor(orgId, mgrB),
@@ -124,8 +123,14 @@ type F = Awaited<ReturnType<typeof fixture>>;
 const attach = (f: F, who: Actor) =>
   asOrg(f.orgId, (tx) =>
     attachLeaveDocument(tx, who, { requestId: f.requestId, contentType: 'image/jpeg', bytes: photoWithGps() } as never)) as Promise<{ fileId: string }>;
-const open = (f: F, who: Actor) =>
-  asOrg(f.orgId, (tx) => openLeaveDocument(tx, who, { requestId: f.requestId } as never)) as Promise<{ url: string }>;
+/** Opens the request's newest certificate the way GET /files/{id} does: through readFileUrl, the one place the decision and the audit live. */
+const open = async (f: F, who: Actor): Promise<{ url: string }> => {
+  const rows = await sql<{ id: string }[]>`
+    select id from stored_files where org_id = ${f.orgId} and purpose = 'leave_document' and linked_to = ${f.requestId}
+    order by uploaded_at desc limit 1`;
+  if (!rows[0]) throw new FileNotFoundError('no certificate on this request');
+  return asOrg(f.orgId, (tx) => readFileUrl(tx, who, { fileId: rows[0]!.id }));
+};
 const decide = (f: F, who: Actor) => asOrg(f.orgId, (tx) => approveLeave(tx, who, { requestId: f.requestId } as never));
 const load = (f: F, who: Actor) =>
   asOrg(f.orgId, (tx) => loadLeaveRequest(tx, who, { requestId: f.requestId } as never)).catch(() => null) as Promise<Record<string, unknown> | null>;

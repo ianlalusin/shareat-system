@@ -7,7 +7,7 @@ import { requireSession } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { INVENTORY_THRESHOLD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Button, Field, FlashBanner, Input, Select } from '@/components/ui';
+import { Button, Field, FlashBanner, HelpTip, Input, Select } from '@/components/ui';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -145,17 +145,25 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
         </section>
       )}
 
-      <h2 className="mt-10 text-lg font-medium">Thresholds</h2>
-      <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-        A threshold of <strong>0</strong> means “tell me the moment it runs out”. Clearing the box
-        removes the threshold entirely — a different state, and the item then falls off the list.
-      </p>
+      <h2 className="mt-10 flex items-center gap-1 text-lg font-medium">
+        Thresholds
+        {/* T-448: the long explanation is a (?) tip, not a paragraph. */}
+        <HelpTip label="Thresholds">
+          A threshold of 0 means “tell me the moment it runs out”. Clearing the box removes the
+          threshold entirely — a different state, and the item then falls off the list.
+        </HelpTip>
+      </h2>
       <table className="mt-3 w-full border-collapse text-sm">
         <thead>
           <tr className="border-b border-neutral-300 text-left dark:border-neutral-700">
             <th className="py-2 pr-4 font-medium">Item</th>
             <th className="py-2 pr-4 font-medium">Unit</th>
-            <th className="py-2 font-medium">Threshold</th>
+            <th className="py-2 font-medium">
+              <span className="inline-flex items-center gap-1">
+                Threshold
+                <HelpTip label="Threshold">A number of 0 or more. Blank means no threshold.</HelpTip>
+              </span>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -168,6 +176,8 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
               <td className="py-2 pr-4 text-neutral-600 dark:text-neutral-400">{item.baseUnit}</td>
               <td className="py-2">
                 {thresholdByItem.has(item.id) ? (
+                  <div className="flex items-center gap-3">
+                  <span className="tabular-nums">{thresholdByItem.get(item.id)}</span>
                   <EditableRecord
                     action={setThresholdAction}
                     rules={INVENTORY_THRESHOLD_RULES}
@@ -185,8 +195,9 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
                       />
                     </Field>
                   </EditableRecord>
+                  </div>
                 ) : (
-                  <CheckedForm rules={INVENTORY_THRESHOLD_RULES} action={setThresholdAction} className="flex items-center gap-2">
+                  <CheckedForm rules={INVENTORY_THRESHOLD_RULES} action={setThresholdAction} className="flex flex-nowrap items-center gap-2">
                     <input type="hidden" name="storeId" value={storeId} />
                     <input type="hidden" name="itemId" value={item.id} />
                     <Field label={<span className="sr-only">{`${item.name} threshold`}</span>} rule={INVENTORY_THRESHOLD_RULES.threshold}>
@@ -195,7 +206,7 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
                         aria-label={`${item.name} threshold`}
                         defaultValue={thresholdByItem.get(item.id) ?? ''}
                         placeholder="none"
-                        className="w-28 tabular-nums"
+                        className="w-24 tabular-nums"
                       />
                     </Field>
                     <Button type="submit" variant="secondary" className="text-xs">

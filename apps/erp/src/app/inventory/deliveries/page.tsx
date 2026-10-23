@@ -6,7 +6,7 @@ import { deliveryFormData, deliveryRegister, listStores } from './lib';
 import { NewDeliveryForm } from './NewDeliveryForm';
 import { createDeliveryAction } from './actions';
 import { Page } from '@/components/shell/Page';
-import { Badge, FlashBanner, LinkRow, RowLink, Select } from '@/components/ui';
+import { Badge, FlashBanner, FormModal, LinkRow, RowLink, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -74,20 +74,21 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: P
         </label>
       </FilterRow>
 
-      <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="text-sm font-medium">New delivery</h2>
-        <NewDeliveryForm
-          action={createDeliveryAction}
-          storeId={storeId}
-          suppliers={formData.suppliers}
-          items={formData.items}
-          locations={formData.locations}
-          today={toBusinessDate()}
-        />
-      </section>
-
       <section>
-        <h2 className="text-lg font-medium">Register</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-medium">Register</h2>
+          {/* T-448: the new-delivery form opens from a button. */}
+          <FormModal trigger="+ New delivery" title="New delivery" size="lg">
+            <NewDeliveryForm
+              action={createDeliveryAction}
+              storeId={storeId}
+              suppliers={formData.suppliers}
+              items={formData.items}
+              locations={formData.locations}
+              today={toBusinessDate()}
+            />
+          </FormModal>
+        </div>
         {deliveries.length === 0 ? (
           <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">Nothing recorded yet.</p>
         ) : (

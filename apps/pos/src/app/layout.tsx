@@ -8,6 +8,9 @@ import { FirstLoginGuard } from '@/components/auth/first-login-guard';
 import { Providers } from './providers';
 import { OfflineBanner } from '@/components/shared/OfflineBanner';
 import { PaymentQueueSyncProvider } from '@/components/shared/PaymentQueueSyncProvider';
+import { OutboxSync } from '@/components/shared/OutboxSync';
+import { UnsentBanner } from '@/components/shared/UnsentBanner';
+import { XSlipScheduler } from '@/components/shared/XSlipScheduler';
 
 // Define fonts
 const fontSans = Poppins({
@@ -86,6 +89,9 @@ export default function RootLayout({
         <Providers>
           <OfflineBanner />
             <PaymentQueueSyncProvider />
+            <OutboxSync />
+            <XSlipScheduler />
+            <UnsentBanner />
           <FirstLoginGuard>
             <Suspense>{children}</Suspense>
           </FirstLoginGuard>

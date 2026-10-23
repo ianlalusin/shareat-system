@@ -173,7 +173,7 @@ describe('G1/G2 - the change-unit form is drawn only for who may use it', () => 
       const html = await detailHtmlAs(f.superAdmin, id);
       expect(html).toMatch(/<select\b[^>]*name="baseUnit"/);
       // 2026-10-09, T-384 sweep fallout (A0): "Change unit" is now the EditableRecord's Edit button for the unit.
-      expect(html).toMatch(/aria-label="Edit [^"]* unit"[^>]*>Edit</);
+      expect(html).toMatch(/aria-label="Edit [^"]* unit"[^>]*data-tip="Edit"/); // T-448: icon button, words in aria-label + data-tip
       expect(decode(html)).not.toContain(NOT_SUPER_ADMIN);
     },
     60_000,

@@ -79,7 +79,7 @@ export async function fixture(sql: postgres.Sql, hint: string) {
   const mkEmployment = async (personId: string, caps?: readonly string[]) => {
     const [e] = await sql<{ id: string }[]>`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-      values (${orgId}, ${storeId}, ${personId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+      values (${orgId}, ${storeId}, ${personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
     await grantEverydayPositionAccess(sql, {
       orgId, storeId, employmentId: e!.id, personId, setBy: managerId,
       ...(caps ? { capabilities: caps as never } : {}),

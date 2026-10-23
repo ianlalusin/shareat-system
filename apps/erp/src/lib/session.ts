@@ -4,6 +4,7 @@ import { flashCookieName } from '@/lib/flash';
 import { transaction } from '@shareat/db';
 import {
   resolveActor,
+  POS_TABLET_COOKIE,
   AuthenticationError,
   signSetupIdentity,
   setupIdentitySignatureMatches,
@@ -52,6 +53,37 @@ export async function clearSessionCookie(): Promise<void> {
   jar.delete(COOKIE);
   // T-380: the next person on a shared PC inherits no banner or refill from the last one.
   jar.delete(flashCookieName());
+}
+
+// =======================================================================================
+// The POS tablet pairing cookie - T-464. docs/tasks/464-pos-tablet-sign-in.md s1.
+// =======================================================================================
+
+/**
+ * 400 days: the longest a browser keeps a cookie. It is only the carrier - the SERVER decides whether the pairing is live (not
+ * revoked, used within 30 days), and the cookie is refreshed on each successful tablet sign-in.
+ *
+ * `httpOnly`, `sameSite: 'lax'`, `path: '/'` as the session cookie; `secure` in production only, for the reason given there
+ * (a Secure cookie silently never sets over http://localhost). Nothing else is stored on the device: no org, store or label (T-304 invariant 9).
+ */
+const POS_TABLET_MAX_AGE_SECONDS = 400 * 24 * 60 * 60;
+
+export async function setPosTabletCookie(token: string): Promise<void> {
+  (await cookies()).set(POS_TABLET_COOKIE, token, {
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: POS_TABLET_MAX_AGE_SECONDS,
+  });
+}
+
+export async function readPosTabletToken(): Promise<string | null> {
+  return (await cookies()).get(POS_TABLET_COOKIE)?.value ?? null;
+}
+
+export async function clearPosTabletCookie(): Promise<void> {
+  (await cookies()).delete(POS_TABLET_COOKIE);
 }
 
 export async function readSessionToken(): Promise<string | null> {

@@ -26,6 +26,10 @@ class RedirectSignal extends Error {
   }
 }
 vi.mock('next/navigation', () => ({
+  // T-448: FormModal/Dialog read the address.
+  usePathname: () => '/',
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push() {}, replace() {}, refresh() {}, back() {}, forward() {}, prefetch() {} }),
   redirect: (to: string) => {
     throw new RedirectSignal(to);
   },
@@ -105,7 +109,7 @@ async function fixture(hint: string) {
   await sql`insert into person_store_scope (person_id, store_id) values (${adminId}, ${storeId})`;
   const [employment] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${orgId}, ${storeId}, ${adminId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+    values (${orgId}, ${storeId}, ${adminId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
   await grantEverydayPositionAccess(sql, { orgId, storeId, employmentId: employment!.id, personId: adminId, setBy: adminId });
   const admin_ = actor(orgId, adminId);
 
@@ -117,7 +121,7 @@ async function fixture(hint: string) {
   await sql`insert into person_store_scope (person_id, store_id) values (${verifierId}, ${storeId})`;
   const [verifierEmployment] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${orgId}, ${storeId}, ${verifierId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+    values (${orgId}, ${storeId}, ${verifierId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
   await grantEverydayPositionAccess(sql, { orgId, storeId, employmentId: verifierEmployment!.id, personId: verifierId, setBy: adminId });
   const verifier_ = actor(orgId, verifierId);
 
@@ -327,7 +331,9 @@ describe('W5 (REV-6) — the log-a-bill form has both fee inputs and says both a
       expect(tag, `no <input name="${name}"> on /ap`).toBeDefined();
       expect(tag).not.toMatch(/\brequired\b/);
     }
-    expect(TEXT(html)).toContain("Part of the total above. Both are added to the items' cost; neither is a line.");
+    // T-448: the one paragraph became a (?) hint on EACH fee field (text still in the DOM, inside the hidden tooltip).
+    const fee = "Optional. Part of the total above, added to the items' cost; not a line.";
+    expect(TEXT(html).split(fee).length - 1, 'both fee fields carry the hint').toBeGreaterThanOrEqual(2);
   });
 });
 

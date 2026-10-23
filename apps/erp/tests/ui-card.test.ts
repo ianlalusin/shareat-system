@@ -36,7 +36,7 @@ function classTokens(html: string): Set<string> {
 describe('Card — T-334 slice 2 contract', () => {
   it('T-387 S2: rounded-[14px] bg-surface border border-surface-border p-4, exactly (Amendment 7)', () => {
     const tokens = classTokens(renderToStaticMarkup(createElement(Card, { children: 'x' })));
-    expect([...tokens].sort()).toEqual(['bg-surface', 'border', 'border-surface-border', 'p-4', 'rounded-[14px]']);
+    expect([...tokens].sort()).toEqual(['bg-surface', 'border', 'border-surface-border', 'p-4', 'rounded-[20px]']); // T-448 A2: 14px -> 20px
     expect(tokens.has('rounded-lg')).toBe(false);
   });
 

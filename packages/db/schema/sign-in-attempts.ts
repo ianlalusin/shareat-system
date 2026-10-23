@@ -24,6 +24,8 @@ export const signInAttempts = pgTable(
     storeId: uuid('store_id').references(() => stores.id, { onDelete: 'restrict' }),
     // T-416 (migration 0200): the signed-in person whose approval-PIN bucket this row belongs to. At most one of store_id / actor_person_id.
     actorPersonId: uuid('actor_person_id').references(() => persons.id, { onDelete: 'restrict' }),
+    // T-464 (migration 0212): the Employee ID bucket (normalised `SE-007`) a paired POS tablet's miss was charged to; NULL for every other bucket.
+    staffCode: text('staff_code'),
     deviceId: uuid('device_id').references(() => persons.id, { onDelete: 'restrict' }),
     kind: text('kind').notNull(),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
@@ -32,6 +34,8 @@ export const signInAttempts = pgTable(
     index('sign_in_attempts_store_time_idx').on(t.storeId, t.occurredAt),
     index('sign_in_attempts_org_time_idx').on(t.orgId, t.occurredAt),
     index('sign_in_attempts_actor_time_idx').on(t.actorPersonId, t.occurredAt),
+    // NOTE: the partial index (store_id, staff_code, occurred_at) where staff_code is not null is hand-added in migration 0212.
+    check('sign_in_attempts_staff_code_needs_store_check', sql`${t.staffCode} is null or ${t.storeId} is not null`),
     check('sign_in_attempts_one_key_check', sql`not (${t.storeId} is not null and ${t.actorPersonId} is not null)`),
     foreignKey({
       columns: [t.orgId, t.actorPersonId],

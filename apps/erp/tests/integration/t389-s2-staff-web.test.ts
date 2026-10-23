@@ -56,7 +56,7 @@ async function staffCtx(hint: string): Promise<StaffCtx> {
   await sql`insert into person_roles (person_id, org_id, role) values (${subject.id}, ${f.orgId}, 'staff')`;
   const [emp] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${f.orgId}, ${f.storeId}, ${subject.id}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+    values (${f.orgId}, ${f.storeId}, ${subject.id}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
   const ps = await sql<{ id: string }[]>`select id from positions where org_id = ${f.orgId} and store_id is null order by name limit 3`;
   const [p1, p2, p3] = [ps[0]!.id, ps[1]!.id, ps[2]!.id];
   await asOrg(f.orgId, (tx) => setEmploymentPositions(tx, f.admin, { employmentId: emp!.id, positionIds: [p1], primaryPositionId: p1 }));

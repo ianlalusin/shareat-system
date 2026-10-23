@@ -86,7 +86,7 @@ async function setup(hint: string): Promise<Fixture> {
     for (const storeId of [f.storeId, f.storeId2]) {
       await sql`insert into person_store_scope (person_id, store_id) values (${personId}, ${storeId})`;
       // T-407: sign-in also needs the org-level rule (an open employment, an admin role, or a never-employed manager), so the fixture person is also employed.
-      await sql`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${orgId}, ${storeId}, ${personId}, ${`FX${++seq}`}, 'regular', '2020-01-01')`;
+      await sql`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${orgId}, ${storeId}, ${personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2020-01-01')`;
     }
   }
   return f;
@@ -261,7 +261,7 @@ describe('a terminal-kind person is not staff (the three-part guard)', () => {
     // something accidentally gave a terminal an employment row, the view must still exclude it.
     await sql`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-      values (${f.orgId}, ${f.storeId}, ${term.personId}, ${uid('EMP')}, 'regular', current_date)
+      values (${f.orgId}, ${f.storeId}, ${term.personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', current_date)
     `;
     const rows = await asOrg(f.orgId, (tx) =>
       tx.execute(dsql`select person_id from v_active_employments where store_id = ${f.storeId}`),

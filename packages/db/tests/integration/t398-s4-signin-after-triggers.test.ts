@@ -48,7 +48,7 @@ async function fixture(hint: string, role: 'manager' | 'staff') {
   await sql`insert into person_roles (person_id, org_id, role) values (${personId}, ${orgId}, ${role})`;
   await sql`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${orgId}, ${storeId}, ${personId}, ${uid('SC')}, 'regular', '2026-01-01')`;
+    values (${orgId}, ${storeId}, ${personId}, ${'SE-' + (100000 + Math.floor(Math.random() * 899999999))}, 'regular', '2026-01-01')`;
   await sql`insert into person_store_scope (person_id, store_id, source) values (${personId}, ${storeId}, 'manual')`;
   const externalId = uid('fbuid');
   await sql`insert into person_credentials (person_id, kind, store_id, external_id) values (${personId}, 'firebase', null, ${externalId})`;

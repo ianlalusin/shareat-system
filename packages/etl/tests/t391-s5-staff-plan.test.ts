@@ -19,8 +19,8 @@
  *       { op:'create', entity:'person', personRef, fullName, employments: Emp[] }
  *       { op:'employ', entity:'person', personId, personRef, employments: Emp[] }            an existing v2 person answered `same`
  *       Emp = { storeCode, v1StoreId, v1StaffId, startedOn 'YYYY-MM-DD' (Manila), employmentStatus,
- *               positions: string[] (v2 names, resolved only), primaryPosition: string | null (first resolved), staffCode: string | null }
- *       staffCode is the v1 override (S9) or null = "let v2 allocate"; a null caused by a bad v1 code is also in `listed`.
+ *               positions: string[] (v2 names, resolved only), primaryPosition: string | null (first resolved) }   (T-464: no staffCode)
+ *       T-464: v2 numbers every hire itself; a v1 staffCode is never planned.
  *     sheets (all four always present, as arrays):
  *       'positions'         : ['row_key','store_code','v1_position','v2_position','note']          Ian fills v2_position: a canonical name, 'new:<name>' or 'none'
  *       'staff-same-person' : ['row_key','full_name','stores','same_or_different','note']
@@ -349,49 +349,26 @@ describe('14d. S5 started_on', () => {
   });
 });
 
-describe('14e. S9 staff codes', () => {
-  it('v1 staffCode is planned as the override; blank and malformed fall back (null) and are listed. Mutants: the code ignored; a malformed code passed through', async () => {
+describe('14e. staff codes (T-464: v2 numbers everyone fresh)', () => {
+  it('no v1 staffCode is carried over, whatever it looks like: every planned employment leaves the code to v2 (the field is gone), and nothing is listed about codes. Mutants: a v1 code planned again; a note per code', async () => {
     const p = await plan(
       snap([
         stf(L, 'Keep Kim', { staffCode: 'SE-014' }),
         stf(L, 'Blank Bea', { staffCode: '' }),
         stf(L, 'Bad Bob', { staffCode: 'EMP-7' }),
         stf(M, 'Short Sol', { staffCode: 'SE-14' }),
+        stf(L, 'Dup Late', { staffCode: 'SE-020', dateHired: '2026-05-01T00:00:00.000Z' }),
+        stf(L, 'Dup Early', { staffCode: 'SE-020', dateHired: '2026-02-01T00:00:00.000Z' }),
       ]),
     );
-    expect(empOf(p, 'Keep Kim').staffCode).toBe('SE-014');
-    for (const nm of ['Blank Bea', 'Bad Bob', 'Short Sol']) expect(empOf(p, nm).staffCode).toBeNull();
-    const listed = JSON.stringify(p.listed);
-    for (const nm of ['Blank Bea', 'Bad Bob', 'Short Sol']) expect(listed).toContain(nm);
-    expect(listed).not.toContain('Keep Kim');
-  });
-
-  it('S11: a code duplicated at one store goes to the EARLIEST dateHired; the other falls back (null) and is listed. Mutants: both keep it; the later one keeps it', async () => {
-    const p = await plan(snap([
-      stf(L, 'Dup Late', { staffCode: 'SE-020', dateHired: '2026-05-01T00:00:00.000Z' }),
-      stf(L, 'Dup Early', { staffCode: 'SE-020', dateHired: '2026-02-01T00:00:00.000Z' }),
-    ]));
-    expect(empOf(p, 'Dup Early').staffCode).toBe('SE-020');
-    expect(empOf(p, 'Dup Late').staffCode).toBeNull();
-    expect(JSON.stringify(p.listed)).toContain('Dup Late');
-    expect(JSON.stringify(p.listed)).not.toContain('Dup Early');
-  });
-
-  it('S11: a tie on dateHired goes to the lowest v1 id', async () => {
-    const same = '2026-02-01T00:00:00.000Z';
-    const p = await plan(snap([
-      stf(L, 'Tie Beta', { id: 'a2', staffCode: 'SE-021', dateHired: same }),
-      stf(L, 'Tie Alpha', { id: 'a1', staffCode: 'SE-021', dateHired: same }),
-    ]));
-    expect(empOf(p, 'Tie Alpha').staffCode).toBe('SE-021');
-    expect(empOf(p, 'Tie Beta').staffCode).toBeNull();
-    expect(JSON.stringify(p.listed)).toContain('Tie Beta');
-  });
-
-  it('the same code at two DIFFERENT stores is fine (codes are per store)', async () => {
-    const p = await plan(snap([stf(L, 'Lipa Lu', { staffCode: 'SE-007' }), stf(M, 'Malvar Mo', { staffCode: 'SE-007' })]));
-    expect(empOf(p, 'Lipa Lu').staffCode).toBe('SE-007');
-    expect(empOf(p, 'Malvar Mo').staffCode).toBe('SE-007');
+    for (const nm of ['Keep Kim', 'Blank Bea', 'Bad Bob', 'Short Sol', 'Dup Late', 'Dup Early']) {
+      const e = empOf(p, nm);
+      expect(e, nm).toBeDefined();
+      expect('staffCode' in e, `${nm}: mutant - a staffCode is planned again`).toBe(false);
+    }
+    expect(JSON.stringify(p.listed), 'no per-code note any more').not.toMatch(/staff code/i);
+    // the HR sheet's staff_code column is blank: v2 allocates it at hire
+    expect(sheet(p, 'staff-roster').every((r: Any) => r.staff_code === '')).toBe(true);
   });
 });
 

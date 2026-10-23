@@ -41,6 +41,7 @@ function inputTagFor(filePath: string, nameLiteral: string): string {
   expect(occurrences, `"${needle}" must appear exactly once in ${filePath}`).toBe(1);
 
   const nameIdx = src.indexOf(needle);
+  // T-448: a box may be the shared ui `<Input>` (same native attributes, spread through).
   const tagStart = Math.max(src.lastIndexOf('<input', nameIdx), src.lastIndexOf('<Input', nameIdx));
   expect(tagStart, `no preceding <input for "${needle}" in ${filePath}`).toBeGreaterThan(-1);
   // Anchor on the tag's real close (`/>`), not the first `>` — an inline `onChange={(e) => …}`

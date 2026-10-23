@@ -69,7 +69,7 @@ export function StatusHero({ kind, word, step, steps, line, tone, children }: St
     <section
       data-status-hero
       data-tone={tone}
-      className="status-hero rounded-xl border border-surface-border bg-surface p-5"
+      className="status-hero rounded-[20px] border border-surface-border bg-surface p-5"
     >
       <div className="flex flex-wrap items-center gap-4">
         <span className={`inline-flex h-16 w-16 shrink-0 items-center justify-center rounded-full ${TONE_SOFT[tone]} ${TONE_TEXT[tone]}`}>

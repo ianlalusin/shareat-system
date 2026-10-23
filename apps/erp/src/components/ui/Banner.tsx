@@ -72,7 +72,7 @@ export function Banner({ tone, children, fieldId, fieldLabel, className }: Banne
   return (
     <div
       role={tone === 'error' ? 'alert' : 'status'}
-      className={`flex items-start gap-3 rounded-[10px] px-4 py-3 text-sm ${TONE_CLASSES[tone]}${className ? ` ${className}` : ''}`}
+      className={`flex items-start gap-3 rounded-[20px] px-4 py-3 text-sm ${TONE_CLASSES[tone]}${className ? ` ${className}` : ''}`}
     >
       <Icon tone={tone} />
       <div className="min-w-0 flex-1">

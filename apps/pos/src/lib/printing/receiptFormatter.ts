@@ -3,6 +3,8 @@
 import { toJsDate } from "@/lib/utils/date";
 import type { ReceiptData, SessionBillLine } from "@/lib/types";
 import { format } from "date-fns";
+import { receiptLineAmounts } from './receipt-line-amounts';
+import { formatCentavos } from '@/lib/money/format';
 
 /**
  * Formats receipt data into plain text for thermal printing (ESC/POS).
@@ -60,26 +62,42 @@ export function formatReceiptText(
   const headerRow = 'Qty'.padEnd(qtyWidth) + 'Item'.padEnd(nameWidth) + 'Total'.padStart(priceWidth);
   lines.push(headerRow);
 
-  const activeLines = (data.lines || [])
-    .filter(l => (l.qtyOrdered - (l.voidedQty || 0)) > 0)
-    // Pin the package/bundle line to the top (dine-in); stable for the rest.
-    .sort((a, b) => ((a.type === 'package' ? 0 : 1) - (b.type === 'package' ? 0 : 1)));
-  activeLines.forEach(line => {
-    const billableQty = line.qtyOrdered - (line.voidedQty || 0);
-    const lineTotal = (billableQty * line.unitPrice).toFixed(2);
+  const activeLines = receiptLineAmounts(data.lines || [], data.store);
+  activeLines.forEach(({ line, activeQty, grossCentavos }) => {
+    const lineTotal = formatCentavos(grossCentavos);
     const name = line.itemName.substring(0, nameWidth - 1);
-    lines.push(String(billableQty).padEnd(qtyWidth) + name.padEnd(nameWidth) + lineTotal.padStart(priceWidth));
+    lines.push(String(activeQty).padEnd(qtyWidth) + name.padEnd(nameWidth) + lineTotal.padStart(priceWidth));
+    // Wrap descriptive details to the printer width without truncating the amount above.
+    for (const detail of [line.modifiersText, line.freeQty > 0 ? `Free: ${line.freeQty}` : null]) {
+      if (!detail) continue;
+      for (let start = 0; start < detail.length; start += charsPerLine - qtyWidth) {
+        lines.push(' '.repeat(qtyWidth) + detail.slice(start, start + charsPerLine - qtyWidth));
+      }
+    }
   });
 
   lines.push(hr());
 
   const analytics = data.analytics || {};
+  const statutory = data.statutoryDiners ?? [];
   lines.push(justify("SUBTOTAL", (analytics.subtotal || 0).toFixed(2)));
   if ((analytics.discountsTotal || 0) > 0) {
     lines.push(justify("DISCOUNTS", `(-${analytics.discountsTotal.toFixed(2)})`));
   }
   if ((analytics.chargesTotal || 0) > 0) {
     lines.push(justify("CHARGES", `+${analytics.chargesTotal.toFixed(2)}`));
+  }
+  if (statutory.length && (analytics.statutoryVatRemovedTotal || 0) > 0) {
+    const label = 'Less: VAT exemption (SC/PWD)';
+    const amount = `-${analytics.statutoryVatRemovedTotal.toFixed(2)}`;
+    if (label.length + amount.length + 1 > charsPerLine) lines.push(label, amount.padStart(charsPerLine));
+    else lines.push(justify(label, amount));
+  }
+  if (statutory.length && ((analytics.taxAmount || 0) > 0 || (analytics.vatExemptSales || 0) > 0)) {
+    lines.push(hr());
+    lines.push(justify('VATABLE SALES', (analytics.vatableSales || 0).toFixed(2)));
+    lines.push(justify(settings.vatType === 'NON_VAT' ? 'SC/PWD SALES' : 'VAT-EXEMPT SALES', (analytics.vatExemptSales || 0).toFixed(2)));
+    lines.push(justify(`VAT (${data.store?.taxRatePct || 0}%)`, (analytics.taxAmount || 0).toFixed(2)));
   }
 
   lines.push(hr());
@@ -92,6 +110,12 @@ export function formatReceiptText(
   });
   lines.push(justify("TOTAL PAID", (analytics.totalPaid || 0).toFixed(2)));
   lines.push(justify("CHANGE", (analytics.change || 0).toFixed(2)));
+  for (const diner of statutory) {
+    lines.push(hr(), diner.kind === 'senior' ? 'SENIOR CITIZEN' : 'PWD', diner.name, `ID: ${diner.idNo}`);
+    lines.push(justify('Discount', diner.discount.toFixed(2)));
+    if (diner.promoWasHigher) lines.push('promo was higher');
+    lines.push('Signature: ________________');
+  }
 
   lines.push("");
   if (settings.footerText) lines.push(center(settings.footerText));

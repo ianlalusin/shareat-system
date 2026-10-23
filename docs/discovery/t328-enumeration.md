@@ -331,15 +331,16 @@ traced; "grep only" = not traced further than the pattern match.
 | `.filter((v)=>Number(v.amount)<0)` | apps/erp/src/app/remittance/page.tsx | OUT | display filter over DB-read data — read the block |
 | `.filter((l)=>Number(l.cap)>0)` | apps/erp/src/app/trade/returns/page.tsx | OUT | display filter over DB-read data — read the block |
 | `.filter((f)=>Number(f.outstanding)>0)` | apps/erp/src/lib/money-lines/load.ts | OUT | display/selection filter over a ledger-read position, a deliberate v1-derived business rule — read the block |
+| `__reactFiber$` | apps/erp/src/components/ui/phone-table-cards.ts | OUT | not money — React-internal key prefix matched by the `key.startsWith(prefix)` shape (T-448 / DEF-740 hydration check) |
 
 ## Tally
 
 - Total sites enumerated at site granularity: **10 (3rd) + 17 (4th) + 12 (5th-a) + 3 (5th-b) + 9
-  (channel-settlements shadow) + 3 (DEF-379 app-layer money()) + 35 (6th) + 9 (7th shape) = 98.**
+  (channel-settlements shadow) + 3 (DEF-379 app-layer money()) + 35 (6th) + 10 (7th shape) = 99.**
 - **IN: 4 (4th) + 12 (5th-a) + 3 (5th-b) + 9 (shadow) + 0 (DEF-379, disputed to OUT) + 4 (6th) + 3
   (7th shape) = 35.**
-- **OUT: 10 (3rd) + 13 (4th) + 3 (DEF-379, disputed) + 31 (6th) + 6 (7th shape) = 63.**
-- 35 + 63 = 98. Every site the method reached is disposed.
+- **OUT: 10 (3rd) + 13 (4th) + 3 (DEF-379, disputed) + 31 (6th) + 7 (7th shape) = 64.**
+- 35 + 64 = 99. Every site the method reached is disposed.
 - **Not included in the 98:** the two live defects under "Beyond this task's named spellings" (#1
   `ar/index.ts::recordCollection`'s `amount`/`platformFee`/`creditApplied` fields, #2
   `items/index.ts::validateInvoiceLines`'s `unitPrice`/`lineTotal` guard) — these were found by

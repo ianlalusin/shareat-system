@@ -14,10 +14,10 @@ import { withFlash } from '@/lib/flash';
 import { personName } from '@/lib/person-name';
 import { typedFor } from '@/lib/keep-typing';
 import { EXPENSE_DRAFT_EDIT } from '../typed-forms';
-import { CheckedForm, EditableRecord, FieldCheck } from '@/components/forms';
-import { EXPENSE_VOID_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
+import { CheckedForm, EditableRecord } from '@/components/forms';
+import { EXPENSE_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { accountCodeAndName } from '@/lib/account-label';
-import { Badge, Button, ConfirmDestructive, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Badge, Button, CardGrid, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 
 // Derived from the repo function rather than re-declared — the table renders exactly what
 // that reader returns, so the two cannot drift.
@@ -137,7 +137,8 @@ export default async function ExpenseDetailPage({
 
       <FlashBanner flash={sp} />
 
-      <section className="grid gap-4 md:grid-cols-2">
+      {/* T-448: the short cards (Trail, Payments, and for a draft Correct + Approve) share rows. */}
+      <CardGrid>
         <div className="rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
           <h2 className="mb-3 font-medium">Trail</h2>
           <dl className="space-y-1.5">
@@ -177,7 +178,66 @@ export default async function ExpenseDetailPage({
             </tbody>
           </table>
         </div>
-      </section>
+        {isDraft && (
+          <>
+            <div className="space-y-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
+              <h2 className="font-medium">Correct this draft</h2>
+              <p className="text-neutral-600 dark:text-neutral-400">Change the category or particulars.</p>
+              <EditableRecord
+                action={updateDraftAction}
+                label="draft"
+                hidden={{ storeId: sp.store ?? '', expenseId: expense.id }}
+                saveLabel="Save draft"
+                typed={typedFor(sp, EXPENSE_DRAFT_EDIT, expense.id, actor.personId)}
+              >
+                <FormGrid layout="fields">
+                  <Field label="Category" width="name">
+                    <Select name="categoryId" defaultValue={expense.categoryId} className="w-full">
+                      {/* ⭐ T-229 slice 2 — retired categories are hidden UNLESS this expense already
+                          carries one. Filtering them out unconditionally would silently re-point the
+                          expense at whatever option happened to be first when the form was saved. */}
+                      {categories
+                        .filter((c) => c.isActive || c.id === expense.categoryId)
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.group} — {c.category}
+                            {c.isActive ? '' : ' (retired)'}
+                          </option>
+                        ))}
+                    </Select>
+                  </Field>
+                  <Field label="Particulars" width="long">
+                    <Input name="particulars" defaultValue={expense.particulars} className="w-full" />
+                  </Field>
+                </FormGrid>
+              </EditableRecord>
+            </div>
+
+            <form
+              action={approveExpenseAction}
+              className="flex flex-col justify-between gap-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800"
+            >
+              {hiddenIds}
+              <div>
+                <h2 className="font-medium">Approve &amp; post</h2>
+                <p className="mt-1 text-neutral-600 dark:text-neutral-400">
+                  Posts the balanced entry to the ledger. <strong>Irreversible except by a void</strong>,
+                  which reverses rather than deletes.
+                </p>
+              </div>
+              {closedMonth && (
+                <>
+                  <input type="hidden" name="expenseDate" value={expense.businessDate} />
+                  <ClosedMonthOverride closedMonths={[closedMonth]} dateFieldName="expenseDate" initialDate={expense.businessDate} />
+                </>
+              )}
+              <Button type="submit" variant="primary">
+                Approve &amp; post
+              </Button>
+            </form>
+          </>
+        )}
+      </CardGrid>
 
       {entryId && (
         <section className="space-y-4">
@@ -202,67 +262,6 @@ export default async function ExpenseDetailPage({
               <LedgerTable lines={reversalLines} />
             </div>
           )}
-        </section>
-      )}
-
-      {isDraft && (
-        <section className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
-            <h2 className="font-medium">Correct this draft</h2>
-            <EditableRecord
-              action={updateDraftAction}
-              label="draft"
-              hidden={{ storeId: sp.store ?? '', expenseId: expense.id }}
-              saveLabel="Save draft"
-              typed={typedFor(sp, EXPENSE_DRAFT_EDIT, expense.id, actor.personId)}
-            >
-            <FormGrid>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Category</span>
-              <Select name="categoryId" defaultValue={expense.categoryId}>
-                {/* ⭐ T-229 slice 2 — retired categories are hidden UNLESS this expense already
-                    carries one. Filtering them out unconditionally would silently re-point the
-                    expense at whatever option happened to be first when the form was saved. */}
-                {categories
-                  .filter((c) => c.isActive || c.id === expense.categoryId)
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.group} — {c.category}
-                      {c.isActive ? '' : ' (retired)'}
-                    </option>
-                  ))}
-              </Select>
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Particulars</span>
-              <Input name="particulars" defaultValue={expense.particulars} />
-            </label>
-            </FormGrid>
-            </EditableRecord>
-          </div>
-
-          <form
-            action={approveExpenseAction}
-            className="flex flex-col justify-between gap-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800"
-          >
-            {hiddenIds}
-            <div>
-              <h2 className="font-medium">Approve &amp; post</h2>
-              <p className="mt-1 text-neutral-600 dark:text-neutral-400">
-                Posts the balanced entry to the ledger. <strong>Irreversible except by a void</strong>,
-                which reverses rather than deletes.
-              </p>
-            </div>
-            {closedMonth && (
-              <>
-                <input type="hidden" name="expenseDate" value={expense.businessDate} />
-                <ClosedMonthOverride closedMonths={[closedMonth]} dateFieldName="expenseDate" initialDate={expense.businessDate} />
-              </>
-            )}
-            <Button type="submit" variant="primary">
-              Approve &amp; post
-            </Button>
-          </form>
         </section>
       )}
 
@@ -359,19 +358,6 @@ function LedgerTable({ lines }: { lines: EntryLineWithAccountCode[] }) {
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function Field({ label, rule, className, children }: { label: React.ReactNode; rule: FieldRule; className?: string; children: React.ReactNode }) {
-  // T-440: the label keeps its look; the live helper line sits OUTSIDE it (never part of the accessible name).
-  return (
-    <div className={className}>
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{label}</span>
-        {children}
-      </label>
-      <FieldCheck rule={rule} />
     </div>
   );
 }

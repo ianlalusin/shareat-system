@@ -119,7 +119,7 @@ describe('signOutAction — the function every sign-out button calls (T-257/DEF-
     // rows. Previously `credential.storeId === input.storeId` admitted everyone by construction.
     await sql`insert into person_store_scope (person_id, store_id) values (${f.personId}, ${f.storeId})`;
     // T-407: the PIN door also needs the org-level rule, so the fixture cashier holds an open employment too.
-    await sql`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${f.orgId}, ${f.storeId}, ${f.personId}, 'FX1', 'regular', '2020-01-01')`;
+    await sql`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${f.orgId}, ${f.storeId}, ${f.personId}, 'SE-070088049', 'regular', '2020-01-01')`;
     await asOrg(f.orgId, (tx) => setPin(tx, { orgId: f.orgId, personId: f.personId, storeId: f.storeId, pin: '778899' }));
     const res = await asOrg(f.orgId, (tx) => signInWithPin(tx, { orgId: f.orgId, storeId: f.storeId, pin: '778899' }));
 

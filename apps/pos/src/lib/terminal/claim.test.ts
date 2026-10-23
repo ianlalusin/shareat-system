@@ -17,9 +17,9 @@
  *   - a terminal doc held by ANOTHER deviceId => throws Error("Terminal 01 is already used by another tablet. Ask a manager to release it.")
  *     (TT zero padded); the same deviceId may re-claim (reinstall with the same browser profile). Decided inside runTransaction.
  *   - on success writes the doc and then `saveTerminalClaim({storeId, terminalNo, deviceId, nextSeq})` (counter.ts) to IndexedDB.
- *   - nextSeq = 1 + highest seq found by a document-id RANGE query on stores/{s}/receiptNumbers between `CODE-TT-000000` and
- *     `CODE-TT-999999`, orderBy documentId desc, limit 1 (0 when there is none). That query must run on a Firestore that refuses
- *     undeclared composite indexes (the fake does).
+ *   - nextSeq = 1 + highest seq found by at most20 ascending document-id range probes with limit1 (0 when empty).
+ *     T-457 corrects the original descending-key-only contract after actual SDK/emulator refusal (DEF-736).
+ *     Queries still run without undeclared composite indexes; the original fake index harness alone did not prove backend compatibility.
  *   - when the previous terminal doc carries a release (releaseEpoch >= 1 and deviceId null), nextSeq = highest seq + 1000 instead.
  *   - the FIRST claim of a prefix (no terminal doc yet) first queries stores/{s}/receipts where receiptNumber >= `CODE-TT-` and
  *     < `CODE-TT-`; any receipt found WITHOUT a numeric `terminalNo` means v1's free-text format already uses that prefix: throw
@@ -45,6 +45,56 @@ beforeEach(() => {
   vi.stubGlobal('indexedDB', createFakeIdb({ commitDelayMs: 5 }));
 });
 afterEach(() => vi.unstubAllGlobals());
+
+describe('DEF-736 backend-compatible sequence discovery', () => {
+  function compatiblePort() {
+    const port = fs.port;
+    const read = port.getDocs;
+    const probes: any[] = [];
+    port.getDocs = async (q: any) => {
+      if (q.coll.path.endsWith('/receiptNumbers')) {
+        probes.push(q);
+        if (q.constraints.some((c: any) => c.type === 'orderBy' && c.dir === 'desc' && c.field === port.documentId())) {
+          throw new Error('Firestore does not support descending key scans');
+        }
+      }
+      return read(q);
+    };
+    return { port, probes };
+  }
+  it('claims an empty series without a descending key scan', async () => {
+    const { port } = compatiblePort();
+    await expect(claim.claimTerminal(port, A)).resolves.toMatchObject({ nextSeq: 1 });
+  });
+  it('finds the exact sparse maximum and isolates the terminal prefix', async () => {
+    for (const n of ['SHT-01-000002', 'SHT-01-000051', 'SHT-01-900003', 'SHT-02-999999', 'OTHER-01-999999']) seedNumber(n);
+    const { port } = compatiblePort();
+    await expect(claim.claimTerminal(port, A)).resolves.toMatchObject({ nextSeq: 900004 });
+  });
+  it('bounds discovery to twenty limited ascending range probes even near exhaustion', async () => {
+    seedNumber('SHT-01-999998');
+    const { port, probes } = compatiblePort();
+    await expect(claim.claimTerminal(port, A)).resolves.toMatchObject({ nextSeq: 999999 });
+    expect(probes.length).toBeGreaterThan(0);
+    expect(probes.length).toBeLessThanOrEqual(20);
+    for (const q of probes) {
+      expect(q.constraints).toContainEqual(expect.objectContaining({ type: 'limit', n: 1 }));
+      expect(q.constraints).toContainEqual(expect.objectContaining({ type: 'orderBy', dir: 'asc' }));
+      expect(q.constraints.filter((c: any) => c.type === 'where')).toHaveLength(2);
+    }
+  });
+  it('does not mistake a query failure for an empty series or claim a terminal', async () => {
+    const { port } = compatiblePort();
+    const read = port.getDocs;
+    port.getDocs = async (q: any) => {
+      if (q.coll.path.endsWith('/receiptNumbers')) throw new Error('permission-denied');
+      return read(q);
+    };
+    await expect(claim.claimTerminal(port, A)).rejects.toThrow('permission-denied');
+    expect(fs.get(`stores/${S}/terminals/01`)).toBeUndefined();
+    expect(await counter.readTerminal()).toBeNull();
+  });
+});
 
 describe('the fake enforces the index rule (harness check for Acceptance 12)', () => {
   it('refuses an equality + orderBy on two different fields, allows a document-id range, allows a one-field range', async () => {

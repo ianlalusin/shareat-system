@@ -95,7 +95,7 @@ async function fixture() {
     for (const s of [alphaId, bravoId]) {
       const [e] = await sql<{ id: string }[]>`
         insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-        values (${orgId}, ${s}, ${p!.id}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+        values (${orgId}, ${s}, ${p!.id}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
       await grantEverydayPositionAccess(sql, { orgId, storeId: s, employmentId: e!.id, personId: p!.id, setBy: p!.id });
     }
     return p!.id;

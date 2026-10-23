@@ -172,7 +172,7 @@ describe('W1 - the Name and code form is drawn only for who may use it', () => {
       expect(hidden).toMatch(/type="hidden"/);
       expect(hidden).toContain(id);
       expect(html).toMatch(/<fieldset disabled/);
-      expect(html).toMatch(/aria-label="Edit [^"]*"[^>]*>Edit</);
+      expect(html).toMatch(/aria-label="Edit [^"]*"[^>]*data-tip="Edit"/); // T-448: icon button
       expect(html).not.toMatch(/>Rename</);
       expect(html).not.toMatch(/\b(w-64|w-40)\b/);
     },
@@ -191,7 +191,7 @@ describe('W1 - the Name and code form is drawn only for who may use it', () => {
         expect(html).not.toMatch(/>Rename</);
         // 2026-10-09, T-384 sweep fallout: the page now carries other EditableRecords (unit, organisation default), so
         // "no Edit button" is scoped to the RENAME record, whose label is exactly the item name.
-        expect(html).not.toMatch(/aria-label="Edit Coke 1\.5"[^>]*>Edit</);
+        expect(html).not.toMatch(/aria-label="Edit Coke 1\.5"/);
         expect(decode(html)).toContain(NOT_SUPER_ADMIN);
       },
       60_000,

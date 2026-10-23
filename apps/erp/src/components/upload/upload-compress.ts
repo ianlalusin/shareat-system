@@ -14,7 +14,7 @@ import {
   isCompressibleImage,
   needsPreScale,
   scaleToEdge,
-} from '../photo-compression';
+} from './photo-compression';
 
 export class CompressionRefused extends Error {}
 export class CompressionUnavailable extends Error {}
