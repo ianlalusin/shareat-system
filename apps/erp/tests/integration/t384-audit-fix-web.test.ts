@@ -83,7 +83,10 @@ async function asOrg<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
 const text = (html: string): string => html.replace(/&#x27;/g, "'").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&');
 const formsOf = (html: string) => [...html.matchAll(/<form\b[\s\S]*?<\/form>/g)].map((m) => m[0]);
 const submitLabels = (block: string) =>
-  [...block.matchAll(/<button\b[^>]*type="submit"[^>]*>([\s\S]*?)<\/button>/g)].map((m) => text(m[1]!.replace(/<[^>]+>/g, '').trim()));
+  // T-448: a known verb is an icon button - its words are the aria-label, there is no visible text. Read the label first.
+  [...block.matchAll(/<button\b([^>]*type="submit"[^>]*)>([\s\S]*?)<\/button>/g)].map((m) =>
+    text(/\baria-label="([^"]*)"/.exec(m[1]!)?.[1] ?? m[2]!.replace(/<[^>]+>/g, '').trim()),
+  );
 
 async function orgWith(hint: string, role: string) {
   const code = uid(`t384af-${hint}`);
@@ -163,6 +166,9 @@ describe('A5 - sales-days/[id]: Platform sales with no saved rows is an add', ()
     return { ...f, storeId, dayId: id, panda };
   }
   async function platformForm(f: Awaited<ReturnType<typeof dayFixture>>): Promise<string> {
+    return (await platformPage(f)).form;
+  }
+  async function platformPage(f: Awaited<ReturnType<typeof dayFixture>>): Promise<{ form: string; html: string }> {
     h.actor = f.actor;
     h.flash = null;
     const Page = (await import('../../src/app/sales-days/[id]/page')).default;
@@ -171,7 +177,7 @@ describe('A5 - sales-days/[id]: Platform sales with no saved rows is an add', ()
     );
     const form = formsOf(html).find((b) => /name="channel_/.test(b));
     expect(form, 'the Platform sales form').toBeDefined();
-    return form!;
+    return { form: form!, html };
   }
 
   it('no saved channel rows: the form is open (no disabled fieldset) and its submit reads exactly "Save". Mutant: always EditableRecord -> red', async () => {
@@ -184,8 +190,9 @@ describe('A5 - sales-days/[id]: Platform sales with no saved rows is an add', ()
   it('control (green on HEAD): with a saved platform row the form stays a locked EditableRecord with its Edit button', async () => {
     const f = await dayFixture('a5b');
     await sql`insert into sales_day_channels (sales_day_id, channel_id, amount) values (${f.dayId}, ${f.panda}, '150.00')`;
-    const form = await platformForm(f);
+    const { form, html } = await platformPage(f);
     expect(form).toContain('<fieldset disabled');
-    expect(form).toContain('aria-label="Edit platform sales"');
+    // T-448: the Edit icon button sits beside the form (the form is inside a closed dialog), so look in the whole page.
+    expect(html).toContain('aria-label="Edit platform sales"');
   }, 60_000);
 });

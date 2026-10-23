@@ -234,7 +234,7 @@ describe('W5 - an unlinked store\'s card', () => {
     expect(text, 'who, when (any format) and why').toMatch(/Unlinked .+ by Super: wrong store 123/);
     expect(text, 'not shown as linked').not.toContain('Linked to');
     // 2026-10-09 (T-384 S1b A0 L4): an unlinked store's link form is an add form; its submit now reads 'Save', not 'Link store'.
-    expect(html, 'the link form is there for a relink (R8)').toMatch(/<button[^>]*type="submit"[^>]*>\s*Save\s*<\/button>/);
+    expect(html, 'the link form is there for a relink (R8)').toMatch(/<button[^>]*type="submit"[^>]*aria-label="Save"/); // T-448: Save is an icon button, the word is its aria-label
     expect(html).toMatch(/name="posStoreId"/);
     expect(text, 'no Unlink section on an unlinked store').not.toContain('Unlink store from POS');
   });
