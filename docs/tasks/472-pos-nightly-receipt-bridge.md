@@ -1,7 +1,7 @@
 # T-472: Nightly per-receipt bridge — copy every POS receipt from Firebase into Postgres (from 1 Jan 2027)
 
 **Status:** spec written 2026-10-23 (Opus planner, POS v2 session); revised the same day after the orchestrator's
-Opus review. Waits on Ian: Q1 (create the read-only service account), Q4 confirm, Ruling 7 re-confirm. Orchestrator: migration 0215 allocated, file list OK (23 Oct).
+Opus review. Ian answered 24 Oct (row 392): Q1 yes (read-only account `pos-receipt-bridge-readonly`; Ian saves its key under `C:\Users\ianla\shareat-master-data\keys\`, then runs an install script this task provides), personal data none, Q4 yes. Build after #53 lands. Orchestrator: migration 0215 allocated, file list OK (23 Oct).
 **Model:** Sonnet tester -> Sonnet builder -> Sonnet auditor (schema + money: Sonnet, never Haiku).
 **Migration:** ONE, hand-authored (ADR-012 §5 checklist); number from the orchestrator (0212+ is theirs).
 **Authority:** bible rows 272, 276, 307, 379 (clean slate; nightly per-receipt bridge from 1 Jan 2027, all stores,
@@ -61,11 +61,9 @@ stock use and reports from them. It starts with 1 January 2027; older POS data i
 6. **Checks, not truth.** No posting, `sales_days` untouched. `pos_bridge_day_checks` holds per store-day: receipt
    count, sum of final sales minus refunds, the day-feed figures, result (match | mismatch | pending when no feed
    yet), recomputed nightly. A mismatch above 1 centavo per receipt shows as one note on the Sales days page.
-7. **Personal data (Ian, 23 Oct — being re-confirmed via the orchestrator with one new fact).** Ian chose a
-   separate locked table. New fact: `statutory_discount_records` already holds senior/PWD `holder_name` /
-   `id_number` (`schema/statutory-discounts.ts:84`) and T-435 has no table-level gate. Until he re-confirms, the
-   build copies NO personal fields (customer name/TIN/address, statutory name/ID) and `raw` excludes them; adding
-   the table later is additive.
+7. **Personal data (Ian, 24 Oct, row 392): none is copied.** No senior/PWD names or ID numbers, no customer
+   name/TIN/address, in any table or in `raw`. `statutory_discount_records` and the Firestore logbook export stay the
+   source. No `_personal` table. A test fails if a copied row or `raw` holds any of those fields.
 8. **Schedule.** Job `pos_receipt_bridge`, own timer **06:30 Manila**, heartbeat like `POS_IMPORT_HEARTBEAT_URL`.
    The 2027-01-01 floor applies to **writes only**, so the December dry run (`--dry-run`, reads and reports, writes
    nothing) works. Live from 2 Jan for 1 Jan's sales. Volume ~8.4k reads a night, inside the free tier.
