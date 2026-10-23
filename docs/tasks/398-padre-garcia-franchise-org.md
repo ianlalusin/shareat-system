@@ -833,3 +833,8 @@ the T-441 merge (it shares `leave/` and `files/`).
   (scripts written by the builder lane under `C:\Users\ianla\shareat-master-data\`). Avoid deploying 05:30-07:00
   Manila (the T-396 POS import locks sales_days / pos_v1_day_feeds). Time 0213 on a restore or synthetic volume; over
   60 s -> split VALIDATE into a later deploy.
+
+### Production prechecks run by Ian (2026-10-23, read-only)
+- S3 / migration 0213 (script `p0212-check.sh`, same predicate as P0212a/b): organisations visible 1; foreign keys checked 145 (expected 145); ALL ZERO: yes.
+- S4 / migration 0214 (`p0214-check.sh`, same SQL as `docs/ops/P0214-precheck.sql`): organisations visible 1; 55 keys (expected 55); ALL ZERO: yes.
+Logs: `C:\Users\ianla\shareat-master-data\2026-10-22\prod-p0212.log`, `prod-p0214.log`. Both migrations may deploy; avoid 05:30-07:00 Manila (D8).
