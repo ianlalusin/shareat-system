@@ -496,6 +496,10 @@ describe('T-470 refund rows (DEF-731): checked against the server receiptNumbers
       tenders: [{ method: 'cash-1', centavos: 12500, toCheck: false, reference: null }],
     });
   }
+  /** T-470 follow-up 3c: a refund row younger than 10 minutes may still be in flight; tests that expect a decision use an aged row. */
+  async function aged(ev: ledger.LedgerEvent, ageMs = 11 * 60_000) {
+    await ledger.patchEvent(ev.deviceId, ev.terminalSeq, { createdAtClientMs: Date.now() - ageMs });
+  }
 
   it('number document exists with the SAME terminalSeq -> acknowledged', async () => {
     const ev = await refund();
@@ -507,6 +511,7 @@ describe('T-470 refund rows (DEF-731): checked against the server receiptNumbers
 
   it('number document absent -> skipped with the plain reason (no money)', async () => {
     const ev = await refund();
+    await aged(ev);
     const r = await reconcile.runReconcilePass(deps());
     expect(r.skippedSeqs).toEqual([ev.terminalSeq]);
     const row = await status(ev);
@@ -516,6 +521,7 @@ describe('T-470 refund rows (DEF-731): checked against the server receiptNumbers
 
   it('absent number is skipped even when the PARENT receipt exists on the server (the parent is not proof of the refund)', async () => {
     const ev = await refund('parent1');
+    await aged(ev);
     fs.seed(receiptPath('parent1'), { receiptNumber: ev.receiptNumber, total: 125, lines: [] });
     await reconcile.runReconcilePass(deps());
     const row = await status(ev);
@@ -532,6 +538,25 @@ describe('T-470 refund rows (DEF-731): checked against the server receiptNumbers
     expect(row.status).toBe('reserved');
     expect(typeof row.lastError).toBe('string');
     expect(row.lastError).not.toBe('');
+  });
+
+  it('follow-up 3c: an absent number on a row younger than 10 minutes stays reserved (the request may still be in flight); at 10 minutes it is skipped', async () => {
+    const young = await refund();
+    await aged(young, 10 * 60_000 - 5_000);
+    const r1 = await reconcile.runReconcilePass(deps());
+    expect(r1.skippedSeqs).toEqual([]);
+    expect((await status(young)).status).toBe('reserved');
+    await aged(young, 10 * 60_000);
+    const r2 = await reconcile.runReconcilePass(deps());
+    expect(r2.skippedSeqs).toEqual([young.terminalSeq]);
+    expect((await status(young)).status).toBe('skipped');
+  });
+
+  it('follow-up 3c: a young row whose number IS on the server is still acknowledged straight away', async () => {
+    const ev = await refund();
+    fs.seed(numberPath(ev.receiptNumber), { receiptId: 'refund-xyz', terminalNo: 1, terminalSeq: ev.terminalSeq });
+    await reconcile.runReconcilePass(deps());
+    expect((await status(ev)).status).toBe('acknowledged');
   });
 
   it('a thrown read leaves the refund row reserved (never "absent")', async () => {

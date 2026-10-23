@@ -156,3 +156,10 @@ T-457 updates the v2-only `src/lib/terminal/claim.ts`: bounded ascending range p
 ## T-471 edits (day close: Z-reading, X-reading)
 
 - `src/app/settings/page.tsx` (T-471 S3): imports and renders the new `DaySection` (`components/settings/DaySection.tsx`, new file) after `OutboxSection`; no other line of the page changes. Everything else in T-471 is a new V2-only file (`lib/cash/z-reading.ts`, `lib/printing/zSlipFormatter.ts`, `lib/pos2/zReadingClient.ts`, `server/pos2/z-readings.ts`, `app/api/pos2/z-readings/route.ts`, `app/api/pos2/x-reading/route.ts`) plus `scripts/pos2-audit.mjs` / `pos2-audit-lib.mjs` (Z gaps). No v1 file is otherwise edited.
+
+## T-470 follow-ups and T-471 corrections (23 Oct)
+
+- `src/components/cashier/CashHandoverClient.tsx`: bible row 391 - holds `cashRefunds` from `computeHandoverCash`, subtracts it in the on-screen expected cash, saves it with the handover, shows it, and adds a "Cash refunds" column to the export.
+- `src/lib/cash/handover.ts`, `src/lib/cash/convert-net.ts`: bible row 391 - `computeCashSalesAndRefunds` (cash-tender, non-voided refunds in the window), `cashRefunds` in `computeExpectedCash`/`buildHandoverRecord`.
+- `src/lib/cash/handover-submit.ts`, `src/lib/types.ts`: optional `cashRefunds` accepted/typed.
+- `src/components/settings/OutboxSection.tsx` (T-425 file): refund rows labelled "Refund"; manager block "Refund number conflict".

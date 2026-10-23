@@ -66,7 +66,7 @@ export function formatZSlip(i: {
   lines.push(two('Total sales', m(r.totals.saleCentavos)), two('Total refunds', m(r.totals.refundCentavos)), two('Net', m(r.totals.netCentavos)));
   lines.push(hr, 'CASH IN THE DRAWER');
   lines.push(two('Starting cash', m(r.cash.startingCentavos)), two('Cash sales', m(r.cash.salesCentavos)), two('Convert net', m(r.cash.convertNetCentavos)),
-    two('Less deductions', m(r.cash.deductionsCentavos)), two('Expected cash', m(r.cash.expectedCentavos)), two('Cash refunds paid', m(r.cash.refundsPaidCentavos)));
+    two('Less deductions', m(r.cash.deductionsCentavos)), two('Less cash refunds', m(r.cash.refundsPaidCentavos)), two('Expected cash', m(r.cash.expectedCentavos)));
   if (r.lastHandover) lines.push(two('Counted at handover', m(r.lastHandover.countedCentavos)), two('Variance', m(r.lastHandover.varianceCentavos)));
   if (r.lateReceiptNumbers.length) {
     lines.push(hr, 'LATE FROM AN EARLIER DAY');

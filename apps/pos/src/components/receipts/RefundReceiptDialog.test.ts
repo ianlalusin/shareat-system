@@ -34,8 +34,15 @@ describe('RefundReceiptDialog reserves through the sale ledger (T-470)', () => {
   it('a 409 clears the held number', () => {
     expect(code).toMatch(/status\s*===\s*409\)\s*reserved\.current\s*=\s*null/);
   });
-  it('success acknowledges the ledger row (mutant: row stays reserved forever)', () => {
-    expect(code).toMatch(/\bmarkAcknowledged\b/);
+  it('success acknowledges the ledger row AFTER the server call and not in the catch (mutant: row stays reserved forever / acknowledged before the server has it)', () => {
+    const post = code.search(/await\s+postPos2\s*[<(]/);
+    const ack = code.search(/await\s+markAcknowledged\s*\(/);
+    const catchAt = code.search(/\}\s*catch\s*\(/);
+    expect(post).toBeGreaterThan(-1);
+    expect(ack).toBeGreaterThan(post);
+    expect(catchAt).toBeGreaterThan(ack); // so it sits in the try body, after the post, never in the catch block
+    expect(code.slice(catchAt)).not.toMatch(/markAcknowledged/);
+    expect(code.match(/markAcknowledged\s*\(/g)).toHaveLength(1);
   });
   it('the dialog NEVER calls markSkipped (only reconcile, reading the server, may say a number carries no money)', () => {
     expect(code).not.toMatch(/\bmarkSkipped\b/);

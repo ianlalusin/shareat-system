@@ -121,6 +121,9 @@ async function doPass(deps: ReconcileDeps): Promise<ReconcileResult> {
   return res;
 }
 
+/** T-470 follow-up 3c: a reserved refund is not marked skipped until it is at least this old. */
+export const REFUND_SKIP_MIN_AGE_MS = 10 * 60_000;
+
 /** T-470: a refund's receipt id is chosen by the server, so its number is proven by `receiptNumbers/{number}` (written in the refund's transaction). */
 async function resolveReservedRefund(ev: LedgerEvent, port: ReconcilePort, res: ReconcileResult): Promise<void> {
   let snap;
@@ -130,6 +133,8 @@ async function resolveReservedRefund(ev: LedgerEvent, port: ReconcilePort, res: 
     return; // cannot tell: stays reserved
   }
   if (!snap.exists()) {
+    // A young row may still be in flight (slow network): only a row older than this is called "never reached the server".
+    if (Date.now() - ev.createdAtClientMs < REFUND_SKIP_MIN_AGE_MS) return;
     await markSkipped(ev.deviceId, ev.terminalSeq, 'The refund did not reach the server, so this number carries no money.');
     res.skippedSeqs.push(ev.terminalSeq);
     return;

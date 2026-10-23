@@ -5,6 +5,7 @@
  *
  * Ruling 1: a business day runs from the previous Z to this one ("Z to Z"), half-open [fromMs, toMs). The first Z at a store starts at 04:00 Manila
  * (the same rule as lib/cash/handover.ts getShiftDayStartMs, restated here without that file's firebase import).
+ * Bible row 391: cash refunds come off expected cash (start + cash sales + Convert net + adjustments - deductions - cash refunds).
  * Ruling 5: a receipt belongs to the window of its sale moment (createdAtClientMs). One that was rung before the last Z but only reached the server after
  * it is counted on THIS Z and listed as late; a printed Z is never recomputed.
  */
@@ -121,8 +122,10 @@ export function computeZReading(i: {
     receiptCount += 1;
     gross += storedPesosToCentavos(a.subtotal);
     charges += storedPesosToCentavos(a.chargesTotal);
-    ordinary += storedPesosToCentavos(a.discountsTotal);
-    seniorPwd += storedPesosToCentavos(a.statutoryDiscountTotal);
+    // analytics.discountsTotal already INCLUDES the senior/PWD discount (statutory/totals.ts totalDiscounts), so the ordinary part is the rest.
+    const statutory = storedPesosToCentavos(a.statutoryDiscountTotal);
+    ordinary += storedPesosToCentavos(a.discountsTotal) - statutory;
+    seniorPwd += statutory;
     dinerCount += Array.isArray(r.statutoryDiners) ? r.statutoryDiners.length : 0;
     for (const [method, pesos] of Object.entries((a.mop ?? {}) as Record<string, number>)) {
       const cents = storedPesosToCentavos(pesos);
@@ -150,7 +153,7 @@ export function computeZReading(i: {
   const last = handovers[handovers.length - 1];
   const expected = storedPesosToCentavos(computeExpectedCash({
     startingCash: toWirePesos(starting), cashSales: toWirePesos(cashSales), convertNet: toWirePesos(convertCash),
-    deductions: toWirePesos(deductions), manualCashAdjustment: toWirePesos(manual),
+    deductions: toWirePesos(deductions), manualCashAdjustment: toWirePesos(manual), cashRefunds: toWirePesos(cashRefunds),
   }));
 
   const byMethod = [...lines.values()].sort((a, b) => a.method.localeCompare(b.method));

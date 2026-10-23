@@ -66,3 +66,9 @@ task a refund number is written to the ledger first, then sent; a later reconcil
 
 ## Out of scope
 Server-side numbering, the `pos2-audit` script, refunds offline, any receipt print change.
+
+## Follow-ups (audit, 23 Oct)
+- **3a** `OutboxSection.tsx`: a refund ledger row is labelled "Refund" (it said "Sale").
+- **3b** `OutboxSection.tsx`: a `reserved` refund row with `lastError` (receipt-number conflict) is listed in the manager block "Refund number conflict — ask the manager". No new screen.
+- **3c** `reconcile.ts` `resolveReservedRefund`: an absent `receiptNumbers/{number}` is marked `skipped` only once the row is at least 10 minutes old (`REFUND_SKIP_MIN_AGE_MS`, by `createdAtClientMs`); a younger row stays reserved for the next pass. A present number is still acknowledged at once. Tests on both sides of the boundary.
+- **3d** `RefundReceiptDialog.test.ts`: "success acknowledges" now checks source order: `markAcknowledged` is called after `postPos2(...)`, before the `catch`, and nowhere inside it.

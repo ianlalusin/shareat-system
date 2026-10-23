@@ -10,7 +10,7 @@
  *     Layout (the golden below): header (wrapped), rule, store, 'Z number: Z-0007' (Z) or 'Reading so far - the day is NOT closed' (X), From, To,
  *     'Spans two dates: <from> to <to>' only when it does, rule, Receipts, Gross sales, Charges, Discounts, 'Senior/PWD (<n> diners)', 'Refunds (<n>)',
  *     'Voided sales (<n>)', rule, 'BY PAYMENT METHOD' with Sale / Refund / Convert / Net per method, Total sales / Total refunds / Net, rule, 'CASH IN THE DRAWER'
- *     (Starting cash, Cash sales, Convert net, Less deductions, Expected cash, Cash refunds paid, and - only when a handover exists - Counted at handover, Variance),
+ *     (Starting cash, Cash sales, Convert net, Less deductions, Less cash refunds, Expected cash, and - only when a handover exists - Counted at handover, Variance),
  *     then 'LATE FROM AN EARLIER DAY' + numbers and 'BELOW ZERO: <methods>' when present, rule, Printed by, Approved by (Z only), rule, ZSLIP_FOOTER.
  *
  * RED FOR THE RIGHT REASON: @/lib/printing/zSlipFormatter does not exist yet - every case fails on the missing module.
@@ -52,7 +52,7 @@ const BODY = (w: number) => [
   two(w, 'Total sales', '12,500.00'), two(w, 'Total refunds', '250.00'), two(w, 'Net', '12,250.00'),
   '-'.repeat(w), 'CASH IN THE DRAWER',
   two(w, 'Starting cash', '5,000.00'), two(w, 'Cash sales', '9,000.00'), two(w, 'Convert net', '200.00'), two(w, 'Less deductions', '1,000.00'),
-  two(w, 'Expected cash', '13,200.00'), two(w, 'Cash refunds paid', '250.00'), two(w, 'Counted at handover', '13,100.00'), two(w, 'Variance', '-100.00'),
+  two(w, 'Less cash refunds', '250.00'), two(w, 'Expected cash', '13,200.00'), two(w, 'Counted at handover', '13,100.00'), two(w, 'Variance', '-100.00'),
   '-'.repeat(w), 'Printed by: Cora Cashier', 'Approved by: person-mgr-1', '-'.repeat(w),
 ];
 

@@ -27,7 +27,7 @@
  *     cash.salesCentavos = cash-method mop + voidCashRetained of voided receipts (unless voidCashRetainedReversed) - the same rule as computeCashSales.
  *     Handovers: only those with periodEndMs in [fromMs, toMs). startingCentavos = the earliest one's startingCash (0 if none); deductionsCentavos = sum of
  *     their deductionsTotal; expected = computeExpectedCash (convert-net.ts) incl. their manualCashAdjustment. refundsPaidCentavos = cash-method refunds
- *     (information only; NOT subtracted - the handover rule does not subtract them either).
+ *     (SUBTRACTED from expected cash, bible row 391 - 23 Oct; the handover subtracts them too).
  *
  * RED FOR THE RIGHT REASON: @/lib/cash/z-reading does not exist yet - every case fails on the missing module.
  * MUTANTS: M1 window closed at the end (to counted twice); M2 first Z from midnight; M3 voided receipt counted as a sale; M4 refund added to sales;
@@ -140,13 +140,20 @@ describe('computeZReading - counting', () => {
 describe('computeZReading - senior / PWD discount stays apart (Ruling 6)', () => {
   it('counts qualifying diners and totals their discount separately; the discount total is the sum of both', () => {
     const r = run({ receipts: [
-      sale({ analytics: { discountsTotal: 100, statutoryDiscountTotal: 80 }, extra: { statutoryDiners: [{ kind: 'senior' }, { kind: 'pwd' }] } }),
-      sale({ analytics: { discountsTotal: 20, statutoryDiscountTotal: 40.25 }, extra: { statutoryDiners: [{ kind: 'senior' }] } }),
+      // analytics.discountsTotal already INCLUDES the statutory discount (statutory/totals.ts totalDiscounts), so ordinary = discountsTotal - statutory.
+      sale({ analytics: { discountsTotal: 180, statutoryDiscountTotal: 80 }, extra: { statutoryDiners: [{ kind: 'senior' }, { kind: 'pwd' }] } }),
+      sale({ analytics: { discountsTotal: 60.25, statutoryDiscountTotal: 40.25 }, extra: { statutoryDiners: [{ kind: 'senior' }] } }),
       sale({}),
     ] });
     expect(r.discounts.ordinaryCentavos).toBe(12_000);
     expect(r.discounts.seniorPwd).toEqual({ dinerCount: 3, centavos: 12_025 });
     expect(r.discounts.totalCentavos).toBe(24_025);
+  });
+  it('a senior/PWD discount is counted once: the total equals the sum of discountsTotal, not discountsTotal plus statutory (row 390 double count)', () => {
+    const r = run({ receipts: [sale({ analytics: { discountsTotal: 100, statutoryDiscountTotal: 100 }, extra: { statutoryDiners: [{ kind: 'senior' }] } })] });
+    expect(r.discounts.ordinaryCentavos).toBe(0);
+    expect(r.discounts.seniorPwd.centavos).toBe(10_000);
+    expect(r.discounts.totalCentavos).toBe(10_000);
   });
 });
 
@@ -227,6 +234,21 @@ describe('computeZReading - expected cash and the last handover', () => {
   });
 });
 
+describe('computeZReading - cash refunds come off expected cash (bible row 391)', () => {
+  it('expected = start + cash sales + Convert net - deductions - cash refunds; a GCash refund does not touch the drawer', () => {
+    const r = run({
+      receipts: [sale({ mop: { Cash: 900 } }), refund(12_500, 'Cash'), refund(40_000, 'GCash')],
+      handovers: [handover({ startingCash: 100, deductionsTotal: 50 })],
+    });
+    expect(r.cash.refundsPaidCentavos).toBe(12_500);
+    expect(r.cash.expectedCentavos).toBe(10_000 + 90_000 - 5_000 - 12_500);
+  });
+  it('a refund outside the window, or voided, is not subtracted; one inside is (same createdAtClientMs rule as sales)', () => {
+    const r = run({ receipts: [sale({ mop: { Cash: 500 } }), refund(10_000, 'Cash', FROM - 1), refund(20_000, 'Cash', TO), { ...refund(30_000, 'Cash'), status: 'voided' }, refund(4_000, 'Cash', FROM)] });
+    expect(r.cash.expectedCentavos).toBe(50_000 - 4_000);
+  });
+});
+
 describe('computeZReading - late arrivals (Ruling 5)', () => {
   const LAST_Z_PRINTED = FROM + 1000;
   it('rung before the last Z but arrived after it: counted now, listed by number', () => {
@@ -275,7 +297,7 @@ describe('computeZReading - integer centavos and totals = sum of lines (property
           for (const m of methods) if (rnd() < 0.4) mop[m] = peso();
           if (!Object.keys(mop).length) mop.Cash = peso();
           receipts.push(sale({ ms, mop, extra: kind < 0.2 ? { status: 'voided', voidCashRetained: peso() } : kind < 0.35 ? { statutoryDiners: [{ kind: 'senior' }] } : {},
-            analytics: { subtotal: peso(), discountsTotal: peso(), statutoryDiscountTotal: kind < 0.35 ? peso() : 0, chargesTotal: peso() } }));
+            analytics: (() => { const stat = kind < 0.35 ? peso() : 0; return { subtotal: peso(), discountsTotal: Math.round((peso() + stat) * 100) / 100, statutoryDiscountTotal: stat, chargesTotal: peso() }; })() }));
         }
       }
       const conversions = Array.from({ length: Math.floor(rnd() * 5) }, () => { const a = Math.floor(rnd() * 4); return conv(methods[a]!, methods[(a + 1 + Math.floor(rnd() * 3)) % 4]!, peso(), { createdAtClientMs: FROM + Math.floor(rnd() * (TO - FROM)) }); });
@@ -287,6 +309,8 @@ describe('computeZReading - integer centavos and totals = sum of lines (property
       expect(r.totals.netCentavos).toBe(r.totals.saleCentavos - r.totals.refundCentavos); // converts move money between lines, they add none
       expect(sum((l) => l.convertCentavos)).toBe(0);
       expect(r.discounts.totalCentavos).toBe(r.discounts.ordinaryCentavos + r.discounts.seniorPwd.centavos);
+      expect(r.discounts.totalCentavos).toBe(receipts.filter((x) => !x.isRefund && x.status !== 'voided').reduce((n, x) => n + Math.round(x.analytics.discountsTotal * 100), 0)); // each peso of discount once
+      expect(r.cash.expectedCentavos).toBe(r.cash.startingCentavos + r.cash.salesCentavos + r.cash.convertNetCentavos - r.cash.deductionsCentavos - r.cash.refundsPaidCentavos);
       for (const l of r.byMethod) expect(l.netCentavos).toBe(l.saleCentavos - l.refundCentavos + l.convertCentavos);
       expect(r.negativeMethods).toEqual(r.byMethod.filter((l) => l.netCentavos < 0).map((l) => l.method).sort());
       const walk = (v: unknown) => { if (typeof v === 'number') expect(Number.isSafeInteger(v)).toBe(true); else if (v && typeof v === 'object') Object.values(v).forEach(walk); };
