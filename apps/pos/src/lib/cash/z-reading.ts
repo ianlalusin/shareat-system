@@ -31,11 +31,16 @@ export interface ZReading {
   byMethod: ZMethodLine[];
   totals: { saleCentavos: number; refundCentavos: number; netCentavos: number };
   convertNetCashCentavos: number;
-  cash: { startingCentavos: number; salesCentavos: number; convertNetCentavos: number; deductionsCentavos: number; expectedCentavos: number; refundsPaidCentavos: number };
+  cash: { startingCentavos: number; salesCentavos: number; convertNetCentavos: number; deductionsCentavos: number; expectedCentavos: number; refundsPaidCentavos: number;
+    /** Cash kept on voided sales, already INSIDE salesCentavos (and so inside expected cash); the slip prints it on its own line so the cash lines add up. */
+    voidCashKeptCentavos: number };
   lastHandover: { countedCentavos: number; varianceCentavos: number } | null;
   negativeMethods: string[];
   lateReceiptNumbers: string[];
 }
+
+/** The reading plus the Firestore doc ids of every receipt it counted (sales, refunds, voids, late ones). A later Z must not count a late receipt whose id is here. */
+export type ZReadingWithIds = ZReading & { receiptIds: string[] };
 
 export function formatZNo(n: number): string {
   return `Z-${String(n).padStart(4, '0')}`;
@@ -76,11 +81,13 @@ type Doc = Record<string, any>;
 export function computeZReading(i: {
   window: ZWindow;
   lastZPrintedAtMs: number | null;
+  /** Ids already counted by an earlier Z whose window reaches into the late-lookback period: such a receipt is never late again. */
+  countedReceiptIds?: ReadonlySet<string>;
   receipts: readonly Doc[];
   conversions: readonly Doc[];
   handovers: readonly Doc[];
   cashNames: ReadonlySet<string>;
-}): ZReading {
+}): ZReadingWithIds {
   const { fromMs, toMs } = i.window;
   const isCash = (name: string) => isCashMethod(name, i.cashNames);
   const lines = new Map<string, ZMethodLine>();
@@ -92,6 +99,8 @@ export function computeZReading(i: {
   let receiptCount = 0, gross = 0, charges = 0, ordinary = 0, dinerCount = 0, seniorPwd = 0;
   let refundCount = 0, refundC = 0, voidCount = 0, voidC = 0, cashSales = 0, cashRefunds = 0;
   const late: string[] = [];
+  const ids: string[] = [];
+  let voidKept = 0;
 
   for (const r of i.receipts) {
     const saleMs = msOf(r.createdAtClientMs);
@@ -99,10 +108,11 @@ export function computeZReading(i: {
     const inWindow = saleMs >= fromMs && saleMs < toMs;
     if (!inWindow) {
       const arrived = msOf(r.createdAt);
-      const isLate = saleMs < fromMs && i.lastZPrintedAtMs !== null && arrived !== null && arrived >= i.lastZPrintedAtMs;
+      const isLate = saleMs < fromMs && i.lastZPrintedAtMs !== null && arrived !== null && arrived >= i.lastZPrintedAtMs && !i.countedReceiptIds?.has(String(r.id ?? ''));
       if (!isLate) continue;
       late.push(String(r.receiptNumber ?? r.id ?? ''));
     }
+    if (r.id !== undefined && r.id !== null && r.id !== '') ids.push(String(r.id));
     if (r.isRefund === true) {
       if (r.status === 'voided') continue;
       const cents = Number.isSafeInteger(r.refundTotalCentavos) ? (r.refundTotalCentavos as number) : storedPesosToCentavos(Math.abs(Number(r.total ?? 0)));
@@ -116,7 +126,7 @@ export function computeZReading(i: {
     if (r.status === 'voided') {
       voidCount += 1; voidC += storedPesosToCentavos(a.grandTotal ?? r.total);
       // Cash kept on a void is in the drawer (the same rule as computeCashSales), until a re-ring has taken it over.
-      if (r.voidCashRetainedReversed !== true) { const kept = Number(r.voidCashRetained || 0); if (kept > 0) cashSales += storedPesosToCentavos(kept); }
+      if (r.voidCashRetainedReversed !== true) { const kept = Number(r.voidCashRetained || 0); if (kept > 0) { const c = storedPesosToCentavos(kept); cashSales += c; voidKept += c; } }
       continue;
     }
     receiptCount += 1;
@@ -167,9 +177,9 @@ export function computeZReading(i: {
     byMethod,
     totals: { saleCentavos: sum((l) => l.saleCentavos), refundCentavos: sum((l) => l.refundCentavos), netCentavos: sum((l) => l.netCentavos) },
     convertNetCashCentavos: convertCash,
-    cash: { startingCentavos: starting, salesCentavos: cashSales, convertNetCentavos: convertCash, deductionsCentavos: deductions, expectedCentavos: expected, refundsPaidCentavos: cashRefunds },
+    cash: { startingCentavos: starting, salesCentavos: cashSales, convertNetCentavos: convertCash, deductionsCentavos: deductions, expectedCentavos: expected, refundsPaidCentavos: cashRefunds, voidCashKeptCentavos: voidKept },
     lastHandover: last ? { countedCentavos: storedPesosToCentavos(last.countedCash), varianceCentavos: storedPesosToCentavos(last.variance) } : null,
     negativeMethods: negativeMethods(Object.fromEntries(byMethod.map((l) => [l.method, toWirePesos(l.netCentavos)]))),
-    lateReceiptNumbers: late.sort(),
+    lateReceiptNumbers: late.sort(), receiptIds: ids.sort(),
   };
 }

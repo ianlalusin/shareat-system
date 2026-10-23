@@ -218,6 +218,36 @@ describe('Ruling 1 - Z to Z; Ruling 2 - selling goes on', () => {
     expect(z3.body.reading.lateReceiptNumbers).toEqual([]);
     expect(z3.body.reading.receiptCount).toBe(0);
   });
+  it('a receipt committed between the clock read and the transaction of a Z is counted on ONE Z, not two', async () => {
+    // Sold just before Z1's moment, but it reached the server a moment AFTER that moment while Z1 was still reading: Z1 counts it (sold inside its window).
+    await sale('race1', 70, NOW1 - 1000, { createdAt: FakeTimestamp.fromMillis(NOW1 + 500) });
+    const z1 = await closeDay(zbody());
+    expect(z1.body.reading.receiptCount).toBe(3);
+    expect(fs.get(zPath('Z-0001'))!.receiptIds).toContain('race1');
+    const z2 = await closeDay(zbody({ requestId: R2 }), { nowMs: NOW2 });
+    expect(z2.body.reading.receiptCount).toBe(0);
+    expect(z2.body.reading.lateReceiptNumbers).toEqual([]);
+    expect(z2.body.reading.totals.saleCentavos).toBe(0);
+  });
+  it('a genuinely late receipt is counted once on the next Z, and its id is stored there', async () => {
+    await closeDay(zbody());
+    await sale('late2', 40, at('2026-10-14T23:50:00'), { createdAt: FakeTimestamp.fromMillis(NOW1 + 120_000) });
+    const z2 = await closeDay(zbody({ requestId: R2 }), { nowMs: NOW2 });
+    expect(z2.body.reading.receiptCount).toBe(1);
+    expect(z2.body.reading.lateReceiptNumbers).toEqual(['SHT-01-late2']);
+    expect(fs.get(zPath('Z-0002'))!.receiptIds).toEqual(['late2']);
+  });
+  it('a receipt counted late on Z2 is not counted again on Z3 even if it arrived after Z2 started', async () => {
+    await closeDay(zbody());
+    // Sold before Z1, arrived at NOW2 + 1 ms: after Z2's clock read, before Z2 read the data. Z2 counts it late; Z3 must not.
+    await sale('late3', 40, at('2026-10-14T23:50:00'), { createdAt: FakeTimestamp.fromMillis(NOW2 + 1) });
+    const z2 = await closeDay(zbody({ requestId: R2 }), { nowMs: NOW2 });
+    expect(z2.body.reading.lateReceiptNumbers).toEqual(['SHT-01-late3']);
+    const z3 = await closeDay(zbody({ requestId: R3 }), { nowMs: NOW2 + 3_600_000 });
+    expect(z3.body.reading.receiptCount).toBe(0);
+    expect(z3.body.reading.lateReceiptNumbers).toEqual([]);
+    expect(z3.body.reading.totals.saleCentavos).toBe(0);
+  });
   it('Convert, refunds and voids are in the figures', async () => {
     fs.seed(`stores/${STORE}/paymentConversions/c1`, { status: 'active', fromMethod: 'GCash', toMethod: 'Cash', amount: 200, createdAtClientMs: at('2026-10-14T12:00:00') });
     fs.seed(`stores/${STORE}/receipts/rf1`, { id: 'rf1', isRefund: true, status: 'final', receiptNumber: 'SHT-01-RF1', createdAtClientMs: at('2026-10-14T13:00:00'), createdAt: FakeTimestamp.fromMillis(at('2026-10-14T13:00:00')), total: -100, refundTotalCentavos: 10_000, refundTender: { methodId: 'm-cash', methodName: 'Cash' } });

@@ -26,26 +26,31 @@ const ROLES = ['admin', 'manager', 'cashier'] as const;
 interface LastZ { zNo: string; zSeq: number; toMs: number; printedAtMs: number }
 
 /** Reads everything a reading needs. `read` is tx.get inside the Z's transaction, a plain get for the X-reading. */
-async function compute(deps: Pos2Deps, storeId: string, nowMs: number, read: (target: any) => Promise<any>): Promise<{ last: LastZ | null; window: ZWindow; reading: ZReading }> {
+async function compute(deps: Pos2Deps, storeId: string, nowMs: number, read: (target: any) => Promise<any>): Promise<{ last: LastZ | null; window: ZWindow; reading: ZReading; receiptIds: string[] }> {
   const db = deps.db;
   const lastSnap = await read(db.collection(`stores/${storeId}/zReadings`).orderBy('zSeq', 'desc').limit(1));
   const lastDoc = lastSnap.docs[0]?.data() as Record<string, any> | undefined;
   const last: LastZ | null = lastDoc ? { zNo: String(lastDoc.zNo), zSeq: Number(lastDoc.zSeq), toMs: Number(lastDoc.toMs), printedAtMs: Number(lastDoc.printedAtMs ?? lastDoc.toMs) } : null;
   const window = zWindow({ lastZToMs: last ? last.toMs : null, nowMs });
   const receiptsFrom = last ? window.fromMs - LATE_LOOKBACK_MS : window.fromMs;
-  const [receipts, conversions, handovers, methods] = await Promise.all([
+  const [receipts, conversions, handovers, methods, priorZs] = await Promise.all([
     read(db.collection(`stores/${storeId}/receipts`).where('createdAtClientMs', '>=', receiptsFrom).where('createdAtClientMs', '<', nowMs)),
     read(db.collection(`stores/${storeId}/paymentConversions`).where('createdAtClientMs', '>=', window.fromMs).where('createdAtClientMs', '<', nowMs)),
     read(db.collection(`stores/${storeId}/cashHandovers`).where('createdAtClientMs', '>=', window.fromMs).where('createdAtClientMs', '<', nowMs)),
     read(db.collection(`stores/${storeId}/storeModesOfPayment`).limit(200)),
+    // Every Z whose window reaches into the lookback period: a receipt one of them counted is never "late" again.
+    last ? read(db.collection(`stores/${storeId}/zReadings`).where('toMs', '>=', receiptsFrom)) : Promise.resolve({ docs: [] as any[] }),
   ]);
-  const data = (snap: any) => snap.docs.map((d: any) => ({ id: d.id, ...(d.data() as Record<string, any>) }));
+  const data = (snap: any) => snap.docs.map((d: any) => ({ ...(d.data() as Record<string, any>), id: d.id }));
+  const countedReceiptIds = new Set<string>();
+  for (const d of priorZs.docs) for (const id of (d.data() as Record<string, any>).receiptIds ?? []) countedReceiptIds.add(String(id));
   const cashNames = new Set<string>(data(methods).filter((m: Record<string, any>) => m.type === 'cash' && m.name).map((m: Record<string, any>) => String(m.name)));
-  const reading = computeZReading({
-    window, lastZPrintedAtMs: last ? last.printedAtMs : null,
+  const { receiptIds, ...reading } = computeZReading({
+    window, lastZPrintedAtMs: last ? last.printedAtMs : null, countedReceiptIds,
     receipts: data(receipts), conversions: data(conversions), handovers: data(handovers), cashNames,
   });
-  return { last, window, reading };
+  // The ids live on the Z document itself (not inside `reading`), so the figures the tablet receives stay small.
+  return { last, window, reading, receiptIds };
 }
 
 const windowOf = (z: Record<string, any>): ZWindow => ({ fromMs: z.fromMs, toMs: z.toMs, spansTwoDates: z.spansTwoDates === true, fromDate: z.fromDate, toDate: z.toDate });
@@ -87,13 +92,13 @@ export async function handleZReading(req: Request, deps: Pos2Deps): Promise<Resp
     const record = () => db.runTransaction(async (tx: any) => {
       const slot = await tx.get(slotRef);
       if (slot.exists) return { slot: slot.data() as Record<string, any> };
-      const { last, window, reading } = await compute(deps, storeId, nowMs, (target) => tx.get(target));
+      const { last, window, reading, receiptIds } = await compute(deps, storeId, nowMs, (target) => tx.get(target));
       const zSeq = (last?.zSeq ?? 0) + 1;
       const zNo = formatZNo(zSeq);
       const doc = {
         storeId, zNo, zSeq, fromMs: window.fromMs, toMs: window.toMs, printedAtMs: nowMs,
         spansTwoDates: window.spansTwoDates, fromDate: window.fromDate, toDate: window.toDate,
-        reading, requestId, requestHash, printedBy, approvedByPersonId: approval.approverPersonId,
+        reading, receiptIds, requestId, requestHash, printedBy, approvedByPersonId: approval.approverPersonId,
         source: 'pos2-z', createdAt: db.FieldValue.serverTimestamp(),
       };
       tx.create(db.doc(`stores/${storeId}/zReadings/${zNo}`), doc);

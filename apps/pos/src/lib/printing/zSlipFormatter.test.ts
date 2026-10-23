@@ -33,8 +33,8 @@ const READING: ZReading = {
   ],
   totals: { saleCentavos: 1_250_000, refundCentavos: 25_000, netCentavos: 1_225_000 },
   convertNetCashCentavos: 20_000,
-  cash: { startingCentavos: 500_000, salesCentavos: 900_000, convertNetCentavos: 20_000, deductionsCentavos: 100_000, expectedCentavos: 1_320_000, refundsPaidCentavos: 25_000 },
-  lastHandover: { countedCentavos: 1_310_000, varianceCentavos: -10_000 },
+  cash: { startingCentavos: 500_000, salesCentavos: 900_000, convertNetCentavos: 20_000, deductionsCentavos: 100_000, expectedCentavos: 1_295_000, refundsPaidCentavos: 25_000, voidCashKeptCentavos: 30_000 },
+  lastHandover: { countedCentavos: 1_285_000, varianceCentavos: -10_000 },
   negativeMethods: [], lateReceiptNumbers: [],
 };
 const base = { kind: 'Z' as const, storeName: 'Shareat Test', zNo: 'Z-0007', window: WINDOW, reading: READING, printedBy: 'Cora Cashier', approvedBy: 'person-mgr-1' };
@@ -51,8 +51,8 @@ const BODY = (w: number) => [
   'GCash', two(w, '  Sale', '3,500.00'), two(w, '  Refund', '0.00'), two(w, '  Convert', '-200.00'), two(w, '  Net', '3,300.00'),
   two(w, 'Total sales', '12,500.00'), two(w, 'Total refunds', '250.00'), two(w, 'Net', '12,250.00'),
   '-'.repeat(w), 'CASH IN THE DRAWER',
-  two(w, 'Starting cash', '5,000.00'), two(w, 'Cash sales', '9,000.00'), two(w, 'Convert net', '200.00'), two(w, 'Less deductions', '1,000.00'),
-  two(w, 'Less cash refunds', '250.00'), two(w, 'Expected cash', '13,200.00'), two(w, 'Counted at handover', '13,100.00'), two(w, 'Variance', '-100.00'),
+  two(w, 'Starting cash', '5,000.00'), two(w, 'Cash sales', '8,700.00'), two(w, 'Cash kept on voided sales', '300.00'), two(w, 'Convert net', '200.00'), two(w, 'Less deductions', '1,000.00'),
+  two(w, 'Less cash refunds', '250.00'), two(w, 'Expected cash', '12,950.00'), two(w, 'Counted at handover', '12,850.00'), two(w, 'Variance', '-100.00'),
   '-'.repeat(w), 'Printed by: Cora Cashier', 'Approved by: person-mgr-1', '-'.repeat(w),
 ];
 
@@ -76,6 +76,32 @@ describe('golden text (Z)', () => {
   it('exports the header and footer texts', () => {
     expect(zs.ZSLIP_HEADER).toBe('Z-READING — cash control, not a BIR document');
     expect(zs.ZSLIP_FOOTER).toBe("The ERP's sales day still follows midnight until the shared database (P2).");
+  });
+});
+
+describe('the cash lines add up to expected cash', () => {
+  const cents = (line: string) => Number(/(-?[\d,]+\.\d{2})$/.exec(line)![1]!.replace(/[,.]/g, ''));
+  const sumOf = (reading: ZReading, widthMm: 58 | 80) => {
+    const lines = zs.formatZSlip({ ...base, reading, widthMm }).split(String.fromCharCode(10));
+    const from = lines.indexOf('CASH IN THE DRAWER') + 1;
+    const to = lines.findIndex((l) => l.startsWith('Expected cash'));
+    let total = 0;
+    for (const l of lines.slice(from, to)) total += (l.startsWith('Less ') ? -1 : 1) * cents(l);
+    return { total, expected: cents(lines[to]!) };
+  };
+  it('start + cash sales + cash kept on voided sales + convert - deductions - cash refunds = expected, to the centavo', () => {
+    for (const w of [80, 58] as const) { const r = sumOf(READING, w); expect(r.total).toBe(r.expected); expect(r.expected).toBe(1_295_000); }
+  });
+  it('cash kept on voided sales is its own line, above expected cash, and Cash sales no longer hides it', () => {
+    const text = zs.formatZSlip(base);
+    expect(text).toContain('Cash kept on voided sales');
+    expect(text.indexOf('Cash kept on voided sales')).toBeLessThan(text.indexOf('Expected cash'));
+    expect(text).toMatch(/Cash sales +8,700\.00/);
+  });
+  it('still reconciles when there is no void cash and when the figures are odd centavos', () => {
+    const odd: ZReading = { ...READING, cash: { startingCentavos: 12_345, salesCentavos: 67_891, convertNetCentavos: -1_001, deductionsCentavos: 5_005, expectedCentavos: 12_345 + 67_891 - 1_001 - 5_005 - 333, refundsPaidCentavos: 333, voidCashKeptCentavos: 0 } };
+    const r = sumOf(odd, 80);
+    expect(r.total).toBe(r.expected);
   });
 });
 

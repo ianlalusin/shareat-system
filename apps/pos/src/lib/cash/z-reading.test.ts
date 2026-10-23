@@ -63,8 +63,8 @@ const refund = (cents: number, method = 'Cash', ms = FROM + 7_200_000) => ({
 }) as Record<string, any>;
 const conv = (from: string, to: string, pesos: number, o: Record<string, any> = {}) => ({ status: 'active', fromMethod: from, toMethod: to, amount: pesos, createdAtClientMs: FROM + 10_000, ...o });
 const handover = (o: Record<string, any> = {}) => ({ periodEndMs: FROM + 5_000_000, startingCash: 0, deductionsTotal: 0, countedCash: 0, variance: 0, ...o });
-const run = (i: { receipts?: any[]; conversions?: any[]; handovers?: any[]; window?: typeof WINDOW; lastZPrintedAtMs?: number | null } = {}) =>
-  z.computeZReading({ window: i.window ?? WINDOW, lastZPrintedAtMs: i.lastZPrintedAtMs ?? null, receipts: i.receipts ?? [], conversions: i.conversions ?? [], handovers: i.handovers ?? [], cashNames: CASH });
+const run = (i: { receipts?: any[]; conversions?: any[]; handovers?: any[]; window?: typeof WINDOW; lastZPrintedAtMs?: number | null; countedReceiptIds?: string[] } = {}) =>
+  z.computeZReading({ window: i.window ?? WINDOW, lastZPrintedAtMs: i.lastZPrintedAtMs ?? null, countedReceiptIds: new Set(i.countedReceiptIds ?? []), receipts: i.receipts ?? [], conversions: i.conversions ?? [], handovers: i.handovers ?? [], cashNames: CASH });
 const line = (r: ReturnType<typeof run>, m: string) => r.byMethod.find((l) => l.method === m)!;
 
 describe('zNo', () => {
@@ -180,6 +180,8 @@ describe('computeZReading - refunds and voids', () => {
     const voided = (retained: number, reversed?: boolean) => sale({ mop: { Cash: 300 }, extra: { status: 'voided', voidCashRetained: retained, ...(reversed ? { voidCashRetainedReversed: true } : {}) } });
     expect(run({ receipts: [sale({ mop: { Cash: 100 } }), voided(150)] }).cash.salesCentavos).toBe(25_000);
     expect(run({ receipts: [sale({ mop: { Cash: 100 } }), voided(150, true)] }).cash.salesCentavos).toBe(10_000);
+    expect(run({ receipts: [sale({ mop: { Cash: 100 } }), voided(150)] }).cash.voidCashKeptCentavos).toBe(15_000);
+    expect(run({ receipts: [sale({ mop: { Cash: 100 } }), voided(150, true)] }).cash.voidCashKeptCentavos).toBe(0);
     expect(run({ receipts: [voided(150)] }).totals.saleCentavos).toBe(0);
   });
 });
@@ -273,6 +275,26 @@ describe('computeZReading - late arrivals (Ruling 5)', () => {
     const r = run({ receipts: [lateRefund, sale({ number: 'SHT-01-IN' })], lastZPrintedAtMs: LAST_Z_PRINTED });
     expect(r.refunds.count).toBe(1);
     expect(r.lateReceiptNumbers).toEqual([lateRefund.receiptNumber]);
+  });
+});
+
+describe('computeZReading - a receipt is on one Z only (receiptIds)', () => {
+  const LAST_Z_PRINTED = FROM + 1000;
+  it('a late receipt whose id an earlier Z already counted is NOT counted again', () => {
+    const raced = sale({ ms: FROM - 1, arrived: LAST_Z_PRINTED + 1, number: 'SHT-02-000900', mop: { Cash: 80 } });
+    const r = run({ receipts: [raced], lastZPrintedAtMs: LAST_Z_PRINTED, countedReceiptIds: [String(raced.id)] });
+    expect(r.receiptCount).toBe(0);
+    expect(r.lateReceiptNumbers).toEqual([]);
+    expect(r.receiptIds).toEqual([]);
+  });
+  it('lists the id of every receipt it counted: sales, refunds, voids and late ones; not the ones it skipped', () => {
+    const late = sale({ ms: FROM - 60_000, arrived: LAST_Z_PRINTED + 5000, mop: { Cash: 80 } });
+    const inside = sale({ mop: { Cash: 20 } });
+    const voided = sale({ mop: { Cash: 5 }, extra: { status: 'voided' } });
+    const rf = refund(1_000);
+    const outside = sale({ ms: FROM - 60_000, arrived: LAST_Z_PRINTED - 1 });
+    const r = run({ receipts: [late, inside, voided, rf, outside], lastZPrintedAtMs: LAST_Z_PRINTED });
+    expect([...r.receiptIds].sort()).toEqual([late.id, inside.id, voided.id, rf.id].map(String).sort());
   });
 });
 
