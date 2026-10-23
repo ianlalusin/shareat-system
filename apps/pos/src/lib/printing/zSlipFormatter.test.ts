@@ -41,7 +41,7 @@ const base = { kind: 'Z' as const, storeName: 'Shareat Test', zNo: 'Z-0007', win
 
 /** The X-slip's own two-column rule: left padded (or cut) so the line is exactly `width` wide. */
 const two = (w: number, left: string, right: string) => { const room = Math.max(1, w - right.length - 1); return `${left.length > room ? left.slice(0, room) : left.padEnd(room)} ${right}`; };
-const FOOT80 = ["The ERP's sales day still follows midnight until the shared database (P2)."];
+const FOOT80 = ["The ERP's sales day still follows midnight until", 'the shared database (P2).'];
 const BODY = (w: number) => [
   'Receipts: 12',
   two(w, 'Gross sales', '13,800.00'), two(w, 'Charges', '0.00'), two(w, 'Discounts', '500.00'), two(w, 'Senior/PWD (2 diners)', '800.00'),

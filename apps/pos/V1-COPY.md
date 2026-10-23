@@ -152,3 +152,7 @@ T-457 updates the v2-only `src/lib/terminal/claim.ts`: bounded ascending range p
 
 - `src/components/receipts/RefundReceiptDialog.tsx`: reserve the refund number with `reserveOnlineEvent` (kind `refund`) instead of `reserveNext`; acknowledge the ledger row after the server answers; never mark it skipped here.
 - V2-only `src/lib/outbox/ledger.ts`: new ledger kind `refund` (reserved row, never unsent money). V2-only `src/lib/outbox/reconcile.ts`: a reserved refund is proven by `receiptNumbers/{number}` (same terminalSeq acknowledged, absent skipped, different seq left reserved with a note). No v1 source was changed.
+
+## T-471 edits (day close: Z-reading, X-reading)
+
+- `src/app/settings/page.tsx` (T-471 S3): imports and renders the new `DaySection` (`components/settings/DaySection.tsx`, new file) after `OutboxSection`; no other line of the page changes. Everything else in T-471 is a new V2-only file (`lib/cash/z-reading.ts`, `lib/printing/zSlipFormatter.ts`, `lib/pos2/zReadingClient.ts`, `server/pos2/z-readings.ts`, `app/api/pos2/z-readings/route.ts`, `app/api/pos2/x-reading/route.ts`) plus `scripts/pos2-audit.mjs` / `pos2-audit-lib.mjs` (Z gaps). No v1 file is otherwise edited.

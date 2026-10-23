@@ -12,9 +12,10 @@
 //   5. unpaid sessions VOIDED OFFLINE (T-425, `voidedOffline: true`)   (a manager reviews every void made without the internet; listed by session id)
 //   6. 'pos2-convert' documents voided without voidedVia 'pos2'
 //   7. final day totals with negative payment methods (counts and related conversion ids, never amounts)
+//   8. (T-471) Z-reading numbers missing from a store's sequence (whole history, not only the dates asked for)
 // It only ever calls `.get()`: no write, no update, no delete. Exit code 0 when everything is clean, 2 when anything is listed, 1 on error.
 import { readFileSync } from 'node:fs';
-import { auditDayOf as dayOf, auditRange, classifyConversion, negativeDays } from './pos2-audit-lib.mjs';
+import { auditDayOf as dayOf, auditRange, classifyConversion, negativeDays, zGaps } from './pos2-audit-lib.mjs';
 
 const args = process.argv.slice(2);
 const flag = (name) => args.filter((a) => a.startsWith(`--${name}=`)).map((a) => a.slice(name.length + 3));
@@ -123,6 +124,15 @@ for (const storeId of storeIds) {
     const ms = typeof v.voidedAt?.toMillis === 'function' ? v.voidedAt.toMillis() : typeof v.updatedAt?.toMillis === 'function' ? v.updatedAt.toMillis() : Number.NaN;
     if (!Number.isFinite(ms) || ms < fromMs || ms > toMs) continue;
     bucket(dayOf(ms)).voidedOffline.push(d.id);
+  }
+
+  // T-471: the Z sequence never resets, so a number missing between Z-0001 and the highest one means a Z-reading was lost.
+  const zSnap = await db.collection(`stores/${storeId}/zReadings`).get();
+  const zMissing = zGaps(zSnap.docs.map((d) => d.id));
+  if (zMissing.length) {
+    listed += zMissing.length;
+    console.log(`store ${storeId}`);
+    console.log(`  Z-reading numbers missing (${zMissing.length}): ${zMissing.join(', ')}`);
   }
 
   for (const [dayId, b] of [...days.entries()].sort()) {
