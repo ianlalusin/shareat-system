@@ -487,3 +487,65 @@ describe('kill and restart mid-reconcile (Acceptance 7)', () => {
     for (const e of evs) expect((await status(e)).status).toBe('acknowledged');
   });
 });
+
+describe('T-470 refund rows (DEF-731): checked against the server receiptNumbers document', () => {
+  const numberPath = (n: string) => `stores/${STORE}/receiptNumbers/${n}`;
+  async function refund(parent = 'parent1') {
+    return ledger.reserveOnlineEvent({
+      kind: 'refund', storeCode: 'SHT', receiptId: parent, totalCentavos: 12500, linesHash: 'h-refund',
+      tenders: [{ method: 'cash-1', centavos: 12500, toCheck: false, reference: null }],
+    });
+  }
+
+  it('number document exists with the SAME terminalSeq -> acknowledged', async () => {
+    const ev = await refund();
+    fs.seed(numberPath(ev.receiptNumber), { receiptId: 'refund-xyz', terminalNo: 1, terminalSeq: ev.terminalSeq });
+    const r = await reconcile.runReconcilePass(deps());
+    expect(r).toMatchObject({ acknowledged: 1, skippedSeqs: [] });
+    expect((await status(ev)).status).toBe('acknowledged');
+  });
+
+  it('number document absent -> skipped with the plain reason (no money)', async () => {
+    const ev = await refund();
+    const r = await reconcile.runReconcilePass(deps());
+    expect(r.skippedSeqs).toEqual([ev.terminalSeq]);
+    const row = await status(ev);
+    expect(row.status).toBe('skipped');
+    expect(row.lastError).toBe('The refund did not reach the server, so this number carries no money.');
+  });
+
+  it('absent number is skipped even when the PARENT receipt exists on the server (the parent is not proof of the refund)', async () => {
+    const ev = await refund('parent1');
+    fs.seed(receiptPath('parent1'), { receiptNumber: ev.receiptNumber, total: 125, lines: [] });
+    await reconcile.runReconcilePass(deps());
+    const row = await status(ev);
+    expect(row.status).toBe('skipped');
+    expect(row.lastError).toBe('The refund did not reach the server, so this number carries no money.');
+  });
+
+  it('number document with a DIFFERENT terminalSeq -> stays reserved with lastError (a person decides), never auto-resolved', async () => {
+    const ev = await refund();
+    fs.seed(numberPath(ev.receiptNumber), { receiptId: 'other-refund', terminalNo: 1, terminalSeq: ev.terminalSeq + 100 });
+    const r = await reconcile.runReconcilePass(deps());
+    expect(r).toMatchObject({ acknowledged: 0, skippedSeqs: [] });
+    const row = await status(ev);
+    expect(row.status).toBe('reserved');
+    expect(typeof row.lastError).toBe('string');
+    expect(row.lastError).not.toBe('');
+  });
+
+  it('a thrown read leaves the refund row reserved (never "absent")', async () => {
+    const ev = await refund();
+    const port = { ...client.reconcilePort, getDocFromServer: async () => { throw new Error('unavailable'); } };
+    await reconcile.runReconcilePass(deps({ port: port as any }));
+    expect((await status(ev)).status).toBe('reserved');
+  });
+
+  it('refund rows are read at stores/{storeId}/receiptNumbers/{receiptNumber}, not receipts/{parent}', async () => {
+    const ev = await refund('parent1');
+    const paths: string[] = [];
+    const port = { ...client.reconcilePort, doc: (db: unknown, p: string) => { paths.push(p); return client.reconcilePort.doc(db, p); } };
+    await reconcile.runReconcilePass(deps({ port: port as any }));
+    expect(paths).toEqual([numberPath(ev.receiptNumber)]);
+  });
+});
