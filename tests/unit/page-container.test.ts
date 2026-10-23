@@ -246,7 +246,7 @@ describe('T-234 — every route uses the Page container', () => {
     // the suite goes red, and the natural repair is to delete every legitimate line-length cap.
     // Naming what is PERMITTED is what stops that.
     //
-    // ⛔ T-348 / DEF-474 (2026-09-29): >10 -> 5. The 47 title descriptions that used to supply most
+    // ⛔ T-348 / DEF-474 (2026-09-29): >10 -> 5 -> 4 (T-448 PR #50: payroll/page.tsx dropped its `max-w-2xl` blurb in the redesign, so 4 remain). The 47 title descriptions that used to supply most
     // of this population are swept into `<PageDescription>` (page-container.test.ts's OTHER
     // docstring above), which drops the cap on purpose — they no longer count here, and that is
     // the fix working, not a regression. What is left: the 4 section-blurb files the sweep left
@@ -255,10 +255,10 @@ describe('T-234 — every route uses the Page container', () => {
     // nothing to do with a title or a section blurb). Pinned exact, like the rest of this file's
     // guards, so the NEXT change to this number states itself instead of quietly drifting: this
     // control still does its one job — proving `<p className="...max-w-...">` is not vacuously
-    // forbidden — with 5 of them, same as with 50.
+    // forbidden — with 4 of them, same as with 50.
     const withProseMeasure = pageFiles().filter((f) =>
       /<p className="[^"]*\bmax-w-/.test(readFileSync(join(repoRoot, f), 'utf8')),
     );
-    expect(withProseMeasure.length).toBe(5);
+    expect(withProseMeasure.length).toBe(4);
   });
 });
