@@ -24,10 +24,38 @@ without updating this file.
 | `staff` | Positions, duties, SOPs, conduct, schedules, HR rules |
 | `cash-and-payments` | Cash handling, tenders, refunds, voids, end of day |
 | `policies` | Store rules, safety, allergens, complaints, legal |
+| `planned` | Changes decided but **not live** — never present them as working today |
+
+**must_be_exact: true** pages hold money, allergen or legal rules — quote them, never paraphrase
+loosely or fill gaps.
 
 ## Pages
 
-_None yet._
+### customer-experience
+
+| Page | Title | About | Readers | Summary | Updated |
+|---|---|---|---|---|---|
+| [customer-experience/dine-in-journey.md](customer-experience/dine-in-journey.md) | Dine-in customer journey — arrival to payment | customer, cashier, server, cook | public | The standard visit: greeting, order at cashier, QR code, rules, seating, refills, bill and payment at cashier, review | 2026-10-23 |
+| [customer-experience/customer-app.md](customer-experience/customer-app.md) | The customer app during dine-in | customer, server, cook, manager | public | App buttons: refill, add griller, assistance, loyalty card, games, à la carte (if manager allows) | 2026-10-23 |
+
+### staff
+
+| Page | Title | About | Readers | Summary | Updated |
+|---|---|---|---|---|---|
+| [staff/cashier-dine-in-sop.md](staff/cashier-dine-in-sop.md) | Cashier SOP — dine-in | cashier | staff | Order taking, starting the session, billing; bill not invoice (not BIR-accredited); manual OR on request. must_be_exact | 2026-10-23 |
+| [staff/server-and-kitchen-dine-in-sop.md](staff/server-and-kitchen-dine-in-sop.md) | Server and kitchen SOP — dine-in | server, cook | staff | Greeting, seating, refills on device, kitchen display, bell, assistance alerts, leftover inspection | 2026-10-23 |
+
+### policies
+
+| Page | Title | About | Readers | Summary | Updated |
+|---|---|---|---|---|---|
+| [policies/leftover-policy.md](policies/leftover-policy.md) | No-leftover policy | customer, server, cashier | public | Leftovers charged, never taken home; server decides; amounts set in the POS. must_be_exact | 2026-10-23 |
+
+### planned
+
+| Page | Title | About | Readers | Summary | Updated |
+|---|---|---|---|---|---|
+| [planned.md](planned.md) | Planned changes — not live | customer, cashier | managers | v2: request the bill from the customer app | 2026-10-23 |
 
 <!-- Row format, under a "### <topic>" heading:
 | Page | Title | About | Readers | Summary | Updated |
