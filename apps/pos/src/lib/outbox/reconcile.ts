@@ -44,6 +44,11 @@ export interface ReconcileDeps {
   isOnline(): boolean;
   locks?: ReconcileLocks;
   pendingWritesTimeoutMs?: number;
+  /**
+   * T-474 (DEF-756): asks the server to CLOSE a refund number nobody has used (POST /api/pos2/refund-numbers/release). Without it, an absent
+   * refund number is never called unused: the row stays reserved. Rejects (or the call fails) -> the row stays reserved.
+   */
+  releaseRefundNumber?(ev: LedgerEvent): Promise<{ state: 'released' | 'used'; terminalSeq: number }>;
 }
 
 export interface ReconcileResult {
@@ -92,7 +97,7 @@ async function doPass(deps: ReconcileDeps): Promise<ReconcileResult> {
 
   // 1. reserved rows (online sales and refunds that never reported back)
   for (const ev of reserved) {
-    if (ev.kind === 'refund') { await resolveReservedRefund(ev, port, res); continue; }
+    if (ev.kind === 'refund') { await resolveReservedRefund(ev, deps, res); continue; }
     let snap;
     try {
       snap = await port.getDocFromServer(port.doc(port.db, receiptPath(ev)));
@@ -124,8 +129,16 @@ async function doPass(deps: ReconcileDeps): Promise<ReconcileResult> {
 /** T-470 follow-up 3c: a reserved refund is not marked skipped until it is at least this old. */
 export const REFUND_SKIP_MIN_AGE_MS = 10 * 60_000;
 
-/** T-470: a refund's receipt id is chosen by the server, so its number is proven by `receiptNumbers/{number}` (written in the refund's transaction). */
-async function resolveReservedRefund(ev: LedgerEvent, port: ReconcilePort, res: ReconcileResult): Promise<void> {
+const REFUND_RELEASED_REASON = 'The refund did not reach the server; its number was closed on the server, so it carries no money.';
+const REFUND_SEQ_CONFLICT = 'The server already has this refund number under a different terminal sequence.';
+
+/**
+ * T-470: a refund's receipt id is chosen by the server, so its number is proven by `receiptNumbers/{number}` (written in the refund's transaction).
+ * T-474 (DEF-756): ABSENCE is not an outcome (the request may still commit). A row is `skipped` only when the server has CLOSED the number
+ * (`released: true`, written by the release route; the refund transaction refuses a closed number), so no refund can ever commit with it.
+ */
+async function resolveReservedRefund(ev: LedgerEvent, deps: ReconcileDeps, res: ReconcileResult): Promise<void> {
+  const { port } = deps;
   let snap;
   try {
     snap = await port.getDocFromServer(port.doc(port.db, numberPath(ev)));
@@ -133,19 +146,42 @@ async function resolveReservedRefund(ev: LedgerEvent, port: ReconcilePort, res: 
     return; // cannot tell: stays reserved
   }
   if (!snap.exists()) {
-    // A young row may still be in flight (slow network): only a row older than this is called "never reached the server".
+    // A young row may still be in flight (slow network): only a row older than this asks the server to close the number.
     if (Date.now() - ev.createdAtClientMs < REFUND_SKIP_MIN_AGE_MS) return;
-    await markSkipped(ev.deviceId, ev.terminalSeq, 'The refund did not reach the server, so this number carries no money.');
-    res.skippedSeqs.push(ev.terminalSeq);
+    if (!deps.releaseRefundNumber) return; // nothing can close the number: stays reserved
+    let answer: { state: 'released' | 'used'; terminalSeq: number };
+    try {
+      answer = await deps.releaseRefundNumber(ev);
+    } catch {
+      return; // cannot tell: stays reserved
+    }
+    if (answer.terminalSeq !== ev.terminalSeq) {
+      await patchEvent(ev.deviceId, ev.terminalSeq, { lastError: REFUND_SEQ_CONFLICT });
+      return;
+    }
+    if (answer.state === 'released') {
+      await markSkipped(ev.deviceId, ev.terminalSeq, REFUND_RELEASED_REASON);
+      res.skippedSeqs.push(ev.terminalSeq);
+    } else if (answer.state === 'used') {
+      await markAcknowledged(ev.deviceId, ev.terminalSeq);
+      res.acknowledged += 1;
+    }
     return;
   }
-  if ((snap.data() as { terminalSeq?: unknown } | undefined)?.terminalSeq === ev.terminalSeq) {
+  const data = snap.data() as { terminalSeq?: unknown; released?: unknown } | undefined;
+  if (data?.terminalSeq === ev.terminalSeq) {
+    if (data.released === true) {
+      // Closed on the server: this number can never carry a refund. NEVER acknowledged.
+      await markSkipped(ev.deviceId, ev.terminalSeq, REFUND_RELEASED_REASON);
+      res.skippedSeqs.push(ev.terminalSeq);
+      return;
+    }
     await markAcknowledged(ev.deviceId, ev.terminalSeq);
     res.acknowledged += 1;
     return;
   }
   // The number is on the server under a different terminal sequence: a person decides, never auto-resolved.
-  await patchEvent(ev.deviceId, ev.terminalSeq, { lastError: 'The server already has this refund number under a different terminal sequence.' });
+  await patchEvent(ev.deviceId, ev.terminalSeq, { lastError: REFUND_SEQ_CONFLICT });
 }
 
 async function pendingWritesResolved(port: ReconcilePort, timeoutMs: number): Promise<boolean> {

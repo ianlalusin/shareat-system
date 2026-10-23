@@ -501,6 +501,9 @@ describe('T-470 refund rows (DEF-731): checked against the server receiptNumbers
     await ledger.patchEvent(ev.deviceId, ev.terminalSeq, { createdAtClientMs: Date.now() - ageMs });
   }
 
+  /** A fake of POST /api/pos2/refund-numbers/release that answers like the server for a number nobody used. */
+  const releaseOk = async (ev: ledger.LedgerEvent) => ({ state: 'released' as const, terminalSeq: ev.terminalSeq });
+
   it('number document exists with the SAME terminalSeq -> acknowledged', async () => {
     const ev = await refund();
     fs.seed(numberPath(ev.receiptNumber), { receiptId: 'refund-xyz', terminalNo: 1, terminalSeq: ev.terminalSeq });
@@ -509,24 +512,24 @@ describe('T-470 refund rows (DEF-731): checked against the server receiptNumbers
     expect((await status(ev)).status).toBe('acknowledged');
   });
 
-  it('number document absent -> skipped with the plain reason (no money)', async () => {
+  it('number document absent -> the server is asked to close it; released -> skipped with the plain reason (no money)', async () => {
     const ev = await refund();
     await aged(ev);
-    const r = await reconcile.runReconcilePass(deps());
+    const r = await reconcile.runReconcilePass(deps({ releaseRefundNumber: releaseOk }));
     expect(r.skippedSeqs).toEqual([ev.terminalSeq]);
     const row = await status(ev);
     expect(row.status).toBe('skipped');
-    expect(row.lastError).toBe('The refund did not reach the server, so this number carries no money.');
+    expect(row.lastError).toBe('The refund did not reach the server; its number was closed on the server, so it carries no money.');
   });
 
   it('absent number is skipped even when the PARENT receipt exists on the server (the parent is not proof of the refund)', async () => {
     const ev = await refund('parent1');
     await aged(ev);
     fs.seed(receiptPath('parent1'), { receiptNumber: ev.receiptNumber, total: 125, lines: [] });
-    await reconcile.runReconcilePass(deps());
+    await reconcile.runReconcilePass(deps({ releaseRefundNumber: releaseOk }));
     const row = await status(ev);
     expect(row.status).toBe('skipped');
-    expect(row.lastError).toBe('The refund did not reach the server, so this number carries no money.');
+    expect(row.lastError).toBe('The refund did not reach the server; its number was closed on the server, so it carries no money.');
   });
 
   it('number document with a DIFFERENT terminalSeq -> stays reserved with lastError (a person decides), never auto-resolved', async () => {
@@ -547,7 +550,7 @@ describe('T-470 refund rows (DEF-731): checked against the server receiptNumbers
     expect(r1.skippedSeqs).toEqual([]);
     expect((await status(young)).status).toBe('reserved');
     await aged(young, 10 * 60_000);
-    const r2 = await reconcile.runReconcilePass(deps());
+    const r2 = await reconcile.runReconcilePass(deps({ releaseRefundNumber: releaseOk }));
     expect(r2.skippedSeqs).toEqual([young.terminalSeq]);
     expect((await status(young)).status).toBe('skipped');
   });
@@ -572,5 +575,69 @@ describe('T-470 refund rows (DEF-731): checked against the server receiptNumbers
     const port = { ...client.reconcilePort, doc: (db: unknown, p: string) => { paths.push(p); return client.reconcilePort.doc(db, p); } };
     await reconcile.runReconcilePass(deps({ port: port as any }));
     expect(paths).toEqual([numberPath(ev.receiptNumber)]);
+  });
+
+  describe('T-474 DEF-756: absence is not an outcome; only a number the server CLOSED is skipped', () => {
+    const REASON = 'The refund did not reach the server; its number was closed on the server, so it carries no money.';
+    it('absent + old, NO releaseRefundNumber dep -> stays reserved (never skipped on absence alone)', async () => {
+      const ev = await refund();
+      await aged(ev);
+      const r = await reconcile.runReconcilePass(deps());
+      expect(r.skippedSeqs).toEqual([]);
+      expect((await status(ev)).status).toBe('reserved');
+    });
+    it('absent + young -> release is not even called', async () => {
+      const ev = await refund();
+      await aged(ev, 60_000);
+      const release = vi.fn(releaseOk);
+      await reconcile.runReconcilePass(deps({ releaseRefundNumber: release }));
+      expect(release).not.toHaveBeenCalled();
+      expect((await status(ev)).status).toBe('reserved');
+    });
+    it('absent + old: release says released with the row seq -> skipped', async () => {
+      const ev = await refund();
+      await aged(ev);
+      const release = vi.fn(releaseOk);
+      const r = await reconcile.runReconcilePass(deps({ releaseRefundNumber: release }));
+      expect(release).toHaveBeenCalledTimes(1);
+      expect(r.skippedSeqs).toEqual([ev.terminalSeq]);
+      expect((await status(ev)).lastError).toBe(REASON);
+    });
+    it('absent + old: release says used (the refund committed meanwhile) -> acknowledged, NOT skipped', async () => {
+      const ev = await refund();
+      await aged(ev);
+      const r = await reconcile.runReconcilePass(deps({ releaseRefundNumber: async (e) => ({ state: 'used', terminalSeq: e.terminalSeq }) }));
+      expect(r.skippedSeqs).toEqual([]);
+      expect(r.acknowledged).toBe(1);
+      expect((await status(ev)).status).toBe('acknowledged');
+    });
+    it('absent + old: release answers another terminalSeq (released or used) -> stays reserved with lastError', async () => {
+      for (const state of ['released', 'used'] as const) {
+        const ev = await refund();
+        await aged(ev);
+        await reconcile.runReconcilePass(deps({ releaseRefundNumber: async (e) => ({ state, terminalSeq: e.terminalSeq + 100 }) }));
+        const row = await status(ev);
+        expect(row.status, state).toBe('reserved');
+        expect(row.lastError, state).toBeTruthy();
+        await ledger.patchEvent(ev.deviceId, ev.terminalSeq, { status: 'acknowledged' });
+      }
+    });
+    it('absent + old: release throws -> stays reserved', async () => {
+      const ev = await refund();
+      await aged(ev);
+      const r = await reconcile.runReconcilePass(deps({ releaseRefundNumber: async () => { throw new Error('503'); } }));
+      expect(r.skippedSeqs).toEqual([]);
+      expect((await status(ev)).status).toBe('reserved');
+    });
+    it('number doc present with released:true and the row seq -> skipped, never acknowledged', async () => {
+      const ev = await refund();
+      fs.seed(numberPath(ev.receiptNumber), { released: true, kind: 'refund-number-released', terminalNo: 1, terminalSeq: ev.terminalSeq });
+      const r = await reconcile.runReconcilePass(deps());
+      expect(r.acknowledged).toBe(0);
+      expect(r.skippedSeqs).toEqual([ev.terminalSeq]);
+      const row = await status(ev);
+      expect(row.status).toBe('skipped');
+      expect(row.lastError).toBe(REASON);
+    });
   });
 });
