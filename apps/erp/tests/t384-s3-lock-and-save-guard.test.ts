@@ -174,7 +174,6 @@ const COMMANDS: Record<string, string> = {
   // T-434 staff photo/signature (managers only; bible rows 353/355)
   'Save photo': 'T-434 staff photo/signature (managers only; bible rows 353/355): uploads a photo; plain data entry that should read "Save"',
   'Remove photo': 'T-434 staff photo/signature (managers only; bible rows 353/355): removes the photo',
-  'View signature': 'T-434 staff photo/signature (managers only; bible rows 353/355): opens a signature, audited',
   'Remove signature': 'T-434 staff photo/signature (managers only; bible rows 353/355): removes the signature',
 };
 /** Forms that only navigate, filter, preview or retry. Not data entry, so G8 does not judge them (ruling 2). */

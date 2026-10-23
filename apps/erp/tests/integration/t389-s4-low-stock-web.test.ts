@@ -73,13 +73,13 @@ const threshold: FormCase<LowCtx> = {
   hiddenNames: ['storeId', 'itemId'],
   refused: (ctx, over = {}) => {
     const fd = new FormData();
-    for (const [k, v] of Object.entries({ storeId: ctx.storeId, itemId: ctx.itemA, threshold: 'abc', ...over })) if (v !== null) fd.set(k, v as string);
+    for (const [k, v] of Object.entries({ storeId: ctx.storeId, itemId: ctx.itemA, threshold: 'xyz', ...over })) if (v !== null) fd.set(k, v as string);
     return fd;
   },
   refusal: /Low-stock threshold/i,
-  fields: () => ({ threshold: 'abc' }),
-  changed: { list: 'threshold', fields: () => ({ threshold: 'abc' }) },
-  notDrawn: ['abc'],
+  fields: () => ({ threshold: 'xyz' }),
+  changed: { list: 'threshold', fields: () => ({ threshold: 'xyz' }) },
+  notDrawn: ['xyz'],
   stored: (_ctx, seg, m) => expect(m.inputValue(seg, 'threshold'), 'the stored threshold is drawn').toBe('5.000'),
   tooLong: { threshold: LONG },
   good: (ctx) => threshold.refused(ctx, { threshold: '7' }),

@@ -97,7 +97,16 @@ export function createHarness(deps: { h: { actor: Actor | null }; seen: { record
       const el = await Page(c.props(ctx, params));
       return renderToStaticMarkup(el as never);
     }
-    const notDrawnOf = (ctx: C): string[] => (typeof c.notDrawn === 'function' ? c.notDrawn(ctx) : c.notDrawn);
+    const notDrawnOf = (ctx: C): string[] => {
+      const values = typeof c.notDrawn === 'function' ? c.notDrawn(ctx) : c.notDrawn;
+      for (const v of values) {
+        // A full UUID (a real record or type id, e.g. goneType) cannot collide by chance, so it is exempt; a short hex-only
+        // value such as 'abc' can match inside a UUID and is refused.
+        const fullUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+        if (!fullUuid && /^[0-9a-f-]+$/i.test(v)) throw new Error(`DEF-744: notDrawn value "${v}" in ${c.form} is hex-only and can match a record id (UUID) by chance; use a value with a non-hex letter, e.g. 'xyz'`);
+      }
+      return values;
+    };
 
     describe(`T-389 S4 ${c.label} - a refused save keeps what was typed (DEF-617) [${c.form}]`, () => {
       it(`slot: the refusal puts the allow-listed fields (and no hidden id) in the typed slot, kept for the signed-in person${c.note ? ` [${c.note}]` : ''}`, async () => {

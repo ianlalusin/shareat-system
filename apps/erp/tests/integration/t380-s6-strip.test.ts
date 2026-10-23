@@ -36,7 +36,6 @@ vi.mock('../../src/lib/page-access', () => ({
 }));
 vi.mock('@/lib/constraint-messages', async () => await import('../../src/lib/constraint-messages'));
 vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
-vi.mock('@/components/PhotoInput', () => ({ PhotoInput: () => null }));
 vi.mock('@/components/shell/DetailLayout', () => ({
   DetailLayout: ({ summary, children }: { summary: unknown; children: unknown }) => [summary, children],
 }));
