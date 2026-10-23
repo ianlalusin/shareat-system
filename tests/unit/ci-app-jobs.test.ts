@@ -83,6 +83,21 @@ describe('T-417 ERP CI is untouched (case 13)', () => {
     expect(d).toMatch(/restart shareat-pos\.service \|\| echo/);
     expect(d.indexOf('Confirm POS v2 is up')).toBeGreaterThan(d.indexOf('- name: Confirm the app is up'));
   });
+
+  // 22 Oct: `next start` crashed on the box because next.config.mjs imports ./config/*, which the
+  // artifact did not ship. Every local file next.config.mjs imports must be in the POS PATHS.
+  it('the artifact ships every local file apps/pos/next.config.mjs imports. Mutant: drop apps/pos/config', () => {
+    const cfg = readLf(path.join(repoRoot, 'apps', 'pos', 'next.config.mjs'));
+    const local = [...cfg.matchAll(/from\s+['"]\.\/([^'"]+)['"]/g)].map((m) => m[1]!);
+    expect(local.length, 'next.config.mjs imports nothing local: re-check this guard').toBeGreaterThan(0);
+    const pathsLine = readLf(wf('deploy.yml')).split('\n').find((l) => l.includes('PATHS="$PATHS apps/pos/.next'));
+    expect(pathsLine, 'POS PATHS line not found').toBeDefined();
+    const shipped = pathsLine!.match(/apps\/pos\/[^\s"]+/g) ?? [];
+    for (const rel of local) {
+      const top = `apps/pos/${rel.split('/')[0]}`;
+      expect(shipped, `${top} is imported by next.config.mjs but not shipped`).toContain(top);
+    }
+  });
 });
 
 describe('T-417 ci.yml: change detection and app jobs (case 9)', () => {

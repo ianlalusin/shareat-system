@@ -241,7 +241,7 @@ describe('S1 supplier - a refused save keeps what was typed (DEF-617)', () => {
     expect(plain(html), 'the refusal banner').toContain(TERMS_BLANK);
     const form = editForm(html);
     expect(form, 'reopened').not.toContain('<fieldset disabled');
-    expect(form, 'Save is showing').toMatch(/<button[^>]*type="submit"[^>]*>\s*Save\s*<\/button>/);
+    expect(form, 'Save is showing').toMatch(/<button[^>]*type="submit"[^>]*aria-label="Save"[^>]*>/); // T-448: Save is an icon button (words are aria-label + data-tip)
     expect(form, 'stored name drawn').toContain(`value="${s.name}"`);
     expect(form, 'stored account number drawn (the user sees what is on file)').toContain('value="5555"');
     for (const typed of ['Typed Supplier Name', 'Typed Rep', 'Typed Bank', 'Typed notes', '0012-3456-7']) {

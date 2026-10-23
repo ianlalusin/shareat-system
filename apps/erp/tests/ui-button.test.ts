@@ -101,8 +101,9 @@ describe('Button — T-334 slice 2 contract', () => {
   // purpose — rounded-[12px] (t387-q3 = b), font-semibold, one 44px height (t387-q4 = a, `min-h-11`:
   // the census reads `min-h-N` as N*4 px, touch-target-geometry.ts:439), secondary hover:bg-canvas,
   // and the new `ghost` variant. The focus idiom is Amendment 6 (`ring-ink`) and is unchanged.
+  // T-448: text buttons are PILLS (rounded-full, was rounded-[12px]); a word that names an action becomes a round icon button (tests below).
   const BASE_SNAPSHOT =
-    'inline-flex items-center gap-2 min-h-11 rounded-[12px] px-4 py-2.5 text-sm font-semibold disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
+    'inline-flex items-center gap-2 min-h-11 rounded-full px-4 py-2.5 text-sm font-semibold disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
   const VARIANT_SNAPSHOT = {
     primary: 'border border-transparent bg-brand text-white hover:bg-brand-hover',
     secondary: 'border border-surface-border bg-surface text-ink hover:bg-canvas',
@@ -126,11 +127,12 @@ describe('Button — T-334 slice 2 contract', () => {
     }
   });
 
-  const FORBIDDEN_SHAPE = /^rounded-(full|md|lg|xl|2xl|3xl)$/;
-  it('shape and weight: rounded-[12px] + font-semibold + min-h-11, and NEVER rounded-full / rounded-md / font-medium (t387-q3, t387-q4)', () => {
+  // T-448: rounded-full is now THE shape; the old 12px radius and the stock md/lg radii are what must never appear.
+  const FORBIDDEN_SHAPE = /^(rounded-(md|lg|xl|2xl|3xl)|rounded-\[12px\])$/;
+  it('shape and weight: rounded-full + font-semibold + min-h-11, and NEVER rounded-[12px] / rounded-md / font-medium (T-448, t387-q4)', () => {
     for (const variant of ['primary', 'secondary', 'ghost', 'danger'] as const) {
       const tokens = classTokens(renderToStaticMarkup(createElement(Button, { variant, children: 'X' })));
-      expect(tokens.has('rounded-[12px]'), variant).toBe(true);
+      expect(tokens.has('rounded-full'), variant).toBe(true);
       expect(tokens.has('font-semibold'), variant).toBe(true);
       expect(tokens.has('min-h-11'), variant).toBe(true);
       expect([...tokens].filter((t) => FORBIDDEN_SHAPE.test(t)), variant).toEqual([]);
@@ -139,11 +141,11 @@ describe('Button — T-334 slice 2 contract', () => {
   });
 
   // NEGATIVE: the same absence predicate the test above uses, applied to a mutated class string.
-  it('mutation check: a rounded-full (or rounded-md) Button class string is caught by the shape predicate', () => {
+  it('mutation check: a rounded-[12px] (or rounded-md) Button class string is caught by the shape predicate', () => {
     const hasForbiddenShape = (cls: string) => cls.split(/\s+/).some((t) => FORBIDDEN_SHAPE.test(t));
     expect(hasForbiddenShape(`${BASE_SNAPSHOT} ${VARIANT_SNAPSHOT.primary}`)).toBe(false);
-    expect(hasForbiddenShape(BASE_SNAPSHOT.replace('rounded-[12px]', 'rounded-full'))).toBe(true);
-    expect(hasForbiddenShape(BASE_SNAPSHOT.replace('rounded-[12px]', 'rounded-md'))).toBe(true);
+    expect(hasForbiddenShape(BASE_SNAPSHOT.replace('rounded-full', 'rounded-[12px]'))).toBe(true);
+    expect(hasForbiddenShape(BASE_SNAPSHOT.replace('rounded-full', 'rounded-md'))).toBe(true);
   });
 
   it('secondary has hover:bg-canvas; primary keeps hover:bg-brand-hover and has no hover:bg-canvas', () => {
@@ -153,8 +155,9 @@ describe('Button — T-334 slice 2 contract', () => {
     expect(pri.has('hover:bg-canvas')).toBe(false);
   });
 
-  it('ghost (Cancel): transparent fill and border, text-ink, hover:bg-canvas; no bg-brand, no border-danger, no icon', () => {
-    const html = renderToStaticMarkup(createElement(Button, { variant: 'ghost', children: 'Cancel' }));
+  // T-448: icon={null} keeps the words, so the TEXT ghost button is what this pins.
+  it('ghost (Cancel, text): transparent fill and border, text-ink, hover:bg-canvas; no bg-brand, no border-danger, no icon', () => {
+    const html = renderToStaticMarkup(createElement(Button, { variant: 'ghost', icon: null, children: 'Cancel' }));
     const t = classTokens(html);
     for (const need of ['border-transparent', 'bg-transparent', 'text-ink', 'hover:bg-canvas']) expect(t.has(need), need).toBe(true);
     expect(t.has('bg-brand')).toBe(false);
@@ -163,12 +166,51 @@ describe('Button — T-334 slice 2 contract', () => {
     expect(html).not.toContain('<svg');
   });
 
-  it('danger stays OUTLINED with its icon: border-danger text-danger, no solid bg-danger, keeps <svg> (ADR-013 §1)', () => {
-    const html = renderToStaticMarkup(createElement(Button, { variant: 'danger', children: 'Delete' }));
+  // T-448: ADR-013's outlined danger now holds for TEXT danger buttons (icon={null}); an ICON danger button is solid red (Ian's explicit request, test below).
+  it('danger TEXT button stays OUTLINED with its triangle icon: border-danger text-danger, no solid bg-danger, keeps <svg> (ADR-013 §1)', () => {
+    const html = renderToStaticMarkup(createElement(Button, { variant: 'danger', icon: null, children: 'Delete' }));
     const t = classTokens(html);
     expect(t.has('border-danger') && t.has('text-danger')).toBe(true);
     expect(t.has('bg-danger')).toBe(false);
     expect(html).toContain('<svg');
+  });
+
+  // T-448: the round icon button - words become the accessible name + hover tip, never visible text.
+  it('icon buttons: Save/Edit/+ Add/Delete render a round white-on-red or white-on-ink icon with the words as aria-label and data-tip, and no visible text', () => {
+    const cases: Array<[string, 'primary' | 'secondary' | 'danger', string, string]> = [
+      ['Save', 'primary', 'Save', 'bg-brand'],
+      ['Edit', 'secondary', 'Edit', 'bg-ink'],
+      ['+ Add supplier', 'primary', 'Add supplier', 'bg-brand'],
+      ['Delete', 'danger', 'Delete', 'bg-brand'],
+    ];
+    for (const [words, variant, name, fill] of cases) {
+      const html = renderToStaticMarkup(createElement(Button, { variant, children: words }));
+      const t = classTokens(html);
+      expect(html, words).toContain(`aria-label="${name}"`);
+      expect(html, words).toContain(`data-tip="${name}"`);
+      expect(html, words).toContain('<svg');
+      expect(html.replace(/<svg.*?<\/svg>/g, '').replace(/<[^>]+>/g, ''), `${words}: no visible text`).toBe('');
+      for (const need of ['rounded-full', 'h-11', 'w-11', 'erp-icon-btn', fill]) expect(t.has(need), `${words} ${need}`).toBe(true);
+      expect(t.has('rounded-[12px]'), words).toBe(false);
+    }
+  });
+
+  // T-448: Ian's explicit request supersedes ADR-013's outlined danger FOR ICON BUTTONS; text danger stays outlined (test above).
+  it('danger ICON button is solid brand red (white icon), never border-danger/text-danger; the same words as text (icon={null}) keep the outline', () => {
+    const icon = classTokens(renderToStaticMarkup(createElement(Button, { variant: 'danger', children: 'Delete' })));
+    expect(icon.has('bg-brand') && icon.has('text-white')).toBe(true);
+    expect(icon.has('border-danger') || icon.has('text-danger')).toBe(false);
+    const text = classTokens(renderToStaticMarkup(createElement(Button, { variant: 'danger', icon: null, children: 'Delete' })));
+    expect(text.has('border-danger') && !text.has('bg-brand')).toBe(true);
+  });
+
+  it('icon={null} keeps the words visible and drops the round icon shape; an unknown verb also keeps its text', () => {
+    const kept = renderToStaticMarkup(createElement(Button, { icon: null, children: 'Save' }));
+    expect(kept).toContain('>Save</button>');
+    expect(kept).not.toContain('data-tip');
+    const unknown = renderToStaticMarkup(createElement(Button, { children: 'Zebra' }));
+    expect(unknown).toContain('>Zebra</button>');
+    expect(classTokens(unknown).has('erp-icon-btn')).toBe(false);
   });
 
   it('primary emits a solid brand fill and a hover class (§4.1)', () => {
@@ -180,10 +222,11 @@ describe('Button — T-334 slice 2 contract', () => {
     expect(tokens.has('text-white')).toBe(true);
   });
 
+  // T-448: icon={null} so the secondary TEXT classes (text-ink) are what is compared.
   it('secondary is the default when no variant is passed, asserted as a literal (§4.2)', () => {
-    const defaultHtml = renderToStaticMarkup(createElement(Button, { children: 'Cancel' }));
+    const defaultHtml = renderToStaticMarkup(createElement(Button, { icon: null, children: 'Cancel' }));
     const secondaryHtml = renderToStaticMarkup(
-      createElement(Button, { variant: 'secondary', children: 'Cancel' }),
+      createElement(Button, { variant: 'secondary', icon: null, children: 'Cancel' }),
     );
     // The positive literal: §3's own prose names `text-ink` for secondary. Absence-only assertions
     // (no bg-brand, no border-danger) would be satisfied by the null stub, which is why this line —
@@ -195,8 +238,9 @@ describe('Button — T-334 slice 2 contract', () => {
     expect(classTokens(defaultHtml).has('border-danger')).toBe(false);
   });
 
-  it('danger emits no solid brand/danger fill and does emit an outline (§4.3)', () => {
-    const html = renderToStaticMarkup(createElement(Button, { variant: 'danger', children: 'Delete' }));
+  // T-448: TEXT danger only (icon={null}); the icon form is solid red by Ian's request.
+  it('danger TEXT button emits no solid brand/danger fill and does emit an outline (§4.3)', () => {
+    const html = renderToStaticMarkup(createElement(Button, { variant: 'danger', icon: null, children: 'Delete' }));
     const tokens = classTokens(html);
     expect(tokens.has('bg-brand')).toBe(false);
     // Token, not substring: bg-danger-surface must not make this assertion vacuous either way —
@@ -276,10 +320,11 @@ describe('Button — T-334 slice 2 contract', () => {
     expect(hasDarkTextOverride).toBe(false);
   });
 
-  it('renders a hand-drawn icon only for the danger variant — positive/negative control pair (§9 R3)', () => {
-    const danger = renderToStaticMarkup(createElement(Button, { variant: 'danger', children: 'Delete' }));
-    const primary = renderToStaticMarkup(createElement(Button, { variant: 'primary', children: 'Save' }));
-    const secondary = renderToStaticMarkup(createElement(Button, { variant: 'secondary', children: 'Cancel' }));
+  // T-448: on TEXT buttons (icon={null}) the warning triangle is danger-only.
+  it('renders the hand-drawn warning triangle only for the TEXT danger variant — positive/negative control pair (§9 R3)', () => {
+    const danger = renderToStaticMarkup(createElement(Button, { variant: 'danger', icon: null, children: 'Delete' }));
+    const primary = renderToStaticMarkup(createElement(Button, { variant: 'primary', icon: null, children: 'Save' }));
+    const secondary = renderToStaticMarkup(createElement(Button, { variant: 'secondary', icon: null, children: 'Cancel' }));
 
     // Positive half.
     expect(danger).toContain('<svg');

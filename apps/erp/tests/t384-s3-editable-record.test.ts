@@ -112,7 +112,8 @@ describe('E2: locked render (renderToStaticMarkup)', () => {
   it('has an Edit button with aria-label="Edit Gcash", type="button"', async () => {
     const html = await render();
     expect(html).toContain('aria-label="Edit Gcash"');
-    expect(html).toMatch(/<button[^>]*type="button"[^>]*>\s*Edit\s*<\/button>|<button[^>]*>\s*Edit\s*<\/button>/);
+    // T-448: Edit is a round icon button - the accessible name and the hover tip carry the word, no visible text.
+    expect(html).toMatch(/<button[^>]*type="button"[^>]*aria-label="Edit Gcash"[^>]*data-tip="Edit"[^>]*><svg/);
   });
   it('has no type="submit" and no Save button while locked', async () => {
     const html = await render();
@@ -248,8 +249,9 @@ describe('E6: the editing render (audit B6), through EditableRecordView', () => 
     const html = await view('editing');
     expect(html).toContain('<fieldset');
     expect(html).not.toContain('<fieldset disabled');
-    expect(html).toMatch(/<button[^>]*type="submit"[^>]*>\s*Save\s*<\/button>/);
-    expect(html).toMatch(/<button[^>]*type="button"[^>]*>\s*Cancel\s*<\/button>/);
+    // T-448: icon Save / icon Cancel; the accessible name (aria-label) is the word.
+    expect(html).toMatch(/<button[^>]*type="submit"[^>]*aria-label="Save"[^>]*><svg/);
+    expect(html).toMatch(/<button[^>]*type="button"[^>]*aria-label="Cancel"[^>]*><svg/);
     expect(html).not.toContain('aria-label="Edit Gcash"');
   });
   it('editing: extra is rendered; locked: it is not', async () => {

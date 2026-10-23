@@ -69,7 +69,7 @@ describe('T-450 entire ERP table rollout', () => {
     expect(shell.match(/<PhoneTableCards>/g)).toHaveLength(1);
     expect(shell).toMatch(/<PhoneTableCards>[\s\S]*<ScreenState[\s\S]*\{children\}<\/PhoneTableCards>/);
     const adapter = read('apps/erp/src/components/shell/PhoneTableCards.tsx');
-    expect(adapter).toContain('observePhoneTables(root.current)');
+    expect(adapter).toContain('observePhoneTables(root.current, { awaitHydration: true })');
     expect(adapter).toContain('data-phone-table-root');
   });
   it('keeps card layout screen-only below 768px, retaining tablet and print tables', () => {

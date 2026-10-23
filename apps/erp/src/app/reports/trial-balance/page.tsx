@@ -3,12 +3,12 @@ import { reportScope, runReport } from '../lib';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { EmptyState } from '@/components/reports/EmptyState';
 import { ReportBasis } from '@/components/reports/ReportBasis';
-import { ReportFilters } from '@/components/reports/ReportFilters';
 import { TieIndicator } from '@/components/reports/TieIndicator';
 import { TrialBalanceTable } from '@/components/reports/TrialBalanceTable';
 import { CsvExportLink } from '@/components/reports/CsvExportLink';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
+import { Button, Field, FormGrid, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Trial Balance — Shareat System' };
 
@@ -69,17 +69,54 @@ export default async function TrialBalancePage({
         </PageDescription>
       </div>
 
-      <ReportFilters
-        basePath="/reports/trial-balance"
-        orgs={[{ id: orgId, label: `${scope.orgName} (${scope.orgCode})` }]}
-        currentOrgId={orgId}
-        stores={storeRows.map((s) => ({ id: s.id, label: `${s.name} (${s.code})` }))}
-        currentStoreId={storeId}
-        fromDate={fromDate}
-        toDate={toDate}
-        includeYearClose={includeYearClose}
-        yearCloseHelp="Defaults to included — a trial balance is a balance-sheet-as-of view (ADR-006)."
-      />
+      {/* T-448: one wrapping row of content-sized fields, Apply on the controls' baseline. Same GET form
+          and field names as the shared ReportFilters (which the other reports still use). */}
+      <form
+        method="GET"
+        action="/reports/trial-balance"
+        className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-800 dark:bg-neutral-900"
+      >
+        <FormGrid layout="fields" className="[&.erp-form-fields]:items-end">
+          <Field label="Organization" width="name">
+            <Select name="org" defaultValue={orgId} className="w-full">
+              <option value={orgId}>{`${scope.orgName} (${scope.orgCode})`}</option>
+            </Select>
+          </Field>
+          <Field label="Store" width="code">
+            <Select name="store" defaultValue={storeId ?? ''} className="w-full">
+              <option value="">All stores</option>
+              {storeRows.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {`${s.name} (${s.code})`}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="From" width="date">
+            <Input type="date" name="from" defaultValue={fromDate} className="w-full" />
+          </Field>
+          <Field label="To" width="date">
+            <Input type="date" name="to" defaultValue={toDate} className="w-full" />
+          </Field>
+          {/* A <select> with explicit values, not a checkbox: an unchecked checkbox submits nothing,
+              which cannot be told apart from "the form was not submitted". */}
+          <Field
+            label="Year-close entry"
+            width="code"
+            hint="Defaults to included — a trial balance is a balance-sheet-as-of view (ADR-006)."
+          >
+            <Select name="yearClose" defaultValue={includeYearClose ? 'include' : 'exclude'} className="w-full">
+              <option value="include">Included</option>
+              <option value="exclude">Excluded</option>
+            </Select>
+          </Field>
+          <div style={{ flex: 'none' }}>
+            <Button type="submit" variant="primary">
+              Apply
+            </Button>
+          </div>
+        </FormGrid>
+      </form>
 
       <div className="flex items-center justify-between gap-4">
         <ReportBasis

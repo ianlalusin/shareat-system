@@ -161,7 +161,8 @@ const hasAttr = (tag: string, attr: string) => new RegExp(`\\s${attr}(\\s|=|/|>)
 describe('B6 - server renders', () => {
   it('the add form (COD default) renders the days input without required, enabled', async () => {
     expect(days.when, 'the rule has no `when` yet').toBeDefined();
-    const Page = (await import('../src/app/ap/page')).default;
+    // T-448 merge: the add-supplier form moved from /ap into a modal on /ap/suppliers.
+    const Page = (await import('../src/app/ap/suppliers/page')).default;
     const html = renderToStaticMarkup((await Page({ searchParams: Promise.resolve({}) })) as never);
     const tag = inputTag(html, 'creditTermsDays');
     expect(hasAttr(tag, 'required'), tag).toBe(false);

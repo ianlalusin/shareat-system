@@ -114,7 +114,7 @@ jobs:
           [ -d apps/erp/public ] && PATHS="$PATHS apps/erp/public"
           # >>> POS v2 (apps/pos/node_modules holds packages that clash with the root: firebase 10, T-422 rule 7)
           if [ -d apps/pos/.next ]; then
-            PATHS="$PATHS apps/pos/.next apps/pos/package.json apps/pos/next.config.mjs apps/pos/public"
+            PATHS="$PATHS apps/pos/.next apps/pos/package.json apps/pos/next.config.mjs apps/pos/config apps/pos/public"
             [ -d apps/pos/node_modules ] && PATHS="$PATHS apps/pos/node_modules"
           fi
           # <<< POS v2

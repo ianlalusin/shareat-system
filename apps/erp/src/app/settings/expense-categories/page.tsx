@@ -11,7 +11,7 @@ import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { SETTINGS_EXPENSE_CATEGORY_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Button, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Button, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { EXPENSE_CATEGORY_ACCOUNT, EXPENSE_CATEGORY_RENAME } from './typed-forms';
@@ -121,17 +121,20 @@ export default async function ExpenseCategoriesSettingsPage({
                         rule 5), and renaming it here would have the next seed re-create the
                         original beside it. It can still be retired, which is rule 2's own wording
                         and what makes a 38-row seed survivable for a business that uses 20. */}
-                    {c.isSystem ? (
-                      c.category
-                    ) : (
+                    {/* T-448: the name is always text; a non-seeded row adds an Edit button (modal). */}
+                    <span className="mr-2">{c.category}</span>
+                    {!c.isSystem && (
                       <EditableRecord action={renameCategoryAction} label={c.category} hidden={{ categoryId: c.id }} typed={typedFor(sp, EXPENSE_CATEGORY_RENAME, c.id, actor.personId)} rules={SETTINGS_EXPENSE_CATEGORY_RULES}>
-                        <Field label={<span className="sr-only">{`Name of ${c.category}`}</span>} rule={SETTINGS_EXPENSE_CATEGORY_RULES.category}>
-                          <Input
-                            {...nativeAttrs(SETTINGS_EXPENSE_CATEGORY_RULES.category)}
-                            defaultValue={c.category}
-                            className="w-full py-1"
-                          />
-                        </Field>
+                        <FormGrid layout="fields">
+                          <Field label="Name" width="name" rule={SETTINGS_EXPENSE_CATEGORY_RULES.category}>
+                            <Input
+                              {...nativeAttrs(SETTINGS_EXPENSE_CATEGORY_RULES.category)}
+                              defaultValue={c.category}
+                              aria-label={`Name of ${c.category}`}
+                              className="w-full"
+                            />
+                          </Field>
+                        </FormGrid>
                       </EditableRecord>
                     )}
                     {isUnmapped && (
@@ -173,54 +176,64 @@ export default async function ExpenseCategoriesSettingsPage({
                   </td>
                   <td className="py-2">
                     {!isUnmapped ? (
-                    <EditableRecord
-                      action={setCategoryAccountAction}
-                      label={`account for ${c.category}`}
-                      hidden={{ categoryId: c.id, categoryLabel: c.category }}
-                      typed={typedFor(sp, EXPENSE_CATEGORY_ACCOUNT, c.id, actor.personId)}
-                    >
-                      <Select
-                        name="accountCode"
-                        defaultValue={c.accountCode ?? ''}
-                        className="w-full"
-                        aria-label={`Account for ${c.category}`}
-                      >
-                        {/* ⭐ A real choice, not a placeholder: picking it CLEARS the mapping.
-                            `account_code` is nullable on purpose so a wrong mapping is
-                            removable — a wrong account posts silently, an absent one refuses. */}
-                        <option value="">— none (blocks posting) —</option>
-                        {accounts.map((a) => (
-                          <option key={a.code} value={a.code}>
-                            {a.code} · {a.name}
-                          </option>
-                        ))}
-                      </Select>
-                    </EditableRecord> 
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span>{accounts.find((a) => a.code === c.accountCode) ? `${c.accountCode} · ${accounts.find((a) => a.code === c.accountCode)!.name}` : c.accountCode}</span>
+                        <EditableRecord
+                          action={setCategoryAccountAction}
+                          label={`account for ${c.category}`}
+                          hidden={{ categoryId: c.id, categoryLabel: c.category }}
+                          typed={typedFor(sp, EXPENSE_CATEGORY_ACCOUNT, c.id, actor.personId)}
+                        >
+                          <FormGrid layout="fields">
+                            <Field label="Posts to" width="name">
+                              <Select
+                                name="accountCode"
+                                defaultValue={c.accountCode ?? ''}
+                                className="w-full"
+                                aria-label={`Account for ${c.category}`}
+                              >
+                                {/* ⭐ A real choice, not a placeholder: picking it CLEARS the mapping.
+                                    `account_code` is nullable on purpose so a wrong mapping is
+                                    removable — a wrong account posts silently, an absent one refuses. */}
+                                <option value="">— none (blocks posting) —</option>
+                                {accounts.map((a) => (
+                                  <option key={a.code} value={a.code}>
+                                    {a.code} · {a.name}
+                                  </option>
+                                ))}
+                              </Select>
+                            </Field>
+                          </FormGrid>
+                        </EditableRecord>
+                      </div>
                     ) : (
-                      /* No account saved yet: an ADD, open with Save (A6 rule 1). */
-                      <form action={setCategoryAccountAction} className="space-y-2">
-                        <input type="hidden" name="categoryId" value={c.id} />
-                        <input type="hidden" name="categoryLabel" value={c.category} />
-                        <Select
-                        name="accountCode"
-                        defaultValue=""
-                        className="w-full"
-                        aria-label={`Account for ${c.category}`}
-                      >
-                        {/* ⭐ A real choice, not a placeholder: picking it CLEARS the mapping.
-                            `account_code` is nullable on purpose so a wrong mapping is
-                            removable — a wrong account posts silently, an absent one refuses. */}
-                        <option value="">— none (blocks posting) —</option>
-                        {accounts.map((a) => (
-                          <option key={a.code} value={a.code}>
-                            {a.code} · {a.name}
-                          </option>
-                        ))}
-                      </Select>
-                        <Button type="submit" variant="secondary">
-                          Save
-                        </Button>
-                      </form>
+                      /* No account saved yet: an ADD — a "Set account" button opens it in a modal. */
+                      <FormModal trigger="Set account" title={`Set account for ${c.category}`} size="sm">
+                        <form action={setCategoryAccountAction} className="space-y-3">
+                          <input type="hidden" name="categoryId" value={c.id} />
+                          <input type="hidden" name="categoryLabel" value={c.category} />
+                          <FormGrid layout="fields">
+                            <Field label="Posts to" width="name">
+                              <Select
+                                name="accountCode"
+                                defaultValue=""
+                                className="w-full"
+                                aria-label={`Account for ${c.category}`}
+                              >
+                                <option value="">— none (blocks posting) —</option>
+                                {accounts.map((a) => (
+                                  <option key={a.code} value={a.code}>
+                                    {a.code} · {a.name}
+                                  </option>
+                                ))}
+                              </Select>
+                            </Field>
+                          </FormGrid>
+                          <Button type="submit" variant="primary">
+                            Save
+                          </Button>
+                        </form>
+                      </FormModal>
                     )}
                   </td>
                 </tr>
@@ -234,40 +247,42 @@ export default async function ExpenseCategoriesSettingsPage({
           uniqueness moved to `lower(trim(category))`, so a hand-typed name can no longer collide
           with a seeded one by case or spacing — bible §4.4 rule 3, DEF-205. */}
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="font-medium">Add a category</h2>
-        <CheckedForm rules={SETTINGS_EXPENSE_CATEGORY_RULES} action={createCategoryAction} className="mt-3 space-y-3 text-sm">
-          <FormGrid>
-            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>} rule={SETTINGS_EXPENSE_CATEGORY_RULES.category}>
-              <Input {...nativeAttrs(SETTINGS_EXPENSE_CATEGORY_RULES.category)} placeholder="Scooter rental" className="w-full" />
-            </Field>
-            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Group</span>}>
-              <Select name="group" defaultValue="OPEX" className="w-full">
-                <option value="OPEX">OPEX — running cost</option>
-                <option value="COGS">COGS — cost of goods sold</option>
-                <option value="CAPEX">CAPEX — equipment</option>
-                <option value="PERSONAL">PERSONAL — owner&apos;s drawings</option>
-              </Select>
-            </Field>
-            <Field label={<span className="text-neutral-600 dark:text-neutral-400">Posts to</span>}>
-              <Select name="accountCode" defaultValue="" className="w-full">
-                <option value="">— none (blocks posting) —</option>
-                {accounts.map((a) => (
-                  <option key={a.code} value={a.code}>
-                    {a.code} · {a.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          </FormGrid>
-          <Button type="submit" variant="primary">
-            Save
-          </Button>
-        </CheckedForm>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-medium">Add a category</h2>
+          <FormModal trigger="+ Add category" title="Add a category" size="md">
+            <CheckedForm rules={SETTINGS_EXPENSE_CATEGORY_RULES} action={createCategoryAction} className="space-y-3 text-sm">
+              <FormGrid layout="fields">
+                <Field label="Name" width="name" rule={SETTINGS_EXPENSE_CATEGORY_RULES.category}>
+                  <Input {...nativeAttrs(SETTINGS_EXPENSE_CATEGORY_RULES.category)} placeholder="Scooter rental" className="w-full" />
+                </Field>
+                <Field label="Group" width="name">
+                  <Select name="group" defaultValue="OPEX" className="w-full">
+                    <option value="OPEX">OPEX — running cost</option>
+                    <option value="COGS">COGS — cost of goods sold</option>
+                    <option value="CAPEX">CAPEX — equipment</option>
+                    <option value="PERSONAL">PERSONAL — owner&apos;s drawings</option>
+                  </Select>
+                </Field>
+                <Field label="Posts to" width="name">
+                  <Select name="accountCode" defaultValue="" className="w-full">
+                    <option value="">— none (blocks posting) —</option>
+                    {accounts.map((a) => (
+                      <option key={a.code} value={a.code}>
+                        {a.code} · {a.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </FormGrid>
+              <Button type="submit" variant="primary">
+                Save
+              </Button>
+            </CheckedForm>
+          </FormModal>
+        </div>
         <p className="mt-3 text-xs text-neutral-500 dark:text-neutral-400">
-          Names are compared ignoring case and spacing, so <code>Rent</code> and{' '}
-          <code>rent&nbsp;</code> are the same category and the second is refused by the database.
-          A category is <strong>retired, never deleted</strong> — everything already recorded in it
-          keeps working.
+          Names are compared ignoring case and spacing. A category is <strong>retired, never deleted</strong> — everything
+          already recorded in it keeps working.
         </p>
       </section>
 

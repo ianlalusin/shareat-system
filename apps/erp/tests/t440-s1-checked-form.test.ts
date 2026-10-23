@@ -367,14 +367,15 @@ describe('EditableRecordView under the context (T-S1-8, T-S1-10)', () => {
     expect(html).not.toMatch(/<button\b[^>]*\sdisabled=""/);
     expect(html).toContain('Edit government numbers');
   });
-  it('the Save class list greys a disabled Save (pointer-events-none + opacity-50) and PRIMARY stays ONE string literal (touch-target census)', async () => {
+  it('the Save class list greys a disabled Save (pointer-events-none + opacity-40) and PRIMARY stays ONE string literal (touch-target census)', async () => {
     const c = await ctxFor(await oneSet(), ACTIVE({}));
     const cls = /class="([^"]*)"/.exec(save(await view('editing', c)))?.[1] ?? '';
-    expect(cls.split(/\s+/)).toEqual(expect.arrayContaining(['disabled:pointer-events-none', 'disabled:opacity-50']));
+    // T-448: the round icon Save greys at opacity-40 (was 50).
+    expect(cls.split(/\s+/)).toEqual(expect.arrayContaining(['disabled:pointer-events-none', 'disabled:opacity-40']));
     const lit = /const PRIMARY =\s*'([^']*)'\s*;/.exec(read('components/forms/EditableRecord.tsx'));
     expect(lit, 'PRIMARY is a single quoted literal').not.toBeNull();
     expect(lit![1]).toMatch(/disabled:pointer-events-none/);
-    expect(lit![1]).toMatch(/disabled:opacity-50/);
+    expect(lit![1]).toMatch(/disabled:opacity-40/);
   });
 });
 
@@ -487,10 +488,10 @@ describe('the two pilot forms (spec S1; A10)', () => {
     expect(region).not.toMatch(/\bname="(sssNo|philhealthNo|pagibigNo|tin)"/);
   });
   it('supplier add form: a <CheckedForm rules=>, name + creditTermsDays through Field rule / nativeAttrs, no literal `required` or name left on them', () => {
-    const page = read('app/ap/page.tsx');
-    const at = page.indexOf('Record a supplier');
+    const page = read('app/ap/suppliers/page.tsx');
+    const at = page.indexOf('Add a supplier');
     expect(at).toBeGreaterThan(-1);
-    const region = page.slice(at, page.indexOf('</section>', at));
+    const region = page.slice(at, page.indexOf('</CheckedForm>', at));
     expect(region).toMatch(/<CheckedForm\b[^>]*\brules=\{/);
     expect(region).not.toMatch(/<form\b/);
     expect((region.match(/\brule=\{/g) ?? []).length).toBeGreaterThanOrEqual(2);

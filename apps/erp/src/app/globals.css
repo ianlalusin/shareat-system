@@ -237,6 +237,8 @@
   .status-icon-rejected .si-stamp { animation: si-stamp 1.8s cubic-bezier(.5, 0, .5, 1) infinite; }
   .status-icon-void .si-strike { stroke-dasharray: 18; animation: si-check 2s ease-out infinite; }
   .status-icon-counting .si-spin { transform-box: fill-box; transform-origin: center; animation: si-spin 2.4s linear infinite; }
+  .erp-tip { animation: erp-tip-in 0.12s ease-out both; }
+  @keyframes erp-tip-in { from { opacity: 0; } to { opacity: 1; } }
   .toast-in { animation: toast-in 0.55s cubic-bezier(.34, 1.56, .64, 1) both; }
   .stamp-slam { transform: rotate(-12deg); animation: stamp-slam 0.6s cubic-bezier(.5, 0, .5, 1.4) both; }
   .empty-flame { transform-box: fill-box; transform-origin: 50% 100%; animation: si-flick 1.2s ease-in-out infinite alternate; }
@@ -414,16 +416,99 @@
 .erp-page :where(input[name="code"], input[name="referenceNo"], input[name="invoiceNo"]) { max-inline-size: min(100%, 14rem); }
 .erp-page :where(input[name="purchaseUnit"], input[name="baseUnit"], select[name="baseUnit"], input[name="creditTermsDays"]) { max-inline-size: min(100%, 8rem); }
 .erp-page :where(select[name="kind"], select[name="customerGroup"], select[name="vatType"], select[name="isOfficialReceipt"]) { max-inline-size: min(100%, 16rem); }
+/* T-448 (Ian, 2026-10-22: "uneven height of input boxes"): T-445's rule sat in :where(), so any
+   Tailwind py- or min-h- utility on a control beat it and those stayed 38-44px. These selectors carry real
+   specificity (class + element/attribute, above a single utility) so every single-line control and
+   button is one height. Touch screens keep 44px.
+   ⛔ Ian, same day: the dashboard (marked by its "Right now" band) and the staff ID cards were
+   hand-tuned; they are excluded here and must not be restyled by this rule. */
 @media (min-width: 768px) and (pointer: fine) {
-  [data-erp-control="single"]:not([type="file"]):not([type="checkbox"]):not([type="radio"]),
-  .erp-page :where(input:not([type]), input[type="text"], input[type="email"], input[type="tel"], input[type="search"], input[type="password"], input[type="number"], input[type="date"], input[type="month"], input[type="time"], input[type="url"], select) {
+  :is(.erp-page:not(:has([aria-label="Right now"])), .erp-dialog) :is(
+    [data-erp-control="single"]:not([type="file"]):not([type="checkbox"]):not([type="radio"]),
+    input:is(:not([type]), [type="text"], [type="email"], [type="tel"], [type="search"], [type="password"], [type="number"], [type="date"], [type="month"], [type="time"], [type="url"]),
+    select,
+    button:not(.erp-help-tip):not(.erp-icon-btn):not([data-erp-size="free"])
+  ):not([data-staff-card] *) {
     min-height: 32px;
+    height: auto;
     padding-block: 0.25rem;
   }
-  [data-erp-control="multiline"], .erp-page textarea {
+  :is(.erp-page:not(:has([aria-label="Right now"])), .erp-dialog) input[type="file"] { min-height: 32px; padding-block: 0.125rem; }
+  :is(.erp-page:not(:has([aria-label="Right now"])), .erp-dialog) :is([data-erp-control="multiline"], textarea) {
     min-height: 64px;
     padding-block: 0.375rem;
   }
+}
+
+/* T-448 (Ian: icon buttons, "edges more curved"): round icon buttons are square at the row height — 32px with a
+   mouse, 44px on touch — so they line up with the compact inputs beside them. */
+@media (min-width: 768px) and (pointer: fine) {
+  :is(.erp-page:not(:has([aria-label="Right now"])), .erp-dialog) .erp-icon-btn:not([data-staff-card] *) {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+  }
+}
+
+/* T-448 Amendment A2 (Ian, 2026-10-22: "inputs 12px, cards/tables/banners 20px, modals 24px, buttons and badges
+   fully round"): one corner scale. The shared components carry it in their classes; this block reaches the panels
+   and native inputs written inline in pages. Same scope as the compact rule above: the dashboard ("Right now"
+   band) and the staff ID cards are excluded. Small things (buttons, links, images, table-cell bits) are skipped. */
+:is(.erp-page:not(:has([aria-label="Right now"])), .erp-dialog) :is(.rounded-lg, .rounded-xl, .rounded-\[14px\]):not(button, input, select, textarea, a, img, td *, th *, [data-staff-card] *) {
+  border-radius: 20px;
+}
+:is(.erp-page:not(:has([aria-label="Right now"])), .erp-dialog) :is(input:not([type="checkbox"], [type="radio"], [type="file"]), select, textarea):not([data-staff-card] *) {
+  border-radius: 12px;
+}
+
+/* T-448: the one modal. Native <dialog>; the backdrop dims, the panel scrolls inside the viewport. */
+.erp-dialog {
+  width: min(100vw - 2rem, var(--erp-dialog-width, 44rem));
+  max-height: calc(100dvh - 2rem);
+  padding: 0;
+  border: 1px solid var(--surface-border);
+  border-radius: 24px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 20px 50px rgb(0 0 0 / 0.18);
+}
+.erp-dialog::backdrop { background: rgb(20 16 12 / 0.45); }
+.erp-dialog[data-size="sm"] { --erp-dialog-width: 28rem; }
+.erp-dialog[data-size="lg"] { --erp-dialog-width: 64rem; }
+.erp-dialog[data-size="xl"] { --erp-dialog-width: 80rem; }
+.erp-dialog-body { container-type: inline-size; }
+@media (max-width: 639px) {
+  .erp-dialog { width: 100vw; max-width: 100vw; max-height: 100dvh; height: 100dvh; margin: 0; border-radius: 0; }
+}
+
+/* T-448: sibling cards share a row when they fit, instead of one full-width card per row. */
+.erp-card-grid {
+  display: grid;
+  gap: 1rem;
+  align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--erp-card-min, 24rem)), 1fr));
+}
+
+/* T-448: (?) help — a toggletip. Hidden until hover, focus or click. */
+.erp-help-tip-wrap { position: relative; display: inline-flex; vertical-align: middle; }
+.erp-help-tip-pop {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  left: -0.5rem;
+  width: max-content;
+  max-width: min(20rem, 80vw);
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.4;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
+  white-space: normal;
 }
 @container (min-width: 58rem) {
   .split-workspace-grid {

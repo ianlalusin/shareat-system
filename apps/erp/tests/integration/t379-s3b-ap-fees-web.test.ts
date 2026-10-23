@@ -26,6 +26,10 @@ class RedirectSignal extends Error {
   }
 }
 vi.mock('next/navigation', () => ({
+  // T-448: FormModal/Dialog read the address.
+  usePathname: () => '/',
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push() {}, replace() {}, refresh() {}, back() {}, forward() {}, prefetch() {} }),
   redirect: (to: string) => {
     throw new RedirectSignal(to);
   },
@@ -327,7 +331,9 @@ describe('W5 (REV-6) — the log-a-bill form has both fee inputs and says both a
       expect(tag, `no <input name="${name}"> on /ap`).toBeDefined();
       expect(tag).not.toMatch(/\brequired\b/);
     }
-    expect(TEXT(html)).toContain("Part of the total above. Both are added to the items' cost; neither is a line.");
+    // T-448: the one paragraph became a (?) hint on EACH fee field (text still in the DOM, inside the hidden tooltip).
+    const fee = "Optional. Part of the total above, added to the items' cost; not a line.";
+    expect(TEXT(html).split(fee).length - 1, 'both fee fields carry the hint').toBeGreaterThanOrEqual(2);
   });
 });
 

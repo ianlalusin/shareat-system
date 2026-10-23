@@ -10,10 +10,13 @@ describe('T-452 compact card field groups', () => {
     const html = renderToStaticMarkup(createElement(FormGrid, { layout: 'pairs' } as never, 'fields'));
     expect(html).toContain('erp-form-pairs-grid'); expect(html).not.toContain('<form');
   });
-  it('places the control before help and keeps the short label separate', () => {
+  // T-448 merge: the hint is now a (?) HelpTip beside the label (before the control), so a neighbouring control lines up on the control row.
+  it('puts help in the label row and keeps the short label separate', () => {
     const html = renderToStaticMarkup(createElement(Field, { label: 'Net deposited', hint: 'What landed in the account' }, createElement(Input, { name: 'netDeposited' })));
     expect(html).toContain('erp-field-label');
-    expect(html.indexOf('name="netDeposited"')).toBeLessThan(html.indexOf('What landed in the account'));
+    expect(html).toContain('What landed in the account');
+    expect(html.indexOf('What landed in the account')).toBeLessThan(html.indexOf('name="netDeposited"'));
+    expect(html).toContain('erp-help-tip');
   });
   it('applies shared paired spacing to existing record-card groups', () => {
     expect(read('apps/erp/src/components/forms/EditableRecord.tsx')).toContain('erp-record-fields');

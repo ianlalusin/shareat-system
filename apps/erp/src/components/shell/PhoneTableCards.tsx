@@ -8,6 +8,6 @@ const useBeforePaint = typeof window === 'undefined' ? useEffect : useLayoutEffe
 /** Server-rendered children stay server-rendered; only presentation annotations run in the browser. */
 export function PhoneTableCards({ children }: { readonly children: ReactNode }) {
   const root = useRef<HTMLDivElement>(null);
-  useBeforePaint(() => root.current ? observePhoneTables(root.current) : undefined, []);
+  useBeforePaint(() => root.current ? observePhoneTables(root.current, { awaitHydration: true }) : undefined, []);
   return <div ref={root} className="contents" data-phone-table-root="">{children}</div>;
 }

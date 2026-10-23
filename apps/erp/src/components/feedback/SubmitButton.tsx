@@ -22,6 +22,7 @@ import { useContext, type ReactNode } from 'react';
 import { CheckContext } from '@/components/forms/context';
 import { Button } from '@/components/ui';
 import type { ButtonVariant } from '@/components/ui/Button';
+import { actionIconFor } from '@/components/ui/action-icons';
 import { submitButtonState } from './submit-button-state';
 
 export interface SubmitButtonProps {
@@ -68,9 +69,16 @@ export function SubmitButton({ children, pendingLabel, className, disabled, vari
       disabled={state.disabled || disabled || blocked}
       data-check-aware="true"
       aria-busy={state.ariaBusy ? 'true' : undefined}
+      // T-448: the icon comes from the resting words ("Save"), so "Saving…" keeps the same round button, spinning.
+      icon={actionIconFor(children)}
+      busyIcon={pending ? <Spinner /> : undefined}
     >
-      {pending ? <Spinner /> : null}
-      {state.label}
+      {actionIconFor(children) ? state.label : (
+        <>
+          {pending ? <Spinner /> : null}
+          {state.label}
+        </>
+      )}
     </Button>
   );
 }

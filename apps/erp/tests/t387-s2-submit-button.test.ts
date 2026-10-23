@@ -66,14 +66,16 @@ describe('<SubmitButton> SSR (outside any form, not pending)', () => {
     expect(html).not.toContain('Saving…');
   });
 
-  it('is a submit button rendered through the kit Button: primary classes, rounded-[12px], min-h-11, no rounded-full', () => {
+  // T-448: "Save" is a ROUND ICON button (rounded-full, h-11 w-11) whose accessible name is the label; no visible text.
+  it('is a submit button rendered through the kit Button: primary icon button, rounded-full, min-h-11, aria-label=Save, no rounded-[12px]', () => {
     expect(html).toMatch(/type="submit"/);
     const t = classTokens(html);
-    for (const need of ['bg-brand', 'text-white', 'hover:bg-brand-hover', 'rounded-[12px]', 'min-h-11', 'font-semibold']) {
+    for (const need of ['bg-brand', 'text-white', 'hover:bg-brand-hover', 'rounded-full', 'min-h-11', 'erp-icon-btn']) {
       expect(t.has(need), need).toBe(true);
     }
-    expect(t.has('rounded-full')).toBe(false);
-    expect(html).not.toContain('<svg'); // spinner only while pending
+    expect(t.has('rounded-[12px]')).toBe(false);
+    expect(html).toContain('aria-label="Save"');
+    expect(html).not.toContain('animate-spin'); // the check glyph is drawn, the spinner only while pending
   });
 });
 
@@ -105,7 +107,7 @@ describe('<SubmitButton> while its action is pending (useFormStatus mocked pendi
       const html = renderToStaticMarkup(createElement(SubmitButton, { children: 'Post', pendingLabel: 'Posting…' }));
       expect(html).toContain('aria-busy="true"');
       expect(html).toContain('disabled=""');
-      expect(html).toContain('<svg');
+      expect(html).toContain('animate-spin'); // T-448: the spinner REPLACES the icon while pending (an icon alone would not prove it)
       expect(html).toContain('Posting…');
       expect(html).not.toContain('>Post<');
     } finally {
@@ -122,7 +124,8 @@ describe('<SubmitButton variant> — a repeated Save is secondary, not a second 
   it('variant="secondary" renders the kit secondary and keeps the pending behaviour', () => {
     const idle = classTokens(renderToStaticMarkup(createElement(SubmitButton, { children: 'Save', variant: 'secondary' })));
     expect(idle.has('bg-brand')).toBe(false);
-    expect(idle.has('bg-surface')).toBe(true);
+    // T-448: a secondary icon button is white-on-ink (bg-ink), not the old bordered surface.
+    expect(idle.has('bg-ink')).toBe(true);
     formStatus.pending = true;
     try {
       const busy = renderToStaticMarkup(createElement(SubmitButton, { children: 'Save', variant: 'secondary' }));

@@ -105,6 +105,10 @@ opening it. Read them as *requirements*, not as design (bible section 1.2b).
   deliberate Opus pass, and genuinely intricate data-shape design. *"It was hard"* is not the
   bar for escalation; a systematic pass must have been made and failed. Equally, do not spend
   Opus on what Sonnet does well.
+- ⛔ **Check the model before EVERY subagent** (Ian, 2026-10-14, re-stated 2026-10-22). **Haiku**:
+  discovery, greps, lookups, count bumps, mechanical sweeps, simple test fixes. **Sonnet**: builders,
+  testers, auditors (always on money, auth or schema). **Opus**: specs, rulings, verification only;
+  it does not write implementation code. Always set the model explicitly; never inherit Opus.
 - **Research before planning** (bible §3.6). A new phase or module, or any data shape that is
   expensive to undo, gets a bounded research pass into how mature systems solve it *before*
   the plan is written — with a document under `docs/discovery/`. Research **informs**; it

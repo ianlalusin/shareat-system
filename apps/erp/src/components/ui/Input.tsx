@@ -17,7 +17,7 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 // Audit finding 6(b): same ring-offset as Button.tsx's `BASE_CLASSES`, for the same reason — one
 // shared focus idiom across the components this slice ships, not two focus rings sitting at
 // different distances once a form adopts both.
-const BASE_CLASSES = 'rounded-[10px] border bg-field px-3 py-2 min-h-11 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:bg-canvas disabled:text-muted aria-[invalid=true]:border-danger';
+const BASE_CLASSES = 'rounded-[12px] border bg-field px-3 py-2 min-h-11 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:bg-canvas disabled:text-muted aria-[invalid=true]:border-danger';
 
 export function Input({
   invalid = false,

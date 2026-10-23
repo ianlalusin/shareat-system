@@ -128,7 +128,7 @@ describe('S2-R2 — the Change control is decided PER CHANNEL, at that channel\'
       // 2026-10-09, T-384 sweep fallout (A0): "Change" (a <details>/<summary>) is now the EditableRecord's Edit button,
       // labelled "Edit <channel> payout account". Same per-store gate: present on A, absent on B.
       expect(html, 'store A: the admin is scoped here, Edit must show').toMatch(
-        /aria-label="Edit Foodpanda A [^"]* payout account"[^>]*>Edit</,
+        /aria-label="Edit Foodpanda A [^"]* payout account"/, // T-448: Edit is an icon button; its words are the aria-label
       );
       expect(
         html,

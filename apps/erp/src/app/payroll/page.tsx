@@ -18,7 +18,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, Input, Select } from '@/components/ui';
+import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { PAYROLL_PAY_RATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
@@ -107,46 +107,43 @@ export default async function PayrollPage({
         </span>
       </div>
 
-      <form method="get" className="flex flex-wrap items-end gap-3">
-        <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1">
-          <span className={LABEL}>Store</span>
-          <Select name="store" defaultValue={storeId} className="w-full">
-            {stores.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </Select>
-        </label>
-        {/* ⭐ The store's OWN periods. ⚠️ The dates stay editable underneath — a late correction
-            has to be payable even when it does not line up with a configured window. */}
-        {periodOptions.length > 0 && (
-          <label className="flex min-w-0 flex-1 basis-48 flex-col gap-1">
-            <span className={LABEL}>Period</span>
-            <Select
-              name="period"
-              defaultValue={`${periodStart}|${periodEnd}`}
-              className="w-full"
-            >
-              {periodOptions.map((p) => (
-                <option key={p.start} value={`${p.start}|${p.end}`}>
-                  {p.label}
+      {/* T-448: one compact filter row; widths by kind of value. */}
+      <form method="get">
+        <FormGrid layout="fields">
+          <Field label="Store" width="name">
+            <Select name="store" defaultValue={storeId} className="w-full">
+              {stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
                 </option>
               ))}
             </Select>
-          </label>
-        )}
-        <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1">
-          <span className={LABEL}>From</span>
-          <Input name="start" type="date" defaultValue={periodStart} className="w-full" />
-        </label>
-        <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1">
-          <span className={LABEL}>to</span>
-          <Input name="end" type="date" defaultValue={periodEnd} className="w-full" />
-        </label>
-        <Button type="submit" variant="secondary">
-          Preview
-        </Button>
+          </Field>
+          {/* ⭐ The store's OWN periods. ⚠️ The dates stay editable underneath — a late correction
+              has to be payable even when it does not line up with a configured window. */}
+          {periodOptions.length > 0 && (
+            <Field label="Period" width="name">
+              <Select name="period" defaultValue={`${periodStart}|${periodEnd}`} className="w-full">
+                {periodOptions.map((p) => (
+                  <option key={p.start} value={`${p.start}|${p.end}`}>
+                    {p.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+          <Field label="From" width="date">
+            <Input name="start" type="date" defaultValue={periodStart} className="w-full" />
+          </Field>
+          <Field label="to" width="date">
+            <Input name="end" type="date" defaultValue={periodEnd} className="w-full" />
+          </Field>
+          <div className="!flex-none self-end">
+            <Button type="submit" variant="secondary">
+              Preview
+            </Button>
+          </div>
+        </FormGrid>
       </form>
 
       {/* ⭐ The premium settings this run is computed under. ⚠️ These were constants in code until
@@ -377,19 +374,23 @@ export default async function PayrollPage({
 
       {/* ------------------------------------------------------------------ rates */}
       <section className="space-y-3">
-        <h2 className="text-sm font-medium">Pay rates</h2>
-        <p className="max-w-2xl text-xs text-neutral-500">
-          ⛔ A rate is never edited — a new one <strong>supersedes</strong> it from its effective
-          date, because a payslip already posted was computed under the old one and has to stay
-          explicable. ⚠️ Only a <strong>daily</strong> basis has a compute path.
-        </p>
+        <div className="flex items-center gap-1">
+          <h2 className="text-sm font-medium">Pay rates</h2>
+          <HelpTip label="Pay rates">
+            ⛔ A rate is never edited — a new one <strong>supersedes</strong> it from its effective
+            date, because a payslip already posted was computed under the old one and has to stay
+            explicable. ⚠️ Only a <strong>daily</strong> basis has a compute path.
+          </HelpTip>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[40rem] text-sm">
+          <table className="w-full min-w-[32rem] text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-neutral-500">
                 <th className="py-1 pr-3 font-medium">Person</th>
                 <th className="py-1 pr-3 font-medium">Rate in force today</th>
-                <th className="py-1 font-medium">Set a new rate</th>
+                <th className="py-1 text-right font-medium">
+                  <span className="sr-only">Set a new rate</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -404,29 +405,40 @@ export default async function PayrollPage({
                       </span>
                     )}
                   </td>
-                  <td className="py-2">
-                    <CheckedForm rules={PAYROLL_PAY_RATE_RULES} action={setPayRateAction} className="flex flex-wrap items-end gap-2">
-                      <input type="hidden" name="storeId" value={storeId} />
-                      <input type="hidden" name="employmentId" value={r.id} />
-                      <Select name="basis" defaultValue="daily" className="w-24">
-                        <option value="daily">daily</option>
-                        <option value="hourly">hourly</option>
-                      </Select>
-                      <Field label="Rate" rule={PAYROLL_PAY_RATE_RULES.amount}>
-                        <Input {...nativeAttrs(PAYROLL_PAY_RATE_RULES.amount)} placeholder="0.00" className="w-28" />
-                      </Field>
-                      <Field label="From" rule={PAYROLL_PAY_RATE_RULES.effectiveFrom}>
-                        <Input
-                          type="date"
-                          {...nativeAttrs(PAYROLL_PAY_RATE_RULES.effectiveFrom)}
-                          defaultValue={periodStart}
-                          className="w-40"
-                        />
-                      </Field>
-                      <Button type="submit" variant="secondary">
-                        Save
-                      </Button>
-                    </CheckedForm>
+                  <td className="py-2 text-right">
+                    {/* T-448: the per-row inline form is now a modal opened by "Set rate". */}
+                    <FormModal
+                      trigger="Set rate"
+                      triggerVariant="secondary"
+                      triggerLabel={`Set a new rate for ${r.personName}`}
+                      title={`Set a new rate — ${r.personName}`}
+                      description="Takes effect from the date below; the current rate stays on past payslips."
+                      size="sm"
+                    >
+                      <CheckedForm rules={PAYROLL_PAY_RATE_RULES} action={setPayRateAction}>
+                        <input type="hidden" name="storeId" value={storeId} />
+                        <input type="hidden" name="employmentId" value={r.id} />
+                        <FormGrid layout="fields">
+                          <Field label="Basis" width="short">
+                            <Select name="basis" defaultValue="daily" className="w-full">
+                              <option value="daily">daily</option>
+                              <option value="hourly">hourly</option>
+                            </Select>
+                          </Field>
+                          <Field label="Rate" width="short" rule={PAYROLL_PAY_RATE_RULES.amount}>
+                            <Input {...nativeAttrs(PAYROLL_PAY_RATE_RULES.amount)} placeholder="0.00" className="w-full" />
+                          </Field>
+                          <Field label="From" width="date" rule={PAYROLL_PAY_RATE_RULES.effectiveFrom}>
+                            <Input type="date" {...nativeAttrs(PAYROLL_PAY_RATE_RULES.effectiveFrom)} defaultValue={periodStart} className="w-full" />
+                          </Field>
+                          <div className="!flex-none self-end">
+                            <Button type="submit" variant="secondary">
+                              Save
+                            </Button>
+                          </div>
+                        </FormGrid>
+                      </CheckedForm>
+                    </FormModal>
                   </td>
                 </tr>
               ))}

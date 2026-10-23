@@ -30,7 +30,7 @@ const inputInvalid = classesOf(R(Input, { name: 'x', invalid: true }), 'input');
 
 describe('Input is the reference (sanity)', () => {
   it('Input still has the 44px field geometry', () => {
-    for (const t of ['rounded-[10px]', 'bg-field', 'min-h-11', 'border-field-border']) expect(inputValid).toContain(t);
+    for (const t of ['rounded-[12px]', 'bg-field', 'min-h-11', 'border-field-border']) expect(inputValid).toContain(t); // T-448 A2: 10px -> 12px
   });
 });
 
