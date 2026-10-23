@@ -4,7 +4,7 @@ topic: store-operations/opening-and-closing
 about: [staff, manager]
 readers: staff
 must_be_exact: false
-related: [staff/cashier-dine-in-sop, staff/server-and-kitchen-sop, planned]
+related: [staff/cashier-dine-in-sop, staff/server-and-kitchen-sop, planned, store-operations/daily-usage]
 updated: 2026-10-23
 ---
 

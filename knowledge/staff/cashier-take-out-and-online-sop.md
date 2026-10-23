@@ -4,7 +4,7 @@ topic: staff/cashier-take-out-and-online-sop
 about: [cashier, manager]
 readers: staff
 must_be_exact: true
-related: [customer-experience/take-out-in-store, customer-experience/online-orders, staff/server-and-kitchen-sop, staff/cashier-dine-in-sop]
+related: [customer-experience/take-out-in-store, customer-experience/online-orders, staff/server-and-kitchen-sop, staff/cashier-dine-in-sop, cash-and-payments/platform-wastage]
 updated: 2026-10-23
 ---
 
@@ -52,3 +52,6 @@ updated: 2026-10-23
   Merchant app on the company phone.
 - Whoever holds the device handles the order. If you hold it, pass each order to the kitchen.
 - The customer pays Foodpanda or Grab, never the store. These orders are not entered in the POS.
+- Check every platform order carefully. If an item is wrong or missing, the platform refunds the
+  customer and takes it out of the store's payout, and the cost may be charged to the staff
+  member responsible.

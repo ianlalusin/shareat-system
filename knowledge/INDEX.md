@@ -49,6 +49,7 @@ loosely or fill gaps.
 | Page | Title | About | Readers | Summary | Updated |
 |---|---|---|---|---|---|
 | [store-operations/opening-and-closing.md](store-operations/opening-and-closing.md) | Opening and closing the store — checklists | staff, manager | staff | Per-position checklists in ERP; prep starts after opening; closing open until 2 a.m.; photo items and AI checks set by manager; failures warn the manager; missed checklist = automatic infraction | 2026-10-23 |
+| [store-operations/daily-usage.md](store-operations/daily-usage.md) | Nightly usage recording | staff, manager | staff | One staff per department records usage nightly in ERP; missed night = infraction + catch-up entry; monthly count mismatch = manager corrects and investigates | 2026-10-23 |
 
 ### staff
 
@@ -62,6 +63,7 @@ loosely or fill gaps.
 
 | Page | Title | About | Readers | Summary | Updated |
 |---|---|---|---|---|---|
+| [cash-and-payments/platform-wastage.md](cash-and-payments/platform-wastage.md) | Foodpanda and Grab wastage — refunded wrong or missing items | manager, staff | managers | Daily Gmail script feeds the ERP v1 wastage page; manager names staff, raises with platform (photos, CCTV), else expense or charge staff. must_be_exact | 2026-10-23 |
 | [cash-and-payments/platform-payouts.md](cash-and-payments/platform-payouts.md) | Foodpanda and Grab payouts | manager | managers | Customers pay the platforms; Grab pays next business day, Foodpanda weekly; not in the POS. must_be_exact | 2026-10-23 |
 
 ### policies

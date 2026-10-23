@@ -4,7 +4,7 @@ topic: planned
 about: [customer, cashier]
 readers: managers
 must_be_exact: false
-related: [customer-experience/dine-in-journey, customer-experience/customer-app, cash-and-payments/platform-payouts, staff/cashier-take-out-and-online-sop, store-operations/opening-and-closing]
+related: [customer-experience/dine-in-journey, customer-experience/customer-app, cash-and-payments/platform-payouts, staff/cashier-take-out-and-online-sop, store-operations/opening-and-closing, store-operations/daily-usage]
 updated: 2026-10-23
 ---
 
@@ -17,4 +17,4 @@ When a change goes live, move it into the real pages and delete it here.
 |---|---|---|
 | v2 | Today the customer app shows a bill preview. In v2 the customer will request the bill from the app while seated. | dine-in-journey, customer-app, cashier-dine-in-sop |
 | Near future (date not set) | Foodpanda and Grab orders recorded in the POS (not in v1, not yet in v2). | cashier-take-out-and-online-sop, platform-payouts |
-| v2 | Opening and closing checklists move to ERP v2, inside a slim staff-only version of ERP v2 that shows only staff work (checklists, wastage and usage) — no admin or manager screens. | opening-and-closing |
+| v2 | Opening and closing checklists move to ERP v2, inside a slim staff-only version of ERP v2 that shows only staff work (checklists, wastage and usage, with usage recording improved) — no admin or manager screens. | opening-and-closing, daily-usage |
