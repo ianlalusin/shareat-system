@@ -141,7 +141,7 @@ export function createHarness(deps: { h: { actor: Actor | null }; seen: { record
         expect(plain(html), 'the refusal banner').toMatch(c.refusal);
         const seg = pickForm(html, c.has(ctx));
         expect(seg, 'reopened: not locked').not.toContain('<fieldset disabled');
-        expect(seg, 'Save is showing').toMatch(/<button[^>]*type="submit"[^>]*>\s*Save\s*<\/button>/);
+        expect(seg, 'Save is showing').toMatch(/<button[^>]*type="submit"[^>]*aria-label="Save"[^>]*>/); // T-448: Save is an icon button (words are aria-label + data-tip)
         await c.stored(ctx, seg, markup);
         for (const typed of notDrawnOf(ctx)) expect(seg, `"${typed}" is typed, never drawn by the server (the browser applies it)`).not.toContain(typed);
         const rec = find(c.sel(ctx));

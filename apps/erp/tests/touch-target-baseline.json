@@ -359,10 +359,14 @@
       "foreign component — box decided inside the component"
     ],
     "components/ui/Button.tsx": [
+      "className could not be resolved statically (dynamic expression outside the known shapes)",
       "className could not be resolved statically (dynamic expression outside the known shapes)"
     ],
     "components/ui/Checkbox.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
+    ],
+    "components/ui/Dialog.tsx": [
+      "ancestry truncated — no font size resolvable"
     ],
     "components/ui/Input.tsx": [
       "className could not be resolved statically (dynamic expression outside the known shapes)"

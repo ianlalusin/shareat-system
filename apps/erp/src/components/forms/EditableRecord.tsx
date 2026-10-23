@@ -22,6 +22,8 @@ import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, us
 import { ruleInputNames, type FieldRuleSetLike } from '@shareat/domain/field-rules';
 import type { TypedView } from '@/lib/keep-typing';
 import { CheckContext } from './context';
+import { Dialog } from '@/components/ui/Dialog';
+import { ActionIcon } from '@/components/ui/action-icons';
 import { CheckSummary } from './CheckSummary';
 import { CHECKED_FORM_INITIAL, checkContextValue, checkedFormReducer, onCheckedSubmit, watchFormReset } from './check-state';
 import { focusControl, readRuledValues, ruledTarget } from './check-dom';
@@ -338,10 +340,11 @@ export interface EditableRecordViewProps extends EditableRecordProps {
 }
 
 // Single string literals (no template or `+`): the touch-target census resolves only literal initializers.
+// T-448 (Ian: white icon on a red or black round button, name on hover): Save is red, Edit and Cancel are ink.
 const PRIMARY =
-  'inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium border border-transparent bg-brand text-white hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:pointer-events-none disabled:opacity-50';
+  'erp-icon-btn inline-flex h-11 w-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full p-0 text-sm border border-transparent bg-brand text-white hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:pointer-events-none disabled:opacity-40';
 const SECONDARY =
-  'inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium border border-surface-border bg-surface text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
+  'erp-icon-btn inline-flex h-11 w-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full p-0 text-sm border border-transparent bg-ink text-canvas hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
 
 /** The presentational tree: no hooks, so the editing state is reachable in server render tests. */
 export function EditableRecordView({
@@ -364,39 +367,51 @@ export function EditableRecordView({
   // T-440: a failing rule makes Save truly disabled. LOCKED never reads the context, whatever it says.
   const check = useContext(CheckContext);
   const blocked = editing && check?.blocked === true;
+  // T-448 (Ian: "dont expose the input box that is disabled"): locked shows only the Edit button; the form lives in the
+  // shared Dialog, always mounted (closed while locked) so reset, refs, the typed-view replay and the registry work unchanged.
+  // Esc, the close button and a backdrop click all go through onCancel (reset + lock).
   return (
     <>
-      <form action={action} ref={formRef} onInput={onFormInput} onChange={onFormInput} onSubmit={onFormSubmit}>
-        {Object.entries(hidden).map(([name, value]) => (
-          <input key={name} type="hidden" name={name} value={value} />
-        ))}
-        <fieldset disabled={!editing} className="erp-record-fields min-w-0">
-          {children}
-        </fieldset>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+      <span className="inline-flex flex-wrap items-center gap-2">
+        {/* While editing the modal covers the page; the Edit button returns (and takes focus back) on close. */}
+        {editing ? null : (
+          <button type="button" ref={editRef} className={SECONDARY} aria-label={`Edit ${label}`} aria-haspopup="dialog" data-tip="Edit" onClick={onEdit}>
+            <ActionIcon name="edit" />
+          </button>
+        )}
+        {!editing && message ? (
+          <span role="alert" className="text-sm text-danger">
+            {message}
+          </span>
+        ) : null}
+      </span>
+      <Dialog open={editing} onClose={() => onCancel?.()} title={`Edit ${label}`} footer={editing && extra ? extra : undefined}>
+        <form action={action} ref={formRef} onInput={onFormInput} onChange={onFormInput} onSubmit={onFormSubmit}>
+          {Object.entries(hidden).map(([name, value]) => (
+            <input key={name} type="hidden" name={name} value={value} />
+          ))}
+          <fieldset disabled={!editing} className="erp-record-fields min-w-0">
+            {children}
+          </fieldset>
+          {/* Locked renders no submit at all (a closed dialog's Save must not be reachable by an implicit submit). */}
           {editing ? (
-            <>
-              <button type="submit" className={PRIMARY} disabled={blocked} data-check-aware="true">
-                {saveLabel}
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <button type="submit" className={PRIMARY} disabled={blocked} data-check-aware="true" aria-label={saveLabel} data-tip={saveLabel}>
+                <ActionIcon name="check" />
               </button>
-              <button type="button" className={SECONDARY} onClick={onCancel}>
-                Cancel
+              <button type="button" className={SECONDARY} onClick={onCancel} aria-label="Cancel" data-tip="Cancel">
+                <ActionIcon name="close" />
               </button>
-            </>
-          ) : (
-            <button type="button" ref={editRef} className={SECONDARY} aria-label={`Edit ${label}`} onClick={onEdit}>
-              Edit
-            </button>
-          )}
-          {message ? (
-            <span role="alert" className="text-sm text-danger">
-              {message}
-            </span>
+              {message ? (
+                <span role="alert" className="text-sm text-danger">
+                  {message}
+                </span>
+              ) : null}
+            </div>
           ) : null}
-        </div>
-        <CheckSummary active={editing && check?.active === true} summary={check?.summary ?? null} />
-      </form>
-      {editing ? extra : null}
+          <CheckSummary active={editing && check?.active === true} summary={check?.summary ?? null} />
+        </form>
+      </Dialog>
     </>
   );
 }

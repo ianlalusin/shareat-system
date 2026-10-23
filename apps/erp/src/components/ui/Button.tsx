@@ -5,12 +5,21 @@
  * component and still bundles fine when a client component imports it; adding it would foreclose
  * the server path for every plain `type="submit"` caller inside a server-action form.
  */
-import type { ButtonHTMLAttributes } from 'react';
+import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { ActionIcon, actionIconFor, actionName, type ActionIconName } from './action-icons';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   readonly variant?: ButtonVariant;
+  /**
+   * T-448: the icon. Left out, it is read from the button's own words ("Save" -> check, "+ Add supplier" -> plus);
+   * `null` keeps the words. With an icon the button is a round icon button: the words become its accessible name
+   * and the name shown on hover (`data-tip`, drawn by `TooltipLayer`).
+   */
+  readonly icon?: ActionIconName | null;
+  /** Drawn instead of the icon while busy (SubmitButton's spinner). */
+  readonly busyIcon?: ReactNode;
 }
 
 // A single string literal, not `+`-joined — apps/erp/tests/touch-target-geometry.ts's
@@ -27,7 +36,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 // the ring read as an outline rather than as the fill growing by 2px. No new token —
 // `ring-offset-surface` resolves through Tailwind's default `ringOffsetColor`, which spreads
 // `theme('colors')` the same way `ringColor` does.
-const BASE_CLASSES = 'inline-flex items-center gap-2 min-h-11 rounded-[12px] px-4 py-2.5 text-sm font-semibold disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
+const BASE_CLASSES = 'inline-flex items-center gap-2 min-h-11 rounded-full px-4 py-2.5 text-sm font-semibold disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
 
 // §3: primary is the one solid fill; secondary is the careless-caller-safe default; danger is
 // OUTLINED, never filled (§9 R2 guard 9) and never carries a surface tint either — §3 gives it no
@@ -85,13 +94,51 @@ function WarningTriangleIcon() {
   );
 }
 
+// T-448 (Ian: "white icon on red or black button", "edges more curved"): round, one size, white glyph. Red for
+// primary and danger, the ink fill (black in light mode) otherwise. A single literal for the census.
+const ICON_BASE = 'erp-icon-btn inline-flex h-11 w-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full p-0 text-sm disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
+const ICON_VARIANT: Record<ButtonVariant, string> = {
+  primary: 'border border-transparent bg-brand text-white hover:bg-brand-hover',
+  danger: 'border border-transparent bg-brand text-white hover:bg-brand-hover',
+  secondary: 'border border-transparent bg-ink text-canvas hover:opacity-85',
+  ghost: 'border border-transparent bg-ink text-canvas hover:opacity-85',
+};
+
+/** The plain words of a button whose children are text (a string, or strings and numbers side by side). */
+function textOf(children: ReactNode): string | null {
+  if (typeof children === 'string' || typeof children === 'number') return String(children);
+  if (Array.isArray(children) && children.length > 0 && children.every((c) => typeof c === 'string' || typeof c === 'number' || c === null || c === false)) {
+    return children.filter((c) => c !== null && c !== false).join('');
+  }
+  return null;
+}
+
 export function Button({
   variant = 'secondary',
   type = 'button',
   className,
   children,
+  icon,
+  busyIcon,
   ...rest
 }: ButtonProps) {
+  const words = textOf(children);
+  const resolved = icon === null ? null : (icon ?? (words ? actionIconFor(words) : null));
+  if (resolved && words) {
+    const name = actionName(words);
+    return (
+      <button
+        data-erp-control="single"
+        type={type}
+        className={`${ICON_BASE} ${ICON_VARIANT[variant]}${className ? ` ${className}` : ''}`}
+        aria-label={rest['aria-label'] ?? name}
+        data-tip={name}
+        {...rest}
+      >
+        {busyIcon ?? <ActionIcon name={resolved} />}
+      </button>
+    );
+  }
   return (
     <button
       data-erp-control="single"

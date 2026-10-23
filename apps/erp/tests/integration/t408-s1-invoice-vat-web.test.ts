@@ -32,6 +32,10 @@ class RedirectSignal extends Error {
   }
 }
 vi.mock('next/navigation', () => ({
+  // T-448: FormModal/Dialog read the address.
+  usePathname: () => '/',
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push() {}, replace() {}, refresh() {}, back() {}, forward() {}, prefetch() {} }),
   redirect: (to: string) => {
     throw new RedirectSignal(to);
   },

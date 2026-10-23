@@ -11,7 +11,12 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Button, FlashBanner, Input, LinkRow, RowLink } from '@/components/ui';
+import { Badge, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { CheckedForm } from '@/components/forms';
+import { SubmitButton } from '@/components/feedback/SubmitButton';
+import { SUPPLIER_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { ACTION_LINK } from '@/components/action-link';
+import { createSupplierAction } from '../actions';
 
 export const metadata = { title: 'Suppliers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -49,19 +54,56 @@ export default async function SuppliersPage({
 
   return (
     <Page density="table">
-      <div>
-        <h1 className="text-2xl font-semibold">Suppliers</h1>
-        <PageDescription>
-          The register, org-wide. ⭐ One row per supplier — not one per store. v1 keyed suppliers
-          under each branch, so a fleet-wide vendor became <strong>up to twenty</strong> separate
-          records that each had to be edited, reconciled and paid.
-        </PageDescription>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-semibold">Suppliers</h1>
+          <PageDescription>
+            The register, org-wide. ⭐ One row per supplier — not one per store. v1 keyed suppliers
+            under each branch, so a fleet-wide vendor became <strong>up to twenty</strong> separate
+            records that each had to be edited, reconciled and paid.
+          </PageDescription>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link href="/ap" className={ACTION_LINK}>← Payables</Link>
+          {/* T-448: suppliers change rarely, so adding one is a header action, not a form on the invoices page. */}
+          <FormModal trigger="+ Add supplier" title="Add a supplier" size="md">
+            <CheckedForm rules={SUPPLIER_ADD_RULES} action={createSupplierAction} className="space-y-3">
+              <FormSection title="Supplier details">
+                <FormGrid layout="fields">
+                  <Field width="name" label="Name" rule={SUPPLIER_ADD_RULES.name}>
+                    <Input {...nativeAttrs(SUPPLIER_ADD_RULES.name)} placeholder="ABC Meat Supply" className="w-full" />
+                  </Field>
+                  <Field width="long" label="Address" hint="Optional.">
+                    <Input name="address" className="w-full" />
+                  </Field>
+                  <Field width="code" label="Contact no." hint="Optional.">
+                    <Input name="contactNo" className="w-full" />
+                  </Field>
+                </FormGrid>
+              </FormSection>
+              <FormSection title="Payment terms">
+                <FormGrid layout="fields">
+                  <Field label="Payment terms">
+                    <Select name="termsMode" defaultValue="cod" className="w-full">
+                      <option value="cod">Cash on delivery (no credit)</option>
+                      <option value="credit">On credit (AP)</option>
+                    </Select>
+                  </Field>
+                  <Field width="short" label="Days to pay" hint="Only for On credit. 0 to 365." rule={SUPPLIER_ADD_RULES.creditTermsDays}>
+                    <Input {...nativeAttrs(SUPPLIER_ADD_RULES.creditTermsDays)} className="w-full" />
+                  </Field>
+                </FormGrid>
+              </FormSection>
+              <SubmitButton variant="secondary">Save</SubmitButton>
+            </CheckedForm>
+          </FormModal>
+        </div>
       </div>
 
       <FlashBanner flash={sp} />
 
       <form className="flex flex-wrap items-end gap-3">
-        <label className="flex min-w-0 flex-col gap-1 erp-field-long w-full">
+        <label className="flex min-w-0 flex-col gap-1 erp-field-long">
           <span className={LABEL}>Search</span>
           <Input name="q" defaultValue={q} placeholder="Name, TIN, contact, bank…" className="w-full" />
         </label>
@@ -72,9 +114,6 @@ export default async function SuppliersPage({
         <Button type="submit" variant="primary">
           Search
         </Button>
-        <Link href="/ap" className="inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas">
-          Add a supplier
-        </Link>
       </form>
 
       <p className="text-xs text-neutral-500">

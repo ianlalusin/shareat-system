@@ -70,18 +70,18 @@ export function NewUsageForm({
 
   if (items.length === 0) {
     return (
-      <Banner tone="warning" className="mt-3">
+      <Banner tone="warning">
         No active items yet — add one under Inventory › Items first.
       </Banner>
     );
   }
 
   return (
-    <form action={action} className="mt-3 space-y-4">
+    <form action={action} className="space-y-4">
       <input type="hidden" name="storeId" value={storeId} />
 
-      <FormGrid>
-        <Field label="Room" className={FLABEL}>
+      <FormGrid layout="fields">
+        <Field label="Room" width="name" className={FLABEL}>
           <Select name="locationId" required className={FULL}>
             {locations.map((l) => (
               <option key={l.id} value={l.id}>
@@ -90,7 +90,7 @@ export function NewUsageForm({
             ))}
           </Select>
         </Field>
-        <Field label="Kind" className={FLABEL}>
+        <Field label="Kind" width="name" className={FLABEL}>
           <Select
             name="kind"
             required
@@ -102,11 +102,11 @@ export function NewUsageForm({
             <option value="wastage">Wastage — spoiled, damaged, lost</option>
           </Select>
         </Field>
-        <Field label="Used on" className={FLABEL}>
+        <Field label="Used on" width="date" className={FLABEL}>
           <Input name="usedOn" type="date" required defaultValue={today} className={FULL} />
         </Field>
         {kind === 'wastage' && (
-          <Field label="Reason" className={FLABEL}>
+          <Field label="Reason" width="name" className={FLABEL}>
             <Select name="reasonCode" required defaultValue="" className={FULL}>
               <option value="" disabled>
                 Choose a reason
@@ -120,7 +120,7 @@ export function NewUsageForm({
           </Field>
         )}
         {departments.length > 0 && (
-          <Field label="Department (optional)" className={FLABEL}>
+          <Field label="Department (optional)" width="name" className={FLABEL}>
             <Select name="departmentId" defaultValue="" className={FULL}>
               <option value="">—</option>
               {departments.map((d) => (
@@ -145,7 +145,7 @@ export function NewUsageForm({
           return (
             <div
               key={l.key}
-              className="grid grid-cols-2 gap-2 rounded-md border border-neutral-200 p-2 sm:grid-cols-[1fr_8rem_auto] sm:items-end dark:border-neutral-800"
+              className="grid grid-cols-2 gap-2 rounded-md border border-neutral-200 p-2 sm:grid-cols-[minmax(12rem,24rem)_7rem_auto] sm:justify-start sm:items-end dark:border-neutral-800"
             >
               <label className={`${label} col-span-2 sm:col-span-1`}>
                 Item

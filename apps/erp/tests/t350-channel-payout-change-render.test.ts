@@ -187,7 +187,8 @@ describe('R1 — a wired channel card, for a holder of set_channel_payout, shows
       // payout account is an EditableRecord, so the holder sees it LOCKED (disabled fieldset) with an Edit button. Save +
       // Cancel appear only after Edit (client state), so they are not in the static markup.
       expect(changeForm, 'expected the payout account locked until Edit (A0)').toMatch(/<fieldset disabled/);
-      expect(html, 'expected an Edit button for the payout account').toMatch(/aria-label="Edit [^"]*"[^>]*>Edit</);
+      // T-448: the Edit button is a round icon button; its words are the aria-label and data-tip.
+      expect(html, 'expected an Edit button for the payout account').toMatch(/aria-label="Edit [^"]*"[^>]*data-tip="Edit"/);
 
       const selectBlock = /<select[^>]*name="moneyAccountId"[^>]*>[\s\S]*?<\/select>/.exec(changeForm!)?.[0];
       expect(selectBlock, 'expected the moneyAccountId select itself').toBeTruthy();

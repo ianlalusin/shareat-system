@@ -2,6 +2,10 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { cast, expectAccessRefused, expectSentenceError, fd, plain, rawItem, render, run, sql, uid, type Cast } from './t401-s4-common';
 
+// T-448: a known verb (Approve, Reject, Save recipe, ...) is an icon button: its words are the aria-label, not visible text.
+// Expose them to the text checks so "shows X" and "does not show X" both still mean something.
+const plainL = (html: string): string => plain(html.replace(/<button\b[^>]*aria-label="([^"]*)"[^>]*>/g, '<button> $1 '));
+
 /**
  * T-401 S4 (TESTER) - /menu/requests: request -> duplicate shown -> submit; approve / mark duplicate / reject as super admin.
  * Contract (including the TWO-STEP duplicate check on submit): header of t401-s4-common.ts.
@@ -86,8 +90,8 @@ describe('request -> duplicate shown -> submit (manager)', () => {
     const w = await world('dup-page');
     const out = await run(ACTIONS, 'submitItemRequestAction', w.c.managerA, asked(w.c, { name: 'Samgyupsal Set' }));
     const withWarning = await render(PAGE, w.c.managerA, { flashFrom: out.url });
-    expect(plain(withWarning)).toContain('Samgyupsal Set');
-    expect(plain(withWarning)).toContain('Send request anyway');
+    expect(plainL(withWarning)).toContain('Samgyupsal Set');
+    expect(plainL(withWarning)).toContain('Send request anyway');
     const token = confirmToken(withWarning);
     expect(token, 'a per-name token, never the bare "1"').not.toBe('1');
     expect(token.length).toBeGreaterThanOrEqual(8);
@@ -95,7 +99,7 @@ describe('request -> duplicate shown -> submit (manager)', () => {
     const other = await run(ACTIONS, 'submitItemRequestAction', w.c.managerA, asked(w.c, { name: 'Pork Belly Set' }));
     expect(confirmToken(await render(PAGE, w.c.managerA, { flashFrom: other.url })), 'a different name carries a different token').not.toBe(token);
     const plainPage = await render(PAGE, w.c.managerA, {});
-    expect(plain(plainPage)).not.toContain('Send request anyway');
+    expect(plainL(plainPage)).not.toContain('Send request anyway');
   });
 
   it('step 2: the same form with confirmed=1 creates the open request for that manager and store ("Request sent."); name, type, category hint and note are kept', async () => {
@@ -194,7 +198,7 @@ describe('/menu/requests - what each person sees', () => {
     await mk(w.c.manager, 'Rejected Thing', 'rejected', 'we already sell it as a set');
     await mk(w.c.manager, 'Duplicate Thing', 'duplicate');
     await mk(w.c.manager2, 'Someone Elses Thing', 'open');
-    const t = plain(await render(PAGE, w.c.manager, {}));
+    const t = plainL(await render(PAGE, w.c.manager, {}));
     for (const name of ['Open Thing', 'Approved Thing', 'Rejected Thing', 'Duplicate Thing']) expect(t, name).toContain(name);
     expect(t).toContain('Open');
     expect(t).toContain('Approved');
@@ -209,7 +213,7 @@ describe('/menu/requests - what each person sees', () => {
     await run(ACTIONS, 'submitItemRequestAction', w.c.manager, asked(w.c));
     expectAccessRefused(await render(PAGE, w.c.staff, {}), 'request_menu_item');
     for (const [label, who] of [['manager', w.c.manager], ['admin', w.c.admin]] as const) {
-      const t = plain(await render(PAGE, who, {}));
+      const t = plainL(await render(PAGE, who, {}));
       for (const b of ['Approve', 'Mark duplicate', 'Reject']) expect(t, `${label} must not see "${b}"`).not.toContain(b);
     }
   });
@@ -219,7 +223,7 @@ describe('/menu/requests - what each person sees', () => {
     await submitChecked(w.c, w.c.manager, { name: 'Samgyupsal Set', categoryId: w.c.categoryId });
     await run(ACTIONS, 'submitItemRequestAction', w.c.manager2, fd({ storeId: w.c.storeB, name: 'Wagyu Platter', itemType: 'a_la_carte' }));
     const html = await render(PAGE, w.c.superAdmin, {});
-    const t = plain(html);
+    const t = plainL(html);
     expect(t).toContain('Samgyupsal Set');
     expect(t).toContain('Wagyu Platter');
     for (const b of ['Approve', 'Mark duplicate', 'Reject']) expect(t, b).toContain(b);
@@ -292,7 +296,7 @@ describe('resolving a request (super admin only)', () => {
     const w = await world('outcome');
     const r = await open(w, `Ube Cheesecake ${uid('x')}`);
     await run(ACTIONS, 'rejectItemRequestAction', w.c.superAdmin, fd({ id: r.id, note: 'dessert menu is closed' }));
-    const t = plain(await render(PAGE, w.c.managerA, {}));
+    const t = plainL(await render(PAGE, w.c.managerA, {}));
     expect(t).toContain(r.name);
     expect(t).toContain('Rejected');
     expect(t).toContain('dessert menu is closed');

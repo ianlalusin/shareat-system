@@ -24,15 +24,18 @@ describe('FilterRow — the shared filter-row wrapper', () => {
 
   it('defaults the submit label to "Show" — 24 of 26 rows migrated pass nothing here', () => {
     const html = renderToStaticMarkup(createElement(FilterRow, { children: null }));
-    expect(html).toContain('>Show<');
+    // T-448: "Show" is now a round icon button; the word is its accessible name and hover tip, not visible text.
+    expect(html).toContain('aria-label="Show"');
+    expect(html).toContain('data-tip="Show"');
   });
 
   it('accepts a custom submit label — staff/hire is the one caller passing "Search"', () => {
     const html = renderToStaticMarkup(
       createElement(FilterRow, { submitLabel: 'Search', children: null }),
     );
-    expect(html).toContain('>Search<');
-    expect(html).not.toContain('>Show<');
+    // T-448: the label is the accessible name ("Search" is an icon button too).
+    expect(html).toContain('aria-label="Search"');
+    expect(html).not.toContain('aria-label="Show"');
   });
 
   it('appends a passed className to the fixed layout classes rather than replacing them', () => {

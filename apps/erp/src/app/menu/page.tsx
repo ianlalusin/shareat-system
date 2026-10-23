@@ -8,7 +8,7 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { MENU_CATEGORY_RULES, MENU_ITEM_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select } from '@/components/ui';
 import { createCategoryAction, createItemAction, editCategoryAction, retireCategoryAction } from './actions';
 import { listCategories, listOverviewItems, storesInScope, withOrgPrincipal } from './lib';
 import { MENU_CATEGORY } from './typed-forms';
@@ -63,6 +63,61 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
             What the stores sell: categories, items and their variants, what each sale uses up from stock, and the options guests can pick.
             Prices are set per store.
           </PageDescription>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* T-448: the add forms open from header buttons. */}
+          {canManage && (
+            <FormModal trigger="+ Category" title="Add category" size="sm">
+              <CheckedForm rules={MENU_CATEGORY_RULES} action={createCategoryAction} className="space-y-3">
+                <FormGrid layout="fields">
+                  <Field label="Name" width="name" rule={MENU_CATEGORY_RULES.name}>
+                    <Input {...nativeAttrs(MENU_CATEGORY_RULES.name)} />
+                  </Field>
+                  <Field label="Sort order (optional)" width="short" rule={MENU_CATEGORY_RULES.sortOrder}>
+                    <Input {...nativeAttrs(MENU_CATEGORY_RULES.sortOrder)} />
+                  </Field>
+                </FormGrid>
+                <Button type="submit" variant="primary">
+                  Save
+                </Button>
+              </CheckedForm>
+            </FormModal>
+          )}
+          {canAddItem && (
+            <FormModal trigger="+ Item" title="Add item" size="md">
+              <CheckedForm rules={MENU_ITEM_ADD_RULES} action={createItemAction} className="space-y-3">
+                <FormGrid layout="fields">
+                  <Field label="Category" width="name" rule={MENU_ITEM_ADD_RULES.categoryId}>
+                    <Select {...nativeAttrs(MENU_ITEM_ADD_RULES.categoryId)}>
+                      {categories
+                        .filter((c) => c.status === 'active')
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                    </Select>
+                  </Field>
+                  <Field label="Name" width="name" rule={MENU_ITEM_ADD_RULES.name}>
+                    <Input {...nativeAttrs(MENU_ITEM_ADD_RULES.name)} />
+                  </Field>
+                  <Field label="Type" width="name">
+                    <Select name="itemType" defaultValue="a_la_carte">
+                      <option value="a_la_carte">A la carte</option>
+                      <option value="package">Package</option>
+                      <option value="refill">Refill</option>
+                    </Select>
+                  </Field>
+                  <Field label="Description (optional)" width="long">
+                    <Input name="description" />
+                  </Field>
+                </FormGrid>
+                <Button type="submit" variant="primary">
+                  Save
+                </Button>
+              </CheckedForm>
+            </FormModal>
+          )}
         </div>
         <div className="flex flex-wrap gap-4 text-sm">
           <Link href="/menu/prices" className="inline-flex min-h-6 items-center underline underline-offset-4">
@@ -144,16 +199,19 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
             </div>
             {canManage && c.status === 'active' && (
               <>
-                <p className="text-xs text-muted">
-                  Retiring a category hides it, and every item in it, from every store menu. It is refused while the category still holds active items.
-                </p>
+                <div className="flex items-center gap-1 text-xs text-muted">
+                  Retiring a category
+                  <HelpTip label="Retiring a category">
+                    Retiring a category hides it, and every item in it, from every store menu. It is refused while the category still holds active items.
+                  </HelpTip>
+                </div>
                 <EditableRecord action={editCategoryAction} rules={MENU_CATEGORY_RULES} label={c.name} hidden={{ id: c.id }} typed={typedFor(sp, MENU_CATEGORY, c.id, actor.personId)}>
-                  <FormGrid>
-                    <Field label="Name" className="text-sm" rule={MENU_CATEGORY_RULES.name}>
-                      <Input {...nativeAttrs(MENU_CATEGORY_RULES.name)} defaultValue={c.name} className="w-full" />
+                  <FormGrid layout="fields">
+                    <Field label="Name" width="name" rule={MENU_CATEGORY_RULES.name}>
+                      <Input {...nativeAttrs(MENU_CATEGORY_RULES.name)} defaultValue={c.name} />
                     </Field>
-                    <Field label="Sort order" className="text-sm" rule={MENU_CATEGORY_RULES.sortOrder}>
-                      <Input {...nativeAttrs(MENU_CATEGORY_RULES.sortOrder)} defaultValue={String(c.sortOrder)} className="w-full" />
+                    <Field label="Sort order" width="short" rule={MENU_CATEGORY_RULES.sortOrder}>
+                      <Input {...nativeAttrs(MENU_CATEGORY_RULES.sortOrder)} defaultValue={String(c.sortOrder)} />
                     </Field>
                   </FormGrid>
                 </EditableRecord>
@@ -179,62 +237,6 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
           </section>
         );
       })}
-
-      {canManage && (
-        <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
-          <h2 className="text-lg font-semibold">Add category</h2>
-          <CheckedForm rules={MENU_CATEGORY_RULES} action={createCategoryAction} className="space-y-3">
-            <FormGrid>
-              <Field label="Name" className="text-sm" rule={MENU_CATEGORY_RULES.name}>
-                <Input {...nativeAttrs(MENU_CATEGORY_RULES.name)} className="w-full" />
-              </Field>
-              <Field label="Sort order (optional)" className="text-sm" rule={MENU_CATEGORY_RULES.sortOrder}>
-                <Input {...nativeAttrs(MENU_CATEGORY_RULES.sortOrder)} className="w-full" />
-              </Field>
-            </FormGrid>
-            <Button type="submit" variant="primary">
-              Save
-            </Button>
-          </CheckedForm>
-        </section>
-      )}
-
-      {canAddItem && (
-        <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
-          <h2 className="text-lg font-semibold">Add item</h2>
-          <CheckedForm rules={MENU_ITEM_ADD_RULES} action={createItemAction} className="space-y-3">
-            <FormGrid>
-              <Field label="Category" className="text-sm" rule={MENU_ITEM_ADD_RULES.categoryId}>
-                <Select {...nativeAttrs(MENU_ITEM_ADD_RULES.categoryId)} className="w-full">
-                  {categories
-                    .filter((c) => c.status === 'active')
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                </Select>
-              </Field>
-              <Field label="Name" className="text-sm" rule={MENU_ITEM_ADD_RULES.name}>
-                <Input {...nativeAttrs(MENU_ITEM_ADD_RULES.name)} className="w-full" />
-              </Field>
-              <Field label="Type" className="text-sm">
-                <Select name="itemType" defaultValue="a_la_carte" className="w-full">
-                  <option value="a_la_carte">A la carte</option>
-                  <option value="package">Package</option>
-                  <option value="refill">Refill</option>
-                </Select>
-              </Field>
-              <Field label="Description (optional)" className="text-sm">
-                <Input name="description" className="w-full" />
-              </Field>
-            </FormGrid>
-            <Button type="submit" variant="primary">
-              Save
-            </Button>
-          </CheckedForm>
-        </section>
-      )}
     </Page>
   );
 }

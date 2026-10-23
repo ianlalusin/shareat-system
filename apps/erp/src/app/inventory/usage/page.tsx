@@ -10,7 +10,7 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Banner, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Badge, Banner, FlashBanner, FormModal, Input, LinkRow, RowLink, Select } from '@/components/ui';
 
 export const metadata = { title: 'Usage & wastage — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -224,23 +224,26 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
           </Link>
           .
         </Banner>
-      ) : (
-        <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-          <h2 className="text-sm font-medium">New record</h2>
-          <NewUsageForm
-            action={saveUsageDraftAction}
-            storeId={storeId}
-            locations={locations}
-            departments={departments}
-            items={items}
-            reasons={WASTAGE_REASONS.map((value) => ({ value, label: WASTAGE_REASON_LABEL[value] }))}
-            today={toBusinessDate()}
-          />
-        </section>
-      )}
+      ) : null}
 
       <section>
-        <h2 className="text-lg font-medium">Records</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-medium">Records</h2>
+          {/* T-448: the new-record form opens from a button. */}
+          {locations.length > 0 ? (
+            <FormModal trigger="+ New record" title="New record" size="lg">
+              <NewUsageForm
+                action={saveUsageDraftAction}
+                storeId={storeId}
+                locations={locations}
+                departments={departments}
+                items={items}
+                reasons={WASTAGE_REASONS.map((value) => ({ value, label: WASTAGE_REASON_LABEL[value] }))}
+                today={toBusinessDate()}
+              />
+            </FormModal>
+          ) : null}
+        </div>
         {records.length === 0 ? (
           <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">Nothing recorded yet.</p>
         ) : (

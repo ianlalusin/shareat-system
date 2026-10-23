@@ -103,6 +103,10 @@ export function nextNavigationMock(): Record<string, unknown> {
     notFound: (): never => {
       throw new Error('NEXT_NOT_FOUND');
     },
+    // T-448: FormModal (and so every page that draws an add form) reads the address to close on navigation.
+    usePathname: (): string => '/',
+    useSearchParams: (): URLSearchParams => new URLSearchParams(),
+    useRouter: () => ({ push() {}, replace() {}, refresh() {}, back() {}, forward() {}, prefetch() {} }),
   };
 }
 

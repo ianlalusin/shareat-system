@@ -13,6 +13,10 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetJar, seedSearch } from '../helpers/flash-jar';
 
 vi.mock('next/navigation', () => ({
+  // T-448: FormModal/Dialog read the address.
+  usePathname: () => '/',
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push() {}, replace() {}, refresh() {}, back() {}, forward() {}, prefetch() {} }),
   redirect: (to: string) => {
     throw new Error(`redirect:${to}`);
   },

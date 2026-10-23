@@ -25,6 +25,7 @@
 import { Children, Fragment, isValidElement, type ReactNode } from 'react';
 import type { FieldRule } from '@shareat/domain/field-rules';
 import { FieldCheck } from '@/components/forms/FieldCheck';
+import { HelpTip } from './HelpTip';
 
 export interface FormGridProps {
   /** T-445: content-sized fields wrap within their container; existing grids remain unchanged. */
@@ -94,11 +95,15 @@ export function Field({ label, hint, span, width, className, rule, children }: F
   const outer = `erp-form-field min-w-0${span ? SPAN[span] : ''}${resolvedWidth ? ` erp-field-${resolvedWidth}` : ''}${className ? ` ${className}` : ''}`;
   const inner = (
     <>
-      <span className="erp-field-label block text-sm font-medium leading-5 text-ink">{label}</span>
+      {/* T-448: the hint is a (?) beside the label, not a line under it, so neighbouring controls line up. */}
+      <span className="erp-field-label flex items-center text-sm font-medium leading-5 text-ink">
+        {label}
+        {rule && rule.optional !== true ? <span aria-hidden="true" className="ml-0.5 text-danger">*</span> : null}
+        {hint !== undefined && hint !== null && hint !== false && (
+          <HelpTip label={typeof label === 'string' ? label : undefined}>{hint}</HelpTip>
+        )}
+      </span>
       <span className="erp-field-control mt-1 block min-w-0">{children}</span>
-      {hint !== undefined && hint !== null && (
-        <span className="erp-field-hint mt-1 block text-xs leading-5 text-ink/70">{hint}</span>
-      )}
     </>
   );
   if (!rule) return <label className={`block ${outer}`}>{inner}</label>;
@@ -108,6 +113,12 @@ export function Field({ label, hint, span, width, className, rule, children }: F
       <FieldCheck rule={rule} />
     </div>
   );
+}
+
+/** T-448: sibling cards share a row when they fit (auto-fit, 24rem minimum each). */
+export function CardGrid({ children, className, min }: { readonly children?: ReactNode; readonly className?: string; readonly min?: 'sm' | 'md' | 'lg' }) {
+  const style = min ? ({ '--erp-card-min': min === 'sm' ? '18rem' : min === 'lg' ? '32rem' : '24rem' } as Record<string, string>) : undefined;
+  return <div className={`erp-card-grid${className ? ` ${className}` : ''}`} style={style}>{children}</div>;
 }
 
 /** A named, visible group; does not introduce a form or alter submission/validation. */

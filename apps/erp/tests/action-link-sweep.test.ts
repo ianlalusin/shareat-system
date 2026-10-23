@@ -205,7 +205,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
   //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
   //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 147 FAIL / 47 UNRESOLVED', () => {
+  it('accepted-baseline totals: 116 FAIL / 49 UNRESOLVED', () => {
     // 62 -> 63 UNRESOLVED, T-386 S4 2026-10-09: the rename "use the suggested code" checkbox on app/items/ItemCodeField.tsx
     // (an intrinsic checkbox box; baselined in touch-target-baseline.json per Ian's §6.1 ruling).
     // 63 -> 66 UNRESOLVED, T-387 S3 2026-10-10. +3: the kit's new native `<select>` (Select.tsx) and `<textarea>` (Textarea.tsx)
@@ -226,9 +226,14 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 116 FAIL / 1259 total, T-411 2026-10-15: 30 tables' row links are full-height rows (h-11).
     // components/ui/Table.tsx UNRESOLVED (T-411): RowLink's tap target is its stretched ::after (absolute inset-0) over the
     // enclosing LinkRow, which is h-11 (44px); RowLink's own class carries no height by design.
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 116, unresolved: 47 });
+    // 47 -> 49 UNRESOLVED, FAIL unmoved at 116, T-448 2026-10-22. +2, none undersized:
+    //   components/ui/Button.tsx +1 (the round icon-button branch takes a caller className like the text branch; h-11 w-11 = 44px touch, 32px desktop by CSS);
+    //   components/ui/Dialog.tsx +1 (its Close button, h-8 w-8 = 32px; the font size sits behind the component boundary).
+    // T-448 x main merge: main's own +1 (T-440 expenses/recurring checkbox) stacks on the +2 above, so 48 + 2 = 50 UNRESOLVED; FAIL still 116, none new.
     // 48 -> 47 UNRESOLVED, T-441 S7 (22 Oct): components/PhotoInput.tsx deleted; its baseline entry removed from touch-target-baseline.json.
     // 47 -> 48 UNRESOLVED, T-440 (17 Oct): expenses/recurring gained a second intrinsic checkbox box (touch-target-baseline.json entry added).
+    // T-448 x main (05ada44) merge: re-measured
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 116, unresolved: 49 });
   });
 
   // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
@@ -460,13 +465,17 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     //   dismissed-pairs list (summary, links, Undo), the Variation-of selects on the request form and approve row, and the item page's
     //   Variations section (links, select, Save). Measured 1362 -> 1374; all 12 new controls are >= 24px (the 5 that were 20px got py-0.5).
     // T-444: one new Review and approvals disclosure summary; all existing controls remain.
+    // +9 (22 Oct): T-448 modal forms - the shared Dialog's Close button, every form's Save/Cancel/Edit now icon buttons, add forms moved into dialogs (1375 -> 1384 measured; the 9 new controls are 32px desktop / 44px touch icon buttons, or the 2 UNRESOLVED above).
+    // T-448 x main merge: main's 1392 (T-450/T-451 controls) + this branch's +9 = 1401 measured.
     // Combined T-440 controls plus T-448: Books moves into the financial StatCard map.
     // SSR checks retain Assets and Books links; this removes one static scanner site.
     // T-450: one new native DisclosureCard summary, authored min-h-11 (44px); no fail/unresolved exemption.
     // T-451: one explicit Remove staff positions submit control; existing size/baseline checks still apply.
     // T-464: +8 controls (measured), all >= 24px, none baselined: the paired-tablet sign-in form and /settings/pos-tablet.
+    // T-448 x main (b2a0ebe) merge: re-measured
+    // T-448 x main (05ada44) merge: re-measured
     // T-441 S7 (22 Oct): PhotoInput.tsx deleted (its 2 controls leave the census with it): 1400 -> 1398.
-    expect(results.length).toBe(1398);
+    expect(results.length).toBe(1407);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

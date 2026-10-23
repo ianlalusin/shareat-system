@@ -170,8 +170,38 @@ export function enhancePhoneTables(root: HTMLElement): void {
   root.querySelectorAll<HTMLTableElement>('table').forEach(enhanceTable);
 }
 
-export function observePhoneTables(root: HTMLElement): () => void {
-  enhancePhoneTables(root);
+/** React stamps `__reactFiber$...` on a DOM node when it hydrates it. A table without it is still dehydrated server HTML. */
+const isHydrated = (el: Element) => Object.keys(el).some(key => key.startsWith('__reactFiber$'));
+
+export interface ObservePhoneTablesOptions {
+  /**
+   * Inserting the toggle cell changes a row's children, so doing it to HTML React has not hydrated yet is a hydration
+   * mismatch (minified React error #418, DEF-740). Streamed-in Suspense content arrives after the shell has hydrated;
+   * with this on, such tables stay native until React owns them, then are annotated.
+   */
+  readonly awaitHydration?: boolean;
+}
+
+export function observePhoneTables(root: HTMLElement, options: ObservePhoneTablesOptions = {}): () => void {
+  const view = root.ownerDocument.defaultView;
+  const waiting = new Set<HTMLTableElement>();
+  let timer: number | undefined;
+  let tries = 0;
+  const settle = () => {
+    timer = undefined;
+    for (const table of Array.from(waiting)) {
+      if (!root.contains(table)) waiting.delete(table);
+      else if (isHydrated(table)) { waiting.delete(table); enhanceTable(table); }
+    }
+    // Hydration of streamed boundaries is quick; give up quietly after ~10 s and leave the native table.
+    if (waiting.size && view && ++tries < 100) timer = view.setTimeout(settle, 100);
+  };
+  const enhance = (table: HTMLTableElement) => {
+    if (!options.awaitHydration || isHydrated(table)) return enhanceTable(table);
+    waiting.add(table);
+    if (!timer && view) { tries = 0; timer = view.setTimeout(settle, 50); }
+  };
+  root.querySelectorAll<HTMLTableElement>('table').forEach(enhance);
   const onClick = (event: Event) => {
     const target = event.target as Element | null;
     const button = target?.closest<HTMLButtonElement>('button[data-card-toggle]');
@@ -183,7 +213,7 @@ export function observePhoneTables(root: HTMLElement): () => void {
   };
   root.addEventListener('click', onClick);
   const Observer = root.ownerDocument.defaultView?.MutationObserver;
-  if (!Observer) return () => root.removeEventListener('click', onClick);
+  if (!Observer) return () => { if (timer) view?.clearTimeout(timer); root.removeEventListener('click', onClick); };
   const observer = new Observer(records => {
     const tables = new Set<HTMLTableElement>();
     for (const record of records) {
@@ -196,10 +226,10 @@ export function observePhoneTables(root: HTMLElement): () => void {
         element.querySelectorAll<HTMLTableElement>('table').forEach(added => tables.add(added));
       }
     }
-    tables.forEach(table => { if (root.contains(table)) enhanceTable(table); });
+    tables.forEach(table => { if (root.contains(table)) enhance(table); });
   });
   // Annotation attributes/roles are deliberately excluded: our writes cannot trigger a feedback loop.
   observer.observe(root, { subtree: true, childList: true, characterData: true, attributes: true,
     attributeFilter: ['colspan', 'rowspan', 'headers', 'aria-label', 'data-card-heading', 'data-card-columns', 'data-card-title', 'data-card-subtitle', 'data-card-keys'] });
-  return () => { observer.disconnect(); root.removeEventListener('click', onClick); };
+  return () => { observer.disconnect(); if (timer) view?.clearTimeout(timer); root.removeEventListener('click', onClick); };
 }
