@@ -129,6 +129,7 @@ recordClientEvents
 remainingFor
 remainingOf
 removeUsageLine
+reserveNext
 resetNonCentavoCount
 resolveFingerprintMatchToken
 retireMenuItem

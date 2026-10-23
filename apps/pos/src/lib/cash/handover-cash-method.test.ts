@@ -19,7 +19,7 @@ vi.mock('firebase/firestore', async (importOriginal) => {
   query: (path: string) => path,
   getDocs: readRows, getDocsFromServer: readRows,
 }; });
-import { computeCashSales, computeHandoverCash } from './handover';
+import { computeCashSalesAndRefunds, computeHandoverCash } from './handover';
 
 beforeEach(() => { fixture.names = ['Cash']; fixture.methodsFail = false; fixture.mop = {}; fixture.conversions = []; fixture.refunds = []; fixture.byMethod = {}; });
 
@@ -46,14 +46,14 @@ describe('DEF-704 physical cash identity', () => {
   });
   it('GCash and Maya sales do not increase expected physical drawer cash', async () => {
     fixture.mop = { Cash: 100, GCash: 500, Maya: 200 };
-    expect(await computeCashSales('S1', 1, 2)).toBe(100);
+    expect((await computeCashSalesAndRefunds('S1', 1, 2)).cashSales).toBe(100);
   });
   it('a configured cash method is recognized even when its name has no cash word', async () => {
     fixture.names = ['Drawer']; fixture.mop = { Drawer: 50, GCash: 200 };
-    expect(await computeCashSales('S1', 1, 2)).toBe(50);
+    expect((await computeCashSalesAndRefunds('S1', 1, 2)).cashSales).toBe(50);
   });
   it('the methods-outage fallback recognizes a cash word, never GCash', async () => {
     fixture.methodsFail = true; fixture.mop = { 'Till Cash': 100, GCash: 500 };
-    expect(await computeCashSales('S1', 1, 2)).toBe(100);
+    expect((await computeCashSalesAndRefunds('S1', 1, 2)).cashSales).toBe(100);
   });
 });

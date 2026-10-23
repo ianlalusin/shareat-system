@@ -46,14 +46,6 @@ export function formatZNo(n: number): string {
   return `Z-${String(n).padStart(4, '0')}`;
 }
 
-/** 'Z-0007' -> 7. Anything that is not Z- plus digits, or is zero, -> null. */
-export function parseZNo(s: string): number | null {
-  const m = /^Z-(\d+)$/.exec(s);
-  if (!m) return null;
-  const n = Number(m[1]);
-  return Number.isSafeInteger(n) && n > 0 ? n : null;
-}
-
 const manilaDate = (ms: number) => new Date(ms + MANILA).toISOString().slice(0, 10);
 
 /** 04:00 Manila of the shift day that contains `nowMs` (before 04:00 it is the previous day's). */
@@ -125,7 +117,7 @@ export function computeZReading(i: {
     const a = (r.analytics ?? {}) as Doc;
     if (r.status === 'voided') {
       voidCount += 1; voidC += storedPesosToCentavos(a.grandTotal ?? r.total);
-      // Cash kept on a void is in the drawer (the same rule as computeCashSales), until a re-ring has taken it over.
+      // Cash kept on a void is in the drawer (the same rule as computeCashSalesAndRefunds), until a re-ring has taken it over.
       if (r.voidCashRetainedReversed !== true) { const kept = Number(r.voidCashRetained || 0); if (kept > 0) { const c = storedPesosToCentavos(kept); cashSales += c; voidKept += c; } }
       continue;
     }

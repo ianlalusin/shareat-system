@@ -2,7 +2,7 @@
  * T-471 slice T - the pure Z/X reading maths. docs/tasks/471-pos-day-close-z-reading.md Rulings 1, 5, 6.
  *
  * CONTRACT THE BUILDER MATCHES - module `@/lib/cash/z-reading` (pure: no firebase, no React, no server-only), exports:
- *   formatZNo(n: number): string          1 -> 'Z-0001', 12345 -> 'Z-12345'      parseZNo(s: string): number | null   ('Z-0007' -> 7, junk -> null)
+ *   formatZNo(n: number): string          1 -> 'Z-0001', 12345 -> 'Z-12345'
  *   zWindow({ lastZToMs: number | null, nowMs: number }): { fromMs; toMs; spansTwoDates: boolean; fromDate: string; toDate: string }
  *       HALF-OPEN [fromMs, toMs). No previous Z: fromMs = 04:00 Manila of the shift day that contains nowMs (handover.ts getShiftDayStartMs rule).
  *       Otherwise fromMs = lastZToMs ("Z to Z"). toMs = nowMs. spansTwoDates = (toMs - fromMs) > 24 h. fromDate/toDate = Manila 'YYYY-MM-DD' of
@@ -24,7 +24,7 @@
  *       totals { saleCentavos, refundCentavos, netCentavos } = the sums of the byMethod lines,
  *       convertNetCashCentavos, cash { startingCentavos, salesCentavos, convertNetCentavos, deductionsCentavos, expectedCentavos, refundsPaidCentavos },
  *       lastHandover { countedCentavos, varianceCentavos } | null, negativeMethods (names whose netCentavos < 0, sorted), lateReceiptNumbers (sorted).
- *     cash.salesCentavos = cash-method mop + voidCashRetained of voided receipts (unless voidCashRetainedReversed) - the same rule as computeCashSales.
+ *     cash.salesCentavos = cash-method mop + voidCashRetained of voided receipts (unless voidCashRetainedReversed) - the same rule as computeCashSalesAndRefunds.
  *     Handovers: only those with periodEndMs in [fromMs, toMs). startingCentavos = the earliest one's startingCash (0 if none); deductionsCentavos = sum of
  *     their deductionsTotal; expected = computeExpectedCash (convert-net.ts) incl. their manualCashAdjustment. refundsPaidCentavos = cash-method refunds
  *     (SUBTRACTED from expected cash, bible row 391 - 23 Oct; the handover subtracts them too).
@@ -68,13 +68,10 @@ const run = (i: { receipts?: any[]; conversions?: any[]; handovers?: any[]; wind
 const line = (r: ReturnType<typeof run>, m: string) => r.byMethod.find((l) => l.method === m)!;
 
 describe('zNo', () => {
-  it('formats and parses', () => {
+  it('formats', () => {
     expect(z.formatZNo(1)).toBe('Z-0001');
     expect(z.formatZNo(42)).toBe('Z-0042');
     expect(z.formatZNo(12345)).toBe('Z-12345');
-    expect(z.parseZNo('Z-0007')).toBe(7);
-    expect(z.parseZNo('Z-12345')).toBe(12345);
-    for (const junk of ['', 'Z-', 'Z-00x1', 'X-0001', 'Z0001', 'Z-0']) expect(z.parseZNo(junk), junk).toBeNull();
   });
 });
 
@@ -176,7 +173,7 @@ describe('computeZReading - refunds and voids', () => {
     expect(r.voids).toEqual({ count: 1, centavos: 30_000 });
     expect(r.totals.saleCentavos).toBe(10_000);
   });
-  it('cash kept on a void is in expected cash (like computeCashSales); once reversed it is not', () => {
+  it('cash kept on a void is in expected cash (like computeCashSalesAndRefunds); once reversed it is not', () => {
     const voided = (retained: number, reversed?: boolean) => sale({ mop: { Cash: 300 }, extra: { status: 'voided', voidCashRetained: retained, ...(reversed ? { voidCashRetainedReversed: true } : {}) } });
     expect(run({ receipts: [sale({ mop: { Cash: 100 } }), voided(150)] }).cash.salesCentavos).toBe(25_000);
     expect(run({ receipts: [sale({ mop: { Cash: 100 } }), voided(150, true)] }).cash.salesCentavos).toBe(10_000);

@@ -46,22 +46,6 @@ export async function getCashMethodNames(storeId: string, fresh = false): Promis
 }
 
 /**
- * Sum cash sales from final receipts in [fromMs, toMs]. Reads receipts by the
- * `createdAtClientMs` range (single-field, no composite index), filters out
- * voids/refunds client-side, and sums the cash-named entries of each receipt's
- * `analytics.mop` (already net of change).
- */
-export async function computeCashSales(
-  storeId: string,
-  fromMs: number,
-  toMs: number,
-  knownCashNames?: ReadonlySet<string>,
-  fresh = false,
-): Promise<number> {
-  return (await computeCashSalesAndRefunds(storeId, fromMs, toMs, knownCashNames, fresh)).cashSales;
-}
-
-/**
  * Bible row 391: cash paid back for refunds in the window. A refund receipt keeps its tender in `refundTender.methodName` (never in analytics.mop) and its
  * amount in `refundTotalCentavos` (else |total|); a voided refund paid nothing back. Same createdAtClientMs window as sales.
  */
