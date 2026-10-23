@@ -4,7 +4,7 @@ topic: customer-experience/dine-in-journey
 about: [customer, cashier, server, cook]
 readers: public
 must_be_exact: false
-related: [customer-experience/customer-app, policies/leftover-policy, staff/cashier-dine-in-sop, staff/server-and-kitchen-dine-in-sop]
+related: [customer-experience/customer-app, policies/leftover-policy, staff/cashier-dine-in-sop, staff/server-and-kitchen-dine-in-sop, policies/allergies-and-dietary-requests]
 updated: 2026-10-23
 ---
 
@@ -21,7 +21,8 @@ such as handing out a voucher when one is running.
 3. The cashier hands over the menu and explains it, then asks which package and which flavors
    the customer wants.
 4. The cashier enters the order in the POS, then asks for the customer's name, how many are in
-   the group, and any notes, such as allergies. The kitchen sees all of this, notes included.
+   the group, and any notes, such as allergies or no pork. The kitchen sees all of this, notes
+   included (see [allergies and dietary requests](../policies/allergies-and-dietary-requests.md)).
 5. The cashier starts the session on the POS. The POS prints a QR code, and the cashier explains
    how to use it: scanning it opens the customer app, where the customer can order on their own
    (see [the customer app](customer-app.md)).

@@ -4,7 +4,7 @@ topic: staff/cashier-dine-in-sop
 about: [cashier]
 readers: staff
 must_be_exact: true
-related: [customer-experience/dine-in-journey, policies/leftover-policy, staff/server-and-kitchen-dine-in-sop]
+related: [customer-experience/dine-in-journey, policies/leftover-policy, staff/server-and-kitchen-dine-in-sop, policies/allergies-and-dietary-requests]
 updated: 2026-10-23
 ---
 
@@ -39,4 +39,7 @@ A cashier must be on duty at all times.
 
 ## Allergies
 
-The kitchen sees every note, including allergies. For anything beyond that, ask a manager.
+Enter every allergy or dietary note — the kitchen sees it. A no-pork table gets no pork all
+session and a clean setup. Buffet side dishes cannot be adjusted for allergies; à la carte can.
+Never call anything "halal". Full rules:
+[allergies and dietary requests](../policies/allergies-and-dietary-requests.md).

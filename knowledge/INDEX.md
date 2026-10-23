@@ -49,6 +49,7 @@ loosely or fill gaps.
 
 | Page | Title | About | Readers | Summary | Updated |
 |---|---|---|---|---|---|
+| [policies/allergies-and-dietary-requests.md](policies/allergies-and-dietary-requests.md) | Allergies and dietary requests | customer, cashier, server, cook | public | No-pork tables get a clean setup all session; no nuts; seafood only on purpose; buffet can't be adjusted, à la carte can; never claim halal. must_be_exact | 2026-10-23 |
 | [policies/leftover-policy.md](policies/leftover-policy.md) | No-leftover policy | customer, server, cashier | public | Leftovers charged, never taken home; server decides; amounts set in the POS. must_be_exact | 2026-10-23 |
 
 ### planned

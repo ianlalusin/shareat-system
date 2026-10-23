@@ -4,7 +4,7 @@ topic: staff/server-and-kitchen-dine-in-sop
 about: [server, cook]
 readers: staff
 must_be_exact: false
-related: [customer-experience/dine-in-journey, customer-experience/customer-app, policies/leftover-policy, staff/cashier-dine-in-sop]
+related: [customer-experience/dine-in-journey, customer-experience/customer-app, policies/leftover-policy, staff/cashier-dine-in-sop, policies/allergies-and-dietary-requests]
 updated: 2026-10-23
 ---
 
@@ -29,4 +29,7 @@ updated: 2026-10-23
    self-service at the buffet table.
 3. When an order is ready, ring the bell for a server. If there is no bell, call a server out.
 4. The kitchen tablet also shows "ask for assistance" alerts.
-5. Allergy notes: for anything beyond reading the note, ask a manager.
+5. No-pork tables: no pork for the whole session, and start them with clean tongs, clean plates,
+   and clean everything. Cook à la carte orders with an allergy note separately, with separate
+   tongs. Buffet side dishes are batch-cooked and cannot be adjusted. Full rules:
+   [allergies and dietary requests](../policies/allergies-and-dietary-requests.md).
