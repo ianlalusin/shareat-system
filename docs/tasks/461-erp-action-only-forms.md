@@ -58,3 +58,22 @@ Ian, 2026-10-22: hide every ERP form; reveal through Add/Edit/Update or another 
 
 ## Evidence
 Target regression first, typecheck/build with dev stopped, affected shared-component tests and guards/census. Running ERP visual gate requires Ian because saved browser permission is denied. Do not claim visual approval.
+
+## Follow-up 2026-10-24 (Opus planner, AUDIT session) — DEF-755: a finished delivery's lines hide behind "Update"
+
+Source: Codex read-only audit 2026-10-23 finding 3, re-verified at a892aef. `apps/erp/src/app/inventory/deliveries/[id]/page.tsx:111`
+wraps the whole line table in an unconditional `<FormDisclosure>`. `formNeedsReveal` (`components/forms/FormDisclosure.tsx:36`)
+counts any non-kit component (`LinkRow`, `RowLink`) as an entry control, so a `received` or `void` delivery, which has no
+editable field, renders its item / quantity / cost history inside a closed `<details>` labelled the fallback "Update".
+That breaks Contract 1 ("Stored read-only content outside editors stays visible").
+
+**Ruling:** the reveal applies only to the editable receive state. `FormDisclosure` wraps the form only when
+`canReceive` (status `draft`); a received or void delivery renders the same table with no disclosure. The detector is not
+changed (its conservative "unknown component = entry" rule protects custom inputs elsewhere).
+
+**Test (red first):** a received delivery's line table (item name, ordered, unit cost, received) renders outside any
+`<details>`; a draft delivery still starts in a closed disclosure. Prefer rendering the page against a dedicated local
+Postgres test database (never a shared one in use by another lane); a source-shape assertion alone is not enough.
+
+**Files:** `apps/erp/src/app/inventory/deliveries/[id]/page.tsx`, one test file, this spec, `docs/DEFECTS-REGISTER.md`
+(section E, DEF-755). Visual confirmation in the running ERP still needs Ian (browser automation is denied).
