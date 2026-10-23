@@ -197,7 +197,7 @@ async function buildWorld(): Promise<World> {
     const status = o.status ?? 'regular';
     const [e] = await sql<{ id: string }[]>`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on, ended_on, created_by)
-      values (${orgId}, ${storeId}, ${personId}, ${uid('SE')}, ${status}, '2025-01-01', ${o.endedOn ?? null}, ${aId}) returning id`;
+      values (${orgId}, ${storeId}, ${personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, ${status}, '2025-01-01', ${o.endedOn ?? null}, ${aId}) returning id`;
     if (o.caps !== null && !o.endedOn) {
       await grantEverydayPositionAccess(sql, {
         orgId, storeId, employmentId: e!.id, personId, setBy: aId,

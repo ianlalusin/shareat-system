@@ -89,7 +89,7 @@ async function stop(orgId: string, storeId: string) {
   await sql`
     insert into pin_attempt_throttle (org_id, store_id, fail_count, window_started_at, locked_until, stopped_at)
     values (${orgId}, ${storeId}, 7, now() - interval '30 seconds', now() + interval '90 seconds', now() - interval '1 hour')
-    on conflict (store_id) do update set fail_count = 7, window_started_at = now() - interval '30 seconds',
+    on conflict (store_id) where staff_code is null do update set fail_count = 7, window_started_at = now() - interval '30 seconds',
       locked_until = now() + interval '90 seconds', stopped_at = now() - interval '1 hour', reopened_at = null, reopened_by = null`;
 }
 const row = async (storeId: string) =>

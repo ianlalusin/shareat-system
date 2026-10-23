@@ -72,7 +72,7 @@ async function addDay(orgId: string, storeId: string, shiftDay: string, status: 
   const [adminP] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, ${uid('a')}) returning id`;
   const [emp] = await sql<{ id: string }[]>`
     insert into employments (org_id, person_id, store_id, staff_code, started_on, employment_status, created_by)
-    values (${orgId}, ${p!.id}, ${storeId}, ${uid('sc')}, '2020-01-01', 'regular', ${adminP!.id}) returning id`;
+    values (${orgId}, ${p!.id}, ${storeId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, '2020-01-01', 'regular', ${adminP!.id}) returning id`;
   const [cfg] = await sql<{ id: string }[]>`select id from store_attendance_config where store_id = ${storeId} limit 1`;
   await sql`
     insert into attendance_days (org_id, store_id, person_id, employment_id, shift_day, attendance_config_id, anchor_mode,

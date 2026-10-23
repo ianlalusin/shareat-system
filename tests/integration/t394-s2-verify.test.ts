@@ -208,7 +208,7 @@ describe('T-394 S2 I10c - verify fails when terminals were touched after start',
   async function withEmployment(s: postgres.Sql, fx: OrgFx): Promise<string> {
     const [e] = await s<{ id: string }[]>`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-      values (${fx.orgId}, ${fx.storeId}, ${fx.personId}, ${uid('SC')}, 'regular', '2026-01-01') returning id`;
+      values (${fx.orgId}, ${fx.storeId}, ${fx.personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2026-01-01') returning id`;
     return e!.id;
   }
 

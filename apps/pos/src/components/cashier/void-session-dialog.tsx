@@ -16,7 +16,8 @@ import { postPos2, Pos2Error } from "@/lib/pos2/client";
 import { voidOutcome } from "@/lib/pos2/voidOutcome";
 import { PIN_LENGTH, PinPad } from "@/components/pos2/PinPad";
 import { voidSessionOffline } from "./offlineVoid";
-import { addToQueue, getQueue, removeFromQueue } from "@/lib/offline/payment-queue";
+import { addEffectItem, listEffectItems, removeEffectItem } from "@/lib/outbox/effects-store";
+import { OFFLINE_VOID_ROLE_MESSAGE, canVoidOffline } from "@/lib/offline/offlineRules";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import type { ActiveSession } from "./active-sessions-grid";
 import type { AppUser } from "@/context/auth-context";
@@ -38,6 +39,8 @@ export function VoidSessionDialog({ isOpen, onClose, session, user, storeId }: V
   const isOnline = useOnlineStatus();
 
   const isLocked = session.isPaid;
+  // T-425 (bible row 356): without the internet only a signed-in manager or admin may void an unpaid table; everyone else waits.
+  const offlineRoleBlocked = !isOnline && !canVoidOffline(user.role);
   // T-424 Ruling 8: the SERVER decides who may void. A manager or admin (by their staff record) voids without a PIN; anyone else needs a store
   // manager's PIN. This only decides whether to show the pad.
   const needsPin = !(user.role === "manager" || user.role === "admin" || (user as any).isPlatformAdmin === true);
@@ -60,15 +63,15 @@ export function VoidSessionDialog({ isOpen, onClose, session, user, storeId }: V
         const redemptions = sessionSnap.exists() && Array.isArray((sessionSnap.data() as any)?.loyaltyRedemptions) ? (sessionSnap.data() as any).loyaltyRedemptions : [];
         const reversedRedemptionIds: string[] = redemptions.map((r: any) => r?.redemptionId).filter(Boolean);
         let queuedId: string | null = null;
-        if (reversedRedemptionIds.length > 0 && !getQueue().some((q) => q.sessionId === session.id && q.kind === "void")) {
-          queuedId = addToQueue({
+        if (reversedRedemptionIds.length > 0 && !(await listEffectItems()).some((q) => q.sessionId === session.id && q.kind === "void")) {
+          queuedId = (await addEffectItem({
             storeId,
             sessionId: session.id,
             receiptId: session.id,
             kind: "void",
             ctx: { amount: 0, redemptionIds: reversedRedemptionIds },
             effects: { analytics: "skip", loyaltyFinalize: "skip", loyaltyEarn: "skip", pinFinalize: "skip", loyaltyReverse: "pending" },
-          }).id;
+          })).id;
         }
         try {
           await postPos2("session-voids", { storeId, sessionId: session.id, reason: safeReason, ...(needsPin ? { pin } : {}) });
@@ -76,7 +79,7 @@ export function VoidSessionDialog({ isOpen, onClose, session, user, storeId }: V
           // Only a DEFINITE refusal takes the queued reversal back out. No answer or a 5xx: the void may have committed, keep it (replay checks the
           // session first). "Already voided": the void happened, so carry on as success and let the reversal run.
           const outcome = voidOutcome(voidErr as { status?: unknown; message?: unknown });
-          if (outcome === "refused" && queuedId) removeFromQueue(queuedId);
+          if (outcome === "refused" && queuedId) await removeEffectItem(queuedId);
           if (outcome !== "voided") throw voidErr;
         }
         const voidResult = { reversedRedemptionIds };
@@ -96,7 +99,7 @@ export function VoidSessionDialog({ isOpen, onClose, session, user, storeId }: V
           );
           // T-423: voidSession queued this reversal before it committed. Done here => drop the queued copy; failed => the queue retries it.
           if (results.every(Boolean)) {
-            getQueue().filter((q) => q.sessionId === session.id && q.kind === "void").forEach((q) => removeFromQueue(q.id));
+            for (const q of (await listEffectItems()).filter((x) => x.sessionId === session.id && x.kind === "void")) await removeEffectItem(q.id);
           }
         }
 
@@ -130,7 +133,7 @@ export function VoidSessionDialog({ isOpen, onClose, session, user, storeId }: V
           reason: safeReason,
           actor: user,
         });
-        addToQueue({
+        await addEffectItem({
           storeId,
           sessionId: session.id,
           receiptId: session.id,
@@ -176,6 +179,11 @@ export function VoidSessionDialog({ isOpen, onClose, session, user, storeId }: V
               onChange={(e) => setReason(e.target.value)}
               placeholder="e.g., Customer complaint, wrong order"
             />
+            {offlineRoleBlocked && (
+              <Alert variant="destructive" className="mt-3">
+                <AlertDescription>{OFFLINE_VOID_ROLE_MESSAGE}</AlertDescription>
+              </Alert>
+            )}
             {needsPin && isOnline && (
               <div className="pt-3">
                 <Label>Store manager PIN</Label>
@@ -190,7 +198,7 @@ export function VoidSessionDialog({ isOpen, onClose, session, user, storeId }: V
           <Button
             variant="destructive"
             onClick={handleConfirm}
-            disabled={isSubmitting || isLocked || !reason.trim() || (isOnline && needsPin && pin.length !== PIN_LENGTH)}
+            disabled={isSubmitting || isLocked || offlineRoleBlocked || !reason.trim() || (isOnline && needsPin && pin.length !== PIN_LENGTH)}
           >
             {isSubmitting && <Loader2 className="mr-2 animate-spin" />}
             Confirm Void

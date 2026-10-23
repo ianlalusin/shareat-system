@@ -149,7 +149,8 @@ describe('one series per tablet, no localStorage counter (Acceptance 8; Rulings 
   });
 
   it('counter.ts uses native indexedDB, read lazily. Mutant: a dependency, or an IndexedDB handle captured at import time', () => {
-    const src = stripComments(read(path.join(TERMINAL, 'counter.ts')));
+    // T-425: counter.ts now opens through the shared opener lib/terminal/db.ts, which is where native indexedDB is read (lazily); both files are policed.
+    const src = stripComments(read(path.join(TERMINAL, 'counter.ts'))) + '\n' + stripComments(read(path.join(TERMINAL, 'db.ts')));
     expect(src).toMatch(/indexedDB/);
     expect(src).not.toMatch(/from\s+['"](idb|idb-keyval|dexie|localforage|fake-indexeddb)['"]/);
     expect(src).not.toMatch(/^\s*(export\s+)?const\s+\w+\s*=\s*(globalThis\.|window\.)?indexedDB\b/m);

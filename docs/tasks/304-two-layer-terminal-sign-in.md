@@ -447,6 +447,7 @@ The chain, checked rather than assumed:
 | **2** | ⭐ **`endAllForDevice`** | ⛔ **Immediate.** The cashier's live session on that tablet ends at once, rather than up to 12 hours later | — |
 | **3** | **Disable the shared account in the Firebase console** (Ian's, and only his) | ⚠️ **NOT immediate — the slowest of the three.** An already-minted ID token stays valid until it expires; we cannot shorten that (see below) | Stops a new ID token being minted once the current one expires |
 | **4** | Re-provision a replacement tablet with a **new** shared account | — | — |
+| **5** | ⭐ **Un-pair it on POS tablets** (T-464): `/settings/pos-tablet`, from any device, retype the tablet's name. Needs `pair_pos_tablet` at that store (its manager, or an admin) | ⛔ **Immediate.** Ends every session live on the pairing, at once | ⛔ **Immediate.** The pairing is re-resolved on every Employee ID + PIN submit, so the cookie on the lost tablet stops working on its very next attempt |
 
 ⛔ **Steps 1 and 2 are what actually stop the thief, and both are ours.** Step 3 is necessary
 belt-and-braces, not the decisive act — ⚠️ **and it is the one most likely to be mistaken for the

@@ -114,7 +114,7 @@ export async function world(hint: string): Promise<World> {
     await seedTestTenders(sql, { orgId, storeId: sid, walletAccountId: g!.id });
   }
   const [emp] = await sql<{ id: string }[]>`
-    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${orgId}, ${storeA}, ${staffId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+    insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${orgId}, ${storeA}, ${staffId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
   await grantEverydayPositionAccess(sql, { orgId, storeId: storeA, employmentId: emp!.id, personId: staffId, setBy: managerId });
 
   return {

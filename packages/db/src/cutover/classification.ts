@@ -1258,6 +1258,12 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'pos_v1_store_links - a tablet is registered once, not on 1 January; a purged link would leave every approval on that ' +
       'tablet refused until an administrator registers it again.',
   },
+  pos_tablet_pairings: {
+    class: 'keep',
+    reason:
+      'Configuration: which browser is the paired POS tablet of a store (T-464). The same class as pos_terminal_links - a tablet is paired ' +
+      'once, not on 1 January; a purged pairing would sign every paired tablet out to the full email screen until a manager pairs it again.',
+  },
   tenders: {
     class: 'keep',
     reason:

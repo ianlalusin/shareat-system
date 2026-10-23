@@ -2,7 +2,10 @@ import { redirect } from 'next/navigation';
 import { safeNext } from './lib';
 import { TerminalSignInForm } from './TerminalSignInForm';
 import { EmailSignInForm } from './EmailSignInForm';
-import { currentSession } from '../../lib/session';
+import { TabletSignInForm } from './TabletSignInForm';
+import { ForgetDeadPairing } from './ForgetDeadPairing';
+import { currentSession, readPosTabletToken } from '../../lib/session';
+import { resolvePosTablet } from '@shareat/auth';
 import { FlashBanner } from '@/components/ui';
 
 export const metadata = { title: 'Sign in — Shareat System' };
@@ -43,9 +46,30 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
   const existing = await currentSession();
   if (existing) redirect(safeNext(sp.next ?? ''));
 
+  // T-464 - a PAIRED POS tablet shows Employee ID + PIN only. The pairing is resolved from the httpOnly cookie on the server, on every
+  // load (so a revoke bites at once); a cookie that names nothing live is forgotten and the page is today's, unchanged.
+  const tabletToken = await readPosTabletToken();
+  const pairing = tabletToken ? await resolvePosTablet(null, tabletToken) : null;
+
+  if (pairing) {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center p-8">
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-semibold">Sign in</h1>
+            <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">Your Employee ID and PIN.</p>
+          </div>
+          <FlashBanner flash={sp} />
+          <TabletSignInForm next={sp.next ?? ''} label={pairing.label} />
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center p-8">
       <div className="space-y-6">
+        {tabletToken && <ForgetDeadPairing />}
         <div>
           <h1 className="text-2xl font-semibold">Sign in</h1>
           <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">

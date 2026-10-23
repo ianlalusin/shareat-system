@@ -14,9 +14,12 @@ import { describe, expect, it } from 'vitest';
  * single day of arming the tenancy lock produced four more subsystems. One list would have
  * absorbed them all and nobody would have had to look twice at any of them.
  *
- * **The one permitted caller** is `packages/auth/src/sessions.ts`, and the door is scoped to three
- * lookups inside it: `findActiveCredentialByExternalId`, `findLiveByTokenHash`, and `endSession`'s
- * write. Everything downstream of a resolved session knows the actor's organisation and goes back
+ * **The one permitted caller** is `packages/auth/src/sessions.ts`, and the door is scoped to four
+ * lookups inside it: `findActiveCredentialByExternalId`, `findLiveByTokenHash`, `endSession`'s
+ * write, and (T-464, bible row 382) the POS tablet pairing lookup `resolvePosTablet`, which reads
+ * `pos_tablet_pairings` by the cookie's keyed hash before the org is known - its refusals (unknown,
+ * revoked, 30-days-unused) are asserted in `packages/auth/tests/integration/t464-tablet-sign-in.test.ts`.
+ * Everything downstream of a resolved session knows the actor's organisation and goes back
  * through `withOrgPrincipal`.
  *
  * ⭐ **It was four. `findActiveCredentialByLookupHash` — the PIN lookup — left the door in T-302**,

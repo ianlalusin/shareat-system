@@ -1,34 +1,30 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useOnlineStatus } from "@/hooks/use-online-status";
 
+/**
+ * "You are offline" strip. T-425: the answer comes from the ONE connectivity store (a probe of the POS server), not from the browser's
+ * online flag and not from a private copy of it, so a captive-portal Wi-Fi shows as offline here exactly as it does at the till.
+ */
 export function OfflineBanner() {
-  const [isOnline, setIsOnline] = useState(true);
+  const isOnline = useOnlineStatus();
   const [showBanner, setShowBanner] = useState(false);
+  const wasOnline = useRef(true);
 
   useEffect(() => {
-    // Set initial state
-    setIsOnline(navigator.onLine);
-    setShowBanner(!navigator.onLine);
-
-    const handleOnline = () => {
-      setIsOnline(true);
-      // Keep banner briefly to show "back online" then fade
-      setTimeout(() => setShowBanner(false), 3000);
-    };
-    const handleOffline = () => {
-      setIsOnline(false);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    if (!isOnline) {
       setShowBanner(true);
-    };
-
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
+    } else if (!wasOnline.current) {
+      // Keep banner briefly to show "back online" then fade
+      setShowBanner(true);
+      timer = setTimeout(() => setShowBanner(false), 3000);
+    }
+    wasOnline.current = isOnline;
+    return () => { if (timer) clearTimeout(timer); };
+  }, [isOnline]);
 
   if (!showBanner) return null;
 

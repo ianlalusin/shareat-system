@@ -53,6 +53,12 @@ const REQUIRED_CALLERS = [
   // "must act across every organisation" shape row 185 already covers. One transaction per org,
   // same door as bootstrap-org.ts.
   'scripts/backfill-canonical-positions.ts',
+  // DEF-742 — enumerates every org; lists via listOrgsToRun on a bare transaction(), must move to systemTransaction.
+  'scripts/backfill-file-links.ts',
+  // DEF-742 — enumerates every org; lists via listOrgsToRun on a bare transaction(), must move to systemTransaction.
+  'scripts/backfill-fiscal-periods.ts',
+  // DEF-742 — enumerates every org; lists via listOrgsToRun on a bare transaction(), must move to systemTransaction.
+  'scripts/backfill-store-attendance-config.ts',
 ] as const;
 
 /**

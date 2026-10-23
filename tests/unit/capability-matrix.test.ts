@@ -238,7 +238,8 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // ⭐ 112 -> 113 (T-434): `view_staff_signature` (store, admin yes, manager no: held by position grant). Also joins the derived ELEVATED set.
     // ⭐ 113 -> 114 (T-436): `view_leave_document` (store, admin yes, manager yes, position-grantable).
     // ⭐ 114 -> 115 (T-190): `manage_payroll_rates` (org, admin only: the accountant).
-    expect(rows.length).toBe(115);
+    // ⭐ 115 -> 116 (T-464): `pair_pos_tablet` (store, admin yes, manager yes, staff no).
+    expect(rows.length).toBe(116);
     // ⭐ 109 -> 111 (T-402 S1b): `view_activity_log` (store) and `view_activity_log_restricted` (org).
     // ⭐ 108 -> 109 (T-403): `manage_recipes` (org, admin-only).
   });
@@ -315,9 +316,9 @@ describe('invariant 1 — every capability has an explicit decision for all four
     // ⭐ 99 -> 100 (T-382 S1, A3): `unlink_store_from_pos`. ⛔ RED until the builder adds it to capabilities.ts.
     // ⭐ 100 -> 101 (T-385 S3, A3): `verify_own_sales_day`. ⛔ RED until the builder adds it to capabilities.ts.
     // ⭐ 101 -> 108 (T-401 S2): the seven menu capabilities.
-    expect(CAPABILITIES.length).toBe(115);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(115);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(115);
+    expect(CAPABILITIES.length).toBe(116);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(116);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(116);
     // ⭐ 108 -> 109 (T-403): `manage_recipes`.
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));

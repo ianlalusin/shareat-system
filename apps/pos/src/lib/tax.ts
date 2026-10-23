@@ -1,5 +1,9 @@
 import { storedPesosToCentavos, toWirePesos } from "@/lib/money/centavos";
 import { Exact, HUNDRED, ONE, ZERO } from "@/lib/money/exact";
+import { lineAmounts } from '@/lib/money/line-amounts';
+import { ordinaryBill } from '@/lib/money/ordinary-bill';
+import { statutoryTotals } from '@/lib/statutory/totals';
+import type { StatutoryInput } from '@/lib/statutory/shares';
 import type { SessionBillLine, Charge, Discount, Store, Adjustment, LineAdjustment } from "@/lib/types";
 
 export interface TaxAndTotals {
@@ -14,6 +18,10 @@ export interface TaxAndTotals {
   grandTotal: number; // The final, gross amount due by the customer
   vatableSales: number;
   vatExemptSales: number;
+  statutoryDiscountTotal: number;
+  statutoryVatRemovedTotal: number;
+  statutoryDiners: { dinerId: string; kind: 'senior' | 'pwd'; share: number; discount: number;
+    vatRemoved: number; vatExempt: number; promoWasHigher: boolean }[];
 }
 
 /** Redeemed loyalty rewards applied to the bill as stacking discounts. */
@@ -26,6 +34,7 @@ const ZERO_TOTALS: TaxAndTotalsCentavos = {
   subtotal: 0, taxableAmount: 0, taxTotal: 0, lineDiscountsTotal: 0,
   billDiscountTotal: 0, loyaltyDiscountTotal: 0, totalDiscounts: 0, chargesTotal: 0, grandTotal: 0,
   vatableSales: 0, vatExemptSales: 0,
+  statutoryDiscountTotal: 0, statutoryVatRemovedTotal: 0, statutoryDiners: [],
 };
 
 /**
@@ -40,12 +49,13 @@ export function calculateBillTotalsCentavos(
   store: Store | null,
   billDiscount: Discount | null,
   customAdjustments: Adjustment[],
-  loyaltyDiscount: LoyaltyDiscountInput = null
+  loyaltyDiscount: LoyaltyDiscountInput = null,
+  statutory: StatutoryInput | null = null
 ): TaxAndTotalsCentavos {
 
   if (!store) {
     console.warn("[Tax] calculateBillTotals called with null store — returning zero totals. This may indicate a loading race.");
-    return { ...ZERO_TOTALS };
+    return { ...ZERO_TOTALS, statutoryDiners: [] };
   }
 
   const pct = (x: unknown) => Exact.of(Number(x || 0)).div(HUNDRED);
@@ -56,83 +66,14 @@ export function calculateBillTotalsCentavos(
   const isVatExclusive = store.taxType === 'VAT_EXCLUSIVE';
   const storedC = (x: unknown) => Exact.int(storedPesosToCentavos(x));
 
-  let grossSubtotal = ZERO;
-  let lineDiscountsTotal = ZERO;
-  let lineChargesTotal = ZERO;
-
-  const activeLines = billLines.filter(line => {
-    const qty = line.qtyOrdered - (line.voidedQty || 0);
-    if (qty < 0) {
-      console.warn(`[Tax] Line "${line.itemName}" has voidedQty (${line.voidedQty}) > qtyOrdered (${line.qtyOrdered}). Skipping.`);
-      return false;
-    }
-    return qty > 0;
-  });
-
-  activeLines.forEach(line => {
-    const billableQty = line.qtyOrdered - (line.voidedQty || 0) - (line.freeQty || 0);
-    if (billableQty <= 0) return;
-
-    const baseUnitOnly = Number.isFinite(Number(line.unitPrice)) ? Math.max(0, storedPesosToCentavos(Number(line.unitPrice))) : 0;
-    // Modifiers contribute their priceDelta to the per-unit price. Modifier
-    // selections live on the bill line at order time; see OptionGroup type.
-    const modPerUnit = storedPesosToCentavos((line as any).modifiersTotal || 0);
-    const unitPrice = Exact.int(baseUnitOnly + modPerUnit);
-    const qty = Exact.of(billableQty);
-
-    grossSubtotal = grossSubtotal.add(qty.mul(unitPrice));
-
-    const baseUnitPrice = (isVatInclusive && hasRate) ? unitPrice.div(onePlus) : unitPrice;
-    // Discounts apply to the gross (VAT-inclusive) shelf price; VAT is derived
-    // afterward. For VAT-exclusive / non-VAT stores unitPrice already is net,
-    // so this matches their existing behavior.
-    const discountUnitBase = unitPrice;
-    const adjs = Object.values((line as any).lineAdjustments ?? {}).sort((a: any, b: any) => (a.createdAtClientMs || 0) - (b.createdAtClientMs || 0)) as LineAdjustment[];
-    const hasAdjDiscount = adjs.some(a => a.kind === "discount");
-
-    let remainingQtyForDiscounts = billableQty;
-
-    for (const adj of adjs) {
-        if (adj.kind === "discount") {
-            if (remainingQtyForDiscounts <= 0) continue;
-            const qtyToApply = Math.min(Number(adj.qty || 0), remainingQtyForDiscounts);
-            if (qtyToApply <= 0) continue;
-
-            if (adj.type === "percent") {
-                lineDiscountsTotal = lineDiscountsTotal.add(Exact.of(qtyToApply).mul(discountUnitBase).mul(pct(adj.value)));
-            } else { // fixed
-                lineDiscountsTotal = lineDiscountsTotal.add(discountUnitBase.min(storedC(Number(adj.value || 0))).mul(Exact.of(qtyToApply)));
-            }
-            remainingQtyForDiscounts -= qtyToApply;
-
-        } else if (adj.kind === "charge") {
-            const qtyToApply = Math.min(Number(adj.qty || 0), billableQty);
-            if (qtyToApply <= 0) continue;
-
-            if (adj.type === "percent") {
-                lineChargesTotal = lineChargesTotal.add(Exact.of(qtyToApply).mul(baseUnitPrice).mul(pct(adj.value)));
-            } else { // fixed
-                lineChargesTotal = lineChargesTotal.add(storedC(Number(adj.value || 0)).mul(Exact.of(qtyToApply)));
-            }
-        }
-    }
-
-    // Legacy fallback:
-    if (!hasAdjDiscount && line.discountValue && line.discountValue > 0 && line.discountQty > 0) {
-      const discountedQty = Exact.of(Math.min(line.discountQty, billableQty));
-
-      if (line.discountType === "percent") {
-        lineDiscountsTotal = lineDiscountsTotal.add(discountedQty.mul(discountUnitBase).mul(pct(line.discountValue)));
-      } else { // fixed
-        lineDiscountsTotal = lineDiscountsTotal.add(discountUnitBase.min(storedC(line.discountValue ?? 0)).mul(discountedQty));
-      }
-    }
-  });
+  const { grossSubtotal, lineDiscountsTotal, lineChargesTotal } = lineAmounts(billLines, store);
 
   const subtotalC = grossSubtotal.roundHalfUp();
   const lineDiscountsC = lineDiscountsTotal.roundHalfUp();
   const lineChargesC = lineChargesTotal.roundHalfUp();
   const grossAfterLine = Exact.int(subtotalC - lineDiscountsC);
+  if (statutory?.diners.length) return statutoryTotals({ subtotalC, lineDiscountsC, lineChargesC,
+    lines: billLines, store, promo: billDiscount, adjustments: customAdjustments, loyalty: loyaltyDiscount, statutory });
 
   // Bill-level discount (gross-world). A VAT-exempt (senior/PWD) bill discount
   // is special: the whole bill becomes VAT-exempt AND the discount (e.g. 20%) is
@@ -153,44 +94,13 @@ export function calculateBillTotalsCentavos(
     billDiscountC = exemptDiscount.roundHalfUp();
     vatExemptC = netBeforeExempt.sub(exemptDiscount).max(ZERO).roundHalfUp();
   } else {
-    if (billDiscount) {
-      // Discount taken on the gross (VAT-inclusive) amount after line discounts.
-      billDiscountC = (billDiscount.type === 'percent'
-        ? grossAfterLine.mul(pct(billDiscount.value))
-        : grossAfterLine.min(storedC(billDiscount.value))).roundHalfUp();
-    }
-
-    // Loyalty rewards stack after line + bill discounts on the running remaining
-    // gross. Multiple rewards compound on what's left. Reward values are gross
-    // (peso off the shelf price), matching the corrected discount model.
-    if (Array.isArray(loyaltyDiscount) && loyaltyDiscount.length > 0) {
-      let remainingGross = grossAfterLine.sub(Exact.int(billDiscountC));
-      let sum = ZERO;
-      for (const lr of loyaltyDiscount) {
-        if (!lr || !(lr.value > 0) || !remainingGross.gt(ZERO)) continue;
-        const amt = lr.type === "percent" ? remainingGross.mul(pct(lr.value)) : remainingGross.min(storedC(lr.value));
-        sum = sum.add(amt);
-        remainingGross = remainingGross.sub(amt);
-      }
-      loyaltyDiscountC = sum.max(ZERO).roundHalfUp();
-    }
+    const ordinary = ordinaryBill(grossAfterLine, store, billDiscount, loyaltyDiscount);
+    billDiscountC = ordinary.billDiscountC; loyaltyDiscountC = ordinary.loyaltyDiscountC;
+    vatableSales = ordinary.vatableSales; taxTotal = ordinary.taxTotal;
   }
 
   const totalDiscountsC = lineDiscountsC + billDiscountC + loyaltyDiscountC;
   const netSalesAfterAllDiscounts = isVatExemptBill ? Exact.int(vatExemptC) : Exact.int(subtotalC - totalDiscountsC);
-
-  if (!isVatExemptBill) {
-    if (isVatInclusive) {
-        vatableSales = netSalesAfterAllDiscounts.div(onePlus);
-        taxTotal = netSalesAfterAllDiscounts.sub(vatableSales);
-    } else if (isVatExclusive) {
-        vatableSales = netSalesAfterAllDiscounts;
-        taxTotal = vatableSales.mul(taxRate);
-    } else { // NON_VAT
-        vatableSales = netSalesAfterAllDiscounts;
-        taxTotal = ZERO;
-    }
-  }
 
   // Corrected grand total calculation (VAT-exclusive adds tax on top of net).
   const totalBeforeCharges = (isVatExclusive && !isVatExemptBill)
@@ -221,6 +131,7 @@ export function calculateBillTotalsCentavos(
     grandTotal: grandTotalC,
     vatableSales: vatableC,
     vatExemptSales: vatExemptC,
+    statutoryDiscountTotal: 0, statutoryVatRemovedTotal: 0, statutoryDiners: [],
   };
 }
 
@@ -238,9 +149,10 @@ export function calculateBillTotals(
   store: Store | null,
   billDiscount: Discount | null,
   customAdjustments: Adjustment[],
-  loyaltyDiscount: LoyaltyDiscountInput = null
+  loyaltyDiscount: LoyaltyDiscountInput = null,
+  statutory: StatutoryInput | null = null
 ): TaxAndTotals {
-  const c = calculateBillTotalsCentavos(billLines, store, billDiscount, customAdjustments, loyaltyDiscount);
+  const c = calculateBillTotalsCentavos(billLines, store, billDiscount, customAdjustments, loyaltyDiscount, statutory);
   return {
     subtotal: toWirePesos(c.subtotal),
     taxableAmount: toWirePesos(c.taxableAmount),
@@ -253,5 +165,9 @@ export function calculateBillTotals(
     grandTotal: toWirePesos(c.grandTotal),
     vatableSales: toWirePesos(c.vatableSales),
     vatExemptSales: toWirePesos(c.vatExemptSales),
+    statutoryDiscountTotal: toWirePesos(c.statutoryDiscountTotal),
+    statutoryVatRemovedTotal: toWirePesos(c.statutoryVatRemovedTotal),
+    statutoryDiners: c.statutoryDiners.map(diner => ({ ...diner, share: toWirePesos(diner.share),
+      discount: toWirePesos(diner.discount), vatRemoved: toWirePesos(diner.vatRemoved), vatExempt: toWirePesos(diner.vatExempt) })),
   };
 }

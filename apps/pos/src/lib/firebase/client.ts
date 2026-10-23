@@ -3,10 +3,11 @@
 "use client";
 
 import { initializeApp, getApps } from "firebase/app";
-import { getAuth, updateProfile } from "firebase/auth";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, updateDoc, serverTimestamp, setDoc } from "firebase/firestore";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { getAuth, updateProfile, connectAuthEmulator } from "firebase/auth";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, updateDoc, serverTimestamp, setDoc, connectFirestoreEmulator } from "firebase/firestore";
+import { getStorage, ref, uploadBytes, getDownloadURL, connectStorageEmulator } from "firebase/storage";
 import { firebaseConfig } from "@/firebase/config";
+import { emulatorProfile } from '../../../config/emulator-profile.mjs';
 
 // Initialize Firebase
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
@@ -19,6 +20,13 @@ const db = initializeFirestore(app, {
 });
 
 const storage = getStorage(app);
+const emulator = emulatorProfile(process.env.NEXT_PUBLIC_POS_EMULATOR_MODE, process.env.NEXT_PUBLIC_POS_EMULATOR_HOST);
+if (emulator) {
+    if (app.options.projectId !== emulator.projectId) throw new Error('The POS emulator build cannot use a live Firebase app.');
+    connectAuthEmulator(auth, `http://${emulator.host}:${emulator.authPort}`, { disableWarnings: true });
+    connectFirestoreEmulator(db, emulator.host, emulator.firestorePort);
+    connectStorageEmulator(storage, emulator.host, emulator.storagePort);
+}
 
 export async function uploadProductImage(productId: string, file: File): Promise<string> {
     if (!productId) {

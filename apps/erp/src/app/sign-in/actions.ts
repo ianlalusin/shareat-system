@@ -13,12 +13,22 @@
  * browser chose.
  */
 import { redirect } from 'next/navigation';
-import { signInWithPin, signOut, resolveTerminalIdentity, AuthenticationError } from '@shareat/auth';
+import {
+  signInWithPin,
+  signOut,
+  resolveTerminalIdentity,
+  signInOnPairedTablet,
+  TABLET_NOT_PAIRED,
+  AuthenticationError,
+} from '@shareat/auth';
 import {
   setSessionCookie,
   clearSessionCookie,
   readSessionToken,
   setSetupIdentityCookie,
+  readPosTabletToken,
+  setPosTabletCookie,
+  clearPosTabletCookie,
 } from '../../lib/session';
 import { verifyFirebaseIdToken } from '../../lib/firebase-auth-admin';
 import { NOT_LINKED_MESSAGE, resolveVerifiedSignIn, safeNext } from './lib';
@@ -90,6 +100,46 @@ export async function signInWithTerminalPinAction(formData: FormData): Promise<v
     redirect(`/sign-in?next=${encodeURIComponent(next)}&error=${encodeURIComponent(message)}`);
   }
   redirect(redirectTo);
+}
+
+/**
+ * T-464 - sign in on a PAIRED POS tablet with Employee ID + PIN.
+ *
+ * ⭐ Reads ONLY `staffCode` and `pin` (and `next`) from the form. The pairing - and through it the org and store - comes from the
+ * httpOnly cookie `shareat_pos_tablet`, never from the form, and is re-resolved on EVERY submit so a revoke bites on the very next
+ * attempt. With no live pairing the sentence is flat and nothing is written. The pairing cookie is refreshed on a success and cleared
+ * when it turns out to be dead, so the next load shows today's screen.
+ *
+ * ⚠️ `redirect()` after the `try`, never inside it (see `signInWithEmailAction`).
+ */
+export async function signInWithTabletPinAction(formData: FormData): Promise<void> {
+  const staffCode = str(formData, 'staffCode');
+  const pin = str(formData, 'pin');
+  const next = safeNext(str(formData, 'next'));
+
+  let redirectTo: string;
+  try {
+    const cookieToken = await readPosTabletToken();
+    const result = await signInOnPairedTablet(null, { cookieToken, staffCode, pin });
+    await setSessionCookie(result.token, result.expiresAt);
+    if (cookieToken) await setPosTabletCookie(cookieToken); // keep the cookie fresh while the tablet is in use
+    redirectTo = next;
+  } catch (err) {
+    // A revoked / stale / forged pairing is dead: forget it so the sign-in page falls back to today's screen.
+    if (err instanceof AuthenticationError && err.message === TABLET_NOT_PAIRED) await clearPosTabletCookie();
+    const message = preSessionMessage(err, SIGN_IN_POLICY);
+    redirect(`/sign-in?next=${encodeURIComponent(next)}&error=${encodeURIComponent(message)}`);
+  }
+  redirect(redirectTo);
+}
+
+/**
+ * T-464 - called once by the sign-in page when the cookie it holds no longer names a live pairing (a Server Component cannot
+ * delete a cookie itself). It deletes THIS browser's pairing cookie and nothing else, so it needs no authorization: a caller can
+ * only ever forget their own tablet's pairing.
+ */
+export async function forgetDeadPosTabletAction(): Promise<void> {
+  await clearPosTabletCookie();
 }
 
 /**

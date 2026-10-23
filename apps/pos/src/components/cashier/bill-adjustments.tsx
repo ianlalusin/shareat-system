@@ -84,6 +84,8 @@ function CurrencyInput({ value, onChange, disabled }: { value: number, onChange:
     )
 }
 
+import { selectableBillDiscounts, assertBillDiscountAllowed, checkCustomBillDiscount } from './statutory-presets';
+
 function normalizeDiscountType(t: any): "fixed" | "percent" {
     if (t === "percentage" || t === "percent") return "percent";
     return "fixed";
@@ -188,6 +190,9 @@ export function BillAdjustments({
         };
     }
     await runBillingMutation(async () => {
+      const custom = checkCustomBillDiscount(discountToApply);
+      if (!custom.ok) throw new Error(custom.message);
+      assertBillDiscountAllowed(discountToApply);
       await onSetBillDiscount(discountToApply);
       setDiscountOpen(false);
     });
@@ -256,7 +261,7 @@ export function BillAdjustments({
                     <Select onValueChange={handleDiscountSelect} disabled={isLocked || isSaving || busy} value={selectedDiscountId}>
                         <SelectTrigger className="h-9"><SelectValue placeholder="Select discount..." /></SelectTrigger>
                         <SelectContent>
-                            {discounts.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                            {selectableBillDiscounts(discounts).map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
                             <SelectItem value="custom">Others (Custom)</SelectItem>
                         </SelectContent>
                     </Select>

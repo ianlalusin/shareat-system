@@ -71,7 +71,7 @@ export async function cast(hint: string): Promise<Cast> {
   const grantedStaff = await person(orgId, 'Granted staff', 'staff', [storeA, storeB]);
   const [emp] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${orgId}, ${storeA}, ${grantedStaff.personId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+    values (${orgId}, ${storeA}, ${grantedStaff.personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
   await grantEverydayPositionAccess(sql, {
     orgId, storeId: storeA, employmentId: emp!.id, personId: grantedStaff.personId, setBy: admin.personId,
     // The capability does not exist until the builder adds it; the cast keeps this file compiling for the red run.

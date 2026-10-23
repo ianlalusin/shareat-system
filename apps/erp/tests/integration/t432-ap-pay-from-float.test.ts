@@ -109,7 +109,7 @@ async function setup(hint: string) {
   for (const sid of [storeA, storeB]) {
     const [emp] = await sql<{ id: string }[]>`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-      values (${orgId}, ${sid}, ${staffId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+      values (${orgId}, ${sid}, ${staffId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
     await grantEverydayPositionAccess(sql, { orgId, storeId: sid, employmentId: emp!.id, personId: staffId, setBy: managerId });
   }
 

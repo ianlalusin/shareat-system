@@ -109,7 +109,7 @@ async function fixture(hint: string, opts: { drawingLimit?: string; drawingLimit
     values (${orgId}, ${storeId}, '2026-01-01', '9', '1.25', '1.10', 'multiplier') returning id`;
   const [emp] = await sql<{ id: string }[]>`
     insert into employments (org_id, person_id, store_id, staff_code, started_on, employment_status, created_by)
-    values (${orgId}, ${anaId}, ${storeId}, ${uid('sc')}, '2026-01-01', 'regular', ${adminId}) returning id`;
+    values (${orgId}, ${anaId}, ${storeId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, '2026-01-01', 'regular', ${adminId}) returning id`;
 
   return { orgId, storeId, storeId2, admin, adminId, ana, anaId, ownerId, officeAccountId: office!.id, configId: config!.id, employmentId: emp!.id };
 }

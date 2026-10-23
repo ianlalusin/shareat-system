@@ -144,6 +144,7 @@ const COMMANDS: Record<string, string> = {
   'Open shift': 'opens a shift',
   'Settle': 'settles a balance',
   'Unlink': 'removes a link',
+  'Pair this tablet': "T-464: pairs this browser as the store's POS tablet and signs the manager out (a command that moves a device's status, not data entry)",
   // 2026-10-09 T-384 sweep fallout: 'Link store' removed (no button carries it any more). Added per A5/A6:
   'Apply to every store': 'fans one setting out to every store (a bulk write, not a record edit)',
   'Copy': 'copies a record into a new one',

@@ -303,7 +303,7 @@ async function trackedRunCount(sql: ReturnType<typeof postgres>): Promise<number
 describe('T-318 slice B / migration 0152 — refuses when an open employment has no position', () => {
   const dbName = `shareat_scratch_0152_refuse_pos_${Date.now()}`;
   let sql: ReturnType<typeof postgres>;
-  const orphanStaffCode = 'SC-ORPHAN';
+  const orphanStaffCode = 'SE-900002'; // T-464: staff codes must be SE-NNN (migration 0212)
 
   beforeAll(async () => {
     await createScratchDatabase(dbName);
@@ -374,7 +374,7 @@ describe('T-318 slice B / migration 0152 — the two-tier attribution rule', () 
       const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name, is_active) values (${org!.id}, 'S1', 'Store', true) returning id`;
       const [pos] = await sql<{ id: string }[]>`insert into positions (org_id, store_id, name, is_canonical, is_active) values (${org!.id}, null, 'Cashier', true, true) returning id`;
       const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${org!.id}, 'Worker') returning id`;
-      const [emp] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${org!.id}, ${store!.id}, ${person!.id}, 'SC-Z1', 'regular', '2026-01-01') returning id`;
+      const [emp] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${org!.id}, ${store!.id}, ${person!.id}, 'SE-083067045090049', 'regular', '2026-01-01') returning id`;
       await sql`insert into employment_positions (employment_id, position_id, is_primary) values (${emp!.id}, ${pos!.id}, true)`;
       // No super_admin, no admin at all — production's actual shape before this fix.
 
@@ -400,7 +400,7 @@ describe('T-318 slice B / migration 0152 — the two-tier attribution rule', () 
       const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name, is_active) values (${org!.id}, 'S1', 'Store', true) returning id`;
       const [pos] = await sql<{ id: string }[]>`insert into positions (org_id, store_id, name, is_canonical, is_active) values (${org!.id}, null, 'Cashier', true, true) returning id`;
       const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${org!.id}, 'Worker') returning id`;
-      const [emp] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${org!.id}, ${store!.id}, ${person!.id}, 'SC-A1', 'regular', '2026-01-01') returning id`;
+      const [emp] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${org!.id}, ${store!.id}, ${person!.id}, 'SE-083067045065049', 'regular', '2026-01-01') returning id`;
       await sql`insert into employment_positions (employment_id, position_id, is_primary) values (${emp!.id}, ${pos!.id}, true)`;
 
       await expect(apply152(sql)).resolves.toBeUndefined();
@@ -432,7 +432,7 @@ describe('T-318 slice B / migration 0152 — the two-tier attribution rule', () 
       const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name, is_active) values (${org!.id}, 'S1', 'Store', true) returning id`;
       const [pos] = await sql<{ id: string }[]>`insert into positions (org_id, store_id, name, is_canonical, is_active) values (${org!.id}, null, 'Cashier', true, true) returning id`;
       const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${org!.id}, 'Worker') returning id`;
-      const [emp] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${org!.id}, ${store!.id}, ${person!.id}, 'SC-D1', 'regular', '2026-01-01') returning id`;
+      const [emp] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${org!.id}, ${store!.id}, ${person!.id}, 'SE-083067045068049', 'regular', '2026-01-01') returning id`;
       await sql`insert into employment_positions (employment_id, position_id, is_primary) values (${emp!.id}, ${pos!.id}, true)`;
 
       await expect(apply152(sql)).rejects.toThrow(/Admin One.*Admin Two|Admin Two.*Admin One/s);
@@ -457,7 +457,7 @@ describe('T-318 slice B / migration 0152 — the two-tier attribution rule', () 
       const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name, is_active) values (${org!.id}, 'S1', 'Store', true) returning id`;
       const [pos] = await sql<{ id: string }[]>`insert into positions (org_id, store_id, name, is_canonical, is_active) values (${org!.id}, null, 'Cashier', true, true) returning id`;
       const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${org!.id}, 'Worker') returning id`;
-      const [emp] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${org!.id}, ${store!.id}, ${person!.id}, 'SC-T1', 'regular', '2026-01-01') returning id`;
+      const [emp] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${org!.id}, ${store!.id}, ${person!.id}, 'SE-083067045084049', 'regular', '2026-01-01') returning id`;
       await sql`insert into employment_positions (employment_id, position_id, is_primary) values (${emp!.id}, ${pos!.id}, true)`;
 
       await expect(apply152(sql)).rejects.toThrow(/Super One.*Super Two|Super Two.*Super One/s);
@@ -484,7 +484,7 @@ describe('T-318 slice B / migration 0152 — the two-tier attribution rule', () 
       const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name, is_active) values (${org!.id}, 'S1', 'Store', true) returning id`;
       const [pos] = await sql<{ id: string }[]>`insert into positions (org_id, store_id, name, is_canonical, is_active) values (${org!.id}, null, 'Cashier', true, true) returning id`;
       const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${org!.id}, 'Worker') returning id`;
-      const [emp] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${org!.id}, ${store!.id}, ${person!.id}, 'SC-P1', 'regular', '2026-01-01') returning id`;
+      const [emp] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${org!.id}, ${store!.id}, ${person!.id}, 'SE-083067045080049', 'regular', '2026-01-01') returning id`;
       await sql`insert into employment_positions (employment_id, position_id, is_primary) values (${emp!.id}, ${pos!.id}, true)`;
 
       await expect(apply152(sql)).resolves.toBeUndefined();
@@ -519,7 +519,7 @@ describe('T-318 slice B / migration 0152 — the two-tier attribution rule', () 
       const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name, is_active) values (${org!.id}, 'S1', 'Store', true) returning id`;
       const [pos] = await sql<{ id: string }[]>`insert into positions (org_id, store_id, name, is_canonical, is_active) values (${org!.id}, null, 'Cashier', true, true) returning id`;
       const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${org!.id}, 'Worker') returning id`;
-      const [emp] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${org!.id}, ${store!.id}, ${person!.id}, 'SC-R1', 'regular', '2026-01-01') returning id`;
+      const [emp] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${org!.id}, ${store!.id}, ${person!.id}, 'SE-083067045082049', 'regular', '2026-01-01') returning id`;
       await sql`insert into employment_positions (employment_id, position_id, is_primary) values (${emp!.id}, ${pos!.id}, true)`;
 
       await expect(apply152(sql)).resolves.toBeUndefined();
@@ -571,20 +571,20 @@ describe('T-318 slice B / migration 0152 — backfills position_capability_defau
 
     // Single-position holder, open employment, active store.
     const [personSingle] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Single Position') returning id`;
-    const [empSingle] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${orgId}, ${activeStore!.id}, ${personSingle!.id}, 'SC-1', 'regular', '2026-01-01') returning id`;
+    const [empSingle] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${orgId}, ${activeStore!.id}, ${personSingle!.id}, 'SE-083067045049', 'regular', '2026-01-01') returning id`;
     await sql`insert into employment_positions (employment_id, position_id, is_primary) values (${empSingle!.id}, ${cashierId}, true)`;
     singlePersonId = personSingle!.id;
 
     // Multi-position holder — ruled 2026-09-14: union of both, is_primary decides nothing here.
     const [personMulti] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Multi Position') returning id`;
-    const [empMulti] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${orgId}, ${activeStore!.id}, ${personMulti!.id}, 'SC-2', 'regular', '2026-01-01') returning id`;
+    const [empMulti] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${orgId}, ${activeStore!.id}, ${personMulti!.id}, 'SE-083067045050', 'regular', '2026-01-01') returning id`;
     await sql`insert into employment_positions (employment_id, position_id, is_primary) values (${empMulti!.id}, ${cashierId}, true)`;
     await sql`insert into employment_positions (employment_id, position_id, is_primary) values (${empMulti!.id}, ${cookId}, false)`;
     multiPersonId = personMulti!.id;
 
     // Open employment at an INACTIVE store — Contract 4 must hold for them too.
     const [personInactive] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'At Inactive Store') returning id`;
-    const [empInactive] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${orgId}, ${inactiveStore!.id}, ${personInactive!.id}, 'SC-3', 'regular', '2026-01-01') returning id`;
+    const [empInactive] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${orgId}, ${inactiveStore!.id}, ${personInactive!.id}, 'SE-083067045051', 'regular', '2026-01-01') returning id`;
     await sql`insert into employment_positions (employment_id, position_id, is_primary) values (${empInactive!.id}, ${cashierId}, true)`;
     inactiveStorePersonId = personInactive!.id;
 
@@ -681,7 +681,7 @@ describe('T-318 slice B / migration 0152 — backfills position_capability_defau
       const [person] = await idemSql<{ id: string }[]>`insert into persons (org_id, display_name) values (${org!.id}, 'Worker') returning id`;
       const [emp] = await idemSql<{ id: string }[]>`
         insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-        values (${org!.id}, ${store!.id}, ${person!.id}, 'SC-IDM1', 'regular', '2026-01-01') returning id`;
+        values (${org!.id}, ${store!.id}, ${person!.id}, 'SE-083067045073068077049', 'regular', '2026-01-01') returning id`;
       await idemSql`insert into employment_positions (employment_id, position_id, is_primary) values (${emp!.id}, ${pos!.id}, true)`;
 
       await applyThrough152(idemSql);

@@ -118,7 +118,7 @@ async function fixture(hint: string) {
   const hire = async (personId: string, storeId: string) => {
     const id = (await sql<{ id: string }[]>`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-      values (${orgId}, ${storeId}, ${personId}, ${uid('SC')}, 'regular', '2026-01-01') returning id`)[0]!.id;
+      values (${orgId}, ${storeId}, ${personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2026-01-01') returning id`)[0]!.id;
     // A manual/fan_out row already there wins (T-336): the employment-sourced row is only written when none exists.
     await sql`insert into person_store_scope (person_id, store_id, source) values (${personId}, ${storeId}, 'employment') on conflict do nothing`;
     return id;

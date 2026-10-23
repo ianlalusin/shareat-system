@@ -56,6 +56,8 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/settings/pos-link': 'manage_chart_of_accounts',
   // T-401 S6: the usage tolerance band is org policy, admin-only like the menu depletion rules (`set_menu_depletion`); the setters check the same word.
   '/settings/usage-tolerance': 'set_menu_depletion',
+  // T-464: pairing a store's POS tablet is the store manager's (or an admin's) act; `pairPosTablet` / `unpairPosTablet` check the same word at the store. Longer prefix wins over `/settings`.
+  '/settings/pos-tablet': 'pair_pos_tablet',
 
   // --- The books. A cashier's own day is theirs; the organisation's ledger is not. -------------
   '/reports/trial-balance': 'view_trial_balance',

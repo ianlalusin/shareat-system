@@ -5,6 +5,9 @@ import { useMemo } from "react";
 import { Separator } from "../ui/separator";
 import type { SessionBillLine, Discount, Store, Adjustment, LineAdjustment, SessionLoyaltyRedemption } from "@/lib/types";
 import { calculateBillTotals, type TaxAndTotals } from "@/lib/tax";
+import { statutoryInputOf, type StatutorySession } from '@/lib/statutory/session';
+import { maskIdNo } from '@/lib/statutory/capture';
+import type { StatutoryInput } from '@/lib/statutory/shares';
 
 interface BillTotalsProps {
   lines: SessionBillLine[];
@@ -15,6 +18,8 @@ interface BillTotalsProps {
   totalPaid: number;
   isLocked?: boolean;
   onRemoveLineAdjustment?: (lineId: string, adjId: string) => void;
+  statutory?: StatutoryInput | null;
+  session?: StatutorySession | null;
 }
 
 export function BillTotals({
@@ -26,18 +31,21 @@ export function BillTotals({
   totalPaid,
   isLocked,
   onRemoveLineAdjustment,
+  statutory,
+  session,
 }: BillTotalsProps) {
 
     const redemptions = loyaltyRedemptions ?? [];
+    const qualifying = statutory ?? statutoryInputOf(session);
     const totals = useMemo(() => {
         if (!store) return {
           subtotal: 0, taxableAmount: 0, taxTotal: 0, lineDiscountsTotal: 0,
           billDiscountTotal: 0, loyaltyDiscountTotal: 0, totalDiscounts: 0, chargesTotal: 0, grandTotal: 0,
-          vatableSales: 0, vatExemptSales: 0
+          vatableSales: 0, vatExemptSales: 0, statutoryDiscountTotal: 0, statutoryVatRemovedTotal: 0, statutoryDiners: []
         };
         return calculateBillTotals(lines, store, billDiscount, customAdjustments,
-          redemptions.map((r) => ({ type: r.type, value: r.value })));
-    }, [lines, store, billDiscount, customAdjustments, redemptions]);
+          redemptions.map((r) => ({ type: r.type, value: r.value })), qualifying);
+    }, [lines, store, billDiscount, customAdjustments, redemptions, qualifying]);
 
     // Add guards for totals being null
     const grandTotal = totals?.grandTotal ?? 0;
@@ -185,7 +193,15 @@ export function BillTotals({
             </div>
         )}
 
-        {((totals?.taxTotal ?? 0) > 0) && (
+        {totals.statutoryDiners.map(diner => {
+          const identity = qualifying?.diners.find(person => person.id === diner.dinerId);
+          return <div key={diner.dinerId} className="flex items-start justify-between gap-3 text-xs">
+            <span>{diner.kind === 'senior' ? 'Senior' : 'PWD'} · {identity?.name} · {maskIdNo(identity?.idNo ?? '')}</span>
+            <span className="shrink-0 tabular-nums">− ₱{diner.discount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>;
+        })}
+        {((totals?.statutoryVatRemovedTotal ?? 0) > 0) && <div className="flex justify-between gap-3 text-xs"><span>Less: VAT exemption (SC/PWD)</span><span>− ₱{totals.statutoryVatRemovedTotal.toFixed(2)}</span></div>}
+        {((totals?.taxTotal ?? 0) > 0 || (totals?.vatExemptSales ?? 0) > 0) && (
             <>
                 <Separator className="my-1"/>
                 <div className="flex justify-between text-muted-foreground">
@@ -193,7 +209,7 @@ export function BillTotals({
                     <span>₱{(totals?.vatableSales ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
                  <div className="flex justify-between text-muted-foreground">
-                    <span>VAT-Exempt Sales</span>
+                    <span>{store.taxType === 'NON_VAT' ? 'SC/PWD Sales' : 'VAT-Exempt Sales'}</span>
                     <span>₱{(totals?.vatExemptSales ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
                  <div className="flex justify-between text-muted-foreground">

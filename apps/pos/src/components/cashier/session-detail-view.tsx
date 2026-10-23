@@ -21,6 +21,9 @@ import { isCashierLinked } from "@/lib/loyalty/session-link";
 import { BillableItems } from "@/components/cashier/billable-items";
 import { BillTotals } from "@/components/cashier/bill-totals";
 import { BillAdjustments, BillAppliedAdjustments } from "@/components/cashier/bill-adjustments";
+import { statutoryInputOf } from '@/lib/statutory/session';
+import { assertBillDiscountAllowed } from './statutory-presets';
+import { StatutoryDinersPanel } from './StatutoryDinersPanel';
 import { PaymentModal } from "@/components/cashier/payment-modal";
 import { LinkCardDialog } from "@/components/cashier/LinkCardDialog";
 import { CustomerInfoForm } from "@/components/cashier/customer-info-form";
@@ -261,8 +264,8 @@ export function SessionDetailView({ sessionId }: { sessionId: string }) {
 
   const billTotals = useMemo(() => {
     return calculateBillTotals(billLines, activeStore, billDiscount, customAdjustments,
-      loyaltyRedemptions.map((r) => ({ type: r.type, value: r.value })));
-  }, [billLines, activeStore, billDiscount, customAdjustments, loyaltyRedemptions]);
+      loyaltyRedemptions.map((r) => ({ type: r.type, value: r.value })), statutoryInputOf(session));
+  }, [billLines, activeStore, billDiscount, customAdjustments, loyaltyRedemptions, session]);
   
   const { grandTotal } = billTotals;
 
@@ -629,6 +632,7 @@ export function SessionDetailView({ sessionId }: { sessionId: string }) {
   };
 
   const handleSetBillDiscount = async (d: Discount | null) => {
+    assertBillDiscountAllowed(d);
     const wasDiscount = !!billDiscount;
     await updateSessionBillingState({ billDiscount: d });
     setBillDiscount(d);
@@ -642,7 +646,9 @@ export function SessionDetailView({ sessionId }: { sessionId: string }) {
     <div className="h-full flex flex-col">
       <div className="flex-1 overflow-y-auto">
         {session && <CustomerInfoForm session={session} />}
+        {session && activeStore && storeId && <div className="px-3 py-2"><StatutoryDinersPanel storeId={storeId} sessionId={sessionId} session={session} lines={billLines} store={activeStore} user={appUser} billDiscount={billDiscount} adjustments={customAdjustments} loyalty={loyaltyRedemptions} /></div>}
         <BillTotals
+          session={session}
           lines={billLines}
           store={activeStore!}
           billDiscount={billDiscount}

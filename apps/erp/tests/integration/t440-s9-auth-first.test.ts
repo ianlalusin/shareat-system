@@ -168,7 +168,7 @@ describe('T-440 S9 behaviour - a caller without the capability is refused, not c
   });
   it('people domain check: blank surname + no capability => authorization refusal, one denial', async () => {
     const f = await fixture('people');
-    const [job] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${f.orgId}, ${f.storeId}, ${f.staff.personId}, ${uid('job')}, 'regular', '2025-01-01') returning id`;
+    const [job] = await sql<{ id: string }[]>`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${f.orgId}, ${f.storeId}, ${f.staff.personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
     if (!job) throw new Error('Synthetic job was not inserted');
     const { renamePersonAction } = await import('../../src/app/staff/actions');
     const form = (lastName: string) => {

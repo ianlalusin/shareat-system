@@ -7,7 +7,61 @@
 | **Inputs** | posv2 plan data + Ian's 13 Oct answers (128 answer files) · `pos-v1-study.md` and `customer-v1-study.md` (15 Oct, read-only) · Ian's 15 Oct rulings · CI timings from GitHub (run of 15 Oct 12:15 UTC) |
 | **Does not** | amend the bible or ADR-015 (task PC-1 does) · write task specs (listed in §6, written next in plan mode) |
 
-## 1. Bottom line
+## 0. 22 October update: Lipa on v2 by 1 January, aiming for early December (bible row 378)
+
+Ian chose ERP v2 and POS v2 (Lipa) both live by 1 Jan, Customer v2 in P3, and "work faster to ship earlier".
+§1 item 1 and the 11 Jan date below are superseded. P0 ships on v1's Firebase. It writes v1's Firestore format
+unchanged, so Lipa can switch before the ERP cutover. The target is Mon 7 Dec; the deadline is 1 Jan.
+
+| By | Step | Who |
+|---|---|---|
+| 22 Oct | Audit + full CI + merge `codex/pos-shared-backend` (T-425/426/427, T-456-460, T-461-463) as PR #47. Audit done 22 Oct (verdict MERGE). GitHub Actions minutes ran out on 22 Oct; Ian made the repo public the same day so CI runs; PR #47 merges after a green run | orchestrator |
+| 31 Oct | v2 APK signing key in GitHub; Lipa tablet model/Android/memory + printers; DNS `pos2.shareat.net` | Ian |
+| 7 Nov | POS v2 server switched on (runbook §0 steps 3-9); manager PINs + `approve_pos_correction` at Lipa | orchestrator + Ian |
+| 9 Nov | POS v1 feature freeze (row 348, unchanged) | — |
+| 14 Nov | Emulator full run (T-463) + real Lipa tablet and printer check | orchestrator + Lipa staff |
+| 21 Nov | PC-8 day close / X-Z slip (business day ends at closing, row 348): spec in plan mode, build, audit | POS lane |
+| 23-29 Nov | Soak test, 24 h, two tablets: 0 lost, 0 doubled. A failure retries 30 Nov - 4 Dec | orchestrator |
+| 1-5 Dec | Lipa staff training on the new payment and stand screens | Ian + Lipa |
+| **Mon 7 Dec** | **Lipa on POS v2** (v1 stays installed as roll-back). Fallback dates: 14 Dec, then 1 Jan at the latest | — |
+| 21 Dec - 10 Jan | No new store switches (holidays, ERP cutover 1 Jan) | — |
+| from 11 Jan | Malvar, then Davao: one a week, each after one clean week (Banay-Banay is closing and leaves v2, row 377) | — |
+
+**Data rule (bible row 379).** Pre-2027 POS data is test data; nothing but master data and loyalty point balances
+crosses over. New task (spec to write, number at writing): **nightly per-receipt bridge**, Firebase -> Postgres, all
+stores, from 1 Jan, extending the T-396 06:00 import; read-only on Firebase; spec by 13 Nov, built and dry-run on
+December data by 18 Dec, live 2 Jan for 1 Jan's sales.
+
+Faster how: the POS lane runs beside the ERP lanes; emulator checks replace the cloud TEST project (T-463);
+Ian's asks are batched into the 31 Oct list above. P1 shared-backend coding (T-462) competes for the same lane.
+
+
+## 0b. Owner direction — 21 October 2026 (P1 start; the Firebase-release default is overridden by row 378)
+
+Ian reviewed the phases, said **"start now"**, and requested **"use emulator to test it when build"**.
+This updates the work order below; the October 15 dates remain historical draft targets, not renewed commitments.
+
+- Deliver POS as an Android APK. Keep unsent sales and a durable outbox on the device; synchronize through
+  authenticated server APIs into the **same PostgreSQL backend as ERP**. Never connect the APK directly to Postgres.
+- Begin **P1 now**, preserving the tested P0 billing, receipts and offline ledger. An interim Firebase production
+  rollout is no longer the default prerequisite. Firebase retirement still requires completing each ownership move.
+- Device storage does not require Firebase. **SQLite adoption is undecided**: test existing IndexedDB persistence
+  first, then scope any native storage change and migration separately. Do not describe SQLite as installed or approved.
+- Use an isolated Android emulator and local Firebase **demo-shareat-pos2** emulators for remaining legacy paths.
+  These local checks do not require a separate cloud Firebase project. A TEST store inside live Firebase remains
+  prohibited; no live Firebase or production payment writes are authorized by this testing direction.
+- Emulator checks cover APK installation, offline persistence, restart and reconnect where implemented. Real tablet,
+  printer, payment, visual and offline-soak gates remain before release; an emulator pass does not replace them.
+
+Current sequence: **T-463 emulator harness → P1 enrollment/shared sign-in and reference snapshots → P2 receipts,
+payments and till into Postgres → P3 tables/KDS/Customer → P4 remaining rollout/extras**.
+P1 must prove tablet possession rather than trust a public device UUID, reuse shared permissions/session services,
+and specify offline verifier expiry/revocation behavior. Offline refunds remain prohibited by the later T-425 ruling.
+See [T-462](../tasks/462-pos-shared-postgres-p1.md) and the
+[bounded assessment](../discovery/pos-p1-shared-backend-start.md). This records direction, not completed migration
+or POS release approval; planner synchronization of historical dates and bible decision rows remains outstanding.
+
+## 1. Original 15 October recommendation
 
 1. **Going live on 1 January itself is not safe. Go live in the first store (Lipa) on Monday 11 January 2027.**
    1 Jan is the ERP cutover day (purge, opening entry, first POST). Putting the first POS v2 store on the same

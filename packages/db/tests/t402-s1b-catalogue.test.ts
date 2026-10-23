@@ -92,7 +92,7 @@ function expectedRetention(category: string, sensitivity: string): 'r10y' | 'r2y
 describe('T-402 S1b - the catalogue is closed, typed and in one file (R2, R3, R4)', () => {
   it('has roughly the specified size (~95 entries; the 22 existing + ~33 S2/S3 + ~40 reserved) and every entry has every field', () => {
     expect(AUDIT_CATALOGUE.length).toBeGreaterThanOrEqual(90);
-    expect(AUDIT_CATALOGUE.length).toBeLessThanOrEqual(190); // 170 -> 190, T-436: 11 leave.*/leave_cap/leave_type/sil/leave_document audit actions; 160 -> 170, T-434: staff_photo.*/staff_signature.* audit actions (set/replaced/removed/viewed/view_refused); raise deliberately
+    expect(AUDIT_CATALOGUE.length).toBeLessThanOrEqual(195); // 190 -> 195, T-464: pos_tablet.paired / pos_tablet.unpaired; 170 -> 190, T-436: 11 leave.*/leave_cap/leave_type/sil/leave_document audit actions; 160 -> 170, T-434: staff_photo.*/staff_signature.* audit actions (set/replaced/removed/viewed/view_refused); raise deliberately
     for (const e of AUDIT_CATALOGUE) {
       expect(typeof e.action, 'action').toBe('string');
       expect(CATEGORIES, `${e.action} category`).toContain(e.category);
@@ -124,13 +124,13 @@ describe('T-402 S1b - the catalogue is closed, typed and in one file (R2, R3, R4
     }
   });
 
-  it('Invariant 10/13: all 49 legacy actions are present, NOT reserved (except the split master_data_load and the retired recode_item), with exactly the labels migration 0197 copied them under', () => {
+  it('Invariant 10/13: all 49 legacy actions are present, NOT reserved (except the split master_data_load and the retired recode_item and set_staff_code), with exactly the labels migration 0197 copied them under', () => {
     for (const [action, label] of Object.entries(LEGACY)) {
       const e = catalogueEntry(action);
       expect(e, `${action} missing from the catalogue`).toBeDefined();
       expect(`${e!.category}/${e!.sensitivity}`, `${action} label`).toBe(label);
       // orchestrator ruling: master_data_load is split into master_data.*_load; the legacy string stays catalogued but reserved
-      expect(e!.reserved, `${action} reserved?`).toBe(action === 'master_data_load' || action === 'recode_item');
+      expect(e!.reserved, `${action} reserved?`).toBe(action === 'master_data_load' || action === 'recode_item' || action === 'set_staff_code'); // T-464: set_staff_code retired (no typed codes)
       expect(e!.clientSources, `${action} is server-only`).toEqual([]);
     }
   });

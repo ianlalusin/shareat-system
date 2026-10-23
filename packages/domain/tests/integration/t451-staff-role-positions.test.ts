@@ -24,7 +24,7 @@ describe('T-451 privileged roles do not require staff positions', () => {
     const f = await roleFixture(`451-clear-${role}`);
     const target = role === 'manager' ? f.manager : role === 'admin' ? f.admin : f.superAdmin;
     const [emp] = await sql`insert into employments (org_id,store_id,person_id,staff_code,employment_status,started_on)
-      values (${f.orgId},${f.storeId},${target.personId},${uid('SE')},'regular','2026-01-01') returning id`;
+      values (${f.orgId},${f.storeId},${target.personId},${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`},'regular','2026-01-01') returning id`;
     const [position] = await sql`select id from positions where org_id = ${f.orgId} and name = 'Cashier'`;
     await sql`insert into employment_positions (employment_id,position_id,is_primary) values (${emp!.id},${position!.id},true)`;
     const beforeRole = await asOrg(f.orgId, tx => accessRepo.activeRoleForPerson(tx, target.personId, f.orgId));

@@ -64,10 +64,11 @@ class Req extends Target {
     this.readyState = 'done';
     return !this.dispatch('error').defaultPrevented; // true => the transaction must abort
   }
-  upgrade() { this.dispatch('upgradeneeded'); }
+  upgrade(extra: object = {}) { this.dispatch('upgradeneeded', extra); }
+  blocked() { this.dispatch('blocked'); }
 }
 
-interface StoreMeta { keyPath: string | null; autoIncrement: boolean; rows: Map<string, any>; nextKey: number }
+interface StoreMeta { keyPath: string | string[] | null; autoIncrement: boolean; rows: Map<string, any>; nextKey: number }
 interface DbData { version: number; stores: Map<string, StoreMeta>; lock: { active: Tx | null; waiting: Tx[] } }
 
 const k = (key: unknown) => JSON.stringify(key);
@@ -90,6 +91,11 @@ class ObjStore {
     return r;
   }
   private keyFor(m: StoreMeta, value: any, key: unknown): unknown {
+    if (Array.isArray(m.keyPath)) {
+      const parts = m.keyPath.map((p) => value?.[p]);
+      if (parts.some((x) => x === undefined)) throw domErr('DataError', 'compound key path yielded no key');
+      return parts;
+    }
     if (m.keyPath) {
       const kk = value?.[m.keyPath];
       if (kk === undefined) {
@@ -157,7 +163,8 @@ class Tx extends Target {
     if (this.mode === 'readonly') throw domErr('ReadOnlyError', 'transaction is read-only');
   }
   objectStore(name: string): ObjStore {
-    if (!this.names.includes(name)) throw domErr('NotFoundError', `store ${name} not in transaction scope`);
+    const inScope = this.names.includes(name) || (this.mode === 'versionchange' && this.db.data.stores.has(name));
+    if (!inScope) throw domErr('NotFoundError', `store ${name} not in transaction scope`);
     return new ObjStore(this, name, () => this.working.get(name) ?? this.db.data.stores.get(name)!);
   }
   begin() {
@@ -234,7 +241,7 @@ class Db extends Target {
     const names = [...this.data.stores.keys()];
     return Object.assign(names, { contains: (n: string) => names.includes(n) });
   }
-  createObjectStore(name: string, opts: { keyPath?: string | null; autoIncrement?: boolean } = {}) {
+  createObjectStore(name: string, opts: { keyPath?: string | string[] | null; autoIncrement?: boolean } = {}) {
     if (this.data.stores.has(name)) throw domErr('ConstraintError', 'store exists');
     this.data.stores.set(name, { keyPath: opts.keyPath ?? null, autoIncrement: !!opts.autoIncrement, rows: new Map(), nextKey: 0 });
   }
@@ -261,40 +268,71 @@ class Db extends Target {
   released(tx: Tx) {
     if (this.lock.active === tx) { this.lock.active = null; setTimeout(() => this.pump(), 0); }
   }
-  close() { /* data lives in the factory */ }
+  /** T-425: a closed connection no longer blocks a version upgrade (and no longer receives versionchange). */
+  closed = false;
+  close() { this.closed = true; this.factory.forget(this); }
 }
 
 export class FakeIdbFactory {
   commitDelayMs: number;
   commits = 0;
   private dbs = new Map<string, DbData>();
+  private conns = new Map<string, Set<Db>>();
   private failures = 0;
   constructor(opts: { commitDelayMs?: number } = {}) { this.commitDelayMs = opts.commitDelayMs ?? 15; }
 
+  forget(db: Db) { this.conns.get(db.name)?.delete(db); }
+  /** T-425 test hook: connections to `name` that were opened and not closed. */
+  openConnections(name: string): number { return this.conns.get(name)?.size ?? 0; }
+  private track(db: Db) {
+    const set = this.conns.get(db.name) ?? new Set<Db>();
+    set.add(db);
+    this.conns.set(db.name, set);
+    return db;
+  }
+
+  /**
+   * T-425: versioned open. A higher version than stored fires `versionchange` ({oldVersion, newVersion}) on every OTHER open connection,
+   * waits (firing `blocked` once on the request) until they are all closed, then runs `upgradeneeded` ({oldVersion, newVersion}) with
+   * `request.transaction` usable for the existing stores. A lower version fails with VersionError.
+   */
   open(name: string, version?: number): Req {
     const req = new Req();
     setTimeout(() => {
-      let data = this.dbs.get(name);
+      const data = this.dbs.get(name);
       const want = version ?? data?.version ?? 1;
       if (data && want < data.version) {
         req.fail(domErr('VersionError', 'requested version is lower than the existing one'));
         return;
       }
-      const db0 = (d: DbData) => new Db(this, name, d);
       if (!data || want > data.version) {
-        data = data ?? { version: 0, stores: new Map(), lock: { active: null, waiting: [] } };
-        data.version = want;
-        this.dbs.set(name, data);
-        const db = db0(data);
-        req.result = db;
-        const tx = db.upgradeTx();
-        req.transaction = tx;
-        tx.addEventListener('complete', () => req.succeed(db));
-        tx.addEventListener('abort', () => req.fail(domErr('AbortError', 'upgrade aborted')));
-        req.upgrade();
+        const oldVersion = data?.version ?? 0;
+        const others = [...(this.conns.get(name) ?? [])];
+        for (const o of others) {
+          (o as any).dispatch('versionchange', { oldVersion, newVersion: want });
+        }
+        let warned = false;
+        const go = () => {
+          if ([...(this.conns.get(name) ?? [])].some((c) => !c.closed)) {
+            if (!warned) { warned = true; req.blocked(); }
+            setTimeout(go, 1);
+            return;
+          }
+          const d = data ?? { version: 0, stores: new Map(), lock: { active: null, waiting: [] } };
+          d.version = want;
+          this.dbs.set(name, d);
+          const db = this.track(new Db(this, name, d));
+          req.result = db;
+          const tx = db.upgradeTx();
+          req.transaction = tx;
+          tx.addEventListener('complete', () => req.succeed(db));
+          tx.addEventListener('abort', () => req.fail(domErr('AbortError', 'upgrade aborted')));
+          req.upgrade({ oldVersion, newVersion: want });
+        };
+        go();
         return;
       }
-      req.succeed(db0(data));
+      req.succeed(this.track(new Db(this, name, data)));
     }, 0);
     return req;
   }
@@ -321,7 +359,22 @@ export class FakeIdbFactory {
   failNextTransaction(n = 1) { this.failures += n; }
   consumeFailure() { if (this.failures > 0) { this.failures--; return true; } return false; }
   /** Simulates reinstall/clear-site-data. */
-  wipe() { this.dbs.clear(); }
+  wipe() { this.dbs.clear(); this.conns.clear(); }
+  /** Stored version of a database (0 when absent). */
+  versionOf(name: string): number { return this.dbs.get(name)?.version ?? 0; }
+  /**
+   * T-425: seeds a database exactly as an OLDER build left it (version + stores + rows), so an upgrade is a real test.
+   * `stores`: name -> { keyPath?, rows: [[key, value]] } (out-of-line keys when no keyPath).
+   */
+  seedDatabase(name: string, version: number, stores: Record<string, { keyPath?: string | string[]; rows?: [unknown, unknown][] }>) {
+    const m = new Map<string, StoreMeta>();
+    for (const [sn, def] of Object.entries(stores)) {
+      const rows = new Map<string, any>();
+      for (const [key, v] of def.rows ?? []) rows.set(k(key), { key, v: clone(v) });
+      m.set(sn, { keyPath: def.keyPath ?? null, autoIncrement: false, rows, nextKey: 0 });
+    }
+    this.dbs.set(name, { version, stores: m, lock: { active: null, waiting: [] } });
+  }
 }
 
 export const createFakeIdb = (opts?: { commitDelayMs?: number }) => new FakeIdbFactory(opts);

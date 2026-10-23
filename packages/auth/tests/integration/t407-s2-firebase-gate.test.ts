@@ -74,7 +74,7 @@ async function fixture(hint: string) {
   const employ = async (personId: string, storeId: string, startedOn: string, endedOn?: string) => {
     await sql`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on, ended_on)
-      values (${orgId}, ${storeId}, ${personId}, ${uid('SC')}, ${endedOn ? 'terminated' : 'regular'}, ${startedOn}, ${endedOn ?? null})`;
+      values (${orgId}, ${storeId}, ${personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, ${endedOn ? 'terminated' : 'regular'}, ${startedOn}, ${endedOn ?? null})`;
   };
   return { orgId, storeA, storeB, person, employ };
 }

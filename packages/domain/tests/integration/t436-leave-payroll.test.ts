@@ -98,7 +98,7 @@ async function fixture(hint: string, opts: { secondStore?: boolean } = {}) {
   const emp = async (personId: string, storeId: string, startedOn: string, rate: string, endedOn: string | null = null) => {
     const [e] = await sql<{ id: string }[]>`
       insert into employments (org_id, person_id, store_id, staff_code, started_on, ended_on, employment_status, created_by)
-      values (${orgId}, ${personId}, ${storeId}, ${uid('sc')}, ${startedOn}, ${endedOn},
+      values (${orgId}, ${personId}, ${storeId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, ${startedOn}, ${endedOn},
               ${endedOn ? 'resigned' : 'regular'}, ${adminId}) returning id`;
     const [r] = await sql<{ id: string }[]>`
       insert into pay_rates (org_id, employment_id, basis, amount, effective_from, created_by)

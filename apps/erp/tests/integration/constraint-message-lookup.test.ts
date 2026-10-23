@@ -109,7 +109,7 @@ describe('T-271 — pay_runs / pay_rates / payslips / attendance_days', () => {
     personId = person!.id;
     const [emp] = await sql<{ id: string }[]>`
       insert into employments (org_id, person_id, store_id, staff_code, started_on, employment_status, created_by)
-      values (${orgId}, ${personId}, ${storeId}, ${uid('sc')}, '2026-01-01', 'regular', ${personId}) returning id`;
+      values (${orgId}, ${personId}, ${storeId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, '2026-01-01', 'regular', ${personId}) returning id`;
     employmentId = emp!.id;
     const [cfg] = await sql<{ id: string }[]>`
       insert into store_attendance_config (org_id, store_id, effective_from) values (${orgId}, ${storeId}, '2026-01-01') returning id`;

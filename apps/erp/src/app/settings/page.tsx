@@ -86,6 +86,11 @@ export default async function SettingsPage() {
           description="Which POS store each branch sells under. A linked branch's sales days come from POS and can't be typed; a branch that isn't linked keeps typing them in. Admin only."
         />
         <SettingsCard
+          href="/settings/pos-tablet"
+          title="POS tablet"
+          description="Set a store's counter tablet up once; after that staff sign in on it with their Employee ID and PIN only. A store manager or an admin pairs it here, and un-pairs a lost one."
+        />
+        <SettingsCard
           href="/settings/usage-tolerance"
           title="Usage tolerance"
           description="How far the usage staff record may stray from what POS sales say was used before a manager needs a reason to post it. One organisation-wide band, and an optional band per item. Admin only."

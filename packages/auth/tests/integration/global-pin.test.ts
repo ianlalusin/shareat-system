@@ -82,7 +82,7 @@ async function mkPerson(orgId: string, name: string): Promise<string> {
 async function hireAt(orgId: string, personId: string, storeId: string): Promise<void> {
   await sql`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${orgId}, ${storeId}, ${personId}, ${uid('SC')}, 'regular', '2026-01-01')
+    values (${orgId}, ${storeId}, ${personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2026-01-01')
   `;
 }
 
@@ -328,7 +328,7 @@ describe('one organisation, not two — bible invariant 7', () => {
     // refuses it (23503 naming the constraint) and the sign-in assertion below stands on the credential lookup alone.
     const crossOrg = await sql`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-      values (${o2.orgId}, ${o2.storeA}, ${p1}, ${uid('SC')}, 'regular', '2026-01-01')
+      values (${o2.orgId}, ${o2.storeA}, ${p1}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2026-01-01')
     `.then(
       () => null,
       (e: { code?: string; constraint_name?: string }) => e,

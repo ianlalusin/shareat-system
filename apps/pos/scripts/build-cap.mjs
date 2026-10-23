@@ -5,11 +5,11 @@
 // POS v2 server. So `src/app/api`, `src/middleware.ts` and `src/server` (the server code and its tests, which import the route files) are moved
 // aside for the export and ALWAYS put back (finally), even if the build fails. No client file imports any of them (tests/unit/pos-v2-server-boundary.test.ts).
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, lstatSync, mkdirSync, readdirSync, renameSync, rmdirSync } from 'node:fs';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const stashDir = join(root, '.cap-stash');
 const targets = [
   { from: join(root, 'src', 'app', 'api'), to: join(stashDir, 'app-api') },
@@ -17,13 +17,48 @@ const targets = [
   { from: join(root, 'src', 'server'), to: join(stashDir, 'server') },
 ];
 
+function checkedPath(candidate) {
+  const absolute = resolve(candidate);
+  const inside = relative(root, absolute);
+  if (!inside || isAbsolute(inside) || inside === '..' || inside.startsWith(`..${sep}`)) {
+    throw new Error('build-cap: refusing a source move outside the POS workspace.');
+  }
+  // Do not follow a generated symlink/junction while merging or moving source.
+  for (let parent = dirname(absolute); parent !== root; parent = dirname(parent)) {
+    if (existsSync(parent) && lstatSync(parent).isSymbolicLink()) {
+      throw new Error('build-cap: refusing a source move through a symbolic link.');
+    }
+  }
+  return absolute;
+}
+function entry(candidate) {
+  try { return lstatSync(candidate); }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+}
 function stash() {
   mkdirSync(stashDir, { recursive: true });
-  for (const t of targets) if (existsSync(t.from)) renameSync(t.from, t.to);
+  for (const t of targets) if (entry(t.from)) renameSync(checkedPath(t.from), checkedPath(t.to));
+}
+function restoreEntry(from, to) {
+  checkedPath(from);
+  checkedPath(to);
+  const saved = entry(from);
+  if (!saved) return;
+  const current = entry(to);
+  if (!current) { renameSync(from, to); return; }
+  // A collision is preserved on both sides for manual review. Only real
+  // directories are traversed; files and symbolic links are never overwritten.
+  if (!saved.isDirectory() || !current.isDirectory()) return;
+  for (const name of readdirSync(from)) restoreEntry(join(from, name), join(to, name));
+  if (readdirSync(from).length === 0) rmdirSync(from);
 }
 function restore() {
-  for (const t of targets) if (existsSync(t.to) && !existsSync(t.from)) renameSync(t.to, t.from);
-  if (existsSync(stashDir)) rmSync(stashDir, { recursive: true, force: true });
+  for (const t of targets) restoreEntry(t.to, t.from);
+  if (!entry(stashDir)) return;
+  if (readdirSync(stashDir).length !== 0) {
+    throw new Error('build-cap: saved source remains in .cap-stash. Both versions were preserved; review them before building again.');
+  }
+  rmdirSync(checkedPath(stashDir));
 }
 
 let status = 1;

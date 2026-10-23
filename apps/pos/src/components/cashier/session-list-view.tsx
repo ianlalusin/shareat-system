@@ -31,6 +31,7 @@ import { deleteDoc, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { takeReservationSeatHandoff } from "@/lib/reservations/seat-handoff";
 import { useLocalProfile } from "@/context/local-profile-context";
 import { reservationEvent, appendReservationEvent } from "@/lib/reservations/history";
+import { ConvertSheet } from './ConvertSheet';
 
 export function SessionListView() {
     const { appUser, isSigningOut } = useAuthContext();
@@ -240,6 +241,7 @@ export function SessionListView() {
             <PageHeader title="Cashier" description="Start a new session or manage active ones.">
                 <div className="flex items-center gap-2 flex-wrap justify-end">
                     <CashierTargetProgressCard storeId={activeStore.id} />
+                    <ConvertSheet key={`${activeStore.id}:${appUser?.uid}`} storeId={activeStore.id} />
                     <Button variant="outline" size="sm" onClick={() => router.push("/cashier/handover")}>
                         <Banknote className="mr-2 h-4 w-4" /> Cash Handover
                     </Button>

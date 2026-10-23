@@ -464,7 +464,19 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // T-444: one new Review and approvals disclosure summary; all existing controls remain.
     // +9 (22 Oct): T-448 modal forms - the shared Dialog's Close button, every form's Save/Cancel/Edit now icon buttons, add forms moved into dialogs (1375 -> 1384 measured; the 9 new controls are 32px desktop / 44px touch icon buttons, or the 2 UNRESOLVED above).
     // T-448 x main merge: main's 1392 (T-450/T-451 controls) + this branch's +9 = 1401 measured.
-    expect(results.length).toBe(1401);
+    // Combined T-440 controls plus T-448: Books moves into the financial StatCard map.
+    // SSR checks retain Assets and Books links; this removes one static scanner site.
+    // T-450: one new native DisclosureCard summary, authored min-h-11 (44px); no fail/unresolved exemption.
+    // T-451: one explicit Remove staff positions submit control; existing size/baseline checks still apply.
+    // T-464: +8 controls (measured), all >= 24px, none baselined: the paired-tablet sign-in form and /settings/pos-tablet.
+    // T-448 x main (b2a0ebe) merge: re-measured
+    expect(results.length).toBe(1409);
+  });
+
+  it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
+    const disclosure = results.filter(result => result.file === 'components/ui/DisclosureCard.tsx');
+    expect(disclosure).toHaveLength(1);
+    expect(disclosure[0]).toMatchObject({ tag: 'summary', status: 'pass', px: 44 });
   });
 
   it('no control is undersized or unresolved outside the accepted baseline', () => {

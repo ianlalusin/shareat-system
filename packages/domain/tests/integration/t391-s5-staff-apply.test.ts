@@ -4,7 +4,7 @@ import postgres from 'postgres';
 
 /**
  * T-391 S5 - `docs/tasks/391-production-master-data-load.md`, tests 22 and 26 (+ S1-S9, R2, R4, R8, R15, R16, I1, I2, I4, I7, I9). TESTER file.
- * Real Postgres. The positions and staff APPLY, and createEmployment's staffCode override.
+ * Real Postgres. The positions and staff APPLY, (the S9 staffCode override was removed by T-464).
  *
  * CONTRACT these tests pin (the spec names files, not signatures - the builder builds to this):
  *   scripts/lib/master-data-apply.ts
@@ -24,12 +24,12 @@ import postgres from 'postgres';
  *     applyMasterData({ ..., only?: ('items'|'suppliers'|'customers'|'positions'|'staff')[] }) gains 'positions' and 'staff' (R3 order:
  *       positions before staff) and returns them under result.positions / result.staff. In a DRY RUN the entities share ONE outer
  *       transaction (R2), so staff see the positions the same run planned, and the whole thing is rolled back.
- *   @shareat/domain: createEmployment(tx, actor, { ..., staffCode?: string })
+ *   @shareat/domain: createEmployment(tx, actor, { ... })  (T-464: no staffCode input; every code is allocated)
  *       gated by enrol_staff (as today); shape SE-NNN (three digits) else refused; refused when the code is taken at that store;
  *       every refusal is an error carrying a non-empty `userReason`; ONE audit_log row (entity 'employments', entity_id = the employment)
  *       when the override is used, and none otherwise; later plain hires keep max + 1.
  *
- * Each test names its killing mutant. Red today: the apply functions do not exist; createEmployment ignores staffCode.
+ * Each test names its killing mutant.
  */
 config({ path: '.env.local' });
 
@@ -233,86 +233,47 @@ afterAll(async () => {
   await sql.end({ timeout: 5 });
 });
 
-describe('S5 apply - the staffCode override (S9)', () => {
+describe('S5 apply - staff codes are ALWAYS allocated, never typed (T-464; the S9 override is gone)', () => {
   it(
-    'a code is kept: the employment carries SE-014, ONE audit row names it, and the next plain hire at that store gets SE-015 (max + 1). Killing mutants: the override ignored; no audit row; the counter not following the override',
+    'every hire gets the next SE-NNN (max + 1) and writes ONLY employment.created: a staffCode in the input is not a thing any more. Killing mutants: the override honoured again; an override audit row written',
     async () => {
       const e = await env('OV');
       const a = await newPerson(e, 'Override One');
       const b = await newPerson(e, 'Plain Two');
+      // the old S9 field, passed anyway (a stale caller): it is ignored, the allocator decides
       const emp = await hire(e, e.superA, a, 'LIPA', { staffCode: 'SE-014' });
-      expect(emp.staffCode).toBe('SE-014');
-      // T-402 S2: createEmployment also writes employment.created for the hire; the override row is still exactly one.
-      const all = await sql<Any[]>`select action, after, actor_person_id from audit_log where org_id = ${e.orgId} and entity_id = ${emp.id}`;
-      expect(all.map((r) => r.action).sort()).toEqual(['employment.created', 'set_staff_code']);
-      const au = all.filter((r) => r.action === 'set_staff_code');
-      expect(au).toHaveLength(1);
-      expect(JSON.stringify(au[0]!.after)).toContain('SE-014');
-      expect(au[0]!.actor_person_id).toBe(e.superA.personId);
-      const next = await hire(e, e.superA, b, 'LIPA');
-      expect(next.staffCode).toBe('SE-015');
-    },
-    60_000,
-  );
-
-  it(
-    'a plain hire still allocates (SE-001) and writes NO override audit row. Killing mutant: the audit row written for every hire',
-    async () => {
-      const e = await env('NO');
-      const emp = await hire(e, e.superA, await newPerson(e, 'Plain One'), 'LIPA');
-      expect(emp.staffCode).toBe('SE-001');
-      // T-402 S2: the hire writes employment.created, and nothing else (no override row).
+      expect(emp.staffCode, 'mutant: the typed code was honoured').toBe('SE-001');
       expect((await sql<Any[]>`select action from audit_log where org_id = ${e.orgId} and entity_id = ${emp.id}`).map((r) => r.action)).toEqual(['employment.created']);
+      expect((await hire(e, e.superA, b, 'LIPA')).staffCode).toBe('SE-002');
     },
     60_000,
   );
 
   it(
-    'a code TAKEN at that store is refused with a userReason; nothing is written (no employment, no audit row, no role). The same code at ANOTHER store is fine. Killing mutant: the override accepting a taken code',
+    'two people can never hold one number at a store, and the same number at ANOTHER store is fine (each store counts from 001)',
     async () => {
       const e = await env('TK');
-      await hire(e, e.superA, await newPerson(e, 'First Holder'), 'LIPA', { staffCode: 'SE-005' });
-      const second = await newPerson(e, 'Second Claimant');
-      const before = await auditCount(e.orgId);
-      const err = await failure(hire(e, e.superA, second, 'LIPA', { staffCode: 'se-005' }));
-      expect(typeof err.userReason).toBe('string');
-      expect(err.userReason.length).toBeGreaterThan(0);
-      expect(err.userReason).toMatch(/SE-005/i);
-      expect(await sql<Any[]>`select 1 from employments where person_id = ${second}`).toHaveLength(0);
-      expect(await sql<Any[]>`select 1 from person_roles where person_id = ${second}`).toHaveLength(0);
-      expect(await auditCount(e.orgId)).toBe(before);
-      const other = await hire(e, e.superA, second, 'MLVR', { staffCode: 'SE-005' });
-      expect(other.staffCode).toBe('SE-005');
-    },
-    60_000,
-  );
-
-  it.each(['SE-14', 'SE-1000', 'EMP-014', '014', 'SE014', 'SE-0x4'])(
-    'a malformed code %s is refused with a userReason and writes nothing. Killing mutant: no shape check',
-    async (bad) => {
-      const e = await env('SH');
-      const p = await newPerson(e, 'Shape Sam');
-      const err = await failure(hire(e, e.superA, p, 'LIPA', { staffCode: bad }));
-      expect(typeof err.userReason).toBe('string');
-      expect(err.userReason.length).toBeGreaterThan(0);
-      expect(await sql<Any[]>`select 1 from employments where person_id = ${p}`).toHaveLength(0);
+      const first = await hire(e, e.superA, await newPerson(e, 'First Holder'), 'LIPA');
+      const second = await hire(e, e.superA, await newPerson(e, 'Second Claimant'), 'LIPA');
+      const other = await hire(e, e.superA, await newPerson(e, 'Other Store'), 'MLVR');
+      expect([first.staffCode, second.staffCode, other.staffCode]).toEqual(['SE-001', 'SE-002', 'SE-001']);
     },
     60_000,
   );
 
   it(
-    'the override is gated on enrol_staff at that store: a staff actor, and a manager scoped to Lipa hiring at Malvar, are refused (AuthorizationError) with nothing written. Killing mutant: the gate skipped when staffCode is set',
+    'the hire is gated on enrol_staff at that store: a staff actor, and a manager scoped to Lipa hiring at Malvar, are refused (AuthorizationError) with nothing written; a manager at their own store may',
     async () => {
       const e = await env('GT');
       const p = await newPerson(e, 'Gate Gus');
       const before = await auditCount(e.orgId);
-      expect(await failure(hire(e, e.staff, p, 'LIPA', { staffCode: 'SE-009' }))).toBeInstanceOf(AuthorizationError);
-      expect(await failure(hire(e, e.manager, p, 'MLVR', { staffCode: 'SE-009' }))).toBeInstanceOf(AuthorizationError);
+      expect(await failure(hire(e, e.staff, p, 'LIPA'))).toBeInstanceOf(AuthorizationError);
+      expect(await failure(hire(e, e.manager, p, 'MLVR'))).toBeInstanceOf(AuthorizationError);
       expect(await sql<Any[]>`select 1 from employments where person_id = ${p}`).toHaveLength(0);
       expect(await auditCount(e.orgId)).toBe(before);
       expect(await denialCount(e.orgId), 'T-402 S2: each refused actor leaves one denial row').toBe(2);
-      const ok = await hire(e, e.manager, p, 'LIPA', { staffCode: 'SE-009' }); // a manager at their own store may
-      expect(ok.staffCode).toBe('SE-009');
+      const ok = await hire(e, e.manager, p, 'LIPA');
+      expect(ok.staffCode).toBe('SE-001');
     },
     60_000,
   );
@@ -320,7 +281,7 @@ describe('S5 apply - the staffCode override (S9)', () => {
 
 describe('S5 apply - persons, employments, positions, links, audit', () => {
   it(
-    'positions and staff as planned: v1 codes kept, blank and duplicate codes allocated, status and Manila date stored, links and audit rows written. Killing mutants: a code not kept; a link not written; no audit row; UTC date',
+    'positions and staff as planned: v2 numbers every hire itself (no v1 code is carried over), status and Manila date stored, links and audit rows written. Killing mutants: a v1 code kept; a link not written; no audit row; UTC date',
     async () => {
       const e = await env('A');
       const s = snap([
@@ -337,11 +298,10 @@ describe('S5 apply - persons, employments, positions, links, audit', () => {
       const got = await emps(e.orgId);
       expect(got.map((x) => x.display_name)).toEqual(['Ana Reyes', 'Ben Cruz', 'Cai Dela Rosa', 'Dee Ocampo']);
       const ana = got.find((x) => x.display_name === 'Ana Reyes')!;
-      expect(ana).toMatchObject({ staff_code: 'SE-014', started_on: '2026-03-02', store_code: 'LIPA', employment_status: 'regular' });
+      expect(ana).toMatchObject({ staff_code: 'SE-001', started_on: '2026-03-02', store_code: 'LIPA', employment_status: 'regular' });
       expect(got.find((x) => x.display_name === 'Ben Cruz')).toMatchObject({ employment_status: 'part-time' });
       const malvar = got.filter((x) => x.store_code === 'MLVR');
-      expect(new Set(malvar.map((x) => x.staff_code)).size).toBe(2); // the duplicate did not collide
-      expect(malvar.find((x) => x.display_name === 'Cai Dela Rosa')!.staff_code).toBe('SE-003'); // S11: earliest dateHired keeps the duplicate
+      expect(malvar.map((x) => x.staff_code).sort()).toEqual(['SE-001', 'SE-002']); // T-464: v1's duplicate SE-003 is not carried over; v2 numbers fresh
       expect((await empPositions(ana.id)).map((x) => x.name)).toEqual(['Cashier']);
       const ben = await empPositions(got.find((x) => x.display_name === 'Ben Cruz')!.id);
       expect(ben.map((x) => x.name)).toEqual(['Kitchen Staff', 'Server']);
@@ -366,9 +326,8 @@ describe('S5 apply - persons, employments, positions, links, audit', () => {
       expect(staffAudit[0]).toMatchObject({ source: 'etl', actor_person_id: e.superA.personId });
       expect(staffAudit[0]!.after).toMatchObject({ snapshotSha: SHA, created: 4, held: 0 });
       expect(JSON.stringify(staffAudit[0]!.after.stores)).toMatch(/LIPA/);
-      // the two kept codes (SE-014, SE-003) are audited by createEmployment itself
-      // T-402 S2: plus the employment.created row every hire now writes.
-      expect((await sql<Any[]>`select action from audit_log where org_id = ${e.orgId} and entity_id = ${ana.id}`).map((r) => r.action).sort()).toEqual(['employment.created', 'set_staff_code']);
+      // T-402 S2: createEmployment writes employment.created; T-464: never a set_staff_code row (no code is typed or kept).
+      expect((await sql<Any[]>`select action from audit_log where org_id = ${e.orgId} and entity_id = ${ana.id}`).map((r) => r.action).sort()).toEqual(['employment.created']);
     },
     90_000,
   );
@@ -581,7 +540,7 @@ describe('S5 apply - idempotence, dry run, lock, dependencies', () => {
       expect(await lastCode(e.stores.LIPA!)).toBe(code);
       // a hand hire afterwards continues after the highest code, so the second run really consumed none
       const next = await hire(e, e.superA, await newPerson(e, 'Later Lou'), 'LIPA');
-      expect(next.staffCode).toBe('SE-012');
+      expect(next.staffCode).toBe('SE-003'); // T-464: two fresh numbers 001 and 002 were issued; v1's SE-010 was not carried over
     },
     90_000,
   );

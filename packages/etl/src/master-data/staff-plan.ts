@@ -62,7 +62,6 @@ export interface PlannedEmployment {
   employmentStatus: string;
   positions: string[];
   primaryPosition: string | null;
-  staffCode: string | null;
 }
 export interface PlannedPersonLink {
   v1StoreId: string;
@@ -125,8 +124,6 @@ export interface PlanStaffInput {
   existingPersons: readonly ExistingPerson[];
   links: readonly StaffLink[];
   answers: Record<string, Row[]>;
-  /** Staff codes v2 already holds, so a v1 code that is taken falls back to allocation. Optional. */
-  existingStaffCodes?: ReadonlyArray<{ storeCode: string; staffCode: string }>;
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : typeof v === 'number' ? String(v) : '');
@@ -136,7 +133,6 @@ const ck = (s: string): string => collapse(s).toLowerCase();
 const ENDED = new Set(['resigned', 'terminated', 'inactive']);
 const HIRABLE_STATUSES = new Set(['regular', 'probationary', 'contractual', 'part-time']);
 const MANAGEMENT = /manager|supervisor|\boic\b|in.?charge|admin|owner|\bhead\b|\blead/i;
-const CODE = /^SE-\d{3}$/i;
 
 /** A real calendar date in YYYY-MM-DD, or ''. */
 const realDate = (s: string): string => {
@@ -164,7 +160,6 @@ interface Rec {
   status: string;
   date: string;
   hiredAt: number;
-  v1Code: string;
   positions: string[];
   group: string | null;
 }
@@ -253,7 +248,6 @@ export function planStaff(input: PlanStaffInput): StaffPlan {
       status,
       date,
       hiredAt: date ? Date.parse(`${date}T00:00:00Z`) : Number.POSITIVE_INFINITY,
-      v1Code: str(s.staffCode),
       positions: (Array.isArray(s.positions) ? s.positions : []).map(str).filter(Boolean),
       group: groupOf.get(`${s.store}|${id}`) ?? null,
     });
@@ -395,44 +389,8 @@ export function planStaff(input: PlanStaffInput): StaffPlan {
     return out;
   };
 
-  // ---- staff codes (S9, S11): decided per store over the records still to be hired
-  const taken = new Set((input.existingStaffCodes ?? []).map((c) => `${c.storeCode}|${c.staffCode.toUpperCase()}`));
+  // T-464: v2 numbers EVERY hire itself (`allocateStaffCode`); a v1 staff code is never carried over (Ian: t391-q6, "v2 numbers everyone fresh").
   const hirable = (r: Rec): boolean => !hasEmp(r) && scope.has(r.store);
-  const codeFor = new Map<string, string | null>();
-  const byStoreCode = new Map<string, Rec[]>();
-  for (const r of recs.filter(hirable)) {
-    if (!CODE.test(r.v1Code)) {
-      codeFor.set(r.id, null);
-      list(
-        r.name,
-        r.v1Code === ''
-          ? `${r.name}: v1 has no staff code; v2 allocates one at ${r.code}.`
-          : `${r.name}: v1 staff code "${r.v1Code}" is not SE-NNN; v2 allocates one at ${r.code}.`,
-      );
-      continue;
-    }
-    const k = `${r.code}|${r.v1Code.toUpperCase()}`;
-    if (!byStoreCode.has(k)) byStoreCode.set(k, []);
-    byStoreCode.get(k)!.push(r);
-  }
-  for (const [k, rs] of byStoreCode) {
-    const code = k.split('|')[1]!;
-    const sorted = rs.slice().sort((a, b) => a.hiredAt - b.hiredAt || a.id.localeCompare(b.id));
-    const takenAlready = taken.has(k);
-    sorted.forEach((r, i) => {
-      if (i === 0 && !takenAlready) {
-        codeFor.set(r.id, code);
-        return;
-      }
-      codeFor.set(r.id, null);
-      list(
-        r.name,
-        takenAlready
-          ? `${r.name}: v1 staff code ${code} is already used at ${r.code} in v2; v2 allocates a new one.`
-          : `${r.name}: v1 staff code ${code} is also held by an earlier hire at ${r.code}; v2 allocates a new one.`,
-      );
-    });
-  }
 
   // ---- each human: roster row, drift, and the writes
   const rosterAnswers = answerByKey['staff-roster'];
@@ -489,7 +447,6 @@ export function planStaff(input: PlanStaffInput): StaffPlan {
         employmentStatus: status,
         positions: pr.resolved,
         primaryPosition: pr.resolved[0] ?? null,
-        staffCode: codeFor.get(r.id) ?? null,
       });
     }
     if (needsDate || needsStatus) {
@@ -509,7 +466,7 @@ export function planStaff(input: PlanStaffInput): StaffPlan {
       primary_position: emps[0]?.primaryPosition ?? '',
       employment_status: emps[0]?.employmentStatus || h.recs[0]!.status,
       started_on: dated ? (toHire.length > 0 ? emps.map((e) => e.startedOn).sort()[0]! : starts[0]!) : '',
-      staff_code: emps[0]?.staffCode ?? '',
+      staff_code: '', // v2 allocates it at hire
       sss_no: '',
       philhealth_no: '',
       pagibig_no: '',
