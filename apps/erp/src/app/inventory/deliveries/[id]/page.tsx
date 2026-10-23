@@ -108,7 +108,8 @@ export default async function DeliveryPage({
         )}
       </StatusHero>
 
-      <FormDisclosure><form id="receive-delivery-form" action={receiveDeliveryAction} className="space-y-4">
+      {/* DEF-755: only the editable draft sits behind the reveal (called = no reveal); a received/void delivery's stored lines stay visible. */}
+      <FormDisclosure called={!canReceive}><form id="receive-delivery-form" action={receiveDeliveryAction} className="space-y-4">
         <input type="hidden" name="deliveryId" value={doc.id} />
         <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
           <table className="w-full min-w-[720px] border-collapse text-sm">
