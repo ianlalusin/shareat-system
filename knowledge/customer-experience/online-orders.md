@@ -4,7 +4,7 @@ topic: customer-experience/online-orders
 about: [customer, cashier]
 readers: public
 must_be_exact: true
-related: [customer-experience/take-out-in-store, staff/cashier-take-out-and-online-sop, cash-and-payments/platform-payouts]
+related: [customer-experience/take-out-in-store, staff/cashier-take-out-and-online-sop, cash-and-payments/platform-payouts, cash-and-payments/platform-wastage]
 updated: 2026-10-23
 ---
 

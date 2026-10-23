@@ -30,6 +30,9 @@ without updating this file.
 today and ERP v2 from v2 (bible row 383). Pages point to the system; an AI reads current values
 from it.
 
+⛔ **`related` links are for keeping pages consistent, not permission.** A public page may link to a
+staff or managers page; before showing any page, check that page's own `readers`.
+
 **must_be_exact: true** pages hold money, allergen or legal rules — quote them, never paraphrase
 loosely or fill gaps.
 

@@ -50,6 +50,8 @@ updated: 2026-10-23
 ---
 ```
 
+- `related` links any page that must agree with this one, whatever its `readers` — a link is
+  never permission; each page's own `readers` governs who sees it.
 - `readers` decides who the future AI may show it to. When unsure, pick the **narrower** audience
   (managers over staff over public) and say so to Ian.
 - New `about` values or a new top-level topic: propose it to Ian, do not invent silently.
