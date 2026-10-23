@@ -175,14 +175,14 @@ describe('T-341 / DEF-414 M1-M4 — the person_grants store backfill migration',
     async function openEmployment(personId: string, storeId: string, positionId: string = cashier!.id) {
       const [emp] = await sql<{ id: string }[]>`
         insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-        values (${orgId}, ${storeId}, ${personId}, ${uid('SC')}, 'regular', '2025-01-01') returning id`;
+        values (${orgId}, ${storeId}, ${personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
       await sql`insert into person_store_scope (person_id, store_id, source) values (${personId}, ${storeId}, 'employment')`;
       await sql`insert into employment_positions (employment_id, position_id, is_primary) values (${emp!.id}, ${positionId}, true)`;
     }
     async function endedEmployment(personId: string, storeId: string, positionId: string = cashier!.id) {
       const [emp] = await sql<{ id: string }[]>`
         insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on, ended_on)
-        values (${orgId}, ${storeId}, ${personId}, ${uid('SC')}, 'resigned', '2025-01-01', '2025-06-01') returning id`;
+        values (${orgId}, ${storeId}, ${personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'resigned', '2025-01-01', '2025-06-01') returning id`;
       await sql`insert into person_store_scope (person_id, store_id, source) values (${personId}, ${storeId}, 'employment')`;
       await sql`insert into employment_positions (employment_id, position_id, is_primary) values (${emp!.id}, ${positionId}, true)`;
     }

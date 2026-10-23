@@ -40,7 +40,7 @@ async function fixture(hint: string) {
     insert into persons (org_id, display_name) values (${orgId}, 'Worker') returning id`;
   const [emp] = await sql<{ id: string }[]>`
     insert into employments (org_id, person_id, store_id, staff_code, started_on, employment_status, created_by)
-    values (${orgId}, ${p!.id}, ${store!.id}, ${uid('sc')}, '2025-01-01', 'regular', ${p!.id}) returning id`;
+    values (${orgId}, ${p!.id}, ${store!.id}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, '2025-01-01', 'regular', ${p!.id}) returning id`;
   const [rate] = await sql<{ id: string }[]>`
     insert into pay_rates (org_id, employment_id, basis, amount, effective_from, created_by)
     values (${orgId}, ${emp!.id}, 'daily', '600.00', '2025-01-01', ${p!.id}) returning id`;

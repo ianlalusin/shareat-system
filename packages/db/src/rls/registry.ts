@@ -997,6 +997,10 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'Which POS v2 tablet is which terminal person at an org’s own store; one franchisee must not see another’s tablets.',
   },
+  pos_tablet_pairings: {
+    scope: 'org_column',
+    reason: 'Which browser is an org’s own paired POS tablet at its own store; one franchisee must not see or revoke another’s tablets.',
+  },
   pos_v1_day_feeds: {
     scope: 'org_column',
     reason: 'The stored POS response for one store-day: sales figures and sold items, org-scoped like sales_days.',

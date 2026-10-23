@@ -181,7 +181,7 @@ describe('T-394 S2 I10c - report fails when a terminal was touched after start',
     try {
       const [e] = await s<{ id: string }[]>`
         insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-        values (${fx.orgId}, ${fx.storeId}, ${fx.personId}, ${uid('SC')}, 'regular', '2026-01-01') returning id`;
+        values (${fx.orgId}, ${fx.storeId}, ${fx.personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2026-01-01') returning id`;
       await s`
         insert into attendance_punches (org_id, store_id, person_id, employment_id, client_punch_id, occurred_at, shift_day, method, asserted_intent, source)
         values (${fx.orgId}, ${fx.storeId}, ${fx.personId}, ${e!.id}, ${uid('cp')}, now(), current_date, 'manual', 'in', 'manual_entry')`;

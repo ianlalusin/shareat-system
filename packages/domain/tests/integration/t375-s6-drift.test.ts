@@ -349,7 +349,7 @@ describe('D - the 7-day recheck runs for an importer WITHOUT verify_sales_day', 
     await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${f.storeId})`;
     const [emp] = await sql<{ id: string }[]>`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-      values (${f.orgId}, ${f.storeId}, ${p!.id}, ${`SE-${Date.now()}`}, 'regular', '2025-01-01') returning id`;
+      values (${f.orgId}, ${f.storeId}, ${p!.id}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
     await grantEverydayPositionAccess(sql, { orgId: f.orgId, storeId: f.storeId, employmentId: emp!.id, personId: p!.id, setBy: f.managerId });
     const cashier: Actor = { personId: p!.id, orgId: f.orgId };
 

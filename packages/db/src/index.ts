@@ -346,6 +346,7 @@ export type {
 export * from './pos-v1/wire';
 export * as posV1Repo from './repo/pos-v1';
 export * as posTerminalLinksRepo from './repo/pos-terminal-links';
+export * as posTabletPairingsRepo from './repo/pos-tablet-pairings';
 export type {
   PosItemMapRow,
   PosMapRequestRow,

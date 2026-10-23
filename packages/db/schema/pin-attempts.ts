@@ -11,7 +11,7 @@
  * concurrency lock-clobber bug, ported forward as the invariant rather than rediscovered.
  */
 import { sql } from 'drizzle-orm';
-import { check, integer, pgTable, timestamp, uniqueIndex, uuid, foreignKey } from 'drizzle-orm/pg-core';
+import { check, integer, pgTable, text, timestamp, uniqueIndex, uuid, foreignKey } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { persons } from './persons';
 import { stores } from './stores';
@@ -27,6 +27,8 @@ export const pinAttemptThrottle = pgTable(
     storeId: uuid('store_id').references(() => stores.id, { onDelete: 'restrict' }),
     // T-416 (migration 0200): a PERSON's bucket for administrator-approval PIN misses. At most one of store_id / actor_person_id.
     actorPersonId: uuid('actor_person_id').references(() => persons.id, { onDelete: 'restrict' }),
+    // T-464 (migration 0212): with store_id set, a PER-EMPLOYEE-ID bucket on a paired POS tablet (normalised upper-case `SE-007`). NULL = the store's own bucket.
+    staffCode: text('staff_code'),
     failCount: integer('fail_count').notNull().default(0),
     windowStartedAt: timestamp('window_started_at', { withTimezone: true }),
     lockedUntil: timestamp('locked_until', { withTimezone: true }),
@@ -40,7 +42,10 @@ export const pinAttemptThrottle = pgTable(
     // One counter per store — v1's key. A store belongs to one org, so this alone also fixes
     // the org (checked by the `orgId = (select org_id from stores ...)` shape at the write site,
     // never trusted from the caller — invariant 8, "never a client-supplied value").
-    uniqueIndex('pin_attempt_throttle_store_id_unique').on(t.storeId),
+    // T-464 (migration 0212): partial - the store's own bucket is the row with no staff code; per-Employee-ID rows are keyed below.
+    uniqueIndex('pin_attempt_throttle_store_id_unique').on(t.storeId).where(sql`${t.staffCode} is null`),
+    uniqueIndex('pin_attempt_throttle_staff_code_unique').on(t.storeId, t.staffCode).where(sql`${t.staffCode} is not null`),
+    check('pin_attempt_throttle_staff_code_needs_store_check', sql`${t.staffCode} is null or ${t.storeId} is not null`),
     // T-412 (migration 0199, narrowed by 0200): one organisation-level bucket (no store, no actor) per org.
     uniqueIndex('pin_attempt_throttle_org_bucket_unique')
       .on(t.orgId)

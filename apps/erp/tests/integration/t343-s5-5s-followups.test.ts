@@ -382,7 +382,7 @@ async function cashRequestFixture(hint: string) {
   // (cash-requests.test.ts's own grantStaffAccess).
   const [employment] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${f.orgId}, ${f.storeId}, ${staffId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+    values (${f.orgId}, ${f.storeId}, ${staffId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
   await grantEverydayPositionAccess(sql, { orgId: f.orgId, storeId: f.storeId, employmentId: employment!.id, personId: staffId, setBy: f.admin.personId });
   const [till] = await sql<{ id: string }[]>`
     select id from money_accounts where store_id = ${f.storeId} and instrument = 'cash' and custodian = 'cashier' and is_foundation`;
@@ -775,7 +775,7 @@ async function separationFixture(hint: string) {
   await sql`insert into person_store_scope (person_id, store_id) values (${staffId}, ${f.storeId})`;
   const [emp] = await sql<{ id: string }[]>`
     insert into employments (org_id, person_id, store_id, staff_code, started_on, employment_status, created_by)
-    values (${f.orgId}, ${staffId}, ${f.storeId}, ${uid('sep')}, '2026-01-01', 'regular', ${f.admin.personId}) returning id`;
+    values (${f.orgId}, ${staffId}, ${f.storeId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, '2026-01-01', 'regular', ${f.admin.personId}) returning id`;
   const [office] = await sql<{ id: string }[]>`
     select id from money_accounts where store_id = ${f.storeId} and instrument = 'cash' and custodian = 'office' and is_foundation`;
   return { ...f, employmentId: emp!.id, officeAccountId: office!.id };

@@ -109,12 +109,16 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('restore_item', 'stock', 'normal', 'org', 'items', 'T-383'),
   // One-time T-386 S5 recode script (removed): old rows carry it (0197's list); reserved so nothing new writes it.
   def('recode_item', 'stock', 'normal', 'org', 'items', 'T-386', { reserved: true }),
-  def('set_staff_code', 'security', 'high', 'store', 'employments', 'T-391', { viewers: 'admin' }),
+  // T-464: retired writer - every staff code is allocated now, none is typed - so it is reserved (no caller); rows already logged keep their labels.
+  def('set_staff_code', 'security', 'high', 'store', 'employments', 'T-391', { viewers: 'admin', reserved: true }),
   def('link_store_to_pos', 'settings', 'normal', 'store', 'pos_v1_store_links', 'T-375'),
   def('unlink_store_from_pos', 'settings', 'normal', 'store', 'pos_v1_store_links', 'T-382'),
   // T-424 S5: registering a POS v2 tablet as an ERP terminal person (dotted: new, never in 0197's copy list).
   def('pos_terminal_link.provision', 'settings', 'high', 'store', 'pos_terminal_links', 'T-424'),
   def('pos_terminal_link.revoke', 'settings', 'high', 'store', 'pos_terminal_links', 'T-424'),
+  // T-464: pairing a store's POS tablet and un-pairing it (dotted: new).
+  def('pos_tablet.paired', 'security', 'high', 'store', 'pos_tablet_pairings', 'T-464'),
+  def('pos_tablet.unpaired', 'security', 'high', 'store', 'pos_tablet_pairings', 'T-464'),
   // T-190: a change to the statutory tables (rate row, withholding table, minimum wage): add, confirm or discard. ONE entry (the catalogue
   // size is capped); `after.table` / `after.event` say which. Dotted: new. Org-scoped, admin-readable; rows are immutable once confirmed.
   // T-190: a person's government numbers were set or cleared. Records FIELD NAMES only, never a number.

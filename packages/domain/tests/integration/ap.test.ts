@@ -89,7 +89,7 @@ async function fixture(hint: string) {
   await sql`insert into person_store_scope (person_id, store_id) values (${staff!.id}, ${storeId})`;
   const [employment] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${orgId}, ${storeId}, ${staff!.id}, ${uid('SE')}, 'regular', '2025-01-01')
+    values (${orgId}, ${storeId}, ${staff!.id}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01')
     returning id
   `;
   await grantEverydayPositionAccess(sql, {
@@ -594,7 +594,7 @@ async function secondStore(f: FixtureWithSupplier, hint: string) {
   // block tests AP scoping, not staff authorisation.
   const [employment] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${f.orgId}, ${storeId}, ${f.staffId}, ${uid('SE')}, 'regular', '2025-01-01')
+    values (${f.orgId}, ${storeId}, ${f.staffId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01')
     returning id
   `;
   await grantEverydayPositionAccess(sql, {

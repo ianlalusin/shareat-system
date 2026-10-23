@@ -39,6 +39,13 @@ export {
   signInWithPin,
   signInWithFirebase,
   resolveTerminalIdentity,
+  /** T-464 - the paired POS tablet (bible row 382). */
+  resolvePosTablet,
+  signInWithStaffCodeAndPin,
+  signInOnPairedTablet,
+  TABLET_NOT_PAIRED,
+  STAFF_CODE_PAUSED,
+  BAD_ID_OR_PIN,
   resolveActor,
   signOut,
   endShift,
@@ -52,7 +59,9 @@ export {
    *  because three of `verifyPin`'s four `false` returns happen before it does. */
   DUMMY_SCRYPT_HASH,
 } from './sessions';
-export type { SignInResult, ResolvedSession, TerminalIdentity } from './sessions';
+export type { SignInResult, ResolvedSession, TerminalIdentity, PosTabletIdentity } from './sessions';
+export { parseTabletEmployeeId, tabletEmployeeIdToStaffCode } from './tablet-employee-id';
+export { pairPosTablet, unpairPosTablet, POS_TABLET_COOKIE } from './pos-tablet';
 /** T-412 - the server-side admin-PIN check behind every Tier P destructive action. */
 export { verifyAdminApproval, ADMIN_PIN_REFUSED } from './admin-approval';
 export type { AdminApprovalInput } from './admin-approval';
@@ -60,7 +69,7 @@ export type { AdminApprovalInput } from './admin-approval';
 export { verifyPosManagerApproval, POS_APPROVAL_REFUSED, POS_APPROVAL_PIN_CAPPED, POS_TERMINAL_NOT_REGISTERED } from './pos-approval';
 export type { PosApprovalInput } from './pos-approval';
 export { resolvePosTerminalLink, isPosDeviceId, POS_DEVICE_ID_INVALID } from './pos-terminal-link';
-export { hashPin, verifyPin, pinLookupHash, isValidPinFormat, newSessionToken, sessionTokenHash } from './credentials';
+export { hashPin, verifyPin, pinLookupHash, posTabletTokenHash, isValidPinFormat, newSessionToken, sessionTokenHash } from './credentials';
 /** T-237 / DEF-224 — administering someone else's sign-in credentials. Gated on `manage_users`,
  *  unlike everything in `sessions.ts`, which is why it is a separate module. */
 export { linkFirebaseCredential, unlinkCredential, reopenPinSignIn, resetApprovalPinCap } from './credentials-admin';

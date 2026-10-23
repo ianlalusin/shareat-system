@@ -140,7 +140,7 @@ async function fixture(hint: string) {
   const cashierId = await mkPerson('Cashier');
   await sql`insert into person_store_scope (person_id, store_id) values (${cashierId}, ${storeId})`;
   // T-407: the PIN door also needs the org-level rule, so the cashier is employed (open employment) as well as scoped.
-  await sql`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${orgId}, ${storeId}, ${cashierId}, ${`FX${++seq}`}, 'regular', '2020-01-01')`;
+  await sql`insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on) values (${orgId}, ${storeId}, ${cashierId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2020-01-01')`;
   await sql`
     insert into person_credentials (person_id, kind, store_id, secret_hash, lookup_hash)
     values (${cashierId}, 'pin', ${storeId}, ${await hashPin(PIN)}, ${pinLookupHash(orgId, PIN)})`;
@@ -571,7 +571,7 @@ describe('Invariant 15 - employment created / ended / positions_set', () => {
       createEmployment(tx, f.admin, { storeId: f.storeId, personId: f.workerId, employmentStatus: 'probationary', startedOn: '2026-01-05', ...over }),
     );
 
-  it('createEmployment: one employment.created (store-scoped, actor = the admin, entity = the employment); a staff-code override adds set_staff_code beside it, not instead; a refused or rolled-back hire leaves none', async () => {
+  it('createEmployment: one employment.created (store-scoped, actor = the admin, entity = the employment); the code is always allocated, so no set_staff_code row is ever written (T-464); a refused or rolled-back hire leaves none', async () => {
     const { f } = await staffed('emp-c');
     await rejects(
       withOrgPrincipal(f.orgId, async (tx) => {
@@ -580,13 +580,14 @@ describe('Invariant 15 - employment created / ended / positions_set', () => {
       }),
     );
     expect(await count(f.orgId, 'employment.created'), 'a success event rolls back with its change').toBe(0);
-    const e = await hire(f, { staffCode: 'SE-777' });
+    const e = await hire(f);
     const got = await rows(f.orgId, 'employment.created');
     expect(got).toHaveLength(1);
     expect(got[0]!.actor_person_id).toBe(f.adminId);
     expect(got[0]!.entity_id).toBe(e.id);
     expectLabels(got[0]!, 'employment.created', f.storeId);
-    expect(await count(f.orgId, 'set_staff_code'), 'the existing override row is unchanged').toBe(1);
+    expect(await count(f.orgId, 'set_staff_code'), 'T-464: no typed staff codes, so the override audit row is never written').toBe(0);
+    expect((await sql<{ staff_code: string }[]>`select staff_code from employments where id = ${e.id}`)[0]!.staff_code, 'the allocator issued it (SE- plus digits)').toMatch(/^SE-\d{3,}$/);
     await expect(hire(f)).rejects.toThrow(/already/i); // a second open employment: refused
     expect(await count(f.orgId, 'employment.created'), 'mutant: logged before the refusal').toBe(1);
   });

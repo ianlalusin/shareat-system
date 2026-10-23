@@ -107,7 +107,7 @@ async function attendancePunchFixture(hint: string) {
   const personId = person!.id;
   const [employment] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${orgId}, ${storeId}, ${personId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+    values (${orgId}, ${storeId}, ${personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
   const employmentId = employment!.id;
   const [punch] = await sql<{ id: string }[]>`
     insert into attendance_punches
@@ -166,7 +166,7 @@ async function attendanceAdjustmentFixture(hint: string) {
   const personId = person!.id;
   const [employment] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${orgId}, ${storeId}, ${personId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+    values (${orgId}, ${storeId}, ${personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
   const employmentId = employment!.id;
   const [cred] = await sql<{ id: string }[]>`
     insert into person_credentials (person_id, kind, external_id) values (${personId}, 'firebase', ${uid('ext')}) returning id`;

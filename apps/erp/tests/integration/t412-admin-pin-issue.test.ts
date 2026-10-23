@@ -110,7 +110,7 @@ describe('issuePinAction on an employment whose person is an administrator', () 
   async function employed(f: Awaited<ReturnType<typeof fixture>>, personId: string) {
     const [e] = await sql<{ id: string }[]>`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-      values (${f.orgId}, ${f.storeId}, ${personId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+      values (${f.orgId}, ${f.storeId}, ${personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
     return e!.id;
   }
 
@@ -174,7 +174,7 @@ describe('M5 issuePinAction on an employment whose person is a super_admin', () 
   async function employed(f: Awaited<ReturnType<typeof withSuper>>, personId: string) {
     const [e] = await sql<{ id: string }[]>`
       insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-      values (${f.orgId}, ${f.storeId}, ${personId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+      values (${f.orgId}, ${f.storeId}, ${personId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
     return e!.id;
   }
 

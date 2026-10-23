@@ -617,7 +617,7 @@ describe('A6/M30 - a guarded lightbox open is ONE audited view each, whatever ?o
     const colleagueId = await mk('Colleague', 'staff');
     const [e] = await sql<{ id: string }[]>`
       insert into employments (org_id, person_id, store_id, staff_code, started_on, employment_status, created_by)
-      values (${orgId}, ${workerId}, ${store!.id}, ${uid('sc')}, '2025-01-01', 'regular', ${adminId}) returning id`;
+      values (${orgId}, ${workerId}, ${store!.id}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, '2025-01-01', 'regular', ${adminId}) returning id`;
     const worker = actor(orgId, workerId);
     const r = await asOrg(orgId, (tx) =>
       requestLeave(tx, worker, { employmentId: e!.id, leaveType: 'sick', note: NOTE, days: [{ date: '2026-03-02', kind: 'leave' }] } as never));

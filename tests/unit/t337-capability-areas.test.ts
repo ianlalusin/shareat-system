@@ -59,9 +59,9 @@ describe('U1 — CAPABILITY_AREA is keyed on exactly the 112 capabilities; every
     // ⭐ 98 -> 99 (T-350/DEF-477): `set_channel_payout` joins CAPABILITY_AREA.
     // ⭐ 99 -> 100 (T-382 S1, A4): `unlink_store_from_pos` joins CAPABILITY_AREA.
     // ⭐ 100 -> 101 (T-385 S3): `verify_own_sales_day` joins CAPABILITY_AREA.
-    expect(Object.keys(_control).length, 'positive control: unmutated form has all 115 keys').toBe(115);
-    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(114);
-    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(116);
+    expect(Object.keys(_control).length, 'positive control: unmutated form has all 116 keys').toBe(116);
+    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(115);
+    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(117);
   });
 });
 
@@ -119,7 +119,9 @@ const ORACLE: Readonly<Record<CapabilityArea, readonly string[]>> = {
     // ⭐ T-436: `view_leave_document` (area staff, 113 -> 114).
     'view_leave_document',
     // ⭐ T-190: `manage_payroll_rates` (area staff, 114 -> 115).
-    'manage_payroll_rates'],
+    'manage_payroll_rates',
+    // ⭐ T-464: `pair_pos_tablet` (area staff, 115 -> 116).
+    'pair_pos_tablet'],
   books: [
     'run_cutover', 'view_financial_reports', 'view_trial_balance', 'reverse_entry', 'close_period',
     'override_period_lock', 'post_journal_entry', 'manage_fixed_assets', 'run_depreciation',
@@ -141,7 +143,7 @@ const ORACLE: Readonly<Record<CapabilityArea, readonly string[]>> = {
 };
 
 describe('U2 — the literal per-area table matches CAPABILITY_AREA exactly', () => {
-  it('every capability inverts to the oracle\'s area, and the counts match §1 (115 total)', () => {
+  it('every capability inverts to the oracle\'s area, and the counts match §1 (116 total)', () => {
     const inverted: Record<string, string[]> = {};
     for (const [cap, area] of Object.entries(CAPABILITY_AREA)) (inverted[area] ??= []).push(cap);
     const sortedInverted = Object.fromEntries(Object.entries(inverted).map(([k, v]) => [k, [...v].sort()]));
@@ -153,7 +155,7 @@ describe('U2 — the literal per-area table matches CAPABILITY_AREA exactly', ()
     const total = Object.values(ORACLE).reduce((sum, caps) => sum + caps.length, 0);
     // ⭐ 100 -> 101 (T-385 S3): `verify_own_sales_day`.
     // ⭐ 101 -> 108 (T-401 S2): the seven menu capabilities, area sales.
-    expect(total).toBe(115);
+    expect(total).toBe(116);
     // ⭐ 108 -> 109 (T-403): `manage_recipes` joins production.
   });
 

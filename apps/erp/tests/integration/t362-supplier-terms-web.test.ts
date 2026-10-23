@@ -108,7 +108,7 @@ async function fixture(hint: string) {
   await sql`insert into person_store_scope (person_id, store_id) values (${adminId}, ${storeId})`;
   const [employment] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${orgId}, ${storeId}, ${adminId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+    values (${orgId}, ${storeId}, ${adminId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
   await grantEverydayPositionAccess(sql, { orgId, storeId, employmentId: employment!.id, personId: adminId, setBy: adminId });
   const admin_ = actor(orgId, adminId);
 
@@ -120,7 +120,7 @@ async function fixture(hint: string) {
   await sql`insert into person_store_scope (person_id, store_id) values (${verifierId}, ${storeId})`;
   const [verifierEmployment] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on)
-    values (${orgId}, ${storeId}, ${verifierId}, ${uid('SE')}, 'regular', '2025-01-01') returning id`;
+    values (${orgId}, ${storeId}, ${verifierId}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e6)}${Math.floor(Math.random() * 1e6)}`}, 'regular', '2025-01-01') returning id`;
   await grantEverydayPositionAccess(sql, { orgId, storeId, employmentId: verifierEmployment!.id, personId: verifierId, setBy: adminId });
   const verifier_ = actor(orgId, verifierId);
 
