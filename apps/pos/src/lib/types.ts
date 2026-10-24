@@ -446,7 +446,7 @@ export type KitchenLocation = {
  * Cash handover / till log. Lives at stores/{storeId}/cashHandovers/{id} and is
  * recorded from /cashier/handover at shift change. Purely a log for
  * accountability — inventory/accounting truth lives in the ERP. expectedCash =
- * startingCash + cashSales − deductionsTotal; variance = countedCash −
+ * startingCash + cashSales + convertNet + manualCashAdjustment − deductionsTotal − cashRefunds; variance = countedCash −
  * expectedCash.
  */
 export type CashHandoverDeduction = {
@@ -467,6 +467,8 @@ export type CashHandover = {
   cashSales: number;
   /** T-427 additive fields; absent on older handovers. */
   convertNet?: number;
+  /** Bible row 391: cash paid back for refunds in the window; subtracted from expectedCash. Absent on older handovers. */
+  cashRefunds?: number;
   manualCashAdjustment?: number;
   manualCashAdjustmentReason?: string | null;
   periodStartExclusive?: boolean;
