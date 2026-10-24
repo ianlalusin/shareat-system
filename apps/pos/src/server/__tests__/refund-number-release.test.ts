@@ -13,8 +13,8 @@ const NUM = 'SHT-01-000002';
 const numPath = (n = NUM) => `stores/${STORE}/receiptNumbers/${n}`;
 const body = (over: Record<string, unknown> = {}) => ({ storeId: STORE, deviceId: DEVICE, terminalNo: 1, terminalSeq: 2, receiptNumber: NUM, ...over });
 
-async function release(b: Record<string, unknown>, token: string | null = 'tok-cashier') {
-  const d = makeDeps(fs, { nowMs: () => SAME_DAY });
+async function release(b: Record<string, unknown>, token: string | null = 'tok-cashier', over: Record<string, unknown> = {}) {
+  const d = makeDeps(fs, { nowMs: () => SAME_DAY, ...over });
   const { handleRefundNumberRelease } = await import('@/server/pos2/refund-number-release');
   const res = await handleRefundNumberRelease(post('refund-numbers/release', b, token), d.deps as any);
   return { status: res.status, body: await json(res), calls: d.calls };
@@ -89,5 +89,75 @@ describe('DEF-756 - release closes an unused refund number', () => {
     }
     expect(fs.get(numPath())).toBeUndefined();
     expect((await release(body(), 'tok-manager')).status).toBe(200);
+  });
+});
+
+describe('DEF-771 (T-477) - release is bound to the caller\'s registered terminal and a plausible sequence', () => {
+  const numbers = () => fs.list(`stores/${STORE}/receiptNumbers`);
+  const seqNum = (n: number, tt = '01') => `SHT-${tt}-${String(n).padStart(6, '0')}`;
+  /** Existing numbers for terminal 1 with highest seq 5 (a used one and a released tombstone), plus terminal 2 noise at 50000. */
+  const seedHigh = () => {
+    fs.seed(numPath(seqNum(3)), { receiptId: 'rX', terminalNo: 1, terminalSeq: 3 });
+    fs.seed(numPath(seqNum(5)), { released: true, kind: 'refund-number-released', terminalNo: 1, terminalSeq: 5 });
+    fs.seed(numPath(seqNum(50000, '02')), { receiptId: 'rY', terminalNo: 2, terminalSeq: 50000 });
+  };
+
+  it('missing / invalid deviceId -> 400 and nothing is written', async () => {
+    for (const bad of [{ deviceId: undefined }, { deviceId: 'not-a-uuid' }, { deviceId: 7 }]) {
+      const r = await release(body(bad));
+      expect(r.status, JSON.stringify(bad)).toBe(400);
+    }
+    expect(numbers()).toHaveLength(0);
+  });
+
+  it('the device is resolved through the trusted link port, with the store and device from the request', async () => {
+    const r = await release(body());
+    expect(r.status).toBe(200);
+    expect(r.calls.terminal).toEqual([{ posStoreId: STORE, deviceId: DEVICE }]);
+  });
+
+  it('a device with no registered link -> 403 and no tombstone', async () => {
+    const r = await release(body(), 'tok-cashier', { resolveTerminalNo: async () => null });
+    expect(r.status).toBe(403);
+    expect(r.body.error).toMatch(/not registered/i);
+    expect(numbers()).toHaveLength(0);
+  });
+
+  it('a tablet registered for terminal 2 cannot close a terminal-1 number -> 403 and no tombstone', async () => {
+    const r = await release(body(), 'tok-cashier', { resolveTerminalNo: async () => 2 });
+    expect(r.status).toBe(403);
+    expect(numbers()).toHaveLength(0);
+  });
+
+  it('a link lookup that fails (not "no link") is not turned into an answer: the route does not write', async () => {
+    const r = await release(body(), 'tok-cashier', { resolveTerminalNo: async () => { throw new Error('db down'); } });
+    expect(r.status).toBeGreaterThanOrEqual(500);
+    expect(numbers()).toHaveLength(0);
+  });
+
+  it('terminalSeq 999999 with highest existing seq 5 -> 409 and no tombstone (the claim cannot be poisoned)', async () => {
+    seedHigh();
+    const before = numbers().length;
+    const r = await release(body({ terminalSeq: 999999, receiptNumber: seqNum(999999) }));
+    expect(r.status).toBe(409);
+    expect(r.body.error).toMatch(/too far ahead/i);
+    expect(numbers()).toHaveLength(before);
+    expect(fs.get(numPath(seqNum(999999)))).toBeUndefined();
+  });
+
+  it('the window edge: highest + 1000 is allowed, highest + 1001 is refused (tombstones count; other terminals do not)', async () => {
+    seedHigh();
+    // Refused first: a successful release is itself a tombstone and raises the highest number.
+    const tooFar = await release(body({ terminalSeq: 1006, receiptNumber: seqNum(1006) }));
+    expect(tooFar.status).toBe(409);
+    expect(fs.get(numPath(seqNum(1006)))).toBeUndefined();
+    const ok = await release(body({ terminalSeq: 1005, receiptNumber: seqNum(1005) }));
+    expect(ok.status).toBe(200);
+    expect(fs.get(numPath(seqNum(1005)))).toMatchObject({ released: true, terminalSeq: 1005 });
+  });
+
+  it('a store with no numbers yet: highest is 0, so 1001 is refused and 1000 is allowed', async () => {
+    expect((await release(body({ terminalSeq: 1001, receiptNumber: seqNum(1001) }))).status).toBe(409);
+    expect((await release(body({ terminalSeq: 1000, receiptNumber: seqNum(1000) }))).status).toBe(200);
   });
 });

@@ -8,12 +8,15 @@ import 'server-only';
  * so no PIN. Idempotent.
  */
 import { formatTerminalReceiptNumber } from '@/lib/terminal/counter';
-import { Refusal, fail, guarded, isNonBlank, jsonResponse } from './http';
+import { Refusal, fail, guarded, isNonBlank, isUuid, jsonResponse } from './http';
+import { DEVICE_ID_MISSING } from './approval';
 import { authenticate } from './identity';
 import { requireRole } from './roles';
 import type { Pos2Deps } from './types';
 
 const ROLES = ['admin', 'manager', 'cashier'] as const;
+/** T-477: how far above the terminal's highest existing receipt number a release may reach (the same size as claim.ts RELEASE_GAP). */
+const RELEASE_WINDOW = 1000;
 
 export async function handleRefundNumberRelease(req: Request, deps: Pos2Deps): Promise<Response> {
   return guarded(async () => {
@@ -30,6 +33,10 @@ export async function handleRefundNumberRelease(req: Request, deps: Pos2Deps): P
     if (!isNonBlank(b.receiptNumber)) return fail(400, 'The refund receipt number is missing.');
     const receiptNumber = b.receiptNumber.trim();
     if (receiptNumber.includes('/')) return fail(400, 'The refund receipt number is not valid.');
+    // T-477 (DEF-771): only the tablet registered for this terminal may close its numbers. The link comes from ERP, never from Firestore claim docs.
+    if (!isUuid(b.deviceId)) return fail(400, DEVICE_ID_MISSING);
+    const registered = await deps.resolveTerminalNo({ posStoreId: storeId, deviceId: b.deviceId });
+    if (registered === null || registered !== terminalNo) return fail(403, 'This tablet is not registered for that terminal.');
 
     const db = deps.db;
     const FV = db.FieldValue;
@@ -52,6 +59,18 @@ export async function handleRefundNumberRelease(req: Request, deps: Pos2Deps): P
         if (prev.released === true) return { state: 'released' as const, terminalSeq: seq };
         return { state: 'used' as const, terminalSeq: seq, receiptId: typeof prev.receiptId === 'string' ? prev.receiptId : null };
       }
+      // T-477: a release may only reach RELEASE_WINDOW above this terminal's highest existing number (tombstones count), so a far-ahead
+      // number cannot push the next claim past MAX_TERMINAL_SEQ. Reads stay before the write.
+      const prefix = `${storeCode}-${String(terminalNo).padStart(2, '0')}-`;
+      const top = await tx.get(
+        db.collection(`stores/${storeId}/receiptNumbers`)
+          .where(db.FieldPath.documentId(), '>=', `${prefix}000000`)
+          .where(db.FieldPath.documentId(), '<=', `${prefix}999999`)
+          .orderBy(db.FieldPath.documentId(), 'desc')
+          .limit(1),
+      );
+      const highest = top.docs.length > 0 ? Number(String(top.docs[0].id).slice(prefix.length)) || 0 : 0;
+      if (terminalSeq > highest + RELEASE_WINDOW) throw new Refusal(409, "That number is too far ahead of this terminal's receipts; a manager must check it.");
       tx.create(ref, {
         released: true, kind: 'refund-number-released', terminalNo, terminalSeq,
         releasedBy: { uid: caller.uid, role: caller.role }, createdAt: FV.serverTimestamp(),

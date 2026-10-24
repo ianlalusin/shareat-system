@@ -629,6 +629,17 @@ describe('T-470 refund rows (DEF-731): checked against the server receiptNumbers
       expect(r.skippedSeqs).toEqual([]);
       expect((await status(ev)).status).toBe('reserved');
     });
+    it('T-477: absent + old: release refused (403 not registered / 409 too far ahead) -> stays reserved, never skipped or acknowledged', async () => {
+      for (const msg of ['This tablet is not registered for that terminal.', "That number is too far ahead of this terminal's receipts; a manager must check it."]) {
+        const ev = await refund();
+        await aged(ev);
+        const r = await reconcile.runReconcilePass(deps({ releaseRefundNumber: async () => { throw new Error(msg); } }));
+        expect(r.skippedSeqs).toEqual([]);
+        expect(r.acknowledged).toBe(0);
+        expect((await status(ev)).status, msg).toBe('reserved');
+        await ledger.patchEvent(ev.deviceId, ev.terminalSeq, { status: 'acknowledged' });
+      }
+    });
     it('number doc present with released:true and the row seq -> skipped, never acknowledged', async () => {
       const ev = await refund();
       fs.seed(numberPath(ev.receiptNumber), { released: true, kind: 'refund-number-released', terminalNo: 1, terminalSeq: ev.terminalSeq });

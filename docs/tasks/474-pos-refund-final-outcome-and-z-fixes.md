@@ -114,3 +114,5 @@ baseline/guard files only if a guard requires it. Nothing else.
 Each new test red on 51b5b4f for the stated reason, then green. POS suite (`npm test -w @shareat/pos` or the repo's
 POS vitest project) green, POS typecheck clean, guards `tests/unit/pos-v2-*` and `app-boundaries` green. No live
 Firebase, no TEST store on live, no emulator writes outside a local emulator. Release gates of PR #54 unchanged.
+
+> **Follow-up (2026-10-24):** the release route was bound to the caller's registered terminal and a plausible sequence window by [T-477](./477-refund-number-release-binding.md) (DEF-771).
