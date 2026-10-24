@@ -179,6 +179,8 @@ jobs:
               if [ -n "$PREV_RELEASE" ] && [ "$PREV_RELEASE" != "$RELEASE" ] && { [ -f "$PREV_RELEASE/apps/pos/.pos-build-ok" ] || [ -d "$PREV_RELEASE/apps/pos/.next" ]; }; then
                 if rm -rf "$RELEASE/apps/pos" && cp -a "$PREV_RELEASE/apps/pos" "$RELEASE/apps/pos"; then
                   echo "::warning::POS v2 did not build in this deploy; kept the last good POS from $PREV_RELEASE (not restarted)"
+                  # DEF-770: the running process still lives in PREV_RELEASE; record it once (chained carry-forwards keep the original)
+                  [ -e /srv/shareat-releases/.pos-running ] || echo "$PREV_RELEASE" > /srv/shareat-releases/.pos-running || echo "::warning::POS v2 could not record the running release (.pos-running)"
                 else
                   rm -rf "$RELEASE/apps/pos" || true
                   echo "::warning::POS v2 carry-forward failed (copy from $PREV_RELEASE); POS left as is, ERP deploy continues"
@@ -193,7 +195,19 @@ jobs:
             sudo /usr/bin/systemctl restart shareat-erp.service
             # >>> POS v2: restarts only once its unit is installed (runbook §4); a failure never stops the ERP deploy
             if [ "$POS_RESTART" = 1 ] && [ -f /etc/systemd/system/shareat-pos.service ]; then
-              sudo /usr/bin/systemctl restart shareat-pos.service || echo "POS v2 restart failed; ERP unaffected" >&2
+              POS_UP=1
+              sudo /usr/bin/systemctl restart shareat-pos.service || { POS_UP=0; echo "POS v2 restart failed; ERP unaffected" >&2; }
+              # DEF-770: the new process now lives in $RELEASE
+              if [ "$POS_UP" = 1 ]; then
+                echo "$RELEASE" > /srv/shareat-releases/.pos-running || echo "::warning::POS v2 could not record the running release (.pos-running)"
+              fi
+            fi
+            # <<< POS v2
+            # >>> POS v2 (DEF-770): never prune the release the running POS lives in; never fatal
+            POS_KEEP="$(cat /srv/shareat-releases/.pos-running 2>/dev/null || true)"
+            POS_KEEP="${POS_KEEP%/}"
+            if [ -n "$POS_KEEP" ] && [ -d "$POS_KEEP" ]; then
+              touch -m "$POS_KEEP" || echo "::warning::POS v2 could not protect $POS_KEEP from the release cleanup"
             fi
             # <<< POS v2
 
