@@ -97,11 +97,13 @@ jobs:
       # POS v2's web process (T-424 server routes, pos2.shareat.net). Web build only: the APK is built by
       # app-build.yml with build:cap, which never ships server code. Runbook §6. A POS build failure must
       # never block an ERP deploy: the step may fail, and the artifact then ships without POS.
+      # DEF-753: `next build` creates .next before it can fail, so only a build that exits 0 leaves
+      # apps/pos/.pos-build-ok. Packaging and the server key on that marker, never on .next.
       - name: Build POS v2 (web)
         continue-on-error: true
         env:
           NODE_ENV: production
-        run: npm run build -w @shareat/pos
+        run: rm -f apps/pos/.pos-build-ok && npm run build -w @shareat/pos && touch apps/pos/.pos-build-ok
 
       # <<< POS v2
       - name: Prune devDependencies (bible §8 — runtime deps only from here on)
@@ -113,8 +115,8 @@ jobs:
           PATHS="apps/erp/.next apps/erp/package.json apps/erp/next.config.js packages scripts package.json package-lock.json node_modules"
           [ -d apps/erp/public ] && PATHS="$PATHS apps/erp/public"
           # >>> POS v2 (apps/pos/node_modules holds packages that clash with the root: firebase 10, T-422 rule 7)
-          if [ -d apps/pos/.next ]; then
-            PATHS="$PATHS apps/pos/.next apps/pos/package.json apps/pos/next.config.mjs apps/pos/config apps/pos/public"
+          if [ -f apps/pos/.pos-build-ok ]; then
+            PATHS="$PATHS apps/pos/.next apps/pos/.pos-build-ok apps/pos/package.json apps/pos/next.config.mjs apps/pos/config apps/pos/public"
             [ -d apps/pos/node_modules ] && PATHS="$PATHS apps/pos/node_modules"
           fi
           # <<< POS v2
@@ -168,11 +170,29 @@ jobs:
             fi
             DATABASE_URL="$SYSTEM_DB_URL" npm run db:migrate
 
+            # >>> POS v2 (DEF-753): a release without a good POS build keeps the last good POS; never fatal
+            POS_RESTART=0
+            if [ -f "$RELEASE/apps/pos/.pos-build-ok" ]; then
+              POS_RESTART=1
+            else
+              PREV_RELEASE="$(readlink -f /srv/shareat 2>/dev/null || true)"
+              if [ -n "$PREV_RELEASE" ] && [ "$PREV_RELEASE" != "$RELEASE" ] && { [ -f "$PREV_RELEASE/apps/pos/.pos-build-ok" ] || [ -d "$PREV_RELEASE/apps/pos/.next" ]; }; then
+                if rm -rf "$RELEASE/apps/pos" && cp -a "$PREV_RELEASE/apps/pos" "$RELEASE/apps/pos"; then
+                  echo "::warning::POS v2 did not build in this deploy; kept the last good POS from $PREV_RELEASE (not restarted)"
+                else
+                  rm -rf "$RELEASE/apps/pos" || true
+                  echo "::warning::POS v2 carry-forward failed (copy from $PREV_RELEASE); POS left as is, ERP deploy continues"
+                fi
+              else
+                echo "POS v2: no good POS build in this release and none to carry forward; not restarting it"
+              fi
+            fi
+            # <<< POS v2
             ln -sfn "$RELEASE" /srv/shareat.new
             mv -Tf /srv/shareat.new /srv/shareat
             sudo /usr/bin/systemctl restart shareat-erp.service
             # >>> POS v2: restarts only once its unit is installed (runbook §4); a failure never stops the ERP deploy
-            if [ -f /etc/systemd/system/shareat-pos.service ]; then
+            if [ "$POS_RESTART" = 1 ] && [ -f /etc/systemd/system/shareat-pos.service ]; then
               sudo /usr/bin/systemctl restart shareat-pos.service || echo "POS v2 restart failed; ERP unaffected" >&2
             fi
             # <<< POS v2
