@@ -26,7 +26,8 @@ import { Dialog } from '@/components/ui/Dialog';
 import { ActionIcon } from '@/components/ui/action-icons';
 import { CheckSummary } from './CheckSummary';
 import { CHECKED_FORM_INITIAL, checkContextValue, checkedFormReducer, onCheckedSubmit, watchFormReset } from './check-state';
-import { focusControl, readRuledValues, ruledTarget } from './check-dom';
+import { focusControl, readNamedValues, ruledTarget } from './check-dom';
+import { useRuleHost } from './useRuleHost';
 
 export const OTHER_DIRTY_MESSAGE = 'Save or cancel the changes you are making first.';
 /** T-389 R3: the typing was too big to keep (lib/flash.ts), so the record stays locked and says why. */
@@ -428,14 +429,18 @@ export function EditableRecord(props: EditableRecordProps) {
   const editing = state.mode === 'editing';
   const editingRef = useRef(editing);
   const names = useMemo(() => new Set(rules ? ruleInputNames(rules) : []), [rules]);
-  const ctx = useMemo(() => (rules ? checkContextValue(rules, checks) : null), [rules, checks]);
+  const host = useRuleHost(formRef, checkDispatch);
+  const ctx = useMemo(
+    () => (rules ? { ...checkContextValue(rules, checks), setVerdict: host.setVerdict, track: host.track } : null),
+    [rules, checks, host.setVerdict, host.track],
+  );
 
   // T-440: while EDITING read the form's values and check them; LOCKED switches the checks off. Declared BEFORE the typed-view
   // effect so that effect's input events (a T-389 reopen) land after this read and are checked too.
   const reread = useCallback(() => {
     const form = formRef.current;
-    if (rules && form && editingRef.current) checkDispatch({ type: 'read', values: readRuledValues(form, rules) });
-  }, [rules]);
+    if (rules && form && editingRef.current) checkDispatch({ type: 'read', values: readNamedValues(form, [...names, ...host.watchedNames()]) });
+  }, [rules, names, host.watchedNames]);
   useIsomorphicLayoutEffect(() => {
     editingRef.current = editing;
     if (!rules) return;
@@ -504,7 +509,7 @@ export function EditableRecord(props: EditableRecordProps) {
       onFormInput={
         rules
           ? (e) => {
-              const hit = ruledTarget(e.target, names);
+              const hit = ruledTarget(e.target, new Set([...names, ...host.watchedNames()]));
               if (hit) checkDispatch({ type: 'input', name: hit.name, value: hit.value });
             }
           : undefined

@@ -8,20 +8,34 @@ type ValueControl = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 const isValueControl = (el: unknown): el is ValueControl =>
   el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement;
 
-/** The current value of every ruled control, by name. A rule with no control in the form is simply absent (= blank). */
-export function readRuledValues(form: HTMLFormElement, set: FieldRuleSetLike): Record<string, string> {
+/**
+ * What a control currently says, as a business rule reads it: a checkbox or radio is its `value` ('on' by default) only while
+ * CHECKED, else ''. (A ruled text/select control is just its value.)
+ */
+function valueOf(el: ValueControl): string {
+  if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) return el.checked ? el.value : '';
+  return el.value;
+}
+
+/** The current value of each named control, by name. A name with no single control in the form is simply absent (= blank). */
+export function readNamedValues(form: HTMLFormElement, names: Iterable<string>): Record<string, string> {
   const values: Record<string, string> = {};
-  for (const name of ruleInputNames(set)) {
+  for (const name of names) {
     const el = form.elements.namedItem(name);
-    if (isValueControl(el)) values[name] = el.value;
+    if (isValueControl(el)) values[name] = valueOf(el);
   }
   return values;
+}
+
+/** The current value of every ruled control, by name. A rule with no control in the form is simply absent (= blank). */
+export function readRuledValues(form: HTMLFormElement, set: FieldRuleSetLike): Record<string, string> {
+  return readNamedValues(form, ruleInputNames(set));
 }
 
 /** The ruled control an input/change event came from, or null (a hidden input, a control with no rule). */
 export function ruledTarget(target: EventTarget | null, names: ReadonlySet<string>): { name: string; value: string } | null {
   if (!isValueControl(target) || !target.name || !names.has(target.name)) return null;
-  return { name: target.name, value: target.value };
+  return { name: target.name, value: valueOf(target) };
 }
 
 export function focusControl(form: HTMLFormElement | null, name: string): void {

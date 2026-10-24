@@ -14,7 +14,8 @@ import { ruleInputNames, type FieldRuleSetLike } from '@shareat/domain/field-rul
 import { CheckContext } from './context';
 import { CheckSummary } from './CheckSummary';
 import { CHECKED_FORM_INITIAL, checkContextValue, checkedFormReducer, onCheckedSubmit, watchFormReset } from './check-state';
-import { focusControl, readRuledValues, ruledTarget, syncForeignSubmits } from './check-dom';
+import { focusControl, readNamedValues, ruledTarget, syncForeignSubmits } from './check-dom';
+import { useRuleHost } from './useRuleHost';
 
 /** `useLayoutEffect` warns when a component renders on the server; the effect is browser-only, so use `useEffect` there. */
 const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
@@ -28,12 +29,17 @@ export function CheckedForm({ rules, action, children, ...formProps }: CheckedFo
   const [state, dispatch] = useReducer(checkedFormReducer, CHECKED_FORM_INITIAL);
   const formRef = useRef<HTMLFormElement>(null);
   const names = useMemo(() => new Set(ruleInputNames(rules)), [rules]);
-  const ctx = useMemo(() => checkContextValue(rules, state), [rules, state]);
+  // T-475: a `<RuleCheck>` inside the form reports verdicts here and asks for its `watch` controls to be read as well.
+  const host = useRuleHost(formRef, dispatch);
+  const ctx = useMemo(
+    () => ({ ...checkContextValue(rules, state), setVerdict: host.setVerdict, track: host.track }),
+    [rules, state, host.setVerdict, host.track],
+  );
 
   const reread = useCallback(() => {
     const form = formRef.current;
-    if (form) dispatch({ type: 'read', values: readRuledValues(form, rules) });
-  }, [rules]);
+    if (form) dispatch({ type: 'read', values: readNamedValues(form, [...names, ...host.watchedNames()]) });
+  }, [names, host.watchedNames]);
 
   useIsomorphicLayoutEffect(() => {
     reread();
@@ -50,7 +56,7 @@ export function CheckedForm({ rules, action, children, ...formProps }: CheckedFo
   }, [ctx.blocked]);
 
   const onInput = (e: FormEvent<HTMLFormElement>) => {
-    const hit = ruledTarget(e.target, names);
+    const hit = ruledTarget(e.target, new Set([...names, ...host.watchedNames()]));
     if (hit) dispatch({ type: 'input', name: hit.name, value: hit.value });
   };
 

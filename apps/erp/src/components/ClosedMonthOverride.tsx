@@ -32,6 +32,7 @@ export function ClosedMonthOverride({
   dateFieldName,
   initialDate,
   count = 1,
+  defaults,
 }: {
   closedMonths: ClosedMonthOption[];
   /** The `name` of the date input in the same form. */
@@ -39,6 +40,8 @@ export function ClosedMonthOverride({
   initialDate: string;
   /** How many entries this form posts (the bills screen: one per draft). 1 keeps the original copy. */
   count?: number;
+  /** T-475 R14: what a refused save had in these controls, put back when the form reopens. */
+  defaults?: { confirm?: boolean; reason?: string; note?: string };
 }) {
   const many = count > 1;
   const ref = useRef<HTMLDetailsElement>(null);
@@ -60,7 +63,7 @@ export function ClosedMonthOverride({
   const month = closedMonths.find((m) => date >= m.startsOn && date <= m.endsOn);
 
   return (
-    <details ref={ref} data-closed-month-override="" hidden={!month} className="sm:col-span-2 rounded-md border border-warning p-3">
+    <details ref={ref} data-closed-month-override="" hidden={!month} open={defaults?.confirm || undefined} className="sm:col-span-2 rounded-md border border-warning p-3">
       <summary className="inline-flex min-h-[44px] cursor-pointer items-center text-sm font-medium">
         {month ? `${month.label} is closed — post ${many ? `these ${count} expenses` : 'this one entry'} anyway` : 'Post into a closed month'}
       </summary>
@@ -71,7 +74,7 @@ export function ClosedMonthOverride({
         </p>
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Reason</span>
-          <Select name="periodOverrideReason" defaultValue="">
+          <Select name="periodOverrideReason" defaultValue={defaults?.reason ?? ''}>
             <option value="" disabled>
               Choose a reason…
             </option>
@@ -84,10 +87,10 @@ export function ClosedMonthOverride({
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Note (required for “Other”)</span>
-          <Input name="periodOverrideNote" />
+          <Input name="periodOverrideNote" defaultValue={defaults?.note ?? ''} />
         </label>
         <label className="flex items-center gap-2 text-sm sm:col-span-2">
-          <input type="checkbox" name="periodOverrideConfirm" />
+          <input type="checkbox" name="periodOverrideConfirm" defaultChecked={defaults?.confirm === true} />
           <span>I confirm this entry belongs in a closed month.</span>
         </label>
       </div>

@@ -36,3 +36,12 @@ export const INVOICE_LINES = defineTypedForm({
   form: 'invoice.lines',
   fields: [/^line[1-5]_(itemId|quantity|purchaseUnit|conversionFactor|unitPrice)$/],
 });
+
+/**
+ * T-475 R14: the verify form. A refused verify (a missing tick, an unmapped draft, a closed month) reopens with the four
+ * ticks and the closed-month override still filled in. The record is the invoice id.
+ */
+export const VERIFY_INVOICE = defineTypedForm({
+  form: 'ap.verifyInvoice',
+  fields: ['attestSupplier', 'attestInvoice', 'attestItems', 'attestPrice', 'periodOverrideConfirm', 'periodOverrideReason', 'periodOverrideNote'],
+});

@@ -12,11 +12,12 @@
  * before even loading the category/payments, mirroring `postEntry`'s own "idempotency
  * checked first" philosophy.
  */
-import { authorize, type Actor } from '@shareat/auth';
-import { apRepo, auditLogRepo, cashRequestsRepo, expensesRepo, journalRepo, moneyAccountsRepo, ownersRepo, personsRepo, transaction, type Tx } from '@shareat/db';
+import { authorize, can, CAPABILITY_LABEL, type Actor, type Capability } from '@shareat/auth';
+import { apRepo, auditLogRepo, cashRequestsRepo, expensesRepo, goneSentence, journalRepo, moneyAccountsRepo, ownersRepo, personsRepo, transaction, type Tx } from '@shareat/db';
 import type { PeriodOverrideReason } from '@shareat/db/schema';
-import { add, compare, formatMoney, money, ZERO, type Money } from '@shareat/core/money';
-import { checkDraw } from '../money-accounts/overdraft';
+import { add, compare, formatMoney, money, subtract, ZERO, type Money } from '@shareat/core/money';
+import { judgeDraw } from '../money-accounts/draw-verdict';
+import { capacityRefusal } from '../business-rules';
 import { postEntry } from '../ledger/post-entry';
 import { withInterStoreLegs } from '../ledger/inter-store';
 import { routeExpense } from './routing';
@@ -47,6 +48,361 @@ function monthLabel(startsOn: string): string {
   return new Date(`${startsOn}T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// ⭐ T-475 S1 (spec section 4.1) - ONE evaluator for "would this draft post?", used by the real approval AND by the verify
+// form's preview, so the preview can never disagree with the posting.
+//
+//   gatherApprovalFacts(tx, actor, id, { lock })   READS everything the checks need. `lock: true` is the real approval: it
+//                                                  takes the invoice lock and the cash-request locks (FOR UPDATE) exactly where
+//                                                  the old inline code did. `lock: false` is a preview: no lock, no write, no
+//                                                  authorize() (so no denial row) - `can()` answers instead.
+//   approvalVerdict(facts, options)                PURE. The FIRST blocker, in the order the old inline code refused, or null.
+//   approveExpense                                 = authorize + gather(lock) + verdict + throw + post.
+//
+// First-refusal order (do not reorder; a test pins every adjacent pair): approve_expense -> voided -> the invoice (voided /
+// not yet verified / room) -> category -> cash-request draws -> money accounts (exist, then transfer_funds) -> drawer
+// balances -> routing -> the fiscal period.
+// ---------------------------------------------------------------------------------------------------------------------
+type ExpenseRowT = NonNullable<Awaited<ReturnType<typeof expensesRepo.getExpenseById>>>;
+type CategoryRowT = Awaited<ReturnType<typeof expensesRepo.getCategoryById>>;
+type PaymentRowT = Awaited<ReturnType<typeof expensesRepo.getPaymentsForExpense>>[number];
+type CapacityT = Awaited<ReturnType<typeof apRepo.capacityOf>>;
+type CashRequestT = Awaited<ReturnType<typeof cashRequestsRepo.getById>>;
+type MoneyAccountT = NonNullable<Awaited<ReturnType<typeof moneyAccountsRepo.getById>>>;
+type OwnerT = Awaited<ReturnType<typeof ownersRepo.getById>>;
+type PeriodT = Awaited<ReturnType<typeof journalRepo.findPeriodForDate>>;
+
+export interface ApprovalFacts {
+  expense: ExpenseRowT;
+  /** The actor may approve at the expense's store. The real path authorised just before gathering, so it is true there. */
+  canApprove: boolean;
+  /** null once the expense is no longer a draft: a posted or voided one reads nothing more. */
+  detail: {
+    capacity: CapacityT;
+    category: CategoryRowT;
+    payments: PaymentRowT[];
+    /** Every cash request the payments draw on, in id order. */
+    requests: Array<{ id: string; row: CashRequestT; holder: string; outstanding: Money | null }>;
+    /** Every money account the payments name, in payment order. */
+    wallets: Array<{ id: string; account: MoneyAccountT | undefined; crossStore: boolean; transferAllowed: boolean }>;
+    /** The accounts the payments draw on directly (not via a cash request), with what the ledger says they hold. */
+    drawers: Array<{ account: MoneyAccountT; available: Money; drawn: Money }>;
+    owner: OwnerT | null;
+    period: PeriodT;
+  } | null;
+}
+
+export interface ApprovalBlocker {
+  /** The raw diagnostic (T-343): ids and function names are fine here. */
+  raw: string;
+  /** What a person reads. */
+  sentence: string;
+  /** A CLOSED month: the override lifts this one (and only this one). */
+  liftable?: true;
+  /** The refusal is an authorisation one: the real path calls `authorize()` with this so the ORIGINAL AuthorizationError is thrown. */
+  authorize?: { capability: Capability; storeId: string };
+}
+
+/** What earlier drafts of the same invoice would already have drawn, when the verify cascade posts them oldest first. */
+export interface ApprovalCarried {
+  accounts: Map<string, Money>;
+  requests: Map<string, Money>;
+}
+
+export interface ApprovalVerdictOptions extends ApproveExpenseOptions {
+  /** The verify preview: the invoice is verified in the same transaction, just before its drafts post. Lifts ONLY the pending blocker. */
+  invoiceVerifiedInThisTx?: boolean;
+  carried?: ApprovalCarried;
+}
+
+/** The money this expense draws, per cash request and per money account (a split's rows are judged together, in exact centavos). */
+export function approvalDraws(payments: readonly PaymentRowT[]): ApprovalCarried {
+  const requests = new Map<string, Money>();
+  const accounts = new Map<string, Money>();
+  for (const p of payments) {
+    if (p.cashRequestId) requests.set(p.cashRequestId, add(requests.get(p.cashRequestId) ?? ZERO, money(p.amount)));
+  }
+  for (const p of payments) {
+    if (!p.moneyAccountId) continue; // credit, reimbursable and cash-request legs move no money now
+    // T-414: a cash-request leg is judged against ITS request, not against the aggregate staff account.
+    if (p.cashRequestId) continue;
+    accounts.set(p.moneyAccountId, add(accounts.get(p.moneyAccountId) ?? ZERO, money(p.amount)));
+  }
+  return { requests, accounts };
+}
+
+export async function gatherApprovalFacts(
+  tx: Tx,
+  actor: Actor,
+  expenseId: string,
+  options: { lock: boolean },
+): Promise<ApprovalFacts> {
+  let expense = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
+  if (!expense) {
+    throw gone(`approveExpense: expense ${expenseId} does not exist in org ${actor.orgId}`, 'expense');
+  }
+  // The real path (lock) authorised `approve_expense` immediately before; a preview asks, without writing a denial row.
+  const canApprove = options.lock ? true : await can(tx, actor, 'approve_expense', { storeId: expense.storeId });
+
+  if (options.lock) {
+    // ⭐ T-367 S2 / R4 (DEF-396) — lock the invoice BEFORE re-reading the expense's own status. A concurrent voidInvoice
+    // (lockInvoiceForUpdate) or another approveExpense on the SAME invoice serialises here; the re-read right after is
+    // what makes a double-approve resolve as the existing `created: false` retry rather than a second posting.
+    await apRepo.lockInvoiceForRecording(tx, actor.orgId, expense.supplierInvoiceId);
+    expense = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
+    if (!expense) {
+      throw internalFault(`approveExpense: expense ${expenseId} vanished between its first read and the lock`);
+    }
+  }
+  if (expense.status !== 'draft') return { expense, canApprove, detail: null };
+
+  const capacity = await apRepo.capacityOf(tx, actor.orgId, expense.supplierInvoiceId, expense.id);
+  const category = await expensesRepo.getCategoryById(tx, actor.orgId, expense.categoryId);
+  const payments = await expensesRepo.getPaymentsForExpense(tx, expenseId);
+  const draws = approvalDraws(payments);
+
+  // ⭐ T-414 (rulings 6, 7): every cash-request leg is re-checked against the request's LIVE outstanding. The real path
+  // locks the request rows FIRST (`FOR UPDATE`, id order) and reads the balance AFTER the lock; a preview reads without it.
+  const requestIds = [...draws.requests.keys()].sort((a, b) => a.localeCompare(b));
+  const lockedRows = options.lock ? await cashRequestsRepo.lockForSpend(tx, actor.orgId, requestIds) : null;
+  const requests: NonNullable<ApprovalFacts['detail']>['requests'] = [];
+  for (const id of requestIds) {
+    const row = lockedRows ? lockedRows.find((r) => r.id === id) : await cashRequestsRepo.getById(tx, actor.orgId, id);
+    const holder = row ? ((await personsRepo.getPersonById(tx, actor.orgId, row.requestedFor))?.displayName ?? 'The holder') : 'The holder';
+    const outstanding = row ? money((await cashRequestsRepo.floatPositionOf(tx, actor.orgId, id)).outstanding) : null;
+    requests.push({ id, row, holder, outstanding });
+  }
+
+  // Each payment's money account, resolved here: `routeExpense` is pure and cannot look one up. A named account that does
+  // not exist blocks the posting rather than defaulting.
+  const walletIds = [...new Set(payments.map((p) => p.moneyAccountId).filter(Boolean))] as string[];
+  const wallets: NonNullable<ApprovalFacts['detail']>['wallets'] = [];
+  for (const id of walletIds) {
+    const account = await moneyAccountsRepo.getById(tx, actor.orgId, id);
+    // ⭐ FUNDING AN EXPENSE FROM ANOTHER STORE'S ACCOUNT IS CROSS-STORE MONEY MOVEMENT (Ian, 2026-08-26; bible row 153).
+    // `approve_expense` only proves the actor answers for THIS store; the movement needs `transfer_funds` at the other.
+    const crossStore = !!account && account.storeId !== expense.storeId;
+    const transferAllowed = crossStore ? await can(tx, actor, 'transfer_funds', { storeId: account!.storeId }) : true;
+    wallets.push({ id, account, crossStore, transferAllowed });
+  }
+
+  // ⛔/⚠️ OVERDRAWING (bible row 154): the decision lives in `judgeDraw`, shared with `createMoneyTransfer`. Summed PER ACCOUNT
+  // across the split (the DEF-065 family of error: a split's rows are only ever right when considered together).
+  const drawers: NonNullable<ApprovalFacts['detail']>['drawers'] = [];
+  for (const [id, drawn] of draws.accounts) {
+    const account = wallets.find((w) => w.id === id)?.account ?? (await moneyAccountsRepo.getById(tx, actor.orgId, id));
+    if (!account) continue; // a missing account is already a blocker above
+    drawers.push({ account, available: money(await moneyAccountsRepo.balanceOf(tx, actor.orgId, account)), drawn });
+  }
+
+  // ⚠️ Looked up unconditionally rather than only for PERSONAL categories: a null here has to mean "no owner named", never
+  // "we did not check", or the block in the verdict would silently stop firing.
+  const owner = expense.ownerId ? await ownersRepo.getById(tx, actor.orgId, expense.ownerId) : null;
+  const period = /^\d{4}-\d{2}-\d{2}$/.test(expense.businessDate)
+    ? await journalRepo.findPeriodForDate(tx, actor.orgId, expense.businessDate)
+    : undefined;
+
+  return { expense, canApprove, detail: { capacity, category, payments, requests, wallets, drawers, owner: owner ?? null, period } };
+}
+
+/** The routing of a gathered draft (pure). Shared by the verdict and by the posting, so both route the same facts. */
+function routeFacts(facts: ApprovalFacts & { detail: NonNullable<ApprovalFacts['detail']> }) {
+  const { expense } = facts;
+  const { category, owner, payments, wallets } = facts.detail;
+  const glOf = new Map(wallets.map((w) => [w.id, w.account] as const));
+  return routeExpense({
+    totalAmount: money(expense.totalAmount),
+    supplierId: expense.supplierId,
+    categoryName: category!.category,
+    categoryAccountCode: category!.accountCode,
+    // ⭐ T-127: a PERSONAL expense belongs to an owner, and that owner's policy decides whether it is a receivable (1260)
+    // or a drawing (3200). Resolved at gather because `routeExpense` is pure.
+    owner: owner && { id: owner.id, treatment: owner.personalExpenseTreatment },
+    payments: payments.map((p) => ({
+      method: p.method,
+      amount: money(p.amount),
+      staffId: p.staffId,
+      cashRequestId: p.cashRequestId,
+      moneyAccountId: p.moneyAccountId,
+      moneyAccountGlCode: p.moneyAccountId ? glOf.get(p.moneyAccountId)?.glAccountCode : null,
+      // T-369 S8 (DEF-551): the credit is posted at the ACCOUNT's store.
+      moneyAccountStoreId: p.moneyAccountId ? glOf.get(p.moneyAccountId)?.storeId : null,
+    })),
+  });
+}
+
+function carriedFor(carried: ApprovalCarried | undefined, map: 'accounts' | 'requests', id: string): Money {
+  return carried?.[map].get(id) ?? ZERO;
+}
+
+/** The FIRST thing that stops this draft posting, or null. Pure: same facts, same answer. */
+export function approvalVerdict(facts: ApprovalFacts, options: ApprovalVerdictOptions = {}): ApprovalBlocker | null {
+  const { expense } = facts;
+  const expenseId = expense.id;
+
+  if (!facts.canApprove) {
+    return {
+      raw: `approveExpense: the actor may not ${CAPABILITY_LABEL.approve_expense} at store ${expense.storeId}`,
+      sentence: `Your role can't ${CAPABILITY_LABEL.approve_expense}. Ask an admin if you need to.`,
+      authorize: { capability: 'approve_expense', storeId: expense.storeId },
+    };
+  }
+  if (expense.status === 'voided') {
+    return {
+      raw: `approveExpense: expense ${expenseId} is voided — cannot post`,
+      sentence: "This expense has been voided, so it can't be posted.",
+    };
+  }
+  const detail = facts.detail;
+  if (expense.status !== 'draft' || !detail) return null; // already posted: re-approving is a safe no-op
+
+  // ⭐ T-196 — the gate moved from EXISTENCE to POSTING: a draft may stand against a PENDING invoice, but cannot post until
+  // the invoice is verified. The trigger (`expenses_check_invoice_open_for_recording`, migration 0113) is the backstop.
+  const invoiceId = expense.supplierInvoiceId;
+  if (!detail.capacity) {
+    return { raw: `approveExpense: supplier invoice ${invoiceId} does not exist in org`, sentence: goneSentence('supplier invoice') };
+  }
+  const room = capacityRefusal(detail.capacity, expense.totalAmount, 'posted', { skipPending: options.invoiceVerifiedInThisTx === true });
+  if (room) {
+    const c = detail.capacity;
+    const raw =
+      room.kind === 'voided'
+        ? `assertOpenForRecording: supplier invoice ${invoiceId} is voided — nothing further may be recorded against it`
+        : room.kind === 'pending'
+          ? `assertOpenForRecording: supplier invoice ${invoiceId} is ${c.status} — a draft may stand against it, but it cannot post until it is verified`
+          : `assertOpenForRecording: supplier invoice ${invoiceId} has only ₱${c.remaining} remaining (total ₱${c.totalAmount}, already recorded ₱${c.recorded}) — ₱${expense.totalAmount} does not fit`;
+    return { raw, sentence: room.sentence };
+  }
+
+  if (!detail.category) {
+    return {
+      raw: `approveExpense: category ${expense.categoryId} for expense ${expenseId} no longer exists`,
+      sentence: 'The category on this expense no longer exists. Pick another category, then approve it.',
+    };
+  }
+
+  const draws = approvalDraws(detail.payments);
+  for (const { id: requestId, row: req, holder, outstanding } of detail.requests) {
+    const drawn = draws.requests.get(requestId) ?? ZERO;
+    if (!req) {
+      return {
+        raw: `approveExpense: expense ${expenseId} draws on cash request ${requestId}, which does not exist in org ${expense.orgId}`,
+        sentence: goneSentence('cash request'),
+      };
+    }
+    if (req.status !== 'released') {
+      return {
+        raw: `approveExpense: expense ${expenseId} draws on cash request ${requestId}, which is ${req.status}, not released`,
+        sentence: `${holder}'s cash request is no longer open (${req.status}). Pick another source.`,
+      };
+    }
+    if (req.storeId !== expense.storeId) {
+      return {
+        raw: `approveExpense: expense ${expenseId} (store ${expense.storeId}) draws on cash request ${requestId}, released at store ${req.storeId}`,
+        sentence: `${holder}'s cash request belongs to another store, so this expense cannot draw from it. Pick another source.`,
+      };
+    }
+    // What earlier drafts of the same invoice would already have spent of this float, when the cascade posts them in turn.
+    const left = subtract(outstanding ?? ZERO, carriedFor(options.carried, 'requests', requestId));
+    if (compare(drawn, left) > 0) {
+      return {
+        raw: `approveExpense: expense ${expenseId} draws ${drawn} from cash request ${requestId}, which has ${left} left`,
+        sentence: `${holder}'s cash request has ${formatMoney(left)} left — this expense draws ${formatMoney(drawn)} from it. Lower the amount or pay the rest another way.`,
+      };
+    }
+  }
+
+  for (const w of detail.wallets) {
+    if (!w.account) {
+      return {
+        raw: `approveExpense: expense ${expenseId} names money account ${w.id}, which does not exist in this org`,
+        sentence: 'A money account on this expense no longer exists. Edit the payment, then approve it.',
+      };
+    }
+    if (w.crossStore && !w.transferAllowed) {
+      return {
+        raw: `approveExpense: expense ${expenseId} (store ${expense.storeId}) draws on money account ${w.id} of store ${w.account.storeId}, and the actor may not ${CAPABILITY_LABEL.transfer_funds} there`,
+        sentence: `Your role can't ${CAPABILITY_LABEL.transfer_funds}. Ask an admin if you need to.`,
+        authorize: { capability: 'transfer_funds', storeId: w.account.storeId },
+      };
+    }
+  }
+
+  // ⛔ BLOCKED for an office or staff account, WARNED for a cashier one (see `approvalWarnings`).
+  for (const d of detail.drawers) {
+    const drawn = add(d.drawn, carriedFor(options.carried, 'accounts', d.account.id));
+    const judged = judgeDraw(d.account, d.available, drawn);
+    if (judged.blocked) {
+      const message = judged.message ?? `"${d.account.name}" cannot cover this.`;
+      return { raw: `approveExpense: expense ${expenseId} cannot post: ${message}`, sentence: message };
+    }
+  }
+
+  const routed = routeFacts({ ...facts, detail });
+  if (!routed.ok) {
+    // Invariants 7, 8, 9, 10 all surface here, by name, never a bare exception. The expense itself is UNCHANGED.
+    return {
+      raw: `approveExpense: expense ${expenseId} cannot post — ${routed.reason}`,
+      sentence: `This expense can't be posted yet: ${routed.reason}.`,
+    };
+  }
+
+  // T-369 S5b: say, in words, when the expense's month will not take the posting - `postEntry`'s own refusal is a developer
+  // sentence carrying ids.
+  const period = detail.period;
+  if (period?.status === 'locked') {
+    return {
+      raw: `approveExpense: the fiscal period covering ${expense.businessDate} is locked.`,
+      sentence: `${monthLabel(period.startsOn)} is locked. Nothing can be posted into it, not even with the closed-month override.`,
+    };
+  }
+  if (period?.status === 'closed' && !options.periodOverride) {
+    return {
+      raw: `approveExpense: the fiscal period covering ${expense.businessDate} is closed and no periodOverride was given.`,
+      sentence: `${monthLabel(period.startsOn)} is closed. Ask an administrator to post this one entry into it.`,
+      liftable: true,
+    };
+  }
+  return null;
+}
+
+/** ⚠️ Cashier-account shortfalls that are allowed but must be SURFACED (bible row 154: a warning nobody sees is v1's disease). */
+export function approvalWarnings(facts: ApprovalFacts): string[] {
+  const warnings: string[] = [];
+  for (const d of facts.detail?.drawers ?? []) {
+    const judged = judgeDraw(d.account, d.available, d.drawn);
+    if (!judged.blocked && judged.message) warnings.push(judged.message);
+  }
+  return warnings;
+}
+
+/**
+ * ⭐ T-475 R13 - what verifying an invoice would do to each of its drafts, oldest first, exactly as the cascade posts them: the
+ * invoice counts as verified, and each draft that would post uses up its draws before the next is judged (two drafts that
+ * each fit a drawer but together overdraw it name the SECOND). Reads only: no lock, no write, no denial row.
+ */
+export async function previewInvoiceDrafts(
+  tx: Tx,
+  actor: Actor,
+  invoiceId: string,
+): Promise<Array<{ draftId: string; particulars: string; verdict: ApprovalBlocker | null }>> {
+  const live = await apRepo.liveExpensesForInvoice(tx, actor.orgId, invoiceId);
+  const carried: ApprovalCarried = { accounts: new Map(), requests: new Map() };
+  const rows: Array<{ draftId: string; particulars: string; verdict: ApprovalBlocker | null }> = [];
+  for (const d of live.filter((e) => e.status === 'draft')) {
+    const facts = await gatherApprovalFacts(tx, actor, d.id, { lock: false });
+    const verdict = approvalVerdict(facts, { invoiceVerifiedInThisTx: true, carried });
+    rows.push({ draftId: d.id, particulars: facts.expense.particulars, verdict });
+    // A draft that would post (or only waits on the closed-month override) spends its draws before the next is judged.
+    if (verdict === null || verdict.liftable) {
+      const draws = approvalDraws(facts.detail?.payments ?? []);
+      for (const [id, amount] of draws.accounts) carried.accounts.set(id, add(carried.accounts.get(id) ?? ZERO, amount));
+      for (const [id, amount] of draws.requests) carried.requests.set(id, add(carried.requests.get(id) ?? ZERO, amount));
+    }
+  }
+  return rows;
+}
+
 export async function approveExpense(
   tx: Tx | null,
   actor: Actor,
@@ -65,22 +421,16 @@ async function runApproveExpense(
 ): Promise<ApproveExpenseResult> {
   // Org-scoped read before authorize() — see edit.ts's identical comment: the capability
   // is store-scoped and the store is a property of the resource itself.
-  let expense = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
-  if (!expense) {
+  const found = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
+  if (!found) {
     throw gone(`approveExpense: expense ${expenseId} does not exist in org ${actor.orgId}`, 'expense');
   }
 
-  await authorize(tx, actor, 'approve_expense', { storeId: expense.storeId });
+  await authorize(tx, actor, 'approve_expense', { storeId: found.storeId });
 
-  // ⭐ T-367 S2 / R4 (DEF-396) — lock the invoice BEFORE re-reading the expense's own status. A
-  // concurrent voidInvoice (lockInvoiceForUpdate) or another approveExpense on the SAME invoice
-  // serialises here; the re-read right after is what makes a double-approve resolve as the
-  // existing `created: false` retry below rather than a second posting.
-  await apRepo.lockInvoiceForRecording(tx, actor.orgId, expense.supplierInvoiceId);
-  expense = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
-  if (!expense) {
-    throw internalFault(`approveExpense: expense ${expenseId} vanished between its first read and the lock`);
-  }
+  // Gather (locking, as the inline code did), then judge the gathered facts with the SAME function the verify preview uses.
+  const facts = await gatherApprovalFacts(tx, actor, expenseId, { lock: true });
+  const expense = facts.expense;
 
   if (expense.status === 'posted') {
     if (!expense.journalEntryId) {
@@ -88,188 +438,20 @@ async function runApproveExpense(
     }
     return { journalEntryId: expense.journalEntryId, created: false };
   }
-  if (expense.status === 'voided') {
-    throw refuse(
-      `approveExpense: expense ${expenseId} is voided — cannot post`,
-      "This expense has been voided, so it can't be posted.",
-    );
+
+  const blocker = approvalVerdict(facts, { periodOverride: options?.periodOverride });
+  if (blocker) {
+    // An authorisation refusal re-asks with authorize(): the ORIGINAL AuthorizationError (and its denial log) is what is thrown.
+    if (blocker.authorize) await authorize(tx, actor, blocker.authorize.capability, { storeId: blocker.authorize.storeId });
+    throw refuse(blocker.raw, blocker.sentence);
   }
+  const detail = facts.detail!;
 
-  // ⭐ T-196 — the gate moved from EXISTENCE to POSTING. `createExpense` no longer refuses a
-  // draft against a PENDING invoice (docs/tasks/196-draft-expense-on-a-pending-invoice.md), so
-  // by the time a draft reaches here its invoice may still be unverified. This is "the approval
-  // path" the spec means by `assertOpenForRecording(..., 'posted')` — checked here for a clean,
-  // named error (invariant 5); the trigger (`expenses_check_invoice_open_for_recording`,
-  // migration 0113) is the actual backstop when this service is bypassed, e.g. a raw
-  // `UPDATE expenses SET status = 'posted'`, same discipline as createExpense's own check.
-  await apRepo.assertOpenForRecording(
-    tx,
-    actor.orgId,
-    expense.supplierInvoiceId,
-    expense.totalAmount,
-    'posted',
-    expense.id,
-  );
-
-  // ⭐ T-130: the DEF-055 photo gate RELOCATED. It used to live here ("invariant 11 — no photo,
-  // no posting"), checking `expense.receiptFileId`/`receiptPhotoUrl`. Those columns are gone —
-  // the evidence now lives on `supplier_invoices`, checked once at `verifyInvoice`, and this
-  // expense could not exist at all unless its invoice was already verified (the
-  // `expenses_check_invoice_open_for_recording` trigger, DEF-073, is the backstop). No
-  // replacement check belongs here: by the time an expense reaches `approve`, its invoice's
-  // evidence has already been proven, in a different transaction, by a different actor.
-
-  const category = await expensesRepo.getCategoryById(tx, actor.orgId, expense.categoryId);
-  if (!category) {
-    throw refuse(
-      `approveExpense: category ${expense.categoryId} for expense ${expenseId} no longer exists`,
-      'The category on this expense no longer exists. Pick another category, then approve it.',
-    );
-  }
-
-  const payments = await expensesRepo.getPaymentsForExpense(tx, expenseId);
-
-  // ⭐ T-414 (rulings 6, 7): every cash-request leg is re-checked against the request's LIVE outstanding, inside this
-  // transaction, before anything posts. Create checks amount <= outstanding once; two drafts can each pass it on one
-  // float and both post. The request rows are locked FIRST (`FOR UPDATE`, id order), and the balance is read AFTER the
-  // lock - so a concurrent approval that drew on the same float has committed and is already in the number. The legs are
-  // summed per request in exact centavos (two legs of 600 on a 1,000 float are one draw of 1,200, not two of 600).
-  const drawnPerRequest = new Map<string, Money>();
-  for (const p of payments) {
-    if (!p.cashRequestId) continue;
-    drawnPerRequest.set(p.cashRequestId, add(drawnPerRequest.get(p.cashRequestId) ?? ZERO, money(p.amount)));
-  }
-  if (drawnPerRequest.size > 0) {
-    const locked = new Map(
-      (await cashRequestsRepo.lockForSpend(tx, actor.orgId, [...drawnPerRequest.keys()])).map((r) => [r.id, r] as const),
-    );
-    for (const [requestId, drawn] of [...drawnPerRequest].sort(([a], [b]) => a.localeCompare(b))) {
-      const req = locked.get(requestId);
-      if (!req) {
-        throw gone(`approveExpense: expense ${expenseId} draws on cash request ${requestId}, which does not exist in org ${actor.orgId}`, 'cash request');
-      }
-      const holder = (await personsRepo.getPersonById(tx, actor.orgId, req.requestedFor))?.displayName ?? 'The holder';
-      if (req.status !== 'released') {
-        throw refuse(
-          `approveExpense: expense ${expenseId} draws on cash request ${requestId}, which is ${req.status}, not released`,
-          `${holder}'s cash request is no longer open (${req.status}). Pick another source.`,
-        );
-      }
-      if (req.storeId !== expense.storeId) {
-        throw refuse(
-          `approveExpense: expense ${expenseId} (store ${expense.storeId}) draws on cash request ${requestId}, released at store ${req.storeId}`,
-          `${holder}'s cash request belongs to another store, so this expense cannot draw from it. Pick another source.`,
-        );
-      }
-      const outstanding = money((await cashRequestsRepo.floatPositionOf(tx, actor.orgId, requestId)).outstanding);
-      if (compare(drawn, outstanding) > 0) {
-        throw refuse(
-          `approveExpense: expense ${expenseId} draws ${drawn} from cash request ${requestId}, which has ${outstanding} left`,
-          `${holder}'s cash request has ${formatMoney(outstanding)} left — this expense draws ${formatMoney(drawn)} from it. Lower the amount or pay the rest another way.`,
-        );
-      }
-    }
-  }
-
-  // ⭐ Resolve each payment's money account to its GL code HERE. `routeExpense` is pure and cannot
-  // look one up, and the account is what decides both where the credit lands and who owned it
-  // (DEF-058). A named account that does not exist blocks the posting rather than defaulting.
-  const walletIds = [...new Set(payments.map((p) => p.moneyAccountId).filter(Boolean))] as string[];
-  const wallets = new Map<string, { glCode: string; storeId: string }>();
-  for (const id of walletIds) {
-    const acct = await moneyAccountsRepo.getById(tx, actor.orgId, id);
-    if (!acct) {
-      throw refuse(
-        `approveExpense: expense ${expenseId} names money account ${id}, which does not exist in this org`,
-        'A money account on this expense no longer exists. Edit the payment, then approve it.',
-      );
-    }
-    wallets.set(id, { glCode: acct.glAccountCode, storeId: acct.storeId });
-
-    // ⭐ FUNDING AN EXPENSE FROM ANOTHER STORE'S ACCOUNT IS CROSS-STORE MONEY MOVEMENT
-    // (Ian, 2026-08-26; bible row 153) — *"cross store money movement will only be possible for
-    // manager initiated transactions, with manager having access … to both stores."*
-    //
-    // ⚠️ The rule is about the MOVEMENT, not the screen it was reached through. An expense at
-    // Lipa paid from Malvar's safe moves Malvar's money just as surely as a transfer does, and
-    // `approve_expense` above only ever proved the actor answers for **Lipa**. Without this,
-    // gating transfers alone would leave the identical act reachable one menu across.
-    if (acct.storeId !== expense.storeId) {
-      await authorize(tx, actor, 'transfer_funds', { storeId: acct.storeId });
-    }
-  }
-
-  // ⛔/⚠️ OVERDRAWING — blocked for an office or staff account, WARNED for a cashier one
-  // (bible row 154). The decision itself lives in `checkDraw`, shared with `createMoneyTransfer`.
-  //
-  // ⭐ **This is the surface that actually needed it.** Expense payment is ~34% of v1's ledger
-  // activity against a transfer's 7%, so a drawer is far likelier to be driven negative by
-  // spending than by moving money. Nothing checked it before.
-  //
-  // ⚠️ Checked at APPROVE, never at create — this file's own rule, and correct here for a second
-  // reason: a draft is not a posting, so a draft naming money that has not arrived yet is a
-  // legitimate thing to be holding. Only the moment it posts has to be true.
-  //
-  // ⚠️ Summed PER ACCOUNT across the split, not per payment row. Two ₱600 cash lines against one
-  // ₱1,000 drawer are individually affordable and together are not — checking them one at a time
-  // would let exactly that through (the DEF-065 family of error: a split's rows are only ever
-  // right when considered together).
-  // T-371 (R4): summed in exact centavos from re-minted rows, not a float `+`; `checkDraw` takes the `Money` sum.
-  const drawnPerAccount = new Map<string, Money>();
-  for (const p of payments) {
-    if (!p.moneyAccountId) continue; // credit, reimbursable and cash-request legs move no money now
-    // T-414: a cash-request leg is judged against ITS request (above), not against the aggregate staff account, which
-    // holds every holder's float and would hide an over-spend on one of them.
-    if (p.cashRequestId) continue;
-    drawnPerAccount.set(p.moneyAccountId, add(drawnPerAccount.get(p.moneyAccountId) ?? ZERO, money(p.amount)));
-  }
-  const warnings: string[] = [];
-  for (const [id, drawn] of drawnPerAccount) {
-    const acct = await moneyAccountsRepo.getById(tx, actor.orgId, id);
-    const warning = await checkDraw(
-      tx,
-      actor.orgId,
-      acct!,
-      drawn,
-      `approveExpense: expense ${expenseId} cannot post`,
-    );
-    if (warning) warnings.push(warning);
-  }
-
-  // ⚠️ Looked up unconditionally rather than only for PERSONAL categories: a null here has to mean
-  // "no owner named", never "we did not check", or the block below would silently stop firing.
-  const owner = expense.ownerId
-    ? await ownersRepo.getById(tx, actor.orgId, expense.ownerId)
-    : null;
-
-  const routed = routeExpense({
-    totalAmount: money(expense.totalAmount),
-    supplierId: expense.supplierId,
-    categoryName: category.category,
-    categoryAccountCode: category.accountCode,
-    // ⭐ T-127: a PERSONAL expense belongs to an owner, and that owner's policy decides whether it
-    // is a receivable (1260) or a drawing (3200). Resolved here because `routeExpense` is pure.
-    owner: owner && { id: owner.id, treatment: owner.personalExpenseTreatment },
-    payments: payments.map((p) => ({
-      method: p.method,
-      amount: money(p.amount),
-      staffId: p.staffId,
-      cashRequestId: p.cashRequestId,
-      moneyAccountId: p.moneyAccountId,
-      moneyAccountGlCode: p.moneyAccountId ? wallets.get(p.moneyAccountId)?.glCode : null,
-      // T-369 S8 (DEF-551): the credit is posted at the ACCOUNT's store.
-      moneyAccountStoreId: p.moneyAccountId ? wallets.get(p.moneyAccountId)?.storeId : null,
-    })),
-  });
-
-  if (!routed.ok) {
-    // Invariants 7, 8, 9, 10 all surface here, by name, never a bare exception. The
-    // expense itself is UNCHANGED — still a draft, fixable and re-approvable.
-    throw refuse(
-      `approveExpense: expense ${expenseId} cannot post — ${routed.reason}`,
-      `This expense can't be posted yet: ${routed.reason}.`,
-    );
-  }
+  // ⭐ T-130: the DEF-055 photo gate RELOCATED to `verifyInvoice` (the evidence lives on `supplier_invoices`). No replacement
+  // check belongs here: by the time an expense reaches `approve`, its invoice's evidence has already been proven.
+  const warnings = approvalWarnings(facts);
+  const routed = routeFacts({ ...facts, detail });
+  if (!routed.ok) throw internalFault(`approveExpense: expense ${expenseId} routed differently between the verdict and the posting`);
 
   // T-369 S8 (DEF-551): every routed line sits at the expense's store EXCEPT a money-account credit, which sits at
   // the account's store; a cross-store draw then gains the 1250/2150 pair for what that store paid (not the total).
@@ -287,26 +469,10 @@ async function runApproveExpense(
     })),
   });
 
-  // T-369 S5b: say, in words, when the expense's month will not take the posting - `postEntry`'s own refusal is a
-  // developer sentence carrying ids. The override is passed on ONLY when the month is closed: for an open month it
-  // is ignored, so an ordinary approval leaves no audit row and never asks for `override_period_lock`.
-  let periodOverride: ApproveExpenseOptions['periodOverride'];
-  if (/^\d{4}-\d{2}-\d{2}$/.test(expense.businessDate)) {
-    const period = await journalRepo.findPeriodForDate(tx, actor.orgId, expense.businessDate);
-    if (period?.status === 'closed') periodOverride = options?.periodOverride;
-    if (period?.status === 'locked') {
-      throw refuse(
-        `approveExpense: the fiscal period covering ${expense.businessDate} is locked.`,
-        `${monthLabel(period.startsOn)} is locked. Nothing can be posted into it, not even with the closed-month override.`,
-      );
-    }
-    if (period?.status === 'closed' && !options?.periodOverride) {
-      throw refuse(
-        `approveExpense: the fiscal period covering ${expense.businessDate} is closed and no periodOverride was given.`,
-        `${monthLabel(period.startsOn)} is closed. Ask an administrator to post this one entry into it.`,
-      );
-    }
-  }
+  // The override is passed on ONLY when the month is closed: for an open month it is ignored, so an ordinary approval leaves
+  // no audit row and never asks for `override_period_lock`.
+  const periodOverride = detail.period?.status === 'closed' ? options?.periodOverride : undefined;
+  const category = detail.category!;
 
   const result = await postEntry(tx, {
     orgId: actor.orgId,

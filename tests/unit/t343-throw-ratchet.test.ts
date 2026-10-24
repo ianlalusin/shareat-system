@@ -71,6 +71,7 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/activity': 0, // T-402 S3: new directory, no raw throws (client-events.ts uses refuse(...))
   'packages/domain/src/leave': 0, // T-436: new directory, no raw throws (refuse/gone only), ceiling = count at birth
   'packages/domain/src/ap': 0, // T-343 S5.2: 39 -> 0, all converted to refuse/gone/internalFault
+  'packages/domain/src/business-rules': 0, // T-475: a client-safe leaf; it returns verdicts and never throws
   'packages/domain/src/ar': 31, // T-343 S5.5p: 35 -> 34, recordCollection's negative-credit throw converted to refuse(...); T-367 S1 + DEF-546 (2026-10-01): 34 -> 31, writeOffCharge, voidCharge and voidCollection not-found throws folded into the uniform AuthorizationError
   'packages/domain/src/attendance': 1,
   'packages/domain/src/budgets': 4,

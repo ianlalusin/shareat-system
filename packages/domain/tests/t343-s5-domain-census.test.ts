@@ -55,18 +55,8 @@ function allSitesInFile(relPath: string) {
  * line, with a reason — never granted by loosening either check itself.
  */
 const DERIVED_ALLOWLIST: { dir: string; file: string; messageSubstring: string; reason: string }[] = [
-  {
-    dir: 'ap',
-    file: 'index.ts',
-    // T-343 S5.2 (auditor CHANGES, 2026-09-27) — `verifyInvoice`'s missing-attestation sentence
-    // (`ap/index.ts`) joins the HUMAN LABELS of whichever attestation parts are actually missing
-    // (`ATTESTATION_LABEL[k]` — literal strings like "the items", "the prices"), never a database
-    // id. `.join(` always classifies `derived` regardless of what is being joined, so this is a
-    // real false positive for the "might leak an id" concern the rule exists to catch, not a
-    // wording change (P7).
-    messageSubstring: 'still unconfirmed: ${joined}',
-    reason: 'joins literal attestation labels, never ids (T-343 S5.2 P7)',
-  },
+  // T-475 S1: the one entry (verifyInvoice's joined attestation labels) went away with the sentence, which now lives in the
+  // business-rule leaf (`packages/domain/src/business-rules/ap.ts`, outside this census); ap/index.ts's own refuse() argument is plain.
 ];
 
 describe('D1 — sales-days/ and expenses/ carry no raw, id-shaped throw once converted', () => {

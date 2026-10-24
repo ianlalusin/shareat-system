@@ -45,3 +45,9 @@ export const INVOICE_EXPENSE_RULES = defineFieldRules('ap.recordExpenseForInvoic
   categoryId: { label: 'The category', kind: 'text', requires: 'Choose a category.' },
   particulars: { label: 'The particulars', kind: 'text', requires: 'Particulars are required - say what the spend was for.' },
 });
+
+/**
+ * T-475 S1: "Verify this invoice" (verifyInvoiceAction). It has no ruled field: the four ticks, the supplier, the receipt and the
+ * drafts are BUSINESS rules (`@shareat/domain/business-rules`). The empty set makes the form a CheckedForm so those can turn Save off.
+ */
+export const INVOICE_VERIFY_RULES = defineFieldRules('ap.verifyInvoice', {});

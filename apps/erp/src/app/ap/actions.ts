@@ -10,6 +10,7 @@ import { parseMoneyInput } from '@shareat/domain/money-input';
 import { logger } from '@shareat/core/logger';
 import { compare, formatMoney, money, ZERO } from '@shareat/core/money';
 import { INVOICE_EXPENSE_RULES,
+  INVOICE_VERIFY_RULES,
   INVOICE_VOID_RULES,
   PAYMENT_VOID_RULES,
   SUPPLIER_INVOICE_LOG_RULES,
@@ -40,9 +41,11 @@ import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
 import { resolveUploadedFile } from '@/lib/uploaded-file';
 import { keepTyping } from '@/lib/keep-typing';
-import { INVOICE_LINES, SUPPLIER_EDIT } from './typed-forms';
+import { INVOICE_LINES, SUPPLIER_EDIT, VERIFY_INVOICE } from './typed-forms';
 import { verifyAdminApproval } from '@shareat/auth';
 import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
+
+const WHOLE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -254,6 +257,31 @@ export async function setInvoiceLinesAction(formData: FormData): Promise<void> {
   return await redirectWithFlash(`/ap/invoices/${invoiceId}`, {}, { ok: 'Lines saved. Prices now feed the item history.' });
 }
 
+/**
+ * T-475 S1 (A5, Q1) - the live "this invoice number is already recorded" warning on the log form.
+ *
+ * authorize() FIRST (DEF-676): a caller who may not log invoices at that store is refused, never answered, and never told
+ * "no match" (an empty answer from a refusal would look like a real one). The matches are scoped to the ACTOR'S ORG - the
+ * very rows the after-save warning already reveals - and carry the date and total of each, nothing else: no id, no person,
+ * no store (T-343, bible row 353).
+ */
+export async function checkInvoiceNumberAction(input: {
+  storeId: string;
+  supplierId: string;
+  invoiceNo: string;
+}): Promise<{ matches: Array<{ invoiceDate: string; totalAmount: string }> }> {
+  const actor = await requireActor();
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    await authorize(tx, actor, 'record_supplier_invoice', { storeId: String(input.storeId ?? '') });
+    const invoiceNo = String(input.invoiceNo ?? '').trim();
+    const supplierId = String(input.supplierId ?? '');
+    // A blank number matches nothing, and a malformed id is "no such supplier" (the same answer as an unknown one).
+    if (!invoiceNo || !WHOLE_UUID.test(supplierId)) return { matches: [] };
+    const found = await apRepo.findDuplicateInvoices(tx, actor.orgId, { supplierId, invoiceNo });
+    return { matches: found.map((m) => ({ invoiceDate: m.invoiceDate, totalAmount: m.totalAmount })) };
+  });
+}
+
 export async function verifyInvoiceAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const id = str(formData, 'invoiceId');
@@ -276,8 +304,12 @@ export async function verifyInvoiceAction(formData: FormData): Promise<void> {
         periodOverride = readPeriodOverride(formData);
       }
     }
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      verifyInvoice(
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      // T-440 / DEF-676: the form's field rules (none yet; its checks are the business rules in the domain) are judged only
+      // once the actor holds the gate at the bill's store. The domain then runs every business rule again on this save.
+      const bill = await apRepo.getSupplierInvoiceById(tx, actor.orgId, id);
+      if (bill && (await can(tx, actor, 'verify_supplier_invoice', { storeId: bill.storeId }))) assertFieldRules(INVOICE_VERIFY_RULES, formData);
+      await verifyInvoice(
         tx,
         actor,
         id,
@@ -288,10 +320,11 @@ export async function verifyInvoiceAction(formData: FormData): Promise<void> {
           price: formData.get('attestPrice') === 'on',
         },
         periodOverride ? { periodOverride } : undefined,
-      ),
-    );
+      );
+    });
   } catch (err) {
-    return await redirectWithFlash(`/ap/invoices/${id}`, {}, { error: errorMessage(err) });
+    // T-475 R14 / T-389: a refused verify reopens with the four ticks and the closed-month override reason still in place.
+    return await redirectWithFlash(`/ap/invoices/${id}`, {}, { error: errorMessage(err), typed: keepTyping(formData, VERIFY_INVOICE, id, { actorId: actor.personId }) });
   }
   return await redirectWithFlash(`/ap/invoices/${id}`, {}, { stamp: 'VERIFIED', ok: 'Verified. Expenses can now be recorded against it.' });
 }
