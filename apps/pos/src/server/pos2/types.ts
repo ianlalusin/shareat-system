@@ -32,6 +32,11 @@ export interface Pos2Deps {
    * request's device id. NOTHING from Firestore (a terminals/{TT} claim doc) is consulted for the store or the bucket (B1).
    */
   approveManagerPin(input: { posStoreId: string; deviceId: string; pin: string }): Promise<ApprovalResult>;
+  /**
+   * T-477 (DEF-771): the terminal number the device is registered for at that POS store, from the trusted ERP link (the same lookup as the PIN
+   * path, but no PIN). `null` when the device has no active link. Other failures propagate. Never read from Firestore (B1).
+   */
+  resolveTerminalNo(input: { posStoreId: string; deviceId: string }): Promise<number | null>;
   /** The ERP till shift open for that POS store, if any. */
   openTillShift(posStoreId: string): Promise<{ openedAtMs: number } | null>;
   /** The server clock. */

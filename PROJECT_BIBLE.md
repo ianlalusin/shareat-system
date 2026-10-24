@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1722` 13. Decision log
-- `1723–1742` 14. Amendment protocol
-- `1743–1747` 15. Engineering standards — the industry practices this project follows
-  - `1748–1753` 15.1 Build order: walking skeleton first
-  - `1754–1765` 15.2 Golden-master testing — the most important practice here
-  - `1766–1774` 15.3 Strangler Fig, not big-bang cutover
-  - `1775–1779` 15.4 No dual-write
-  - `1780–1788` 15.5 Expand/contract migrations
-  - `1789–1797` 15.6 Observability from day zero, not later
-  - `1798–1802` 15.7 CI gates
-  - `1803–1807` 15.8 Backups and a tested restore
-  - `1808–1812` 15.9 Twelve-Factor config
-  - `1813–1820` 15.10 Append-only ledgers — but not event sourcing
-  - `1821–1825` 15.11 Defence in depth
-  - `1826–1854` 15.12 Skills are lenses, not assurance
-  - `1855–1861` 15.13 Reconciliation is a permanent feature
-- `1862–1866` 16. The accounting spine
-  - `1867–1898` 16.0 What we are actually fixing — the diagnosis
-  - `1899–1942` 16.1 The ten invariants — non-negotiable
-  - `1943–1957` 16.2 The oracle: how "correct" is tested
-  - `1958–1979` 16.3 The model — header + lines, not legs
-  - `1980–1999` 16.4 Deliberately simpler than ERPNext
-  - `2000–2068` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2069–2093` 16.6 What v1 already gets right — preserve the intent
-  - `2094–2115` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2116–2130` 16.8 What v1's accounting already gets right
-  - `2131–2174` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2175–2225` 16.10 Posting patterns — one canonical pattern per business event
-  - `2226–2258` 16.11 Inventory's accounting integration
+- `1329–1723` 13. Decision log
+- `1724–1743` 14. Amendment protocol
+- `1744–1748` 15. Engineering standards — the industry practices this project follows
+  - `1749–1754` 15.1 Build order: walking skeleton first
+  - `1755–1766` 15.2 Golden-master testing — the most important practice here
+  - `1767–1775` 15.3 Strangler Fig, not big-bang cutover
+  - `1776–1780` 15.4 No dual-write
+  - `1781–1789` 15.5 Expand/contract migrations
+  - `1790–1798` 15.6 Observability from day zero, not later
+  - `1799–1803` 15.7 CI gates
+  - `1804–1808` 15.8 Backups and a tested restore
+  - `1809–1813` 15.9 Twelve-Factor config
+  - `1814–1821` 15.10 Append-only ledgers — but not event sourcing
+  - `1822–1826` 15.11 Defence in depth
+  - `1827–1855` 15.12 Skills are lenses, not assurance
+  - `1856–1862` 15.13 Reconciliation is a permanent feature
+- `1863–1867` 16. The accounting spine
+  - `1868–1899` 16.0 What we are actually fixing — the diagnosis
+  - `1900–1943` 16.1 The ten invariants — non-negotiable
+  - `1944–1958` 16.2 The oracle: how "correct" is tested
+  - `1959–1980` 16.3 The model — header + lines, not legs
+  - `1981–2000` 16.4 Deliberately simpler than ERPNext
+  - `2001–2069` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2070–2094` 16.6 What v1 already gets right — preserve the intent
+  - `2095–2116` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2117–2131` 16.8 What v1's accounting already gets right
+  - `2132–2175` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2176–2226` 16.10 Posting patterns — one canonical pattern per business event
+  - `2227–2259` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1719,6 +1719,7 @@ just a patch.**
 | 390 | 2026-10-23 | **POS v2 DAY CLOSE: THE BUSINESS DAY RUNS Z TO Z; SELLING CONTINUES AFTER A Z; THE CASHIER OR MANAGER CLOSES, A MANAGER APPROVES WITH THEIR ERP PIN.** Implements row 348 (the day ends at the store's closing time) as the moment the manager closes the day with a Z-reading, so no per-store closing-time setting is needed; the first Z starts 04:00 Manila of the store's first day; a forgotten Z makes the next one span two dates. A Z does not lock the till: later sales are the next business day. X-readings need no PIN. Both slips say "cash control, not a BIR document" (the POS is not BIR-accredited; official receipts are handwritten, knowledge/staff/cashier-dine-in-sop.md). The ERP's sales day keeps v1's midnight feed until P2. Spec: T-471. | Ian, 2026-10-23, POS v2 session (three questions, all as recommended) | Yes |
 | 391 | 2026-10-23 | **CASH REFUNDS COME OFF THE EXPECTED DRAWER CASH, ON THE Z-READING AND ON THE CASHIER HANDOVER.** POS v2 refunds are cash only (T-424), so expected cash = start + cash sales + Convert net + manual adjustments − deductions − cash refunds. v1's handover ignored refunds (they were rare: 7 partial refunds in 9 months); kept as is, every v2 refund would show as a drawer shortage. | Ian, 2026-10-23, POS v2 session (as recommended) | Yes |
 | 392 | 2026-10-24 | **THE NIGHTLY RECEIPT BRIDGE (T-472): ITS OWN READ-ONLY KEY, NO PERSONAL DATA, AND IT CATCHES LATE CHANGES.** (1) It reads POS Firestore directly with a new production service account holding only Cloud Datastore Viewer on `shareat-hub-v2` (`pos-receipt-bridge-readonly`), never the POS v2 server key (that one can write). (2) It copies NO personal details: no senior/PWD names or ID numbers, no customer name/TIN/address; `statutory_discount_records` and the Firestore logbook export stay the source. **Supersedes** Ian's earlier same-day answer to the POS v2 session (a separate locked table), given before he knew that table existed and that T-435 gates screens, not tables. (3) Edits, voids and late offline syncs older than 7 days are caught with change-time queries. Business day key stays the calendar day with the Z number as an attribute (row 390). | Ian, 2026-10-24, via the orchestrator ("1 yes, 2 A, 4 yes") | Yes |
+| 393 | 2026-10-24 | **A REFUND NUMBER IS CALLED "UNUSED" ONLY AFTER THE SERVER HAS CLOSED IT; A LATE RECEIPT REACHES THE NEXT Z HOWEVER LATE; A Z NEVER ENDS BEFORE THE LAST ONE (T-474, CORRECTS T-470 RULING 4 AND T-471 CORRECTION 3).** (1) **Refunds (DEF-756):** a missing `receiptNumbers/{number}` is not a final outcome, because the refund request can still commit later and a `skipped` ledger row is never looked at again. After the 10-minute wait the tablet asks the server (`POST /api/pos2/refund-numbers/release`) to close the number in one transaction (`released: true`); the refund transaction already refuses a used number, so a closed number can never carry money. Only a closed number is marked skipped; a number the server answers "used" is acknowledged; anything else stays reserved for a person. Industry pattern: a fence (tombstone). (2) **Late receipts (DEF-758):** T-471 Correction 3's 7-day lookback is withdrawn. A Z reads in-window receipts by sale time AND every receipt that arrived on the server since the last Z's clock; "counted once" uses every Z committed since that clock. Ruling 5 holds with no time limit. (3) **Z boundary (DEF-757):** inside the Z transaction, if the latest Z ends at or after this request's clock, the Z is refused 409 and nothing is written. (4) **Slip (DEF-759):** manual cash adjustments are returned and printed, so the slip's cash lines add up to expected cash (completes T-471 Fix B). | Codex read-only audits of 23 Oct (findings 5-8), re-verified on `claude/pos-v2-t470` 51b5b4f; Opus planner (AUDIT session) under Ian's 2026-10-24 instruction to verify, correct defective specs and fix; Ian asked for this row the same day | Yes. (1) is a new route plus reconcile rule; reverting re-opens the lost-refund gap |
 
 ## 14. Amendment protocol
 
