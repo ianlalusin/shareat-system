@@ -32,6 +32,7 @@ let storeB: string;
 let personA: string;
 let personB: string;
 let typeA: string;
+let typeB: string;
 
 async function asOrg<T>(org: string | null, fn: (tx: postgres.TransactionSql) => Promise<T>): Promise<T> {
   return (await sql.begin(async (tx) => {
@@ -50,7 +51,7 @@ async function room(
 ) {
   const [r] = await sql<{ id: string }[]>`
     insert into stock_locations (org_id, store_id, code, name, type_id, role, purpose, is_default, status, created_by)
-    values (${orgId}, ${storeId}, ${code}, ${code}, ${typeA},
+    values (${orgId}, ${storeId}, ${code}, ${code}, ${orgId === orgB ? typeB : typeA},
             ${over.role ?? 'storage'}, ${over.purpose ?? 'normal'},
             ${over.isDefault ?? false}, ${over.status ?? 'active'}, ${orgId === orgB ? personB : personA})
     returning id`;
@@ -86,6 +87,10 @@ beforeEach(async () => {
   const [t] = await sql<{ id: string }[]>`
     insert into location_types (org_id, code, name) values (${orgA}, 'STOCKROOM', 'Stockroom') returning id`;
   typeA = t!.id;
+  // DEF-491 (0213): a room's type must be same-org, so org B's rooms need org B's own type.
+  const [tb] = await sql<{ id: string }[]>`
+    insert into location_types (org_id, code, name) values (${orgB}, 'STOCKROOM', 'Stockroom') returning id`;
+  typeB = tb!.id;
 });
 
 afterAll(async () => {

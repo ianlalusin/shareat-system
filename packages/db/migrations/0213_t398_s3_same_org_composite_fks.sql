@@ -18,6 +18,11 @@
 -- form, so org_id (NOT NULL) is never nulled. A blanket RESTRICT would have silently turned those nine
 -- parent deletes from "cascade / clear" into "refused". The four reference gaps are RESTRICT (new FKs).
 --
+-- DEFERRABILITY. Each composite also copies its twin's condeferrable/condeferred, read from pg_constraint. Exactly one
+-- twin is deferrable: attendance_adjustments.superseded_by_adjustment_id (0084, DEFERRABLE INITIALLY DEFERRED, because the
+-- domain stamps the old row's superseded_by with a minted id before inserting the new row), so its composite is
+-- DEFERRABLE INITIALLY DEFERRED too. The other 144 are immediate, like their twins.
+--
 -- COUNTS (D2). 145 composite FKs = 141 bare single-column org->org FKs read from pg_constraint + 4 reference
 -- gaps (A11: payslips.journal_entry_id, separations.journal_entry_id, thirteenth_month_payouts.journal_entry_id,
 -- owner_drawing_closes.adjustment_entry_id - uuid columns that had NO FK at all). 38 new UNIQUE (org_id, id):
@@ -342,7 +347,7 @@ ALTER TABLE "ar_write_offs" ADD CONSTRAINT "ar_write_offs_journal_entry_id_same_
 --> statement-breakpoint
 ALTER TABLE "attendance_adjustments" ADD CONSTRAINT "attendance_adjustments_employment_id_same_org_fk" FOREIGN KEY ("org_id", "employment_id") REFERENCES "employments" ("org_id", "id") ON DELETE RESTRICT;
 --> statement-breakpoint
-ALTER TABLE "attendance_adjustments" ADD CONSTRAINT "attendance_adjustments_superseded_by_adjustment_id_same_org_fk" FOREIGN KEY ("org_id", "superseded_by_adjustment_id") REFERENCES "attendance_adjustments" ("org_id", "id") ON DELETE RESTRICT;
+ALTER TABLE "attendance_adjustments" ADD CONSTRAINT "attendance_adjustments_superseded_by_adjustment_id_same_org_fk" FOREIGN KEY ("org_id", "superseded_by_adjustment_id") REFERENCES "attendance_adjustments" ("org_id", "id") ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED;
 --> statement-breakpoint
 ALTER TABLE "attendance_credentials" ADD CONSTRAINT "attendance_credentials_employment_id_same_org_fk" FOREIGN KEY ("org_id", "employment_id") REFERENCES "employments" ("org_id", "id") ON DELETE RESTRICT;
 --> statement-breakpoint

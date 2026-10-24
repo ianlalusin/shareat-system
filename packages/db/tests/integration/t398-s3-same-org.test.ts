@@ -101,6 +101,25 @@ describe('K1 -- every org->org FK in scope has a composite (org_id, col) -> pare
     expect(bad, 'composites whose ON DELETE differs from their single-column twin').toEqual([]);
   });
 
+  it("RED until 0213 is fixed: each composite has the same DEFERRABLE / INITIALLY DEFERRED setting as the single-column FK it twins (a composite left immediate beside a deferred twin is the mutant)", async () => {
+    const rows = await sql<{ child: string; col: string; s_def: boolean; s_dfd: boolean; c_def: boolean; c_dfd: boolean }[]>`
+      with fks as (select con.*, cardinality(con.conkey) n,
+          (select attname from pg_attribute where attrelid = con.conrelid and attnum = con.conkey[1]) c1,
+          (select attname from pg_attribute where attrelid = con.conrelid and attnum = con.conkey[2]) c2
+        from pg_constraint con where con.contype = 'f' and con.connamespace = 'public'::regnamespace)
+      select cr.relname as child, s.c1 as col, s.condeferrable as s_def, s.condeferred as s_dfd,
+        t.condeferrable as c_def, t.condeferred as c_dfd
+      from fks s join pg_class cr on cr.oid = s.conrelid
+      join fks t on t.conrelid = s.conrelid and t.confrelid = s.confrelid and t.n = 2 and t.c1 = 'org_id' and t.c2 = s.c1
+      where s.n = 1`;
+    const inScope = new Set(catalogScope.map((e) => `${e.child}.${e.col}`));
+    const bad = rows
+      .filter((r) => inScope.has(`${r.child}.${r.col}`))
+      .filter((r) => r.s_def !== r.c_def || r.s_dfd !== r.c_dfd)
+      .map((r) => `${r.child}.${r.col}: single deferrable=${r.s_def} deferred=${r.s_dfd}, composite deferrable=${r.c_def} deferred=${r.c_dfd}`);
+    expect(bad, 'composites whose deferral differs from their single-column twin').toEqual([]);
+  });
+
   it('every composite child carries org_id NOT NULL (A8 C7 over the new FKs)', async () => {
     const rows = await sql<{ t: string }[]>`
       select distinct c.relname as t
@@ -197,6 +216,8 @@ async function leg(e: ScopeFk, target: 'foreign' | 'own' | 'null', asApp: boolea
   const out: LegResult = { rows: -1 };
   try {
     await ssql.begin(async (tx) => {
+      // F and O: check deferred FKs at the statement, so a DEFERRABLE INITIALLY DEFERRED composite fires inside the rolled-back leg.
+      if (target === 'foreign') await tx`set constraints all immediate`;
       if (asApp) {
         await tx.unsafe(`set local role ${APP_ROLE}`);
         await tx`select set_config('app.org_id', ${ids.a}, true)`;

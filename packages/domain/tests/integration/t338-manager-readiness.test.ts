@@ -69,6 +69,15 @@ async function scope(personId: string, storeId: string): Promise<void> {
   await sql`insert into person_store_scope (person_id, store_id) values (${personId}, ${storeId})`;
 }
 
+/** DEF-491 (0214): the database refuses a scope row whose person and store are in different orgs, so M7's
+ *  deliberate cross-org plant skips FKs and triggers (session_replication_role = replica). */
+async function scopeForeign(personId: string, storeId: string): Promise<void> {
+  await sql.begin(async (tx) => {
+    await tx`set local session_replication_role = replica`;
+    await tx`insert into person_store_scope (person_id, store_id) values (${personId}, ${storeId})`;
+  });
+}
+
 async function checks(f: OrgFixture, storeId: string) {
   return withOrgPrincipal(f.orgId, async (tx) => {
     const store = await storesRepo.getById(tx, f.orgId, storeId);
@@ -179,7 +188,7 @@ describe('T-338 - the `manager` readiness check', () => {
       const other = await orgFixture('m7b');
       const storeId = await makeStore(f);
       const p = await person(other.orgId, 'Other Org Manager', 'manager');
-      await scope(p, storeId);
+      await scopeForeign(p, storeId);
       expect((await managerCheck(f, storeId)).ok).toBe(false);
     },
     60_000,

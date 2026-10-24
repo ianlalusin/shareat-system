@@ -171,6 +171,8 @@ export const attendanceAdjustments = pgTable(
       foreignColumns: [employments.orgId, employments.id],
       name: 'attendance_adjustments_employment_id_same_org_fk',
     }).onDelete('restrict'),
+    // NOTE: this FK is DEFERRABLE INITIALLY DEFERRED in the SQL (migration 0213), like its single-column twin from 0084: the domain stamps the old row's
+    // superseded_by with a minted id BEFORE inserting the new row (attendance/adjustments.ts). Drizzle's foreignKey() cannot express it; keep it in the migration.
     // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `superseded_by_adjustment_id` FK (RLS checks only this row's org_id); references `attendance_adjustments_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.supersededByAdjustmentId],
