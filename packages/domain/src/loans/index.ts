@@ -10,7 +10,7 @@
  * layer on top; they are not what a loan is.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { journalRepo, loansRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
+import { journalRepo, loansRepo, moneyAccountsRepo, type Tx } from '@shareat/db';
 import { compare, decimal, money, subtract, ZERO, type Decimal, type Money } from '@shareat/core/money';
 import { checkDraw } from '../money-accounts/overdraft';
 import { parseMoneyInput } from '../shared/money-input';
@@ -49,7 +49,7 @@ export interface CreateLoanInput {
  * commitment, not a debt, and posting it on signature would show cash the business does not have.
  */
 export async function createLoan(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: CreateLoanInput,
 ): Promise<{ id: string }> {
@@ -104,8 +104,7 @@ export async function createLoan(
       createdBy: actor.personId,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -115,7 +114,7 @@ export async function createLoan(
  * outstanding from it rather than from the agreed principal.
  */
 export async function disburseLoan(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { loanId: string; amount: string; intoMoneyAccountId: string; on: string; memo?: string },
 ): Promise<{ entryId: string }> {
@@ -180,8 +179,7 @@ export async function disburseLoan(
     });
     return { entryId: result.entryId };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 export interface RecordPaymentResult {
@@ -201,7 +199,7 @@ export interface RecordPaymentResult {
  * since the last payment is taken first; principal takes the remainder.
  */
 export async function recordLoanPayment(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: {
     loanId: string;
@@ -330,8 +328,7 @@ export async function recordLoanPayment(
       ...(warning ? { warning } : {}),
     };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -345,7 +342,7 @@ export async function recordLoanPayment(
  * naming its id here.
  */
 export async function reverseLoanEntry(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { loanId: string; entryId: string; reason: string },
 ): Promise<{ reversalEntryId: string; /** false: the entry was already reversed, nothing new was written (T-412). */ created: boolean }> {
@@ -389,6 +386,5 @@ export async function reverseLoanEntry(
     }
     return { reversalEntryId: reversal.reversalEntryId, created: reversal.created };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }

@@ -18,7 +18,7 @@
  * it is the verifier's, so it needs `verify_sales_day` (segregation of duties, `verify.ts`).
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { auditLogRepo, salesDaysRepo, transaction, type Tx } from '@shareat/db';
+import { auditLogRepo, salesDaysRepo, type Tx } from '@shareat/db';
 import { refuse, gone } from '../shared/refusal';
 import { money, type Money } from '@shareat/core/money';
 import { parseSalesDayFigures, writeChannels, writeTenders, type CreateSalesDayInput } from './create';
@@ -28,9 +28,8 @@ export interface EditSalesDayInput extends Omit<CreateSalesDayInput, 'storeId' |
   salesDayId: string;
 }
 
-export async function editSalesDay(tx: Tx | null, actor: Actor, input: EditSalesDayInput): Promise<{ id: string }> {
-  if (tx) return runEdit(tx, actor, input);
-  return transaction((trx) => runEdit(trx, actor, input));
+export async function editSalesDay(tx: Tx, actor: Actor, input: EditSalesDayInput): Promise<{ id: string }> {
+  return runEdit(tx, actor, input);
 }
 
 async function runEdit(tx: Tx, actor: Actor, input: EditSalesDayInput): Promise<{ id: string }> {

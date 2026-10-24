@@ -109,18 +109,18 @@ describe('T-342 / DEF-417 part 1 — cutover under the RLS-enforcing role', () =
     ).resolves.toMatchObject({ entryId: expect.any(String) });
   });
 
-  it('2. NEGATIVE — attestStep(null, actor, …) (bare null-tx branch) rejects with /has no active role/', async () => {
-    // ⛔ This IS today's DEF-417 bug, reproduced live: a bare `null` tx opens `transaction()` with
-    // no principal applied, so `authorize()`'s RLS-scoped `person_roles` read sees zero rows for
+  it('2. NEGATIVE — attestStep on a principal-less transaction() rejects with /has no active role/', async () => {
+    // ⛔ This IS the DEF-417 bug, reproduced live (T-398 S2b: `null` is no longer accepted, so the bare `transaction()`
+    // is written here): a tx opened with no principal applied, so `authorize()`'s RLS-scoped `person_roles` read sees zero rows for
     // an admin who very much has an active role. GREEN NOW — the proof the harness enforces RLS —
     // and it is exactly the failure the builder's fix (test 1 above) makes go away.
     const { actor } = await fixture();
-    await expect(attestStep(null, actor, { stepCode: 'A1', note: 'T-342 negative control.' })).rejects.toThrow(
+    await expect(transaction((tx) => attestStep(tx, actor, { stepCode: 'A1', note: 'T-342 negative control.' }))).rejects.toThrow(
       /has no active role/,
     );
   });
 
-  it('2b. NEGATIVE — addOpeningFigure(null, actor, …) (bare null-tx branch) rejects with /has no active role/', async () => {
+  it('2b. NEGATIVE — addOpeningFigure on a principal-less transaction() rejects with /has no active role/', async () => {
     const { orgId, actor } = await fixture();
     await admin`
       insert into fiscal_periods (org_id, starts_on, ends_on, status) values
@@ -128,13 +128,15 @@ describe('T-342 / DEF-417 part 1 — cutover under the RLS-enforcing role', () =
     const [store] = await admin<{ id: string }[]>`
       insert into stores (org_id, code, name) values (${orgId}, ${uid('T342')}, 'T342 Store') returning id`;
     await expect(
-      addOpeningFigure(null, actor, {
-        accountCode: '1110',
-        storeId: store!.id,
-        direction: 'debit',
-        amount: '100.00',
-        entryDate: '2026-12-15',
-      }),
+      transaction((tx) =>
+        addOpeningFigure(tx, actor, {
+          accountCode: '1110',
+          storeId: store!.id,
+          direction: 'debit',
+          amount: '100.00',
+          entryDate: '2026-12-15',
+        }),
+      ),
     ).rejects.toThrow(/has no active role/);
   });
 });

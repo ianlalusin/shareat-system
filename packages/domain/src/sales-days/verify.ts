@@ -18,7 +18,7 @@
  * T-385 (Ian 2026-10-09): verify requires `submitted`. The check sits before routing and posting.
  */
 import { authorize, type Actor, can } from '@shareat/auth';
-import { auditLogRepo, posV1Repo, salesDaysRepo, transaction, type Tx } from '@shareat/db';
+import { auditLogRepo, posV1Repo, salesDaysRepo, type Tx } from '@shareat/db';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { routeInputForDay } from './compose';
@@ -35,9 +35,8 @@ export interface VerifySalesDayResult {
 // submit
 // -------------------------------------------------------------------------------------
 
-export async function submitSalesDay(tx: Tx | null, actor: Actor, salesDayId: string): Promise<void> {
-  if (tx) return runSubmit(tx, actor, salesDayId);
-  return transaction((trx) => runSubmit(trx, actor, salesDayId));
+export async function submitSalesDay(tx: Tx, actor: Actor, salesDayId: string): Promise<void> {
+  return runSubmit(tx, actor, salesDayId);
 }
 
 async function runSubmit(tx: Tx, actor: Actor, salesDayId: string): Promise<void> {
@@ -70,12 +69,11 @@ async function runSubmit(tx: Tx, actor: Actor, salesDayId: string): Promise<void
 // -------------------------------------------------------------------------------------
 
 export async function verifySalesDay(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   salesDayId: string,
 ): Promise<VerifySalesDayResult> {
-  if (tx) return runVerify(tx, actor, salesDayId);
-  return transaction((trx) => runVerify(trx, actor, salesDayId));
+  return runVerify(tx, actor, salesDayId);
 }
 
 async function runVerify(tx: Tx, actor: Actor, salesDayId: string): Promise<VerifySalesDayResult> {
@@ -183,13 +181,12 @@ async function runVerify(tx: Tx, actor: Actor, salesDayId: string): Promise<Veri
 // -------------------------------------------------------------------------------------
 
 export async function voidSalesDay(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   salesDayId: string,
   reason: string,
 ): Promise<{ reversalEntryId: string | null }> {
-  if (tx) return runVoid(tx, actor, salesDayId, reason);
-  return transaction((trx) => runVoid(trx, actor, salesDayId, reason));
+  return runVoid(tx, actor, salesDayId, reason);
 }
 
 async function runVoid(

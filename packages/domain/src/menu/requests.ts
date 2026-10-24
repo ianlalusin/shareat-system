@@ -28,7 +28,7 @@ export async function requestMenuItem(
   input: { storeId: string; name: string; itemType: MenuItemType; categoryId?: string; note?: string },
   tx?: Tx,
 ): Promise<{ id: string; possibleDuplicates: PossibleDuplicate[] }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'request_menu_item', { storeId: input.storeId });
     const name = requireName(input.name, 'requestMenuItem', 'The item');
     if (!(MENU_ITEM_TYPES as readonly unknown[]).includes(input.itemType)) {
@@ -64,7 +64,7 @@ async function openRequest(trx: Tx, actor: Actor, id: string, rawLabel: string) 
 
 /** Only the requester, only while open. The store gate is the request's own store. */
 export async function withdrawMenuItemRequest(actor: Actor, input: { id: string }, tx?: Tx): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     // Authorize BEFORE reading: a caller without the capability learns nothing about which ids exist.
     // A store-scoped capability needs a store, which is read from the row: so first ask only whether the role holds it at all.
     if (!(await heldCapabilities(trx, actor)).has('request_menu_item')) await authorize(trx, actor, 'request_menu_item', {});
@@ -87,7 +87,7 @@ export async function approveMenuItemRequest(
   input: { id: string; categoryId: string },
   tx?: Tx,
 ): Promise<{ itemId: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'add_menu_item', {});
     const row = await openRequest(trx, actor, input.id, 'approveMenuItemRequest');
     const item = await createMenuItem(actor, { categoryId: input.categoryId, name: row.name, itemType: row.itemType }, trx);
@@ -99,7 +99,7 @@ export async function approveMenuItemRequest(
 
 /** The ask is already on the menu: point at that item. */
 export async function markMenuItemRequestDuplicate(actor: Actor, input: { id: string; itemId: string }, tx?: Tx): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'add_menu_item', {});
     const row = await openRequest(trx, actor, input.id, 'markMenuItemRequestDuplicate');
     if (!(await menuRepo.getItem(trx, actor.orgId, input.itemId))) {
@@ -113,7 +113,7 @@ export async function markMenuItemRequestDuplicate(actor: Actor, input: { id: st
 
 /** A reason is required: the requester is told why. */
 export async function rejectMenuItemRequest(actor: Actor, input: { id: string; note: string }, tx?: Tx): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'add_menu_item', {});
     assertFieldRules(MENU_REQUEST_REJECT_RULES, { note: input.note });
     const note = typeof input.note === 'string' ? input.note.trim() : '';

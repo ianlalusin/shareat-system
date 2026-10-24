@@ -9,7 +9,8 @@
  *     the R8 identity. NOTHING is written in this pass, so a refusal leaves the database as it was.
  *  4. Only then: insert each new report version with its lines, and one `audit_log` row for the run.
  *
- * The caller's transaction is used as is (a rollback undoes the whole run); `tx` null opens an org-scoped one.
+ * The caller's transaction is used as is (a rollback undoes the whole run); callers open it with
+ * `withOrgPrincipal` (T-398 S2b / DEF-421: no null tx).
  *
  * Warning: this module reads `packages/etl/src/dual-run` (the pure S1/S2 comparator) by relative path. `@shareat/etl`
  * depends on `@shareat/domain`, so the package import would be a cycle; the files read here import neither the domain
@@ -23,7 +24,6 @@ import {
   auditLogRepo,
   dualRunRepo,
   masterLinksRepo,
-  withOrgPrincipal,
   type DualRunV2Line,
   type Tx,
 } from '@shareat/db';
@@ -161,8 +161,7 @@ interface Planned {
   existingId?: string;
 }
 
-export async function runDualRun(tx: Tx | null, actor: Actor, input: RunDualRunInput): Promise<RunDualRunResult> {
-  if (tx === null) return withOrgPrincipal(actor.orgId, (own) => runDualRun(own, actor, input));
+export async function runDualRun(tx: Tx, actor: Actor, input: RunDualRunInput): Promise<RunDualRunResult> {
   await authorize(tx, actor, 'run_cutover', {});
 
   const { snapshot, apply } = input;

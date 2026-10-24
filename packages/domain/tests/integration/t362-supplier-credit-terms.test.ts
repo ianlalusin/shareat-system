@@ -368,9 +368,9 @@ describe('Database backstop (green today, a guard)', () => {
 // range) at compile time.
 // =================================================================================================
 function neverCalled_creditTermsDaysAcceptsRawInput(): void {
-  void createSupplier(null, null as never, { name: 'x', creditTermsDays: '30' });
+  void createSupplier(null as never, null as never, { name: 'x', creditTermsDays: '30' });
 
-  void createSupplier(null, null as never, {
+  void createSupplier(null as never, null as never, {
     name: 'x',
     // @ts-expect-error — creditTermsDays is number | string | null; a boolean is none of those.
     creditTermsDays: true,

@@ -10,14 +10,7 @@
  */
 import { sql } from 'drizzle-orm';
 import { ZERO, add, compare, decimal, divideMoney, formatMoney, money, subtract, type Money } from '@shareat/core/money';
-import {
-  attendanceConfigRepo,
-  moneyAccountsRepo,
-  payrollRepo,
-  statutoryRepo,
-  transaction,
-  type Tx,
-} from '@shareat/db';
+import { attendanceConfigRepo, moneyAccountsRepo, payrollRepo, statutoryRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { parseMoneyInput } from '../shared/money-input';
 import { assertFieldRules } from '../shared/field-rules-assert';
@@ -80,7 +73,7 @@ const FREQUENCY_LABEL = { monthly: 'monthly', semi_monthly: 'semi-monthly', week
  * posted was computed under the old one and has to stay explicable.
  */
 export async function setPayRate(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: {
     employmentId: string;
@@ -109,8 +102,7 @@ export async function setPayRate(
       createdBy: actor.personId,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -------------------------------------------------------------------------------------
@@ -202,13 +194,12 @@ export interface PayRunPreview {
  * rate before it and the new rate after. That is what an effective date means.
  */
 export async function previewPayRun(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { storeId: string; periodStart: string; periodEnd: string },
 ): Promise<PayRunPreview> {
   const run = (trx: Tx) => buildPreview(trx, actor, input, false);
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -617,7 +608,7 @@ export async function outstandingAdvance(
  * attendance: an admin paying themselves is precisely the case the block exists for.
  */
 export async function postPayRun(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: {
     storeId: string;
@@ -802,8 +793,7 @@ export async function postPayRun(
       totalNet: formatMoney(preview.totalNet),
     };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -814,7 +804,7 @@ export async function postPayRun(
  * would make the period permanently unpayable by anyone.
  */
 export async function voidPayRun(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { runId: string; reason: string; on?: string },
 ): Promise<{ reversed: number; unfrozenDays: number }> {
@@ -856,8 +846,7 @@ export async function voidPayRun(
 
     return { reversed, unfrozenDays };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -------------------------------------------------------------------------------------

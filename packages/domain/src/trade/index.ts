@@ -24,19 +24,7 @@
  * v2, so a dispatch relieves no stock. Wholesale revenue is measurable after this task; wholesale
  * MARGIN is not. See the spec's Out of scope.
  */
-import {
-  auditLogRepo,
-  commissaryRepo,
-  customersRepo,
-  itemsRepo,
-  journalRepo,
-  moneyTransfersRepo,
-  stockLedgerRepo,
-  stockLocationsRepo,
-  transaction,
-  tradeRepo,
-  type Tx,
-} from '@shareat/db';
+import { auditLogRepo, commissaryRepo, customersRepo, itemsRepo, journalRepo, moneyTransfersRepo, stockLedgerRepo, stockLocationsRepo, tradeRepo, type Tx } from '@shareat/db';
 import { authorize, AuthorizationError, type Actor, type Capability, can } from '@shareat/auth';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { assertFiguresReconcile } from '../shared/reconcile';
@@ -180,7 +168,7 @@ export interface CreateTradeOrderInput {
  * and the wholesale flag.
  */
 export async function createTradeOrder(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: CreateTradeOrderInput,
 ): Promise<{ orderId: string; totalAmount: string }> {
@@ -389,13 +377,12 @@ export async function createTradeOrder(
     await tradeRepo.insertLines(trx, actor.orgId, orderId, lines);
     return { orderId, totalAmount };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /** Nothing posts here. Confirming says the order is agreed and ready to go out. */
 export async function confirmTradeOrder(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { orderId: string },
 ): Promise<void> {
@@ -408,8 +395,7 @@ export async function confirmTradeOrder(
     }
     await tradeRepo.setStatus(trx, actor.orgId, order.id, 'confirmed');
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 export interface DispatchResult {
@@ -436,7 +422,7 @@ export interface DispatchResult {
  * ⚠️ Idempotent: dispatching an already-dispatched order returns what it already did.
  */
 export async function dispatchTradeOrder(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { orderId: string; creditOverrideReason?: string | null; payNow?: PayNowInput | null },
 ): Promise<DispatchResult> {
@@ -691,8 +677,7 @@ export async function dispatchTradeOrder(
       balanceAfterPayment: paidNow ? subtract(money(order.totalAmount), paidNow) : null,
     };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /** `-3.500` → `3.500`. `Quantity` carries no arithmetic of its own — this is string trimming. */
@@ -752,7 +737,7 @@ async function reverseDispatchStock(
  * posts the mirror entry, so the ledger keeps both halves of what happened.
  */
 export async function voidTradeOrder(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { orderId: string; reason: string },
 ): Promise<{ reversedEntryId: string | null }> {
@@ -849,8 +834,7 @@ export async function voidTradeOrder(
     }
     return { reversedEntryId };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -900,7 +884,7 @@ export interface ReceiveTradeOrderResult {
  * value moved at dispatch, and receipt is a recorded fact about who signed for it.
  */
 export async function receiveTradeOrder(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: ReceiveTradeOrderInput,
 ): Promise<ReceiveTradeOrderResult> {
@@ -1071,8 +1055,7 @@ export async function receiveTradeOrder(
     const receivedAt = await tradeRepo.markReceived(trx, actor.orgId, order.id, actor.personId);
     return { receivedAt, entryId, freightEntryId, overCounts };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -------------------------------------------------------------------------------------
@@ -1092,7 +1075,7 @@ function periodMonthLabel(startsOn: string): string {
  * partial unique index is the backstop). Refused once the order's month is closed. Audited with before and after.
  */
 export async function setBirInvoiceNo(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { orderId: string; value: string },
 ): Promise<{ birInvoiceNo: string | null }> {
@@ -1154,6 +1137,5 @@ export async function setBirInvoiceNo(
     });
     return { birInvoiceNo: next };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }

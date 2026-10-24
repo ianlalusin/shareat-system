@@ -5,7 +5,7 @@
  * book value as `cost`, the conversion date as `acquired_on` (so depreciation starts there, not at the original purchase), and its
  * REMAINING life. Accumulated depreciation therefore opens at zero.
  */
-import { cutoverRepo, fixedAssetsRepo, transaction, type Tx } from '@shareat/db';
+import { cutoverRepo, fixedAssetsRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { compare, ZERO } from '@shareat/core/money';
 import { parseMoneyInput } from '../shared/money-input';
@@ -21,7 +21,7 @@ export interface ValueOpeningAssetInput {
   salvageValue?: string;
 }
 
-export async function valueOpeningAsset(tx: Tx | null, actor: Actor, input: ValueOpeningAssetInput): Promise<void> {
+export async function valueOpeningAsset(tx: Tx, actor: Actor, input: ValueOpeningAssetInput): Promise<void> {
   const run = async (trx: Tx) => {
     const asset = await cutoverRepo.assetOf(trx, actor.orgId, input.assetId);
     if (!asset) throw gone(`valueOpeningAsset: asset ${input.assetId} does not exist.`, 'asset');
@@ -95,6 +95,5 @@ export async function valueOpeningAsset(tx: Tx | null, actor: Actor, input: Valu
       throw e;
     }
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
