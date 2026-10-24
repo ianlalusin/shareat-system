@@ -131,9 +131,9 @@ export function Button({
         data-erp-control="single"
         type={type}
         className={`${ICON_BASE} ${ICON_VARIANT[variant]}${className ? ` ${className}` : ''}`}
-        aria-label={rest['aria-label'] ?? name}
         data-tip={name}
         {...rest}
+        aria-label={rest['aria-label'] ?? name}
       >
         {busyIcon ?? <ActionIcon name={resolved} />}
       </button>
