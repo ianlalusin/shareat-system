@@ -4,7 +4,6 @@
     "app/reports/store-comparison/page.tsx",
     "components/dashboard/RangeForm.tsx",
     "components/reports/AgingFilters.tsx",
-    "components/reports/BalanceSheetFilters.tsx",
-    "components/reports/ReportFilters.tsx"
+    "components/reports/BalanceSheetFilters.tsx"
   ]
 }
