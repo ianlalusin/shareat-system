@@ -1,6 +1,6 @@
 # T-398: Padre Garcia on v2 as its own organisation (plan C11)
 
-**Status:** S1 LIVE (0194); S2a BUILT, NOT RELEASED 2026-10-18 (DEF-421 ratchet); S2b-S6 SPEC AUDITED, buildable (amended B1-B14, C1-C6); S7 WAITING ON data (Q11 answered b, row 369: PG HR on v2 needs a new task).
+**Status:** 2026-10-25: S1, S2a, S3, S4 LIVE (S3/S4 = #53, migrations 0213/0214, production prechecks all zero); S2b in open PR #60; S5-S7 next (S7 waits on data, Q11 answered b, row 369).
 **Ian's answers to Q1-Q10, given 2026-10-10** — §0b.
 - **Buildable now (no Ian answer needed):** **S2a**, **S2b**, **S3**, **S4** — and their production apply too: Q9 (b)
   lets a DEF-491 migration deploy at any time, short pauses accepted (C2). S3's lock timing still uses a restore taken
@@ -805,3 +805,36 @@ added since 0194 was guarded at creation, `CROSS_ORG_BY_DESIGN` is `[]`, and A11
 - **C6 — Q10 (a).** Ian gives PG written notice (franchise agreement or privacy notice) that the operator can reach
   all data and every use is logged — before 4 Dec production. No build; the S6 access-log screen is what the notice
   points PG's owner to.
+
+### Amendments D1-D8 (2026-10-22 - Opus re-audit against main `4a82378`; these bind and win over any earlier sentence)
+
+Counts re-measured and unchanged: DEF-421 ratchet 206 / 188; `OPEN_DEF_491` 223 (141 org->org, 77 derived->org, 3
+org->derived, 2 derived->derived); `NO_FK_PIN` 28; `JSONB_PIN` 9. Line numbers in A9 / trade have moved (re-grep, never
+trust a line number here). Migrations: **0213 = S3, 0214 = S4 (0212 taken by T-464, PR #49)**. S3 merges before S4; S2b (no migration) runs after
+the T-441 merge (it shares `leave/` and `files/`).
+- **D1 (S3, blocker):** composite FKs carry `org_id`, which the purge never clears, so `purge.ts`'s "every FK child
+  column is in clearColumns" check refuses (`fixed_assets.source_expense_id`, `recurring_expenses.last_drafted_expense_id`).
+  S3 makes that check ignore `org_id` (MATCH SIMPLE accepts NULL in the other column) and adds test leg **P1**:
+  `applyPurge` succeeds with the composites present. `packages/db/src/cutover/purge.ts` and
+  `t347-cutover-purge-shells.test.ts` join S3's paths.
+- **D2 (S3):** `pos_v1_day_feeds.batch_id` has no parent (a minted grouping id): reclassify as `idempotency-key`.
+  S3 adds 4 ref-gap FKs, so **145 composites** and **38 new `UNIQUE (org_id, id)`** (7 parents already have one).
+  The parent list comes only from the `pg_constraint` query pasted in 0213's header (B6's hand list is wrong).
+- **D3 (S4):** 27 of the 82 derived FKs are the table's own RLS `via` header; the census treats those as guarded by
+  construction (pinned list), and S4 builds **55** triggers. `packages/db/src/triggers/registry.ts` (55 entries,
+  `validator`, `origin`) joins S4's paths.
+- **D4 (S4):** delete A2's citation of `0185:126` - it returns true on NOT FOUND (fail-open). The function raises.
+- **D5 (S2b):** `scripts/dual-run.ts:100` calls `runDualRun(null, ...)`: it joins S2b's paths and wraps the call in
+  `withOrgPrincipal`; the T1 allow-list does NOT grow beyond `runDepreciation`. `runDepreciationCore`,
+  `depreciateAsset`, `depreciationDrift` lose `| null` like the rest. T4 is a regression guard (already green).
+- **D6 (S2b):** T2 counts non-member `transaction(` calls and imports only; `tx.transaction(` savepoints are allowed.
+- **D7:** S3 and S4 each carry their own L1 leg (lock_timeout + budget header); the existing L1 is pinned to 0194.
+- **D8 (Ian):** before the merge that deploys 0213 / 0214, Ian runs the read-only prechecks P0212a/b, P0214 as doadmin
+  (scripts written by the builder lane under `C:\Users\ianla\shareat-master-data\`). Avoid deploying 05:30-07:00
+  Manila (the T-396 POS import locks sales_days / pos_v1_day_feeds). Time 0213 on a restore or synthetic volume; over
+  60 s -> split VALIDATE into a later deploy.
+
+### Production prechecks run by Ian (2026-10-23, read-only)
+- S3 / migration 0213 (script `p0212-check.sh`, same predicate as P0212a/b): organisations visible 1; foreign keys checked 145 (expected 145); ALL ZERO: yes.
+- S4 / migration 0214 (`p0214-check.sh`, same SQL as `docs/ops/P0214-precheck.sql`): organisations visible 1; 55 keys (expected 55); ALL ZERO: yes.
+Logs: `C:\Users\ianla\shareat-master-data\2026-10-22\prod-p0212.log`, `prod-p0214.log`. Both migrations may deploy; avoid 05:30-07:00 Manila (D8).

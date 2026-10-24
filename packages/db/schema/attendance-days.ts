@@ -47,6 +47,7 @@ import { employments } from './employment';
 import { organizations } from './organizations';
 import { persons } from './persons';
 import { stores } from './stores';
+import { payRuns } from './payroll';
 
 /**
  * ⚠️ v1's `SessionStatus` also has `auto_paired`, `half_day` and `edited` — three values that encode
@@ -198,5 +199,38 @@ export const attendanceDays = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'attendance_days_store_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `attendance_config_id` FK (RLS checks only this row's org_id); references `store_attendance_config_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.attendanceConfigId],
+      foreignColumns: [storeAttendanceConfig.orgId, storeAttendanceConfig.id],
+      name: 'attendance_days_attendance_config_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `employment_id` FK (RLS checks only this row's org_id); references `employments_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.employmentId],
+      foreignColumns: [employments.orgId, employments.id],
+      name: 'attendance_days_employment_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `first_in_punch_id` FK (RLS checks only this row's org_id); references `attendance_punches_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.firstInPunchId],
+      foreignColumns: [attendancePunches.orgId, attendancePunches.id],
+      name: 'attendance_days_first_in_punch_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `frozen_by_pay_run_id` FK (RLS checks only this row's org_id); references `pay_runs_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.frozenByPayRunId],
+      foreignColumns: [payRuns.orgId, payRuns.id],
+      name: 'attendance_days_frozen_by_pay_run_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `last_out_punch_id` FK (RLS checks only this row's org_id); references `attendance_punches_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.lastOutPunchId],
+      foreignColumns: [attendancePunches.orgId, attendancePunches.id],
+      name: 'attendance_days_last_out_punch_id_same_org_fk',
+    }).onDelete('restrict'),
+    // NOTE: attendance_days_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0213 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES attendance_days (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );

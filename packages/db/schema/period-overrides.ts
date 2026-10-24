@@ -97,5 +97,17 @@ export const periodOverrides = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'period_overrides_actor_person_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.entryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+      name: 'period_overrides_entry_id_same_org_fk',
+    }).onDelete('cascade'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `period_id` FK (RLS checks only this row's org_id); references `fiscal_periods_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.periodId],
+      foreignColumns: [fiscalPeriods.orgId, fiscalPeriods.id],
+      name: 'period_overrides_period_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

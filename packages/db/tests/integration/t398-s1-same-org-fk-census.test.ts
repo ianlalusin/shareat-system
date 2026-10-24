@@ -19,6 +19,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import * as exemptions from '../../src/rls/same-org-fk-exemptions';
 import {
   CROSS_ORG_BY_DESIGN,
   JSONB_REFERENCES,
@@ -50,13 +51,24 @@ afterAll(async () => {
 
 const sha = (lines: readonly string[]) => createHash('sha256').update([...lines].sort().join('\n')).digest('hex');
 
-/** OPEN_DEF_491 as it must stand AFTER S1 (all current gaps minus the persons/stores org->org ones). */
-const OPEN_BASELINE = { count: 223, sha256: '341d656a156ce5e35006ba7dfba23171f824ad17ed65a83806bcd3259585c783' } as const;
+/**
+ * T-398 S4 (D3, 0214): OPEN_DEF_491 is EMPTY after S4 -- 82 = 55 triggered (assert_same_org_via_parent) + 27 whose FK is the
+ * table's own RLS via header (guarded by construction, pinned in VIA_HEADER_GUARDED). The S3 pin was 82 / 2df148cd...
+ * (the old comment below describes the post-S3 state).
+ *
+ * OPEN_DEF_491 as it must stand AFTER S3 (T-398 S3 / D2): the 141 org->org gaps are closed by 0213,
+ * leaving the 82 derived-scope entries (77 derived->org, 3 org->derived, 2 derived->derived) that S4 closes.
+ * S1's pin was 223 / 341d656a...; the S3 tester lowered it (the ratchet only goes down).
+ */
+const OPEN_BASELINE = { count: 0, sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' } as const;
 /** Planner-ruled permanent exceptions. Empty until S5 adds the inter-entity links. */
 const BY_DESIGN_PIN: readonly string[] = [];
 const ORG_LESS_PIN: readonly string[] = ['etl_quarantine', 'etl_reconciliation', 'etl_runs', 'etl_source_documents'];
 // T-424: +pos_terminal_links.device_id (external key: the POS v2 tablet install id). 27 -> 28.
-const NO_FK_PIN = { count: 28, sha256: 'c3b1234c5f44b1cff1489c2b16baa5d49e5177c9a2dc8adca16d54829de6810f' } as const;
+// T-398 S3 (A11, D2): the four ref-gap columns (payslips / separations / thirteenth_month_payouts .journal_entry_id,
+// owner_drawing_closes.adjustment_entry_id) gain composite FKs and leave the list; pos_v1_day_feeds.batch_id has no
+// parent (a minted grouping id) and is reclassified 'idempotency-key'. 28 -> 24.
+const NO_FK_PIN = { count: 24, sha256: '9126fadcd8497248e9757e0fed3f093a0b1cf2e4f5bd1759f5ee778b2803a214' } as const;
 const JSONB_PIN = { count: 9, sha256: 'c6ed3b6390ba20d384ed7ad17b22b6fc66e2ade9b0cb2867c115aa36f7d8d16b' } as const;
 
 const openKeys = (l: readonly OpenFkEntry[]) => l.map((e) => e.fk);
@@ -141,8 +153,13 @@ interface Verdict {
 }
 const RULING_RE = /^(T-\d+ (R|A|S)\d+|bible row \d+)/;
 
+/** S4 (D3): FKs that ARE their table's RLS via header are guarded by construction; the list is pinned in the S4 test. */
+const VIA_GUARDED = new Set(
+  (((exemptions as Record<string, unknown>).VIA_HEADER_GUARDED as readonly (string | { fk: string })[] | undefined) ?? []).map((e) => (typeof e === 'string' ? e : e.fk)),
+);
+
 function isGuarded(r: FkRow): boolean {
-  return r.kind === 'org->org' ? r.hasTwin : r.hasTrigger;
+  return r.kind === 'org->org' ? r.hasTwin : r.hasTrigger || VIA_GUARDED.has(keyOf(r));
 }
 
 function census(fks: readonly FkRow[], lists: Lists): Verdict {

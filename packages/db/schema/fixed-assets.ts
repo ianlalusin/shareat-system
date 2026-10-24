@@ -345,5 +345,14 @@ export const fixedAssets = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'fixed_assets_store_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `source_expense_id` FK (RLS checks only this row's org_id); references `expenses_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.sourceExpenseId],
+      foreignColumns: [expenses.orgId, expenses.id],
+      name: 'fixed_assets_source_expense_id_same_org_fk',
+    }).onDelete('restrict'),
+    // NOTE: fixed_assets_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0213 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES fixed_assets (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );

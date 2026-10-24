@@ -60,6 +60,18 @@ export const supplierItems = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'supplier_items_created_by_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `item_id` FK (RLS checks only this row's org_id); references `items_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.itemId],
+      foreignColumns: [items.orgId, items.id],
+      name: 'supplier_items_item_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `supplier_id` FK (RLS checks only this row's org_id); references `suppliers_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.supplierId],
+      foreignColumns: [suppliers.orgId, suppliers.id],
+      name: 'supplier_items_supplier_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

@@ -1,6 +1,6 @@
 # T-454: Drop Banay-Banay from v2 (store closing)
 
-**Status:** RESERVED 2026-10-22 by the orchestrator. Spec not written (Opus, plan mode).
+**Status:** 2026-10-25: RESERVED. Spec not written. Banay-Banay closes at the end of 2026 and Lipa buys it back. Open: do the staff move to Lipa?
 **Ruling:** bible row 377 (Ian, 2026-10-22): Banay-Banay is closing; drop it completely from v2. Its history stays in v1.
 
 ## Scope to specify

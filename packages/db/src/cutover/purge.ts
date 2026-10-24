@@ -562,12 +562,15 @@ export async function applyPurge(tx: Tx, plan: PurgePlan, opts: ApplyPurgeOption
   }
 
   // Step 1 — every kept-child → purged-parent FK must already be cleared, or refuse before writing.
-  // Every column of the constraint must be cleared (almost always exactly one, in this schema).
+  // Every column of the constraint must be cleared (almost always exactly one, in this schema) EXCEPT org_id:
+  // T-398 S3 / D1 - a composite same-org FK is (org_id, col); the purge never clears org_id (it is the row's tenant),
+  // and MATCH SIMPLE accepts the pair once the other column is NULL, so org_id is not counted -
+  // but only inside a composite (more than one child column): a lone org_id column must still be cleared.
   for (const fk of plan.foreignKeys) {
     const entry = CUTOVER_CLASSIFICATION[fk.childTable] as CutoverEntry | undefined;
     const clearColumns = entry?.class === 'keep_shell' ? entry.clearColumns : [];
     const columnLabel = fk.childColumns.join(', ');
-    if (!fk.childColumns.every((c) => clearColumns.includes(c))) {
+    if (!fk.childColumns.every((c) => (c === 'org_id' && fk.childColumns.length > 1) || clearColumns.includes(c))) {
       throw refuse(
         `cutover purge: ${fk.childTable}.${columnLabel} -> ${fk.parentTable} not in clearColumns`,
         `REFUSED. ${fk.childTable}.${columnLabel} references purged ${fk.parentTable} and is not cleared; classify it`,
