@@ -10,7 +10,7 @@
  *
  * ⛔ **This module never writes to the ledger.** Every detector is a question, not a correction.
  */
-import { findingsRepo, transaction, type Tx } from '@shareat/db';
+import { findingsRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 // ⭐ Reused, not redefined. T-140 already owns "the last COMPLETED month" and the scorecard must
 // observe exactly the month the screen shows, or the two disagree about what was ever asked.
@@ -306,7 +306,7 @@ async function decorateFindings(
  * condition goes away on its own the finding vanishes without this ever being called.
  */
 export async function acknowledgeFinding(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { findingKey: string; note?: string | null; period: string },
 ): Promise<{ expiresAt: Date }> {
@@ -337,8 +337,7 @@ export async function acknowledgeFinding(
     });
     return { expiresAt };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**

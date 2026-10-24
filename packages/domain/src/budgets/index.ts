@@ -11,7 +11,7 @@
  * cannot buy gas because a cap was set wrong buys it with their own money, and then the expense
  * leaves the system entirely. Warning is the control; blocking is the failure.
  */
-import { budgetsRepo, transaction, type Tx } from '@shareat/db';
+import { budgetsRepo, type Tx } from '@shareat/db';
 import type { ReissueInterval } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { compare, ZERO } from '@shareat/core/money';
@@ -38,7 +38,7 @@ export interface SetBudgetInput {
  * to a place where the two readings lead to opposite screens.
  */
 export async function setExpenseBudget(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: SetBudgetInput,
 ): Promise<{ id: string }> {
@@ -84,8 +84,7 @@ export async function setExpenseBudget(
       createdBy: actor.personId,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -97,7 +96,7 @@ export async function setExpenseBudget(
  * draft expense applies: everything POSTED is reversed and never removed; this was never posted.
  */
 export async function removeExpenseBudget(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { budgetId: string },
 ): Promise<void> {
@@ -107,8 +106,7 @@ export async function removeExpenseBudget(
     await authorize(trx, actor, 'manage_expense_budgets', { storeId: budget.storeId });
     await budgetsRepo.removeBudget(trx, actor.orgId, input.budgetId);
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /** `YYYYMM` for a `YYYY-MM-DD` business date. */

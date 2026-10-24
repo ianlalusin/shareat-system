@@ -27,16 +27,7 @@
  * both stores' books move. This file is the conversation before the truck.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import {
-  commissaryRepo,
-  itemsRepo,
-  lowStockRepo,
-  refuse,
-  stockLocationsRepo,
-  tradeRepo,
-  transaction,
-  type Tx,
-} from '@shareat/db';
+import { commissaryRepo, itemsRepo, lowStockRepo, refuse, stockLocationsRepo, tradeRepo, type Tx } from '@shareat/db';
 import { notActiveItemSentence } from '../items/not-active';
 import { dispatchTradeOrder, type DispatchResult } from '../trade';
 import { money, ZERO, type Money } from '@shareat/core/money';
@@ -80,7 +71,7 @@ async function resolveSourceLocation(
  * ⭐ Accept: the commissary says it will fill this. Seeds `fulfilled_quantity` from
  * `requested_quantity` on every line (invariant 4), so the packing list starts as the ask.
  */
-export async function acceptOrder(tx: Tx | null, actor: Actor, input: { orderId: string }): Promise<void> {
+export async function acceptOrder(tx: Tx, actor: Actor, input: { orderId: string }): Promise<void> {
   const run = async (trx: Tx) => {
     const order = await loadBranchOrder(trx, actor.orgId, input.orderId, { forUpdate: true });
     await authorize(trx, actor, 'fulfil_branch_order', { storeId: order.storeId });
@@ -94,8 +85,7 @@ export async function acceptOrder(tx: Tx | null, actor: Actor, input: { orderId:
     }
     await tradeRepo.markAccepted(trx, actor.orgId, order.id, actor.personId);
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -104,7 +94,7 @@ export async function acceptOrder(tx: Tx | null, actor: Actor, input: { orderId:
  * (the one-open-order index ignores `void`).
  */
 export async function rejectOrder(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { orderId: string; reason: string },
 ): Promise<void> {
@@ -118,8 +108,7 @@ export async function rejectOrder(
     await tradeRepo.markRejected(trx, actor.orgId, order.id, { rejectedBy: actor.personId, reason });
     await noteOnThread(trx, actor.orgId, order.id, actor.personId, `Rejected the order: ${reason}`);
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 export interface FulfilLineInput {
@@ -139,7 +128,7 @@ export interface FulfilLineInput {
  * will actually be charged. A rejected proposal is not editable; a pending one is (it is the
  * commissary's own).
  */
-export async function fulfilLine(tx: Tx | null, actor: Actor, input: FulfilLineInput): Promise<void> {
+export async function fulfilLine(tx: Tx, actor: Actor, input: FulfilLineInput): Promise<void> {
   const run = async (trx: Tx) => {
     const order = await loadBranchOrder(trx, actor.orgId, input.orderId, { forUpdate: true });
     await authorize(trx, actor, 'fulfil_branch_order', { storeId: order.storeId });
@@ -165,8 +154,7 @@ export async function fulfilLine(tx: Tx | null, actor: Actor, input: FulfilLineI
     });
     await lowStockRepo.refreshOrderTotal(trx, order.id);
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 export interface ProposeLineInput {
@@ -185,7 +173,7 @@ export interface ProposeLineInput {
  * `commissary_added` / `pending`, counts toward nothing until the branch approves (invariant 5),
  * and is announced on the thread so the reason survives the people who made it (T-175).
  */
-export async function proposeLine(tx: Tx | null, actor: Actor, input: ProposeLineInput): Promise<{ lineId: string }> {
+export async function proposeLine(tx: Tx, actor: Actor, input: ProposeLineInput): Promise<{ lineId: string }> {
   const run = async (trx: Tx) => {
     const order = await loadBranchOrder(trx, actor.orgId, input.orderId, { forUpdate: true });
     await authorize(trx, actor, 'fulfil_branch_order', { storeId: order.storeId });
@@ -262,8 +250,7 @@ export async function proposeLine(tx: Tx | null, actor: Actor, input: ProposeLin
     );
     return { lineId: id };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -271,7 +258,7 @@ export async function proposeLine(tx: Tx | null, actor: Actor, input: ProposeLin
  * line has no fulfilment figure, and when nothing at all would go — an order that sends nothing is
  * a rejection wearing a different label.
  */
-export async function markReady(tx: Tx | null, actor: Actor, input: { orderId: string }): Promise<void> {
+export async function markReady(tx: Tx, actor: Actor, input: { orderId: string }): Promise<void> {
   const run = async (trx: Tx) => {
     const order = await loadBranchOrder(trx, actor.orgId, input.orderId, { forUpdate: true });
     await authorize(trx, actor, 'fulfil_branch_order', { storeId: order.storeId });
@@ -294,8 +281,7 @@ export async function markReady(tx: Tx | null, actor: Actor, input: { orderId: s
     }
     await tradeRepo.markReady(trx, actor.orgId, order.id, actor.personId);
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -309,7 +295,7 @@ export async function markReady(tx: Tx | null, actor: Actor, input: { orderId: s
  * `dispatchOrder` (the posting primitive) from the same barrel. A spec defect, reported in T-172 §12.
  */
 export async function dispatchBranchOrder(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { orderId: string },
 ): Promise<DispatchResult> {
@@ -320,6 +306,5 @@ export async function dispatchBranchOrder(
     refuseUnless(stage, ['ready'], 'dispatchBranchOrder');
     return dispatchTradeOrder(trx, actor, { orderId: order.id });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }

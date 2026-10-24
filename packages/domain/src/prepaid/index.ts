@@ -25,14 +25,7 @@
  * gap too (`reverseAmortisation`, §7.8).
  */
 import { authorize, type Actor } from '@shareat/auth';
-import {
-  journalRepo,
-  prepaidRepo,
-  transaction,
-  withSystemOrgPrincipal,
-  type PrepaidCategory,
-  type Tx,
-} from '@shareat/db';
+import { journalRepo, prepaidRepo, withSystemOrgPrincipal, type PrepaidCategory, type Tx } from '@shareat/db';
 import { compare, isZero, money, subtract, ZERO, type Money } from '@shareat/core/money';
 import { parseMoneyInput } from '../shared/money-input';
 import { parseWholeNumberInput } from '../shared/whole-number-input';
@@ -88,12 +81,11 @@ export function prepaidSchedule(item: {
 // -------------------------------------------------------------------------------------
 
 export async function createPrepaidItem(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: CreatePrepaidItemInput,
 ): Promise<{ id: string }> {
-  if (tx) return runCreate(tx, actor, input);
-  return transaction((trx) => runCreate(trx, actor, input));
+  return runCreate(tx, actor, input);
 }
 
 async function runCreate(
@@ -156,7 +148,7 @@ async function runCreate(
  * is built against.
  */
 export async function confirmPrepaidTerm(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { prepaidItemId: string; coverageMonths: number | string; coverageStartDate: string },
 ): Promise<void> {
@@ -185,8 +177,7 @@ export async function confirmPrepaidTerm(
       coverageStartDate: input.coverageStartDate,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -------------------------------------------------------------------------------------
@@ -209,12 +200,11 @@ export interface AmortiseResult {
  * looked fine, because the register was a maintained column.
  */
 export async function amortisePrepaidItem(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { prepaidItemId: string; asOfPeriod: string },
 ): Promise<AmortiseResult> {
-  if (tx) return runAmortise(tx, actor, input);
-  return transaction((trx) => runAmortise(trx, actor, input));
+  return runAmortise(tx, actor, input);
 }
 
 async function runAmortise(
@@ -330,7 +320,7 @@ export async function checkFullyAmortised(
  * the stored column are the same problem wearing two hats.
  */
 export async function reverseAmortisation(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { prepaidItemId: string; period: string; reason: string },
 ): Promise<{ reversalEntryId: string }> {
@@ -367,8 +357,7 @@ export async function reverseAmortisation(
     }
     return { reversalEntryId: reversal.reversalEntryId };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -------------------------------------------------------------------------------------
@@ -396,12 +385,11 @@ export interface WriteOffInput {
  * cancellation — the entry would still balance, which is exactly why it needs saying.
  */
 export async function writeOffPrepaidItem(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: WriteOffInput,
 ): Promise<{ entryId: string; expensed: Money; refunded: Money }> {
-  if (tx) return runWriteOff(tx, actor, input);
-  return transaction((trx) => runWriteOff(trx, actor, input));
+  return runWriteOff(tx, actor, input);
 }
 
 async function runWriteOff(
@@ -514,7 +502,7 @@ async function runWriteOff(
  * at `written_off`, with nothing to move it back and no way to resume amortising.
  */
 export async function undoWriteOff(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { prepaidItemId: string; reason: string },
 ): Promise<{ reversalEntryId: string }> {
@@ -561,8 +549,7 @@ export async function undoWriteOff(
 
     return { reversalEntryId: reversal.reversalEntryId };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -------------------------------------------------------------------------------------

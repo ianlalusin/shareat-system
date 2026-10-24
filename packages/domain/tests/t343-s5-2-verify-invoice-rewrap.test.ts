@@ -104,7 +104,7 @@ describe('P5 — verifyInvoice keeps an AuthorizationError’s own userMessage, 
         new AuthorizationError("authorize: role 'staff' may not 'transfer_funds'", 'transfer_funds' as never, S),
       );
 
-      const caught = await verifyInvoice(null, { personId: 'p1', orgId: 'org-1' }, 'inv-1', {
+      const caught = await verifyInvoice({} as never, { personId: 'p1', orgId: 'org-1' }, 'inv-1', {
         supplier: true,
         invoice: true,
         items: true,

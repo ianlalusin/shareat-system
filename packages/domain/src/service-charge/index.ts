@@ -15,7 +15,7 @@
  * ⛔ **No per-employee, eligibility or rounding logic in any form** (§2 Q1–Q3). ERP records only
  * that the float was discharged and by how much; the split is processed and documented by hand.
  */
-import { advisoryLocksRepo, moneyAccountsRepo, serviceChargeRepo, storesRepo, transaction, type Tx } from '@shareat/db';
+import { advisoryLocksRepo, moneyAccountsRepo, serviceChargeRepo, storesRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { compare, money, subtract, ZERO } from '@shareat/core/money';
 import { postEntry } from '../ledger/post-entry';
@@ -39,7 +39,7 @@ interface DistributeServiceChargeInput {
 }
 
 export async function distributeServiceCharge(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: DistributeServiceChargeInput,
 ): Promise<{ entryId: string; created: boolean; warning?: string }> {
@@ -139,6 +139,5 @@ export async function distributeServiceCharge(
     // wearing a different hat: the float reads discharged while the ledger says otherwise.
     return { entryId: result.entryId, created: result.created, ...(warning ? { warning } : {}) };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }

@@ -6,15 +6,15 @@
  * cast: `numeric(14,2)` silently rounds `'10.005'`, so more than two decimals is refused here, never rounded (I13b).
  */
 import type { Actor } from '@shareat/auth';
-import { auditLogRepo, itemsRepo, menuRepo, productionRepo, transaction, type Tx } from '@shareat/db';
+import { auditLogRepo, itemsRepo, menuRepo, productionRepo, withOrgPrincipal, type Tx } from '@shareat/db';
 import { compareDecimal, decimal, type Decimal } from '@shareat/core/money';
 import { parseDecimalInput } from '../shared/money-input';
 import { gone, refuse } from '../shared/refusal';
 import { notActiveItemSentence } from '../items/not-active';
 
-/** Runs `run` on the caller's transaction, or opens one. Every menu function ends here, so the write and its audit row share it. */
-export async function inTx<T>(tx: Tx | undefined, run: (trx: Tx) => Promise<T>): Promise<T> {
-  return tx ? run(tx) : transaction(run);
+/** Runs `run` on the caller's transaction, or opens one under the org principal (T-398 S2b, DEF-421). Every menu function ends here, so the write and its audit row share it. */
+export async function inTx<T>(tx: Tx | undefined, orgId: string, run: (trx: Tx) => Promise<T>): Promise<T> {
+  return tx ? run(tx) : withOrgPrincipal(orgId, run);
 }
 
 /**

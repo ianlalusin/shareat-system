@@ -13,15 +13,7 @@
  * commissary offers, who it offers it to, and what one of the branch's own items a commissary
  * line becomes.
  */
-import {
-  commissaryCatalogueRepo,
-  commissaryRepo,
-  customersRepo,
-  expensesRepo,
-  itemsRepo,
-  transaction,
-  type Tx,
-} from '@shareat/db';
+import { commissaryCatalogueRepo, commissaryRepo, customersRepo, expensesRepo, itemsRepo, type Tx } from '@shareat/db';
 import { LINK_STATUSES } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { decimal, type Decimal } from '@shareat/core/money';
@@ -117,7 +109,7 @@ export interface UpsertCommissaryLinkResult {
  * Gating it behind admin would leave a manager able to create the link and still unable to use it.
  */
 export async function upsertCommissaryLink(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: UpsertCommissaryLinkInput,
 ): Promise<UpsertCommissaryLinkResult> {
@@ -175,8 +167,7 @@ export async function upsertCommissaryLink(
     });
     return { linkId, customerId: created.id, customerCreated: true };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -----------------------------------------------------------------------------------------
@@ -193,7 +184,7 @@ export interface UpsertOfferingInput {
 /** What a commissary offers. T-171 invariant 3: the item must be an item the commissary can
  *  actually supply — active and purchasable — refused otherwise. */
 export async function upsertOffering(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: UpsertOfferingInput,
 ): Promise<{ id: string }> {
@@ -249,8 +240,7 @@ export async function upsertOffering(
       createdBy: actor.personId,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -----------------------------------------------------------------------------------------
@@ -272,7 +262,7 @@ export interface UpsertMapInput {
  * commissary's.
  */
 export async function upsertMap(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: UpsertMapInput,
 ): Promise<{ id: string }> {
@@ -358,12 +348,11 @@ export async function upsertMap(
       createdBy: actor.personId,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 export async function removeMap(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { id: string },
 ): Promise<{ removed: boolean }> {
@@ -376,6 +365,5 @@ export async function removeMap(
     const removed = await commissaryCatalogueRepo.removeMap(trx, actor.orgId, input.id);
     return { removed };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }

@@ -11,7 +11,7 @@
  * account, plus a `LiabilityLedgerEntry` with its own running balance (DEF-074) — the fourth time
  * this exact shape has turned up. Every figure here is summed from `2500` by party.
  */
-import { journalRepo, liabilitiesRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
+import { journalRepo, liabilitiesRepo, moneyAccountsRepo, type Tx } from '@shareat/db';
 import type { LiabilityCategory } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { postEntry } from '../ledger/post-entry';
@@ -36,7 +36,7 @@ export interface CreateLiabilityInput {
 }
 
 export async function createLiability(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: CreateLiabilityInput,
 ): Promise<{ id: string }> {
@@ -57,8 +57,7 @@ export async function createLiability(
       createdBy: actor.personId,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -69,7 +68,7 @@ export async function createLiability(
  * wrong side of the balance sheet is invisible until something else fails to reconcile.
  */
 export async function chargeLiability(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: {
     liabilityId: string;
@@ -133,8 +132,7 @@ export async function chargeLiability(
       outstanding: (await liabilitiesRepo.positionOf(trx, actor.orgId, liability.id)).outstanding,
     };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -169,7 +167,7 @@ async function assertChargeableAccount(trx: Tx, orgId: string, code: string): Pr
 
 /** ⭐ **The obligation is paid.** `DR 2500 (party = it) · CR the money account`. */
 export async function payLiability(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { liabilityId: string; amount: string; fromMoneyAccountId: string; on: string; memo?: string },
 ): Promise<{ entryId: string; outstanding: string; settled: boolean; warning?: string }> {
@@ -240,8 +238,7 @@ export async function payLiability(
       ...(warning ? { warning } : {}),
     };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /** The only two source types `reverseLiabilityEntry` may target — T-366 S1c / DEF-534. */
@@ -249,7 +246,7 @@ const LIABILITY_ENTRY_SOURCE_TYPES = new Set(['liability_charge', 'liability_pay
 
 /** ⚠️ Reversal, not deletion — the original and its mirror both stay on the ledger. */
 export async function reverseLiabilityEntry(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { liabilityId: string; entryId: string; reason: string },
 ): Promise<{ entryId: string; /** false: the entry was already reversed, nothing new was written (T-412). */ created: boolean }> {
@@ -293,8 +290,7 @@ export async function reverseLiabilityEntry(
     });
     return { entryId: result.reversalEntryId, created: result.created };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -303,7 +299,7 @@ export async function reverseLiabilityEntry(
  * an outstanding balance would hide a real debt from the register that exists to show it.
  */
 export async function retireLiability(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { liabilityId: string },
 ): Promise<void> {
@@ -323,8 +319,7 @@ export async function retireLiability(
     }
     await liabilitiesRepo.updateLiability(trx, actor.orgId, liability.id, { retiredAt: new Date() });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /** ⚠️ Overdue is computed, never stored — `due_on` in the past with money still owed. */

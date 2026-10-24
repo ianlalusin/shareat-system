@@ -31,7 +31,7 @@
  * screen is presentation (DEF-051); the control is the mutation.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { expensesRepo, transaction, type Tx } from '@shareat/db';
+import { expensesRepo, type Tx } from '@shareat/db';
 import { RefusalError, refuse, gone } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { SETTINGS_EXPENSE_CATEGORY_RULES } from '../field-rules/settings';
@@ -102,12 +102,11 @@ export interface SetCategoryAccountInput {
  * here.
  */
 export async function setCategoryAccount(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: SetCategoryAccountInput,
 ): Promise<void> {
-  if (tx) return run(tx, actor, input);
-  return transaction((trx) => run(trx, actor, input));
+  return run(tx, actor, input);
 }
 
 async function run(tx: Tx, actor: Actor, input: SetCategoryAccountInput): Promise<void> {

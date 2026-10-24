@@ -14,7 +14,7 @@
  *
  * ⭐ **Nothing here posts.** A template carries no journal entry and no money.
  */
-import { auditLogRepo, moneyAccountsRepo, recurringExpensesRepo, storesRepo, transaction, type Tx } from '@shareat/db';
+import { auditLogRepo, moneyAccountsRepo, recurringExpensesRepo, storesRepo, type Tx } from '@shareat/db';
 import type { RecurringInterval } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { compare, ZERO } from '@shareat/core/money';
@@ -104,7 +104,7 @@ function parseAnchorDay(raw: number | string): number {
 }
 
 export async function createRecurringTemplate(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: CreateRecurringTemplateInput,
 ): Promise<{ id: string; nextDueDate: string }> {
@@ -211,8 +211,7 @@ export async function createRecurringTemplate(
     });
     return { id, nextDueDate };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 export interface UpdateRecurringTemplateInput {
@@ -229,7 +228,7 @@ export interface UpdateRecurringTemplateInput {
 }
 
 export async function updateRecurringTemplate(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: UpdateRecurringTemplateInput,
 ): Promise<void> {
@@ -313,8 +312,7 @@ export async function updateRecurringTemplate(
       });
     }
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -325,7 +323,7 @@ export async function updateRecurringTemplate(
  * exist?"* is answered by the template, and a deleted answer is worse than a paused one.
  */
 export async function setRecurringTemplateStatus(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { templateId: string; status: 'active' | 'paused' },
 ): Promise<void> {
@@ -359,13 +357,12 @@ export async function setRecurringTemplateStatus(
       });
     }
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /** ⛔ Only while it has never produced anything. Otherwise: pause it. */
 export async function deleteRecurringTemplate(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { templateId: string },
 ): Promise<void> {
@@ -388,8 +385,7 @@ export async function deleteRecurringTemplate(
       throw err;
     }
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 export * from './recurrence';
