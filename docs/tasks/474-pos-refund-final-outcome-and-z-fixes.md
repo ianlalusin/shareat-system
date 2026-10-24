@@ -3,8 +3,8 @@
 **Status:** spec written 2026-10-24 (Opus planner, AUDIT session). Source: Codex read-only audits 2026-10-23
 (`C:\Users\ianla\shareat-audits\2026-10-23`, findings 5-8), re-verified against `claude/pos-v2-t470` 51b5b4f.
 Branch `audit/t474-pos-refund-z` off 51b5b4f, for merge into `claude/pos-v2-t470` (PR #54). Defects DEF-756..759.
-This spec CORRECTS T-470 Ruling 4 and T-471 Correction 3 (see "Spec corrections"); a bible §13 row recording
-them is owed by the planner at merge (not written here: the orchestrator is editing the bible on that branch).
+This spec CORRECTS T-470 Ruling 4 and T-471 Correction 3 (see "Spec corrections"); recorded as bible §13
+row 393 (Ian asked for it, 2026-10-24).
 
 ## Finding 5 — DEF-756 (P2 → treated P1, money record): an in-flight refund can be called "carries no money" for ever
 
