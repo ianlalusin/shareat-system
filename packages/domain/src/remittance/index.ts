@@ -32,17 +32,7 @@ import { gone, refuse } from '../shared/refusal';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { postStaffShortageCharge } from '../shared/staff-shortage-charge';
-import {
-  REMITTANCE_CADENCES,
-  advisoryLocksRepo,
-  moneyAccountsRepo,
-  personsRepo,
-  remittanceRepo,
-  storesRepo,
-  transaction,
-  type RemittanceCadence,
-  type Tx,
-} from '@shareat/db';
+import { REMITTANCE_CADENCES, advisoryLocksRepo, moneyAccountsRepo, personsRepo, remittanceRepo, storesRepo, type RemittanceCadence, type Tx } from '@shareat/db';
 import { add, compare, formatMoney, isZero, money, negate, subtract, ZERO, type Money } from '@shareat/core/money';
 import { parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { createMoneyTransfer, voidMoneyTransfer } from '../money-transfers';
@@ -104,12 +94,11 @@ export interface CreateRemittanceResult {
 }
 
 export async function createRemittance(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: CreateRemittanceInput,
 ): Promise<CreateRemittanceResult> {
-  if (tx) return runCreate(tx, actor, input);
-  return transaction((trx) => runCreate(trx, actor, input));
+  return runCreate(tx, actor, input);
 }
 
 async function runCreate(
@@ -442,7 +431,7 @@ async function runCreate(
  * (T-373 R6: open = status open AND remittance posted); a charged one has its entry reversed.
  */
 export async function reverseRemittance(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { remittanceId: string; reason: string; reversedOn?: string },
 ): Promise<void> {
@@ -497,8 +486,7 @@ export async function reverseRemittance(
       reverseReason: reason,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -539,7 +527,7 @@ export async function reverseRemittance(
  * Existing `written_off` rows are untouched.
  */
 export async function resolveRemittanceVariance(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input:
     | {
@@ -795,8 +783,7 @@ export async function resolveRemittanceVariance(
       journalEntryId: posted.entryId,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**

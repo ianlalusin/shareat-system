@@ -11,7 +11,7 @@
  * ROUNDING: one per item per store, half-up, in exact scaled integers (never a float). Three rooms of one unit at 0.0050 are
  * round2(0.015) = 0.02, not 3 x 0.01.
  */
-import { cutoverRepo, journalRepo, stockLayersRepo, stockLedgerRepo, transaction, type Tx } from '@shareat/db';
+import { cutoverRepo, journalRepo, stockLayersRepo, stockLedgerRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { decimal, fromCentavos, money } from '@shareat/core/money';
 import { refuse } from '../shared/refusal';
@@ -203,7 +203,7 @@ export interface ValueOpeningStockResult {
  * conversion date, idempotency key `opening-stock:{org}:{store}`. No counts with value: removes any old draft and returns `null`.
  */
 export async function valueOpeningStock(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { storeId: string },
 ): Promise<ValueOpeningStockResult | null> {
@@ -290,8 +290,7 @@ export async function valueOpeningStock(
     await journalRepo.insertLines(trx, entryId, lines);
     return { entryId, byAccount: plan.accounts };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**

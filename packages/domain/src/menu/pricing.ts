@@ -34,7 +34,7 @@ export interface SetDepletionRuleInput {
 }
 
 export async function setDepletionRule(actor: Actor, input: SetDepletionRuleInput, tx?: Tx): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'set_menu_depletion', {});
     assertFieldRules(MENU_DEPLETION_RULES, { quantityPerSale: input.quantityPerSale });
     if (!(MENU_DEPLETION_MODES as readonly unknown[]).includes(input.mode)) {
@@ -83,7 +83,7 @@ export async function setDepletionRule(actor: Actor, input: SetDepletionRuleInpu
 
 /** Cancels a rule that has not taken effect. The database also refuses it if a live offer would be left with no rule in force. */
 export async function cancelScheduledDepletionRule(actor: Actor, input: { id: string }, tx?: Tx): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'set_menu_depletion', {});
     const row = await menuRepo.getRule(trx, actor.orgId, input.id);
     if (!row) throw gone(`cancelScheduledDepletionRule: rule ${input.id} does not exist.`, 'depletion rule');
@@ -134,7 +134,7 @@ export interface SetMenuOfferInput {
 
 /** Appends a LIVE offer (the price from `effectiveFrom`). Needs a depletion rule in force for the variant (database rule R6). */
 export async function setMenuOffer(actor: Actor, input: SetMenuOfferInput, tx?: Tx): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'set_menu_price', { storeId: input.storeId });
     const channel = requireChannel(input.channel, 'setMenuOffer');
     const pricingMode = input.pricingMode ?? 'fixed';
@@ -214,7 +214,7 @@ export async function withdrawMenuOffer(
   input: { storeId: string; variantId: string; channel: MenuChannel; effectiveFrom?: Date },
   tx?: Tx,
 ): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'set_menu_price', { storeId: input.storeId });
     const channel = requireChannel(input.channel, 'withdrawMenuOffer');
     await requireNotBackdated(trx, input.effectiveFrom, 'withdrawMenuOffer', 'withdrawals');
@@ -239,7 +239,7 @@ export async function withdrawMenuOffer(
 
 /** Cancels an offer row that has not taken effect. `storeId` is the store the caller is allowed to price, and must be the row's. */
 export async function cancelScheduledOffer(actor: Actor, input: { id: string; storeId: string }, tx?: Tx): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'set_menu_price', { storeId: input.storeId });
     const row = await menuRepo.getOffer(trx, actor.orgId, input.id);
     if (!row || row.storeId !== input.storeId) throw gone(`cancelScheduledOffer: offer ${input.id} does not exist at this store.`, 'scheduled price');
@@ -268,7 +268,7 @@ export async function setOptionOffer(
   input: { storeId: string; optionValueId: string; channel: MenuChannel; priceDelta: string | null; effectiveFrom?: Date },
   tx?: Tx,
 ): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'set_menu_price', { storeId: input.storeId });
     const channel = requireChannel(input.channel, 'setOptionOffer');
     const priceDelta = input.priceDelta === null ? null : parseMenuAmount(input.priceDelta, 'setOptionOffer: the price change', 'The price change', true);
@@ -295,7 +295,7 @@ export async function setOptionOffer(
 }
 
 export async function cancelScheduledOptionOffer(actor: Actor, input: { id: string; storeId: string }, tx?: Tx): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'set_menu_price', { storeId: input.storeId });
     const row = await menuRepo.getOptionOffer(trx, actor.orgId, input.id);
     if (!row || row.storeId !== input.storeId) throw gone(`cancelScheduledOptionOffer: option offer ${input.id} does not exist at this store.`, 'scheduled option price');

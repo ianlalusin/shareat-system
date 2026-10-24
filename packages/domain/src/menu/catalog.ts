@@ -28,7 +28,7 @@ export interface CreateMenuCategoryInput {
 }
 
 export async function createMenuCategory(actor: Actor, input: CreateMenuCategoryInput, tx?: Tx): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'manage_menu', {});
     assertFieldRules(MENU_CATEGORY_RULES, { name: input.name, sortOrder: input.sortOrder === undefined ? undefined : String(input.sortOrder) });
     const name = requireName(input.name, 'createMenuCategory', 'A category');
@@ -57,7 +57,7 @@ export interface EditMenuCategoryInput {
 }
 
 export async function editMenuCategory(actor: Actor, input: EditMenuCategoryInput, tx?: Tx): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'manage_menu', {});
     const row = await requireCategory(trx, actor, input.id);
     const name = input.name === undefined ? undefined : requireName(input.name, 'editMenuCategory', 'A category');
@@ -125,7 +125,7 @@ function requireRefillNotSold(itemType: MenuItemType, soldALaCarte: boolean, sol
 
 /** Creates the item AND its default variant (unlabelled, active) in the caller's transaction. One audit row, naming both. */
 export async function createMenuItem(actor: Actor, input: CreateMenuItemInput, tx?: Tx): Promise<{ id: string; defaultVariantId: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'add_menu_item', {});
     const name = requireName(input.name, 'createMenuItem', 'An item');
     const itemType = requireItemType(input.itemType, 'createMenuItem');
@@ -175,7 +175,7 @@ export interface EditMenuItemInput {
 
 /** `status: 'active'` brings a retired item back. Refused unless it has an active default variant (S1 audit ruling). */
 export async function editMenuItem(actor: Actor, input: EditMenuItemInput, tx?: Tx): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'manage_menu', {});
     const row = await menuRepo.getItem(trx, actor.orgId, input.id, true);
     if (!row) throw gone(`editMenuItem: item ${input.id} does not exist.`, 'menu item');
@@ -239,7 +239,7 @@ export async function addMenuVariant(
   input: { menuItemId: string; label: string; sortOrder?: number },
   tx?: Tx,
 ): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'add_menu_item', {});
     assertFieldRules(MENU_VARIANT_RULES, { label: input.label });
     const label = requireName(input.label, 'addMenuVariant', 'A variant');
@@ -270,7 +270,7 @@ export interface EditMenuVariantInput {
 }
 
 export async function editMenuVariant(actor: Actor, input: EditMenuVariantInput, tx?: Tx): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'manage_menu', {});
     const row = await menuRepo.getVariant(trx, actor.orgId, input.id);
     if (!row) throw gone(`editMenuVariant: variant ${input.id} does not exist.`, 'variant');

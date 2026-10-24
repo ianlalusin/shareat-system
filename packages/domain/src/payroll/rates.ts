@@ -5,7 +5,7 @@
  * `audit_log` row in the same transaction. Rows are IMMUTABLE once confirmed (migration 0206): there is no edit. A correction is a new
  * row with a later `effective_from`; only a row that was never confirmed and never used can be deleted.
  */
-import { auditLogRepo, statutoryRepo, transaction, type Tx } from '@shareat/db';
+import { auditLogRepo, statutoryRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { parseDecimalInput } from '../shared/money-input';
 import { gone, refuse } from '../shared/refusal';
@@ -35,8 +35,8 @@ async function assertNotPaidAlready(trx: Tx, orgId: string, fn: string, effectiv
   }
 }
 
-function run<T>(tx: Tx | null, fn: (trx: Tx) => Promise<T>): Promise<T> {
-  return tx ? fn(tx) : transaction(fn);
+function run<T>(tx: Tx, fn: (trx: Tx) => Promise<T>): Promise<T> {
+  return fn(tx);
 }
 
 export interface AddStatutoryRateInput {
@@ -58,7 +58,7 @@ export interface AddStatutoryRateInput {
 }
 
 /** Adds an UNCONFIRMED contribution row. It is not used by a POST until `confirmStatutoryRate`. */
-export function addStatutoryRate(tx: Tx | null, actor: Actor, input: AddStatutoryRateInput): Promise<{ id: string }> {
+export function addStatutoryRate(tx: Tx, actor: Actor, input: AddStatutoryRateInput): Promise<{ id: string }> {
   return run(tx, async (trx) => {
     await authorize(trx, actor, CAPABILITY);
     // T-440 S9 (ii): the screen's own rules, only once the gate has passed.
@@ -112,7 +112,7 @@ export function addStatutoryRate(tx: Tx | null, actor: Actor, input: AddStatutor
 }
 
 /** The first confirmation of a row. A second one is refused (by the database too). */
-export function confirmStatutoryRate(tx: Tx | null, actor: Actor, input: { id: string }): Promise<void> {
+export function confirmStatutoryRate(tx: Tx, actor: Actor, input: { id: string }): Promise<void> {
   return run(tx, async (trx) => {
     await authorize(trx, actor, CAPABILITY);
     const row = await statutoryRepo.getRate(trx, actor.orgId, input.id);
@@ -136,7 +136,7 @@ export function confirmStatutoryRate(tx: Tx | null, actor: Actor, input: { id: s
 }
 
 /** Discards (removes) a row that was never confirmed. A confirmed row, or one a payslip used, cannot be discarded. */
-export function discardStatutoryRate(tx: Tx | null, actor: Actor, input: { id: string }): Promise<void> {
+export function discardStatutoryRate(tx: Tx, actor: Actor, input: { id: string }): Promise<void> {
   return run(tx, async (trx) => {
     await authorize(trx, actor, CAPABILITY);
     const row = await statutoryRepo.getRate(trx, actor.orgId, input.id);
@@ -164,7 +164,7 @@ export function discardStatutoryRate(tx: Tx | null, actor: Actor, input: { id: s
  * Returns the ids in the order given.
  */
 export function addWithholdingBracketSet(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: {
     frequency: (typeof FREQUENCIES)[number];
@@ -216,7 +216,7 @@ export function addWithholdingBracketSet(
 
 /** Confirms every row of a bracket set at once. */
 export function confirmWithholdingBracketSet(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { frequency: (typeof FREQUENCIES)[number]; effectiveFrom: string },
 ): Promise<{ confirmed: number }> {
@@ -241,7 +241,7 @@ export function confirmWithholdingBracketSet(
 
 /** Adds an UNCONFIRMED minimum-wage row for a store. */
 export function addMinimumWage(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { storeId: string; effectiveFrom: string; dailyRate: string; wageOrderRef: string },
 ): Promise<{ id: string }> {
@@ -274,7 +274,7 @@ export function addMinimumWage(
   });
 }
 
-export function confirmMinimumWage(tx: Tx | null, actor: Actor, input: { id: string }): Promise<void> {
+export function confirmMinimumWage(tx: Tx, actor: Actor, input: { id: string }): Promise<void> {
   return run(tx, async (trx) => {
     await authorize(trx, actor, CAPABILITY);
     if (!(await statutoryRepo.confirmMinimumWage(trx, actor.orgId, input.id, actor.personId))) {
@@ -294,7 +294,7 @@ export function confirmMinimumWage(tx: Tx | null, actor: Actor, input: { id: str
 
 /** Discards a withholding table (every row of one frequency + date) that was never approved. */
 export function discardWithholdingBracketSet(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { frequency: (typeof FREQUENCIES)[number]; effectiveFrom: string },
 ): Promise<{ discarded: number }> {
@@ -321,7 +321,7 @@ export function discardWithholdingBracketSet(
 }
 
 /** Discards a minimum-wage row that was never approved. */
-export function discardMinimumWage(tx: Tx | null, actor: Actor, input: { id: string }): Promise<void> {
+export function discardMinimumWage(tx: Tx, actor: Actor, input: { id: string }): Promise<void> {
   return run(tx, async (trx) => {
     await authorize(trx, actor, CAPABILITY);
     if (!(await statutoryRepo.minimumWageExists(trx, actor.orgId, input.id))) throw gone('discardMinimumWage: no such row', 'That minimum wage');
@@ -345,7 +345,7 @@ export function discardMinimumWage(tx: Tx | null, actor: Actor, input: { id: str
  * personal data and also decide which agencies a payslip deducts. A wrong format is refused with a plain sentence.
  */
 export function setGovernmentIds(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { personId: string; storeId: string; sssNo?: string | null; philhealthNo?: string | null; pagibigNo?: string | null; tin?: string | null },
 ): Promise<void> {

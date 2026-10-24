@@ -13,7 +13,7 @@
  * checked first" philosophy.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { apRepo, auditLogRepo, cashRequestsRepo, expensesRepo, journalRepo, moneyAccountsRepo, ownersRepo, personsRepo, transaction, type Tx } from '@shareat/db';
+import { apRepo, auditLogRepo, cashRequestsRepo, expensesRepo, journalRepo, moneyAccountsRepo, ownersRepo, personsRepo, type Tx } from '@shareat/db';
 import type { PeriodOverrideReason } from '@shareat/db/schema';
 import { add, compare, formatMoney, money, ZERO, type Money } from '@shareat/core/money';
 import { checkDraw } from '../money-accounts/overdraft';
@@ -48,13 +48,12 @@ function monthLabel(startsOn: string): string {
 }
 
 export async function approveExpense(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   expenseId: string,
   options?: ApproveExpenseOptions,
 ): Promise<ApproveExpenseResult> {
-  if (tx) return runApproveExpense(tx, actor, expenseId, options);
-  return transaction((trx) => runApproveExpense(trx, actor, expenseId, options));
+  return runApproveExpense(tx, actor, expenseId, options);
 }
 
 async function runApproveExpense(

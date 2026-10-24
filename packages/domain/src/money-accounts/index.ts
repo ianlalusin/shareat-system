@@ -23,14 +23,7 @@
  * sit is the org's. An admin already holds org-wide scope, so nothing is widened by it.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import {
-  moneyAccountsRepo,
-  storesRepo,
-  transaction,
-  type Custodian,
-  type MoneyInstrument,
-  type Tx,
-} from '@shareat/db';
+import { moneyAccountsRepo, storesRepo, type Custodian, type MoneyInstrument, type Tx } from '@shareat/db';
 import { compare, isZero, money, ZERO } from '@shareat/core/money';
 import { parseDecimalInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
@@ -71,12 +64,11 @@ export function glCodeFor(instrument: MoneyInstrument, custodian: Custodian): st
 }
 
 export async function createMoneyAccount(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: CreateMoneyAccountInput,
 ): Promise<{ id: string }> {
-  if (tx) return runCreate(tx, actor, input);
-  return transaction((trx) => runCreate(trx, actor, input));
+  return runCreate(tx, actor, input);
 }
 
 async function runCreate(
@@ -125,12 +117,11 @@ async function runCreate(
 
 /** ⛔ Retire, never delete — its journal lines and sales-day tenders outlive it. */
 export async function retireMoneyAccount(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { moneyAccountId: string },
 ): Promise<void> {
-  if (tx) return runRetire(tx, actor, input);
-  return transaction((trx) => runRetire(trx, actor, input));
+  return runRetire(tx, actor, input);
 }
 
 async function runRetire(
@@ -206,7 +197,7 @@ export { judgeDraw, checkDraw, type DrawVerdict } from './overdraft';
  * changing them would move money between accounts by editing a label.
  */
 export async function renameMoneyAccount(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: {
     moneyAccountId: string;
@@ -264,8 +255,7 @@ export async function renameMoneyAccount(
       ...(limit !== undefined ? { overdraftLimit: limit } : {}),
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -------------------------------------------------------------------------------------

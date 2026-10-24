@@ -5,14 +5,14 @@
  * The bytes go through the file broker (`uploadFile`: purpose `leave_document`, jpeg / png / webp, the app-wide 1 MB photo cap, EXIF
  * stripped) and are claimed for the request at upload (`linked_to` = the request id), so the orphan sweep leaves them alone.
  */
-import { transaction, leaveRepo, UUID_SHAPE, type Tx } from '@shareat/db';
+import { leaveRepo, UUID_SHAPE, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { gone } from '../shared/refusal';
 import { claimUpload, linkFile, uploadFile } from '../files';
 import { decideLeaveDocumentRead } from './document-access';
 import { leaveRefusal } from './refusal';
 
-const run = <T>(tx: Tx | null, fn: (trx: Tx) => Promise<T>): Promise<T> => (tx ? fn(tx) : transaction(fn));
+const run = <T>(tx: Tx, fn: (trx: Tx) => Promise<T>): Promise<T> => fn(tx);
 
 /**
  * Attaches a photo to a request. A manage_attendance holder at the request's store; the employee and a colleague cannot.
@@ -20,7 +20,7 @@ const run = <T>(tx: Tx | null, fn: (trx: Tx) => Promise<T>): Promise<T> => (tx ?
  * unlinked, fresh, of this purpose and this request's store), or `{ contentType, bytes }` uploads it here (the no-JS path).
  */
 export function attachLeaveDocument(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { requestId: string; fileId: string } | { requestId: string; contentType: string; bytes: Uint8Array },
 ): Promise<{ fileId: string }> {
@@ -50,7 +50,7 @@ export function attachLeaveDocument(
  * The newest certificate's file id, ONLY if `decideLeaveDocumentRead` lets this viewer open it - else null. Decides and nothing
  * else: no audit row (the audited event is the GET of `/files/{id}` that the Lightbox makes). Any fault is null.
  */
-export async function leaveProofFileId(tx: Tx | null, actor: Actor, input: { requestId: string }): Promise<string | null> {
+export async function leaveProofFileId(tx: Tx, actor: Actor, input: { requestId: string }): Promise<string | null> {
   if (!UUID_SHAPE.test(input.requestId)) return null;
   try {
     return await run(tx, async (trx) => {

@@ -9,7 +9,7 @@
  * history.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { apRepo, auditLogRepo, cashRequestsRepo, expensesRepo, journalRepo, personsRepo, transaction, type Tx } from '@shareat/db';
+import { apRepo, auditLogRepo, cashRequestsRepo, expensesRepo, journalRepo, personsRepo, type Tx } from '@shareat/db';
 import { compare, formatMoney, money, ZERO } from '@shareat/core/money';
 import { parseBusinessDate } from '@shareat/core/datetime';
 import { reverseEntry } from '../ledger/reverse-entry';
@@ -37,13 +37,12 @@ function expensePhrase(expense: { particulars: string; businessDate: string }): 
 }
 
 export async function voidExpense(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   expenseId: string,
   reason: string,
 ): Promise<VoidExpenseResult> {
-  if (tx) return runVoidExpense(tx, actor, expenseId, reason);
-  return transaction((trx) => runVoidExpense(trx, actor, expenseId, reason));
+  return runVoidExpense(tx, actor, expenseId, reason);
 }
 
 async function runVoidExpense(tx: Tx, actor: Actor, expenseId: string, reason: string): Promise<VoidExpenseResult> {

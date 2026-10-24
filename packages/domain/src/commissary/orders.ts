@@ -34,17 +34,7 @@
  * the goods are on a truck cannot silently reclassify them.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import {
-  commissaryRepo,
-  itemsRepo,
-  lowStockRepo,
-  refuse,
-  tradeRepo,
-  transaction,
-  type Tx,
-  type TradeOrderLineRow,
-  type TradeOrderRow,
-} from '@shareat/db';
+import { commissaryRepo, itemsRepo, lowStockRepo, refuse, tradeRepo, type Tx, type TradeOrderLineRow, type TradeOrderRow } from '@shareat/db';
 import { decimal, money, ZERO, type Money } from '@shareat/core/money';
 import { branchPriceFor } from '../items';
 import { notActiveItemSentence } from '../items/not-active';
@@ -366,7 +356,7 @@ export interface SaveBranchOrderDraftInput {
  * making one with nothing on it is a mis-click, not an order.
  */
 export async function saveBranchOrderDraft(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: SaveBranchOrderDraftInput,
 ): Promise<{ orderId: string; totalAmount: string }> {
@@ -429,12 +419,11 @@ export async function saveBranchOrderDraft(
     const saved = await tradeRepo.getOrderById(trx, actor.orgId, orderId);
     return { orderId, totalAmount: saved!.totalAmount };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 export async function addBranchOrderLine(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { orderId: string } & BranchLineDraft,
 ): Promise<{ lineId: string }> {
@@ -451,13 +440,12 @@ export async function addBranchOrderLine(
     await lowStockRepo.refreshOrderTotal(trx, order.id);
     return { lineId: id };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /** Change the ASK on a draft line. ⚠️ Only the ask — after submit the branch's numbers are frozen. */
 export async function updateBranchOrderLine(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { orderId: string; lineId: string; quantity: string; rate?: string | null },
 ): Promise<void> {
@@ -484,12 +472,11 @@ export async function updateBranchOrderLine(
     });
     await lowStockRepo.refreshOrderTotal(trx, order.id);
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 export async function removeBranchOrderLine(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { orderId: string; lineId: string },
 ): Promise<void> {
@@ -505,8 +492,7 @@ export async function removeBranchOrderLine(
     await tradeRepo.deleteLine(trx, actor.orgId, line.id);
     await lowStockRepo.refreshOrderTotal(trx, order.id);
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -515,7 +501,7 @@ export async function removeBranchOrderLine(
  * category unless ledger-only. The resolved values are captured onto the line here (invariant 12's
  * one definition); the trigger refuses the same thing at the database, so the two cannot drift.
  */
-export async function submitOrder(tx: Tx | null, actor: Actor, input: { orderId: string }): Promise<void> {
+export async function submitOrder(tx: Tx, actor: Actor, input: { orderId: string }): Promise<void> {
   const run = async (trx: Tx) => {
     const order = await loadBranchOrder(trx, actor.orgId, input.orderId, { forUpdate: true });
     await authorize(trx, actor, 'place_branch_order', { storeId: order.requestedByStoreId });
@@ -562,8 +548,7 @@ export async function submitOrder(tx: Tx | null, actor: Actor, input: { orderId:
     await tradeRepo.setStatus(trx, actor.orgId, order.id, 'confirmed');
     await lowStockRepo.refreshOrderTotal(trx, order.id);
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -572,7 +557,7 @@ export async function submitOrder(tx: Tx | null, actor: Actor, input: { orderId:
  * the map exactly as submit does. Rejecting zero-fulfils it: declined, not billed, not dispatched.
  */
 export async function decideProposedLine(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { orderId: string; lineId: string; decision: 'approved' | 'rejected' },
 ): Promise<void> {
@@ -624,6 +609,5 @@ export async function decideProposedLine(
     }
     await lowStockRepo.refreshOrderTotal(trx, order.id);
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
