@@ -1001,6 +1001,30 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'Which browser is an org’s own paired POS tablet at its own store; one franchisee must not see or revoke another’s tablets.',
   },
+  lobby_stores: {
+    scope: 'org_column',
+    reason: 'Which of an org’s own stores run the customer lobby and their switches; one franchisee must not see or flip another’s lobby (T-455).',
+  },
+  lobby_entries: {
+    scope: 'org_column',
+    reason: 'A diner party waiting at an org’s own store, with a hashed device and a first name; one franchisee must not see another’s queue (T-455).',
+  },
+  lobby_entry_lines: {
+    scope: 'org_column',
+    reason: 'The pre-order a waiting party chose at an org’s own store; carries its own org_id like its entry (T-455).',
+  },
+  lobby_entry_line_options: {
+    scope: 'org_column',
+    reason: 'The flavours chosen on a pre-order line at an org’s own store; carries its own org_id like its line (T-455).',
+  },
+  lobby_birthday_requests: {
+    scope: 'org_column',
+    reason: 'A birthday-song request from a waiting party at an org’s own store; carries its own org_id like its entry (T-455).',
+  },
+  lobby_discount_claims: {
+    scope: 'org_column',
+    reason: 'A senior/PWD claim, with the holder’s name and ID number while pending; one franchisee must never read another’s claims (T-455, rows 353 and 357).',
+  },
   pos_v1_day_feeds: {
     scope: 'org_column',
     reason: 'The stored POS response for one store-day: sales figures and sold items, org-scoped like sales_days.',

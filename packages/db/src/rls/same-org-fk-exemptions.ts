@@ -100,6 +100,7 @@ export const NO_FK_REFERENCES: readonly NoFkReference[] = [
   { column: 'journal_lines.party_id', kind: 'asserted-party', reason: 'text counterparty id with party_type; ASSERTED by census leg C5 against the party table of the line\'s own org (journal_lines has no org_id: its org is journal_entries.org_id)' },
   { column: 'mirror_outbox.entity_id', kind: 'polymorphic', reason: 'outbox rows carry their own org_id; entity_id points at whichever table entity_type names' },
   { column: 'person_credentials.external_id', kind: 'external-key', reason: 'Firebase/IdP subject id' },
+  { column: 'lobby_entries.client_request_id', kind: 'idempotency-key', reason: 'T-455: the diner phone\'s retry key for one check-in (unique per store); a minted string, not a row of ours' },
   { column: 'pos_terminal_links.device_id', kind: 'external-key', reason: 'the POS v2 tablet install id (a uuid minted on the device), shown on its Settings page; not a row of ours' },
   { column: 'pos_v1_day_feeds.batch_id', kind: 'idempotency-key', reason: 'T-398 S3 D2: a minted grouping id of one feed batch; no parent table exists, so there is nothing to point a foreign key at' },
   { column: 'pos_v1_day_feeds.pos_store_id', kind: 'external-key', reason: 'v1 POS store id string, mapped through pos_v1_store_links' },

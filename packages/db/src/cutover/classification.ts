@@ -1270,6 +1270,50 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'The tender master a till sells against (ADR-015 section 7): configuration, the same class as ' +
       'pos_item_maps. The names and wallet accounts are standing decisions, not pilot activity.',
   },
+  lobby_stores: {
+    class: 'keep',
+    reason:
+      'Configuration (T-455): which stores run the customer lobby and their switches (paused, cap, birthday and claim toggles). Born in v2, nothing ' +
+      'migrated (row 379); a purged row would switch the lobby off at every store on 1 January until it was re-seeded.',
+  },
+  lobby_entries: {
+    class: 'date_scoped',
+    reason:
+      'Pilot check-ins (T-455): born in v2, nothing migrated. Rows created before the cutover date are testing and training queues and are purged; ' +
+      'rows from 2027-01-01 on are the real queue history and stay.',
+    dateColumn: 'created_at',
+    keepFrom: '2027-01-01',
+  },
+  lobby_entry_lines: {
+    class: 'date_scoped',
+    reason:
+      'Pilot pre-order lines (T-455), the children of lobby_entries: the same cutover line, 2027-01-01, so no line outlives or precedes its entry.',
+    dateColumn: 'created_at',
+    keepFrom: '2027-01-01',
+  },
+  lobby_entry_line_options: {
+    class: 'date_scoped',
+    reason:
+      'Pilot flavour choices (T-455), the grandchildren of lobby_entries (via lobby_entry_lines): the same cutover line, 2027-01-01. The purge deletes ' +
+      'lobby_entry_line_options before lobby_entry_lines before lobby_entries.',
+    dateColumn: 'created_at',
+    keepFrom: '2027-01-01',
+  },
+  lobby_birthday_requests: {
+    class: 'date_scoped',
+    reason:
+      'Pilot birthday-song requests (T-455), the children of lobby_entries: the same cutover line, 2027-01-01, so no request outlives or precedes its entry.',
+    dateColumn: 'created_at',
+    keepFrom: '2027-01-01',
+  },
+  lobby_discount_claims: {
+    class: 'date_scoped',
+    reason:
+      'Pilot senior/PWD claims (T-455), the children of lobby_entries: the same cutover line, 2027-01-01. A claim holds no name or ID once decided ' +
+      '(row 353); the legal record is the T-426 statutory diner on the receipt, not this table.',
+    dateColumn: 'created_at',
+    keepFrom: '2027-01-01',
+  },
   pos_v1_day_feeds: {
     class: 'purge',
     reason:
