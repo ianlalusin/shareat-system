@@ -29,7 +29,7 @@ function Row({ ev, action }: { ev: LedgerEvent; action?: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-2 border-b py-2 text-sm last:border-b-0">
       <div className="min-w-0">
-        <div className="font-medium">{ev.kind === "void" ? "Void" : "Sale"} {ev.receiptNumber}{ev.kind === "sale" ? `  ₱${formatCentavos(ev.totalCentavos)}` : ""}</div>
+        <div className="font-medium">{ev.kind === "void" ? "Void" : ev.kind === "refund" ? "Refund" : "Sale"} {ev.receiptNumber}{ev.kind === "sale" ? `  ₱${formatCentavos(ev.totalCentavos)}` : ""}</div>
         <div className="text-xs text-muted-foreground">{when(ev.createdAtClientMs)} · session {ev.receiptId.slice(0, 8)}</div>
         {ev.lastError && <div className="text-xs text-destructive">{ev.lastError}</div>}
       </div>
@@ -96,6 +96,7 @@ export function OutboxSection() {
   };
 
   const by = (...s: LedgerEvent["status"][]) => events.filter((e) => s.includes(e.status));
+  const refundConflicts = events.filter((e) => e.kind === "refund" && e.status === "reserved" && e.lastError);
   const review = events.filter((e) => e.status !== "skipped" && (e.kind === "void" || e.tenders.some((t) => t.toCheck))).slice(-50);
   const showLink = canShowUpdateLink({ unsentCount: status.unsentCount, currentVersion: APP_VERSION, latestVersion: latest });
 
@@ -139,6 +140,9 @@ export function OutboxSection() {
                 <Row key={`${e.deviceId}-${e.terminalSeq}`} ev={e}
                   action={<Button size="sm" variant="outline" onClick={async () => { await retryStuck(e.deviceId, e.terminalSeq); notifyOutboxChanged(); await reload(); }}>Retry</Button>} />
               ))}
+            </ListBlock>
+            <ListBlock title="Refund number conflict — ask the manager" badge={refundConflicts.length}>
+              {refundConflicts.map((e) => <Row key={`${e.deviceId}-${e.terminalSeq}`} ev={e} />)}
             </ListBlock>
             <ListBlock title="Follow-ups that failed (analytics, loyalty, PIN)" badge={failed.length}>
               {failed.map((f) => (

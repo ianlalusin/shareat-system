@@ -47,6 +47,7 @@ export function CashHandoverClient() {
   const [startingCash, setStartingCash] = useState<string>("0");
   const [cashSales, setCashSales] = useState<string>("0");
   const [convertNet, setConvertNet] = useState(0);
+  const [cashRefunds, setCashRefunds] = useState(0);
   const [manualCashAdjustment, setManualCashAdjustment] = useState('');
   const [adjustmentReason, setAdjustmentReason] = useState('');
   const [negativeMethodNames, setNegativeMethodNames] = useState<string[]>([]);
@@ -83,7 +84,7 @@ export function CashHandoverClient() {
       if (saved) {
         const p = saved.payload;
         setPeriodStartMs(p.periodStartMs); setHasPrior(Boolean(p.periodStartExclusive));
-        setStartingCash(String(p.startingCash)); setCashSales(String(p.cashSales)); setConvertNet(p.convertNet ?? 0);
+        setStartingCash(String(p.startingCash)); setCashSales(String(p.cashSales)); setConvertNet(p.convertNet ?? 0); setCashRefunds(p.cashRefunds ?? 0);
         setManualCashAdjustment(String(p.manualCashAdjustment ?? 0)); setAdjustmentReason(p.manualCashAdjustmentReason ?? '');
         setDeductions(p.deductions); setCountedCash(String(p.countedCash)); setOutgoing(p.outgoingCashierName);
         setIncoming(p.incomingCashierName); setNotes(p.notes ?? '');
@@ -152,7 +153,7 @@ export function CashHandoverClient() {
     try {
       const result = await computeHandoverCash(activeStore.id, handoverReadFrom(fromMs, priorExists), Date.now());
       if (storeNow.current !== activeStore.id) return;
-      setCashSales(String(result.cashSales)); setConvertNet(result.convertNet); setNegativeMethodNames(result.negativeMethodNames);
+      setCashSales(String(result.cashSales)); setConvertNet(result.convertNet); setCashRefunds(result.cashRefunds); setNegativeMethodNames(result.negativeMethodNames);
       setComputedForStore(activeStore.id);
     } catch (e: any) {
       setComputedForStore(null);
@@ -172,7 +173,7 @@ export function CashHandoverClient() {
     catch (error) { return { ok: false as const, error: (error as Error).message }; }
   }, [startingCash, manualCashAdjustment, countedCash]);
   const expectedCash = parsed.ok ? computeExpectedCash({ startingCash: toWirePesos(parsed.starting), cashSales: toWirePesos(storedPesosToCentavos(cashSales)),
-    convertNet, manualCashAdjustment: toWirePesos(parsed.adjustment), deductions: deductionsTotal }) : 0;
+    convertNet, cashRefunds, manualCashAdjustment: toWirePesos(parsed.adjustment), deductions: deductionsTotal }) : 0;
   const variance = useMemo(
     () => !parsed.ok || parsed.counted === null ? 0 : toWirePesos(parsed.counted - storedPesosToCentavos(expectedCash)),
     [parsed, expectedCash],
@@ -221,7 +222,7 @@ export function CashHandoverClient() {
         const now = Date.now();
         const fresh = await computeHandoverCash(activeStore.id, handoverReadFrom(periodStartMs, hasPrior), now);
         if (identityNow.current !== submittingIdentity) throw new Error('The store or staff member changed. Review this handover again before saving.');
-        const figures = buildHandoverRecord({ startingCash: toWirePesos(parsed.starting), cashSales: fresh.cashSales, convertNet: fresh.convertNet,
+        const figures = buildHandoverRecord({ startingCash: toWirePesos(parsed.starting), cashSales: fresh.cashSales, convertNet: fresh.convertNet, cashRefunds: fresh.cashRefunds,
           manualCashAdjustment: toWirePesos(parsed.adjustment), manualCashAdjustmentReason: adjustmentReason,
           deductions: deductionsTotal, countedCash: toWirePesos(parsed.counted) });
         request = { id: crypto.randomUUID(), storeId: activeStore.id, payload: {
@@ -232,7 +233,7 @@ export function CashHandoverClient() {
         } };
         saveHandoverAttempt(localStorage, submittingKey, request);
         setAttempt(request);
-        setCashSales(String(fresh.cashSales)); setConvertNet(fresh.convertNet); setNegativeMethodNames(fresh.negativeMethodNames);
+        setCashSales(String(fresh.cashSales)); setConvertNet(fresh.convertNet); setCashRefunds(fresh.cashRefunds); setNegativeMethodNames(fresh.negativeMethodNames);
       }
       await commitHandover(request);
       const figures = request.payload;
@@ -273,6 +274,7 @@ export function CashHandoverClient() {
         "Starting Cash": h.startingCash,
         "Cash Sales": h.cashSales,
         "Convert and tender fixes": h.convertNet ?? 0,
+        "Cash refunds": h.cashRefunds ?? 0,
         "Manual cash adjustment": h.manualCashAdjustment ?? 0,
         "Adjustment reason": h.manualCashAdjustmentReason ?? '',
         "Deductions": h.deductionsTotal,
@@ -380,8 +382,9 @@ export function CashHandoverClient() {
 
             {/* Computed expected */}
             <div className="rounded-md border bg-muted/40 p-3 space-y-1 text-sm">
-              <div className="flex justify-between gap-3"><span className="text-muted-foreground">Starting + Cash sales + Adjustment + Converts − Deductions</span><span className="tabular-nums">{parsed.ok ? peso(expectedCash) : '—'}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-muted-foreground">Starting + Cash sales + Adjustment + Converts − Deductions − Cash refunds</span><span className="tabular-nums">{parsed.ok ? peso(expectedCash) : '—'}</span></div>
               {convertLineText(convertNet) && <p className="tabular-nums">{convertLineText(convertNet)}</p>}
+              {cashRefunds > 0 && <p className="tabular-nums">Cash refunds paid back: −{peso(cashRefunds)}</p>}
               <div className="flex justify-between font-semibold"><span>Expected cash on hand</span><span className="tabular-nums">{parsed.ok ? peso(expectedCash) : '—'}</span></div>
             </div>
 

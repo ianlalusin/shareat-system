@@ -11,7 +11,7 @@
 import { TERMINAL_ROW_KEY, formatTerminalReceiptNumber, planReservation, type TerminalRecord } from '@/lib/terminal/counter';
 import { STORE_EVENTS, STORE_META, STORE_TERMINAL, inTerminalTransaction } from '@/lib/terminal/db';
 
-export type LedgerKind = 'sale' | 'void' | 'skipped';
+export type LedgerKind = 'sale' | 'void' | 'refund' | 'skipped';
 export type LedgerStatus = 'reserved' | 'unsent' | 'acknowledged' | 'skipped' | 'quarantined' | 'rejected' | 'stuck';
 
 export interface LedgerOp {
@@ -142,7 +142,7 @@ export function applyOpsToBatch(batch: OpsWriter, ops: LedgerOp[], sdk: OpsSdk):
 
 // ---- reserving -------------------------------------------------------------------------------------------------------------------------------
 interface ReserveBase {
-  kind: 'sale' | 'void';
+  kind: 'sale' | 'void' | 'refund';
   storeCode: string;
   receiptId: string;
   totalCentavos: number;

@@ -46,18 +46,16 @@ export async function getCashMethodNames(storeId: string, fresh = false): Promis
 }
 
 /**
- * Sum cash sales from final receipts in [fromMs, toMs]. Reads receipts by the
- * `createdAtClientMs` range (single-field, no composite index), filters out
- * voids/refunds client-side, and sums the cash-named entries of each receipt's
- * `analytics.mop` (already net of change).
+ * Bible row 391: cash paid back for refunds in the window. A refund receipt keeps its tender in `refundTender.methodName` (never in analytics.mop) and its
+ * amount in `refundTotalCentavos` (else |total|); a voided refund paid nothing back. Same createdAtClientMs window as sales.
  */
-export async function computeCashSales(
+export async function computeCashSalesAndRefunds(
   storeId: string,
   fromMs: number,
   toMs: number,
   knownCashNames?: ReadonlySet<string>,
   fresh = false,
-): Promise<number> {
+): Promise<{ cashSales: number; cashRefunds: number }> {
   const cashNames = knownCashNames ?? await getCashMethodNames(storeId, fresh);
   const isCashKey = (k: string) =>
     isCashMethod(k, cashNames);
@@ -70,10 +68,15 @@ export async function computeCashSales(
     ),
   );
 
-  let totalCents = 0;
+  let totalCents = 0, refundCents = 0;
   snap.forEach((d) => {
     const r = d.data() as any;
-    if (r?.isRefund === true) return;
+    if (r?.isRefund === true) {
+      if (r?.status !== "voided" && isCashKey(String(r?.refundTender?.methodName ?? ""))) {
+        refundCents += Number.isSafeInteger(r?.refundTotalCentavos) ? r.refundTotalCentavos : storedPesosToCentavos(Math.abs(Number(r?.total ?? 0)));
+      }
+      return;
+    }
     // A voided receipt's SALE is excluded — but if cash was collected and NOT
     // refunded on the void, that retained cash is physically in the drawer and
     // must stay in expected cash sales (else it shows as a phantom overage).
@@ -90,21 +93,21 @@ export async function computeCashSales(
       if (isCashKey(k)) totalCents += storedPesosToCentavos(v);
     }
   });
-  return toWirePesos(totalCents);
+  return { cashSales: toWirePesos(totalCents), cashRefunds: toWirePesos(refundCents) };
 }
 
 /** One explicit server window for handover; a failed read aborts the save instead of treating missing totals as zero. */
 export async function computeHandoverCash(storeId: string, fromMs: number, toMs: number) {
   const cashNames = await getCashMethodNames(storeId, true);
-  const [cashSales, conversions, day] = await Promise.all([
-    computeCashSales(storeId, fromMs, toMs, cashNames, true),
+  const [{ cashSales, cashRefunds }, conversions, day] = await Promise.all([
+    computeCashSalesAndRefunds(storeId, fromMs, toMs, cashNames, true),
     getDocsFromServer(query(collection(db, 'stores', storeId, 'paymentConversions'), where('createdAtClientMs', '>=', fromMs), where('createdAtClientMs', '<=', toMs))),
     getDocFromServer(doc(db, 'stores', storeId, 'analytics', getDayIdFromTimestamp(toMs))),
   ]);
   const movements: ConversionLike[] = [];
   conversions.forEach((row) => movements.push(row.data() as ConversionLike));
   return {
-    cashSales, convertNet: convertNetPesos(movements, fromMs, toMs, (name) => isCashMethod(name, cashNames)),
+    cashSales, cashRefunds, convertNet: convertNetPesos(movements, fromMs, toMs, (name) => isCashMethod(name, cashNames)),
     negativeMethodNames: negativeMethods(day.data()?.payments?.byMethod ?? {}),
   };
 }
