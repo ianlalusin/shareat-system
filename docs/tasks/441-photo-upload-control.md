@@ -1,6 +1,6 @@
 # T-441: One photo-upload control with progress and preview
 
-**Status:** 2026-10-22: S1 merged (PR #36); L1 lightbox fix merged (PR #39) and live. S2 (customer delivery and trade receipt claims) in PR #43, fixes pushed 22 Oct, not merged. S3, S4, S6 built and audited on lanes (not merged); S5 in progress; S7 after #43 merges.
+**Status:** 2026-10-25: COMPLETE. S1-S7 merged (#36, #39, #43, #52) and live. S8 (drag-drop, pan-zoom) recorded from Ian, not built.
 **Ruling:** bible row 364 (Ian, 2026-10-17). Also row 353 (personal data strictly guarded; signatures strictest), row 171 /
 §1.2c (one family of patterns), row 289 (an add form ends in Save), T-296 (1 MB photo cap, browser compression), T-141
 (file broker), T-369 S2 (`/files/[fileId]`), T-434 (staff photo + signature), T-436 (leave certificates).

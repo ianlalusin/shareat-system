@@ -1,6 +1,6 @@
 # T-398: Padre Garcia on v2 as its own organisation (plan C11)
 
-**Status:** S1 LIVE (0194); S2a BUILT, NOT RELEASED 2026-10-18 (DEF-421 ratchet); S2b-S6 SPEC AUDITED, buildable (amended B1-B14, C1-C6); S7 WAITING ON data (Q11 answered b, row 369: PG HR on v2 needs a new task).
+**Status:** 2026-10-25: S1, S2a, S3, S4 LIVE (S3/S4 = #53, migrations 0213/0214, production prechecks all zero); S2b in open PR #60; S5-S7 next (S7 waits on data, Q11 answered b, row 369).
 **Ian's answers to Q1-Q10, given 2026-10-10** — §0b.
 - **Buildable now (no Ian answer needed):** **S2a**, **S2b**, **S3**, **S4** — and their production apply too: Q9 (b)
   lets a DEF-491 migration deploy at any time, short pauses accepted (C2). S3's lock timing still uses a restore taken
