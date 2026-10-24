@@ -1,6 +1,6 @@
 # T-442: Link the files already saved (DEF-672 backfill + census)
 
-**Status:** 2026-10-22: S1+S2 backfill in PR #43 (with part of T-441 S2), fixes pushed 22 Oct, main merged in 22 Oct; not merged, not deployed. Production run by Ian after deploy.
+**Status:** 2026-10-25: MERGED (#43) and live. Production check EXIT=0 (0 to link). DEF-672 closes after one clean nightly sweep.
 
 ## 1. The problem, measured in code (not assumed)
 
