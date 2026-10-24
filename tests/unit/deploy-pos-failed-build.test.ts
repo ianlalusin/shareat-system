@@ -253,20 +253,20 @@ describe('deploy.yml run blocks stay valid block scalars (DEF-770 review)', () =
   function runBlocks() {
     const out: Array<{ start: number; body: string[]; ender: string | null }> = [];
     for (let i = 0; i < lines.length; i++) {
-      const m = /^(\s*)(?:- )?run: \|\s*$/.exec(lines[i]);
+      const m = /^(\s*)(?:- )?run: \|\s*$/.exec(lines[i] ?? '');
       if (!m) continue;
-      const keyIndent = m[1].length;
+      const keyIndent = (m[1] ?? '').length;
       let n = -1;
       const body: string[] = [];
       let j = i + 1;
       for (; j < lines.length; j++) {
-        const l = lines[j];
+        const l = lines[j] ?? '';
         if (!l.trim()) { body.push(l); continue; }
         if (n < 0) n = ind(l);
         if (ind(l) < n) break;
         body.push(l);
       }
-      out.push({ start: i + 1, body, ender: j < lines.length ? lines[j] : null });
+      out.push({ start: i + 1, body, ender: j < lines.length ? (lines[j] ?? null) : null });
       void keyIndent;
     }
     return out;
