@@ -151,6 +151,18 @@ export const stockUsageRecords = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'stock_usage_records_voided_by_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `department_id` FK (RLS checks only this row's org_id); references `departments_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.departmentId],
+      foreignColumns: [departments.orgId, departments.id],
+      name: 'stock_usage_records_department_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `location_id` FK (RLS checks only this row's org_id); references `stock_locations_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.locationId],
+      foreignColumns: [stockLocations.orgId, stockLocations.id],
+      name: 'stock_usage_records_location_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

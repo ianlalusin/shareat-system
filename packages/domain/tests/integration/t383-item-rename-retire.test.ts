@@ -342,22 +342,37 @@ async function addStore(orgId: string, name: string): Promise<string> {
     insert into stores (org_id, code, name) values (${orgId}, ${uid('st')}, ${name}) returning id`;
   return s!.id;
 }
+// DEF-491 (0213/0214): the database refuses a row whose item is another org's. S6 plants exactly such
+// foreign rows to prove retireReadout's own org filters, so those plants run with FKs and triggers
+// skipped (session_replication_role = replica); every other call keeps the plain connection.
+let db: postgres.Sql | postgres.TransactionSql = sql;
+async function plantForeign(fn: () => Promise<void>): Promise<void> {
+  await sql.begin(async (tx) => {
+    await tx`set local session_replication_role = replica`;
+    db = tx;
+    try {
+      await fn();
+    } finally {
+      db = sql;
+    }
+  });
+}
 async function moveStock(orgId: string, storeId: string, locationId: string, itemId: string, qty: string, by: string) {
-  await sql`
+  await db`
     insert into stock_movements (org_id, store_id, location_id, item_id, moved_at, quantity, kind, source_type, source_id, created_by)
     values (${orgId}, ${storeId}, ${locationId}, ${itemId}, now(), ${qty}, 'receipt', 'test', ${crypto.randomUUID()}, ${by})`;
 }
 async function posMap(orgId: string, storeId: string, itemId: string, status: 'active' | 'inactive', by: string) {
-  await sql`
+  await db`
     insert into pos_item_maps (org_id, store_id, pos_item_key, pos_item_name, mode, item_id, quantity_per_sale, status, created_by)
     values (${orgId}, ${storeId}, ${uid('pk')}, 'POS thing', 'direct', ${itemId}, 1, ${status}, ${by})`;
 }
 async function recipe(orgId: string, outputItemId: string, lineItemIds: string[], status: 'active' | 'inactive', by: string) {
-  const [r] = await sql<{ id: string }[]>`
+  const [r] = await db<{ id: string }[]>`
     insert into production_recipes (org_id, name, output_item_id, output_quantity, status, created_by)
     values (${orgId}, ${uid('recipe')}, ${outputItemId}, 1, ${status}, ${by}) returning id`;
   for (const [i, it] of lineItemIds.entries()) {
-    await sql`insert into production_recipe_lines (recipe_id, item_id, quantity, unit) values (${r!.id}, ${it}, 1, ${i % 2 ? 'g' : 'kg'})`;
+    await db`insert into production_recipe_lines (recipe_id, item_id, quantity, unit) values (${r!.id}, ${it}, 1, ${i % 2 ? 'g' : 'kg'})`;
   }
 }
 
@@ -497,9 +512,11 @@ describe('S6 - itemsRepo.retireReadout', () => {
       const gStore = await addStore(g.orgId, 'Store Foreign');
       const gLoc = await roomFor(g.orgId, gStore, g.staffId);
       const gOther = await newNamed(g, 'Other', 'OTHR-001');
-      await moveStock(g.orgId, gStore, gLoc, id, '7', g.staffId);
-      await posMap(g.orgId, gStore, id, 'active', g.staffId);
-      await recipe(g.orgId, gOther, [id], 'active', g.staffId);
+      await plantForeign(async () => {
+        await moveStock(g.orgId, gStore, gLoc, id, '7', g.staffId);
+        await posMap(g.orgId, gStore, id, 'active', g.staffId);
+        await recipe(g.orgId, gOther, [id], 'active', g.staffId);
+      });
 
       // Sanity (green today): the foreign rows really are attached to this item, so the org filters are what is tested.
       const [seen] = await sql<{ n: string }[]>`select count(*)::text as n from stock_movements where item_id = ${id}`;

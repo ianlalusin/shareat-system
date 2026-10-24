@@ -99,6 +99,24 @@ export const supplierReturns = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'supplier_returns_voided_by_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `delivery_id` FK (RLS checks only this row's org_id); references `deliveries_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.deliveryId],
+      foreignColumns: [deliveries.orgId, deliveries.id],
+      name: 'supplier_returns_delivery_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `journal_entry_id` FK (RLS checks only this row's org_id); references `journal_entries_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.journalEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+      name: 'supplier_returns_journal_entry_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `supplier_id` FK (RLS checks only this row's org_id); references `suppliers_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.supplierId],
+      foreignColumns: [suppliers.orgId, suppliers.id],
+      name: 'supplier_returns_supplier_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 

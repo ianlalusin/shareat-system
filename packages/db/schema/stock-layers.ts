@@ -123,6 +123,21 @@ export const stockLayers = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'stock_layers_store_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `item_id` FK (RLS checks only this row's org_id); references `items_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.itemId],
+      foreignColumns: [items.orgId, items.id],
+      name: 'stock_layers_item_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `movement_id` FK (RLS checks only this row's org_id); references `stock_movements_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.movementId],
+      foreignColumns: [stockMovements.orgId, stockMovements.id],
+      name: 'stock_layers_movement_id_same_org_fk',
+    }).onDelete('restrict'),
+    // NOTE: stock_layers_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0213 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES stock_layers (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );
 
@@ -184,5 +199,23 @@ export const stockLayerConsumptions = pgTable(
     check('stock_layer_consumptions_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
     check('stock_layer_consumptions_unit_cost_finite_check', sql`${t.unitCost} > '-Infinity'::numeric and ${t.unitCost} < 'Infinity'::numeric`),
     check('stock_layer_consumptions_cost_finite_check', sql`${t.cost} > '-Infinity'::numeric and ${t.cost} < 'Infinity'::numeric`),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `layer_id` FK (RLS checks only this row's org_id); references `stock_layers_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.layerId],
+      foreignColumns: [stockLayers.orgId, stockLayers.id],
+      name: 'stock_layer_consumptions_layer_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `movement_id` FK (RLS checks only this row's org_id); references `stock_movements_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.movementId],
+      foreignColumns: [stockMovements.orgId, stockMovements.id],
+      name: 'stock_layer_consumptions_movement_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `reversed_by_movement_id` FK (RLS checks only this row's org_id); references `stock_movements_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.reversedByMovementId],
+      foreignColumns: [stockMovements.orgId, stockMovements.id],
+      name: 'stock_layer_consumptions_reversed_by_movement_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

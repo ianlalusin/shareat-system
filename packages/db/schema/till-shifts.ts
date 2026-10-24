@@ -161,6 +161,21 @@ export const tillCustodyShifts = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'till_custody_shifts_store_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `attendance_day_id` FK (RLS checks only this row's org_id); references `attendance_days_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.attendanceDayId],
+      foreignColumns: [attendanceDays.orgId, attendanceDays.id],
+      name: 'till_custody_shifts_attendance_day_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `prev_shift_id` FK (RLS checks only this row's org_id); references `till_custody_shifts_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.prevShiftId],
+      foreignColumns: [t.orgId, t.id],
+      name: 'till_custody_shifts_prev_shift_id_same_org_fk',
+    }).onDelete('restrict'),
+    // NOTE: till_custody_shifts_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0213 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES till_custody_shifts (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );
 

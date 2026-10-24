@@ -304,12 +304,26 @@ const EXEMPT: Record<string, string> = {
   'item_duplicate_dismissals.item_a_id': 'T-443: a ruling that two items differ; no quantity or price rides on it',
   'item_duplicate_dismissals.item_b_id': 'T-443: a ruling that two items differ; no quantity or price rides on it',
   'item_duplicate_dismissals.org_id': 'T-443: the org half of the composite same-org FKs; not an item id',
+  'commissary_item_map.org_id': 'DEF-491 (0213): the org half of the composite same-org FK to items; not an item id (its item column leg is NOT exempt)',
+  'commissary_item_offerings.org_id': 'DEF-491 (0213): the org half of the composite same-org FK to items; not an item id (its item column leg is NOT exempt)',
+  'item_pricing.org_id': 'DEF-491 (0213): the org half of the composite same-org FK to items; not an item id (its item column leg is NOT exempt)',
+  'opening_counts.org_id': 'DEF-491 (0213): the org half of the composite same-org FK to items; not an item id (its item column leg is NOT exempt)',
+  'pos_item_maps.org_id': 'DEF-491 (0213): the org half of the composite same-org FK to items; not an item id (its item column leg is NOT exempt)',
+  'price_list_items.org_id': 'DEF-491 (0213): the org half of the composite same-org FK to items; not an item id (its item column leg is NOT exempt)',
+  'production_recipes.org_id': 'DEF-491 (0213): the org half of the composite same-org FK to items; not an item id (its item column leg is NOT exempt)',
+  'stock_layers.org_id': 'DEF-491 (0213): the org half of the composite same-org FK to items; not an item id (its item column leg is NOT exempt)',
+  'stock_movements.org_id': 'DEF-491 (0213): the org half of the composite same-org FK to items; not an item id (its item column leg is NOT exempt)',
+  'stock_reservations.org_id': 'DEF-491 (0213): the org half of the composite same-org FK to items; not an item id (its item column leg is NOT exempt)',
+  'store_item_sellability.org_id': 'DEF-491 (0213): the org half of the composite same-org FK to items; not an item id (its item column leg is NOT exempt)',
+  'store_item_thresholds.org_id': 'DEF-491 (0213): the org half of the composite same-org FK to items; not an item id (its item column leg is NOT exempt)',
+  'supplier_items.org_id': 'DEF-491 (0213): the org half of the composite same-org FK to items; not an item id (its item column leg is NOT exempt)',
+  'trade_order_lines.org_id': 'DEF-491 (0213): the org half of the composite same-org FK to items; not an item id (its item column leg is NOT exempt)',
   'menu_depletion_rules.org_id': 'the org half of the T-401 composite same-org FK; not an item id (its item_id leg is NOT exempt)',
 };
 
 async function itemFks() {
   const rows = await sql<{ tbl: string; col: string }[]>`
-    select cl.relname as tbl, att.attname as col
+    select distinct cl.relname as tbl, att.attname as col  -- DISTINCT: DEF-491 (0213) adds a composite FK beside the old single-column one on the same item column
     from pg_constraint c
     join pg_class cl on cl.oid = c.conrelid
     join pg_namespace n on n.oid = cl.relnamespace
