@@ -2,12 +2,12 @@
 
 **Status:** spec written 2026-10-25 (Opus planner, AUDIT session). Source: Codex audit eighth pass (2026-10-25,
 `C:\Users\ianla\shareat-audits\OPEN\audit-2026-10-25-eighth-pass.md`, finding 12, P2), re-verified on
-`lane/t455-customer-lobby` f5aff6a. Stacked PR into that branch (owner: orchestrator), never into main directly.
+`lane/t455-customer-lobby` f5aff6a (migration then numbered 0217; renumbered 0215 by the orchestrator at 23eb7ae, 25 Oct — this fix is rebased onto 23eb7ae). Stacked PR into that branch (owner: orchestrator), never into main directly.
 Defect DEF-774. Numbers from the AUDIT block.
 
 ## Finding — DEF-774 (P2, data invariant)
 T-455 §2.2 promises "max claims per entry = `party_size` (trigger)". Migration
-`packages/db/migrations/0217_t455_lobby_tables.sql` enforces it only on `BEFORE INSERT ON lobby_discount_claims`
+`packages/db/migrations/0215_t455_lobby_tables.sql` enforces it only on `BEFORE INSERT ON lobby_discount_claims`
 (`lobby_discount_claims_cap`, :303-318, trigger :334). `lobby_entries_forward_only` (:218-250) lets `party_size` change
 while the entry is `waiting`/`called`, and the CHECK only says 1..30. So: party of 3, three pending claims, then
 `UPDATE lobby_entries SET party_size = 1` succeeds and leaves three live claims for one diner; they can then be
@@ -27,10 +27,10 @@ approved with no further check (approval is an UPDATE of the claim, not an INSER
 3. **Concurrency is the existing lock protocol.** A claim insert locks the entry row `FOR UPDATE` before counting; the
    shrink UPDATE holds the same row lock. Whichever goes second sees the other's committed result (the trigger's
    count runs in a fresh READ COMMITTED snapshot; `FOR UPDATE` returns the latest row). No new lock is needed.
-4. **Where the SQL goes.** 0217 is unmerged and applied only on throwaway lane/test databases (none of the seven shared
-   databases, ADR-012 §5.6), so the trigger is added to 0217 itself (header comment + function + REVOKE + trigger),
-   not a new migration — 0218 belongs to the orchestrator's block and migrations must reach main in number order
-   (board rule 4c). Any lane database that already applied 0217 must be rebuilt from zero (board rule 2). If 0217 has
+4. **Where the SQL goes.** 0215 is unmerged and applied only on throwaway lane/test databases (none of the seven shared
+   databases, ADR-012 §5.6), so the trigger is added to 0215 itself (header comment + function + REVOKE + trigger),
+   not a new migration — 0218 belongs to the orchestrator's block (0216 is POS T-472, 0217 is T-475 S3) and migrations must reach main in number order
+   (board rule 4c). Any lane database that already applied 0215 must be rebuilt from zero (board rule 2). If 0215 has
    reached main by the time this is merged, stop: this becomes a new migration with the next free number.
 5. History is kept: existing claims are never changed by the trigger; staff reject or expire claims first, then
    shrink the party.
@@ -46,7 +46,7 @@ On a dedicated database `shareat_audit_t479_test` (never `shareat_test` / `share
 - trigger-registry / class census tests stay green with the new entry.
 
 ## Files
-`packages/db/migrations/0217_t455_lobby_tables.sql`, `packages/db/src/triggers/registry.ts`,
+`packages/db/migrations/0215_t455_lobby_tables.sql`, `packages/db/src/triggers/registry.ts`,
 `packages/db/tests/integration/t455-s1-lobby-schema.test.ts`, `docs/tasks/455-customer-lobby.md` (one line in §2.2
 pointing here), `docs/DEFECTS-REGISTER.md` (DEF-774). Nothing else.
 

@@ -1103,6 +1103,6 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     mode: 'origin',
     kind: 'validator',
     reason:
-      'A lobby entry party_size may not be lowered below its pending-or-approved discount claims (the other side of lobby_discount_claims_cap); counts the sibling claims, other rows current state, under the entry row lock the UPDATE already holds (0217, T-479, DEF-774).',
+      'A lobby entry party_size may not be lowered below its pending-or-approved discount claims (the other side of lobby_discount_claims_cap); counts the sibling claims, other rows current state, under the entry row lock the UPDATE already holds (0215, T-479, DEF-774).',
   },
 } as const;
