@@ -1,0 +1,28 @@
+# T-472 S3 - the 06:30 Manila nightly copy of every POS receipt from Firebase into Postgres. INSTALL INSTRUCTIONS: docs/ops/pos-receipt-bridge-runbook.md
+#
+# What it is for: yesterday's receipts (and any day of the last 7 that has no day check yet) are copied, read-only, from POS's Firebase
+# into pos_bridge_receipts, and each day is checked against the POS day feed. Nothing is posted and sales_days is untouched.
+# Firebase is only READ, with its own Datastore-Viewer-only key. Never the POS v2 server key (pos2-firebase-key.json can write).
+
+[Unit]
+Description=Shareat - 06:30 Manila nightly copy of POS receipts into Postgres, read-only (T-472)
+After=network-online.target
+Wants=network-online.target
+# No After=postgresql.service - the database is DO Managed Postgres, off-box (ADR-002 section 1).
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/shareat
+ExecStart=/usr/bin/npm run pos-receipt-bridge
+User=shareat
+Group=shareat
+TimeoutStartSec=30min
+
+# NEVER build here. This is a 4 GB droplet that runs the app; a build OOMs it. This unit runs an already-installed tree shipped by CI - bible 2.10.
+Environment=NODE_ENV=production
+# The bridge's OWN read-only credential. POS_BRIDGE_HEARTBEAT_URL lives in /srv/shareat-shared/.env.local, never here (it carries a secret token).
+Environment=POS_BRIDGE_SA_KEY_FILE=/srv/shareat-shared/secrets/pos-bridge-reader.json
+
+# The exit code is load-bearing: non-zero when any store-day was refused, a receipt could not be copied, POS could not be read, or no org was found.
+StandardOutput=append:/var/log/shareat/pos-receipt-bridge.log
+StandardError=append:/var/log/shareat/pos-receipt-bridge.log

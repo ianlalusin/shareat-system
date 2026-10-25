@@ -213,6 +213,8 @@ export const tenders = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
   (t) => [
+    // T-472 S1, migration 0216 - the target of pos_bridge_receipt_tenders' same-org composite FK (id alone is already unique).
+    unique('tenders_org_id_id_unique').on(t.orgId, t.id),
     index('tenders_org_store_idx').on(t.orgId, t.storeId),
     check('tenders_kind_check', sql`${t.kind} in ('cash', 'wallet')`),
     check('tenders_wallet_account_shape_check', sql`(${t.kind} = 'wallet') = (${t.moneyAccountId} is not null)`),
