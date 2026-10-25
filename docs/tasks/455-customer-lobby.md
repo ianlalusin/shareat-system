@@ -276,3 +276,15 @@ Spec defects acknowledged:
   only, unguessable uuidv7 ids, the attempt writes a denial row).
 - `packages/db/src/audit/catalogue.ts` is at its 195-entry cap after S2's four lobby actions: S6/S7 must raise it.
 - `runLobbyNightly(tx, orgId)` has no org loop yet; S9 adds the scheduler entry and the systemTransaction org list (DEF-742).
+
+## S3 rulings (orchestrator, 2026-10-25)
+The S3 tester's contract choices are accepted: every limit / paused / disabled / stale / unknown store answers **409**
+with the one sentence "Please check in at the counter." (no code in the body); 400 bad input, 413 body over 16 KB,
+401/404 share one sentence; cookie `lobby_dev` (43 base64url chars, HttpOnly, Secure, SameSite=Lax, Path=/api/lobby, no
+Domain, with Max-Age); hashes are HMAC-SHA256 hex keyed by `LOBBY_HASH_SECRET`; `/me?s=<storeCode>`, cancel takes
+`{storeCode}`. The discount-claim log-capture case moves to S7a (its routes live there) and S7a repeats it.
+- **Client IP:** read only `x-real-ip`, set by OUR nginx (never `x-forwarded-for`, which the diner controls). If it is
+  missing outside tests, answer **503** and log once (no IP in the log): never fall back to one shared value, which
+  would put every diner of a store under one 5-per-hour limit. ⛔ Before S9 switches the lobby on, confirm the
+  order.shareat.net nginx block sets `proxy_set_header X-Real-IP $remote_addr;`.
+- `LOBBY_HASH_SECRET` missing → 503 "not configured" (fail closed), never an unkeyed hash.
