@@ -1434,12 +1434,6 @@ export const PURGE_ORDER_HINT: readonly string[] = [
   'finding_views',
   'finding_occurrences',
   'finding_acknowledgements',
-  // T-455: the customer lobby. Every lobby FK is RESTRICT, so grandchildren, then children, then the entries.
-  'lobby_entry_line_options',
-  'lobby_entry_lines',
-  'lobby_birthday_requests',
-  'lobby_discount_claims',
-  'lobby_entries',
   // T-215. ⚠️ Self-referencing (`reissued_from_id`), so a reissued row points at its parent and
   // the whole table has to go in one DELETE rather than in FK order — listed early for that
   // reason, and because nothing else references it at all.
