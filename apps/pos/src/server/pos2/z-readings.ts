@@ -19,8 +19,6 @@ import { computeZReading, formatZNo, zWindow, type ZReading, type ZWindow } from
 const UNSENT = 'Send the unsent sales first.';
 const REUSED = 'That request id was already used for a different day close.';
 const RACE = 'Another tablet just closed the day. Check the last Z number and try again.';
-/** A receipt can reach the server days after it was rung (tablet offline); look this far behind the window for late arrivals. */
-const LATE_LOOKBACK_MS = 7 * 24 * 3_600_000;
 const ROLES = ['admin', 'manager', 'cashier'] as const;
 
 interface LastZ { zNo: string; zSeq: number; toMs: number; printedAtMs: number }
@@ -32,22 +30,27 @@ async function compute(deps: Pos2Deps, storeId: string, nowMs: number, read: (ta
   const lastDoc = lastSnap.docs[0]?.data() as Record<string, any> | undefined;
   const last: LastZ | null = lastDoc ? { zNo: String(lastDoc.zNo), zSeq: Number(lastDoc.zSeq), toMs: Number(lastDoc.toMs), printedAtMs: Number(lastDoc.printedAtMs ?? lastDoc.toMs) } : null;
   const window = zWindow({ lastZToMs: last ? last.toMs : null, nowMs });
-  const receiptsFrom = last ? window.fromMs - LATE_LOOKBACK_MS : window.fromMs;
-  const [receipts, conversions, handovers, methods, priorZs] = await Promise.all([
-    read(db.collection(`stores/${storeId}/receipts`).where('createdAtClientMs', '>=', receiptsFrom).where('createdAtClientMs', '<', nowMs)),
+  // T-474 (DEF-758): a Z reads receipts two ways. In-window by SALE time; and, when a Z exists, every receipt that ARRIVED on the server since the last
+  // Z's clock, however old its sale time (a tablet may hold a sale unsent for weeks). They are merged by document id.
+  const lastPrinted = last ? new Date(last.printedAtMs) : null;
+  const [receipts, lateReceipts, conversions, handovers, methods, priorZs] = await Promise.all([
+    read(db.collection(`stores/${storeId}/receipts`).where('createdAtClientMs', '>=', window.fromMs).where('createdAtClientMs', '<', nowMs)),
+    lastPrinted ? read(db.collection(`stores/${storeId}/receipts`).where('createdAt', '>=', lastPrinted)) : Promise.resolve({ docs: [] as any[] }),
     read(db.collection(`stores/${storeId}/paymentConversions`).where('createdAtClientMs', '>=', window.fromMs).where('createdAtClientMs', '<', nowMs)),
     read(db.collection(`stores/${storeId}/cashHandovers`).where('createdAtClientMs', '>=', window.fromMs).where('createdAtClientMs', '<', nowMs)),
     read(db.collection(`stores/${storeId}/storeModesOfPayment`).limit(200)),
-    // Every Z whose window reaches into the lookback period: a receipt one of them counted is never "late" again.
-    last ? read(db.collection(`stores/${storeId}/zReadings`).where('toMs', '>=', receiptsFrom)) : Promise.resolve({ docs: [] as any[] }),
+    // Every Z committed at or after the last Z's clock could have read a receipt arriving after it: a receipt one of them counted is never "late" again.
+    lastPrinted ? read(db.collection(`stores/${storeId}/zReadings`).where('createdAt', '>=', lastPrinted)) : Promise.resolve({ docs: [] as any[] }),
   ]);
   const data = (snap: any) => snap.docs.map((d: any) => ({ ...(d.data() as Record<string, any>), id: d.id }));
+  const mergedReceipts = new Map<string, Record<string, any>>();
+  for (const r of [...data(receipts), ...data(lateReceipts)]) mergedReceipts.set(String(r.id), r);
   const countedReceiptIds = new Set<string>();
   for (const d of priorZs.docs) for (const id of (d.data() as Record<string, any>).receiptIds ?? []) countedReceiptIds.add(String(id));
   const cashNames = new Set<string>(data(methods).filter((m: Record<string, any>) => m.type === 'cash' && m.name).map((m: Record<string, any>) => String(m.name)));
   const { receiptIds, ...reading } = computeZReading({
     window, lastZPrintedAtMs: last ? last.printedAtMs : null, countedReceiptIds,
-    receipts: data(receipts), conversions: data(conversions), handovers: data(handovers), cashNames,
+    receipts: [...mergedReceipts.values()], conversions: data(conversions), handovers: data(handovers), cashNames,
   });
   // The ids live on the Z document itself (not inside `reading`), so the figures the tablet receives stay small.
   return { last, window, reading, receiptIds };
@@ -93,6 +96,9 @@ export async function handleZReading(req: Request, deps: Pos2Deps): Promise<Resp
       const slot = await tx.get(slotRef);
       if (slot.exists) return { slot: slot.data() as Record<string, any> };
       const { last, window, reading, receiptIds } = await compute(deps, storeId, nowMs, (target) => tx.get(target));
+      // T-474 (DEF-757): a Z may never end before (or at) the previous Z's end. Two overlapping requests took their clocks before this transaction;
+      // the one with the older clock must not commit a backwards window. Nothing is written; the tablet is told to look at the last Z.
+      if (last && last.toMs >= nowMs) throw new Refusal(409, RACE);
       const zSeq = (last?.zSeq ?? 0) + 1;
       const zNo = formatZNo(zSeq);
       const doc = {

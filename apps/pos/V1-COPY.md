@@ -163,3 +163,7 @@ T-457 updates the v2-only `src/lib/terminal/claim.ts`: bounded ascending range p
 - `src/lib/cash/handover.ts`, `src/lib/cash/convert-net.ts`: bible row 391 - `computeCashSalesAndRefunds` (cash-tender, non-voided refunds in the window), `cashRefunds` in `computeExpectedCash`/`buildHandoverRecord`.
 - `src/lib/cash/handover-submit.ts`, `src/lib/types.ts`: optional `cashRefunds` accepted/typed.
 - `src/components/settings/OutboxSection.tsx` (T-425 file): refund rows labelled "Refund"; manager block "Refund number conflict".
+
+## T-474 edits (refund number release, Z fixes)
+
+- V2-only `src/lib/outbox/reconcile.ts` and `src/lib/outbox/reconcileRunner.ts`: a reserved refund number is skipped only after the server has closed it (`releaseRefundNumber` dep, `POST /api/pos2/refund-numbers/release`); absence alone leaves the row reserved. V2-only `src/server/pos2/z-readings.ts`, `src/lib/cash/z-reading.ts`, `src/lib/printing/zSlipFormatter.ts`: Z window never backward, late receipts by server arrival, "Manual adjustments" slip line. New V2-only `src/server/pos2/refund-number-release.ts` and its route. No v1 source was changed.

@@ -18,6 +18,7 @@ import {
 import { db } from "@/lib/firebase/client";
 import { runReconcilePass, type ReconcilePort, type ReconcileResult } from "@/lib/outbox/reconcile";
 import { getConnectivityStore } from "@/hooks/useConnectivity";
+import { postPos2 } from "@/lib/pos2/client";
 
 export const realReconcilePort: ReconcilePort = {
   db,
@@ -32,5 +33,15 @@ export const realReconcilePort: ReconcilePort = {
 
 /** One reconcile pass against the real Firestore, gated on the connectivity store. */
 export function runReconcileNow(): Promise<ReconcileResult> {
-  return runReconcilePass({ port: realReconcilePort, isOnline: () => getConnectivityStore().getState().online });
+  return runReconcilePass({
+    port: realReconcilePort,
+    isOnline: () => getConnectivityStore().getState().online,
+    // T-474 (DEF-756): a refund number is called unused only after the server has closed it.
+    releaseRefundNumber: async (ev) => {
+      const r = await postPos2<{ state: "released" | "used"; terminalSeq: number }>("refund-numbers/release", {
+        storeId: ev.storeId, terminalNo: ev.terminalNo, terminalSeq: ev.terminalSeq, receiptNumber: ev.receiptNumber,
+      });
+      return { state: r.state, terminalSeq: r.terminalSeq };
+    },
+  });
 }

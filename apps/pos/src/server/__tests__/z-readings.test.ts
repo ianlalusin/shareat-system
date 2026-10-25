@@ -291,3 +291,66 @@ describe('X-reading - the same figures any time, closes nothing', () => {
     expect(x.body.lastZ).toEqual({ zNo: 'Z-0001', toMs: NOW1 });
   });
 });
+
+describe('T-474 DEF-757 - a Z may never end before the previous Z ended', () => {
+  const seedZ = (toMs: number) => fs.seed(zPath('Z-0010'), { zNo: 'Z-0010', zSeq: 10, storeId: STORE, fromMs: FIRST_FROM, toMs, printedAtMs: toMs, reading: {}, receiptIds: [] });
+  it('the latest Z ends AFTER this request\'s clock -> 409, no Z document and no slot written', async () => {
+    seedZ(NOW1 + 60_000);
+    const commits = fs.commits.length;
+    const r = await closeDay(zbody(), { nowMs: NOW1 });
+    expect(r.status).toBe(409);
+    expect(r.body.error).toBe('Another tablet just closed the day. Check the last Z number and try again.');
+    expect(zDocs().map((d) => d.id)).toEqual(['Z-0010']);
+    expect(fs.get(`stores/${STORE}/pos2Slots/zreq__${R1}`)).toBeUndefined();
+    expect(fs.commits.length).toBe(commits);
+  });
+  it('the latest Z ends at exactly this request\'s clock -> 409 (an empty window is also refused)', async () => {
+    seedZ(NOW1);
+    const r = await closeDay(zbody(), { nowMs: NOW1 });
+    expect(r.status).toBe(409);
+    expect(zDocs()).toHaveLength(1);
+  });
+  it('a later clock still closes normally (Z-0011 from the previous end)', async () => {
+    seedZ(NOW1 - 1);
+    const r = await closeDay(zbody(), { nowMs: NOW1 });
+    expect(r.status).toBe(200);
+    expect(r.body.zNo).toBe('Z-0011');
+  });
+});
+
+describe('T-474 DEF-758 - a receipt that arrives more than 7 days late reaches the next Z', () => {
+  const DAY8 = 8 * 24 * 3_600_000;
+  it('sold 8 days before the last Z, uploaded after it: counted and listed late on the next Z, once', async () => {
+    await closeDay(zbody());
+    await sale('old8', 33, NOW1 - DAY8, { createdAt: FakeTimestamp.fromMillis(NOW1 + 120_000) });
+    const z2 = await closeDay(zbody({ requestId: R2 }), { nowMs: NOW2 });
+    expect(z2.body.reading.lateReceiptNumbers).toEqual(['SHT-01-old8']);
+    expect(z2.body.reading.totals.saleCentavos).toBe(3_300);
+    expect(fs.get(zPath('Z-0002'))!.receiptIds).toEqual(['old8']);
+    const z3 = await closeDay(zbody({ requestId: R3 }), { nowMs: NOW2 + 3_600_000 });
+    expect(z3.body.reading.lateReceiptNumbers).toEqual([]);
+    expect(z3.body.reading.receiptCount).toBe(0);
+  });
+  it('the X-reading lists the same very late receipt', async () => {
+    await closeDay(zbody());
+    await sale('old9', 12, NOW1 - 30 * 24 * 3_600_000, { createdAt: FakeTimestamp.fromMillis(NOW1 + 5_000) });
+    const x = await xRead('?storeId=S1', { nowMs: NOW1 + 600_000 });
+    expect(x.body.reading.lateReceiptNumbers).toEqual(['SHT-01-old9']);
+  });
+  it('a receipt counted late on Z2 that arrived after Z2\'s clock is not counted again on Z3', async () => {
+    await closeDay(zbody());
+    await sale('late8', 40, NOW1 - DAY8, { createdAt: FakeTimestamp.fromMillis(NOW2 + 1) });
+    const z2 = await closeDay(zbody({ requestId: R2 }), { nowMs: NOW2 });
+    expect(z2.body.reading.lateReceiptNumbers).toEqual(['SHT-01-late8']);
+    const z3 = await closeDay(zbody({ requestId: R3 }), { nowMs: NOW2 + 3_600_000 });
+    expect(z3.body.reading.receiptCount).toBe(0);
+    expect(z3.body.reading.lateReceiptNumbers).toEqual([]);
+  });
+  it('a receipt sold before the last Z that arrived BEFORE that Z printed is not late', async () => {
+    await closeDay(zbody());
+    await sale('early', 40, at('2026-10-14T23:00:00'), { createdAt: FakeTimestamp.fromMillis(NOW1 - 60_000) });
+    const z2 = await closeDay(zbody({ requestId: R2 }), { nowMs: NOW2 });
+    expect(z2.body.reading.receiptCount).toBe(0);
+    expect(z2.body.reading.lateReceiptNumbers).toEqual([]);
+  });
+});
