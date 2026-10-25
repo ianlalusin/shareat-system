@@ -57,6 +57,8 @@ const JOB_SCRIPT: Record<SchedulerJob, string> = {
   usage_auto_post: 'usage-auto-post',
   // T-396 S1: the 06:00 Manila import of every linked store's closed POS days, as drafts.
   pos_day_import: 'pos-day-import',
+  // T-472: the 06:30 Manila nightly POS receipt bridge. Its script and unit pair land in S3.
+  pos_receipt_bridge: 'pos-receipt-bridge',
 };
 
 /** The unique scripts `JOB_SCRIPT` names — `docs/ops/shareat-<name>.{service,timer}` basenames. */
