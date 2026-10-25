@@ -38,7 +38,10 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['src/**/*.test.ts'],
+    // `npm test` (app-build.yml, no database) skips the real-Postgres server tests; `npm run test:integration` runs ONLY them
+    // (CUSTOMER_INTEGRATION=1) in the verify job, which has the postgres service.
+    include: process.env.CUSTOMER_INTEGRATION === '1' ? ['src/server/__tests__/**/*.test.ts'] : ['src/**/*.test.ts'],
+    exclude: process.env.CUSTOMER_INTEGRATION === '1' ? ['**/node_modules/**'] : ['**/node_modules/**', 'src/server/__tests__/**'],
     environment: 'node',
     // The lobby routes import the whole @shareat/domain index; the first route call in a file pays that cold transform.
     testTimeout: 60_000,

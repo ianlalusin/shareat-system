@@ -104,7 +104,10 @@ describe.each(names)('T-417 apps/%s is a real workspace', (app) => {
     // T-424 Ruling 1: the POS v2 SERVER lives in apps/pos/src/app/api/pos2/** (build:cap stashes it, so the APK has none). Every other route handler stays forbidden.
     const routeHandlers = walk(srcApp)
       .filter((f) => /[\/]route\.(ts|js|tsx)$/.test(f))
-      .filter((f) => !(app === 'pos' && /[\/]app[\/]api[\/]pos2[\/]/.test(f)));
+      .filter((f) => !(app === 'pos' && /[\/]app[\/]api[\/]pos2[\/]/.test(f)))
+      // T-455 S3 (spec S3 row, amends ruling 3 for the lobby only): the customer lobby SERVER lives in
+      // apps/customer/src/app/api/lobby/** and build:cap stashes it, as POS does. Every other route stays forbidden.
+      .filter((f) => !(app === 'customer' && /[\/]app[\/]api[\/]lobby[\/]/.test(f)));
     expect(routeHandlers).toEqual([]);
     // T-422 filled apps/pos with POS v1's floor screens (its root page renders the login page), so
     // for pos the app name is checked where the copy puts it: the root layout's title.
