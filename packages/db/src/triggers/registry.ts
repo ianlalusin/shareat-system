@@ -1105,4 +1105,28 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     reason:
       'A lobby entry party_size may not be lowered below its pending-or-approved discount claims (the other side of lobby_discount_claims_cap); counts the sibling claims, other rows current state, under the entry row lock the UPDATE already holds (0215, T-479, DEF-774).',
   },
+  // ---------------------------------------------------------------------------------------------
+  // T-398 S5 (0218) - the inter-entity shipment link guard. Reads the shipping organisation's order and customer rows: validator, origin.
+  // ---------------------------------------------------------------------------------------------
+  inter_entity_shipments_link_check_trg: {
+    table: 'inter_entity_shipments',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'A shipment may only go to the organisation the order customer is linked to (customers.counterparty_org_id = buyer_org_id) and may only be written by the shipping organisation; decides from the order and customer rows, other rows current state (0218, T-398 S5).',
+  },
+  inter_entity_shipments_receipt_guard_trg: {
+    table: 'inter_entity_shipments',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Only receive_inter_entity_shipment() (the table owner) may write received_at / received_by / received_total / status received; the app role is refused 42501. Decides from the calling role, not from row history (0218, T-398 S5).',
+  },
+  inter_entity_shipment_lines_receipt_guard_trg: {
+    table: 'inter_entity_shipment_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Only receive_inter_entity_shipment() (the table owner) may write received_quantity; the app role is refused 42501. Decides from the calling role, not from row history (0218, T-398 S5).',
+  },
 } as const;

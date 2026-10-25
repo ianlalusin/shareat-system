@@ -22,7 +22,13 @@ export type RlsScope =
   /** The organizations table itself — scoped by its own `id`. */
   | 'self'
   /** RLS enabled with NO staff or customer policy. Only the system principal can read it. */
-  | 'system_only';
+  | 'system_only'
+  /**
+   * T-398 S5 (A10) - `org_id` (the owner, who alone writes) AND a second organisation column (`counterpartyColumn`) that may only READ:
+   * SELECT is `org_id = app_current_org() OR <counterpartyColumn> = app_current_org()`; INSERT / UPDATE name `org_id` only; no DELETE.
+   * Only the two inter-entity shipment tables use it - it is the one defined cross-organisation handoff, not an escape hatch.
+   */
+  | 'dual_org_counterparty';
 
 export interface RlsEntry {
   readonly scope: RlsScope;
@@ -30,6 +36,8 @@ export interface RlsEntry {
   readonly reason: string;
   /** `derived` only — the SQL predicate linking this table to an org-bearing parent. */
   readonly via?: string;
+  /** `dual_org_counterparty` only - the column naming the organisation that may READ the row (the buyer), e.g. `buyer_org_id`. */
+  readonly counterpartyColumn?: string;
   /**
    * ⛔ **An ACCESS table keyed on a person — its policy MUST also prove the person belongs to
    * the org** (DEF-183), in BOTH `USING` and `WITH CHECK`, whether or not the table also
@@ -693,6 +701,20 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     reason:
       'What an org sells wholesale, to whom, at what price. A franchise reading another’s would ' +
       'learn its entire wholesale book — buyers, volumes and the rates it negotiated.',
+  },
+  inter_entity_shipments: {
+    scope: 'dual_org_counterparty',
+    counterpartyColumn: 'buyer_org_id',
+    reason:
+      'T-398 S5 (0218): the commissary writes the shipment note, the franchise it ships to may READ it and stamp "received" through one definer function. ' +
+      'SELECT admits org_id or buyer_org_id; INSERT / UPDATE admit org_id only; no DELETE. The only table pair where one organisation reads another’s row.',
+  },
+  inter_entity_shipment_lines: {
+    scope: 'dual_org_counterparty',
+    counterpartyColumn: 'buyer_org_id',
+    reason:
+      'T-398 S5 (0218): the lines of an inter-entity shipment - name, unit, quantity, rate, line total and what the buyer counted. Carries org_id and buyer_org_id itself ' +
+      '(QO-7), composite to its header, so the same SELECT rule holds without a derived predicate. No cost, layer or person name.',
   },
   trade_order_lines: {
     scope: 'org_column',

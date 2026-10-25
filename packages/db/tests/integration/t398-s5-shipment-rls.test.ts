@@ -291,10 +291,11 @@ describe('C -- catalog: same-org composite keys everywhere EXCEPT the defined ha
   it('E20a a line with received_quantity > quantity is refused (23514); equal, less, NULL and 0 are accepted; negative is refused (kills: CHECK dropped)', async () => {
     const w = await world();
     const s = await newShipment(w);
-    const mk = (rq: string | null, no: string) => ins(sql, LINE, lineRow(w, s.shipmentId, s.lineId, { line_no: no, received_quantity: rq }));
-    expectRefused(await ownerProbe(() => mk('10.001', '9')), 'E20a over-receipt', '23514');
-    expectRefused(await ownerProbe(() => mk('-0.001', '9')), 'negative received', '23514');
-    for (const ok of ['10.000', '8.000', '0.000', null]) expect(await ownerProbe(() => mk(ok, '9')), `control ${ok}`).toBeUndefined();
+    let seq = 10;
+    const mk = (rq: string | null) => ins(sql, LINE, lineRow(w, s.shipmentId, s.lineId, { line_no: String(seq++), received_quantity: rq }));
+    expectRefused(await ownerProbe(() => mk('10.001')), 'E20a over-receipt', '23514');
+    expectRefused(await ownerProbe(() => mk('-0.001')), 'negative received', '23514');
+    for (const ok of ['10.000', '8.000', '0.000', null]) expect(await ownerProbe(() => mk(ok)), `control ${ok}`).toBeUndefined();
   });
 
   it('C7 the ratchet did not grow: CROSS_ORG_BY_DESIGN stays [] and OPEN_DEF_491 stays [] (the handoff is a declared composite, not an exemption)', () => {
@@ -312,7 +313,7 @@ describe('C -- catalog: same-org composite keys everywhere EXCEPT the defined ha
       where c.contype = 'f' and (c.confrelid = to_regclass(${'public.' + SHIP}) or c.confrelid = to_regclass(${'public.' + LINE}) or c.conrelid = to_regclass(${'public.' + SHIP}) or c.conrelid = to_regclass(${'public.' + LINE}) or 'buyer_org_id' = any(array(select attname from unnest(c.confkey) k(n) join pg_attribute a on a.attrelid = c.confrelid and a.attnum = k.n)))`;
     expect(rows.length, 'RED today: no handoff FKs at all').toBeGreaterThan(0);
     // a cross-org shape = the child's first column is not org_id, or the parent key's first column is not org_id
-    const cross = rows.filter((r) => r.cols[0] !== 'org_id' || r.pcols[0] !== 'org_id').map((r) => `${r.child}(${r.cols.join(',')})->${r.parent}(${r.pcols.join(',')})`).sort();
+    const cross = rows.filter((r) => r.parent !== 'organizations' && (r.cols[0] !== 'org_id' || r.pcols[0] !== 'org_id')).map((r) => `${r.child}(${r.cols.join(',')})->${r.parent}(${r.pcols.join(',')})`).sort();
     expect(cross, 'X3: exactly the two declared cross-org shapes').toEqual([
       `deliveries(org_id,inter_entity_shipment_id)->${SHIP}(buyer_org_id,id)`.replace('deliveries(org_id', 'deliveries(org_id'),
       `${SHIP}(buyer_org_id,received_by)->persons(org_id,id)`,
@@ -458,10 +459,67 @@ describe('K -- CHECK constraints (each pair: refusal + positive control)', () =>
   it('E20a-lines a line with quantity <= 0, rate < 0 or line_total <> round(quantity x rate, 2) is refused (money arithmetic in the database)', async () => {
     const w = await world();
     const s = await newShipment(w);
-    expectRefused(await ownerProbe((tx) => ins(tx, LINE, lineRow(w, s.shipmentId, s.lineId, { line_no: '2', quantity: '0.000', line_total: '0.00' }))), 'zero quantity', '23514');
-    expectRefused(await ownerProbe((tx) => ins(tx, LINE, lineRow(w, s.shipmentId, s.lineId, { line_no: '2', rate: '-1.00', line_total: '-10.00' }))), 'negative rate', '23514');
-    expectRefused(await ownerProbe((tx) => ins(tx, LINE, lineRow(w, s.shipmentId, s.lineId, { line_no: '2', line_total: '3100.01' }))), 'line_total off by a centavo', '23514');
-    expect(await ownerProbe((tx) => ins(tx, LINE, lineRow(w, s.shipmentId, s.lineId, { line_no: '2', quantity: '0.500', rate: '7.77', line_total: '3.89' }))), 'control: 0.500 x 7.77 = 3.885 -> 3.89 (half up)').toBeUndefined();
+    expectRefused(await ownerProbe((tx) => ins(tx, LINE, lineRow(w, s.shipmentId, s.lineId, { line_no: '3', quantity: '0.000', line_total: '0.00' }))), 'zero quantity', '23514');
+    expectRefused(await ownerProbe((tx) => ins(tx, LINE, lineRow(w, s.shipmentId, s.lineId, { line_no: '4', rate: '-1.00', line_total: '-10.00' }))), 'negative rate', '23514');
+    expectRefused(await ownerProbe((tx) => ins(tx, LINE, lineRow(w, s.shipmentId, s.lineId, { line_no: '5', line_total: '3100.01' }))), 'line_total off by a centavo', '23514');
+    expect(await ownerProbe((tx) => ins(tx, LINE, lineRow(w, s.shipmentId, s.lineId, { line_no: '6', quantity: '0.500', rate: '7.77', line_total: '3.89' }))), 'control: 0.500 x 7.77 = 3.885 -> 3.89 (half up)').toBeUndefined();
+  });
+
+  it('LN a duplicate line_no on ONE shipment is refused (23505); distinct numbers are accepted; the same number on another shipment is fine (kills: UNIQUE (shipment_id, line_no) dropped)', async () => {
+    const w = await world();
+    const s = await newShipment(w);
+    const s2 = await newShipment(w);
+    const mk = (ship: string, ol: string, no: string) => ins(sql, LINE, lineRow(w, ship, ol, { line_no: no }));
+    expectRefused(await ownerProbe(() => mk(s.shipmentId, s.lineId, '1')), 'LN duplicate line_no 1 on the same shipment', '23505');
+    expect(await ownerProbe(() => mk(s.shipmentId, s.lineId, '2')), 'control: distinct number').toBeUndefined();
+    expect(await ownerProbe(() => mk(s2.shipmentId, s2.lineId, '2')), 'control: same number on a different shipment').toBeUndefined();
+  });
+
+  it('W1 only receive_inter_entity_shipment() may write the receipt: as the SELLER (shareat_app), setting received_at / received_by / received_total / status received / a line received_quantity is refused 42501 naming received; bir_invoice_no still updates (control)', async () => {
+    const w = await world();
+    const s = await newShipment(w);
+    const sets: [string, string][] = [
+      ['received_at', `update ${SHIP} set received_at = now() where id = $1`],
+      ['received_by', `update ${SHIP} set received_by = '${w.b.personId}' where id = $1`],
+      ['received_total', `update ${SHIP} set received_total = '1.00' where id = $1`],
+      ['status received', `update ${SHIP} set status = 'received', received_at = now(), received_by = '${w.b.personId}', received_total = '3100.00' where id = $1`],
+      ['line received_quantity', `update ${LINE} set received_quantity = '8.000' where id = $1`],
+    ];
+    const r = await asPerson(w.a.orgId, w.a.personId, async (tx) => {
+      const out: Record<string, PgErr | undefined> = {};
+      for (const [k, q] of sets) out[k] = await probe(tx, (sp) => asSql(sp).unsafe(q, [k === 'line received_quantity' ? s.shipLineId : s.shipmentId]));
+      const ok = await asSql(tx)`update ${asSql(tx)(SHIP)} set bir_invoice_no = 'BIR-9' where id = ${s.shipmentId} returning id`;
+      return { out, ok: ok.length };
+    });
+    expect(r.err?.message).toBeUndefined();
+    for (const [k] of sets) {
+      expectRefused(r.value!.out[k], `W1 seller sets ${k}`, '42501');
+      expect(r.value!.out[k]!.message, `W1 ${k}: the refusal must name received`).toMatch(/received/i);
+    }
+    expect(r.value!.ok, 'control: an unrelated column still updates').toBe(1);
+  });
+
+  it('W2 PG cannot write the receipt directly either (0 rows or 42501), and the definer receive still works for PG (positive control)', async () => {
+    const w = await world();
+    const s = await newShipment(w);
+    const r = await asPerson(w.b.orgId, w.b.personId, async (tx) => {
+      const q = asSql(tx);
+      const direct: unknown[] = [];
+      const a = await probe(tx, async (sp) => {
+        direct.push((await asSql(sp)`update ${asSql(sp)(SHIP)} set received_total = '1.00' where id = ${s.shipmentId} returning id`).length);
+      });
+      if (a) direct.push(a.code);
+      const b = await probe(tx, async (sp) => {
+        direct.push((await asSql(sp)`update ${asSql(sp)(LINE)} set received_quantity = '1.000' where id = ${s.shipLineId} returning id`).length);
+      });
+      if (b) direct.push(b.code);
+      await q`select receive_inter_entity_shipment(${s.shipmentId}::uuid, ${q.json([{ line_id: s.shipLineId, received_quantity: '8.000' }] as never)}::jsonb)`;
+      const [row] = await q<{ status: string; received_total: string }[]>`select status, received_total from ${q(SHIP)} where id = ${s.shipmentId}`;
+      return { direct, row };
+    });
+    expect(r.err?.message, 'RED today: no function / table').toBeUndefined();
+    for (const d of r.value!.direct) expect([0, '42501'], `direct write result ${String(d)}`).toContain(d);
+    expect(r.value!.row).toEqual({ status: 'received', received_total: '2480.00' });
   });
 
   it('E26 customers.credit_terms_days: 30 stored; 0 and 365 accepted; -1 and 366 refused (kills: CHECK dropped)', async () => {

@@ -55,7 +55,8 @@ import { storedFiles } from './stored-files';
 import { stores } from './stores';
 import { suppliers } from './suppliers';
 
-export const DELIVERY_KINDS = ['supplier', 'purchase', 'commissary'] as const;
+/** T-398 S5 (migration 0218): `inter_entity` = a franchise receiving a shipment another organisation sent (inter_entity_shipment_id required). */
+export const DELIVERY_KINDS = ['supplier', 'purchase', 'commissary', 'inter_entity'] as const;
 export type DeliveryKind = (typeof DELIVERY_KINDS)[number];
 
 export const DELIVERY_STATUSES = ['draft', 'received', 'void'] as const;
@@ -102,6 +103,12 @@ export const deliveries = pgTable(
     status: text('status', { enum: DELIVERY_STATUSES }).notNull().default('draft'),
     /** ⭐ The photo gate. Enforced by a CHECK, not by the service — see the migration. */
     proofFileId: uuid('proof_file_id').references(() => storedFiles.id, { onDelete: 'restrict' }),
+    /**
+     * T-398 S5 (migration 0218) - the shipment this delivery receives (kind `inter_entity` only, both ways by CHECK). Composite FK
+     * (org_id, inter_entity_shipment_id) -> inter_entity_shipments (buyer_org_id, id): only the BUYER can point a delivery at it. No Drizzle
+     * `.references()` here on purpose (the target key is not the primary key); see the NOTE below.
+     */
+    interEntityShipmentId: uuid('inter_entity_shipment_id'),
     receivedAt: timestamp('received_at', { withTimezone: true }),
     receivedBy: uuid('received_by').references(() => persons.id, { onDelete: 'restrict' }),
     voidedAt: timestamp('voided_at', { withTimezone: true }),
@@ -117,13 +124,18 @@ export const deliveries = pgTable(
     /** ⭐ A supplier delivery names its supplier; a purchase need not. */
     check(
       'deliveries_supplier_required_check',
-      sql`${t.kind} <> 'supplier' or ${t.supplierId} is not null`,
+      sql`${t.kind} not in ('supplier', 'inter_entity') or ${t.supplierId} is not null`,
     ),
     /** ⚠️ The photo gate, as a constraint. A commissary delivery is exempt (system-generated). */
     check(
       'deliveries_proof_required_check',
-      sql`${t.kind} = 'commissary' or ${t.proofFileId} is not null`,
+      sql`${t.kind} in ('commissary', 'inter_entity') or ${t.proofFileId} is not null`,
     ),
+    // NOTE: migration 0218 (T-398 S5) widened deliveries_kind_check (+ 'inter_entity'), deliveries_proof_required_check (waived for commissary AND inter_entity),
+    // deliveries_supplier_required_check (supplier AND inter_entity need a supplier), and hand-added deliveries_inter_entity_shipment_check
+    // CHECK ((kind = 'inter_entity') = (inter_entity_shipment_id IS NOT NULL)), the FK deliveries_inter_entity_shipment_buyer_fk
+    // (org_id, inter_entity_shipment_id) -> inter_entity_shipments (buyer_org_id, id), and the partial UNIQUE deliveries_inter_entity_shipment_live_key
+    // over non-void deliveries. The two CHECKs below are shown in their widened form.
     check(
       'deliveries_received_shape_check',
       sql`${t.status} <> 'received' or (${t.receivedAt} is not null and ${t.receivedBy} is not null)`,

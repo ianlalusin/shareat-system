@@ -84,10 +84,16 @@ export const suppliers = pgTable(
      * down to system writes only."* Surfaced read-only on the ordinary supplier form; the write
      * path belongs to `customers`/T-129, not this task.
      *
-     * ⛔ No `counterpartyOrgId` twin — v1's `SupplierPlain` has no cross-org link (unlike
-     * `customers`'s franchise case). Not added without a stated need (bible §16.4).
+     * T-398 S5 (migration 0218) adds the stated need: `counterpartyOrgId` below.
      */
     counterpartyStoreId: uuid('counterparty_store_id').references(() => stores.id, {
+      onDelete: 'restrict',
+    }),
+    /**
+     * T-398 S5 (migration 0218) - Padre Garcia's supplier row for the commissary: the OTHER organisation this supplier is. At most one of
+     * `counterpartyStoreId` / `counterpartyOrgId` (`suppliers_one_counterparty_check`). System-set when an inter-entity shipment is received.
+     */
+    counterpartyOrgId: uuid('counterparty_org_id').references(() => organizations.id, {
       onDelete: 'restrict',
     }),
 
@@ -171,6 +177,8 @@ export const suppliers = pgTable(
   (t) => [
     index('suppliers_org_idx').on(t.orgId),
     index('suppliers_counterparty_store_idx').on(t.counterpartyStoreId),
+    index('suppliers_counterparty_org_idx').on(t.counterpartyOrgId),
+    // NOTE: suppliers_one_counterparty_check CHECK (num_nonnulls(counterparty_store_id, counterparty_org_id) <= 1) - hand-added in migration 0218 (T-398 S5).
     uniqueIndex('suppliers_org_name_key').on(t.orgId, t.name),
 
     check('suppliers_name_not_blank_check', sql`length(trim(${t.name})) > 0`),
