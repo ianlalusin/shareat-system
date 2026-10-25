@@ -50,6 +50,23 @@ import { checkField } from '../field-rules/check';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { SUPPLIER_ADD_RULES } from '../field-rules/ap';
 import { allocateOldestFirst, type AllocationItem, type TypedAmount } from '../shared/allocate-oldest-first';
+import {
+  attestationCheck,
+  attestationValues,
+  buildReceiptFacts,
+  buildSupplierFacts,
+  buildVerifySupplierFacts,
+  draftsWouldPostCheck,
+  dueNotBeforeInvoiceCheck,
+  duplicateNumberCheck,
+  duplicateSavedAnywayFlash,
+  feesNotOverTotalCheck,
+  receiptPhotoCheck,
+  selfVerifyCheck,
+  supplierActiveCheck,
+  vatCheck,
+  verifySupplierActiveCheck,
+} from '../business-rules';
 import { createExpense, type CreateExpensePaymentInput } from '../expenses/create';
 import { approveExpense, type ApproveExpenseResult } from '../expenses/approve';
 import { voidExpense } from '../expenses/void';
@@ -465,13 +482,10 @@ export async function recordInvoice(
     // (`receipt.actions.ts`), so an inactive supplier can still be billed against there. An
     // inactive supplier is one the business has stopped buying from; a new bill from one is
     // either a mistake or something worth a second look, and neither should post quietly.
-    if (supplier.status !== 'active') {
-      throw refuse(
-        `recordInvoice: ${supplier.name} is ${supplier.status}, not active — reactivate the ` +
-          'supplier first if you really are still buying from them.',
-        `${supplier.name} is ${supplier.status}, not active — reactivate the supplier first if you really are still buying from them.`,
-      );
-    }
+    // T-475: the sentence lives in the shared rule leaf, so the form's live line and this refusal read the same.
+    const supplierFacts = buildSupplierFacts([supplier]);
+    const inactive = supplierActiveCheck.run(supplierFacts, { supplierId: supplier.id });
+    if (inactive) throw refuse(`recordInvoice: ${inactive.sentence}`, inactive.sentence);
 
     // T-367 S3 (DEF-420, R8): every money input is parsed ONCE, here, and the row is written from the PARSED
     // values - a typed `abc` or `NaN` used to reach the database (22P02 / 23514) and a non-numeric fee became NaN.
@@ -489,15 +503,13 @@ export async function recordInvoice(
     const otherFees = feeOf(input.otherFees, 'recordInvoice: the other fees', 'The other fees');
     // T-151: the fees are part of the invoice total but are NOT lines, so the lines are checked against the goods.
     // Two fees can together leave the `numeric(14,2)` range, which `subtract` reports as a RangeError - a refusal here.
-    const feesTooBig = () =>
-      refuse('recordInvoice: the delivery and other fees exceed the invoice total.', "The delivery and other fees can't be more than the invoice total.");
-    let goodsTotal: Money;
-    try {
-      goodsTotal = subtract(subtract(total, deliveryFee ?? ZERO), otherFees ?? ZERO);
-    } catch {
-      throw feesTooBig();
-    }
-    if (compare(goodsTotal, ZERO) < 0) throw feesTooBig();
+    const feesVerdict = feesNotOverTotalCheck.run(undefined, {
+      totalAmount: input.totalAmount,
+      deliveryFee: input.deliveryFee ?? '',
+      otherFees: input.otherFees ?? '',
+    });
+    if (feesVerdict) throw refuse('recordInvoice: the delivery and other fees exceed the invoice total.', feesVerdict.sentence);
+    const goodsTotal = subtract(subtract(total, deliveryFee ?? ZERO), otherFees ?? ZERO);
     // T-371 (R6): the three VAT columns are nullable, so a blank is null; a typed figure is parsed to its column's shape
     // (`vat_rate` is numeric(8,4)) instead of reaching the database raw.
     const vatRate = parseDecimalInput(input.vatRate, '8,4', 'recordInvoice: the VAT rate', 'The VAT rate', { blank: 'null' });
@@ -523,39 +535,23 @@ export async function recordInvoice(
     if (vatType !== null && !['vatable', 'zero_rated', 'exempt', 'non_vat'].includes(vatType)) {
       throw refuse(`recordInvoice: unknown VAT type "${String(vatType)}".`, "That VAT type isn't one we know.");
     }
-    if (supplier.vatStatus === 'non_vat') {
-      if (vatType === 'vatable' || vatType === 'zero_rated') {
-        throw refuse(
-          `recordInvoice: ${supplier.name} is not VAT-registered, so a ${vatType} bill is not possible.`,
-          `${supplier.name} is not VAT-registered, so this bill can't be vatable or zero-rated.`,
-        );
-      }
-      if (vatAmount !== null) {
-        throw refuse(
-          `recordInvoice: ${supplier.name} is not VAT-registered, so it cannot carry a VAT amount.`,
-          `${supplier.name} is not VAT-registered, so this bill can't carry a VAT amount.`,
-        );
-      }
-    }
+    // T-475: the whole VAT family (non-VAT supplier, vatable needs an amount, zero-rated has none, an amount only with
+    // vatable) is ONE check in the rule leaf; its sentence is the form's live line and this refusal.
+    const vatVerdict = vatCheck.run(supplierFacts, {
+      supplierId: supplier.id,
+      vatType: input.vatType ?? '',
+      vatAmount: input.vatAmount ?? '',
+      totalAmount: input.totalAmount,
+    });
+    if (vatVerdict) throw refuse(`recordInvoice: ${vatVerdict.sentence}`, vatVerdict.sentence);
     let storedVatAmount: Money | null = null;
     let storedVatExclusive: Money | null = null;
     if (vatType === 'vatable') {
-      if (vatAmount === null) throw refuse('recordInvoice: a vatable bill needs its VAT amount.', 'A vatable bill needs the VAT amount printed on it.');
-      if (compare(vatAmount, ZERO) <= 0) throw refuse('recordInvoice: the VAT amount must be greater than zero.', 'The VAT amount has to be greater than zero.');
-      if (compare(vatAmount, total) > 0) throw refuse('recordInvoice: the VAT amount is more than the total.', "The VAT amount can't be more than the invoice total.");
-      storedVatAmount = vatAmount;
-      storedVatExclusive = subtract(total, vatAmount);
+      storedVatAmount = vatAmount!;
+      storedVatExclusive = subtract(total, vatAmount!);
     } else if (vatType === 'zero_rated') {
-      if (vatAmount !== null && compare(vatAmount, ZERO) !== 0) {
-        throw refuse('recordInvoice: a zero-rated bill carries no VAT.', 'A zero-rated bill has no VAT amount. Leave it blank or enter 0.');
-      }
       storedVatAmount = ZERO;
       storedVatExclusive = total;
-    } else if (vatAmount !== null) {
-      throw refuse(
-        `recordInvoice: a VAT amount needs a vatable VAT type (type is ${vatType ?? 'not set'}).`,
-        'A VAT amount only goes with a vatable bill. Clear the amount, or choose the vatable type.',
-      );
     }
     // The caller may not contradict what the server derived (refused, not overwritten): `vat_rate` is always null,
     // and the exclusive figure is whatever the derivation says.
@@ -587,7 +583,8 @@ export async function recordInvoice(
       } catch {
         throw refuse('recordInvoice: the due date is not a real date.', "The due date isn't a real date.");
       }
-      if (dueDate < invoiceDate) throw refuse('recordInvoice: the due date is before the invoice date.', "A due date can't be before the invoice date.");
+      const dueVerdict = dueNotBeforeInvoiceCheck.run(undefined, { invoiceDate, dueDate: dueRaw });
+      if (dueVerdict) throw refuse('recordInvoice: the due date is before the invoice date.', dueVerdict.sentence);
     } else if (supplier.creditTermsDays != null) {
       dueDate = addDays(invoiceDate, supplier.creditTermsDays);
     }
@@ -599,12 +596,17 @@ export async function recordInvoice(
         supplierId: input.supplierId,
         invoiceNo,
       });
-      if (duplicates.length > 0) {
-        duplicateWarning =
-          `This looks like a duplicate — ${supplier.name} already has invoice "${invoiceNo}" ` +
-          `recorded (${duplicates.map((d) => `${d.invoiceDate} ₱${d.totalAmount}`).join(', ')}). ` +
-          'Saved anyway; check it is not the same bill twice.';
-      }
+      // T-475 Q1: still a WARNING, never a block. The live line and this flash share the leaf's words.
+      const repeated = duplicateNumberCheck.run(
+        {
+          supplierName: supplier.name,
+          invoiceNo,
+          supplierId: input.supplierId,
+          matches: duplicates.map((d) => ({ invoiceDate: d.invoiceDate, totalAmount: d.totalAmount })),
+        },
+        { invoiceNo, supplierId: input.supplierId },
+      );
+      if (repeated) duplicateWarning = duplicateSavedAnywayFlash(repeated.sentence);
     }
 
     const created = await apRepo.insertSupplierInvoice(trx, {
@@ -667,12 +669,6 @@ export interface VerifyInvoiceAttestation {
 }
 
 /** Human labels for `VerifyInvoiceAttestation`'s own keys — never the literal key in a sentence. */
-const ATTESTATION_LABEL: Record<keyof VerifyInvoiceAttestation, string> = {
-  supplier: 'the supplier',
-  invoice: 'the invoice number and date',
-  items: 'the items',
-  price: 'the prices',
-};
 
 /**
  * ⭐ Replace a PENDING invoice's lines — the wiring T-145 was missing.
@@ -780,64 +776,40 @@ export async function verifyInvoice(
     }
 
     // ⛔ Segregation of duties. The DB enforces it too; this is the sentence a human can act on.
-    if (invoice.createdBy === actor.personId) {
+    const selfVerify = selfVerifyCheck.run({ createdByViewer: invoice.createdBy === actor.personId }, {});
+    if (selfVerify) {
       throw refuse(
-        'verifyInvoice: you logged this invoice, so you cannot also verify it. Verification is a ' +
-          'second pair of eyes — ask a manager who did not enter it, or an admin.',
-        'You logged this invoice, so you cannot also verify it. Verification is a second pair of ' +
-          'eyes — ask a manager who did not enter it, or an admin.',
+        'verifyInvoice: you logged this invoice, so you cannot also verify it (Verification is a second pair of eyes).',
+        selfVerify.sentence,
       );
     }
 
-    const missing = (Object.keys(attestation) as (keyof VerifyInvoiceAttestation)[]).filter(
-      (k) => !attestation[k],
-    );
-    if (missing.length > 0) {
-      const labels = missing.map((k) => ATTESTATION_LABEL[k]);
-      const joined = labels.length > 1 ? `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]!}` : labels[0]!;
-      throw refuse(
-        `verifyInvoice: confirm every part of the bill before verifying it — still unconfirmed: ` +
-          `${missing.join(', ')}. Verifying means you checked the supplier, the invoice details, ` +
-          'the items and the prices against the photo.',
-        `Confirm every part of the bill before verifying it — still unconfirmed: ${joined}. ` +
-          'Verifying means you checked the supplier, the invoice details, the items and the ' +
-          'prices against the photo.',
-      );
+    // T-475: the four ticks are one check in the rule leaf (fixed label order), shared with the verify form's live line.
+    const unticked = attestationCheck.run(undefined, attestationValues(attestation));
+    if (unticked) {
+      const missing = (Object.keys(attestation) as (keyof VerifyInvoiceAttestation)[]).filter((k) => !attestation[k]);
+      throw refuse(`verifyInvoice: confirm every part of the bill before verifying it - still unconfirmed: ${missing.join(', ')}.`, unticked.sentence);
     }
 
     const supplier = await apRepo.getSupplierById(trx, actor.orgId, invoice.supplierId);
     if (!supplier) throw gone(`verifyInvoice: supplier ${invoice.supplierId} does not exist.`, 'supplier');
-    if (supplier.status !== 'active') {
-      throw refuse(`verifyInvoice: ${supplier.name} is ${supplier.status}, not active.`, `${supplier.name} is ${supplier.status}, not active.`);
-    }
+    const inactive = verifySupplierActiveCheck.run(buildVerifySupplierFacts(supplier), {});
+    if (inactive) throw refuse(`verifyInvoice: ${inactive.sentence}`, inactive.sentence);
 
-    const isCommissaryMirror = !!supplier.counterpartyStoreId;
-    if (!isCommissaryMirror) {
-      if (!invoice.receiptFileId) {
-        throw refuse(
-          `verifyInvoice: supplier invoice ${invoiceId} has no receipt photo — upload one before ` +
-            'verifying. A photo of the paper is the evidence the whole gate rests on (DEF-055).',
-          'This invoice has no receipt photo — upload one before verifying. A photo of the paper ' +
-            'is the evidence the whole gate rests on.',
-        );
-      }
-      // ⭐ T-141's real check, not a truthiness test: the file must exist, in this org, and belong
-      // to this invoice's store. A receipt from somewhere else is not evidence for this bill.
-      const file = await filesRepo.getById(trx, actor.orgId, invoice.receiptFileId);
-      if (!file) {
-        throw refuse(
-          `verifyInvoice: supplier invoice ${invoiceId} names a receipt file that does not exist in this org.`,
-          'This invoice names a receipt file that does not exist in this org.',
-        );
-      }
-      if (file.storeId && file.storeId !== invoice.storeId) {
-        throw refuse(
-          `verifyInvoice: supplier invoice ${invoiceId} names a receipt belonging to another store — ` +
-            'a photo from somewhere else is not evidence for this invoice.',
-          'This invoice names a receipt belonging to another store — a photo from somewhere else is not evidence for this invoice.',
-        );
-      }
-    }
+    // ⭐ T-141's real check, not a truthiness test: the file must exist, in this org, and belong to this invoice's store.
+    // A receipt from somewhere else is not evidence for this bill. A commissary mirror has no paper to photograph.
+    const receiptFile =
+      invoice.receiptFileId && !supplier.counterpartyStoreId ? await filesRepo.getById(trx, actor.orgId, invoice.receiptFileId) : null;
+    const noReceipt = receiptPhotoCheck.run(
+      buildReceiptFacts({
+        counterpartyStoreId: supplier.counterpartyStoreId ?? null,
+        receiptFileId: invoice.receiptFileId ?? null,
+        invoiceStoreId: invoice.storeId,
+        file: receiptFile,
+      }),
+      {},
+    );
+    if (noReceipt) throw refuse(`verifyInvoice: supplier invoice ${invoiceId}: ${noReceipt.sentence} (DEF-055)`, noReceipt.sentence);
 
     await apRepo.markInvoiceVerified(trx, actor.orgId, invoiceId, { verifiedBy: actor.personId });
 
@@ -858,12 +830,22 @@ export async function verifyInvoice(
         // `userMessage` too and is not a `RefusalError`; the same `isPresentable`-shaped check
         // `apps/erp/src/lib/error-shape.ts` uses (including its `instanceof Error` guard, so a
         // thrown non-Error can't TypeError here), duplicated since domain cannot import it.
+        // T-475: the sentence is the shared V5 frame - the draft is NAMED, and the verify form's live line says the same words.
+        // (If the failed posting left the transaction unusable the name cannot be read: the frame then says "a draft expense".)
+        let particulars = 'a draft expense';
+        try {
+          particulars = (await expensesRepo.getExpenseById(trx, actor.orgId, d.id))?.particulars ?? particulars;
+        } catch {
+          // keep the generic name
+        }
+        const framed =
+          typeof innerUserMessage === 'string' && innerUserMessage.trim() !== ''
+            ? draftsWouldPostCheck.run({ drafts: [{ particulars, sentence: innerUserMessage }] }, {})
+            : null;
         throw refuse(
           `verifyInvoice: supplier invoice ${invoiceId} cannot be verified — draft expense ${d.id} ` +
             `failed to post: ${reason}`,
-          typeof innerUserMessage === 'string' && innerUserMessage.trim() !== ''
-            ? innerUserMessage
-            : 'This invoice could not be verified — posting one of its draft expenses failed. Check the draft and try again.',
+          framed?.sentence ?? 'This invoice could not be verified — posting one of its draft expenses failed. Check the draft and try again.',
         );
       }
     }

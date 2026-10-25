@@ -116,7 +116,9 @@ describe('P5 — verifyInvoice keeps an AuthorizationError’s own userMessage, 
 
       expect(caught, 'verifyInvoice should have refused').not.toBeNull();
       const userMessage = (caught as { userMessage?: string }).userMessage;
-      expect(userMessage).toBe(S);
+      // T-475 S1: the sentence is now framed with the draft's name ("This invoice can't be verified yet: ... - <S>"); S is kept whole.
+      expect(userMessage).toContain(S);
+      expect(userMessage).not.toMatch(/could not be verified — posting one of its draft expenses failed/);
     },
     30000,
   );

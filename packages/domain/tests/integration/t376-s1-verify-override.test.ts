@@ -205,7 +205,8 @@ describe('T3 - no override and January closed: the ordinary sentence', () => {
 
     for (const who of [f.admin, f.manager]) {
       const refused = await rejection(verify(f, who, b.id), 'verifying a closed-month bill with no override');
-      expect(refused.userMessage).toBe(CLOSED_SENTENCE);
+      // T-475 S1: the refusal names the draft ("This invoice can't be verified yet: ... - <sentence>"); the sentence is kept whole.
+      expect(refused.userMessage).toContain(CLOSED_SENTENCE);
       expect(refused.userMessage).not.toMatch(UUID);
       await expectNothingPosted(f, b);
     }
@@ -223,7 +224,7 @@ describe('T4 - a LOCKED month cannot be overridden', () => {
     await sql`update fiscal_periods set status = 'locked' where org_id = ${f.orgId}`;
 
     const refused = await rejection(verify(f, f.admin, b.id, OVERRIDE), 'verifying a bill dated in a locked month');
-    expect(refused.userMessage).toBe(LOCKED_SENTENCE);
+    expect(refused.userMessage).toContain(LOCKED_SENTENCE);
     await expectNothingPosted(f, b);
   });
 });
