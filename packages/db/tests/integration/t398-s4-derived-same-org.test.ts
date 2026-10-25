@@ -71,7 +71,8 @@ const TRIGGERED_COUNT = 55;
 /** TRIGGER_REGISTRY had 100 entries (69 origin, 57 validator) at 0213; S4 adds exactly 55 validator/origin entries. */
 const REGISTRY_BEFORE_S4 = 100;
 /** Triggers classified AFTER S4 by later tasks (each lane bumps this): T-455 S1 (0215) adds 4 lobby validators; T-479 adds lobby_entries_party_size_cap. */
-const REGISTRY_ADDED_AFTER_S4 = 5;
+// T-475 S3 (0217): +2 (supplier_invoices self-verify capability + immutability triggers). 5 -> 7.
+const REGISTRY_ADDED_AFTER_S4 = 7;
 
 function pinMismatch(keys: readonly string[], pin: { count: number; sha256: string }): string | null {
   if (keys.length !== pin.count) return `count ${keys.length} != pinned ${pin.count}`;
