@@ -1,6 +1,6 @@
 # T-472: Nightly per-receipt bridge — copy every POS receipt from Firebase into Postgres (from 1 Jan 2027)
 
-**Status:** spec written 2026-10-23 (Opus planner, POS v2 session); revised the same day after the orchestrator's
+**Status:** 2026-10-25: MERGED + LIVE (#67, migration 0216, with the T-478/DEF-775 fix). History: spec written 2026-10-23 (Opus planner, POS v2 session); revised the same day after the orchestrator's
 Opus review. Ian answered 24 Oct (row 392): Q1 yes (read-only account `pos-receipt-bridge-readonly`; Ian saves its key under `C:\Users\ianla\shareat-master-data\keys\`, then runs an install script this task provides), personal data none, Q4 yes. Build after #53 lands. Orchestrator: migration 0215 allocated, file list OK (23 Oct).
 **Model:** Sonnet tester -> Sonnet builder -> Sonnet auditor (schema + money: Sonnet, never Haiku).
 **Migration:** ONE, hand-authored (ADR-012 §5 checklist); number from the orchestrator (0212+ is theirs).
