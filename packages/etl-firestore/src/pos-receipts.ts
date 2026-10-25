@@ -60,12 +60,24 @@ export type PosChangeField = 'voidedAt' | 'editedAt' | 'createdAt';
 const CHANGE_FIELDS: readonly PosChangeField[] = ['voidedAt', 'editedAt', 'createdAt'];
 
 export interface PosDayCrossCheck {
-  /** Receipts whose `createdAtClientMs` falls in the Manila day. */
+  /** Receipts whose `createdAtClientMs` falls in the Manila day. Aggregate count: drift information only. */
   readonly byClientMs: number;
-  /** Receipts whose server `createdAt` falls in the same day. */
+  /** Receipts whose server `createdAt` falls in the same day. Aggregate count: drift information only. */
   readonly byServerCreatedAt: number;
-  /** `max(0, byServerCreatedAt - byClientMs)`: docs the client-time query cannot see. */
+  /**
+   * How many receipts with a server `createdAt` in the Manila day have no usable `createdAtClientMs`
+   * (absent, null, a string, NaN or infinite). Counted by enumerating those documents, NOT by
+   * subtracting `byClientMs` from `byServerCreatedAt`: the two counts are different sets (an offline
+   * receipt sold on day D and uploaded on D+1 is in D's client count and D+1's server count).
+   * (DEF-775)
+   */
   readonly missingClientMs: number;
+  /**
+   * Document ids of exactly those receipts, in page order (server `createdAt`, then id).
+   * `listDay` never returns them (it queries `createdAtClientMs`), so the import job must read these
+   * ids separately or they are silently absent from the day.
+   */
+  readonly missingClientMsIds: readonly string[];
 }
 
 export interface PosReceiptReaderOptions {
@@ -97,7 +109,10 @@ export class PosReceiptReader {
     yield* this.page(base, 'createdAtClientMs');
   }
 
-  /** Count by client time vs by server `createdAt`, for docs that lack `createdAtClientMs`. */
+  /**
+   * Count by client time and by server `createdAt` (drift information), and find the receipts that
+   * really lack `createdAtClientMs` by enumerating the server-day documents (DEF-775).
+   */
   async crossCheckDay(posStoreId: string, businessDate: string): Promise<PosDayCrossCheck> {
     const { start, end } = businessDayRange(parseBusinessDate(businessDate));
     const col = receiptsPath(posStoreId);
@@ -107,15 +122,19 @@ export class PosReceiptReader {
       .where('createdAtClientMs', '<', end.getTime())
       .count()
       .get();
-    const byServer = await this.firestore
-      .collection(col)
-      .where('createdAt', '>=', start)
-      .where('createdAt', '<', end)
-      .count()
-      .get();
-    const a = byClient.data().count;
-    const b = byServer.data().count;
-    return { byClientMs: a, byServerCreatedAt: b, missingClientMs: Math.max(0, b - a) };
+    const serverDay = this.firestore.collection(col).where('createdAt', '>=', start).where('createdAt', '<', end);
+    const byServer = await serverDay.count().get();
+    const missingClientMsIds: string[] = [];
+    for await (const doc of this.page(serverDay, 'createdAt')) {
+      const v = doc.data.createdAtClientMs;
+      if (typeof v !== 'number' || !Number.isFinite(v)) missingClientMsIds.push(doc.id);
+    }
+    return {
+      byClientMs: byClient.data().count,
+      byServerCreatedAt: byServer.data().count,
+      missingClientMs: missingClientMsIds.length,
+      missingClientMsIds,
+    };
   }
 
   /** Receipts whose `voidedAt`, `editedAt` or server `createdAt` is after `since`, paged. */

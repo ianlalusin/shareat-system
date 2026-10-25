@@ -40,6 +40,7 @@ stock use and reports from them. It starts with 1 January 2027; older POS data i
    **change-time queries** since the last successful run on `voidedAt`, `editedAt` and server `createdAt`, so
    voids, in-place edits (v1) and offline syncs older than 7 days are caught (Q4). Calendar day is the key; for a
    v2 store the T-471 Z number is an attribute only (row 390).
+   The cross-check's missing-client-time count must be a real subset enumeration, not a count subtraction: see T-478 / DEF-775.
 3. **Identity and versions.** Key `UNIQUE(org_id, pos_store_id, firestore_doc_id, version)`; never receipt
    number or terminal seq (GLOSSARY: `receiptSeq` is not monotonic). `doc_hash` = `toStableJson` (etl-firestore)
    over a FIXED list of copied fields; housekeeping fields (`analyticsApplied*`, `reRingLinkedAt`, `editedAt` stamps,

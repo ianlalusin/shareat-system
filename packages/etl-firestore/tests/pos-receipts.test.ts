@@ -221,8 +221,8 @@ describe('paging', () => {
 });
 
 describe('cross-check by server createdAt', () => {
-  it('counts both ways and reports docs that have no createdAtClientMs', async () => {
-    const t = (n: number) => Timestamp.fromMillis(n);
+  const t = (n: number) => Timestamp.fromMillis(n);
+  it('counts both ways and names the docs that have no createdAtClientMs', async () => {
     const { fs } = fakeFirestore({
       [PATH]: [
         rec('a', DAY_START + 5, { createdAt: t(DAY_START + 5) }),
@@ -236,7 +236,65 @@ describe('cross-check by server createdAt', () => {
       byClientMs: 1,
       byServerCreatedAt: 3,
       missingClientMs: 2,
+      missingClientMsIds: ['b', 'c'],
     });
+  });
+  it('DEF-775: an offline receipt sold on D and uploaded on D+1 does not hide a missing one on D', async () => {
+    // A: client time D, server time D+1.  B: no client time, server time D.  Both counts are 1 for D.
+    const { fs } = fakeFirestore({
+      [PATH]: [
+        rec('A', DAY_START + 100, { createdAt: t(DAY_END + 100) }),
+        rec('B', undefined, { createdAt: t(DAY_START + 200) }),
+      ],
+    });
+    const r = new PosReceiptReader({ firestore: fs });
+    const out = await r.crossCheckDay(STORE, '2027-01-02');
+    expect(out.byClientMs).toBe(1);
+    expect(out.byServerCreatedAt).toBe(1);
+    expect(out.missingClientMs).toBe(1);
+    expect(out.missingClientMsIds).toEqual(['B']);
+  });
+  it('DEF-775: a receipt sold on D-1 and uploaded on D is not a false gap', async () => {
+    const { fs } = fakeFirestore({
+      [PATH]: [rec('late', DAY_START - 1000, { createdAt: t(DAY_START + 50) })],
+    });
+    const r = new PosReceiptReader({ firestore: fs });
+    const out = await r.crossCheckDay(STORE, '2027-01-02');
+    expect(out.byClientMs).toBe(0);
+    expect(out.byServerCreatedAt).toBe(1);
+    expect(out.missingClientMs).toBe(0);
+    expect(out.missingClientMsIds).toEqual([]);
+  });
+  it('DEF-775: createdAtClientMs present but not a number counts as missing', async () => {
+    const { fs } = fakeFirestore({
+      [PATH]: [
+        rec('str', undefined, { createdAt: t(DAY_START + 1), createdAtClientMs: String(DAY_START + 1) }),
+        rec('nul', undefined, { createdAt: t(DAY_START + 2), createdAtClientMs: null }),
+        rec('nan', undefined, { createdAt: t(DAY_START + 3), createdAtClientMs: Number.NaN }),
+        rec('ok', DAY_START + 4, { createdAt: t(DAY_START + 4) }),
+      ],
+    });
+    const r = new PosReceiptReader({ firestore: fs });
+    const out = await r.crossCheckDay(STORE, '2027-01-02');
+    expect(out.missingClientMs).toBe(3);
+    expect(out.missingClientMsIds).toEqual(['str', 'nul', 'nan']);
+  });
+  it('DEF-775: enumerates more than one page of server-day docs (1203)', async () => {
+    const docs: Doc[] = [];
+    const expectedMissing: string[] = [];
+    for (let i = 0; i < 1203; i++) {
+      const id = `r${String(i).padStart(5, '0')}`;
+      const missing = i % 3 === 0;
+      if (missing) expectedMissing.push(id);
+      docs.push(rec(id, missing ? undefined : DAY_START + i, { createdAt: t(DAY_START + Math.floor(i / 3)) }));
+    }
+    const { fs, calls } = fakeFirestore({ [PATH]: docs });
+    const r = new PosReceiptReader({ firestore: fs });
+    const out = await r.crossCheckDay(STORE, '2027-01-02');
+    expect(out.byServerCreatedAt).toBe(1203);
+    expect(out.missingClientMs).toBe(expectedMissing.length);
+    expect(out.missingClientMsIds).toEqual(expectedMissing);
+    expect(calls.filter((c) => c.op === 'get').length).toBe(3);
   });
 });
 
