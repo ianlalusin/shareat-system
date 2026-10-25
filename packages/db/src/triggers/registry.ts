@@ -1068,7 +1068,7 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
   // ---------------------------------------------------------------------------------------------
   // T-455 S1 (0215) — the customer lobby. The three forward-only triggers decide only from OLD/NEW and refuse
   // a rewrite of a closed row: history guards, ENABLE ALWAYS (R1; precedent item_code_counters_forward_only).
-  // lobby_discount_claims_cap counts OTHER rows: validator, origin.
+  // lobby_discount_claims_cap and lobby_entries_party_size_cap (T-479) count OTHER rows: validator, origin.
   // ---------------------------------------------------------------------------------------------
   lobby_entries_forward_only: {
     table: 'lobby_entries',
@@ -1097,5 +1097,12 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'validator',
     reason:
       'At most party_size pending-or-approved claims per lobby entry; decides from the entry row (locked FOR UPDATE) and the sibling claims, other rows current state (0215, T-455 S1).',
+  },
+  lobby_entries_party_size_cap: {
+    table: 'lobby_entries',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'A lobby entry party_size may not be lowered below its pending-or-approved discount claims (the other side of lobby_discount_claims_cap); counts the sibling claims, other rows current state, under the entry row lock the UPDATE already holds (0217, T-479, DEF-774).',
   },
 } as const;
