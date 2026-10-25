@@ -1366,6 +1366,13 @@
       "when": 1804563107084,
       "tag": "0214_t398_s4_derived_same_org_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 216,
+      "version": "7",
+      "when": 1804735907084,
+      "tag": "0216_pos_receipt_bridge",
+      "breakpoints": true
     }
   ]
 }

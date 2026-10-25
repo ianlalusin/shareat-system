@@ -1009,6 +1009,22 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'The tender master names an org’s own wallets and how its POS spells them.',
   },
+  pos_bridge_receipts: {
+    scope: 'org_column',
+    reason: 'An org’s own copied POS receipts (T-472); one franchisee must not read another’s sales.',
+  },
+  pos_bridge_receipt_lines: {
+    scope: 'org_column',
+    reason: 'Lines of an org’s own copied POS receipts; carries its own org_id, composite FK to its receipt (T-472).',
+  },
+  pos_bridge_receipt_tenders: {
+    scope: 'org_column',
+    reason: 'Payments of an org’s own copied POS receipts; carries its own org_id, composite FKs to its receipt and tender (T-472).',
+  },
+  pos_bridge_day_checks: {
+    scope: 'org_column',
+    reason: 'An org’s own per-store-day receipt-vs-feed check (T-472).',
+  },
   sales_day_pos_corrections: {
     scope: 'org_column',
     reason: 'A correcting posting for an org’s own sales day; org-scoped like the journal entry it names.',

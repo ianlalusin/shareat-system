@@ -1277,6 +1277,34 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'cites a feed is itself purged, so no kept row points at one. Append-only by trigger; the purge TRUNCATEs, ' +
       'which fires no row trigger. Purged AFTER sales_days and pos_usage_pulls (PURGE_ORDER_HINT).',
   },
+  pos_bridge_receipts: {
+    class: 'date_scoped',
+    reason:
+      'T-472 receipt bridge (bible row 379: clean slate, copied from 1 Jan 2027; older POS data is test data). Date-scoped on the Manila calendar day; the writer floors at 2027-01-01 anyway. Children cascade.',
+    dateColumn: 'pos_calendar_date',
+    keepFrom: '2027-01-01',
+  },
+  pos_bridge_receipt_lines: {
+    class: 'date_scoped',
+    reason:
+      'T-472 receipt bridge (bible row 379: clean slate, copied from 1 Jan 2027; older POS data is test data). Carries its own pos_calendar_date; ON DELETE CASCADE from its receipt, so purge order cannot block.',
+    dateColumn: 'pos_calendar_date',
+    keepFrom: '2027-01-01',
+  },
+  pos_bridge_receipt_tenders: {
+    class: 'date_scoped',
+    reason:
+      'T-472 receipt bridge (bible row 379: clean slate, copied from 1 Jan 2027; older POS data is test data). Carries its own pos_calendar_date; ON DELETE CASCADE from its receipt. Points at the kept tenders master.',
+    dateColumn: 'pos_calendar_date',
+    keepFrom: '2027-01-01',
+  },
+  pos_bridge_day_checks: {
+    class: 'date_scoped',
+    reason:
+      'T-472 receipt bridge (bible row 379: clean slate, copied from 1 Jan 2027; older POS data is test data). A per store-day check against the day feed; the same date column.',
+    dateColumn: 'pos_calendar_date',
+    keepFrom: '2027-01-01',
+  },
   sales_day_pos_corrections: {
     class: 'purge',
     reason:
