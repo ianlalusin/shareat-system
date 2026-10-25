@@ -47,6 +47,12 @@ export async function getLobbyStore(tx: Tx, orgId: string, storeId: string, posW
   return row;
 }
 
+/** T-455 S3: a store's id from its public code (unique per org). undefined when the code names no store of this org. */
+export async function getStoreIdByCode(tx: Tx, orgId: string, code: string): Promise<string | undefined> {
+  const [row] = await tx.select({ id: stores.id }).from(stores).where(and(eq(stores.orgId, orgId), eq(stores.code, code))).limit(1);
+  return row?.id;
+}
+
 export async function storeExists(tx: Tx, orgId: string, storeId: string): Promise<boolean> {
   const [row] = await tx.select({ id: stores.id }).from(stores).where(and(eq(stores.orgId, orgId), eq(stores.id, storeId))).limit(1);
   return row !== undefined;
