@@ -228,9 +228,11 @@ describe('/menu/requests - what each person sees', () => {
     expect(t).toContain('Wagyu Platter');
     for (const b of ['Approve', 'Mark duplicate', 'Reject']) expect(t, b).toContain(b);
     expect(t.indexOf('Samgyupsal Set'), 'the match is listed (the existing item AND the request carry the name)').not.toBe(t.lastIndexOf('Samgyupsal Set'));
-    const sel = /<select\b[^>]*\sname="categoryId"[^>]*>([\s\S]*?)<\/select>/.exec(html);
-    expect(sel, 'a category select on the approve form').not.toBeNull();
-    expect(sel![1]).toMatch(new RegExp(`<option[^>]*value="${w.c.categoryId}"[^>]*selected|<option[^>]*selected[^>]*value="${w.c.categoryId}"`));
+    // T-448 A3: the Request form (now in a FormModal, drawn first) also has a categoryId select, so look at every one.
+    const sels = [...html.matchAll(/<select\b[^>]*\sname="categoryId"[^>]*>([\s\S]*?)<\/select>/g)].map((m) => m[1]!);
+    expect(sels.length, 'a category select on the approve form').toBeGreaterThan(0);
+    const preselected = new RegExp(`<option[^>]*value="${w.c.categoryId}"[^>]*selected|<option[^>]*selected[^>]*value="${w.c.categoryId}"`);
+    expect(sels.some((x) => preselected.test(x)), 'the approve form pre-selects the category hint').toBe(true);
   });
 });
 

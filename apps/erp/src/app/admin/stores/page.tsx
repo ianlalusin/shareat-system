@@ -3,7 +3,7 @@ import { listStoresForAdmin } from './lib';
 import { createStoreAction } from './actions';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Button, FlashBanner, FormGrid, Field, Input, LinkRow, RowLink, Select , FormSection} from '@/components/ui';
+import { Badge, Button, FlashBanner, FormGrid, Field, Input, LinkRow, RowLink, Select , FormSection, FormModal} from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { CheckedForm } from '@/components/forms';
 import { ADMIN_STORE_CREATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
@@ -36,87 +36,20 @@ export default async function StoresPage({
 
   return (
     <Page density="table">
-      <div>
-        <h1 className="text-2xl font-semibold">Stores</h1>
-        <PageDescription>
-          Opening a branch creates its default room and grants every admin access, in one
-          transaction — so a half-made store cannot exist. What is left is the business half.
-        </PageDescription>
-      </div>
-
-      <FlashBanner flash={sp} />
-
-      <section className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-        <table className="w-full text-sm">
-          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500 dark:bg-neutral-900 dark:text-neutral-400">
-            <tr>
-              <th className="p-3">Code</th>
-              <th className="p-3">Name</th>
-              <th className="p-3">Cadence</th>
-              <th className="p-3 text-right">Rooms</th>
-              <th className="p-3">Status</th>
-              <th className="p-3">Opening</th>
-            </tr>
-          </thead>
-          <tbody>
-            {stores.map((s) => (
-              <LinkRow
-                key={s.id}
-                // Ian 2026-10-14 (T-404): the WHOLE row opens the store — the T-258 stretched-link technique.
-                className="border-t border-neutral-200 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900"
-              >
-                <td className="p-3 font-medium">
-                  <RowLink
-                    href={`/admin/stores/${s.id}`}
-                    aria-label={`Open store ${s.code} — ${s.name}`}
-                  >
-                    {s.code}
-                  </RowLink>
-                </td>
-                <td className="p-3">{s.name}</td>
-                <td className="p-3">
-                  {s.remittanceCadence}
-                  {s.unremittedCeiling ? ` · ceiling ${s.unremittedCeiling}` : ''}
-                </td>
-                <td className="p-3 text-right tabular-nums">{s.roomCount}</td>
-                <td className="p-3">
-                  <Badge status={s.isActive ? 'active' : 'inactive'} />
-                </td>
-                {/* T-346 S1 (DEF-428) — Amendment R3.3: three states via the shared `isPreOpening`
-                    (R1 item 11 originally specified two; superseded). */}
-                <td className="p-3">
-                  {s.openingDate === null ? (
-                    <span className="text-neutral-500">Not yet open</span>
-                  ) : s.preOpening ? (
-                    <span className="text-warning-ink">Opens {s.openingDate}</span>
-                  ) : (
-                    <span className="text-success">Opened {s.openingDate}</span>
-                  )}
-                </td>
-              </LinkRow>
-            ))}
-            {stores.length === 0 && (
-              <tr>
-                <td className="p-4 text-neutral-500" colSpan={6}>
-                  No stores yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </section>
-
-      {/* Ian 2026-10-14 (T-404): the create form is hidden until asked for — only the button shows. */}
-      {/* The summary is styled `secondary` so the form's own "Open branch" stays the one primary (row 311). */}
-      {/* A refused create reopens it, so the person sees the form the error is about. */}
-      <details className="space-y-3" open={Boolean(sp.error)}>
-        <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-[12px] border border-surface-border bg-surface px-4 py-2.5 text-sm font-semibold text-ink hover:bg-canvas">
-          Open a branch
-        </summary>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Stores</h1>
+          <PageDescription>
+            Opening a branch creates its default room and grants every admin access, in one
+            transaction — so a half-made store cannot exist. What is left is the business half.
+          </PageDescription>
+        </div>
+        {/* T-448: the create form lives in a dialog; the header button replaces the old "Open a branch" disclosure. */}
+        <FormModal trigger="+ Add store" title="Open a branch" size="lg" defaultOpen={Boolean(sp.error)}>
         <CheckedForm
           rules={ADMIN_STORE_CREATE_RULES}
           action={createStoreAction}
-          className="space-y-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800"
+          className="space-y-3 text-sm"
         >
           <>
             <FormSection title="Branch identity">
@@ -192,7 +125,70 @@ export default async function StoresPage({
             </Button>
           </div>
         </CheckedForm>
-      </details>
+        </FormModal>
+      </div>
+
+      <FlashBanner flash={sp} />
+
+      <section className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
+        <table className="w-full text-sm">
+          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500 dark:bg-neutral-900 dark:text-neutral-400">
+            <tr>
+              <th className="p-3">Code</th>
+              <th className="p-3">Name</th>
+              <th className="p-3">Cadence</th>
+              <th className="p-3 text-right">Rooms</th>
+              <th className="p-3">Status</th>
+              <th className="p-3">Opening</th>
+            </tr>
+          </thead>
+          <tbody>
+            {stores.map((s) => (
+              <LinkRow
+                key={s.id}
+                // Ian 2026-10-14 (T-404): the WHOLE row opens the store — the T-258 stretched-link technique.
+                className="border-t border-neutral-200 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900"
+              >
+                <td className="p-3 font-medium">
+                  <RowLink
+                    href={`/admin/stores/${s.id}`}
+                    aria-label={`Open store ${s.code} — ${s.name}`}
+                  >
+                    {s.code}
+                  </RowLink>
+                </td>
+                <td className="p-3">{s.name}</td>
+                <td className="p-3">
+                  {s.remittanceCadence}
+                  {s.unremittedCeiling ? ` · ceiling ${s.unremittedCeiling}` : ''}
+                </td>
+                <td className="p-3 text-right tabular-nums">{s.roomCount}</td>
+                <td className="p-3">
+                  <Badge status={s.isActive ? 'active' : 'inactive'} />
+                </td>
+                {/* T-346 S1 (DEF-428) — Amendment R3.3: three states via the shared `isPreOpening`
+                    (R1 item 11 originally specified two; superseded). */}
+                <td className="p-3">
+                  {s.openingDate === null ? (
+                    <span className="text-neutral-500">Not yet open</span>
+                  ) : s.preOpening ? (
+                    <span className="text-warning-ink">Opens {s.openingDate}</span>
+                  ) : (
+                    <span className="text-success">Opened {s.openingDate}</span>
+                  )}
+                </td>
+              </LinkRow>
+            ))}
+            {stores.length === 0 && (
+              <tr>
+                <td className="p-4 text-neutral-500" colSpan={6}>
+                  No stores yet.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </section>
     </Page>
   );
 }

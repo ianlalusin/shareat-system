@@ -7,7 +7,7 @@ import { StoreNotAvailable } from '../../../lib/page-access';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, FlashBanner, LinkRow, RowLink, Select } from '@/components/ui';
+import { Badge, FlashBanner, FormModal, LinkRow, RowLink, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Trade orders — Shareat System' };
@@ -69,6 +69,26 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
         </label>
       </FilterRow>
 
+      <div className="flex justify-end">
+        <FormModal
+          trigger="+ New trade order"
+          title="New trade order"
+          description={<>Saved as a <strong>draft</strong> — nothing posts until it is dispatched from the order&rsquo;s page. A wholesale line needs an item the selling store sells wholesale (set on the item&rsquo;s page); an internal transfer needs no such flag.</>}
+          size="lg"
+        >
+          <NewOrderForm
+            action={createOrderAction}
+            stores={stores}
+            storeId={storeId}
+            customers={form.customers}
+            items={form.items}
+            quotes={form.quotes}
+            branchPrices={form.branchPrices}
+            today={today()}
+          />
+        </FormModal>
+      </div>
+
       {/*
         ⭐ BOTH directions in one list, deliberately — every order this store is on, as the seller
         or as the branch a transfer is going to. Same rule as the branch-orders screen: two lists
@@ -76,7 +96,7 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
       */}
       {orders.length === 0 ? (
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          No trade orders at this store yet. Draft one below.
+          No trade orders at this store yet. Draft one with the button above.
         </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
@@ -120,25 +140,6 @@ export default async function TradeOrdersPage({ searchParams }: { searchParams: 
           </table>
         </div>
       )}
-
-      <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="font-medium">New trade order</h2>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          Saved as a <strong>draft</strong> — nothing posts until it is dispatched from the
-          order&rsquo;s page. A wholesale line needs an item the selling store sells wholesale
-          (set on the item&rsquo;s page); an internal transfer needs no such flag.
-        </p>
-        <NewOrderForm
-          action={createOrderAction}
-          stores={stores}
-          storeId={storeId}
-          customers={form.customers}
-          items={form.items}
-          quotes={form.quotes}
-          branchPrices={form.branchPrices}
-          today={today()}
-        />
-      </section>
     </Page>
   );
 }

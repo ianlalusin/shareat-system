@@ -1,3 +1,4 @@
+DisclosureCard
 GET
 POST
 __resetChatPresenceTracker

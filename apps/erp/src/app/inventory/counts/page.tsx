@@ -3,7 +3,7 @@ import { countsRegister, listStores } from './lib';
 import { openCountSessionAction } from './actions';
 import { requireSession } from '../../../lib/session';
 import { Page } from '@/components/shell/Page';
-import { Badge, Button, FlashBanner, FormGrid, Field, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
+import { Badge, Button, FlashBanner, FormGrid, FormModal, Field, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { INVENTORY_COUNT_OPEN_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FilterRow } from '@/components/FilterRow';
@@ -89,7 +89,9 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
         {locations.length === 0 ? (
           <p className="mt-3 text-sm text-warning-ink">This store has no active rooms yet.</p>
         ) : (
-          <CheckedForm rules={INVENTORY_COUNT_OPEN_RULES} action={openCountSessionAction} className="mt-3 space-y-3">
+          <div className="mt-3">
+          <FormModal trigger="+ Open count" title="Open a count" size="md">
+          <CheckedForm rules={INVENTORY_COUNT_OPEN_RULES} action={openCountSessionAction} className="space-y-3">
             <input type="hidden" name="storeId" value={storeId} />
             <fieldset className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {locations.map((l) => (
@@ -116,6 +118,8 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
               Open count
             </Button>
           </CheckedForm>
+          </FormModal>
+          </div>
         )}
       </section>
 

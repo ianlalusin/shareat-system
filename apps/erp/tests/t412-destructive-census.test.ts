@@ -286,7 +286,7 @@ describe('every file: ConfirmDestructive count by tier, and what is left bare (V
       if (r.startsWith('components/ui/')) continue;
       const src = stripComments(readFileSync(abs, 'utf8'));
       const literals = src.split(String.fromCharCode(10)).filter((ln) => /['"]danger['"]/.test(ln) && !/tone/i.test(ln)).length;
-      const counted = src.split(String.fromCharCode(10)).filter((ln) => /['"]danger['"]/.test(ln) && !/tone/i.test(ln) && /variant=/.test(ln)).length;
+      const counted = src.split(String.fromCharCode(10)).filter((ln) => /['"]danger['"]/.test(ln) && !/tone/i.test(ln) && /variant=/i.test(ln)).length; // T-448 A3: /i so FormModal's triggerVariant="danger" counts as a variant line
       if (literals !== counted) bad.push(`${r}: ${literals} danger literals, ${counted} on a variant= line`);
     }
     expect(bad).toEqual([]);

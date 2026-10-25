@@ -16,7 +16,7 @@ import {
   MENU_VARIANT_RULES,
   nativeAttrs,
 } from '@shareat/domain/field-rules';
-import { Badge, Banner, Button, Checkbox, Field, FlashBanner, FormGrid, Input, Select, Table, Td, Textarea, Th } from '@/components/ui';
+import { Badge, Banner, Button, Checkbox, Field, FlashBanner, FormGrid, FormModal, Input, Select, Table, Td, Textarea, Th } from '@/components/ui';
 import {
   addOptionValueAction,
   addVariantAction,
@@ -177,6 +177,7 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
                 </Table>
               )}
               {canRule && v.status === 'active' && (
+                <FormModal trigger="Set stock rule" title={`Set stock rule — ${v.label ?? 'Default'}`} size="md">
                 <CheckedForm rules={MENU_DEPLETION_RULES} action={setDepletionRuleAction} className="space-y-3">
                   <input type="hidden" name="menuItemId" value={item.id} />
                   <input type="hidden" name="variantId" value={v.id} />
@@ -219,6 +220,7 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
                     Save
                   </Button>
                 </CheckedForm>
+                </FormModal>
               )}
             </div>
           );
@@ -434,9 +436,9 @@ function OptionGroups({ data, canManage, sp, actorId }: { data: ItemPageData; ca
               Save
             </Button>
           </form>
+          <FormModal trigger="+ New option group" title="Add an option group" size="md">
           <CheckedForm rules={MENU_OPTION_GROUP_RULES} action={createOptionGroupAction} className="space-y-3">
             <input type="hidden" name="menuItemId" value={itemId} />
-            <h3 className="font-medium">Add option group</h3>
             <FormGrid>
               <Field label="Group name (for example Flavour)" className="text-sm" rule={MENU_OPTION_GROUP_RULES.name}>
                 <Input {...nativeAttrs(MENU_OPTION_GROUP_RULES.name)} className="w-full" />
@@ -461,6 +463,7 @@ function OptionGroups({ data, canManage, sp, actorId }: { data: ItemPageData; ca
               Save
             </Button>
           </CheckedForm>
+          </FormModal>
         </div>
       )}
     </section>

@@ -33,7 +33,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import { CertificateView } from './CertificateView';
-import { Badge, Button, Field, FlashBanner, FormGrid, Input, Select, Textarea , FormSection} from '@/components/ui';
+import { Badge, Button, Field, FlashBanner, FormGrid, Input, Select, Textarea , FormSection, FormModal} from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { ACTION_LINK } from '@/components/action-link';
 
@@ -154,7 +154,9 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
             You have no open job on record, so there is nothing to request leave against.
           </p>
         ) : (
-            <CheckedForm rules={ATTENDANCE_LEAVE_REQUEST_RULES} action={requestLeaveAction} className="space-y-3 rounded border border-surface-border p-4">
+          <div className="flex justify-end">
+            <FormModal trigger="Request leave" title="Request leave" size="lg">
+            <CheckedForm rules={ATTENDANCE_LEAVE_REQUEST_RULES} action={requestLeaveAction} className="space-y-3">
               <>
                 <FormSection title="Leave request">
                   <FormGrid layout="fields">
@@ -224,6 +226,8 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
                 Request leave
               </Button>
             </CheckedForm>
+            </FormModal>
+          </div>
         )}
 
         {mine.requests.length > 0 && (
@@ -371,8 +375,9 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
                 )}
               </div>
 
-              <CheckedForm rules={ATTENDANCE_LEAVE_RECORD_RULES} action={recordLeaveAction} className="space-y-3 rounded border border-surface-border p-4">
-                <h3 className="font-medium">Record an absence that already happened</h3>
+              <div className="flex justify-end">
+              <FormModal trigger="Record leave" title="Record an absence that already happened" size="lg">
+              <CheckedForm rules={ATTENDANCE_LEAVE_RECORD_RULES} action={recordLeaveAction} className="space-y-3">
                 <FormGrid>
                   <Field label="Person">
                     <Select name="employmentId" className="mt-1 w-full">
@@ -417,6 +422,8 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
                   Record absence
                 </Button>
               </CheckedForm>
+              </FormModal>
+              </div>
             </>
           )}
         </section>

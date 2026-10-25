@@ -5,7 +5,7 @@ import { getCountSessionDetail, type SheetLine } from '../lib';
 import { advanceCountAction, cancelCountAction, commitCountAction, recordCountAction } from '../actions';
 import { requireSession } from '../../../../lib/session';
 import { Page } from '@/components/shell/Page';
-import { Button, FlashBanner, FormGrid, Field, Input, Select } from '@/components/ui';
+import { Button, FlashBanner, FormGrid, FormModal, Field, Input, Select } from '@/components/ui';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { INVENTORY_COUNT_LINE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -190,7 +190,9 @@ export default async function CountSessionPage({
             Found something the ledger has no record of in this room? Add it — it will still show its
             true count against a ledger balance of zero, and post as counted LONG at commit.
           </p>
-          <CheckedForm rules={INVENTORY_COUNT_LINE_RULES} action={recordCountAction} className="mt-3 space-y-3">
+          <div className="mt-3">
+          <FormModal trigger="+ Add item not on sheet" title="Add an item that is not on the sheet" size="md">
+          <CheckedForm rules={INVENTORY_COUNT_LINE_RULES} action={recordCountAction} className="space-y-3">
             <input type="hidden" name="sessionId" value={detail.id} />
             <FormGrid>
               <Field label="Item" rule={INVENTORY_COUNT_LINE_RULES.itemId}>
@@ -222,6 +224,8 @@ export default async function CountSessionPage({
               Save
             </Button>
           </CheckedForm>
+          </FormModal>
+          </div>
         </section>
       )}
 

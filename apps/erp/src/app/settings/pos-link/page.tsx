@@ -11,7 +11,7 @@ import { canUnlink, posLinkRows, posStoreOptions, storeTenders, tenderMapping, t
 import { Page } from '@/components/shell/Page';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { SETTINGS_POS_LINK_RULES, SETTINGS_POS_UNLINK_RULES, SETTINGS_TENDER_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select, Textarea } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, FormModal, Input, Select, Textarea } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
 
@@ -195,7 +195,9 @@ function StoreCard({
             </FormGrid>
           </EditableRecord>
         ) : (
-          // An unlinked store's link form is an add form: it ends in Save (A0 L4).
+          // An unlinked store's link form is an add form: it ends in Save (A0 L4). T-448: it opens in a dialog.
+          <div>
+          <FormModal trigger="Link to POS" title={`Link ${row.storeName} to POS`} size="md">
           <CheckedForm rules={SETTINGS_POS_LINK_RULES} action={linkStoreToPosAction} className="space-y-3">
             <input type="hidden" name="storeId" value={row.storeId} />
             <input type="hidden" name="storeName" value={row.storeName} />
@@ -260,6 +262,8 @@ function StoreCard({
               Save
             </Button>
           </CheckedForm>
+          </FormModal>
+          </div>
         )}
       </div>
 
@@ -346,7 +350,42 @@ function TendersSection({
   const mapping = tenderMapping(t.methods, t.tenders, t.accounts);
   return (
     <div className="space-y-3 border-t border-neutral-200 pt-3 text-sm dark:border-neutral-800">
-      <h3 className="font-medium">Tenders</h3>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="font-medium">Tenders</h3>
+        <FormModal trigger="+ Add tender" title={`Add a tender — ${storeName}`} size="md">
+        <CheckedForm rules={SETTINGS_TENDER_RULES} action={createTenderAction} autoComplete="off" className="space-y-3">
+          <input type="hidden" name="storeId" value={storeId} />
+          <FormGrid>
+            <Field label="Name" rule={SETTINGS_TENDER_RULES.name}>
+              <Input {...nativeAttrs(SETTINGS_TENDER_RULES.name)} placeholder="e.g. GCash" autoComplete="off" className="mt-1 w-full" />
+            </Field>
+            <Field label="Kind" rule={SETTINGS_TENDER_RULES.kind}>
+              <Select {...nativeAttrs(SETTINGS_TENDER_RULES.kind)} defaultValue="" className="mt-1 w-full">
+                <option value="">Choose cash or wallet</option>
+                <option value="cash">Cash</option>
+                <option value="wallet">Wallet</option>
+              </Select>
+            </Field>
+            <Field label="Money account (wallets only)" hint={ACCOUNT_HINT}>
+              <Select name="moneyAccountId" defaultValue="" className="mt-1 w-full">
+                <option value="">None</option>
+                {t.accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="POS name" hint={POS_NAME_HINT}>
+              <Input name="posV1Alias" autoComplete="off" className="mt-1 w-full" />
+            </Field>
+          </FormGrid>
+          <Button type="submit" variant="secondary">
+            Save
+          </Button>
+        </CheckedForm>
+        </FormModal>
+      </div>
 
       {t.accounts.length === 0 && (
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -426,40 +465,6 @@ function TendersSection({
         </details>
       )}
 
-      <div className="space-y-3 rounded border border-neutral-200 p-3 dark:border-neutral-800">
-        <h4 className="font-medium">Add a tender</h4>
-        <CheckedForm rules={SETTINGS_TENDER_RULES} action={createTenderAction} autoComplete="off" className="space-y-3">
-          <input type="hidden" name="storeId" value={storeId} />
-          <FormGrid>
-            <Field label="Name" rule={SETTINGS_TENDER_RULES.name}>
-              <Input {...nativeAttrs(SETTINGS_TENDER_RULES.name)} placeholder="e.g. GCash" autoComplete="off" className="mt-1 w-full" />
-            </Field>
-            <Field label="Kind" rule={SETTINGS_TENDER_RULES.kind}>
-              <Select {...nativeAttrs(SETTINGS_TENDER_RULES.kind)} defaultValue="" className="mt-1 w-full">
-                <option value="">Choose cash or wallet</option>
-                <option value="cash">Cash</option>
-                <option value="wallet">Wallet</option>
-              </Select>
-            </Field>
-            <Field label="Money account (wallets only)" hint={ACCOUNT_HINT}>
-              <Select name="moneyAccountId" defaultValue="" className="mt-1 w-full">
-                <option value="">None</option>
-                {t.accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="POS name" hint={POS_NAME_HINT}>
-              <Input name="posV1Alias" autoComplete="off" className="mt-1 w-full" />
-            </Field>
-          </FormGrid>
-          <Button type="submit" variant="secondary">
-            Save
-          </Button>
-        </CheckedForm>
-      </div>
     </div>
   );
 }

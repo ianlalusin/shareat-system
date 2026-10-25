@@ -6,7 +6,7 @@ import { requireSession } from '../../../lib/session';
 import { upsertPosItemMapAction, decideMapRequestAction } from './actions';
 import { listStores, posMapScreenData, withOrgPrincipal } from './lib';
 import { Page } from '@/components/shell/Page';
-import { Button, Checkbox, FlashBanner, FormGrid, Field, Input, Select , FormSection} from '@/components/ui';
+import { Button, Checkbox, FlashBanner, FormGrid, Field, Input, Select , FormSection, FormModal} from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -104,9 +104,9 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
       )}
 
       {canEditMap && (
-      <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="text-sm font-medium">New / edit mapping</h2>
-          <CheckedForm rules={INVENTORY_POS_MAP_RULES} action={upsertPosItemMapAction} className="mt-3 space-y-3">
+      <div className="flex justify-end">
+        <FormModal trigger="+ Map POS item" title="New / edit mapping" size="lg">
+          <CheckedForm rules={INVENTORY_POS_MAP_RULES} action={upsertPosItemMapAction} className="space-y-3">
             <input type="hidden" name="storeId" value={storeId} />
             <>
               <FormSection title="POS item">
@@ -187,7 +187,8 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
               Save
             </Button>
           </CheckedForm>
-      </section>
+        </FormModal>
+      </div>
       )}
 
       <section>

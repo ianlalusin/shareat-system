@@ -13,7 +13,7 @@ import { CATEGORY_LABEL, STATUS_LABEL, getDetail, peso, thisPeriod } from '../li
 import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Banner, Button, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, FlashBanner, Input, Select, FormModal } from '@/components/ui';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import {
   PREPAID_MONTH_REVERSE_RULES,
@@ -118,6 +118,7 @@ export default async function PrepaidItemPage({
               </>
             )}
           </div>
+          <FormModal trigger="Confirm term" title="Confirm the term" size="md">
           <CheckedForm rules={PREPAID_TERM_RULES} action={confirmTermAction} className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="prepaidItemId" value={item.id} />
             <Field label="Starts" rule={PREPAID_TERM_RULES.coverageStartDate} tone="warning">
@@ -139,6 +140,7 @@ export default async function PrepaidItemPage({
             </Field>
             <Button type="submit" variant="primary">Confirm term</Button>
           </CheckedForm>
+          </FormModal>
         </section>
         </Banner>
       )}
@@ -233,14 +235,15 @@ export default async function PrepaidItemPage({
 
       {/* ── Early termination ────────────────────────────────────────────────────────── */}
       {active && compare(item.remaining, ZERO) > 0 && (
-        <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-          <div>
-            <h2 className="font-medium">End it early</h2>
-            <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              Whatever is left is recognised now. If some money came back, say how much — a refund
-              is cash returning, not income.
-            </p>
-          </div>
+        <div className="flex justify-end">
+          <FormModal
+            trigger="Write off"
+            triggerVariant="danger"
+            title="End it early"
+            size="md"
+            description="Whatever is left is recognised now. If some money came back, say how much — a refund is cash returning, not income."
+            defaultOpen={sp.reason !== undefined || sp.refundAmount !== undefined || sp.writtenOffOn !== undefined}
+          >
           <CheckedForm rules={PREPAID_WRITE_OFF_RULES} action={writeOffAction} className="space-y-4">
             <input type="hidden" name="prepaidItemId" value={item.id} />
             <div className="grid gap-4 sm:grid-cols-2">
@@ -293,7 +296,8 @@ export default async function PrepaidItemPage({
               consequence="Writes off what is left of this prepaid item. An administrator must approve with their own PIN."
             />
           </CheckedForm>
-        </section>
+          </FormModal>
+        </div>
       )}
 
       {item.status === 'written_off' && (

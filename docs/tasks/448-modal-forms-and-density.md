@@ -86,3 +86,38 @@ Exclusions: the dashboard (`.erp-page` holding `[aria-label="Right now"]`) and a
 `[data-staff-card]`. The inline-panel rule also skips button, input, select, textarea, a, img and anything
 inside td/th, so chips and row bits keep their size. Radio, checkbox and file inputs keep their own radius.
 Not touched: page.tsx, components/dashboard, app/staff, components/upload, NewDeliveryForm.tsx.
+
+## Amendment A3 — the inline-form sweep (Ian, 2026-10-25: "Sort the 52 files into groups, write the slice plan in plan mode, then run it on Sonnet builders in a fresh worktree.")
+
+Census on main bd7cfd0: 129 `<CheckedForm>` in 77 files sit outside any FormModal/EditableRecord, plus 102 literal
+`<form>`s. Every one was read and sorted:
+
+| Class | Count | Treatment |
+|---|---|---|
+| Add/record/settle/pay form, 2+ inputs, drawn inline | 44 | `FormModal` behind a button |
+| Client form component its page renders unwrapped | 8 | wrap it at the parent page |
+| Inline edit of one stored setting (settings/usage-tolerance org tolerance) | 1 | **stays inline**: as an `EditableRecord` it needs a typed-refill slot (t389 keep-typing guard), which this sweep does not add |
+| Row action: a button, or a button + one reason/amount/select | 68 | **stays inline** — a modal adds a click for nothing |
+| The route exists to hold the form (/new, /hire, /setup, separations) | 7 | stays |
+| Literal `<form>`: GET filters, sign-in, one-button row actions | 102 | stays |
+
+Rules (Contract 1–6 above still apply):
+- Trigger label = the action in words ("+ Add customer", "Record payment"), so A1's `actionIconFor` draws the icon.
+  Page-level adds sit in the page header's action slot; per-record actions in the section header where the form was.
+- Per-row repeated forms (menu prices per channel, stock rule per variant, POS link per unlinked store): one
+  trigger per row; the modal title names the row.
+- `defaultOpen` only where a refill exists today: menu/requests (`typedFor(sp, ITEM_REQUEST)`). No other add form
+  in the sweep has a refill; a refused server save closes the modal and shows the flash banner, as on #50's pages.
+  Adding refills is out of scope.
+- A FormModal never sits inside another `<form>`.
+- `size="lg"` for line grids or 8+ fields; `md` otherwise.
+
+Slices (disjoint files): S1 money out (owners/[id] + SettleForm, loans, loans/[id], liabilities/[id], cash-requests,
+cash-requests/[id]) · S2 AR/AP/treasury (customers, customers/[customerId] + AutoAllocateCollectionForm,
+price-lists/[id], ap/invoices/[id], ap/suppliers/[id] + AutoAllocatePaymentForm, channel-settlements +
+SettlementForm, money-transfers + RecordTransferForm + SettleBetweenStoresForm, remittance, service-charge,
+prepaid/[id]) · S3 inventory/commissary/trade (commissary/orders, commissary/orders/[id], commissary/catalogue,
+trade/orders + NewOrderForm, inventory/transfers + NewTransferForm, production, pos-map, counts, counts/[id]) ·
+S4 people/settings (attendance/leave, settings/attendance, admin/stores, settings/pos-link,
+settings/usage-tolerance item tolerance) · S5 menu/one-offs (menu/requests, menu/prices, menu/items/[id], items, wastage,
+statutory-discounts, cutover/opening). Branch `t448-inline-form-sweep`, worktree `wt-t448-sweep`.

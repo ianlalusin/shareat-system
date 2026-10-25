@@ -24,7 +24,7 @@ import {
 import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Button, FlashBanner, FormModal, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Cash request — Shareat System' };
@@ -163,36 +163,38 @@ export default async function CashRequestPage({
               {holder?.displayName ?? 'the holder'}.
             </p>
           </div>
-          <CheckedForm rules={CASH_REQUEST_RELEASE_RULES} action={releaseAction} className="space-y-4">
-            <input type="hidden" name="requestId" value={req.id} />
-            <div className="grid gap-4 sm:grid-cols-3">
-              <Field label="Amount" rule={CASH_REQUEST_RELEASE_RULES.amount}>
-                <input
-                  {...nativeAttrs(CASH_REQUEST_RELEASE_RULES.amount)}
-                  defaultValue={req.approvedAmount ?? ''}
-                  className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink"
-                />
-              </Field>
-              <Field label="From" hint="Balances shown are derived from the ledger." rule={CASH_REQUEST_RELEASE_RULES.fromMoneyAccountId}>
-                <Select {...nativeAttrs(CASH_REQUEST_RELEASE_RULES.fromMoneyAccountId)} defaultValue="" className="w-full">
-                  <option value="" disabled>
-                    Choose…
-                  </option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} — {peso(a.balance)}
+          <FormModal trigger="Hand over cash" title="Hand the cash over" size="md">
+            <CheckedForm rules={CASH_REQUEST_RELEASE_RULES} action={releaseAction} className="space-y-4">
+              <input type="hidden" name="requestId" value={req.id} />
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Field label="Amount" rule={CASH_REQUEST_RELEASE_RULES.amount}>
+                  <input
+                    {...nativeAttrs(CASH_REQUEST_RELEASE_RULES.amount)}
+                    defaultValue={req.approvedAmount ?? ''}
+                    className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink"
+                  />
+                </Field>
+                <Field label="From" hint="Balances shown are derived from the ledger." rule={CASH_REQUEST_RELEASE_RULES.fromMoneyAccountId}>
+                  <Select {...nativeAttrs(CASH_REQUEST_RELEASE_RULES.fromMoneyAccountId)} defaultValue="" className="w-full">
+                    <option value="" disabled>
+                      Choose…
                     </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="On" rule={CASH_REQUEST_RELEASE_RULES.on}>
-                <Input {...nativeAttrs(CASH_REQUEST_RELEASE_RULES.on)} type="date" defaultValue={today()} className="w-full" />
-              </Field>
-            </div>
-            <Button type="submit" variant="primary">
-              Release
-            </Button>
-          </CheckedForm>
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} — {peso(a.balance)}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="On" rule={CASH_REQUEST_RELEASE_RULES.on}>
+                  <Input {...nativeAttrs(CASH_REQUEST_RELEASE_RULES.on)} type="date" defaultValue={today()} className="w-full" />
+                </Field>
+              </div>
+              <Button type="submit" variant="primary">
+                Release
+              </Button>
+            </CheckedForm>
+          </FormModal>
         </section>
       )}
 
@@ -211,40 +213,42 @@ export default async function CashRequestPage({
               <strong>back</strong>, and what does not.
             </p>
           </div>
-          <CheckedForm rules={CASH_REQUEST_SETTLE_RULES} action={settleAction} className="space-y-4">
-            <input type="hidden" name="requestId" value={req.id} />
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Returned" hint="Cash physically handed back. Leave blank if none." rule={CASH_REQUEST_SETTLE_RULES.returnedAmount}>
-                <input {...nativeAttrs(CASH_REQUEST_SETTLE_RULES.returnedAmount)} className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink" />
-              </Field>
-              <Field label="Into" hint="Where the returned cash landed.">
-                <Select name="toMoneyAccountId" defaultValue="" className="w-full">
-                  <option value="">—</option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} — {peso(a.balance)}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field
-                label="Short"
-                hint="Unaccounted-for. Becomes a receivable from the holder, not a write-off."
-                rule={CASH_REQUEST_SETTLE_RULES.shortAmount}
-              >
-                <input {...nativeAttrs(CASH_REQUEST_SETTLE_RULES.shortAmount)} className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink" />
-              </Field>
-              <Field label="Short because" hint="Required if anything is short.">
-                <Input name="shortReason" className="w-full" />
-              </Field>
-              <Field label="On" rule={CASH_REQUEST_SETTLE_RULES.on}>
-                <Input {...nativeAttrs(CASH_REQUEST_SETTLE_RULES.on)} type="date" defaultValue={today()} className="w-full" />
-              </Field>
-            </div>
-            <Button type="submit" variant="primary">
-              Record
-            </Button>
-          </CheckedForm>
+          <FormModal trigger="Close the float" title="Close the float" size="lg">
+            <CheckedForm rules={CASH_REQUEST_SETTLE_RULES} action={settleAction} className="space-y-4">
+              <input type="hidden" name="requestId" value={req.id} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Returned" hint="Cash physically handed back. Leave blank if none." rule={CASH_REQUEST_SETTLE_RULES.returnedAmount}>
+                  <input {...nativeAttrs(CASH_REQUEST_SETTLE_RULES.returnedAmount)} className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink" />
+                </Field>
+                <Field label="Into" hint="Where the returned cash landed.">
+                  <Select name="toMoneyAccountId" defaultValue="" className="w-full">
+                    <option value="">—</option>
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} — {peso(a.balance)}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field
+                  label="Short"
+                  hint="Unaccounted-for. Becomes a receivable from the holder, not a write-off."
+                  rule={CASH_REQUEST_SETTLE_RULES.shortAmount}
+                >
+                  <input {...nativeAttrs(CASH_REQUEST_SETTLE_RULES.shortAmount)} className="w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm text-ink" />
+                </Field>
+                <Field label="Short because" hint="Required if anything is short.">
+                  <Input name="shortReason" className="w-full" />
+                </Field>
+                <Field label="On" rule={CASH_REQUEST_SETTLE_RULES.on}>
+                  <Input {...nativeAttrs(CASH_REQUEST_SETTLE_RULES.on)} type="date" defaultValue={today()} className="w-full" />
+                </Field>
+              </div>
+              <Button type="submit" variant="primary">
+                Record
+              </Button>
+            </CheckedForm>
+          </FormModal>
         </section>
       )}
 

@@ -6,7 +6,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { SETTINGS_ATTENDANCE_POLICY_RULES, SETTINGS_LEAVE_CAP_RULES, SETTINGS_LEAVE_KIND_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Button, Checkbox, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Button, Checkbox, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { ATTENDANCE_POLICY } from './typed-forms';
@@ -270,7 +270,9 @@ export default async function AttendanceSettingsPage({
               ))}
             </ul>
           )}
-          <CheckedForm rules={SETTINGS_LEAVE_CAP_RULES} action={saveLeaveCapAction} className="space-y-3 rounded border border-surface-border p-4">
+          <div className="flex justify-end">
+          <FormModal trigger="+ Set leave limit" title="Set a leave limit" size="md">
+          <CheckedForm rules={SETTINGS_LEAVE_CAP_RULES} action={saveLeaveCapAction} className="space-y-3">
             <input type="hidden" name="storeId" value={storeId} />
             <FormGrid>
               <Field label="Kind of leave">
@@ -311,6 +313,8 @@ export default async function AttendanceSettingsPage({
               Save leave limit
             </Button>
           </CheckedForm>
+          </FormModal>
+          </div>
 
           <h3 className="font-medium">Kinds of leave</h3>
           <ul className="space-y-2">
@@ -337,9 +341,10 @@ export default async function AttendanceSettingsPage({
               </li>
             ))}
           </ul>
-          <CheckedForm rules={SETTINGS_LEAVE_KIND_RULES} action={addLeaveTypeAction} className="space-y-3 rounded border border-surface-border p-4">
+          <div className="flex justify-end">
+          <FormModal trigger="+ Add kind of leave" title="Add a kind of leave" description="Administrators only." size="md">
+          <CheckedForm rules={SETTINGS_LEAVE_KIND_RULES} action={addLeaveTypeAction} className="space-y-3">
             <input type="hidden" name="storeId" value={storeId} />
-            <h4 className="text-sm font-medium">Add a kind of leave (administrators)</h4>
             <FormGrid>
               <Field label="Name" rule={SETTINGS_LEAVE_KIND_RULES.label}>
                 <Input {...nativeAttrs(SETTINGS_LEAVE_KIND_RULES.label)} className="mt-1 w-full" />
@@ -359,6 +364,8 @@ export default async function AttendanceSettingsPage({
               Add kind
             </Button>
           </CheckedForm>
+          </FormModal>
+          </div>
         </section>
       )}
     </Page>

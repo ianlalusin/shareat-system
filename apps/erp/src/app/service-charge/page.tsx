@@ -7,7 +7,7 @@ import { SERVICE_CHARGE_DISTRIBUTE_RULES, nativeAttrs, type FieldRule } from '@s
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Button, FlashBanner, Input, Select, FormModal } from '@/components/ui';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 
 export const metadata = { title: 'Service charge — Shareat System' };
@@ -93,16 +93,17 @@ export default async function ServiceChargePage({
         </p>
       </div>
 
-      <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <div>
-          <h2 className="font-medium">Distribute</h2>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            {hasFloat
-              ? "Pay only what is available. A distribution exceeding this store's own float is refused, never negative."
-              : 'Nothing is held for this store yet.'}
-          </p>
-        </div>
+      <div className="flex justify-end">
+        {!hasFloat && (
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">Nothing is held for this store yet.</p>
+        )}
         {hasFloat && (
+          <FormModal
+            trigger="Distribute"
+            title="Distribute"
+            size="md"
+            description="Pay only what is available. A distribution exceeding this store's own float is refused, never negative."
+          >
           <CheckedForm rules={SERVICE_CHARGE_DISTRIBUTE_RULES} action={distributeAction} className="space-y-3">
             <input type="hidden" name="storeId" value={storeId} />
             <Field label="Amount" hint={`Up to ${peso(balance)} available.`} rule={SERVICE_CHARGE_DISTRIBUTE_RULES.amount}>
@@ -128,8 +129,9 @@ export default async function ServiceChargePage({
             </Field>
             <SubmitButton pendingLabel="Saving…">Distribute</SubmitButton>
           </CheckedForm>
+          </FormModal>
         )}
-      </section>
+      </div>
     </Page>
   );
 }

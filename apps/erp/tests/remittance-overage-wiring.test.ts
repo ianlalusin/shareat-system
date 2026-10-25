@@ -419,13 +419,14 @@ describe('T-324 slice B — an overage on a zero-amount line must not resurrect 
 
 describe('T-324 slice B — the explanatory paragraph must cover the over case, not only the short case', () => {
   it('page.tsx: the "Record a handover" paragraph describes what happens when the amount is OVER what is owed', () => {
-    const headingIdx = pageSource.indexOf('Record a handover</h2>');
+    // T-448 A3: the heading + paragraph moved into the FormModal's title= / description= props.
+    const headingIdx = pageSource.indexOf('title="Record a handover"');
     expect(headingIdx, 'could not find the "Record a handover" heading').not.toBe(-1);
     const formIdx = pageSource.indexOf('<form action={createRemittanceAction}', headingIdx);
     expect(formIdx, 'could not find the form following the heading').not.toBe(-1);
     const between = pageSource.slice(headingIdx, formIdx);
-    const pMatch = between.match(/<p[^>]*>([\s\S]*?)<\/p>/);
-    expect(pMatch, 'could not find the explanatory <p> between the heading and the form').not.toBeNull();
+    const pMatch = between.match(/description="([^"]*)"/);
+    expect(pMatch, 'could not find the explanatory description between the heading and the form').not.toBeNull();
     const paragraphText = requireGroup(pMatch, 1, 'explanatory paragraph');
 
     // Matched on meaning, not on an exact sentence: today the paragraph only ever says what
