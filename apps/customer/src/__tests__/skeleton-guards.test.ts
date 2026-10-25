@@ -85,7 +85,7 @@ function elements(src: string, names: string[]): { open: string; inner: string }
 }
 
 // ---------- detectors (all pure) ----------
-const EXPECTED_ROUTES = ['/', '/join', '/menu', '/cart', '/orders', '/bill', '/feedback', '/account'];
+const EXPECTED_ROUTES = ['/', '/join', '/menu', '/cart', '/orders', '/bill', '/feedback', '/account', '/lobby', '/lobby/check-in', '/lobby/wait'];
 
 /** page files (paths relative to src/app) -> route paths. Route groups "(x)" do not add a segment. */
 function routesFrom(pageFiles: string[]): string[] {
@@ -377,7 +377,7 @@ describe('skeleton guards on apps/customer', () => {
     expect(files.length).toBeGreaterThan(0);
   });
 
-  it('route set is exactly the 8 spec routes', () => {
+  it('route set is exactly the 8 spec routes plus the 3 T-455 S4 lobby screens', () => {
     const pages = walk(join(SRC, 'app')).map((f) => rel(join(SRC, 'app'), f));
     expect(routesFrom(pages)).toEqual([...EXPECTED_ROUTES].sort());
   });
@@ -386,12 +386,12 @@ describe('skeleton guards on apps/customer', () => {
     expect(structureViolations(walk(SRC).map((f) => rel(SRC, f)))).toEqual([]);
   });
 
-  it('the server half exists (not vacuous): src/server has source, and app/api/lobby has check-in, me and cancel route handlers [T-455 S3]', () => {
+  it('the server half exists (not vacuous): src/server has source, and app/api/lobby has check-in, me, cancel and store route handlers [T-455 S3/S4]', () => {
     const server = walk(join(SRC, 'server')).filter((f) => SOURCE_RE.test(f));
     expect(server.length, 'src/server/** must hold the cookie, hash and glue code').toBeGreaterThan(0);
     const lobbyApi = join(SRC, 'app', 'api', 'lobby');
     const routes = walk(lobbyApi).map((f) => rel(lobbyApi, f)).sort();
-    for (const r of ['cancel/route.ts', 'check-in/route.ts', 'me/route.ts']) expect(routes, r).toContain(r);
+    for (const r of ['cancel/route.ts', 'check-in/route.ts', 'me/route.ts', 'store/route.ts']) expect(routes, r).toContain(r);
     expect(routes.filter((r) => !/(^|\/)route\.ts$/.test(r)), 'only route.ts files live under app/api/lobby').toEqual([]);
   });
 
