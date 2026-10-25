@@ -5,6 +5,10 @@ export type { CheckedFormProps } from './CheckedForm';
 export { FieldCheck, FieldCheckView } from './FieldCheck';
 export { CheckContext } from './context';
 export { CheckSummary } from './CheckSummary';
+// T-475: business-rule lines (blockers and warnings) and the lookup that feeds one.
+export { RuleCheck, RuleFactsContext } from './RuleCheck';
+export { useLookupCheck } from './useLookupCheck';
+export { useFormValues } from './useFormValues';
 export {
   CHECKED_FORM_INITIAL,
   checkedFormReducer,

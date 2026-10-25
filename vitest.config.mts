@@ -56,6 +56,8 @@ const alias = {
   '@shareat/domain/service-charge': `${root}packages/domain/src/service-charge/index.ts`,
   // T-440 - the field-rule leaf (CheckedForm / FieldCheck import it in the browser); exact entry before the bare name.
   '@shareat/domain/field-rules': `${root}packages/domain/src/field-rules/index.ts`,
+  // T-475 - the business-rule leaf (RuleCheck imports it in the browser); exact entry before the bare name.
+  '@shareat/domain/business-rules': `${root}packages/domain/src/business-rules/index.ts`,
   '@shareat/domain': `${root}packages/domain/src/index.ts`,
   // ⚠️ The subpath goes BEFORE the bare name: these are exact-match aliases applied in order, and
   // T-237's `@shareat/auth/errors` leaf (the error classes without `@shareat/db` behind them) is

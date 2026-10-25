@@ -11,6 +11,7 @@
     "./item-code": "./src/items/code.ts",
     "./files/limits": "./src/files/limits.ts",
     "./field-rules": "./src/field-rules/index.ts",
+    "./business-rules": "./src/business-rules/index.ts",
     "./refusal-leaf": "./src/shared/refusal-leaf.ts",
     "./attendance/fingerprint": "./src/attendance/fingerprint/index.ts",
     "./service-charge": "./src/service-charge/index.ts"

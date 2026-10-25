@@ -287,7 +287,8 @@ describe('F3 - a forged invoiceDate field changes nothing: the action trusts the
     const bare = verifyForm(b.id, {});
     bare.set('invoiceDate', '2026-02-10');
     const refused = await expectRedirectTo(() => verifyInvoiceAction(bare));
-    expect(param(refused, 'error'), 'a forged open date skipped the closed-month refusal').toBe(CLOSED_SENTENCE);
+    // T-475 S1: the refusal is framed with the draft's name; the closed-month sentence is kept whole inside it.
+    expect(param(refused, 'error'), 'a forged open date skipped the closed-month refusal').toContain(CLOSED_SENTENCE);
     expect(await invoiceStatus(b.id)).toBe('pending');
 
     resetSpy();
