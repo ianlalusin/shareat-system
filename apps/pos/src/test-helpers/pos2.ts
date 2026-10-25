@@ -33,6 +33,7 @@
  *       posStoreId = the request's `storeId` (the Firestore store id the caller is authorised for); deviceId = the request's `deviceId`.
  *       NOTHING from Firestore (a terminals/{TT} claim doc) is consulted for the store or the bucket (B1).
  *   openTillShift(posStoreId): Promise<{ openedAtMs: number } | null>     the ERP till shift for that store
+ *   resolveTerminalNo({ posStoreId, deviceId }): Promise<number | null>    T-477: the device's registered terminal (default 1); null = no link
  *   nowMs(): number        the server clock;       newId(): string       a fresh document id
  *
  * Caller identity (every route, in this order): body must be JSON (else 400); `Authorization: Bearer <token>` (else 401); verifyIdToken
@@ -77,19 +78,21 @@ export const T_SALE = Date.parse('2026-10-14T10:00:00+08:00');
 export const SAME_DAY = T_SALE + 2 * 3600 * 1000;
 export const SHIFT_OPENED = Date.parse('2026-10-14T08:00:00+08:00');
 
-export interface Calls { approve: { posStoreId: string; deviceId: string; pin: string }[]; shift: string[] }
+export interface Calls { approve: { posStoreId: string; deviceId: string; pin: string }[]; shift: string[]; terminal: { posStoreId: string; deviceId: string }[] }
 
 export interface TestDeps {
   db: FakeFirestore['admin'];
   verifyIdToken: (t: string) => Promise<{ uid: string }>;
   approveManagerPin: (i: { posStoreId: string; deviceId: string; pin: string }) => Promise<{ ok: true; approverPersonId: string } | { ok: false; message: string }>;
   openTillShift: (posStoreId: string) => Promise<{ openedAtMs: number } | null>;
+  /** T-477: the terminal number the device is registered for (trusted ERP link, no PIN); null when there is no link. */
+  resolveTerminalNo: (i: { posStoreId: string; deviceId: string }) => Promise<number | null>;
   nowMs: () => number;
   newId: () => string;
 }
 
 export function makeDeps(fs: FakeFirestore, over: Partial<TestDeps> = {}) {
-  const calls: Calls = { approve: [], shift: [] };
+  const calls: Calls = { approve: [], shift: [], terminal: [] };
   let n = 0;
   const deps: TestDeps = {
     db: fs.admin,
@@ -102,6 +105,7 @@ export function makeDeps(fs: FakeFirestore, over: Partial<TestDeps> = {}) {
       return i.pin === PIN_OK ? { ok: true, approverPersonId: MANAGER_PERSON } : { ok: false, message: 'That PIN cannot approve this. Ask a store manager.' };
     },
     openTillShift: async (s) => { calls.shift.push(s); return { openedAtMs: SHIFT_OPENED }; },
+    resolveTerminalNo: async (i) => { calls.terminal.push(i); return 1; },
     nowMs: () => NOW,
     newId: () => `gen${++n}`,
     ...over,

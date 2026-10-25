@@ -31,7 +31,9 @@ export interface ZReading {
   byMethod: ZMethodLine[];
   totals: { saleCentavos: number; refundCentavos: number; netCentavos: number };
   convertNetCashCentavos: number;
-  cash: { startingCentavos: number; salesCentavos: number; convertNetCentavos: number; deductionsCentavos: number; expectedCentavos: number; refundsPaidCentavos: number;
+  cash: { startingCentavos: number; salesCentavos: number; convertNetCentavos: number; deductionsCentavos: number;
+    /** T-474 (DEF-759): signed sum of the window handovers' manual cash adjustments, already INSIDE expectedCentavos. Absent on a Z printed before this fix. */
+    manualAdjustmentCentavos?: number; expectedCentavos: number; refundsPaidCentavos: number;
     /** Cash kept on voided sales, already INSIDE salesCentavos (and so inside expected cash); the slip prints it on its own line so the cash lines add up. */
     voidCashKeptCentavos: number };
   lastHandover: { countedCentavos: number; varianceCentavos: number } | null;
@@ -169,7 +171,7 @@ export function computeZReading(i: {
     byMethod,
     totals: { saleCentavos: sum((l) => l.saleCentavos), refundCentavos: sum((l) => l.refundCentavos), netCentavos: sum((l) => l.netCentavos) },
     convertNetCashCentavos: convertCash,
-    cash: { startingCentavos: starting, salesCentavos: cashSales, convertNetCentavos: convertCash, deductionsCentavos: deductions, expectedCentavos: expected, refundsPaidCentavos: cashRefunds, voidCashKeptCentavos: voidKept },
+    cash: { startingCentavos: starting, salesCentavos: cashSales, convertNetCentavos: convertCash, deductionsCentavos: deductions, manualAdjustmentCentavos: manual, expectedCentavos: expected, refundsPaidCentavos: cashRefunds, voidCashKeptCentavos: voidKept },
     lastHandover: last ? { countedCentavos: storedPesosToCentavos(last.countedCash), varianceCentavos: storedPesosToCentavos(last.variance) } : null,
     negativeMethods: negativeMethods(Object.fromEntries(byMethod.map((l) => [l.method, toWirePesos(l.netCentavos)]))),
     lateReceiptNumbers: late.sort(), receiptIds: ids.sort(),

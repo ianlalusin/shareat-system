@@ -337,3 +337,32 @@ describe('computeZReading - integer centavos and totals = sum of lines (property
     }
   });
 });
+
+describe('T-474 DEF-759: manual cash adjustments are reported on the reading', () => {
+  it('cash.manualAdjustmentCentavos is the signed sum of the window handovers\' manualCashAdjustment, in integer centavos', () => {
+    const r = run({ handovers: [handover({ startingCash: 100, manualCashAdjustment: 20 }), handover({ periodEndMs: FROM + 6_000_000, manualCashAdjustment: -5.25 })] });
+    expect(r.cash.manualAdjustmentCentavos).toBe(1_475);
+    expect(r.cash.startingCentavos).toBe(10_000);
+    expect(r.cash.expectedCentavos).toBe(11_475);
+  });
+  it('is 0 with no handover', () => {
+    expect(run().cash.manualAdjustmentCentavos).toBe(0);
+  });
+  it('property: start + (cash sales - kept) + kept + convert + manual - deductions - refunds = expected (200 random days)', () => {
+    let seed = 7741;
+    const rnd = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
+    const peso = () => Math.round(rnd() * 100000) / 100;
+    for (let day = 0; day < 200; day++) {
+      const receipts: any[] = [];
+      for (let i = 0; i < Math.floor(rnd() * 15); i++) {
+        const ms = FROM + Math.floor(rnd() * (TO - FROM));
+        if (rnd() < 0.15) receipts.push(refund(Math.round(peso() * 100), 'Cash', ms));
+        else receipts.push(sale({ ms, mop: { Cash: peso() }, extra: rnd() < 0.2 ? { status: 'voided', voidCashRetained: peso() } : {} }));
+      }
+      const handovers = Array.from({ length: Math.floor(rnd() * 4) }, (_, k) => handover({ periodEndMs: FROM + 1_000_000 * (k + 1), startingCash: peso(), deductionsTotal: peso(), manualCashAdjustment: rnd() < 0.5 ? peso() : -peso() }));
+      const r = run({ receipts, handovers, conversions: [conv('GCash', 'Cash', peso())] });
+      const c = r.cash;
+      expect(c.expectedCentavos).toBe(c.startingCentavos + (c.salesCentavos - c.voidCashKeptCentavos) + c.voidCashKeptCentavos + c.convertNetCentavos + c.manualAdjustmentCentavos! - c.deductionsCentavos - c.refundsPaidCentavos);
+    }
+  });
+});
