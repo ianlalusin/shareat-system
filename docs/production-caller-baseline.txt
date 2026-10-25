@@ -96,9 +96,6 @@ listPunchesForDay
 listRoster
 listWriteOffsForCharge
 loadMod
-lobbyCancel
-lobbyCheckIn
-lobbyMyEntry
 lobbyPartiesAhead
 makeDeps
 markReviewed

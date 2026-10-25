@@ -53,6 +53,12 @@ export async function getStoreIdByCode(tx: Tx, orgId: string, code: string): Pro
   return row?.id;
 }
 
+/** T-455 S4: the store's public display name (shown on the diner's lobby screen). undefined when the store is not of this org. */
+export async function getStoreName(tx: Tx, orgId: string, storeId: string): Promise<string | undefined> {
+  const [row] = await tx.select({ name: stores.name }).from(stores).where(and(eq(stores.orgId, orgId), eq(stores.id, storeId))).limit(1);
+  return row?.name;
+}
+
 export async function storeExists(tx: Tx, orgId: string, storeId: string): Promise<boolean> {
   const [row] = await tx.select({ id: stores.id }).from(stores).where(and(eq(stores.orgId, orgId), eq(stores.id, storeId))).limit(1);
   return row !== undefined;
