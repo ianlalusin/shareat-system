@@ -51,3 +51,9 @@ Trade orders can carry a delivery fee. Should an order to PG?
   Bible row to be written at wrap-up (next free row).
 - QO-2..QO-9 and QI-2: the planner's defaults stand.
 - Migration number: **0218** (reserved on the coordination board).
+- **S5b tester questions (orchestrator, 25 Oct):** (1) "linked as franchisor/franchisee" = the trade order's customer
+  carries `counterparty_org_id = buyer_org_id`, enforced in the database (trigger or CHECK); shipping to an unlinked org
+  is refused. (2) Over-receipt / second-receive sentences: builder words them plainly; tests pin the meaning only.
+  (3) Scheduler job list: carry every job from the newest earlier migration (0217 adds none). (5) Void columns:
+  `voided_at`, `voided_by`, `void_reason` on `inter_entity_shipments` (all three or none); the tester adds the void legs
+  after the build.
