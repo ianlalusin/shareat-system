@@ -45,6 +45,9 @@ Trade orders can carry a delivery fee. Should an order to PG?
   (goods received, not billed) to 2110 (AP) via `linkInvoiceToReceipt`, so PG pays the commissary from its normal AP
   screen. ⛔ S5b/S5c first SPIKE whether the two-person verification CHECK (and 0217's self-verify rules) admit a
   system-created bill; if not, STOP and report: the fix is designed, not patched around.
-- **QI-1 (Ian):** asked 25 Oct; recommended (a). Until he answers, S5 builds (b) (manager types the short quantities).
+- **QI-1 = (a) — Ian, 2026-10-25 ("QI-1 is a").** The commissary sees, per item on each shipment, how many PG received,
+  plus one "PG owes us ₱Y" balance. Nothing else of PG's (prices, costs, other suppliers, staff). The credit note is
+  computed from the per-item shortfall; a payment one side forgot is caught by the reconciliation. Amends Q8 (a).
+  Bible row to be written at wrap-up (next free row).
 - QO-2..QO-9 and QI-2: the planner's defaults stand.
 - Migration number: **0218** (reserved on the coordination board).
