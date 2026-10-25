@@ -115,7 +115,8 @@ async function orgFixture(hint: string) {
   const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
   const orgId = org!.id;
   const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Lobby Cashier') returning id`;
-  await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${orgId}, 'staff')`;
+  // 'manager' holds record_sale (the cashier capability, store-scoped) in the default matrix; 'staff' does not. Store scope is added per store in mkStore.
+  await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${orgId}, 'manager')`;
   const staff: Actor = { personId: p!.id, orgId };
   const [cat] = await sql<{ id: string }[]>`
     insert into menu_categories (org_id, name, sort_order, status, created_by) values (${orgId}, ${uid('Cat')}, 0, 'active', ${staff.personId}) returning id`;
@@ -135,6 +136,7 @@ async function orgFixture(hint: string) {
   /** A fresh store. Default: lobby enabled, not paused, cap 60, POS seen just now. posSeenMinutesAgo null = never; row false = no lobby_stores row. */
   const mkStore = async (o: { enabled?: boolean; paused?: boolean; max?: number; posSeenMinutesAgo?: number | null; row?: boolean } = {}): Promise<S> => {
     const [st] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${orgId}, ${uid('ST')}, 'Lipa') returning id`;
+    await sql`insert into person_store_scope (person_id, store_id) values (${staff.personId}, ${st!.id})`;
     if (o.row !== false) {
       const seen = o.posSeenMinutesAgo === undefined ? ago(0) : o.posSeenMinutesAgo === null ? null : ago(o.posSeenMinutesAgo);
       await sql`

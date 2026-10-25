@@ -119,6 +119,11 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-464: pairing a store's POS tablet and un-pairing it (dotted: new).
   def('pos_tablet.paired', 'security', 'high', 'store', 'pos_tablet_pairings', 'T-464'),
   def('pos_tablet.unpaired', 'security', 'high', 'store', 'pos_tablet_pairings', 'T-464'),
+  // T-455 S2: a cashier's moves on the customer lobby line (park a walk-in, call, seat, remove). Payloads carry code, size, stand and session id - never a name or phone.
+  def('lobby.park', 'order', 'normal', 'store', 'lobby_entry', 'T-455'),
+  def('lobby.call', 'order', 'low', 'store', 'lobby_entry', 'T-455'),
+  def('lobby.seat', 'order', 'normal', 'store', 'lobby_entry', 'T-455'),
+  def('lobby.remove', 'order', 'normal', 'store', 'lobby_entry', 'T-455'),
   // T-190: a change to the statutory tables (rate row, withholding table, minimum wage): add, confirm or discard. ONE entry (the catalogue
   // size is capped); `after.table` / `after.event` say which. Dotted: new. Org-scoped, admin-readable; rows are immutable once confirmed.
   // T-190: a person's government numbers were set or cleared. Records FIELD NAMES only, never a number.

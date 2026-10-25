@@ -153,3 +153,10 @@ export * from './activity/client-events';
 
 // T-436 - leave and absence tracking: requests, caps, the SIL balance, medical-certificate photos.
 export * from './leave';
+
+// T-455 S2 - the customer lobby: diner check-in, cashier moves, nightly expiry/purge. Callers arrive with S3 (customer server) and S5 (POS card).
+export * from './lobby/checkin';
+export * from './lobby/staff';
+export * from './lobby/purge';
+export { LobbyRefusal, LOBBY_REFUSAL_CODES } from './lobby/refusal';
+export type { LobbyRefusalCode } from './lobby/refusal';

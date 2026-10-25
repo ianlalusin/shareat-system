@@ -267,3 +267,12 @@ Spec defects acknowledged:
   (SQL only in `packages/db/src/repo/`), the domain calls it.
 - §4.1 vs per-limit tests: resolved by ruling 2.
 - Expiry lives in `packages/domain/src/lobby/purge.ts` with the nightly purge.
+
+## S2 audit notes (2026-10-25), carried to S3
+- **S3 must require a uuid-shaped `clientRequestId`** (the domain accepts any 1-64 chars). A guessable id could be
+  pre-claimed by another device, which then makes the real diner's retry answer `LOBBY_BAD_INPUT`.
+- Staff lobby functions authorize `record_sale` at the entry's own store (orchestrator ruling, 25 Oct). A store-A cashier
+  probing a store-B entry id gets AuthorizationError while a ghost id gets LOBBY_NOT_FOUND: accepted (signed-in staff
+  only, unguessable uuidv7 ids, the attempt writes a denial row).
+- `packages/db/src/audit/catalogue.ts` is at its 195-entry cap after S2's four lobby actions: S6/S7 must raise it.
+- `runLobbyNightly(tx, orgId)` has no org loop yet; S9 adds the scheduler entry and the systemTransaction org list (DEF-742).
