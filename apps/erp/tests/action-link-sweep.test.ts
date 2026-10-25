@@ -478,7 +478,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // T-448 follow-up (24 Oct): trial balance's inline filter form replaced by the shared ReportFilters
     // (its 6 controls leave the census; the shared component's were already counted), measured: 1407 -> 1401.
     // T-448 Amendment A3 (25 Oct): inline add-forms moved into FormModal; re-measured 1401 -> 1398.
-    expect(results.length).toBe(1398);
+    // 1398 -> 1399 after merging main 9e4778d (one new control).
+    expect(results.length).toBe(1399);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
