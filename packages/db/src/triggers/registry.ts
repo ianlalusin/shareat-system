@@ -677,4 +677,392 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'validator',
     reason: 'No row may join a bracket set that already holds a confirmed row (0206, T-190). Reads other rows of the set.',
   },
+  // ---------------------------------------------------------------------------------------------
+  // ORIGIN / VALIDATOR (55) - T-398 S4 / DEF-491 same-org guards on the derived-scope FKs (0214).
+  // ---------------------------------------------------------------------------------------------
+  ap_payment_allocations_expense_id_same_org_trg: {
+    table: 'ap_payment_allocations',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): expense_id must point at a expenses row of the organisation of the header ap_payments. Decides from another row organisation.',
+  },
+  ar_collection_allocations_ar_charge_id_same_org_trg: {
+    table: 'ar_collection_allocations',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): ar_charge_id must point at a ar_charges row of the organisation of the header ar_collections. Decides from another row organisation.',
+  },
+  attendance_adjustments_decided_by_session_id_same_org_trg: {
+    table: 'attendance_adjustments',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): decided_by_session_id must point at a sessions row of the organisation of this row. Decides from another row organisation.',
+  },
+  attendance_punches_captured_by_session_id_same_org_trg: {
+    table: 'attendance_punches',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): captured_by_session_id must point at a sessions row of the organisation of this row. Decides from another row organisation.',
+  },
+  count_lines_counted_by_same_org_trg: {
+    table: 'count_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): counted_by must point at a persons row of the organisation of the header count_sessions. Decides from another row organisation.',
+  },
+  count_lines_item_id_same_org_trg: {
+    table: 'count_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): item_id must point at a items row of the organisation of the header count_sessions. Decides from another row organisation.',
+  },
+  count_lines_location_id_same_org_trg: {
+    table: 'count_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): location_id must point at a stock_locations row of the organisation of the header count_sessions. Decides from another row organisation.',
+  },
+  count_lines_movement_id_same_org_trg: {
+    table: 'count_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): movement_id must point at a stock_movements row of the organisation of the header count_sessions. Decides from another row organisation.',
+  },
+  count_session_locations_location_id_same_org_trg: {
+    table: 'count_session_locations',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): location_id must point at a stock_locations row of the organisation of the header count_sessions. Decides from another row organisation.',
+  },
+  customer_return_lines_item_id_same_org_trg: {
+    table: 'customer_return_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): item_id must point at a items row of the organisation of the header customer_returns. Decides from another row organisation.',
+  },
+  customer_return_lines_movement_id_same_org_trg: {
+    table: 'customer_return_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): movement_id must point at a stock_movements row of the organisation of the header customer_returns. Decides from another row organisation.',
+  },
+  customer_return_lines_trade_order_line_id_same_org_trg: {
+    table: 'customer_return_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): trade_order_line_id must point at a trade_order_lines row of the organisation of the header customer_returns. Decides from another row organisation.',
+  },
+  delivery_lines_item_id_same_org_trg: {
+    table: 'delivery_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): item_id must point at a items row of the organisation of the header deliveries. Decides from another row organisation.',
+  },
+  delivery_lines_location_id_same_org_trg: {
+    table: 'delivery_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): location_id must point at a stock_locations row of the organisation of the header deliveries. Decides from another row organisation.',
+  },
+  employment_positions_position_id_same_org_trg: {
+    table: 'employment_positions',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): position_id must point at a positions row of the organisation of the header employments. Decides from another row organisation.',
+  },
+  expense_payments_cash_request_id_same_org_trg: {
+    table: 'expense_payments',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): cash_request_id must point at a cash_requests row of the organisation of the header expenses. Decides from another row organisation.',
+  },
+  expense_payments_money_account_id_same_org_trg: {
+    table: 'expense_payments',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): money_account_id must point at a money_accounts row of the organisation of the header expenses. Decides from another row organisation.',
+  },
+  expense_payments_staff_id_same_org_trg: {
+    table: 'expense_payments',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): staff_id must point at a persons row of the organisation of the header expenses. Decides from another row organisation.',
+  },
+  journal_lines_account_id_same_org_trg: {
+    table: 'journal_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): account_id must point at a accounts row of the organisation of the header journal_entries. Decides from another row organisation.',
+  },
+  journal_lines_store_id_same_org_trg: {
+    table: 'journal_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): store_id must point at a stores row of the organisation of the header journal_entries. Decides from another row organisation.',
+  },
+  order_wastage_allocations_person_id_same_org_trg: {
+    table: 'order_wastage_allocations',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): person_id must point at a persons row of the organisation of the header order_wastages. Decides from another row organisation.',
+  },
+  person_credentials_revoked_by_same_org_trg: {
+    table: 'person_credentials',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): revoked_by must point at a persons row of the organisation of the header persons. Decides from another row organisation.',
+  },
+  person_credentials_store_id_same_org_trg: {
+    table: 'person_credentials',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): store_id must point at a stores row of the organisation of the header persons. Decides from another row organisation.',
+  },
+  person_grants_granted_by_same_org_trg: {
+    table: 'person_grants',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): granted_by must point at a persons row of the organisation of the header persons. Decides from another row organisation.',
+  },
+  person_grants_source_ref_same_org_trg: {
+    table: 'person_grants',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): source_ref must point at a position_capability_defaults row of the organisation of the header persons. Decides from another row organisation.',
+  },
+  person_grants_store_id_same_org_trg: {
+    table: 'person_grants',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): store_id must point at a stores row of the organisation of the header persons. Decides from another row organisation.',
+  },
+  person_store_scope_granted_by_same_org_trg: {
+    table: 'person_store_scope',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): granted_by must point at a persons row of the organisation of the header persons. Decides from another row organisation.',
+  },
+  person_store_scope_store_id_same_org_trg: {
+    table: 'person_store_scope',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): store_id must point at a stores row of the organisation of the header persons. Decides from another row organisation.',
+  },
+  pos_usage_pull_lines_item_id_same_org_trg: {
+    table: 'pos_usage_pull_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): item_id must point at a items row of the organisation of the header pos_usage_pulls. Decides from another row organisation.',
+  },
+  pos_usage_pull_lines_location_id_same_org_trg: {
+    table: 'pos_usage_pull_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): location_id must point at a stock_locations row of the organisation of the header pos_usage_pulls. Decides from another row organisation.',
+  },
+  pos_usage_pull_lines_usage_record_id_same_org_trg: {
+    table: 'pos_usage_pull_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): usage_record_id must point at a stock_usage_records row of the organisation of the header pos_usage_pulls. Decides from another row organisation.',
+  },
+  production_recipe_lines_item_id_same_org_trg: {
+    table: 'production_recipe_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): item_id must point at a items row of the organisation of the header production_recipes. Decides from another row organisation.',
+  },
+  production_record_lines_item_id_same_org_trg: {
+    table: 'production_record_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): item_id must point at a items row of the organisation of the header production_records. Decides from another row organisation.',
+  },
+  production_record_lines_movement_id_same_org_trg: {
+    table: 'production_record_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): movement_id must point at a stock_movements row of the organisation of the header production_records. Decides from another row organisation.',
+  },
+  remittance_allocations_sales_day_id_same_org_trg: {
+    table: 'remittance_allocations',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): sales_day_id must point at a sales_days row of the organisation of the header remittances. Decides from another row organisation.',
+  },
+  remittance_lines_from_money_account_id_same_org_trg: {
+    table: 'remittance_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): from_money_account_id must point at a money_accounts row of the organisation of the header remittances. Decides from another row organisation.',
+  },
+  remittance_lines_money_transfer_id_same_org_trg: {
+    table: 'remittance_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): money_transfer_id must point at a money_transfers row of the organisation of the header remittances. Decides from another row organisation.',
+  },
+  remittance_lines_to_money_account_id_same_org_trg: {
+    table: 'remittance_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): to_money_account_id must point at a money_accounts row of the organisation of the header remittances. Decides from another row organisation.',
+  },
+  sales_day_channels_channel_id_same_org_trg: {
+    table: 'sales_day_channels',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): channel_id must point at a sales_channels row of the organisation of the header sales_days. Decides from another row organisation.',
+  },
+  sales_day_tenders_money_account_id_same_org_trg: {
+    table: 'sales_day_tenders',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): money_account_id must point at a money_accounts row of the organisation of the header sales_days. Decides from another row organisation.',
+  },
+  sessions_credential_id_same_org_trg: {
+    table: 'sessions',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): credential_id must point at a person_credentials row of the organisation of the header persons. Decides from another row organisation.',
+  },
+  sessions_store_id_same_org_trg: {
+    table: 'sessions',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): store_id must point at a stores row of the organisation of the header persons. Decides from another row organisation.',
+  },
+  stock_layers_invoice_line_id_same_org_trg: {
+    table: 'stock_layers',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): invoice_line_id must point at a supplier_invoice_lines row of the organisation of this row. Decides from another row organisation.',
+  },
+  stock_transfer_lines_in_movement_id_same_org_trg: {
+    table: 'stock_transfer_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): in_movement_id must point at a stock_movements row of the organisation of the header stock_transfers. Decides from another row organisation.',
+  },
+  stock_transfer_lines_item_id_same_org_trg: {
+    table: 'stock_transfer_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): item_id must point at a items row of the organisation of the header stock_transfers. Decides from another row organisation.',
+  },
+  stock_transfer_lines_out_movement_id_same_org_trg: {
+    table: 'stock_transfer_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): out_movement_id must point at a stock_movements row of the organisation of the header stock_transfers. Decides from another row organisation.',
+  },
+  stock_usage_lines_item_id_same_org_trg: {
+    table: 'stock_usage_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): item_id must point at a items row of the organisation of the header stock_usage_records. Decides from another row organisation.',
+  },
+  stock_usage_lines_movement_id_same_org_trg: {
+    table: 'stock_usage_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): movement_id must point at a stock_movements row of the organisation of the header stock_usage_records. Decides from another row organisation.',
+  },
+  supplier_invoice_lines_item_id_same_org_trg: {
+    table: 'supplier_invoice_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): item_id must point at a items row of the organisation of the header supplier_invoices. Decides from another row organisation.',
+  },
+  supplier_return_lines_delivery_line_id_same_org_trg: {
+    table: 'supplier_return_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): delivery_line_id must point at a delivery_lines row of the organisation of the header supplier_returns. Decides from another row organisation.',
+  },
+  supplier_return_lines_item_id_same_org_trg: {
+    table: 'supplier_return_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): item_id must point at a items row of the organisation of the header supplier_returns. Decides from another row organisation.',
+  },
+  supplier_return_lines_location_id_same_org_trg: {
+    table: 'supplier_return_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): location_id must point at a stock_locations row of the organisation of the header supplier_returns. Decides from another row organisation.',
+  },
+  supplier_return_lines_movement_id_same_org_trg: {
+    table: 'supplier_return_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): movement_id must point at a stock_movements row of the organisation of the header supplier_returns. Decides from another row organisation.',
+  },
+  till_count_lines_counted_by_same_org_trg: {
+    table: 'till_count_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): counted_by must point at a persons row of the organisation of the header till_custody_shifts. Decides from another row organisation.',
+  },
+  till_count_lines_money_account_id_same_org_trg: {
+    table: 'till_count_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Same-org guard (0214, T-398 S4, DEF-491): money_account_id must point at a money_accounts row of the organisation of the header till_custody_shifts. Decides from another row organisation.',
+  },
 } as const;

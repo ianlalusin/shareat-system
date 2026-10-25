@@ -95,14 +95,11 @@ export function scheduleInputFor(asset: fixedAssetsRepo.FixedAssetRow): Schedule
  * `created: false`, so a caller can tell "nothing was owed" from "three months were caught up".
  */
 export async function depreciateAsset(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { assetId: string; through: string },
 ): Promise<DepreciationPosting[]> {
-  if (tx) return runForAsset(tx, actor, input);
-  // DEF-287: the no-tx fallback opens its own transaction, so it carries its own principal.
-  // No caller passes null today — this is the shape being correct rather than a live fix.
-  return withOrgPrincipal(actor.orgId, (trx) => runForAsset(trx, actor, input));
+  return runForAsset(tx, actor, input);
 }
 
 async function runForAsset(
@@ -248,13 +245,13 @@ export async function runDepreciation(
   // other never did.
   if (tx) {
     await authorize(tx, actor, 'run_depreciation', {});
-  } else {
-    // ⛔ `withOrgPrincipal`, NOT a bare `transaction` — DEF-287. `authorize()` READS `persons` and
-    // the grant tables, which are org-scoped and FORCE RLS. With no principal it sees nobody and
-    // refuses a capability the actor genuinely holds.
-    await withOrgPrincipal(actor.orgId, (trx) => authorize(trx, actor, 'run_depreciation', {}));
+    return runDepreciationCore((fn) => fn(tx), true, actor.orgId, actor.personId, input);
   }
-  return runDepreciationCore(tx, 'staff', actor.orgId, actor.personId, input);
+  // ⛔ `withOrgPrincipal`, NOT a bare `transaction` — DEF-287. `authorize()` READS `persons` and
+  // the grant tables, which are org-scoped and FORCE RLS. With no principal it sees nobody and
+  // refuses a capability the actor genuinely holds.
+  await withOrgPrincipal(actor.orgId, (trx) => authorize(trx, actor, 'run_depreciation', {}));
+  return runDepreciationCore(perAssetPrincipal('staff', actor.orgId), false, actor.orgId, actor.personId, input);
 }
 
 /**
@@ -285,12 +282,18 @@ export async function runDepreciationAsSystem(
   orgId: string,
   input: RunDepreciationInput,
 ): Promise<RunDepreciationResult> {
-  return runDepreciationCore(null, 'system', orgId, null, input);
+  return runDepreciationCore(perAssetPrincipal('system', orgId), false, orgId, null, input);
+}
+
+/** Opens one transaction under the org's principal: 'staff' for the request path, 'system' for the scheduled run. */
+function perAssetPrincipal(kind: 'staff' | 'system', orgId: string) {
+  return <R,>(fn: (trx: Tx) => Promise<R>): Promise<R> =>
+    kind === 'system' ? withSystemOrgPrincipal(orgId, fn) : withOrgPrincipal(orgId, fn);
 }
 
 /**
  * ⛔ **`kind` is not decoration — it chooses the principal every transaction below opens under,
- * and getting it wrong is DEF-287.** When `tx` is null this function opens its OWN transactions
+ * and getting it wrong is DEF-287.** In per-asset mode (`atomic` false) this function opens its OWN transactions
  * from the pool, so a principal applied by some caller further up does not reach them; each one
  * has to carry its own. `'staff'` for the request path, `'system'` for the scheduled run.
  *
@@ -299,19 +302,15 @@ export async function runDepreciationAsSystem(
  * around the loop and forgotten.
  */
 async function runDepreciationCore(
-  tx: Tx | null,
-  kind: 'staff' | 'system',
+  openTx: <R>(fn: (trx: Tx) => Promise<R>) => Promise<R>,
+  atomic: boolean,
   orgId: string,
   postedBy: string | null,
   input: RunDepreciationInput,
 ): Promise<RunDepreciationResult> {
   const actor = { orgId, personId: postedBy } as Actor;
-  const openTx = <R,>(fn: (trx: Tx) => Promise<R>): Promise<R> =>
-    kind === 'system' ? withSystemOrgPrincipal(orgId, fn) : withOrgPrincipal(orgId, fn);
 
-  const assets = tx
-    ? await loadDepreciable(tx, actor, input)
-    : await openTx((trx) => loadDepreciable(trx, actor, input));
+  const assets = await openTx((trx) => loadDepreciable(trx, actor, input));
 
   const posted: DepreciationPosting[] = [];
   const failed: RunDepreciationResult['failed'] = [];
@@ -320,15 +319,13 @@ async function runDepreciationCore(
 
   for (const asset of assets) {
     try {
-      const run = tx
-        ? await postPeriodsFor(tx, actor, asset, input.through)
-        : await openTx((trx) => postPeriodsFor(trx, actor, asset, input.through));
+      const run = await openTx((trx) => postPeriodsFor(trx, actor, asset, input.through));
       // An asset whose only owed months sit in a closed period is NOT "owing nothing".
       if (run.postings.length === 0 && run.skippedClosed === 0) skipped += 1;
       skippedClosed += run.skippedClosed;
       posted.push(...run.postings);
     } catch (err) {
-      if (tx) throw err; // Atomic mode: the caller asked for all-or-nothing, so give it.
+      if (atomic) throw err; // Atomic mode: the caller asked for all-or-nothing, so give it.
       failed.push({
         assetId: asset.id,
         assetName: asset.name,
@@ -359,13 +356,11 @@ async function loadDepreciable(
  * number equals itself — which is exactly why a two-month outage was invisible.
  */
 export async function depreciationDrift(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { through: string },
 ): Promise<{ assetId: string; assetName: string; expected: string; actual: string }[]> {
-  if (tx) return runDrift(tx, actor, input);
-  // DEF-287, as above.
-  return withOrgPrincipal(actor.orgId, (trx) => runDrift(trx, actor, input));
+  return runDrift(tx, actor, input);
 }
 
 async function runDrift(

@@ -14,7 +14,7 @@
  * for why forcing that fit would have meant satisfying CHECKs that mean nothing for this shape.
  */
 import { ZERO, add, compare, formatMoney, divideMoney, money, subtract, type Money } from '@shareat/core/money';
-import { thirteenthMonthRepo, payrollRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
+import { thirteenthMonthRepo, payrollRepo, moneyAccountsRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
@@ -141,7 +141,7 @@ export async function preview13thMonthRun(
  * as `postPayRun`: an admin paying themselves is precisely the case it exists for.
  */
 export async function post13thMonthRun(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: {
     storeId: string;
@@ -254,14 +254,13 @@ export async function post13thMonthRun(
       totalNet: formatMoney(preview.totalNet),
     };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /** Mirrors `voidPayRun` — reverses every payout's journal entry, marks the run voided. No
  *  day-freeze/unfreeze step: a 13th-month payout never freezes attendance days. */
 export async function void13thMonthRun(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { runId: string; reason: string; on?: string },
 ): Promise<{ reversed: number }> {
@@ -298,6 +297,5 @@ export async function void13thMonthRun(
 
     return { reversed };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }

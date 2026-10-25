@@ -13,7 +13,7 @@
  * stored copy of a subtraction, plus a third copy in `EquityLedgerEntry` (DEF-072). Every figure
  * here is summed from the ledger by party.
  */
-import { moneyAccountsRepo, ownersRepo, transaction, type Tx } from '@shareat/db';
+import { moneyAccountsRepo, ownersRepo, type Tx } from '@shareat/db';
 import type { DrawingLimitPeriod, PersonalExpenseTreatment } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { add, compare, compareDecimal, decimal, isZero, money, negate, subtract, ZERO, type Decimal, type Money } from '@shareat/core/money';
@@ -68,7 +68,7 @@ export interface CreateOwnerInput {
 }
 
 export async function createOwner(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: CreateOwnerInput,
 ): Promise<{ id: string }> {
@@ -149,8 +149,7 @@ export async function createOwner(
       createdBy: actor.personId,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -------------------------------------------------------------------------------------
@@ -158,7 +157,7 @@ export async function createOwner(
 // -------------------------------------------------------------------------------------
 
 export async function recordContribution(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { ownerId: string; amount: string; intoMoneyAccountId: string; on: string; memo?: string },
 ): Promise<{ entryId: string }> {
@@ -213,8 +212,7 @@ export async function recordContribution(
     });
     return { entryId: result.entryId };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -------------------------------------------------------------------------------------
@@ -301,7 +299,7 @@ async function assertMonthOpen(
 }
 
 export async function recordDrawing(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { ownerId: string; amount: string; fromMoneyAccountId: string; on: string; memo?: string },
 ): Promise<{ entryId: string; warning?: string }> {
@@ -363,8 +361,7 @@ export async function recordDrawing(
     });
     return { entryId: result.entryId, ...(warning ? { warning } : {}) };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -------------------------------------------------------------------------------------
@@ -400,7 +397,7 @@ async function assertWithinReceivable(
  * the only way.
  */
 export async function repayFromOwner(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { ownerId: string; amount: string; intoMoneyAccountId: string; on: string; memo?: string },
 ): Promise<{ entryId: string; outstanding: string }> {
@@ -448,8 +445,7 @@ export async function repayFromOwner(
       outstanding: await ownersRepo.receivableOf(trx, actor.orgId, owner.id),
     };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -474,7 +470,7 @@ export async function repayFromOwner(
  * receivable quietly parked where nothing will ever collect it.
  */
 export async function recoverFromPay(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { ownerId: string; amount: string; on: string; memo?: string },
 ): Promise<{ entryId: string; outstanding: string }> {
@@ -525,8 +521,7 @@ export async function recoverFromPay(
       outstanding: await ownersRepo.receivableOf(trx, actor.orgId, owner.id),
     };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -550,7 +545,7 @@ export async function recoverFromPay(
  * the same way a back-dated drawing is.
  */
 export async function writeOffReceivable(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { ownerId: string; amount: string; reason: string; on: string },
 ): Promise<{ entryId: string; outstanding: string }> {
@@ -609,8 +604,7 @@ export async function writeOffReceivable(
       outstanding: await ownersRepo.receivableOf(trx, actor.orgId, owner.id),
     };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -------------------------------------------------------------------------------------
@@ -626,7 +620,7 @@ export interface ClosePreview {
 
 /** What the closer is being asked to agree to, before they agree to it. */
 export async function previewDrawingClose(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { ownerId: string; month: string },
 ): Promise<ClosePreview> {
@@ -643,8 +637,7 @@ export async function previewDrawingClose(
     const existing = await ownersRepo.closeFor(trx, actor.orgId, owner.id, periodMonth);
     return { periodMonth, ledgerAmount, alreadyClosed: Boolean(existing) };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -662,7 +655,7 @@ export async function previewDrawingClose(
  * Without that, someone back-dates a withdrawal and the agreed figure quietly stops being true.
  */
 export async function closeDrawingMonth(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: {
     ownerId: string;
@@ -776,13 +769,12 @@ export async function closeDrawingMonth(
       adjustmentAmount: isZero(difference) ? null : difference,
     };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /** ⚠️ Reversal, not deletion — the original and its mirror both stay on the ledger. */
 export async function reverseOwnerEntry(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { ownerId: string; entryId: string; reason: string },
 ): Promise<{ entryId: string }> {
@@ -799,6 +791,5 @@ export async function reverseOwnerEntry(
     });
     return { entryId: result.reversalEntryId };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }

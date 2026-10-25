@@ -428,7 +428,7 @@ describe('I6 — setAssetInService moves an asset later: without confirm it list
     );
     expect(String(accumulated)).toBe('1000.00');
 
-    const drift = await depreciationDrift(null, f.admin, { through: '2026-10' });
+    const drift = await withOrgPrincipal(f.orgId, (tx) => depreciationDrift(tx, f.admin, { through: '2026-10' }));
     expect(drift.filter((d) => d.assetId === assetId)).toEqual([]);
   });
 });

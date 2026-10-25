@@ -210,6 +210,24 @@ export const items = pgTable(
       foreignColumns: [t.orgId, t.id],
       name: 'items_variant_of_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `cost_basis_item_id` FK (RLS checks only this row's org_id); references `items_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.costBasisItemId],
+      foreignColumns: [t.orgId, t.id],
+      name: 'items_cost_basis_item_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `merged_into_id` FK (RLS checks only this row's org_id); references `items_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.mergedIntoId],
+      foreignColumns: [t.orgId, t.id],
+      name: 'items_merged_into_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `parent_slab_item_id` FK (RLS checks only this row's org_id); references `items_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.parentSlabItemId],
+      foreignColumns: [t.orgId, t.id],
+      name: 'items_parent_slab_item_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -315,6 +333,12 @@ export const itemRequests = pgTable(
       foreignColumns: [items.orgId, items.id],
       name: 'item_requests_variant_of_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `created_item_id` FK (RLS checks only this row's org_id); references `items_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.createdItemId],
+      foreignColumns: [items.orgId, items.id],
+      name: 'item_requests_created_item_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -415,6 +439,12 @@ export const storeItemSellability = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'store_item_sellability_store_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `item_id` FK (RLS checks only this row's org_id); references `items_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.itemId],
+      foreignColumns: [items.orgId, items.id],
+      name: 'store_item_sellability_item_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -477,6 +507,12 @@ export const itemPricing = pgTable(
       columns: [t.orgId, t.setBy],
       foreignColumns: [persons.orgId, persons.id],
       name: 'item_pricing_set_by_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `item_id` FK (RLS checks only this row's org_id); references `items_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.itemId],
+      foreignColumns: [items.orgId, items.id],
+      name: 'item_pricing_item_id_same_org_fk',
     }).onDelete('restrict'),
   ],
 );

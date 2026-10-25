@@ -40,7 +40,7 @@ function requireGroupShape(mode: unknown, min: unknown, max: unknown): void {
 }
 
 export async function createOptionGroup(actor: Actor, input: CreateOptionGroupInput, tx?: Tx): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'manage_menu', {});
     const name = requireName(input.name, 'createOptionGroup', 'An option group');
     requireGroupShape(input.selectionMode, input.minSelections, input.maxSelections);
@@ -67,7 +67,7 @@ export interface EditOptionGroupInput {
 }
 
 export async function editOptionGroup(actor: Actor, input: EditOptionGroupInput, tx?: Tx): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'manage_menu', {});
     const row = await menuRepo.getOptionGroup(trx, actor.orgId, input.id);
     if (!row) throw gone(`editOptionGroup: option group ${input.id} does not exist.`, 'option group');
@@ -97,7 +97,7 @@ export async function addOptionValue(
   input: { optionGroupId: string; name: string; sortOrder?: number },
   tx?: Tx,
 ): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'manage_menu', {});
     assertFieldRules(MENU_OPTION_VALUE_RULES, { name: input.name });
     const name = requireName(input.name, 'addOptionValue', 'An option');
@@ -120,7 +120,7 @@ export async function editOptionValue(
   input: { id: string; name?: string; sortOrder?: number; status?: MenuStatus },
   tx?: Tx,
 ): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'manage_menu', {});
     const row = await menuRepo.getOptionValue(trx, actor.orgId, input.id);
     if (!row) throw gone(`editOptionValue: option value ${input.id} does not exist.`, 'option');
@@ -144,7 +144,7 @@ export interface LinkOptionGroupInput {
 }
 
 export async function linkOptionGroup(actor: Actor, input: LinkOptionGroupInput, tx?: Tx): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'manage_menu', {});
     if (Boolean(input.menuItemId) === Boolean(input.variantId)) {
       throw refuse(
@@ -174,7 +174,7 @@ export async function linkOptionGroup(actor: Actor, input: LinkOptionGroupInput,
 }
 
 export async function unlinkOptionGroup(actor: Actor, input: { id: string }, tx?: Tx): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'manage_menu', {});
     const row = await menuRepo.getLink(trx, actor.orgId, input.id);
     if (!row) throw gone(`unlinkOptionGroup: link ${input.id} does not exist.`, 'option group link');
@@ -196,7 +196,7 @@ export async function setPackageRefills(
   input: { packageVariantId: string; refillItemIds: string[] },
   tx?: Tx,
 ): Promise<{ packageVariantId: string; refillItemIds: string[]; changed: boolean }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'manage_menu', {});
     const variant = await menuRepo.getVariant(trx, actor.orgId, input.packageVariantId);
     if (!variant) throw gone(`setPackageRefills: variant ${input.packageVariantId} does not exist.`, 'package variant');

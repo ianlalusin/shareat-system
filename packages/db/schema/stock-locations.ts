@@ -95,6 +95,9 @@ export const locationTypes = pgTable(
     uniqueIndex('location_types_org_code_key').on(t.orgId, t.code),
     check('location_types_code_not_blank_check', sql`length(trim(${t.code})) > 0`),
     check('location_types_name_not_blank_check', sql`length(trim(${t.name})) > 0`),
+    // NOTE: location_types_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0213 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES location_types (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );
 
@@ -153,6 +156,12 @@ export const stockLocations = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'stock_locations_store_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `type_id` FK (RLS checks only this row's org_id); references `location_types_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.typeId],
+      foreignColumns: [locationTypes.orgId, locationTypes.id],
+      name: 'stock_locations_type_id_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );
 
@@ -177,5 +186,8 @@ export const departments = pgTable(
     uniqueIndex('departments_org_code_key').on(t.orgId, t.code),
     check('departments_code_not_blank_check', sql`length(trim(${t.code})) > 0`),
     check('departments_name_not_blank_check', sql`length(trim(${t.name})) > 0`),
+    // NOTE: departments_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0213 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES departments (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );

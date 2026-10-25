@@ -212,6 +212,9 @@ export const suppliers = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'suppliers_reconciled_by_same_org_fk',
     }).onDelete('restrict'),
+    // NOTE: suppliers_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0213 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES suppliers (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );
 
@@ -373,5 +376,20 @@ export const supplierInvoices = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'supplier_invoices_voided_by_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `receipt_file_id` FK (RLS checks only this row's org_id); references `stored_files_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.receiptFileId],
+      foreignColumns: [storedFiles.orgId, storedFiles.id],
+      name: 'supplier_invoices_receipt_file_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `supplier_id` FK (RLS checks only this row's org_id); references `suppliers_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.supplierId],
+      foreignColumns: [suppliers.orgId, suppliers.id],
+      name: 'supplier_invoices_supplier_id_same_org_fk',
+    }).onDelete('restrict'),
+    // NOTE: supplier_invoices_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0213 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES supplier_invoices (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );

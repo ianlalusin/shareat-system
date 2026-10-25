@@ -1,75 +1,76 @@
-# Handoff — 2026-10-22 (covers 18–22 Oct)
+# Handoff — 2026-10-25 (covers 22-25 Oct)
 
 ## Where things stand
-PRODUCTION: **7949b6f LIVE** (PR #45; health check 22 Oct: ok, database reachable). Migrations live through **0211**.
-Everything merged to `main` is live: T-396 S1+S2, T-440 complete (live field checks + authorization-first), T-441 S1 +
-lightbox fix L1, T-443 item families, T-444..T-446/T-448 compact workspaces and forms, T-450 phone cards, T-451/T-452
-role-first staff. Two PRs are OPEN and fixed, waiting only on green CI and Ian's go: **#43** (T-442 file-link backfill +
-part of T-441 S2) and **#44** (POS v2: T-425 offline, T-426 senior/PWD, T-427 Convert). This wrap-up's PR (branch
-`lane/t453-audit-followups`) carries T-453 + bible rows 373-375 + DEF-727..729 + roadmap.
+PRODUCTION: **fb17323 LIVE**, health ok, migrations through **0214**. Twelve PRs merged and deployed since 22 Oct (list
+below). **Main is protected**: the required check "typecheck, test, build" applies to admins too (bible row 385), so
+everything goes through a PR. Several sessions work on this repo at once; the orchestrator runs ONE merge queue and the
+rules live OUTSIDE the repo in **`C:\Users\ianla\webapps\shareat-coord\BOARD.md`** — read it before any push, PR,
+merge, migration, port use or new number.
 
 ## Gates
-Local, on `lane/t453-audit-followups`: typecheck clean · T-453 unit 20/20 + guards 134/134 · T-453 integration 9 files
-160/160 (lane DB `shareat_t453_test`). Full unit + integration suite: runs in the wrap-up PR's CI (row 296). Build: CI.
-#43 and #44 re-run their CI after the 22 Oct pushes (5b1d780, d6f610f).
+- main fb17323: CI green (full unit + integration), Deploy green.
+- PR #60 (T-398 S2b): local full integration on a fresh DB 10,489 pass; the 4 failing files pass alone (journal +
+  t357 63/63, t393 11/11) or need pg_dump (t394, not installed locally); unit 9,079 pass (etl capture = known env-only).
+  CI running, auto-merge ON.
+- lane/t475-ap-live-checks (S1): t475-s1 + t440 + t384 + t343 1,649 pass in one run; typecheck clean; browser smoke
+  (forged sign-in, 1280/375, light/dark) ALL PASS on the re-run after fixing the Save-re-enables bug the first run found.
+- lane/t455-customer-lobby (S1): t455-s1 85/85; same-org census, t354, journal green; typecheck clean.
+- Build: run by CI on each PR; not run locally.
 
-## What happened (18–22 Oct)
-- **18 Oct (this orchestrator):** Ian's 17 Oct answers recorded (bible 365-372); POS store ids recorded
-  (`docs/ops/pos-v1-key.md`; Ian set POS secret v3 with all five stores); T-440 S9 (auth-first guard G6) and part B;
-  T-442 S1; lightbox L1. The session was cut off by a network drop mid-sweep.
-- **19-21 Oct (another agent, Codex):** finished T-440 (#40), T-442/T-441 S2 pieces (#43, open), POS v2 (#44, open),
-  T-443 + migrations 0210/0211 (#37), compact UI (#38 #41 #42), role-first staff (#45); deployed through 7949b6f.
-- **22 Oct audit of that work (6 reviewers):** no blocker in anything merged. Fixed today:
-  - **#44 money bug:** senior/PWD "whichever is higher" compared a promo on the VAT-inclusive price with 20% of the
-    VAT-free price, so an 18-20% promo overcharged (₱112/19%: ₱81 instead of ₱80). Ruling (orchestrator, recorded in
-    `docs/tasks/426-*.md` on that branch): compare what the diner PAYS, unrounded; tie = 20% statutory. Also removed an
-    unapproved permission allow-list from `.claude/settings.json` on that branch; Convert warning names the method
-    that went negative.
-  - **#43:** `--check` exits 1 only for a LINKABLE unlinked file (ruling in `docs/tasks/442-*.md`).
-  - **T-453** (this PR): cutover direction refuses anything but debit/credit (DEF-727); audit rows for item
-    variant/dismiss/undo (DEF-728); legacy manager/admin position holders shown flagged on Staff (DEF-729);
-    scroll-save throttled; L2a test oracle.
-  - **Bible 373-375:** role-first staffing (21 Oct), T-443 R-A (each size its own item under a parent), R-B (wholesale label).
+## What happened (22-25 Oct)
+- **Live:** #46 T-453 audit follow-ups · #43 T-442 receipt-link backfill (+T-441 S2) · #47 POS v2 release · #48 DEF-742
+  (scripts listed orgs on a connection row security hid) · #49 T-464 POS tablet pairing + Employee ID/PIN sign-in
+  (0212) · #51 POS deploy fix · #52 T-441 S3-S7 one photo-upload control (staff photo, leave certificate, signature,
+  viewers, guard) · #50 T-448 modal forms/density + DEF-740 hydration fix · #55 T-473 failed POS build keeps last good
+  POS · #58 T-476 deploy never prunes the running POS release · #59 T-448 report filters · #53 T-398 S3+S4 same-org
+  composite FKs + validator triggers (0213/0214; caught a deferrable-FK bug that would have broken attendance).
+- **Production runs by Ian (read-only):** receipt-link check EXIT=0 (nothing to link); staff codes 0 bad / 0 duplicate;
+  P0212/P0214 prechecks ALL ZERO.
+- **Decisions (Ian), where recorded:** rows 376-377 (QRPH -> Maribank; drop Banay-Banay) and row 380 (repo public by
+  choice) on main; rows 384-387 in PR #60 (Banay-Banay bought back by Lipa; required check for admins; customer lobby
+  rulings; T-475 rulings incl. "1b 2a 3a"). T-472 answers (read-only service account yes, no personal data, catch
+  >7-day changes) are the POS session's row 392 (its PR #54). Lobby + T-475 answers also in their task files on their
+  branches.
+- **Coordination:** BOARD.md created (merge queue, port lock, number blocks; rule 4b no `--auto` before your slot;
+  rule 4c migrations must land in number order because drizzle silently skips a lower `when`).
 
 ## Pick up here
-1. **Merge order once CI is green and Ian says go:** this wrap-up PR → #43 → #44 (#44 has no migrations; none of the
-   three conflict). Then a release + deploy script for Ian.
-2. **T-441 S3-S7** (staff photo, leave documents, signature, thumbnails, guard): S3/S4/S6 in parallel, then S5, then S7.
-3. **T-398 S2b-S6** (Padre Garcia), plus the new PG HR-on-v2 task (bible 369: needs PG's own statutory rates and an
-   approver above the PG manager) — before 1 Jan.
+1. **PR #60** merges itself when green -> confirm Deploy + health show its sha; update BOARD.md.
+2. **T-475:** S1 is done and smoke-passed: open its PR (no migration) and ask Ian for "merge"; then S2 (expense forms) and
+   S3 (`verify_own_supplier_invoice`, migration 0216 — must merge AFTER 0215 POS T-472 or be renumbered, rule 4c).
+3. **T-455 customer lobby:** S2 (lobby rules: check-in, booking code, limits, purge; must expire pending discount
+   claims when an entry closes) — spec docs/tasks/455-customer-lobby.md on lane/t455-customer-lobby; migration 0217.
+Then: T-485 (app-wide live checks, plan awaits Ian's OK), T-398 S5-S7 (Padre Garcia inter-entity sale, view, onboarding).
 
 ## Do not decide these alone — they are Ian's
-- **Shared online accounts** (Open Questions `q-t396-shared-accounts`): recommended **A** — each store gets its own
-  "share" of each real GCash/BDO/foodpanda account; the daily sweep is one money transfer inside the store; no code.
-  Also needs: which account gets QRPH and bank transfer; foodpanda account per store; Davao; is Ian's wife an owner at
-  Banay-Banay (personal use from her account must be an owner drawing). **Needed by Fri 23 Oct for the 2 Nov start.**
-- **POS key check:** after the POS rollout, run the five-store curl in `docs/ops/pos-v1-key.md` §4 (expect 200 ×5).
-- **Repo visibility (DEF-680):** GitHub was public on 19 Oct, private now. Secret scan of main found nothing. Confirm private.
-- **Uncommitted in the main checkout** (not ours; the main checkout is on Codex's branch `codex/compact-form-fields`
-  with an unpushed doc commit 31ecf0d): `CLAUDE.md` deletes the old-droplet / never-build-on-the-server warning, and
-  `docs/operations/inventory-monitoring-responsibilities.docx` is new. Ian: keep or revert each.
-- Count, on production, managers/admins who still hold staff positions (T-451 left them; they keep position grants).
-- Phone check: on a phone, look at AP bills and customer balances — only two columns show until a row is tapped.
+- **T-485 plan:** wave 1 = the 10 most-hit errors + shared facts (closed month, account balance, stock), then waves
+  2-3. Recommended: yes, after T-475 S1 merges.
+- **Banay-Banay staff:** move to Lipa, or separate with final pay in v1? (T-454)
+- **POS session:** #54 (POS v2 T-470/T-471, with AUDIT's #56 money fixes inside) is next in the queue but its session
+  was closed — Ian reopens it; it reads BOARD.md.
+- Lipa readiness: encoder (a Cashier) still to hire; manager hired.
 
 ## Traps that have actually bitten
-- **Two agents, one repo:** Codex used the main checkout and its own worktrees under `C:\Users\ianla\.codex\worktrees`.
-  Check `git worktree list` and `gh pr list` before assuming the tree is yours.
-- **Git Bash mangles `rev:path`** (`origin/main:.claude/settings.json` becomes a Windows path): set `MSYS_NO_PATHCONV=1`.
-- Agents cannot read or write production (blocked): scripts Ian runs; reading the public `/api/health` is fine.
-- A tester's `npm install` in a lane worktree drifted versions (vitest 4.1.12, duplicate drizzle); `npm ci` there fixed it.
-  Lane worktrees now hold their own `node_modules` (no junctions) — still never `git worktree remove --force`.
-- CRLF and cp1252 bytes from agents: the pre-commit hook catches CR; a 0x97 em dash broke a test silently.
+- **Run the FULL integration suite on a fresh DB before any migration PR** — #53 failed CI because only the slice's
+  tests had run; the full run then found a real production bug.
+- **Lane DB names must contain `shareat_test`** (9 tests refuse other names). Rebuild the lane DB from zero after a
+  main merge — a stale DB hid 0212's staff-code CHECK and 49 failures.
+- **Migrations land in number order** (rule 4c). **No `--auto` merge before your queue slot.**
+- Fixtures: employments.staff_code must be SE-NNN; never hex-only typed values (DEF-744); no new single-column org->org
+  FK (T-398 census).
+- `\b`/`\s` written by agents can become control bytes — verify bytes. Planner files came out CRLF once.
 
 ## The paste-ready prompt
 ```
 You are the orchestrator for shareat-system (C:\Users\ianla\webapps\shareat-system). Run the global /orchestrator
-skill. Start COLD: read docs/HANDOFF-TODAY.md (all) and docs/RULES.md. GREP the bible and register, never Read them
-whole. Production = 7949b6f (migrations through 0211). Open PRs: the 22 Oct wrap-up PR (lane/t453-audit-followups),
-#43 (T-442), #44 (POS v2) — check CI; merge+deploy only when Ian says so, in that order. First ask Ian for the
-shared-accounts answer (Open Questions q-t396-shared-accounts, needed for 2 Nov) and the five-store POS key check.
-Then T-441 S3-S7, T-398 S2b-S6 + PG HR task. Another agent (Codex) also works in this repo: check git worktree list
-and gh pr list first; the main checkout may be on its branch. Next free: migration 0212, task T-454, DEF-730.
-STANDING: lanes are subagents (tester/builder/auditor separate, own _test DB, worktree per lane, workers never run
-git, LF only); every wait = plan + Opus-audit the next slices; Sonnet/Haiku for work, Opus for specs and reviews;
-production steps are scripts Ian runs; talk to Ian in plain language; messages are short.
+skill. Start COLD: read docs/HANDOFF-TODAY.md (all), docs/RULES.md, and C:\Users\ianla\webapps\shareat-coord\BOARD.md
+(merge queue, number blocks, port lock, rules - you own it). GREP the bible and register, never Read them whole.
+Production = fb17323 (migrations through 0214); main is protected (required check applies to admins). PR #60 (T-398
+S2b) auto-merges when green - confirm its deploy. Then: T-475 (lane/t475-ap-live-checks, S1 done + smoke PASS: open
+the PR, then S2/S3), T-455 customer lobby (lane/t455-customer-lobby, S1 done, next S2), T-485 awaits
+Ian's OK. Other sessions may be live (POS, AUDIT, UI UX): ListAgents + gh pr list first. Next free: migration 0218
+(0215 POS, 0216 T-475, 0217 T-455 reserved), DEF-746, task T-486, bible row 388.
+STANDING: lanes are subagents (tester/builder/auditor separate, own *shareat_test* DB, worktree per lane, workers never
+run git, LF only); model per job (Haiku mechanical, Sonnet build/test/audit, Opus specs/reviews); full integration suite
+before migration PRs; production steps are read-only scripts Ian runs; talk to Ian in plain language; messages short.
 ```

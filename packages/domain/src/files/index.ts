@@ -18,7 +18,7 @@
  */
 import { createHash } from 'node:crypto';
 import { authorize, type Actor, can } from '@shareat/auth';
-import { filesRepo, goneSentence, refuse, RefusalError, transaction, UUID_SHAPE, withSystemOrgPrincipal, type FilePurpose, type Tx } from '@shareat/db';
+import { filesRepo, goneSentence, refuse, RefusalError, UUID_SHAPE, withSystemOrgPrincipal, type FilePurpose, type Tx } from '@shareat/db';
 import { stripImageMetadata } from '@shareat/core/exif';
 import { logger } from '@shareat/core/logger';
 import { resolveStorageDriver } from './driver';
@@ -88,12 +88,11 @@ export interface UploadResult {
 }
 
 export async function uploadFile(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: UploadInput,
 ): Promise<UploadResult> {
-  if (tx) return runUpload(tx, actor, input);
-  return transaction((trx) => runUpload(trx, actor, input));
+  return runUpload(tx, actor, input);
 }
 
 /**
@@ -254,7 +253,7 @@ export async function canReadFiles(tx: Tx, actor: Actor, fileIds: readonly strin
  * exactly what `getDownloadURL()` hands out and exactly what this replaces.
  */
 export async function readFileUrl(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { fileId: string; expiresInSeconds?: number },
 ): Promise<{ url: string; contentType: string }> {
@@ -293,8 +292,7 @@ export async function readFileUrl(
     );
     return { url, contentType: file.contentType };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**

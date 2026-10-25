@@ -507,12 +507,17 @@ describe('T-343 S2b — I6 (⛔): a cross-org plant never leaks org Y’s store,
     const { personId: xPersonId } = await hireStaff(fX, { storeId: fX.storeAId, positionIds: [fX.cashierId] });
 
     // ⭐ Superuser plant (this file's own `sql`, which already bypasses RLS for fixture setup) —
-    // `source_ref` -> Y's default; the fill trigger (0159 step 9) computes `store_id` from it.
+    // `source_ref` -> Y's default; `store_id` is Y's store, set explicitly because the fill trigger (0159 step 9) is skipped under replica.
     let plantError: unknown;
     try {
-      await sql`
-        insert into person_grants (person_id, grant_name, granted_by, grant_source, source_ref)
-        values (${xPersonId}, 'record_sale', ${fX.adminId}, 'position', ${yDefault!.id})`;
+      // DEF-491 (0213/0214): the database now refuses this cross-org row, so the plant skips FKs
+      // and triggers (session_replication_role = replica) to keep the APP-level refusal reachable.
+      await sql.begin(async (tx) => {
+        await tx`set local session_replication_role = replica`;
+        await tx`
+          insert into person_grants (person_id, grant_name, granted_by, grant_source, source_ref, store_id)
+          values (${xPersonId}, 'record_sale', ${fX.adminId}, 'position', ${yDefault!.id}, ${fY.storeAId})`;
+      });
     } catch (err) {
       plantError = err;
     }
@@ -549,9 +554,14 @@ describe('T-343 S2b — I6b (⛔): positionGrantsElsewhere itself, on a BYPASSRL
 
     let plantError: unknown;
     try {
-      await sql`
-        insert into person_grants (person_id, grant_name, granted_by, grant_source, source_ref)
-        values (${xPersonId}, 'record_sale', ${fX.adminId}, 'position', ${yDefault!.id})`;
+      // DEF-491 (0213/0214): the database now refuses this cross-org row, so the plant skips FKs
+      // and triggers (session_replication_role = replica) to keep the APP-level refusal reachable.
+      await sql.begin(async (tx) => {
+        await tx`set local session_replication_role = replica`;
+        await tx`
+          insert into person_grants (person_id, grant_name, granted_by, grant_source, source_ref, store_id)
+          values (${xPersonId}, 'record_sale', ${fX.adminId}, 'position', ${yDefault!.id}, ${fY.storeAId})`;
+      });
     } catch (err) {
       plantError = err;
     }

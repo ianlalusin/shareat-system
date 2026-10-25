@@ -173,5 +173,8 @@ export const owners = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'owners_store_id_same_org_fk',
     }).onDelete('restrict'),
+    // NOTE: owners_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0213 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES owners (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );
