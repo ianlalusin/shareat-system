@@ -52,6 +52,8 @@ Children carry no `store_id`: their store is the header's (via-header, T-398 S4 
 in `packages/db/src/cutover/classification.ts` (born in v2, nothing migrated, row 379) and `packages/db/src/rls/registry.ts`
 (org-scoped). Lobby tables are not hot-set mirrors (no Firestore copy).
 
+**T-479 / DEF-774:** the claims cap holds from both sides - `lobby_entries_party_size_cap` also refuses lowering `party_size` below the entry's pending + approved claims (`docs/tasks/479-lobby-party-shrink-claim-cap.md`).
+
 ### 2.3 Booking code
 - **4 digits, 1000-9999, random** (not a counter), unique among the store's live entries (partial unique index);
   insert retries up to 5 times on a unique violation, then refuses "Please check in at the counter". With the

@@ -20,13 +20,17 @@
 --   * lobby_discount_claims: holder_name and id_number exist only while status = 'pending' (NOT NULL then, NULL after: row 353, the app "documents it"
 --     with id_last4, outcome, who and when); card_seen_at IS NOT NULL exactly when approved; approved needs session_ref, statutory_diner_ref and the
 --     approving person. pending -> approved | rejected | expired, the rest frozen. Trigger lobby_discount_claims_cap: pending + approved claims of an
---     entry never exceed its party_size (the entry row is locked FOR UPDATE so two inserts cannot both pass).
+--     entry never exceed its party_size (the entry row is locked FOR UPDATE so two inserts cannot both pass). T-479 / DEF-774: the cap is checked on
+--     the other side too. Trigger lobby_entries_party_size_cap (BEFORE UPDATE OF party_size ON lobby_entries, only when the party SHRINKS) refuses a
+--     party_size below the entry's pending + approved claims (23514, no claim details); growing a party or any update that does not lower
+--     party_size is untouched. The shrink UPDATE holds the entry row lock the claim insert also takes, so whichever runs second sees the other's
+--     committed result. Existing claims are never changed by it: staff reject or expire claims first, then shrink the party.
 --   * No photo, no bytea, no price column anywhere (Ian, 24 Oct: no card photo is kept; the phone never prices).
 --   * lobby_stores is keyed (org_id, store_id) and carries the per-store switches; its max_live_entries defaults to 60.
 --   * lobby_entry_line_options (org_id, line_id, option_value_id): the flavours / options of one pre-order line, one row each (replaces an array column).
 --   * lobby_entries: handoff_url and handoff_expires_at are both set or both NULL.
 -- Trigger classes (triggers/registry.ts): the three forward-only triggers decide only from OLD/NEW and refuse a rewrite of a closed row, so they are
--- history_guard / ENABLE ALWAYS (registry rule R1); lobby_discount_claims_cap counts other rows and stays validator / origin. A birthday request is
+-- history_guard / ENABLE ALWAYS (registry rule R1); lobby_discount_claims_cap and lobby_entries_party_size_cap count other rows and stay validator / origin. A birthday request is
 -- INSERTed only in state requested; the trigger stamps accepted_at = now() on requested -> accepted and ignores any caller-supplied value.
 --
 -- GRANTS. shareat_app gets SELECT, INSERT, UPDATE on all five (a purge only NULLs columns; the cutover purge runs as the owner); no DELETE.
@@ -317,6 +321,20 @@ BEGIN
 END
 $fn$;
 --> statement-breakpoint
+CREATE FUNCTION lobby_entries_party_size_cap() RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $fn$
+DECLARE
+	taken integer;
+BEGIN
+	-- T-479 / DEF-774: the entry row is already locked by this UPDATE (the same lock a claim insert takes FOR UPDATE), and this count runs in a fresh
+	-- READ COMMITTED snapshot, so a claim committed by the transaction we waited on is seen.
+	SELECT count(*) INTO taken FROM lobby_discount_claims WHERE org_id = NEW.org_id AND entry_id = NEW.id AND status IN ('pending','approved');
+	IF taken > NEW.party_size THEN
+		RAISE EXCEPTION 'T-479: a party of % cannot be set below its % live discount claims; reject or expire claims first', NEW.party_size, taken USING ERRCODE = 'check_violation';
+	END IF;
+	RETURN NEW;
+END
+$fn$;
+--> statement-breakpoint
 REVOKE EXECUTE ON FUNCTION lobby_entries_forward_only() FROM PUBLIC;
 --> statement-breakpoint
 REVOKE EXECUTE ON FUNCTION lobby_birthday_requests_forward_only() FROM PUBLIC;
@@ -325,6 +343,8 @@ REVOKE EXECUTE ON FUNCTION lobby_discount_claims_forward_only() FROM PUBLIC;
 --> statement-breakpoint
 REVOKE EXECUTE ON FUNCTION lobby_discount_claims_cap() FROM PUBLIC;
 --> statement-breakpoint
+REVOKE EXECUTE ON FUNCTION lobby_entries_party_size_cap() FROM PUBLIC;
+--> statement-breakpoint
 CREATE TRIGGER "lobby_entries_forward_only" BEFORE UPDATE ON "lobby_entries" FOR EACH ROW EXECUTE FUNCTION lobby_entries_forward_only();
 --> statement-breakpoint
 CREATE TRIGGER "lobby_birthday_requests_forward_only" BEFORE INSERT OR UPDATE ON "lobby_birthday_requests" FOR EACH ROW EXECUTE FUNCTION lobby_birthday_requests_forward_only();
@@ -332,6 +352,8 @@ CREATE TRIGGER "lobby_birthday_requests_forward_only" BEFORE INSERT OR UPDATE ON
 CREATE TRIGGER "lobby_discount_claims_forward_only" BEFORE UPDATE ON "lobby_discount_claims" FOR EACH ROW EXECUTE FUNCTION lobby_discount_claims_forward_only();
 --> statement-breakpoint
 CREATE TRIGGER "lobby_discount_claims_cap" BEFORE INSERT ON "lobby_discount_claims" FOR EACH ROW EXECUTE FUNCTION lobby_discount_claims_cap();
+--> statement-breakpoint
+CREATE TRIGGER "lobby_entries_party_size_cap" BEFORE UPDATE OF party_size ON "lobby_entries" FOR EACH ROW WHEN (NEW.party_size < OLD.party_size) EXECUTE FUNCTION lobby_entries_party_size_cap();
 --> statement-breakpoint
 ALTER TABLE "lobby_entries" ENABLE ALWAYS TRIGGER "lobby_entries_forward_only";
 --> statement-breakpoint

@@ -25,6 +25,7 @@
  *  phone allowed on a lobby entry                       -> E3
  *  claim keeps name/ID after leaving pending            -> K1, K2
  *  claim count not capped at party_size                 -> K4
+ *  party shrunk below its live claims (DEF-774, T-479)  -> K5a..K5f
  *  a photo/bytea/price column                           -> P1, P2
  *  RLS missing / USING-only / FORCE missing             -> R1, R2, R3
  *  registry or classification entry missing             -> G1, G2
@@ -880,6 +881,179 @@ describe('K -- lobby_discount_claims (row 353: no photo, name/ID die with the pe
     expect(value!.solo1?.message).toBeUndefined();
     expectRefused(value!.three, 'K4 3rd claim, party of 2');
     expectRefused(value!.solo2, 'K4 2nd claim, party of 1');
+  });
+});
+
+describe('K5 -- DEF-774 / T-479: shrinking a waiting party cannot leave more live claims than diners', () => {
+  const NOW = () => new Date().toISOString();
+  const setParty = (sp: Tx, entry: string, n: number) => asSql(sp)`update lobby_entries set party_size = ${n} where id = ${entry}`;
+  const partyOf = async (tx: Tx, entry: string) => (await tx<{ party_size: number }[]>`select party_size from lobby_entries where id = ${entry}`)[0]!.party_size;
+
+  it('K5a party 3 with three pending claims: party_size = 1 and = 2 are refused 23514 and the row is unchanged (mutant: no shrink trigger)', async () => {
+    const a = await fixture('k5a');
+    const { value, err } = await asApp(a.orgId, async (tx) => {
+      const e = await ins(tx, 'lobby_entries', entryRow(a, { party_size: 3 }));
+      for (let i = 0; i < 3; i++) await ins(tx, 'lobby_discount_claims', claimRow(a, e));
+      const toOne = await probe(tx, (sp) => setParty(sp, e, 1));
+      const toTwo = await probe(tx, (sp) => setParty(sp, e, 2));
+      return { toOne, toTwo, party: await partyOf(tx, e) };
+    });
+    expect(err?.message, 'RED today: no table').toBeUndefined();
+    expectRefused(value!.toOne, 'K5a 3 pending claims, party 3 -> 1', '23514');
+    expectRefused(value!.toTwo, 'K5a 3 pending claims, party 3 -> 2', '23514');
+    expect(value!.party, 'a refused shrink leaves the row unchanged').toBe(3);
+  });
+
+  it('K5b only pending and approved claims count: party 3 with two pending + one rejected shrinks to 2, not to 1', async () => {
+    const a = await fixture('k5b');
+    const { value, err } = await asApp(a.orgId, async (tx) => {
+      const e = await ins(tx, 'lobby_entries', entryRow(a, { party_size: 3 }));
+      await ins(tx, 'lobby_discount_claims', claimRow(a, e));
+      await ins(tx, 'lobby_discount_claims', claimRow(a, e, { kind: 'pwd' }));
+      const rejected = await ins(tx, 'lobby_discount_claims', claimRow(a, e));
+      await asSql(tx)`update lobby_discount_claims set status = 'rejected', reject_reason = 'blurry', holder_name = null, id_number = null where id = ${rejected}`;
+      const toTwo = await probe(tx, (sp) => setParty(sp, e, 2));
+      const toOne = await probe(tx, (sp) => setParty(sp, e, 1));
+      return { toTwo, toOne, party: await partyOf(tx, e) };
+    });
+    expect(err?.message, 'RED today: no table').toBeUndefined();
+    expect(value!.toTwo?.message, 'a rejected claim does not count: 3 -> 2 is legal with 2 live claims').toBeUndefined();
+    expectRefused(value!.toOne, 'K5b 2 live claims, party 2 -> 1', '23514');
+    expect(value!.party).toBe(2);
+  });
+
+  it('K5c approved claims count the same as pending ones', async () => {
+    const a = await fixture('k5c');
+    const { value, err } = await asApp(a.orgId, async (tx) => {
+      const e = await ins(tx, 'lobby_entries', entryRow(a, { party_size: 3 }));
+      const c1 = await ins(tx, 'lobby_discount_claims', claimRow(a, e));
+      const c2 = await ins(tx, 'lobby_discount_claims', claimRow(a, e));
+      for (const c of [c1, c2]) {
+        await asSql(tx)`update lobby_discount_claims set ${asSql(tx)({
+          status: 'approved', holder_name: null, id_number: null, card_seen_at: NOW(), session_ref: 'S-1', statutory_diner_ref: `D-${c.slice(-4)}`, acted_by_person_id: a.personId,
+        })} where id = ${c}`;
+      }
+      return { toOne: await probe(tx, (sp) => setParty(sp, e, 1)), toTwo: await probe(tx, (sp) => setParty(sp, e, 2)) };
+    });
+    expect(err?.message, 'RED today: no table').toBeUndefined();
+    expectRefused(value!.toOne, 'K5c 2 approved claims, party 3 -> 1 (mutant: only pending counted)', '23514');
+    expect(value!.toTwo?.message, 'party 3 -> 2 with 2 approved claims is legal').toBeUndefined();
+  });
+
+  it('K5d growing the party, and an update that leaves party_size alone, are allowed with claims at the cap', async () => {
+    const a = await fixture('k5d');
+    const { value, err } = await asApp(a.orgId, async (tx) => {
+      const e = await ins(tx, 'lobby_entries', entryRow(a, { party_size: 3 }));
+      for (let i = 0; i < 3; i++) await ins(tx, 'lobby_discount_claims', claimRow(a, e));
+      return {
+        grow: await probe(tx, (sp) => setParty(sp, e, 5)),
+        same: await probe(tx, (sp) => setParty(sp, e, 5)),
+        note: await probe(tx, (sp) => asSql(sp)`update lobby_entries set note = 'near the door' where id = ${e}`),
+        called: await probe(tx, (sp) => asSql(sp)`update lobby_entries set status = 'called' where id = ${e}`),
+        party: await partyOf(tx, e),
+      };
+    });
+    expect(err?.message, 'RED today: no table').toBeUndefined();
+    expect(value!.grow?.message, 'growing 3 -> 5 is untouched (mutant: any party_size change checked)').toBeUndefined();
+    expect(value!.same?.message, 'setting party_size to its own value is untouched').toBeUndefined();
+    expect(value!.note?.message, 'an update that does not touch party_size is untouched').toBeUndefined();
+    expect(value!.called?.message, 'a status move at the cap is untouched').toBeUndefined();
+    expect(value!.party).toBe(5);
+  });
+
+  describe('concurrency: the entry row lock orders a claim insert against a shrink (DEF-774)', () => {
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    /** A COMMITTED entry (not rolled back) with `claims` pending claims, written by the admin connection; removed again afterwards. */
+    async function committedEntry(a: MenuFx, party: number, claims: number) {
+      const entry = await insEntry(sql, a, { party_size: party });
+      for (let i = 0; i < claims; i++) await ins(sql, 'lobby_discount_claims', claimRow(a, entry));
+      return entry;
+    }
+    const cleanup = async (entry: string) => {
+      await sql`delete from lobby_discount_claims where entry_id = ${entry}`;
+      await sql`delete from lobby_entries where id = ${entry}`;
+    };
+    const settled = (p: Promise<unknown>) => {
+      const s = { done: false };
+      void p.then(
+        () => (s.done = true),
+        () => (s.done = true),
+      );
+      return s;
+    };
+
+    it('K5e tx A inserts the 3rd claim (holds the entry lock), tx B tries party_size = 2 and BLOCKS; A commits -> B is refused 23514', async () => {
+      const a = await fixture('k5e');
+      const entry = await committedEntry(a, 3, 2);
+      try {
+        let release!: () => void;
+        const gate = new Promise<void>((r) => (release = r));
+        let aHasLock!: () => void;
+        const aReady = new Promise<void>((r) => (aHasLock = r));
+        const txA = sql.begin(async (tx) => {
+          await ins(tx, 'lobby_discount_claims', claimRow(a, entry));
+          aHasLock();
+          await gate;
+        });
+        await aReady;
+        const txB = sql
+          .begin(async (tx) => {
+            await setParty(tx, entry, 2);
+          })
+          .then(
+            () => undefined,
+            (e: PgErr) => e,
+          );
+        const bState = settled(txB);
+        await sleep(500);
+        expect(bState.done, 'B must wait on the entry row lock A holds, not decide on a stale count').toBe(false);
+        release();
+        await txA;
+        const bErr = await txB;
+        expectRefused(bErr, 'K5e shrink to 2 after A committed a 3rd claim', '23514');
+        expect(await sql`select party_size from lobby_entries where id = ${entry}`).toMatchObject([{ party_size: 3 }]);
+        expect(await sql`select count(*)::int as n from lobby_discount_claims where entry_id = ${entry}`).toMatchObject([{ n: 3 }]);
+      } finally {
+        await cleanup(entry);
+      }
+    });
+
+    it('K5f reverse order: tx B shrinks to 2 first (holds the entry lock), tx A inserts the 3rd claim and BLOCKS; B commits -> the insert is refused', async () => {
+      const a = await fixture('k5f');
+      const entry = await committedEntry(a, 3, 2);
+      try {
+        let release!: () => void;
+        const gate = new Promise<void>((r) => (release = r));
+        let bHasLock!: () => void;
+        const bReady = new Promise<void>((r) => (bHasLock = r));
+        const txB = sql.begin(async (tx) => {
+          await setParty(tx, entry, 2);
+          bHasLock();
+          await gate;
+        });
+        await bReady;
+        const txA = sql
+          .begin(async (tx) => {
+            await ins(tx, 'lobby_discount_claims', claimRow(a, entry));
+          })
+          .then(
+            () => undefined,
+            (e: PgErr) => e,
+          );
+        const aState = settled(txA);
+        await sleep(500);
+        expect(aState.done, 'the claim insert must wait on the entry row lock B holds').toBe(false);
+        release();
+        await txB;
+        const aErr = await txA;
+        expectRefused(aErr, 'K5f 3rd claim after the party shrank to 2', '23514');
+        expect(await sql`select party_size from lobby_entries where id = ${entry}`).toMatchObject([{ party_size: 2 }]);
+        expect(await sql`select count(*)::int as n from lobby_discount_claims where entry_id = ${entry}`).toMatchObject([{ n: 2 }]);
+      } finally {
+        await cleanup(entry);
+      }
+    });
   });
 });
 
