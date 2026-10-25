@@ -10,8 +10,10 @@ const cap = process.env.BUILD_TARGET === 'capacitor';
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // @shareat/core is TypeScript source (money): compile it with the app.
-  transpilePackages: ['@shareat/core'],
+  // @shareat/core, @shareat/db and @shareat/domain are TypeScript source: compile them with the app.
+  // postgres and pino stay external (T-455 S3: the lobby route handlers are the only code that reaches them).
+  transpilePackages: ['@shareat/core', '@shareat/db', '@shareat/domain'],
+  serverExternalPackages: ['postgres', 'pino'],
   trailingSlash: cap,
   images: { unoptimized: cap },
   ...(cap ? { output: 'export' } : {}),

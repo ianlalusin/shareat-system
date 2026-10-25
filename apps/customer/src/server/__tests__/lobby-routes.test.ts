@@ -319,6 +319,48 @@ describe('A. POST /api/lobby/check-in', () => {
   });
 });
 
+describe('E. audit follow-ups', () => {
+  it('E1 (F2) LOBBY_HASH_SECRET shorter than 32 characters is "not configured": 503 counter sentence, no cookie, no row; 32 characters works [kills: any non-empty secret accepted, off-by-one on the minimum]', async () => {
+    const s = await mkStore();
+    const prev = process.env.LOBBY_HASH_SECRET;
+    try {
+      for (const weak of ['x', 'a'.repeat(31)]) {
+        process.env.LOBBY_HASH_SECRET = weak;
+        const r = await checkIn(s);
+        expect([r.status, r.body], `secret length ${weak.length}`).toEqual([503, SORRY_COUNTER]);
+        expect(r.setCookie).toBeNull();
+      }
+      expect(await countEntries(s)).toBe(0);
+      process.env.LOBBY_HASH_SECRET = 'Qk7'.repeat(10) + 'ab'; // exactly 32
+      expect((await checkIn(s)).status, 'positive control: 32 characters').toBe(200);
+    } finally {
+      process.env.LOBBY_HASH_SECRET = prev;
+    }
+  });
+
+  it('E2 (F3) with no x-real-ip the answer is 503 even when NODE_ENV is "test"; only the explicit LOBBY_TEST_IP_STANDIN setting lets a request through [kills: stand-in keyed on NODE_ENV, one shared bucket for header-less requests]', async () => {
+    const s = await mkStore();
+    const prevEnv = process.env.NODE_ENV;
+    const prevStand = process.env.LOBBY_TEST_IP_STANDIN;
+    (process.env as Record<string, string>).NODE_ENV = 'test';
+    delete process.env.LOBBY_TEST_IP_STANDIN;
+    try {
+      const r = await checkIn(s, { ip: null });
+      expect([r.status, r.body]).toEqual([503, SORRY_COUNTER]);
+      expect(r.setCookie).toBeNull();
+      expect(await countEntries(s)).toBe(0);
+      process.env.LOBBY_TEST_IP_STANDIN = 'injected-ip-for-tests';
+      const ok = await checkIn(s, { ip: null });
+      expect(ok.status, 'positive control: explicit stand-in').toBe(200);
+      expect((await entryRow(ok.body.entry.entryId)).ip_hash).toBe(hmacHex('injected-ip-for-tests'));
+    } finally {
+      (process.env as Record<string, string | undefined>).NODE_ENV = prevEnv;
+      if (prevStand === undefined) delete process.env.LOBBY_TEST_IP_STANDIN;
+      else process.env.LOBBY_TEST_IP_STANDIN = prevStand;
+    }
+  });
+});
+
 // ================================================================================================ B. whose entry is it
 describe('B. GET /api/lobby/me and POST /api/lobby/cancel: only the owning cookie', () => {
   it('B1 no cookie -> 401 on /me with the not-found sentence, even when the store code is right [kills: 200/404/500 without a cookie, a store-code lookup that answers]', async () => {

@@ -288,3 +288,7 @@ Domain, with Max-Age); hashes are HMAC-SHA256 hex keyed by `LOBBY_HASH_SECRET`; 
   would put every diner of a store under one 5-per-hour limit. ⛔ Before S9 switches the lobby on, confirm the
   order.shareat.net nginx block sets `proxy_set_header X-Real-IP $remote_addr;`.
 - `LOBBY_HASH_SECRET` missing → 503 "not configured" (fail closed), never an unkeyed hash.
+- ⛔ **Hard gate before S9 (S3 audit, 25 Oct):** S3's diner routes run through `withOrgPrincipal` (org-wide app
+  connection). That is acceptable while the lobby is off; S9 must not switch the lobby on until the diner path runs on a
+  dedicated lobby DB role (grants only on `lobby_*` + read on the menu tables), per the S1 audit note.
+- `LOBBY_HASH_SECRET` must be at least 32 characters, else 503 (a short key makes the low-entropy device/IP hashes guessable).
