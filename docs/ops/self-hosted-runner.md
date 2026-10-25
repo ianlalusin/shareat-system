@@ -8,7 +8,9 @@
 > deploy was skipped. Unit tests and typecheck were fine (~5 min). Do not set `CI_RUNNER` again until
 > the desktop is fixed and a full run passes in reasonable time.
 >
-> The desktop runner `shareat-desktop` is still registered and online for that testing.
+> **Cause and decision:** the desktop's disk is an HDD (spinning disk); the integration suite's constant
+> database create/drop is disk-bound. Ian, 2026-10-25: drop the desktop runner (option B); CI stays on
+> GitHub-hosted. Revisit only with an SSD fitted (and ideally native Linux), proven by one full run.
 >
 > | | |
 > |---|---|
