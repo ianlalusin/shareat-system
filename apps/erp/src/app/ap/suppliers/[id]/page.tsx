@@ -342,7 +342,10 @@ export default async function SupplierDetailPage({
                     </td>
                     <td className="px-3 py-2">{inv.invoiceDate}</td>
                     <td className="px-3 py-2">
-                      <Badge status={inv.status} />
+                      <span className="inline-flex flex-wrap items-center gap-1.5">
+                        <Badge status={inv.status} />
+                        {inv.selfVerified && <Badge tone="warning" label="Verified by its own creator" />}
+                      </span>
                     </td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(inv.totalAmount)}</td>
                   </LinkRow>

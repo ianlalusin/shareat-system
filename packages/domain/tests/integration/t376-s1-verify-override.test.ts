@@ -257,14 +257,15 @@ describe('T6 - a January bill with NO drafts', () => {
   });
 });
 
-describe('T7 (R4, segregation) - the admin who LOGGED the bill cannot verify it, override or not', () => {
-  it('the segregation sentence; zero rows - control: the same override on a bill the admin did not log (T1)', async () => {
+// T-475 S3 (Ian Q2=B, Q3=A): an ADMIN may now verify a bill they logged (flagged self_verified, audited); every other role still may not.
+describe('T7 (R4, segregation) - the MANAGER who LOGGED the bill cannot verify it, override or not; an admin logger now can', () => {
+  it('the segregation sentence; zero rows - control: the same override on a bill the manager did not log (T1)', async () => {
     const f = await fixture('t7');
-    const mine = await f.bill({ on: '2026-01-10', loggedBy: f.adminId, drafts: ['1200.00'] });
+    const mine = await f.bill({ on: '2026-01-10', loggedBy: f.managerId, drafts: ['1200.00'] });
     const staffs = await f.bill({ on: '2026-01-11', loggedBy: f.staffId, drafts: ['800.00'] });
     await closeJanuary(f);
 
-    const refused = await rejection(verify(f, f.admin, mine.id, OVERRIDE), 'the logger verifying their own bill');
+    const refused = await rejection(verify(f, f.manager, mine.id, OVERRIDE), 'the manager logger verifying their own bill');
     expect(refused.userMessage).toMatch(/^You logged this invoice, so you cannot also verify it/);
     await expectNothingPosted(f, mine);
     expect(await invoiceStatus(staffs.id)).toBe('pending');
@@ -272,6 +273,15 @@ describe('T7 (R4, segregation) - the admin who LOGGED the bill cannot verify it,
     await verify(f, f.admin, staffs.id, OVERRIDE); // control
     expect(await invoiceStatus(staffs.id)).toBe('verified');
     expect(await overrideRows(f.orgId)).toHaveLength(1);
+  });
+
+  it('positive control: an ADMIN logger verifies their own bill and it is flagged self_verified (details: t475-s3-self-verify.test.ts)', async () => {
+    const f = await fixture('t7a');
+    const mine = await f.bill({ on: '2026-02-10', loggedBy: f.adminId, drafts: ['1200.00'] });
+    await verify(f, f.admin, mine.id);
+    expect(await invoiceStatus(mine.id)).toBe('verified');
+    const [row] = await sql<{ self_verified: boolean }[]>`select self_verified from supplier_invoices where id = ${mine.id}`;
+    expect(row!.self_verified).toBe(true);
   });
 });
 
