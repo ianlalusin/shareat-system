@@ -15,7 +15,7 @@
  */
 import { ZERO, add, compare, divideMoney, money, subtract, type Money } from '@shareat/core/money';
 import { parseDecimalInput } from '../shared/money-input';
-import { employmentRepo, moneyAccountsRepo, separationsRepo, thirteenthMonthRepo, transaction, type Tx } from '@shareat/db';
+import { employmentRepo, moneyAccountsRepo, separationsRepo, thirteenthMonthRepo, type Tx } from '@shareat/db';
 import type { SeparationCause } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { postEntry } from '../ledger/post-entry';
@@ -88,7 +88,7 @@ export async function previewSeparation(
  * Same self-dealing block as `postPayRun`/`post13thMonthRun`.
  */
 export async function postSeparation(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: {
     storeId: string;
@@ -228,14 +228,13 @@ export async function postSeparation(
 
     return { id: separationId, netPay: netPay };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /** Mirrors `voidPayRun`/`void13thMonthRun`. ⚠️ Does NOT automatically re-include the employment in
  *  a later annual 13th-month run if that run already posted for the year — see task spec §5. */
 export async function voidSeparation(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { id: string; reason: string; on?: string },
 ): Promise<{ reversed: boolean }> {
@@ -277,6 +276,5 @@ export async function voidSeparation(
 
     return { reversed };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }

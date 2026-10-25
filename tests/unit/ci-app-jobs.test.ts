@@ -76,11 +76,11 @@ describe('T-417 ERP CI is untouched (case 13)', () => {
   it('a POS v2 failure can never block the ERP deploy. Mutant: fatal POS build or restart', () => {
     const d = readLf(wf('deploy.yml'));
     const opens = d.match(/# >>> POS v2/g)?.length ?? 0;
-    expect(opens).toBe(4);
-    expect(d.match(/# <<< POS v2/g)?.length).toBe(4);
+    expect(opens).toBe(6); // T-473 / DEF-753 carry-forward block; T-476 / DEF-770 retention block
+    expect(d.match(/# <<< POS v2/g)?.length).toBe(6);
     expect(d).toMatch(/- name: Build POS v2 \(web\)\n\s+continue-on-error: true/);
-    expect(d).toMatch(/if \[ -d apps\/pos\/\.next \]; then/);
-    expect(d).toMatch(/restart shareat-pos\.service \|\| echo/);
+    expect(d).toMatch(/if \[ -f apps\/pos\/\.pos-build-ok \]; then/); // gated on the success marker, not .next
+    expect(d).toMatch(/restart shareat-pos\.service \|\| \{ POS_UP=0; echo/);
     expect(d.indexOf('Confirm POS v2 is up')).toBeGreaterThan(d.indexOf('- name: Confirm the app is up'));
   });
 

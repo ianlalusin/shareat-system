@@ -38,7 +38,7 @@
  * is enforced HERE, for every caller, not only the web action's own copy.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { apRepo, auditLogRepo, expensesRepo, transaction, type Tx } from '@shareat/db';
+import { apRepo, auditLogRepo, expensesRepo, type Tx } from '@shareat/db';
 import { add } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
 import { assertLivePaymentMethod, type ExpensePaymentMethod } from './routing';
@@ -102,12 +102,11 @@ export interface CreateExpenseResult {
 }
 
 export async function createExpense(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: CreateExpenseInput,
 ): Promise<CreateExpenseResult> {
-  if (tx) return runCreateExpense(tx, actor, input);
-  return transaction((trx) => runCreateExpense(trx, actor, input));
+  return runCreateExpense(tx, actor, input);
 }
 
 async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput): Promise<CreateExpenseResult> {

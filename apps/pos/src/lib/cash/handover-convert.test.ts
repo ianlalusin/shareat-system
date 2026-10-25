@@ -64,6 +64,12 @@ describe('Acceptance 7 - shift-close reconciliation', () => {
     expect(rec.expectedCash).toBe(2000 + 5000 + rec.convertNet - 0);
   });
 
+  it('row 391: cash refunds come off expected cash and are stored on the handover record', () => {
+    expect(computeExpectedCash({ startingCash: 2000, cashSales: 5000, convertNet: 0, deductions: 250, cashRefunds: 125.5 })).toBe(6624.5);
+    expect(computeExpectedCash({ startingCash: 2000, cashSales: 5000, convertNet: 0, deductions: 0 })).toBe(7000); // omitted = none
+    const rec = buildHandoverRecord({ startingCash: 2000, cashSales: 5000, convertNet: 0, deductions: 0, cashRefunds: 100, countedCash: 6900 });
+    expect(rec).toMatchObject({ expectedCash: 6900, cashRefunds: 100, variance: 0 });
+  });
   it('deductions still subtract, and a negative net shows a minus sign', () => {
     const net = convertNetPesos([doc({ fromMethod: 'Cash', toMethod: 'GCash', amount: 300 })], FROM, TO, isCash);
     expect(net).toBe(-300);

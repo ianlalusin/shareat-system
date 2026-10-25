@@ -165,5 +165,22 @@ export const attendanceAdjustments = pgTable(
       foreignColumns: [stores.orgId, stores.id],
       name: 'attendance_adjustments_store_id_same_org_fk',
     }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `employment_id` FK (RLS checks only this row's org_id); references `employments_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.employmentId],
+      foreignColumns: [employments.orgId, employments.id],
+      name: 'attendance_adjustments_employment_id_same_org_fk',
+    }).onDelete('restrict'),
+    // NOTE: this FK is DEFERRABLE INITIALLY DEFERRED in the SQL (migration 0213), like its single-column twin from 0084: the domain stamps the old row's
+    // superseded_by with a minted id BEFORE inserting the new row (attendance/adjustments.ts). Drizzle's foreignKey() cannot express it; keep it in the migration.
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `superseded_by_adjustment_id` FK (RLS checks only this row's org_id); references `attendance_adjustments_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.supersededByAdjustmentId],
+      foreignColumns: [t.orgId, t.id],
+      name: 'attendance_adjustments_superseded_by_adjustment_id_same_org_fk',
+    }).onDelete('restrict'),
+    // NOTE: attendance_adjustments_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0213 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES attendance_adjustments (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );

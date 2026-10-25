@@ -589,11 +589,12 @@ describe('T-176 test 16 — the same product cannot be both input and output', (
 });
 
 describe('T-176 test 17 — an unresolvable product id is a HARD reject', () => {
-  it('for the output — an item from a DIFFERENT org (passes the raw FK, fails org-scoped resolution)', async () => {
-    // A genuinely nonexistent uuid trips `production_record_lines`' own FK at DRAFT time — this
-    // schema cannot even hold a reference to an item that never existed. The realistic
-    // "unresolvable" case `validateProductionLines`'s `resolved` flag exists for is exactly this:
-    // an id that is a real ITEM ROW, but not in the actor's own org.
+  it('for the output — an item from a DIFFERENT org: the database refuses it at draft time (DEF-491), and a planted one is still refused at post by org-scoped resolution', async () => {
+    // DEF-491 (0213): this used to "pass the raw FK" and fail only in validation. The composite
+    // same-org FK now refuses the foreign item when the draft is written, so the guarantee moved
+    // down a layer. Leg 1 pins the database refusal; leg 2 plants the foreign item the way only a
+    // superuser can (session_replication_role = replica skips FKs and triggers) to keep the
+    // app-level `resolved` refusal reachable.
     const [otherOrg] = await sql<{ id: string }[]>`insert into organizations (name, code) values ('Org B','org-b') returning id`;
     const [otherOrgPerson] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${otherOrg!.id},'Other') returning id`;
     const [foreignItem] = await sql<{ id: string }[]>`
@@ -601,16 +602,32 @@ describe('T-176 test 17 — an unresolvable product id is a HARD reject', () => 
       values (${otherOrg!.id},${testItemCode()},'Foreign item','raw_material','kg',${otherOrgPerson!.id}) returning id`;
 
     await stockUpSlab();
-    const draft = await asOrg(orgA, (tx) =>
-      createProductionDraft(tx, staffActor, {
-        orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice', producedOn: '2026-08-10',
-        inputs: [{ itemId: slabItem, quantity: '10', unit: 'kg' }],
-        outputs: [{ itemId: foreignItem!.id, quantity: '5', unit: 'kg' }],
-      }),
-    );
-    // The FK is satisfied (it IS a real items row) — the refusal must come from validation.
+    const draftInput = (outputItemId: string) => ({
+      orgId: orgA, storeId: storeA, locationId: kitchen, kind: 'slice' as const, producedOn: '2026-08-10',
+      inputs: [{ itemId: slabItem, quantity: '10', unit: 'kg' }],
+      outputs: [{ itemId: outputItemId, quantity: '5', unit: 'kg' }],
+    });
+
+    // Leg 1: the database refuses the foreign item at draft time.
+    let refused: unknown;
+    try {
+      await asOrg(orgA, (tx) => createProductionDraft(tx, staffActor, draftInput(foreignItem!.id)));
+    } catch (err) {
+      refused = err;
+    }
+    expect(refused, 'the cross-org output must be refused by the database').toBeDefined();
+    expect((refused as { code?: string }).code).toBe('23503');
+    expect(String((refused as Error).message)).toMatch(/DEF-491|same_org_fk/);
+
+    // Leg 2: plant the foreign item under replica, then post.
+    const draft = await asOrg(orgA, (tx) => createProductionDraft(tx, staffActor, draftInput(sliceA)));
     expect(draft.ok).toBe(true);
     if (!draft.ok) return;
+    await sql.begin(async (tx) => {
+      await tx`set local session_replication_role = replica`;
+      await tx`update production_record_lines set item_id = ${foreignItem!.id}
+               where record_id = ${draft.recordId} and direction = 'out'`;
+    });
     const posted = await asOrg(orgA, (tx) => postProduction(tx, managerActor, { recordId: draft.recordId }));
     expect(posted.ok).toBe(false);
     if (posted.ok) return;

@@ -8,7 +8,7 @@
  * ⛔ **The platform fee is booked here, once.** v1 recognised it twice and it cost ₱198,148.29
  * across two stores. `POSTING-PATTERNS.md`'s `ar_collection` is the authority for these legs.
  */
-import { arRepo, auditLogRepo, customersRepo, journalRepo, moneyAccountsRepo, transaction, type CustomerRow, type Tx } from '@shareat/db';
+import { arRepo, auditLogRepo, customersRepo, journalRepo, moneyAccountsRepo, type CustomerRow, type Tx } from '@shareat/db';
 import { authorize, AuthorizationError, type Actor, can } from '@shareat/auth';
 import { add, compare, money, subtract, ZERO, type Money } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
@@ -194,7 +194,7 @@ async function postCharge(
  * T-433: the gate itself is `creditExposure` above, shared with `recordChargeWithCollection`.
  */
 export async function recordCharge(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: RecordChargeInput,
 ): Promise<{ chargeId: string; entryId: string; creditOverrideBy: string | null; creditOverrideReason: string | null }> {
@@ -212,8 +212,7 @@ export async function recordCharge(
     await auditCreditOverride(trx, actor, input.storeId, chargeId, exposure);
     return { chargeId, entryId, creditOverrideBy: exposure.overrideBy, creditOverrideReason: exposure.overrideReason };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /** What is paid on the spot. The money account must be at the charge's own store. */
@@ -236,7 +235,7 @@ export type RecordChargeWithCollectionInput = RecordChargeInput & { payNow: PayN
  * also posts the payment that makes that true.
  */
 export async function recordChargeWithCollection(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: RecordChargeWithCollectionInput,
 ): Promise<{
@@ -299,8 +298,7 @@ export async function recordChargeWithCollection(
       creditOverrideReason: exposure.overrideReason,
     };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -309,7 +307,7 @@ export async function recordChargeWithCollection(
  * Needs `approve_buyer` at the store, the same right as the dispatch it previews, so staff see no customer figures.
  */
 export async function previewCreditExposure(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { customerId: string; storeId: string; total: string; payNow?: string | null },
 ): Promise<{ owed: string; after: string; limit: string | null; over: boolean }> {
@@ -325,8 +323,7 @@ export async function previewCreditExposure(
     const x = await creditExposure(trx, actor, customer, input.storeId, added, { enforce: false });
     return { owed: x.owed, after: x.after, limit: x.limit, over: x.over };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -337,7 +334,7 @@ export async function previewCreditExposure(
 const CHARGE_VOID_OUT_OF_REACH = 'That charge does not exist, or it is not at a store where you may void it.';
 
 export async function voidCharge(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { chargeId: string; reason: string },
 ): Promise<{ entryId: string }> {
@@ -389,8 +386,7 @@ export async function voidCharge(
     }
     return { entryId: result.reversalEntryId };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -------------------------------------------------------------------------------------
@@ -426,7 +422,7 @@ export interface RecordCollectionInput {
 }
 
 export async function recordCollection(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: RecordCollectionInput,
 ): Promise<{ collectionId: string; entryId: string; allocated: string; surplus: string }> {
@@ -685,8 +681,7 @@ export async function recordCollection(
       surplus,
     };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /** Reversal, never deletion. The allocations stay so the charge correctly reopens. */
@@ -698,7 +693,7 @@ export async function recordCollection(
 const COLLECTION_VOID_OUT_OF_REACH = 'That collection does not exist, or it is not at a store where you may void it.';
 
 export async function voidCollection(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { collectionId: string; reason: string },
 ): Promise<{ entryId: string }> {
@@ -749,8 +744,7 @@ export async function voidCollection(
     }
     return { entryId: result.reversalEntryId };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -------------------------------------------------------------------------------------
@@ -786,7 +780,7 @@ export async function voidCollection(
 const CHARGE_OUT_OF_REACH = 'That charge does not exist, or it is not at a store where you may write off receivables.';
 
 export async function writeOffCharge(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { chargeId: string; amount: string; reason: string },
 ): Promise<{ writeOffId: string; entryId: string; alreadyRecorded: boolean }> {
@@ -910,8 +904,7 @@ export async function writeOffCharge(
     });
     return { writeOffId, entryId: result.entryId, alreadyRecorded: false };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -------------------------------------------------------------------------------------
@@ -952,7 +945,7 @@ export interface SuggestArAllocationResult {
  * imported in this file, and the TESTER's case 5 asserts on that exact class.
  */
 export async function suggestCollectionAllocation(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   storeId: string,
   amount: string,
@@ -999,6 +992,5 @@ export async function suggestCollectionAllocation(
       surplus: plan.remainder,
     };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }

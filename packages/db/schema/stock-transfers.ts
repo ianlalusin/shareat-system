@@ -154,6 +154,9 @@ export const stockTransfers = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'stock_transfers_voided_by_same_org_fk',
     }).onDelete('restrict'),
+    // NOTE: stock_transfers_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0213 (T-398 S3 / DEF-491), no Drizzle mirror here.
+    // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES stock_transfers (org_id, id)`
+    // same-org FKs declared beside their own tables have a real unique target.
   ],
 );
 
@@ -230,6 +233,18 @@ export const stockReservations = pgTable(
       columns: [t.orgId, t.storeId],
       foreignColumns: [stores.orgId, stores.id],
       name: 'stock_reservations_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `item_id` FK (RLS checks only this row's org_id); references `items_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.itemId],
+      foreignColumns: [items.orgId, items.id],
+      name: 'stock_reservations_item_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `transfer_id` FK (RLS checks only this row's org_id); references `stock_transfers_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.transferId],
+      foreignColumns: [stockTransfers.orgId, stockTransfers.id],
+      name: 'stock_reservations_transfer_id_same_org_fk',
     }).onDelete('restrict'),
   ],
 );

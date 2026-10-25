@@ -10,14 +10,7 @@
  * again as a separate expense document, and it cost **₱198,148.29** across two stores. One
  * function owns these legs, which makes the double-count impossible rather than merely forbidden.
  */
-import {
-  auditLogRepo,
-  channelSettlementsRepo,
-  moneyAccountsRepo,
-  moneyTransfersRepo,
-  transaction,
-  type Tx,
-} from '@shareat/db';
+import { auditLogRepo, channelSettlementsRepo, moneyAccountsRepo, moneyTransfersRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { logger } from '@shareat/core/logger';
 import { compare, fromCentavos, isZero, money, negate, toCentavos, ZERO, type Money } from '@shareat/core/money';
@@ -455,7 +448,7 @@ async function gatherSettlementContext(
  * form that fixes one error at a time makes four round trips out of one.
  */
 export async function previewChannelSettlement(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: Omit<RecordSettlementInput, 'salesDayId' | 'settledOn'> & { settledOn?: string },
 ): Promise<SettlementPreview> {
@@ -486,8 +479,7 @@ export async function previewChannelSettlement(
       figuresComputed: figureBlockers.length === 0,
     };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -497,7 +489,7 @@ export async function previewChannelSettlement(
  * money — and v1 shipped a bug by assuming otherwise. Nothing here clamps them.
  */
 export async function recordChannelSettlement(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   rawInput: RecordSettlementInput,
 ): Promise<SettlementResult> {
@@ -711,8 +703,7 @@ export async function recordChannelSettlement(
       settlementGain,
     };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -732,7 +723,7 @@ export async function recordChannelSettlement(
  * pays into. Choosing the account already set is a no-op success (no write).
  */
 export async function setChannelPayoutDestination(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { channelId: string; moneyAccountId: string },
 ): Promise<{
@@ -840,8 +831,7 @@ export async function setChannelPayoutDestination(
       wrote: true,
     };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -849,7 +839,7 @@ export async function setChannelPayoutDestination(
  * and re-post, never an edit, because a posted settlement is immutable.
  */
 export async function voidChannelSettlement(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { settlementId: string; reason: string },
 ): Promise<{ reversedEntryId: string }> {
@@ -878,8 +868,7 @@ export async function voidChannelSettlement(
     await R.markVoided(trx, actor.orgId, s.id, { voidedBy: actor.personId, voidReason: reason });
     return { reversedEntryId: reversal.reversalEntryId };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // =====================================================================================
@@ -937,7 +926,7 @@ function toSummary(row: {
 
 /** One channel-day's POSTED settlement, if one exists — read-gated the same as a preview. */
 export async function findPostedSettlementForChannelDay(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { channelId: string; businessDate: string },
 ): Promise<PostedSettlementSummary | null> {
@@ -951,8 +940,7 @@ export async function findPostedSettlementForChannelDay(
     if (!row) return null;
     return toSummary({ ...row, channelName: config.name, businessDate: row.businessDate });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -962,7 +950,7 @@ export async function findPostedSettlementForChannelDay(
  * view does not carry.
  */
 export async function listPostedSettlementsForStore(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { storeId: string; limit?: number },
 ): Promise<PostedSettlementSummary[]> {
@@ -978,6 +966,5 @@ export async function listPostedSettlementsForStore(
     }
     return out;
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }

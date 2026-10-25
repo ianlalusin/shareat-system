@@ -35,10 +35,11 @@ export function handoverReadFrom(periodStartMs: number, hasPrior: boolean): numb
   return periodStartMs + (hasPrior ? 1 : 0);
 }
 
-interface CashFigures { startingCash: number; cashSales: number; convertNet: number; deductions: number; manualCashAdjustment?: number }
+/** cashRefunds (bible row 391): cash handed back for refunds in the window, as a positive peso amount; it comes OFF the expected drawer cash. */
+interface CashFigures { startingCash: number; cashSales: number; convertNet: number; deductions: number; manualCashAdjustment?: number; cashRefunds?: number }
 export function computeExpectedCash(input: CashFigures): number {
   return toWirePesos(storedPesosToCentavos(input.startingCash) + storedPesosToCentavos(input.cashSales) +
-    storedPesosToCentavos(input.convertNet) + storedPesosToCentavos(input.manualCashAdjustment ?? 0) - storedPesosToCentavos(input.deductions));
+    storedPesosToCentavos(input.convertNet) + storedPesosToCentavos(input.manualCashAdjustment ?? 0) - storedPesosToCentavos(input.deductions) - storedPesosToCentavos(input.cashRefunds ?? 0));
 }
 
 export function convertLineText(net: number): string | null {
@@ -53,7 +54,7 @@ export function buildHandoverRecord(input: CashFigures & { countedCash: number; 
   const expectedCash = computeExpectedCash(input);
   return {
     startingCash: input.startingCash, cashSales: input.cashSales, convertNet: input.convertNet,
-    deductionsTotal: input.deductions, countedCash: input.countedCash, expectedCash, manualCashAdjustment, manualCashAdjustmentReason,
+    deductionsTotal: input.deductions, cashRefunds: toWirePesos(storedPesosToCentavos(input.cashRefunds ?? 0)), countedCash: input.countedCash, expectedCash, manualCashAdjustment, manualCashAdjustmentReason,
     variance: toWirePesos(storedPesosToCentavos(input.countedCash) - storedPesosToCentavos(expectedCash)),
   };
 }

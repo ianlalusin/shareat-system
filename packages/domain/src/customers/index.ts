@@ -13,7 +13,7 @@
  * `counterparty_store_id` → internal, eliminates. `counterparty_org_id` → inter-entity, real
  * revenue. Neither → external, real revenue. ⛔ `customer_group` never decides any of it.
  */
-import { auditLogRepo, customersRepo, itemsRepo, transaction, type Tx } from '@shareat/db';
+import { auditLogRepo, customersRepo, itemsRepo, type Tx } from '@shareat/db';
 import type { CustomerGroup, CustomerTreatment } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { gone, refuse } from '../shared/refusal';
@@ -37,7 +37,7 @@ export interface CreateCustomerInput {
 }
 
 export async function createCustomer(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: CreateCustomerInput,
 ): Promise<{ id: string; treatment: CustomerTreatment }> {
@@ -95,8 +95,7 @@ export async function createCustomer(
       }),
     };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -105,7 +104,7 @@ export async function createCustomer(
  * row, only when the status really changes.
  */
 export async function setCustomerStatus(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { customerId: string; status: 'active' | 'inactive'; source?: 'web' | 'etl' },
 ): Promise<void> {
@@ -125,8 +124,7 @@ export async function setCustomerStatus(
       source: input.source ?? 'web',
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -141,7 +139,7 @@ export async function setCustomerStatus(
  * would tell every aging report after it that a live debt was settled.
  */
 export async function reconcileCustomer(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { customerId: string; asOf: string },
 ): Promise<{ balanceAtStamp: string }> {
@@ -170,8 +168,7 @@ export async function reconcileCustomer(
     });
     return { balanceAtStamp: balance };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -------------------------------------------------------------------------------------
@@ -179,7 +176,7 @@ export async function reconcileCustomer(
 // -------------------------------------------------------------------------------------
 
 export async function createPriceList(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { name: string; description?: string | null },
 ): Promise<{ id: string }> {
@@ -196,13 +193,12 @@ export async function createPriceList(
       createdBy: actor.personId,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /** ⭐ Re-quoting an item REPLACES its rate. A price list holds one rate per item, not a history. */
 export async function setPrice(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: {
     priceListId: string;
@@ -255,6 +251,5 @@ export async function setPrice(
       unit: input.unit?.trim() || null,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }

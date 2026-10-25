@@ -15,7 +15,7 @@
  * already posted instead of a second one — looked up before the cap, since the cap may now be 0.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { advisoryLocksRepo, expensesRepo, journalRepo, moneyAccountsRepo, transaction, type Tx } from '@shareat/db';
+import { advisoryLocksRepo, expensesRepo, journalRepo, moneyAccountsRepo, type Tx } from '@shareat/db';
 import { compare, equals, money, ZERO } from '@shareat/core/money';
 import type { PeriodOverrideReason } from '@shareat/db/schema';
 import { checkDraw } from '../money-accounts/overdraft';
@@ -60,7 +60,7 @@ export interface PayReimbursementResult {
 }
 
 export async function payReimbursement(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: PayReimbursementInput,
 ): Promise<PayReimbursementResult> {
@@ -241,6 +241,5 @@ export async function payReimbursement(
       ...(warning ? { warning } : {}),
     };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }

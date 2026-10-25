@@ -32,7 +32,7 @@
  * writes the audit row. See `PeriodOverride` below for the contract. `locked` periods are entirely
  * out of the override's reach and are refused before `periodOverride` is even considered.
  */
-import { fiscalPeriodsRepo, journalRepo, schema, transaction, type Tx } from '@shareat/db';
+import { fiscalPeriodsRepo, journalRepo, schema, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { ZERO, type Money } from '@shareat/core/money';
 import { parseMoneyInput } from '../shared/money-input';
@@ -137,15 +137,12 @@ export function lineAmount(
  * of work, e.g. an expense-posting service that itself owns a transaction); pass
  * `null` to let `postEntry` open and own its own transaction.
  */
-export async function postEntry(tx: Tx | null, input: PostEntryInput): Promise<PostEntryResult> {
+export async function postEntry(tx: Tx, input: PostEntryInput): Promise<PostEntryResult> {
   if (!input.idempotencyKey) {
     throw new Error('postEntry: idempotencyKey is required');
   }
 
-  if (tx) {
-    return runPostEntry(tx, input);
-  }
-  return transaction((trx) => runPostEntry(trx, input));
+  return runPostEntry(tx, input);
 }
 
 async function runPostEntry(tx: Tx, input: PostEntryInput): Promise<PostEntryResult> {

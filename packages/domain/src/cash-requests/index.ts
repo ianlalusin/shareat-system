@@ -21,7 +21,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { add, compare, formatMoney, money, ZERO, type Money } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
 import { toBusinessDate } from '@shareat/core/datetime';
-import { auditLogRepo, cashRequestsRepo, moneyAccountsRepo, personsRepo, storesRepo, transaction, type Tx } from '@shareat/db';
+import { auditLogRepo, cashRequestsRepo, moneyAccountsRepo, personsRepo, storesRepo, type Tx } from '@shareat/db';
 import { checkDraw } from '../money-accounts/overdraft';
 import { postEntry } from '../ledger/post-entry';
 import { parseMoneyInput } from '../shared/money-input';
@@ -55,7 +55,7 @@ export interface CreateCashRequestInput {
 
 /** ⚠️ Records the ask. **No money moves** — see the header. */
 export async function createCashRequest(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: CreateCashRequestInput,
 ): Promise<{ id: string }> {
@@ -86,8 +86,7 @@ export async function createCashRequest(
       createdBy: actor.personId,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -97,7 +96,7 @@ export async function createCashRequest(
  * are two decisions, and letting one person do both unilaterally is the control this separates.
  */
 export async function decideCashRequest(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input:
     | { requestId: string; decision: 'approve'; amount: string; on?: string }
@@ -162,8 +161,7 @@ export async function decideCashRequest(
       source: 'web',
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -177,7 +175,7 @@ export async function decideCashRequest(
  * return, and it posts. A status that could erase a released float would erase the float with it.
  */
 export async function cancelCashRequest(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { requestId: string; reason?: string },
 ): Promise<void> {
@@ -201,8 +199,7 @@ export async function cancelCashRequest(
       rejectReason: input.reason?.trim() || null,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -213,7 +210,7 @@ export async function cancelCashRequest(
  * T-143's end-day report sums. Ian's *"out = cash request released by cashier"* falls out.
  */
 export async function releaseCashRequest(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { requestId: string; amount: string; fromMoneyAccountId: string; on: string },
 ): Promise<{ entryId: string; warning?: string }> {
@@ -342,8 +339,7 @@ export async function releaseCashRequest(
     const allWarnings = [warning, staffWarning].filter((w): w is string => !!w).join(' ');
     return { entryId: result.entryId, ...(allWarnings ? { warning: allWarnings } : {}) };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 export interface SettleResult {
@@ -364,7 +360,7 @@ export interface SettleResult {
  * nothing about who was holding the money (row 144): a float has a named holder by construction.
  */
 export async function settleCashRequest(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: {
     requestId: string;
@@ -517,6 +513,5 @@ export async function settleCashRequest(
 
     return { entryIds, outstanding: after.outstanding, liquidated };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }

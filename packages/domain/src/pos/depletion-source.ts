@@ -269,7 +269,7 @@ async function computeComparison(tx: Tx, orgId: string, storeId: string, days: n
 
 /** A dry run, read-only: the usage plan over the last `days` stored day feeds from the POS item maps and from the menu rules. */
 export async function compareDepletionSources(actor: Actor, input: { storeId: string; days?: number }, tx?: Tx): Promise<SourceComparison> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'view_menu', {});
     if (!(await accessRepo.storeIdsForPerson(trx, actor.personId)).includes(input.storeId)) {
       throw refuse(`compareDepletionSources: store ${input.storeId} is outside the store scope of person ${actor.personId}.`, 'You are not assigned to that store, so you cannot compare its usage sources.');
@@ -297,7 +297,7 @@ export async function switchUsageSource(
   input: SwitchUsageSourceInput,
   tx?: Tx,
 ): Promise<{ id: string; source: UsageSource; differenceCount: number | null }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'switch_usage_source', { storeId: input.storeId });
     if (input.source !== 'menu_rules' && input.source !== 'v1_pos_map') {
       throw refuse('switchUsageSource: source must be menu_rules or v1_pos_map.', 'Choose the menu rules or the POS item maps.');
@@ -379,7 +379,7 @@ async function requireFreeKey(tx: Tx, storeId: string, key: string, storeName: s
 }
 
 export async function linkPosV1Item(actor: Actor, input: LinkPosV1ItemInput, tx?: Tx): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     const { store, key } = await beginLink(trx, actor, input);
     await requireFreeKey(trx, input.storeId, key, store.name);
     if (!(await menuRepo.getVariant(trx, actor.orgId, input.variantId))) throw gone(`linkPosV1Item: variant ${input.variantId} does not exist.`, 'menu item');
@@ -403,7 +403,7 @@ export async function linkPosV1Item(actor: Actor, input: LinkPosV1ItemInput, tx?
 }
 
 export async function unlinkPosV1Item(actor: Actor, input: { storeId: string; posItemKey: string }, tx?: Tx): Promise<{ id: string }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     const { store, key } = await beginLink(trx, actor, input);
     const link = await menuRepo.getActiveLink(trx, input.storeId, key);
     if (!link) throw gone(`unlinkPosV1Item: no active link for "${key}" at ${store.name}.`, 'link');
@@ -424,7 +424,7 @@ export async function seedLinkFromMap(
   input: { storeId: string; posItemKey: string; variantId: string },
   tx?: Tx,
 ): Promise<{ id: string; ruleId: string | null }> {
-  return inTx(tx, async (trx) => {
+  return inTx(tx, actor.orgId, async (trx) => {
     const { store, key } = await beginLink(trx, actor, input);
     await requireFreeKey(trx, input.storeId, key, store.name);
     const map = await posMappingRepo.getActiveMapByKey(trx, input.storeId, key);
