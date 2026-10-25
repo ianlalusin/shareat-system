@@ -43,7 +43,7 @@ export async function listSuppliersWithPosition(orgId: string): Promise<Supplier
 
 export async function listInvoices(
   orgId: string,
-  filter: { supplierId?: string; status?: SupplierInvoiceRow['status'] } = {},
+  filter: { supplierId?: string; status?: SupplierInvoiceRow['status']; selfVerified?: true } = {},
 ): Promise<SupplierInvoiceRow[]> {
   return withOrgPrincipal(orgId, (tx) => apRepo.listSupplierInvoices(tx, orgId, filter));
 }
@@ -56,9 +56,14 @@ export interface InvoicePickerOption {
   id: string;
   supplierId: string;
   supplierName: string;
+  /** T-475 C2 / F5: the supplier's terms (null = cash-on-delivery, so Credit is not offered) and status (an inactive one is marked and blocked). */
+  creditTermsDays: number | null;
+  supplierStatus: string;
   invoiceNo: string | null;
   invoiceDate: string;
   totalAmount: string;
+  /** What is already recorded against it (the room left is `remaining`). */
+  recorded: string;
   remaining: string;
   /** ⭐ T-196 — the picker now offers PENDING invoices too (draftable, no verification wait),
    *  alongside VERIFIED ones (still draftable — `createExpense` never requires verified, only
@@ -81,7 +86,7 @@ export async function listOpenInvoicesForPicker(orgId: string, storeId?: string)
       apRepo.listSupplierInvoices(tx, orgId, { status: 'verified', ...(storeId ? { storeId } : {}) }),
       apRepo.listSuppliers(tx, orgId, { includeInactive: true }),
     ]);
-    const supplierName = new Map(suppliers.map((s) => [s.id, s.name]));
+    const supplierById = new Map(suppliers.map((s) => [s.id, s]));
     const out: InvoicePickerOption[] = [];
     for (const inv of [...pending, ...verified]) {
       const capacity = await apRepo.capacityOf(tx, orgId, inv.id);
@@ -90,10 +95,13 @@ export async function listOpenInvoicesForPicker(orgId: string, storeId?: string)
       out.push({
         id: inv.id,
         supplierId: inv.supplierId,
-        supplierName: supplierName.get(inv.supplierId) ?? inv.supplierId,
+        supplierName: supplierById.get(inv.supplierId)?.name ?? inv.supplierId,
+        creditTermsDays: supplierById.get(inv.supplierId)?.creditTermsDays ?? null,
+        supplierStatus: supplierById.get(inv.supplierId)?.status ?? 'inactive',
         invoiceNo: inv.invoiceNo,
         invoiceDate: inv.invoiceDate,
         totalAmount: inv.totalAmount,
+        recorded: capacity.recorded,
         remaining: capacity.remaining,
         status: inv.status as 'pending' | 'verified',
       });

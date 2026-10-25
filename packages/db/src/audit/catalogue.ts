@@ -279,6 +279,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-414 R-AUTO: releasing a cash request at a store with no staff cash account creates one (actor = the releaser).
   def('money_account.created', 'money', 'normal', 'store', 'money_accounts', 'T-414'),
   def('ap_invoice.approved', 'money', 'normal', 'store', 'ap_invoices', 'T-402'),
+  // T-475 S3: an admin verified the supplier invoice they logged themselves (written beside ap_invoice.approved).
+  def('ap_invoice.self_verified', 'money', 'high', 'store', 'ap_invoices', 'T-475'),
   def('ap_payment.recorded', 'money', 'normal', 'store', 'ap_payments', 'T-402'),
   def('data.export_downloaded', 'data', 'high', 'org', 'exports', 'T-402', ADMIN_RES),
   def('data.bulk_import_applied', 'data', 'high', 'org', 'imports', 'T-402', RES),

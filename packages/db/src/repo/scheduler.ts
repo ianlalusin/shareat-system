@@ -150,6 +150,20 @@ export async function lastRunFor(
   return row as SchedulerRunRow | undefined;
 }
 
+/**
+ * T-472: the most recent run of one job that ended `ok` (a failed or partial run said nothing reliable). The bridge asks it
+ * where its change-time queries should start.
+ */
+export async function lastOkRunFor(tx: Tx, orgId: string, job: SchedulerJob): Promise<SchedulerRunRow | undefined> {
+  const [row] = await tx
+    .select(COLUMNS)
+    .from(schedulerRuns)
+    .where(and(eq(schedulerRuns.orgId, orgId), eq(schedulerRuns.job, job), eq(schedulerRuns.outcome, 'ok'), sql`${schedulerRuns.finishedAt} is not null`))
+    .orderBy(desc(schedulerRuns.startedAt))
+    .limit(1);
+  return row as SchedulerRunRow | undefined;
+}
+
 /** Runs that started and never reported back — a killed process, and invisible without this. */
 export async function unfinishedRuns(tx: Tx, orgId: string): Promise<SchedulerRunRow[]> {
   const rows = await tx

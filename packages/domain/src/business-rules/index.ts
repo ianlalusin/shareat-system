@@ -15,9 +15,19 @@ import {
   vatCheck,
   verifySupplierActiveCheck,
 } from './ap';
+import {
+  amountWithinRemainingCheck,
+  categoryMappedCheck,
+  creditNeedsTermsCheck,
+  expenseSupplierActiveCheck,
+  invoiceVerifiedCheck,
+  periodOpenCheck,
+  wouldPostCheck,
+} from './expenses';
 
 export * from './check';
 export * from './ap';
+export * from './expenses';
 
 // Facts differ per check, so the registry's value type is the check with its facts erased (the caller knows which it asked for).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -32,6 +42,13 @@ const ALL: ReadonlyArray<BusinessCheck<any>> = [
   verifySupplierActiveCheck,
   receiptPhotoCheck,
   draftsWouldPostCheck,
+  amountWithinRemainingCheck,
+  creditNeedsTermsCheck,
+  expenseSupplierActiveCheck,
+  categoryMappedCheck,
+  invoiceVerifiedCheck,
+  periodOpenCheck,
+  wouldPostCheck,
 ];
 
 /** Every check by id. The client resolves a check from here; the server calls the same objects. */

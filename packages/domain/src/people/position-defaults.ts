@@ -18,6 +18,7 @@ import {
   CAPABILITIES,
   CAPABILITY_SCOPE,
   SUPER_ADMIN_ONLY_CAPABILITIES,
+  grantsConfer,
 } from '@shareat/auth';
 import { accessRepo, employmentRepo, personsRepo, positionDefaultsRepo, type Tx } from '@shareat/db';
 import { CANONICAL_POSITIONS } from '@shareat/db/schema';
@@ -58,6 +59,7 @@ export class PositionDefaultError extends Error {
 export const OFFERABLE_TO_POSITIONS: readonly Capability[] = CAPABILITIES.filter(
   (c) =>
     !SUPER_ADMIN_ONLY_CAPABILITIES.includes(c) &&
+    grantsConfer(c) && // T-475 S3: a role-only capability can never be a position default either
     CAPABILITY_SCOPE[c] !== 'platform' &&
     c !== 'close_period' &&
     c !== 'create_missing_period' &&

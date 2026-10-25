@@ -18,13 +18,13 @@ export const STATUS_TONE: Readonly<Record<string, Tone>> = Object.fromEntries([
   ...group('warning', ['duplicate', 'submitted', 'requested', 'pending', 'waiting', 'needs_review', 'deferred', 'pending_valuation', 'paused', 'disputed']),
   ...group('success', [
     'approved', 'posted', 'confirmed', 'accepted', 'seated', 'played', 'released', 'received', 'verified', 'computed', 'finalized',
-    'resolved', 'succeeded', 'active', 'liquidated', 'fully_amortised', 'paid_off',
+    'resolved', 'succeeded', 'active', 'liquidated', 'fully_amortised', 'paid_off', 'final',
   ]),
   ...group('progress', ['counting', 'reviewing', 'preparing', 'running', 'in_transit', 'dispatched', 'ready', 'called']),
   ...group('danger', ['void', 'voided', 'overdue', 'rejected', 'declined', 'failed', 'aborted', 'defaulted', 'written_off']),
   ...group('closed', [
     'closed', 'cancelled', 'removed', 'expired', 'reversed', 'disposed', 'merged', 'archived', 'inactive', 'locked', 'charged', 'income',
-    'resigned', 'terminated', 'retired', 'withdrawn', 'superseded_by_work',
+    'resigned', 'terminated', 'retired', 'withdrawn', 'superseded_by_work', 'gone',
   ]),
 ]);
 
