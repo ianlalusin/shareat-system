@@ -27,6 +27,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { PosReceiptBridgePort } from '../../src/pos/receipt-bridge-port';
+import { posV1SalesBody } from '../../../db/src/pos-v1/fixtures';
 import { DEC_NOW, FakePort, NOW, YESTERDAY, receipt, sha } from './_fixtures/pos-bridge';
 
 vi.setConfig({ testTimeout: 90_000, hookTimeout: 90_000 });
@@ -105,10 +106,7 @@ const runs = (orgId: string) => sql<{ outcome: string; posted_count: number }[]>
   select outcome, posted_count from scheduler_runs where org_id = ${orgId} and job = 'pos_receipt_bridge'`;
 
 async function addFeed(f: F, date: string, totalSales: number | null) {
-  const obj =
-    totalSales === null
-      ? { found: false }
-      : { found: true, totalSales, totalSessions: 1, dineInSales: 0, paymentsByMethod: {}, discountsTotal: 0, chargesTotal: 0 };
+  const obj = posV1SalesBody(totalSales === null ? { found: false } : { paidTotal: totalSales, receiptCount: 1 });
   const body = JSON.stringify(obj);
   await sql`insert into pos_v1_day_feeds (org_id, store_id, business_date, kind, purpose, batch_id, pos_store_id, body, payload, content_hash, fetched_by)
     values (${f.orgId}, ${f.storeId}, ${date}, 'sales', 'import', ${crypto.randomUUID()}, ${f.posStoreId}, ${body}, ${body}::jsonb, ${sha(body)}, ${f.personId})`;
@@ -493,7 +491,8 @@ describe('K: day checks against the day feed (Ruling 6)', () => {
     await addFeed(f, YESTERDAY, 500);
     await sweep({ orgId: f.orgId, port, now: NEXT });
     expect(await checkOf(f, YESTERDAY)).toMatchObject({ result: 'match' });
-    expect(await countRows(f.orgId, 'pos_bridge_day_checks')).toBe(7);
+    // 2027-01-06..12 on the first night, 2027-01-07..13 on the second: 8 distinct store-days, each row updated in place.
+    expect(await countRows(f.orgId, 'pos_bridge_day_checks')).toBe(8);
   });
 
   it('K4: a mismatch is said as a notice on the run (the Sales days note), not as a failure', async () => {
@@ -503,7 +502,7 @@ describe('K: day checks against the day feed (Ruling 6)', () => {
     port.put(f.posStoreId, YESTERDAY, receipt({ id: 'a', total: '500.00' }));
     const r = await sweep({ orgId: f.orgId, port });
     expect(r.hadFailures).toBe(false);
-    expect(r.outcomes[0]!.failures.some((x) => x.kind === 'notice' && /12 Jan|2027-01-12/.test(x.reason))).toBe(true);
+    expect(r.outcomes[0]!.failures.some((x) => x.kind === 'notice' && /Jan 12, 2027|2027-01-12/.test(x.reason))).toBe(true);
   });
 });
 

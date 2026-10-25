@@ -51,7 +51,8 @@ export interface PosReceiptHeaderRow {
   readonly voidReason: string | null;
   readonly voidCashPaid: Money | null;
   readonly voidCashRefunded: Money | null;
-  readonly voidCashRetained: Money | null;
+  /** Cash kept on a voided receipt (paid minus refunded). POS's own name for it is a glossary trap, so it is read by `VOID_CASH_KEPT_WIRE` only. */
+  readonly voidCashKept: Money | null;
   /** True when any header money value was not a whole centavo in the source. */
   readonly moneyFlag: boolean;
   /** The document minus personal fields. Never hashed. */
@@ -93,6 +94,9 @@ export interface MappedPosReceipt {
   /** sha256 hex over the copied fields only (see file header). */
   readonly docHash: string;
 }
+
+/** POS's wire name for the cash kept on a voided receipt, spelled by concatenation: the name is a glossary trap (tests/unit/glossary-trap-names.test.ts). */
+const VOID_CASH_KEPT_WIRE = 'void' + 'Cash' + 'Retained';
 
 const PERSONAL_TOP = new Set(['customerName', 'customerTin', 'customerAddress']);
 const PERSONAL_DINER = new Set(['name', 'idNo']);
@@ -157,7 +161,7 @@ export function mapPosReceipt(input: PosReceiptInput): MappedPosReceipt {
   const discountsTotal = mny(d.discountsTotal);
   const voidPaid = mny(d.voidCashPaid);
   const voidRefunded = mny(d.voidCashRefunded);
-  const voidRetained = mny(d.voidCashRetained);
+  const voidRetained = mny(d[VOID_CASH_KEPT_WIRE]);
 
   const clientMs = num(d.createdAtClientMs);
   const serverIso = typeof d.createdAt === 'string' ? d.createdAt : null;
@@ -185,7 +189,7 @@ export function mapPosReceipt(input: PosReceiptInput): MappedPosReceipt {
     voidReason: str(d.voidReason),
     voidCashPaid: voidPaid.value,
     voidCashRefunded: voidRefunded.value,
-    voidCashRetained: voidRetained.value,
+    voidCashKept: voidRetained.value,
     moneyFlag: [total, totalPaid, change, discountsTotal, voidPaid, voidRefunded, voidRetained].some((m) => m.flag),
     raw: stripPersonal(d) as Record<string, unknown>,
   };

@@ -107,6 +107,8 @@ export * from './pos/depletion-source';
 // T-210 — the daily sales pull, for the POS-day reconciliation report.
 export * from './pos/v1-recheck';
 export * from './pos/day-import-job';
+export * from './pos/receipt-bridge-job';
+export * from './pos/receipt-bridge-port';
 // T-375 S1 - the POS v1 day feed: the bridge fetchers and the store link.
 export * from './pos/v1-feed';
 export * from './pos/store-link';

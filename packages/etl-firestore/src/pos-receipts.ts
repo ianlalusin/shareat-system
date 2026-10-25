@@ -122,19 +122,31 @@ export class PosReceiptReader {
       .where('createdAtClientMs', '<', end.getTime())
       .count()
       .get();
-    const serverDay = this.firestore.collection(col).where('createdAt', '>=', start).where('createdAt', '<', end);
-    const byServer = await serverDay.count().get();
+    const byServer = await this.serverDay(posStoreId, start, end).count().get();
     const missingClientMsIds: string[] = [];
-    for await (const doc of this.page(serverDay, 'createdAt')) {
-      const v = doc.data.createdAtClientMs;
-      if (typeof v !== 'number' || !Number.isFinite(v)) missingClientMsIds.push(doc.id);
-    }
+    for await (const doc of this.listMissingClientMs(posStoreId, businessDate)) missingClientMsIds.push(doc.id);
     return {
       byClientMs: byClient.data().count,
       byServerCreatedAt: byServer.data().count,
       missingClientMs: missingClientMsIds.length,
       missingClientMsIds,
     };
+  }
+
+  /**
+   * The receipts with a server `createdAt` in the Manila day but no usable `createdAtClientMs` (absent, null, a string, NaN,
+   * infinite), in page order. `listDay` never returns them, so the bridge job reads them here (T-478).
+   */
+  async *listMissingClientMs(posStoreId: string, businessDate: string): AsyncGenerator<PosReceiptDoc> {
+    const { start, end } = businessDayRange(parseBusinessDate(businessDate));
+    for await (const doc of this.page(this.serverDay(posStoreId, start, end), 'createdAt')) {
+      const v = doc.data.createdAtClientMs;
+      if (typeof v !== 'number' || !Number.isFinite(v)) yield doc;
+    }
+  }
+
+  private serverDay(posStoreId: string, start: Date, end: Date): PosQueryLike {
+    return this.firestore.collection(receiptsPath(posStoreId)).where('createdAt', '>=', start).where('createdAt', '<', end);
   }
 
   /** Receipts whose `voidedAt`, `editedAt` or server `createdAt` is after `since`, paged. */

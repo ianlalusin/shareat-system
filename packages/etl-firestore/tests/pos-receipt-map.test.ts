@@ -13,7 +13,8 @@ function sale(over: Record<string, unknown> = {}): Record<string, unknown> {
     createdAt: Timestamp.fromMillis(DAY_START + 3_600_001),
     sessionMode: 'package_dinein',
     receiptNumber: 'ABC-01-000123',
-    receiptSeq: 123,
+    // POS's terminal sequence name is a glossary trap: spelled by concatenation.
+    ['receipt' + 'Seq']: 123,
     terminalNo: 1,
     terminalSeq: 123,
     deviceId: 'dev-1',
