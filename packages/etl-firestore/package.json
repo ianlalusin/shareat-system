@@ -8,7 +8,10 @@
     ".": "./src/index.ts",
     "./client": "./src/client.ts",
     "./reader": "./src/reader.ts",
-    "./plan": "./src/plan.ts"
+    "./plan": "./src/plan.ts",
+    "./pos-receipts": "./src/pos-receipts.ts",
+    "./pos-receipt-map": "./src/pos-receipt-map.ts",
+    "./pos-receipt-bridge-adapter": "./src/pos-receipt-bridge-adapter.ts"
   },
   "dependencies": { "@shareat/etl": "*", "firebase-admin": "^13.0.2" }
 }

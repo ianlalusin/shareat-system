@@ -10,3 +10,5 @@
 export * from './client';
 export * from './reader';
 export * from './plan';
+export * from './pos-receipts';
+export * from './pos-receipt-map';

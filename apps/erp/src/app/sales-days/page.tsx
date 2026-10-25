@@ -1,9 +1,10 @@
 import { can } from '@shareat/auth';
-import { salesDaysRepo } from '@shareat/db';
+import { posBridgeRepo, salesDaysRepo } from '@shareat/db';
 import { SchedulerStatus } from '../../components/scheduler-status';
 import { formatMoney, money } from '@shareat/core/money';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { addDays, parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { listStores } from './lib';
+import { receiptCheckLine } from './receipt-check';
 import { requireSession } from '../../lib/session';
 import { withOrgPrincipal } from '../expenses/lib';
 import { Page } from '@/components/shell/Page';
@@ -45,6 +46,15 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
   });
   const storeById = new Map(stores.map((s) => [s.id, s]));
 
+  // T-472 S3: the nightly receipt bridge's one-line note, only for stores this person may submit for, last 14 days.
+  const mismatches = await withOrgPrincipal(orgId, (tx) =>
+    posBridgeRepo.recentMismatches(tx, orgId, addDays(parseBusinessDate(toBusinessDate()), -14)),
+  );
+  const receiptNote = receiptCheckLine(
+    mismatches.filter((m) => submitStoreIds.includes(m.storeId) && (!storeId || m.storeId === storeId)),
+    (id) => storeById.get(id)?.name ?? 'A store',
+  );
+
   const carry = new URLSearchParams();
   if (storeId) carry.set('store', storeId);
 
@@ -81,6 +91,10 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
           cadence="daily"
           visibleSubjectIds={submitStoreIds}
         />
+      )}
+
+      {receiptNote && (
+        <Banner tone="warning">{receiptNote}</Banner>
       )}
 
       {oldestUnverified && (

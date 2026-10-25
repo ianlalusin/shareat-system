@@ -65,12 +65,14 @@ const OPEN_BASELINE = { count: 0, sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae4
 const BY_DESIGN_PIN: readonly string[] = [];
 const ORG_LESS_PIN: readonly string[] = ['etl_quarantine', 'etl_reconciliation', 'etl_runs', 'etl_source_documents'];
 // T-424: +pos_terminal_links.device_id (external key: the POS v2 tablet install id). 27 -> 28.
+// T-472 S1: +5 pos_bridge_* external-key columns (24 -> 29); JSONB +pos_bridge_receipts.raw (9 -> 10), both re-measured.
 // T-398 S3 (A11, D2): the four ref-gap columns (payslips / separations / thirteenth_month_payouts .journal_entry_id,
 // owner_drawing_closes.adjustment_entry_id) gain composite FKs and leave the list; pos_v1_day_feeds.batch_id has no
 // parent (a minted grouping id) and is reclassified 'idempotency-key'. 28 -> 24.
 // T-455 S1 (0215): +lobby_entries.client_request_id (idempotency-key). 24 -> 25.
-const NO_FK_PIN = { count: 25, sha256: '33f72effc90d19d7b8f0837aa0fbfb624240550e2b5f72a4a34743a326ab08a9' } as const;
-const JSONB_PIN = { count: 9, sha256: 'c6ed3b6390ba20d384ed7ad17b22b6fc66e2ade9b0cb2867c115aa36f7d8d16b' } as const;
+// T-472 S1 (0216): +5 pos_bridge external keys (pos_store_id x2, firestore_doc_id, parent_doc_id, pos_item_id). 25 -> 30; +pos_bridge_receipts.raw jsonb. 9 -> 10.
+const NO_FK_PIN = { count: 30, sha256: '0cc48911c590e81dde433b4ec52a85930f6d4657c96448cc81161c84f701b61f' } as const;
+const JSONB_PIN = { count: 10, sha256: '027c304d61ed276c5e70c4411a8defa397063a7720db0eddcf8fb2c6a13f4bc2' } as const;
 
 const openKeys = (l: readonly OpenFkEntry[]) => l.map((e) => e.fk);
 const noFkKeys = (l: readonly { column: string; kind: string }[]) => l.map((e) => `${e.column}|${e.kind}`);

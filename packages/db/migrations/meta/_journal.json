@@ -1373,6 +1373,13 @@
       "when": 1804649507084,
       "tag": "0215_t455_lobby_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 216,
+      "version": "7",
+      "when": 1804735907084,
+      "tag": "0216_pos_receipt_bridge",
+      "breakpoints": true
     }
   ]
 }

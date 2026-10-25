@@ -137,6 +137,7 @@ export * from './missed-month-adjustments';
 
 // T-375 S1 - the POS v1 day feed: store links, the immutable feed, the tender master, POS corrections.
 export * from './pos-v1';
+export * from './pos-bridge';
 
 // T-424 S5 - which POS v2 tablet is which ERP terminal person (the manager-approval bucket owner).
 export * from './pos-terminal-links';
