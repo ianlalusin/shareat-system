@@ -6,7 +6,7 @@ keeps re-checking; (2A) a new org-level capability `verify_own_supplier_invoice`
 bypassing ONLY creator-is-not-verifier; (3 yes) expense-to-invoice linkage fixes. Follows row 293 / T-385 (`verify_own_sales_day`),
 row 363 / T-440 (live field checks), row 289 (Save off until valid), row 262 (offer a control only where it can succeed).
 **Model:** Sonnet lanes, tester first then builder (money + auth: Sonnet, never Haiku). Amendments in plan mode (Opus).
-**Migration:** `0216` (reserved), S3 only. Hand-authored per ADR-012 §5; full suite on a fresh gate DB (memory: full suite for migrations).
+**Migration:** `0217` (reserved), S3 only. Hand-authored per ADR-012 §5; full suite on a fresh gate DB (memory: full suite for migrations).
 
 ## 1. Goal
 Today the AP invoice and expense forms accept input, round-trip to the server, and only then say "no". Ian wants every
@@ -129,7 +129,7 @@ supplier, photo, drafts via `approveExpense`, which keeps period locks, routing 
 `selfVerified`. After the existing `ap_invoice.approved` row, a second audit row `ap_invoice.self_verified`
 (`audit/catalogue.ts`: money, high, store, `ap_invoices`, T-475) with `after: { selfVerified: true }`.
 
-### 5.3 Data: migration `0216_t475_self_verified_supplier_invoices.sql`
+### 5.3 Data: migration `0217_t475_self_verified_supplier_invoices.sql`
 1. `ALTER TABLE supplier_invoices ADD COLUMN self_verified boolean NOT NULL DEFAULT false;`
 2. Replace `supplier_invoices_two_person_verification_check` (0046:61) with the same name:
    `CHECK (verified_by IS NULL OR verified_by <> created_by OR self_verified) NOT VALID` (stays NOT VALID like 0046: history).
@@ -152,9 +152,9 @@ supplier, photo, drafts via `approveExpense`, which keeps period locks, routing 
   ADD CONSTRAINT NOT VALID are brief ACCESS EXCLUSIVE with no scan; VALIDATE takes SHARE UPDATE EXCLUSIVE with a scan; CREATE
   TRIGGER takes SHARE ROW EXCLUSIVE; CREATE INDEX blocks writes for its build. The table is small (single-thousands of
   rows); all locks are held to commit, so deploy outside store hours. Follow ADR-012 §5 for `lock_timeout` and the meta journal.
-- **Prechecks** (read only, as `doadmin` with Ian, `docs/ops/README.md` row): P0216a `count(*) WHERE verified_by = created_by`
+- **Prechecks** (read only, as `doadmin` with Ian, `docs/ops/README.md` row): P0217a `count(*) WHERE verified_by = created_by`
   (informational; historic rows stay legal under NOT VALID and are NOT back-flagged: they were not verified through the
-  capability); P0216b active admins per org (who gains the power; Ian confirms); P0216c pending invoices whose creator is an
+  capability); P0217b active admins per org (who gains the power; Ian confirms); P0217c pending invoices whose creator is an
   admin (the backlog Ian can now clear).
 - **Census:** no table, no FK, so the same-org census and `classification.ts` / `rls/registry.ts` are untouched; run the
   schema-coverage, same-org census and trigger-registry guard files anyway.
@@ -211,7 +211,7 @@ marked and blocked; E4 `editExpense` refuses an unmapped category (*mutant* chec
 approve disabled on a pending invoice; P2 locked blocks even with override ticked, closed blocks a non-holder (loader runs for
 everyone, *mutant* gated on holder again); server refuses each when the client is bypassed (raw POST).
 
-**S3. Self-verify capability + migration 0216.** Files: `packages/db/migrations/0216_*.sql` + meta,
+**S3. Self-verify capability + migration 0217.** Files: `packages/db/migrations/0217_*.sql` + meta,
 `packages/db/schema/suppliers.ts`, `packages/db/src/repo/ap.ts`, `packages/db/src/triggers/registry.ts`,
 `packages/db/src/audit/catalogue.ts`, `packages/auth/src/capabilities.ts`, `docs/decisions/CAPABILITY-MATRIX.md`,
 `packages/domain/src/ap/index.ts`, `apps/erp/src/app/ap/page.tsx` (filter, badge), `ap/invoices/[id]/page.tsx` (badge),
@@ -244,7 +244,7 @@ before wrap-up (row 296).
 - Linking deliveries to invoices: bible row 119, deliveries book AP directly.
 - Making a duplicate invoice number a hard stop (Q1 recommends keeping it a warning).
 - Cross-field live checks on other forms (T-440 Q4 stands elsewhere); the AP payment form and DEF-404 (its due date).
-- Self-verify for any other document; back-flagging historic self-verified rows (P0216a, informational).
+- Self-verify for any other document; back-flagging historic self-verified rows (P0217a, informational).
 - Reimbursement and recurring-expense forms.
 
 ## 9. Question for Ian (one; the build does not wait on it)
@@ -253,7 +253,7 @@ today after save. (B) Stop the save until the number changes. **Recommend A:** s
 books, and a hard stop would force fake numbers; the warning now arrives before Save instead of after. S1 builds A.
 
 **Note for Ian (not a question):** "admin" in the matrix means every person with the admin role in an org, plus a manager
-standing in for an org with no admin. Precheck P0216b lists exactly who that is before deploy.
+standing in for an org with no admin. Precheck P0217b lists exactly who that is before deploy.
 
 ## Amendments R1-R16 (review 24 Oct). These WIN over any earlier text in this spec.
 **S3 (data, trigger, capability)**
@@ -269,11 +269,11 @@ standing in for an org with no admin. Precheck P0216b lists exactly who that is 
   action input or `markInvoiceVerified` caller argument derived from the request may set it. Test: a POST carrying
   `selfVerified=on` from a non-creator leaves the flag false.
 - R5 (§5.4) The badge also shows on the supplier page invoice list (`apps/erp/src/app/ap/suppliers/[id]/page.tsx:47`).
-- R6 (§5.3 prechecks) P0216b also lists managers who are already elevated (in an org with no active admin), since they gain
+- R6 (§5.3 prechecks) P0217b also lists managers who are already elevated (in an org with no active admin), since they gain
   the capability through the derived set (see Q4).
-- R7 (0216 file) First statement `SET LOCAL lock_timeout = '5s';`, last `RESET lock_timeout;` (0194:59 / :777). The new
+- R7 (0217 file) First statement `SET LOCAL lock_timeout = '5s';`, last `RESET lock_timeout;` (0194:59 / :777). The new
   self-means-self CHECK is added NOT VALID then VALIDATEd (as §5.3 step 3). `packages/db/schema/suppliers.ts` marks the column
-  and both checks `// NOTE: hand-added in 0216`. Number stays 0216 (0215 is reserved by the POS session, T-472).
+  and both checks `// NOTE: hand-added in 0217`. Number is 0217 (renumbered 25 Oct: 0215 = T-455 lobby, 0217 = POS T-472; `when` = 0217's + 86400000 = 1804822307084).
 
 **S1 / S2 (rule layer)**
 - R8 Shared FACT BUILDERS, not only sentences: the leaf exports pure `xxxFacts(rows)` functions (e.g. `supplierFacts(supplier)`,
@@ -327,4 +327,4 @@ Binding over Q2-Q4 above. Ian's words: "1b 2a 3a". Where this section and the te
   `authorize()` and by the trigger on a flagged verify.
 - **Q4 = A.** Stand-in managers do not get it. Remove it explicitly from `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER`. Pinned test:
   a manager standing in for an org with no admin is refused it.
-- **Knock-on:** P0216b and R6 now only confirm that the people who gain the capability are the active admins and super admins.
+- **Knock-on:** P0217b and R6 now only confirm that the people who gain the capability are the active admins and super admins.
