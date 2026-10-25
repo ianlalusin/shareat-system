@@ -390,7 +390,7 @@ describe('verifyInvoice — a pending bill whose draft expense is dated in a clo
       asOrg(orgId, (tx) => verifyInvoice(tx, actor(orgId, managerId), inv!.id, { supplier: true, invoice: true, items: true, price: true })),
       'verifying a bill whose draft expense is in a closed month',
     );
-    expect(refused.userMessage).toBe('January 2026 is closed. Ask an administrator to post this one entry into it.');
+    expect(refused.userMessage).toContain('January 2026 is closed. Ask an administrator to post this one entry into it.'); // T-475 S1: framed with the draft's name
     expect(refused.userMessage).not.toMatch(UUID);
     expect((await sql<{ status: string }[]>`select status from supplier_invoices where id = ${inv!.id}`)[0]!.status).toBe('pending');
     expect(await statusOf(made.id)).toBe('draft');

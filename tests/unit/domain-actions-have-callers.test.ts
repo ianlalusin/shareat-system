@@ -89,6 +89,8 @@ function actionShapedExports(): Map<string, string> {
  * off the same day** by T-226, and the stale-exemption rule below is what forced their rows out.
  */
 const EXEMPT: Record<string, string> = {
+  gatherApprovalFacts:
+    'INTERNAL — T-475 S1 split approveExpense into facts + verdict; previewInvoiceDrafts (the AP verify preview) and approveExpense call it in the same file.',
   revokePosTerminalLink:
     'UNWIRED — T-424 audit: scripts/provision-terminal.ts (--revoke-pos-device) is its caller, run by an administrator; no ERP screen yet. ' +
     'It retires a lost or replaced POS v2 tablet.',

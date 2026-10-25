@@ -142,16 +142,16 @@ async function cloneBase(name: string): Promise<postgres.Sql> {
   await withAdmin(url!, (a) => a.unsafe(`CREATE DATABASE "${name}" TEMPLATE "${BASE_DB}"`));
   return postgres(dbUrl(url!, name), { max: 1 });
 }
-// T-472 S1: apply THROUGH 0213 only. Later migrations (0214 triggers, 0216 new bridge tables with their own composite FKs) are out
-// of this test's scope and would change its pinned counts (145 composites / 38 uniques); every migration the test means is <= 0213.
-async function applyEverything(s: postgres.Sql): Promise<void> {
+// Ruling (orchestrator, 25 Oct; same as the POS session's 0216): this test checks 0213's own effect, so scratch
+// databases apply migrations only THROUGH 0213. Later migrations must not move these pins.
+const applyThroughS3 = async (s: postgres.Sql): Promise<void> => {
   const dir = buildFolderThroughTag(s3Entry()!.tag);
   try {
     await migrate(drizzle(s), { migrationsFolder: dir });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-}
+};
 
 /** Three seeds, one per kind of gap: two org->org FKs read from the catalog scope, and one FK-less ref-gap column (A11/D2). */
 const SEEDS = [
@@ -224,7 +224,7 @@ describe('M1 -- fail-closed pre-flight: cross-org rows seeded on a scratch DB be
 
     let err: Error | undefined;
     try {
-      await applyEverything(s);
+      await applyThroughS3(s);
     } catch (e) {
       err = e as Error;
     }
@@ -257,7 +257,7 @@ describe('M3 -- the pre-flight also refuses DANGLING references (a uuid that exi
     const before = await constraintCounts(s);
     let err: Error | undefined;
     try {
-      await applyEverything(s);
+      await applyThroughS3(s);
     } catch (e) {
       err = e as Error;
     }
@@ -286,7 +286,7 @@ describe('M2 -- positive control: the same scratch technique with same-org data 
     const bareBefore = (await readScope(s)).filter((e) => !e.hasComposite).length;
     expect(bareBefore, 'sanity: the base has the 141 bare org->org FKs before 0213').toBe(141);
 
-    await expect(applyEverything(s), '0213 must apply over same-org data').resolves.toBeUndefined();
+    await expect(applyThroughS3(s), '0213 must apply over same-org data').resolves.toBeUndefined();
 
     const after = await constraintCounts(s);
     expect(after.applied, "RED today: no migration after the base exists, nothing was applied").toBeGreaterThan(before.applied);

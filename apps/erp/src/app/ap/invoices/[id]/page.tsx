@@ -3,7 +3,9 @@ import { notFound } from 'next/navigation';
 import { authorize, heldCapabilities, can } from '@shareat/auth';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { compare, money, subtract, ZERO } from '@shareat/core/money';
-import { expensesRepo, apRepo } from '@shareat/db';
+import { expensesRepo, apRepo, filesRepo } from '@shareat/db';
+import { previewInvoiceDrafts } from '@shareat/domain';
+import { buildDraftsFacts, buildReceiptFacts, buildVerifySupplierFacts } from '@shareat/domain/business-rules';
 import { canViewPhoto, photoKinds } from '../../../../lib/photo-link';
 import { peso } from '../../../../lib/format';
 import { requireSession } from '../../../../lib/session';
@@ -16,9 +18,10 @@ import { ClosedMonthOverride } from '@/components/ClosedMonthOverride';
 import { loadMoneyLines } from '@/lib/money-lines/load';
 import { MoneyLines } from '@/components/money/MoneyLines';
 import { Page } from '@/components/shell/Page';
-import { CheckedForm, EditableRecord, FieldCheck } from '@/components/forms';
+import { CheckedForm, EditableRecord, FieldCheck, RuleCheck } from '@/components/forms';
 import {
   INVOICE_EXPENSE_RULES,
+  INVOICE_VERIFY_RULES,
   INVOICE_VOID_RULES,
   PAYMENT_VOID_RULES,
   nativeAttrs,
@@ -30,7 +33,7 @@ import { Badge, Button, ConfirmDestructive, FlashBanner, Input, LinkRow, RowLink
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
-import { INVOICE_LINES } from '../../typed-forms';
+import { INVOICE_LINES, VERIFY_INVOICE } from '../../typed-forms';
 
 export const metadata = { title: 'Supplier invoice — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -89,6 +92,33 @@ export default async function InvoiceDetailPage({
     .filter((e) => e.status === 'draft')
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   const categoryById = new Map(categories.map((c) => [c.id, c]));
+
+  // T-475 S1 (V3-V5): the facts the verify form's live lines read, for a PENDING invoice only. V5 is the shared approval evaluator
+  // (`previewInvoiceDrafts` = `gatherApprovalFacts` + `approvalVerdict` per draft, draws summed across drafts, oldest first): it
+  // reads without locking and asks `can()`, never `authorize()`, so a page view writes no denial row.
+  const verifyFacts =
+    invoice.status === 'pending'
+      ? await withOrgPrincipal(orgId, async (tx) => {
+        // Blocker sentences can name drawer balances and cash-request holders: only someone who may verify here sees them (can(), no denial row).
+        if (!(await can(tx, actor, 'verify_supplier_invoice', { storeId: invoice.storeId }))) return null;
+        return {
+          supplier: supplier ? buildVerifySupplierFacts(supplier) : undefined,
+          receipt: buildReceiptFacts({
+            counterpartyStoreId: supplier?.counterpartyStoreId ?? null,
+            receiptFileId: invoice.receiptFileId ?? null,
+            invoiceStoreId: invoice.storeId,
+            file: invoice.receiptFileId ? await filesRepo.getById(tx, orgId, invoice.receiptFileId) : null,
+          }),
+          // A preview that cannot be read gives NO verdict (the server re-checks every verify); it never takes the page down.
+          drafts: buildDraftsFacts(draftExpenses.length > 0 ? await previewInvoiceDrafts(tx, actor, id).catch(() => []) : []),
+        };
+      })
+      : null;
+  const typedVerify = typedFor(sp, VERIFY_INVOICE, invoice.id, actor.personId);
+  const typedField = (name: string): string | undefined => {
+    const v = typedVerify?.kind === 'typed' ? typedVerify.fields[name] : undefined;
+    return Array.isArray(v) ? v[0] : v;
+  };
 
   // T-376 S1 (DEF-581), R6 - the closed-month override, for a holder only, and only where it would be used: the
   // verify form (pending, with at least one draft to post) and the record form (canRecord). One lookup.
@@ -377,7 +407,8 @@ return (
       )}
 
       {invoice.status === 'pending' && (
-        <form
+        <CheckedForm
+          rules={INVOICE_VERIFY_RULES}
           action={verifyInvoiceAction}
           className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
         >
@@ -395,10 +426,7 @@ return (
               ['attestItems', 'The items listed are the items received'],
               ['attestPrice', 'The prices charged are the prices agreed'],
             ].map(([name, label]) => (
-              <label key={name} className="flex items-start gap-3">
-                <input type="checkbox" name={name} className="mt-0.5" />
-                <span>{label}</span>
-              </label>
+              <AttestTick key={name} name={name!} label={label!} ticked={typedField(name!) === 'on'} />
             ))}
           </div>
           {closedMonth && draftExpenses.length > 0 && (
@@ -409,13 +437,20 @@ return (
                 dateFieldName="invoiceDate"
                 initialDate={invoice.invoiceDate}
                 count={draftExpenses.length}
+                defaults={{ confirm: typedField('periodOverrideConfirm') === 'on', reason: typedField('periodOverrideReason'), note: typedField('periodOverrideNote') }}
               />
             </>
           )}
+          {/* T-475 S1: the business rules, live. Each prints its own sentence (the same one the server refuses with) and turns Save off. */}
+          <RuleCheck id="ap.verify.selfVerify" facts={{ createdByViewer: invoice.createdBy === actor.personId }} />
+          <RuleCheck id="ap.verify.attestation" />
+          <RuleCheck id="ap.verify.supplierActive" facts={verifyFacts?.supplier} />
+          <RuleCheck id="ap.verify.receiptPhoto" facts={verifyFacts?.receipt} />
+          <RuleCheck id="ap.verify.draftsWouldPost" facts={verifyFacts?.drafts} />
           <Button type="submit" variant="primary">
             Verify &mdash; all four must be checked
           </Button>
-        </form>
+        </CheckedForm>
       )}
 
       {linkedExpenses.length > 0 && (
@@ -637,5 +672,15 @@ function LinesShell({ saved, invoiceId, typed, children }: { saved: boolean; inv
         Save
       </Button>
     </form>
+  );
+}
+
+/** One attestation tick. T-475 R14: a refused verify reopens with what was ticked still ticked. */
+function AttestTick({ name, label, ticked }: { name: string; label: string; ticked: boolean }) {
+  return (
+    <label className="flex items-start gap-3">
+      <input type="checkbox" name={name} defaultChecked={ticked} className="mt-0.5" />
+      <span>{label}</span>
+    </label>
   );
 }

@@ -147,7 +147,8 @@ describe('K1b -- the exemptions file after S3 (D2): no org->org left open, NO_FK
     expect(s3InVia, 'S3-scope org->org FKs in VIA_HEADER_GUARDED').toEqual([]);
   });
   it('RED until the builder edits NO_FK_REFERENCES: 24 entries, no ref-gap kind remains', () => {
-    expect(NO_FK_REFERENCES.length, `NO_FK_REFERENCES has ${NO_FK_REFERENCES.length} entries; S3 leaves 24`).toBe(24);
+    // T-455 S1 (0215): +lobby_entries.client_request_id (idempotency-key). 24 -> 25.
+    expect(NO_FK_REFERENCES.length, `NO_FK_REFERENCES has ${NO_FK_REFERENCES.length} entries; S3 leaves 24`).toBe(25);
     expect(NO_FK_REFERENCES.filter((e) => e.kind === 'ref-gap').map((e) => e.column)).toEqual([]);
   });
   it('RED until reclassified (D2): pos_v1_day_feeds.batch_id is an idempotency-key (it has no parent), still declared, still FK-less', async () => {

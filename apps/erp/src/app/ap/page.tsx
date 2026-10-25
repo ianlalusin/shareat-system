@@ -7,7 +7,9 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Badge, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, RowLink, Select } from '@/components/ui';
-import { CheckedForm } from '@/components/forms';
+import { CheckedForm, RuleCheck } from '@/components/forms';
+import { buildSupplierFacts } from '@shareat/domain/business-rules';
+import { InvoiceNumberCheck } from './InvoiceNumberCheck';
 import { SUPPLIER_INVOICE_LOG_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { ACTION_LINK } from '@/components/action-link';
 
@@ -30,6 +32,9 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
     listStores(actor.orgId),
   ]);
   const supplierName = new Map(suppliers.map((s) => [s.id, s.name]));
+  // T-475: the facts the live business-rule lines read (each supplier's status and vatStatus), built by the SAME function the domain uses; no status or VAT rule is derived here.
+  const supplierFacts = buildSupplierFacts(suppliers);
+  const supplierNames = Object.fromEntries(supplierName);
   const pending = invoiceRows.filter((i) => i.status === 'pending');
   const invoices = [...invoiceRows].sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate));
 
@@ -78,6 +83,10 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
                     <Input {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.totalAmount)} placeholder="0.00" className="w-full" />
                   </Field>
                 </FormGrid>
+                <RuleCheck id="ap.invoice.supplierActive" facts={supplierFacts} />
+                <InvoiceNumberCheck supplierNames={supplierNames}>
+                  <RuleCheck id="ap.invoice.duplicateNumber" />
+                </InvoiceNumberCheck>
                 <FormGrid layout="fields">
                   <Field rule={SUPPLIER_INVOICE_LOG_RULES.deliveryFee} width="short" label="Delivery fee" hint="Optional. Part of the total above, added to the items' cost; not a line.">
                     <Input {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.deliveryFee)} placeholder="0.00" className="w-full" />
@@ -92,6 +101,8 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
                     <Input {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.dueDate)} type="date" className="w-full" />
                   </Field>
                 </FormGrid>
+                <RuleCheck id="ap.invoice.dueNotBeforeInvoice" />
+                <RuleCheck id="ap.invoice.feesNotOverTotal" />
               </FormSection>
               <FormSection title="Tax details">
                 <FormGrid layout="fields">
@@ -115,6 +126,7 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
                     <Input {...nativeAttrs(SUPPLIER_INVOICE_LOG_RULES.vatAmount)} placeholder="0.00" className="w-full" />
                   </Field>
                 </FormGrid>
+                <RuleCheck id="ap.invoice.vat" facts={supplierFacts} />
               </FormSection>
               <FormSection title="Receipt evidence">
                 <Field
