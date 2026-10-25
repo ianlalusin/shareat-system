@@ -98,7 +98,8 @@ export const dueNotBeforeInvoiceCheck = defineCheck<unknown>({
     const invoice = dateOf(typed(values, 'invoiceDate'));
     const due = dateOf(typed(values, 'dueDate'));
     if (invoice === null || due === null) return null;
-    return due < invoice ? block("A due date can't be before the invoice date.") : null;
+    // ISO business dates compared as instants (numbers), not as strings (T-371 G2).
+    return Date.parse(due) < Date.parse(invoice) ? block("A due date can't be before the invoice date.") : null;
   },
 });
 

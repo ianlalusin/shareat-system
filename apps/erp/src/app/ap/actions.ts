@@ -308,7 +308,10 @@ export async function verifyInvoiceAction(formData: FormData): Promise<void> {
       // T-440 / DEF-676: the form's field rules (none yet; its checks are the business rules in the domain) are judged only
       // once the actor holds the gate at the bill's store. The domain then runs every business rule again on this save.
       const bill = await apRepo.getSupplierInvoiceById(tx, actor.orgId, id);
-      if (bill && (await can(tx, actor, 'verify_supplier_invoice', { storeId: bill.storeId }))) assertFieldRules(INVOICE_VERIFY_RULES, formData);
+      if (bill) {
+        await authorize(tx, actor, 'verify_supplier_invoice', { storeId: bill.storeId }); // the same refusal the domain would give
+        assertFieldRules(INVOICE_VERIFY_RULES, formData);
+      }
       await verifyInvoice(
         tx,
         actor,

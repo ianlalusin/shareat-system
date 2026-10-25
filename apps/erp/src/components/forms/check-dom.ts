@@ -2,7 +2,6 @@
  * T-440 - the DOM half of live field checks (browser only; called from effects and event handlers, never during render).
  * The real-DOM behaviour (Enter, focus, layout effects, a real form.reset()) is proven by the section 6 browser smoke.
  */
-import { ruleInputNames, type FieldRuleSetLike } from '@shareat/domain/field-rules';
 
 type ValueControl = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 const isValueControl = (el: unknown): el is ValueControl =>
@@ -25,11 +24,6 @@ export function readNamedValues(form: HTMLFormElement, names: Iterable<string>):
     if (isValueControl(el)) values[name] = valueOf(el);
   }
   return values;
-}
-
-/** The current value of every ruled control, by name. A rule with no control in the form is simply absent (= blank). */
-export function readRuledValues(form: HTMLFormElement, set: FieldRuleSetLike): Record<string, string> {
-  return readNamedValues(form, ruleInputNames(set));
 }
 
 /** The ruled control an input/change event came from, or null (a hidden input, a control with no rule). */
