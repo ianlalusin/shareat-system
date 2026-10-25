@@ -57,3 +57,23 @@ Trade orders can carry a delivery fee. Should an order to PG?
   (3) Scheduler job list: carry every job from the newest earlier migration (0217 adds none). (5) Void columns:
   `voided_at`, `voided_by`, `void_reason` on `inter_entity_shipments` (all three or none); the tester adds the void legs
   after the build.
+
+## S5a+S5b audit (25 Oct) — must be fixed before S5's PR; next session starts here
+1. **HIGH (branch red):** `inter_entity_reconcile` is in SCHEDULER_JOBS (schema/scheduler.ts:126) but `runInterEntityReconcile`
+   and the `inter-entity-reconcile` ops script come in S5e, so scheduler-job-run-recording (:446-514) and
+   scheduler-job-hosting (:62) are red. Either keep it out of the TS list until S5e (the SQL CHECK may stay widened) or
+   land S5e's stub + script + units first.
+2. **MEDIUM (money integrity):** once received, the seller can still rewrite billed_total, credited_total, quantity, rate,
+   line_total, item_name (UPDATE policy admits org_id; guards cover only received_*). Add a BEFORE UPDATE trigger
+   freezing money/identity columns once status <> 'in_transit' (credited_total moves only via the credit-note path), and
+   a check that billed_total = sum(line_total). Tests first.
+3. **LOW-MEDIUM:** receive-function input legs missing: duplicate line, another shipment's line, negative quantity, missing
+   line, void shipment, edit-after-receipt (finding 2).
+4. **LOW (QI-1 a):** the buyer can read void_reason / voided_by / store_id / trade_order ids; the seller can read
+   received_by. Narrow: seller-only side table for void details, or serve the buyer through a definer function.
+5. **LOW:** 0217 (PR #69) must merge and deploy BEFORE 0218 (drizzle skips a lower `when`); re-run migration-journal after.
+6. **LOW:** the six ADD CONSTRAINTs on deliveries / trade_discrepancies / suppliers / customers / scheduler_runs are plain
+   (full scan under ACCESS EXCLUSIVE): use NOT VALID + VALIDATE; add a 0218 row to docs/ops/README.md; prefer plain
+   DROP (fails loudly on drift) over DROP IF EXISTS where the name is certain.
+Checked clean: RLS shape, definers (search_path, REVOKE/GRANT, app_current_org scoping), receipt guard role test
+(requests run SET LOCAL ROLE shareat_app), link trigger, money rounding, credit-note balance, LF/BOM/lock_timeout, cutover.
