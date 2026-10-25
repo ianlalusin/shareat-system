@@ -273,7 +273,7 @@ standing in for an org with no admin. Precheck P0217b lists exactly who that is 
   the capability through the derived set (see Q4).
 - R7 (0217 file) First statement `SET LOCAL lock_timeout = '5s';`, last `RESET lock_timeout;` (0194:59 / :777). The new
   self-means-self CHECK is added NOT VALID then VALIDATEd (as §5.3 step 3). `packages/db/schema/suppliers.ts` marks the column
-  and both checks `// NOTE: hand-added in 0217`. Number is 0217 (renumbered 25 Oct: 0215 = T-455 lobby, 0217 = POS T-472; `when` = 0217's + 86400000 = 1804822307084).
+  and both checks `// NOTE: hand-added in 0217`. Number is 0217 (renumbered 25 Oct: 0215 = T-455 lobby, 0216 = POS T-472; `when` = 0216's + 86400000 = 1804822307084).
 
 **S1 / S2 (rule layer)**
 - R8 Shared FACT BUILDERS, not only sentences: the leaf exports pure `xxxFacts(rows)` functions (e.g. `supplierFacts(supplier)`,
