@@ -1,11 +1,11 @@
 /**
- * T-455 S1 (migration 0217) - the customer lobby: per-store switches, check-in entries, pre-order lines, birthday-song requests, and
+ * T-455 S1 (migration 0215) - the customer lobby: per-store switches, check-in entries, pre-order lines, birthday-song requests, and
  * senior/PWD discount claims. docs/tasks/455-customer-lobby.md section 2 and the "Ian's answers (2026-10-24)" section.
  *
  * Every table carries its own org_id and composite (org_id, x) same-org FKs from birth (T-398), so none is in same-org-fk-exemptions.
  * No photo, no bytea and no price column anywhere (Ian, 24 Oct): the phone never prices, and no card picture is kept.
  * The forward-only status triggers, the claim cap, the partial UNIQUE indexes and the CHECKs that Drizzle cannot express are
- * hand-added in migration 0217 (see the NOTE comments).
+ * hand-added in migration 0215 (see the NOTE comments).
  */
 import { sql } from 'drizzle-orm';
 import { boolean, check, foreignKey, index, integer, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
@@ -82,7 +82,7 @@ export const lobbyEntries = pgTable(
   },
   (t) => [
     unique('lobby_entries_org_id_id_unique').on(t.orgId, t.id),
-    // NOTE: hand-added in migration 0217 - trigger lobby_entries_forward_only (forward-only status, terminal frozen, key columns frozen,
+    // NOTE: hand-added in migration 0215 - trigger lobby_entries_forward_only (forward-only status, terminal frozen, key columns frozen,
     // purge columns NULL-able on closed rows).
     // The two live-only UNIQUE indexes below are partial (WHERE status IN ('waiting','called')): a closed entry frees its code and device.
     uniqueIndex('lobby_entries_live_code_unique').on(t.storeId, t.code).where(sql`${t.status} in ('waiting','called')`),
@@ -172,7 +172,7 @@ export const lobbyBirthdayRequests = pgTable(
   },
   (t) => [
     unique('lobby_birthday_requests_org_id_id_unique').on(t.orgId, t.id),
-    // NOTE: hand-added in migration 0217 - trigger lobby_birthday_requests_forward_only (forward-only status, terminal frozen, stamps accepted_at).
+    // NOTE: hand-added in migration 0215 - trigger lobby_birthday_requests_forward_only (forward-only status, terminal frozen, stamps accepted_at).
     // The index below is partial (WHERE status <> 'cancelled'): one live request per entry.
     uniqueIndex('lobby_birthday_requests_live_entry_unique').on(t.entryId).where(sql`${t.status} <> 'cancelled'`),
     check('lobby_birthday_requests_status_check', sql`${t.status} in ('requested','accepted','declined','played','expired','cancelled')`),
@@ -218,7 +218,7 @@ export const lobbyDiscountClaims = pgTable(
   },
   (t) => [
     unique('lobby_discount_claims_org_id_id_unique').on(t.orgId, t.id),
-    // NOTE: hand-added in migration 0217 - triggers lobby_discount_claims_forward_only (pending -> approved | rejected | expired, terminal frozen)
+    // NOTE: hand-added in migration 0215 - triggers lobby_discount_claims_forward_only (pending -> approved | rejected | expired, terminal frozen)
     // and lobby_discount_claims_cap (pending + approved claims never exceed the entry's party_size).
     index('lobby_discount_claims_entry_idx').on(t.entryId),
     check('lobby_discount_claims_kind_check', sql`${t.kind} in ('senior','pwd')`),

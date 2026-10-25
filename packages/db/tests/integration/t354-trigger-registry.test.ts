@@ -111,8 +111,8 @@ describe('T1 — registry floor', () => {
     // T-386 S2 (2026-10-09): 22 -> 23, DELIBERATELY. item_code_counters_forward_only (migration 0189) is ENABLE ALWAYS: the mark only rises.
     // T-401 S1: three history update guards (menu_offers / menu_option_offers / menu_depletion_rules, migration 0196) 23 -> 26, + menu_usage_source_switches update guard (R7, I26) 26 -> 27, + its delete guard (A3) 27 -> 28.
     // T-190 (migration 0206): the three reference-row immutable guards 28 -> 31. NB: 0206 does not ENABLE ALWAYS them yet, so T3 is red until migration 0207 does.
-    // T-455 S1 (migration 0217): the three lobby forward-only guards (lobby_entries / lobby_birthday_requests / lobby_discount_claims) 31 -> 34.
-    expect(always.length, 'expected exactly 34 ALWAYS triggers (R1 + 0175 + 0179 + 0183 + 0189 + 0196 + 0206 + 0217)').toBe(34);
+    // T-455 S1 (migration 0215): the three lobby forward-only guards (lobby_entries / lobby_birthday_requests / lobby_discount_claims) 31 -> 34.
+    expect(always.length, 'expected exactly 34 ALWAYS triggers (R1 + 0175 + 0179 + 0183 + 0189 + 0196 + 0206 + 0215)').toBe(34);
 
     const alwaysNames = new Set(always.map(([name]) => name));
     for (const { trigger } of ALWAYS_TRIGGERS) {

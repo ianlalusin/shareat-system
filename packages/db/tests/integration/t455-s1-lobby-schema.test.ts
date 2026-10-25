@@ -1,9 +1,9 @@
 /**
- * T-455 S1 -- customer lobby tables, migration 0217 (docs/tasks/455-customer-lobby.md section 2, "Ian's answers 2026-10-24").
+ * T-455 S1 -- customer lobby tables, migration 0215 (docs/tasks/455-customer-lobby.md section 2, "Ian's answers 2026-10-24").
  * TESTER file: it asserts what the spec says the DATABASE enforces and writes NO production code. Real Postgres via
  * TEST_DATABASE_URL (`_test` name guard). Every behaviour leg runs as shareat_app inside a ROLLED-BACK transaction.
  *
- * RED TODAY, for one reason: 0217 does not exist, so the five lobby_* tables are absent. Every refusal leg asserts an
+ * RED TODAY, for one reason: 0215 does not exist, so the five lobby_* tables are absent. Every refusal leg asserts an
  * EXACT SQLSTATE (or "any refusal that is not 42P01/42703", for triggers whose code the spec does not fix), so a missing
  * table can never be mistaken for a refusal.
  *
@@ -28,7 +28,7 @@
  *  a photo/bytea/price column                           -> P1, P2
  *  RLS missing / USING-only / FORCE missing             -> R1, R2, R3
  *  registry or classification entry missing             -> G1, G2
- *  0217 without lock_timeout first / budget header      -> L1
+ *  0215 without lock_timeout first / budget header      -> L1
  */
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -132,11 +132,11 @@ async function fixture(name: string): Promise<MenuFx> {
   return (fx[name] ??= await menuFixture(`t455${name}`));
 }
 
-describe('S0 -- RED while 0217 is not applied: all five lobby tables exist', () => {
+describe('S0 -- RED while 0215 is not applied: all five lobby tables exist', () => {
   it('lobby_stores, lobby_entries, lobby_entry_lines, lobby_birthday_requests, lobby_discount_claims are in public', async () => {
     const rows = await sql<{ relname: string }[]>`
       select relname from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r' and relname = any(${LOBBY as unknown as string[]})`;
-    expect(rows.map((r) => r.relname).sort(), 'RED today: migration 0217 is not applied').toEqual([...LOBBY].sort());
+    expect(rows.map((r) => r.relname).sort(), 'RED today: migration 0215 is not applied').toEqual([...LOBBY].sort());
   });
 });
 
@@ -1009,21 +1009,21 @@ describe('G -- cutover classification and RLS registry have an entry for every n
 
 // ================================================================================================ L1: the migration's own text
 
-describe('L1 -- the 0217 migration text (ADR-012 s5)', () => {
+describe('L1 -- the 0215 migration text (ADR-012 s5)', () => {
   const journal = () => (JSON.parse(readFileSync(join(MIGRATIONS_FOLDER, 'meta', '_journal.json'), 'utf8')) as { entries: { idx: number; tag: string }[] }).entries;
   const text = (): string => {
-    const e = journal().find((x) => x.tag.startsWith('0217_'));
-    expect(e, 'no journal entry numbered 0217: the S1 migration does not exist yet').toBeDefined();
+    const e = journal().find((x) => x.tag.startsWith('0215_'));
+    expect(e, 'no journal entry numbered 0215: the S1 migration does not exist yet').toBeDefined();
     const f = join(MIGRATIONS_FOLDER, `${e!.tag}.sql`);
     expect(existsSync(f)).toBe(true);
     return readFileSync(f, 'utf8');
   };
   const statements = (t: string) => t.split('\n').filter((l) => !l.trim().startsWith('--') && l.trim() !== '');
 
-  it('exactly one 0217 entry (tag names t455), LF-only, no BOM, no 0x08 byte', () => {
-    expect(journal().filter((e) => e.tag.startsWith('0217_')).length, 'RED today: no 0217 entry').toBe(1);
+  it('exactly one 0215 entry (tag names t455), LF-only, no BOM, no 0x08 byte', () => {
+    expect(journal().filter((e) => e.tag.startsWith('0215_')).length, 'RED today: no 0215 entry').toBe(1);
     const t = text();
-    expect(journal().find((e) => e.tag.startsWith('0217_'))!.tag).toMatch(/t455/);
+    expect(journal().find((e) => e.tag.startsWith('0215_'))!.tag).toMatch(/t455/);
     expect(t.includes('\r'), 'CRLF').toBe(false);
     expect(t.charCodeAt(0), 'BOM').not.toBe(0xfeff);
     expect(t.includes(String.fromCharCode(8)), 'a backspace byte (a broken \\b or \\s regex)').toBe(false);

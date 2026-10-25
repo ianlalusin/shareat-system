@@ -2,7 +2,7 @@
 
 **Status:** SPEC 2026-10-24 (Opus planner). Build starts now (Ian, 24 Oct); switch-on date is Q3 below.
 **Model:** Sonnet tester -> Sonnet builder -> Sonnet auditor per slice (S7/S8 touch personal data: money/PII lane rules).
-**Migration:** one, **0217 (0216 is T-475)** by the orchestrator. Hand-authored (ADR-012 §5).
+**Migration:** one, **0215 (renumbered from 0217 on 25 Oct; 0216 is POS T-472, 0217 is T-475 S3)** by the orchestrator. Hand-authored (ADR-012 §5).
 **Authority:** bible rows 251, 283, 330, 349, 353, 357, 358, 364, 371, 372, 378, 379, 380, 383; ADR-015 (+ amendment
 A2, A6); plan `docs/plans/pos-customer-v2-phase-plan.md` §0, §5; T-437 (Customer v2 skeleton); T-426 (SC/PWD per
 diner); T-137 (register); T-435 (personal-data gates); DEF-421 (`tx: Tx`); T-398 S3/S4 (same-org).
@@ -39,7 +39,7 @@ holds no Firebase (T-437 ruling 2, kept). POS v2 reaches Postgres through its ow
 **Consequence:** the staff-parked walk-in list moves from Firestore `stores/{id}/waitlist` to the same Postgres table
 (one list, not two). Offline, the POS lobby card says "Lobby paused (offline)"; seating a walk-in directly still works.
 
-### 2.2 Tables (migration 0217 (0216 is T-475)); every one has `org_id`, `UNIQUE (org_id, id)`, composite FKs
+### 2.2 Tables (migration 0215 (renumbered from 0217 on 25 Oct; 0216 is POS T-472, 0217 is T-475 S3)); every one has `org_id`, `UNIQUE (org_id, id)`, composite FKs
 | Table | Columns that matter | Rules the DATABASE enforces |
 |---|---|---|
 | `lobby_stores` | `store_id`, `enabled`, `paused`, `max_live_entries` (default 60), `birthday_enabled`, `claims_enabled`, `pos_seen_at` | PK `(org_id, store_id)`; FK `(org_id, store_id)` -> `stores (org_id, id)` |
@@ -175,7 +175,7 @@ merges with the Lipa soak (risk R1).
 
 | Slice | Area | What | Tests (tester writes) and the mutants they kill | Parallel with |
 |---|---|---|---|---|
-| **S1** schema | [O] | migration 0217 (0216 is T-475), `packages/db/schema/lobby.ts`, index export, classification + RLS registry rows, repo `packages/db/src/repo/lobby.ts` | `packages/db/tests/integration/t455-s1-lobby-schema.test.ts`: cross-org parent refused on every FK (kills a plain FK instead of composite); backward status move refused, terminal frozen (kills missing trigger); two live entries same code / same device refused, a closed one frees the code (kills full instead of partial unique); a claim leaving `pending` with name kept refused; `party_size+1`th claim refused; phone on a lobby entry refused. Census tests (`t398-s1-same-org-fk-census`, `rls-registry`, `cutover-classification`) stay green | S4 |
+| **S1** schema | [O] | migration 0215 (renumbered from 0217 on 25 Oct; 0216 is POS T-472, 0217 is T-475 S3), `packages/db/schema/lobby.ts`, index export, classification + RLS registry rows, repo `packages/db/src/repo/lobby.ts` | `packages/db/tests/integration/t455-s1-lobby-schema.test.ts`: cross-org parent refused on every FK (kills a plain FK instead of composite); backward status move refused, terminal frozen (kills missing trigger); two live entries same code / same device refused, a closed one frees the code (kills full instead of partial unique); a claim leaving `pending` with name kept refused; `party_size+1`th claim refused; phone on a lobby entry refused. Census tests (`t398-s1-same-org-fk-census`, `rls-registry`, `cutover-classification`) stay green | S4 |
 | **S2** domain | [O] | `packages/domain/src/lobby/{checkin,staff,purge}.ts`: check-in (code retry, idempotent cookie, limits, staleness), position, cancel, list/call/seat/remove/park, expiry, nightly purge | `packages/domain/tests/integration/t455-s2-lobby.test.ts`: 6th check-in per ip-hour refused; 61st live refused; paused/stale refused; same cookie returns same entry and code; forced code collision retries and succeeds; position counts only earlier `waiting|called` of the same store; seat without session refused; handoff URL returned once then null; purge nulls every listed column and keeps counts; every function's signature requires `tx` (type test) | S4 |
 | **S3** customer server | [O] | `apps/customer/src/app/api/lobby/**`, `src/server/**` (cookie, limits glue, log redaction), `src/data/http-lobby-data.ts`; `scripts/build-cap.mjs` stashes `api`/`server` like POS; amend T-437's guard test: server code may import `@shareat/db|domain`, client code may not; `fetch` only in `src/data/http-*`; still no Firebase | `apps/customer/src/server/__tests__/lobby-routes.test.ts`: no cookie -> 401 on `/me`; another cookie cannot read or cancel an entry; body > 16 KB refused; log capture holds no name/ID; `Set-Cookie` is httpOnly+Secure+SameSite; guard detectors each flag a hand-made bad sample | after S2 |
 | **S4** lobby screens | [O] | `apps/customer/src/app/lobby/**`, `LobbyData` interface + fixture (screens built against the fixture first) | unit: check-in form bounds; position text; called notice; hand-off calls `location.replace` exactly once; disabled-store screen shows no form; no price sent in the payload. Smoke at phone width on 9010 | S1-S3 |
@@ -235,7 +235,7 @@ Binding over Q1-Q3 above. Ian: "build now". Where this section and the text abov
    screens are built now.
 3. **Switch on at Lipa as soon as it is built and tested.** Not 11 Jan 2027. Build now. The no-POS-merges window
    (20 Nov-14 Dec, R1) still applies unless Ian says otherwise: [P] merges land before 20 Nov or after 14 Dec, never between.
-- **Migration number:** 0217 (0216 is T-475). Every "0216" for this task in this file now reads 0217.
+- **Migration number:** 0215 (renumbered from 0217 on 25 Oct; 0216 is POS T-472, 0217 is T-475 S3). Every earlier "0216"/"0217" for this task now reads 0215 (25 Oct, so it lands first under rule 4c).
 
 ## S1 audit notes (2026-10-24)
 Carried forward from the S1 audit; none blocks S1.

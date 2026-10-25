@@ -70,7 +70,7 @@ const PRE_S4_OPEN = { count: 82, sha256: '2df148cd2e5e0757ca384cb3c9cc5522cf138f
 const TRIGGERED_COUNT = 55;
 /** TRIGGER_REGISTRY had 100 entries (69 origin, 57 validator) at 0213; S4 adds exactly 55 validator/origin entries. */
 const REGISTRY_BEFORE_S4 = 100;
-/** Triggers classified AFTER S4 by later tasks (each lane bumps this): T-455 S1 (0217) adds 4 lobby validators. */
+/** Triggers classified AFTER S4 by later tasks (each lane bumps this): T-455 S1 (0215) adds 4 lobby validators. */
 const REGISTRY_ADDED_AFTER_S4 = 4;
 
 function pinMismatch(keys: readonly string[], pin: { count: number; sha256: string }): string | null {

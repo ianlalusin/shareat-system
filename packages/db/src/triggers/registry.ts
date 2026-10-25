@@ -1066,7 +1066,7 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
       'Same-org guard (0214, T-398 S4, DEF-491): money_account_id must point at a money_accounts row of the organisation of the header till_custody_shifts. Decides from another row organisation.',
   },
   // ---------------------------------------------------------------------------------------------
-  // T-455 S1 (0217) — the customer lobby. The three forward-only triggers decide only from OLD/NEW and refuse
+  // T-455 S1 (0215) — the customer lobby. The three forward-only triggers decide only from OLD/NEW and refuse
   // a rewrite of a closed row: history guards, ENABLE ALWAYS (R1; precedent item_code_counters_forward_only).
   // lobby_discount_claims_cap counts OTHER rows: validator, origin.
   // ---------------------------------------------------------------------------------------------
@@ -1075,27 +1075,27 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     mode: 'always',
     kind: 'history_guard',
     reason:
-      'Lobby entry status only moves forward (waiting -> called -> seated, or out to cancelled / removed / expired); terminal rows are frozen except the purge columns going to NULL; code, store, source and device are frozen. Decides from OLD/NEW only (0217, T-455 S1).',
+      'Lobby entry status only moves forward (waiting -> called -> seated, or out to cancelled / removed / expired); terminal rows are frozen except the purge columns going to NULL; code, store, source and device are frozen. Decides from OLD/NEW only (0215, T-455 S1).',
   },
   lobby_birthday_requests_forward_only: {
     table: 'lobby_birthday_requests',
     mode: 'always',
     kind: 'history_guard',
     reason:
-      'Birthday request is born requested and only moves forward (requested -> accepted -> played, or out to declined / expired / cancelled); terminal rows are frozen; the accepted time is kept. Decides from OLD/NEW only (0217, T-455 S1).',
+      'Birthday request is born requested and only moves forward (requested -> accepted -> played, or out to declined / expired / cancelled); terminal rows are frozen; the accepted time is kept. Decides from OLD/NEW only (0215, T-455 S1).',
   },
   lobby_discount_claims_forward_only: {
     table: 'lobby_discount_claims',
     mode: 'always',
     kind: 'history_guard',
     reason:
-      'A discount claim leaves pending exactly once (approved / rejected / expired) and is then frozen; entry and kind never change. Decides from OLD/NEW only (0217, T-455 S1).',
+      'A discount claim leaves pending exactly once (approved / rejected / expired) and is then frozen; entry and kind never change. Decides from OLD/NEW only (0215, T-455 S1).',
   },
   lobby_discount_claims_cap: {
     table: 'lobby_discount_claims',
     mode: 'origin',
     kind: 'validator',
     reason:
-      'At most party_size pending-or-approved claims per lobby entry; decides from the entry row (locked FOR UPDATE) and the sibling claims, other rows current state (0217, T-455 S1).',
+      'At most party_size pending-or-approved claims per lobby entry; decides from the entry row (locked FOR UPDATE) and the sibling claims, other rows current state (0215, T-455 S1).',
   },
 } as const;

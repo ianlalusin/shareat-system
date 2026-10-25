@@ -1,6 +1,6 @@
--- 0217 - T-455 S1: the customer lobby tables (lobby_stores, lobby_entries, lobby_entry_lines, lobby_birthday_requests, lobby_discount_claims).
+-- 0215 - T-455 S1: the customer lobby tables (lobby_stores, lobby_entries, lobby_entry_lines, lobby_birthday_requests, lobby_discount_claims).
 -- docs/tasks/455-customer-lobby.md section 2 + "Ian's answers (2026-10-24)". Hand-authored per ADR-012 s5. Journal head when written: 0214
--- (0215 is POS, 0216 is T-475; this file is 0217 by the orchestrator's assignment).
+-- (renumbered 0217 -> 0215 on 25 Oct so it can land first; POS T-472 is 0216, T-475 S3 is 0217).
 --
 -- WHY. A party arriving at the gate checks itself in on its phone and gets a 4-digit booking code and a live place in line; it may ask for the
 -- birthday song and may type a senior/PWD claim that the cashier approves. Five new tables, all born in Postgres (RULES #4), all carrying their own
@@ -37,7 +37,7 @@
 --   * Lock mode: the composite FKs added from the new tables to the existing tables stores, persons and menu_item_variants take SHARE ROW EXCLUSIVE
 --     on each of them (and so do the org_id FKs on organizations, and the option FK on menu_option_values) (conflicts with writes, not with reads) until COMMIT; drizzle applies pending migrations in ONE transaction. Nothing existing
 --     is rewritten or scanned: the five tables are new and empty, so each FK validation scans zero rows.
---   * Budget: 0.87 s end to end (drizzle migrate of 0217 alone, one transaction) on a local PG 18 scratch database at the full 0214 schema; the ceiling is 60 s (D8).
+--   * Budget: 0.87 s end to end (drizzle migrate of 0215 alone, one transaction) on a local PG 18 scratch database at the full 0214 schema; the ceiling is 60 s (D8).
 --     Re-time on a restore before the deploy if the stores / persons / menu_item_variants tables have grown a long-running writer.
 --
 -- Every statement is its own breakpoint; the last statement closes the file.
