@@ -21,6 +21,7 @@ import {
   assertFieldRules,
   createExpense,
   editExpense,
+  editCapabilityFor,
   voidExpense,
   deleteExpenseDraft,
   recordExpenseForInvoice,
@@ -407,7 +408,13 @@ export async function updateDraftAction(formData: FormData): Promise<void> {
 
   try {
     await withOrgPrincipal(actor.orgId, async (tx) => {
-      assertFieldRules(EXPENSE_DRAFT_EDIT_RULES, formData); // no ruled field; the category rule is re-run by editExpense
+      // Authorize first (the capability editExpense itself picks: own draft inside the edit window, else any), then the form's rules.
+      // The store is read from the record; a missing record falls through to the domain's own not-found refusal.
+      const found = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
+      if (found) {
+        await authorize(tx, actor, editCapabilityFor(found, actor), { storeId: found.storeId });
+        assertFieldRules(EXPENSE_DRAFT_EDIT_RULES, formData); // no ruled field; the category rule is re-run by editExpense
+      }
       await editExpense(tx, actor, expenseId, {
         categoryId: categoryId || undefined,
         particulars: particulars || undefined,

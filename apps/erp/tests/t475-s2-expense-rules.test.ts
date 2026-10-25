@@ -168,7 +168,7 @@ describe('T-475 S2 - /expenses/[id] wiring (E4, P1-P3)', () => {
     for (const id of [ID.invoiceVerified, ID.periodOpen, ID.wouldPost, ID.categoryMapped]) yes(page, id);
   });
 
-  it('the page never calls authorize() (R10: a page view writes no denial row; it asks can() / canAt())', () => {
+  it('the page never calls authorize() (R10: a page view writes no denial row; it asks can())', () => {
     const page = code(PAGE);
     no(page, /\bauthorize\(/)
   });

@@ -37,6 +37,15 @@ async function savepointLookup<T>(tx: Tx, run: (t: Tx) => Promise<T>): Promise<T
  *  "outside the window" without duplicating the constant. */
 export const EDIT_WINDOW_MS = 48 * 60 * 60 * 1000;
 
+/** The ONE rule for which capability edits a draft: the creator inside the edit window holds `edit_own_expense`, anyone else (or the creator later) `edit_any_expense`. Used by `editExpense` and by the edit action's authorize-first gate. */
+export function editCapabilityFor(
+  expense: { createdBy: string; createdAt: Date },
+  actor: Pick<Actor, 'personId'>,
+  now: number = Date.now(),
+): 'edit_own_expense' | 'edit_any_expense' {
+  return actor.personId === expense.createdBy && now - expense.createdAt.getTime() <= EDIT_WINDOW_MS ? 'edit_own_expense' : 'edit_any_expense';
+}
+
 export interface EditExpenseInput {
   /**
    * ⛔ REMOVED at T-130 — an invoice-linked expense's business date is the invoice's own date
@@ -80,14 +89,7 @@ async function runEditExpense(tx: Tx, actor: Actor, expenseId: string, input: Ed
     );
   }
 
-  const isCreator = actor.personId === expense.createdBy;
-  const withinWindow = Date.now() - expense.createdAt.getTime() <= EDIT_WINDOW_MS;
-
-  if (isCreator && withinWindow) {
-    await authorize(tx, actor, 'edit_own_expense', { storeId: expense.storeId });
-  } else {
-    await authorize(tx, actor, 'edit_any_expense', { storeId: expense.storeId });
-  }
+  await authorize(tx, actor, editCapabilityFor(expense, actor), { storeId: expense.storeId });
 
   // ⭐ T-367 S2 / R4 (DEF-396) — lock BEFORE `updateExpenseDraft`'s own UPDATE, not after. The
   // `expenses_check_invoice_open_for_recording` trigger is BEFORE UPDATE, so it fires AFTER
