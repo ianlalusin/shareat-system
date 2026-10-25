@@ -479,7 +479,9 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // (its 6 controls leave the census; the shared component's were already counted), measured: 1407 -> 1401.
     // T-448 Amendment A3 (25 Oct): inline add-forms moved into FormModal; re-measured 1401 -> 1398.
     // 1398 -> 1399 after merging main 9e4778d (one new control).
-    expect(results.length).toBe(1399);
+    // 1401 -> 1403, T-475 S3 (25 Oct). +2 PASS, FAIL/UNRESOLVED unmoved (asserted above): the /ap "Self-verified" filter link and its sibling control; re-measured by runCensus().
+    // Merge of T-448 A3 (1399) with main 4444bb6 (1403): re-measured by runCensus() = 1401.
+    expect(results.length).toBe(1401);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

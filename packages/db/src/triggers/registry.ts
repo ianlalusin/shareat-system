@@ -40,7 +40,7 @@ export interface TriggerEntry {
 
 export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
   // ---------------------------------------------------------------------------------------------
-  // ALWAYS (34 after T-455 S1, was 31) — history guards. R1's own table, in R1's own order, plus later additions.
+  // ALWAYS (35 after T-475 S3, 34 after T-455 S1, was 31) — history guards. R1's own table, in R1's own order, plus later additions.
   // ---------------------------------------------------------------------------------------------
   journal_entries_posted_immutable: {
     table: 'journal_entries',
@@ -1104,5 +1104,23 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'validator',
     reason:
       'A lobby entry party_size may not be lowered below its pending-or-approved discount claims (the other side of lobby_discount_claims_cap); counts the sibling claims, other rows current state, under the entry row lock the UPDATE already holds (0215, T-479, DEF-774).',
+  },
+  // ---------------------------------------------------------------------------------------------
+  // T-475 S3 (0217) - an admin may verify the supplier invoice they logged themselves. The capability trigger reads ANOTHER row's current state
+  // (the verifier's active role): validator, origin. The flag guard decides only from OLD/NEW: history_guard, ENABLE ALWAYS (R3).
+  // ---------------------------------------------------------------------------------------------
+  supplier_invoices_self_verify_requires_capability: {
+    table: 'supplier_invoices',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'A flagged (self-verified) pair needs a verifier holding an ACTIVE admin / super_admin role in the invoice org (Q3=A: role only, no grant branch); judged on INSERT, on setting the flag, and when verified_by / created_by move on a flagged row. Reads person_roles, other rows current state (0217, T-475 S3).',
+  },
+  supplier_invoices_self_verified_immutable: {
+    table: 'supplier_invoices',
+    mode: 'always',
+    kind: 'history_guard',
+    reason:
+      'The self-verified flag is history: it can be set once with the verification and never cleared, even under session_replication_role = replica. Decides only from OLD/NEW (0217, T-475 S3, R3).',
   },
 } as const;

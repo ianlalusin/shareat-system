@@ -3,6 +3,7 @@ import {
   CAPABILITIES,
   CAPABILITY_MATRIX,
   CAPABILITY_SCOPE,
+  ROLE_ONLY_CAPABILITIES,
   SUPER_ADMIN_ONLY_CAPABILITIES,
   type Capability,
 } from '../../packages/auth/src/capabilities';
@@ -20,7 +21,7 @@ import { EVERYDAY_CAPABILITIES } from '../../packages/domain/tests/integration/_
  */
 
 describe('OFFERABLE_TO_POSITIONS — derived, not hand-listed', () => {
-  it('OFFERABLE_TO_POSITIONS is derived, not hand-listed — the three excluded sets, by construction', () => {
+  it('OFFERABLE_TO_POSITIONS is derived, not hand-listed — the excluded sets, by construction', () => {
     for (const c of SUPER_ADMIN_ONLY_CAPABILITIES) {
       expect(OFFERABLE_TO_POSITIONS, `${c} is SUPER_ADMIN_ONLY and must not be offerable`).not.toContain(c);
     }
@@ -28,6 +29,11 @@ describe('OFFERABLE_TO_POSITIONS — derived, not hand-listed', () => {
     const platformCapabilities = CAPABILITIES.filter((c) => CAPABILITY_SCOPE[c] === 'platform');
     for (const c of platformCapabilities) {
       expect(OFFERABLE_TO_POSITIONS, `${c} is platform-scoped and must not be offerable`).not.toContain(c);
+    }
+
+    // T-475 S3: role-only capabilities (grantsConfer false) are never conferred by a position default.
+    for (const c of ROLE_ONLY_CAPABILITIES) {
+      expect(OFFERABLE_TO_POSITIONS, `${c} is ROLE_ONLY and must not be offerable`).not.toContain(c);
     }
 
     expect(OFFERABLE_TO_POSITIONS).not.toContain('close_period');
@@ -44,13 +50,14 @@ describe('OFFERABLE_TO_POSITIONS — derived, not hand-listed', () => {
     const excluded = new Set<Capability>([
       ...SUPER_ADMIN_ONLY_CAPABILITIES,
       ...platformCapabilities,
+      ...ROLE_ONLY_CAPABILITIES,
       'close_period',
       'create_missing_period',
       'book_missed_month' as Capability,
     ]);
     for (const c of CAPABILITIES) {
       if (!excluded.has(c)) {
-        expect(OFFERABLE_TO_POSITIONS, `${c} should be offerable — it is in none of the three excluded sets`).toContain(c);
+        expect(OFFERABLE_TO_POSITIONS, `${c} should be offerable — it is in none of the excluded sets`).toContain(c);
       }
     }
 
