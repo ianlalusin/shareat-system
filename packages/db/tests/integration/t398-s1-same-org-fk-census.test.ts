@@ -68,7 +68,8 @@ const ORG_LESS_PIN: readonly string[] = ['etl_quarantine', 'etl_reconciliation',
 // T-398 S3 (A11, D2): the four ref-gap columns (payslips / separations / thirteenth_month_payouts .journal_entry_id,
 // owner_drawing_closes.adjustment_entry_id) gain composite FKs and leave the list; pos_v1_day_feeds.batch_id has no
 // parent (a minted grouping id) and is reclassified 'idempotency-key'. 28 -> 24.
-const NO_FK_PIN = { count: 24, sha256: '9126fadcd8497248e9757e0fed3f093a0b1cf2e4f5bd1759f5ee778b2803a214' } as const;
+// T-455 S1 (0215): +lobby_entries.client_request_id (idempotency-key). 24 -> 25.
+const NO_FK_PIN = { count: 25, sha256: '33f72effc90d19d7b8f0837aa0fbfb624240550e2b5f72a4a34743a326ab08a9' } as const;
 const JSONB_PIN = { count: 9, sha256: 'c6ed3b6390ba20d384ed7ad17b22b6fc66e2ade9b0cb2867c115aa36f7d8d16b' } as const;
 
 const openKeys = (l: readonly OpenFkEntry[]) => l.map((e) => e.fk);

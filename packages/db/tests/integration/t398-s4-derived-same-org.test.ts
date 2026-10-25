@@ -70,6 +70,8 @@ const PRE_S4_OPEN = { count: 82, sha256: '2df148cd2e5e0757ca384cb3c9cc5522cf138f
 const TRIGGERED_COUNT = 55;
 /** TRIGGER_REGISTRY had 100 entries (69 origin, 57 validator) at 0213; S4 adds exactly 55 validator/origin entries. */
 const REGISTRY_BEFORE_S4 = 100;
+/** Triggers classified AFTER S4 by later tasks (each lane bumps this): T-455 S1 (0215) adds 4 lobby validators; T-479 adds lobby_entries_party_size_cap. */
+const REGISTRY_ADDED_AFTER_S4 = 5;
 
 function pinMismatch(keys: readonly string[], pin: { count: number; sha256: string }): string | null {
   if (keys.length !== pin.count) return `count ${keys.length} != pinned ${pin.count}`;
@@ -273,7 +275,7 @@ describe('D6 -- function properties', () => {
 describe('D7 -- packages/db/src/triggers/registry.ts', () => {
   it('RED until 0214: the registry grew by exactly 55 entries, all kind validator, mode origin', () => {
     const n = Object.keys(TRIGGER_REGISTRY).length;
-    expect(n, `registry size ${n}; 100 before S4`).toBe(REGISTRY_BEFORE_S4 + TRIGGERED_COUNT);
+    expect(n, `registry size ${n}; 100 before S4`).toBe(REGISTRY_BEFORE_S4 + TRIGGERED_COUNT + REGISTRY_ADDED_AFTER_S4);
   });
   it('every live assert_same_org_via_parent trigger is classified: validator, origin, on its own table, live tgenabled = O', () => {
     const bad: string[] = [];

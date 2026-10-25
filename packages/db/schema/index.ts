@@ -150,3 +150,6 @@ export * from './menu';
 
 // T-436 - leave and absence tracking: kinds, caps, requests, per-date days, the year-end SIL payout.
 export * from './leave';
+
+// T-455 S1 - the customer lobby: per-store switches, check-in entries, pre-order lines, birthday-song requests, discount claims.
+export * from './lobby';
