@@ -14,6 +14,12 @@ export const EXPENSE_VOID_RULES = defineFieldRules('expenses.void', {
   reason: { label: 'The reason', kind: 'text', requires: 'Say why this expense is being voided - a reversal with no reason is a gap.' },
 });
 
+/**
+ * T-475 S2: "Approve & post" on a draft (approveExpenseAction). It has no ruled field: the invoice, the month and the other
+ * blockers are BUSINESS rules (`@shareat/domain/business-rules`). The empty set makes the form a CheckedForm so those can turn Save off.
+ */
+export const EXPENSE_APPROVE_RULES = defineFieldRules('expenses.approve', {});
+
 export const EXPENSE_REIMBURSEMENT_RULES = defineFieldRules('expenses.reimbursement', {
   amount: { label: 'The reimbursement amount', kind: 'money', min: 0.01 },
   on: { label: 'The date', kind: 'date' },

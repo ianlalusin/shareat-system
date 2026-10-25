@@ -17,11 +17,20 @@ import { apRepo, auditLogRepo, cashRequestsRepo, expensesRepo, goneSentence, jou
 import type { PeriodOverrideReason } from '@shareat/db/schema';
 import { add, compare, formatMoney, money, subtract, ZERO, type Money } from '@shareat/core/money';
 import { judgeDraw } from '../money-accounts/draw-verdict';
-import { capacityRefusal } from '../business-rules';
+import {
+  buildPeriodFacts,
+  buildWouldPostFacts,
+  capacityRefusal,
+  periodRefusal,
+  type InvoiceVerifiedFacts,
+  type PeriodOpenFacts,
+  type WouldPostFacts,
+} from '../business-rules';
 import { postEntry } from '../ledger/post-entry';
 import { withInterStoreLegs } from '../ledger/inter-store';
 import { routeExpense } from './routing';
 import { capitalizeApprovedExpense } from '../fixed-assets/capitalize';
+import { logger } from '@shareat/core/logger';
 import { refuse, gone, internalFault } from '../shared/refusal';
 
 export interface ApproveExpenseResult {
@@ -41,11 +50,6 @@ export interface ApproveExpenseResult {
 /** T-369 S5b (DEF-314): post this one approval into a CLOSED month. Authorised inside `postEntry` against `actor`. */
 interface ApproveExpenseOptions {
   periodOverride?: { reason: PeriodOverrideReason; note?: string | null };
-}
-
-/** "January 2026" - the month a fiscal period covers, for a sentence a person reads. */
-function monthLabel(startsOn: string): string {
-  return new Date(`${startsOn}T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -99,6 +103,8 @@ export interface ApprovalBlocker {
   sentence: string;
   /** A CLOSED month: the override lifts this one (and only this one). */
   liftable?: true;
+  /** T-475 P1 / P3: which part of the approval refused, so a page can show the invoice and the month on their own lines. */
+  group?: 'invoice' | 'period';
   /** The refusal is an authorisation one: the real path calls `authorize()` with this so the ORIGINAL AuthorizationError is thrown. */
   authorize?: { capability: Capability; storeId: string };
 }
@@ -112,6 +118,8 @@ export interface ApprovalCarried {
 export interface ApprovalVerdictOptions extends ApproveExpenseOptions {
   /** The verify preview: the invoice is verified in the same transaction, just before its drafts post. Lifts ONLY the pending blocker. */
   invoiceVerifiedInThisTx?: boolean;
+  /** T-475 F1 (preview only): skip the invoice checks entirely, so the first NON-invoice blocker shows. The real approval never sets it (R9). */
+  skipInvoice?: boolean;
   carried?: ApprovalCarried;
 }
 
@@ -259,19 +267,19 @@ export function approvalVerdict(facts: ApprovalFacts, options: ApprovalVerdictOp
   // ⭐ T-196 — the gate moved from EXISTENCE to POSTING: a draft may stand against a PENDING invoice, but cannot post until
   // the invoice is verified. The trigger (`expenses_check_invoice_open_for_recording`, migration 0113) is the backstop.
   const invoiceId = expense.supplierInvoiceId;
-  if (!detail.capacity) {
-    return { raw: `approveExpense: supplier invoice ${invoiceId} does not exist in org`, sentence: goneSentence('supplier invoice') };
+  if (!detail.capacity && !options.skipInvoice) {
+    return { raw: `approveExpense: supplier invoice ${invoiceId} does not exist in org`, sentence: goneSentence('supplier invoice'), group: 'invoice' };
   }
-  const room = capacityRefusal(detail.capacity, expense.totalAmount, 'posted', { skipPending: options.invoiceVerifiedInThisTx === true });
+  const room = options.skipInvoice || !detail.capacity ? null : capacityRefusal(detail.capacity, expense.totalAmount, 'posted', { skipPending: options.invoiceVerifiedInThisTx === true });
   if (room) {
-    const c = detail.capacity;
+    const c = detail.capacity!;
     const raw =
       room.kind === 'voided'
         ? `assertOpenForRecording: supplier invoice ${invoiceId} is voided — nothing further may be recorded against it`
         : room.kind === 'pending'
           ? `assertOpenForRecording: supplier invoice ${invoiceId} is ${c.status} — a draft may stand against it, but it cannot post until it is verified`
           : `assertOpenForRecording: supplier invoice ${invoiceId} has only ₱${c.remaining} remaining (total ₱${c.totalAmount}, already recorded ₱${c.recorded}) — ₱${expense.totalAmount} does not fit`;
-    return { raw, sentence: room.sentence };
+    return { raw, sentence: room.sentence, group: 'invoice' };
   }
 
   if (!detail.category) {
@@ -349,18 +357,17 @@ export function approvalVerdict(facts: ApprovalFacts, options: ApprovalVerdictOp
 
   // T-369 S5b: say, in words, when the expense's month will not take the posting - `postEntry`'s own refusal is a developer
   // sentence carrying ids.
-  const period = detail.period;
-  if (period?.status === 'locked') {
-    return {
-      raw: `approveExpense: the fiscal period covering ${expense.businessDate} is locked.`,
-      sentence: `${monthLabel(period.startsOn)} is locked. Nothing can be posted into it, not even with the closed-month override.`,
-    };
+  // T-475 P2: the month's sentences live in the shared rule leaf, so the approve card's live line says the same words.
+  const month = periodRefusal(buildPeriodFacts(detail.period), { override: !!options.periodOverride });
+  if (month?.kind === 'locked') {
+    return { raw: `approveExpense: the fiscal period covering ${expense.businessDate} is locked.`, sentence: month.sentence, group: 'period' };
   }
-  if (period?.status === 'closed' && !options.periodOverride) {
+  if (month?.kind === 'closed') {
     return {
       raw: `approveExpense: the fiscal period covering ${expense.businessDate} is closed and no periodOverride was given.`,
-      sentence: `${monthLabel(period.startsOn)} is closed. Ask an administrator to post this one entry into it.`,
+      sentence: month.sentence,
       liftable: true,
+      group: 'period',
     };
   }
   return null;
@@ -401,6 +408,40 @@ export async function previewInvoiceDrafts(
     }
   }
   return rows;
+}
+
+/**
+ * ⭐ T-475 P1-P3 (R8, R9, R10) - the facts the "Approve & post" card's live lines read, from the SAME evaluator the real approval
+ * runs (gather without a lock, then the pure verdict), so the card can never disagree with the posting. Reads only: no lock, no
+ * write, and `can()` where the real path calls `authorize()` (a page view writes no denial row).
+ *
+ * P1 (the invoice) and P2 (the month) get their own lines; P3 is the first OTHER blocker, judged as if the invoice were verified
+ * and the month open, so the three never repeat each other. `canOverride`: the viewer holds `override_period_lock`.
+ * Null when the expense is not a draft; a preview that cannot be read gives null (the server re-checks every approval).
+ */
+export async function previewExpenseApproval(
+  tx: Tx,
+  actor: Actor,
+  expenseId: string,
+  options: { canOverride: boolean },
+): Promise<{ invoice: InvoiceVerifiedFacts | undefined; period: PeriodOpenFacts; wouldPost: WouldPostFacts } | null> {
+  // F2: a savepoint, so a failed read rolls back only itself and cannot poison the page's transaction.
+  try {
+    return await tx.transaction(async (t) => {
+    const gathered = await gatherApprovalFacts(t, actor, expenseId, { lock: false });
+    const detail = gathered.detail;
+    if (!detail) return null;
+    const other = approvalVerdict({ ...gathered, detail: { ...detail, period: undefined } }, { skipInvoice: true });
+    return {
+      invoice: detail.capacity ? { capacity: detail.capacity, amount: gathered.expense.totalAmount } : undefined,
+      period: { period: buildPeriodFacts(detail.period), canOverride: options.canOverride },
+      wouldPost: buildWouldPostFacts(other),
+    };
+    });
+  } catch (err) {
+    logger.warn({ err, expenseId }, 'previewExpenseApproval: the preview failed; the page shows no verdict and approve re-checks');
+    return null;
+  }
 }
 
 export async function approveExpense(

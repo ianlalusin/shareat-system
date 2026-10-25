@@ -1,13 +1,14 @@
 import { listStores, listActiveCategoriesGrouped } from '../lib';
 import { loadMoneyLines } from '@/lib/money-lines/load';
-import { MoneyLines } from '@/components/money/MoneyLines';
+import { InvoiceMoneyLines } from '@/components/money/InvoiceMoneyLines';
 import { listOpenInvoicesForPicker, peso } from '../../ap/lib';
 import { requireSession } from '../../../lib/session';
 import { createExpenseAction } from '../actions';
 import { budgetsRepo } from '@shareat/db';
 import { withOrgPrincipal } from '../lib';
 import { BudgetHint } from './BudgetHint';
-import { CheckedForm, FieldCheck } from '@/components/forms';
+import { CheckedForm, FieldCheck, RuleCheck } from '@/components/forms';
+import { buildNewExpenseFacts } from '@shareat/domain/business-rules';
 import { EXPENSE_CREATE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -34,6 +35,11 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
   const storeId = sp.store && storeRows.some((s) => s.id === sp.store) ? sp.store : (storeRows[0]?.id ?? '');
   // T-414 (ruling 2): the invoice list follows the store, as the action already requires (it refuses another store's invoice).
   const invoices = await listOpenInvoicesForPicker(orgId, storeId || undefined);
+  // T-475 E1-E3 (R8): the facts the live lines read come from the same builder the domain uses; C2: the picked invoice's supplier feeds Credit.
+  const invoiceFacts = buildNewExpenseFacts(invoices);
+  const invoiceSuppliers = Object.fromEntries(
+    invoices.map((inv) => [inv.id, { supplierId: inv.supplierId, supplierName: inv.supplierName, creditTermsDays: inv.creditTermsDays }]),
+  );
 
   // ⭐ T-266 — accounts with their LEDGER balances plus every open float at this store, flattened
   // into one list. Scoped to the store (DEF-291); the picker used to offer every account in the
@@ -120,8 +126,8 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
                 </option>
                 {invoices.map((inv) => (
                   <option key={inv.id} value={inv.id}>
-                    {inv.supplierName} — {inv.invoiceNo ?? inv.id.slice(0, 8)} ({inv.invoiceDate}) — {peso(inv.remaining)} left
-                    {inv.status === 'pending' ? ' — pending' : ' — verified'}
+                    {/* One string (not several text nodes), so the mark reads as one label everywhere. F5: an inactive supplier's invoice is listed but marked. */}
+                    {`${inv.supplierName} — ${inv.invoiceNo ?? inv.id.slice(0, 8)} (${inv.invoiceDate}) — ${peso(inv.remaining)} left${inv.status === 'pending' ? ' — pending' : ' — verified'}${inv.supplierStatus === 'active' ? '' : ' — supplier inactive'}`}
                   </option>
                 ))}
               </Select>
@@ -159,16 +165,20 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
               Payments — add a line for each place the money came from. A split expense posts as
               ONE entry with one credit line per row (invariant 2).
             </h2>
-            <MoneyLines
+            <InvoiceMoneyLines
               direction="out"
               sources={moneyLines.sources}
               otherStoreSources={moneyLines.otherStoreSources}
               storeNames={moneyLines.storeNames}
               staff={moneyLines.staff}
-              supplierId={null}
-              supplierCreditTermsDays={null}
+              invoices={invoiceSuppliers}
             />
           </div>
+
+          {/* T-475 E1-E3: the business rules, live. Each prints its own sentence (the same one the server refuses with) and turns Save off. */}
+          <RuleCheck id="expense.new.amountWithinRemaining" facts={invoiceFacts} />
+          <RuleCheck id="expense.new.creditNeedsTerms" facts={invoiceFacts} />
+          <RuleCheck id="expense.new.supplierActive" facts={invoiceFacts} />
 
           <Button type="submit" variant="primary">
             Save draft

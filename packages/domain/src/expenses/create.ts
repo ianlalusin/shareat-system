@@ -44,7 +44,13 @@ import { logger } from '@shareat/core/logger';
 import { assertLivePaymentMethod, type ExpensePaymentMethod } from './routing';
 import { refuse, gone } from '../shared/refusal';
 import { parseDecimalInput } from '../shared/money-input';
-import { cashOnDeliverySentence } from '../shared/money-lines';
+import {
+  amountWithinRemainingCheck,
+  buildNewExpenseFacts,
+  creditNeedsTermsCheck,
+  expenseLineValues,
+  expenseSupplierActiveCheck,
+} from '../business-rules';
 
 /**
  * S2/R2's `savepointLookup` (`packages/auth/src/authorize.ts`), applied here: `createExpense`
@@ -157,6 +163,20 @@ async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput)
   // voidInvoice (lockInvoiceForUpdate) or another recording on this SAME invoice serialises here
   // instead of both racing a stale capacity read.
   await apRepo.lockInvoiceForRecording(tx, actor.orgId, input.supplierInvoiceId);
+  // T-475 (R8): the page's live lines (E1-E3) and these refusals judge the SAME facts, built by the shared builder from the
+  // same rows, with the sentences in the shared rule leaf. The repo's assertOpenForRecording stays the race-proof backstop.
+  const capacity = await apRepo.capacityOf(tx, actor.orgId, input.supplierInvoiceId);
+  const supplier = await apRepo.getSupplierById(tx, actor.orgId, invoice.supplierId);
+  const facts =
+    capacity && supplier
+      ? buildNewExpenseFacts([{ ...capacity, id: invoice.id, supplierStatus: supplier.status, creditTermsDays: supplier.creditTermsDays }])
+      : undefined;
+  const values = expenseLineValues(
+    input.supplierInvoiceId,
+    input.payments.map((p, i) => ({ method: p.method, amount: amounts[i]! })),
+  );
+  const tooBig = amountWithinRemainingCheck.run(facts, values);
+  if (tooBig) throw refuse(`createExpense: ${tooBig.sentence}`, tooBig.sentence);
   await apRepo.assertOpenForRecording(tx, actor.orgId, input.supplierInvoiceId, totalAmount, 'draft');
 
   // ⛔ The invoice names its supplier, so the caller's `supplierId` is a SECOND source of truth
@@ -170,17 +190,11 @@ async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput)
   // ACTIVE supplier. Checked here and not only at `recordInvoice`, because a supplier can be
   // deactivated between logging the bill and recording the spend against it — and the second is
   // the step that moves money.
-  const supplier = await apRepo.getSupplierById(tx, actor.orgId, invoice.supplierId);
   if (!supplier) {
     throw gone(`createExpense: supplier ${invoice.supplierId} does not exist in org ${actor.orgId}`, 'supplier');
   }
-  if (supplier.status !== 'active') {
-    throw refuse(
-      `createExpense: ${supplier.name} is ${supplier.status}, not active — an expense cannot be ` +
-        'recorded against a supplier the business has stopped buying from.',
-      `${supplier.name} is ${supplier.status}, not active — an expense cannot be recorded against a supplier the business has stopped buying from.`,
-    );
-  }
+  const inactive = expenseSupplierActiveCheck.run(facts, values);
+  if (inactive) throw refuse(`createExpense: ${inactive.sentence}`, inactive.sentence);
 
   if (input.supplierId !== invoice.supplierId) {
     // Refusal-path only: `supplier` above is already the invoice's own supplier, reused; the
@@ -198,10 +212,11 @@ async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput)
   // T-361 / DEF-492 — R2: after the supplier-mismatch refusal (so a picked/invoice-supplier
   // disagreement still wins) and before any write. `supplier` above is already the invoice's own
   // supplier — the authoritative one, never the caller's `input.supplierId`.
-  if (input.payments.some((p) => p.method === 'credit') && supplier.creditTermsDays === null) {
+  const needsTerms = creditNeedsTermsCheck.run(facts, values);
+  if (needsTerms) {
     throw refuse(
       `createExpense: ${supplier.name} is cash-on-delivery (credit_terms_days is null) — a credit payment cannot be recorded against it`,
-      cashOnDeliverySentence(supplier.name),
+      needsTerms.sentence,
     );
   }
 

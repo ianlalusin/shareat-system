@@ -19,6 +19,7 @@ import { parsePaymentAmount, type CreateExpensePaymentInput } from './create';
 import { refuse, gone } from '../shared/refusal';
 import { cashOnDeliverySentence } from '../shared/money-lines';
 import { assertLivePaymentMethod } from './routing';
+import { buildCategoryFacts, categoryMappedCheck } from '../business-rules';
 
 /** S2/R2's `savepointLookup` (`packages/auth/src/authorize.ts`), same reasoning as
  *  `expenses/create.ts`'s own copy: a refusal-path naming lookup here must not abort a
@@ -112,6 +113,11 @@ async function runEditExpense(tx: Tx, actor: Actor, expenseId: string, input: Ed
   if (input.categoryId !== undefined) {
     const category = await expensesRepo.getCategoryById(tx, actor.orgId, input.categoryId);
     if (!category) throw gone(`editExpense: category ${input.categoryId} does not exist in org ${actor.orgId}`, 'expense category');
+    // T-475 E4 / R12: a CHANGE onto a category with no ledger account is refused with the leaf's sentence (the page disables it
+    // too). Keeping the category the draft already sits on is always allowed - recurring drafts can sit on an unmapped one, and
+    // the edit form re-posts the category with every save; posting such a draft stays refused by approveExpense.
+    const unmapped = categoryMappedCheck.run(buildCategoryFacts(expense.categoryId, [category]), { categoryId: input.categoryId });
+    if (unmapped) throw refuse(`editExpense: ${unmapped.sentence}`, unmapped.sentence);
     patch.categoryId = input.categoryId;
   }
 

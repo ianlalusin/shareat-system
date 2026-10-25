@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation';
 import { expensesRepo, journalRepo } from '@shareat/db';
 import { formatMoney, money } from '@shareat/core/money';
+import { previewExpenseApproval } from '@shareat/domain';
+import { buildCategoryFacts } from '@shareat/domain/business-rules';
 import { listStores, listActingPersons, listCategoriesGrouped } from '../lib';
 import { requireSession } from '../../../lib/session';
 import { approveExpenseAction, voidExpenseAction, updateDraftAction, deleteDraftAction } from '../actions';
@@ -13,9 +15,9 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { personName } from '@/lib/person-name';
 import { typedFor } from '@/lib/keep-typing';
-import { EXPENSE_DRAFT_EDIT } from '../typed-forms';
-import { CheckedForm, EditableRecord } from '@/components/forms';
-import { EXPENSE_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { EXPENSE_APPROVE, EXPENSE_DRAFT_EDIT } from '../typed-forms';
+import { CheckedForm, EditableRecord, RuleCheck } from '@/components/forms';
+import { EXPENSE_APPROVE_RULES, EXPENSE_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { accountCodeAndName } from '@/lib/account-label';
 import { Badge, Button, CardGrid, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 
@@ -98,15 +100,30 @@ export default async function ExpenseDetailPage({
   if (sp.store) qs.set('store', sp.store);
   const carry = qs.toString();
 
-  // T-369 S5b: the closed-month control is offered only to a holder of `override_period_lock`, and only for a draft
-  // whose own date is in a closed month.
-  const closedMonth =
-    expense.status === 'draft' && (await canOverrideClosedMonth(actor))
-      ? closedMonthOf(await closedMonths(orgId), expense.businessDate)
-      : undefined;
-
   const isDraft = expense.status === 'draft';
   const isPosted = expense.status === 'posted';
+
+  // T-369 S5b: the closed-month control is offered only to a holder of `override_period_lock`, and only for a draft
+  // whose own date is in a closed month. T-475 F7: whether the viewer holds it is asked of everyone (can(), no denial row),
+  // because the month's status below is shown to EVERY viewer, not just to the holder.
+  const canOverride = isDraft ? await canOverrideClosedMonth(actor) : false;
+  const closedMonth = isDraft && canOverride ? closedMonthOf(await closedMonths(orgId), expense.businessDate) : undefined;
+
+  // T-475 P1-P3 (R8, R9, R10): what Approve & post would say, from the SAME evaluator the real approval runs (see
+  // previewExpenseApproval). It asks can(), never authorize(): a page view writes no denial row. A preview that cannot be read
+  // gives NO verdict (the server re-checks every approval); it never takes the page down.
+  const approveFacts = isDraft ? await withOrgPrincipal(orgId, (tx) => previewExpenseApproval(tx, actor, expense.id, { canOverride })) : null;
+  // T-475 E4: the draft's category facts (the draft's own current category always stays allowed).
+  const categoryFacts = buildCategoryFacts(
+    expense.categoryId,
+    categories.map((c) => ({ id: c.id, accountCode: c.accountCode })),
+  );
+  // T-475 R14: a refused approval reopens with the closed-month override reason and note still in place.
+  const typedApprove = typedFor(sp, EXPENSE_APPROVE, expense.id, actor.personId);
+  const typedApproveField = (name: string): string | undefined => {
+    const v = typedApprove?.kind === 'typed' ? typedApprove.fields[name] : undefined;
+    return Array.isArray(v) ? v[0] : v;
+  };
 
   // A hidden control is not a control (DEF-051) — the domain re-checks every one of these,
   // and these fields only decide what is worth OFFERING.
@@ -199,9 +216,12 @@ export default async function ExpenseDetailPage({
                       {categories
                         .filter((c) => c.isActive || c.id === expense.categoryId)
                         .map((c) => (
-                          <option key={c.id} value={c.id}>
+                          // T-475 E4 / F4: a category with no ledger account is offered but disabled, as on the new-expense form -
+                          // except the one this draft already sits on (R12), which stays selectable so a re-save keeps it.
+                          <option key={c.id} value={c.id} disabled={!c.accountCode && c.id !== expense.categoryId}>
                             {c.group} — {c.category}
                             {c.isActive ? '' : ' (retired)'}
+                            {!c.accountCode ? ' (unmapped — cannot post)' : ''}
                           </option>
                         ))}
                     </Select>
@@ -210,10 +230,12 @@ export default async function ExpenseDetailPage({
                     <Input name="particulars" defaultValue={expense.particulars} className="w-full" />
                   </Field>
                 </FormGrid>
+                <RuleCheck id="expense.edit.categoryMapped" facts={categoryFacts} />
               </EditableRecord>
             </div>
 
-            <form
+            <CheckedForm
+              rules={EXPENSE_APPROVE_RULES}
               action={approveExpenseAction}
               className="flex flex-col justify-between gap-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800"
             >
@@ -228,13 +250,22 @@ export default async function ExpenseDetailPage({
               {closedMonth && (
                 <>
                   <input type="hidden" name="expenseDate" value={expense.businessDate} />
-                  <ClosedMonthOverride closedMonths={[closedMonth]} dateFieldName="expenseDate" initialDate={expense.businessDate} />
+                  <ClosedMonthOverride
+                    closedMonths={[closedMonth]}
+                    dateFieldName="expenseDate"
+                    initialDate={expense.businessDate}
+                    defaults={{ confirm: typedApproveField('periodOverrideConfirm') === 'on', reason: typedApproveField('periodOverrideReason'), note: typedApproveField('periodOverrideNote') }}
+                  />
                 </>
               )}
+              {/* T-475 P1-P3: the business rules, live. Each prints its own sentence (the same one the server refuses with) and turns Save off. */}
+              <RuleCheck id="expense.approve.invoiceVerified" facts={approveFacts?.invoice} />
+              <RuleCheck id="expense.approve.wouldPost" facts={approveFacts?.wouldPost} />
+              <RuleCheck id="expense.approve.periodOpen" facts={approveFacts?.period} />
               <Button type="submit" variant="primary">
                 Approve &amp; post
               </Button>
-            </form>
+            </CheckedForm>
           </>
         )}
       </CardGrid>
