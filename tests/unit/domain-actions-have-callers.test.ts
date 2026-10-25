@@ -89,6 +89,16 @@ function actionShapedExports(): Map<string, string> {
  * off the same day** by T-226, and the stale-exemption rule below is what forced their rows out.
  */
 const EXEMPT: Record<string, string> = {
+  callEntry:
+    'UNWIRED — T-455 S5 (POS lobby card) is its caller; S2 built the domain layer first (25 Oct). Remove this row when S5 lands.',
+  listLobbyEntries:
+    'UNWIRED — T-455 S5 (POS lobby card) is its caller; S2 built the domain layer first (25 Oct). Remove this row when S5 lands.',
+  parkWalkIn:
+    'UNWIRED — T-455 S5 (POS lobby card) is its caller; S2 built the domain layer first (25 Oct). Remove this row when S5 lands.',
+  removeEntry:
+    'UNWIRED — T-455 S5 (POS lobby card) is its caller; S2 built the domain layer first (25 Oct). Remove this row when S5 lands.',
+  seatEntry:
+    'UNWIRED — T-455 S5 (POS lobby card) is its caller; S2 built the domain layer first (25 Oct). Remove this row when S5 lands.',
   gatherApprovalFacts:
     'INTERNAL — T-475 S1 split approveExpense into facts + verdict; previewInvoiceDrafts (the AP verify preview) and approveExpense call it in the same file.',
   revokePosTerminalLink:

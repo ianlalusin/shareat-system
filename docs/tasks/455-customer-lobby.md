@@ -244,3 +244,35 @@ Carried forward from the S1 audit; none blocks S1.
 - **S2 must expire pending discount claims** when their entry closes (cancelled / removed / expired / seated-and-gone), and the nightly job must sweep stale pending claims (name and ID are NULLed on expiry by the DB CHECK). Both need tests in `t455-s2-lobby.test.ts`.
 - **Cutover purge order:** delete `lobby_entry_line_options`, then `lobby_entry_lines`, `lobby_birthday_requests`, `lobby_discount_claims`, then `lobby_entries` (all FKs are `restrict`).
 - **Before S9 decide a dedicated lobby DB role** with grants only on `lobby_*` plus read on the menu tables. The diner path must not run as `shareat_app`, which reaches the whole organisation.
+
+## S2 rulings (orchestrator, 2026-10-25) — answers to the S2 tester's questions
+
+1. **Hashes:** the S3 server glue computes the HMACs; the domain takes `deviceHash` and `ipHash` and never sees a raw IP or cookie.
+2. **Refusals:** one class `LobbyRefusal` with machine codes `LOBBY_*`. The diner-facing sentence is the SAME for every limit
+   (§4.1: never say which limit); the code is for tests and logs only.
+3. **Code retry:** exactly **5 attempts in total** (first try + 4 retries). Tests pin exactly 5 generator calls, not "5 or 6".
+4. **`parkWalkIn` (staff):** ignores the customer limits (ip-hour, paused, stale POS) AND the 60-live cap — staff are standing
+   in front of the guest. It still obeys the DB rules (one live entry per code, party-size cap). Test the cap bypass.
+5. **Hand-off expiry:** the domain sets it to seat time + 2 hours.
+6. **Returning cookie:** a cookie with a live entry is answered (same entry, same code) BEFORE the ip and cap checks.
+7. **Stale pending claim (nightly sweep):** any claim still `pending` whose entry is closed (any age), or whose own
+   `created_at` is more than 24 hours old. Expiry NULLs name + ID per the DB CHECK.
+8. **`closed_at` on seat:** yes, seat sets `closed_at` (the 24 h purge depends on it). ⛔ If 0215's trigger refuses that,
+   the builder STOPS and reports: 0215 is unmerged, so the orchestrator fixes it in S1, never S2.
+9. **Helpers:** pure helpers stay unexported from `lobby/*`; only the actions the screens call are exported.
+10. **`clientRequestId` replay:** add a test — the same `clientRequestId` returns the same entry and creates no second row.
+
+Spec defects acknowledged:
+- `packages/db/src/repo/lobby.ts` (promised in S1) does not exist. **S2's builder writes it**: all lobby SQL lives there
+  (SQL only in `packages/db/src/repo/`), the domain calls it.
+- §4.1 vs per-limit tests: resolved by ruling 2.
+- Expiry lives in `packages/domain/src/lobby/purge.ts` with the nightly purge.
+
+## S2 audit notes (2026-10-25), carried to S3
+- **S3 must require a uuid-shaped `clientRequestId`** (the domain accepts any 1-64 chars). A guessable id could be
+  pre-claimed by another device, which then makes the real diner's retry answer `LOBBY_BAD_INPUT`.
+- Staff lobby functions authorize `record_sale` at the entry's own store (orchestrator ruling, 25 Oct). A store-A cashier
+  probing a store-B entry id gets AuthorizationError while a ghost id gets LOBBY_NOT_FOUND: accepted (signed-in staff
+  only, unguessable uuidv7 ids, the attempt writes a denial row).
+- `packages/db/src/audit/catalogue.ts` is at its 195-entry cap after S2's four lobby actions: S6/S7 must raise it.
+- `runLobbyNightly(tx, orgId)` has no org loop yet; S9 adds the scheduler entry and the systemTransaction org list (DEF-742).
