@@ -17,7 +17,7 @@
  */
 import { createHash } from 'node:crypto';
 import { and, desc, eq, sql } from 'drizzle-orm';
-import { moneyFromLegacyFloat, toCentavos as moneyToCentavos } from '@shareat/core/money';
+import { moneyFromLegacyFloat, toCentavos as moneyToCentavos, type Decimal } from '@shareat/core/money';
 import type { Tx } from '../client';
 import { POS_V1_SALES_FIELDS } from '../pos-v1/wire';
 import {
@@ -104,8 +104,8 @@ export interface BridgeLineInput {
   readonly lineNo: number;
   readonly posItemId: string | null;
   readonly itemName: string;
-  /** Decimal text with three places (`'2.000'`). Not money. */
-  readonly quantity: string;
+  /** Decimal text with three places (`'2.000'`), minted by `decimal(x, '14,3')`. Not money. */
+  readonly quantity: Decimal<'14,3'>;
   readonly unitPriceCentavos: number;
   readonly discountCentavos: number;
   readonly lineTotalCentavos: number;
@@ -293,6 +293,56 @@ export async function activeTenderIdsByAlias(tx: Tx, orgId: string, storeId: str
 // ---------------------------------------------------------------------------------------------
 // day checks (Ruling 6)
 // ---------------------------------------------------------------------------------------------
+
+/** The store's calendar dates in [from, to] that already have a day check (the bridge reads a day again only when it has none). */
+export async function datesWithChecks(tx: Tx, orgId: string, storeId: string, from: string, to: string): Promise<Set<string>> {
+  try {
+    const rows = await tx
+      .select({ d: sql<string>`${posBridgeDayChecks.posCalendarDate}::text` })
+      .from(posBridgeDayChecks)
+      .where(
+        and(
+          eq(posBridgeDayChecks.orgId, orgId),
+          eq(posBridgeDayChecks.storeId, storeId),
+          sql`${posBridgeDayChecks.posCalendarDate} >= ${from}::date and ${posBridgeDayChecks.posCalendarDate} <= ${to}::date`,
+        ),
+      );
+    return new Set(rows.map((r) => r.d));
+  } catch (e) {
+    return sanitise(e);
+  }
+}
+
+export interface MismatchRow {
+  readonly storeId: string;
+  readonly posCalendarDate: string;
+  /** Receipts minus the day total, in centavos. */
+  readonly differenceCentavos: number;
+}
+
+/** Day checks that are a mismatch on or after `fromDate`, newest first (the Sales days note). */
+export async function recentMismatches(tx: Tx, orgId: string, fromDate: string): Promise<MismatchRow[]> {
+  try {
+    const rows = await tx
+      .select({
+        storeId: posBridgeDayChecks.storeId,
+        posCalendarDate: sql<string>`${posBridgeDayChecks.posCalendarDate}::text`,
+        differenceCentavos: posBridgeDayChecks.differenceCentavos,
+      })
+      .from(posBridgeDayChecks)
+      .where(
+        and(
+          eq(posBridgeDayChecks.orgId, orgId),
+          eq(posBridgeDayChecks.result, 'mismatch'),
+          sql`${posBridgeDayChecks.posCalendarDate} >= ${fromDate}::date`,
+        ),
+      )
+      .orderBy(desc(posBridgeDayChecks.posCalendarDate), posBridgeDayChecks.storeId);
+    return rows.map((r) => ({ storeId: r.storeId, posCalendarDate: r.posCalendarDate, differenceCentavos: r.differenceCentavos ?? 0 }));
+  } catch (e) {
+    return sanitise(e);
+  }
+}
 
 export interface DayNet {
   readonly receiptCount: number;

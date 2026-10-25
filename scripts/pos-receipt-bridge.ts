@@ -49,7 +49,7 @@ async function main(): Promise<number> {
   console.log(`pos-receipt-bridge: running (${trigger}${dryRun ? ', dry run' : ''})${orgId ? ` for org ${orgId}` : ''}`);
 
   const port = PosReceiptBridgeAdapter.fromEnv(process.env);
-  const result = await posReceiptBridgeSweep({ orgId, trigger, dryRun, now: new Date(), port });
+  const result = await posReceiptBridgeSweep({ orgId, trigger, dryRun, date: arg('date'), now: new Date(), port });
 
   const failLines: string[] = [];
   for (const o of result.outcomes) {

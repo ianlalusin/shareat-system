@@ -8,6 +8,17 @@
  * is untouched, and Firebase is never written (the port has no write member). It then compares each store-day's receipts with
  * the POS day feed and says so (`pos_bridge_day_checks`): a check, not truth.
  *
+ * ## The Firestore read budget (Opus ruling, 25 Oct)
+ *
+ * A night reads YESTERDAY plus any day of the 7-day window that has no `pos_bridge_day_checks` row for that store yet (a host
+ * that was down, a store linked late), the same idea as the day-import catch-up. Days before the write floor never get a check,
+ * so they are never "missing": a December night reads yesterday only. The change-time queries (voidedAt/editedAt/createdAt since
+ * the last ok run minus 2h) pick up later voids, edits and offline syncs. ⚠️ `gone` is therefore detected only on days that are
+ * actually re-read (yesterday and missed days); a receipt deleted from an older day is not noticed. Accepted.
+ * Expected reads, per store-day read: the day list + the T-478 server-day walk (about 2 reads per receipt) + 2 counts, so about
+ * 8.4k reads a night for all stores, against the 50k/day free tier that POS's live traffic shares. Re-reading all 7 days was ~118k.
+ * A dry run reads yesterday only; `date` (the `--date` flag) reads exactly that day, live or dry.
+ *
  * ## The rules that are easy to break
  *
  *  - ⛔ Every read and write of our tables runs under `withOrgPrincipal`, never a bare transaction (RLS fails closed). Domain
@@ -24,7 +35,7 @@
  *  - Stores come from LIVE links only. There is no hard-coded exclusion list.
  */
 import { posBridgeRepo, posV1Repo, schedulerRepo, withOrgPrincipal, type SchedulerFailure, type Tx } from '@shareat/db';
-import { toBusinessDate, toCentavos, type Money } from '@shareat/core';
+import { decimal, toBusinessDate, toCentavos, type Money } from '@shareat/core';
 import { addDays as addBusinessDays, businessDayRange, parseBusinessDate } from '@shareat/core/datetime';
 import { logger } from '@shareat/core/logger';
 import { runJobForOrg, listOrgsToRun, type JobOutcome } from '../scheduler';
@@ -138,7 +149,7 @@ function toRows(
       lineNo: l.lineNo,
       posItemId: l.itemId,
       itemName: l.itemName ?? '(unnamed item)',
-      quantity: physical.toFixed(3),
+      quantity: decimal(physical.toFixed(3), '14,3'),
       unitPriceCentavos: unit.c,
       discountCentavos: discount,
       lineTotalCentavos: Math.round(unit.c * billable) + mods.c - discount,
@@ -186,6 +197,8 @@ export async function posReceiptBridgeSweep(options: {
   now: Date;
   trigger?: 'cron' | 'manual';
   dryRun?: boolean;
+  /** Read exactly this Manila day (YYYY-MM-DD) instead of yesterday plus missed days. */
+  date?: string;
   port: PosReceiptBridgePort;
 }): Promise<PosReceiptBridgeSweepResult> {
   const { now, port } = options;
@@ -199,7 +212,7 @@ export async function posReceiptBridgeSweep(options: {
   const outcomes: PosReceiptBridgeOutcome[] = [];
 
   for (const org of orgs) {
-    const work = () => bridgeForOrg(org, { today, dryRun, port });
+    const work = () => bridgeForOrg(org, { today, dryRun, port, date: options.date });
     if (dryRun) {
       const base = { orgId: org.id, orgName: org.name, job: 'pos_receipt_bridge' as const, period };
       try {
@@ -228,9 +241,10 @@ type WriteResult = 'written' | 'unchanged' | 'raced' | 'below_floor' | 'unplacea
 
 async function bridgeForOrg(
   org: { id: string; name: string },
-  ctx: { today: string; dryRun: boolean; port: PosReceiptBridgePort },
+  ctx: { today: string; dryRun: boolean; port: PosReceiptBridgePort; date: string | undefined },
 ): Promise<OrgWork> {
   const { today, dryRun, port } = ctx;
+  if (ctx.date !== undefined) parseBusinessDate(ctx.date);
   const failures: SchedulerFailure[] = [];
   let posted = 0;
   let unchanged = 0;
@@ -243,7 +257,7 @@ async function bridgeForOrg(
 
   const yesterday = addDays(today, -1);
   const windowStart = addDays(yesterday, -(POS_BRIDGE_CATCH_UP_DAYS - 1));
-  const dates = dateRange(windowStart, yesterday);
+  const windowDates = dateRange(windowStart, yesterday);
 
   // Read BEFORE this run opens its own row, so "the last successful run" is really the previous one.
   const prev = await withOrgPrincipal(org.id, (tx) => schedulerRepo.lastOkRunFor(tx, org.id, 'pos_receipt_bridge'));
@@ -259,6 +273,14 @@ async function bridgeForOrg(
       reason,
       ...(kind ? { kind } : {}),
     });
+    // Which days to read: see the read-budget note in the file header.
+    let dates: string[];
+    if (ctx.date !== undefined) dates = [ctx.date];
+    else if (dryRun) dates = [yesterday];
+    else {
+      const have = await withOrgPrincipal(org.id, (tx) => posBridgeRepo.datesWithChecks(tx, org.id, link.storeId, windowStart, yesterday));
+      dates = windowDates.filter((d) => d === yesterday || (d.localeCompare(POS_BRIDGE_WRITE_FLOOR) >= 0 && !have.has(d)));
+    }
     const store = { orgId: org.id, storeId: link.storeId, posStoreId: link.posStoreId };
     const tenderIds = await withOrgPrincipal(org.id, (tx) => posBridgeRepo.activeTenderIdsByAlias(tx, org.id, link.storeId));
 

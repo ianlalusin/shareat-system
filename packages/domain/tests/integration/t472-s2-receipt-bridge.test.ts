@@ -25,6 +25,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
   throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
 }
 
+import { decimal } from '@shareat/core/money';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { PosReceiptBridgePort } from '../../src/pos/receipt-bridge-port';
 import { posV1SalesBody } from '../../../db/src/pos-v1/fixtures';
@@ -477,7 +478,7 @@ describe('C: concurrent runs', () => {
       receiptNumber: null, terminalNo: null, parentDocId: null, clientAt: null, posCalendarDate: YESTERDAY,
       subtotalCentavos: 100, discountCentavos: 0, totalCentavos: 100, moneyFlag: false, raw: {}, docHash: sha('x'),
     };
-    const lines = [{ lineNo: 1, posItemId: null, itemName: 'x', quantity: '1.000', unitPriceCentavos: 100, discountCentavos: 0, lineTotalCentavos: 100, moneyFlag: false }];
+    const lines = [{ lineNo: 1, posItemId: null, itemName: 'x', quantity: decimal('1.000', '14,3'), unitPriceCentavos: 100, discountCentavos: 0, lineTotalCentavos: 100, moneyFlag: false }];
     const results = await Promise.all([
       asOrg(f.orgId, (tx) => posBridgeRepo.insertVersion(tx, header, lines, [], 1)),
       asOrg(f.orgId, (tx) => posBridgeRepo.insertVersion(tx, header, lines, [], 1)),
@@ -540,6 +541,24 @@ describe('K: day checks against the day feed (Ruling 6)', () => {
     const r = await sweep({ orgId: f.orgId, port });
     expect(r.hadFailures).toBe(false);
     expect(r.outcomes[0]!.failures.some((x) => x.kind === 'notice' && /Jan 12, 2027|2027-01-12/.test(x.reason))).toBe(true);
+  });
+});
+
+describe('K5: the Sales days note reads mismatches through the repo (T-472 S3)', () => {
+  it('lists only mismatches, newest first, for this org only', async () => {
+    const f = await fixture('k5');
+    const other = await fixture('k5b');
+    await addFeed(f, YESTERDAY, 1);
+    await addFeed(f, '2027-01-11', 500);
+    const port = new FakePort();
+    port.put(f.posStoreId, YESTERDAY, receipt({ id: 'a', total: '500.00' }));
+    port.put(f.posStoreId, '2027-01-11', receipt({ id: 'b', date: '2027-01-11', total: '500.00' }));
+    await sweep({ orgId: f.orgId, port });
+    const { posBridgeRepo } = await import('@shareat/db');
+    const mine = await asOrg(f.orgId, (tx) => posBridgeRepo.recentMismatches(tx, f.orgId, '2027-01-01'));
+    expect(mine).toEqual([{ storeId: f.storeId, posCalendarDate: YESTERDAY, differenceCentavos: 49900 }]);
+    expect(await asOrg(other.orgId, (tx) => posBridgeRepo.recentMismatches(tx, other.orgId, '2027-01-01'))).toEqual([]);
+    expect(await asOrg(f.orgId, (tx) => posBridgeRepo.recentMismatches(tx, f.orgId, '2027-01-13'))).toEqual([]);
   });
 });
 
