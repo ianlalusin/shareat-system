@@ -211,7 +211,9 @@ export async function planPurge(sql: Executor, asOf: string): Promise<PurgePlan>
   );
   const keepTables = tablesInClass('keep');
   const shellTables = tablesInClass('keep_shell');
-  const dateTables = tablesInClass('date_scoped');
+  // T-455 (#66 CI): date-scoped deletes run children before parents too, derived from pg_constraint like the
+  // purge order. Declaration order put lobby_entries before its RESTRICT children (23001 on lobby_entry_lines).
+  const dateTables = await derivePurgeOrder(sql, tablesInClass('date_scoped'));
 
   const purgeRowsNow = new Map<string, number>();
   for (const t of purgeOrder) purgeRowsNow.set(t, await countRows(sql, t));
