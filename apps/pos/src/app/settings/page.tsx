@@ -15,6 +15,7 @@ import { getLastPrinterAddress, setLastPrinterAddress, printViaNativeBluetooth, 
 import { getPinQrMode, setPinQrMode, renderPinQr, PIN_QR_MODES, PIN_QR_NATIVE_DOTS, DEFAULT_PIN_QR_MODE, type PinQrMode } from "@/lib/printing/pinQr";
 import { TerminalSection } from "@/components/settings/TerminalSection";
 import { OutboxSection } from "@/components/settings/OutboxSection";
+import { DaySection } from "@/components/settings/DaySection";
 import { getKitchenPrinterAddress, setKitchenPrinterAddress, printKitchenText } from "@/lib/printing/kitchenPrinter";
 
 export default function SettingsPage() {
@@ -355,6 +356,7 @@ export default function SettingsPage() {
 
         <TerminalSection />
         <OutboxSection />
+        <DaySection />
 
         <Card>
           <CardHeader>

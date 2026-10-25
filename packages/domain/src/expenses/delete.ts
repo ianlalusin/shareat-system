@@ -26,13 +26,12 @@
  * point — friction on a self-correction is what produces the abandoned drafts instead.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { expensesRepo, transaction, type Tx } from '@shareat/db';
+import { expensesRepo, type Tx } from '@shareat/db';
 import { EDIT_WINDOW_MS } from './edit';
 import { refuse, gone } from '../shared/refusal';
 
-export async function deleteExpenseDraft(tx: Tx | null, actor: Actor, expenseId: string): Promise<void> {
-  if (tx) return runDeleteExpenseDraft(tx, actor, expenseId);
-  return transaction((trx) => runDeleteExpenseDraft(trx, actor, expenseId));
+export async function deleteExpenseDraft(tx: Tx, actor: Actor, expenseId: string): Promise<void> {
+  return runDeleteExpenseDraft(tx, actor, expenseId);
 }
 
 async function runDeleteExpenseDraft(tx: Tx, actor: Actor, expenseId: string): Promise<void> {

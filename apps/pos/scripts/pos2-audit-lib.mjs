@@ -25,3 +25,17 @@ export function negativeDays(days, conversions) {
     conversionIds: conversions.filter((conversion) => conversion.dayId === day.dayId).map((conversion) => conversion.id).sort(),
   })).filter((day) => day.methods.length > 0).sort((a, b) => a.dayId.localeCompare(b.dayId));
 }
+
+/** T-471: the Z numbers ('Z-0001' style) missing between Z-0001 and the highest one present. The sequence never resets, so a hole means a Z was lost. At most 10000 are listed. */
+export function zGaps(zNos) {
+  const seen = new Set();
+  for (const no of zNos) {
+    const m = /^Z-(\d+)$/.exec(String(no));
+    const n = m ? Number(m[1]) : 0;
+    if (Number.isSafeInteger(n) && n > 0) seen.add(n);
+  }
+  const max = seen.size ? Math.max(...seen) : 0;
+  const gaps = [];
+  for (let n = 1; n < max && gaps.length < 10000; n++) if (!seen.has(n)) gaps.push(`Z-${String(n).padStart(4, '0')}`);
+  return gaps;
+}

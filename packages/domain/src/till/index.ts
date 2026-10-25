@@ -20,7 +20,7 @@
  */
 import { money, compare, ZERO, type Money } from '@shareat/core/money';
 import { authorize, type Actor } from '@shareat/auth';
-import { moneyAccountsRepo, tillShiftsRepo, transaction, type Tx } from '@shareat/db';
+import { moneyAccountsRepo, tillShiftsRepo, type Tx } from '@shareat/db';
 import { postStaffShortageCharge } from '../shared/staff-shortage-charge';
 import { parseMoneyInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
@@ -55,7 +55,7 @@ export interface CountInput {
  * constraint-violation error at a till at 6am helps nobody.
  */
 export async function openTillShift(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: OpenShiftInput,
 ): Promise<{ shiftId: string; shiftNo: number }> {
@@ -113,8 +113,7 @@ export async function openTillShift(
     });
     return { shiftId, shiftNo };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -126,7 +125,7 @@ export async function openTillShift(
  * *after the count was taken and signed*. A count is an observation of a moment.
  */
 export async function recordTillCount(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: CountInput,
 ): Promise<void> {
@@ -194,8 +193,7 @@ export async function recordTillCount(
       });
     }
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -206,7 +204,7 @@ export async function recordTillCount(
  * the money changed hands and nobody wrote down how much.
  */
 export async function closeTillShift(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { shiftId: string; notes?: string | null },
 ): Promise<void> {
@@ -246,8 +244,7 @@ export async function closeTillShift(
     });
     if (!ok) throw new Error('closeTillShift: the shift was closed by someone else first.');
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -271,7 +268,7 @@ export async function closeTillShift(
  * *remittance* variance, where the money genuinely was the business's) and never an income account.
  */
 export async function chargeTillShortage(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { countLineId: string; personId: string; note?: string | null },
 ): Promise<{ posted: boolean; reason?: string }> {
@@ -329,6 +326,5 @@ export async function chargeTillShortage(
 
     return { posted: true };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }

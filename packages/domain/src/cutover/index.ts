@@ -20,7 +20,7 @@
  * imbalance found on the tenth supplier is a typo; the same imbalance found after the last one is
  * an investigation.*
  */
-import { auditLogRepo, cutoverRepo, transaction, type Tx } from '@shareat/db';
+import { auditLogRepo, cutoverRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { CUTOVER_STEPS, gatesBefore, stepDef, type StepDef } from './steps';
 import { parseFourDecimalCost } from '../commissary/catalogue';
@@ -189,7 +189,7 @@ async function evaluate(
  * That honesty is the point: a green tick identical to a verified one would be a lie.
  */
 export async function attestStep(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { stepCode: string; storeId?: string | null; note?: string | null },
 ): Promise<void> {
@@ -234,8 +234,7 @@ export async function attestStep(
       source: 'web',
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -245,7 +244,7 @@ export async function attestStep(
  * opening is posted, after taking the shared opening lock.
  */
 export async function recordOpeningCount(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: {
     storeId: string;
@@ -319,8 +318,7 @@ export async function recordOpeningCount(
       countedBy: actor.personId,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 export interface OpeningGaps {

@@ -40,14 +40,7 @@
  * truth, and the two would drift.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import {
-  accessRepo,
-  statutoryDiscountsRepo,
-  transaction,
-  type StatutoryDiscountRow,
-  type StatutoryDiscountSummary,
-  type Tx,
-} from '@shareat/db';
+import { accessRepo, statutoryDiscountsRepo, type StatutoryDiscountRow, type StatutoryDiscountSummary, type Tx } from '@shareat/db';
 import { parseDecimalInput } from '../shared/money-input';
 
 export interface RecordStatutoryDiscountInput {
@@ -73,12 +66,11 @@ export interface ListStatutoryDiscountsQuery {
 }
 
 export async function recordStatutoryDiscount(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: RecordStatutoryDiscountInput,
 ): Promise<{ id: string }> {
-  if (tx) return runRecord(tx, actor, input);
-  return transaction((trx) => runRecord(trx, actor, input));
+  return runRecord(tx, actor, input);
 }
 
 async function runRecord(tx: Tx, actor: Actor, input: RecordStatutoryDiscountInput): Promise<{ id: string }> {
@@ -131,12 +123,11 @@ export interface VoidStatutoryDiscountInput {
  * and that asymmetry with recording IS the control (T-137, CAPABILITY-MATRIX).
  */
 export async function voidStatutoryDiscount(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: VoidStatutoryDiscountInput,
 ): Promise<void> {
-  if (tx) return runVoid(tx, actor, input);
-  return transaction((trx) => runVoid(trx, actor, input));
+  return runVoid(tx, actor, input);
 }
 
 async function runVoid(tx: Tx, actor: Actor, input: VoidStatutoryDiscountInput): Promise<void> {
@@ -167,12 +158,11 @@ async function runVoid(tx: Tx, actor: Actor, input: VoidStatutoryDiscountInput):
 }
 
 export async function listStatutoryDiscounts(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   query: ListStatutoryDiscountsQuery,
 ): Promise<StatutoryDiscountRow[]> {
-  if (tx) return runList(tx, actor, query);
-  return transaction((trx) => runList(trx, actor, query));
+  return runList(tx, actor, query);
 }
 
 async function runList(tx: Tx, actor: Actor, query: ListStatutoryDiscountsQuery): Promise<StatutoryDiscountRow[]> {
@@ -211,7 +201,7 @@ async function authorizeRead(tx: Tx, actor: Actor, query: ListStatutoryDiscounts
 }
 
 export async function summariseStatutoryDiscounts(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   query: ListStatutoryDiscountsQuery,
 ): Promise<StatutoryDiscountSummary> {
@@ -219,6 +209,5 @@ export async function summariseStatutoryDiscounts(
     const scoped = await authorizeRead(trx, actor, query);
     return statutoryDiscountsRepo.summaryForRange(trx, actor.orgId, scoped);
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }

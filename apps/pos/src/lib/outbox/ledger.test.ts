@@ -248,3 +248,57 @@ describe('applyOpsToBatch (Acceptance 2: the batch is BUILT FROM ops)', () => {
     expect(ledger.arrayRemoveMarker('a', 'b')).toEqual({ __arrayRemove__: ['a', 'b'] });
   });
 });
+
+describe('T-470 refund rows (DEF-731): a refund number is explained by a ledger row', () => {
+  const refundTenders = [{ method: 'cash-1', centavos: 12500, toCheck: false, reference: null }];
+  const refundArgs = (extra: Record<string, unknown> = {}) => ({
+    kind: 'refund' as const, storeCode: 'SHT', receiptId: 'parent1', totalCentavos: 12500, linesHash: 'h-refund', tenders: refundTenders, ...extra,
+  });
+
+  it('kind refund reserves the number AND a `reserved` row (no ops) in ONE transaction, keyed to the parent receipt', async () => {
+    await claim(5);
+    const before = idb.commitCount();
+    const ev = await ledger.reserveOnlineEvent(refundArgs());
+    expect(idb.commitCount() - before).toBe(1);
+    expect(ev).toMatchObject({
+      kind: 'refund', status: 'reserved', receiptId: 'parent1', receiptNumber: 'SHT-01-000005', terminalSeq: 5,
+      totalCentavos: 12500, linesHash: 'h-refund', attempts: 0, lastError: null,
+    });
+    expect(ev.tenders).toEqual(refundTenders);
+    expect(ev.ops).toBeUndefined();
+    expect(idb.rows('terminal')[0].nextSeq).toBe(6);
+    expect(idb.rows('events')).toHaveLength(1);
+  });
+
+  it('the sale-intent pointer check is sale-only: a refund on a receipt that has a saved sale intent is NOT refused', async () => {
+    await claim(5);
+    await ledger.reserveOfflineSaleIntent({
+      kind: 'sale', storeId: STORE, storeCode: 'SHT', receiptId: 'parent1', totalCentavos: 59800, linesHash: 'h', tenders, intentFingerprint: 'fp',
+      buildOps: (n) => saleOps({ sessionId: 'parent1', receiptNumber: n.receiptNumber, terminalSeq: n.terminalSeq, deviceId: n.deviceId }),
+    });
+    const ev = await ledger.reserveOnlineEvent(refundArgs());
+    expect(ev).toMatchObject({ kind: 'refund', receiptId: 'parent1', terminalSeq: 6 });
+  });
+
+  it('a refund row is never unsent money: unsentCount and unsentTotalCentavos ignore it, reserved or acknowledged', async () => {
+    await claim(5);
+    const ev = await ledger.reserveOnlineEvent(refundArgs());
+    expect(await ledger.unsentCount()).toBe(0);
+    expect(await ledger.unsentTotalCentavos()).toBe(0);
+    await ledger.markAcknowledged(ev.deviceId, ev.terminalSeq);
+    expect(await ledger.unsentCount()).toBe(0);
+    expect(await ledger.unsentTotalCentavos()).toBe(0);
+  });
+
+  it('a skipped refund row keeps its kind and reason', async () => {
+    await claim(5);
+    await ledger.reserveOnlineEvent(refundArgs());
+    await ledger.markSkipped('DEV-A', 5, 'The refund did not reach the server, so this number carries no money.');
+    expect(await ledger.getEvent('DEV-A', 5)).toMatchObject({ kind: 'refund', status: 'skipped' });
+  });
+
+  it('the LedgerKind type admits refund (compile-time: tsc is red on this file until ledger.ts lists it)', () => {
+    const k: ledger.LedgerKind = 'refund';
+    expect(k).toBe('refund');
+  });
+});

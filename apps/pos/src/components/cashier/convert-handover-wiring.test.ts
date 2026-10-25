@@ -35,6 +35,8 @@ describe('T427 cash UI wiring', () => {
     expect(source).toContain('const snap = await getDocsFromServer(');
     expect(source).toContain('priorReady ? recompute(periodStartMs) : setPriorRetry');
     expect(body).toContain('cashSales: fresh.cashSales'); expect(body).toContain('convertNet: fresh.convertNet');
+    expect(body).toContain('cashRefunds: fresh.cashRefunds'); // bible row 391: cash refunds come off the saved expected cash
+    expect(read('./CashHandoverClient.tsx')).toContain('cashRefunds,'); // and off the on-screen expected cash
     expect(body).toContain('periodEndMs: now'); expect(body).toContain('periodStartExclusive: hasPrior');
     expect(body).toContain('...figures');
     expect(body).toContain('handoverReadFrom(periodStartMs, hasPrior)');

@@ -13,7 +13,7 @@
  * checked first" philosophy.
  */
 import { authorize, can, CAPABILITY_LABEL, type Actor, type Capability } from '@shareat/auth';
-import { apRepo, auditLogRepo, cashRequestsRepo, expensesRepo, goneSentence, journalRepo, moneyAccountsRepo, ownersRepo, personsRepo, transaction, type Tx } from '@shareat/db';
+import { apRepo, auditLogRepo, cashRequestsRepo, expensesRepo, goneSentence, journalRepo, moneyAccountsRepo, ownersRepo, personsRepo, type Tx } from '@shareat/db';
 import type { PeriodOverrideReason } from '@shareat/db/schema';
 import { add, compare, formatMoney, money, subtract, ZERO, type Money } from '@shareat/core/money';
 import { judgeDraw } from '../money-accounts/draw-verdict';
@@ -404,13 +404,12 @@ export async function previewInvoiceDrafts(
 }
 
 export async function approveExpense(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   expenseId: string,
   options?: ApproveExpenseOptions,
 ): Promise<ApproveExpenseResult> {
-  if (tx) return runApproveExpense(tx, actor, expenseId, options);
-  return transaction((trx) => runApproveExpense(trx, actor, expenseId, options));
+  return runApproveExpense(tx, actor, expenseId, options);
 }
 
 async function runApproveExpense(

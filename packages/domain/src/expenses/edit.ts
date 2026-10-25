@@ -12,7 +12,7 @@
  * row; the status check runs first and throws.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { apRepo, expensesRepo, transaction, type Tx } from '@shareat/db';
+import { apRepo, expensesRepo, type Tx } from '@shareat/db';
 import { add } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
 import { parsePaymentAmount, type CreateExpensePaymentInput } from './create';
@@ -54,13 +54,12 @@ export interface EditExpenseInput {
 }
 
 export async function editExpense(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   expenseId: string,
   input: EditExpenseInput,
 ): Promise<void> {
-  if (tx) return runEditExpense(tx, actor, expenseId, input);
-  return transaction((trx) => runEditExpense(trx, actor, expenseId, input));
+  return runEditExpense(tx, actor, expenseId, input);
 }
 
 async function runEditExpense(tx: Tx, actor: Actor, expenseId: string, input: EditExpenseInput): Promise<void> {

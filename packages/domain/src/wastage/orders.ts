@@ -30,12 +30,7 @@ import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { humanDate, refuse } from '../shared/refusal';
 import { toBusinessDate, type BusinessDate } from '@shareat/core/datetime';
 import { lockLiveSalesDay } from '../sales-days/live-day';
-import {
-  channelSettlementsRepo,
-  orderWastageRepo,
-  transaction,
-  type Tx,
-} from '@shareat/db';
+import { channelSettlementsRepo, orderWastageRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
@@ -269,7 +264,7 @@ export interface RecordOrderWastageResult {
  * it exists — the allocated staff if supplied, else the store's Wastage Monitor, seeded here.
  */
 export async function recordOrderWastage(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: RecordOrderWastageInput,
 ): Promise<RecordOrderWastageResult> {
@@ -399,8 +394,7 @@ export async function recordOrderWastage(
 
     return { id, status: 'open', journalEntryId: null };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 export interface DisputeOrderWastageInput {
@@ -412,7 +406,7 @@ export interface DisputeOrderWastageInput {
  *  clock is uniform, including disputed records, and a carve-out here is exactly what was
  *  deliberately removed and must not be restored. */
 export async function disputeOrderWastage(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: DisputeOrderWastageInput,
 ): Promise<Outcome<{ id: string }>> {
@@ -427,8 +421,7 @@ export async function disputeOrderWastage(
     await orderWastageRepo.markDisputed(trx, actor.orgId, row.id);
     return { ok: true, id: row.id };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 export interface ResolveOrderWastageInput {
@@ -455,7 +448,7 @@ export interface ResolveOrderWastageResult {
  * truthfully).
  */
 export async function resolveOrderWastage(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: ResolveOrderWastageInput,
 ): Promise<Outcome<ResolveOrderWastageResult>> {
@@ -512,8 +505,7 @@ export async function resolveOrderWastage(
     });
     return { ok: true, journalEntryId };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 export interface ReverseAutoChargeInput {
@@ -529,7 +521,7 @@ export interface ReverseAutoChargeInput {
  * — there is no separate "un-resolve" shape.
  */
 export async function reverseAutoCharge(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: ReverseAutoChargeInput,
 ): Promise<Outcome<{ reversalEntryId: string }>> {
@@ -567,8 +559,7 @@ export async function reverseAutoCharge(
     await orderWastageRepo.reopenAfterReversal(trx, row.id);
     return { ok: true, reversalEntryId: reversal.reversalEntryId };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // =====================================================================================

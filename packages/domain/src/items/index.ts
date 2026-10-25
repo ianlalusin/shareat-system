@@ -9,18 +9,7 @@
  * `costPerUnit` is zero on 71% of its items, which is what a snapshot nobody maintains looks
  * like after a year.
  */
-import {
-  auditLogRepo,
-  itemCodesRepo,
-  itemsRepo,
-  transaction,
-  type InvoiceLineInput,
-  type ItemRequestRow,
-  type MergeReport,
-  type OpenRequestHit,
-  type SimilarItem,
-  type Tx,
-} from '@shareat/db';
+import { auditLogRepo, itemCodesRepo, itemsRepo, type InvoiceLineInput, type ItemRequestRow, type MergeReport, type OpenRequestHit, type SimilarItem, type Tx } from '@shareat/db';
 import type { BaseUnit, ItemKind, ItemStatus, PurchaseUnit } from '@shareat/db/schema';
 import { computeBranchPrice, type BranchPrice } from './branch-price';
 import { authorize, type Actor } from '@shareat/auth';
@@ -135,7 +124,7 @@ export interface CreateItemInput {
  * until somebody notices the chart is wrong. One person deciding is the strongest control
  * available, and unlike a similarity threshold it does not degrade as the catalogue grows.
  */
-export async function createItem(tx: Tx | null, actor: Actor, input: CreateItemInput): Promise<{ id: string }> {
+export async function createItem(tx: Tx, actor: Actor, input: CreateItemInput): Promise<{ id: string }> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'approve_item', {});
     const name = normaliseItemName(input.name);
@@ -163,8 +152,7 @@ export async function createItem(tx: Tx | null, actor: Actor, input: CreateItemI
       sellableWholesale: input.sellableWholesale ?? false,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -175,7 +163,7 @@ export async function createItem(tx: Tx | null, actor: Actor, input: CreateItemI
  * disagrees with the org still says so through `setStoreSellability`, never here.
  */
 export async function updateItem(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   itemId: string,
   values: Partial<{
@@ -207,8 +195,7 @@ export async function updateItem(
     if (!item) throw new Error(`updateItem: item ${itemId} does not exist.`);
     await itemsRepo.updateItem(trx, actor.orgId, itemId, values);
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -218,7 +205,7 @@ export async function updateItem(
  * writes no audit row (the append comes after the UPDATE, in the same transaction).
  */
 export async function changeItemBaseUnit(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { itemId: string; baseUnit: BaseUnit },
 ): Promise<{ changed: boolean }> {
@@ -245,8 +232,7 @@ export async function changeItemBaseUnit(
     });
     return { changed: true };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /** Round a plain decimal string with more than six places to six, half up on the magnitude; anything else is returned as typed. */
@@ -271,7 +257,7 @@ function roundToScale6(raw: string): string {
  * comes after the UPDATE, in the same transaction). Setting what is already set writes nothing.
  */
 export async function setItemPurchaseUnit(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { itemId: string; purchaseUnit: PurchaseUnit | null; purchaseFactor: string | null; source?: 'web' | 'etl' },
 ): Promise<{ changed: boolean }> {
@@ -311,8 +297,7 @@ export async function setItemPurchaseUnit(
     });
     return { changed: true };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -326,7 +311,7 @@ export async function setItemPurchaseUnit(
  * blank goes to the database as blank, and any other change is an override (shape, number above the stem's mark).
  */
 export async function renameItem(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { itemId: string; name: string; code: string; adoptSuggestedCode?: boolean },
 ): Promise<{ changed: boolean }> {
@@ -360,8 +345,7 @@ export async function renameItem(
     });
     return { changed: true };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -370,7 +354,7 @@ export async function renameItem(
  * (the database's `items_merged_shape_check` backs it; this check exists for the sentence). The audit append comes after the UPDATE.
  */
 export async function setItemStatus(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { itemId: string; status: 'active' | 'inactive' },
 ): Promise<{ changed: boolean }> {
@@ -405,8 +389,7 @@ export async function setItemStatus(
     });
     return { changed: true };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -------------------------------------------------------------------------------------
@@ -724,7 +707,7 @@ export async function validateInvoiceLines(
  * already creates it. Nothing to call, nothing to forget to call, nothing to drift.
  */
 export async function declareSupplierItem(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { supplierId: string; itemId: string; notes?: string | null },
 ): Promise<{ id: string }> {
@@ -746,8 +729,7 @@ export async function declareSupplierItem(
       createdBy: actor.personId,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -758,7 +740,7 @@ export async function declareSupplierItem(
  * in the first draft of this design; deriving the observed half removed the need for one.
  */
 export async function undeclareSupplierItem(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { supplierId: string; itemId: string },
 ): Promise<{ removed: boolean }> {
@@ -767,8 +749,7 @@ export async function undeclareSupplierItem(
     const removed = await itemsRepo.deleteSupplierItem(trx, actor.orgId, input.supplierId, input.itemId);
     return { removed };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -------------------------------------------------------------------------------------
@@ -825,7 +806,7 @@ export interface RequestItemResult {
  * to two people, the requester and then the approver, is what actually prevents the duplicate.
  */
 export async function requestItem(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: RequestItemInput,
 ): Promise<RequestItemResult> {
@@ -870,8 +851,7 @@ export async function requestItem(
     });
     return { requestId: id, similarWarning, similar };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -879,7 +859,7 @@ export async function requestItem(
  * that produced nothing cannot exist — the database refuses that shape outright.
  */
 export async function approveItemRequest(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: {
     requestId: string;
@@ -935,8 +915,7 @@ export async function approveItemRequest(
     });
     return { itemId, code };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 export interface ItemCodeSuggestion {
@@ -953,7 +932,7 @@ export interface ItemCodeSuggestion {
  * left out of the same-stem list.
  */
 export async function suggestItemCode(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { name: string; forItemId?: string },
 ): Promise<ItemCodeSuggestion> {
@@ -970,12 +949,11 @@ export async function suggestItemCode(
     if (last >= 999) return { stem, code: null, full: true, sameStem };
     return { stem, code: formatItemCode(stem, last + 1), full: false, sameStem };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 export async function rejectItemRequest(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { requestId: string; note: string },
 ): Promise<void> {
@@ -991,8 +969,7 @@ export async function rejectItemRequest(
       createdItemId: null,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -1006,7 +983,7 @@ export async function rejectItemRequest(
  * existed — the first thing someone investigating a price anomaly needs to see.
  */
 export async function mergeItems(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { loserId: string; winnerId: string },
 ): Promise<MergeReport> {
@@ -1041,8 +1018,7 @@ export async function mergeItems(
     }
     return itemsRepo.mergeItemInto(trx, actor.orgId, input.loserId, input.winnerId);
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -1142,13 +1118,12 @@ export async function undoDuplicateDismissal(
 }
 
 /** What the super-admin review queue reads. Any manager may LOOK; only a super-admin decides. */
-export async function pendingItemRequests(tx: Tx | null, actor: Actor): Promise<ItemRequestRow[]> {
+export async function pendingItemRequests(tx: Tx, actor: Actor): Promise<ItemRequestRow[]> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_items', {});
     return itemsRepo.listItemRequests(trx, actor.orgId, { status: 'requested' });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -1158,7 +1133,7 @@ export async function pendingItemRequests(tx: Tx | null, actor: Actor): Promise<
  * matters: `false` freezes today's default into a copy that stops tracking it.
  */
 export async function setStoreSellability(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: {
     storeId: string;
@@ -1195,13 +1170,12 @@ export async function setStoreSellability(
       setBy: actor.personId,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /** Return a store to the organisation's answer. */
 export async function clearStoreSellability(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { storeId: string; itemId: string },
 ): Promise<{ cleared: boolean }> {
@@ -1210,8 +1184,7 @@ export async function clearStoreSellability(
     const cleared = await itemsRepo.clearStoreSellability(trx, actor.orgId, input.storeId, input.itemId);
     return { cleared };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // =====================================================================================
@@ -1230,7 +1203,7 @@ const MODE_FIGURE = {
 
 /** Say how an item's branch price is worked out. */
 export async function setItemPricing(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: {
     itemId: string;
@@ -1299,8 +1272,7 @@ export async function setItemPricing(
       setBy: actor.personId,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -1308,7 +1280,7 @@ export async function setItemPricing(
  * source slab, which is the thing actually bought and so the only one with a real received cost.
  */
 export async function setCostBasisItem(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { itemId: string; costBasisItemId: string | null },
 ): Promise<void> {
@@ -1343,8 +1315,7 @@ export async function setCostBasisItem(
       costBasisItemId: input.costBasisItemId,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**

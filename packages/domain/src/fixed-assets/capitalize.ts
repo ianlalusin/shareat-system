@@ -24,15 +24,7 @@
  * `fixedAssetsRepo.assetsMissingCapitalisation`, which is T-135's OIL hook.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import {
-  expensesRepo,
-  fixedAssetsRepo,
-  journalRepo,
-  storesRepo,
-  transaction,
-  type AssetCategory,
-  type Tx,
-} from '@shareat/db';
+import { expensesRepo, fixedAssetsRepo, journalRepo, storesRepo, type AssetCategory, type Tx } from '@shareat/db';
 import { compare, money } from '@shareat/core/money';
 import type { DepreciationInterval } from './schedule';
 import { readPolicyOrRefuse, resolveUsefulLifeMonths } from './policy';
@@ -74,12 +66,11 @@ export interface CreateAssetInput {
  * automatic path below.
  */
 export async function createAsset(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: CreateAssetInput,
 ): Promise<{ id: string }> {
-  if (tx) return runCreateAsset(tx, actor, input);
-  return transaction((trx) => runCreateAsset(trx, actor, input));
+  return runCreateAsset(tx, actor, input);
 }
 
 async function runCreateAsset(
@@ -204,12 +195,11 @@ export interface CapitaliseFromExpenseResult {
  * (spec invariant 5).
  */
 export async function capitalizeFromExpense(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   expenseId: string,
 ): Promise<CapitaliseFromExpenseResult> {
-  if (tx) return runCapitalise(tx, actor, expenseId, true);
-  return transaction((trx) => runCapitalise(trx, actor, expenseId, true));
+  return runCapitalise(tx, actor, expenseId, true);
 }
 
 /**

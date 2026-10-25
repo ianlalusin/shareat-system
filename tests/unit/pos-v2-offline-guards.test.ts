@@ -136,6 +136,12 @@ describe('one shared opener for shareat-pos-terminal (Ruling 1 ✎R2; Acceptance
 });
 
 describe('the payment and void writers go through the ledger and the rules (Rulings 1, 3, 5)', () => {
+  it('T-470 (DEF-731): RefundReceiptDialog.tsx reserves through the ledger and never imports reserveNext. Mutant: a refund number outside the ledger', () => {
+    const f = at('components/receipts/RefundReceiptDialog.tsx');
+    expect(code(f)).not.toMatch(/\breserveNext\b/);
+    expect(code(f)).toMatch(/\breserveOnlineEvent\b/);
+  });
+
   it('offlinePayment.ts reserves through the ledger (not reserveNext), builds its batch with applyOpsToBatch, uses the offline rules, and queues effects in IndexedDB. Mutant: a sale outside the ledger', () => {
     const f = at('components/cashier/offlinePayment.ts');
     const c = code(f);

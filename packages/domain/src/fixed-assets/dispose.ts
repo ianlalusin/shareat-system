@@ -34,7 +34,7 @@
  * that is a spec, not an inference.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { fixedAssetsRepo, transaction, type Tx } from '@shareat/db';
+import { fixedAssetsRepo, type Tx } from '@shareat/db';
 import { compare, money, subtract } from '@shareat/core/money';
 import { postEntry } from '../ledger/post-entry';
 
@@ -59,12 +59,11 @@ export interface DisposeAssetResult {
 }
 
 export async function disposeAsset(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: DisposeAssetInput,
 ): Promise<DisposeAssetResult> {
-  if (tx) return runDispose(tx, actor, input);
-  return transaction((trx) => runDispose(trx, actor, input));
+  return runDispose(tx, actor, input);
 }
 
 async function runDispose(

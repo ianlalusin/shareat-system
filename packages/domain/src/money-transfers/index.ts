@@ -17,7 +17,7 @@
  * coherently be barred from moving ₱500 between two drawers.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { moneyAccountsRepo, moneyTransfersRepo, transaction, type Tx } from '@shareat/db';
+import { moneyAccountsRepo, moneyTransfersRepo, type Tx } from '@shareat/db';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { prepareTransfer } from './prepare';
@@ -60,12 +60,11 @@ export interface CreateMoneyTransferResult {
 }
 
 export async function createMoneyTransfer(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: CreateMoneyTransferInput,
 ): Promise<CreateMoneyTransferResult> {
-  if (tx) return runCreate(tx, actor, input);
-  return transaction((trx) => runCreate(trx, actor, input));
+  return runCreate(tx, actor, input);
 }
 
 async function runCreate(
@@ -156,12 +155,11 @@ async function runCreate(
  * how a ledger ends up holding legs that point at nothing.
  */
 export async function voidMoneyTransfer(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { moneyTransferId: string; reason: string; voidDate?: string },
 ): Promise<{ reversalEntryId: string }> {
-  if (tx) return runVoid(tx, actor, input);
-  return transaction((trx) => runVoid(trx, actor, input));
+  return runVoid(tx, actor, input);
 }
 
 async function runVoid(

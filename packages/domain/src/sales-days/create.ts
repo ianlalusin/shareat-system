@@ -27,7 +27,7 @@
  * commit — the exemption is the newer decision.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { moneyAccountsRepo, salesDaysRepo, transaction, type Tx } from '@shareat/db';
+import { moneyAccountsRepo, salesDaysRepo, type Tx } from '@shareat/db';
 import { add, compare, isZero, ZERO, type Money } from '@shareat/core/money';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
@@ -75,12 +75,11 @@ export interface CreateSalesDayInput {
 }
 
 export async function createSalesDay(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: CreateSalesDayInput,
 ): Promise<{ id: string }> {
-  if (tx) return runCreate(tx, actor, input);
-  return transaction((trx) => runCreate(trx, actor, input));
+  return runCreate(tx, actor, input);
 }
 
 async function runCreate(tx: Tx, actor: Actor, input: CreateSalesDayInput): Promise<{ id: string }> {

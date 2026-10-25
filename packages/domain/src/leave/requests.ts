@@ -12,7 +12,7 @@
  * - **Whole days only** (Ian): a `portion` is refused.
  * - **The note is personal data** (D13, bible row 353): only the loader returns it, and only to people allowed to open the request.
  */
-import { accessRepo, leaveRepo, advisoryLocksRepo, transaction, type Tx } from '@shareat/db';
+import { accessRepo, leaveRepo, advisoryLocksRepo, type Tx } from '@shareat/db';
 import { authorize, heldCapabilities, type Actor } from '@shareat/auth';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { gone } from '../shared/refusal';
@@ -86,7 +86,7 @@ function cleanNote(note: unknown): string | null {
   return t.length > MAX_NOTE ? t.slice(0, MAX_NOTE) : t;
 }
 
-const run = <T>(tx: Tx | null, fn: (trx: Tx) => Promise<T>): Promise<T> => (tx ? fn(tx) : transaction(fn));
+const run = <T>(tx: Tx, fn: (trx: Tx) => Promise<T>): Promise<T> => fn(tx);
 
 async function isSuperAdmin(tx: Tx, actor: Actor): Promise<boolean> {
   const role = await accessRepo.activeRoleForPerson(tx, actor.personId, actor.orgId);
@@ -281,12 +281,12 @@ async function create(
 }
 
 /** Files a request: pending until a manager decides. The person themself, or a manage_attendance holder for them. */
-export function requestLeave(tx: Tx | null, actor: Actor, input: LeaveRequestInput): Promise<{ requestId: string }> {
+export function requestLeave(tx: Tx, actor: Actor, input: LeaveRequestInput): Promise<{ requestId: string }> {
   return run(tx, (trx) => create(trx, actor, input, 'request'));
 }
 
 /** A manager records a past absence: created already approved, judged by every rule (v1's flow, with caps under a lock). */
-export function recordLeave(tx: Tx | null, actor: Actor, input: LeaveRequestInput): Promise<{ requestId: string }> {
+export function recordLeave(tx: Tx, actor: Actor, input: LeaveRequestInput): Promise<{ requestId: string }> {
   return run(tx, (trx) => create(trx, actor, input, 'record'));
 }
 
@@ -306,7 +306,7 @@ async function lockedRequest(tx: Tx, actor: Actor, requestId: string) {
 }
 
 export function approveLeave(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { requestId: string; paid?: boolean },
 ): Promise<{ requestId: string; paid: boolean }> {
@@ -375,7 +375,7 @@ export function approveLeave(
 }
 
 export function rejectLeave(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { requestId: string; reason?: string | null },
 ): Promise<{ requestId: string }> {
@@ -403,7 +403,7 @@ export function rejectLeave(
 }
 
 /** Cancel a pending request: by the person it is for, the one who filed it, or a manager. */
-export function cancelLeave(tx: Tx | null, actor: Actor, input: { requestId: string }): Promise<{ requestId: string }> {
+export function cancelLeave(tx: Tx, actor: Actor, input: { requestId: string }): Promise<{ requestId: string }> {
   return run(tx, async (trx) => {
     const found = await lockedRequest(trx, actor, input.requestId);
     const mine = found.personId === actor.personId || found.requestedBy === actor.personId;
@@ -432,7 +432,7 @@ export function cancelLeave(tx: Tx | null, actor: Actor, input: { requestId: str
  * run has paid cannot quietly stop being leave. Void the run first.
  */
 export function voidLeave(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { requestId: string; reason?: string | null },
 ): Promise<{ requestId: string }> {
@@ -488,7 +488,7 @@ const validCap = (n: unknown): n is number | null => n === null || n === undefin
  * it is judged per birth, never against a cap, so nothing is stored.
  */
 export function setLeaveCap(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: LeaveCapInput,
 ): Promise<{ id: string | null; ignored: boolean }> {
@@ -544,7 +544,7 @@ export function setLeaveCap(
 
 /** Adds a kind of leave this org uses beyond the eleven platform kinds. The code is permanent; the kind is retired, never deleted. */
 export function addLeaveType(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { code: string; label: string; paid: boolean; needsProof?: boolean },
 ): Promise<{ id: string }> {
@@ -578,7 +578,7 @@ export function addLeaveType(
 
 /** Retires or restores a kind this org added. The platform kinds are not the org's to switch off. */
 export function setLeaveTypeActive(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { id: string; active: boolean },
 ): Promise<{ id: string }> {
@@ -598,7 +598,7 @@ export function setLeaveTypeActive(
   });
 }
 
-export function listLeaveTypes(tx: Tx | null, actor: Actor): Promise<leaveRepo.LeaveTypeRow[]> {
+export function listLeaveTypes(tx: Tx, actor: Actor): Promise<leaveRepo.LeaveTypeRow[]> {
   return run(tx, (trx) => leaveRepo.listTypes(trx, actor.orgId));
 }
 
@@ -606,7 +606,7 @@ export function listLeaveTypes(tx: Tx | null, actor: Actor): Promise<leaveRepo.L
  * The caps on file. For a store: the org-wide defaults plus that store's own rows (a manage_attendance holder there). With no store:
  * every row in the org (people admin).
  */
-export function listLeaveCaps(tx: Tx | null, actor: Actor, input: { storeId?: string } = {}): Promise<leaveRepo.CapListRow[]> {
+export function listLeaveCaps(tx: Tx, actor: Actor, input: { storeId?: string } = {}): Promise<leaveRepo.CapListRow[]> {
   return run(tx, async (trx) => {
     if (input.storeId) await authorize(trx, actor, 'manage_attendance', { storeId: input.storeId });
     else await authorize(trx, actor, 'manage_users');
@@ -620,7 +620,7 @@ export function listLeaveCaps(tx: Tx | null, actor: Actor, input: { storeId?: st
 
 /** `{ entitlement, used, remaining }` for a person in a calendar year - derived, never stored. The person, or a manage_attendance holder. */
 export function silBalance(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { personId: string; year: number },
 ): Promise<{ entitlement: number; used: number; remaining: number }> {
@@ -660,7 +660,7 @@ export interface LeaveRequestView {
  * Loads one request. The person it is for and a manage_attendance holder at its store may open it; anyone else is refused.
  * The `note` key exists only on what they get back - it is never stripped by the screen, it is never selected for anyone else.
  */
-export function loadLeaveRequest(tx: Tx | null, actor: Actor, input: { requestId: string }): Promise<LeaveRequestView> {
+export function loadLeaveRequest(tx: Tx, actor: Actor, input: { requestId: string }): Promise<LeaveRequestView> {
   return run(tx, async (trx) => {
     const request = await leaveRepo.getRequest(trx, actor.orgId, input.requestId);
     if (!request) throw gone('leave: that request does not exist', 'leave request');
@@ -723,12 +723,12 @@ async function rows(
 }
 
 /** Every leave date in a store and range, whatever its status. The kind only: no note, no file id. */
-export function listLeave(tx: Tx | null, actor: Actor, input: { storeId: string; from: string; to: string }): Promise<LeaveRow[]> {
+export function listLeave(tx: Tx, actor: Actor, input: { storeId: string; from: string; to: string }): Promise<LeaveRow[]> {
   return run(tx, (trx) => rows(trx, actor, input, ['pending', 'approved', 'rejected', 'cancelled', 'voided', 'superseded_by_work']));
 }
 
 /** What the attendance grid draws: pending and approved leave, with Paid / Unpaid and the punches-that-day clash flag. */
-export function leaveGrid(tx: Tx | null, actor: Actor, input: { storeId: string; from: string; to: string }): Promise<LeaveRow[]> {
+export function leaveGrid(tx: Tx, actor: Actor, input: { storeId: string; from: string; to: string }): Promise<LeaveRow[]> {
   return run(tx, (trx) => rows(trx, actor, input, ['pending', 'approved']));
 }
 
@@ -738,7 +738,7 @@ const csvCell = (v: string): string => {
   return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 };
 
-export function exportLeaveCsv(tx: Tx | null, actor: Actor, input: { storeId: string; from: string; to: string }): Promise<string> {
+export function exportLeaveCsv(tx: Tx, actor: Actor, input: { storeId: string; from: string; to: string }): Promise<string> {
   return run(tx, async (trx) => {
     const list = await rows(trx, actor, input, ['pending', 'approved', 'voided', 'superseded_by_work']);
     const header = ['Date', 'Person', 'Kind', 'Leave type', 'Status', 'Pay', 'Punches that day', 'Proof attached'];
@@ -759,7 +759,7 @@ export interface MyLeave {
 }
 
 /** What a staff member sees about their own leave: their open jobs, their requests, this year's SIL balance and the kinds they may file. */
-export function myLeave(tx: Tx | null, actor: Actor): Promise<MyLeave> {
+export function myLeave(tx: Tx, actor: Actor): Promise<MyLeave> {
   return run(tx, async (trx) => {
     const year = Number(toBusinessDate().slice(0, 4));
     const [employments, requests, balance, types] = await Promise.all([
