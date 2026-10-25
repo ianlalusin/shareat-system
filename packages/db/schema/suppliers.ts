@@ -292,6 +292,14 @@ export const supplierInvoices = pgTable(
     attestedItems: boolean('attested_items').notNull().default(false),
     attestedPrice: boolean('attested_price').notNull().default(false),
 
+    /**
+     * T-475 S3 (migration 0217). True when the person who logged this invoice verified it themselves, which only a holder of
+     * `verify_own_supplier_invoice` (admin / super_admin by ROLE) may do. History: set once with the verification, never cleared
+     * (trigger `supplier_invoices_self_verified_immutable`, ENABLE ALWAYS). The domain sets it from `can()` and nothing else.
+     */
+    // NOTE: the column's checks, index and both triggers are hand-added in migration 0217 (see the NOTEs at the foot of this table).
+    selfVerified: boolean('self_verified').notNull().default(false),
+
     /** Real, server-recomputed VAT (v1: `receipt.actions.ts:283-325`), captured as data. Not yet
      *  posted to a separate input-VAT account — no split exists in `POSTING-PATTERNS.md` today. */
     /**
@@ -388,6 +396,11 @@ export const supplierInvoices = pgTable(
       foreignColumns: [suppliers.orgId, suppliers.id],
       name: 'supplier_invoices_supplier_id_same_org_fk',
     }).onDelete('restrict'),
+    // NOTE: hand-added in 0217 (T-475 S3), no Drizzle mirror: `supplier_invoices_two_person_verification_check` (from 0046) is REPLACED under the
+    // same name by CHECK (verified_by IS NULL OR verified_by <> created_by OR self_verified) NOT VALID; `supplier_invoices_self_verified_means_self_check`
+    // CHECK (NOT self_verified OR verified_by = created_by) (added NOT VALID, then VALIDATED); partial index `supplier_invoices_self_verified_idx`
+    // ON (org_id, verified_at) WHERE self_verified; triggers `supplier_invoices_self_verify_requires_capability` (validator) and
+    // `supplier_invoices_self_verified_immutable` (history_guard, ENABLE ALWAYS). Do not "fix" the builder to match.
     // NOTE: supplier_invoices_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0213 (T-398 S3 / DEF-491), no Drizzle mirror here.
     // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES supplier_invoices (org_id, id)`
     // same-org FKs declared beside their own tables have a real unique target.

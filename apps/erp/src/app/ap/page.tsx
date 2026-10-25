@@ -20,15 +20,18 @@ interface SearchParams {
   error?: string;
   ok?: string;
   warning?: string;
+  /** T-475 S3: `1` lists only invoices verified by the person who logged them. A flag; nothing typed in the URL. */
+  selfVerified?: string;
 }
 
 export default async function ApPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
   const { actor } = await requireSession('/ap');
 
+  const onlySelfVerified = sp.selfVerified === '1';
   const [suppliers, invoiceRows, stores] = await Promise.all([
     listSuppliersWithPosition(actor.orgId),
-    listInvoices(actor.orgId),
+    listInvoices(actor.orgId, onlySelfVerified ? { selfVerified: true } : {}),
     listStores(actor.orgId),
   ]);
   const supplierName = new Map(suppliers.map((s) => [s.id, s.name]));
@@ -168,7 +171,15 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
       )}
 
       <section className="space-y-3">
-        <h2 className="font-medium">Invoices</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-medium">Invoices</h2>
+          {/* T-475 S3: the review list - a plain GET link, so the filter is a flag and no typing is read from the URL. */}
+          {onlySelfVerified ? (
+            <Link href="/ap" className={ACTION_LINK}>Showing: verified by its own creator. Show all invoices →</Link>
+          ) : (
+            <Link href="/ap?selfVerified=1" className={ACTION_LINK}>Verified by its own creator →</Link>
+          )}
+        </div>
         {invoices.length > 0 ? (
           <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
             <table className="w-full min-w-[600px] border-collapse text-sm">
@@ -195,7 +206,10 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
                     <td className="px-3 py-2">{inv.invoiceNo ?? 'No number'}</td>
                     <td className="px-3 py-2">{inv.invoiceDate}</td>
                     <td className="px-3 py-2">
-                      <Badge status={inv.status} />
+                      <span className="inline-flex flex-wrap items-center gap-1.5">
+                        <Badge status={inv.status} />
+                        {inv.selfVerified && <Badge tone="warning" label="Verified by its own creator" />}
+                      </span>
                     </td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(inv.totalAmount)}</td>
                   </LinkRow>
@@ -204,7 +218,7 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
             </table>
           </div>
         ) : (
-          <p className="text-sm text-neutral-500 dark:text-neutral-400">No invoices logged yet.</p>
+          <p className="text-sm text-neutral-500 dark:text-neutral-400">{onlySelfVerified ? 'No invoice has been verified by its own creator.' : 'No invoices logged yet.'}</p>
         )}
       </section>
     </Page>

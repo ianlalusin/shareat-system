@@ -1373,6 +1373,13 @@
       "when": 1804649507084,
       "tag": "0215_t455_lobby_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 217,
+      "version": "7",
+      "when": 1804822307084,
+      "tag": "0217_t475_self_verified_supplier_invoices",
+      "breakpoints": true
     }
   ]
 }

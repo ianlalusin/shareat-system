@@ -189,6 +189,8 @@ export interface SupplierInvoiceRow {
   attestedInvoice: boolean;
   attestedItems: boolean;
   attestedPrice: boolean;
+  /** T-475 S3: verified by the person who logged it (an admin, `verify_own_supplier_invoice`). History, never cleared. */
+  selfVerified: boolean;
   verifiedBy: string | null;
   verifiedAt: Date | null;
   vatType: SupplierInvoiceVatType | null;
@@ -248,12 +250,13 @@ export async function getSupplierInvoiceById(
 export async function listSupplierInvoices(
   tx: Tx,
   orgId: string,
-  filter: { supplierId?: string; status?: SupplierInvoiceStatus; storeId?: string } = {},
+  filter: { supplierId?: string; status?: SupplierInvoiceStatus; storeId?: string; selfVerified?: true } = {},
 ): Promise<SupplierInvoiceRow[]> {
   const conditions = [eq(supplierInvoices.orgId, orgId)];
   if (filter.storeId) conditions.push(eq(supplierInvoices.storeId, filter.storeId)); // T-414: the expense picker is store-scoped
   if (filter.supplierId) conditions.push(eq(supplierInvoices.supplierId, filter.supplierId));
   if (filter.status) conditions.push(eq(supplierInvoices.status, filter.status));
+  if (filter.selfVerified) conditions.push(eq(supplierInvoices.selfVerified, true)); // T-475 S3: only `true` filters; undefined never does
   const rows = await tx
     .select()
     .from(supplierInvoices)
@@ -289,13 +292,15 @@ export async function markInvoiceVerified(
   tx: Tx,
   orgId: string,
   id: string,
-  input: { verifiedBy: string },
+  input: { verifiedBy: string; selfVerified?: boolean },
 ): Promise<void> {
   const updated = await tx
     .update(supplierInvoices)
     .set({
       status: 'verified',
       verifiedBy: input.verifiedBy,
+      // T-475 S3: written in the same UPDATE as the verifier, so the DB trigger judges the pair together.
+      selfVerified: input.selfVerified === true,
       verifiedAt: sql`now()`,
       // ⭐ Stamped together with the status, never separately: the DB CHECK requires all four to
       // be true for a verified row, so a status flip that forgot them would be refused outright.

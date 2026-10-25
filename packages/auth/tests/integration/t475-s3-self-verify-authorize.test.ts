@@ -23,7 +23,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { APP_ROLE, transaction, type Tx } from '@shareat/db';
-import { assignRole, authorize, can, heldCapabilities, AuthorizationError, type Capability, type Role } from '@shareat/auth';
+import { assignRole, authorize, can, heldCapabilities, grantCapabilityAsActor, ROLE_ONLY_CAPABILITIES, AuthorizationError, type Capability, type Role } from '@shareat/auth';
 
 const sql = postgres(url, { max: 3 });
 afterAll(async () => {
@@ -152,5 +152,37 @@ describe('T-475 S3 - Q4=A: a stand-in manager of an admin-less org does not get 
     expect(await tryAuthorize(o, admin)).toBeNull();
     const rows = await sql<{ n: string }[]>`select count(*)::text as n from person_grants where person_id = ${admin}`;
     expect(Number(rows[0]!.n), 'held by role: no grant rows').toBe(0);
+  });
+});
+
+describe('T-475 S3 / audit F1 - grantCapabilityAsActor refuses every role-only capability', () => {
+  const grantRows = (personId: string, name: string) =>
+    sql<{ grant_name: string }[]>`select grant_name from person_grants where person_id = ${personId} and grant_name = ${name}`;
+
+  it('F1: an admin granting verify_own_supplier_invoice (forged POST) is REFUSED with a presentable sentence and NO person_grants row is written. Mutant: only CAPABILITIES.includes checked', async () => {
+    expect([...ROLE_ONLY_CAPABILITIES], 'precondition: the role-only set holds the capability').toContain(CAP);
+    for (const cap of ROLE_ONLY_CAPABILITIES) {
+      const o = await mkOrg();
+      const admin = await mkPerson(o, 'admin');
+      const target = await mkPerson(o, 'manager');
+      let err: unknown = null;
+      try {
+        await asPerson(o.orgId, (tx) => grantCapabilityAsActor(tx, { personId: admin, orgId: o.orgId }, { personId: target, capability: cap }));
+      } catch (e) {
+        err = e;
+      }
+      expect(err, `granting role-only ${cap} was ACCEPTED`).toBeInstanceOf(Error);
+      expect((err as { userMessage?: string }).userMessage, 'a presentable sentence').toBeTruthy();
+      expect((err as { userMessage?: string }).userMessage, 'not the unknown-capability sentence: it IS a known capability').not.toBe("That isn't a permission this system knows.");
+      expect(await grantRows(target, cap), 'no grant row written').toHaveLength(0);
+    }
+  });
+
+  it('F1 control: the same admin granting an ordinary grantable capability (manage_fixed_assets) still works and writes the row', async () => {
+    const o = await mkOrg();
+    const admin = await mkPerson(o, 'admin');
+    const target = await mkPerson(o, 'manager');
+    await asPerson(o.orgId, (tx) => grantCapabilityAsActor(tx, { personId: admin, orgId: o.orgId }, { personId: target, capability: 'manage_fixed_assets' as Capability }));
+    expect(await grantRows(target, 'manage_fixed_assets')).toHaveLength(1);
   });
 });
