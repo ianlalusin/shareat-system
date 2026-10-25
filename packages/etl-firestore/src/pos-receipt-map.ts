@@ -18,7 +18,7 @@ import { hash as nodeHash } from 'node:crypto';
 
 import { toBusinessDate } from '@shareat/core/datetime';
 import { moneyFromLegacyFloat, type Money } from '@shareat/core/money';
-import { normalizePosV1Alias } from '@shareat/domain';
+import { normalizePosV1Alias, scrubReceiptRaw } from '@shareat/domain';
 
 import { toStableJson } from './reader';
 
@@ -98,24 +98,6 @@ export interface MappedPosReceipt {
 /** POS's wire name for the cash kept on a voided receipt, spelled by concatenation: the name is a glossary trap (tests/unit/glossary-trap-names.test.ts). */
 const VOID_CASH_KEPT_WIRE = 'void' + 'Cash' + 'Retained';
 
-const PERSONAL_TOP = new Set(['customerName', 'customerTin', 'customerAddress']);
-const PERSONAL_DINER = new Set(['name', 'idNo']);
-
-/** Drops personal keys anywhere in the tree; diner `name`/`idNo` are dropped inside `statutoryDiners`. */
-function stripPersonal(value: unknown, inDiners = false): unknown {
-  if (Array.isArray(value)) return value.map((v) => stripPersonal(v, inDiners));
-  if (value && typeof value === 'object') {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      if (PERSONAL_TOP.has(k)) continue;
-      if (inDiners && PERSONAL_DINER.has(k)) continue;
-      out[k] = stripPersonal(v, inDiners || k === 'statutoryDiners');
-    }
-    return out;
-  }
-  return value;
-}
-
 function str(v: unknown): string | null {
   return typeof v === 'string' && v !== '' ? v : null;
 }
@@ -191,7 +173,7 @@ export function mapPosReceipt(input: PosReceiptInput): MappedPosReceipt {
     voidCashRefunded: voidRefunded.value,
     voidCashKept: voidRetained.value,
     moneyFlag: [total, totalPaid, change, discountsTotal, voidPaid, voidRefunded, voidRetained].some((m) => m.flag),
-    raw: stripPersonal(d) as Record<string, unknown>,
+    raw: scrubReceiptRaw(d),
   };
 
   const rawLines = Array.isArray(d.lines) ? (d.lines as Record<string, unknown>[]) : [];

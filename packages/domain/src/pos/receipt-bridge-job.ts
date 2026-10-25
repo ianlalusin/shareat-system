@@ -29,8 +29,7 @@
  *  - A new version only when the hash differs (Ruling 3); a document seen before and missing from a re-read day gets a `gone`
  *    version; a lost race for the same version is a skip, never a failure.
  *  - Money: whole centavos, `money_flag` when POS's float was not one. A receipt is NEVER dropped for its money.
- *  - ⛔ NO personal data (Ruling 7): `raw` is scrubbed here again, whatever the port handed over (customer name/TIN/address;
- *    statutory diner names and ID numbers).
+ *  - ⛔ NO personal data (Ruling 7): `raw` goes through the ALLOW-LIST (`scrubReceiptRaw`) here again, whatever the port handed over.
  *  - Database errors are said without row values (the repo sanitises them before they get here).
  *  - Stores come from LIVE links only. There is no hard-coded exclusion list.
  */
@@ -40,6 +39,7 @@ import { addDays as addBusinessDays, businessDayRange, parseBusinessDate } from 
 import { logger } from '@shareat/core/logger';
 import { runJobForOrg, listOrgsToRun, type JobOutcome } from '../scheduler';
 import { safeHumanDate } from '../sales-days/create-block';
+import { scrubReceiptRaw } from './receipt-bridge-scrub';
 import type { BridgeChangeField, BridgeSourceReceipt, PosReceiptBridgePort } from './receipt-bridge-port';
 
 /** Nothing before this Manila date is written (bible row 379). Reads are not floored. */
@@ -92,27 +92,16 @@ function reasonOf(e: unknown): string {
 
 const pesos = (centavos: number): string => `${centavos < 0 ? '-' : ''}P${(Math.abs(centavos) / 100).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-// ---- no personal data ------------------------------------------------------------------------------------------------
-
-const PERSONAL_TOP = new Set(['customerName', 'customerTin', 'customerAddress']);
-const PERSONAL_DINER_KEY = /name|id[_-]?no|\btin\b|address/i;
-
-/** Drops personal keys anywhere in the tree; inside `statutoryDiners` also any name / ID-number / TIN / address key. */
-function scrubPersonal(value: unknown, inDiners = false): unknown {
-  if (Array.isArray(value)) return value.map((v) => scrubPersonal(v, inDiners));
-  if (value && typeof value === 'object') {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      if (PERSONAL_TOP.has(k)) continue;
-      if (inDiners && PERSONAL_DINER_KEY.test(k)) continue;
-      out[k] = scrubPersonal(v, inDiners || k === 'statutoryDiners');
-    }
-    return out;
-  }
-  return value;
-}
-
 // ---- mapping a port receipt to repo rows ---------------------------------------------------------------------------------
+
+/**
+ * THE one integer rounding for every derived centavo figure: half AWAY from zero, so a sale line and its refund mirror each other.
+ * Never `Math.round` (it rounds -0.5 toward zero) and never a float into a column.
+ */
+export function roundHalfAway(x: number): number {
+  const r = Math.floor(Math.abs(x) + 0.5);
+  return x < 0 ? -r : r;
+}
 
 /** Money string -> centavos. A missing figure is 0 and FLAGGED: the receipt is still copied. */
 function cents(m: Money | null): { c: number; flag: boolean } {
@@ -130,30 +119,41 @@ function toRows(
   const total = cents(h.total);
   const disc = h.discountsTotal === null ? { c: 0, flag: false } : cents(h.discountsTotal);
 
+  // POS writes a refund's lines with POSITIVE quantities and a NEGATIVE header total, so a refund line is stored with the refund
+  // sign (quantity, discount and total negative) and a plain refund's lines add up to its header. A line that already carries a
+  // negative quantity keeps its sign.
   const lines: posBridgeRepo.BridgeLineInput[] = r.lines.map((l) => {
     const unit = cents(l.unitPrice);
     const mods = l.modifiersTotal === null ? { c: 0, flag: false } : cents(l.modifiersTotal);
     const ordered = l.qtyOrdered ?? 0;
-    const voided = l.voidedQty ?? 0;
-    const free = l.freeQty ?? 0;
+    const sign = h.kind === 'refund' || ordered < 0 ? -1 : 1;
+    const voided = Math.abs(l.voidedQty ?? 0);
+    const free = Math.abs(l.freeQty ?? 0);
     // What the line physically used (stock use later) vs what it bills: free quantity is used but not billed.
-    const physical = Math.max(0, ordered - voided);
-    const billable = Math.max(0, ordered - voided - free);
-    const discQty = Math.min(l.discountQty ?? 0, billable);
+    const physical = Math.max(0, Math.abs(ordered) - voided);
+    const billable = Math.max(0, Math.abs(ordered) - voided - free);
+    const discQty = Math.min(Math.abs(l.discountQty ?? 0), billable);
+    let flag = l.moneyFlag || unit.flag || mods.flag;
+    const whole = (x: number): number => {
+      const r2 = roundHalfAway(x);
+      if (Math.abs(x - r2) > 1e-6) flag = true;
+      return r2;
+    };
     let discount = 0;
     if (discQty > 0) {
-      if (l.discountType === 'fixed' && l.discountFixed !== null) discount = Number(toCentavos(l.discountFixed)) * discQty;
-      else if (l.discountType === 'percent' && l.discountPercent !== null) discount = Math.round((unit.c * discQty * l.discountPercent) / 100);
+      if (l.discountType === 'fixed' && l.discountFixed !== null) discount = whole(Number(toCentavos(l.discountFixed)) * discQty);
+      else if (l.discountType === 'percent' && l.discountPercent !== null) discount = whole((unit.c * discQty * l.discountPercent) / 100);
     }
+    const gross = whole((unit.c + mods.c) * billable);
     return {
       lineNo: l.lineNo,
       posItemId: l.itemId,
       itemName: l.itemName ?? '(unnamed item)',
-      quantity: decimal(physical.toFixed(3), '14,3'),
+      quantity: decimal((sign * physical).toFixed(3), '14,3'),
       unitPriceCentavos: unit.c,
-      discountCentavos: discount,
-      lineTotalCentavos: Math.round(unit.c * billable) + mods.c - discount,
-      moneyFlag: l.moneyFlag || unit.flag,
+      discountCentavos: sign * discount,
+      lineTotalCentavos: sign * (gross - discount),
+      moneyFlag: flag,
     };
   });
 
@@ -184,7 +184,7 @@ function toRows(
     discountCentavos: disc.c,
     totalCentavos: total.c,
     moneyFlag: h.moneyFlag || total.flag || disc.flag || lines.some((l) => l.moneyFlag) || tenders.some((t) => t.moneyFlag),
-    raw: scrubPersonal(h.raw) as Record<string, unknown>,
+    raw: scrubReceiptRaw(h.raw),
     docHash: r.docHash,
   };
   return { header, lines, tenders };
@@ -261,7 +261,6 @@ async function bridgeForOrg(
 
   // Read BEFORE this run opens its own row, so "the last successful run" is really the previous one.
   const prev = await withOrgPrincipal(org.id, (tx) => schedulerRepo.lastOkRunFor(tx, org.id, 'pos_receipt_bridge'));
-  const since = prev ? new Date(prev.startedAt.getTime() - SINCE_OVERLAP_MS) : businessDayRange(parseBusinessDate(windowStart)).start;
 
   const links = await withOrgPrincipal(org.id, (tx) => posV1Repo.listLiveLinks(tx, org.id));
 
@@ -281,6 +280,11 @@ async function bridgeForOrg(
       const have = await withOrgPrincipal(org.id, (tx) => posBridgeRepo.datesWithChecks(tx, org.id, link.storeId, windowStart, yesterday));
       dates = windowDates.filter((d) => d === yesterday || (d.localeCompare(POS_BRIDGE_WRITE_FLOOR) >= 0 && !have.has(d)));
     }
+    // The change-time cutoff: after a successful run, 2 h before it. A dry run and a FIRST live run have no such run to lean on, so
+    // they cut off at the start of the earliest day they actually read: never the 7-day window start (a wider net than the budget).
+    const earliestRead = [...dates].sort()[0]!;
+    const since =
+      prev && !dryRun ? new Date(prev.startedAt.getTime() - SINCE_OVERLAP_MS) : businessDayRange(parseBusinessDate(earliestRead)).start;
     const store = { orgId: org.id, storeId: link.storeId, posStoreId: link.posStoreId };
     const tenderIds = await withOrgPrincipal(org.id, (tx) => posBridgeRepo.activeTenderIdsByAlias(tx, org.id, link.storeId));
 
@@ -294,7 +298,8 @@ async function bridgeForOrg(
       await withOrgPrincipal(org.id, async (tx) => {
         for (const r of docs) {
           try {
-            const res = await writeOne(tx, store, r, fallbackDate, tenderIds, dryRun);
+            // Each receipt on its own savepoint: one statement error rolls back that receipt only, never the day's transaction.
+            const res = await tx.transaction((sp) => writeOne(sp, store, r, fallbackDate, tenderIds, dryRun));
             if (res === 'written') posted += 1;
             else if (res === 'unchanged') unchanged += 1;
             else if (res === 'raced') raced += 1;
@@ -341,7 +346,8 @@ async function bridgeForOrg(
         for (const id of inDay) seen.add(id);
         read += docs.length;
         await writeAll(docs, date, when);
-        readOk.add(date);
+        // Only a COMPLETE read may feed `gone` and the day check: an incomplete one would mint false `gone` versions.
+        if (notRead.length === 0 && byClient >= cross.byClientMs) readOk.add(date);
       } catch (e) {
         failures.push(line(`${when}: ${reasonOf(e)} The rest of this store's days wait for tomorrow.`));
         stopped = true;

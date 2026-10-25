@@ -109,6 +109,7 @@ export * from './pos/v1-recheck';
 export * from './pos/day-import-job';
 export * from './pos/receipt-bridge-job';
 export * from './pos/receipt-bridge-port';
+export * from './pos/receipt-bridge-scrub';
 // T-375 S1 - the POS v1 day feed: the bridge fetchers and the store link.
 export * from './pos/v1-feed';
 export * from './pos/store-link';

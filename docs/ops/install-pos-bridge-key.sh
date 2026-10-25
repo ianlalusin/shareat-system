@@ -22,11 +22,9 @@ PROJECT="$(node -e 'const k=JSON.parse(require("fs").readFileSync(process.argv[1
 [ "$PROJECT" = "$EXPECT_PROJECT" ] || { echo "The key belongs to project '$PROJECT', expected $EXPECT_PROJECT. Not copied." >&2; exit 1; }
 
 LOCAL_SUM="$(sha256sum "$SRC" | cut -c1-12)"
-TMP="/tmp/pos-bridge-reader.$$.json"
-
-scp -q "$SRC" "$HOST:$TMP"
-# Owner shareat, mode 600, inside a 700 directory; the temp copy is removed whatever happens.
-REMOTE_SUM="$(ssh "$HOST" "set -e; trap 'rm -f $TMP' EXIT; install -d -m 700 -o shareat -g shareat /srv/shareat-shared/secrets; install -o shareat -g shareat -m 600 $TMP $DEST; sha256sum $DEST | cut -c1-12")"
+# Streamed over ssh on stdin: no scp, no copy in /tmp. umask 077 so nothing is ever group/world-readable, `install` writes the final
+# file in one step (owner shareat, mode 600, in a 700 directory), and on any failure `set -e` stops before anything else is touched.
+REMOTE_SUM="$(ssh "$HOST" "umask 077; set -e; trap 'rc=\$?; [ \$rc -ne 0 ] && rm -f $DEST' EXIT; install -d -m 700 -o shareat -g shareat /srv/shareat-shared/secrets; install -o shareat -g shareat -m 600 /dev/stdin $DEST; sha256sum $DEST | cut -c1-12" < "$SRC")"
 
 echo "Installed $DEST on ${HOST#*@} (owner shareat, mode 600)."
 echo "SHA-256 prefix  laptop: $LOCAL_SUM   droplet: $REMOTE_SUM"
