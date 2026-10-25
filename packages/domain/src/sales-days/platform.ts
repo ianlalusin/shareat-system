@@ -15,7 +15,7 @@
  * `submit_sales_day` for the status sentence on a closed day). `authorize()` comes first (I1).
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { auditLogRepo, salesDaysRepo, transaction, type Tx } from '@shareat/db';
+import { auditLogRepo, salesDaysRepo, type Tx } from '@shareat/db';
 import { compare, ZERO, isZero, type Money } from '@shareat/core/money';
 import { parseMoneyInput } from '../shared/money-input';
 import { gone, refuse } from '../shared/refusal';
@@ -26,9 +26,8 @@ export interface SetPlatformSalesInput {
   rows: { channelId: string; amount: string; noSales: boolean }[];
 }
 
-export async function setPlatformSales(tx: Tx | null, actor: Actor, input: SetPlatformSalesInput): Promise<{ id: string }> {
-  if (tx) return run(tx, actor, input);
-  return transaction((trx) => run(trx, actor, input));
+export async function setPlatformSales(tx: Tx, actor: Actor, input: SetPlatformSalesInput): Promise<{ id: string }> {
+  return run(tx, actor, input);
 }
 
 async function run(tx: Tx, actor: Actor, input: SetPlatformSalesInput): Promise<{ id: string }> {

@@ -16,7 +16,7 @@
  * The prior-7-days recheck is NOT part of this function (R10): the server action calls it AFTER this commits.
  */
 import { authorize, AuthorizationError, type Actor } from '@shareat/auth';
-import { auditLogRepo, moneyAccountsRepo, posV1Repo, salesDaysRepo, storesRepo, transaction, type Tx } from '@shareat/db';
+import { auditLogRepo, moneyAccountsRepo, posV1Repo, salesDaysRepo, storesRepo, type Tx } from '@shareat/db';
 import type { PosV1FeedKind } from '@shareat/db/schema';
 import { parseBusinessDate } from '@shareat/core/datetime';
 import { POS_V1_SALES_FIELDS } from '@shareat/db/pos-v1/wire';
@@ -58,31 +58,27 @@ export interface ImportSalesDayInput {
 /** What an `ifAbsent` import answers: the day it made, the day that was already there, or POS having no sales for the date. */
 export type ImportSalesDayOutcome = { id: string; skipped?: true } | { notFound: true };
 
-/** The nullable transaction argument, spelled once here so the two overloads below add nothing to the DEF-421 ratchet. */
-type MaybeTx = Tx | null;
-
 export function importSalesDay(
-  tx: MaybeTx,
+  tx: Tx,
   actor: Actor,
   input: ImportSalesDayInput & { readonly ifAbsent: true },
   fetchers?: ImportFetchers,
 ): Promise<ImportSalesDayOutcome>;
 export function importSalesDay(
-  tx: MaybeTx,
+  tx: Tx,
   actor: Actor,
   input: ImportSalesDayInput & { readonly ifAbsent?: false },
   fetchers?: ImportFetchers,
 ): Promise<{ id: string }>;
 /** A non-literal `ifAbsent: boolean` may answer either shape. */
-export function importSalesDay(tx: MaybeTx, actor: Actor, input: ImportSalesDayInput, fetchers?: ImportFetchers): Promise<ImportSalesDayOutcome>;
+export function importSalesDay(tx: Tx, actor: Actor, input: ImportSalesDayInput, fetchers?: ImportFetchers): Promise<ImportSalesDayOutcome>;
 export async function importSalesDay(
-  tx: MaybeTx,
+  tx: Tx,
   actor: Actor,
   input: ImportSalesDayInput,
   fetchers: ImportFetchers = LIVE_FETCHERS,
 ): Promise<ImportSalesDayOutcome> {
-  if (tx) return runImport(tx, actor, input, fetchers);
-  return transaction((trx) => runImport(trx, actor, input, fetchers));
+  return runImport(tx, actor, input, fetchers);
 }
 
 const DAY_OUT_OF_REACH = 'That sales day does not exist, or it is not at a store where you may import.';
@@ -93,12 +89,11 @@ const DAY_OUT_OF_REACH = 'That sales day does not exist, or it is not at a store
  * oracle for which days exist.
  */
 export async function reimportSalesDay(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { readonly salesDayId: string },
   fetchers: ImportFetchers = LIVE_FETCHERS,
 ): Promise<{ id: string }> {
-  if (!tx) return transaction((trx) => reimportSalesDay(trx, actor, input, fetchers));
   const day = await salesDaysRepo.getById(tx, actor.orgId, input.salesDayId);
   if (!day) {
     const raw = 'reimportSalesDay: no such sales day in this org';

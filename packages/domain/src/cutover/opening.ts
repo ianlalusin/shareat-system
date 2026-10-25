@@ -18,7 +18,7 @@
  * triggers fire only on `posted`), figures can be entered over days, and C5's post is still the
  * single act that makes the whole set final.
  */
-import { auditLogRepo, cutoverRepo, journalRepo, transaction, type Tx } from '@shareat/db';
+import { auditLogRepo, cutoverRepo, journalRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { compare, isZero, money, ZERO, type Money } from '@shareat/core/money';
 import { parseMoneyInput } from '../shared/money-input';
@@ -58,7 +58,7 @@ export interface OpeningFigureInput {
  * this design refuses to have.
  */
 export async function addOpeningFigure(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: OpeningFigureInput,
 ): Promise<{ entryId: string }> {
@@ -162,8 +162,7 @@ export async function addOpeningFigure(
     }
     return { entryId };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 type DraftLine = {
@@ -205,7 +204,7 @@ async function resolveLines(tx: Tx, orgId: string, lines: DraftLine[]) {
  * at C5's post, which is what correction 3 of the spec settled.
  */
 export async function removeOpeningFigure(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { entryId: string },
 ): Promise<void> {
@@ -228,8 +227,7 @@ export async function removeOpeningFigure(
     }
     await cutoverRepo.deleteDraftEntry(trx, actor.orgId, input.entryId);
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 export interface PostOpeningResult {
@@ -245,7 +243,7 @@ export interface PostOpeningResult {
  * difference is that this moment is never a surprise.
  */
 export async function postOpeningBalances(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
 ): Promise<PostOpeningResult> {
   const run = async (trx: Tx): Promise<PostOpeningResult> => {
@@ -331,6 +329,5 @@ export async function postOpeningBalances(
 
     return { posted: entryIds.length, entryIds };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }

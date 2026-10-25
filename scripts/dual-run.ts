@@ -93,11 +93,13 @@ async function compare(): Promise<number> {
   const { loadSnapshotFile, removeSnapshotFile } = await import('./lib/dual-run-extract');
   const { snapshot, sha } = loadSnapshotFile(resolve(snapshotPath)); // sha, mode and owner are checked here
   const keysText = readFileSync(resolve(keysPath), 'utf8');
-  const { closeDb } = await import('@shareat/db');
+  const { closeDb, withOrgPrincipal } = await import('@shareat/db');
   const { runDualRun } = await import('@shareat/domain');
 
   try {
-    const outcome = await runDualRun(null, { orgId, personId: actorId }, { snapshot, snapshotSha: sha, keysText, storeCodes: list('--stores'), apply });
+    const outcome = await withOrgPrincipal(orgId, (tx) =>
+      runDualRun(tx, { orgId, personId: actorId }, { snapshot, snapshotSha: sha, keysText, storeCodes: list('--stores'), apply }),
+    );
     console.log(`${apply ? 'APPLY' : 'DRY RUN (nothing written)'}  snapshot sha256 ${outcome.snapshotSha}  keys sha256 ${outcome.keysSha}`);
     if (outcome.excluded.length > 0) {
       console.log(`Excluded (named): ${outcome.excluded.map((e) => `${e.name} - ${e.reason}`).join('; ')}`);

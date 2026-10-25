@@ -28,21 +28,7 @@
  * version silently skipped budget release, cash-request liquidation, the expense-summary
  * projection, and a CAPEX asset's live-depreciation guard. `voidInvoice` below does the same.
  */
-import {
-  advisoryLocksRepo,
-  apRepo,
-  auditLogRepo,
-  cashRequestsRepo,
-  itemsRepo,
-  journalRepo,
-  expensesRepo,
-  filesRepo,
-  moneyAccountsRepo,
-  personsRepo,
-  storesRepo,
-  transaction,
-  type Tx,
-} from '@shareat/db';
+import { advisoryLocksRepo, apRepo, auditLogRepo, cashRequestsRepo, itemsRepo, journalRepo, expensesRepo, filesRepo, moneyAccountsRepo, personsRepo, storesRepo, type Tx } from '@shareat/db';
 import type {
   SupplierClassification,
   SupplierInvoiceVatType,
@@ -181,7 +167,7 @@ function judgeCreditTerms(
 }
 
 export async function createSupplier(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: CreateSupplierInput,
 ): Promise<{ id: string }> {
@@ -209,8 +195,7 @@ export async function createSupplier(
       creditTermsDays: creditTermsDays ?? null,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -234,7 +219,7 @@ export async function createSupplier(
  * to any of the three bank fields is audited too, same transaction, full before/after triple.
  */
 export async function editSupplier(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: EditSupplierInput,
 ): Promise<void> {
@@ -344,8 +329,7 @@ export async function editSupplier(
       });
     }
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -354,7 +338,7 @@ export async function editSupplier(
  * `approve_supplier`; a store of another organisation is refused.
  */
 export async function setSupplierCounterpartyStore(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { supplierId: string; storeId: string; source?: 'web' | 'etl' },
 ): Promise<void> {
@@ -381,8 +365,7 @@ export async function setSupplierCounterpartyStore(
       source: input.source ?? 'web',
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -391,7 +374,7 @@ export async function setSupplierCounterpartyStore(
  * still shows a real `2110` outstanding.
  */
 export async function reconcileSupplier(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { supplierId: string; asOf: string },
 ): Promise<{ balanceAtStamp: string }> {
@@ -420,8 +403,7 @@ export async function reconcileSupplier(
     });
     return { balanceAtStamp: position.controlBalance };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -------------------------------------------------------------------------------------
@@ -469,7 +451,7 @@ export interface RecordInvoiceResult {
 }
 
 export async function recordInvoice(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: RecordInvoiceInput,
 ): Promise<RecordInvoiceResult> {
@@ -664,8 +646,7 @@ export async function recordInvoice(
 
     return { id: created.id, ...(duplicateWarning ? { duplicateWarning } : {}) };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -707,7 +688,7 @@ const ATTESTATION_LABEL: Record<keyof VerifyInvoiceAttestation, string> = {
  * `editExpense`'s payments already follow.
  */
 export async function setInvoiceLines(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   invoiceId: string,
   lines: InvoiceLineDraft[],
@@ -733,8 +714,7 @@ export async function setInvoiceLines(
     if (validated.length > 0) await itemsRepo.insertInvoiceLines(trx, invoiceId, validated);
     return { count: validated.length };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -781,7 +761,7 @@ export async function setInvoiceLines(
  * `override_period_lock` against `actor`. Without the override a closed month refuses in `approveExpense`'s words.
  */
 export async function verifyInvoice(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   invoiceId: string,
   attestation: VerifyInvoiceAttestation,
@@ -898,8 +878,7 @@ export async function verifyInvoice(
       source: 'web',
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /**
@@ -925,7 +904,7 @@ export async function verifyInvoice(
  * authorized for the delete.
  */
 export async function voidInvoice(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: { invoiceId: string; reason: string },
 ): Promise<void> {
@@ -972,8 +951,7 @@ export async function voidInvoice(
       voidReason: reason,
     });
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -------------------------------------------------------------------------------------
@@ -1007,7 +985,7 @@ export interface RecordExpenseForInvoiceResult extends ApproveExpenseResult {
  * which it calls below; there is no separate copy of it here.
  */
 export async function recordExpenseForInvoice(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: RecordExpenseForInvoiceInput,
 ): Promise<RecordExpenseForInvoiceResult> {
@@ -1025,8 +1003,7 @@ export async function recordExpenseForInvoice(
     const approved = await approveExpense(trx, actor, expenseId, { periodOverride: input.periodOverride });
     return { expenseId, ...approved };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -------------------------------------------------------------------------------------
@@ -1090,7 +1067,7 @@ export interface RecordApPaymentResult {
 }
 
 export async function recordPayment(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: RecordApPaymentInput,
 ): Promise<RecordApPaymentResult> {
@@ -1404,15 +1381,14 @@ export async function recordPayment(
       ...(warning ? { warning } : {}),
     };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 /** ⚠️ Reversal, never a delete — the original and its mirror both stay on the ledger. Allocation
  *  rows are NOT deleted; a voided payment's allocations must stay visible so `openItems` correctly
  *  shows the expense open again (invariant 8). */
 export async function voidPayment(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: {
     paymentId: string;
@@ -1536,8 +1512,7 @@ export async function voidPayment(
 
     return { entryId: result.reversalEntryId };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -------------------------------------------------------------------------------------
@@ -1591,7 +1566,7 @@ export interface SuggestApAllocationResult {
  * item and Save would throw on a figure the operator never typed.
  */
 export async function suggestPaymentAllocation(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   storeId: string,
   amount: string,
@@ -1641,6 +1616,5 @@ export async function suggestPaymentAllocation(
       unallocated: plan.remainder,
     };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }

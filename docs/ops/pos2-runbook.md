@@ -121,6 +121,7 @@ every tablet is an ERP **terminal person** AND is linked to its **device id**.
 `POS_FIREBASE_SA_KEY_FILE=<key file> node apps/pos/scripts/pos2-audit.mjs --from=20261001 --to=20261016 [--store=<POS store id>]`
 Prints, per store and day, COUNTS and RECEIPT NUMBERS only: refunds without an approver, refunds without a receipt-number record, payment conversions not
 made by POS v2, POS v2 corrections that v1 has since voided, and (T-425) unpaid tables voided OFFLINE (`voidedOffline`, listed by session id for a manager to review). Exit 0 = clean, 2 = something listed. It only ever reads.
+(T-471) It also lists Z gaps: a Z-reading number missing from a store's `zReadings` sequence (`Z-0001`, `Z-0002`, ...; the sequence never resets, so a hole means a Z was lost).
 
 ## 9. What this does NOT protect (until v1 retires at P2)
 POS v2 gates its OWN refund, correction and void actions. v1's server is still live and Firestore rules are still v1's loose ones (DEF-652), so while v1

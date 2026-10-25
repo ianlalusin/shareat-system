@@ -18,7 +18,7 @@ function valid(value: unknown, storeId: string, uid: string): value is HandoverA
     && p.periodEndMs >= p.periodStartMs && p.createdAtClientMs === p.periodEndMs
     && typeof p.shiftDayId === 'string' && typeof p.outgoingCashierName === 'string' && p.outgoingCashierName.trim()
     && typeof p.incomingCashierName === 'string' && p.incomingCashierName.trim() && Array.isArray(p.deductions)
-    && [p.startingCash, p.cashSales, p.convertNet ?? 0, p.manualCashAdjustment ?? 0,
+    && [p.startingCash, p.cashSales, p.convertNet ?? 0, p.cashRefunds ?? 0, p.manualCashAdjustment ?? 0,
       p.deductionsTotal, p.expectedCash, p.countedCash, p.variance].every(n => typeof n === 'number' && Number.isFinite(n)));
 }
 export function readHandoverAttempt(storage: Pick<Storage, 'getItem'>, key: string, storeId: string, uid: string): HandoverAttempt | null {

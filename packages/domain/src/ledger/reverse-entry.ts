@@ -43,7 +43,7 @@
  * on its first, successful attempt.
  */
 import { money } from '@shareat/core/money';
-import { journalRepo, transaction, type Tx } from '@shareat/db';
+import { journalRepo, type Tx } from '@shareat/db';
 import { postEntry } from './post-entry';
 
 export interface ReverseEntryInput {
@@ -83,13 +83,10 @@ export interface ReverseEntryResult {
  * and own its own transaction (same contract as `postEntry`).
  */
 export async function reverseEntry(
-  tx: Tx | null,
+  tx: Tx,
   input: ReverseEntryInput,
 ): Promise<ReverseEntryResult> {
-  if (tx) {
-    return runReverseEntry(tx, input);
-  }
-  return transaction((trx) => runReverseEntry(trx, input));
+  return runReverseEntry(tx, input);
 }
 
 async function runReverseEntry(tx: Tx, input: ReverseEntryInput): Promise<ReverseEntryResult> {

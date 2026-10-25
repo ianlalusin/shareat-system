@@ -19,14 +19,7 @@
 import type { Actor } from '@shareat/auth';
 import { equals, fromCentavos, formatMoney, money, negate, toCentavos } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
-import {
-  advisoryLocksRepo,
-  journalRepo,
-  moneyTransfersRepo,
-  storesRepo,
-  transaction,
-  type Tx,
-} from '@shareat/db';
+import { advisoryLocksRepo, journalRepo, moneyTransfersRepo, storesRepo, type Tx } from '@shareat/db';
 import { postEntry } from '../ledger/post-entry';
 import { internalFault, refuse } from '../shared/refusal';
 import type { CreateMoneyTransferResult } from './index';
@@ -61,12 +54,11 @@ const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
  * Partial settlement is allowed: any `amountIn` from ₱0.01 up to what is owed; the remainder stays owed.
  */
 export async function settleBetweenStores(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   input: SettleBetweenStoresInput,
 ): Promise<SettleBetweenStoresResult> {
-  if (tx) return runSettle(tx, actor, input);
-  return transaction((trx) => runSettle(trx, actor, input));
+  return runSettle(tx, actor, input);
 }
 
 async function runSettle(tx: Tx, actor: Actor, input: SettleBetweenStoresInput): Promise<SettleBetweenStoresResult> {

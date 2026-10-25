@@ -23,22 +23,7 @@
  * `returnableQuantity` caps an internal line at `receivedQuantity` and an external line at
  * `fulfilledQuantity`/`quantity` (what was actually sold) — reported here, not silently assumed.
  */
-import {
-  arRepo,
-  commissaryRepo,
-  customerReturnsRepo,
-  customersRepo,
-  itemsRepo,
-  journalRepo,
-  moneyAccountsRepo,
-  moneyTransfersRepo,
-  stockLayersRepo,
-  stockLedgerRepo,
-  stockLocationsRepo,
-  tradeRepo,
-  transaction,
-  type Tx,
-} from '@shareat/db';
+import { arRepo, commissaryRepo, customerReturnsRepo, customersRepo, itemsRepo, journalRepo, moneyAccountsRepo, moneyTransfersRepo, stockLayersRepo, stockLedgerRepo, stockLocationsRepo, tradeRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import type {
   CustomerReturnSettlement,
@@ -169,7 +154,7 @@ interface PreparedLine {
 type ScopedReturnInput = RecordCustomerReturnInput & { readonly orgId: string };
 
 export async function recordCustomerReturn(
-  tx: Tx | null,
+  tx: Tx,
   publicInput: RecordCustomerReturnInput,
 ): Promise<RecordCustomerReturnOutcome> {
   const input: ScopedReturnInput = { ...publicInput, orgId: publicInput.actor.orgId };
@@ -230,8 +215,7 @@ export async function recordCustomerReturn(
     }
     return recordExternalReturn(trx, input, order, customer, prepared);
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 // -----------------------------------------------------------------------------------------
@@ -524,7 +508,7 @@ export interface VoidCustomerReturnOutcome {
  * balance, since credit is pooled and fungible, not tracked per-return.
  */
 export async function voidCustomerReturn(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   returnId: string,
   reason: string,
@@ -621,8 +605,7 @@ export async function voidCustomerReturn(
     await customerReturnsRepo.markVoid(trx, returnId, actor.personId, trimmed, now);
     return { ok: true };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
 
 function absQty(q: string): Quantity {
@@ -647,7 +630,7 @@ export interface ApplyCreditOutcome {
  * 13.3% class of bug `repo/ar.ts`'s own header exists to prevent.
  */
 export async function applyCredit(
-  tx: Tx | null,
+  tx: Tx,
   actor: Actor,
   /** ⛔ NO `orgId` — T-231/DEF-210. It comes from `actor`. */
   input: { tradeOrderId: string; amount: string; collectionDate: string; moneyAccountId: string },
@@ -675,6 +658,5 @@ export async function applyCredit(
     });
     return { ok: true, collectionId: result.collectionId };
   };
-  if (tx) return run(tx);
-  return transaction(run);
+  return run(tx);
 }
