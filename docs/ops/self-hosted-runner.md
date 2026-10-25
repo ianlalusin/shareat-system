@@ -2,7 +2,13 @@
 
 > ## ⭐ Current setup — 2026-10-25 (read this first)
 >
-> **CI runs on a dedicated desktop, not on Ian's laptop.** `CI_RUNNER = shareat-local` is ON.
+> ⛔ **ROLLED BACK 2026-10-25: `CI_RUNNER` is UNSET — CI runs on GitHub-hosted runners.** The desktop's
+> first full run (main, run 40170053417) took **2 h 46 min** against ~23 min hosted: integration tests
+> alone ran 2 h 39 min and 5 timed out (backup/restore drill, scratch-DB migration tests), so the
+> deploy was skipped. Unit tests and typecheck were fine (~5 min). Do not set `CI_RUNNER` again until
+> the desktop is fixed and a full run passes in reasonable time.
+>
+> The desktop runner `shareat-desktop` is still registered and online for that testing.
 >
 > | | |
 > |---|---|
