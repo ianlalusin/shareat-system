@@ -26,6 +26,7 @@ function WaitScreen() {
       storeCode,
       doc: document,
       loc: window.location,
+      origin: window.location.origin,
       onView: (v) => {
         setProblem(null);
         setView(v);
@@ -75,7 +76,7 @@ function WaitScreen() {
     return (
       <Card className="mt-4 text-center">
         <p className="font-semibold">Your table is ready.</p>
-        <p className="mt-1 text-sm text-muted-foreground">{view.handoffUrl ? 'Opening your table...' : 'Please check in at the counter.'}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{view.handoffUrl && !problem ? 'Opening your table...' : 'Please check in at the counter.'}</p>
       </Card>
     );
   }

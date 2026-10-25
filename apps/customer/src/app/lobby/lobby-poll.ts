@@ -10,6 +10,7 @@ export interface PollDoc {
 export function createLobbyPoll({ poll, doc }: { poll: () => unknown; doc: PollDoc }): { start(): void; stop(): void } {
   let timer: ReturnType<typeof setInterval> | null = null;
   let running = false;
+  let pending = false;
 
   const clear = () => {
     if (timer !== null) {
@@ -17,18 +18,27 @@ export function createLobbyPoll({ poll, doc }: { poll: () => unknown; doc: PollD
       timer = null;
     }
   };
+  // A tick is skipped while the previous poll has not settled (resolved or rejected): slow networks never stack requests.
+  const tick = () => {
+    if (pending) return;
+    pending = true;
+    void Promise.resolve()
+      .then(poll)
+      .catch(() => undefined)
+      .finally(() => {
+        pending = false;
+      });
+  };
   const arm = () => {
-    if (timer !== null) return; // one timer only
-    timer = setInterval(() => {
-      void Promise.resolve()
-        .then(poll)
-        .catch(() => undefined);
-    }, LOBBY_POLL_MS);
+    if (timer !== null) return false; // one timer only
+    timer = setInterval(tick, LOBBY_POLL_MS);
+    return true;
   };
   const onVisibility = () => {
     if (!running) return;
-    if (doc.visibilityState === 'visible') arm();
-    else clear();
+    if (doc.visibilityState === 'visible') {
+      if (arm()) tick(); // back on screen after being hidden: refresh at once, then the 10 s rhythm
+    } else clear();
   };
 
   return {

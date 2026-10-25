@@ -1,5 +1,6 @@
 import type { LobbyMyEntry } from '@/data/http-lobby-data';
 import type { LobbyData } from '@/data/lobby-data';
+import { DEFAULT_HANDOFF_HOSTS, isAllowedHandoff } from '@/data/lobby-handoff';
 import { createLobbyPoll, type PollDoc } from './lobby-poll';
 import { waitView, type WaitView } from './lobby-view';
 
@@ -13,6 +14,10 @@ interface WaitControllerOptions {
   doc: PollDoc;
   loc: { replace(url: string): void };
   onView(view: WaitView): void;
+  /** Hosts the hand-off link may point to (https only). */
+  handoffHosts?: readonly string[];
+  /** The page's own origin; a same-origin https link is also accepted. */
+  origin?: string;
   /** The server has no place in line for this phone (404/401) and nothing has been shown yet. */
   onMissing?(message: string): void;
   /** A cancel the server refused. The place in line is unchanged. */
@@ -22,6 +27,7 @@ interface WaitControllerOptions {
 export function createWaitController(o: WaitControllerOptions): { start(): void; stop(): void; cancel(): Promise<void> } {
   let stopped = false;
   let handedOff = false;
+  let inflight = false;
   let last: LobbyMyEntry | null = null;
   const poll = createLobbyPoll({ poll: () => refresh(), doc: o.doc });
 
@@ -31,8 +37,16 @@ export function createWaitController(o: WaitControllerOptions): { start(): void;
   };
 
   async function refresh(): Promise<void> {
-    if (stopped) return;
-    const r = await o.data.myEntry(o.storeCode);
+    if (stopped || inflight) return;
+    inflight = true;
+    let r: Awaited<ReturnType<LobbyData['myEntry']>>;
+    try {
+      r = await o.data.myEntry(o.storeCode);
+    } catch {
+      return; // treated like a failed poll: keep the last view
+    } finally {
+      inflight = false;
+    }
     if (stopped) return;
     if (!r.ok) {
       if (last === null && (r.status === 404 || r.status === 401)) {
@@ -48,9 +62,13 @@ export function createWaitController(o: WaitControllerOptions): { start(): void;
       finish();
     } else if (view.kind === 'handoff') {
       finish();
-      if (view.handoffUrl && !handedOff) {
-        handedOff = true;
-        o.loc.replace(view.handoffUrl);
+      if (view.handoffUrl !== null && !handedOff) {
+        if (isAllowedHandoff(view.handoffUrl, o.handoffHosts ?? DEFAULT_HANDOFF_HOSTS, o.origin)) {
+          handedOff = true;
+          o.loc.replace(view.handoffUrl);
+        } else {
+          o.onMissing?.('Please check in at the counter.');
+        }
       }
     }
   }
