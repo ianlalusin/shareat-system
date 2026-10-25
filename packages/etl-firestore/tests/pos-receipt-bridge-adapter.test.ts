@@ -197,12 +197,12 @@ describe('PosReceiptBridgeAdapter', () => {
 
   it('A4: personal fields are stripped from raw; money fields come through as exact strings with the flag', async () => {
     const { fs } = fakeFirestore({
-      [PATH]: [mapped('a', { total: 648.648, customerName: 'Juan', customerTin: '1', customerAddress: 'x', statutoryDiners: [{ kind: 'senior', name: 'Lola', idNo: 'K1', share: 1 }] })],
+      [PATH]: [mapped('a', { total: 648.648, customerName: 'Juan', customerTin: '1', customerAddress: 'x', guestName: 'Gina', phone: '0917', email: 'a@b.c', customerSnap: { name: 'Snap' }, statutoryDiners: [{ kind: 'senior', name: 'Lola', idNo: 'K1', idNumber: 'K2', seniorId: 'K3', pwdId: 'K4', scId: 'K5', cardNo: 'K6', share: 1 }] })],
     });
     const out = [];
     for await (const r of new PosReceiptBridgeAdapter(fs).listDay(STORE, DAY)) out.push(r);
     const r = out[0]!;
-    expect(JSON.stringify(r.header.raw)).not.toMatch(/Juan|Lola|K1/);
+    expect(JSON.stringify(r.header.raw)).not.toMatch(/Juan|Lola|K\d|Gina|0917|a@b|Snap/);
     expect(r.header.total).toBe('648.65');
     expect(r.header.moneyFlag).toBe(true);
     expect(r.id).toBe('a');
