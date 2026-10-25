@@ -7,7 +7,8 @@
     "build": "next build",
     "build:cap": "node scripts/build-cap.mjs",
     "start": "next start -p 9010 -H 127.0.0.1",
-    "test": "vitest run --config vitest.config.mts"
+    "test": "vitest run --config vitest.config.mts",
+    "test:integration": "node -e \"process.env.CUSTOMER_INTEGRATION='1';process.exit(require('child_process').spawnSync('npx',['vitest','run','--config','vitest.config.mts'],{stdio:'inherit',shell:true,env:process.env}).status)\""
   },
   "dependencies": {
     "@capacitor/core": "^6.2.1",
