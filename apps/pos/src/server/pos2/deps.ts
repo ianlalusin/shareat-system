@@ -86,6 +86,16 @@ async function buildDeps(keyFile: string, orgId: string): Promise<Pos2Deps> {
         throw err;
       }
     },
+    // T-477 (DEF-771): the same trusted ERP link the PIN path uses, with no PIN. No link (or an unusable device id) is null; anything else propagates.
+    resolveTerminalNo: async ({ posStoreId, deviceId }) => {
+      try {
+        const link = await dbPkg.withOrgPrincipal(orgId, (tx) => auth.resolvePosTerminalLink(tx, { orgId, posStoreId, deviceId }));
+        return link.terminalNo;
+      } catch (err) {
+        if (err instanceof auth.AuthenticationError) return null;
+        throw err;
+      }
+    },
     openTillShift: async (posStoreId) =>
       dbPkg.withOrgPrincipal(orgId, async (tx) => {
         const link = await dbPkg.posV1Repo.getLinkByPosStoreId(tx, orgId, posStoreId);

@@ -33,7 +33,7 @@ const READING: ZReading = {
   ],
   totals: { saleCentavos: 1_250_000, refundCentavos: 25_000, netCentavos: 1_225_000 },
   convertNetCashCentavos: 20_000,
-  cash: { startingCentavos: 500_000, salesCentavos: 900_000, convertNetCentavos: 20_000, deductionsCentavos: 100_000, expectedCentavos: 1_295_000, refundsPaidCentavos: 25_000, voidCashKeptCentavos: 30_000 },
+  cash: { startingCentavos: 500_000, salesCentavos: 900_000, convertNetCentavos: 20_000, deductionsCentavos: 100_000, manualAdjustmentCentavos: 2_000, expectedCentavos: 1_297_000, refundsPaidCentavos: 25_000, voidCashKeptCentavos: 30_000 },
   lastHandover: { countedCentavos: 1_285_000, varianceCentavos: -10_000 },
   negativeMethods: [], lateReceiptNumbers: [],
 };
@@ -51,8 +51,8 @@ const BODY = (w: number) => [
   'GCash', two(w, '  Sale', '3,500.00'), two(w, '  Refund', '0.00'), two(w, '  Convert', '-200.00'), two(w, '  Net', '3,300.00'),
   two(w, 'Total sales', '12,500.00'), two(w, 'Total refunds', '250.00'), two(w, 'Net', '12,250.00'),
   '-'.repeat(w), 'CASH IN THE DRAWER',
-  two(w, 'Starting cash', '5,000.00'), two(w, 'Cash sales', '8,700.00'), two(w, 'Cash kept on voided sales', '300.00'), two(w, 'Convert net', '200.00'), two(w, 'Less deductions', '1,000.00'),
-  two(w, 'Less cash refunds', '250.00'), two(w, 'Expected cash', '12,950.00'), two(w, 'Counted at handover', '12,850.00'), two(w, 'Variance', '-100.00'),
+  two(w, 'Starting cash', '5,000.00'), two(w, 'Cash sales', '8,700.00'), two(w, 'Cash kept on voided sales', '300.00'), two(w, 'Convert net', '200.00'), two(w, 'Manual adjustments', '20.00'), two(w, 'Less deductions', '1,000.00'),
+  two(w, 'Less cash refunds', '250.00'), two(w, 'Expected cash', '12,970.00'), two(w, 'Counted at handover', '12,850.00'), two(w, 'Variance', '-100.00'),
   '-'.repeat(w), 'Printed by: Cora Cashier', 'Approved by: person-mgr-1', '-'.repeat(w),
 ];
 
@@ -90,13 +90,26 @@ describe('the cash lines add up to expected cash', () => {
     return { total, expected: cents(lines[to]!) };
   };
   it('start + cash sales + cash kept on voided sales + convert - deductions - cash refunds = expected, to the centavo', () => {
-    for (const w of [80, 58] as const) { const r = sumOf(READING, w); expect(r.total).toBe(r.expected); expect(r.expected).toBe(1_295_000); }
+    for (const w of [80, 58] as const) { const r = sumOf(READING, w); expect(r.total).toBe(r.expected); expect(r.expected).toBe(1_297_000); }
   });
   it('cash kept on voided sales is its own line, above expected cash, and Cash sales no longer hides it', () => {
     const text = zs.formatZSlip(base);
     expect(text).toContain('Cash kept on voided sales');
     expect(text.indexOf('Cash kept on voided sales')).toBeLessThan(text.indexOf('Expected cash'));
     expect(text).toMatch(/Cash sales +8,700\.00/);
+  });
+  it('DEF-759: a negative manual adjustment prints signed and the lines still add up; it sits after Convert net and before Less deductions', () => {
+    const neg: ZReading = { ...READING, cash: { ...READING.cash, manualAdjustmentCentavos: -500, expectedCentavos: 1_297_000 - 2_000 - 500 } };
+    const text = zs.formatZSlip({ ...base, reading: neg });
+    expect(text).toMatch(/Manual adjustments +-5\.00/);
+    expect(text.indexOf('Convert net')).toBeLessThan(text.indexOf('Manual adjustments'));
+    expect(text.indexOf('Manual adjustments')).toBeLessThan(text.indexOf('Less deductions'));
+    for (const w of [80, 58] as const) { const r = sumOf(neg, w); expect(r.total).toBe(r.expected); }
+  });
+  it('DEF-759: a Z stored before this fix (no manualAdjustmentCentavos) reprints with no such line', () => {
+    const { manualAdjustmentCentavos: _m, ...cash } = READING.cash;
+    const text = zs.formatZSlip({ ...base, reading: { ...READING, cash: { ...cash, expectedCentavos: 1_295_000 } } });
+    expect(text).not.toContain('Manual adjustments');
   });
   it('still reconciles when there is no void cash and when the figures are odd centavos', () => {
     const odd: ZReading = { ...READING, cash: { startingCentavos: 12_345, salesCentavos: 67_891, convertNetCentavos: -1_001, deductionsCentavos: 5_005, expectedCentavos: 12_345 + 67_891 - 1_001 - 5_005 - 333, refundsPaidCentavos: 333, voidCashKeptCentavos: 0 } };
