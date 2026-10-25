@@ -40,8 +40,8 @@
 --          caller's supplier row, from its 2110 control account). No cost, price, supplier, person or item column.
 --      The functions run as the table owner, so they depend on the owner role bypassing RLS, as the cutover purge and the owner-run migrations
 --      already do; every filter they need is written out in the SQL, none is left to RLS.
---   9. scheduler_runs_job_check restates the WHOLE list of 0216 plus 'inter_entity_reconcile' (0209's pattern). The job function, ops unit
---      pair and script land in S5e; S5c/S5d add nothing to it.
+--   9. scheduler_runs_job_check restates the WHOLE list of 0216 UNCHANGED (0209's pattern; a deliberate no-op restatement). 'inter_entity_reconcile' is
+--      NOT in it: it is added with the job function, ops unit pair, script and the SCHEDULER_JOBS entry together in S5e.
 --  10. trade_discrepancies: disposition += 'franchise_credit' (paired with direction 'short'); nullable inter_entity_shipment_line_id with the
 --      composite (org_id, inter_entity_shipment_line_id) -> inter_entity_shipment_lines (org_id, id). QO-2: the day-open block excludes
 --      inter-entity rows (domain code, S5e).
@@ -54,6 +54,13 @@
 -- (current_user = shareat_app). The definer function runs as the table owner, so only receive_inter_entity_shipment() can write the receipt; the seller
 -- cannot forge the buyer's evidence. The check is the role, not a setting the app could switch on. Owner-run fixtures and the purge are unaffected.
 --
+--
+-- FREEZE AND SUM (S5 audit, 25 Oct). Two more BEFORE UPDATE triggers (inter_entity_shipments_freeze_guard_trg, inter_entity_shipment_lines_freeze_guard_trg)
+-- refuse, 42501, any change by the app role to billed_total / credited_total / the organisations / the order link (header) or quantity / rate / line_total /
+-- item_name / unit / links (line) once the shipment is not in_transit; credited_total then moves only on the owner / definer path. Two DEFERRABLE INITIALLY
+-- DEFERRED constraint triggers (inter_entity_shipments_billed_sum_trg, inter_entity_shipment_lines_billed_sum_trg) enforce billed_total = sum(line_total) at
+-- commit (23514); a header with no lines yet is tolerated. The 12 ADD CONSTRAINTs on existing tables are NOT VALID then VALIDATEd; DROP CONSTRAINT is plain.
+--
 -- TRIGGER CLASS (triggers/registry.ts): inter_entity_shipments_link_check_trg reads the order and customer rows of the shipping organisation,
 -- other rows' current state, so it is a validator / origin.
 --
@@ -64,6 +71,8 @@
 --     for the statement (ADD COLUMN of a nullable column without a default rewrites nothing). The ADD CONSTRAINT ... CHECK / FOREIGN KEY
 --     statements scan the table once under that lock: deliveries, suppliers, customers, trade_discrepancies and scheduler_runs are small
 --     (thousands of rows). The new tables are empty. Drizzle applies pending migrations in ONE transaction, so those locks last until COMMIT.
+--     NOT VALID + VALIDATE CONSTRAINT in the same transaction does NOT shorten the lock (the ADD COLUMN / DROP CONSTRAINT already hold ACCESS
+--     EXCLUSIVE to COMMIT); it only keeps the shape conventional.
 --   * Budget: re-time on a restore before the deploy; the ceiling is 60 s (D8). Do not deploy 05:30-07:00 Manila (the POS import window).
 --
 -- Every statement is its own breakpoint; the last statement closes the file.
@@ -72,15 +81,24 @@ SET LOCAL lock_timeout = '5s';
 --> statement-breakpoint
 ALTER TABLE "suppliers" ADD COLUMN "counterparty_org_id" uuid;
 --> statement-breakpoint
-ALTER TABLE "suppliers" ADD CONSTRAINT "suppliers_counterparty_org_id_organizations_id_fk" FOREIGN KEY ("counterparty_org_id") REFERENCES "organizations" ("id") ON DELETE RESTRICT;
+ALTER TABLE "suppliers" ADD CONSTRAINT "suppliers_counterparty_org_id_organizations_id_fk" FOREIGN KEY ("counterparty_org_id") REFERENCES "organizations" ("id") ON DELETE RESTRICT NOT VALID;
 --> statement-breakpoint
-ALTER TABLE "suppliers" ADD CONSTRAINT "suppliers_one_counterparty_check" CHECK (num_nonnulls("counterparty_store_id", "counterparty_org_id") <= 1);
+ALTER TABLE "suppliers" VALIDATE CONSTRAINT "suppliers_counterparty_org_id_organizations_id_fk";
+
+--> statement-breakpoint
+ALTER TABLE "suppliers" ADD CONSTRAINT "suppliers_one_counterparty_check" CHECK (num_nonnulls("counterparty_store_id", "counterparty_org_id") <= 1) NOT VALID;
+--> statement-breakpoint
+ALTER TABLE "suppliers" VALIDATE CONSTRAINT "suppliers_one_counterparty_check";
+
 --> statement-breakpoint
 CREATE INDEX "suppliers_counterparty_org_idx" ON "suppliers" ("counterparty_org_id");
 --> statement-breakpoint
 ALTER TABLE "customers" ADD COLUMN "credit_terms_days" integer;
 --> statement-breakpoint
-ALTER TABLE "customers" ADD CONSTRAINT "customers_credit_terms_days_check" CHECK ("credit_terms_days" IS NULL OR ("credit_terms_days" >= 0 AND "credit_terms_days" <= 365));
+ALTER TABLE "customers" ADD CONSTRAINT "customers_credit_terms_days_check" CHECK ("credit_terms_days" IS NULL OR ("credit_terms_days" >= 0 AND "credit_terms_days" <= 365)) NOT VALID;
+--> statement-breakpoint
+ALTER TABLE "customers" VALIDATE CONSTRAINT "customers_credit_terms_days_check";
+
 --> statement-breakpoint
 CREATE TABLE "inter_entity_shipments" (
 	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
@@ -111,6 +129,9 @@ CREATE TABLE "inter_entity_shipments" (
 	CONSTRAINT "inter_entity_shipments_store_id_same_org_fk" FOREIGN KEY ("org_id", "store_id") REFERENCES "stores" ("org_id", "id") ON DELETE RESTRICT,
 	CONSTRAINT "inter_entity_shipments_voided_by_same_org_fk" FOREIGN KEY ("org_id", "voided_by") REFERENCES "persons" ("org_id", "id") ON DELETE RESTRICT,
 	CONSTRAINT "inter_entity_shipments_received_by_buyer_org_fk" FOREIGN KEY ("buyer_org_id", "received_by") REFERENCES "persons" ("org_id", "id") ON DELETE RESTRICT,
+	CONSTRAINT "inter_entity_shipments_billed_total_finite_check" CHECK ("billed_total" > '-Infinity'::numeric AND "billed_total" < 'Infinity'::numeric),
+	CONSTRAINT "inter_entity_shipments_credited_total_finite_check" CHECK ("credited_total" > '-Infinity'::numeric AND "credited_total" < 'Infinity'::numeric),
+	CONSTRAINT "inter_entity_shipments_received_total_finite_check" CHECK ("received_total" > '-Infinity'::numeric AND "received_total" < 'Infinity'::numeric),
 	CONSTRAINT "inter_entity_shipments_buyer_differs_check" CHECK ("buyer_org_id" <> "org_id"),
 	CONSTRAINT "inter_entity_shipments_status_check" CHECK ("status" IN ('in_transit', 'received', 'void')),
 	CONSTRAINT "inter_entity_shipments_billed_total_check" CHECK ("billed_total" > 0 AND "billed_total" < 'Infinity'::numeric),
@@ -149,6 +170,10 @@ CREATE TABLE "inter_entity_shipment_lines" (
 	CONSTRAINT "inter_entity_shipment_lines_org_id_organizations_id_fk" FOREIGN KEY ("org_id") REFERENCES "organizations" ("id") ON DELETE RESTRICT,
 	CONSTRAINT "inter_entity_shipment_lines_shipment_same_pair_fk" FOREIGN KEY ("org_id", "buyer_org_id", "shipment_id") REFERENCES "inter_entity_shipments" ("org_id", "buyer_org_id", "id") ON DELETE RESTRICT,
 	CONSTRAINT "inter_entity_shipment_lines_trade_order_line_id_same_org_fk" FOREIGN KEY ("org_id", "trade_order_line_id") REFERENCES "trade_order_lines" ("org_id", "id") ON DELETE RESTRICT,
+	CONSTRAINT "inter_entity_shipment_lines_quantity_finite_check" CHECK ("quantity" > '-Infinity'::numeric AND "quantity" < 'Infinity'::numeric),
+	CONSTRAINT "inter_entity_shipment_lines_rate_finite_check" CHECK ("rate" > '-Infinity'::numeric AND "rate" < 'Infinity'::numeric),
+	CONSTRAINT "inter_entity_shipment_lines_line_total_finite_check" CHECK ("line_total" > '-Infinity'::numeric AND "line_total" < 'Infinity'::numeric),
+	CONSTRAINT "inter_entity_shipment_lines_received_quantity_finite_check" CHECK ("received_quantity" > '-Infinity'::numeric AND "received_quantity" < 'Infinity'::numeric),
 	CONSTRAINT "inter_entity_shipment_lines_line_no_check" CHECK ("line_no" > 0),
 	CONSTRAINT "inter_entity_shipment_lines_quantity_check" CHECK ("quantity" > 0 AND "quantity" < 'Infinity'::numeric),
 	CONSTRAINT "inter_entity_shipment_lines_rate_check" CHECK ("rate" >= 0 AND "rate" < 'Infinity'::numeric),
@@ -262,23 +287,161 @@ CREATE TRIGGER "inter_entity_shipment_lines_receipt_guard_trg"
 	BEFORE INSERT OR UPDATE ON "inter_entity_shipment_lines"
 	FOR EACH ROW EXECUTE FUNCTION "inter_entity_shipment_lines_guard_receipt"();
 --> statement-breakpoint
+CREATE FUNCTION "inter_entity_shipments_guard_freeze"() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+	-- Once the shipment has left in_transit (received or void) the shipping organisation can no longer rewrite its money or identity.
+	-- The role is the test, as in the receipt guard: the owner / definer path (credit notes, purge, fixtures) is unaffected.
+	IF current_user = 'shareat_app' AND OLD."status" <> 'in_transit' AND (
+		NEW."status" IS DISTINCT FROM OLD."status" OR NEW."billed_total" IS DISTINCT FROM OLD."billed_total" OR NEW."credited_total" IS DISTINCT FROM OLD."credited_total"
+		OR NEW."org_id" IS DISTINCT FROM OLD."org_id" OR NEW."buyer_org_id" IS DISTINCT FROM OLD."buyer_org_id"
+		OR NEW."trade_order_id" IS DISTINCT FROM OLD."trade_order_id"
+	) THEN
+		RAISE EXCEPTION 'A shipment that is already received or void can no longer have its status, amounts, organisations or order changed.' USING ERRCODE = '42501';
+	END IF;
+	RETURN NEW;
+END;
+$$;
+--> statement-breakpoint
+REVOKE EXECUTE ON FUNCTION "inter_entity_shipments_guard_freeze"() FROM PUBLIC;
+--> statement-breakpoint
+CREATE TRIGGER "inter_entity_shipments_freeze_guard_trg"
+	BEFORE UPDATE ON "inter_entity_shipments"
+	FOR EACH ROW EXECUTE FUNCTION "inter_entity_shipments_guard_freeze"();
+--> statement-breakpoint
+CREATE FUNCTION "inter_entity_shipment_lines_guard_freeze"() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+	v_new text;
+	v_old text;
+BEGIN
+	IF current_user = 'shareat_app' AND (
+		TG_OP = 'INSERT'
+		OR NEW."quantity" IS DISTINCT FROM OLD."quantity" OR NEW."rate" IS DISTINCT FROM OLD."rate" OR NEW."line_total" IS DISTINCT FROM OLD."line_total"
+		OR NEW."item_name" IS DISTINCT FROM OLD."item_name" OR NEW."unit" IS DISTINCT FROM OLD."unit"
+		OR NEW."trade_order_line_id" IS DISTINCT FROM OLD."trade_order_line_id" OR NEW."shipment_id" IS DISTINCT FROM OLD."shipment_id"
+		OR NEW."org_id" IS DISTINCT FROM OLD."org_id" OR NEW."buyer_org_id" IS DISTINCT FROM OLD."buyer_org_id"
+	) THEN
+		-- FOR SHARE: waits for a concurrent receive (it holds the header FOR UPDATE) and re-reads the status, so a line cannot land on a shipment just received.
+		SELECT s."status" INTO v_new FROM "inter_entity_shipments" s WHERE s."id" = NEW."shipment_id" FOR SHARE;
+		IF TG_OP = 'UPDATE' THEN
+			SELECT s."status" INTO v_old FROM "inter_entity_shipments" s WHERE s."id" = OLD."shipment_id" FOR SHARE;
+		END IF;
+		-- A shipment the caller cannot see (or that does not exist) is left to RLS and the foreign key.
+		IF (v_new IS NOT NULL AND v_new <> 'in_transit') OR (v_old IS NOT NULL AND v_old <> 'in_transit') THEN
+			RAISE EXCEPTION 'A line of a shipment that is already received or void can no longer be added, moved or have its item, quantity or price changed.' USING ERRCODE = '42501';
+		END IF;
+	END IF;
+	RETURN NEW;
+END;
+$$;
+--> statement-breakpoint
+REVOKE EXECUTE ON FUNCTION "inter_entity_shipment_lines_guard_freeze"() FROM PUBLIC;
+--> statement-breakpoint
+CREATE TRIGGER "inter_entity_shipment_lines_freeze_guard_trg"
+	BEFORE INSERT OR UPDATE ON "inter_entity_shipment_lines"
+	FOR EACH ROW EXECUTE FUNCTION "inter_entity_shipment_lines_guard_freeze"();
+--> statement-breakpoint
+CREATE FUNCTION "inter_entity_shipments_check_billed_sum"() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+	v_ids uuid[];
+	v_org uuid;
+	v_prev text;
+	v_id uuid;
+	v_billed numeric;
+	v_sum numeric;
+	v_n bigint;
+	v_found boolean;
+BEGIN
+	-- The check must not depend on the org context the session carries when it runs at commit (RLS would hide the header and the check would
+	-- skip). It runs as the invoker (no new definer), and sets app.org_id to the ROW's own organisation (the shipping organisation, the only one
+	-- that can write these rows) for the two lookups, then puts the previous value back. Deferred to the end of the transaction: a header is written before its lines. A header with no lines yet is tolerated.
+	IF TG_TABLE_NAME = 'inter_entity_shipments' THEN
+		IF TG_OP = 'DELETE' THEN
+			RETURN NULL;
+		END IF;
+		v_ids := ARRAY[NEW."id"];
+		v_org := NEW."org_id";
+	ELSE
+		v_org := CASE WHEN TG_OP = 'DELETE' THEN OLD."org_id" ELSE NEW."org_id" END;
+		v_ids := ARRAY[]::uuid[];
+		IF TG_OP <> 'DELETE' THEN v_ids := v_ids || NEW."shipment_id"; END IF;
+		IF TG_OP <> 'INSERT' THEN v_ids := v_ids || OLD."shipment_id"; END IF;
+	END IF;
+	v_prev := coalesce(current_setting('app.org_id', true), '');
+	FOR v_id IN SELECT DISTINCT x FROM unnest(v_ids) x LOOP
+		PERFORM set_config('app.org_id', v_org::text, true);
+		SELECT s."billed_total" INTO v_billed FROM "inter_entity_shipments" s WHERE s."id" = v_id;
+		v_found := FOUND;
+		SELECT count(*), coalesce(sum(l."line_total"), 0) INTO v_n, v_sum FROM "inter_entity_shipment_lines" l WHERE l."shipment_id" = v_id;
+		PERFORM set_config('app.org_id', v_prev, true);
+		IF NOT v_found THEN
+			-- Header gone (a purge deletes lines, then the header): nothing to check. Lines without a header cannot stand.
+			IF v_n > 0 THEN
+				RAISE EXCEPTION 'A shipment line has no shipment header.' USING ERRCODE = '23514', CONSTRAINT = 'inter_entity_shipments_billed_sum_check';
+			END IF;
+			CONTINUE;
+		END IF;
+		IF v_n > 0 AND v_sum <> v_billed THEN
+			RAISE EXCEPTION 'The shipment total % does not equal the sum of its lines %.', v_billed, v_sum
+				USING ERRCODE = '23514', CONSTRAINT = 'inter_entity_shipments_billed_sum_check';
+		END IF;
+	END LOOP;
+	RETURN NULL;
+END;
+$$;
+--> statement-breakpoint
+REVOKE EXECUTE ON FUNCTION "inter_entity_shipments_check_billed_sum"() FROM PUBLIC;
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER "inter_entity_shipments_billed_sum_trg"
+	AFTER INSERT OR UPDATE OF "billed_total" OR DELETE ON "inter_entity_shipments"
+	DEFERRABLE INITIALLY DEFERRED
+	FOR EACH ROW EXECUTE FUNCTION "inter_entity_shipments_check_billed_sum"();
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER "inter_entity_shipment_lines_billed_sum_trg"
+	AFTER INSERT OR UPDATE OF "line_total", "shipment_id" OR DELETE ON "inter_entity_shipment_lines"
+	DEFERRABLE INITIALLY DEFERRED
+	FOR EACH ROW EXECUTE FUNCTION "inter_entity_shipments_check_billed_sum"();
+--> statement-breakpoint
 ALTER TABLE "deliveries" ADD COLUMN "inter_entity_shipment_id" uuid;
 --> statement-breakpoint
-ALTER TABLE "deliveries" DROP CONSTRAINT IF EXISTS "deliveries_kind_check";
+ALTER TABLE "deliveries" DROP CONSTRAINT "deliveries_kind_check";
 --> statement-breakpoint
-ALTER TABLE "deliveries" ADD CONSTRAINT "deliveries_kind_check" CHECK ("kind" IN ('supplier', 'purchase', 'commissary', 'inter_entity'));
+ALTER TABLE "deliveries" ADD CONSTRAINT "deliveries_kind_check" CHECK ("kind" IN ('supplier', 'purchase', 'commissary', 'inter_entity')) NOT VALID;
 --> statement-breakpoint
-ALTER TABLE "deliveries" DROP CONSTRAINT IF EXISTS "deliveries_proof_required_check";
+ALTER TABLE "deliveries" VALIDATE CONSTRAINT "deliveries_kind_check";
+
 --> statement-breakpoint
-ALTER TABLE "deliveries" ADD CONSTRAINT "deliveries_proof_required_check" CHECK ("kind" IN ('commissary', 'inter_entity') OR "proof_file_id" IS NOT NULL);
+ALTER TABLE "deliveries" DROP CONSTRAINT "deliveries_proof_required_check";
 --> statement-breakpoint
-ALTER TABLE "deliveries" DROP CONSTRAINT IF EXISTS "deliveries_supplier_required_check";
+ALTER TABLE "deliveries" ADD CONSTRAINT "deliveries_proof_required_check" CHECK ("kind" IN ('commissary', 'inter_entity') OR "proof_file_id" IS NOT NULL) NOT VALID;
 --> statement-breakpoint
-ALTER TABLE "deliveries" ADD CONSTRAINT "deliveries_supplier_required_check" CHECK ("kind" NOT IN ('supplier', 'inter_entity') OR "supplier_id" IS NOT NULL);
+ALTER TABLE "deliveries" VALIDATE CONSTRAINT "deliveries_proof_required_check";
+
 --> statement-breakpoint
-ALTER TABLE "deliveries" ADD CONSTRAINT "deliveries_inter_entity_shipment_check" CHECK (("kind" = 'inter_entity') = ("inter_entity_shipment_id" IS NOT NULL));
+ALTER TABLE "deliveries" DROP CONSTRAINT "deliveries_supplier_required_check";
 --> statement-breakpoint
-ALTER TABLE "deliveries" ADD CONSTRAINT "deliveries_inter_entity_shipment_buyer_fk" FOREIGN KEY ("org_id", "inter_entity_shipment_id") REFERENCES "inter_entity_shipments" ("buyer_org_id", "id") ON DELETE RESTRICT;
+ALTER TABLE "deliveries" ADD CONSTRAINT "deliveries_supplier_required_check" CHECK ("kind" NOT IN ('supplier', 'inter_entity') OR "supplier_id" IS NOT NULL) NOT VALID;
+--> statement-breakpoint
+ALTER TABLE "deliveries" VALIDATE CONSTRAINT "deliveries_supplier_required_check";
+
+--> statement-breakpoint
+ALTER TABLE "deliveries" ADD CONSTRAINT "deliveries_inter_entity_shipment_check" CHECK (("kind" = 'inter_entity') = ("inter_entity_shipment_id" IS NOT NULL)) NOT VALID;
+--> statement-breakpoint
+ALTER TABLE "deliveries" VALIDATE CONSTRAINT "deliveries_inter_entity_shipment_check";
+
+--> statement-breakpoint
+ALTER TABLE "deliveries" ADD CONSTRAINT "deliveries_inter_entity_shipment_buyer_fk" FOREIGN KEY ("org_id", "inter_entity_shipment_id") REFERENCES "inter_entity_shipments" ("buyer_org_id", "id") ON DELETE RESTRICT NOT VALID;
+--> statement-breakpoint
+ALTER TABLE "deliveries" VALIDATE CONSTRAINT "deliveries_inter_entity_shipment_buyer_fk";
+
 --> statement-breakpoint
 CREATE UNIQUE INDEX "deliveries_inter_entity_shipment_live_key" ON "deliveries" ("inter_entity_shipment_id") WHERE "inter_entity_shipment_id" IS NOT NULL AND "status" <> 'void';
 --> statement-breakpoint
@@ -318,6 +481,9 @@ BEGIN
 		RAISE EXCEPTION 'Received quantities must be a list of lines.' USING ERRCODE = '22023';
 	END IF;
 	SELECT count(*) INTO v_expected FROM "inter_entity_shipment_lines" WHERE "shipment_id" = s."id";
+	IF v_expected = 0 THEN
+		RAISE EXCEPTION 'This shipment has no lines to receive.' USING ERRCODE = '22023';
+	END IF;
 	FOR e IN SELECT value FROM jsonb_array_elements(p_lines) LOOP
 		v_line := (e ->> 'line_id')::uuid;
 		IF v_line = ANY (v_seen) THEN
@@ -400,29 +566,40 @@ REVOKE ALL ON FUNCTION "inter_entity_counterparty_balance"() FROM PUBLIC;
 --> statement-breakpoint
 GRANT EXECUTE ON FUNCTION "inter_entity_counterparty_balance"() TO "shareat_app";
 --> statement-breakpoint
-ALTER TABLE "scheduler_runs" DROP CONSTRAINT IF EXISTS "scheduler_runs_job_check";
+ALTER TABLE "scheduler_runs" DROP CONSTRAINT "scheduler_runs_job_check";
 --> statement-breakpoint
 ALTER TABLE "scheduler_runs" ADD CONSTRAINT "scheduler_runs_job_check"
 	CHECK ("job" IN ('depreciation', 'amortisation', 'attendance_sweep', 'mirror_publish', 'inbox_relay',
 	                 'order_wastage_backstop', 'finding_observation', 'budget_reissue', 'recurring_expenses',
-	                 'orphan_file_sweep', 'fiscal_period_seed', 'usage_auto_post', 'pos_day_import', 'pos_receipt_bridge',
-	                 'inter_entity_reconcile'));
+	                 'orphan_file_sweep', 'fiscal_period_seed', 'usage_auto_post', 'pos_day_import', 'pos_receipt_bridge')) NOT VALID;
 --> statement-breakpoint
-ALTER TABLE "trade_discrepancies" DROP CONSTRAINT IF EXISTS "trade_discrepancies_disposition_check";
+ALTER TABLE "scheduler_runs" VALIDATE CONSTRAINT "scheduler_runs_job_check";
+
+--> statement-breakpoint
+ALTER TABLE "trade_discrepancies" DROP CONSTRAINT "trade_discrepancies_disposition_check";
 --> statement-breakpoint
 ALTER TABLE "trade_discrepancies" ADD CONSTRAINT "trade_discrepancies_disposition_check"
-	CHECK ("disposition" IS NULL OR "disposition" IN ('audit', 'loss', 'charge', 'late_receipt', 'extra_dispatch', 'return', 'franchise_credit'));
+	CHECK ("disposition" IS NULL OR "disposition" IN ('audit', 'loss', 'charge', 'late_receipt', 'extra_dispatch', 'return', 'franchise_credit')) NOT VALID;
 --> statement-breakpoint
-ALTER TABLE "trade_discrepancies" DROP CONSTRAINT IF EXISTS "trade_discrepancies_disposition_direction_check";
+ALTER TABLE "trade_discrepancies" VALIDATE CONSTRAINT "trade_discrepancies_disposition_check";
+
+--> statement-breakpoint
+ALTER TABLE "trade_discrepancies" DROP CONSTRAINT "trade_discrepancies_disposition_direction_check";
 --> statement-breakpoint
 ALTER TABLE "trade_discrepancies" ADD CONSTRAINT "trade_discrepancies_disposition_direction_check"
 	CHECK ("disposition" IS NULL OR "disposition" = 'audit'
 		OR ("direction" = 'short' AND "disposition" IN ('loss', 'charge', 'late_receipt', 'franchise_credit'))
-		OR ("direction" = 'over' AND "disposition" IN ('extra_dispatch', 'return')));
+		OR ("direction" = 'over' AND "disposition" IN ('extra_dispatch', 'return'))) NOT VALID;
+--> statement-breakpoint
+ALTER TABLE "trade_discrepancies" VALIDATE CONSTRAINT "trade_discrepancies_disposition_direction_check";
+
 --> statement-breakpoint
 ALTER TABLE "trade_discrepancies" ADD COLUMN "inter_entity_shipment_line_id" uuid;
 --> statement-breakpoint
-ALTER TABLE "trade_discrepancies" ADD CONSTRAINT "trade_discrepancies_inter_entity_shipment_line_id_same_org_fk" FOREIGN KEY ("org_id", "inter_entity_shipment_line_id") REFERENCES "inter_entity_shipment_lines" ("org_id", "id") ON DELETE RESTRICT;
+ALTER TABLE "trade_discrepancies" ADD CONSTRAINT "trade_discrepancies_inter_entity_shipment_line_id_same_org_fk" FOREIGN KEY ("org_id", "inter_entity_shipment_line_id") REFERENCES "inter_entity_shipment_lines" ("org_id", "id") ON DELETE RESTRICT NOT VALID;
+--> statement-breakpoint
+ALTER TABLE "trade_discrepancies" VALIDATE CONSTRAINT "trade_discrepancies_inter_entity_shipment_line_id_same_org_fk";
+
 --> statement-breakpoint
 CREATE INDEX "trade_discrepancies_inter_entity_line_idx" ON "trade_discrepancies" ("inter_entity_shipment_line_id") WHERE "inter_entity_shipment_line_id" IS NOT NULL;
 --> statement-breakpoint

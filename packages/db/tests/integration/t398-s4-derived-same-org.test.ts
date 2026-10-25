@@ -73,7 +73,8 @@ const REGISTRY_BEFORE_S4 = 100;
 /** Triggers classified AFTER S4 by later tasks (each lane bumps this): T-455 S1 (0215) adds 4 lobby validators; T-479 adds lobby_entries_party_size_cap. */
 // T-475 S3 (0217): +2 (supplier_invoices self-verify capability + immutability triggers). 5 -> 7.
 // T-398 S5b (0218): +3 (inter_entity_shipments link check + two receipt guards). 7 -> 10.
-const REGISTRY_ADDED_AFTER_S4 = 10;
+// T-398 S5 audit (0218): +4 (two freeze triggers + two deferred sum-check constraint triggers). 10 -> 14.
+const REGISTRY_ADDED_AFTER_S4 = 14;
 
 function pinMismatch(keys: readonly string[], pin: { count: number; sha256: string }): string | null {
   if (keys.length !== pin.count) return `count ${keys.length} != pinned ${pin.count}`;

@@ -446,15 +446,8 @@ const PINNED: PinnedKind[] = [
     expectedHopsFromEntry: 1,
     expectedPathFromEntry: [],
   },
-  {
-    // T-398 S5e: the 06:30 Manila inter-entity reconcile. Iterates listOrgsToRun; one runJobForOrg per org.
-    kind: 'inter_entity_reconcile',
-    entry: 'runInterEntityReconcile',
-    file: 'packages/domain/src/scheduler/index.ts',
-    walkFrom: 'runInterEntityReconcile',
-    expectedHopsFromEntry: 1,
-    expectedPathFromEntry: [],
-  },
+  // inter_entity_reconcile returns with S5e (T-398)
+
 ];
 
 describe('Pass B — every registered SCHEDULER_JOBS kind reaches runJobForOrg, in the REAL repo', () => {
@@ -464,7 +457,7 @@ describe('Pass B — every registered SCHEDULER_JOBS kind reaches runJobForOrg, 
     expect(domainSourceFiles()).toContain('packages/domain/src/recurring-expenses/job.ts');
   });
 
-  it('⭐ PASS B COUNT: all 15 pinned SCHEDULER_JOBS kinds are reachable — reported separately from Pass A', () => {
+  it('⭐ PASS B COUNT: all 14 pinned SCHEDULER_JOBS kinds are reachable — reported separately from Pass A', () => {
     const results = PINNED.map((row) => {
       const bodies = functionBodies(read(row.file));
       // The entry must actually call `walkFrom` directly (or walkFrom IS the entry, for a direct
@@ -488,7 +481,7 @@ describe('Pass B — every registered SCHEDULER_JOBS kind reaches runJobForOrg, 
     expect(unreached).toEqual([]); // every one of the 14 must be reached — no exemptions exist
 
     const reachedCount = results.filter((r) => r.reached).length;
-    expect(reachedCount).toBe(15); // 15/15 since T-398 S5e's inter_entity_reconcile; 14/14 since T-472 S2's pos_receipt_bridge; was 10/10 (system32-85); 11/11 since T-276's fiscal_period_seed; 12/12 since T-401 S6's usage_auto_post; 13/13 since T-396 S1's pos_day_import
+    expect(reachedCount).toBe(14); // 14/14 since T-472 S2's pos_receipt_bridge; was 10/10 (system32-85); 11/11 since T-276's fiscal_period_seed; 12/12 since T-401 S6's usage_auto_post; 13/13 since T-396 S1's pos_day_import
   });
 
   it('⭐ PINNED kinds are exactly SCHEDULER_JOBS, sorted — a new job updates PINNED too, not just KNOWN_JOB_NAMES', () => {

@@ -27,6 +27,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { RLS_REGISTRY } from '../../src/rls/registry';
+import { SCHEDULER_JOBS } from '../../schema/scheduler';
 import { CUTOVER_CLASSIFICATION } from '../../src/cutover/classification';
 import { dbUrl, dropDb, MIGRATIONS_FOLDER, withAdmin } from './t398-s3-fixture';
 
@@ -161,11 +162,15 @@ describe('L2 -- 0218 applies from zero on a scratch database and yields the cata
   }, 240_000);
 });
 
-describe('J -- scheduler_runs_job_check restates the whole list plus inter_entity_reconcile', () => {
-  it('J1 the live constraint admits every job the previous migration listed and inter_entity_reconcile (kills: list shortened)', async () => {
+describe('J -- scheduler_runs_job_check restates the whole list (inter_entity_reconcile returns with S5e)', () => {
+  it('J1 the live constraint admits every job the previous migration listed, equals SCHEDULER_JOBS, and does not admit inter_entity_reconcile (kills: list shortened)', async () => {
     const [c] = await sql<{ def: string }[]>`select pg_get_constraintdef(oid) def from pg_constraint where conname = 'scheduler_runs_job_check' and conrelid = 'scheduler_runs'::regclass`;
     expect(c, 'constraint missing').toBeDefined();
-    expect(c!.def, 'RED today: inter_entity_reconcile not admitted').toContain('inter_entity_reconcile');
+    // inter_entity_reconcile returns with S5e (T-398)
+    expect(c!.def, 'inter_entity_reconcile must NOT be admitted yet').not.toContain('inter_entity_reconcile');
+    const live = [...c!.def.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);
+    expect([...new Set(live)].sort(), 'the live list is exactly SCHEDULER_JOBS (14 jobs)').toEqual([...SCHEDULER_JOBS].sort());
+    expect(SCHEDULER_JOBS.length).toBe(14);
     // previous list = the newest migration BEFORE 0218 that restates the constraint
     const files = readdirSync(MIGRATIONS_FOLDER).filter((f) => /^\d{4}_.*\.sql$/.test(f) && !f.startsWith('0218_')).sort().reverse();
     const prior = files.find((f) => /scheduler_runs_job_check"?\s*\n?\s*CHECK/i.test(readFileSync(join(MIGRATIONS_FOLDER, f), 'utf8')));

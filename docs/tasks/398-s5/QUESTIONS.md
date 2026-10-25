@@ -77,3 +77,21 @@ Trade orders can carry a delivery fee. Should an order to PG?
    DROP (fails loudly on drift) over DROP IF EXISTS where the name is certain.
 Checked clean: RLS shape, definers (search_path, REVOKE/GRANT, app_current_org scoping), receipt guard role test
 (requests run SET LOCAL ROLE shareat_app), link trigger, money rounding, credit-note balance, LF/BOM/lock_timeout, cutover.
+
+## Audit fixes landed (26 Oct, orchestrator) - S5c/S5d start from here
+- Findings 1, 2, 3, 5, 6 above: FIXED. Finding 2 also gained, after a second audit round: no status change by the app
+  role once a shipment leaves in_transit (void -> in_transit -> edit loop); no line INSERT or line move into a received
+  or void shipment (parent status read FOR SHARE, so a concurrent receive is waited for); the deferred
+  billed_total = sum(line_total) check reads the rows under the row's own org context (it failed open with no or another
+  org context) and raises if lines exist without a visible header; receive refuses a zero-line shipment (22023).
+  Every 0218 money column now has a *_finite_check.
+- Finding 1 ruling: `inter_entity_reconcile` is out of SCHEDULER_JOBS, out of 0218's scheduler CHECK and out of the schema
+  CHECK sql. **S5e puts all three back together** (plus the scheduler unit pins and t398-s5-migration J1).
+- Finding 4 (buyer can read void details / seller can read received_by): **deferred to S5d** - the buyer's reads go
+  through a definer function that returns only what QI-1 (a) allows.
+- Label ruling: disposition `franchise_credit` displays as "Credit note to the franchise".
+- ⛔ KNOWN RED until S5c/S5d: tests/unit/production-caller-ratchet.test.ts - buyerPosted, counterpartyBalance,
+  findByTradeOrder, listInbound (S5b repo functions) have no production caller yet. Do NOT regenerate the baseline:
+  S5c/S5d give each a real caller; the S5 PR does not go up while this is red.
+- Unit runs on the laptop time out under load (~100 of 110 failures on 26 Oct were 5 s timeouts); judge the full unit
+  suite in CI, and re-run a suspected file on its own.

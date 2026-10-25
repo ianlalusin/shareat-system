@@ -1129,6 +1129,34 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     reason:
       'Only receive_inter_entity_shipment() (the table owner) may write received_quantity; the app role is refused 42501. Decides from the calling role, not from row history (0218, T-398 S5).',
   },
+  inter_entity_shipments_freeze_guard_trg: {
+    table: 'inter_entity_shipments',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Once a shipment is received or void the app role may not change billed_total, credited_total, the organisations or the order link (42501); credited_total moves only on the owner path. Decides from the calling role and OLD/NEW (0218, T-398 S5 audit).',
+  },
+  inter_entity_shipment_lines_freeze_guard_trg: {
+    table: 'inter_entity_shipment_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Once the parent shipment is received or void the app role may not change a line quantity, rate, line_total, item or links (42501); reads the parent shipment status, another row current state (0218, T-398 S5 audit).',
+  },
+  inter_entity_shipments_billed_sum_trg: {
+    table: 'inter_entity_shipments',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Deferred constraint trigger: billed_total must equal the sum of the shipment lines line_total at commit (23514); reads the sibling lines, other rows current state (0218, T-398 S5 audit).',
+  },
+  inter_entity_shipment_lines_billed_sum_trg: {
+    table: 'inter_entity_shipment_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Deferred constraint trigger on the lines side of the billed_total = sum(line_total) check; reads the header and sibling lines, other rows current state (0218, T-398 S5 audit).',
+  },
   // T-475 S3 (0217) - an admin may verify the supplier invoice they logged themselves. The capability trigger reads ANOTHER row's current state
   // (the verifier's active role): validator, origin. The flag guard decides only from OLD/NEW: history_guard, ENABLE ALWAYS (R3).
   // ---------------------------------------------------------------------------------------------

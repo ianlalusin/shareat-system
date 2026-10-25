@@ -53,6 +53,9 @@ export const interEntityShipments = pgTable(
   (t) => [
     index('inter_entity_shipments_org_status_idx').on(t.orgId, t.status, t.shippedOn),
     index('inter_entity_shipments_buyer_status_idx').on(t.buyerOrgId, t.status, t.shippedOn),
+    check('inter_entity_shipments_billed_total_finite_check', sql`${t.billedTotal} > '-Infinity'::numeric and ${t.billedTotal} < 'Infinity'::numeric`),
+    check('inter_entity_shipments_credited_total_finite_check', sql`${t.creditedTotal} > '-Infinity'::numeric and ${t.creditedTotal} < 'Infinity'::numeric`),
+    check('inter_entity_shipments_received_total_finite_check', sql`${t.receivedTotal} > '-Infinity'::numeric and ${t.receivedTotal} < 'Infinity'::numeric`),
     check('inter_entity_shipments_buyer_differs_check', sql`${t.buyerOrgId} <> ${t.orgId}`),
     check('inter_entity_shipments_status_check', sql`${t.status} in ('in_transit', 'received', 'void')`),
     // NOTE: UNIQUE (trade_order_id), UNIQUE (org_id, id), UNIQUE (buyer_org_id, id), UNIQUE (org_id, buyer_org_id, id) - hand-added in migration 0218 (T-398 S5), no Drizzle mirror here.
@@ -105,6 +108,10 @@ export const interEntityShipmentLines = pgTable(
   },
   (t) => [
     // NOTE: UNIQUE (shipment_id, line_no), UNIQUE (org_id, id), receipt-guard triggers on both tables and the CHECKs (quantity > 0, rate >= 0, line_total = round(quantity * rate, 2), 0 <= received_quantity <= quantity) - hand-added in migration 0218 (T-398 S5).
+    check('inter_entity_shipment_lines_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
+    check('inter_entity_shipment_lines_rate_finite_check', sql`${t.rate} > '-Infinity'::numeric and ${t.rate} < 'Infinity'::numeric`),
+    check('inter_entity_shipment_lines_line_total_finite_check', sql`${t.lineTotal} > '-Infinity'::numeric and ${t.lineTotal} < 'Infinity'::numeric`),
+    check('inter_entity_shipment_lines_received_quantity_finite_check', sql`${t.receivedQuantity} > '-Infinity'::numeric and ${t.receivedQuantity} < 'Infinity'::numeric`),
     // NOTE: RLS (ENABLE + FORCE; SELECT org_id OR buyer_org_id, INSERT / UPDATE org_id only, no DELETE) and the grants - hand-added in migration 0218.
     foreignKey({
       columns: [t.orgId, t.buyerOrgId, t.shipmentId],

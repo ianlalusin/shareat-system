@@ -292,7 +292,7 @@ describe('C -- catalog: same-org composite keys everywhere EXCEPT the defined ha
     const w = await world();
     const s = await newShipment(w);
     let seq = 10;
-    const mk = (rq: string | null) => ins(sql, LINE, lineRow(w, s.shipmentId, s.lineId, { line_no: String(seq++), received_quantity: rq }));
+    const mk = (rq: string | null) => ins(sql, LINE, lineRow(w, s.shipmentId, s.lineId, { line_no: String(seq++), received_quantity: rq, rate: '0.00', line_total: '0.00' })); // zero-value extra lines keep billed_total = sum(line_total)
     expectRefused(await ownerProbe(() => mk('10.001')), 'E20a over-receipt', '23514');
     expectRefused(await ownerProbe(() => mk('-0.001')), 'negative received', '23514');
     for (const ok of ['10.000', '8.000', '0.000', null]) expect(await ownerProbe(() => mk(ok)), `control ${ok}`).toBeUndefined();
@@ -469,7 +469,7 @@ describe('K -- CHECK constraints (each pair: refusal + positive control)', () =>
     const w = await world();
     const s = await newShipment(w);
     const s2 = await newShipment(w);
-    const mk = (ship: string, ol: string, no: string) => ins(sql, LINE, lineRow(w, ship, ol, { line_no: no }));
+    const mk = (ship: string, ol: string, no: string) => ins(sql, LINE, lineRow(w, ship, ol, { line_no: no, rate: '0.00', line_total: '0.00' })); // zero-value extra lines keep billed_total = sum(line_total)
     expectRefused(await ownerProbe(() => mk(s.shipmentId, s.lineId, '1')), 'LN duplicate line_no 1 on the same shipment', '23505');
     expect(await ownerProbe(() => mk(s.shipmentId, s.lineId, '2')), 'control: distinct number').toBeUndefined();
     expect(await ownerProbe(() => mk(s2.shipmentId, s2.lineId, '2')), 'control: same number on a different shipment').toBeUndefined();
@@ -815,8 +815,12 @@ describe('B/R -- receive_inter_entity_shipment (the buyer\'s one write into the 
     const w = await world();
     const s = await newShipment(w);
     const l2Order = await sql<{ id: string }[]>`insert into trade_order_lines (org_id, order_id, item_id, quantity, unit, rate, line_total) values (${w.a.orgId}, ${s.orderId}, ${w.a.stockItemId}, '0.500', 'kg', '7.77', '3.89') returning id`;
-    const l2 = await ins(sql, LINE, lineRow(w, s.shipmentId, l2Order[0]!.id, { line_no: '2', quantity: '0.500', rate: '7.77', line_total: '3.89' }));
-    await sql`update ${sql(SHIP)} set billed_total = '3103.89' where id = ${s.shipmentId}`;
+    // header and second line move together in ONE transaction (billed_total = sum(line_total) is checked at commit)
+    const l2 = await sql.begin(async (tx) => {
+      const id = await ins(tx, LINE, lineRow(w, s.shipmentId, l2Order[0]!.id, { line_no: '2', quantity: '0.500', rate: '7.77', line_total: '3.89' }));
+      await asSql(tx)`update ${asSql(tx)(SHIP)} set billed_total = '3103.89' where id = ${s.shipmentId}`;
+      return id;
+    });
     const r = await asPerson(w.b.orgId, w.b.personId, async (tx) => {
       await call(tx, s.shipmentId, [{ line_id: s.shipLineId, received_quantity: '8.000' }, { line_id: l2, received_quantity: '0.250' }]);
       const q = asSql(tx);
