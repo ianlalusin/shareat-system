@@ -113,8 +113,9 @@ export const SCHEDULER_JOBS = [
    */
   'pos_day_import',
   /**
-   * `pos_receipt_bridge` - T-472, DAILY 06:30 Manila. Copies yesterday's POS receipts (and any changed since the last run)
-   * into `pos_bridge_*`, read-only on Firebase; posts nothing. Needs migration 0216's widening of `scheduler_runs_job_check`.
+   * `pos_receipt_bridge` - T-472, DAILY 06:30 Manila. Copies yesterday's POS receipts (and any changed since the last run) into
+   * `pos_bridge_*`, read-only on Firebase; posts nothing. Needs migration 0216's widening of `scheduler_runs_job_check`.
+   * Its job function, run-recording PINNED row and docs/ops unit pair land in S2/S3.
    */
   'pos_receipt_bridge',
 ] as const;

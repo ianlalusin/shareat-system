@@ -64,7 +64,7 @@ export const posBridgeReceipts = pgTable(
     storeId: uuid('store_id').notNull(),
     /** POS's own (Firestore) store id the document was read from. */
     posStoreId: text('pos_store_id').notNull(),
-    /** The Firestore document id. Never the receipt number or terminal seq (GLOSSARY: `receiptSeq` is not monotonic). */
+    /** The Firestore document id. Never the receipt number or terminal seq (GLOSSARY: the terminal sequence is not a monotonic key). */
     firestoreDocId: text('firestore_doc_id').notNull(),
     version: integer('version').notNull(),
     kind: text('kind', { enum: POS_BRIDGE_RECEIPT_KINDS }).notNull(),
@@ -131,6 +131,7 @@ export const posBridgeReceiptLines = pgTable(
     unique('pos_bridge_receipt_lines_receipt_line_unique').on(t.orgId, t.receiptId, t.lineNo),
     index('pos_bridge_receipt_lines_date_idx').on(t.orgId, t.posCalendarDate),
     check('pos_bridge_receipt_lines_line_no_check', sql`${t.lineNo} >= 1`),
+    check('pos_bridge_receipt_lines_quantity_finite_check', sql`${t.quantity} > '-Infinity'::numeric and ${t.quantity} < 'Infinity'::numeric`),
     foreignKey({
       columns: [t.orgId, t.receiptId],
       foreignColumns: [posBridgeReceipts.orgId, posBridgeReceipts.id],

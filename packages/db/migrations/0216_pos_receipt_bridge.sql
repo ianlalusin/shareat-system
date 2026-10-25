@@ -62,7 +62,8 @@ CREATE TABLE "pos_bridge_receipt_lines" (
 	"line_total_centavos" bigint NOT NULL,
 	"money_flag" boolean DEFAULT false NOT NULL,
 	CONSTRAINT "pos_bridge_receipt_lines_receipt_line_unique" UNIQUE ("org_id", "receipt_id", "line_no"),
-	CONSTRAINT "pos_bridge_receipt_lines_line_no_check" CHECK ("line_no" >= 1)
+	CONSTRAINT "pos_bridge_receipt_lines_line_no_check" CHECK ("line_no" >= 1),
+	CONSTRAINT "pos_bridge_receipt_lines_quantity_finite_check" CHECK ("quantity" > '-Infinity'::numeric and "quantity" < 'Infinity'::numeric)
 );
 --> statement-breakpoint
 CREATE TABLE "pos_bridge_receipt_tenders" (
