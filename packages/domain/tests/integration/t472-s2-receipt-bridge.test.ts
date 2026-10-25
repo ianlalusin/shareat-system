@@ -79,9 +79,9 @@ async function fixture(hint: string, opts: { linked?: boolean; unlinked?: boolea
 }
 type F = Awaited<ReturnType<typeof fixture>>;
 
-async function sweep(o: { orgId: string; port: PosReceiptBridgePort; now?: string; dryRun?: boolean }) {
+async function sweep(o: { orgId: string; port: PosReceiptBridgePort; now?: string; dryRun?: boolean; date?: string }) {
   const { posReceiptBridgeSweep } = await import('../../src/pos/receipt-bridge-job');
-  return posReceiptBridgeSweep({ orgId: o.orgId, port: o.port, now: new Date(o.now ?? NOW), dryRun: o.dryRun });
+  return posReceiptBridgeSweep({ orgId: o.orgId, port: o.port, now: new Date(o.now ?? NOW), dryRun: o.dryRun, date: o.date });
 }
 
 interface HeaderRow {
@@ -302,7 +302,7 @@ describe('V: versions by hash', () => {
     await sweep({ orgId: f.orgId, port });
     port.clear(f.posStoreId, YESTERDAY);
     port.put(f.posStoreId, YESTERDAY, receipt({ id: 'a', v: 2, total: '120.00' }));
-    await sweep({ orgId: f.orgId, port, now: NEXT });
+    await sweep({ orgId: f.orgId, port, now: NEXT, date: YESTERDAY });
     expect((await headers(f.orgId)).map((h) => [h.version, h.total_centavos])).toEqual([[1, '10000'], [2, '12000']]);
     expect(await countRows(f.orgId, 'pos_bridge_receipt_lines')).toBe(2);
     expect(await countRows(f.orgId, 'pos_bridge_receipt_tenders')).toBe(2);
@@ -336,16 +336,17 @@ describe('V: versions by hash', () => {
     await sweep({ orgId: f.orgId, port });
     port.clear(f.posStoreId, YESTERDAY);
     port.put(f.posStoreId, YESTERDAY, receipt({ id: 'a', v: 1 }));
-    await sweep({ orgId: f.orgId, port, now: NEXT });
+    // gone is only seen on a day that is actually re-read (the read budget), so the day is named.
+    await sweep({ orgId: f.orgId, port, now: NEXT, date: YESTERDAY });
     let hs = await headers(f.orgId);
     expect(hs.filter((h) => h.firestore_doc_id === 'b').map((h) => [h.version, h.status])).toEqual([[1, 'final'], [2, 'gone']]);
     expect(hs.filter((h) => h.firestore_doc_id === 'a').length).toBe(1);
     expect((await checkOf(f, YESTERDAY))!.receipt_count).toBe(1);
-    await sweep({ orgId: f.orgId, port, now: '2027-01-14T22:30:00.000Z' });
+    await sweep({ orgId: f.orgId, port, now: '2027-01-14T22:30:00.000Z', date: YESTERDAY });
     hs = await headers(f.orgId);
     expect(hs.filter((h) => h.firestore_doc_id === 'b').length).toBe(2);
     port.put(f.posStoreId, YESTERDAY, receipt({ id: 'b', v: 1 }));
-    await sweep({ orgId: f.orgId, port, now: '2027-01-15T22:30:00.000Z' });
+    await sweep({ orgId: f.orgId, port, now: '2027-01-15T22:30:00.000Z', date: YESTERDAY });
     hs = await headers(f.orgId);
     expect(hs.filter((h) => h.firestore_doc_id === 'b').map((h) => [h.version, h.status])).toEqual([[1, 'final'], [2, 'gone'], [3, 'final']]);
   });
@@ -393,7 +394,7 @@ describe('F + D: the 2027-01-01 write floor and the dry run', () => {
     const port = new FakePort();
     port.put(f.posStoreId, YESTERDAY, receipt({ id: 'a' }), receipt({ id: 'b' }));
     const r = await sweep({ orgId: f.orgId, port, dryRun: true });
-    expect(port.datesCalled(f.posStoreId, 'listDay').length).toBe(7);
+    expect(port.datesCalled(f.posStoreId, 'listDay')).toEqual([YESTERDAY]);
     expect(r.outcomes[0]!.posted).toBe(2);
     for (const t of ['pos_bridge_receipts', 'pos_bridge_receipt_lines', 'pos_bridge_receipt_tenders', 'pos_bridge_day_checks']) {
       expect(await countRows(f.orgId, t), t).toBe(0);
@@ -418,6 +419,42 @@ describe('F + D: the 2027-01-01 write floor and the dry run', () => {
     const rs = await runs(f.orgId);
     expect(rs.length).toBe(1);
     expect(rs[0]).toMatchObject({ outcome: 'ok', posted_count: 1 });
+  });
+});
+
+describe('B: the Firestore read budget (about 8.4k reads a night, not 7 days of them)', () => {
+  it('B1: a night with every check present reads exactly ONE day (yesterday)', async () => {
+    const f = await fixture('b1');
+    await sweep({ orgId: f.orgId, port: new FakePort() }); // first night: no checks yet, so the whole window
+    const port = new FakePort();
+    await sweep({ orgId: f.orgId, port, now: NEXT });
+    expect(port.datesCalled(f.posStoreId, 'listDay')).toEqual(['2027-01-13']);
+    expect(port.datesCalled(f.posStoreId, 'cross')).toEqual(['2027-01-13']);
+    expect(port.datesCalled(f.posStoreId, 'listMissing')).toEqual(['2027-01-13']);
+  });
+
+  it('B2: one missing check means that day is read too (a host that was down, a store linked late)', async () => {
+    const f = await fixture('b2');
+    await sweep({ orgId: f.orgId, port: new FakePort() });
+    await sql`delete from pos_bridge_day_checks where org_id = ${f.orgId} and pos_calendar_date = '2027-01-10'`;
+    const port = new FakePort();
+    await sweep({ orgId: f.orgId, port, now: NEXT });
+    expect(port.datesCalled(f.posStoreId, 'listDay')).toEqual(['2027-01-10', '2027-01-13']);
+  });
+
+  it('B3: days before the write floor never get a check, so they are not re-read every night: a December night reads yesterday only', async () => {
+    const f = await fixture('b3');
+    await sweep({ orgId: f.orgId, port: new FakePort(), now: DEC_NOW });
+    const port = new FakePort();
+    await sweep({ orgId: f.orgId, port, now: '2026-12-31T22:30:00.000Z' });
+    expect(port.datesCalled(f.posStoreId, 'listDay')).toEqual(['2026-12-31']);
+  });
+
+  it('B4: --date reads exactly that day, live or dry', async () => {
+    const f = await fixture('b4');
+    const port = new FakePort();
+    await sweep({ orgId: f.orgId, port, date: '2027-01-09', dryRun: true });
+    expect(port.datesCalled(f.posStoreId, 'listDay')).toEqual(['2027-01-09']);
   });
 });
 
@@ -489,10 +526,10 @@ describe('K: day checks against the day feed (Ruling 6)', () => {
     await sweep({ orgId: f.orgId, port });
     expect(await checkOf(f, YESTERDAY)).toMatchObject({ result: 'pending', feed_total_centavos: null, difference_centavos: null, net_sales_centavos: '50000' });
     await addFeed(f, YESTERDAY, 500);
-    await sweep({ orgId: f.orgId, port, now: NEXT });
+    await sweep({ orgId: f.orgId, port, now: NEXT, date: YESTERDAY });
     expect(await checkOf(f, YESTERDAY)).toMatchObject({ result: 'match' });
-    // 2027-01-06..12 on the first night, 2027-01-07..13 on the second: 8 distinct store-days, each row updated in place.
-    expect(await countRows(f.orgId, 'pos_bridge_day_checks')).toBe(8);
+    // 2027-01-06..12 on the first night; the re-check of 12 Jan updated its row in place (still 7 rows).
+    expect(await countRows(f.orgId, 'pos_bridge_day_checks')).toBe(7);
   });
 
   it('K4: a mismatch is said as a notice on the run (the Sales days note), not as a failure', async () => {
