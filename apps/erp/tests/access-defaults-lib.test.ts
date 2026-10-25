@@ -3,6 +3,7 @@ import {
   CAPABILITIES,
   CAPABILITY_MATRIX,
   CAPABILITY_SCOPE,
+  ROLE_ONLY_CAPABILITIES,
   SUPER_ADMIN_ONLY_CAPABILITIES,
   type Capability,
 } from '@shareat/auth';
@@ -63,6 +64,7 @@ describe('gridCapabilityGroups — exactly the offerable set, grouped by CAPABIL
     const platformCapabilities = new Set(CAPABILITIES.filter((c) => CAPABILITY_SCOPE[c] === 'platform'));
     const excluded = new Set<Capability>([
       ...SUPER_ADMIN_ONLY_CAPABILITIES,
+      ...ROLE_ONLY_CAPABILITIES,
       ...platformCapabilities,
       'close_period',
       'create_missing_period',

@@ -319,6 +319,8 @@ export type Capability =
   | 'view_activity_log'
   /** T-402 R8. Also org-level rows and the admin-viewed entries (grants, credential changes, denials, exports, cutover). */
   | 'view_activity_log_restricted'
+  /** T-475 S3: an admin or super admin may verify a supplier invoice they logged themselves. ROLE ONLY (see `ROLE_ONLY_CAPABILITIES`). */
+  | 'verify_own_supplier_invoice'
   // Platform — super-admin only
   | 'cross_org_access'
   | 'view_franchise_sales';
@@ -438,6 +440,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'verify_own_sales_day',
   'view_activity_log',
   'view_activity_log_restricted',
+  'verify_own_supplier_invoice',
   'cross_org_access',
   'view_franchise_sales',
 ];
@@ -641,6 +644,7 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   verify_own_sales_day: 'org',
   view_activity_log: 'store',
   view_activity_log_restricted: 'org',
+  verify_own_supplier_invoice: 'org',
 
   cross_org_access: 'platform',
   view_franchise_sales: 'platform',
@@ -740,6 +744,7 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   verify_own_sales_day: 'sales',
   view_activity_log: 'admin',
   view_activity_log_restricted: 'admin',
+  verify_own_supplier_invoice: 'suppliers',
 
   confirm_receipt: 'commissary',
   resolve_trade_discrepancy: 'commissary',
@@ -1093,6 +1098,8 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   verify_own_sales_day: { super_admin: true, admin: false, manager: false, staff: false },
   view_activity_log: { super_admin: true, admin: true, manager: true, staff: false },
   view_activity_log_restricted: { super_admin: true, admin: true, manager: false, staff: false },
+  // T-475 S3. Ian 2026-10-24 (Q3=A): admin and super admin BY ROLE only - see ROLE_ONLY_CAPABILITIES. Matrix-held, so no backfill.
+  verify_own_supplier_invoice: { super_admin: true, admin: true, manager: false, staff: false },
 
   cross_org_access: { super_admin: true, admin: false, manager: false, staff: false },
   view_franchise_sales: { super_admin: true, admin: false, manager: false, staff: false },
@@ -1105,6 +1112,20 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
 export const CONDITIONAL_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>(['close_period']);
 
 /**
+ * T-475 S3 (Ian Q3=A) - capabilities held BY ROLE ONLY: the matrix is the sole way to hold one. A `person_grants` row naming
+ * it (any source: grant, owner, elevation, position) confers nothing, and no screen offers it as a grant or a position default.
+ * ONE declarative set: `authorize()` / `can()` (one `decide`), `heldCapabilities()`, the grant picker
+ * (`grantableCapabilitiesFor`), the position-default offer list and `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER` all consult it
+ * through `grantsConfer()`; none string-compares a capability name. `verify_own_supplier_invoice` is the first member.
+ */
+export const ROLE_ONLY_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>(['verify_own_supplier_invoice']);
+
+/** May a person-level grant confer `capability`? False for a role-only capability. */
+export function grantsConfer(capability: Capability): boolean {
+  return !ROLE_ONLY_CAPABILITIES.has(capability);
+}
+
+/**
  * The elevated-grant set for the grant-time fallback (bible rows 115-116,
  * CAPABILITY-MATRIX.md §B/§B.1): "creating a manager in an org with no admin applies the
  * elevated grants then, as real rows." Derived, not hand-listed — it is exactly the
@@ -1115,7 +1136,8 @@ export const CONDITIONAL_CAPABILITIES: ReadonlySet<Capability> = new Set<Capabil
  * hand or reach another org.)
  */
 export const ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER: readonly Capability[] = CAPABILITIES.filter(
-  (c) => CAPABILITY_MATRIX[c].admin && !CAPABILITY_MATRIX[c].manager,
+  // T-475 S3 (Ian Q4=A): a stand-in manager never receives a role-only capability - it is subtracted explicitly.
+  (c) => CAPABILITY_MATRIX[c].admin && !CAPABILITY_MATRIX[c].manager && !ROLE_ONLY_CAPABILITIES.has(c),
 );
 
 /**
@@ -1296,6 +1318,7 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   verify_own_sales_day: 'verify a sales day you submitted yourself',
   view_activity_log: "view the activity log of your store",
   view_activity_log_restricted: 'view the whole activity log, including grants, exports and denials',
+  verify_own_supplier_invoice: 'verify a supplier invoice you logged yourself',
   cross_org_access: 'access another organisation (break-glass)',
   view_franchise_sales: 'view franchise sales',
 };

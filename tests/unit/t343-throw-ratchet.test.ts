@@ -121,6 +121,7 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/stock-locations': 16,
   'packages/domain/src/stores': 12,
   'packages/domain/src/sync': 0,
+  'packages/domain/src/lobby': 0, // T-455 S2: new directory, no raw throws (lobbyRefusal only)
   'packages/domain/src/till': 18,
   'packages/domain/src/trade': 51, // T-343 S5.5r: 53 -> 52, parseQuantityInput converted to refuse(...)
   'packages/domain/src/wastage': 11,

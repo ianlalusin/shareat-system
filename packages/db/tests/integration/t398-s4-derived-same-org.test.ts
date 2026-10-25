@@ -70,8 +70,10 @@ const PRE_S4_OPEN = { count: 82, sha256: '2df148cd2e5e0757ca384cb3c9cc5522cf138f
 const TRIGGERED_COUNT = 55;
 /** TRIGGER_REGISTRY had 100 entries (69 origin, 57 validator) at 0213; S4 adds exactly 55 validator/origin entries. */
 const REGISTRY_BEFORE_S4 = 100;
-/** Triggers classified AFTER S4 by later tasks (each lane bumps this): T-455 S1 (0215) adds 4 lobby validators; T-479 adds lobby_entries_party_size_cap; T-398 S5b (0218) adds 1 (inter_entity_shipments_link_check_trg; the receipt-write guard from W1 will add one more). */
-const REGISTRY_ADDED_AFTER_S4 = 8; // T-398 S5b (0218): +3 (link check + two receipt guards)
+/** Triggers classified AFTER S4 by later tasks (each lane bumps this): T-455 S1 (0215) adds 4 lobby validators; T-479 adds lobby_entries_party_size_cap. */
+// T-475 S3 (0217): +2 (supplier_invoices self-verify capability + immutability triggers). 5 -> 7.
+// T-398 S5b (0218): +3 (inter_entity_shipments link check + two receipt guards). 7 -> 10.
+const REGISTRY_ADDED_AFTER_S4 = 10;
 
 function pinMismatch(keys: readonly string[], pin: { count: number; sha256: string }): string | null {
   if (keys.length !== pin.count) return `count ${keys.length} != pinned ${pin.count}`;
