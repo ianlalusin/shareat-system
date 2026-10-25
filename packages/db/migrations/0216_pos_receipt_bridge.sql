@@ -15,7 +15,9 @@
 -- RLS. ENABLE + FORCE, one org-isolation policy per table through app_current_org() (DEF-077) with WITH CHECK (DEF-183).
 -- GRANTS. receipts / lines / tenders are append-only: SELECT, INSERT for shareat_app. day_checks is recomputed nightly: SELECT, INSERT, UPDATE.
 -- The view is security_invoker = true, so it applies the CALLER's RLS on pos_bridge_receipts.
--- JOB CHECK. Rewritten as 0209 did; every existing value is kept.
+-- JOB CHECK. Rewritten as 0209 did; every existing value is kept. DROP ... IF EXISTS so the T-398 scratch-database tests, which strip every CHECK before
+-- applying the pending migrations, can still apply this one.
+-- NO feed_id on day_checks: the day-feed row is purged at cutover and a kept row may not point at a purged one.
 CREATE TABLE "pos_bridge_receipts" (
 	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"org_id" uuid NOT NULL,
@@ -89,7 +91,6 @@ CREATE TABLE "pos_bridge_day_checks" (
 	"receipt_count" integer NOT NULL,
 	"net_sales_centavos" bigint NOT NULL,
 	"feed_total_centavos" bigint,
-	"feed_id" uuid,
 	"difference_centavos" bigint,
 	"result" text NOT NULL,
 	"checked_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -118,8 +119,6 @@ ALTER TABLE "pos_bridge_receipt_tenders" ADD CONSTRAINT "pos_bridge_receipt_tend
 ALTER TABLE "pos_bridge_receipt_tenders" ADD CONSTRAINT "pos_bridge_receipt_tenders_tender_id_same_org_fk" FOREIGN KEY ("org_id", "tender_id") REFERENCES "public"."tenders"("org_id", "id") ON DELETE restrict ON UPDATE no action;
 --> statement-breakpoint
 ALTER TABLE "pos_bridge_day_checks" ADD CONSTRAINT "pos_bridge_day_checks_store_id_same_org_fk" FOREIGN KEY ("org_id", "store_id") REFERENCES "public"."stores"("org_id", "id") ON DELETE restrict ON UPDATE no action;
---> statement-breakpoint
-ALTER TABLE "pos_bridge_day_checks" ADD CONSTRAINT "pos_bridge_day_checks_feed_id_same_org_fk" FOREIGN KEY ("org_id", "feed_id") REFERENCES "public"."pos_v1_day_feeds"("org_id", "id") ON DELETE restrict ON UPDATE no action;
 --> statement-breakpoint
 CREATE INDEX "pos_bridge_receipts_store_day_idx" ON "pos_bridge_receipts" ("org_id", "store_id", "pos_calendar_date");
 --> statement-breakpoint
@@ -183,7 +182,7 @@ CREATE VIEW "public"."pos_bridge_receipts_current" WITH (security_invoker = true
 --> statement-breakpoint
 GRANT SELECT ON "pos_bridge_receipts_current" TO "shareat_app";
 --> statement-breakpoint
-ALTER TABLE "scheduler_runs" DROP CONSTRAINT "scheduler_runs_job_check";
+ALTER TABLE "scheduler_runs" DROP CONSTRAINT IF EXISTS "scheduler_runs_job_check";
 --> statement-breakpoint
 ALTER TABLE "scheduler_runs" ADD CONSTRAINT "scheduler_runs_job_check"
 	CHECK ("job" IN ('depreciation', 'amortisation', 'attendance_sweep', 'mirror_publish', 'inbox_relay',

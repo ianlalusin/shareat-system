@@ -142,7 +142,16 @@ async function cloneBase(name: string): Promise<postgres.Sql> {
   await withAdmin(url!, (a) => a.unsafe(`CREATE DATABASE "${name}" TEMPLATE "${BASE_DB}"`));
   return postgres(dbUrl(url!, name), { max: 1 });
 }
-const applyEverything = (s: postgres.Sql) => migrate(drizzle(s), { migrationsFolder: MIGRATIONS_FOLDER });
+// T-472 S1: apply THROUGH 0213 only. Later migrations (0214 triggers, 0216 new bridge tables with their own composite FKs) are out
+// of this test's scope and would change its pinned counts (145 composites / 38 uniques); every migration the test means is <= 0213.
+async function applyEverything(s: postgres.Sql): Promise<void> {
+  const dir = buildFolderThroughTag(s3Entry()!.tag);
+  try {
+    await migrate(drizzle(s), { migrationsFolder: dir });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 /** Three seeds, one per kind of gap: two org->org FKs read from the catalog scope, and one FK-less ref-gap column (A11/D2). */
 const SEEDS = [

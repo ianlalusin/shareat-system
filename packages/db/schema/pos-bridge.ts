@@ -6,6 +6,8 @@
  *  - `pos_bridge_receipt_lines`    the lines of one version.
  *  - `pos_bridge_receipt_tenders`  the payments of one version.
  *  - `pos_bridge_day_checks`       per store-day: our receipts against the POS day feed. A check, not truth (Ruling 6).
+ *                                  Holds the feed FIGURE, not a link to the feed row: a feed is purged at cutover and a kept row must not
+ *                                  point at a purged one (cutover purge refuses it).
  *  - `pos_bridge_receipts_current` (view, hand-added in 0216) the latest version of each document.
  *
  * Money is whole centavos in `bigint`, never float (RULES #6). `money_flag` is set when POS's value was not a whole
@@ -41,7 +43,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
 import { stores } from './stores';
-import { posV1DayFeeds, tenders } from './pos-v1';
+import { tenders } from './pos-v1';
 
 export const POS_BRIDGE_RECEIPT_KINDS = ['sale', 'refund'] as const;
 export type PosBridgeReceiptKind = (typeof POS_BRIDGE_RECEIPT_KINDS)[number];
@@ -191,7 +193,6 @@ export const posBridgeDayChecks = pgTable(
     netSalesCentavos: centavos('net_sales_centavos').notNull(),
     /** The day-feed figure it was compared with; null (and result `pending`) when no feed exists yet. */
     feedTotalCentavos: centavos('feed_total_centavos'),
-    feedId: uuid('feed_id'),
     /** `net_sales_centavos - feed_total_centavos`; null while pending. */
     differenceCentavos: centavos('difference_centavos'),
     result: text('result', { enum: POS_BRIDGE_CHECK_RESULTS }).notNull(),
@@ -211,11 +212,6 @@ export const posBridgeDayChecks = pgTable(
       columns: [t.orgId, t.storeId],
       foreignColumns: [stores.orgId, stores.id],
       name: 'pos_bridge_day_checks_store_id_same_org_fk',
-    }).onDelete('restrict'),
-    foreignKey({
-      columns: [t.orgId, t.feedId],
-      foreignColumns: [posV1DayFeeds.orgId, posV1DayFeeds.id],
-      name: 'pos_bridge_day_checks_feed_id_same_org_fk',
     }).onDelete('restrict'),
   ],
 );
