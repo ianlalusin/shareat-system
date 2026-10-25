@@ -176,8 +176,9 @@ async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput)
     input.payments.map((p, i) => ({ method: p.method, amount: amounts[i]! })),
   );
   const tooBig = amountWithinRemainingCheck.run(facts, values);
-  if (tooBig) throw refuse(`createExpense: ${tooBig.sentence}`, tooBig.sentence);
+  // The backstop throws the same sentence with its own raw diagnostic (ids, amounts, "does not fit"); run it first so raw and sentence stay separate.
   await apRepo.assertOpenForRecording(tx, actor.orgId, input.supplierInvoiceId, totalAmount, 'draft');
+  if (tooBig) throw refuse(`createExpense: ${tooBig.sentence}`, tooBig.sentence);
 
   // ⛔ The invoice names its supplier, so the caller's `supplierId` is a SECOND source of truth
   // for the same fact — and two copies of one fact drift (bible §16.1's whole argument). Nothing
