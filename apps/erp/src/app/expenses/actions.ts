@@ -21,6 +21,7 @@ import {
   assertFieldRules,
   createExpense,
   editExpense,
+  editCapabilityFor,
   voidExpense,
   deleteExpenseDraft,
   recordExpenseForInvoice,
@@ -30,7 +31,7 @@ import {
   type MoneyLine,
 } from '@shareat/domain';
 import { apRepo, expensesRepo, goneSentence, refuse } from '@shareat/db';
-import { EXPENSE_CREATE_RULES, EXPENSE_VOID_RULES } from '@shareat/domain/field-rules';
+import { EXPENSE_APPROVE_RULES, EXPENSE_DRAFT_EDIT_RULES, EXPENSE_CREATE_RULES, EXPENSE_VOID_RULES } from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from './lib';
 import { closedMonthOf, closedMonths, periodOverrideProblem, readPeriodOverride } from '../../lib/period-override';
 import { loadMoneyLines } from '@/lib/money-lines/load';
@@ -40,7 +41,7 @@ import { authorize, can, verifyAdminApproval, type Actor, type Capability } from
 import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 import { redirectWithFlash, splitReturnTo, type Nav } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
-import { EXPENSE_DRAFT_EDIT } from './typed-forms';
+import { EXPENSE_APPROVE, EXPENSE_DRAFT_EDIT } from './typed-forms';
 
 /**
  * ⭐ Screen-local, deliberately — T-266, migration 0141, and the same reasoning `till/actions.ts`
@@ -346,7 +347,10 @@ export async function approveExpenseAction(formData: FormData): Promise<void> {
     // proven `approve_expense` at the expense's store. A refusal here is the generic authorization one.
     const expense = await withOrgPrincipal(actor.orgId, async (tx) => {
       const found = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
-      if (found) await authorize(tx, actor, 'approve_expense', { storeId: found.storeId });
+      if (found) {
+        await authorize(tx, actor, 'approve_expense', { storeId: found.storeId });
+        assertFieldRules(EXPENSE_APPROVE_RULES, formData); // no ruled field: its checks are the business rules, re-run by approveExpense
+      }
       return found;
     });
     const asked = readPeriodOverride(formData);
@@ -358,7 +362,8 @@ export async function approveExpenseAction(formData: FormData): Promise<void> {
       approveExpense(tx, actor, expenseId, periodOverride ? { periodOverride } : undefined),
     );
   } catch (err) {
-    return await redirectWithFlash(`/expenses/${expenseId}`, nav, { error: errorMessage(err) });
+    // T-475 R14 / T-389: a refused approval reopens with the closed-month override reason and note still in place.
+    return await redirectWithFlash(`/expenses/${expenseId}`, nav, { error: errorMessage(err), typed: keepTyping(formData, EXPENSE_APPROVE, expenseId, { actorId: actor.personId }) });
   }
   return await redirectWithFlash(`/expenses/${expenseId}`, nav, { ok: 'Expense posted.', stamp: 'POSTED' });
 }
@@ -402,12 +407,19 @@ export async function updateDraftAction(formData: FormData): Promise<void> {
   const particulars = str(formData, 'particulars');
 
   try {
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      editExpense(tx, actor, expenseId, {
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      // Authorize first (the capability editExpense itself picks: own draft inside the edit window, else any), then the form's rules.
+      // The store is read from the record; a missing record falls through to the domain's own not-found refusal.
+      const found = await expensesRepo.getExpenseById(tx, actor.orgId, expenseId);
+      if (found) {
+        await authorize(tx, actor, editCapabilityFor(found, actor), { storeId: found.storeId });
+        assertFieldRules(EXPENSE_DRAFT_EDIT_RULES, formData); // no ruled field; the category rule is re-run by editExpense
+      }
+      await editExpense(tx, actor, expenseId, {
         categoryId: categoryId || undefined,
         particulars: particulars || undefined,
-      }),
-    );
+      });
+    });
   } catch (err) {
     return await redirectWithFlash(`/expenses/${expenseId}`, nav, { error: errorMessage(err), typed: keepTyping(formData, EXPENSE_DRAFT_EDIT, expenseId, { actorId: actor.personId }) });
   }

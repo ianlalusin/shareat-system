@@ -45,7 +45,7 @@
  */
 import { accessRepo, organizationsRepo, storesRepo, type Tx } from '@shareat/db';
 import { logger } from '@shareat/core/logger';
-import { CAPABILITY_MATRIX, CAPABILITY_SCOPE, type Capability, type Role } from './capabilities';
+import { CAPABILITY_MATRIX, CAPABILITY_SCOPE, grantsConfer, type Capability, type Role } from './capabilities';
 import { AuthorizationError } from './errors';
 import { enqueueAuthorizeDenied } from './security-events';
 import {
@@ -207,8 +207,10 @@ async function decide(tx: Tx, actor: Actor, capability: Capability, ctx: Authori
   // matches everywhere, unchanged). Axis 2 below still runs separately and always — a store-scoped
   // call with no storeId falls through to axis 2's own "no storeId was given" refusal unchanged.
   const matrixAllows = CAPABILITY_MATRIX[capability][role];
+  // T-475 S3 (Q3=A): a role-only capability is never conferred by a grant (`grantsConfer`), so the grant lookup is skipped.
   const allowed =
-    matrixAllows || (await accessRepo.personHasActiveGrant(tx, actor.personId, capability, scope === 'store' ? ctx.storeId : undefined));
+    matrixAllows ||
+    (grantsConfer(capability) && (await accessRepo.personHasActiveGrant(tx, actor.personId, capability, scope === 'store' ? ctx.storeId : undefined)));
   if (!allowed) {
     // Row 5 — S2b/DEF-430: for a store-scoped capability, one savepointed lookup asks whether a
     // position at ANOTHER store gives the person this capability, and names that store instead of
@@ -335,7 +337,7 @@ export async function heldCapabilities(tx: Tx, actor: Actor): Promise<ReadonlySe
 
   const held = new Set<Capability>();
   for (const capability of Object.keys(CAPABILITY_MATRIX) as Capability[]) {
-    if (CAPABILITY_MATRIX[capability][role] || granted.has(capability)) held.add(capability);
+    if (CAPABILITY_MATRIX[capability][role] || (granted.has(capability) && grantsConfer(capability))) held.add(capability);
   }
   return held;
 }

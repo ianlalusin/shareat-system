@@ -1,0 +1,15 @@
+# T-472 S3 - DAILY, 06:30 Manila (30 minutes after the 06:00 POS day import, so the day feed it checks against is already there).
+#
+# 06:30 Manila, not UTC: receipts are keyed by the Manila calendar date, so "yesterday" is the Manila day that just ended.
+# `Persistent=true`: a missed run (a reboot, an outage) runs at boot; a day with no day check is read again the next night.
+
+[Unit]
+Description=Shareat - 06:30 Manila nightly copy of POS receipts, daily (T-472)
+
+[Timer]
+OnCalendar=*-*-* 06:30:00 Asia/Manila
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

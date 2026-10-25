@@ -187,7 +187,10 @@ return (
           </PageDescription>
         </div>
         <div className="text-right">
-          <Badge status={invoice.status} />
+          <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
+            <Badge status={invoice.status} />
+            {invoice.selfVerified && <Badge tone="warning" label="Verified by its own creator" />}
+          </span>
           <p className="mt-2 text-2xl font-semibold tabular-nums">{peso(invoice.totalAmount)}</p>
           {(compare(deliveryFee, ZERO) !== 0 || compare(otherFees, ZERO) !== 0) && (
             <dl className="mt-1 space-y-0.5 text-sm text-neutral-500 dark:text-neutral-400">
