@@ -17,7 +17,7 @@ import { personName } from '@/lib/person-name';
 import { typedFor } from '@/lib/keep-typing';
 import { EXPENSE_APPROVE, EXPENSE_DRAFT_EDIT } from '../typed-forms';
 import { CheckedForm, EditableRecord, RuleCheck } from '@/components/forms';
-import { EXPENSE_APPROVE_RULES, EXPENSE_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { EXPENSE_APPROVE_RULES, EXPENSE_DRAFT_EDIT_RULES, EXPENSE_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { accountCodeAndName } from '@/lib/account-label';
 import { Badge, Button, CardGrid, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 
@@ -201,6 +201,7 @@ export default async function ExpenseDetailPage({
               <h2 className="font-medium">Correct this draft</h2>
               <p className="text-neutral-600 dark:text-neutral-400">Change the category or particulars.</p>
               <EditableRecord
+                rules={EXPENSE_DRAFT_EDIT_RULES}
                 action={updateDraftAction}
                 label="draft"
                 hidden={{ storeId: sp.store ?? '', expenseId: expense.id }}

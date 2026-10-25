@@ -36,14 +36,20 @@ vi.mock('../../src/lib/session', () => ({
     actor: ACTOR_HOLDER.actor!, sessionId: 'session-1', credentialKind: 'pin' as const, storeId: null, expiresAt: new Date('2099-01-01'),
   })),
 }));
-const CAPTURED: Array<{ id: string; facts: unknown }> = [];
-vi.mock('@/components/forms', async (orig) => ({
-  ...(await orig<Record<string, unknown>>()),
-  RuleCheck: (props: { id: string; facts: unknown }) => {
-    CAPTURED.push({ id: props.id, facts: props.facts });
-    return null;
-  },
-}));
+const CAPTURED: Array<{ id: string; facts: unknown; inContext: boolean }> = [];
+vi.mock('@/components/forms', async (orig) => {
+  const { useContext } = await import('react');
+  const { CheckContext } = await import('../../src/components/forms/context');
+  return {
+    ...(await orig<Record<string, unknown>>()),
+    // Records the facts AND whether a form's CheckContext is above it (a RuleCheck outside one renders nothing in the browser).
+    RuleCheck: (props: { id: string; facts: unknown }) => {
+      const ctx = useContext(CheckContext);
+      CAPTURED.push({ id: props.id, facts: props.facts, inContext: ctx !== null });
+      return null;
+    },
+  };
+});
 vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
 vi.mock('@/lib/money-lines/load', async () => await import('../../src/lib/money-lines/load'));
 vi.mock('@/components/money/MoneyLines', async () => await import('../../src/components/money/MoneyLines'));
@@ -430,5 +436,19 @@ describe('T-475 S2 / audit F1 - P3 still shows the first NON-invoice blocker whe
     await renderDetail(f.admin, id);
     expect(verdictOf(ID.invoiceVerified, {})).not.toBeNull();
     expect(verdictOf(ID.wouldPost, {})).toBeNull();
+  });
+});
+
+// =====================================================================================================================
+describe('T-475 S2 / browser-smoke finding - the draft screen RuleChecks sit inside a form check context', () => {
+  it('E4 (edit card) and P1-P3 (approve card) are each mounted INSIDE a CheckContext, or they render nothing and E4 is dead (mutant: <EditableRecord> given no `rules=`)', async () => {
+    const f = await ap475Fixture(sql, 'ctx');
+    const id = await f.draft(await f.invoice({ status: 'verified' }));
+    await renderDetail(f.admin, id);
+    for (const rid of [ID.categoryMapped, ID.invoiceVerified, ID.wouldPost, ID.periodOpen]) {
+      const hits = CAPTURED.filter((c) => c.id === rid);
+      expect(hits.length, `${rid} is mounted`).toBeGreaterThan(0);
+      expect(hits.every((h) => h.inContext), `${rid} must be rendered inside a CheckedForm / EditableRecord that provides CheckContext`).toBe(true);
+    }
   });
 });

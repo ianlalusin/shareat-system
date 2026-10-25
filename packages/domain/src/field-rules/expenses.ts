@@ -20,6 +20,9 @@ export const EXPENSE_VOID_RULES = defineFieldRules('expenses.void', {
  */
 export const EXPENSE_APPROVE_RULES = defineFieldRules('expenses.approve', {});
 
+/** T-475 S2 (E4): "Correct this draft". No ruled field; the category rule is a BUSINESS rule. The empty set gives the EditableRecord a check context. */
+export const EXPENSE_DRAFT_EDIT_RULES = defineFieldRules('expenses.draftEdit', {});
+
 export const EXPENSE_REIMBURSEMENT_RULES = defineFieldRules('expenses.reimbursement', {
   amount: { label: 'The reimbursement amount', kind: 'money', min: 0.01 },
   on: { label: 'The date', kind: 'date' },

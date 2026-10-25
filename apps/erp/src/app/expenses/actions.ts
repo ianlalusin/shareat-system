@@ -30,7 +30,7 @@ import {
   type MoneyLine,
 } from '@shareat/domain';
 import { apRepo, expensesRepo, goneSentence, refuse } from '@shareat/db';
-import { EXPENSE_APPROVE_RULES, EXPENSE_CREATE_RULES, EXPENSE_VOID_RULES } from '@shareat/domain/field-rules';
+import { EXPENSE_APPROVE_RULES, EXPENSE_DRAFT_EDIT_RULES, EXPENSE_CREATE_RULES, EXPENSE_VOID_RULES } from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from './lib';
 import { closedMonthOf, closedMonths, periodOverrideProblem, readPeriodOverride } from '../../lib/period-override';
 import { loadMoneyLines } from '@/lib/money-lines/load';
@@ -406,12 +406,13 @@ export async function updateDraftAction(formData: FormData): Promise<void> {
   const particulars = str(formData, 'particulars');
 
   try {
-    await withOrgPrincipal(actor.orgId, (tx) =>
-      editExpense(tx, actor, expenseId, {
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      assertFieldRules(EXPENSE_DRAFT_EDIT_RULES, formData); // no ruled field; the category rule is re-run by editExpense
+      await editExpense(tx, actor, expenseId, {
         categoryId: categoryId || undefined,
         particulars: particulars || undefined,
-      }),
-    );
+      });
+    });
   } catch (err) {
     return await redirectWithFlash(`/expenses/${expenseId}`, nav, { error: errorMessage(err), typed: keepTyping(formData, EXPENSE_DRAFT_EDIT, expenseId, { actorId: actor.personId }) });
   }
