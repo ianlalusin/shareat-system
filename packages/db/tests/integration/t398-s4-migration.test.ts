@@ -88,18 +88,24 @@ const SEEDS = [
 ] as const;
 
 async function stripAllChecks(s: postgres.Sql) {
-  const ks = await s<{ t: string; c: string }[]>`
-    select c.relname as t, con.conname as c from pg_constraint con join pg_class c on c.oid = con.conrelid
+  const defs = await s<{ t: string; c: string; d: string }[]>`
+    select c.relname as t, con.conname as c, pg_get_constraintdef(con.oid) as d from pg_constraint con join pg_class c on c.oid = con.conrelid
     where con.contype = 'c' and c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and not c.relispartition`;
-  for (const k of ks) await s.unsafe(`alter table "${k.t}" drop constraint "${k.c}"`);
+  for (const k of defs) await s.unsafe(`alter table "${k.t}" drop constraint "${k.c}"`);
+  return defs;
+}
+
+/** Put the stripped CHECKs back as NOT VALID after seeding: later migrations (e.g. 0218) plain-DROP and re-add some of them, and a real database has them. */
+async function restoreChecks(s: postgres.Sql, defs: { t: string; c: string; d: string }[]) {
+  for (const k of defs) await s.unsafe(`alter table "${k.t}" add constraint "${k.c}" ${k.d} not valid`);
 }
 
 type Mode = 'mixed' | 'same';
 
 /** 'mixed': the first seed points at a parent in org B (cross-org), the second at a uuid that exists nowhere (dangling). 'same': both same-org. */
 async function seed(s: postgres.Sql, mode: Mode): Promise<{ child: string; id: string; value: string }[]> {
-  await stripAllChecks(s);
-  return s.begin(async (tx) => {
+  const stripped = await stripAllChecks(s);
+  const out = await s.begin(async (tx) => {
     await tx`set local session_replication_role = replica`;
     const a = await insertOrg(tx, 'a');
     const b = mode === 'mixed' ? await insertOrg(tx, 'b') : a;
@@ -114,6 +120,8 @@ async function seed(s: postgres.Sql, mode: Mode): Promise<{ child: string; id: s
     }
     return out;
   });
+  await restoreChecks(s, stripped);
+  return out;
 }
 
 async function state(s: postgres.Sql) {
