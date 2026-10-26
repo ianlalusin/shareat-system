@@ -12,6 +12,24 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev:customer"],
       "port": 9010
+    },
+    {
+      "name": "customer-lobby-demo",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "set NEXT_PUBLIC_LOBBY_DEMO=1&& cd /d C:\\Users\\ianla\\webapps\\wt-t455 && npm run dev:customer"],
+      "port": 9010
+    },
+    {
+      "name": "pos-firebase-emulator",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd /d C:\\Users\\ianla\\webapps\\shareat-system\\apps\\pos\\emulator && firebase emulators:start --only auth,firestore,storage --project demo-shareat-pos2 --config firebase.json"],
+      "port": 8080
+    },
+    {
+      "name": "pos-demo",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "set POS_EMULATOR_MODE=1&& set POS_EMULATOR_HOST=127.0.0.1&& cd /d C:\\Users\\ianla\\webapps\\shareat-system && npm run dev:pos"],
+      "port": 9009
     }
   ]
 }
