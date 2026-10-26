@@ -4,7 +4,12 @@ import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * T-437 slice T: structural guards for the customer v2 skeleton (fixtures only). Imports NO app code.
+ * T-437 slice T: structural guards for the customer v2 skeleton. Imports NO app code.
+ * T-455 S3 amendment (docs/tasks/455-customer-lobby.md section 5, S3 row): the app now has a SERVER half. Two zones:
+ *   server zone = src/server/** and src/app/api/lobby/**  (route handlers + server code; stashed out of the static APK build by scripts/build-cap.mjs)
+ *   client zone = every other file under src
+ * Server code MAY import @shareat/db and @shareat/domain (and @shareat/core); client code may NOT, nor import the server zone. `fetch(` is allowed ONLY in
+ * src/data/http-*. Still no Firebase, no Capacitor in the server zone, no 'use server'. Every new detector has a positive and a negative hand-made sample.
  * Every detector is a pure function here and has one hand-made bad sample it must flag, so a detector that
  * always returns [] cannot pass (pattern: tests/unit/app-boundaries.test.ts). Scans skip every __tests__ dir (Ruling 2).
  */
@@ -80,7 +85,7 @@ function elements(src: string, names: string[]): { open: string; inner: string }
 }
 
 // ---------- detectors (all pure) ----------
-const EXPECTED_ROUTES = ['/', '/join', '/menu', '/cart', '/orders', '/bill', '/feedback', '/account'];
+const EXPECTED_ROUTES = ['/', '/join', '/menu', '/cart', '/orders', '/bill', '/feedback', '/account', '/lobby', '/lobby/check-in', '/lobby/wait'];
 
 /** page files (paths relative to src/app) -> route paths. Route groups "(x)" do not add a segment. */
 function routesFrom(pageFiles: string[]): string[] {
@@ -93,28 +98,51 @@ function routesFrom(pageFiles: string[]): string[] {
     .sort();
 }
 
-/** Paths (relative to src) that are dynamic segments, API dirs, or route handlers. */
+/**
+ * Paths (relative to src): dynamic segments are never allowed; an api dir or a route handler is allowed ONLY under app/api/lobby/ (T-455 S3:
+ * the diner is identified by a cookie, so no [id] segment is ever needed).
+ */
 function structureViolations(paths: string[]): string[] {
   const out: string[] = [];
   for (const p of paths) {
     const segs = p.split('/');
     if (segs.some((s) => s.startsWith('['))) out.push(`${p}: dynamic segment`);
-    if (segs[0] === 'app' && segs.slice(1, -1).includes('api')) out.push(`${p}: api dir`);
-    if (/(^|\/)route\.(ts|tsx|js|jsx|mjs)$/.test(p)) out.push(`${p}: route handler`);
+    const inLobbyApi = p.startsWith('app/api/lobby/');
+    if (segs[0] === 'app' && segs.slice(1, -1).includes('api') && !inLobbyApi) out.push(`${p}: api dir outside app/api/lobby`);
+    if (/(^|\/)route\.(ts|tsx|js|jsx|mjs)$/.test(p) && !inLobbyApi) out.push(`${p}: route handler outside app/api/lobby`);
   }
   return out;
 }
 
-const FORBIDDEN_IMPORT: RegExp[] = [
+/** The two zones. Paths are relative to src. */
+const isServerZone = (relPath: string) => relPath.startsWith('server/') || relPath.startsWith('app/api/lobby/');
+
+/** Never allowed anywhere (either zone): Firebase, Capacitor, @shareat/auth (the diner has no staff identity), raw packages/ paths. */
+const FORBIDDEN_EVERYWHERE: RegExp[] = [
   /^firebase(\/|$)/,
   /^firebase-admin(\/|$)/,
   /^@firebase\//,
-  /^@shareat\/(db|domain|auth)(\/|$)/,
+  /^@shareat\/auth(\/|$)/,
   /^@capacitor\//,
-  /(^|\/)packages\/(db|domain|auth)(\/|$)/,
+  /(^|\/)packages\//,
 ];
-function forbiddenImports(src: string): string[] {
-  return importSpecifiers(stripComments(src)).filter((s) => FORBIDDEN_IMPORT.some((re) => re.test(s)));
+/** Forbidden in the CLIENT zone only: the database and the domain (they would reach the browser bundle and the APK). */
+const SERVER_ONLY_PACKAGES: RegExp[] = [/^@shareat\/(db|domain)(\/|$)/];
+/** Forbidden in the client zone: reaching into the server zone (the APK build moves that code away). */
+const SERVER_ZONE_SPECIFIER: RegExp[] = [/(^|\/)server\//, /(^|\/)app\/api\//, /^@\/(server|app\/api)(\/|$)/, /^server-only$/];
+
+function importsOf(src: string): string[] {
+  return importSpecifiers(stripComments(src));
+}
+/** Violations for a file at `relPath` (relative to src), zone-aware. */
+function forbiddenImports(src: string, relPath = 'components/x.tsx'): string[] {
+  const server = isServerZone(relPath);
+  return importsOf(src).filter((s) => {
+    if (FORBIDDEN_EVERYWHERE.some((re) => re.test(s))) return true;
+    if (!server && SERVER_ONLY_PACKAGES.some((re) => re.test(s))) return true;
+    if (!server && SERVER_ZONE_SPECIFIER.some((re) => re.test(s))) return true;
+    return false;
+  });
 }
 
 const NETWORK: [string, RegExp][] = [
@@ -128,6 +156,21 @@ const NETWORK: [string, RegExp][] = [
 function networkCalls(src: string): string[] {
   const s = stripComments(src);
   return NETWORK.filter(([, re]) => re.test(s)).map(([n]) => n);
+}
+/** `fetch(` is allowed ONLY in src/data/http-*.ts(x); every other network primitive is forbidden everywhere, http-* files included. */
+const isHttpDataFile = (relPath: string) => /^data\/http-[^/]+\.(ts|tsx)$/.test(relPath);
+function networkViolations(src: string, relPath: string): string[] {
+  return networkCalls(src).filter((n) => !(n === 'fetch(' && isHttpDataFile(relPath)));
+}
+
+/** scripts/build-cap.mjs must move src/app/api and src/server aside for the static export and put them back in a finally. */
+function capStashProblems(src: string): string[] {
+  const s = stripComments(src);
+  const out: string[] = [];
+  if (!/['"]src['"]\s*,\s*['"]app['"]\s*,\s*['"]api['"]/.test(s)) out.push('src/app/api is not stashed');
+  if (!/['"]src['"]\s*,\s*['"]server['"]/.test(s)) out.push('src/server is not stashed');
+  if (!/finally\s*\{[\s\S]*restore\s*\(/.test(s)) out.push('the stash is not restored in a finally');
+  return out;
 }
 
 function hasUseServer(src: string): boolean {
@@ -196,27 +239,68 @@ describe('detector self-tests (a detector that returns [] must fail here)', () =
     expect(routesFrom(['page.tsx', 'menu/page.tsx', '(g)/cart/page.tsx', 'layout.tsx', 'menu/loading.tsx'])).toEqual(['/', '/cart', '/menu']);
     expect(routesFrom(['page.tsx', 'admin/page.tsx'])).toContain('/admin');
   });
-  it('structureViolations flags dynamic segment, api dir, route handler', () => {
+  it('structureViolations flags dynamic segment, api dir and route handler OUTSIDE app/api/lobby; allows them inside', () => {
     expect(structureViolations(['app/menu/[id]/page.tsx'])).toHaveLength(1);
     expect(structureViolations(['app/api/orders/x.ts'])).toHaveLength(1);
     expect(structureViolations(['app/anything/route.ts'])).toHaveLength(1);
+    expect(structureViolations(['app/api/health/route.ts']).length).toBeGreaterThanOrEqual(1);
+    expect(structureViolations(['app/api/lobby/[id]/route.ts']).some((v) => v.includes('dynamic segment'))).toBe(true);
     expect(structureViolations(['app/menu/page.tsx', 'data/types.ts'])).toEqual([]);
+    expect(structureViolations(['app/api/lobby/check-in/route.ts', 'app/api/lobby/me/route.ts', 'app/api/lobby/cancel/route.ts'])).toEqual([]);
   });
-  it('forbiddenImports flags firebase, firebase-admin, @shareat db/domain/auth, @capacitor, static and dynamic', () => {
+  it('isServerZone: src/server/** and src/app/api/lobby/** are server; everything else is client', () => {
+    expect(isServerZone('server/lobby/cookie.ts')).toBe(true);
+    expect(isServerZone('app/api/lobby/me/route.ts')).toBe(true);
+    for (const c of ['data/http-lobby-data.ts', 'app/lobby/page.tsx', 'lib/ids.ts', 'components/ui.tsx', 'serverish/x.ts', 'app/api/other/route.ts']) {
+      expect(isServerZone(c), c).toBe(false);
+    }
+  });
+  it('forbiddenImports (client zone) flags firebase, firebase-admin, @shareat db/domain/auth, @capacitor and the server zone, static and dynamic', () => {
     for (const bad of [
       `import { x } from 'firebase/app';`,
       `import a from "firebase-admin";`,
       `import { d } from '@shareat/db';`,
-      `import { d } from '@shareat/domain/orders';`,
+      `import { d } from '@shareat/domain/lobby/checkin';`,
       `import { a } from '@shareat/auth';`,
       `import { Capacitor } from '@capacitor/core';`,
       `const m = await import('firebase/firestore');`,
       `import '@capacitor/android';`,
+      `import { c } from '@/server/lobby/cookie';`,
+      `import { c } from '../server/lobby/cookie';`,
+      `import { r } from '@/app/api/lobby/me/route';`,
+      `import 'server-only';`,
     ]) {
-      expect(forbiddenImports(bad), bad).toHaveLength(1);
+      expect(forbiddenImports(bad, 'data/http-lobby-data.ts'), bad).toHaveLength(1);
     }
-    expect(forbiddenImports(`import { money } from '@shareat/core/money'; import React from 'react';`)).toEqual([]);
-    expect(forbiddenImports(`// import x from 'firebase/app'`)).toEqual([]);
+    expect(forbiddenImports(`import { money } from '@shareat/core/money'; import React from 'react'; import { next } from 'next/server';`, 'components/x.tsx')).toEqual([]);
+    expect(forbiddenImports(`// import x from 'firebase/app'`, 'components/x.tsx')).toEqual([]);
+  });
+  it('forbiddenImports (server zone) ALLOWS @shareat/db, @shareat/domain, @shareat/core and server-only, and still flags firebase, @capacitor, @shareat/auth and raw packages/ paths', () => {
+    for (const rp of ['server/lobby/glue.ts', 'app/api/lobby/me/route.ts']) {
+      const ok = `import { withOrgPrincipal } from '@shareat/db'; import { checkIn } from '@shareat/domain/lobby/checkin'; import { logger } from '@shareat/core/logger'; import 'server-only'; import { h } from '@/server/lobby/http';`;
+      expect(forbiddenImports(ok, rp), rp).toEqual([]);
+      for (const bad of [
+        `import { x } from 'firebase-admin/firestore';`,
+        `import { x } from '@firebase/app';`,
+        `import { C } from '@capacitor/core';`,
+        `import { a } from '@shareat/auth';`,
+        `import { d } from '../../../../packages/db/src/index';`,
+        `const m = await import('firebase/app');`,
+      ]) {
+        expect(forbiddenImports(bad, rp), `${rp}: ${bad}`).toHaveLength(1);
+      }
+    }
+  });
+  it('networkViolations: fetch( is allowed ONLY in src/data/http-*; every other primitive is forbidden everywhere', () => {
+    const f = `const r = await fetch('/api/lobby/me');`;
+    expect(networkViolations(f, 'data/http-lobby-data.ts')).toEqual([]);
+    expect(networkViolations(f, 'data/http-extra.tsx')).toEqual([]);
+    for (const bad of ['components/ui.tsx', 'app/lobby/page.tsx', 'server/lobby/glue.ts', 'app/api/lobby/me/route.ts', 'data/fixture-data.ts', 'lib/http-x.ts', 'data/xhttp-a.ts', 'data/http/x.ts', 'data/http-lobby-data.mjs']) {
+      expect(networkViolations(f, bad), bad).toEqual(['fetch(']);
+    }
+    expect(networkViolations(`new XMLHttpRequest()`, 'data/http-lobby-data.ts')).toEqual(['XMLHttpRequest']);
+    expect(networkViolations(`new WebSocket('wss://x'); new EventSource('/s'); navigator.sendBeacon('/b'); CapacitorHttp.get({})`, 'data/http-lobby-data.ts')).toEqual(['WebSocket', 'EventSource', 'sendBeacon', 'CapacitorHttp']);
+    expect(networkViolations(`// fetch(\nconst a = 1;`, 'components/ui.tsx')).toEqual([]);
   });
   it('networkCalls flags fetch(, XMLHttpRequest, WebSocket, EventSource, sendBeacon, CapacitorHttp', () => {
     for (const [name, bad] of [
@@ -230,6 +314,14 @@ describe('detector self-tests (a detector that returns [] must fail here)', () =
       expect(networkCalls(bad)).toEqual([name]);
     }
     expect(networkCalls(`// we never fetch(\nconst a = 1;`)).toEqual([]);
+  });
+  it('capStashProblems: the build-cap script must stash src/app/api and src/server and restore in a finally', () => {
+    const good = `const targets = [ { from: join(root, 'src', 'app', 'api'), to: a }, { from: join(root, 'src', 'server'), to: b } ];\ntry { stash(); } finally { restore(); }`;
+    expect(capStashProblems(good)).toEqual([]);
+    expect(capStashProblems(good.replace(`'src', 'app', 'api'`, `'src', 'app', 'apx'`))).toEqual(['src/app/api is not stashed']);
+    expect(capStashProblems(good.replace(`'src', 'server'`, `'src', 'srvr'`))).toEqual(['src/server is not stashed']);
+    expect(capStashProblems(good.replace('finally { restore(); }', 'catch (e) {} restore();'))).toEqual(['the stash is not restored in a finally']);
+    expect(capStashProblems(`spawnSync('npx', ['next', 'build'])`)).toHaveLength(3);
   });
   it('hasUseServer flags the directive', () => {
     expect(hasUseServer(`'use server';\nexport async function a() {}`)).toBe(true);
@@ -285,23 +377,47 @@ describe('skeleton guards on apps/customer', () => {
     expect(files.length).toBeGreaterThan(0);
   });
 
-  it('route set is exactly the 8 spec routes', () => {
+  it('route set is exactly the 8 spec routes plus the 3 T-455 S4 lobby screens', () => {
     const pages = walk(join(SRC, 'app')).map((f) => rel(join(SRC, 'app'), f));
     expect(routesFrom(pages)).toEqual([...EXPECTED_ROUTES].sort());
   });
 
-  it('no dynamic segments, no api dir, no route.ts', () => {
+  it('no dynamic segments; api dirs and route handlers only under app/api/lobby', () => {
     expect(structureViolations(walk(SRC).map((f) => rel(SRC, f)))).toEqual([]);
   });
 
-  it('no forbidden imports (firebase, @shareat/db|domain|auth, @capacitor)', () => {
-    const v = files.flatMap((f) => forbiddenImports(read(f)).map((s) => `${rel(SRC, f)}: ${s}`));
+  it('the server half exists (not vacuous): src/server has source, and app/api/lobby has check-in, me, cancel and store route handlers [T-455 S3/S4]', () => {
+    const server = walk(join(SRC, 'server')).filter((f) => SOURCE_RE.test(f));
+    expect(server.length, 'src/server/** must hold the cookie, hash and glue code').toBeGreaterThan(0);
+    const lobbyApi = join(SRC, 'app', 'api', 'lobby');
+    const routes = walk(lobbyApi).map((f) => rel(lobbyApi, f)).sort();
+    for (const r of ['cancel/route.ts', 'check-in/route.ts', 'me/route.ts', 'store/route.ts']) expect(routes, r).toContain(r);
+    expect(routes.filter((r) => !/(^|\/)route\.ts$/.test(r)), 'only route.ts files live under app/api/lobby').toEqual([]);
+  });
+
+  it('no forbidden imports: client code has no firebase, @shareat/db|domain|auth, @capacitor or server-zone import; server code may import @shareat/db|domain but never firebase/capacitor/auth', () => {
+    const v = files.flatMap((f) => forbiddenImports(read(f), rel(SRC, f)).map((s) => `${rel(SRC, f)}: ${s}`));
     expect(v).toEqual([]);
   });
 
-  it('no network calls', () => {
-    const v = files.flatMap((f) => networkCalls(read(f)).map((n) => `${rel(SRC, f)}: ${n}`));
+  it('the server zone and the client zone are both non-empty (the zone split is not vacuous)', () => {
+    const rels = files.map((f) => rel(SRC, f));
+    expect(rels.filter(isServerZone).length).toBeGreaterThan(0);
+    expect(rels.filter((r) => !isServerZone(r)).length).toBeGreaterThan(0);
+  });
+
+  it('fetch( appears only in src/data/http-*; no other network primitive anywhere; the http data module exists and really uses fetch', () => {
+    const v = files.flatMap((f) => networkViolations(read(f), rel(SRC, f)).map((n) => `${rel(SRC, f)}: ${n}`));
     expect(v).toEqual([]);
+    const httpFiles = files.filter((f) => isHttpDataFile(rel(SRC, f)));
+    expect(httpFiles.map((f) => rel(SRC, f)), 'src/data/http-lobby-data.ts must exist').toContain('data/http-lobby-data.ts');
+    expect(httpFiles.some((f) => networkCalls(read(f)).includes('fetch(')), 'the allowed zone is not empty: the lobby data module calls fetch').toBe(true);
+  });
+
+  it('scripts/build-cap.mjs stashes src/app/api and src/server for the static export and restores them in a finally', () => {
+    const p = join(APP, 'scripts', 'build-cap.mjs');
+    expect(existsSync(p)).toBe(true);
+    expect(capStashProblems(read(p))).toEqual([]);
   });
 
   it("no 'use server'", () => {

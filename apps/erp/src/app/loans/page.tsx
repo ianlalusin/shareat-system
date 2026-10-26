@@ -7,7 +7,7 @@ import { METHOD_LABEL, listRegister, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Button, FlashBanner, Input, LinkRow, RowLink, Select , FormGrid, FormSection, type FieldProps } from '@/components/ui';
+import { Badge, Button, FlashBanner, Input, LinkRow, RowLink, Select, FormModal, FormGrid, FormSection, type FieldProps } from '@/components/ui';
 
 export const metadata = { title: 'Loans — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -35,12 +35,130 @@ export default async function LoansPage({
 
   return (
     <Page density="table">
-      <div>
-        <h1 className="text-2xl font-semibold">Loans</h1>
-        <PageDescription>
-          What the business has borrowed, what it has repaid, and what is left. Every figure here is
-          summed from the ledger — <strong>there is no stored balance to go stale</strong>.
-        </PageDescription>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-semibold">Loans</h1>
+          <PageDescription>
+            What the business has borrowed, what it has repaid, and what is left. Every figure here is
+            summed from the ledger — <strong>there is no stored balance to go stale</strong>.
+          </PageDescription>
+        </div>
+        <FormModal trigger="+ Record loan" title="Record a loan" size="lg"
+          description="This records the agreement. No money moves until it is drawn: a signed loan that has not been drawn is a commitment, not a debt.">
+            <CheckedForm rules={LOAN_ADD_RULES} action={createLoanAction} className="space-y-4">
+              <>
+                <FormSection title="Loan and lender">
+                  <FormGrid layout="fields">
+                    <div className="min-w-0 erp-field-name">
+                      <Field rule={LOAN_ADD_RULES.name} label="What it is called">
+                        <Input {...nativeAttrs(LOAN_ADD_RULES.name)}    placeholder="Grab cash advance" className="w-full" />
+                      </Field>
+                    </div>
+                    <div className="min-w-0 erp-field-name">
+                      <Field rule={LOAN_ADD_RULES.lenderName} label="Lender">
+                        <Input {...nativeAttrs(LOAN_ADD_RULES.lenderName)}    placeholder="Grab" className="w-full" />
+                      </Field>
+                    </div>
+                    <div className="min-w-0">
+                      <Field rule={LOAN_ADD_RULES.storeId} label="Store">
+                        <Select {...nativeAttrs(LOAN_ADD_RULES.storeId)}   defaultValue="" className="w-full">
+                          <option value="">Choose a store…</option>
+                          {stores.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name} ({s.code})
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                    </div>
+                    <div className="min-w-0">
+                      <Field rule={LOAN_ADD_RULES.principalAmount} label="Amount agreed">
+                        <input {...nativeAttrs(LOAN_ADD_RULES.principalAmount)}
+
+
+
+                          placeholder="0.00"
+                          className={INPUT}
+                        />
+                      </Field>
+                    </div>
+                  </FormGrid>
+                </FormSection>
+                <FormSection title="Interest">
+                  <FormGrid layout="fields">
+                    <div className="min-w-0">
+                      <Field rule={LOAN_ADD_RULES.interestRate} label="Interest rate (%)">
+                        <input {...nativeAttrs(LOAN_ADD_RULES.interestRate)} inputMode="decimal"
+
+
+
+                          className={INPUT}
+                        />
+                      </Field>
+                    </div>
+                    {/* ⛔ No default, deliberately. In v1 an absent rate period meant ANNUAL on old rows and
+                    MONTHLY on new ones, with nothing on the row to tell them apart — so the same "2"
+                    described two very different debts. */}
+                    <div className="min-w-0 erp-field-code">
+                      <Field rule={LOAN_ADD_RULES.ratePeriod} label="…per" hint="A month is 30 days and a year is 365. Say which.">
+                        <Select {...nativeAttrs(LOAN_ADD_RULES.ratePeriod)}   defaultValue="" className="w-full">
+                          <option value="">Choose…</option>
+                          {RATE_PERIODS.map((p) => (
+                            <option key={p} value={p}>
+                              {p}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                    </div>
+                    <div className="min-w-0">
+                      <Field label="How interest is charged">
+                        <Select name="interestMethod" defaultValue="straight" className="w-full">
+                          {INTEREST_METHODS.map((m) => (
+                            <option key={m} value={m}>
+                              {METHOD_LABEL[m] ?? m}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                    </div>
+                  </FormGrid>
+                </FormSection>
+                <FormSection title="Repayment schedule">
+                  <FormGrid layout="fields">
+                    <div className="min-w-0 erp-field-code">
+                      <Field label="Repaid">
+                        <Select name="paymentFrequency" defaultValue="monthly" className="w-full">
+                          {PAYMENT_FREQUENCIES.map((f) => (
+                            <option key={f} value={f}>
+                              {f}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                    </div>
+                    <div className="min-w-0 erp-field-short">
+                      <Field rule={LOAN_ADD_RULES.termPeriods} label="Number of payments">
+                        <input {...nativeAttrs(LOAN_ADD_RULES.termPeriods)}    defaultValue={12} className={INPUT} />
+                      </Field>
+                    </div>
+                    <div className="min-w-0 erp-field-date">
+                      <Field rule={LOAN_ADD_RULES.startDate} label="Starts">
+                        <Input {...nativeAttrs(LOAN_ADD_RULES.startDate)}  type="date"  defaultValue={today()} className="w-full" />
+                      </Field>
+                    </div>
+                  </FormGrid>
+                </FormSection>
+              </>
+              <Field label="Notes">
+                <Input name="notes" className="w-full" />
+              </Field>
+
+              <Button type="submit" variant="primary">
+                Record loan
+              </Button>
+            </CheckedForm>
+        </FormModal>
       </div>
 
       <FlashBanner flash={sp} />
@@ -108,131 +226,6 @@ export default async function LoansPage({
       ) : (
         <p className="text-sm text-neutral-500 dark:text-neutral-400">No loans recorded.</p>
       )}
-
-      {/* ── Record one ───────────────────────────────────────────────────────────────── */}
-      <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <div>
-          <h2 className="font-medium">Record a loan</h2>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            This records the <strong>agreement</strong>. ⚠️ No money moves until it is drawn — a
-            signed loan that has not been drawn is a commitment, not a debt.
-          </p>
-        </div>
-
-        <CheckedForm rules={LOAN_ADD_RULES} action={createLoanAction} className="space-y-4">
-          <>
-            <FormSection title="Loan and lender">
-              <FormGrid layout="fields">
-                <div className="min-w-0 erp-field-name">
-                  <Field rule={LOAN_ADD_RULES.name} label="What it is called">
-                    <Input {...nativeAttrs(LOAN_ADD_RULES.name)}    placeholder="Grab cash advance" className="w-full" />
-                  </Field>
-                </div>
-                <div className="min-w-0 erp-field-name">
-                  <Field rule={LOAN_ADD_RULES.lenderName} label="Lender">
-                    <Input {...nativeAttrs(LOAN_ADD_RULES.lenderName)}    placeholder="Grab" className="w-full" />
-                  </Field>
-                </div>
-                <div className="min-w-0">
-                  <Field rule={LOAN_ADD_RULES.storeId} label="Store">
-                    <Select {...nativeAttrs(LOAN_ADD_RULES.storeId)}   defaultValue="" className="w-full">
-                      <option value="">Choose a store…</option>
-                      {stores.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} ({s.code})
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                </div>
-                <div className="min-w-0">
-                  <Field rule={LOAN_ADD_RULES.principalAmount} label="Amount agreed">
-                    <input {...nativeAttrs(LOAN_ADD_RULES.principalAmount)}
-
-
-
-                      placeholder="0.00"
-                      className={INPUT}
-                    />
-                  </Field>
-                </div>
-              </FormGrid>
-            </FormSection>
-            <FormSection title="Interest">
-              <FormGrid layout="fields">
-                <div className="min-w-0">
-                  <Field rule={LOAN_ADD_RULES.interestRate} label="Interest rate (%)">
-                    <input {...nativeAttrs(LOAN_ADD_RULES.interestRate)} inputMode="decimal"
-
-
-
-                      className={INPUT}
-                    />
-                  </Field>
-                </div>
-                {/* ⛔ No default, deliberately. In v1 an absent rate period meant ANNUAL on old rows and
-                MONTHLY on new ones, with nothing on the row to tell them apart — so the same "2"
-                described two very different debts. */}
-                <div className="min-w-0 erp-field-code">
-                  <Field rule={LOAN_ADD_RULES.ratePeriod} label="…per" hint="A month is 30 days and a year is 365. Say which.">
-                    <Select {...nativeAttrs(LOAN_ADD_RULES.ratePeriod)}   defaultValue="" className="w-full">
-                      <option value="">Choose…</option>
-                      {RATE_PERIODS.map((p) => (
-                        <option key={p} value={p}>
-                          {p}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                </div>
-                <div className="min-w-0">
-                  <Field label="How interest is charged">
-                    <Select name="interestMethod" defaultValue="straight" className="w-full">
-                      {INTEREST_METHODS.map((m) => (
-                        <option key={m} value={m}>
-                          {METHOD_LABEL[m] ?? m}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                </div>
-              </FormGrid>
-            </FormSection>
-            <FormSection title="Repayment schedule">
-              <FormGrid layout="fields">
-                <div className="min-w-0 erp-field-code">
-                  <Field label="Repaid">
-                    <Select name="paymentFrequency" defaultValue="monthly" className="w-full">
-                      {PAYMENT_FREQUENCIES.map((f) => (
-                        <option key={f} value={f}>
-                          {f}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                </div>
-                <div className="min-w-0 erp-field-short">
-                  <Field rule={LOAN_ADD_RULES.termPeriods} label="Number of payments">
-                    <input {...nativeAttrs(LOAN_ADD_RULES.termPeriods)}    defaultValue={12} className={INPUT} />
-                  </Field>
-                </div>
-                <div className="min-w-0 erp-field-date">
-                  <Field rule={LOAN_ADD_RULES.startDate} label="Starts">
-                    <Input {...nativeAttrs(LOAN_ADD_RULES.startDate)}  type="date"  defaultValue={today()} className="w-full" />
-                  </Field>
-                </div>
-              </FormGrid>
-            </FormSection>
-          </>
-          <Field label="Notes">
-            <Input name="notes" className="w-full" />
-          </Field>
-
-          <Button type="submit" variant="primary">
-            Record loan
-          </Button>
-        </CheckedForm>
-      </section>
     </Page>
   );
 }

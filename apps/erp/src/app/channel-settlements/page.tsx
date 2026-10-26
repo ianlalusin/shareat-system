@@ -27,7 +27,7 @@ import { typedFor } from '@/lib/keep-typing';
 import { PAYOUT_DESTINATION_EDIT } from './typed-forms';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { CHANNEL_PAYOUT_DESTINATION_RULES, CHANNEL_SETTLEMENT_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Button, ConfirmDestructive, Field, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Button, ConfirmDestructive, Field, FlashBanner, Input, LinkRow, RowLink, Select, FormModal } from '@/components/ui';
 
 export const metadata = { title: 'Channel settlements — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -381,18 +381,14 @@ export default async function ChannelSettlementsPage({
       </section>
 
       {/* ── Record one ───────────────────────────────────────────────────────────────── */}
-      <section
-        id="record"
-        className="space-y-4 scroll-mt-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
-      >
-        <div>
-          <h2 className="font-medium">Record a settlement</h2>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            One payout, one channel, one verified day. A payout covering several days is one
-            settlement per day sharing a reference — which is what keeps each day&apos;s receivable
-            checkable on its own.
-          </p>
-        </div>
+      <div id="record" className="flex scroll-mt-4 justify-end">
+        <FormModal
+          trigger="+ Record settlement"
+          title="Record a settlement"
+          size="lg"
+          defaultOpen={sp.channel !== undefined || sp.day !== undefined}
+          description="One payout, one channel, one verified day. A payout covering several days is one settlement per day sharing a reference — which is what keeps each day's receivable checkable on its own."
+        >
         <SettlementForm
           previewAction={previewSettlementAction}
           channels={channels
@@ -418,7 +414,8 @@ export default async function ChannelSettlementsPage({
           preselectChannelId={sp.channel}
           preselectSalesDayId={sp.day}
         />
-      </section>
+        </FormModal>
+      </div>
 
       {/* ── History ──────────────────────────────────────────────────────────────────── */}
       {settlements.length > 0 && (

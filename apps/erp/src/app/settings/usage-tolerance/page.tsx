@@ -6,7 +6,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
 import { CheckedForm } from '@/components/forms';
-import { Button, Field, FlashBanner, Input, Select } from '@/components/ui';
+import { Button, Field, FlashBanner, FormModal, Input, Select } from '@/components/ui';
 import { SETTINGS_ITEM_TOLERANCE_RULES, SETTINGS_ORG_TOLERANCE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Usage tolerance — Shareat System' };
@@ -62,33 +62,41 @@ export default async function UsageToleranceSettingsPage({ searchParams }: { sea
       </section>
 
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="text-sm font-medium">One item&apos;s own tolerance</h2>
-        <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-          Leave the box empty to remove an item&apos;s own setting, so the organisation-wide one applies to it again.
-        </p>
-        <CheckedForm rules={SETTINGS_ITEM_TOLERANCE_RULES} action={setItemUsageToleranceAction} className="mt-3 flex flex-wrap items-end gap-3">
-          <label className="text-sm">
-            <span className="block text-neutral-600 dark:text-neutral-400">Item</span>
-            <Select name="itemId" defaultValue={view.items[0]?.id}>
-              {view.items.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.name} ({i.code}){i.override !== null ? ` - ${percentOf(i.override)}` : ''}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <Field label="Tolerance, as a fraction" rule={SETTINGS_ITEM_TOLERANCE_RULES.tolerance} className="text-sm">
-            <Input
-              {...nativeAttrs(SETTINGS_ITEM_TOLERANCE_RULES.tolerance)}
-              inputMode="decimal"
-              placeholder="0.05"
-              className="w-full sm:w-auto sm:min-w-48 sm:flex-1"
-            />
-          </Field>
-          <Button type="submit" variant="primary">
-            Save
-          </Button>
-        </CheckedForm>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-medium">One item&apos;s own tolerance</h2>
+          </div>
+          <FormModal
+            trigger="+ Set item tolerance"
+            title="Set an item's own tolerance"
+            description="Leave the box empty to remove an item's own setting, so the organisation-wide one applies to it again."
+            size="md"
+          >
+            <CheckedForm rules={SETTINGS_ITEM_TOLERANCE_RULES} action={setItemUsageToleranceAction} className="flex flex-wrap items-end gap-3">
+              <label className="text-sm">
+                <span className="block text-neutral-600 dark:text-neutral-400">Item</span>
+                <Select name="itemId" defaultValue={view.items[0]?.id}>
+                  {view.items.map((i) => (
+                    <option key={i.id} value={i.id}>
+                      {i.name} ({i.code}){i.override !== null ? ` - ${percentOf(i.override)}` : ''}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <Field label="Tolerance, as a fraction" rule={SETTINGS_ITEM_TOLERANCE_RULES.tolerance} className="text-sm">
+                <Input
+                  {...nativeAttrs(SETTINGS_ITEM_TOLERANCE_RULES.tolerance)}
+                  inputMode="decimal"
+                  placeholder="0.05"
+                  className="w-full sm:w-auto sm:min-w-48 sm:flex-1"
+                />
+              </Field>
+              <Button type="submit" variant="primary">
+                Save
+              </Button>
+            </CheckedForm>
+          </FormModal>
+        </div>
         {overridden.length > 0 && (
           <ul className="mt-3 space-y-1 text-sm text-neutral-700 dark:text-neutral-300">
             {overridden.map((i) => (

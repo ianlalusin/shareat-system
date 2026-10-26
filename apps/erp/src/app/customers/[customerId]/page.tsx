@@ -34,7 +34,7 @@ import {
 } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { withFlash } from '@/lib/flash';
-import { Badge, Button, ConfirmDestructive, FlashBanner, Input, LinkRow, RowAction, RowLink } from '@/components/ui';
+import { Badge, Button, ConfirmDestructive, FlashBanner, Input, LinkRow, RowAction, RowLink, FormModal } from '@/components/ui';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import {
   CHARGE_VOID_RULES,
@@ -236,16 +236,22 @@ export default async function CustomerDetailPage({
 
       {/* ------------------------------------------------------------------ Record a collection */}
       {openItems.length > 0 ? (
-        <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-          <h2 className="font-medium">Record a payment</h2>
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            ⛔ Name the charges this settles (bible §16.10 &mdash; a collection must never float
-            unallocated), or press &ldquo;Auto-allocate&rdquo; to fill the empty boxes
-            most-overdue-first (T-330) and edit from there. <strong>Total received is GROSS</strong>:
-            the receivable is relieved by it, and the account receives it minus the fee. Paying
-            more than allocated becomes real store credit, which the next payment can draw
-            on.
-          </p>
+        <div className="flex justify-end">
+          <FormModal
+            trigger="Record collection"
+            title="Record a payment"
+            size="lg"
+            description={
+              <>
+                ⛔ Name the charges this settles (bible §16.10 &mdash; a collection must never float
+                unallocated), or press &ldquo;Auto-allocate&rdquo; to fill the empty boxes
+                most-overdue-first (T-330) and edit from there. <strong>Total received is GROSS</strong>:
+                the receivable is relieved by it, and the account receives it minus the fee. Paying
+                more than allocated becomes real store credit, which the next payment can draw
+                on.
+              </>
+            }
+          >
           <AutoAllocateCollectionForm
             postAction={recordCollectionAction}
             previewAction={autoAllocateCollectionAction}
@@ -256,7 +262,8 @@ export default async function CustomerDetailPage({
             today={now}
             credit={credit}
           />
-        </section>
+          </FormModal>
+        </div>
       ) : (
         <p className="rounded-lg border border-neutral-200 p-4 text-sm text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
           Nothing outstanding — there is no open charge to collect against.

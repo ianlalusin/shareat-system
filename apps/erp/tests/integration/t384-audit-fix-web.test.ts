@@ -31,6 +31,10 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock('next/navigation', () => ({
+  // T-448 A3: FormModal/Dialog read the address.
+  usePathname: () => '/',
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push() {}, replace() {}, refresh() {}, back() {}, forward() {}, prefetch() {} }),
   redirect: (t: string) => {
     throw new Error(`NEXT_REDIRECT ${t}`);
   },

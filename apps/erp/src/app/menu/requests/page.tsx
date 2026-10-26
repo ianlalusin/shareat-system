@@ -6,7 +6,7 @@ import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Banner, Button, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Badge, Banner, Button, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { MENU_REQUEST_REJECT_RULES, MENU_REQUEST_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import {
@@ -84,9 +84,59 @@ export default async function MenuRequestsPage({ searchParams }: { searchParams:
             added twice. The head office adds the item or tells you why not.
           </PageDescription>
         </div>
-        <Link href="/menu" className="inline-flex min-h-6 items-center text-sm underline underline-offset-4">
-          Back to the menu
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/menu" className="inline-flex min-h-6 items-center text-sm underline underline-offset-4">
+            Back to the menu
+          </Link>
+          {stores.length > 0 && (
+            <FormModal
+              trigger="+ Request item"
+              title="Request an item"
+              size="md"
+              defaultOpen={typed?.kind === 'typed'}
+            >
+              <CheckedForm rules={MENU_REQUEST_RULES} action={submitItemRequestAction} className="space-y-3">
+              <FormGrid>
+                <Field label="For store" className="text-sm">
+                  <Select name="storeId" defaultValue={one('storeId') || stores[0]?.id} className="w-full">
+                    {stores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Name" className="text-sm" rule={MENU_REQUEST_RULES.name}>
+                  <Input {...nativeAttrs(MENU_REQUEST_RULES.name)} defaultValue={one('name')} className="w-full" />
+                </Field>
+                <Field label="Type" className="text-sm">
+                  <Select name="itemType" defaultValue={one('itemType') || 'a_la_carte'} className="w-full">
+                    <option value="a_la_carte">A la carte</option>
+                    <option value="package">Package</option>
+                    <option value="refill">Refill</option>
+                  </Select>
+                </Field>
+                <Field label="Category (a hint, optional)" className="text-sm">
+                  <Select name="categoryId" defaultValue={one('categoryId')} className="w-full">
+                    <option value="">-</option>
+                    {activeCategories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Note (optional)" span="wide" className="text-sm">
+                  <Input name="note" defaultValue={one('note')} className="w-full" />
+                </Field>
+              </FormGrid>
+              <Button type="submit" variant="primary" name={showAnyway ? 'confirmed' : undefined} value={showAnyway ? confirmTokenFor(one('name')) : undefined}>
+                {showAnyway ? 'Send request anyway' : 'Request item'}
+              </Button>
+              </CheckedForm>
+            </FormModal>
+          )}
+        </div>
       </div>
 
       <FlashBanner flash={sp} />
@@ -152,52 +202,12 @@ export default async function MenuRequestsPage({ searchParams }: { searchParams:
         </section>
       )}
 
-      <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
-        <h2 className="text-lg font-semibold">Request an item</h2>
-        {stores.length === 0 ? (
+      {stores.length === 0 && (
+        <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
+          <h2 className="text-lg font-semibold">Request an item</h2>
           <p className="text-sm text-muted">You are not assigned to any store, so you cannot send a request.</p>
-        ) : (
-          <CheckedForm rules={MENU_REQUEST_RULES} action={submitItemRequestAction} className="space-y-3">
-            <FormGrid>
-              <Field label="For store" className="text-sm">
-                <Select name="storeId" defaultValue={one('storeId') || stores[0]?.id} className="w-full">
-                  {stores.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Name" className="text-sm" rule={MENU_REQUEST_RULES.name}>
-                <Input {...nativeAttrs(MENU_REQUEST_RULES.name)} defaultValue={one('name')} className="w-full" />
-              </Field>
-              <Field label="Type" className="text-sm">
-                <Select name="itemType" defaultValue={one('itemType') || 'a_la_carte'} className="w-full">
-                  <option value="a_la_carte">A la carte</option>
-                  <option value="package">Package</option>
-                  <option value="refill">Refill</option>
-                </Select>
-              </Field>
-              <Field label="Category (a hint, optional)" className="text-sm">
-                <Select name="categoryId" defaultValue={one('categoryId')} className="w-full">
-                  <option value="">-</option>
-                  {activeCategories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Note (optional)" span="wide" className="text-sm">
-                <Input name="note" defaultValue={one('note')} className="w-full" />
-              </Field>
-            </FormGrid>
-            <Button type="submit" variant="primary" name={showAnyway ? 'confirmed' : undefined} value={showAnyway ? confirmTokenFor(one('name')) : undefined}>
-              {showAnyway ? 'Send request anyway' : 'Request item'}
-            </Button>
-          </CheckedForm>
-        )}
-      </section>
+        </section>
+      )}
 
       <section className="space-y-3 rounded-[14px] border border-surface-border p-4">
         <h2 className="text-lg font-semibold">Your requests</h2>

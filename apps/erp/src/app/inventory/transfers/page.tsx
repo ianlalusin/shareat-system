@@ -13,7 +13,7 @@ import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Button, ConfirmDestructive, Field, FlashBanner, Input, Select } from '@/components/ui';
+import { Badge, Button, ConfirmDestructive, Field, FlashBanner, FormModal, Input, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { INVENTORY_TRANSFER_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { withFlash } from '@/lib/flash';
@@ -123,14 +123,15 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
           This store needs at least two active rooms before a transfer means anything.
         </p>
       ) : (
-        <section className="mt-8 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-          <h2 className="text-sm font-medium">New transfer</h2>
-          <NewTransferForm
-            storeId={storeId}
-            locations={locations.map((l) => ({ id: l.id, label: l.name }))}
-            items={items}
-          />
-        </section>
+        <div className="mt-8 flex justify-end">
+          <FormModal trigger="+ New transfer" title="New transfer" size="lg">
+            <NewTransferForm
+              storeId={storeId}
+              locations={locations.map((l) => ({ id: l.id, label: l.name }))}
+              items={items}
+            />
+          </FormModal>
+        </div>
       )}
 
       <h2 className="mt-10 text-lg font-medium">In flight</h2>

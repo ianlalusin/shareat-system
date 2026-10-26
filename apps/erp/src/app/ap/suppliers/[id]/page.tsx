@@ -8,7 +8,7 @@ import { CLASSIFICATION_LABEL, VAT_STATUS_LABEL, maskAccountNumber } from '../..
 import { Page } from '@/components/shell/Page';
 import { EditableRecord, FieldCheck } from '@/components/forms';
 import { SUPPLIER_ADD_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
-import { Badge, FlashBanner, FormGrid, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Badge, FlashBanner, FormGrid, Input, LinkRow, RowLink, Select, FormModal } from '@/components/ui';
 import { AutoAllocatePaymentForm } from './AutoAllocatePaymentForm';
 import { withFlash } from '@/lib/flash';
 import { payableFloatsForStore } from '@/lib/money-lines/load';
@@ -288,14 +288,14 @@ export default async function SupplierDetailPage({
       </section>
 
       {openItems.length > 0 && (
-        <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-          <h2 className="font-medium">Record a payment</h2>
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Name the open items this settles (bible §16.10) — check the ones this payment covers
-            and how much of each, or press &ldquo;Auto-allocate&rdquo; to fill the empty boxes
-            most-overdue-first (T-330) and edit from there. Paying more than allocated routes the
-            rest to advances to suppliers.
-          </p>
+        <div className="flex justify-end">
+          <FormModal
+            trigger="Record payment"
+            title="Record a payment"
+            size="lg"
+            defaultOpen={Boolean(prefillBill)}
+            description="Name the open items this settles (bible §16.10) — check the ones this payment covers and how much of each, or press “Auto-allocate” to fill the empty boxes most-overdue-first (T-330) and edit from there. Paying more than allocated routes the rest to advances to suppliers."
+          >
           <AutoAllocatePaymentForm
             postAction={recordPaymentAction}
             previewAction={autoAllocatePaymentAction}
@@ -308,7 +308,8 @@ export default async function SupplierDetailPage({
             prefillBill={prefillBill}
             today={today()}
           />
-        </section>
+          </FormModal>
+        </div>
       )}
       {/* Ian 2026-10-14 (T-404): "manager can see invoices by supplier on supplier page". The list was
           already loaded here and never rendered. The whole row opens the invoice (T-258 technique). */}

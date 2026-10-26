@@ -7,7 +7,7 @@ import { listItems } from '../../../items/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input, Select } from '@/components/ui';
+import { Button, FlashBanner, Input, Select, FormModal } from '@/components/ui';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import { PRICE_SET_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 
@@ -88,15 +88,19 @@ export default async function PriceListPage({
         </p>
       )}
 
-      <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <div>
-          <h2 className="font-medium">Set a rate</h2>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            ⚠️ Re-quoting an item <strong>replaces</strong> its rate — a list holds one price per
-            item, not a history. ⭐ Items come from the item master now (T-145) — pick one rather
-            than typing a code, so the same product cannot exist under three spellings.
-          </p>
-        </div>
+      <div className="flex justify-end">
+        <FormModal
+          trigger="+ Set rate"
+          title="Set a rate"
+          size="md"
+          description={
+            <>
+              ⚠️ Re-quoting an item <strong>replaces</strong> its rate — a list holds one price per
+              item, not a history. ⭐ Items come from the item master now (T-145) — pick one rather
+              than typing a code, so the same product cannot exist under three spellings.
+            </>
+          }
+        >
         <CheckedForm rules={PRICE_SET_RULES} action={setPriceAction} className="space-y-3">
           <input type="hidden" name="priceListId" value={list.id} />
           <div className="grid gap-3 sm:grid-cols-2">
@@ -123,7 +127,8 @@ export default async function PriceListPage({
             Save
           </Button>
         </CheckedForm>
-      </section>
+        </FormModal>
+      </div>
     </Page>
   );
 }

@@ -26,7 +26,7 @@ import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { CUTOVER_ASSET_RULES, CUTOVER_FIGURE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
@@ -71,18 +71,80 @@ export default async function OpeningPage({
 
   return (
     <Page density="table">
-      <div>
-        <Link
-          href="/cutover"
-          className={`${ACTION_LINK} text-neutral-500 dark:text-neutral-400`}
-        >
-          ← Back to the conversion
-        </Link>
-        <h1 className="mt-1 text-2xl font-semibold">Opening balances</h1>
-        <PageDescription>
-          What the business owns and owes on the morning the new books open. Enter them over as
-          many days as it takes — nothing is final until you post at the end.
-        </PageDescription>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <Link
+            href="/cutover"
+            className={`${ACTION_LINK} text-neutral-500 dark:text-neutral-400`}
+          >
+            ← Back to the conversion
+          </Link>
+          <h1 className="mt-1 text-2xl font-semibold">Opening balances</h1>
+          <PageDescription>
+            What the business owns and owes on the morning the new books open. Enter them over as
+            many days as it takes — nothing is final until you post at the end.
+          </PageDescription>
+        </div>
+        <FormModal trigger="+ Add opening figure" title="Add an opening figure" size="md">
+        <CheckedForm rules={CUTOVER_FIGURE_RULES} action={addOpeningFigureAction} className="space-y-3">
+          <input type="hidden" name="entryDate" value={CONVERSION_DATE} />
+          <FormGrid>
+            <Field label="Account" rule={CUTOVER_FIGURE_RULES.accountCode}>
+              <Select {...nativeAttrs(CUTOVER_FIGURE_RULES.accountCode)} className="mt-1 w-full">
+                {accounts.map((a) => (
+                  <option key={a.code} value={a.code}>
+                    {a.code} — {a.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Store" rule={CUTOVER_FIGURE_RULES.storeId}>
+              <Select {...nativeAttrs(CUTOVER_FIGURE_RULES.storeId)} className="mt-1 w-full">
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Owns or owes" rule={CUTOVER_FIGURE_RULES.direction}>
+              <Select {...nativeAttrs(CUTOVER_FIGURE_RULES.direction)} className="mt-1 w-full">
+                {/* Plain words, because "debit" and "credit" are the thing people get backwards. */}
+                <option value="debit">We have this (asset)</option>
+                <option value="credit">We owe this (liability)</option>
+              </Select>
+            </Field>
+            <Field label="Amount" rule={CUTOVER_FIGURE_RULES.amount}>
+              <input
+                {...nativeAttrs(CUTOVER_FIGURE_RULES.amount)}
+                placeholder="0.00"
+                className="mt-1 w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm"
+              />
+            </Field>
+            <Field label="Party kind (suppliers and customers only)">
+              <select name="partyType" className={INPUT} defaultValue="">
+                <option value="">No party</option>
+                <option value="supplier">Supplier</option>
+                <option value="customer">Customer</option>
+              </select>
+            </Field>
+            <Field label="Party">
+              <select name="partyId" className={INPUT} defaultValue="">
+                <option value="">No party</option>
+                {parties.map((p) => (
+                  <option key={`${p.type}:${p.id}`} value={p.id}>
+                    {p.name} ({p.type})
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </FormGrid>
+          <Input type="text" name="memo" placeholder="What this is (optional)" className="w-full" />
+          <Button type="submit" variant="secondary" className="w-full sm:w-auto">
+            Save
+          </Button>
+        </CheckedForm>
+        </FormModal>
       </div>
 
       <FlashBanner flash={sp} />
@@ -145,69 +207,6 @@ export default async function OpeningPage({
           </p>
         </Banner>
       )}
-
-      {/* ── Add a figure ─────────────────────────────────────────────────────────────── */}
-      <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="text-sm font-medium">Add a figure</h2>
-        <CheckedForm rules={CUTOVER_FIGURE_RULES} action={addOpeningFigureAction} className="mt-3 space-y-3">
-          <input type="hidden" name="entryDate" value={CONVERSION_DATE} />
-          <FormGrid>
-            <Field label="Account" rule={CUTOVER_FIGURE_RULES.accountCode}>
-              <Select {...nativeAttrs(CUTOVER_FIGURE_RULES.accountCode)} className="mt-1 w-full">
-                {accounts.map((a) => (
-                  <option key={a.code} value={a.code}>
-                    {a.code} — {a.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Store" rule={CUTOVER_FIGURE_RULES.storeId}>
-              <Select {...nativeAttrs(CUTOVER_FIGURE_RULES.storeId)} className="mt-1 w-full">
-                {stores.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Owns or owes" rule={CUTOVER_FIGURE_RULES.direction}>
-              <Select {...nativeAttrs(CUTOVER_FIGURE_RULES.direction)} className="mt-1 w-full">
-                {/* Plain words, because "debit" and "credit" are the thing people get backwards. */}
-                <option value="debit">We have this (asset)</option>
-                <option value="credit">We owe this (liability)</option>
-              </Select>
-            </Field>
-            <Field label="Amount" rule={CUTOVER_FIGURE_RULES.amount}>
-              <input
-                {...nativeAttrs(CUTOVER_FIGURE_RULES.amount)}
-                placeholder="0.00"
-                className="mt-1 w-full rounded-[10px] border border-field-border bg-field px-3 py-2 min-h-11 text-sm"
-              />
-            </Field>
-            <Field label="Party kind (suppliers and customers only)">
-              <select name="partyType" className={INPUT} defaultValue="">
-                <option value="">No party</option>
-                <option value="supplier">Supplier</option>
-                <option value="customer">Customer</option>
-              </select>
-            </Field>
-            <Field label="Party">
-              <select name="partyId" className={INPUT} defaultValue="">
-                <option value="">No party</option>
-                {parties.map((p) => (
-                  <option key={`${p.type}:${p.id}`} value={p.id}>
-                    {p.name} ({p.type})
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </FormGrid>
-          <Input type="text" name="memo" placeholder="What this is (optional)" className="w-full" />
-          <Button type="submit" variant="secondary" className="w-full sm:w-auto">
-            Save
-          </Button>
-        </CheckedForm>
-      </section>
 
       {/* ── Value the count (R5) ─────────────────────────────────────────────────────── */}
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">

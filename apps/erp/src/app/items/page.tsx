@@ -28,9 +28,8 @@ import { arrangeFamilies } from './family';
 import { BASE_UNITS, ITEM_KINDS, ITEM_KIND_LABEL, itemKindLabel } from '@shareat/db';
 import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
-import { Banner, Button, Checkbox, FlashBanner, Input, LinkRow, RowLink, Select, FormGrid, FormSection, Field, SplitWorkspace } from '@/components/ui';
+import { Banner, Button, Checkbox, FlashBanner, Input, LinkRow, RowLink, Select, FormGrid, FormSection, Field, FormModal } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { DisclosureCard } from '@/components/ui/DisclosureCard';
 
 export const metadata = { title: 'Items — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -61,24 +60,19 @@ export default async function ItemsPage({
 
   return (
     <Page density="table">
-      <div>
-        <h1 className="text-2xl font-semibold">Items</h1>
-        <PageDescription>
-          The shared item catalogue for every store. Request a new item here; a super-admin approves it. Open an item for its settings, suppliers and price history.
-        </PageDescription>
-      </div>
-
-      <FlashBanner flash={sp} />
-
-      <SplitWorkspace
-        balance="details"
-        formTitle="Request or add an item"
-        detailsTitle="Item catalogue"
-        form={<>
-      <DisclosureCard id="new-item" title="Request a new item" action="Add">
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          Choose the unit used to measure stock and compare prices. Boxes and packs use conversions on the invoice.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Items</h1>
+          <PageDescription>
+            The shared item catalogue for every store. Request a new item here; a super-admin approves it. Open an item for its settings, suppliers and price history.
+          </PageDescription>
+        </div>
+        <FormModal
+          trigger="+ Request item"
+          title="Request a new item"
+          description="Choose the unit used to measure stock and compare prices. Boxes and packs use conversions on the invoice."
+          size="lg"
+        >
             <CheckedForm rules={ITEMS_REQUEST_RULES} action={requestItemAction} className="erp-item-form space-y-3">
               <FormSection title="Identity">
                 <FormGrid layout="fields" className="erp-item-identity">
@@ -176,10 +170,12 @@ export default async function ItemsPage({
                 </Button>
               </div>
             </CheckedForm>
-      </DisclosureCard>
+        </FormModal>
+      </div>
 
-        </>}
-        details={<div className="min-w-0 space-y-4">
+      <FlashBanner flash={sp} />
+
+      <div className="min-w-0 space-y-4">
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold">Catalogue</h2>
@@ -432,8 +428,7 @@ export default async function ItemsPage({
               </div>
             </details>
           )}
-        </div>}
-      />
+      </div>
     </Page>
   );
 }

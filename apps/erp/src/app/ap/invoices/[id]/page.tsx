@@ -29,7 +29,7 @@ import {
 } from '@shareat/domain/field-rules';
 import { ACTION_LINK } from '@/components/action-link';
 import { PhotoThumb } from '@/components/upload/PhotoThumb';
-import { Badge, Button, ConfirmDestructive, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Badge, Button, ConfirmDestructive, FlashBanner, Input, LinkRow, RowLink, Select, FormModal } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
@@ -546,11 +546,13 @@ return (
       )}
 
       {canRecord && (
-        <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-          <h2 className="font-medium">Record an expense against this invoice</h2>
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Posts immediately — verification already was the approval (Ian, 2026-08-27).
-          </p>
+        <div className="flex justify-end">
+          <FormModal
+            trigger="+ Record expense"
+            title="Record an expense against this invoice"
+            size="lg"
+            description="Posts immediately — verification already was the approval (Ian, 2026-08-27)."
+          >
           <CheckedForm rules={INVOICE_EXPENSE_RULES} action={recordInvoiceExpenseAction} className="space-y-3">
             <input type="hidden" name="returnTo" value={`/ap/invoices/${invoice.id}`} />
             <input type="hidden" name="supplierId" value={invoice.supplierId} />
@@ -606,7 +608,8 @@ return (
               Record expense
             </Button>
           </CheckedForm>
-        </section>
+          </FormModal>
+        </div>
       )}
 
       {invoice.status !== 'voided' && (

@@ -39,7 +39,16 @@ describe('T-417 ERP CI is untouched (case 13)', () => {
   it('the verify job is byte-identical to 9c1704b. Mutant: any ERP job edit or reorder', () => {
     const block = jobBlock(ci(), 'verify');
     expect(block, 'verify job not found').toBeDefined();
-    expect(sha(block!.trimEnd())).toBe('2ffcc4ac79eb6ad768c12af9e61f7f33068baec2e2832b992efec2ba8fa13753');
+    // T-455 S3: the customer lobby's DB-backed tests run inside verify between `# >>> Customer lobby` and
+    // `# <<< Customer lobby` markers (same pattern as POS v2 in deploy.yml); with that block removed, verify is 9c1704b's.
+    const out: string[] = [];
+    let skip = false;
+    for (const line of block!.split('\n')) {
+      if (line.includes('# >>> Customer lobby')) { skip = true; continue; }
+      if (line.includes('# <<< Customer lobby')) { skip = false; continue; }
+      if (!skip) out.push(line);
+    }
+    expect(sha(out.join('\n').trimEnd())).toBe('2ffcc4ac79eb6ad768c12af9e61f7f33068baec2e2832b992efec2ba8fa13753');
   });
 
   it('the existing "Determine docs-only" step text is untouched', () => {

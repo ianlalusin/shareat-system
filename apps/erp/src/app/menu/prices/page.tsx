@@ -9,7 +9,7 @@ import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
-import { Badge, Banner, Button, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Badge, Banner, Button, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { MENU_OPTION_PRICE_RULES, MENU_PRICE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import {
@@ -221,6 +221,7 @@ function Panel({
       ))}
 
       {canPrice && (
+        <FormModal trigger="Set price" title={`Set price — ${CHANNEL_LABEL[channel]}`} size="md">
         <CheckedForm rules={MENU_PRICE_RULES} action={setPriceAction} className="space-y-3">
           {hidden}
           <FormGrid>
@@ -266,6 +267,7 @@ function Panel({
             Save
           </Button>
         </CheckedForm>
+        </FormModal>
       )}
 
       {canPrice && row && !row.withdrawn && (
