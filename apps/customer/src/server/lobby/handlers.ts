@@ -1,8 +1,8 @@
 import 'server-only';
 import { lobbyRepo, withOrgPrincipal } from '@shareat/db';
-import { cancelMyEntry, checkIn, getMyEntry, type CheckInLine } from '@shareat/domain';
+import { cancelMyEntry, checkIn, getMyEntry, LOBBY_POS_STALE_MINUTES, type CheckInLine } from '@shareat/domain';
 import { newCookieValue, readCookie, setCookieHeader } from './cookie';
-import { BodyTooLarge, fail, json, readJsonObject, SENTENCES } from './http';
+import { BodyTooLarge, fail, json, MAX_BODY_BYTES, readJsonObject, SENTENCES } from './http';
 import { logFault, logMissingIp, logReply } from './log';
 import { refusalReply } from './refusals';
 import { clientIp, hmacHex, isUuid, readConfig, type LobbyConfig } from './secrets';
@@ -15,7 +15,7 @@ import { clientIp, hmacHex, isUuid, readConfig, type LobbyConfig } from './secre
  * The diner is identified ONLY by the cookie. No input names a code or an entry id.
  */
 
-type Route = 'check-in' | 'me' | 'cancel';
+type Route = 'check-in' | 'me' | 'cancel' | 'store';
 const MAX_STORE_CODE = 64;
 
 const storeCodeOf = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 && v.length <= MAX_STORE_CODE ? v : null);
@@ -153,5 +153,36 @@ export async function handleCancel(req: Request): Promise<Response> {
 
     noteEntry(done.entryId);
     return json(200, { ok: true, entry: { entryId: done.entryId, status: done.status } });
+  });
+}
+
+/** The one reply for every store the diner cannot join: paused, switched off, POS unseen, no lobby row, unknown or missing code. Same keys as an open store. */
+const closedStore = (): Response =>
+  json(200, { ok: true, store: { storeName: '', partiesWaiting: 0, accepting: false }, error: SENTENCES.counter });
+
+/**
+ * GET /api/lobby/store?s=CODE - what the lobby screen shows before check-in: the store's name, how many parties are waiting, and whether the line
+ * is open. Public and read-only: no cookie, no ip, no hash secret, no person data and no money. A closed store and an unknown code look the same.
+ */
+export async function handleStore(req: Request): Promise<Response> {
+  return guarded('store', async () => {
+    const declared = Number(req.headers.get('content-length') ?? '0');
+    if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return fail(413, SENTENCES.tooLarge);
+
+    const orgId = (process.env.LOBBY_ORG_ID ?? '').trim();
+    const storeCode = storeCodeOf(new URL(req.url).searchParams.get('s'));
+    if (!isUuid(orgId) || !storeCode) return closedStore();
+
+    const view = await withOrgPrincipal(orgId, async (tx) => {
+      const storeId = await lobbyRepo.getStoreIdByCode(tx, orgId, storeCode);
+      if (!storeId) return null;
+      const sw = await lobbyRepo.getLobbyStore(tx, orgId, storeId, LOBBY_POS_STALE_MINUTES, false);
+      if (!sw || !sw.enabled || sw.paused || !sw.posFresh) return null;
+      const storeName = await lobbyRepo.getStoreName(tx, orgId, storeId);
+      if (storeName === undefined) return null;
+      return { storeName, partiesWaiting: await lobbyRepo.countLive(tx, orgId, storeId) };
+    });
+    if (!view) return closedStore();
+    return json(200, { ok: true, store: { storeName: view.storeName, partiesWaiting: view.partiesWaiting, accepting: true } });
   });
 }

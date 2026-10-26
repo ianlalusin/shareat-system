@@ -292,3 +292,12 @@ Domain, with Max-Age); hashes are HMAC-SHA256 hex keyed by `LOBBY_HASH_SECRET`; 
   connection). That is acceptable while the lobby is off; S9 must not switch the lobby on until the diner path runs on a
   dedicated lobby DB role (grants only on `lobby_*` + read on the menu tables), per the S1 audit note.
 - `LOBBY_HASH_SECRET` must be at least 32 characters, else 503 (a short key makes the low-entropy device/IP hashes guessable).
+
+## S4 notes (orchestrator, 2026-10-25)
+- S4 ships check-in, wait and cancel without the pre-order menu: the customer app's menu read needs a joined table
+  session, which a lobby diner does not have. **S4b (new):** a lobby menu read (`GET /api/lobby/menu?s=CODE`, read-only,
+  variant + option ids, no cost) and the package / flavour chips + à la carte on /lobby/check-in. Until S4b, the lobby
+  page says the menu is shown at the table.
+- `NEXT_PUBLIC_LOBBY_DEMO=1` makes the screens use the fixture (demo, no server). Never set it in production.
+- S4 audit (25 Oct): `GET /api/lobby/store` has no per-IP limit (public, read-only, 3-4 small queries). Accepted for now;
+  ⛔ before S9 add an nginx `limit_req` zone for `/api/lobby/` on order.shareat.net.

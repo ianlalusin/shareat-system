@@ -3,6 +3,7 @@
  * The diner is identified by an HttpOnly cookie the server sets; this layer never sees it, never sends a code or an entry id, and never
  * keeps the hand-off link past the screen that shows it. `base` is '' on the web (same origin); the APK passes the server origin.
  */
+import type { LobbyData, LobbyStoreView } from './lobby-data';
 
 export type LobbyStatus = 'waiting' | 'called' | 'seated' | 'cancelled' | 'removed' | 'expired';
 
@@ -81,4 +82,28 @@ export function lobbyCancel(storeCode: string, base = ''): Promise<LobbyResult<{
     { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ storeCode }) },
     (b) => b.entry as { entryId: string; status: 'cancelled' },
   );
+}
+
+/** T-455 S4: the store's public line status. A closed store answers 200 with accepting:false; that and any `error` both mean "not joinable". */
+function lobbyStore(storeCode: string, base = ''): Promise<LobbyResult<LobbyStoreView>> {
+  return call(base, `/api/lobby/store?s=${encodeURIComponent(storeCode)}`, { method: 'GET' }, (b) => {
+    const s = (b.store ?? {}) as { storeName?: unknown; partiesWaiting?: unknown; accepting?: unknown };
+    const open = s.accepting === true && typeof b.error !== 'string';
+    return {
+      storeCode,
+      storeName: typeof s.storeName === 'string' ? s.storeName : '',
+      partiesWaiting: typeof s.partiesWaiting === 'number' ? s.partiesWaiting : 0,
+      accepting: open,
+    };
+  });
+}
+
+/** The LobbyData the screens use against the real server. `base` is '' on the web; the APK passes the server origin. */
+export function createHttpLobbyData(base = ''): LobbyData {
+  return {
+    getStore: (storeCode) => lobbyStore(storeCode, base),
+    checkIn: (input) => lobbyCheckIn(input, base),
+    myEntry: (storeCode) => lobbyMyEntry(storeCode, base),
+    cancel: (storeCode) => lobbyCancel(storeCode, base),
+  };
 }
