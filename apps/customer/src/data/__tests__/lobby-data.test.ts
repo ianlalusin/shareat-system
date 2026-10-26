@@ -157,14 +157,14 @@ describe('http implementation (S3 routes)', () => {
     expect(JSON.parse(String(b[1].body)).clientRequestId).toBe(ID);
   });
 
-  it('DEF-782: a second 428 is the ordinary error state (status 428, the server sentence), after exactly two calls', async () => {
+  it('DEF-782: a second 428 (cookies blocked) is the ordinary error state: status 428 and the counter sentence, not the server sentence, after exactly two calls', async () => {
     // kills: an endless retry loop; swallowing the second refusal
     const f = vi.fn(async () => new Response(JSON.stringify({ ok: false, error: 'Please try again.', code: 'LOBBY_COOKIE_NEEDED' }), { status: 428, headers: { 'content-type': 'application/json' } }));
     vi.stubGlobal('fetch', f);
     const r = await createHttpLobbyData().checkIn({ storeCode: 'LIPA', displayName: 'Ana', partySize: 2, clientRequestId: ID });
     expect(f).toHaveBeenCalledTimes(2);
     expect(r.ok).toBe(false);
-    if (!r.ok) expect([r.status, r.error]).toEqual([428, 'Please try again.']);
+    if (!r.ok) expect([r.status, r.error]).toEqual([428, 'Please check in at the counter.']);
   });
 
   it('DEF-782: any other status is not retried (400, 409, 500, and a 428 WITHOUT the cookie-needed code)', async () => {

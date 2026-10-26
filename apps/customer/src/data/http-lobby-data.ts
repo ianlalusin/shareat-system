@@ -42,6 +42,8 @@ export interface LobbyMyEntry extends LobbyEntrySummary {
 /** `error` is always one plain sentence meant for the diner. `status` is the HTTP status (0 when the phone could not reach the server). */
 export type LobbyResult<T> = { ok: true; value: T } | { ok: false; status: number; error: string; code?: string };
 
+/** Same wording as the server's SENTENCES.counter. */
+const COUNTER = 'Please check in at the counter.';
 const OFFLINE = 'We could not reach the restaurant. Check your connection and try again.';
 
 async function call<T>(base: string, path: string, init: RequestInit, pick: (body: Record<string, unknown>) => T): Promise<LobbyResult<T>> {
@@ -74,7 +76,12 @@ export async function lobbyCheckIn(input: LobbyCheckInInput, base = ''): Promise
   const first = await send();
   // T-491 / DEF-782: the server writes nothing until the phone holds its cookie; its 428 hands the cookie out. Retry the SAME request (same
   // clientRequestId, same body) exactly once - the browser now carries the cookie. A second 428 is shown as the ordinary error.
-  if (!first.ok && first.status === 428 && first.code === 'LOBBY_COOKIE_NEEDED') return send();
+  if (!first.ok && first.status === 428 && first.code === 'LOBBY_COOKIE_NEEDED') {
+    const second = await send();
+    // Still 428: this phone refuses the cookie (an in-app webview). Say what every other refusal says - go to the counter.
+    if (!second.ok && second.status === 428 && second.code === 'LOBBY_COOKIE_NEEDED') return { ok: false, status: 428, error: COUNTER, code: second.code };
+    return second;
+  }
   return first;
 }
 
