@@ -313,6 +313,26 @@ export async function datesWithChecks(tx: Tx, orgId: string, storeId: string, fr
   }
 }
 
+/** The store's calendar dates in [from, to] whose day check is still `pending` (no day feed yet when it was last computed). */
+export async function pendingCheckDates(tx: Tx, orgId: string, storeId: string, from: string, to: string): Promise<Set<string>> {
+  try {
+    const rows = await tx
+      .select({ d: sql<string>`${posBridgeDayChecks.posCalendarDate}::text` })
+      .from(posBridgeDayChecks)
+      .where(
+        and(
+          eq(posBridgeDayChecks.orgId, orgId),
+          eq(posBridgeDayChecks.storeId, storeId),
+          eq(posBridgeDayChecks.result, 'pending'),
+          sql`${posBridgeDayChecks.posCalendarDate} >= ${from}::date and ${posBridgeDayChecks.posCalendarDate} <= ${to}::date`,
+        ),
+      );
+    return new Set(rows.map((r) => r.d));
+  } catch (e) {
+    return sanitise(e);
+  }
+}
+
 export interface MismatchRow {
   readonly storeId: string;
   readonly posCalendarDate: string;
