@@ -1,6 +1,6 @@
 # T-475: AP and expense forms check business rules live, admins may verify their own invoice, and the two forms link up
 
-**Status:** SPEC 2026-10-24 (Opus planner). Base: main `fb17323`.
+**Status:** 2026-10-25: S1, S2 LIVE (#62, #65); S3 in PR #69 (self-verify capability, migration 0217; only Ian gains it); S4 (linkage) next. Spec 2026-10-24 (Opus planner).
 **Ruling:** Ian, 2026-10-24, *"1A, 2A, 3 yes"*: (1A) business-rule errors show WHILE filling, Save off until fixed, the server
 keeps re-checking; (2A) a new org-level capability `verify_own_supplier_invoice`, admin and super-admin, flagged and audited,
 bypassing ONLY creator-is-not-verifier; (3 yes) expense-to-invoice linkage fixes. Follows row 293 / T-385 (`verify_own_sales_day`),

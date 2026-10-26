@@ -239,6 +239,14 @@ jobs:
           INTEGRATION_WORKERS: '2'
         run: npm run test:integration
 
+      # >>> Customer lobby
+      # T-455: the customer lobby server tests need real Postgres, so they run here (the app-customer job has no database).
+      # The tests set LOBBY_* and DATABASE_URL themselves; the job env supplies TEST_DATABASE_URL.
+      - name: Customer server integration tests (real Postgres)
+        if: needs.changes.outputs.docs_only != 'true'
+        run: npm run test:integration -w @shareat/customer
+
+      # <<< Customer lobby
       # PROJECT_BIBLE.md §2 rule 10 / §8 Rule 1:
       # the production droplet NEVER builds. Builds happen here, and only here.
       - name: Build
