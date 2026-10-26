@@ -19,6 +19,7 @@ import { refuse } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { LOAN_ADD_RULES, LOAN_DRAW_RULES, LOAN_PAYMENT_RULES } from '../field-rules/loans';
 import { postEntry } from '../ledger/post-entry';
+import { postEntryOnce, requireRequestId } from '../ledger/replay';
 import { authorizeOtherStores, withInterStoreLegs } from '../ledger/inter-store';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { accruedInterest, splitPayment, type PaymentSplit } from './interest';
@@ -116,7 +117,7 @@ export async function createLoan(
 export async function disburseLoan(
   tx: Tx,
   actor: Actor,
-  input: { loanId: string; amount: string; intoMoneyAccountId: string; on: string; memo?: string },
+  input: { requestId: string; loanId: string; amount: string; intoMoneyAccountId: string; on: string; memo?: string },
 ): Promise<{ entryId: string }> {
   const run = async (trx: Tx) => {
     const loan = await loansRepo.getById(trx, actor.orgId, input.loanId);
@@ -124,6 +125,7 @@ export async function disburseLoan(
     await authorize(trx, actor, 'record_ap_payment', { storeId: loan.storeId });
     // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
     assertFieldRules(LOAN_DRAW_RULES, { amount: input.amount, intoMoneyAccountId: input.intoMoneyAccountId, on: input.on });
+    const requestId = requireRequestId('disburseLoan', input.requestId);
 
     const amount = parseMoneyInput(input.amount, 'disburseLoan: the amount', 'The loan amount');
     if (compare(amount, ZERO) <= 0) {
@@ -167,12 +169,12 @@ export async function disburseLoan(
           partyType: 'loan' as const, partyId: loan.id },
       ],
     });
-    const result = await postEntry(trx, {
+    const result = await postEntryOnce(trx, {
       orgId: actor.orgId,
       entryDate: input.on,
       sourceType: 'loan_disbursement',
       sourceId: loan.id,
-      idempotencyKey: `loan:${loan.id}:disbursement:${input.on}:${amount}`,
+      idempotencyKey: `loan:${loan.id}:disbursement:${requestId}`,
       memo,
       postedBy: actor.personId,
       lines,

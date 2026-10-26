@@ -133,7 +133,7 @@ describe('the position is the ledger, and there is nowhere else to look', () => 
     const id = await liability(f);
 
     await asOrg(f.orgId, (tx) =>
-      chargeLiability(tx, f.manager, {
+      chargeLiability(tx, f.manager, { requestId: crypto.randomUUID(),
         liabilityId: id, amount: '45000.00', againstAccountCode: '6200', on: '2026-01-31',
       }),
     );
@@ -144,7 +144,7 @@ describe('the position is the ledger, and there is nowhere else to look', () => 
     });
 
     const result = await asOrg(f.orgId, (tx) =>
-      payLiability(tx, f.manager, {
+      payLiability(tx, f.manager, { requestId: crypto.randomUUID(),
         liabilityId: id, amount: '45000.00', fromMoneyAccountId: f.till, on: '2026-02-05',
       }),
     );
@@ -169,17 +169,17 @@ describe('the position is the ledger, and there is nowhere else to look', () => 
     const permit = await liability(f, { name: 'Permit fee' });
 
     await asOrg(f.orgId, (tx) =>
-      chargeLiability(tx, f.manager, {
+      chargeLiability(tx, f.manager, { requestId: crypto.randomUUID(),
         liabilityId: rent, amount: '45000.00', againstAccountCode: '6200', on: '2026-01-31',
       }),
     );
     await asOrg(f.orgId, (tx) =>
-      chargeLiability(tx, f.manager, {
+      chargeLiability(tx, f.manager, { requestId: crypto.randomUUID(),
         liabilityId: permit, amount: '3000.00', againstAccountCode: '6900', on: '2026-01-31',
       }),
     );
     await asOrg(f.orgId, (tx) =>
-      payLiability(tx, f.manager, {
+      payLiability(tx, f.manager, { requestId: crypto.randomUUID(),
         liabilityId: permit, amount: '3000.00', fromMoneyAccountId: f.till, on: '2026-02-02',
       }),
     );
@@ -193,7 +193,7 @@ describe('the position is the ledger, and there is nowhere else to look', () => 
     const f = await fixture('rev');
     const id = await liability(f);
     const { entryId } = await asOrg(f.orgId, (tx) =>
-      chargeLiability(tx, f.manager, {
+      chargeLiability(tx, f.manager, { requestId: crypto.randomUUID(),
         liabilityId: id, amount: '5000.00', againstAccountCode: '6200', on: '2026-01-10',
       }),
     );
@@ -222,7 +222,7 @@ describe('⛔ the boundary — obligations that already have a home', () => {
     // with nothing reconciling them. Blocking beats silently double-counting.
     await expect(
       asOrg(f.orgId, (tx) =>
-        chargeLiability(tx, f.manager, {
+        chargeLiability(tx, f.manager, { requestId: crypto.randomUUID(),
           liabilityId: id, amount: '1000.00', againstAccountCode: code, on: '2026-01-10',
         }),
       ),
@@ -236,7 +236,7 @@ describe('⛔ the boundary — obligations that already have a home', () => {
     // debit another moves a debt without settling it.
     await expect(
       asOrg(f.orgId, (tx) =>
-        chargeLiability(tx, f.manager, {
+        chargeLiability(tx, f.manager, { requestId: crypto.randomUUID(),
           liabilityId: id, amount: '1000.00', againstAccountCode: '2160', on: '2026-01-10',
         }),
       ),
@@ -248,7 +248,7 @@ describe('⛔ the boundary — obligations that already have a home', () => {
     const id = await liability(f);
     await expect(
       asOrg(f.orgId, (tx) =>
-        chargeLiability(tx, f.manager, {
+        chargeLiability(tx, f.manager, { requestId: crypto.randomUUID(),
           liabilityId: id, amount: '1000.00', againstAccountCode: '6000', on: '2026-01-10',
         }),
       ),
@@ -261,13 +261,13 @@ describe('the refusals', () => {
     const f = await fixture('over');
     const id = await liability(f);
     await asOrg(f.orgId, (tx) =>
-      chargeLiability(tx, f.manager, {
+      chargeLiability(tx, f.manager, { requestId: crypto.randomUUID(),
         liabilityId: id, amount: '5000.00', againstAccountCode: '6200', on: '2026-01-10',
       }),
     );
     await expect(
       asOrg(f.orgId, (tx) =>
-        payLiability(tx, f.manager, {
+        payLiability(tx, f.manager, { requestId: crypto.randomUUID(),
           liabilityId: id, amount: '6000.00', fromMoneyAccountId: f.till, on: '2026-01-20',
         }),
       ),
@@ -278,7 +278,7 @@ describe('the refusals', () => {
     const f = await fixture('retire');
     const id = await liability(f);
     await asOrg(f.orgId, (tx) =>
-      chargeLiability(tx, f.manager, {
+      chargeLiability(tx, f.manager, { requestId: crypto.randomUUID(),
         liabilityId: id, amount: '5000.00', againstAccountCode: '6200', on: '2026-01-10',
       }),
     );
@@ -299,7 +299,7 @@ describe('the refusals', () => {
     const f = await fixture('crossstore');
     const id = await liability(f);
     await asOrg(f.orgId, (tx) =>
-      chargeLiability(tx, f.manager, {
+      chargeLiability(tx, f.manager, { requestId: crypto.randomUUID(),
         liabilityId: id, amount: '5000.00', againstAccountCode: '6200', on: '2026-01-10',
       }),
     );
@@ -312,7 +312,7 @@ describe('the refusals', () => {
     `;
     await expect(
       asOrg(f.orgId, (tx) =>
-        payLiability(tx, f.manager, {
+        payLiability(tx, f.manager, { requestId: crypto.randomUUID(),
           liabilityId: id, amount: '1000.00', fromMoneyAccountId: farTill!.id, on: '2026-01-20',
         }),
       ),

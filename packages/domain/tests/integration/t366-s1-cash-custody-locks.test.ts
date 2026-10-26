@@ -470,7 +470,7 @@ async function liabilityFixture(hint: string) {
   });
 
   const { id: liabilityId } = await asOrg(orgId, (tx) => createLiability(tx, managerActor, { storeId, name: 'Accrued rent — January', category: 'accrued_expenses' }));
-  await asOrg(orgId, (tx) => chargeLiability(tx, managerActor, { liabilityId, amount: '1000.00', againstAccountCode: '6200', on: '2026-01-15' }));
+  await asOrg(orgId, (tx) => chargeLiability(tx, managerActor, { requestId: crypto.randomUUID(), liabilityId, amount: '1000.00', againstAccountCode: '6200', on: '2026-01-15' }));
 
   return { orgId, storeId, manager: managerActor, staff: actor(orgId, staff!.id), liabilityId, till: till!.id };
 }
@@ -479,7 +479,7 @@ type LiabilityFixture = Awaited<ReturnType<typeof liabilityFixture>>;
 const positionOf = (f: LiabilityFixture) => asOrg(f.orgId, (tx) => liabilitiesRepo.positionOf(tx, f.orgId, f.liabilityId));
 
 const payOp = (f: LiabilityFixture, amount: string) => (tx: Tx) =>
-  payLiability(tx, f.manager, { liabilityId: f.liabilityId, amount, fromMoneyAccountId: f.till, on: '2026-01-20' });
+  payLiability(tx, f.manager, { requestId: crypto.randomUUID(), liabilityId: f.liabilityId, amount, fromMoneyAccountId: f.till, on: '2026-01-20' });
 
 describe('T3 — payLiability: two payments cannot both pass one outstanding cap', () => {
   it('exactly one fulfils; outstanding is 300.00 or 400.00, never negative — Mutant: remove the lock -> outstanding -300.00, red', async () => {

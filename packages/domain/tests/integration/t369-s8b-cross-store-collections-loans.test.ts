@@ -212,7 +212,7 @@ async function newLoan(f: Fixture): Promise<string> {
   return loan.id;
 }
 const disburse = (f: Fixture, who: Actor, loanId: string, into: Account, amount = '50000.00') =>
-  asOrg(f.orgId, (tx) => disburseLoan(tx, who, { loanId, amount, intoMoneyAccountId: into.id, on: '2026-01-11' }));
+  asOrg(f.orgId, (tx) => disburseLoan(tx, who, { requestId: crypto.randomUUID(), loanId, amount, intoMoneyAccountId: into.id, on: '2026-01-11' }));
 const loanPay = (f: Fixture, who: Actor, loanId: string, from: Account, amount = '4800.00') =>
   asOrg(f.orgId, (tx) => recordLoanPayment(tx, who, { loanId, amount, fromMoneyAccountId: from.id, on: '2026-01-12' }));
 const loanOutstanding = (f: Fixture, loanId: string) => asOrg(f.orgId, async (tx) => (await loansRepo.positionOf(tx, f.orgId, loanId)).outstanding);

@@ -170,12 +170,12 @@ describe('the position is the ledger, and there is nowhere else to look', () => 
     const id = await owner(f);
 
     await asOrg(f.orgId, (tx) =>
-      recordContribution(tx, f.admin, {
+      recordContribution(tx, f.admin, { requestId: crypto.randomUUID(),
         ownerId: id, amount: '100000.00', intoMoneyAccountId: f.till, on: '2026-01-08',
       }),
     );
     await asOrg(f.orgId, (tx) =>
-      recordDrawing(tx, f.admin, {
+      recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(),
         ownerId: id, amount: '25000.00', fromMoneyAccountId: f.till, on: '2026-01-09',
       }),
     );
@@ -201,7 +201,7 @@ describe('the position is the ledger, and there is nowhere else to look', () => 
     const f = await fixture('rev');
     const id = await owner(f);
     const { entryId } = await asOrg(f.orgId, (tx) =>
-      recordDrawing(tx, f.admin, {
+      recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(),
         ownerId: id, amount: '5000.00', fromMoneyAccountId: f.till, on: '2026-01-10',
       }),
     );
@@ -219,13 +219,13 @@ describe('the position is the ledger, and there is nowhere else to look', () => 
     const ben = await owner(f, { personId: benId, role: 'Silent Partner' });
 
     await asOrg(f.orgId, (tx) =>
-      recordContribution(tx, f.admin, { ownerId: ana, amount: '500000.00', intoMoneyAccountId: f.till, on: '2026-01-08' }),
+      recordContribution(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: ana, amount: '500000.00', intoMoneyAccountId: f.till, on: '2026-01-08' }),
     );
     await asOrg(f.orgId, (tx) =>
-      recordContribution(tx, f.admin, { ownerId: ben, amount: '200000.00', intoMoneyAccountId: f.till, on: '2026-01-08' }),
+      recordContribution(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: ben, amount: '200000.00', intoMoneyAccountId: f.till, on: '2026-01-08' }),
     );
     await asOrg(f.orgId, (tx) =>
-      recordDrawing(tx, f.admin, { ownerId: ana, amount: '300000.00', fromMoneyAccountId: f.till, on: '2026-01-09' }),
+      recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: ana, amount: '300000.00', fromMoneyAccountId: f.till, on: '2026-01-09' }),
     );
 
     // ⛔ v1 nets drawings into capital, which makes these two indistinguishable at ₱200,000 each.
@@ -240,12 +240,12 @@ describe('⭐ the drawing limit — DEF-071', () => {
     const id = await owner(f, { drawingLimit: '50000.00', drawingLimitPeriod: 'monthly' });
 
     await asOrg(f.orgId, (tx) =>
-      recordDrawing(tx, f.admin, { ownerId: id, amount: '40000.00', fromMoneyAccountId: f.till, on: '2026-01-05' }),
+      recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '40000.00', fromMoneyAccountId: f.till, on: '2026-01-05' }),
     );
     // v1 sets this limit, DISPLAYS it back as a live constraint, and checks only `=== 'total'`.
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordDrawing(tx, f.admin, { ownerId: id, amount: '15000.00', fromMoneyAccountId: f.till, on: '2026-01-20' }),
+        recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '15000.00', fromMoneyAccountId: f.till, on: '2026-01-20' }),
       ),
     ).rejects.toThrow(/over the ₱50000.00 monthly limit/);
   });
@@ -254,10 +254,10 @@ describe('⭐ the drawing limit — DEF-071', () => {
     const f = await fixture('nextmonth');
     const id = await owner(f, { drawingLimit: '50000.00', drawingLimitPeriod: 'monthly' });
     await asOrg(f.orgId, (tx) =>
-      recordDrawing(tx, f.admin, { ownerId: id, amount: '50000.00', fromMoneyAccountId: f.till, on: '2026-01-05' }),
+      recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '50000.00', fromMoneyAccountId: f.till, on: '2026-01-05' }),
     );
     await asOrg(f.orgId, (tx) =>
-      recordDrawing(tx, f.admin, { ownerId: id, amount: '50000.00', fromMoneyAccountId: f.till, on: '2026-02-05' }),
+      recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '50000.00', fromMoneyAccountId: f.till, on: '2026-02-05' }),
     );
     expect((await positionOf(f, id)).drawn).toBe('100000.00');
   });
@@ -266,12 +266,12 @@ describe('⭐ the drawing limit — DEF-071', () => {
     const f = await fixture('backdate');
     const id = await owner(f, { drawingLimit: '50000.00', drawingLimitPeriod: 'monthly' });
     await asOrg(f.orgId, (tx) =>
-      recordDrawing(tx, f.admin, { ownerId: id, amount: '50000.00', fromMoneyAccountId: f.till, on: '2026-01-05' }),
+      recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '50000.00', fromMoneyAccountId: f.till, on: '2026-01-05' }),
     );
     // Measured against TODAY this would pass, because February is empty.
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordDrawing(tx, f.admin, { ownerId: id, amount: '1000.00', fromMoneyAccountId: f.till, on: '2026-01-31' }),
+        recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '1000.00', fromMoneyAccountId: f.till, on: '2026-01-31' }),
       ),
     ).rejects.toThrow(/over the ₱50000.00 monthly limit/);
   });
@@ -309,7 +309,7 @@ describe('⭐ the drawing limit — DEF-071', () => {
 
     // The whole ₱50,000 must still be available — the shortage is not a drawing.
     await asOrg(f.orgId, (tx) =>
-      recordDrawing(tx, f.admin, {
+      recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(),
         ownerId: id, amount: '50000.00', fromMoneyAccountId: f.till, on: '2026-01-10',
       }),
     );
@@ -320,11 +320,11 @@ describe('⭐ the drawing limit — DEF-071', () => {
     const f = await fixture('total');
     const id = await owner(f, { drawingLimit: '60000.00', drawingLimitPeriod: 'total' });
     await asOrg(f.orgId, (tx) =>
-      recordDrawing(tx, f.admin, { ownerId: id, amount: '50000.00', fromMoneyAccountId: f.till, on: '2026-01-05' }),
+      recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '50000.00', fromMoneyAccountId: f.till, on: '2026-01-05' }),
     );
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordDrawing(tx, f.admin, { ownerId: id, amount: '20000.00', fromMoneyAccountId: f.till, on: '2026-02-05' }),
+        recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '20000.00', fromMoneyAccountId: f.till, on: '2026-02-05' }),
       ),
     ).rejects.toThrow(/over the ₱60000.00 total limit/);
   });
@@ -341,7 +341,7 @@ describe('⭐ the monthly drawings close', () => {
     const f = await fixture('close');
     const id = await owner(f);
     await asOrg(f.orgId, (tx) =>
-      recordDrawing(tx, f.admin, { ownerId: id, amount: '12000.00', fromMoneyAccountId: f.till, on: '2026-01-10' }),
+      recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '12000.00', fromMoneyAccountId: f.till, on: '2026-01-10' }),
     );
 
     const preview = await asOrg(f.orgId, (tx) =>
@@ -359,7 +359,7 @@ describe('⭐ the monthly drawings close', () => {
     const f = await fixture('lock');
     const id = await owner(f);
     await asOrg(f.orgId, (tx) =>
-      recordDrawing(tx, f.admin, { ownerId: id, amount: '12000.00', fromMoneyAccountId: f.till, on: '2026-01-10' }),
+      recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '12000.00', fromMoneyAccountId: f.till, on: '2026-01-10' }),
     );
     await asOrg(f.orgId, (tx) =>
       closeDrawingMonth(tx, f.admin, { ownerId: id, month: '2026-01-01', on: '2026-02-01' }),
@@ -367,13 +367,13 @@ describe('⭐ the monthly drawings close', () => {
 
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordDrawing(tx, f.admin, { ownerId: id, amount: '5000.00', fromMoneyAccountId: f.till, on: '2026-01-15' }),
+        recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '5000.00', fromMoneyAccountId: f.till, on: '2026-01-15' }),
       ),
     ).rejects.toThrow(/2026-01 is closed for this owner/);
 
     // ⚠️ ...and the OPEN month is unaffected. A lock that stopped everything would just be an outage.
     await asOrg(f.orgId, (tx) =>
-      recordDrawing(tx, f.admin, { ownerId: id, amount: '5000.00', fromMoneyAccountId: f.till, on: '2026-02-03' }),
+      recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '5000.00', fromMoneyAccountId: f.till, on: '2026-02-03' }),
     );
     expect((await positionOf(f, id)).drawn).toBe('17000.00');
   });
@@ -382,7 +382,7 @@ describe('⭐ the monthly drawings close', () => {
     const f = await fixture('adjust');
     const id = await owner(f);
     await asOrg(f.orgId, (tx) =>
-      recordDrawing(tx, f.admin, { ownerId: id, amount: '12000.00', fromMoneyAccountId: f.till, on: '2026-01-10' }),
+      recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '12000.00', fromMoneyAccountId: f.till, on: '2026-01-10' }),
     );
 
     const result = await asOrg(f.orgId, (tx) =>
@@ -412,7 +412,7 @@ describe('⭐ the monthly drawings close', () => {
     const f = await fixture('noreason');
     const id = await owner(f);
     await asOrg(f.orgId, (tx) =>
-      recordDrawing(tx, f.admin, { ownerId: id, amount: '12000.00', fromMoneyAccountId: f.till, on: '2026-01-10' }),
+      recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '12000.00', fromMoneyAccountId: f.till, on: '2026-01-10' }),
     );
     await expect(
       asOrg(f.orgId, (tx) =>
@@ -456,7 +456,7 @@ describe('⭐ the monthly drawings close', () => {
     );
     // Ben has not signed off; blocking him would make the control something people route around.
     await asOrg(f.orgId, (tx) =>
-      recordDrawing(tx, f.admin, { ownerId: ben, amount: '1000.00', fromMoneyAccountId: f.till, on: '2026-01-15' }),
+      recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: ben, amount: '1000.00', fromMoneyAccountId: f.till, on: '2026-01-15' }),
     );
     expect((await positionOf(f, ben)).drawn).toBe('1000.00');
   });
@@ -470,7 +470,7 @@ describe('⭐ clearing a 1260 receivable', () => {
     expect((await positionOf(f, id)).receivable).toBe('2000.00');
 
     const result = await asOrg(f.orgId, (tx) =>
-      repayFromOwner(tx, f.admin, {
+      repayFromOwner(tx, f.admin, { requestId: crypto.randomUUID(),
         ownerId: id, amount: '2000.00', intoMoneyAccountId: f.till, on: '2026-01-20',
       }),
     );
@@ -488,7 +488,7 @@ describe('⭐ clearing a 1260 receivable', () => {
     const id = await owner(f);
     await owesUs(f, id, '2000.00');
     const result = await asOrg(f.orgId, (tx) =>
-      repayFromOwner(tx, f.admin, {
+      repayFromOwner(tx, f.admin, { requestId: crypto.randomUUID(),
         ownerId: id, amount: '750.00', intoMoneyAccountId: f.till, on: '2026-01-20',
       }),
     );
@@ -501,7 +501,7 @@ describe('⭐ clearing a 1260 receivable', () => {
     await owesUs(f, id, '2000.00');
     await expect(
       asOrg(f.orgId, (tx) =>
-        repayFromOwner(tx, f.admin, {
+        repayFromOwner(tx, f.admin, { requestId: crypto.randomUUID(),
           ownerId: id, amount: '2500.00', intoMoneyAccountId: f.till, on: '2026-01-20',
         }),
       ),
@@ -514,7 +514,7 @@ describe('⭐ clearing a 1260 receivable', () => {
     await owesUs(f, id, '2000.00');
 
     const result = await asOrg(f.orgId, (tx) =>
-      recoverFromPay(tx, f.admin, { ownerId: id, amount: '2000.00', on: '2026-01-20' }),
+      recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '2000.00', on: '2026-01-20' }),
     );
     expect(result.outstanding).toBe('0.00');
 
@@ -538,11 +538,11 @@ describe('⭐ clearing a 1260 receivable', () => {
 
     // Reclassifying is not repaying. If 1230 were not counted, this would wrongly succeed.
     await asOrg(f.orgId, (tx) =>
-      recoverFromPay(tx, f.admin, { ownerId: id, amount: '2000.00', on: '2026-01-20' }),
+      recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '2000.00', on: '2026-01-20' }),
     );
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordDrawing(tx, f.admin, {
+        recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(),
           ownerId: id, amount: '1500.00', fromMoneyAccountId: f.till, on: '2026-01-25',
         }),
       ),
@@ -554,13 +554,13 @@ describe('⭐ clearing a 1260 receivable', () => {
     const id = await owner(f, { drawingLimit: '3000.00', drawingLimitPeriod: 'monthly' });
     await owesUs(f, id, '2000.00');
     await asOrg(f.orgId, (tx) =>
-      repayFromOwner(tx, f.admin, {
+      repayFromOwner(tx, f.admin, { requestId: crypto.randomUUID(),
         ownerId: id, amount: '2000.00', intoMoneyAccountId: f.till, on: '2026-01-20',
       }),
     );
     // Room again, because the till has the money.
     await asOrg(f.orgId, (tx) =>
-      recordDrawing(tx, f.admin, {
+      recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(),
         ownerId: id, amount: '2500.00', fromMoneyAccountId: f.till, on: '2026-01-25',
       }),
     );
@@ -576,7 +576,7 @@ describe('⭐ clearing a 1260 receivable', () => {
     await owesUs(f, id, '2000.00');
     await expect(
       asOrg(f.orgId, (tx) =>
-        recoverFromPay(tx, f.admin, { ownerId: id, amount: '2000.00', on: '2026-01-20' }),
+        recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '2000.00', on: '2026-01-20' }),
       ),
     ).rejects.toThrow(/no active role, so there is no pay to recover from/);
   });
@@ -589,7 +589,7 @@ describe('⭐ writing a receivable off — when it stops being one', () => {
     await owesUs(f, id, '2000.00');
 
     const result = await asOrg(f.orgId, (tx) =>
-      writeOffReceivable(tx, f.admin, {
+      writeOffReceivable(tx, f.admin, { requestId: crypto.randomUUID(),
         ownerId: id, amount: '2000.00', reason: 'not collectible, agreed with the partners',
         on: '2026-02-05',
       }),
@@ -609,7 +609,7 @@ describe('⭐ writing a receivable off — when it stops being one', () => {
     await owesUs(f, id, '2000.00');
     await expect(
       asOrg(f.orgId, (tx) =>
-        writeOffReceivable(tx, f.admin, { ownerId: id, amount: '2000.00', reason: '  ', on: '2026-02-05' }),
+        writeOffReceivable(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '2000.00', reason: '  ', on: '2026-02-05' }),
       ),
     ).rejects.toThrow(/say why/);
   });
@@ -622,7 +622,7 @@ describe('⭐ writing a receivable off — when it stops being one', () => {
     // The receivable already consumes the whole cap. A drawing is refused...
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordDrawing(tx, f.admin, {
+        recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(),
           ownerId: id, amount: '500.00', fromMoneyAccountId: f.till, on: '2026-02-05',
         }),
       ),
@@ -631,7 +631,7 @@ describe('⭐ writing a receivable off — when it stops being one', () => {
     // ...but the write-off is not a NEW draw, it is the same money changing account. Blocking it
     // would leave a receivable nobody can ever clear off the books.
     await asOrg(f.orgId, (tx) =>
-      writeOffReceivable(tx, f.admin, {
+      writeOffReceivable(tx, f.admin, { requestId: crypto.randomUUID(),
         ownerId: id, amount: '2000.00', reason: 'forgiven', on: '2026-02-05',
       }),
     );
@@ -647,7 +647,7 @@ describe('⭐ writing a receivable off — when it stops being one', () => {
     );
     await expect(
       asOrg(f.orgId, (tx) =>
-        writeOffReceivable(tx, f.admin, {
+        writeOffReceivable(tx, f.admin, { requestId: crypto.randomUUID(),
           ownerId: id, amount: '2000.00', reason: 'forgiven', on: '2026-01-20',
         }),
       ),
@@ -673,7 +673,7 @@ describe('⭐ writing a receivable off — when it stops being one', () => {
     const id = await owner(f);
     await owesUs(f, id, '1000.00');
     await asOrg(f.orgId, (tx) =>
-      repayFromOwner(tx, f.admin, {
+      repayFromOwner(tx, f.admin, { requestId: crypto.randomUUID(),
         ownerId: id, amount: '1000.00', intoMoneyAccountId: f.till, on: '2026-01-20',
       }),
     );
@@ -695,7 +695,7 @@ describe('the refusals', () => {
     `;
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordContribution(tx, f.admin, {
+        recordContribution(tx, f.admin, { requestId: crypto.randomUUID(),
           ownerId: id, amount: '1000.00', intoMoneyAccountId: farTill!.id, on: '2026-01-08',
         }),
       ),
@@ -717,7 +717,7 @@ describe('the refusals', () => {
 
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordDrawing(tx, f.admin, {
+        recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(),
           ownerId: id, amount: '506000.00', fromMoneyAccountId: drawer!.id, on: '2026-01-10',
         }),
       ),
@@ -734,7 +734,7 @@ describe('the refusals', () => {
     await sql`update money_accounts set overdraft_limit = '5000.00' where id = ${drawer!.id}`;
 
     const result = await asOrg(f.orgId, (tx) =>
-      recordDrawing(tx, f.admin, {
+      recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(),
         // Lands at −₱4,000 — inside the ₱5,000 cap.
         ownerId: id, amount: '504000.00', fromMoneyAccountId: drawer!.id, on: '2026-01-10',
       }),
@@ -750,7 +750,7 @@ describe('the refusals', () => {
     const id = await owner(f);
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordDrawing(tx, f.admin, { ownerId: id, amount: '0.00', fromMoneyAccountId: f.till, on: '2026-01-08' }),
+        recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '0.00', fromMoneyAccountId: f.till, on: '2026-01-08' }),
       ),
     ).rejects.toMatchObject({ name: 'RefusalError', userMessage: 'A drawing has to be greater than zero.' });
   });
@@ -780,7 +780,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
     const id = await owner(f);
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordContribution(tx, f.admin, { ownerId: id, amount: '0.004', intoMoneyAccountId: f.till, on: '2026-01-08' }),
+        recordContribution(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: id, amount: '0.004', intoMoneyAccountId: f.till, on: '2026-01-08' }),
       ),
     ).rejects.toMatchObject({"name":"RefusalError","message":"owners.contribution.amount: money check failed","userMessage":"The contribution amount — \"0.004\" is not a valid amount. Use at most two decimal places."});
   });

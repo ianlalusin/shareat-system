@@ -189,13 +189,13 @@ describe('R1 — payLiability racing reverseLiabilityEntry on the same liability
   it('B waits; outstanding never negative; exactly one outcome writes — Mutant: no lock on reverseLiabilityEntry -> both proceed, outstanding -1000.00, red', async () => {
     const f = await fixture('r1');
     const liabilityId = await newLiability(f, 'R1 obligation');
-    const charge = await asOrg(f.orgId, (tx) => chargeLiability(tx, f.manager, { liabilityId, amount: '1000.00', againstAccountCode: '6200', on: '2026-01-05' }));
+    const charge = await asOrg(f.orgId, (tx) => chargeLiability(tx, f.manager, { requestId: crypto.randomUUID(), liabilityId, amount: '1000.00', againstAccountCode: '6200', on: '2026-01-05' }));
     expect(charge.outstanding).toBe('1000.00');
 
     const { aResult, bResult, bWaited } = await runConcurrencyLeg(
       f.orgId,
       (tx) => reverseLiabilityEntry(tx, f.manager, { liabilityId, entryId: charge.entryId, reason: 'T-366 S1b R1' }),
-      (tx) => payLiability(tx, f.manager, { liabilityId, amount: '1000.00', fromMoneyAccountId: f.till, on: '2026-01-10' }),
+      (tx) => payLiability(tx, f.manager, { requestId: crypto.randomUUID(), liabilityId, amount: '1000.00', fromMoneyAccountId: f.till, on: '2026-01-10' }),
       ROW_LOCK,
     );
 
@@ -213,13 +213,13 @@ describe('R1 — payLiability racing reverseLiabilityEntry on the same liability
     const f = await fixture('r1pc');
     const liabilityId = await newLiability(f, 'R1pc obligation A');
     const otherLiabilityId = await newLiability(f, 'R1pc obligation B');
-    const charge = await asOrg(f.orgId, (tx) => chargeLiability(tx, f.manager, { liabilityId, amount: '1000.00', againstAccountCode: '6200', on: '2026-01-05' }));
-    await asOrg(f.orgId, (tx) => chargeLiability(tx, f.manager, { liabilityId: otherLiabilityId, amount: '1000.00', againstAccountCode: '6200', on: '2026-01-05' }));
+    const charge = await asOrg(f.orgId, (tx) => chargeLiability(tx, f.manager, { requestId: crypto.randomUUID(), liabilityId, amount: '1000.00', againstAccountCode: '6200', on: '2026-01-05' }));
+    await asOrg(f.orgId, (tx) => chargeLiability(tx, f.manager, { requestId: crypto.randomUUID(), liabilityId: otherLiabilityId, amount: '1000.00', againstAccountCode: '6200', on: '2026-01-05' }));
 
     const { bResult, bWaited } = await runConcurrencyLeg(
       f.orgId,
       (tx) => reverseLiabilityEntry(tx, f.manager, { liabilityId, entryId: charge.entryId, reason: 'T-366 S1b R1pc' }),
-      (tx) => payLiability(tx, f.manager, { liabilityId: otherLiabilityId, amount: '1000.00', fromMoneyAccountId: f.till, on: '2026-01-10' }),
+      (tx) => payLiability(tx, f.manager, { requestId: crypto.randomUUID(), liabilityId: otherLiabilityId, amount: '1000.00', fromMoneyAccountId: f.till, on: '2026-01-10' }),
       ROW_LOCK,
     );
 
@@ -230,7 +230,7 @@ describe('R1 — payLiability racing reverseLiabilityEntry on the same liability
   it('a single uncontended reversal still succeeds with the same result as today', async () => {
     const f = await fixture('r1solo');
     const liabilityId = await newLiability(f, 'R1solo obligation');
-    const charge = await asOrg(f.orgId, (tx) => chargeLiability(tx, f.manager, { liabilityId, amount: '1000.00', againstAccountCode: '6200', on: '2026-01-05' }));
+    const charge = await asOrg(f.orgId, (tx) => chargeLiability(tx, f.manager, { requestId: crypto.randomUUID(), liabilityId, amount: '1000.00', againstAccountCode: '6200', on: '2026-01-05' }));
     await asOrg(f.orgId, (tx) => reverseLiabilityEntry(tx, f.manager, { liabilityId, entryId: charge.entryId, reason: 'solo' }));
     expect((await positionOf(f, liabilityId)).outstanding).toBe('0.00');
   });
@@ -249,7 +249,7 @@ describe('R2 — chargeLiability racing retireLiability on the same liability', 
     const { aResult, bResult, bWaited } = await runConcurrencyLeg(
       f.orgId,
       (tx) => retireLiability(tx, f.manager, { liabilityId }),
-      (tx) => chargeLiability(tx, f.manager, { liabilityId, amount: '500.00', againstAccountCode: '6200', on: '2026-01-06' }),
+      (tx) => chargeLiability(tx, f.manager, { requestId: crypto.randomUUID(), liabilityId, amount: '500.00', againstAccountCode: '6200', on: '2026-01-06' }),
       ROW_LOCK,
     );
 
@@ -274,7 +274,7 @@ describe('R2 — chargeLiability racing retireLiability on the same liability', 
     const { bResult, bWaited } = await runConcurrencyLeg(
       f.orgId,
       (tx) => retireLiability(tx, f.manager, { liabilityId }),
-      (tx) => chargeLiability(tx, f.manager, { liabilityId: otherLiabilityId, amount: '500.00', againstAccountCode: '6200', on: '2026-01-06' }),
+      (tx) => chargeLiability(tx, f.manager, { requestId: crypto.randomUUID(), liabilityId: otherLiabilityId, amount: '500.00', againstAccountCode: '6200', on: '2026-01-06' }),
       ROW_LOCK,
     );
 
