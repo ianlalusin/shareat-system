@@ -288,6 +288,18 @@ describe('E6 PG receives in full: the shipment is the bill (QO-1 a)', () => {
     expect(rows.map((r) => [r.shipmentId, cents(r.postedTotal)])).toEqual([[s.shipmentId, '320300']]);
   });
 
+  it('S1. (QI-2 a) a PG MANAGER (not an admin) receiving 8 of 10 creates ONE verified supplier invoice, flagged system-made, linked to the shipment, total = received_total 2480.00, created by the manager (assumed columns: system_made, inter_entity_shipment_id)', async () => {
+    const w = await world('s1');
+    const s = await seed(w, { lines: 'one' });
+    await pgReceives(w, receiveInput(w, s, { pork: '8' }));
+    const inv = await sql<{ status: string; system_made: boolean; total: string; created_by: string; supplier_id: string }[]>`
+      select status, system_made, total_amount::text as total, created_by, supplier_id from supplier_invoices where org_id = ${w.g.orgId} and inter_entity_shipment_id = ${s.shipmentId}`;
+    expect(inv).toHaveLength(1);
+    expect(inv[0]).toMatchObject({ status: 'verified', system_made: true, total: '2480.00', created_by: w.g.manager.personId, supplier_id: w.supplierId });
+    const [sh] = await sql<{ received_total: string }[]>`select received_total::text from inter_entity_shipments where id = ${s.shipmentId}`;
+    expect(inv[0]!.total).toBe(sh!.received_total);
+  });
+
   it('E6c. PG can pay the commissary from its ordinary AP screen: the open item carries the supplier, the store and the full outstanding (kills: 2110 credit with no bill row)', async () => {
     const w = await world('e6c');
     const s = await seed(w, { lines: 'one' });

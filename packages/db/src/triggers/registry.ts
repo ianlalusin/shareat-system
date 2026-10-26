@@ -1157,6 +1157,20 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     reason:
       'Deferred constraint trigger on the lines side of the billed_total = sum(line_total) check; reads the header and sibling lines, other rows current state (0218, T-398 S5 audit).',
   },
+  supplier_invoices_system_made_guard_trg: {
+    table: 'supplier_invoices',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'A system-made bill (QI-2): the app role cannot set/clear the flag or link or change a flagged bill money/supplier/dates (42501); any role is refused 23514 unless it links a received shipment addressed to the invoice organisation and total = received_total. Reads the shipment, another row current state (0218, T-398 S5d).',
+  },
+  supplier_invoice_lines_system_made_guard_trg: {
+    table: 'supplier_invoice_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'The app role may not add, change or delete a line of a system-made bill (42501); reads the parent invoice flag, another row current state (0218, T-398 S5d).',
+  },
   // T-475 S3 (0217) - an admin may verify the supplier invoice they logged themselves. The capability trigger reads ANOTHER row's current state
   // (the verifier's active role): validator, origin. The flag guard decides only from OLD/NEW: history_guard, ENABLE ALWAYS (R3).
   // ---------------------------------------------------------------------------------------------

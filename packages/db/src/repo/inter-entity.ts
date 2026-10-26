@@ -366,3 +366,24 @@ export async function counterpartyName(tx: Tx, customerId: string): Promise<stri
   )) as unknown as { name: string | null }[];
   return rows[0]?.name ?? null;
 }
+
+export interface SystemBillInput {
+  readonly shipmentId: string;
+  readonly storeId: string;
+  readonly supplierId: string;
+  /** YYYY-MM-DD. */
+  readonly invoiceDate: string;
+  readonly dueDate: string | null;
+  readonly notes: string | null;
+}
+
+/**
+ * BUYER, in the receive transaction: `create_system_supplier_invoice` - the verified, system-made supplier bill for a RECEIVED shipment (QI-2 = A).
+ * The total is the shipment's received_total (taken by the database, never passed in); the flag and the link are written only by this function.
+ */
+export async function createSystemSupplierInvoice(tx: Tx, input: SystemBillInput): Promise<string> {
+  const rows = (await tx.execute(
+    sql`select create_system_supplier_invoice(${input.shipmentId}::uuid, ${input.storeId}::uuid, ${input.supplierId}::uuid, ${input.invoiceDate}::date, ${input.dueDate}::date, ${input.notes}) as id`,
+  )) as unknown as { id: string }[];
+  return rows[0]!.id;
+}

@@ -64,6 +64,16 @@
 -- TRIGGER CLASS (triggers/registry.ts): inter_entity_shipments_link_check_trg reads the order and customer rows of the shipping organisation,
 -- other rows' current state, so it is a validator / origin.
 --
+-- SYSTEM-MADE BILL (QI-2 = A, Ian 26 Oct; bible row 389). supplier_invoices gains system_made (NOT NULL DEFAULT false) and inter_entity_shipment_id (composite FK
+-- (org_id, id) -> inter_entity_shipments (buyer_org_id, id)); CHECK system_made <=> a linked shipment; the two-person check admits verified_by = created_by when
+-- system_made. BEFORE trigger supplier_invoices_system_made_guard_trg: the app role is refused 42501 on setting/clearing the flag or link and on changing a flagged
+-- bill's money/supplier/store/dates; any role is refused 23514 unless the shipment is received, addressed to the invoice org, and total = received_total. A second
+-- trigger freezes a flagged bill's lines for the app role. Only the definer create_system_supplier_invoice() writes the flag (total taken from the shipment, never typed).
+--
+-- DEPLOY NOTE (system-made bill): the unique index on supplier_invoices (inter_entity_shipment_id) is built non-concurrently under a SHARE lock (fast: every
+-- existing row has a NULL link); the owner of the SECURITY DEFINER functions here must not be a superuser. The restated two-person check stays NOT VALID on purpose, exactly
+-- as 0046 and 0217 left it: legacy rows were verified by their own creator, so a VALIDATE could abort the deploy. New and updated rows are still enforced.
+--
 -- LOCK BUDGET (ADR-012 s5).
 --   * First statement: SET LOCAL lock_timeout = '5s' (resets at commit); the last statement is RESET lock_timeout. A deploy that hits it is
 --     re-run, never edited.
@@ -617,5 +627,140 @@ ALTER TABLE "trade_discrepancies" VALIDATE CONSTRAINT "trade_discrepancies_inter
 
 --> statement-breakpoint
 CREATE INDEX "trade_discrepancies_inter_entity_line_idx" ON "trade_discrepancies" ("inter_entity_shipment_line_id") WHERE "inter_entity_shipment_line_id" IS NOT NULL;
+--> statement-breakpoint
+ALTER TABLE "supplier_invoices" ADD COLUMN "system_made" boolean NOT NULL DEFAULT false;
+--> statement-breakpoint
+ALTER TABLE "supplier_invoices" ADD COLUMN "inter_entity_shipment_id" uuid;
+--> statement-breakpoint
+ALTER TABLE "supplier_invoices" ADD CONSTRAINT "supplier_invoices_inter_entity_shipment_buyer_fk" FOREIGN KEY ("org_id", "inter_entity_shipment_id") REFERENCES "inter_entity_shipments" ("buyer_org_id", "id") ON DELETE RESTRICT NOT VALID;
+--> statement-breakpoint
+ALTER TABLE "supplier_invoices" VALIDATE CONSTRAINT "supplier_invoices_inter_entity_shipment_buyer_fk";
+
+--> statement-breakpoint
+ALTER TABLE "supplier_invoices" ADD CONSTRAINT "supplier_invoices_system_made_link_check" CHECK (("system_made" AND "inter_entity_shipment_id" IS NOT NULL) OR (NOT "system_made" AND "inter_entity_shipment_id" IS NULL)) NOT VALID;
+--> statement-breakpoint
+ALTER TABLE "supplier_invoices" VALIDATE CONSTRAINT "supplier_invoices_system_made_link_check";
+
+--> statement-breakpoint
+ALTER TABLE "supplier_invoices" DROP CONSTRAINT "supplier_invoices_two_person_verification_check";
+--> statement-breakpoint
+ALTER TABLE "supplier_invoices" ADD CONSTRAINT "supplier_invoices_two_person_verification_check"
+	CHECK ("verified_by" IS NULL OR "verified_by" <> "created_by" OR "self_verified" OR "system_made") NOT VALID;
+--> statement-breakpoint
+CREATE UNIQUE INDEX "supplier_invoices_inter_entity_shipment_key" ON "supplier_invoices" ("inter_entity_shipment_id") WHERE "inter_entity_shipment_id" IS NOT NULL;
+--> statement-breakpoint
+CREATE FUNCTION "supplier_invoices_guard_system_made"() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+	s_total numeric;
+BEGIN
+	IF current_user = 'shareat_app' THEN
+		IF TG_OP = 'INSERT' AND (NEW."system_made" OR NEW."inter_entity_shipment_id" IS NOT NULL) THEN
+			RAISE EXCEPTION 'Only receiving a shipment can create a system-made supplier bill.' USING ERRCODE = '42501';
+		END IF;
+		IF TG_OP = 'UPDATE' AND (NEW."system_made" IS DISTINCT FROM OLD."system_made" OR NEW."inter_entity_shipment_id" IS DISTINCT FROM OLD."inter_entity_shipment_id") THEN
+			RAISE EXCEPTION 'The system-made mark on a supplier bill cannot be set or cleared by hand.' USING ERRCODE = '42501';
+		END IF;
+		IF TG_OP = 'UPDATE' AND OLD."system_made" AND (
+			NEW."status" IS DISTINCT FROM OLD."status" OR NEW."verified_by" IS DISTINCT FROM OLD."verified_by" OR NEW."verified_at" IS DISTINCT FROM OLD."verified_at"
+			OR NEW."attested_supplier" IS DISTINCT FROM OLD."attested_supplier" OR NEW."attested_invoice" IS DISTINCT FROM OLD."attested_invoice"
+			OR NEW."attested_items" IS DISTINCT FROM OLD."attested_items" OR NEW."attested_price" IS DISTINCT FROM OLD."attested_price"
+			OR NEW."total_amount" IS DISTINCT FROM OLD."total_amount" OR NEW."delivery_fee" IS DISTINCT FROM OLD."delivery_fee"
+			OR NEW."other_fees" IS DISTINCT FROM OLD."other_fees" OR NEW."vat_type" IS DISTINCT FROM OLD."vat_type"
+			OR NEW."vat_rate" IS DISTINCT FROM OLD."vat_rate" OR NEW."vat_amount" IS DISTINCT FROM OLD."vat_amount"
+			OR NEW."vat_exclusive_amount" IS DISTINCT FROM OLD."vat_exclusive_amount" OR NEW."supplier_id" IS DISTINCT FROM OLD."supplier_id"
+			OR NEW."store_id" IS DISTINCT FROM OLD."store_id" OR NEW."org_id" IS DISTINCT FROM OLD."org_id"
+			OR NEW."invoice_date" IS DISTINCT FROM OLD."invoice_date" OR NEW."created_by" IS DISTINCT FROM OLD."created_by")
+		THEN
+			RAISE EXCEPTION 'A system-made supplier bill is computed from the shipment received; its amount, supplier, dates, status and verification cannot be changed.' USING ERRCODE = '42501';
+		END IF;
+	END IF;
+	IF NEW."system_made" AND (TG_OP = 'INSERT' OR NOT OLD."system_made" OR NEW."total_amount" IS DISTINCT FROM OLD."total_amount") THEN
+		SELECT "received_total" INTO s_total FROM "inter_entity_shipments"
+		WHERE "id" = NEW."inter_entity_shipment_id" AND "buyer_org_id" = NEW."org_id" AND "status" = 'received';
+		IF NOT FOUND OR s_total IS NULL THEN
+			RAISE EXCEPTION 'A system-made supplier bill needs a received shipment addressed to the same organisation.' USING ERRCODE = '23514', CONSTRAINT = 'supplier_invoices_system_made_shipment_check';
+		END IF;
+		IF NEW."total_amount" <> s_total THEN
+			RAISE EXCEPTION 'A system-made supplier bill must equal the shipment received total (%).', s_total USING ERRCODE = '23514', CONSTRAINT = 'supplier_invoices_system_made_total_check';
+		END IF;
+	END IF;
+	RETURN NEW;
+END;
+$$;
+--> statement-breakpoint
+REVOKE EXECUTE ON FUNCTION "supplier_invoices_guard_system_made"() FROM PUBLIC;
+--> statement-breakpoint
+CREATE TRIGGER "supplier_invoices_system_made_guard_trg"
+	BEFORE INSERT OR UPDATE ON "supplier_invoices"
+	FOR EACH ROW EXECUTE FUNCTION "supplier_invoices_guard_system_made"();
+--> statement-breakpoint
+CREATE FUNCTION "supplier_invoice_lines_guard_system_made"() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+	v_invoice uuid := coalesce(NEW."supplier_invoice_id", OLD."supplier_invoice_id");
+BEGIN
+	IF current_user = 'shareat_app' AND EXISTS (SELECT 1 FROM "supplier_invoices" WHERE "id" = v_invoice AND "system_made") THEN
+		RAISE EXCEPTION 'The lines of a system-made supplier bill cannot be changed.' USING ERRCODE = '42501';
+	END IF;
+	IF TG_OP = 'DELETE' THEN
+		RETURN OLD;
+	END IF;
+	RETURN NEW;
+END;
+$$;
+--> statement-breakpoint
+REVOKE EXECUTE ON FUNCTION "supplier_invoice_lines_guard_system_made"() FROM PUBLIC;
+--> statement-breakpoint
+CREATE TRIGGER "supplier_invoice_lines_system_made_guard_trg"
+	BEFORE INSERT OR UPDATE OR DELETE ON "supplier_invoice_lines"
+	FOR EACH ROW EXECUTE FUNCTION "supplier_invoice_lines_guard_system_made"();
+--> statement-breakpoint
+CREATE FUNCTION "create_system_supplier_invoice"("p_shipment_id" uuid, "p_store_id" uuid, "p_supplier_id" uuid, "p_invoice_date" date, "p_due_date" date, "p_notes" text) RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+	v_org uuid := app_current_org();
+	v_person uuid := nullif(current_setting('app.person_id', true), '')::uuid;
+	s "inter_entity_shipments"%ROWTYPE;
+	v_id uuid;
+BEGIN
+	IF v_org IS NULL OR v_person IS NULL THEN
+		RAISE EXCEPTION 'Filing the bill for a shipment needs a signed-in person.' USING ERRCODE = '42501';
+	END IF;
+	SELECT * INTO s FROM "inter_entity_shipments" WHERE "id" = p_shipment_id AND "buyer_org_id" = v_org FOR UPDATE;
+	IF NOT FOUND OR s."status" <> 'received' THEN
+		RAISE EXCEPTION 'This shipment is not a received shipment addressed to your organisation.' USING ERRCODE = '42501';
+	END IF;
+	IF s."received_by" IS DISTINCT FROM v_person THEN
+		RAISE EXCEPTION 'Only the person who received the shipment can file its bill.' USING ERRCODE = '42501';
+	END IF;
+	IF EXISTS (SELECT 1 FROM "supplier_invoices" WHERE "inter_entity_shipment_id" = s."id") THEN
+		RAISE EXCEPTION 'This shipment already has its bill (a voided bill is not replaced).' USING ERRCODE = '23505', CONSTRAINT = 'supplier_invoices_inter_entity_shipment_key';
+	END IF;
+	IF NOT EXISTS (SELECT 1 FROM "suppliers" WHERE "id" = p_supplier_id AND "org_id" = v_org AND "counterparty_org_id" = s."org_id") THEN
+		RAISE EXCEPTION 'The bill must be filed under your supplier row for the company that sent the shipment.' USING ERRCODE = '42501';
+	END IF;
+	IF NOT EXISTS (SELECT 1 FROM "deliveries" WHERE "org_id" = v_org AND "inter_entity_shipment_id" = s."id" AND "store_id" = p_store_id AND "status" <> 'void') THEN
+		RAISE EXCEPTION 'The bill must be filed at the store that received the shipment.' USING ERRCODE = '42501';
+	END IF;
+	INSERT INTO "supplier_invoices" ("org_id", "store_id", "supplier_id", "invoice_date", "due_date", "total_amount", "notes", "status", "verified_by", "verified_at",
+		"attested_supplier", "attested_invoice", "attested_items", "attested_price", "system_made", "inter_entity_shipment_id", "created_by")
+	VALUES (v_org, p_store_id, p_supplier_id, p_invoice_date, p_due_date, s."received_total", p_notes, 'verified', v_person, now(),
+		true, true, true, true, true, s."id", v_person)
+	RETURNING "id" INTO v_id;
+	RETURN v_id;
+END;
+$$;
+--> statement-breakpoint
+REVOKE ALL ON FUNCTION "create_system_supplier_invoice"(uuid, uuid, uuid, date, date, text) FROM PUBLIC;
+--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION "create_system_supplier_invoice"(uuid, uuid, uuid, date, date, text) TO "shareat_app";
 --> statement-breakpoint
 RESET lock_timeout;

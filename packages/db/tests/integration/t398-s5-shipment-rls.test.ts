@@ -314,9 +314,10 @@ describe('C -- catalog: same-org composite keys everywhere EXCEPT the defined ha
     expect(rows.length, 'RED today: no handoff FKs at all').toBeGreaterThan(0);
     // a cross-org shape = the child's first column is not org_id, or the parent key's first column is not org_id
     const cross = rows.filter((r) => r.parent !== 'organizations' && (r.cols[0] !== 'org_id' || r.pcols[0] !== 'org_id')).map((r) => `${r.child}(${r.cols.join(',')})->${r.parent}(${r.pcols.join(',')})`).sort();
-    expect(cross, 'X3: exactly the two declared cross-org shapes').toEqual([
+    expect(cross, 'X3: exactly the three declared cross-org shapes').toEqual([
       `deliveries(org_id,inter_entity_shipment_id)->${SHIP}(buyer_org_id,id)`.replace('deliveries(org_id', 'deliveries(org_id'),
       `${SHIP}(buyer_org_id,received_by)->persons(org_id,id)`,
+      `supplier_invoices(org_id,inter_entity_shipment_id)->${SHIP}(buyer_org_id,id)`, // T-398 S5d QI-2 (0218)
     ].sort().filter(() => true));
   });
 });

@@ -479,7 +479,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // (its 6 controls leave the census; the shared component's were already counted), measured: 1407 -> 1401.
     // 1401 -> 1403, T-475 S3 (25 Oct). +2 PASS, FAIL/UNRESOLVED unmoved (asserted above): the /ap "Self-verified" filter link and its sibling control; re-measured by runCensus().
     // 1403 -> 1405, T-398 S5c: customer credit terms (+2), re-measured.
-    expect(results.length).toBe(1405);
+    // 1405 -> 1414, T-398 S5d: inbound list + receipt form, re-measured.
+    expect(results.length).toBe(1414);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

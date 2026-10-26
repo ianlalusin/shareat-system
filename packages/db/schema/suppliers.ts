@@ -317,6 +317,14 @@ export const supplierInvoices = pgTable(
      */
     isOfficialReceipt: boolean('is_official_receipt').notNull().default(true),
 
+    /**
+     * T-398 S5d (migration 0218, QI-2 = A). True for the bill the inter-entity RECEIVE creates (computed from the shipment received, nobody types it).
+     * Written only by the definer `create_system_supplier_invoice()`; the app role is refused (trigger). Exempt from the two-person check. Never set from TS.
+     */
+    systemMade: boolean('system_made').notNull().default(false),
+    /** T-398 S5d (0218) - the received shipment a system-made bill is for (composite FK (org_id, id) -> inter_entity_shipments (buyer_org_id, id), hand-added). */
+    interEntityShipmentId: uuid('inter_entity_shipment_id'),
+
     vatType: text('vat_type', { enum: SUPPLIER_INVOICE_VAT_TYPES }),
     vatRate: numeric('vat_rate', { precision: 8, scale: 4 }),
     vatAmount: numeric('vat_amount', { precision: 14, scale: 2 }),
@@ -409,6 +417,9 @@ export const supplierInvoices = pgTable(
     // CHECK (NOT self_verified OR verified_by = created_by) (added NOT VALID, then VALIDATED); partial index `supplier_invoices_self_verified_idx`
     // ON (org_id, verified_at) WHERE self_verified; triggers `supplier_invoices_self_verify_requires_capability` (validator) and
     // `supplier_invoices_self_verified_immutable` (history_guard, ENABLE ALWAYS). Do not "fix" the builder to match.
+    // NOTE: hand-added in 0218 (T-398 S5d, QI-2), no Drizzle mirror: FK `supplier_invoices_inter_entity_shipment_buyer_fk`, CHECK `supplier_invoices_system_made_link_check`
+    // (system_made <=> inter_entity_shipment_id), `supplier_invoices_two_person_verification_check` re-stated with `OR system_made`, partial UNIQUE
+    // `supplier_invoices_inter_entity_shipment_key`, triggers `supplier_invoices_system_made_guard_trg` and `supplier_invoice_lines_system_made_guard_trg`.
     // NOTE: supplier_invoices_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0213 (T-398 S3 / DEF-491), no Drizzle mirror here.
     // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES supplier_invoices (org_id, id)`
     // same-org FKs declared beside their own tables have a real unique target.

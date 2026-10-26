@@ -21,17 +21,13 @@
  * (`interEntityRepo.listInbound` / `findInbound` / `inboundLinesOf`): the void reason, the person who voided, the seller's store and the trade-order
  * ids are never read, so no caller can leak them. No new definer.
  *
- * ## Known blocker (QO-1 spike result)
+ * ## The bill (QI-2 = A)
  *
- * The system bill is a `supplier_invoices` row, and `supplier_invoices_two_person_verification_check` (0046/0217) admits a verified invoice only
- * when verified_by <> created_by OR self_verified, and self_verified needs an admin / super admin as the verifier. PG's receiver is an ordinary
- * manager, who is both. This file takes the one honest door that exists today (an admin may verify their own bill) and REFUSES for anyone
- * else, in words, before the first write. It does not invent a second person. The designed fix (a system-generated exemption on the invoice) is
- * a migration and is for the planner.
+ * The bill is made by the definer `create_system_supplier_invoice` (flag `system_made`, total = the shipment's received_total, verified by the receiver):
+ * exempt from the two-person check only because the database computes and checks it. No admin is needed.
  */
-import { authorize, can, heldCapabilities, type Actor } from '@shareat/auth';
+import { authorize, heldCapabilities, type Actor } from '@shareat/auth';
 import {
-  apRepo,
   deliveriesRepo,
   expensesRepo,
   interEntityRepo,
@@ -306,14 +302,6 @@ export async function receiveInterEntityShipment(tx: Tx, actor: Actor, input: Re
     );
   }
 
-  // QO-1 spike result (file header): the system bill needs a verifier. Only an admin may verify a bill they created themselves.
-  if (!(await can(tx, actor, 'verify_own_supplier_invoice'))) {
-    throw refuse(
-      'receiveInterEntityShipment: the system supplier bill needs a verifier and only an admin may verify a bill they created (QO-1 spike).',
-      'Receiving a shipment from the commissary files the commissary\'s bill for you, and only an admin can do that today. Ask an admin to receive this shipment.',
-    );
-  }
-
   const total = add(...plans.map((p) => p.cost), ZERO);
 
   // 1. The definer stamps the shipment (every line named once; a line that did not arrive is 0.000). It also serialises a double receive.
@@ -370,23 +358,15 @@ export async function receiveInterEntityShipment(tx: Tx, actor: Actor, input: Re
   });
 
   // 4-5. The system bill: supplier invoice (verified), DR 2120 / CR 2110, and the expense row that makes it an open payable.
-  const invoice = await apRepo.insertSupplierInvoice(tx, {
-    orgId: actor.orgId,
+  const invoiceId = await interEntityRepo.createSystemSupplierInvoice(tx, {
+    shipmentId: shipment.id,
     storeId: input.storeId,
     supplierId: supplier.id,
-    invoiceNo: null,
     invoiceDate: today,
     dueDate: supplier.creditTermsDays != null ? addDays(parseBusinessDate(today), supplier.creditTermsDays) : null,
-    totalAmount: total,
     notes: `Inter-entity shipment ${shipment.id}, billed at what arrived.`,
-    receiptFileId: null,
-    vatType: null,
-    vatRate: null,
-    vatAmount: null,
-    vatExclusiveAmount: null,
-    createdBy: actor.personId,
   });
-  await apRepo.markInvoiceVerified(tx, actor.orgId, invoice.id, { verifiedBy: actor.personId, selfVerified: true });
+  const invoice = { id: invoiceId };
 
   const sumReceived = addQuantity(...plans.map((p) => p.received));
   const bill = await linkInvoiceToReceipt(tx, {

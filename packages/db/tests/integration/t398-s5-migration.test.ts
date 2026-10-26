@@ -129,7 +129,7 @@ describe('L1 -- the 0218 migration text (ADR-012 s5)', () => {
     const t = text();
     expect(t).not.toMatch(/DROP\s+(TABLE|COLUMN)/i);
     const altered = [...t.matchAll(/ALTER TABLE\s+(?:ONLY\s+)?"?([a-z_]+)"?/gi)].map((m) => m[1]!.toLowerCase());
-    const allowed = new Set(['inter_entity_shipments', 'inter_entity_shipment_lines', 'deliveries', 'suppliers', 'customers', 'scheduler_runs', 'trade_discrepancies']);
+    const allowed = new Set(['inter_entity_shipments', 'inter_entity_shipment_lines', 'deliveries', 'suppliers', 'customers', 'scheduler_runs', 'trade_discrepancies', 'supplier_invoices']); // T-398 S5d QI-2 (0218): supplier_invoices gains system_made + shipment link
     expect([...new Set(altered)].filter((x) => !allowed.has(x)), 'a table the plan does not touch').toEqual([]);
   });
 
