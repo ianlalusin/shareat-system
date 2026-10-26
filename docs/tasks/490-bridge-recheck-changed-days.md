@@ -47,3 +47,23 @@ for existing pending checks is missing, `docs/DEFECTS-REGISTER.md` (section E, D
 ## Acceptance
 New tests red on 26605d1 for the stated reasons, then green; the whole `t472-s2-receipt-bridge.test.ts` and other
 `pos-bridge`/T-472 tests green; root typecheck clean; guard/census unit files green.
+
+## Revision 2026-10-26 (after the PR #76 review, Sonnet auditor via the orchestrator)
+Rulings 2 and 3 are replaced by a simpler, wider rule that also closes review points 1-3:
+- **Refresh set** = every window date (`windowStart`..`yesterday`) at or after the floor, PLUS every date a change-time
+  receipt was written onto (at or after the floor), MINUS every date in tonight's `dates` (read in full or not).
+  ⚠️ Correction (planner, same day): do NOT re-check a partly-read day. Such a day has no check row, which is exactly what
+  makes the next night re-read it in full (`!have.has(d)`); writing a check for it would stop that re-read, and its missing
+  receipts would never be fetched. Point 1's residual case (a partly-read day that already had a check) is covered from
+  the next night by the whole-window re-check. A day feed revised after a `match`/`mismatch` is caught within the window
+  (point 2); an `unchanged`/`raced` write after a crash no longer matters, because the whole window is recomputed
+  (point 3). `pendingCheckDates` is no longer needed: remove it if unused.
+- Still Postgres only: no `markGone`, no Firestore day read; B1-B3 unchanged. Cost: at most 7 Postgres recomputes per
+  store per night.
+- A `--date` run refreshes nothing beyond its own date (unchanged behaviour), and a dry run refreshes nothing.
+- Point 4 (last-writer-wins `upsertDayCheck`): if the job already serialises runs per org (check the existing run lock /
+  concurrency tests, section C), no change; say so in the PR. Only if two runs can really overlap, keep the newer result
+  by comparing `checked_at` in the upsert.
+- Tests to add (point 5): a partly-read day is NOT given a check tonight (so it is re-read in full next night); a `match` day whose feed is
+  revised later is re-checked to `mismatch`; a window day with no change is re-checked and unchanged (no new notice);
+  a date older than `windowStart` with no change is NOT re-checked; a `--date` run refreshes nothing else.

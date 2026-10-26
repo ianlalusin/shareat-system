@@ -707,6 +707,64 @@ describe('X: T-490 (DEF-781) - a day older than yesterday is re-checked when a l
     expect(await checkOf(f, '2027-01-08')).toMatchObject({ receipt_count: 1, net_sales_centavos: '2000' });
   });
 
+  it('Y1: a partly-read day gets NO check tonight (even with a change-time receipt on it) and is re-read in full the next night', async () => {
+    const f = await fixture('y1');
+    const night = new FakePort();
+    night.put(f.posStoreId, YESTERDAY, receipt({ id: 'a', total: '100.00' }));
+    night.crossCheckOverride = (_s, date, d) => (date === YESTERDAY ? { ...d, byClientMs: d.byClientMs + 1 } : d); // POS counts one more than was read
+    night.changed.createdAt = [receipt({ id: 'late', total: '50.00' })];
+    await sweep({ orgId: f.orgId, port: night });
+    expect(await checkOf(f, YESTERDAY)).toBeUndefined();
+    const night2 = new FakePort();
+    await sweep({ orgId: f.orgId, port: night2, now: NEXT });
+    expect(night2.datesCalled(f.posStoreId, 'listDay')).toEqual([YESTERDAY, '2027-01-13']);
+  });
+
+  it('Y2: a match day whose day feed is revised later is re-checked to mismatch within the window', async () => {
+    const f = await fixture('y2');
+    await addFeed(f, D, 100);
+    const night1 = new FakePort();
+    night1.put(f.posStoreId, D, receipt({ id: 'a', date: D, total: '100.00' }));
+    await sweep({ orgId: f.orgId, port: night1 });
+    expect(await checkOf(f, D)).toMatchObject({ result: 'match' });
+    await addFeed(f, D, 400);
+    await sweep({ orgId: f.orgId, port: new FakePort(), now: NEXT });
+    expect(await checkOf(f, D)).toMatchObject({ result: 'mismatch', feed_total_centavos: '40000', difference_centavos: '-30000' });
+  });
+
+  it('Y3: a window day with no change is re-checked and comes out the same, with no new notice', async () => {
+    const f = await fixture('y3');
+    await addFeed(f, D, 100);
+    const night1 = new FakePort();
+    night1.put(f.posStoreId, D, receipt({ id: 'a', date: D, total: '100.00' }));
+    await sweep({ orgId: f.orgId, port: night1 });
+    const r = await sweep({ orgId: f.orgId, port: new FakePort(), now: NEXT });
+    expect(await checkOf(f, D)).toMatchObject({ result: 'match', receipt_count: 1, net_sales_centavos: '10000' });
+    expect(r.outcomes[0]!.failures.filter((x) => x.kind === 'notice')).toEqual([]);
+    expect(r.outcomes[0]!.detail).toContain('re-checked from Postgres 6'); // 01-07..01-12 minus the freshly read 01-13
+  });
+
+  it('Y4: a date older than the window start with no change is NOT re-checked', async () => {
+    const f = await fixture('y4');
+    await sweep({ orgId: f.orgId, port: new FakePort() });
+    await sql`insert into pos_bridge_day_checks (org_id, store_id, pos_store_id, pos_calendar_date, receipt_count, net_sales_centavos, result)
+      values (${f.orgId}, ${f.storeId}, ${f.posStoreId}, '2027-01-02', 0, 0, 'pending') on conflict do nothing`;
+    await addFeed(f, '2027-01-02', 0);
+    await sweep({ orgId: f.orgId, port: new FakePort(), now: NEXT });
+    expect(await checkOf(f, '2027-01-02')).toMatchObject({ result: 'pending', feed_total_centavos: null });
+  });
+
+  it('Y5: a --date run refreshes nothing beyond its own date', async () => {
+    const f = await fixture('y5');
+    await addFeed(f, D, 100);
+    const night1 = new FakePort();
+    night1.put(f.posStoreId, D, receipt({ id: 'a', date: D, total: '100.00' }));
+    await sweep({ orgId: f.orgId, port: night1 });
+    await addFeed(f, D, 400);
+    await sweep({ orgId: f.orgId, port: new FakePort(), now: NEXT, date: '2027-01-12' });
+    expect(await checkOf(f, D)).toMatchObject({ result: 'match', feed_total_centavos: '10000' });
+  });
+
   it('X5: a change-time receipt dated before the write floor creates no check (and no receipt)', async () => {
     const f = await fixture('x5');
     await sweep({ orgId: f.orgId, port: new FakePort() });

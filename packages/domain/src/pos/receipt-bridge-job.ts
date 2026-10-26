@@ -425,18 +425,15 @@ async function bridgeForOrg(
       }
     }
 
-    // 4. Refresh (T-490, DEF-781): a day NOT re-read tonight is re-checked from Postgres when a change-time receipt was written
-    // onto it (a late offline receipt, a void, an edit) or when its check is still `pending` (the day feed may have landed since).
+    // 4. Refresh (T-490, DEF-781): every window day NOT read tonight is re-checked from Postgres (a day feed revised after a check,
+    // a pending day whose feed landed), and so is any day a change-time receipt was written onto. Days in `dates` are left alone even
+    // if only partly read: a partly-read day has no check row, and that absence is what makes tomorrow read it in full.
     // Never `markGone` here (change-time reads are not a full inventory of the day) and never a Firestore read.
     try {
-      const pending =
-        ctx.date !== undefined
-          ? new Set<string>()
-          : await withOrgPrincipal(org.id, (tx) => posBridgeRepo.pendingCheckDates(tx, org.id, link.storeId, windowStart, yesterday));
-      const refresh = new Set<string>();
-      for (const d of changedDates) if (d.localeCompare(POS_BRIDGE_WRITE_FLOOR) >= 0 && !dates.includes(d)) refresh.add(d);
-      for (const d of pending) if (d.localeCompare(POS_BRIDGE_WRITE_FLOOR) >= 0 && !dates.includes(d)) refresh.add(d);
-      for (const date of [...refresh].sort()) {
+      const wanted = new Set<string>(changedDates);
+      if (ctx.date === undefined) for (const d of windowDates) wanted.add(d);
+      const refresh = [...wanted].filter((d) => d.localeCompare(POS_BRIDGE_WRITE_FLOOR) >= 0 && !dates.includes(d));
+      for (const date of refresh.sort()) {
         const when = safeHumanDate(date);
         try {
           const result = await withOrgPrincipal(org.id, (tx) => checkDay(tx, date));
