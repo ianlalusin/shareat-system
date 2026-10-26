@@ -108,7 +108,7 @@ Checked clean: RLS shape, definers (search_path, REVOKE/GRANT, app_current_org s
   the seller read is built (S5e). (d) The rest of the tester's pinned contract (call shapes, entry source types,
   RefusalError) is accepted.
 
-## QI-2 (OPEN, Ian, 26 Oct) - who "verifies" the bill PG's receipt creates?
+## QI-2 (ANSWERED A by Ian, 26 Oct: "a") - who "verifies" the bill PG's receipt creates?
 PG's AP open item needs a VERIFIED supplier invoice, and the two-person rule (0046/0217) needs a second person or an
 admin self-verify. The receiver is usually a PG manager, so today the receipt is refused for non-admins.
 Options: (A, recommended) a system-made bill flag: a bill created by the receive flow, whose amount is computed
@@ -116,3 +116,10 @@ Options: (A, recommended) a system-made bill flag: a bill created by the receive
 check; only the receive definer can set the flag; the 06:30 reconciliation still checks both sides. (B) a per-org
 "system" person verifies - rejected by the orchestrator: fakes a person in the audit trail. (C) the bill waits as
 unverified until a second PG person verifies it - keeps the rule, adds a daily manual step, and AP is incomplete until then.
+
+- QI-2 = A (Ian, 26 Oct). Build: supplier_invoices gains a system-made flag set ONLY by the inter-entity receive path
+  (owner/definer; the app role cannot set or clear it); a flagged invoice is exempt from the two-person check only when
+  its total equals the shipment's received_total and it links that shipment; flagged invoices are immutable in amount.
+  Bible row 389.
+- Clarified by Ian, 26 Oct: Lipa IS the commissary (the seller in T-398); Malvar is a Lipa branch supplied by stock
+  transfer inside the same org; Padre Garcia, a franchise, buys from Lipa. No design change.
