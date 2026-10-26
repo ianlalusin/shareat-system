@@ -23,7 +23,7 @@
  * — v1 names this as a deliberate fix over its own earlier behaviour of silently defaulting, *"so
  * stock is never lost."*
  */
-import { add, decimal, toCentavos, ZERO, type Decimal, type Money } from '@shareat/core/money';
+import { add, decimal, multiplyQuantityByFactor, toCentavos, ZERO, type Decimal, type Money } from '@shareat/core/money';
 import { stockLayersRepo, stockLedgerRepo, type Tx } from '@shareat/db';
 import { resolveReceivingLocation, type LocationLike } from '../stock-locations/rules';
 import { lineCost as costOf } from '../stock/layers';
@@ -115,7 +115,12 @@ export async function receiveDelivery(tx: Tx, input: ReceiveDeliveryInput): Prom
   //
   // ⚠️ Caught by `receive-delivery.test.ts`'s rollback case, which asserted zero movements and
   // found one. The test was written expecting this to be right; it was not.
-  for (const line of input.lines) {
+  for (const [idx, line] of input.lines.entries()) {
+    // T-489: something DID arrive but the conversion rounds it to nothing - refuse, never skip (before the first write).
+    if (toThousandths(line.receivedQuantity) !== 0n && toThousandths(toBaseUnits(line.receivedQuantity, line.conversionFactor)) === 0n) {
+      const sentence = `The unit conversion for line ${line.lineNo ?? String(idx + 1)} is so small that ${line.receivedQuantity} purchase units round to zero base units. Fix the item's conversion factor first.`;
+      return { ok: false, reason: sentence, userReason: sentence };
+    }
     if (!INVENTORY_ACCOUNT_BY_ITEM_KIND[line.itemKind]) {
       return {
         ok: false,
@@ -209,17 +214,18 @@ export async function receiveDelivery(tx: Tx, input: ReceiveDeliveryInput): Prom
 }
 
 /**
- * `purchase quantity × conversionFactor`, exact, in thousandths.
+ * `purchase quantity × conversionFactor`, in thousandths of the base unit.
+ *
+ * ⭐ T-489 (DEF-780): the factor is applied at its full six decimals (`numeric(14,6)`) in scaled bigint, and the product
+ * is rounded HALF-UP away from zero once, at the third decimal. It was `Math.round(Number(factor) * 1000)` - the factor
+ * cut to three decimals through a float - so 0.0625 became 0.063 and anything under 0.0005 became 0.
  *
  * ⭐ Exported for `documents.ts`'s duplicate-risk check, which must compare an INCOMING draft
- * quantity (still in purchase units) against on-hand (in base units) — the same "one
- * implementation" reasoning as `lineCost` above. No behaviour change; this function was already
- * used by every case in `receive-delivery.test.ts`.
+ * quantity (still in purchase units) against on-hand (in base units) - the same "one
+ * implementation" reasoning as `lineCost` above.
  */
 export function toBaseUnits(purchaseQuantity: Quantity, conversionFactor: string): Quantity {
-  const factorThousandths = BigInt(Math.round(Number(conversionFactor) * 1000));
-  const product = (toThousandths(purchaseQuantity) * factorThousandths) / 1000n;
-  return quantity(product);
+  return multiplyQuantityByFactor(purchaseQuantity, decimal(conversionFactor, '14,6'));
 }
 
 /**
