@@ -8,6 +8,9 @@ import { listStores, listActingPersons, getStoreLink } from '../lib';
 import { requireSession } from '../../../lib/session';
 import { postPosCorrectionAction, recheckPosDayAction, reimportSalesDayAction, setPlatformSalesAction, submitSalesDayAction, verifySalesDayAction, voidSalesDayAction } from '../actions';
 import { withOrgPrincipal } from '../../expenses/lib';
+import { canOverrideClosedMonth } from '../../expenses/reimbursements/lib';
+import { closedMonthOf, closedMonths } from '../../../lib/period-override';
+import { ClosedMonthOverride } from '@/components/ClosedMonthOverride';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -84,6 +87,12 @@ export default async function SalesDayDetailPage({
     };
   });
   const unverified = day.status === 'open' || day.status === 'submitted';
+
+  // T-487 (DEF-779): a submitted day whose month has since been closed can only be posted by an administrator, with a reason.
+  // The override fields are OFFERED only to a holder of `override_period_lock` and only when the day's own date is in a CLOSED
+  // month; `verifySalesDay` / `postEntry` are what enforce it.
+  const canOverride = day.status === 'submitted' && can.verify ? await canOverrideClosedMonth(actor) : false;
+  const closedMonth = canOverride ? closedMonthOf(await closedMonths(orgId), day.businessDate) : undefined;
 
   // T-401 S6 (Ian 15 Oct; A11): a WARNING, never a block - how many of this store's usage drafts dated the day BEFORE THE SALES DAY BEING VIEWED still wait for a manager.
   // Shown only to someone who can post them; the count is the domain's own read.
@@ -492,6 +501,12 @@ export default async function SalesDayDetailPage({
                 {day.businessDate}, not today.
               </p>
             </div>
+            {closedMonth && (
+              <>
+                <input type="hidden" name="salesDayDate" value={day.businessDate} />
+                <ClosedMonthOverride closedMonths={[closedMonth]} dateFieldName="salesDayDate" initialDate={day.businessDate} />
+              </>
+            )}
             <Button type="submit" variant="primary">
               Verify &amp; post
             </Button>

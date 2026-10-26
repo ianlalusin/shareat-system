@@ -24,7 +24,9 @@ import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash, splitReturnTo, type Nav } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
 import { PLATFORM_SALES_EDIT } from './typed-forms';
-import { can, verifyAdminApproval } from '@shareat/auth';
+import { authorize, can, verifyAdminApproval } from '@shareat/auth';
+import { salesDaysRepo } from '@shareat/db';
+import { closedMonthOf, closedMonths, periodOverrideProblem, readPeriodOverride } from '@/lib/period-override';
 import { assertApprovalStillRight, loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
@@ -248,7 +250,20 @@ export async function verifySalesDayAction(formData: FormData): Promise<void> {
   const id = str(formData, 'salesDayId');
   const nav = carryNav(formData);
   try {
-    await withOrgPrincipal(actor.orgId, (tx) => verifySalesDay(tx, actor, id));
+    // T-487 (DEF-779): the closed-month override is forwarded only when the DAY's own date (read here, never from the form)
+    // falls in a CLOSED month - otherwise an ordinary verify would leave an audit row. Same shape as `approveExpenseAction`:
+    // nothing derived from the day (its month, a sentence about it) is said until the actor has proven `verify_sales_day` there.
+    const day = await withOrgPrincipal(actor.orgId, async (tx) => {
+      const found = await salesDaysRepo.getById(tx, actor.orgId, id);
+      if (found) await authorize(tx, actor, 'verify_sales_day', { storeId: found.storeId });
+      return found;
+    });
+    const asked = readPeriodOverride(formData);
+    const inClosedMonth = !!day && !!closedMonthOf(await closedMonths(actor.orgId), day.businessDate);
+    const periodOverride = asked && inClosedMonth ? asked : undefined;
+    const problem = inClosedMonth ? periodOverrideProblem(formData) : null;
+    if (problem) throw new Error(problem);
+    await withOrgPrincipal(actor.orgId, (tx) => verifySalesDay(tx, actor, id, periodOverride ? { periodOverride } : undefined));
   } catch (err) {
     return await redirectWithFlash(`/sales-days/${id}`, nav, { error: errorMessage(err) });
   }
