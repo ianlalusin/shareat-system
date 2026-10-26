@@ -38,6 +38,7 @@ const ROW_LINK: readonly string[] = [
   'app/inventory/counts/page.tsx',
   'app/inventory/deliveries/[id]/page.tsx',
   'app/inventory/deliveries/page.tsx',
+  'app/inventory/deliveries/inbound/page.tsx', // T-398 S5: each shipment row opens its receipt page (LinkRow/RowLink)
   'app/inventory/production/page.tsx',
   'app/inventory/production/recipes/page.tsx', // T-413, swept at the 2026-10-16 combined release
   'app/inventory/usage/[id]/page.tsx',
@@ -72,6 +73,7 @@ const NO_ROW_TARGET: readonly string[] = [
   'app/attendance/lane/page.tsx',
   'app/attendance/terminals/page.tsx',
   'app/inventory/counts/[id]/page.tsx',
+  'app/inventory/deliveries/inbound/[shipmentId]/page.tsx', // T-398 S5: shipment line items, no per-row record page
   'app/inventory/locations/page.tsx',
   'app/inventory/low-stock/page.tsx',
   'app/inventory/pos-usage/page.tsx',

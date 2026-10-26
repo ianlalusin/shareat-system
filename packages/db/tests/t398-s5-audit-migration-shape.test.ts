@@ -49,7 +49,11 @@ describe('0218 migration shape (audit finding 6)', () => {
   });
 
   it('A2 each of them is followed LATER by VALIDATE CONSTRAINT of the same name on the same table (kills: NOT VALID left unvalidated)', () => {
+    // T-398 S5 (orchestrator ruling 26 Oct): this one restated constraint stays NOT VALID on purpose - legacy production
+    // rows would fail validation (same as 0046/0217). Exempt by exact table.name only.
+    const NOT_VALID_ON_PURPOSE = new Set(['supplier_invoices.supplier_invoices_two_person_verification_check']);
     const missing = adds
+      .filter((a) => !NOT_VALID_ON_PURPOSE.has(`${a.table}.${a.name}`))
       .filter(
         (a) =>
           !statements.some(

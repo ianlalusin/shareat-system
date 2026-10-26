@@ -743,7 +743,7 @@ export async function runInterEntityReconcile(
 ): Promise<SweepResult> {
   const trigger = options.trigger ?? 'cron';
   const nowMs = options.nowMs ?? Date.now();
-  const period = new Date(nowMs + 8 * 3_600_000).toISOString().slice(0, 7);
+  const period = toBusinessDate(new Date(nowMs)).slice(0, 7);
 
   const orgs = await listOrgsToRun(options.orgId);
   const outcomes: JobOutcome[] = [];
