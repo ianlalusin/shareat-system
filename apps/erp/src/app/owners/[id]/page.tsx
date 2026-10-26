@@ -20,7 +20,7 @@ import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, Field, FlashBanner, Input, Select } from '@/components/ui';
+import { Button, Field, FlashBanner, FormModal, Input, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import {
   OWNERS_CLOSE_MONTH_RULES,
@@ -122,12 +122,14 @@ export default async function OwnerPage({
               into a drawing, which is the moment equity really falls.
             </p>
           </div>
-          <SettleForm
-            ownerId={owner.id}
-            defaultAmount={owner.position.receivable}
-            today={today()}
-            accounts={accounts.map((a) => ({ id: a.id, label: `${a.name} — ${peso(a.balance)}` }))}
-          />
+          <FormModal trigger="Settle" title="Settle what this owner owes" size="lg">
+            <SettleForm
+              ownerId={owner.id}
+              defaultAmount={owner.position.receivable}
+              today={today()}
+              accounts={accounts.map((a) => ({ id: a.id, label: `${a.name} — ${peso(a.balance)}` }))}
+            />
+          </FormModal>
         </section>
       )}
 
@@ -140,30 +142,32 @@ export default async function OwnerPage({
               Money the owner puts into the business. Equity goes up.
             </p>
           </div>
-          <CheckedForm rules={OWNERS_CONTRIBUTION_RULES} action={contributionAction} className="space-y-3">
-            <input type="hidden" name="ownerId" value={owner.id} />
-            <Field label="Amount" rule={OWNERS_CONTRIBUTION_RULES.amount}>
-              <Input {...nativeAttrs(OWNERS_CONTRIBUTION_RULES.amount)} className="w-full" />
-            </Field>
-            <Field label="Into" rule={OWNERS_CONTRIBUTION_RULES.intoMoneyAccountId}>
-              <Select {...nativeAttrs(OWNERS_CONTRIBUTION_RULES.intoMoneyAccountId)} defaultValue="" className="w-full">
-                <option value="" disabled>
-                  Choose…
-                </option>
-                {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name} — {peso(a.balance)}
+          <FormModal trigger="Capital in" title="Record capital in" size="md">
+            <CheckedForm rules={OWNERS_CONTRIBUTION_RULES} action={contributionAction} className="space-y-3">
+              <input type="hidden" name="ownerId" value={owner.id} />
+              <Field label="Amount" rule={OWNERS_CONTRIBUTION_RULES.amount}>
+                <Input {...nativeAttrs(OWNERS_CONTRIBUTION_RULES.amount)} className="w-full" />
+              </Field>
+              <Field label="Into" rule={OWNERS_CONTRIBUTION_RULES.intoMoneyAccountId}>
+                <Select {...nativeAttrs(OWNERS_CONTRIBUTION_RULES.intoMoneyAccountId)} defaultValue="" className="w-full">
+                  <option value="" disabled>
+                    Choose…
                   </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="On" rule={OWNERS_CONTRIBUTION_RULES.on}>
-              <Input type="date" {...nativeAttrs(OWNERS_CONTRIBUTION_RULES.on)} defaultValue={today()} className="w-full" />
-            </Field>
-            <Button type="submit" variant="secondary">
-              Record contribution
-            </Button>
-          </CheckedForm>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} — {peso(a.balance)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="On" rule={OWNERS_CONTRIBUTION_RULES.on}>
+                <Input type="date" {...nativeAttrs(OWNERS_CONTRIBUTION_RULES.on)} defaultValue={today()} className="w-full" />
+              </Field>
+              <Button type="submit" variant="secondary">
+                Record contribution
+              </Button>
+            </CheckedForm>
+          </FormModal>
         </section>
 
         <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
@@ -180,30 +184,32 @@ export default async function OwnerPage({
               )}
             </p>
           </div>
-          <CheckedForm rules={OWNERS_DRAWING_RULES} action={drawingAction} className="space-y-3">
-            <input type="hidden" name="ownerId" value={owner.id} />
-            <Field label="Amount" rule={OWNERS_DRAWING_RULES.amount}>
-              <Input {...nativeAttrs(OWNERS_DRAWING_RULES.amount)} className="w-full" />
-            </Field>
-            <Field label="From" rule={OWNERS_DRAWING_RULES.fromMoneyAccountId}>
-              <Select {...nativeAttrs(OWNERS_DRAWING_RULES.fromMoneyAccountId)} defaultValue="" className="w-full">
-                <option value="" disabled>
-                  Choose…
-                </option>
-                {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name} — {peso(a.balance)}
+          <FormModal trigger="Drawing out" title="Record a drawing" size="md">
+            <CheckedForm rules={OWNERS_DRAWING_RULES} action={drawingAction} className="space-y-3">
+              <input type="hidden" name="ownerId" value={owner.id} />
+              <Field label="Amount" rule={OWNERS_DRAWING_RULES.amount}>
+                <Input {...nativeAttrs(OWNERS_DRAWING_RULES.amount)} className="w-full" />
+              </Field>
+              <Field label="From" rule={OWNERS_DRAWING_RULES.fromMoneyAccountId}>
+                <Select {...nativeAttrs(OWNERS_DRAWING_RULES.fromMoneyAccountId)} defaultValue="" className="w-full">
+                  <option value="" disabled>
+                    Choose…
                   </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="On" rule={OWNERS_DRAWING_RULES.on}>
-              <Input type="date" {...nativeAttrs(OWNERS_DRAWING_RULES.on)} defaultValue={today()} className="w-full" />
-            </Field>
-            <Button type="submit" variant="primary">
-              Record drawing
-            </Button>
-          </CheckedForm>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} — {peso(a.balance)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="On" rule={OWNERS_DRAWING_RULES.on}>
+                <Input type="date" {...nativeAttrs(OWNERS_DRAWING_RULES.on)} defaultValue={today()} className="w-full" />
+              </Field>
+              <Button type="submit" variant="primary">
+                Record drawing
+              </Button>
+            </CheckedForm>
+          </FormModal>
         </section>
       </div>
 
@@ -220,39 +226,41 @@ export default async function OwnerPage({
         </div>
 
         {owner.closableMonth ? (
-          <CheckedForm rules={OWNERS_CLOSE_MONTH_RULES} action={closeMonthAction} className="space-y-4">
-            <input type="hidden" name="ownerId" value={owner.id} />
-            <input type="hidden" name="month" value={owner.closableMonth} />
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Month">
-                <Input
-                  disabled
-                  value={owner.closableMonth.slice(0, 7)}
-                  className={`w-full opacity-70`}
-                />
-              </Field>
-              <Field
-                label="Agreed amount"
-                hint={`The ledger says ${peso(owner.closableAmount)}. Leave as-is to agree with it.`}
-                rule={OWNERS_CLOSE_MONTH_RULES.acknowledgedAmount}
-              >
-                <Input
-                  {...nativeAttrs(OWNERS_CLOSE_MONTH_RULES.acknowledgedAmount)}
-                  defaultValue={owner.closableAmount}
-                  className="w-full"
-                />
-              </Field>
-              <Field label="Difference because" hint="Required only if your figure differs.">
-                <Input name="adjustmentReason" className="w-full" />
-              </Field>
-              <Field label="On" rule={OWNERS_CLOSE_MONTH_RULES.on}>
-                <Input type="date" {...nativeAttrs(OWNERS_CLOSE_MONTH_RULES.on)} defaultValue={today()} className="w-full" />
-              </Field>
-            </div>
-            <Button type="submit" variant="secondary">
-              Close {owner.closableMonth.slice(0, 7)}
-            </Button>
-          </CheckedForm>
+          <FormModal trigger="Close month" title="Close the month" size="md">
+            <CheckedForm rules={OWNERS_CLOSE_MONTH_RULES} action={closeMonthAction} className="space-y-4">
+              <input type="hidden" name="ownerId" value={owner.id} />
+              <input type="hidden" name="month" value={owner.closableMonth} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Month">
+                  <Input
+                    disabled
+                    value={owner.closableMonth.slice(0, 7)}
+                    className={`w-full opacity-70`}
+                  />
+                </Field>
+                <Field
+                  label="Agreed amount"
+                  hint={`The ledger says ${peso(owner.closableAmount)}. Leave as-is to agree with it.`}
+                  rule={OWNERS_CLOSE_MONTH_RULES.acknowledgedAmount}
+                >
+                  <Input
+                    {...nativeAttrs(OWNERS_CLOSE_MONTH_RULES.acknowledgedAmount)}
+                    defaultValue={owner.closableAmount}
+                    className="w-full"
+                  />
+                </Field>
+                <Field label="Difference because" hint="Required only if your figure differs.">
+                  <Input name="adjustmentReason" className="w-full" />
+                </Field>
+                <Field label="On" rule={OWNERS_CLOSE_MONTH_RULES.on}>
+                  <Input type="date" {...nativeAttrs(OWNERS_CLOSE_MONTH_RULES.on)} defaultValue={today()} className="w-full" />
+                </Field>
+              </div>
+              <Button type="submit" variant="secondary">
+                Close {owner.closableMonth.slice(0, 7)}
+              </Button>
+            </CheckedForm>
+          </FormModal>
         ) : (
           <p className="text-sm text-neutral-500 dark:text-neutral-400">
             Last month is already closed for this owner.

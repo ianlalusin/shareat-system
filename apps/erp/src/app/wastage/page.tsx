@@ -10,7 +10,7 @@ import { recordOrderWastageAction } from './actions';
 import { WASTAGE_RECORD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { CheckedForm } from '@/components/forms';
 import { Page } from '@/components/shell/Page';
-import { Badge, Banner, Button, FlashBanner, FormGrid, Field, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Badge, Banner, Button, FlashBanner, FormGrid, Field, FormModal, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -90,30 +90,16 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
 
   return (
     <Page density="table">
-      <div>
-        <h1 className="text-2xl font-semibold">Order wastage</h1>
-        <PageDescription className="mt-1">
-          A refunded or remade order — economics and staff accountability, never stock. Raw-stock
-          wastage is recorded under Inventory.
-        </PageDescription>
-      </div>
-
-      <FilterRow>
-        <label className="text-sm">
-          <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
-          <Select name="store" defaultValue={storeId} className="mt-1">
-            {stores.map((s) => (
-              <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
-            ))}
-          </Select>
-        </label>
-      </FilterRow>
-
-      <FlashBanner flash={sp} />
-
-      <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="font-medium">Record a wastage</h2>
-        <CheckedForm rules={WASTAGE_RECORD_RULES} action={recordOrderWastageAction} className="mt-3 space-y-3 text-sm">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Order wastage</h1>
+          <PageDescription className="mt-1">
+            A refunded or remade order — economics and staff accountability, never stock. Raw-stock
+            wastage is recorded under Inventory.
+          </PageDescription>
+        </div>
+        <FormModal trigger="+ Record wastage" title="Record a wastage" size="lg">
+        <CheckedForm rules={WASTAGE_RECORD_RULES} action={recordOrderWastageAction} className="space-y-3 text-sm">
           <input type="hidden" name="storeId" value={storeId} />
           <FormGrid>
             {/* ⭐ T-230 — a SELECT of configured channels, not free text with a datalist hint.
@@ -201,7 +187,21 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
           </p>
           <Button type="submit" variant="primary">Save</Button>
         </CheckedForm>
-      </section>
+        </FormModal>
+      </div>
+
+      <FilterRow>
+        <label className="text-sm">
+          <span className="block text-neutral-600 dark:text-neutral-400">Store</span>
+          <Select name="store" defaultValue={storeId} className="mt-1">
+            {stores.map((s) => (
+              <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+            ))}
+          </Select>
+        </label>
+      </FilterRow>
+
+      <FlashBanner flash={sp} />
 
       {matches.length > 0 && (
         <Banner tone="warning">

@@ -17,7 +17,7 @@ import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, ConfirmDestructive, FlashBanner, Input, Select } from '@/components/ui';
+import { Button, ConfirmDestructive, FlashBanner, FormModal, Input, Select } from '@/components/ui';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import { LIABILITY_CHARGE_RULES, LIABILITY_PAY_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 
@@ -102,36 +102,38 @@ export default async function LiabilityPage({
               an asset. Charging it to another liability would move a debt without settling it.
             </p>
           </div>
-          <CheckedForm rules={LIABILITY_CHARGE_RULES} action={chargeAction} className="space-y-3">
-            <input type="hidden" name="liabilityId" value={liability.id} />
-            <Field label="Amount" rule={LIABILITY_CHARGE_RULES.amount}>
-              <input {...nativeAttrs(LIABILITY_CHARGE_RULES.amount)} name="amount" inputMode="decimal" className={INPUT} />
-            </Field>
-            <Field
-              label="For"
-              rule={
-                // Written across lines on purpose: t406 reads a one-line `{…AccountCode}` as a chart code printed on screen, and this is a rule reference.
-                LIABILITY_CHARGE_RULES.againstAccountCode
-              }
-            >
-              <Select {...nativeAttrs(LIABILITY_CHARGE_RULES.againstAccountCode)} defaultValue="" className="w-full">
-                <option value="" disabled>
-                  Choose…
-                </option>
-                {targets.map((a) => (
-                  <option key={a.code} value={a.code}>
-                    {a.name}
+          <FormModal trigger="Charge it" title="Charge this obligation" size="md">
+            <CheckedForm rules={LIABILITY_CHARGE_RULES} action={chargeAction} className="space-y-3">
+              <input type="hidden" name="liabilityId" value={liability.id} />
+              <Field label="Amount" rule={LIABILITY_CHARGE_RULES.amount}>
+                <input {...nativeAttrs(LIABILITY_CHARGE_RULES.amount)} name="amount" inputMode="decimal" className={INPUT} />
+              </Field>
+              <Field
+                label="For"
+                rule={
+                  // Written across lines on purpose: t406 reads a one-line `{…AccountCode}` as a chart code printed on screen, and this is a rule reference.
+                  LIABILITY_CHARGE_RULES.againstAccountCode
+                }
+              >
+                <Select {...nativeAttrs(LIABILITY_CHARGE_RULES.againstAccountCode)} defaultValue="" className="w-full">
+                  <option value="" disabled>
+                    Choose…
                   </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="On" rule={LIABILITY_CHARGE_RULES.on}>
-              <Input type="date" {...nativeAttrs(LIABILITY_CHARGE_RULES.on)} defaultValue={today()} className="w-full" />
-            </Field>
-            <Button type="submit" variant="secondary">
-              Charge
-            </Button>
-          </CheckedForm>
+                  {targets.map((a) => (
+                    <option key={a.code} value={a.code}>
+                      {a.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="On" rule={LIABILITY_CHARGE_RULES.on}>
+                <Input type="date" {...nativeAttrs(LIABILITY_CHARGE_RULES.on)} defaultValue={today()} className="w-full" />
+              </Field>
+              <Button type="submit" variant="secondary">
+                Charge
+              </Button>
+            </CheckedForm>
+          </FormModal>
         </section>
 
         <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
@@ -149,36 +151,38 @@ export default async function LiabilityPage({
             </p>
           </div>
           {owing > 0 && (
-            <CheckedForm rules={LIABILITY_PAY_RULES} action={payAction} className="space-y-3">
-              <input type="hidden" name="liabilityId" value={liability.id} />
-              <Field label="Amount" rule={LIABILITY_PAY_RULES.amount}>
-                <input
-                  {...nativeAttrs(LIABILITY_PAY_RULES.amount)}
-                  name="amount"
-                  inputMode="decimal"
-                  defaultValue={liability.position.outstanding}
-                  className={INPUT}
-                />
-              </Field>
-              <Field label="From" hint="Balances shown are derived from the ledger." rule={LIABILITY_PAY_RULES.fromMoneyAccountId}>
-                <Select {...nativeAttrs(LIABILITY_PAY_RULES.fromMoneyAccountId)} defaultValue="" className="w-full">
-                  <option value="" disabled>
-                    Choose…
-                  </option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} — {peso(a.balance)}
+            <FormModal trigger="Pay it" title="Pay this obligation" size="md">
+              <CheckedForm rules={LIABILITY_PAY_RULES} action={payAction} className="space-y-3">
+                <input type="hidden" name="liabilityId" value={liability.id} />
+                <Field label="Amount" rule={LIABILITY_PAY_RULES.amount}>
+                  <input
+                    {...nativeAttrs(LIABILITY_PAY_RULES.amount)}
+                    name="amount"
+                    inputMode="decimal"
+                    defaultValue={liability.position.outstanding}
+                    className={INPUT}
+                  />
+                </Field>
+                <Field label="From" hint="Balances shown are derived from the ledger." rule={LIABILITY_PAY_RULES.fromMoneyAccountId}>
+                  <Select {...nativeAttrs(LIABILITY_PAY_RULES.fromMoneyAccountId)} defaultValue="" className="w-full">
+                    <option value="" disabled>
+                      Choose…
                     </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="On" rule={LIABILITY_PAY_RULES.on}>
-                <Input type="date" {...nativeAttrs(LIABILITY_PAY_RULES.on)} defaultValue={today()} className="w-full" />
-              </Field>
-              <Button type="submit" variant="primary">
-                Pay
-              </Button>
-            </CheckedForm>
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} — {peso(a.balance)}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="On" rule={LIABILITY_PAY_RULES.on}>
+                  <Input type="date" {...nativeAttrs(LIABILITY_PAY_RULES.on)} defaultValue={today()} className="w-full" />
+                </Field>
+                <Button type="submit" variant="primary">
+                  Pay
+                </Button>
+              </CheckedForm>
+            </FormModal>
           )}
         </section>
       </div>

@@ -226,7 +226,10 @@ function recordForm(card: string, tenderId: string): string | undefined {
 function addBox(card: string): string {
   const i = card.indexOf('Add a tender');
   expect(i, 'the card has an "Add a tender" heading (R3)').toBeGreaterThanOrEqual(0);
-  return card.slice(i);
+  // T-448 A3: the add form is a FormModal now; its box ends at the dialog's close (the tender rows follow it).
+  const rest = card.slice(i);
+  const end = rest.indexOf('</dialog>');
+  return end === -1 ? rest : rest.slice(0, end);
 }
 const selectOf = (markup: string, name: string): string | null =>
   new RegExp(`<select\\b[^>]*\\bname="${name}"[^>]*>[\\s\\S]*?</select>`).exec(markup)?.[0] ?? null;

@@ -30,7 +30,7 @@ import {
   COMMISSARY_WITHDRAW_RULES,
   nativeAttrs,
 } from '@shareat/domain/field-rules';
-import { branchOrderSteps, Button, ConfirmDestructive, exitStepFromTimestamps, Field, FlashBanner, FormGrid, Input, isExitStage, nextLineFor, Select, StatusHero, type StatusIconKind, stepIndexFor, type Tone } from '@/components/ui';
+import { branchOrderSteps, Button, ConfirmDestructive, exitStepFromTimestamps, Field, FlashBanner, FormGrid, FormModal, Input, isExitStage, nextLineFor, Select, StatusHero, type StatusIconKind, stepIndexFor, type Tone } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
@@ -226,7 +226,9 @@ export default async function BranchOrderPage({
       {/* ---- The branch's controls ------------------------------------------------------------ */}
       {draft && branchSide && (
         <section className={PANEL}>
-          <h2 className="font-medium">Add a line</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-medium">Add a line</h2>
+            <FormModal trigger="+ Add line" title="Add a line to this order" size="lg">
           <CheckedForm rules={COMMISSARY_ORDER_LINE_RULES} action={addLineAction} className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_7rem_9rem_auto] sm:items-end">
             <input type="hidden" name="orderId" value={order.id} />
             <Field label="Item (the commissary&rsquo;s catalogue)" className={`${LABEL} col-span-2 sm:col-span-1`} rule={COMMISSARY_ORDER_LINE_RULES.itemId}>
@@ -250,6 +252,8 @@ export default async function BranchOrderPage({
               Save
             </Button>
           </CheckedForm>
+            </FormModal>
+          </div>
           <div className="flex flex-wrap items-end gap-3 border-t border-neutral-200 pt-3 dark:border-neutral-800">
             <span className="text-xs text-neutral-500 dark:text-neutral-400">
               Submit is refused while any line is unmapped or has no expense category — fix those under{' '}
@@ -283,6 +287,7 @@ export default async function BranchOrderPage({
             A proposed line counts toward nothing until the branch approves it, and the order cannot be marked ready
             until they answer — the reason goes on the thread.
           </p>
+          <FormModal trigger="Propose substitution" title="Propose a substitution or an addition" size="lg">
           <CheckedForm rules={COMMISSARY_ORDER_LINE_RULES} action={proposeLineAction} className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6 sm:items-end">
             <input type="hidden" name="orderId" value={order.id} />
             <Field label="Item" className={`${LABEL} col-span-2 sm:col-span-1`} rule={COMMISSARY_ORDER_LINE_RULES.itemId}>
@@ -333,6 +338,7 @@ export default async function BranchOrderPage({
               Propose
             </Button>
           </CheckedForm>
+          </FormModal>
         </section>
       )}
 

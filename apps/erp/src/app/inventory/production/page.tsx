@@ -4,7 +4,7 @@ import { requireSession } from '../../../lib/session';
 import { saveProductionDraftAction } from './actions';
 import { listStores, productionScreenData } from './lib';
 import { Page } from '@/components/shell/Page';
-import { Badge, Banner, Button, Field, FlashBanner, FormGrid, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Badge, Banner, Button, Field, FlashBanner, FormGrid, FormModal, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { INVENTORY_PRODUCTION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FilterRow } from '@/components/FilterRow';
@@ -111,11 +111,13 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
               </Link>
             ))}
           </nav>
+          <div className="mt-3">
           {kind === 'cook' && recipes.length === 0 ? (
             <Banner tone="warning" className="mt-3">
               A cook starts from a recipe, and there is no active recipe yet. Ask an admin to add one; recipes can only be added by an admin.
             </Banner>
           ) : (
+          <FormModal trigger="+ New production record" title={`New production record — ${KIND_LABEL[kind]}`} size="lg">
           <CheckedForm rules={INVENTORY_PRODUCTION_RULES} action={saveProductionDraftAction} className="mt-3 space-y-4">
             <input type="hidden" name="storeId" value={storeId} />
             <input type="hidden" name="kind" value={kind} />
@@ -169,7 +171,9 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
               Save draft
             </Button>
           </CheckedForm>
+          </FormModal>
           )}
+          </div>
         </section>
       )}
 

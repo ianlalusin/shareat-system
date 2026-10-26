@@ -33,7 +33,7 @@ import { typedFor } from '@/lib/keep-typing';
 import { CASH_POLICY_EDIT } from './typed-forms';
 import { CheckedForm, EditableRecord, FieldCheck } from '@/components/forms';
 import { CASH_POLICY_RULES, REMITTANCE_RECORD_RULES, REMITTANCE_REVERSE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
-import { Button, ConfirmDestructive, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Button, ConfirmDestructive, FlashBanner, FormGrid, Input, Select, FormModal } from '@/components/ui';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 
 export const metadata = { title: 'Remittance — Shareat System' };
@@ -405,19 +405,13 @@ export default async function RemittancePage({
 
       {/* ── Record a handover ────────────────────────────────────────────────────────── */}
       {handoverFormRenders && (
-        <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-          <div>
-            <h2 className="font-medium">Record a handover</h2>
-            <p className="text-sm text-neutral-600 dark:text-neutral-400">
-              It settles the oldest days first. If it is short, the shortfall lands on the last day
-              it reached — and is recorded as an open item, charged to nobody until somebody says
-              who. If an account is handing over more than it moved over the settleable dates —
-              cash from a day still waiting on verification, for instance — declare the overage
-              beside that amount; nothing is accepted until you do. The balance shown below is
-              what an account currently holds, not what it owes — holding is not owing.
-            </p>
-          </div>
-
+        <div className="flex justify-end">
+          <FormModal
+            trigger="Record handover"
+            title="Record a handover"
+            size="lg"
+            description="It settles the oldest days first. If it is short, the shortfall lands on the last day it reached — and is recorded as an open item, charged to nobody until somebody says who. If an account is handing over more than it moved over the settleable dates — cash from a day still waiting on verification, for instance — declare the overage beside that amount; nothing is accepted until you do. The balance shown below is what an account currently holds, not what it owes — holding is not owing."
+          >
           <CheckedForm rules={REMITTANCE_RECORD_RULES} action={createRemittanceAction} className="space-y-4">
             <input type="hidden" name="storeId" value={storeId} />
 
@@ -485,7 +479,8 @@ export default async function RemittancePage({
 
             <SubmitButton pendingLabel="Saving…">Record handover</SubmitButton>
           </CheckedForm>
-        </section>
+          </FormModal>
+        </div>
       )}
 
       {/* ── History ──────────────────────────────────────────────────────────────────── */}

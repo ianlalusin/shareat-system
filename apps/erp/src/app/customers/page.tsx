@@ -18,7 +18,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input, LinkRow, RowAction, RowLink, Select, FormGrid, FormSection, type FieldProps } from '@/components/ui';
+import { Button, FlashBanner, Input, LinkRow, RowAction, RowLink, Select, FormGrid, FormSection, type FieldProps, FormModal } from '@/components/ui';
 
 export const metadata = { title: 'Customers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -152,16 +152,19 @@ export default async function CustomersPage({
       </p>
 
       {/* ── Add one ──────────────────────────────────────────────────────────────────── */}
-      <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <div>
-          <h2 className="font-medium">Record a customer</h2>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            ⭐ The <strong>counterparty</strong> decides how sales to them are treated, and the two
-            answers are not close: one of our own stores <em>eliminates</em> and is never revenue;
-            another company is <em>real revenue and a real receivable</em>.
-          </p>
-        </div>
-
+      <div className="flex justify-end">
+        <FormModal
+          trigger="+ Add customer"
+          title="Record a customer"
+          size="lg"
+          description={
+            <>
+              ⭐ The <strong>counterparty</strong> decides how sales to them are treated, and the two
+              answers are not close: one of our own stores <em>eliminates</em> and is never revenue;
+              another company is <em>real revenue and a real receivable</em>.
+            </>
+          }
+        >
         <CheckedForm rules={CUSTOMER_ADD_RULES} action={createCustomerAction} className="space-y-4">
           <FormSection title="Customer identity">
             <FormGrid layout="fields">
@@ -238,7 +241,8 @@ export default async function CustomersPage({
             Save
           </Button>
         </CheckedForm>
-      </section>
+        </FormModal>
+      </div>
     </Page>
   );
 }

@@ -11,7 +11,7 @@ import { CUSTODIAN_LABEL, listAccountBalances, listRecentTransfers, listSettleme
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Banner, ConfirmDestructive, Field, FlashBanner, Input } from '@/components/ui';
+import { Badge, Banner, ConfirmDestructive, Field, FlashBanner, Input, FormModal } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { TRANSFER_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
@@ -174,43 +174,49 @@ export default async function MoneyTransfersPage({
 
       {/* ── Record one ───────────────────────────────────────────────────────────────── */}
       {usable.length > 0 && (
-        <section className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-          <div>
-            <h2 className="font-medium">Record a transfer</h2>
-            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <div className="flex flex-wrap justify-end gap-2">
+        <FormModal
+          trigger="+ Record transfer"
+          title="Record a transfer"
+          size="md"
+          description={
+            <>
               A retired account cannot be either end, and{' '}
               <strong>between stores money moves office to office only</strong> — a store remits to
               its own office first, and only office money can fund another store. An office safe
               cannot send more than it holds; a cashier drawer can, and says so, because the till
               holds the day&apos;s takings before the ledger does.
-            </p>
-          </div>
-
+            </>
+          }
+        >
           <RecordTransferForm options={accountOptions} today={today} />
-        </section>
-      )}
-
-      {/* ── Settle between stores ────────────────────────────────────────────────────── */}
-      {usable.length > 0 && (
-        <details className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-          <summary className="inline-flex min-h-[44px] cursor-pointer items-center text-sm font-medium">Settle between stores</summary>
-          <div className="mt-3 space-y-3">
-            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        </FormModal>
+        {settleOptions.length > 0 ? (
+        <FormModal
+          trigger="Settle between stores"
+          triggerVariant="secondary"
+          title="Settle between stores"
+          size="md"
+          description={
+            <>
               When one store has paid for another, the two stores carry a balance. Paying it back here moves the cash
               <strong> and</strong> clears the balance in one entry — an ordinary transfer back would grow both balances
               instead. Money moves office to office, and no more than what is owed.
-            </p>
-            {settleOptions.length === 0 ? (
-              <p className="text-sm text-neutral-500 dark:text-neutral-400">No store owes another.</p>
-            ) : (
-              <SettleBetweenStoresForm
-                pairs={settleOptions}
-                settlementId={settlementId}
-                today={today}
-              />
-            )}
+            </>
+          }
+        >
+          <div className="space-y-3">
+            <SettleBetweenStoresForm
+              pairs={settleOptions}
+              settlementId={settlementId}
+              today={today}
+            />
           </div>
-        </details>
+        </FormModal>
+        ) : (
+          <p className="text-sm text-muted">No store owes another.</p>
+        )}
+        </div>
       )}
 
       {/* ── History ──────────────────────────────────────────────────────────────────── */}

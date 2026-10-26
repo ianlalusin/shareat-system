@@ -8,7 +8,7 @@ import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, ConfirmDestructive, FlashBanner, Input, Select, statusLabel } from '@/components/ui';
+import { Button, ConfirmDestructive, FlashBanner, FormModal, Input, Select, statusLabel } from '@/components/ui';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import { LOAN_DRAW_RULES, LOAN_PAYMENT_RULES, LOAN_REVERSE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 
@@ -89,35 +89,37 @@ export default async function LoanPage({
               loan with its own terms, not a bigger version of this one.
             </p>
           </div>
-          <CheckedForm rules={LOAN_DRAW_RULES} action={disburseLoanAction} className="grid gap-4 sm:grid-cols-3">
-            <input type="hidden" name="loanId" value={loan.id} />
-            <Field label="Amount" rule={LOAN_DRAW_RULES.amount}>
-              <input
-                {...nativeAttrs(LOAN_DRAW_RULES.amount)}
-                name="amount"
-                inputMode="decimal"
-                defaultValue={undrawn}
-                className={INPUT}
-              />
-            </Field>
-            <Field label="Into" rule={LOAN_DRAW_RULES.intoMoneyAccountId}>
-              <Select {...nativeAttrs(LOAN_DRAW_RULES.intoMoneyAccountId)} defaultValue={accounts[0]?.id} className="w-full">
-                {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="On" rule={LOAN_DRAW_RULES.on}>
-              <Input type="date" {...nativeAttrs(LOAN_DRAW_RULES.on)} defaultValue={today()} className="w-full" />
-            </Field>
-            <div className="sm:col-span-3">
-              <Button type="submit" variant="secondary">
-                Record the draw
-              </Button>
-            </div>
-          </CheckedForm>
+          <FormModal trigger="Draw the money" title="Draw the money from this loan" size="md">
+            <CheckedForm rules={LOAN_DRAW_RULES} action={disburseLoanAction} className="grid gap-4 sm:grid-cols-3">
+              <input type="hidden" name="loanId" value={loan.id} />
+              <Field label="Amount" rule={LOAN_DRAW_RULES.amount}>
+                <input
+                  {...nativeAttrs(LOAN_DRAW_RULES.amount)}
+                  name="amount"
+                  inputMode="decimal"
+                  defaultValue={undrawn}
+                  className={INPUT}
+                />
+              </Field>
+              <Field label="Into" rule={LOAN_DRAW_RULES.intoMoneyAccountId}>
+                <Select {...nativeAttrs(LOAN_DRAW_RULES.intoMoneyAccountId)} defaultValue={accounts[0]?.id} className="w-full">
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="On" rule={LOAN_DRAW_RULES.on}>
+                <Input type="date" {...nativeAttrs(LOAN_DRAW_RULES.on)} defaultValue={today()} className="w-full" />
+              </Field>
+              <div className="sm:col-span-3">
+                <Button type="submit" variant="secondary">
+                  Record the draw
+                </Button>
+              </div>
+            </CheckedForm>
+          </FormModal>
         </section>
       )}
 
@@ -150,35 +152,37 @@ export default async function LoanPage({
             </div>
           </div>
 
-          <CheckedForm rules={LOAN_PAYMENT_RULES} action={recordPaymentAction} className="grid gap-4 sm:grid-cols-3">
-            <input type="hidden" name="loanId" value={loan.id} />
-            <Field label="Amount paid" rule={LOAN_PAYMENT_RULES.amount}>
-              <input
-                {...nativeAttrs(LOAN_PAYMENT_RULES.amount)}
-                name="amount"
-                inputMode="decimal"
-                placeholder={loan.instalment}
-                className={INPUT}
-              />
-            </Field>
-            <Field label="From" rule={LOAN_PAYMENT_RULES.fromMoneyAccountId}>
-              <Select {...nativeAttrs(LOAN_PAYMENT_RULES.fromMoneyAccountId)} defaultValue={accounts[0]?.id} className="w-full">
-                {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name} — {peso(a.balance)}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="On" rule={LOAN_PAYMENT_RULES.on}>
-              <Input type="date" {...nativeAttrs(LOAN_PAYMENT_RULES.on)} defaultValue={today()} className="w-full" />
-            </Field>
-            <div className="sm:col-span-3">
-              <Button type="submit" variant="primary">
-                Record payment
-              </Button>
-            </div>
-          </CheckedForm>
+          <FormModal trigger="Record a payment" title="Record a payment on this loan" size="md">
+            <CheckedForm rules={LOAN_PAYMENT_RULES} action={recordPaymentAction} className="grid gap-4 sm:grid-cols-3">
+              <input type="hidden" name="loanId" value={loan.id} />
+              <Field label="Amount paid" rule={LOAN_PAYMENT_RULES.amount}>
+                <input
+                  {...nativeAttrs(LOAN_PAYMENT_RULES.amount)}
+                  name="amount"
+                  inputMode="decimal"
+                  placeholder={loan.instalment}
+                  className={INPUT}
+                />
+              </Field>
+              <Field label="From" rule={LOAN_PAYMENT_RULES.fromMoneyAccountId}>
+                <Select {...nativeAttrs(LOAN_PAYMENT_RULES.fromMoneyAccountId)} defaultValue={accounts[0]?.id} className="w-full">
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} — {peso(a.balance)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="On" rule={LOAN_PAYMENT_RULES.on}>
+                <Input type="date" {...nativeAttrs(LOAN_PAYMENT_RULES.on)} defaultValue={today()} className="w-full" />
+              </Field>
+              <div className="sm:col-span-3">
+                <Button type="submit" variant="primary">
+                  Record payment
+                </Button>
+              </div>
+            </CheckedForm>
+          </FormModal>
         </section>
       )}
 
