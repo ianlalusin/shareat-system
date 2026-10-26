@@ -46,7 +46,7 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     table: 'journal_entries',
     mode: 'always',
     kind: 'history_guard',
-    reason: 'A posted entry cannot be rewritten or erased (0003). Decides only from OLD.status.',
+    reason: 'A posted or reversed entry cannot be rewritten or erased (0003; reversed frozen by 0219, T-492 S2). Decides only from OLD.status.',
   },
   journal_lines_posted_immutable: {
     table: 'journal_lines',

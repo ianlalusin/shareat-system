@@ -1387,6 +1387,13 @@
       "when": 1804822307084,
       "tag": "0217_t475_self_verified_supplier_invoices",
       "breakpoints": true
+    },
+    {
+      "idx": 219,
+      "version": "7",
+      "when": 1804995107084,
+      "tag": "0219_t492_reversed_header_frozen",
+      "breakpoints": true
     }
   ]
 }
