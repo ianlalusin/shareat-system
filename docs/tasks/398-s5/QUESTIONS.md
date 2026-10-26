@@ -95,3 +95,15 @@ Checked clean: RLS shape, definers (search_path, REVOKE/GRANT, app_current_org s
   S5c/S5d give each a real caller; the S5 PR does not go up while this is red.
 - Unit runs on the laptop time out under load (~100 of 110 failures on 26 Oct were 5 s timeouts); judge the full unit
   suite in CI, and re-run a suspected file on its own.
+- S5c audit (26 Oct) triage: (1) void read the order without FOR UPDATE and markVoided had no status guard - FIX in S5c;
+  (2) a voided shipment kept the freed BIR booklet number - FIX (cleared on void); (3) "on credit" with an empty days
+  box stores NULL from a direct domain call - DISMISSED: mirrors the supplier path by ruling, the action's
+  assertFieldRules refuses it on screen; (4) createCustomer trusts any org uuid as the counterparty link - folded into
+  DEF-747 (the link picker decides who may link).
+- S5d tester questions (26 Oct), orchestrator rulings: (a) item mapping is refuse-and-ask - PG picks its own item per
+  line and it must already be declared in supplier_items for PG's supplier row of the commissary (TESTS.md B2); no
+  auto-declare. (b) Finding 4 is enforced at the buyer's domain read: listInboundShipments / getInboundShipment select
+  only the QI-1 (a) columns; NO new definer (X2b stays at 4) and S5b's E3 (PG may read its shipment rows under RLS) is
+  not re-ruled - every PG screen goes through these two reads. (c) The seller-side read of received_by gets a leg when
+  the seller read is built (S5e). (d) The rest of the tester's pinned contract (call shapes, entry source types,
+  RefusalError) is accepted.

@@ -104,6 +104,8 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   // Ian Q2: holding only manage_attendance at a store is enough to see that store's roster.
   '/staff': ['enrol_staff', 'manage_attendance'],
   '/staff/hire': 'enrol_staff',
+  // T-398 S5d: goods another company sent us are received by whoever may receive a delivery. The longer key wins over the open /inventory.
+  '/inventory/deliveries/inbound': 'receive_delivery',
 };
 
 /**

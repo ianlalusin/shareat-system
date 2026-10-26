@@ -566,6 +566,21 @@ REVOKE ALL ON FUNCTION "inter_entity_counterparty_balance"() FROM PUBLIC;
 --> statement-breakpoint
 GRANT EXECUTE ON FUNCTION "inter_entity_counterparty_balance"() TO "shareat_app";
 --> statement-breakpoint
+CREATE FUNCTION "inter_entity_counterparty_name"("p_customer_id" uuid) RETURNS text
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+	-- S5c: the linked organisation's NAME, for the caller's own customer row only (the order page's "Inter-entity sale to ..."). Nothing else of it.
+	SELECT o."name" FROM "customers" c JOIN "organizations" o ON o."id" = c."counterparty_org_id"
+	WHERE c."id" = p_customer_id AND c."org_id" = app_current_org()
+$$;
+--> statement-breakpoint
+REVOKE ALL ON FUNCTION "inter_entity_counterparty_name"(uuid) FROM PUBLIC;
+--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION "inter_entity_counterparty_name"(uuid) TO "shareat_app";
+--> statement-breakpoint
 ALTER TABLE "scheduler_runs" DROP CONSTRAINT "scheduler_runs_job_check";
 --> statement-breakpoint
 ALTER TABLE "scheduler_runs" ADD CONSTRAINT "scheduler_runs_job_check"

@@ -63,7 +63,8 @@ export default async function TradeOrderPage({
 
   const isInternal = treatment === 'internal';
   const canDispatch = order.status === 'draft' || order.status === 'confirmed';
-  const canReceive = order.status === 'dispatched';
+  // T-398 S5c: another company confirms receipt in its own books, so the seller is not offered the button.
+  const canReceive = order.status === 'dispatched' && treatment !== 'inter_entity';
   // ⛔ Void after receipt on an INTERNAL transfer needs a two-store reverse-transfer that is not
   // built (T-165) — the domain refuses it, so the button is not offered. A received SALE may
   // still be voided: AR unwinds the charge and the stock comes back.
@@ -117,6 +118,12 @@ export default async function TradeOrderPage({
         <p className={`mt-1 text-xs ${TREATMENT_TONE[treatment] ?? ''}`}>
           {customer.name} · {TREATMENT_LABEL[treatment]}
         </p>
+        {detail.interEntity && (
+          <p className="mt-1 text-xs text-violet-700 dark:text-violet-400">
+            Inter-entity sale to {detail.interEntity.buyerName}
+            {detail.interEntity.receivedOn && <> · Received by {detail.interEntity.buyerName} on {detail.interEntity.receivedOn}</>}
+          </p>
+        )}
       </div>
 
       <FlashBanner flash={sp} />

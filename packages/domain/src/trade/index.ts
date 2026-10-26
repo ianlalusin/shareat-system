@@ -24,7 +24,7 @@
  * v2, so a dispatch relieves no stock. Wholesale revenue is measurable after this task; wholesale
  * MARGIN is not. See the spec's Out of scope.
  */
-import { auditLogRepo, commissaryRepo, customersRepo, itemsRepo, journalRepo, moneyTransfersRepo, stockLedgerRepo, stockLocationsRepo, tradeRepo, type Tx } from '@shareat/db';
+import { auditLogRepo, commissaryRepo, customersRepo, interEntityRepo, itemsRepo, journalRepo, moneyTransfersRepo, stockLedgerRepo, stockLocationsRepo, tradeRepo, type Tx } from '@shareat/db';
 import { authorize, AuthorizationError, type Actor, type Capability, can } from '@shareat/auth';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { assertFiguresReconcile } from '../shared/reconcile';
@@ -193,15 +193,6 @@ export async function createTradeOrder(
     // and never stored (ADR-008 §2). This one fact decides the whole posting below.
     const treatment = customersRepo.treatmentOf(customer);
 
-    if (treatment === 'inter_entity') {
-      throw new Error(
-        `createTradeOrder: ${customer.name} belongs to another organisation, and their side of ` +
-          'the trade cannot be posted from here — no second org exists in the data yet, and once ' +
-          'RLS isolates two orgs no single transaction spans both. Their agreement becomes a ' +
-          'scheduled reconciliation, which needs a real counterparty to design against. See ' +
-          'docs/tasks/133-inter-entity-trade.md §4.',
-      );
-    }
     if (treatment === 'external' && customer.customerGroup !== 'wholesale' && customer.customerGroup !== 'franchise') {
       throw new Error(
         `createTradeOrder: ${customer.name} is a ${customer.customerGroup} account, not a ` +
@@ -332,6 +323,14 @@ export async function createTradeOrder(
     }
     const goodsTotal = total;
     const fees = add(deliveryFee ?? ZERO, otherFees ?? ZERO);
+    // T-398 S5c (QO-6): another company's books have no freight leg, so a fee would be a figure the two sides could never agree on.
+    // Refused here, before any write; the price list carries the freight.
+    if (treatment === 'inter_entity' && compare(fees, ZERO) > 0) {
+      throw refuse(
+        `createTradeOrder: ${customer.name} is an inter-entity customer; a delivery fee or other fee cannot be added.`,
+        `Delivery charges to ${customer.name} go into the franchise price, so this order carries no delivery fee or other fee. Take the fee off, or put it in the price.`,
+      );
+    }
     total = add(total, fees);
 
     const totalAmount = total;
@@ -407,7 +406,7 @@ export interface DispatchResult {
   entryId: string;
   /** True when the credit limit was breached and someone with the capability let it through. */
   creditOverridden: boolean;
-  treatment: 'internal' | 'external';
+  treatment: 'internal' | 'external' | 'inter_entity';
   /** T-433. What was paid at the door in the same transaction, and what is still owed on this order; null when nothing was. */
   paidNow: string | null;
   balanceAfterPayment: string | null;
@@ -456,8 +455,8 @@ export async function dispatchTradeOrder(
         chargeId: order.arChargeId,
         entryId: order.journalEntryId,
         creditOverridden: order.creditOverrideReason !== null,
-        // ⚠️ Read back from the FACT — an internal transfer never raised a charge.
-        treatment: order.arChargeId ? 'external' : 'internal',
+        // ⚠️ Read back from the FACT — an internal transfer never raised a charge, and an inter-entity sale left a shipment note.
+        treatment: order.arChargeId ? ((await interEntityRepo.findByTradeOrder(trx, actor.orgId, order.id)) ? 'inter_entity' : 'external') : 'internal',
         paidNow: null,
         balanceAfterPayment: null,
         collectionId: null,
@@ -582,6 +581,26 @@ export async function dispatchTradeOrder(
       };
     }
 
+    // ⭐ T-398 S5c. A customer linked to another organisation is billed exactly like an outside buyer; the only additions are the
+    // refusals below (decided before the first write) and the shipment note written after the sale, in this same transaction.
+    const interEntity = customersRepo.treatmentOf(customer) === 'inter_entity';
+    if (interEntity) {
+      // Row 370 (Ian, 17 Oct): each company records its own payments, so nothing is paid at dispatch.
+      if (input.payNow) {
+        throw refuse(
+          `dispatchTradeOrder: order ${order.id} is an inter-entity sale; a pay-now payment does not apply.`,
+          `${customer.name} is another company and pays from its own books, so a payment cannot be taken at dispatch. Record the payment on the customer's page once it arrives.`,
+        );
+      }
+      // The note must add up to the bill, and a fee has no place on it (the order was linked after a fee was set).
+      if (compare(add(money(order.deliveryFee), money(order.otherFees)), ZERO) > 0) {
+        throw refuse(
+          `dispatchTradeOrder: order ${order.id} carries a fee and its customer is an inter-entity buyer.`,
+          `Delivery charges to ${customer.name} go into the franchise price, so this order cannot carry a delivery fee or other fee. Remove the fee first.`,
+        );
+      }
+    }
+
     // ⭐ Bills by calling AR, never by posting its own legs. One owner of the 1210/4200 entry —
     // and DEF-158, the credit-limit gate itself now lives inside `recordCharge`, the one place
     // every AR-charging caller goes through, rather than a copy kept here.
@@ -623,6 +642,7 @@ export async function dispatchTradeOrder(
     // `dispatchOrder` applies it for the internal path. Validating inside the write loop leaves
     // line 1's stock moved when line 2 is the one with no inventory account.
     const cogsLines: { itemId: string; quantity: Quantity; inventoryAccount: string }[] = [];
+    const itemNameById = new Map<string, string>();
     for (const line of soldLines) {
       const item = await itemsRepo.getItemById(trx, actor.orgId, line.itemId);
       if (!item) throw new Error('dispatchTradeOrder: a line names an item that no longer exists.');
@@ -631,6 +651,7 @@ export async function dispatchTradeOrder(
         throw new Error(`dispatchTradeOrder: item kind "${item.kind}" has no inventory account in COA-ALIGNMENT §4.1.`);
       }
       cogsLines.push({ itemId: line.itemId, quantity: quantity(line.quantity), inventoryAccount });
+      itemNameById.set(line.itemId, item.name);
     }
 
     const cogsGroups = new Map<string, { inventoryAccount: string; lines: ConsumedLine[] }>();
@@ -668,11 +689,35 @@ export async function dispatchTradeOrder(
       creditOverrideReason,
     });
 
+    // T-398 S5c. The shipment note: what was sent, how many, at what price - a snapshot of the order lines (no cost, no staff name), carrying
+    // the booklet number. Written here, in the sale's own transaction, so a failed dispatch leaves no note and a sale never lacks one.
+    // The one retry that reaches this point already returned above, so the UNIQUE on the order is only a backstop.
+    if (interEntity) {
+      await interEntityRepo.create(trx, {
+        orgId: actor.orgId,
+        buyerOrgId: customer.counterpartyOrgId!, // inter-entity means this link is set
+        tradeOrderId: order.id,
+        storeId: order.storeId,
+        shippedOn: order.orderDate,
+        birInvoiceNo: order.birInvoiceNo,
+        billedTotal: money(order.totalAmount),
+        lines: soldLines.map((l, i) => ({
+          tradeOrderLineId: l.id,
+          lineNo: i + 1,
+          itemName: itemNameById.get(l.itemId) ?? 'Item',
+          unit: l.unit,
+          quantity: quantity(l.quantity),
+          rate: money(l.rate),
+          lineTotal: money(l.lineTotal),
+        })),
+      });
+    }
+
     const paidNow = input.payNow ? parseMoneyInput(input.payNow.amount, 'dispatchTradeOrder: the payment', 'The amount paid now') : null;
     return {
       orderId: order.id, chargeId, entryId,
       collectionId: billed.collectionId ?? null,
-      creditOverridden: creditOverrideReason !== null, treatment: 'external',
+      creditOverridden: creditOverrideReason !== null, treatment: interEntity ? 'inter_entity' : 'external',
       paidNow,
       balanceAfterPayment: paidNow ? subtract(money(order.totalAmount), paidNow) : null,
     };
@@ -742,7 +787,7 @@ export async function voidTradeOrder(
   input: { orderId: string; reason: string },
 ): Promise<{ reversedEntryId: string | null }> {
   const run = async (trx: Tx) => {
-    const order = await tradeRepo.getOrderById(trx, actor.orgId, input.orderId);
+    const order = await tradeRepo.getOrderById(trx, actor.orgId, input.orderId, { forUpdate: true });
     if (!order) throw new Error(`voidTradeOrder: order ${input.orderId} does not exist.`);
     if (order.requestedByStoreId) {
       // ⭐ T-172. Before anything moved, EITHER side may withdraw — the branch its own request, the
@@ -763,6 +808,21 @@ export async function voidTradeOrder(
 
     const reason = input.reason.trim();
     if (!reason) throw new Error('voidTradeOrder: say why this order is being voided.');
+
+    // T-398 S5c (E10/E11/E17). An inter-entity order has a shipment note the buyer can receive against. Void and receive serialise on that
+    // ONE row: the lock is taken before the first write, so exactly one wins; a void that loses is refused in words, naming the receipt.
+    const shipment =
+      order.status === 'dispatched' || order.status === 'received'
+        ? await interEntityRepo.findByTradeOrder(trx, actor.orgId, order.id, true)
+        : null;
+    if (shipment && shipment.status === 'received') {
+      const customer = await customersRepo.getById(trx, actor.orgId, order.customerId);
+      const day = toBusinessDate(shipment.receivedAt ?? new Date());
+      throw refuse(
+        `voidTradeOrder: shipment ${shipment.id} was received by the buyer on ${day}.`,
+        `${customer?.name ?? 'The buyer'} received this order on ${day}, so it can no longer be voided. Correct a shortage with a credit note or a return instead.`,
+      );
+    }
 
     // T-369 S4: voiding a DISPATCHED order gives the goods back, dated by the order; a closed month's stock
     // stays as it was - said in words, before the first write. (A draft or confirmed order moved no stock.)
@@ -819,9 +879,15 @@ export async function voidTradeOrder(
       voidedBy: actor.personId,
       voidReason: reason,
     });
+    // The note stops being offered to the buyer in the same transaction (it is still in_transit: we hold its lock).
+    if (shipment && shipment.status === 'in_transit') {
+      await interEntityRepo.markVoid(trx, { shipmentId: shipment.id, voidedBy: actor.personId, reason });
+    }
     // T-433: a void frees the booklet number (the paper may be reused on a new order); the change is audited.
     if (order.birInvoiceNo) {
       await tradeRepo.setBirInvoiceNo(trx, actor.orgId, order.id, null);
+      // The note frees the number too (a no-op when the order has no shipment).
+      await interEntityRepo.setBirInvoiceNo(trx, actor.orgId, order.id, null);
       await auditLogRepo.append(trx, actor.orgId, {
         actorPersonId: actor.personId,
         action: 'trade_order.bir_invoice_set',
@@ -909,6 +975,13 @@ export async function receiveTradeOrder(
 
     const customer = await customersRepo.getById(trx, actor.orgId, order.customerId);
     if (!customer) throw new Error('receiveTradeOrder: the order names a customer that no longer exists.');
+    // T-398 S5c (E22): another company signs for its own goods in its own books. Nothing is written here for it.
+    if (customersRepo.treatmentOf(customer) === 'inter_entity') {
+      throw refuse(
+        `receiveTradeOrder: ${customer.name} confirms receipt in its own books; order ${order.id} was sold to another organisation.`,
+        `${customer.name} confirms receipt in its own books. You cannot confirm it from here; once it does, this order's page shows the date.`,
+      );
+    }
 
     let entryId: string | null = null;
     let freightEntryId: string | null = null;
@@ -1114,6 +1187,8 @@ export async function setBirInvoiceNo(
       // A savepoint, so a lost race on the unique index does not poison the surrounding transaction.
       await trx.transaction(async (sp) => {
         await tradeRepo.setBirInvoiceNo(sp, actor.orgId, order.id, next);
+        // T-398 S5c (ruling 2): an inter-entity sale's shipment note carries the same number, whatever its status. No-op for an ordinary sale.
+        await interEntityRepo.setBirInvoiceNo(sp, actor.orgId, order.id, next);
       });
     } catch (err) {
       const e = err as { code?: string; cause?: { code?: string } };

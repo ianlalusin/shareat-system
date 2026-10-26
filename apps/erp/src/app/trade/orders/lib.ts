@@ -9,6 +9,7 @@
 import {
   arRepo,
   customersRepo,
+  interEntityRepo,
   itemsRepo,
   moneyAccountsRepo,
   tradeRepo,
@@ -158,6 +159,8 @@ export interface OrderDetail {
   sellingStore: StoreOption | undefined;
   /** The branch an INTERNAL transfer is going to; undefined for a sale. */
   receivingStore: StoreOption | undefined;
+  /** T-398 S5c. Set only for an inter-entity sale: the buyer organisation's name and, once it received, the Manila date it did. */
+  interEntity: { buyerName: string; receivedOn: string | null } | null;
 }
 
 /**
@@ -186,6 +189,18 @@ export async function orderDetail(actor: Actor, id: string): Promise<OrderDetail
       lines.push({ ...l, itemName: item?.name ?? l.itemId, itemCode: item?.code ?? '' });
     }
     lines.sort((a, b) => a.itemName.localeCompare(b.itemName));
+    // T-398 S5c. The shipment note says whether the buyer has received; the buyer's name comes from the one narrow definer (own customer row only).
+    let interEntity: OrderDetail['interEntity'] = null;
+    if (treatmentOf(customer) === 'inter_entity' && customer.counterpartyOrgId) {
+      const [shipment, buyerName] = await Promise.all([
+        interEntityRepo.findByTradeOrder(tx, orgId, order.id),
+        interEntityRepo.counterpartyName(tx, customer.id),
+      ]);
+      interEntity = {
+        buyerName: buyerName ?? customer.name,
+        receivedOn: shipment?.status === 'received' && shipment.receivedAt ? toBusinessDate(shipment.receivedAt) : null,
+      };
+    }
     return {
       order,
       lines,
@@ -195,6 +210,7 @@ export async function orderDetail(actor: Actor, id: string): Promise<OrderDetail
       receivingStore: customer.counterpartyStoreId
         ? stores.find((s) => s.id === customer.counterpartyStoreId)
         : undefined,
+      interEntity,
     };
   });
 }

@@ -87,7 +87,6 @@ isServeVeryLate
 isStartDecisionMaterial
 jobResult
 kdsEventDayId
-linkInvoiceToReceipt
 listAdjustments
 listAvailableCommissaries
 listCategoryLives

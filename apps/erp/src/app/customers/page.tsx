@@ -95,6 +95,7 @@ export default async function CustomersPage({
                     <div className="text-xs text-neutral-400 dark:text-neutral-600">
                       {GROUP_LABEL[c.customerGroup] ?? c.customerGroup}
                       {c.contactNo && ` · ${c.contactNo}`}
+                      {c.creditTermsDays !== null && ` · ${c.creditTermsDays} days to pay`}
                     </div>
                   </td>
                   <td className={`px-3 py-2 text-xs ${TREATMENT_TONE[c.treatment] ?? ''}`}>
@@ -221,6 +222,19 @@ export default async function CustomersPage({
                     </option>
                   ))}
                 </Select>
+              </Field>
+            </FormGrid>
+          </FormSection>
+          <FormSection title="Payment terms">
+            <FormGrid layout="fields">
+              <Field label="Payment terms" hint="Shown on the register. It never changes the credit limit.">
+                <Select name="termsMode" defaultValue="cod" className="w-full">
+                  <option value="cod">No terms stated</option>
+                  <option value="credit">On credit</option>
+                </Select>
+              </Field>
+              <Field width="short" label="Days to pay" hint="Only for On credit. 0 to 365." rule={CUSTOMER_ADD_RULES.creditTermsDays}>
+                <Input {...nativeAttrs(CUSTOMER_ADD_RULES.creditTermsDays)} className="w-full" />
               </Field>
             </FormGrid>
           </FormSection>

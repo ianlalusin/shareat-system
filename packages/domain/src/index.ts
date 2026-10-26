@@ -72,6 +72,7 @@ export * from './deliveries/duplicate-risk';
 // ⚠️ Each of these had a tested engine and ZERO callers in apps/ for five days.
 export * from './stock-locations/service';
 export * from './deliveries/documents';
+export * from './deliveries/inter-entity';
 export * from './stock/usage-records';
 export * from './stock/usage-tolerance';
 export * from './stock/usage-auto-post';

@@ -7,7 +7,7 @@
  * `buyer_org_id`) may READ it and stamp "received" through {@link receive}, the only thing the buyer ever writes into the seller's table.
  * The three SECURITY DEFINER functions are called here and nowhere else (RULES: SQL lives in the repo).
  *
- * - Seller functions run under the seller's principal: {@link create}, {@link findByTradeOrder}, {@link linesOf}, {@link markVoid},
+ * - Seller functions run under the seller's principal: {@link create}, {@link findByTradeOrder}, {@link linesOf}, {@link markVoid}, {@link setBirInvoiceNo},
  *   {@link buyerPosted}, {@link counterpartyBalance}.
  * - Buyer functions run under the buyer's principal: {@link listInbound}, {@link findById}, {@link receive}.
  *
@@ -15,6 +15,9 @@
  */
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { interEntityShipmentLines, interEntityShipments, type InterEntityShipmentStatus } from '../../schema/inter-entity';
+import { items } from '../../schema/items';
+import { supplierItems } from '../../schema/supplier-items';
+import { suppliers } from '../../schema/suppliers';
 import type { Money, Quantity } from '@shareat/core/money';
 import type { Tx } from '../client';
 
@@ -147,6 +150,17 @@ export async function findByTradeOrder(tx: Tx, orgId: string, tradeOrderId: stri
   return row ?? null;
 }
 
+/**
+ * SELLER: keep the shipment's booklet number in step with the order's, whatever the shipment's status (a number noted or changed after
+ * Padre Garcia received still reaches the note it can read). A no-op when the order has no shipment (an ordinary sale).
+ */
+export async function setBirInvoiceNo(tx: Tx, orgId: string, tradeOrderId: string, value: string | null): Promise<void> {
+  await tx
+    .update(interEntityShipments)
+    .set({ birInvoiceNo: value, updatedAt: sql`now()` })
+    .where(and(eq(interEntityShipments.orgId, orgId), eq(interEntityShipments.tradeOrderId, tradeOrderId)));
+}
+
 /** Either side (RLS admits the seller and the buyer): one shipment by id. */
 export async function findById(tx: Tx, id: string): Promise<InterEntityShipmentRow | null> {
   const [row] = await tx.select(SHIPMENT_COLUMNS).from(interEntityShipments).where(eq(interEntityShipments.id, id));
@@ -158,20 +172,132 @@ export async function linesOf(tx: Tx, shipmentId: string): Promise<InterEntitySh
   return tx.select(LINE_COLUMNS).from(interEntityShipmentLines).where(eq(interEntityShipmentLines.shipmentId, shipmentId)).orderBy(asc(interEntityShipmentLines.lineNo));
 }
 
-/** BUYER: the shipments addressed to `buyerOrgId`, newest first. Voided ones are left out unless `includeVoid`. */
+/**
+ * BUYER read shape (QI-1 (a)): the ONLY columns of a shipment the buyer's screens may carry. Never the void reason, the person who voided, the seller's
+ * store or the trade-order ids - those columns are not selected here (audit finding 4: the narrowing is done by this SELECT, not by the caller).
+ * `sellerOrgId` is for the buyer's own supplier lookup (it already knows who the supplier is) and is dropped before anything reaches a screen.
+ */
+export interface InboundShipmentRow {
+  readonly id: string;
+  readonly sellerOrgId: string;
+  readonly shippedOn: string;
+  readonly status: InterEntityShipmentStatus;
+  readonly billedTotal: string;
+  readonly receivedAt: Date | null;
+  readonly receivedTotal: string | null;
+}
+
+export interface InboundLineRow {
+  readonly id: string;
+  readonly shipmentId: string;
+  readonly lineNo: number;
+  readonly itemName: string;
+  readonly unit: string;
+  readonly quantity: string;
+  readonly rate: string;
+  readonly lineTotal: string;
+  readonly receivedQuantity: string | null;
+}
+
+const INBOUND_COLUMNS = {
+  id: interEntityShipments.id,
+  sellerOrgId: interEntityShipments.orgId,
+  shippedOn: interEntityShipments.shippedOn,
+  status: interEntityShipments.status,
+  billedTotal: interEntityShipments.billedTotal,
+  receivedAt: interEntityShipments.receivedAt,
+  receivedTotal: interEntityShipments.receivedTotal,
+} as const;
+
+const INBOUND_LINE_COLUMNS = {
+  id: interEntityShipmentLines.id,
+  shipmentId: interEntityShipmentLines.shipmentId,
+  lineNo: interEntityShipmentLines.lineNo,
+  itemName: interEntityShipmentLines.itemName,
+  unit: interEntityShipmentLines.unit,
+  quantity: interEntityShipmentLines.quantity,
+  rate: interEntityShipmentLines.rate,
+  lineTotal: interEntityShipmentLines.lineTotal,
+  receivedQuantity: interEntityShipmentLines.receivedQuantity,
+} as const;
+
+/** BUYER: the shipments addressed to `buyerOrgId`, newest first, QI-1 (a) columns only. Voided ones are left out unless `includeVoid`. */
 export async function listInbound(
   tx: Tx,
   buyerOrgId: string,
   opts: { status?: InterEntityShipmentStatus; includeVoid?: boolean } = {},
-): Promise<InterEntityShipmentRow[]> {
+): Promise<InboundShipmentRow[]> {
   const conds = [eq(interEntityShipments.buyerOrgId, buyerOrgId)];
   if (opts.status) conds.push(eq(interEntityShipments.status, opts.status));
   else if (!opts.includeVoid) conds.push(inArray(interEntityShipments.status, ['in_transit', 'received']));
   return tx
-    .select(SHIPMENT_COLUMNS)
+    .select(INBOUND_COLUMNS)
     .from(interEntityShipments)
     .where(and(...conds))
     .orderBy(desc(interEntityShipments.shippedOn), desc(interEntityShipments.id));
+}
+
+/** BUYER: one shipment addressed to `buyerOrgId`, QI-1 (a) columns only; null for a missing id or another organisation's shipment. */
+export async function findInbound(tx: Tx, buyerOrgId: string, id: string): Promise<InboundShipmentRow | null> {
+  const [row] = await tx
+    .select(INBOUND_COLUMNS)
+    .from(interEntityShipments)
+    .where(and(eq(interEntityShipments.buyerOrgId, buyerOrgId), eq(interEntityShipments.id, id)));
+  return row ?? null;
+}
+
+/** BUYER: the lines of the given shipments (QI-1 (a) columns only: no trade-order line id), in shipment then line order. */
+export async function inboundLinesOf(tx: Tx, buyerOrgId: string, shipmentIds: readonly string[]): Promise<InboundLineRow[]> {
+  if (shipmentIds.length === 0) return [];
+  return tx
+    .select(INBOUND_LINE_COLUMNS)
+    .from(interEntityShipmentLines)
+    .where(and(eq(interEntityShipmentLines.buyerOrgId, buyerOrgId), inArray(interEntityShipmentLines.shipmentId, [...shipmentIds])))
+    .orderBy(asc(interEntityShipmentLines.shipmentId), asc(interEntityShipmentLines.lineNo));
+}
+
+export interface CounterpartySupplierRow {
+  readonly id: string;
+  readonly name: string;
+  readonly status: string;
+  readonly creditTermsDays: number | null;
+}
+
+/** BUYER: the buyer's own supplier row for the selling organisation (`suppliers.counterparty_org_id`), or null when none is set up. */
+export async function supplierForSeller(tx: Tx, buyerOrgId: string, sellerOrgId: string): Promise<CounterpartySupplierRow | null> {
+  const [row] = await tx
+    .select({ id: suppliers.id, name: suppliers.name, status: suppliers.status, creditTermsDays: suppliers.creditTermsDays })
+    .from(suppliers)
+    .where(and(eq(suppliers.orgId, buyerOrgId), eq(suppliers.counterpartyOrgId, sellerOrgId)))
+    .orderBy(asc(suppliers.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
+export interface DeclaredItemRow {
+  readonly id: string;
+  readonly name: string;
+  readonly baseUnit: string;
+}
+
+/** BUYER: the active items the buyer has declared in `supplier_items` for that supplier (the choices on the receipt form). */
+export async function declaredItemsOf(tx: Tx, buyerOrgId: string, supplierId: string): Promise<DeclaredItemRow[]> {
+  return tx
+    .select({ id: items.id, name: items.name, baseUnit: items.baseUnit })
+    .from(supplierItems)
+    .innerJoin(items, eq(items.id, supplierItems.itemId))
+    .where(and(eq(supplierItems.orgId, buyerOrgId), eq(supplierItems.supplierId, supplierId), eq(items.status, 'active')))
+    .orderBy(asc(items.name));
+}
+
+/** BUYER: which of `itemIds` the buyer has declared in `supplier_items` for that supplier. */
+export async function declaredItemIds(tx: Tx, buyerOrgId: string, supplierId: string, itemIds: readonly string[]): Promise<Set<string>> {
+  if (itemIds.length === 0) return new Set();
+  const rows = await tx
+    .select({ itemId: supplierItems.itemId })
+    .from(supplierItems)
+    .where(and(eq(supplierItems.orgId, buyerOrgId), eq(supplierItems.supplierId, supplierId), inArray(supplierItems.itemId, [...itemIds])));
+  return new Set(rows.map((r) => r.itemId));
 }
 
 /** SELLER: an in-transit shipment becomes void with the order's void. The caller holds the row FOR UPDATE ({@link findByTradeOrder}). */
@@ -231,4 +357,12 @@ export async function counterpartyBalance(tx: Tx): Promise<CounterpartyBalanceRo
     sql`select counterparty_org_id, counterparty_owes::text as counterparty_owes from inter_entity_counterparty_balance()`,
   )) as unknown as { counterparty_org_id: string; counterparty_owes: string }[];
   return rows.map((r) => ({ counterpartyOrgId: r.counterparty_org_id, counterpartyOwes: r.counterparty_owes }));
+}
+
+/** SELLER: `inter_entity_counterparty_name` - the linked organisation's name for the caller's OWN customer row; null when the customer is not linked or not the caller's. */
+export async function counterpartyName(tx: Tx, customerId: string): Promise<string | null> {
+  const rows = (await tx.execute(
+    sql`select inter_entity_counterparty_name(${customerId}::uuid) as name`,
+  )) as unknown as { name: string | null }[];
+  return rows[0]?.name ?? null;
 }

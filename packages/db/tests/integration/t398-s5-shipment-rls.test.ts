@@ -779,14 +779,15 @@ async function definers(): Promise<Fn[]> {
 }
 
 describe('X2b the SECURITY DEFINER surface is the pinned list', () => {
-  it('exactly receive_inter_entity_shipment, inter_entity_buyer_posted and inter_entity_counterparty_balance (QI-1 a)', async () => {
+  it('exactly receive_inter_entity_shipment, inter_entity_buyer_posted, inter_entity_counterparty_balance (QI-1 a) and inter_entity_counterparty_name (S5c: the order page buyer org name)', async () => {
     const f = await definers();
-    expect(f.map((x) => x.proname).sort(), 'RED today: no definer functions').toEqual(['inter_entity_buyer_posted', 'inter_entity_counterparty_balance', 'receive_inter_entity_shipment']);
+    expect(f.map((x) => x.proname).sort(), 'RED today: no definer functions').toEqual(['inter_entity_buyer_posted', 'inter_entity_counterparty_balance', 'inter_entity_counterparty_name', 'receive_inter_entity_shipment']);
   });
 
   it('each pins search_path, has no PUBLIC EXECUTE, and EXECUTE to shareat_app (kills: unpinned search_path / PUBLIC left)', async () => {
     const f = await definers();
-    expect(f.length, 'RED today: no definer functions').toBe(3);
+    // T-398 S5c: 3 -> 4 (inter_entity_counterparty_name, the order page's buyer org name)
+    expect(f.length, 'RED today: no definer functions').toBe(4);
     for (const x of f) {
       expect((x.proconfig ?? []).some((c) => /^search_path=/.test(c)), `${x.proname}: search_path not pinned (${JSON.stringify(x.proconfig)})`).toBe(true);
       expect(x.public_exec, `${x.proname}: PUBLIC can EXECUTE`).toBe(false);
