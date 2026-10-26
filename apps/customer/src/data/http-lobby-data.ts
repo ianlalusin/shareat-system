@@ -40,7 +40,7 @@ export interface LobbyMyEntry extends LobbyEntrySummary {
 }
 
 /** `error` is always one plain sentence meant for the diner. `status` is the HTTP status (0 when the phone could not reach the server). */
-export type LobbyResult<T> = { ok: true; value: T } | { ok: false; status: number; error: string };
+export type LobbyResult<T> = { ok: true; value: T } | { ok: false; status: number; error: string; code?: string };
 
 const OFFLINE = 'We could not reach the restaurant. Check your connection and try again.';
 
@@ -59,16 +59,23 @@ async function call<T>(base: string, path: string, init: RequestInit, pick: (bod
   }
   if (res.ok && body && body.ok === true) return { ok: true, value: pick(body) };
   const error = body && typeof body.error === 'string' ? body.error : 'Please check in at the counter.';
-  return { ok: false, status: res.status, error };
+  const code = body && typeof body.code === 'string' ? body.code : undefined;
+  return code ? { ok: false, status: res.status, error, code } : { ok: false, status: res.status, error };
 }
 
-export function lobbyCheckIn(input: LobbyCheckInInput, base = ''): Promise<LobbyResult<LobbyEntrySummary & { created: boolean }>> {
-  return call(
-    base,
-    '/api/lobby/check-in',
-    { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) },
-    (b) => ({ ...(b.entry as LobbyEntrySummary), created: b.created === true }),
-  );
+export async function lobbyCheckIn(input: LobbyCheckInInput, base = ''): Promise<LobbyResult<LobbyEntrySummary & { created: boolean }>> {
+  const send = () =>
+    call(
+      base,
+      '/api/lobby/check-in',
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) },
+      (b) => ({ ...(b.entry as LobbyEntrySummary), created: b.created === true }),
+    );
+  const first = await send();
+  // T-491 / DEF-782: the server writes nothing until the phone holds its cookie; its 428 hands the cookie out. Retry the SAME request (same
+  // clientRequestId, same body) exactly once - the browser now carries the cookie. A second 428 is shown as the ordinary error.
+  if (!first.ok && first.status === 428 && first.code === 'LOBBY_COOKIE_NEEDED') return send();
+  return first;
 }
 
 export function lobbyMyEntry(storeCode: string, base = ''): Promise<LobbyResult<LobbyMyEntry>> {
