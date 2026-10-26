@@ -7,7 +7,7 @@
  * production organisation could not post a single journal entry. See `docs/tasks/264-*.md`'s
  * "severity correction" for the full trace.
  */
-import { and, asc, desc, eq, gte, lt, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import {
   deliveries,
@@ -15,6 +15,8 @@ import {
   fiscalPeriods,
   journalEntries,
   periodOverrides,
+  salesDays,
+  stores,
   suppliers,
   type PeriodOverrideReason,
 } from '../../schema';
@@ -423,7 +425,8 @@ export async function insertFilledPeriod(tx: Tx, input: InsertFilledPeriodInput)
 }
 
 export interface UnpostedDraft {
-  readonly kind: 'expense' | 'delivery';
+  /** T-487 (DEF-779): `'salesDay'` is a sales day still `open` or `submitted` - not a `draft` row, but equally unposted. */
+  readonly kind: 'expense' | 'delivery' | 'salesDay';
   readonly id: string;
   readonly dateOn: string;
   /** R1.7 — the supplier's name for an expense (always present, the FK is NOT NULL), or a
@@ -439,12 +442,12 @@ export interface UnpostedDraft {
  * "fill a missing month" action) is its only caller, and the action gates a part-month piece,
  * which has no period string of its own.
  *
- * ⭐ **Exactly these two tables, not the other eleven with a `'draft'` status in this codebase** —
- * ADR-006 §8.2 names only these two in concrete terms (Ian: *"cashier can't create expense
- * receipt... for receipts, reject new entries, and expenses too"*). `sales_days` was considered and
- * rejected: its statuses are `open | submitted | verified | voided` — no `draft` — and `open` means
- * "today is still happening", not "someone left work unfinished"; gating on it would refuse to
- * close a period whenever a sales day was legitimately still in progress.
+ * ⭐ **Expenses and deliveries as `draft`, PLUS sales days as `open`/`submitted` (T-487, DEF-779).** ADR-006 §8.2 names the
+ * first two (Ian: *"cashier can't create expense receipt... for receipts, reject new entries, and expenses too"*). Sales days
+ * were once rejected here because `open` can mean "today is still happening" - but this gate runs on a month that is over, and a
+ * sales day dated in it that nobody posted is revenue off the books with no way to put it on afterwards (a closed month takes
+ * no posting, and reopening is never built). So an `open` or `submitted` day dated in the range blocks, POS-sourced or typed;
+ * `verified` and `voided` never do. The store's name is the counterparty.
  *
  * ⚠️ `journal_entries.status = 'draft'` is deliberately NOT checked here, even though ADR-006's
  * Gates table says "no draft entries dated in the period" with no table named. Confirmed against
@@ -493,6 +496,18 @@ export async function unpostedDraftsInRange(
         lte(deliveries.deliveredOn, endsOn),
       ),
     );
+  const unpostedDays = await tx
+    .select({ id: salesDays.id, dateOn: salesDays.businessDate, storeName: stores.name })
+    .from(salesDays)
+    .innerJoin(stores, eq(stores.id, salesDays.storeId))
+    .where(
+      and(
+        eq(salesDays.orgId, orgId),
+        inArray(salesDays.status, ['open', 'submitted']),
+        gte(salesDays.businessDate, startsOn),
+        lte(salesDays.businessDate, endsOn),
+      ),
+    );
   return [
     ...draftExpenses.map((e) => ({
       kind: 'expense' as const,
@@ -509,6 +524,12 @@ export async function unpostedDraftsInRange(
       id: d.id,
       dateOn: d.dateOn,
       counterpartyName: d.supplierName ?? `${d.deliveryKind} delivery, no supplier`,
+    })),
+    ...unpostedDays.map((d) => ({
+      kind: 'salesDay' as const,
+      id: d.id,
+      dateOn: d.dateOn,
+      counterpartyName: d.storeName,
     })),
   ];
 }

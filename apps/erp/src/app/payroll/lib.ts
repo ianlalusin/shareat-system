@@ -98,7 +98,10 @@ export async function cashAccountsFor(actor: Actor, storeId: string) {
   return withOrgPrincipal(orgId, async (tx) => {
     await authorize(tx, actor, 'run_payroll', { storeId });
     const { moneyAccountsRepo } = await import('@shareat/db');
-    return moneyAccountsRepo.listMoneyAccounts(tx, orgId, { storeId });
+    const accounts = await moneyAccountsRepo.listMoneyAccounts(tx, orgId, { storeId });
+    // T-486 (DEF-776): a staff float (GL 1120) belongs to one person's cash request; payroll cannot be paid from it.
+    // The domain refuses it by name too - the screen is never the only guard.
+    return accounts.filter((a) => a.glAccountCode !== '1120');
   });
 }
 

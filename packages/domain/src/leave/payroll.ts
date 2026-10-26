@@ -19,6 +19,7 @@ import { advisoryLocksRepo, journalRepo, leaveRepo, payrollRepo, type Tx } from 
 import type { Actor } from '@shareat/auth';
 import { ZERO, add, decimal, money, multiply, type Money } from '@shareat/core/money';
 import { refuse } from '../shared/refusal';
+import { EXPENSE_FUNDING_ACCOUNTS } from '../expenses/routing';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { audit } from './audit';
@@ -200,7 +201,7 @@ export async function releaseLeaveOfRun(tx: Tx, runId: string): Promise<{ unfroz
 export async function settleSilAtSeparation(
   tx: Tx,
   by: Actor,
-  input: { storeId: string; employmentId: string; personId: string; separationId: string; separationDate: string; entryDate: string; moneyAccountGlCode: string },
+  input: { storeId: string; employmentId: string; personId: string; separationId: string; separationDate: string; entryDate: string; moneyAccountGlCode: string; moneyAccountId: string },
 ): Promise<{ amount: Money } | null> {
   const year = Number(input.separationDate.slice(0, 4));
   // ⛔ Under the person's leave lock BEFORE the balance is read: a paid SIL approval racing this payout is either seen or queued.
@@ -242,7 +243,15 @@ export async function settleSilAtSeparation(
     postedBy: by.personId,
     lines: [
       { accountCode: SALARIES_ACCOUNT, storeId: input.storeId, debit: amount },
-      { accountCode: input.moneyAccountGlCode, storeId: input.storeId, credit: amount },
+      {
+        accountCode: input.moneyAccountGlCode,
+        storeId: input.storeId,
+        credit: amount,
+        // T-486 (DEF-776): `1140 E-wallet` requires party `money_account`.
+        ...(input.moneyAccountGlCode === EXPENSE_FUNDING_ACCOUNTS.ONLINE
+          ? { partyType: 'money_account' as const, partyId: input.moneyAccountId }
+          : {}),
+      },
     ],
   });
   await audit(tx, by, 'sil.commuted', {
