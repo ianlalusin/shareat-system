@@ -19,7 +19,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
-import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
+import { closeDb, transaction, APP_ROLE, journalRepo, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import {
   CUTOVER_GATES,
@@ -432,6 +432,43 @@ describe('the opening balances', () => {
     const p = await progress(f);
     // ⭐ Still 5,000 — not 10,000. Entering the list over several days has to be safe to retry.
     expect(Number(p.openingResidual)).toBe(5000);
+  });
+
+  // T-493 / DEF-783: the same key with a DIFFERENT amount or side used to return success and silently keep the old figure.
+  it('⛔ re-entering the same figure with a different amount is refused, and the draft keeps its lines', async () => {
+    const f = await fixture('openamt', true);
+    const base = { accountCode: '1110', storeId: f.storeId, direction: 'debit' as const, entryDate: DATE };
+    const a = await asOrg(f.orgId, (tx) => addOpeningFigure(tx, f.admin, { ...base, amount: '5000.00' }));
+    await expect(
+      asOrg(f.orgId, (tx) => addOpeningFigure(tx, f.admin, { ...base, amount: '6000.00' })),
+    ).rejects.toThrow(/already entered as .*5,?000(\.00)? (Dr|debit).*Remove it first/i);
+    const lines = await asOrg(f.orgId, (tx) => journalRepo.findLinesForEntryWithAccountCodes(tx, a.entryId));
+    expect(lines.map((l) => [l.accountCode, Number(l.debit), Number(l.credit)])).toEqual([
+      ['1110', 5000, 0],
+      ['3900', 0, 5000],
+    ]);
+    expect(Number((await progress(f)).openingResidual)).toBe(5000);
+  });
+
+  it('⛔ re-entering the same figure on the other side (Dr/Cr flipped) is refused too', async () => {
+    const f = await fixture('openflip', true);
+    const base = { accountCode: '1110', storeId: f.storeId, entryDate: DATE, amount: '5000.00' };
+    const a = await asOrg(f.orgId, (tx) => addOpeningFigure(tx, f.admin, { ...base, direction: 'debit' }));
+    await expect(
+      asOrg(f.orgId, (tx) => addOpeningFigure(tx, f.admin, { ...base, direction: 'credit' })),
+    ).rejects.toThrow(/already entered as .*Remove it first/i);
+    const lines = await asOrg(f.orgId, (tx) => journalRepo.findLinesForEntryWithAccountCodes(tx, a.entryId));
+    expect(Number(lines.find((l) => l.accountCode === '1110')!.debit)).toBe(5000);
+    expect(Number((await progress(f)).openingResidual)).toBe(5000);
+  });
+
+  it('remove-then-add is the way to change a figure: the new amount lands', async () => {
+    const f = await fixture('openswap', true);
+    const base = { accountCode: '1110', storeId: f.storeId, direction: 'debit' as const, entryDate: DATE };
+    const a = await asOrg(f.orgId, (tx) => addOpeningFigure(tx, f.admin, { ...base, amount: '5000.00' }));
+    await asOrg(f.orgId, (tx) => removeOpeningFigure(tx, f.admin, { entryId: a.entryId }));
+    await asOrg(f.orgId, (tx) => addOpeningFigure(tx, f.admin, { ...base, amount: '6000.00' }));
+    expect(Number((await progress(f)).openingResidual)).toBe(6000);
   });
 
   it('a draft figure can simply be deleted — it was never final', async () => {
