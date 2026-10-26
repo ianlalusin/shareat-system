@@ -55,6 +55,8 @@ export interface CustomerOption {
   //    shown on the order page only to someone who can approve_buyer / override_credit_limit at the order's store. (Typed `null`
   //    only so older callers that build an option by hand still compile; it can never carry a figure.)
   creditLimit?: null;
+  /** The linked company's name (inter-entity customers only), read through the definer - the seller cannot read the other org's row. */
+  counterpartyOrgName?: string | null;
 }
 
 export interface ItemOption {
@@ -102,7 +104,13 @@ export async function orderFormData(orgId: string): Promise<OrderFormData> {
         treatment: treatmentOf(c),
         counterpartyStoreId: c.counterpartyStoreId,
         priceListId: c.priceListId,
+        counterpartyOrgName: null as string | null,
       }));
+    await Promise.all(
+      customers.map(async (o) => {
+        if (o.treatment === 'inter_entity') o.counterpartyOrgName = await interEntityRepo.counterpartyName(tx, o.id);
+      }),
+    );
 
     const quotes: Record<string, Record<string, string>> = {};
     for (const c of customers) {

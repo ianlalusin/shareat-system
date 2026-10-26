@@ -10,7 +10,7 @@ import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
 import { receiveInterEntityShipment } from '@shareat/domain';
 import { errorMessage } from '@/lib/constraint-messages';
-import { withOrgPrincipal } from '../lib';
+import { withActorPrincipal } from './lib';
 import { requireActor } from '../../../../lib/session';
 import { peso } from '../../../../lib/format';
 
@@ -38,7 +38,7 @@ export async function receiveInterEntityShipmentAction(shipmentId: string, fd: F
 
   let message = '';
   try {
-    const result = await withOrgPrincipal(actor.orgId, (tx) => receiveInterEntityShipment(tx, actor, { shipmentId, storeId, lines }));
+    const result = await withActorPrincipal(actor, (tx) => receiveInterEntityShipment(tx, actor, { shipmentId, storeId, lines }));
     message = `Received. Your books now show ${peso(result.receivedTotal)} owed to the commissary.`;
   } catch (err) {
     return await redirectWithFlash(here, {}, { error: errorMessage(err) });
