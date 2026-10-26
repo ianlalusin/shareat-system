@@ -15,6 +15,8 @@
  * so they are never "missing": a December night reads yesterday only. The change-time queries (voidedAt/editedAt/createdAt since
  * the last ok run minus 2h) pick up later voids, edits and offline syncs. ⚠️ `gone` is therefore detected only on days that are
  * actually re-read (yesterday and missed days); a receipt deleted from an older day is not noticed. Accepted.
+ * T-490 (DEF-781): a day NOT re-read is still RE-CHECKED from Postgres (never Firestore, never `gone`) when a change-time receipt was
+ * written onto it or its check is still `pending`, so a late receipt, void or day feed cannot leave a stale `match`.
  * Expected reads, per store-day read: the day list + the T-478 server-day walk (about 2 reads per receipt) + 2 counts, so about
  * 8.4k reads a night for all stores, against the 50k/day free tier that POS's live traffic shares. Re-reading all 7 days was ~118k.
  * A dry run reads yesterday only; `date` (the `--date` flag) reads exactly that day, live or dry.
@@ -252,6 +254,7 @@ async function bridgeForOrg(
   let belowFloor = 0;
   let goneCount = 0;
   let checksWritten = 0;
+  let refreshed = 0;
   let read = 0;
   let storesVisited = 0;
 
@@ -293,23 +296,27 @@ async function bridgeForOrg(
     let stopped = false;
 
     /** Writes (or, in a dry run, counts) one day's worth of receipts; one transaction, each receipt on its own savepoint. */
-    const writeAll = async (docs: readonly BridgeSourceReceipt[], fallbackDate: string | null, label: string): Promise<void> => {
-      if (docs.length === 0) return;
+    const writeAll = async (docs: readonly BridgeSourceReceipt[], fallbackDate: string | null, label: string): Promise<Set<string>> => {
+      const writtenDates = new Set<string>();
+      if (docs.length === 0) return writtenDates;
       await withOrgPrincipal(org.id, async (tx) => {
         for (const r of docs) {
           try {
             // Each receipt on its own savepoint: one statement error rolls back that receipt only, never the day's transaction.
             const res = await tx.transaction((sp) => writeOne(sp, store, r, fallbackDate, tenderIds, dryRun));
-            if (res === 'written') posted += 1;
-            else if (res === 'unchanged') unchanged += 1;
-            else if (res === 'raced') raced += 1;
-            else if (res === 'below_floor') belowFloor += 1;
+            if (res.result === 'written') {
+              posted += 1;
+              if (res.date !== null) writtenDates.add(res.date);
+            } else if (res.result === 'unchanged') unchanged += 1;
+            else if (res.result === 'raced') raced += 1;
+            else if (res.result === 'below_floor') belowFloor += 1;
             else failures.push(line(`${label}: receipt ${r.id} has no usable date from POS, so it was not copied.`));
           } catch (e) {
             failures.push(line(`${label}: receipt ${r.id} was not copied: ${reasonOf(e)}`));
           }
         }
       });
+      return writtenDates;
     };
 
     // 1. Each Manila day of the window: by client time, plus the receipts that lack it (T-478).
@@ -355,6 +362,8 @@ async function bridgeForOrg(
     }
 
     // 2. Receipts changed since the last good run (voids, edits, offline syncs older than the window).
+    // The dates they actually wrote feed the refresh set in step 3 (T-490, DEF-781).
+    const changedDates = new Set<string>();
     if (!stopped) {
       for (const field of CHANGE_FIELDS) {
         try {
@@ -362,7 +371,7 @@ async function bridgeForOrg(
           for await (const r of port.listChangedSince(link.posStoreId, field, since)) docs.push(r);
           for (const r of docs) seen.add(r.id);
           read += docs.length;
-          await writeAll(docs, null, `changed (${field})`);
+          for (const d of await writeAll(docs, null, `changed (${field})`)) changedDates.add(d);
         } catch (e) {
           failures.push(line(`changes by ${field}: ${reasonOf(e)}`));
           break;
@@ -372,6 +381,32 @@ async function bridgeForOrg(
 
     if (dryRun) continue;
 
+    /** One store-day's check from local Postgres only: net receipts against the day feed, upserted. Used by step 3 and the refresh. */
+    const checkDay = async (tx: Tx, date: string) => {
+      const net = await posBridgeRepo.dayNet(tx, org.id, link.storeId, date);
+      const feed = await posBridgeRepo.dayFeedTotalCentavos(tx, org.id, link.storeId, date);
+      const diff = feed === null ? null : net.netSalesCentavos - feed;
+      const outcome = diff === null ? 'pending' : Math.abs(diff) > Math.max(1, net.receiptCount) ? 'mismatch' : 'match';
+      await posBridgeRepo.upsertDayCheck(tx, {
+        orgId: org.id,
+        storeId: link.storeId,
+        posStoreId: link.posStoreId,
+        posCalendarDate: date,
+        receiptCount: net.receiptCount,
+        netSalesCentavos: net.netSalesCentavos,
+        feedTotalCentavos: feed,
+        differenceCentavos: diff,
+        result: outcome,
+      });
+      return { outcome, net: net.netSalesCentavos, feed, diff };
+    };
+    const mismatchNotice = (when: string, r: { net: number; feed: number | null; diff: number | null }): SchedulerFailure =>
+      line(
+        `${when}: the receipts copied from POS add up to ${pesos(r.net)} but POS's day total is ${pesos(r.feed!)} (${pesos(r.diff!)} apart). ` +
+          `This is a note, not a failure: the day feed stays the figure until someone checks it.`,
+        'notice',
+      );
+
     // 3. Gone versions, then the day checks, for each day that was read in full and is on or after the floor.
     for (const date of dates) {
       if (!readOk.has(date) || date.localeCompare(POS_BRIDGE_WRITE_FLOOR) < 0) continue;
@@ -379,38 +414,39 @@ async function bridgeForOrg(
       try {
         const result = await withOrgPrincipal(org.id, async (tx) => {
           const gone = await posBridgeRepo.markGone(tx, { ...store, posCalendarDate: date, seenDocIds: seen });
-          const net = await posBridgeRepo.dayNet(tx, org.id, link.storeId, date);
-          const feed = await posBridgeRepo.dayFeedTotalCentavos(tx, org.id, link.storeId, date);
-          const diff = feed === null ? null : net.netSalesCentavos - feed;
-          const outcome = diff === null ? 'pending' : Math.abs(diff) > Math.max(1, net.receiptCount) ? 'mismatch' : 'match';
-          await posBridgeRepo.upsertDayCheck(tx, {
-            orgId: org.id,
-            storeId: link.storeId,
-            posStoreId: link.posStoreId,
-            posCalendarDate: date,
-            receiptCount: net.receiptCount,
-            netSalesCentavos: net.netSalesCentavos,
-            feedTotalCentavos: feed,
-            differenceCentavos: diff,
-            result: outcome,
-          });
-          return { gone, outcome, net: net.netSalesCentavos, feed, diff };
+          return { gone, ...(await checkDay(tx, date)) };
         });
         goneCount += result.gone;
         checksWritten += 1;
-        if (result.outcome === 'mismatch') {
-          failures.push(
-            line(
-              `${when}: the receipts copied from POS add up to ${pesos(result.net)} but POS's day total is ${pesos(result.feed!)} (${pesos(result.diff!)} apart). ` +
-                `This is a note, not a failure: the day feed stays the figure until someone checks it.`,
-              'notice',
-            ),
-          );
-        }
+        if (result.outcome === 'mismatch') failures.push(mismatchNotice(when, result));
       } catch (e) {
         logger.warn({ storeId: link.storeId, date, err: reasonOf(e) }, 'posReceiptBridgeSweep: the gone/check step failed');
         failures.push(line(`${when}: the day check could not be written: ${reasonOf(e)}`));
       }
+    }
+
+    // 4. Refresh (T-490, DEF-781): every window day NOT read tonight is re-checked from Postgres (a day feed revised after a check,
+    // a pending day whose feed landed), and so is any day a change-time receipt was written onto. Days in `dates` are left alone even
+    // if only partly read: a partly-read day has no check row, and that absence is what makes tomorrow read it in full.
+    // Never `markGone` here (change-time reads are not a full inventory of the day) and never a Firestore read.
+    try {
+      const wanted = new Set<string>(changedDates);
+      if (ctx.date === undefined) for (const d of windowDates) wanted.add(d);
+      const refresh = [...wanted].filter((d) => d.localeCompare(POS_BRIDGE_WRITE_FLOOR) >= 0 && !dates.includes(d));
+      for (const date of refresh.sort()) {
+        const when = safeHumanDate(date);
+        try {
+          const result = await withOrgPrincipal(org.id, (tx) => checkDay(tx, date));
+          checksWritten += 1;
+          refreshed += 1;
+          if (result.outcome === 'mismatch') failures.push(mismatchNotice(when, result));
+        } catch (e) {
+          logger.warn({ storeId: link.storeId, date, err: reasonOf(e) }, 'posReceiptBridgeSweep: the day re-check failed');
+          failures.push(line(`${when}: the day check could not be refreshed: ${reasonOf(e)}`));
+        }
+      }
+    } catch (e) {
+      failures.push(line(`day re-check: ${reasonOf(e)}`));
     }
   }
 
@@ -423,7 +459,7 @@ async function bridgeForOrg(
     detail:
       `${dryRun ? 'dry run - would write' : 'wrote'} ${posted} - already there ${unchanged}` +
       `${raced > 0 ? ` - ${raced} written by another run first` : ''}` +
-      ` - before 1 Jan 2027 (read, not written) ${belowFloor} - gone ${goneCount} - day checks ${checksWritten} - read ${read} - stores ${storesVisited} - refused ${realFailures}`,
+      ` - before 1 Jan 2027 (read, not written) ${belowFloor} - gone ${goneCount} - day checks ${checksWritten} (re-checked from Postgres ${refreshed}) - read ${read} - stores ${storesVisited} - refused ${realFailures}`,
   };
 }
 
@@ -434,12 +470,12 @@ async function writeOne(
   fallbackDate: string | null,
   tenderIds: ReadonlyMap<string, string>,
   dryRun: boolean,
-): Promise<WriteResult> {
+): Promise<{ result: WriteResult; date: string | null }> {
   const date = r.header.posCalendarDate ?? fallbackDate;
-  if (!date) return 'unplaceable';
+  if (!date) return { result: 'unplaceable', date: null };
   // The floor applies to WRITES only; a dry run shows what 1 Jan would copy, so it ignores it.
-  if (!dryRun && date.localeCompare(POS_BRIDGE_WRITE_FLOOR) < 0) return 'below_floor';
+  if (!dryRun && date.localeCompare(POS_BRIDGE_WRITE_FLOOR) < 0) return { result: 'below_floor', date };
   const { header, lines, tenders } = toRows(store, r, date, tenderIds);
-  if (dryRun) return (await posBridgeRepo.wouldWrite(tx, header)) ? 'written' : 'unchanged';
-  return posBridgeRepo.writeVersion(tx, header, lines, tenders);
+  if (dryRun) return { result: (await posBridgeRepo.wouldWrite(tx, header)) ? 'written' : 'unchanged', date };
+  return { result: await posBridgeRepo.writeVersion(tx, header, lines, tenders), date };
 }
