@@ -123,3 +123,7 @@ unverified until a second PG person verifies it - keeps the rule, adds a daily m
   Bible row 389.
 - Clarified by Ian, 26 Oct: Lipa IS the commissary (the seller in T-398); Malvar is a Lipa branch supplied by stock
   transfer inside the same org; Padre Garcia, a franchise, buys from Lipa. No design change.
+- S5d audit (26 Oct) triage: (1) 0-qty line skips item checks -> FIX; (2) layer unit cost = lineCost/qty to 4 dp, not the
+  raw shipment rate - DISMISSED: the shared supplier-delivery rule, the ledger total is exact; (3) bill notes show the
+  shipment uuid -> FIX (ship date); (4) several supplier rows linked to one seller -> FIX: use the active row, refuse two
+  active (uniqueness itself is DEF-747's link work); (minor) non-uuid shipment URL -> notFound.

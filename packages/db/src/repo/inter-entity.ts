@@ -261,17 +261,21 @@ export interface CounterpartySupplierRow {
   readonly name: string;
   readonly status: string;
   readonly creditTermsDays: number | null;
+  /** How many ACTIVE supplier rows the buyer has linked to the seller (the domain refuses when more than one). */
+  readonly activeCount: number;
 }
 
 /** BUYER: the buyer's own supplier row for the selling organisation (`suppliers.counterparty_org_id`), or null when none is set up. */
 export async function supplierForSeller(tx: Tx, buyerOrgId: string, sellerOrgId: string): Promise<CounterpartySupplierRow | null> {
-  const [row] = await tx
+  const rows = await tx
     .select({ id: suppliers.id, name: suppliers.name, status: suppliers.status, creditTermsDays: suppliers.creditTermsDays })
     .from(suppliers)
     .where(and(eq(suppliers.orgId, buyerOrgId), eq(suppliers.counterpartyOrgId, sellerOrgId)))
-    .orderBy(asc(suppliers.createdAt))
-    .limit(1);
-  return row ?? null;
+    .orderBy(asc(suppliers.createdAt));
+  // The ACTIVE row wins; with none active the oldest row is returned so the caller can say it is inactive.
+  const active = rows.filter((r) => r.status === 'active');
+  const row = active[0] ?? rows[0];
+  return row ? { ...row, activeCount: active.length } : null;
 }
 
 export interface DeclaredItemRow {

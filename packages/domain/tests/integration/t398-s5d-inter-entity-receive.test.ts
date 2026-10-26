@@ -260,6 +260,7 @@ describe('E6 PG receives in full: the shipment is the bill (QO-1 a)', () => {
       where je.org_id = ${w.g.orgId} and a.code = '2120'`;
     expect(cents(grni!.net), 'goods-received-not-invoiced is cleared').toBe('0');
 
+    // Layer unit cost is lineCost/qty to 4 dp (the shared supplier-delivery rule); the ledger total stays exact. Ruled acceptable, 26 Oct.
     // the delivery links the shipment; layers cost the SHIPMENT rate (never the commissary cost)
     const d = await deliveriesOf(w.g.orgId, s.shipmentId);
     expect(d.map((r) => [r.kind, r.status, r.supplier_id, r.store_id])).toEqual([['inter_entity', 'received', w.supplierId, w.g.storeId]]);
@@ -544,5 +545,57 @@ describe('F4 the buyer reads a shipment through a definer function that returns 
     expect(got === null || (typeof got === 'object' && 'refused' in (got as object)), `PG was served C's shipment: ${JSON.stringify(got)}`).toBe(true);
     const list = await asPerson(w.g.orgId, w.g.manager.personId, (tx) => api.listInboundShipments(tx, w.g.manager, { includeVoid: true }));
     expect(list.map((r) => r.id)).not.toContain(s.shipmentId);
+  });
+});
+
+// ================================================================================================ S5d audit (26 Oct)
+describe('S5d audit', () => {
+  it('R1. a 0-quantity line carrying an item from ANOTHER org, or a non-uuid item id, is refused in words naming the line (no SQL text); nothing written', async () => {
+    const w = await world('r1');
+    const s = await seed(w); // two lines: salt is received in full, so "every line is 0" cannot be the refusal that masks the bad item
+    const foreign = await wholesaleItem(w.f, 'Foreign'); // an item of the commissary org
+    for (const bad of [foreign, 'abc']) {
+      const before = await snap([w.f.orgId, w.g.orgId], s.shipmentId);
+      const r = await sayOf(pgReceives(w, receiveInput(w, s, { pork: '0', salt: '2.5' }, { porkItem: bad })));
+      notMissing(r.err);
+      expect(r.said, `"${bad}": not a RefusalError sentence: ${rawText(r.err)}`).not.toBeNull();
+      expect(r.said).toContain(s.porkName);
+      expect(r.said).not.toMatch(/uuid|SQLSTATE|syntax|violates|invalid input/i);
+      expect(await snap([w.f.orgId, w.g.orgId], s.shipmentId)).toEqual(before);
+    }
+  });
+
+  it('R2. the system bill notes carry the ship date (YYYY-MM-DD) and NOT the shipment uuid', async () => {
+    const w = await world('r2');
+    const s = await seed(w, { lines: 'one' });
+    await pgReceives(w, receiveInput(w, s, { pork: '8' }));
+    const [inv] = await sql<{ notes: string | null }[]>`select notes from supplier_invoices where org_id = ${w.g.orgId} and inter_entity_shipment_id = ${s.shipmentId}`;
+    expect(inv, 'no system bill').toBeDefined();
+    expect(inv!.notes ?? '').toContain('2026-10-16');
+    expect(inv!.notes ?? '').not.toContain(s.shipmentId);
+  });
+
+  it('R3a. an inactive (older) and an active supplier row both linked to the seller org: the ACTIVE row is used (bill supplier_id, delivery supplier_id)', async () => {
+    const w = await world('r3a');
+    await sql`insert into suppliers (org_id, name, status, created_by, counterparty_org_id, created_at)
+              values (${w.g.orgId}, ${uid('Old commissary')}, 'inactive', ${w.g.manager.personId}, ${w.f.orgId}, now() - interval '60 days')`;
+    const s = await seed(w, { lines: 'one' });
+    await pgReceives(w, receiveInput(w, s, { pork: '10' }));
+    const [inv] = await sql<{ supplier_id: string }[]>`select supplier_id from supplier_invoices where org_id = ${w.g.orgId} and inter_entity_shipment_id = ${s.shipmentId}`;
+    expect(inv!.supplier_id).toBe(w.supplierId);
+    expect((await deliveriesOf(w.g.orgId, s.shipmentId))[0]!.supplier_id).toBe(w.supplierId);
+  });
+
+  it('R3b. two ACTIVE supplier rows linked to the seller org: refused in words asking to keep one; nothing written', async () => {
+    const w = await world('r3b');
+    await sql`insert into suppliers (org_id, name, status, created_by, counterparty_org_id)
+              values (${w.g.orgId}, ${uid('Second commissary')}, 'active', ${w.g.manager.personId}, ${w.f.orgId})`;
+    const s = await seed(w, { lines: 'one' });
+    const before = await snap([w.f.orgId, w.g.orgId], s.shipmentId);
+    const r = await sayOf(pgReceives(w, receiveInput(w, s, { pork: '10' })));
+    notMissing(r.err);
+    expect(r.said, `not a RefusalError sentence: ${rawText(r.err)}`).not.toBeNull();
+    expect(r.said).toMatch(/keep (only )?one|only one/i);
+    expect(await snap([w.f.orgId, w.g.orgId], s.shipmentId)).toEqual(before);
   });
 });

@@ -20,6 +20,7 @@ export default async function InboundShipmentPage({
   searchParams: Promise<{ ok?: string; error?: string; warning?: string }>;
 }) {
   const { shipmentId } = await params;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(shipmentId)) notFound();
   const sp = await withFlash(searchParams);
   const { actor, refusal } = await requirePageAccess(`/inventory/deliveries/inbound/${shipmentId}`);
   if (refusal) return refusal;

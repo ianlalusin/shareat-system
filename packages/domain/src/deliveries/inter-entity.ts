@@ -68,6 +68,8 @@ export interface InboundShipment {
   readonly lines: readonly InboundShipmentLine[];
 }
 
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function requireReadAccess(tx: Tx, actor: Actor): Promise<void> {
   const held = await heldCapabilities(tx, actor);
   if (!held.has('receive_delivery')) {
@@ -198,6 +200,12 @@ export async function receiveInterEntityShipment(tx: Tx, actor: Actor, input: Re
       'Set up the commissary as one of your suppliers (linked to its company) before receiving its shipments.',
     );
   }
+  if (supplier.activeCount > 1) {
+    throw refuse(
+      `receiveInterEntityShipment: organisation ${actor.orgId} has ${supplier.activeCount} active supplier rows linked to seller ${shipment.sellerOrgId}.`,
+      'More than one active supplier is linked to this commissary. Keep only one of them active (make the others inactive), then receive.',
+    );
+  }
   if (supplier.status !== 'active') {
     throw refuse(
       `receiveInterEntityShipment: supplier ${supplier.id} is ${supplier.status}.`,
@@ -249,6 +257,9 @@ export async function receiveInterEntityShipment(tx: Tx, actor: Actor, input: Re
       );
     }
     const itemId = answer.itemId ? answer.itemId : null;
+    if (itemId !== null && !UUID_SHAPE.test(itemId)) {
+      throw refuse(`receiveInterEntityShipment: ${label} item id "${itemId}" is not an id.`, `${label}: the item chosen is not one of your items. Choose the item again from the list.`);
+    }
     if (isPositiveQuantity(received)) {
       if (!itemId) {
         throw refuse(
@@ -256,8 +267,8 @@ export async function receiveInterEntityShipment(tx: Tx, actor: Actor, input: Re
           `${label}: choose which of your own items this is. Map the item to ${supplier.name} first if it is not on the list.`,
         );
       }
-      mappedIds.push(itemId);
     }
+    if (itemId !== null) mappedIds.push(itemId);
     plans.push({ line, received, itemId, cost: isZeroQuantity(received) ? ZERO : lineCost(received, unitCostOf(line.rate)) });
   }
 
@@ -268,7 +279,7 @@ export async function receiveInterEntityShipment(tx: Tx, actor: Actor, input: Re
   // The mapping: refuse-and-ask (ruling 26 Oct). The item must be declared in supplier_items for PG's supplier row of the commissary.
   const declared = await interEntityRepo.declaredItemIds(tx, actor.orgId, supplier.id, mappedIds);
   for (const p of plans) {
-    if (!isPositiveQuantity(p.received)) continue;
+    if (p.itemId === null) continue;
     const label = `Line ${p.line.lineNo} (${p.line.itemName})`;
     const item = await itemsRepo.getItemById(tx, actor.orgId, p.itemId!);
     if (!item) {
@@ -364,7 +375,7 @@ export async function receiveInterEntityShipment(tx: Tx, actor: Actor, input: Re
     supplierId: supplier.id,
     invoiceDate: today,
     dueDate: supplier.creditTermsDays != null ? addDays(parseBusinessDate(today), supplier.creditTermsDays) : null,
-    notes: `Inter-entity shipment ${shipment.id}, billed at what arrived.`,
+    notes: `Inter-entity shipment of ${shipment.shippedOn}, billed at what arrived.`,
   });
   const invoice = { id: invoiceId };
 
