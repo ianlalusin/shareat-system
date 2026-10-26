@@ -1823,6 +1823,8 @@ export async function receivingDisputeOverdue(
       -- never a fourth definition — a dispute that blocks a sales day and one this finding
       -- reports must not be able to differ.
       and d.status <> 'resolved'
+      -- T-398 S5e: a franchise credit has its own reconcile findings and never sat in 1340.
+      and d.disposition is distinct from 'franchise_credit'
       and (${MANILA_TODAY} - d.created_at::date) > ${thresholdDays}
     group by d.store_id, s.name
   `)) as unknown as {

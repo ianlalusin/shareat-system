@@ -1,0 +1,27 @@
+# T-398 S5e - the 06:30 Manila inter-entity reconciliation. INSTALL INSTRUCTIONS: docs/ops/README.md
+#
+# What it is for: the commissary (the seller) and each linked franchise (the buyer) keep separate books. Once a day every organisation compares its
+# books with the other side's for each RECEIVED shipment and for the pair's running balance. The only thing it writes is an open "credit note to
+# the franchise" to-do in the SELLER's own organisation, one per short shipment line. It posts nothing and never writes a franchise's books.
+#
+# Runs as each organisation's own system principal (never a cross-organisation read); the other side is read only through the one-number
+# SECURITY DEFINER functions of migration 0218. Exit code is load-bearing: non-zero when any organisation failed, so the host's mailer speaks up.
+
+[Unit]
+Description=Shareat - 06:30 Manila inter-entity reconciliation, commissary and franchise books (T-398 S5e)
+After=network-online.target
+Wants=network-online.target
+# No After=postgresql.service - the database is DO Managed Postgres, off-box (ADR-002 section 1).
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/shareat
+ExecStart=/usr/bin/npm run inter-entity-reconcile
+User=shareat
+Group=shareat
+
+# NEVER build here. This is a small droplet that runs the app; a build OOMs it. This unit runs an already-installed tree shipped by CI - bible 2.10.
+Environment=NODE_ENV=production
+
+StandardOutput=append:/var/log/shareat/inter-entity-reconcile.log
+StandardError=append:/var/log/shareat/inter-entity-reconcile.log

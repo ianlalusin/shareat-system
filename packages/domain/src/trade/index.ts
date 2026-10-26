@@ -215,6 +215,22 @@ export async function createTradeOrder(
     const lines: { itemId: string; quantity: Quantity; unit: string; rate: Money; lineTotal: Money }[] = [];
     let total: Money = ZERO;
 
+    // S5e L3a: the shipment note and its reconciliation tell items apart one line at a time, so a franchise order names each item once.
+    // Said here, before any write, instead of failing later on a duplicate key.
+    if (treatment === 'inter_entity') {
+      const seen = new Set<string>();
+      for (const draft of input.lines) {
+        if (seen.has(draft.itemId)) {
+          const dup = await itemsRepo.getItemById(trx, actor.orgId, draft.itemId);
+          throw refuse(
+            `createTradeOrder: item ${draft.itemId} is on more than one line of an inter-entity order.`,
+            `${dup?.name ?? 'An item'} is on more than one line. Combine them into one line with the total quantity.`,
+          );
+        }
+        seen.add(draft.itemId);
+      }
+    }
+
     for (const [i, draft] of input.lines.entries()) {
       // S7 / S5.3b R3 — `lineNo` is the operator's own VISIBLE form row, assigned by the caller
       // before it drops empty rows; the post-filter array index (`i + 1`) is only a fallback for

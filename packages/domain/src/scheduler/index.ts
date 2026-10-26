@@ -46,6 +46,7 @@ import { sql } from 'drizzle-orm';
 import { sweepStore } from '../attendance/sweep';
 import { drainOutbox, ingestEvents, type InboxDriver, type MirrorDriver } from '../sync';
 import { recordFindingObservations } from '../findings';
+import { hasGap, raiseShortageDiscrepancies, reconcileInterEntity } from '../trade/inter-entity-reconcile';
 import { budgetsRepo, expensesRepo } from '@shareat/db';
 import { nextPeriodKey, resetWindowDays } from '../budgets';
 
@@ -720,6 +721,48 @@ export async function runFindingObservation(
           skipped: result.observed - result.opened,
           failures: [],
           detail: `asked ${result.periodsAsked.join(', ')} · observed ${result.observed} · opened ${result.opened} · closed ${result.closed}`,
+        };
+      }),
+    );
+  }
+
+  return { outcomes, hadFailures: outcomes.some((o) => o.failed > 0 || o.error) };
+}
+
+/**
+ * `inter_entity_reconcile` - T-398 S5e, DAILY 06:30 Manila. The commissary's books against each linked franchise's, shipment by shipment and
+ * pair by pair (`trade/inter-entity-reconcile.ts`). Its one write is an open `franchise_credit` discrepancy, in the SELLER's own organisation,
+ * per short shipment line; it posts nothing and never writes a franchise's books. The findings feed shows the same disagreement live (derived on
+ * read), so this run is the stored to-do plus the proof it ran.
+ *
+ * Same shape as `runFindingObservation`: one org at a time, each in its own transaction under that org's own principal (never a cross-org
+ * read), one org failing never stops the next, one `scheduler_runs` row each. The Manila month it RAN in is the period (a daily job has no month).
+ */
+export async function runInterEntityReconcile(
+  options: { orgId?: string; trigger?: 'cron' | 'manual'; nowMs?: number } = {},
+): Promise<SweepResult> {
+  const trigger = options.trigger ?? 'cron';
+  const nowMs = options.nowMs ?? Date.now();
+  const period = new Date(nowMs + 8 * 3_600_000).toISOString().slice(0, 7);
+
+  const orgs = await listOrgsToRun(options.orgId);
+  const outcomes: JobOutcome[] = [];
+
+  for (const org of orgs) {
+    outcomes.push(
+      await runJobForOrg(org, 'inter_entity_reconcile', period, trigger, async () => {
+        const done = await asSystem(org.id, async (tx) => {
+          const found = await reconcileInterEntity(tx, org.id);
+          const raised = await raiseShortageDiscrepancies(tx, org.id, found);
+          return { found, raised };
+        });
+        const gapped = done.found.shipments.filter((s) => hasGap(s.gap)).length;
+        const pairsOff = done.found.pairs.filter((p) => hasGap(p.gap)).length;
+        return {
+          posted: done.raised,
+          skipped: done.found.shipments.length - gapped,
+          failures: [],
+          detail: `compared ${done.found.shipments.length} shipment(s) and ${done.found.pairs.length} pair(s) · ${gapped} shipment gap(s) · ${pairsOff} balance gap(s) · raised ${done.raised}`,
         };
       }),
     );

@@ -37,11 +37,15 @@
 --        inter_entity_buyer_posted(p_shipment_ids uuid[]) - A3. Only the SELLER's own shipments, only those received; returns exactly
 --          (shipment_id, received_on, posted_total), read from the buyer's posted receipt entry. Nothing else of the buyer's journal.
 --        inter_entity_counterparty_balance() - QI-1 (a): one figure per linked organisation, what it owes the caller (its payable to the
---          caller's supplier row, from its 2110 control account). No cost, price, supplier, person or item column.
+--          caller's supplier row, from its 2110 control account NET of its 1240 supplier debit / advance, S5e). No cost, price, supplier, person or item column.
+--        credit_inter_entity_shipment(p_shipment_id uuid, p_amount numeric) - S5e, SELLER only: moves credited_total on its own received shipment (the credit note),
+--          never beyond billed_total - received_total. The only way credited_total moves; the app role's own UPDATE stays refused by the freeze trigger.
+--        inter_entity_counterparty_receivable() - S5e, BUYER: the mirror of the balance function. One figure per seller organisation: what that seller's books say the
+--          caller owes it (its 1210 receivable net of its 2140 store credit, on its customer rows linked to the caller). No line, account, person or item.
 --      The functions run as the table owner, so they depend on the owner role bypassing RLS, as the cutover purge and the owner-run migrations
 --      already do; every filter they need is written out in the SQL, none is left to RLS.
---   9. scheduler_runs_job_check restates the WHOLE list of 0216 UNCHANGED (0209's pattern; a deliberate no-op restatement). 'inter_entity_reconcile' is
---      NOT in it: it is added with the job function, ops unit pair, script and the SCHEDULER_JOBS entry together in S5e.
+--   9. scheduler_runs_job_check restates the WHOLE list of 0216 and ADDS 'inter_entity_reconcile' (T-398 S5e: the 06:30 Manila reconciliation job, its
+--      ops unit pair, its script and the SCHEDULER_JOBS entry landed together).
 --  10. trade_discrepancies: disposition += 'franchise_credit' (paired with direction 'short'); nullable inter_entity_shipment_line_id with the
 --      composite (org_id, inter_entity_shipment_line_id) -> inter_entity_shipment_lines (org_id, id). QO-2: the day-open block excludes
 --      inter-entity rows (domain code, S5e).
@@ -559,7 +563,7 @@ AS $$
 			FROM "journal_entries" je
 			JOIN "journal_lines" jl ON jl."entry_id" = je."id"
 			JOIN "accounts" a ON a."id" = jl."account_id" AND a."org_id" = je."org_id"
-			WHERE je."org_id" = l."counterparty_org_id" AND je."status" <> 'draft' AND a."code" = '2110'
+			WHERE je."org_id" = l."counterparty_org_id" AND je."status" <> 'draft' AND a."code" IN ('2110', '1240')
 				AND jl."party_type" = 'supplier'
 				AND jl."party_id" IN (
 					SELECT ps."id"::text FROM "suppliers" ps
@@ -591,12 +595,79 @@ REVOKE ALL ON FUNCTION "inter_entity_counterparty_name"(uuid) FROM PUBLIC;
 --> statement-breakpoint
 GRANT EXECUTE ON FUNCTION "inter_entity_counterparty_name"(uuid) TO "shareat_app";
 --> statement-breakpoint
+CREATE FUNCTION "inter_entity_counterparty_receivable"() RETURNS TABLE ("counterparty_org_id" uuid, "counterparty_is_owed" numeric)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+	-- S5e: the BUYER's view of the seller's books, ONE figure per seller organisation it has a supplier row for (suppliers.counterparty_org_id).
+	-- 1210 receivable (debit - credit) net of the 2140 store credit the seller holds for the caller (a credit balance, so debit - credit over both accounts), on the seller's customer rows linked to the caller.
+	SELECT l."counterparty_org_id",
+		coalesce((
+			SELECT sum(jl."debit" - jl."credit")
+			FROM "journal_entries" je
+			JOIN "journal_lines" jl ON jl."entry_id" = je."id"
+			JOIN "accounts" a ON a."id" = jl."account_id" AND a."org_id" = je."org_id"
+			WHERE je."org_id" = l."counterparty_org_id" AND je."status" <> 'draft' AND a."code" IN ('1210', '2140')
+				AND jl."party_type" = 'customer'
+				AND jl."party_id" IN (
+					SELECT sc."id"::text FROM "customers" sc
+					WHERE sc."org_id" = l."counterparty_org_id" AND sc."counterparty_org_id" = app_current_org()
+				)
+		), 0)
+	FROM (
+		SELECT DISTINCT ps."counterparty_org_id" FROM "suppliers" ps
+		WHERE ps."org_id" = app_current_org() AND ps."counterparty_org_id" IS NOT NULL
+	) l
+$$;
+--> statement-breakpoint
+REVOKE ALL ON FUNCTION "inter_entity_counterparty_receivable"() FROM PUBLIC;
+--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION "inter_entity_counterparty_receivable"() TO "shareat_app";
+--> statement-breakpoint
+CREATE FUNCTION "credit_inter_entity_shipment"("p_shipment_id" uuid, "p_amount" numeric) RETURNS numeric
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+	v_org uuid := app_current_org();
+	s "inter_entity_shipments"%ROWTYPE;
+	v_new numeric;
+BEGIN
+	IF v_org IS NULL THEN
+		RAISE EXCEPTION 'Crediting a shipment needs a signed-in organisation.' USING ERRCODE = '42501';
+	END IF;
+	IF p_amount IS NULL OR p_amount <= 0 OR p_amount <> round(p_amount, 2) THEN
+		RAISE EXCEPTION 'A credit must be a positive amount with at most two decimals.' USING ERRCODE = '22023';
+	END IF;
+	SELECT * INTO s FROM "inter_entity_shipments" WHERE "id" = p_shipment_id AND "org_id" = v_org FOR UPDATE;
+	IF NOT FOUND THEN
+		RAISE EXCEPTION 'This shipment was not sent by your organisation.' USING ERRCODE = '42501';
+	END IF;
+	IF s."status" <> 'received' THEN
+		RAISE EXCEPTION 'Only a shipment the other company has received can be credited.' USING ERRCODE = '23514', CONSTRAINT = 'inter_entity_shipment_credit_status';
+	END IF;
+	IF s."credited_total" + p_amount > s."billed_total" - s."received_total" THEN
+		RAISE EXCEPTION 'The credit would exceed the shortfall (billed % less received %, already credited %).', s."billed_total", s."received_total", s."credited_total"
+			USING ERRCODE = '23514', CONSTRAINT = 'inter_entity_shipment_credit_limit';
+	END IF;
+	UPDATE "inter_entity_shipments" SET "credited_total" = "credited_total" + p_amount, "updated_at" = now() WHERE "id" = s."id" RETURNING "credited_total" INTO v_new;
+	RETURN v_new;
+END;
+$$;
+--> statement-breakpoint
+REVOKE ALL ON FUNCTION "credit_inter_entity_shipment"(uuid, numeric) FROM PUBLIC;
+--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION "credit_inter_entity_shipment"(uuid, numeric) TO "shareat_app";
+--> statement-breakpoint
 ALTER TABLE "scheduler_runs" DROP CONSTRAINT "scheduler_runs_job_check";
 --> statement-breakpoint
 ALTER TABLE "scheduler_runs" ADD CONSTRAINT "scheduler_runs_job_check"
 	CHECK ("job" IN ('depreciation', 'amortisation', 'attendance_sweep', 'mirror_publish', 'inbox_relay',
 	                 'order_wastage_backstop', 'finding_observation', 'budget_reissue', 'recurring_expenses',
-	                 'orphan_file_sweep', 'fiscal_period_seed', 'usage_auto_post', 'pos_day_import', 'pos_receipt_bridge')) NOT VALID;
+	                 'orphan_file_sweep', 'fiscal_period_seed', 'usage_auto_post', 'pos_day_import', 'pos_receipt_bridge', 'inter_entity_reconcile')) NOT VALID;
 --> statement-breakpoint
 ALTER TABLE "scheduler_runs" VALIDATE CONSTRAINT "scheduler_runs_job_check";
 
@@ -730,6 +801,9 @@ DECLARE
 	v_person uuid := nullif(current_setting('app.person_id', true), '')::uuid;
 	s "inter_entity_shipments"%ROWTYPE;
 	v_id uuid;
+	v_line uuid;
+	v_n int := 0;
+	l record;
 BEGIN
 	IF v_org IS NULL OR v_person IS NULL THEN
 		RAISE EXCEPTION 'Filing the bill for a shipment needs a signed-in person.' USING ERRCODE = '42501';
@@ -755,6 +829,22 @@ BEGIN
 	VALUES (v_org, p_store_id, p_supplier_id, p_invoice_date, p_due_date, s."received_total", p_notes, 'verified', v_person, now(),
 		true, true, true, true, true, s."id", v_person)
 	RETURNING "id" INTO v_id;
+	-- S5e (4a): the bill is a MATCHED invoice. Its lines are the received delivery lines, and the stock layers they created are finalised against them
+	-- (is_provisional false, invoice_line_id set), so a later return of that stock is credited against the supplier (1240), never the goods-received control 2120.
+	-- Done here because the app role cannot write the lines of a system-made bill.
+	FOR l IN
+		SELECT d."id" AS delivery_id, dl."item_id", dl."purchase_unit", dl."conversion_factor", dl."unit_cost", dl."received_quantity"
+		FROM "deliveries" d JOIN "delivery_lines" dl ON dl."delivery_id" = d."id"
+		WHERE d."org_id" = v_org AND d."inter_entity_shipment_id" = s."id" AND d."store_id" = p_store_id AND d."status" <> 'void' AND coalesce(dl."received_quantity", 0) > 0
+		ORDER BY dl."line_no"
+	LOOP
+		v_n := v_n + 1;
+		INSERT INTO "supplier_invoice_lines" ("supplier_invoice_id", "line_no", "item_id", "quantity", "purchase_unit", "conversion_factor", "unit_price", "line_total")
+		VALUES (v_id, v_n, l."item_id", l."received_quantity", l."purchase_unit", l."conversion_factor", l."unit_cost", round(l."received_quantity" * l."unit_cost", 2))
+		RETURNING "id" INTO v_line;
+		UPDATE "stock_layers" SET "is_provisional" = false, "invoice_line_id" = v_line, "updated_at" = now()
+		WHERE "org_id" = v_org AND "source" = 'delivery' AND "source_id" = l."delivery_id" AND "item_id" = l."item_id" AND "is_provisional";
+	END LOOP;
 	RETURN v_id;
 END;
 $$;

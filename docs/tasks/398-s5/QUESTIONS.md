@@ -127,3 +127,15 @@ unverified until a second PG person verifies it - keeps the rule, adds a daily m
   raw shipment rate - DISMISSED: the shared supplier-delivery rule, the ledger total is exact; (3) bill notes show the
   shipment uuid -> FIX (ship date); (4) several supplier rows linked to one seller -> FIX: use the active row, refuse two
   active (uniqueness itself is DEF-747's link work); (minor) non-uuid shipment URL -> notFound.
+- S5e tester gaps (26 Oct), orchestrator rulings: (1) the credit note moves credited_total through a SELLER-only definer
+  (owner path; the freeze stays for the app role). (2) PG's balance check reads Lipa's receivable for PG through a
+  symmetric definer returning ONE number for the pair (mirror of QI-1 a; no lines, no accounts, no people).
+  (3) The balance finding reports only the residual not explained by shipment gaps (one finding per cause).
+  (4a) A system-made bill (QI-2) must finalise PG's stock layer like any matched invoice, so a later supplier return
+  posts DR 2110 / CR 1310 - FIX in S5e. (4b) recordCustomerReturn accepts an inter-entity customer (paired return,
+  E21). (4c) the counterparty balance nets the supplier-party 1240 (supplier debit / advance) with 2110.
+  (5) E7r2 is the real rounding fixture; E7r1 stays as written. (6) discrepancy value = the credit value (> 0); findings
+  name "the shipment of <YYYY-MM-DD>" (never a uuid, as R2); Lipa's: "Padre Garcia has recorded P2,480.00 against the
+  shipment of <date>"; PG's: "Lipa billed P3,100.00 for the shipment of <date>; you recorded P2,480.00".
+  (7) franchise_credit rows do not block a month close but are listed as unresolved (QO-2); the invariant-8 comment is
+  updated to say so. (8) the seller's shipment read drops received_by. (9) do not regenerate the ratchet baseline.

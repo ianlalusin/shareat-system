@@ -22,7 +22,7 @@ import {
 import type { CustomerTreatment, TradeOrderStatus } from '@shareat/db/schema';
 import { AuthorizationError, can, type Actor } from '@shareat/auth';
 import { branchPriceFor, previewCreditExposure } from '@shareat/domain';
-import { money, subtract } from '@shareat/core/money';
+import { compare, money, subtract, ZERO } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { listStores, withOrgPrincipal, type StoreOption } from '../../expenses/lib';
 import { scopedStores } from '../../reports/lib';
@@ -160,7 +160,9 @@ export interface OrderDetail {
   /** The branch an INTERNAL transfer is going to; undefined for a sale. */
   receivingStore: StoreOption | undefined;
   /** T-398 S5c. Set only for an inter-entity sale: the buyer organisation's name and, once it received, the Manila date it did. */
-  interEntity: { buyerName: string; receivedOn: string | null } | null;
+  /** `creditDue`: billed less what the buyer received less what is already credited, when the buyer received less than was billed (S5e); else null. */
+  /** `canPostCredit`: the viewer holds resolve_trade_discrepancy at the order's store (the capability the credit note itself asks for). */
+  interEntity: { buyerName: string; receivedOn: string | null; creditDue: string | null; canPostCredit: boolean } | null;
 }
 
 /**
@@ -196,9 +198,14 @@ export async function orderDetail(actor: Actor, id: string): Promise<OrderDetail
         interEntityRepo.findByTradeOrder(tx, orgId, order.id),
         interEntityRepo.counterpartyName(tx, customer.id),
       ]);
+      const canPostCredit = await can(tx, actor, 'resolve_trade_discrepancy', { storeId: order.storeId });
       interEntity = {
         buyerName: buyerName ?? customer.name,
         receivedOn: shipment?.status === 'received' && shipment.receivedAt ? toBusinessDate(shipment.receivedAt) : null,
+        creditDue: shipment?.status === 'received' && shipment.receivedTotal !== null && compare(subtract(subtract(money(shipment.billedTotal), money(shipment.receivedTotal)), money(shipment.creditedTotal)), ZERO) > 0
+          ? subtract(subtract(money(shipment.billedTotal), money(shipment.receivedTotal)), money(shipment.creditedTotal))
+          : null,
+        canPostCredit,
       };
     }
     return {

@@ -59,7 +59,8 @@ const JOB_SCRIPT: Record<SchedulerJob, string> = {
   pos_day_import: 'pos-day-import',
   // T-472: the 06:30 Manila nightly POS receipt bridge. Its script and unit pair land in S3.
   pos_receipt_bridge: 'pos-receipt-bridge',
-  // inter_entity_reconcile returns with S5e (T-398)
+  // T-398 S5e: the 06:30 Manila inter-entity reconciliation (Lipa the seller, Padre Garcia the buyer). Its script and unit pair land in S5e.
+  inter_entity_reconcile: 'inter-entity-reconcile',
 };
 
 /** The unique scripts `JOB_SCRIPT` names — `docs/ops/shareat-<name>.{service,timer}` basenames. */

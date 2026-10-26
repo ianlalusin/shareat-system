@@ -277,6 +277,19 @@ export async function receiveInterEntityShipment(tx: Tx, actor: Actor, input: Re
   }
 
   // The mapping: refuse-and-ask (ruling 26 Oct). The item must be declared in supplier_items for PG's supplier row of the commissary.
+  // S5e L4: two shipment lines may not land on one item of the receiver's own - each stock layer and bill line belongs to one line.
+  const firstLineOfItem = new Map<string, (typeof plans)[number]>();
+  for (const p of plans) {
+    if (p.itemId === null) continue;
+    const first = firstLineOfItem.get(p.itemId);
+    if (first) {
+      throw refuse(
+        `receiveInterEntityShipment: lines ${first.line.lineNo} and ${p.line.lineNo} are both mapped to item ${p.itemId}.`,
+        `Line ${first.line.lineNo} (${first.line.itemName}) and line ${p.line.lineNo} (${p.line.itemName}) are mapped to the same item. Map each line to its own item, then receive.`,
+      );
+    }
+    firstLineOfItem.set(p.itemId, p);
+  }
   const declared = await interEntityRepo.declaredItemIds(tx, actor.orgId, supplier.id, mappedIds);
   for (const p of plans) {
     if (p.itemId === null) continue;

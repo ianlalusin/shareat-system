@@ -103,6 +103,8 @@ export const KIND_LABEL: Record<string, string> = {
   attendanceConfigMissing: 'No pay-cycle policy configured',
   pinSignInFailures: 'Repeated wrong PINs at a terminal',
   pinSignInStopped: 'PIN sign-in stopped at a store',
+  inter_entity_shipment_gap: 'Shipment: the two companies disagree on what arrived',
+  inter_entity_balance_gap: 'Balance with the other company disagrees',
   openingDateContradicted: 'Opening date contradicted by recorded sales',
   assetHeldPastOpening: 'Asset waiting on its store to open',
 };

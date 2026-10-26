@@ -33,6 +33,7 @@ export interface InterEntityShipmentRow {
   readonly creditedTotal: string;
   readonly status: InterEntityShipmentStatus;
   readonly receivedAt: Date | null;
+  /** Always null: who at the buyer counted the goods is the buyer's business (QI-1 (a), S5e ruling 8). */
   readonly receivedBy: string | null;
   readonly receivedTotal: string | null;
   readonly voidedAt: Date | null;
@@ -87,7 +88,8 @@ const SHIPMENT_COLUMNS = {
   creditedTotal: interEntityShipments.creditedTotal,
   status: interEntityShipments.status,
   receivedAt: interEntityShipments.receivedAt,
-  receivedBy: interEntityShipments.receivedBy,
+  // Ruling 8 (S5e): the seller's reads never carry WHO at the buyer received. The key stays (always null) so callers keep their shape.
+  receivedBy: sql<string | null>`null::uuid`,
   receivedTotal: interEntityShipments.receivedTotal,
   voidedAt: interEntityShipments.voidedAt,
   voidReason: interEntityShipments.voidReason,
@@ -390,4 +392,155 @@ export async function createSystemSupplierInvoice(tx: Tx, input: SystemBillInput
     sql`select create_system_supplier_invoice(${input.shipmentId}::uuid, ${input.storeId}::uuid, ${input.supplierId}::uuid, ${input.invoiceDate}::date, ${input.dueDate}::date, ${input.notes}) as id`,
   )) as unknown as { id: string }[];
   return rows[0]!.id;
+}
+
+/** SELLER, owner path: `credit_inter_entity_shipment` - moves credited_total on the caller's OWN received shipment. Returns the new credited_total. */
+export async function creditShipment(tx: Tx, shipmentId: string, amount: Money): Promise<string> {
+  const rows = (await tx.execute(
+    sql`select credit_inter_entity_shipment(${shipmentId}::uuid, ${amount}::numeric)::text as credited`,
+  )) as unknown as { credited: string }[];
+  return rows[0]!.credited;
+}
+
+export interface CounterpartyReceivableRow {
+  readonly counterpartyOrgId: string;
+  /** What the linked seller's books say the caller owes it (its receivable net of store credit). One figure, nothing behind it. */
+  readonly counterpartyIsOwed: string;
+}
+
+/** BUYER: `inter_entity_counterparty_receivable` - one figure per seller organisation the caller has a supplier row for (S5e, QI-1 (a) mirrored). */
+export async function counterpartyReceivable(tx: Tx): Promise<CounterpartyReceivableRow[]> {
+  const rows = (await tx.execute(
+    sql`select counterparty_org_id, counterparty_is_owed::text as counterparty_is_owed from inter_entity_counterparty_receivable()`,
+  )) as unknown as { counterparty_org_id: string; counterparty_is_owed: string }[];
+  return rows.map((r) => ({ counterpartyOrgId: r.counterparty_org_id, counterpartyIsOwed: r.counterparty_is_owed }));
+}
+
+/** One received shipment as ONE side of it sees it, for the 06:30 reconciliation (S5e). */
+export interface ReconcileShipmentRow {
+  readonly shipmentId: string;
+  /** The other organisation. */
+  readonly counterpartyOrgId: string;
+  /** The caller's own name for the other organisation (its customer row / supplier row), or null. */
+  readonly counterpartyName: string | null;
+  readonly shippedOn: string;
+  readonly billedTotal: string;
+  readonly creditedTotal: string;
+  readonly receivedTotal: string;
+  /** The caller's own store: the seller's dispatching store, or the buyer's receiving store. */
+  readonly storeId: string;
+  /** BUYER rows only: what the caller's own books posted for the receipt (the stock receipt entry's debits); null on a seller row. */
+  readonly ownPostedTotal: string | null;
+}
+
+type ReconcileRaw = {
+  shipment_id: string;
+  counterparty_org_id: string;
+  counterparty_name: string | null;
+  shipped_on: string;
+  billed_total: string;
+  credited_total: string;
+  received_total: string;
+  store_id: string;
+  own_posted_total: string | null;
+};
+
+const toReconcileRow = (r: ReconcileRaw): ReconcileShipmentRow => ({
+  shipmentId: r.shipment_id,
+  counterpartyOrgId: r.counterparty_org_id,
+  counterpartyName: r.counterparty_name,
+  shippedOn: r.shipped_on,
+  billedTotal: r.billed_total,
+  creditedTotal: r.credited_total,
+  receivedTotal: r.received_total,
+  storeId: r.store_id,
+  ownPostedTotal: r.own_posted_total,
+});
+
+/** SELLER: the caller's own RECEIVED shipments (in-transit and void ones are not reconciled), oldest first. */
+export async function sellerReceivedShipments(tx: Tx, orgId: string): Promise<ReconcileShipmentRow[]> {
+  const rows = (await tx.execute(sql`
+    select s.id::text as shipment_id, s.buyer_org_id::text as counterparty_org_id,
+           (select c.name from customers c where c.org_id = s.org_id and c.counterparty_org_id = s.buyer_org_id order by c.created_at, c.id limit 1) as counterparty_name,
+           s.shipped_on::text as shipped_on, s.billed_total::text as billed_total, s.credited_total::text as credited_total,
+           s.received_total::text as received_total, s.store_id::text as store_id, null::text as own_posted_total
+    from inter_entity_shipments s
+    where s.org_id = ${orgId} and s.status = 'received'
+    order by s.shipped_on, s.id`)) as unknown as ReconcileRaw[];
+  return rows.map(toReconcileRow);
+}
+
+/** BUYER: shipments addressed to the caller that it RECEIVED, with what its own books posted for each receipt. */
+export async function buyerReceivedShipments(tx: Tx, orgId: string): Promise<ReconcileShipmentRow[]> {
+  const rows = (await tx.execute(sql`
+    select s.id::text as shipment_id, s.org_id::text as counterparty_org_id,
+           (select sp.name from suppliers sp where sp.org_id = s.buyer_org_id and sp.counterparty_org_id = s.org_id
+              order by (sp.status = 'active') desc, sp.created_at, sp.id limit 1) as counterparty_name,
+           s.shipped_on::text as shipped_on, s.billed_total::text as billed_total, s.credited_total::text as credited_total,
+           s.received_total::text as received_total, d.store_id::text as store_id,
+           (select coalesce(sum(jl.debit), 0)::text from journal_entries je join journal_lines jl on jl.entry_id = je.id
+              where je.org_id = s.buyer_org_id and je.source_type = 'stock_receipt' and je.source_id = d.id::text and je.status = 'posted') as own_posted_total
+    from inter_entity_shipments s
+    join deliveries d on d.inter_entity_shipment_id = s.id and d.org_id = s.buyer_org_id and d.status = 'received'
+    where s.buyer_org_id = ${orgId} and s.status = 'received'
+    order by s.shipped_on, s.id`)) as unknown as ReconcileRaw[];
+  return rows.map(toReconcileRow);
+}
+
+export interface CounterpartyFigure {
+  readonly counterpartyOrgId: string;
+  readonly amount: string;
+  /** The caller's own name for that organisation (its customer / supplier row), or null; set by the two own-ledger reads. */
+  readonly counterpartyName?: string | null;
+}
+
+/**
+ * SELLER: the caller's OWN receivable for each linked buyer, from its own ledger: 1210 net of the 2140 store credit it holds, on the customer rows linked
+ * to that buyer (debit minus credit over both). Includes a linked buyer with nothing posted (0).
+ */
+export async function ownReceivableByBuyer(tx: Tx, orgId: string): Promise<CounterpartyFigure[]> {
+  const rows = (await tx.execute(sql`
+    select l.counterparty_org_id::text as counterparty_org_id,
+           coalesce((
+             select sum(jl.debit - jl.credit)
+             from journal_entries je join journal_lines jl on jl.entry_id = je.id join accounts a on a.id = jl.account_id and a.org_id = je.org_id
+             where je.org_id = ${orgId} and je.status <> 'draft' and a.code in ('1210', '2140') and jl.party_type = 'customer'
+               and jl.party_id in (select c2.id::text from customers c2 where c2.org_id = ${orgId} and c2.counterparty_org_id = l.counterparty_org_id)
+           ), 0)::text as amount,
+           (select c3.name from customers c3 where c3.org_id = ${orgId} and c3.counterparty_org_id = l.counterparty_org_id order by c3.created_at, c3.id limit 1) as counterparty_name
+    from (select distinct c.counterparty_org_id from customers c where c.org_id = ${orgId} and c.counterparty_org_id is not null) l
+    order by 1`)) as unknown as { counterparty_org_id: string; amount: string; counterparty_name: string | null }[];
+  return rows.map((r) => ({ counterpartyOrgId: r.counterparty_org_id, amount: r.amount, counterpartyName: r.counterparty_name }));
+}
+
+/**
+ * BUYER: the caller's OWN payable to each linked seller, from its own ledger: 2110 net of the 1240 supplier debit / advance (credit minus debit over both),
+ * on the supplier rows linked to that seller. Includes a linked seller with nothing posted (0).
+ */
+export async function ownPayableBySeller(tx: Tx, orgId: string): Promise<CounterpartyFigure[]> {
+  const rows = (await tx.execute(sql`
+    select l.counterparty_org_id::text as counterparty_org_id,
+           coalesce((
+             select sum(jl.credit - jl.debit)
+             from journal_entries je join journal_lines jl on jl.entry_id = je.id join accounts a on a.id = jl.account_id and a.org_id = je.org_id
+             where je.org_id = ${orgId} and je.status <> 'draft' and a.code in ('2110', '1240') and jl.party_type = 'supplier'
+               and jl.party_id in (select s2.id::text from suppliers s2 where s2.org_id = ${orgId} and s2.counterparty_org_id = l.counterparty_org_id)
+           ), 0)::text as amount,
+           (select s3.name from suppliers s3 where s3.org_id = ${orgId} and s3.counterparty_org_id = l.counterparty_org_id
+              order by (s3.status = 'active') desc, s3.created_at, s3.id limit 1) as counterparty_name
+    from (select distinct s.counterparty_org_id from suppliers s where s.org_id = ${orgId} and s.counterparty_org_id is not null) l
+    order by 1`)) as unknown as { counterparty_org_id: string; amount: string; counterparty_name: string | null }[];
+  return rows.map((r) => ({ counterpartyOrgId: r.counterparty_org_id, amount: r.amount, counterpartyName: r.counterparty_name }));
+}
+
+/** What the caller has billed (SELLER) or been billed (BUYER) on shipments still in transit, per other organisation: not yet in the other side's books, so out of the balance check. */
+export async function inTransitBilledByCounterparty(tx: Tx, orgId: string, role: 'seller' | 'buyer'): Promise<CounterpartyFigure[]> {
+  const rows = (await tx.execute(
+    role === 'seller'
+      ? sql`select s.buyer_org_id::text as counterparty_org_id, sum(s.billed_total)::text as amount from inter_entity_shipments s
+            where s.org_id = ${orgId} and s.status = 'in_transit' group by s.buyer_org_id order by 1`
+      : sql`select s.org_id::text as counterparty_org_id, sum(s.billed_total)::text as amount from inter_entity_shipments s
+            where s.buyer_org_id = ${orgId} and s.status = 'in_transit' group by s.org_id order by 1`,
+  )) as unknown as { counterparty_org_id: string; amount: string }[];
+  return rows.map((r) => ({ counterpartyOrgId: r.counterparty_org_id, amount: r.amount }));
 }

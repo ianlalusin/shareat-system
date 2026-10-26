@@ -43,6 +43,8 @@ export * from './items';
 export * from './ar';
 export * from './trade';
 export * from './trade/returns';
+export { reconcileInterEntity, raiseShortageDiscrepancies, shipmentGapDetail, balanceGapDetail, type ReconcileResult, type ShipmentGap, type PairGap } from './trade/inter-entity-reconcile';
+export { postFranchiseShortageCredit, type FranchiseShortageCreditResult } from './trade/franchise-credit';
 export * from './channel-settlements';
 export * from './findings';
 export * from './fiscal-periods';

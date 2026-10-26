@@ -162,15 +162,16 @@ describe('L2 -- 0218 applies from zero on a scratch database and yields the cata
   }, 240_000);
 });
 
-describe('J -- scheduler_runs_job_check restates the whole list (inter_entity_reconcile returns with S5e)', () => {
-  it('J1 the live constraint admits every job the previous migration listed, equals SCHEDULER_JOBS, and does not admit inter_entity_reconcile (kills: list shortened)', async () => {
+describe('J -- scheduler_runs_job_check restates the whole list and adds inter_entity_reconcile (T-398 S5e)', () => {
+  it('J1 the live constraint admits every job the previous migration listed PLUS inter_entity_reconcile, equals SCHEDULER_JOBS (15 jobs) (kills: list shortened, job left out of the CHECK)', async () => {
     const [c] = await sql<{ def: string }[]>`select pg_get_constraintdef(oid) def from pg_constraint where conname = 'scheduler_runs_job_check' and conrelid = 'scheduler_runs'::regclass`;
     expect(c, 'constraint missing').toBeDefined();
-    // inter_entity_reconcile returns with S5e (T-398)
-    expect(c!.def, 'inter_entity_reconcile must NOT be admitted yet').not.toContain('inter_entity_reconcile');
+    // T-398 S5e: inter_entity_reconcile is back in the CHECK and in SCHEDULER_JOBS
+    expect(c!.def, 'inter_entity_reconcile must be admitted by the live CHECK').toContain("'inter_entity_reconcile'");
+    expect(SCHEDULER_JOBS as readonly string[], 'inter_entity_reconcile is in SCHEDULER_JOBS').toContain('inter_entity_reconcile');
     const live = [...c!.def.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);
-    expect([...new Set(live)].sort(), 'the live list is exactly SCHEDULER_JOBS (14 jobs)').toEqual([...SCHEDULER_JOBS].sort());
-    expect(SCHEDULER_JOBS.length).toBe(14);
+    expect([...new Set(live)].sort(), 'the live list is exactly SCHEDULER_JOBS (15 jobs)').toEqual([...SCHEDULER_JOBS].sort());
+    expect(SCHEDULER_JOBS.length).toBe(15);
     // previous list = the newest migration BEFORE 0218 that restates the constraint
     const files = readdirSync(MIGRATIONS_FOLDER).filter((f) => /^\d{4}_.*\.sql$/.test(f) && !f.startsWith('0218_')).sort().reverse();
     const prior = files.find((f) => /scheduler_runs_job_check"?\s*\n?\s*CHECK/i.test(readFileSync(join(MIGRATIONS_FOLDER, f), 'utf8')));
@@ -180,6 +181,20 @@ describe('J -- scheduler_runs_job_check restates the whole list (inter_entity_re
     const list = [...block.slice(0, block.indexOf(';')).matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);
     expect(list.length, 'parsed the previous job list').toBeGreaterThan(10);
     for (const job of list) expect(c!.def, `job ${job} dropped from the check`).toContain(`'${job}'`);
+  });
+
+  it('J1b T-398 S5e: migration 0218 and the Drizzle mirror (schema/scheduler.ts) both list inter_entity_reconcile in their scheduler_runs_job_check, in step with SCHEDULER_JOBS (kills: one of the three left behind)', () => {
+    const mig = readFileSync(join(MIGRATIONS_FOLDER, '0218_t398_s5_inter_entity_shipments.sql'), 'utf8');
+    const m = mig.slice(mig.search(/ADD CONSTRAINT "scheduler_runs_job_check"/i));
+    const migList = [...m.slice(0, m.indexOf(';')).matchAll(/'([a-z_]+)'/g)].map((x) => x[1]!);
+    expect(migList, '0218 CHECK lists the job').toContain('inter_entity_reconcile');
+    expect([...new Set(migList)].sort(), '0218 CHECK = SCHEDULER_JOBS').toEqual([...SCHEDULER_JOBS].sort());
+    const sch = readFileSync(join(__dirname, '..', '..', 'schema', 'scheduler.ts'), 'utf8');
+    const at = sch.indexOf("'scheduler_runs_job_check'");
+    const code = sch.slice(at).split(String.fromCharCode(10)).find((l) => l.includes('${t.job} in (')) ?? '';
+    const schList = [...code.matchAll(/'([a-z_]+)'/g)].map((x) => x[1]!);
+    expect(schList, 'the Drizzle CHECK lists the job').toContain('inter_entity_reconcile');
+    expect([...new Set(schList)].sort(), 'the Drizzle CHECK = SCHEDULER_JOBS').toEqual([...SCHEDULER_JOBS].sort());
   });
 });
 

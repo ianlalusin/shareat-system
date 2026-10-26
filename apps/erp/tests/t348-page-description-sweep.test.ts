@@ -151,7 +151,7 @@ describe('T-348 S2 — the two neutral-500 prose sites move too (SW3)', () => {
 });
 
 describe('T-348 S2 — the population lands exactly, nothing dropped or doubled (SW4)', () => {
-  it('SW4: exactly 120 <PageDescription> call sites exist under app/', () => {
+  it('SW4: exactly 122 <PageDescription> call sites exist under app/', () => {
     let count = 0;
     for (const file of walk(appRoot)) {
       const content = readFileSync(file, 'utf8');
@@ -162,7 +162,8 @@ describe('T-348 S2 — the population lands exactly, nothing dropped or doubled 
     // 117 -> 118, T-436: the new /attendance/leave page carries its <PageDescription>.
     // 118 -> 119, T-190: /payroll/rates carries its <PageDescription>; measured by walking app/.
     // 119 -> 120, T-464: /settings/pos-tablet carries its <PageDescription>.
-    expect(count).toBe(120);
+    // 120 -> 122, T-398 S5e: the two inbound shipment pages (S5d) each carry a <PageDescription> (verified in both files).
+    expect(count).toBe(122);
   });
 });
 
