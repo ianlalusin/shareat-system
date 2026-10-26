@@ -14,7 +14,7 @@ import {
   type GrantRow,
   type PersonWithAccessRow,
 } from '@shareat/db';
-import { CAPABILITIES, CAPABILITY_MATRIX, type Capability, type Role } from '@shareat/auth';
+import { CAPABILITIES, CAPABILITY_MATRIX, grantsConfer, type Capability, type Role } from '@shareat/auth';
 import { listStores, withOrgPrincipal, type StoreOption } from '../../expenses/lib';
 
 export { listStores, withOrgPrincipal };
@@ -121,8 +121,9 @@ export async function userDetail(orgId: string, personId: string): Promise<UserD
  * which is the same discipline `authorize.test.ts` applies to its own coverage.
  */
 export function grantableCapabilitiesFor(role: Role | null): readonly Capability[] {
-  if (!role) return CAPABILITIES;
-  return CAPABILITIES.filter((c) => !CAPABILITY_MATRIX[c][role]);
+  // T-475 S3 (Q3=A): a role-only capability (`ROLE_ONLY_CAPABILITIES`) is never offered as a grant, for any role.
+  if (!role) return CAPABILITIES.filter(grantsConfer);
+  return CAPABILITIES.filter((c) => grantsConfer(c) && !CAPABILITY_MATRIX[c][role]);
 }
 
 /**

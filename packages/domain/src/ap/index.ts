@@ -36,7 +36,7 @@ import type {
   SupplierVatStatus,
 } from '@shareat/db/schema';
 import type { PeriodOverrideReason } from '@shareat/db/schema';
-import { authorize, type Actor } from '@shareat/auth';
+import { authorize, can, type Actor } from '@shareat/auth';
 import { add, compare, formatMoney, isZero, money, subtract, ZERO, type Money } from '@shareat/core/money';
 import { addDays, parseBusinessDate, type BusinessDate } from '@shareat/core/datetime';
 import { logger } from '@shareat/core/logger';
@@ -776,7 +776,11 @@ export async function verifyInvoice(
     }
 
     // ⛔ Segregation of duties. The DB enforces it too; this is the sentence a human can act on.
-    const selfVerify = selfVerifyCheck.run({ createdByViewer: invoice.createdBy === actor.personId }, {});
+    // T-475 S3 (R4): the self-verify flag comes ONLY from this `can()` - never from a caller argument, form field or option.
+    // `can()`, not `authorize()`: a manager asking is an ordinary answer, not an attempted act (no denial row).
+    const createdByViewer = invoice.createdBy === actor.personId;
+    const selfVerified = createdByViewer && (await can(trx, actor, 'verify_own_supplier_invoice'));
+    const selfVerify = selfVerified ? null : selfVerifyCheck.run({ createdByViewer }, {});
     if (selfVerify) {
       throw refuse(
         'verifyInvoice: you logged this invoice, so you cannot also verify it (Verification is a second pair of eyes).',
@@ -811,7 +815,7 @@ export async function verifyInvoice(
     );
     if (noReceipt) throw refuse(`verifyInvoice: supplier invoice ${invoiceId}: ${noReceipt.sentence} (DEF-055)`, noReceipt.sentence);
 
-    await apRepo.markInvoiceVerified(trx, actor.orgId, invoiceId, { verifiedBy: actor.personId });
+    await apRepo.markInvoiceVerified(trx, actor.orgId, invoiceId, { verifiedBy: actor.personId, selfVerified });
 
     // ⭐ T-196 — post every draft standing against this invoice, oldest first, in the SAME
     // transaction as the status flip above. See this function's own doc comment for why a
@@ -859,6 +863,18 @@ export async function verifyInvoice(
       after: { status: 'verified', draftsPosted: drafts.length },
       source: 'web',
     });
+    // T-475 S3: the second event, only for a self-verify - same transaction, after the first.
+    if (selfVerified) {
+      await auditLogRepo.append(trx, actor.orgId, {
+        actorPersonId: actor.personId,
+        action: 'ap_invoice.self_verified',
+        storeId: invoice.storeId,
+        entityId: invoiceId,
+        before: { selfVerified: false },
+        after: { selfVerified: true },
+        source: 'web',
+      });
+    }
   };
   return run(tx);
 }

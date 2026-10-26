@@ -43,7 +43,7 @@ export async function listSuppliersWithPosition(orgId: string): Promise<Supplier
 
 export async function listInvoices(
   orgId: string,
-  filter: { supplierId?: string; status?: SupplierInvoiceRow['status'] } = {},
+  filter: { supplierId?: string; status?: SupplierInvoiceRow['status']; selfVerified?: true } = {},
 ): Promise<SupplierInvoiceRow[]> {
   return withOrgPrincipal(orgId, (tx) => apRepo.listSupplierInvoices(tx, orgId, filter));
 }

@@ -18,13 +18,11 @@ buildCoverageReport
 byMethodOf
 calculateBillTotalsCentavosT423
 callEntry
-cancelMyEntry
 cancelScheduledDepletionRule
 canonicalAnalytics
 capitalizeFromExpense
 cashPayment
 catalogueProblems
-checkIn
 checkValuesMatch
 childLogger
 closeAsLateReceipt
@@ -68,7 +66,6 @@ getAllocationsForPayment
 getCalendarWeatherIcon
 getGroupKey
 getKitchenTicketContribution
-getMyEntry
 getNonCentavoCount
 groupIntoFamilies
 hasFingerprint

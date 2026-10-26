@@ -29,6 +29,7 @@ import {
   CAPABILITIES,
   CAPABILITY_SCOPE,
   ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER,
+  grantsConfer,
   ROLE_LABEL,
   SUPER_ADMIN_ONLY_CAPABILITIES,
   type Capability,
@@ -615,6 +616,13 @@ export async function grantCapabilityAsActor(
     throw refuse(
       `grantCapabilityAsActor: '${input.capability}' is not a known capability.`,
       "That isn't a permission this system knows.",
+    );
+  }
+  // T-475 S3 (Q3=A): a role-only capability is never granted to a person; no person_grants row is written.
+  if (!grantsConfer(input.capability)) {
+    throw refuse(
+      `grantCapabilityAsActor: '${input.capability}' is held by role only and cannot be granted.`,
+      "That permission comes only with the Admin role; it can't be granted to a person.",
     );
   }
 
