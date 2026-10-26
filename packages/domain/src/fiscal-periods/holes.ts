@@ -120,8 +120,9 @@ export interface CreateMissingClosedPeriodResult {
   readonly status: 'closed' | 'locked';
 }
 
-function draftLabel(d: { kind: 'expense' | 'delivery'; dateOn: string; counterpartyName: string | null }): string {
+function draftLabel(d: { kind: 'expense' | 'delivery' | 'salesDay'; dateOn: string; counterpartyName: string | null }): string {
   const who = d.counterpartyName ?? 'unknown';
+  if (d.kind === 'salesDay') return `unposted sales day dated ${d.dateOn} — ${who}`;
   return d.kind === 'expense'
     ? `draft expense dated ${d.dateOn} — ${who}`
     : `draft delivery dated ${d.dateOn} — ${who}`;

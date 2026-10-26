@@ -19,6 +19,7 @@ import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { advanceToRecover, computePay, type DayInput } from './compute';
 import { refuse } from '../shared/refusal';
+import { EXPENSE_FUNDING_ACCOUNTS } from '../expenses/routing';
 import {
   AGENCIES,
   computeStatutory,
@@ -664,6 +665,7 @@ export async function postPayRun(
     if (account.storeId !== input.storeId) {
       throw new Error('postPayRun: that money account belongs to another store.');
     }
+    assertPayrollMoneyAccount(account, 'postPayRun');
 
     const entryDate = input.entryDate ?? input.periodEnd;
     const runId = (
@@ -760,6 +762,7 @@ export async function postPayRun(
                 accountCode: account.glAccountCode,
                 storeId: input.storeId,
                 credit: slip.netPay,
+                ...payrollMoneyParty(account),
               },
             ]
           : []),
@@ -855,3 +858,30 @@ export * from './thirteenth-month';
 // T-192 — separation, final pay, clearance. Same circular-import shape and same safety reasoning
 // (`outstandingAdvance`/`PAYROLL_ADVANCE_ACCOUNT` used only inside function bodies).
 export * from './separation';
+
+/**
+ * T-486 (DEF-776) - the party a payroll payout's money-account credit must carry.
+ * `1140 E-wallet` requires party `money_account` (migration 0007 `journal_lines_party_requirement`); every other
+ * payable account carries none. Same inline shape as `ar/index.ts` collections.
+ */
+export function payrollMoneyParty(account: { id: string; glAccountCode: string }):
+  | { partyType: 'money_account'; partyId: string }
+  | Record<string, never> {
+  return account.glAccountCode === EXPENSE_FUNDING_ACCOUNTS.ONLINE
+    ? { partyType: 'money_account' as const, partyId: account.id }
+    : {};
+}
+
+/**
+ * T-486 (DEF-776) - payroll cannot be paid from `1120 Cash on hand - staff custodian`. A float belongs to one person
+ * through a cash request; a payroll payout has no request to attach, and inventing one would corrupt `floatPositionOf`
+ * (mirrors `service-charge/index.ts`). Refused BY NAME, before anything is computed or written.
+ */
+export function assertPayrollMoneyAccount(account: { glAccountCode: string }, fn: string): void {
+  if (account.glAccountCode === EXPENSE_FUNDING_ACCOUNTS.CASH_STAFF) {
+    throw refuse(
+      `${fn}: payroll cannot be paid from a staff cash float (GL 1120).`,
+      'That account is a staff cash float, which belongs to one person through a cash request. Payroll cannot be paid from it. Choose an office or e-wallet account.',
+    );
+  }
+}
