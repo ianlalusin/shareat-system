@@ -17,6 +17,15 @@ const STATUS: Record<LobbyRefusalCode, number> = {
   LOBBY_SEAT_NEEDS_SESSION: 409,
 };
 
+/**
+ * T-491 / DEF-782 - the one refusal that is NOT a domain refusal and that the diner's phone must recognise: a check-in that arrives without its
+ * device cookie is not committed (the phone could lose the reply and orphan the entry). The reply carries a fresh cookie; the client retries once.
+ * It is the only refusal body that carries its code (the client keys the silent retry on it); it names no limit and reveals no store state.
+ */
+export const LOBBY_COOKIE_NEEDED = 'LOBBY_COOKIE_NEEDED';
+export const COOKIE_NEEDED_STATUS = 428;
+export const COOKIE_NEEDED_SENTENCE = 'Please try again.';
+
 export function refusalReply(err: unknown): { status: number; error: string } | null {
   if (!(err instanceof LobbyRefusal)) return null;
   return { status: STATUS[err.code] ?? 409, error: err.userMessage };

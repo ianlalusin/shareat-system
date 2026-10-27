@@ -98,7 +98,7 @@ describe('M9 - a refused supplier-credit refund (guard clause after the domain c
   it('refund 1500.00 with no credit: nothing posted, flash.error set and flash.ok not, the address holds no amount and no error text', async () => {
     const f: Fixture = await fixture('m9');
     const before = await entryCount(f.orgId);
-    const seen = await run(f.admin, refundCredit, formOf({ storeId: f.storeId, supplierId: f.supplierId, moneyAccountId: f.safeId, amount: '1500.00' }));
+    const seen = await run(f.admin, refundCredit, formOf({ requestId: crypto.randomUUID(), storeId: f.storeId, supplierId: f.supplierId, moneyAccountId: f.safeId, amount: '1500.00' }));
 
     expect(await entryCount(f.orgId), 'a journal entry was posted').toBe(before);
     expect(

@@ -49,6 +49,8 @@ async function call(mod: string, name: string, fields: Record<string, string>, w
   resetJar();
   h.actor = who;
   const fd = new FormData();
+  // T-488: the nine posting actions need the form's per-render id; every other action ignores the extra field.
+  fd.set('requestId', crypto.randomUUID());
   for (const [k, v] of Object.entries(fields)) fd.set(k, v);
   return outcomeOf(await captureRedirect(() => act(fd)));
 }

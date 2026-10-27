@@ -158,7 +158,7 @@ describe('the postings', () => {
   it('disbursement: DR the money account, CR 2400 with the LOAN as party', async () => {
     const f = await fixture('disburse');
     const r = await asOrg(f.orgId, (tx) =>
-      disburseLoan(tx, f.admin, {
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(),
         loanId: f.loanId,
         amount: '200000.00',
         intoMoneyAccountId: f.safe,
@@ -177,7 +177,7 @@ describe('the postings', () => {
   it('⭐ payment: the split is COMPUTED, and one day of straight interest is ₱133.33', async () => {
     const f = await fixture('pay');
     await asOrg(f.orgId, (tx) =>
-      disburseLoan(tx, f.admin, {
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(),
         loanId: f.loanId, amount: '200000.00', intoMoneyAccountId: f.safe, on: '2026-05-11',
       }),
     );
@@ -202,7 +202,7 @@ describe('the postings', () => {
   it('⭐ a payment SMALLER than the interest retires no principal', async () => {
     const f = await fixture('small');
     await asOrg(f.orgId, (tx) =>
-      disburseLoan(tx, f.admin, {
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(),
         loanId: f.loanId, amount: '200000.00', intoMoneyAccountId: f.safe, on: '2026-05-11',
       }),
     );
@@ -224,13 +224,13 @@ describe('the refusals', () => {
   it('⛔ refuses to draw more than the agreement', async () => {
     const f = await fixture('overdraw');
     await asOrg(f.orgId, (tx) =>
-      disburseLoan(tx, f.admin, {
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(),
         loanId: f.loanId, amount: '200000.00', intoMoneyAccountId: f.safe, on: '2026-05-11',
       }),
     );
     await expect(
       asOrg(f.orgId, (tx) =>
-        disburseLoan(tx, f.admin, {
+        disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(),
           loanId: f.loanId, amount: '1000.00', intoMoneyAccountId: f.safe, on: '2026-05-12',
         }),
       ),
@@ -240,7 +240,7 @@ describe('the refusals', () => {
   it('⛔ refuses an overpayment rather than absorbing it', async () => {
     const f = await fixture('over');
     await asOrg(f.orgId, (tx) =>
-      disburseLoan(tx, f.admin, {
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(),
         loanId: f.loanId, amount: '1000.00', intoMoneyAccountId: f.safe, on: '2026-05-11',
       }),
     );
@@ -259,7 +259,7 @@ describe('the refusals', () => {
     const staffId = await person(f.orgId, f.storeId, 'Staff', 'staff');
     await expect(
       asOrg(f.orgId, (tx) =>
-        disburseLoan(tx, actor(f.orgId, staffId), {
+        disburseLoan(tx, actor(f.orgId, staffId), { requestId: crypto.randomUUID(),
           loanId: f.loanId, amount: '100.00', intoMoneyAccountId: f.safe, on: '2026-05-11',
         }),
       ),
@@ -271,7 +271,7 @@ describe('⭐ paid_off is DERIVED, and a reversal re-opens it', () => {
   it('clears on the final payment and comes back when it is reversed', async () => {
     const f = await fixture('cleared');
     await asOrg(f.orgId, (tx) =>
-      disburseLoan(tx, f.admin, {
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(),
         loanId: f.loanId, amount: '1000.00', intoMoneyAccountId: f.safe, on: '2026-05-11',
       }),
     );
@@ -301,7 +301,7 @@ describe('⭐ paid_off is DERIVED, and a reversal re-opens it', () => {
   it('the payment history reads from the ledger, and drops reversed entries', async () => {
     const f = await fixture('history');
     await asOrg(f.orgId, (tx) =>
-      disburseLoan(tx, f.admin, {
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(),
         loanId: f.loanId, amount: '10000.00', intoMoneyAccountId: f.safe, on: '2026-05-11',
       }),
     );
@@ -346,7 +346,7 @@ describe('⛔ DEF-156 — reverseLoanEntry refuses an entry that is not this loa
       }),
     );
     const otherDisbursement = await asOrg(f.orgId, (tx) =>
-      disburseLoan(tx, f.admin, {
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(),
         loanId: otherLoan.id, amount: '50000.00', intoMoneyAccountId: f.safe, on: '2026-05-11',
       }),
     );
@@ -368,7 +368,7 @@ describe('⛔ DEF-156 — reverseLoanEntry refuses an entry that is not this loa
   it('still reverses the loan\'s OWN entry exactly as before', async () => {
     const f = await fixture('ownership-b');
     const disbursed = await asOrg(f.orgId, (tx) =>
-      disburseLoan(tx, f.admin, {
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(),
         loanId: f.loanId, amount: '1000.00', intoMoneyAccountId: f.safe, on: '2026-05-11',
       }),
     );
@@ -386,7 +386,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
     const f = await fixture('def272-disburse');
     await expect(
       asOrg(f.orgId, (tx) =>
-        disburseLoan(tx, f.admin, { loanId: f.loanId, amount: '0.004', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+        disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: f.loanId, amount: '0.004', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
       ),
     ).rejects.toMatchObject({"name":"RefusalError","message":"loans.disburseLoan.amount: money check failed","userMessage":"The loan amount — \"0.004\" is not a valid amount. Use at most two decimal places."});
   });
@@ -395,7 +395,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
     const f = await fixture('def272-disburse-precision');
     await expect(
       asOrg(f.orgId, (tx) =>
-        disburseLoan(tx, f.admin, { loanId: f.loanId, amount: '1.234', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+        disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: f.loanId, amount: '1.234', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
       ),
     ).rejects.toMatchObject({"name":"RefusalError","message":"loans.disburseLoan.amount: money check failed","userMessage":"The loan amount — \"1.234\" is not a valid amount. Use at most two decimal places."});
   });
@@ -403,7 +403,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
   it('an ordinary disbursement still works, and the exact value reaches the row', async () => {
     const f = await fixture('def272-disburse-happy');
     await asOrg(f.orgId, (tx) =>
-      disburseLoan(tx, f.admin, { loanId: f.loanId, amount: '0.01', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: f.loanId, amount: '0.01', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
     );
     expect((await position(f)).disbursed).toBe('0.01');
   });
@@ -414,7 +414,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
   it('recordLoanPayment refuses "0.004" with a written sentence, not money()\'s developer-facing TypeError', async () => {
     const f = await fixture('def272-payment');
     await asOrg(f.orgId, (tx) =>
-      disburseLoan(tx, f.admin, { loanId: f.loanId, amount: '200000.00', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: f.loanId, amount: '200000.00', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
     );
     await expect(
       asOrg(f.orgId, (tx) =>

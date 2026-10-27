@@ -323,7 +323,7 @@ async function ownerWithDrawingFixture(hint: string) {
   });
   const created = await asOrg(f.orgId, (tx) => createOwner(tx, f.admin, { storeId: f.storeId, personId: anaId, role: 'Managing Partner' }));
   const recordDrawingFn = (await import('@shareat/domain')).recordDrawing;
-  await asOrg(f.orgId, (tx) => recordDrawingFn(tx, f.admin, { ownerId: created.id, amount: '12000.00', fromMoneyAccountId: till!.id, on: '2026-01-10' }));
+  await asOrg(f.orgId, (tx) => recordDrawingFn(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: created.id, amount: '12000.00', fromMoneyAccountId: till!.id, on: '2026-01-10' }));
   return { ...f, ownerId: created.id };
 }
 

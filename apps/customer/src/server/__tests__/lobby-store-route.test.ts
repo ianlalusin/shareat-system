@@ -76,15 +76,16 @@ async function store(code: string | null, headers: Record<string, string> = {}) 
 }
 async function joinLine(s: Store, name: string) {
   const { POST } = await import('@/app/api/lobby/check-in/route');
+  const cookie = randomBytes(32).toString('base64url'); // T-491: a check-in only commits when the phone already holds its cookie
   const r = await POST(
     new Request(`${ORIGIN}/api/lobby/check-in`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-real-ip': `198.51.${++seq % 250}.${(seq * 7) % 250}` },
+      headers: { 'content-type': 'application/json', cookie: `lobby_dev=${cookie}`, 'x-real-ip': `198.51.${++seq % 250}.${(seq * 7) % 250}` },
       body: JSON.stringify({ storeCode: s.code, displayName: name, partySize: 2, clientRequestId: randomUUID() }),
     }),
   );
   expect(r.status).toBe(200);
-  return r;
+  return { res: r, cookie };
 }
 
 describe('GET /api/lobby/store', () => {
@@ -107,7 +108,7 @@ describe('GET /api/lobby/store', () => {
     await joinLine(a, 'Two');
     await joinLine(b, 'Other');
     const cancelled = await joinLine(a, 'Three');
-    const cookie = /lobby_dev=([^;]+)/.exec(cancelled.headers.get('set-cookie') ?? '')![1]!;
+    const cookie = cancelled.cookie;
     const { POST } = await import('@/app/api/lobby/cancel/route');
     const c = await POST(new Request(`${ORIGIN}/api/lobby/cancel`, { method: 'POST', headers: { 'content-type': 'application/json', cookie: `lobby_dev=${cookie}`, 'x-real-ip': '198.51.100.9' }, body: JSON.stringify({ storeCode: a.code }) }));
     expect(c.status).toBe(200);

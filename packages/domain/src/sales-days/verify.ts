@@ -18,7 +18,9 @@
  * T-385 (Ian 2026-10-09): verify requires `submitted`. The check sits before routing and posting.
  */
 import { authorize, type Actor, can } from '@shareat/auth';
-import { auditLogRepo, posV1Repo, salesDaysRepo, type Tx } from '@shareat/db';
+import { auditLogRepo, journalRepo, posV1Repo, salesDaysRepo, type Tx } from '@shareat/db';
+import type { PeriodOverrideReason } from '@shareat/db/schema';
+import { buildPeriodFacts, periodRefusal } from '../business-rules';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { routeInputForDay } from './compose';
@@ -68,15 +70,25 @@ async function runSubmit(tx: Tx, actor: Actor, salesDayId: string): Promise<void
 // verify — the posting step
 // -------------------------------------------------------------------------------------
 
+/**
+ * T-487 (DEF-779): `periodOverride` lets an administrator post a day into a CLOSED month. It is forwarded to `postEntry` only
+ * when the day's month IS closed (an open month ignores it, so an ordinary verify leaves no audit row), and `postEntry` itself
+ * authorizes `override_period_lock` and writes the `period_overrides` row. A LOCKED month never takes it.
+ */
+export interface VerifySalesDayOptions {
+  periodOverride?: { reason: PeriodOverrideReason; note?: string | null };
+}
+
 export async function verifySalesDay(
   tx: Tx,
   actor: Actor,
   salesDayId: string,
+  options?: VerifySalesDayOptions,
 ): Promise<VerifySalesDayResult> {
-  return runVerify(tx, actor, salesDayId);
+  return runVerify(tx, actor, salesDayId, options);
 }
 
-async function runVerify(tx: Tx, actor: Actor, salesDayId: string): Promise<VerifySalesDayResult> {
+async function runVerify(tx: Tx, actor: Actor, salesDayId: string, options?: VerifySalesDayOptions): Promise<VerifySalesDayResult> {
   // T-369 S3 / R5: `FOR UPDATE`, so an edit in flight finishes first and verify posts ITS figures.
   const day = await salesDaysRepo.getByIdForUpdate(tx, actor.orgId, salesDayId);
   if (!day) throw gone(`verifySalesDay: sales day ${salesDayId} does not exist in org ${actor.orgId}`, 'sales day');
@@ -134,6 +146,22 @@ async function runVerify(tx: Tx, actor: Actor, salesDayId: string): Promise<Veri
     );
   }
 
+  // T-487 (DEF-779): say, in words, when the day's month will not take the posting - `postEntry`'s own refusal is a developer
+  // sentence carrying ids. The same pair `approveExpense` uses (T-475 P2); nothing is written when it refuses.
+  const period = await journalRepo.findPeriodForDate(tx, actor.orgId, day.businessDate);
+  const month = periodRefusal(buildPeriodFacts(period), { override: !!options?.periodOverride });
+  if (month?.kind === 'locked') {
+    throw refuse(`verifySalesDay: the fiscal period covering ${day.businessDate} is locked.`, month.sentence);
+  }
+  if (month?.kind === 'closed') {
+    throw refuse(
+      `verifySalesDay: the fiscal period covering ${day.businessDate} is closed and no periodOverride was given.`,
+      month.sentence,
+    );
+  }
+  // The override is passed on ONLY when the month is closed, so an open month leaves no audit row and never asks for `override_period_lock`.
+  const periodOverride = period?.status === 'closed' ? options?.periodOverride : undefined;
+
   const result = await postEntry(tx, {
     orgId: actor.orgId,
     // ⭐ The BUSINESS DATE, never now() (bible row 126). A 31 December day verified on 2 January
@@ -145,6 +173,7 @@ async function runVerify(tx: Tx, actor: Actor, salesDayId: string): Promise<Veri
     idempotencyKey: `sales_day:${salesDayId}:post`,
     memo: `Sales for ${day.businessDate}`,
     postedBy: actor.personId,
+    ...(periodOverride ? { periodOverride: { actor, reason: periodOverride.reason, note: periodOverride.note ?? null } } : {}),
     lines: routed.lines.map((l) => ({
       accountCode: l.accountCode,
       storeId: day.storeId,
