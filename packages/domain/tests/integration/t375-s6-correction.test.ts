@@ -117,6 +117,8 @@ const S = {
   already: 'That POS check has already been posted as a correction.',
   unchanged: (d: string) => `POS's figures for ${hd(d)} haven't changed since they were posted.`,
   early: (d: string) => `A correction can't be dated before the day it corrects (${hd(d)}).`,
+  closed: 'January 2027 is closed. A correction must be dated in an open month. Choose a later date.',
+  noPeriod: (d: string) => `There is no fiscal period for ${hd(d)} yet.`,
   unmapped: 'POS took ₱350.00 as "Maya", which isn\'t set up as a tender for this store. An admin maps it under Settings › POS link, then import again.',
 };
 const OPEN_DATE = '2027-01-20';
@@ -187,10 +189,13 @@ describe('C3 - the date of a correction', () => {
     expect(await sentenceOf(correct(f, f.manager, { salesDayId: dayId, feedId, entryDate: '2027-01-09' }))).toBe(S.early(DAY));
 
     await sql`update fiscal_periods set status = 'closed' where org_id = ${f.orgId} and starts_on in ('2026-12-01', '2027-01-01')`;
-    const closed = await correct(f, f.manager, { salesDayId: dayId, feedId, entryDate: OPEN_DATE }).then(() => null, (e) => e);
-    expect(closed, 'a correction dated in the closed January is refused').toBeInstanceOf(Error);
-    expect(chain(closed)).toMatch(/closed/);
-    expect(chain(closed)).toContain(OPEN_DATE);
+    // T-492 (DEF-784): refused in words, before postEntry - the sentence still says "closed", never ids or "postEntry:".
+    const closedSentence = await sentenceOf(correct(f, f.manager, { salesDayId: dayId, feedId, entryDate: OPEN_DATE }));
+    expect(closedSentence).toBe(S.closed);
+    expect(closedSentence).toMatch(/closed/);
+    expect(closedSentence).not.toMatch(/postEntry|[0-9a-f]{8}-[0-9a-f]{4}/);
+
+    expect(await sentenceOf(correct(f, f.manager, { salesDayId: dayId, feedId, entryDate: '2035-03-05' }))).toBe(S.noPeriod('2035-03-05'));
 
     expect(await corrections(dayId)).toHaveLength(0);
     expect((await saleEntries(f)).length).toBe(entriesBefore);

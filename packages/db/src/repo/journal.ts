@@ -411,6 +411,16 @@ export async function beginReversalPostingContext(tx: Tx): Promise<void> {
 }
 
 /**
+ * T-492 (DEF-785, audit F17): switches the reversal exemption OFF again. The flag is transaction-local, but a
+ * transaction can write more than the one reversal, and bible row 193 makes the exemption for the one entry - so
+ * the caller clears it in `finally` straight after the exempted write, and a later ordinary posting in the same
+ * transaction is judged by the 0005 trigger as if the flag had never been set. The trigger stays the enforcer.
+ */
+export async function endReversalPostingContext(tx: Tx): Promise<void> {
+  await tx.execute(sql`select set_config('app.reversal_posting', 'off', true)`);
+}
+
+/**
  * T-264 slice 3 (DEF-284, docs/plans/264-slice3-plan.md). Sets a transaction-LOCAL flag, exact
  * same shape as `beginReversalPostingContext` above (migration 0005's idiom, reused rather than
  * invented a second time): `set_config(..., true)` — cleared at commit/rollback, never visible to
@@ -422,6 +432,11 @@ export async function beginReversalPostingContext(tx: Tx): Promise<void> {
  */
 export async function beginPeriodOverrideContext(tx: Tx): Promise<void> {
   await tx.execute(sql`select set_config('app.period_override', 'on', true)`);
+}
+
+/** T-492 (DEF-785, audit F17): the matching switch-off for `beginPeriodOverrideContext` - see `endReversalPostingContext`. */
+export async function endPeriodOverrideContext(tx: Tx): Promise<void> {
+  await tx.execute(sql`select set_config('app.period_override', 'off', true)`);
 }
 
 /**
