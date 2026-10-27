@@ -16,9 +16,10 @@
  * The correction row moves the day's basis to the checked feed (`posV1Repo.basisFor`), which is what clears the finding.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { moneyAccountsRepo, posV1Repo, salesDaysRepo, storesRepo, type Tx } from '@shareat/db';
+import { journalRepo, moneyAccountsRepo, posV1Repo, salesDaysRepo, storesRepo, type Tx } from '@shareat/db';
 import { add, compare, isZero, money, negate, subtract, type Money } from '@shareat/core/money';
 import { parseBusinessDate } from '@shareat/core/datetime';
+import { buildPeriodFacts, periodRefusal } from '../business-rules/expenses';
 import { postEntry, type PostEntryLine } from '../ledger/post-entry';
 import { deriveSalesDay } from '../pos/v1-derive';
 import { gone, humanDate, internalFault, refuse } from '../shared/refusal';
@@ -107,6 +108,25 @@ export async function postPosCorrection(tx: Tx, actor: Actor, input: PostPosCorr
     throw refuse(
       `postPosCorrection: entry date ${input.entryDate} is before business date ${day.businessDate}`,
       `A correction can't be dated before the day it corrects (${when}).`,
+    );
+  }
+
+  // T-492 (DEF-784, F16): the month is checked here, in words - not left to `postEntry`'s developer sentence. A correction is
+  // dated in an OPEN month and has no override (the documented rule); the sentences are the shared rule leaf's, as approve's.
+  const period = await journalRepo.findPeriodForDate(tx, orgId, input.entryDate);
+  if (!period) {
+    throw refuse(
+      `postPosCorrection: no fiscal period covers entry date ${input.entryDate} for org ${orgId}`,
+      `There is no fiscal period for ${dayLabel(input.entryDate)} yet.`,
+    );
+  }
+  const month = periodRefusal(buildPeriodFacts(period), { override: false });
+  if (month) {
+    // Only the wording is a correction's own: the shared sentences offer an administrator's override, which corrections lack.
+    const monthName = new Date(`${period.startsOn}T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    throw refuse(
+      `postPosCorrection: the fiscal period covering ${input.entryDate} is ${month.kind}`,
+      `${monthName} is ${month.kind}. A correction must be dated in an open month. Choose a later date.`,
     );
   }
 

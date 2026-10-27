@@ -205,70 +205,82 @@ async function runPostEntry(tx: Tx, input: PostEntryInput): Promise<PostEntryRes
   // authorizing and recording whenever the capability was INVOKED never under-records, and
   // over-recording is the safe direction for an audit trail. `periodStatusAtPost` (below) is what
   // lets a reader tell which rows actually bypassed a lock.
+  // T-492 (DEF-785, F17): the flag is switched off again in `finally`, on every exit (the `created: false` race return
+  // included), so a later ordinary posting in this transaction is not exempt. The trigger stays the enforcer.
   let overrideInvoked = false;
   if (input.periodOverride) {
     await authorize(tx, input.periodOverride.actor, 'override_period_lock', { orgId: input.orgId });
     await journalRepo.beginPeriodOverrideContext(tx);
     overrideInvoked = true;
   }
+  let finished = false;
+  try {
+    // accountCode -> accountId. An unknown code is rejected here, naming the code
+    // (Contract §1). A reserved or header code resolves fine here and is rejected by
+    // T-103's eligibility trigger when the line is inserted below (invariants 6 and 7)
+    // — not re-checked here, per the task's explicit "do not re-implement" rule.
+    // T-371 S3 — every figure is minted first, synchronously, so a malformed one is refused before any account lookup
+    // or write (and before a line's lookup could race another line's refusal).
+    const amounts = input.lines.map((line, index) => ({
+      debit: lineAmount(line.debit, 'debit', index, line.accountCode),
+      credit: lineAmount(line.credit, 'credit', index, line.accountCode),
+    }));
+    const resolvedLines = await Promise.all(
+      input.lines.map(async (line, index) => ({
+        lineNo: index + 1,
+        accountId: await journalRepo.resolveAccountId(tx, input.orgId, line.accountCode),
+        storeId: line.storeId ?? null,
+        channelId: line.channelId ?? null,
+        partyType: line.partyType ?? null,
+        partyId: line.partyId ?? null,
+        debit: amounts[index]!.debit,
+        credit: amounts[index]!.credit,
+        lineMemo: line.lineMemo ?? null,
+      })),
+    );
 
-  // accountCode -> accountId. An unknown code is rejected here, naming the code
-  // (Contract §1). A reserved or header code resolves fine here and is rejected by
-  // T-103's eligibility trigger when the line is inserted below (invariants 6 and 7)
-  // — not re-checked here, per the task's explicit "do not re-implement" rule.
-  // T-371 S3 — every figure is minted first, synchronously, so a malformed one is refused before any account lookup
-  // or write (and before a line's lookup could race another line's refusal).
-  const amounts = input.lines.map((line, index) => ({
-    debit: lineAmount(line.debit, 'debit', index, line.accountCode),
-    credit: lineAmount(line.credit, 'credit', index, line.accountCode),
-  }));
-  const resolvedLines = await Promise.all(
-    input.lines.map(async (line, index) => ({
-      lineNo: index + 1,
-      accountId: await journalRepo.resolveAccountId(tx, input.orgId, line.accountCode),
-      storeId: line.storeId ?? null,
-      channelId: line.channelId ?? null,
-      partyType: line.partyType ?? null,
-      partyId: line.partyId ?? null,
-      debit: amounts[index]!.debit,
-      credit: amounts[index]!.credit,
-      lineMemo: line.lineMemo ?? null,
-    })),
-  );
-
-  // ---- The ordering that closes DEF-031 (Contract §2) ----
-  const { id: entryId, created } = await journalRepo.insertDraftEntry(tx, {
-    orgId: input.orgId,
-    entryDate: input.entryDate,
-    periodId: period.id,
-    memo: input.memo ?? null,
-    sourceType: input.sourceType,
-    sourceId: input.sourceId,
-    idempotencyKey: input.idempotencyKey,
-  });
-
-  if (!created) {
-    // Lost a race with a concurrent postEntry using the same key (invariant 10).
-    return { entryId, created: false };
-  }
-
-  await journalRepo.insertLines(tx, entryId, resolvedLines);
-  await journalRepo.postDraftEntry(tx, entryId, input.postedBy ?? null);
-
-  // T-264 slice 3 — written in the SAME transaction, immediately after the entry posts: a
-  // rollback leaves no row, a commit cannot fail to have one. `periodStatus` is 'open' or
-  // 'closed' only ('locked' returned earlier) — exactly `periodStatusAtPost`'s domain.
-  if (overrideInvoked && input.periodOverride) {
-    await fiscalPeriodsRepo.insertPeriodOverride(tx, {
+    // ---- The ordering that closes DEF-031 (Contract §2) ----
+    const { id: entryId, created } = await journalRepo.insertDraftEntry(tx, {
       orgId: input.orgId,
+      entryDate: input.entryDate,
       periodId: period.id,
-      entryId,
-      actorPersonId: input.periodOverride.actor.personId,
-      reason: input.periodOverride.reason,
-      note: input.periodOverride.note ?? null,
-      periodStatusAtPost: periodStatus,
+      memo: input.memo ?? null,
+      sourceType: input.sourceType,
+      sourceId: input.sourceId,
+      idempotencyKey: input.idempotencyKey,
     });
-  }
 
-  return { entryId, created: true };
+    if (!created) {
+      // Lost a race with a concurrent postEntry using the same key (invariant 10).
+      finished = true;
+      return { entryId, created: false };
+    }
+
+    await journalRepo.insertLines(tx, entryId, resolvedLines);
+    await journalRepo.postDraftEntry(tx, entryId, input.postedBy ?? null);
+
+    // T-264 slice 3 — written in the SAME transaction, immediately after the entry posts: a
+    // rollback leaves no row, a commit cannot fail to have one. `periodStatus` is 'open' or
+    // 'closed' only ('locked' returned earlier) — exactly `periodStatusAtPost`'s domain.
+    if (overrideInvoked && input.periodOverride) {
+      await fiscalPeriodsRepo.insertPeriodOverride(tx, {
+        orgId: input.orgId,
+        periodId: period.id,
+        entryId,
+        actorPersonId: input.periodOverride.actor.personId,
+        reason: input.periodOverride.reason,
+        note: input.periodOverride.note ?? null,
+        periodStatusAtPost: periodStatus,
+      });
+    }
+    finished = true;
+    return { entryId, created: true };
+  } finally {
+    // A failed write aborts the transaction (the flag dies with the rollback); do not mask its real refusal with the
+    // switch-off's own "transaction is aborted". A clean exit must switch off, and throws if it cannot.
+    if (overrideInvoked) {
+      if (finished) await journalRepo.endPeriodOverrideContext(tx);
+      else await journalRepo.endPeriodOverrideContext(tx).catch(() => undefined);
+    }
+  }
 }
