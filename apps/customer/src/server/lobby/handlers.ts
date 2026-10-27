@@ -4,7 +4,7 @@ import { cancelMyEntry, checkIn, getMyEntry, LOBBY_POS_STALE_MINUTES, type Check
 import { newCookieValue, readCookie, setCookieHeader } from './cookie';
 import { BodyTooLarge, fail, json, MAX_BODY_BYTES, readJsonObject, SENTENCES } from './http';
 import { logFault, logMissingIp, logReply } from './log';
-import { refusalReply } from './refusals';
+import { COOKIE_NEEDED_SENTENCE, COOKIE_NEEDED_STATUS, LOBBY_COOKIE_NEEDED, refusalReply } from './refusals';
 import { clientIp, hmacHex, isUuid, readConfig, type LobbyConfig } from './secrets';
 
 /**
@@ -59,10 +59,19 @@ export async function handleCheckIn(req: Request): Promise<Response> {
     const body = await readJsonObject(req);
     if (!body || !isUuid(body.clientRequestId)) return fail(400, SENTENCES.badInput);
 
-    const existing = readCookie(req);
-    const cookie = existing ?? newCookieValue();
     const storeCode = storeCodeOf(body.storeCode);
     if (!storeCode) return fail(409, SENTENCES.counter);
+
+    // T-491 / DEF-782: no cookie, no commit. A check-in is never written before the phone holds the cookie that will find it again; the reply
+    // hands out a fresh cookie and the client retries the same request once. Nothing is written here.
+    const cookie = readCookie(req);
+    if (!cookie) {
+      return json(
+        COOKIE_NEEDED_STATUS,
+        { ok: false, error: COOKIE_NEEDED_SENTENCE, code: LOBBY_COOKIE_NEEDED },
+        { 'set-cookie': setCookieHeader(newCookieValue()) },
+      );
+    }
 
     const result = await withOrgPrincipal(cfg.orgId, async (tx) => {
       const storeId = await lobbyRepo.getStoreIdByCode(tx, cfg.orgId, storeCode);
@@ -82,15 +91,11 @@ export async function handleCheckIn(req: Request): Promise<Response> {
     if (!result) return fail(409, SENTENCES.counter);
 
     noteEntry(result.entryId);
-    return json(
-      200,
-      {
-        ok: true,
-        created: result.created,
-        entry: { entryId: result.entryId, code: result.code, status: result.status, partiesAhead: result.partiesAhead },
-      },
-      existing ? undefined : { 'set-cookie': setCookieHeader(cookie) },
-    );
+    return json(200, {
+      ok: true,
+      created: result.created,
+      entry: { entryId: result.entryId, code: result.code, status: result.status, partiesAhead: result.partiesAhead },
+    });
   });
 }
 
