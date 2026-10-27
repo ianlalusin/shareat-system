@@ -172,10 +172,10 @@ async function chargeAndPay(f: Fixture, who: Actor, storeId: string, till: strin
   );
   const id = created.id;
   const charge = await asOrg(f.orgId, (tx) =>
-    chargeLiability(tx, who, { liabilityId: id, amount, againstAccountCode: '6200', on: '2026-01-10' }),
+    chargeLiability(tx, who, { requestId: crypto.randomUUID(), liabilityId: id, amount, againstAccountCode: '6200', on: '2026-01-10' }),
   );
   const pay = await asOrg(f.orgId, (tx) =>
-    payLiability(tx, who, { liabilityId: id, amount, fromMoneyAccountId: till, on: '2026-01-20' }),
+    payLiability(tx, who, { requestId: crypto.randomUUID(), liabilityId: id, amount, fromMoneyAccountId: till, on: '2026-01-20' }),
   );
   return { id, chargeEntryId: charge.entryId, payEntryId: pay.entryId };
 }
@@ -355,7 +355,7 @@ describe('T-366 S1c — a reversal is bound to the liability it names', () => {
     const f = await fixture('c2');
     const id = await liability(f);
     const { entryId } = await asOrg(f.orgId, (tx) =>
-      chargeLiability(tx, f.manager, {
+      chargeLiability(tx, f.manager, { requestId: crypto.randomUUID(),
         liabilityId: id,
         amount: '2500.00',
         againstAccountCode: '6200',

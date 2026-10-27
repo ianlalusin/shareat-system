@@ -188,7 +188,7 @@ describe('O1 — a payroll recovery frees the cap exactly as a cash repayment wo
   it('total 0.00, Jan 2000.00, Feb 0.00 (monthly floor) — Mutant: restore the source_id-only scope, red; drop the monthly floor, Feb -2000.00, red', async () => {
     const f = await fixture('o1', { drawingLimit: '5000.00', drawingLimitPeriod: 'monthly' });
     await owesUs(f, f.ownerId, '2000.00', '2026-01-10');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { ownerId: f.ownerId, amount: '2000.00', on: '2026-01-20' }));
+    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '2000.00', on: '2026-01-20' }));
     await payrollRecovers(f, '2000.00', '2026-01-05', '2026-02-05');
 
     expect(await drawn(f, f.ownerId)).toBe('0.00');
@@ -200,14 +200,14 @@ describe('O1 — a payroll recovery frees the cap exactly as a cash repayment wo
     // The reclass already cleared what was owed directly — nothing left to also repay in cash.
     expect(await receivable(f, f.ownerId)).toBe('0.00');
     await expect(
-      asOrg(f.orgId, (tx) => repayFromOwner(tx, f.admin, { ownerId: f.ownerId, amount: '1.00', intoMoneyAccountId: f.officeAccountId, on: '2026-01-21' })),
+      asOrg(f.orgId, (tx) => repayFromOwner(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '1.00', intoMoneyAccountId: f.officeAccountId, on: '2026-01-21' })),
     ).rejects.toThrow(/more than the/);
   });
 
   it('twin (monthly floor applies here too): the same three numbers from a pure cash repayment, no recoverFromPay/payroll at all', async () => {
     const g = await fixture('o1twin', { drawingLimit: '5000.00', drawingLimitPeriod: 'monthly' });
     await owesUs(g, g.ownerId, '2000.00', '2026-01-10');
-    await asOrg(g.orgId, (tx) => repayFromOwner(tx, g.admin, { ownerId: g.ownerId, amount: '2000.00', intoMoneyAccountId: g.officeAccountId, on: '2026-02-05' }));
+    await asOrg(g.orgId, (tx) => repayFromOwner(tx, g.admin, { requestId: crypto.randomUUID(), ownerId: g.ownerId, amount: '2000.00', intoMoneyAccountId: g.officeAccountId, on: '2026-02-05' }));
 
     expect(await drawn(g, g.ownerId)).toBe('0.00');
     expect(await drawn(g, g.ownerId, { until: '2026-02-01' })).toBe('2000.00');
@@ -219,7 +219,7 @@ describe('M-floor — a payroll recovery larger than the month\'s drawings never
   it('M-close: closeDrawingMonth with no acknowledgedAmount agrees 0.00 and posts no adjustment — Mutant: no monthly floor, "The agreed amount cannot be negative", red', async () => {
     const f = await fixture('mclose', { drawingLimit: '5000.00', drawingLimitPeriod: 'monthly' });
     await owesUs(f, f.ownerId, '2000.00', '2026-01-10');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { ownerId: f.ownerId, amount: '2000.00', on: '2026-01-20' }));
+    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '2000.00', on: '2026-01-20' }));
     await payrollRecovers(f, '2000.00', '2026-01-05', '2026-02-05'); // Feb: no drawings, 2000 recovered
 
     const result = await asOrg(f.orgId, (tx) => closeDrawingMonth(tx, f.admin, { ownerId: f.ownerId, month: '2026-02-01', on: '2026-03-01' }));
@@ -232,7 +232,7 @@ describe('M-floor — a payroll recovery larger than the month\'s drawings never
   it('M-headroom: cap 10000/month, 5000 prior-month debt recovered by payroll this month — a 15000 drawing is REFUSED, 10000 passes — Mutant: no monthly floor (already = -5000), 15000 passes, red', async () => {
     const f = await fixture('mhead', { drawingLimit: '10000.00', drawingLimitPeriod: 'monthly' });
     await owesUs(f, f.ownerId, '5000.00', '2026-01-10');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { ownerId: f.ownerId, amount: '5000.00', on: '2026-01-20' }));
+    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '5000.00', on: '2026-01-20' }));
     await payrollRecovers(f, '5000.00', '2026-01-05', '2026-02-05');
 
     await expect(asOrg(f.orgId, drawOp(f, '15000.00', '2026-02-10'))).rejects.toThrow(/over the ₱10000\.00 monthly limit/);
@@ -243,7 +243,7 @@ describe('M-floor — a payroll recovery larger than the month\'s drawings never
   it('positive control (green now and after): drawings above the recovery leave the plain positive net — Feb 1000.00, total 3000.00', async () => {
     const f = await fixture('mpos', { drawingLimit: '10000.00', drawingLimitPeriod: 'monthly' });
     await owesUs(f, f.ownerId, '2000.00', '2026-01-10');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { ownerId: f.ownerId, amount: '2000.00', on: '2026-01-20' }));
+    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '2000.00', on: '2026-01-20' }));
     await asOrg(f.orgId, drawOp(f, '3000.00', '2026-02-02'));
     await payrollRecovers(f, '2000.00', '2026-01-05', '2026-02-05');
 
@@ -256,7 +256,7 @@ describe('O2 — voidPayRun restores the cap it freed', () => {
   it('total back to 2000.00 — Mutant: ignore reversal_of_entry_id, red', async () => {
     const f = await fixture('o2', { drawingLimit: '5000.00', drawingLimitPeriod: 'monthly' });
     await owesUs(f, f.ownerId, '2000.00', '2026-01-10');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { ownerId: f.ownerId, amount: '2000.00', on: '2026-01-20' }));
+    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '2000.00', on: '2026-01-20' }));
     const run = await payrollRecovers(f, '2000.00', '2026-01-05', '2026-02-05');
     expect(await drawn(f, f.ownerId)).toBe('0.00');
 
@@ -269,7 +269,7 @@ describe('O3 — FIFO: the older owner-origin charge is consumed first', () => {
   it('reclass 1000 (01-10) older than a staff shortage 600 (01-15); recovery 1000 -> owner 0.00 — Mutant: staff-first min(ownerOrigin,balance) gives 600.00, red', async () => {
     const f = await fixture('o3', { drawingLimit: '5000.00', drawingLimitPeriod: 'monthly' });
     await owesUs(f, f.ownerId, '1000.00', '2026-01-10');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { ownerId: f.ownerId, amount: '1000.00', on: '2026-01-10' }));
+    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '1000.00', on: '2026-01-10' }));
     await staffShortage(f, '600.00', '2026-01-15');
     await payrollRecovers(f, '1000.00', '2026-01-20', '2026-02-05');
 
@@ -282,7 +282,7 @@ describe('O4 — FIFO in the other order: the older non-owner charge is consumed
     const f = await fixture('o4', { drawingLimit: '5000.00', drawingLimitPeriod: 'monthly' });
     await staffShortage(f, '600.00', '2026-01-05');
     await owesUs(f, f.ownerId, '1000.00', '2026-01-10');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { ownerId: f.ownerId, amount: '1000.00', on: '2026-01-10' }));
+    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '1000.00', on: '2026-01-10' }));
     await payrollRecovers(f, '1000.00', '2026-01-20', '2026-02-05');
 
     expect(await drawn(f, f.ownerId)).toBe('600.00');
@@ -293,7 +293,7 @@ describe('O5 — a partial recovery leaves the remainder outstanding', () => {
   it('500 of a 2000 reclass -> 1500.00 — Mutant: pool applied all-or-nothing, red', async () => {
     const f = await fixture('o5', { drawingLimit: '5000.00', drawingLimitPeriod: 'monthly' });
     await owesUs(f, f.ownerId, '2000.00', '2026-01-10');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { ownerId: f.ownerId, amount: '2000.00', on: '2026-01-10' }));
+    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '2000.00', on: '2026-01-10' }));
     await payrollRecovers(f, '500.00', '2026-01-20', '2026-02-05');
 
     expect(await drawn(f, f.ownerId)).toBe('1500.00');
@@ -305,9 +305,9 @@ describe('O6 — one person owns two stores; each owner row sees only its own re
     const f = await fixture('o6', { drawingLimit: '5000.00', drawingLimitPeriod: 'monthly' });
     const ownerB = await secondOwner(f, { drawingLimit: '5000.00', drawingLimitPeriod: 'monthly' });
     await owesUs(f, f.ownerId, '1000.00', '2026-01-10');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { ownerId: f.ownerId, amount: '1000.00', on: '2026-01-10' }));
+    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '1000.00', on: '2026-01-10' }));
     await owesUs(f, ownerB, '700.00', '2026-01-12');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { ownerId: ownerB, amount: '700.00', on: '2026-01-12' }));
+    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: ownerB, amount: '700.00', on: '2026-01-12' }));
     await payrollRecovers(f, '1200.00', '2026-01-20', '2026-02-05');
 
     const a = await drawn(f, f.ownerId);
@@ -333,7 +333,7 @@ describe('O8 (control, green now and after) — recoverFromPay alone still frees
   it('still 2000.00, not freed', async () => {
     const f = await fixture('o8', { drawingLimit: '5000.00', drawingLimitPeriod: 'monthly' });
     await owesUs(f, f.ownerId, '2000.00', '2026-01-10');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { ownerId: f.ownerId, amount: '2000.00', on: '2026-01-20' }));
+    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '2000.00', on: '2026-01-20' }));
     expect(await drawn(f, f.ownerId)).toBe('2000.00');
   });
 });
@@ -415,7 +415,7 @@ function settledError(s: Settled<unknown>): unknown {
 
 const ROW_LOCK = ['transactionid', 'tuple'];
 const drawOp = (f: Fixture, amount: string, on: string) => (tx: Tx) =>
-  recordDrawing(tx, f.admin, { ownerId: f.ownerId, amount, fromMoneyAccountId: f.officeAccountId, on });
+  recordDrawing(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount, fromMoneyAccountId: f.officeAccountId, on });
 
 describe('X1 — two concurrent drawings cannot both pass one monthly cap', () => {
   it('exactly one commits; the other is refused with the limit sentence; drawn = 4500.00 — Mutant: remove lockOwnerForUpdate -> both commit, 6000.00, red', async () => {

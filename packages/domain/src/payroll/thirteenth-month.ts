@@ -20,7 +20,7 @@ import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { refuse } from '../shared/refusal';
 import { advanceToRecover } from './compute';
-import { outstandingAdvance, PAYROLL_ADVANCE_ACCOUNT } from './index';
+import { assertPayrollMoneyAccount, outstandingAdvance, PAYROLL_ADVANCE_ACCOUNT, payrollMoneyParty } from './index';
 
 /** `6140 13th month pay` — provisioned in Phase 1, unused until now. */
 export const THIRTEENTH_MONTH_ACCOUNT = '6140';
@@ -176,6 +176,7 @@ export async function post13thMonthRun(
     if (account.storeId !== input.storeId) {
       throw new Error('post13thMonthRun: that money account belongs to another store.');
     }
+    assertPayrollMoneyAccount(account, 'post13thMonthRun');
 
     const entryDate = input.entryDate ?? `${input.year}-12-24`;
     const runId = (
@@ -227,6 +228,7 @@ export async function post13thMonthRun(
                 accountCode: account.glAccountCode,
                 storeId: input.storeId,
                 credit: payout.netPay,
+                ...payrollMoneyParty(account),
               },
             ]
           : []),

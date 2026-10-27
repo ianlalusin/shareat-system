@@ -38,7 +38,7 @@ export interface CloseBlockersInput {
 
 export interface CloseBlockers {
   readonly drafts: {
-    readonly kind: 'expense' | 'delivery';
+    readonly kind: 'expense' | 'delivery' | 'salesDay';
     readonly id: string;
     readonly dateOn: string;
     readonly counterpartyName: string | null;
@@ -111,7 +111,7 @@ export async function refuseOnMissingEarlierPeriod(
  *
  * Gate order (bible-adjacent discipline: cheapest and least ambiguous first):
  *   1. `authorize(actor, 'close_period')` — capability, then (for a manager) org-wide store scope.
- *   2. Unposted `expenses`/`deliveries` drafts dated in the period — actionable, named by count.
+ *   2. Unposted `expenses`/`deliveries` drafts, and `open`/`submitted` sales days (T-487), dated in the period — actionable, named by count.
  *   2b. T-401 S6: usage drafts, and posted out-of-band usage with no reason, dated in the period (auto-posted records never block).
  *   3. `closeReadiness` — the SAME hard findings `/findings` already shows, re-run here so the
  *      screen's verdict is never trusted, only reproduced.
@@ -133,13 +133,23 @@ export async function closePeriod(
   if (drafts.length > 0) {
     const expenseCount = drafts.filter((d) => d.kind === 'expense').length;
     const deliveryCount = drafts.filter((d) => d.kind === 'delivery').length;
+    const salesDayCount = drafts.filter((d) => d.kind === 'salesDay').length;
     const parts: string[] = [];
     if (expenseCount > 0) parts.push(pluralize(expenseCount, 'draft expense', 'draft expenses'));
     if (deliveryCount > 0) parts.push(pluralize(deliveryCount, 'draft delivery', 'draft deliveries'));
-    throw new Error(
-      `closePeriod: ${input.period} cannot close — ${parts.join(' and ')} still dated in it. ` +
-        'Post or void them first.',
-    );
+    const raw =
+      `closePeriod: ${input.period} cannot close — ${[...parts, ...(salesDayCount > 0 ? [pluralize(salesDayCount, 'unposted sales day', 'unposted sales days')] : [])].join(' and ')} still dated in it. ` +
+      'Post or void them first.';
+    if (salesDayCount > 0) {
+      // T-487 (DEF-779): a sales day nobody posted is revenue off the books, and a closed month takes no posting. Said in words.
+      const monthName = new Date(`${startsOn}T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' });
+      const others = parts.length > 0 ? ` Also still dated in it: ${parts.join(' and ')}.` : '';
+      throw refuse(
+        raw,
+        `${pluralize(salesDayCount, 'sales day', 'sales days')} in ${monthName} ${salesDayCount === 1 ? 'is' : 'are'} not posted yet. Verify or void ${salesDayCount === 1 ? 'it' : 'them'} first.${others}`,
+      );
+    }
+    throw new Error(raw);
   }
 
   // T-401 S6 (Ian 15 Oct): unposted usage drafts, and posted out-of-band usage with no reason, hold the month open.

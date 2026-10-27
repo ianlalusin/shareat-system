@@ -6,8 +6,9 @@ import path from 'node:path';
  * T-369 S5 T8 (I5) — the closed-month override NEVER reaches a stock screen. Ian, 2026-09-30, ruling (a):
  * "no override for stock, ever" — `docs/tasks/369-unwired-money-screens.md` §S4 and invariant I5.
  *
- *   `ClosedMonthOverride` (the control) may be imported ONLY by `expenses/reimbursements/page.tsx` and
- *   `expenses/[id]/page.tsx` (the second arrives with S5b, so it is ALLOWED here but not required).
+ *   `ClosedMonthOverride` (the control) may be imported ONLY by `expenses/reimbursements/page.tsx`,
+ *   `expenses/[id]/page.tsx` (the second arrives with S5b, so it is ALLOWED here but not required) and
+ *   `sales-days/[id]/page.tsx` (T-487 DEF-779: revenue only, a money screen).
  *   Nothing under `inventory/`, `commissary/` or `trade/` may import it, import `lib/period-override`, or
  *   mention `periodOverride` at all.
  *
@@ -20,7 +21,8 @@ const repoRoot = path.resolve(__dirname, '../..');
 const SRC = path.join(repoRoot, 'apps/erp/src');
 const APP = path.join(SRC, 'app');
 const COMPONENT = path.join(SRC, 'components', 'ClosedMonthOverride.tsx');
-const ALLOWED_IMPORTERS = new Set(['app/expenses/reimbursements/page.tsx', 'app/expenses/[id]/page.tsx', 'app/ap/invoices/[id]/page.tsx']);
+// T-487 (DEF-779): the sales-day verify page posts revenue only (stock moves through a separate POS usage pull), so it is a money screen, not a stock one: Ian's "no override for stock, ever" still holds.
+const ALLOWED_IMPORTERS = new Set(['app/expenses/reimbursements/page.tsx', 'app/expenses/[id]/page.tsx', 'app/ap/invoices/[id]/page.tsx', 'app/sales-days/[id]/page.tsx']);
 const STOCK_DIRS = ['inventory', 'commissary', 'trade'];
 
 function walk(dir: string): string[] {
@@ -46,7 +48,7 @@ const rel = (p: string) => path.relative(SRC, p).split(path.sep).join('/');
 const allFiles = walk(SRC).filter((f) => f !== COMPONENT);
 const importers = allFiles.filter((f) => /\bClosedMonthOverride\b/.test(codeOnly(readFileSync(f, 'utf8')))).map(rel);
 
-describe('T8 (I5) — the override control is on an allowlist of exactly three pages', () => {
+describe('T8 (I5) — the override control is on an allowlist of exactly four pages', () => {
   it('ClosedMonthOverride exists (apps/erp/src/components/ClosedMonthOverride.tsx) — red until S5a', () => {
     expect(existsSync(COMPONENT), 'the component file does not exist yet').toBe(true);
   });

@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1728` 13. Decision log
-- `1729–1748` 14. Amendment protocol
-- `1749–1753` 15. Engineering standards — the industry practices this project follows
-  - `1754–1759` 15.1 Build order: walking skeleton first
-  - `1760–1771` 15.2 Golden-master testing — the most important practice here
-  - `1772–1780` 15.3 Strangler Fig, not big-bang cutover
-  - `1781–1785` 15.4 No dual-write
-  - `1786–1794` 15.5 Expand/contract migrations
-  - `1795–1803` 15.6 Observability from day zero, not later
-  - `1804–1808` 15.7 CI gates
-  - `1809–1813` 15.8 Backups and a tested restore
-  - `1814–1818` 15.9 Twelve-Factor config
-  - `1819–1826` 15.10 Append-only ledgers — but not event sourcing
-  - `1827–1831` 15.11 Defence in depth
-  - `1832–1860` 15.12 Skills are lenses, not assurance
-  - `1861–1867` 15.13 Reconciliation is a permanent feature
-- `1868–1872` 16. The accounting spine
-  - `1873–1904` 16.0 What we are actually fixing — the diagnosis
-  - `1905–1948` 16.1 The ten invariants — non-negotiable
-  - `1949–1963` 16.2 The oracle: how "correct" is tested
-  - `1964–1985` 16.3 The model — header + lines, not legs
-  - `1986–2005` 16.4 Deliberately simpler than ERPNext
-  - `2006–2074` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2075–2099` 16.6 What v1 already gets right — preserve the intent
-  - `2100–2121` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2122–2136` 16.8 What v1's accounting already gets right
-  - `2137–2180` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2181–2231` 16.10 Posting patterns — one canonical pattern per business event
-  - `2232–2264` 16.11 Inventory's accounting integration
+- `1329–1730` 13. Decision log
+- `1731–1750` 14. Amendment protocol
+- `1751–1755` 15. Engineering standards — the industry practices this project follows
+  - `1756–1761` 15.1 Build order: walking skeleton first
+  - `1762–1773` 15.2 Golden-master testing — the most important practice here
+  - `1774–1782` 15.3 Strangler Fig, not big-bang cutover
+  - `1783–1787` 15.4 No dual-write
+  - `1788–1796` 15.5 Expand/contract migrations
+  - `1797–1805` 15.6 Observability from day zero, not later
+  - `1806–1810` 15.7 CI gates
+  - `1811–1815` 15.8 Backups and a tested restore
+  - `1816–1820` 15.9 Twelve-Factor config
+  - `1821–1828` 15.10 Append-only ledgers — but not event sourcing
+  - `1829–1833` 15.11 Defence in depth
+  - `1834–1862` 15.12 Skills are lenses, not assurance
+  - `1863–1869` 15.13 Reconciliation is a permanent feature
+- `1870–1874` 16. The accounting spine
+  - `1875–1906` 16.0 What we are actually fixing — the diagnosis
+  - `1907–1950` 16.1 The ten invariants — non-negotiable
+  - `1951–1965` 16.2 The oracle: how "correct" is tested
+  - `1966–1987` 16.3 The model — header + lines, not legs
+  - `1988–2007` 16.4 Deliberately simpler than ERPNext
+  - `2008–2076` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2077–2101` 16.6 What v1 already gets right — preserve the intent
+  - `2102–2123` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2124–2138` 16.8 What v1's accounting already gets right
+  - `2139–2182` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2183–2233` 16.10 Posting patterns — one canonical pattern per business event
+  - `2234–2266` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1725,6 +1725,8 @@ just a patch.**
 | 391 | 2026-10-23 | **CASH REFUNDS COME OFF THE EXPECTED DRAWER CASH, ON THE Z-READING AND ON THE CASHIER HANDOVER.** POS v2 refunds are cash only (T-424), so expected cash = start + cash sales + Convert net + manual adjustments − deductions − cash refunds. v1's handover ignored refunds (they were rare: 7 partial refunds in 9 months); kept as is, every v2 refund would show as a drawer shortage. | Ian, 2026-10-23, POS v2 session (as recommended) | Yes |
 | 392 | 2026-10-24 | **THE NIGHTLY RECEIPT BRIDGE (T-472): ITS OWN READ-ONLY KEY, NO PERSONAL DATA, AND IT CATCHES LATE CHANGES.** (1) It reads POS Firestore directly with a new production service account holding only Cloud Datastore Viewer on `shareat-hub-v2` (`pos-receipt-bridge-readonly`), never the POS v2 server key (that one can write). (2) It copies NO personal details: no senior/PWD names or ID numbers, no customer name/TIN/address; `statutory_discount_records` and the Firestore logbook export stay the source. **Supersedes** Ian's earlier same-day answer to the POS v2 session (a separate locked table), given before he knew that table existed and that T-435 gates screens, not tables. (3) Edits, voids and late offline syncs older than 7 days are caught with change-time queries. Business day key stays the calendar day with the Z number as an attribute (row 390). | Ian, 2026-10-24, via the orchestrator ("1 yes, 2 A, 4 yes") | Yes |
 | 393 | 2026-10-24 | **A REFUND NUMBER IS CALLED "UNUSED" ONLY AFTER THE SERVER HAS CLOSED IT; A LATE RECEIPT REACHES THE NEXT Z HOWEVER LATE; A Z NEVER ENDS BEFORE THE LAST ONE (T-474, CORRECTS T-470 RULING 4 AND T-471 CORRECTION 3).** (1) **Refunds (DEF-756):** a missing `receiptNumbers/{number}` is not a final outcome, because the refund request can still commit later and a `skipped` ledger row is never looked at again. After the 10-minute wait the tablet asks the server (`POST /api/pos2/refund-numbers/release`) to close the number in one transaction (`released: true`); the refund transaction already refuses a used number, so a closed number can never carry money. Only a closed number is marked skipped; a number the server answers "used" is acknowledged; anything else stays reserved for a person. Industry pattern: a fence (tombstone). (2) **Late receipts (DEF-758):** T-471 Correction 3's 7-day lookback is withdrawn. A Z reads in-window receipts by sale time AND every receipt that arrived on the server since the last Z's clock; "counted once" uses every Z committed since that clock. Ruling 5 holds with no time limit. (3) **Z boundary (DEF-757):** inside the Z transaction, if the latest Z ends at or after this request's clock, the Z is refused 409 and nothing is written. (4) **Slip (DEF-759):** manual cash adjustments are returned and printed, so the slip's cash lines add up to expected cash (completes T-471 Fix B). | Codex read-only audits of 23 Oct (findings 5-8), re-verified on `claude/pos-v2-t470` 51b5b4f; Opus planner (AUDIT session) under Ian's 2026-10-24 instruction to verify, correct defective specs and fix; Ian asked for this row the same day. **Ratified by Ian, 2026-10-24, via the POS v2 session** ("Yes, once hole fixed": a tablet may write the server-side "this number carries no money" note once the number is proven to be that tablet's; the hole is closed by T-477 / DEF-771, which binds the release to the tablet's registered terminal) | Yes. (1) is a new route plus reconcile rule; reverting re-opens the lost-refund gap |
+| 399 | 2026-10-26 | **A MONTH CANNOT CLOSE WHILE A SALES DAY DATED IN IT IS UNPOSTED; A SALES DAY CAN BE VERIFIED INTO A CLOSED MONTH ONLY THROUGH THE ADMIN CLOSED-MONTH OVERRIDE (T-487, DEF-779). Reverses the ADR-006 §8.2 note that left sales days out of the close gate.** (1) `closePeriod`'s draft gate now also counts sales days dated in the period with status `open` or `submitted`, POS-sourced or typed; `verified` and `voided` never block. The old note said `open` can mean "today is still happening" — true for today, never for a month that has ended, and a day left unposted there is revenue the ledger never receives. (2) `verifySalesDay` refuses a closed month in words (the `approveExpense` sentence pair) and takes the existing admin-only `override_period_lock` override, which writes a `period_overrides` row; a locked month never takes it. (3) Reopening stays never built (ADR-006). | Audit finding F15 (Claude accounting-core pass, 26 Oct), re-verified on main 26605d1; Opus planner (AUDIT session) under Ian's 2026-10-26 instruction to fix the money findings | Yes. Reverting re-opens a close with revenue off the books and no in-product remedy |
+| 400 | 2026-10-27 | **A STOCK QUANTITY ROUNDS HALF-UP, AWAY FROM ZERO, AT THE THIRD DECIMAL, ONCE, AT THE END (T-489, DEF-780).** Quantities are `numeric(14,3)`; a conversion factor is `numeric(14,6)`. `quantity × factor` is computed exactly in scaled integers (`multiplyQuantityByFactor`, `packages/core/src/money.ts`), never through a float, and rounded once to three decimals, half-up away from zero — the same rule money already follows (`multiply`, `multiplyToMoney`). A received quantity above zero that converts to zero base units is REFUSED, never skipped as "nothing arrived". Records a rule the code already implied but no document named (§6 says only "never float"). | Audit finding F20 (Claude posting-paths pass, 26 Oct): `toBaseUnits` applied the factor at three decimals through a float and truncated, so 0.0625 became 0.063 and a factor under 0.0005 received nothing. Opus planner (AUDIT session) | Yes. A different rounding rule would change received quantities from then on, never past ones |
 
 ## 14. Amendment protocol
 

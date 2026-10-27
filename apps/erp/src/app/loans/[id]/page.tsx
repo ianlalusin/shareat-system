@@ -35,6 +35,9 @@ export default async function LoanPage({
 
   const loan = await getDetail(actor.orgId, id);
   if (!loan) notFound();
+  // T-488: minted per render and submitted back, so a double click is a replay of ONE posting and a second genuine
+  // transaction on the same day carries its own id (the entry is keyed on it, never on the figures).
+  const requestId = crypto.randomUUID();
 
   const accounts = await moneyAccounts(actor.orgId, loan.storeId);
   // T-371 R4/C4: re-minted database values, ordered in exact centavos — no float tolerance needed.
@@ -92,6 +95,7 @@ export default async function LoanPage({
           <FormModal trigger="Draw the money" title="Draw the money from this loan" size="md">
             <CheckedForm rules={LOAN_DRAW_RULES} action={disburseLoanAction} className="grid gap-4 sm:grid-cols-3">
               <input type="hidden" name="loanId" value={loan.id} />
+              <input type="hidden" name="requestId" value={requestId} />
               <Field label="Amount" rule={LOAN_DRAW_RULES.amount}>
                 <input
                   {...nativeAttrs(LOAN_DRAW_RULES.amount)}
