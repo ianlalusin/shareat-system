@@ -67,3 +67,22 @@ Rulings 2 and 3 are replaced by a simpler, wider rule that also closes review po
 - Tests to add (point 5): a partly-read day is NOT given a check tonight (so it is re-read in full next night); a `match` day whose feed is
   revised later is re-checked to `mismatch`; a window day with no change is re-checked and unchanged (no new notice);
   a date older than `windowStart` with no change is NOT re-checked; a `--date` run refreshes nothing else.
+
+## S2 — 2026-10-27 (Opus planner, AUDIT session): a crash cannot leave an older day's check stale (F25, DEF-788)
+Source: Codex 18th pass, `bridge-recheck-crash-outside-window` (`C:\Users\ianla\shareat-audits\OPEN\audit-2026-10-27-eighteenth-pass.md`),
+numbered F25; confirmed on main 822e7ec. Branch `audit/t490-s2-bridge-crash-recheck`, its own PR.
+**Gap in the earlier revision:** the refresh set takes change-time dates only from receipts `writeAll` actually WROTE.
+Receipt writes commit before the refresh; if the run crashes in between, the next run re-reads the same receipt through
+the change-time overlap but gets `unchanged` (or `raced` if another run wrote it), adds no date, and a day OLDER than
+the 7-day window keeps a stale check. Once a later run succeeds, the cutoff advances and the receipt is never seen again.
+**Ruling:** `writeAll` returns the `posCalendarDate` of every receipt the change-time query RETURNED whose result is
+`written`, `unchanged` or `raced` (not `below_floor`/`unplaceable`), at or after the floor. Those dates join the refresh
+set (still minus tonight's `dates`). No other old dates are refreshed (test Y4 stays green); still Postgres only, no
+`markGone`, no extra Firestore read (B1-B3 unchanged).
+- Tests first (real Postgres, dedicated fresh *_test DB), new section in `t472-s2-receipt-bridge.test.ts`: a historical
+  (older than the window) receipt version already committed and its day check deliberately stale; a run whose
+  change-time query returns that same receipt (result `unchanged`) repairs the check, keeps the version count, and makes
+  no extra Firestore reads; the same with `raced`; an unrelated old day with no returned receipt is still not refreshed.
+- Files: `packages/domain/src/pos/receipt-bridge-job.ts`, `t472-s2-receipt-bridge.test.ts`, this spec,
+  `docs/DEFECTS-REGISTER.md` (DEF-788, full row shape).
+- Acceptance: red then green; whole t472-s2 file and other T-472 tests green; root typecheck; WHOLE unit project.
