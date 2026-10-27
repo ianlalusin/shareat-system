@@ -126,7 +126,7 @@ export async function postPosCorrection(tx: Tx, actor: Actor, input: PostPosCorr
     const monthName = new Date(`${period.startsOn}T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
     throw refuse(
       `postPosCorrection: the fiscal period covering ${input.entryDate} is ${month.kind}`,
-      `${monthName} is ${month.kind}. A correction must be dated in an open month. Choose a later date.`,
+      `${monthName} is ${month.kind === 'locked' ? 'locked' : 'closed'}. A correction must be dated in an open month. Choose a later date.`,
     );
   }
 
