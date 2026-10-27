@@ -35,6 +35,7 @@ import { refuse } from '../shared/refusal';
 import { authorize, type Actor } from '@shareat/auth';
 import { consume, reverseConsumption } from './consume';
 import { postEntry } from '../ledger/post-entry';
+import { postEntryOnce, requireRequestId } from '../ledger/replay';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { GRNI_ACCOUNT, INVENTORY_ACCOUNT_BY_ITEM_KIND } from './receipt-posting';
 import { perBaseUnit } from '../deliveries/receive';
@@ -387,6 +388,8 @@ export interface RefundCreditInput {
   readonly amount: string;
   readonly businessDate: string;
   readonly actor: Actor;
+  /** The form's per-render id (T-488): the refund is keyed on it, never on (supplier, date, amount). */
+  readonly requestId: string;
 }
 
 export type RefundCreditOutcome =
@@ -405,6 +408,7 @@ export type RefundCreditOutcome =
 export async function refundSupplierCredit(tx: Tx, input: RefundCreditInput): Promise<RefundCreditOutcome> {
   await authorize(tx, input.actor, 'apply_supplier_credit', { storeId: input.storeId });
   assertFieldRules(INVENTORY_REFUND_RULES, { amount: input.amount });
+  const requestId = requireRequestId('refundSupplierCredit', input.requestId);
   const orgId = input.actor.orgId; // T-231/DEF-210 — see recordReturn.
 
   const amount = parseMoneyInput(input.amount, 'refundSupplierCredit: the amount', 'The refund amount');
@@ -423,12 +427,12 @@ export async function refundSupplierCredit(tx: Tx, input: RefundCreditInput): Pr
   const account = await moneyAccountsRepo.getById(tx, orgId, input.moneyAccountId);
   if (!account) return { ok: false, reason: `money account ${input.moneyAccountId} does not exist` };
 
-  const posted = await postEntry(tx, {
+  const posted = await postEntryOnce(tx, {
     orgId,
     entryDate: input.businessDate,
     sourceType: 'supplier_credit_refund',
     sourceId: input.supplierId,
-    idempotencyKey: `supplier_credit_refund:${input.supplierId}:${input.businessDate}:${input.amount}`,
+    idempotencyKey: `supplier_credit_refund:${input.supplierId}:${requestId}`,
     memo: `Return credit refunded — ${supplierName}`,
     postedBy: input.actor.personId,
     lines: [

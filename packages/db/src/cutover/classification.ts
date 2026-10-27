@@ -815,6 +815,19 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       '(T-134), which is the answer to every transit question the old books had left open.',
   },
 
+  // ---- T-398 S5: the inter-entity shipment (Padre Garcia) ---------------------------------
+  inter_entity_shipments: {
+    class: 'purge',
+    reason:
+      'Operational (T-398 S5, B4): the note that tied one wholesale sale to the franchise receipt. It belongs to the dispatch it describes, which purges with the rest ' +
+      'of the old ledger; purged per organisation, so the franchise rows go with their seller.',
+  },
+  inter_entity_shipment_lines: {
+    class: 'purge',
+    reason:
+      'Operational (T-398 S5, B4): the line snapshot and the franchise’s counted quantity for one shipment. Purges with its header and with the trade order lines it copied.',
+  },
+
   // ---- T-171: the commissary catalogue --------------------------------------------------
   commissary_links: {
     // ⭐ keep: WHICH branch may order from WHICH commissary is a standing arrangement about the

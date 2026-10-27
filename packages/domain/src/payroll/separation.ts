@@ -21,7 +21,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { advanceToRecover } from './compute';
-import { outstandingAdvance, PAYROLL_ADVANCE_ACCOUNT } from './index';
+import { assertPayrollMoneyAccount, outstandingAdvance, PAYROLL_ADVANCE_ACCOUNT, payrollMoneyParty } from './index';
 import { THIRTEENTH_MONTH_ACCOUNT } from './thirteenth-month';
 // T-436: unused Service Incentive Leave is paid in final pay when this is the person's last job (spec D12).
 import { releaseSilOfSeparation, settleSilAtSeparation } from '../leave/payroll';
@@ -154,6 +154,7 @@ export async function postSeparation(
     if (account.storeId !== input.storeId) {
       throw new Error('postSeparation: that money account belongs to another store.');
     }
+    assertPayrollMoneyAccount(account, 'postSeparation');
 
     const entryDate = input.entryDate ?? input.separationDate;
     const separationId = (
@@ -196,7 +197,7 @@ export async function postSeparation(
           ]
         : []),
       ...(compare(netPay, ZERO) > 0
-        ? [{ accountCode: account.glAccountCode, storeId: input.storeId, credit: netPay }]
+        ? [{ accountCode: account.glAccountCode, storeId: input.storeId, credit: netPay, ...payrollMoneyParty(account) }]
         : []),
     ];
 
@@ -224,6 +225,7 @@ export async function postSeparation(
       separationDate: input.separationDate,
       entryDate,
       moneyAccountGlCode: account.glAccountCode,
+      moneyAccountId: account.id,
     });
 
     return { id: separationId, netPay: netPay };

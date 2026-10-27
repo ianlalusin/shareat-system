@@ -161,6 +161,8 @@ export interface InsertDeliveryInput {
   readonly deliveredOn: string;
   readonly proofFileId: string | null;
   readonly createdBy: string;
+  /** T-398 S5d: required for kind `inter_entity` (the shipment this delivery receives), null for every other kind (CHECK, both ways). */
+  readonly interEntityShipmentId?: string | null;
 }
 
 export async function insertDelivery(tx: Tx, input: InsertDeliveryInput): Promise<{ id: string }> {
@@ -175,6 +177,7 @@ export async function insertDelivery(tx: Tx, input: InsertDeliveryInput): Promis
       deliveredOn: input.deliveredOn,
       proofFileId: input.proofFileId,
       createdBy: input.createdBy,
+      interEntityShipmentId: input.interEntityShipmentId ?? null,
     })
     .returning({ id: deliveries.id });
   return row!;

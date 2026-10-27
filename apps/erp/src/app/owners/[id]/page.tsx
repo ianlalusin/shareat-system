@@ -53,6 +53,9 @@ export default async function OwnerPage({
 
   const owner = await getDetail(actor.orgId, id);
   if (!owner) notFound();
+  // T-488: minted per render and submitted back, so a double click is a replay of ONE posting and a second genuine
+  // transaction on the same day carries its own id (the entry is keyed on it, never on the figures).
+  const requestId = crypto.randomUUID();
 
   const [accounts, stores, persons] = await Promise.all([
     moneyAccounts(actor.orgId, owner.storeId),
@@ -125,6 +128,7 @@ export default async function OwnerPage({
           <FormModal trigger="Settle" title="Settle what this owner owes" size="lg">
             <SettleForm
               ownerId={owner.id}
+              requestId={requestId}
               defaultAmount={owner.position.receivable}
               today={today()}
               accounts={accounts.map((a) => ({ id: a.id, label: `${a.name} — ${peso(a.balance)}` }))}
@@ -145,6 +149,7 @@ export default async function OwnerPage({
           <FormModal trigger="Capital in" title="Record capital in" size="md">
             <CheckedForm rules={OWNERS_CONTRIBUTION_RULES} action={contributionAction} className="space-y-3">
               <input type="hidden" name="ownerId" value={owner.id} />
+              <input type="hidden" name="requestId" value={requestId} />
               <Field label="Amount" rule={OWNERS_CONTRIBUTION_RULES.amount}>
                 <Input {...nativeAttrs(OWNERS_CONTRIBUTION_RULES.amount)} className="w-full" />
               </Field>
@@ -187,6 +192,7 @@ export default async function OwnerPage({
           <FormModal trigger="Drawing out" title="Record a drawing" size="md">
             <CheckedForm rules={OWNERS_DRAWING_RULES} action={drawingAction} className="space-y-3">
               <input type="hidden" name="ownerId" value={owner.id} />
+              <input type="hidden" name="requestId" value={requestId} />
               <Field label="Amount" rule={OWNERS_DRAWING_RULES.amount}>
                 <Input {...nativeAttrs(OWNERS_DRAWING_RULES.amount)} className="w-full" />
               </Field>

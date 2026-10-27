@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1728` 13. Decision log
-- `1729–1748` 14. Amendment protocol
-- `1749–1753` 15. Engineering standards — the industry practices this project follows
-  - `1754–1759` 15.1 Build order: walking skeleton first
-  - `1760–1771` 15.2 Golden-master testing — the most important practice here
-  - `1772–1780` 15.3 Strangler Fig, not big-bang cutover
-  - `1781–1785` 15.4 No dual-write
-  - `1786–1794` 15.5 Expand/contract migrations
-  - `1795–1803` 15.6 Observability from day zero, not later
-  - `1804–1808` 15.7 CI gates
-  - `1809–1813` 15.8 Backups and a tested restore
-  - `1814–1818` 15.9 Twelve-Factor config
-  - `1819–1826` 15.10 Append-only ledgers — but not event sourcing
-  - `1827–1831` 15.11 Defence in depth
-  - `1832–1860` 15.12 Skills are lenses, not assurance
-  - `1861–1867` 15.13 Reconciliation is a permanent feature
-- `1868–1872` 16. The accounting spine
-  - `1873–1904` 16.0 What we are actually fixing — the diagnosis
-  - `1905–1948` 16.1 The ten invariants — non-negotiable
-  - `1949–1963` 16.2 The oracle: how "correct" is tested
-  - `1964–1985` 16.3 The model — header + lines, not legs
-  - `1986–2005` 16.4 Deliberately simpler than ERPNext
-  - `2006–2074` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2075–2099` 16.6 What v1 already gets right — preserve the intent
-  - `2100–2121` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2122–2136` 16.8 What v1's accounting already gets right
-  - `2137–2180` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2181–2231` 16.10 Posting patterns — one canonical pattern per business event
-  - `2232–2264` 16.11 Inventory's accounting integration
+- `1329–1732` 13. Decision log
+- `1733–1752` 14. Amendment protocol
+- `1753–1757` 15. Engineering standards — the industry practices this project follows
+  - `1758–1763` 15.1 Build order: walking skeleton first
+  - `1764–1775` 15.2 Golden-master testing — the most important practice here
+  - `1776–1784` 15.3 Strangler Fig, not big-bang cutover
+  - `1785–1789` 15.4 No dual-write
+  - `1790–1798` 15.5 Expand/contract migrations
+  - `1799–1807` 15.6 Observability from day zero, not later
+  - `1808–1812` 15.7 CI gates
+  - `1813–1817` 15.8 Backups and a tested restore
+  - `1818–1822` 15.9 Twelve-Factor config
+  - `1823–1830` 15.10 Append-only ledgers — but not event sourcing
+  - `1831–1835` 15.11 Defence in depth
+  - `1836–1864` 15.12 Skills are lenses, not assurance
+  - `1865–1871` 15.13 Reconciliation is a permanent feature
+- `1872–1876` 16. The accounting spine
+  - `1877–1908` 16.0 What we are actually fixing — the diagnosis
+  - `1909–1952` 16.1 The ten invariants — non-negotiable
+  - `1953–1967` 16.2 The oracle: how "correct" is tested
+  - `1968–1989` 16.3 The model — header + lines, not legs
+  - `1990–2009` 16.4 Deliberately simpler than ERPNext
+  - `2010–2078` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2079–2103` 16.6 What v1 already gets right — preserve the intent
+  - `2104–2125` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2126–2140` 16.8 What v1's accounting already gets right
+  - `2141–2184` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2185–2235` 16.10 Posting patterns — one canonical pattern per business event
+  - `2236–2268` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1721,10 +1721,14 @@ just a patch.**
 | 386 | 2026-10-24 | **CUSTOMER LOBBY (T-455): order.shareat.net; ID read on the phone only; build now.** The lobby lives at order.shareat.net (row 349 stands). A senior/PWD card is read on the diner's own phone only, never by an outside AI service (rows 251/330/353); the cashier still sees the physical card. No photo of the card is kept. Until spring the phone hands over to today's customer app after seating. Switch on at Lipa as soon as it is built and tested; POS slices still avoid merging 20 Nov-14 Dec. | Ian, 2026-10-24 ("1 yes, 2 yes, 3 start now"; "customer lobby - no; phone hand over yes; switch on date at lipa build now") | Yes |
 | 387 | 2026-10-24 | **AP/EXPENSE ERRORS SHOW WHILE TYPING; ADMIN MAY VERIFY THEIR OWN SUPPLIER INVOICE (T-475).** Business-rule errors on the invoice and expense forms appear live with Save off; the server re-checks with the same rule functions. A new capability `verify_own_supplier_invoice` (org level, admin and super admin only, NOT grantable, not given to stand-in managers) lifts only the creator-is-not-verifier rule: the invoice is flagged "verified by its own creator" and audited, and it may include invoices the recurring job logged in the admin's name (amends row 183 for this capability). It never bypasses locked/closed periods, ledger invariants or stock rules. Then the invoice/supplier/expense linkage fixes. App-wide live checks follow as T-485. | Ian, 2026-10-24 ("1A, 2A, 3 yes"; "1b 2a 3a"; "implement the same show error while typing all through the app") | Yes |
 | 388 | 2026-10-25 | **THE COMMISSARY SEES PADRE GARCIA'S PER-ITEM RECEIPT COUNTS PLUS ONE BALANCE (T-398 S5, QI-1 = a).** For each shipment the commissary sees how many of each of ITS OWN items Padre Garcia counted at the door, and one "PG owes us ₱Y" balance; nothing else of PG's (prices, costs, other suppliers, staff). The franchise credit note is computed from the per-item shortfall, and the daily reconciliation catches a payment one side forgot. Amends Q8 (a) ("PG recorded ₱X" per shipment only). | Ian, in chat: "QI-1 is a". Recommended by the planner: the goods are the commissary's own, so it reveals nothing of PG's business and removes a manual, error-prone step. Recorded in docs/tasks/398-s5/QUESTIONS.md on lane/t398-s5. | Yes, before PG goes live on v2 |
+| 389 | 2026-10-26 | **A BILL THE SYSTEM MAKES WHEN PADRE GARCIA RECEIVES A LIPA SHIPMENT NEEDS NO SECOND CHECKER (T-398 S5d, QI-2 = A).** When PG counts in a Lipa (commissary) shipment, the receive step creates PG's supplier bill to Lipa and marks it system-made. A system-made bill is exempt from the two-person verification rule (0046/0217) only while its total equals the shipment's received total and it is linked to that shipment; only the receive path can set the mark, the app role can neither set nor clear it, and its amount cannot be edited. Every other supplier bill keeps the two-person rule. Lipa is the commissary; Malvar is a Lipa branch supplied by stock transfer inside the same org; PG buys from Lipa as a franchise (Ian, 26 Oct). | Ian, in chat: "a". Nobody types the amount (counted quantity x Lipa's rate), the 06:30 reconciliation compares both books daily, and the receiver is usually a PG manager, so a second checker would add a daily manual step and delay what PG owes. A made-up system verifier (B) was rejected: it puts a person who does not exist in the audit trail. | Yes, before PG goes live on v2 |
 | 390 | 2026-10-23 | **POS v2 DAY CLOSE: THE BUSINESS DAY RUNS Z TO Z; SELLING CONTINUES AFTER A Z; THE CASHIER OR MANAGER CLOSES, A MANAGER APPROVES WITH THEIR ERP PIN.** Implements row 348 (the day ends at the store's closing time) as the moment the manager closes the day with a Z-reading, so no per-store closing-time setting is needed; the first Z starts 04:00 Manila of the store's first day; a forgotten Z makes the next one span two dates. A Z does not lock the till: later sales are the next business day. X-readings need no PIN. Both slips say "cash control, not a BIR document" (the POS is not BIR-accredited; official receipts are handwritten, knowledge/staff/cashier-dine-in-sop.md). The ERP's sales day keeps v1's midnight feed until P2. Spec: T-471. | Ian, 2026-10-23, POS v2 session (three questions, all as recommended) | Yes |
 | 391 | 2026-10-23 | **CASH REFUNDS COME OFF THE EXPECTED DRAWER CASH, ON THE Z-READING AND ON THE CASHIER HANDOVER.** POS v2 refunds are cash only (T-424), so expected cash = start + cash sales + Convert net + manual adjustments − deductions − cash refunds. v1's handover ignored refunds (they were rare: 7 partial refunds in 9 months); kept as is, every v2 refund would show as a drawer shortage. | Ian, 2026-10-23, POS v2 session (as recommended) | Yes |
 | 392 | 2026-10-24 | **THE NIGHTLY RECEIPT BRIDGE (T-472): ITS OWN READ-ONLY KEY, NO PERSONAL DATA, AND IT CATCHES LATE CHANGES.** (1) It reads POS Firestore directly with a new production service account holding only Cloud Datastore Viewer on `shareat-hub-v2` (`pos-receipt-bridge-readonly`), never the POS v2 server key (that one can write). (2) It copies NO personal details: no senior/PWD names or ID numbers, no customer name/TIN/address; `statutory_discount_records` and the Firestore logbook export stay the source. **Supersedes** Ian's earlier same-day answer to the POS v2 session (a separate locked table), given before he knew that table existed and that T-435 gates screens, not tables. (3) Edits, voids and late offline syncs older than 7 days are caught with change-time queries. Business day key stays the calendar day with the Z number as an attribute (row 390). | Ian, 2026-10-24, via the orchestrator ("1 yes, 2 A, 4 yes") | Yes |
 | 393 | 2026-10-24 | **A REFUND NUMBER IS CALLED "UNUSED" ONLY AFTER THE SERVER HAS CLOSED IT; A LATE RECEIPT REACHES THE NEXT Z HOWEVER LATE; A Z NEVER ENDS BEFORE THE LAST ONE (T-474, CORRECTS T-470 RULING 4 AND T-471 CORRECTION 3).** (1) **Refunds (DEF-756):** a missing `receiptNumbers/{number}` is not a final outcome, because the refund request can still commit later and a `skipped` ledger row is never looked at again. After the 10-minute wait the tablet asks the server (`POST /api/pos2/refund-numbers/release`) to close the number in one transaction (`released: true`); the refund transaction already refuses a used number, so a closed number can never carry money. Only a closed number is marked skipped; a number the server answers "used" is acknowledged; anything else stays reserved for a person. Industry pattern: a fence (tombstone). (2) **Late receipts (DEF-758):** T-471 Correction 3's 7-day lookback is withdrawn. A Z reads in-window receipts by sale time AND every receipt that arrived on the server since the last Z's clock; "counted once" uses every Z committed since that clock. Ruling 5 holds with no time limit. (3) **Z boundary (DEF-757):** inside the Z transaction, if the latest Z ends at or after this request's clock, the Z is refused 409 and nothing is written. (4) **Slip (DEF-759):** manual cash adjustments are returned and printed, so the slip's cash lines add up to expected cash (completes T-471 Fix B). | Codex read-only audits of 23 Oct (findings 5-8), re-verified on `claude/pos-v2-t470` 51b5b4f; Opus planner (AUDIT session) under Ian's 2026-10-24 instruction to verify, correct defective specs and fix; Ian asked for this row the same day. **Ratified by Ian, 2026-10-24, via the POS v2 session** ("Yes, once hole fixed": a tablet may write the server-side "this number carries no money" note once the number is proven to be that tablet's; the hole is closed by T-477 / DEF-771, which binds the release to the tablet's registered terminal) | Yes. (1) is a new route plus reconcile rule; reverting re-opens the lost-refund gap |
+| 399 | 2026-10-26 | **A MONTH CANNOT CLOSE WHILE A SALES DAY DATED IN IT IS UNPOSTED; A SALES DAY CAN BE VERIFIED INTO A CLOSED MONTH ONLY THROUGH THE ADMIN CLOSED-MONTH OVERRIDE (T-487, DEF-779). Reverses the ADR-006 §8.2 note that left sales days out of the close gate.** (1) `closePeriod`'s draft gate now also counts sales days dated in the period with status `open` or `submitted`, POS-sourced or typed; `verified` and `voided` never block. The old note said `open` can mean "today is still happening" — true for today, never for a month that has ended, and a day left unposted there is revenue the ledger never receives. (2) `verifySalesDay` refuses a closed month in words (the `approveExpense` sentence pair) and takes the existing admin-only `override_period_lock` override, which writes a `period_overrides` row; a locked month never takes it. (3) Reopening stays never built (ADR-006). | Audit finding F15 (Claude accounting-core pass, 26 Oct), re-verified on main 26605d1; Opus planner (AUDIT session) under Ian's 2026-10-26 instruction to fix the money findings | Yes. Reverting re-opens a close with revenue off the books and no in-product remedy |
+| 400 | 2026-10-27 | **A STOCK QUANTITY ROUNDS HALF-UP, AWAY FROM ZERO, AT THE THIRD DECIMAL, ONCE, AT THE END (T-489, DEF-780).** Quantities are `numeric(14,3)`; a conversion factor is `numeric(14,6)`. `quantity × factor` is computed exactly in scaled integers (`multiplyQuantityByFactor`, `packages/core/src/money.ts`), never through a float, and rounded once to three decimals, half-up away from zero — the same rule money already follows (`multiply`, `multiplyToMoney`). A received quantity above zero that converts to zero base units is REFUSED, never skipped as "nothing arrived". Records a rule the code already implied but no document named (§6 says only "never float"). | Audit finding F20 (Claude posting-paths pass, 26 Oct): `toBaseUnits` applied the factor at three decimals through a float and truncated, so 0.0625 became 0.063 and a factor under 0.0005 received nothing. Opus planner (AUDIT session) | Yes. A different rounding rule would change received quantities from then on, never past ones |
+| 401 | 2026-10-27 | **A FORM'S REQUEST ID IS ONE TRANSACTION: A REPLAY MUST MATCH BOTH ITS LINES AND ITS ENTRY DATE, OR IT IS REFUSED (T-488 S2, DEF-787; CORRECTS T-488 RULING 3, WHICH COMPARED LINES ONLY).** Since T-488 the nine owner, liability, loan and supplier-refund postings key on a per-form `requestId` instead of `(document, date, amount)` (bible §4.2 rule 10). `postEntry` answers a known key before it reads the date, so a lost response followed by the same form re-sent with a CHANGED date returned the original entry as success. `postEntryOnce` now compares the saved header's `entry_date` too, as dates only (never re-resolving the period, so an unchanged retry still succeeds after its month closed); a mismatch is refused with "This was already recorded with different figures. Reload the page and try again." Nothing in the ledger is moved or rewritten. | Codex audit 17th pass (`request-id-replay-ignores-entry-date`, F24), confirmed on main 822e7ec; Opus planner (AUDIT session); task number ruled by the orchestrator | Yes. Reverting lets a changed date be silently ignored on a retried form |
 
 ## 14. Amendment protocol
 

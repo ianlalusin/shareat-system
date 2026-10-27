@@ -154,3 +154,6 @@ export * from './leave';
 
 // T-455 S1 - the customer lobby: per-store switches, check-in entries, pre-order lines, birthday-song requests, discount claims.
 export * from './lobby';
+
+// T-398 S5 - the inter-entity shipment (Padre Garcia): seller-owned note the buyer may read and stamp received (migration 0218).
+export * from './inter-entity';

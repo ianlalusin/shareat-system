@@ -49,3 +49,10 @@ Full suite on a fresh DB before its PR.
 ## Acceptance (S1)
 Red then green; `reverse-entry.test.ts`, override/period tests, `t375-s6-*` green; root + ERP typecheck clean; the WHOLE
 unit project green (`npx vitest run --project unit`).
+
+## S2 build notes (2026-10-26, orchestrator allocation)
+Migration number **0219**, file `packages/db/migrations/0219_t492_reversed_header_frozen.sql`, journal entry `when` =
+**1804995107084** (0217's + 2 days, above 0218's reserved 1804908707084; 0218 = T-398 S5, not on main yet — leave the
+gap; the orchestrator renumbers S5 above this at its merge, rule 4c). Hand-authored per
+`docs/decisions/ADR-012-hand-authored-migrations.md` §5 (`db:generate` is retired). Branch
+`audit/t492-s2-reversed-header-frozen`, its own PR. Full integration suite on a fresh DB before the PR (migration rule).

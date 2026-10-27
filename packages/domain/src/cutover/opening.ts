@@ -159,6 +159,22 @@ export async function addOpeningFigure(
 
     if (created) {
       await journalRepo.insertLines(trx, entryId, await resolveLines(trx, actor.orgId, [real, equity]));
+    } else {
+      // T-493 / DEF-783: the key above has no amount or side, so a repeat with a different figure lands here. An identical
+      // repeat stays idempotent; a different one is refused, never kept as success and never edited in place (changing a
+      // figure is remove-then-add, which carries the admin-PIN approval).
+      const existing = (await journalRepo.findLinesForEntryWithAccountCodes(trx, entryId)).find(
+        (l) => l.accountCode === input.accountCode,
+      );
+      if (existing) {
+        const existingDebit = money(existing.debit);
+        const existingIsDebit = compare(existingDebit, ZERO) > 0;
+        const existingAmount = existingIsDebit ? existingDebit : money(existing.credit);
+        if (compare(existingAmount, amount) !== 0 || existingIsDebit !== (direction === 'debit')) {
+          const sentence = `That figure is already entered as ${existingAmount} ${existingIsDebit ? 'Dr' : 'Cr'}. Remove it first, then enter the new amount.`;
+          throw refuse(`addOpeningFigure: ${sentence}`, sentence);
+        }
+      }
     }
     return { entryId };
   };

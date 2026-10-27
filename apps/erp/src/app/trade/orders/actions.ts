@@ -10,9 +10,9 @@
  * same way the AP and item actions do.
  */
 import { revalidatePath } from 'next/cache';
-import { tradeRepo } from '@shareat/db';
+import { interEntityRepo, tradeRepo } from '@shareat/db';
 import { compare, money, ZERO } from '@shareat/core/money';
-import { assertFieldRules, claimUpload, createTradeOrder, dispatchTradeOrder, receiveTradeOrder, setBirInvoiceNo, voidTradeOrder } from '@shareat/domain';
+import { assertFieldRules, claimUpload, createTradeOrder, dispatchTradeOrder, postFranchiseShortageCredit, receiveTradeOrder, setBirInvoiceNo, voidTradeOrder } from '@shareat/domain';
 import { resolveUploadedFile } from '@/lib/uploaded-file';
 import { TRADE_DISPATCH_RULES, TRADE_RECEIVE_RULES, TRADE_VOID_RULES } from '@shareat/domain/field-rules';
 import { SHORTAGE_REASONS, type ShortageReason } from '@shareat/db/schema';
@@ -153,6 +153,28 @@ export async function setBirInvoiceNoAction(fd: FormData): Promise<void> {
     message = result.birInvoiceNo ? `Invoice no. ${result.birInvoiceNo} noted on this order.` : 'Invoice no. cleared.';
   } catch (err) {
     return await redirectWithFlash(`/trade/orders/${orderId}`, {}, { error: errorMessage(err), typed: keepTyping(fd, BIR_INVOICE_NO, orderId, { actorId: actor.personId }) });
+  }
+  revalidatePath(`/trade/orders/${orderId}`);
+  return await redirectWithFlash(`/trade/orders/${orderId}`, {}, { ok: message });
+}
+
+/**
+ * T-398 S5e. Post the credit note for what a franchise received short (the 06:30 check raised the to-do). A human act in the commissary's own books:
+ * `postFranchiseShortageCredit` owns the gate, the entry (4950 / 1210 or 2140 / 5300 / 5100) and the shipment note's credited total.
+ */
+export async function postFranchiseCreditAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/trade/orders');
+  const orderId = str(fd, 'orderId');
+  let message = '';
+  try {
+    const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      const shipment = await interEntityRepo.findByTradeOrder(tx, actor.orgId, orderId);
+      if (!shipment) throw new Error(`postFranchiseCreditAction: order ${orderId} has no shipment note.`);
+      return postFranchiseShortageCredit(tx, actor, { shipmentId: shipment.id });
+    });
+    message = `Credit note posted: ${peso(result.value)} off what the franchise owes.`;
+  } catch (err) {
+    return await redirectWithFlash(`/trade/orders/${orderId}`, {}, { error: errorMessage(err) });
   }
   revalidatePath(`/trade/orders/${orderId}`);
   return await redirectWithFlash(`/trade/orders/${orderId}`, {}, { ok: message });

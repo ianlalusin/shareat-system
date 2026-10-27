@@ -64,6 +64,7 @@ export async function disburseLoanAction(formData: FormData): Promise<void> {
   try {
     await withOrgPrincipal(actor.orgId, (tx) =>
       disburseLoan(tx, actor, {
+        requestId: str(formData, 'requestId'),
         loanId: id,
         amount: str(formData, 'amount'),
         intoMoneyAccountId: str(formData, 'intoMoneyAccountId'),

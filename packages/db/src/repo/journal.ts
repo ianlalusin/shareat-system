@@ -91,9 +91,9 @@ export async function findEntryByIdempotencyKey(
   tx: Tx,
   orgId: string,
   idempotencyKey: string,
-): Promise<{ id: string } | undefined> {
+): Promise<{ id: string; entryDate: string } | undefined> {
   const [row] = await tx
-    .select({ id: journalEntries.id })
+    .select({ id: journalEntries.id, entryDate: journalEntries.entryDate })
     .from(journalEntries)
     .where(and(eq(journalEntries.orgId, orgId), eq(journalEntries.idempotencyKey, idempotencyKey)))
     .limit(1);

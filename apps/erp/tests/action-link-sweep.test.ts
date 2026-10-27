@@ -481,7 +481,11 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1398 -> 1399 after merging main 9e4778d (one new control).
     // 1401 -> 1403, T-475 S3 (25 Oct). +2 PASS, FAIL/UNRESOLVED unmoved (asserted above): the /ap "Self-verified" filter link and its sibling control; re-measured by runCensus().
     // Merge of T-448 A3 (1399) with main 4444bb6 (1403): re-measured by runCensus() = 1401.
-    expect(results.length).toBe(1401);
+    // 1403 -> 1405, T-398 S5c: customer credit terms (+2), re-measured.
+    // 1405 -> 1414, T-398 S5d: inbound list + receipt form, re-measured.
+    // 1414 -> 1415, T-398 S5e: one new control (the credit-note action on the order page), re-measured by runCensus().
+    // Merge of T-398 S5 with main 26605d1 (T-448 A3): re-measured by runCensus() = 1413 (1401 + S5 +12).
+    expect(results.length).toBe(1413);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
