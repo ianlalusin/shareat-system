@@ -62,6 +62,7 @@ export async function contributionAction(formData: FormData): Promise<void> {
   try {
     await withOrgPrincipal(actor.orgId, (tx) =>
       recordContribution(tx, actor, {
+        requestId: str(formData, 'requestId'),
         ownerId: id,
         amount: str(formData, 'amount'),
         intoMoneyAccountId: str(formData, 'intoMoneyAccountId'),
@@ -81,6 +82,7 @@ export async function drawingAction(formData: FormData): Promise<void> {
   try {
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       recordDrawing(tx, actor, {
+        requestId: str(formData, 'requestId'),
         ownerId: id,
         amount: str(formData, 'amount'),
         fromMoneyAccountId: str(formData, 'fromMoneyAccountId'),
@@ -109,6 +111,7 @@ export async function settleAction(formData: FormData): Promise<void> {
     if (how === 'cash') {
       const result = await withOrgPrincipal(actor.orgId, (tx) =>
         repayFromOwner(tx, actor, {
+          requestId: str(formData, 'requestId'),
           ownerId: id,
           amount,
           intoMoneyAccountId: str(formData, 'intoMoneyAccountId'),
@@ -118,7 +121,7 @@ export async function settleAction(formData: FormData): Promise<void> {
       message = `Repaid. ₱${result.outstanding} still owed.`;
     } else if (how === 'pay') {
       const result = await withOrgPrincipal(actor.orgId, (tx) =>
-        recoverFromPay(tx, actor, { ownerId: id, amount, on: str(formData, 'on') }),
+        recoverFromPay(tx, actor, { requestId: str(formData, 'requestId'), ownerId: id, amount, on: str(formData, 'on') }),
       );
       // ⚠️ Says plainly that nothing has been recovered yet. "Recovered from pay" reads as done.
       message =
@@ -131,6 +134,7 @@ export async function settleAction(formData: FormData): Promise<void> {
       const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId!, pin: str(formData, 'adminPin'), capability: 'approve_expense' });
       const result = await withOrgPrincipal(actor.orgId, async (tx) => {
         const written = await writeOffReceivable(tx, actor, {
+          requestId: str(formData, 'requestId'),
           ownerId: id,
           amount,
           reason: str(formData, 'reason'),

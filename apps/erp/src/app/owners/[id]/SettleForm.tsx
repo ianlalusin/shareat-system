@@ -20,11 +20,14 @@ export interface SettleAccount {
 
 export function SettleForm({
   ownerId,
+  requestId,
   defaultAmount,
   today,
   accounts,
 }: {
   ownerId: string;
+  /** Minted per page render (T-488): the entry is keyed on it, so a double click replays ONE posting. */
+  requestId: string;
   defaultAmount: string;
   today: string;
   accounts: readonly SettleAccount[];
@@ -33,6 +36,7 @@ export function SettleForm({
   return (
     <CheckedForm rules={OWNERS_SETTLE_RULES} action={settleAction} className="space-y-4">
       <input type="hidden" name="ownerId" value={ownerId} />
+      <input type="hidden" name="requestId" value={requestId} />
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="How" rule={OWNERS_SETTLE_RULES.how}>
           <Select {...nativeAttrs(OWNERS_SETTLE_RULES.how)} value={how} onChange={(e) => setHow(e.target.value)} className="w-full">

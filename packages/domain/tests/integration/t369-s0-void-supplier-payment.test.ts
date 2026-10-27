@@ -635,7 +635,7 @@ const succeeded = (s: Settled<unknown>) => s.status === 'fulfilled' && (s.value 
 
 describe('AUDIT A1 — voidPayment vs refundSupplierCredit serialise on the supplier credit', () => {
   const refundOp = (f: Fixture) => (tx: Tx) =>
-    refundSupplierCredit(tx, { storeId: f.storeId, supplierId: f.supplierId, moneyAccountId: f.drawerId, amount: '500.00', businessDate: '2026-01-20', actor: f.manager });
+    refundSupplierCredit(tx, { requestId: crypto.randomUUID(), storeId: f.storeId, supplierId: f.supplierId, moneyAccountId: f.drawerId, amount: '500.00', businessDate: '2026-01-20', actor: f.manager });
 
   it('A refunds the ₱500 (holds), B voids P -> B waits on `advisory`, is refused (the credit is gone); the credit is 0.00, never −500 — Mutant: no lock in refundSupplierCredit -> −500, red', async () => {
     const f = await fixture('aA1a');

@@ -106,6 +106,7 @@ export async function refundCreditAction(fd: FormData): Promise<void> {
   try {
     result = await withOrgPrincipal(actor.orgId, (tx) =>
       refundSupplierCredit(tx, {
+        requestId: str(fd, 'requestId'),
         storeId,
         supplierId,
         moneyAccountId,

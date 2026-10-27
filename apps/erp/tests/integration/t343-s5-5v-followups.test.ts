@@ -425,6 +425,7 @@ describe('Comma legs — SAFE: disburseLoanAction / recordPaymentAction already 
     const drawerId = await drawerOf(f);
     const fd = new FormData();
     fd.set('loanId', loanId);
+    fd.set('requestId', crypto.randomUUID());
     fd.set('amount', '1,5');
     fd.set('intoMoneyAccountId', drawerId);
     fd.set('on', '2026-01-10');
@@ -440,6 +441,7 @@ describe('Comma legs — SAFE: disburseLoanAction / recordPaymentAction already 
     const drawerId = await drawerOf(f);
     const disburseFd = new FormData();
     disburseFd.set('loanId', loanId);
+    disburseFd.set('requestId', crypto.randomUUID());
     disburseFd.set('amount', '50000.00');
     disburseFd.set('intoMoneyAccountId', drawerId);
     disburseFd.set('on', '2026-01-10');
@@ -447,6 +449,7 @@ describe('Comma legs — SAFE: disburseLoanAction / recordPaymentAction already 
 
     const payFd = new FormData();
     payFd.set('loanId', loanId);
+    payFd.set('requestId', crypto.randomUUID());
     payFd.set('amount', '1,5');
     payFd.set('fromMoneyAccountId', drawerId);
     payFd.set('on', '2026-01-15');
@@ -468,6 +471,7 @@ describe('Converted guards — disburseLoanAction/recordPaymentAction amount="0"
       const drawerId = await drawerOf(f);
       const fd = new FormData();
       fd.set('loanId', loanId);
+      fd.set('requestId', crypto.randomUUID());
       fd.set('amount', '0');
       fd.set('intoMoneyAccountId', drawerId);
       fd.set('on', '2026-01-10');
@@ -503,6 +507,7 @@ describe('O3 (DEF-472) — chargeAction amount="1.234" (extra decimal place, val
       const { chargeAction } = await import('../../src/app/liabilities/actions');
       const fd = new FormData();
       fd.set('liabilityId', f.liabilityId);
+      fd.set('requestId', crypto.randomUUID());
       fd.set('amount', '1.234');
       fd.set('againstAccountCode', '6100');
       fd.set('on', '2026-01-10');
@@ -522,6 +527,7 @@ describe('Comma legs — Tier 2: chargeAction/payAction amount="1,5" (no server 
       const { chargeAction } = await import('../../src/app/liabilities/actions');
       const fd = new FormData();
       fd.set('liabilityId', f.liabilityId);
+      fd.set('requestId', crypto.randomUUID());
       fd.set('amount', '1,5');
       fd.set('againstAccountCode', '6100');
       fd.set('on', '2026-01-10');
@@ -543,6 +549,7 @@ describe('Converted guards — chargeAction/payAction amount="0"', () => {
       const { chargeAction } = await import('../../src/app/liabilities/actions');
       const fd = new FormData();
       fd.set('liabilityId', f.liabilityId);
+      fd.set('requestId', crypto.randomUUID());
       fd.set('amount', '0');
       fd.set('againstAccountCode', '6100');
       fd.set('on', '2026-01-10');
@@ -560,6 +567,7 @@ describe('Converted guards — chargeAction/payAction amount="0"', () => {
       const { chargeAction, payAction } = await import('../../src/app/liabilities/actions');
       const chargeFd = new FormData();
       chargeFd.set('liabilityId', f.liabilityId);
+      chargeFd.set('requestId', crypto.randomUUID());
       chargeFd.set('amount', '1000.00');
       chargeFd.set('againstAccountCode', '6100');
       chargeFd.set('on', '2026-01-10');
@@ -568,6 +576,7 @@ describe('Converted guards — chargeAction/payAction amount="0"', () => {
       const drawerId = await drawerOf(f);
       const payFd = new FormData();
       payFd.set('liabilityId', f.liabilityId);
+      payFd.set('requestId', crypto.randomUUID());
       payFd.set('amount', '0');
       payFd.set('fromMoneyAccountId', drawerId);
       payFd.set('on', '2026-01-12');
@@ -669,6 +678,7 @@ describe('owners drawing/settle comma legs (Tier 2)', () => {
       const drawerId = await drawerOf(f);
       const fd = new FormData();
       fd.set('ownerId', f.ownerId);
+      fd.set('requestId', crypto.randomUUID());
       fd.set('amount', '1,5');
       fd.set('fromMoneyAccountId', drawerId);
       fd.set('on', '2026-01-10');
@@ -688,6 +698,7 @@ describe('owners drawing/settle comma legs (Tier 2)', () => {
       const drawerId = await drawerOf(f);
       const fd = new FormData();
       fd.set('ownerId', f.ownerId);
+      fd.set('requestId', crypto.randomUUID());
       fd.set('how', 'cash');
       fd.set('amount', 'abc');
       fd.set('intoMoneyAccountId', drawerId);
@@ -709,6 +720,7 @@ describe('Converted guards — drawingAction/contributionAction amount="0"', () 
       const drawerId = await drawerOf(f);
       const fd = new FormData();
       fd.set('ownerId', f.ownerId);
+      fd.set('requestId', crypto.randomUUID());
       fd.set('amount', '0');
       fd.set('fromMoneyAccountId', drawerId);
       fd.set('on', '2026-01-10');
@@ -727,6 +739,7 @@ describe('Converted guards — drawingAction/contributionAction amount="0"', () 
       const drawerId = await drawerOf(f);
       const fd = new FormData();
       fd.set('ownerId', f.ownerId);
+      fd.set('requestId', crypto.randomUUID());
       fd.set('how', 'cash');
       fd.set('amount', '0');
       fd.set('intoMoneyAccountId', drawerId);
@@ -743,6 +756,7 @@ describe('Converted guards — drawingAction/contributionAction amount="0"', () 
     const drawerId = await drawerOf(f);
     const fd = new FormData();
     fd.set('ownerId', f.ownerId);
+    fd.set('requestId', crypto.randomUUID());
     fd.set('amount', '0');
     fd.set('intoMoneyAccountId', drawerId);
     fd.set('on', '2026-01-10');
@@ -759,6 +773,7 @@ describe('Comma legs — SAFE: contributionAction already refuses by name', () =
     const drawerId = await drawerOf(f);
     const fd = new FormData();
     fd.set('ownerId', f.ownerId);
+    fd.set('requestId', crypto.randomUUID());
     fd.set('amount', '1,5');
     fd.set('intoMoneyAccountId', drawerId);
     fd.set('on', '2026-01-10');

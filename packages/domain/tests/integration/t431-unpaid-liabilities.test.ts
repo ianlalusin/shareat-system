@@ -259,12 +259,12 @@ async function liabilityAt(f: Fixture, storeId: string, name: string, charge: st
     createLiability(tx, f.manager, { storeId, name, category: 'accrued_expenses' }),
   );
   await asOrg(f.orgId, (tx) =>
-    chargeLiability(tx, f.manager, { liabilityId: l.id, amount: charge, againstAccountCode: '6200', on: '2026-01-31' }),
+    chargeLiability(tx, f.manager, { requestId: crypto.randomUUID(), liabilityId: l.id, amount: charge, againstAccountCode: '6200', on: '2026-01-31' }),
   );
   if (paid) {
     const k = (Object.keys(f.stores) as ('A' | 'B' | 'C')[]).find((x) => f.stores[x] === storeId)!;
     await asOrg(f.orgId, (tx) =>
-      payLiability(tx, f.manager, { liabilityId: l.id, amount: paid, fromMoneyAccountId: f.offices[k]!, on: '2026-02-05' }),
+      payLiability(tx, f.manager, { requestId: crypto.randomUUID(), liabilityId: l.id, amount: paid, fromMoneyAccountId: f.offices[k]!, on: '2026-02-05' }),
     );
   }
   return l.id;
@@ -279,7 +279,7 @@ async function loanAt(f: Fixture, storeId: string, name: string, principal: stri
     }),
   );
   await asOrg(f.orgId, (tx) =>
-    disburseLoan(tx, f.admin, { loanId: loan.id, amount: principal, intoMoneyAccountId: f.offices[k]!, on: '2026-05-11' }),
+    disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: loan.id, amount: principal, intoMoneyAccountId: f.offices[k]!, on: '2026-05-11' }),
   );
   return { loanId: loan.id, office: f.offices[k]! };
 }

@@ -44,6 +44,9 @@ export default async function LiabilityPage({
 
   const liability = await getDetail(actor.orgId, id);
   if (!liability) notFound();
+  // T-488: minted per render and submitted back, so a double click is a replay of ONE posting and a second genuine
+  // transaction on the same day carries its own id (the entry is keyed on it, never on the figures).
+  const requestId = crypto.randomUUID();
 
   const [accounts, targets, stores] = await Promise.all([
     moneyAccounts(actor.orgId, liability.storeId),
@@ -105,6 +108,7 @@ export default async function LiabilityPage({
           <FormModal trigger="Charge it" title="Charge this obligation" size="md">
             <CheckedForm rules={LIABILITY_CHARGE_RULES} action={chargeAction} className="space-y-3">
               <input type="hidden" name="liabilityId" value={liability.id} />
+              <input type="hidden" name="requestId" value={requestId} />
               <Field label="Amount" rule={LIABILITY_CHARGE_RULES.amount}>
                 <input {...nativeAttrs(LIABILITY_CHARGE_RULES.amount)} name="amount" inputMode="decimal" className={INPUT} />
               </Field>
@@ -154,6 +158,7 @@ export default async function LiabilityPage({
             <FormModal trigger="Pay it" title="Pay this obligation" size="md">
               <CheckedForm rules={LIABILITY_PAY_RULES} action={payAction} className="space-y-3">
                 <input type="hidden" name="liabilityId" value={liability.id} />
+                <input type="hidden" name="requestId" value={requestId} />
                 <Field label="Amount" rule={LIABILITY_PAY_RULES.amount}>
                   <input
                     {...nativeAttrs(LIABILITY_PAY_RULES.amount)}
