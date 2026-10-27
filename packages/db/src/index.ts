@@ -236,6 +236,8 @@ export * as stockTransfersRepo from './repo/stock-transfers';
 export * as supplierReturnsRepo from './repo/supplier-returns';
 export * as deliveriesRepo from './repo/deliveries';
 export * as tradeDiscrepanciesRepo from './repo/trade-discrepancies';
+export * as interEntityRepo from './repo/inter-entity';
+export type { InterEntityShipmentRow, InterEntityShipmentLineRow } from './repo/inter-entity';
 export * as commissaryKpisRepo from './repo/commissary-kpis';
 export type {
   CommissaryKpiFilter,

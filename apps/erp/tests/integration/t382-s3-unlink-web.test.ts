@@ -192,7 +192,8 @@ describe('W3 - a confirmed post unlinks, and neither the reason nor the banner t
     expect(currentJar().has(FLASH_COOKIE), 'the banner is in the flash cookie').toBe(true);
     const decoded = decodeURIComponent(raw.replace(/\+/g, ' '));
     expect(decoded, 'DEF-476: the reason is not in the address bar').not.toContain('wrong store');
-    expect(decoded).not.toContain('123');
+    // DEF-749: the redirect carries a random store uuid that can contain '123'; strip uuids so only the reason text is checked.
+    expect(decoded.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '')).not.toContain('123');
     expect(decoded, 'nor the banner').not.toMatch(/unlinked from POS|typed from now on/);
     expect(raw).not.toMatch(/[?&](ok|error|reason)=/);
     const row = await linkRow(f.storeId);

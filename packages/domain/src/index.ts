@@ -43,6 +43,8 @@ export * from './items';
 export * from './ar';
 export * from './trade';
 export * from './trade/returns';
+export { reconcileInterEntity, raiseShortageDiscrepancies, shipmentGapDetail, balanceGapDetail, type ReconcileResult, type ShipmentGap, type PairGap } from './trade/inter-entity-reconcile';
+export { postFranchiseShortageCredit, type FranchiseShortageCreditResult } from './trade/franchise-credit';
 export * from './channel-settlements';
 export * from './findings';
 export * from './fiscal-periods';
@@ -72,6 +74,7 @@ export * from './deliveries/duplicate-risk';
 // ⚠️ Each of these had a tested engine and ZERO callers in apps/ for five days.
 export * from './stock-locations/service';
 export * from './deliveries/documents';
+export * from './deliveries/inter-entity';
 export * from './stock/usage-records';
 export * from './stock/usage-tolerance';
 export * from './stock/usage-auto-post';

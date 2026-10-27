@@ -4,10 +4,13 @@
  */
 
 import { defineFieldRules } from './check';
+import { SUPPLIER_ADD_RULES } from './ap';
 
 /** "Record a customer" on /customers (createCustomerAction). */
 export const CUSTOMER_ADD_RULES = defineFieldRules('customers.createCustomer', {
   name: { label: 'The customer name', kind: 'text', requires: 'A customer needs a name people will recognise.' },
+  /** T-398 S5c: the supplier rule itself (whole number 0 to 365, judged only when terms mode is On credit). Displayed; never used by the credit gate. */
+  creditTermsDays: SUPPLIER_ADD_RULES.creditTermsDays,
 });
 
 /** The "Anchor" box on each customer row (reconcileCustomerAction). */

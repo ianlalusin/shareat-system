@@ -92,6 +92,12 @@ const ROWS: Record<string, Row> = {
   'ap.recordExpenseForInvoice.particulars': req('Particulars are required - say what the spend was for.'),
   // ---- customers
   'customers.createCustomer.name': req('A customer needs a name people will recognise.'),
+  // T-398 S5c: customer credit terms mirror the supplier's days-to-pay rule exactly.
+  'customers.createCustomer.creditTermsDays': {
+    ok: '30',
+    blank: 'Days to pay is required.',
+    bad: [['abc', 'Days to pay must be a whole number from 0 to 365.'], ['366', 'Days to pay must be a whole number from 0 to 365.'], ['-1', 'Days to pay must be a whole number from 0 to 365.'], ['1.5', 'Days to pay must be a whole number from 0 to 365.']],
+  },
   'customers.reconcileCustomer.asOf': dateReq('Say which date they were verified at zero.'),
   'customers.createPriceList.name': req('A price list needs a name.'),
   'customers.setPrice.itemId': req('Choose an item.'),

@@ -19,7 +19,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { gone, refuse } from '../shared/refusal';
 import { parseMoneyInput } from '../shared/money-input';
 import { assertFieldRules } from '../shared/field-rules-assert';
-import { CUSTOMER_RECONCILE_RULES, PRICE_LIST_ADD_RULES, PRICE_SET_RULES } from '../field-rules/customers';
+import { CUSTOMER_ADD_RULES, CUSTOMER_RECONCILE_RULES, PRICE_LIST_ADD_RULES, PRICE_SET_RULES } from '../field-rules/customers';
 import { compare, isZero, money, ZERO } from '@shareat/core/money';
 
 export { treatmentOf } from '@shareat/db';
@@ -34,6 +34,25 @@ export interface CreateCustomerInput {
   priceListId?: string | null;
   customerGroup?: CustomerGroup;
   notes?: string | null;
+  /**
+   * T-398 S5c. Days to pay, mirroring `suppliers.credit_terms_days`: RAW here and judged after `authorize` by the supplier's own rule
+   * (a whole number, 0 to 365). `null`, absent or an empty box = none stated (NULL). Shown and kept for ageing; the credit gate never reads it.
+   */
+  creditTermsDays?: number | string | null;
+}
+
+/** The days-to-pay rule as a one-rule set: the SAME definition the add form's live check reads. */
+const TERMS_RULE_SET = { form: CUSTOMER_ADD_RULES.form, creditTermsDays: CUSTOMER_ADD_RULES.creditTermsDays };
+
+/**
+ * Judges a customer's raw `creditTermsDays`. Absent, null and an empty box are NULL. Anything else (a whitespace-only box included, as for a
+ * supplier) goes through the one field rule, which says its own sentence and never quotes the typed value.
+ */
+function judgeCreditTerms(raw: number | string | null | undefined): number | null {
+  if (raw === null || raw === undefined || raw === '') return null;
+  const text = typeof raw === 'number' ? String(raw) : raw.trim();
+  const days = assertFieldRules(TERMS_RULE_SET, { creditTermsDays: text }).creditTermsDays;
+  return days === null || days === undefined ? null : Number(days);
 }
 
 export async function createCustomer(
@@ -75,6 +94,8 @@ export async function createCustomer(
       );
     }
 
+    const creditTermsDays = judgeCreditTerms(input.creditTermsDays);
+
     const created = await customersRepo.insertCustomer(trx, {
       orgId: actor.orgId,
       name,
@@ -85,6 +106,7 @@ export async function createCustomer(
       priceListId: input.priceListId ?? null,
       customerGroup: input.customerGroup ?? 'wholesale',
       notes: input.notes?.trim() || null,
+      creditTermsDays,
       createdBy: actor.personId,
     });
     return {

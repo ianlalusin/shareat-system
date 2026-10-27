@@ -7,7 +7,7 @@
  * disagreed with its own inputs on 13.3% of rows, which is what a maintained figure looks like
  * after a year.
  */
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import type { Money, Quantity } from '@shareat/core/money';
 import type { Tx } from '../client';
 import type { SafeInsert } from './numeric-input';
@@ -288,7 +288,7 @@ export async function markVoided(
   id: string,
   values: { voidedBy: string; voidReason: string },
 ): Promise<void> {
-  await tx
+  const updated = await tx
     .update(tradeOrders)
     .set({
       status: 'void',
@@ -297,7 +297,10 @@ export async function markVoided(
       voidReason: values.voidReason,
       updatedAt: sql`now()`,
     })
-    .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id)));
+    .where(and(eq(tradeOrders.orgId, orgId), eq(tradeOrders.id, id), ne(tradeOrders.status, 'void')))
+    .returning({ id: tradeOrders.id });
+  // Status guard: an already-void order is never overwritten (the first reason and time stand).
+  if (updated.length === 0) throw refuse(`markVoided: order ${id} is already void or does not exist.`, 'This order is already void.');
 }
 
 /**

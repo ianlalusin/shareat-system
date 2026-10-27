@@ -154,6 +154,11 @@ export async function resolveDiscrepancy(
       reason: `discrepancy ${row.id} is already resolved as ${row.disposition} — reverse it and resolve again`,
     };
   }
+  // T-398 S5e: a franchise short receipt ends in ONE act, the credit note (trade/franchise-credit.ts). Deciding it here as loss, charge or audit
+  // would leave the commissary billing the franchise for goods it never received.
+  if (row.disposition === 'franchise_credit') {
+    return { ok: false, reason: 'this is a shortage at a franchise: post its credit note instead of deciding it here' };
+  }
 
   // ⛔ T-372 S6b — the DIRECTION GATE, before any posting branch and before every other rule.
   if (row.direction === 'over' && ['loss', 'charge', 'late_receipt'].includes(input.disposition)) {
@@ -406,6 +411,9 @@ export async function deferDiscrepancy(
   }
   if (row.status === 'resolved') {
     return { ok: false, reason: `discrepancy ${row.id} is already resolved — it cannot be deferred` };
+  }
+  if (row.disposition === 'franchise_credit') {
+    return { ok: false, reason: 'this is a shortage at a franchise: post its credit note, it cannot be deferred' };
   }
   await tradeDiscrepanciesRepo.defer(tx, row.id, input.toDate);
   return { ok: true, deferredTo: input.toDate };
