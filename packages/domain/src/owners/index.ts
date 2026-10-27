@@ -18,6 +18,7 @@ import type { DrawingLimitPeriod, PersonalExpenseTreatment } from '@shareat/db/s
 import { authorize, type Actor } from '@shareat/auth';
 import { add, compare, compareDecimal, decimal, isZero, money, negate, subtract, ZERO, type Decimal, type Money } from '@shareat/core/money';
 import { postEntry } from '../ledger/post-entry';
+import { postEntryOnce, requireRequestId } from '../ledger/replay';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { checkDraw } from '../money-accounts/overdraft';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
@@ -159,7 +160,7 @@ export async function createOwner(
 export async function recordContribution(
   tx: Tx,
   actor: Actor,
-  input: { ownerId: string; amount: string; intoMoneyAccountId: string; on: string; memo?: string },
+  input: { requestId: string; ownerId: string; amount: string; intoMoneyAccountId: string; on: string; memo?: string },
 ): Promise<{ entryId: string }> {
   const run = async (trx: Tx) => {
     const owner = await ownersRepo.getById(trx, actor.orgId, input.ownerId);
@@ -167,6 +168,7 @@ export async function recordContribution(
     await authorize(trx, actor, 'transfer_funds', { storeId: owner.storeId });
     // T-440 S9 (ii): the screen's own rules, only once the gate has passed.
     assertFieldRules(OWNERS_CONTRIBUTION_RULES, { amount: input.amount, intoMoneyAccountId: input.intoMoneyAccountId, on: input.on });
+    const requestId = requireRequestId('recordContribution', input.requestId);
 
     const amount = parseMoneyInput(input.amount, 'recordContribution: the amount', 'The contribution amount');
     if (compare(amount, ZERO) <= 0) {
@@ -184,12 +186,12 @@ export async function recordContribution(
       );
     }
 
-    const result = await postEntry(trx, {
+    const result = await postEntryOnce(trx, {
       orgId: actor.orgId,
       entryDate: input.on,
       sourceType: 'capital_contribution',
       sourceId: owner.id,
-      idempotencyKey: `owner:${owner.id}:contribution:${input.on}:${amount}`,
+      idempotencyKey: `owner:${owner.id}:contribution:${requestId}`,
       memo: input.memo?.trim() || 'Capital contribution',
       postedBy: actor.personId,
       lines: [
@@ -301,7 +303,7 @@ async function assertMonthOpen(
 export async function recordDrawing(
   tx: Tx,
   actor: Actor,
-  input: { ownerId: string; amount: string; fromMoneyAccountId: string; on: string; memo?: string },
+  input: { requestId: string; ownerId: string; amount: string; fromMoneyAccountId: string; on: string; memo?: string },
 ): Promise<{ entryId: string; warning?: string }> {
   const run = async (trx: Tx) => {
     const owner = await ownersRepo.getById(trx, actor.orgId, input.ownerId);
@@ -309,6 +311,7 @@ export async function recordDrawing(
     await authorize(trx, actor, 'transfer_funds', { storeId: owner.storeId });
     // T-440 S9 (ii): the screen's own rules, only once the gate has passed.
     assertFieldRules(OWNERS_DRAWING_RULES, { amount: input.amount, fromMoneyAccountId: input.fromMoneyAccountId, on: input.on });
+    const requestId = requireRequestId('recordDrawing', input.requestId);
 
     // ⛔ T-370 / DEF-516 (R3a) — held to COMMIT/ROLLBACK, AFTER authorize so a refused caller never
     // queues on the row: two concurrent drawings must not both read the cap before either posts.
@@ -333,12 +336,12 @@ export async function recordDrawing(
     // `checkDraw` (money-accounts) takes `Money` and compares exactly (T-371 S4).
     const warning = await checkDraw(trx, actor.orgId, account, parsed, 'recordDrawing');
 
-    const result = await postEntry(trx, {
+    const result = await postEntryOnce(trx, {
       orgId: actor.orgId,
       entryDate: input.on,
       sourceType: 'drawing',
       sourceId: owner.id,
-      idempotencyKey: `owner:${owner.id}:drawing:${input.on}:${parsed}`,
+      idempotencyKey: `owner:${owner.id}:drawing:${requestId}`,
       memo: input.memo?.trim() || 'Owner drawing',
       postedBy: actor.personId,
       lines: [
@@ -399,12 +402,13 @@ async function assertWithinReceivable(
 export async function repayFromOwner(
   tx: Tx,
   actor: Actor,
-  input: { ownerId: string; amount: string; intoMoneyAccountId: string; on: string; memo?: string },
+  input: { requestId: string; ownerId: string; amount: string; intoMoneyAccountId: string; on: string; memo?: string },
 ): Promise<{ entryId: string; outstanding: string }> {
   const run = async (trx: Tx) => {
     const owner = await ownersRepo.getById(trx, actor.orgId, input.ownerId);
     if (!owner) throw new Error(`repayFromOwner: owner ${input.ownerId} does not exist.`);
     await authorize(trx, actor, 'transfer_funds', { storeId: owner.storeId });
+    const requestId = requireRequestId('repayFromOwner', input.requestId);
     const parsed = parseMoneyInput(input.amount, 'repayFromOwner: the amount', 'The amount settled');
     await assertWithinReceivable(trx, actor.orgId, owner.id, parsed, 'repayFromOwner');
 
@@ -414,12 +418,12 @@ export async function repayFromOwner(
       throw new Error('repayFromOwner: that account belongs to another store.');
     }
 
-    const result = await postEntry(trx, {
+    const result = await postEntryOnce(trx, {
       orgId: actor.orgId,
       entryDate: input.on,
       sourceType: 'owner_repayment',
       sourceId: owner.id,
-      idempotencyKey: `owner:${owner.id}:repayment:${input.on}:${parsed}`,
+      idempotencyKey: `owner:${owner.id}:repayment:${requestId}`,
       memo: input.memo?.trim() || 'Owner repayment',
       postedBy: actor.personId,
       lines: [
@@ -472,12 +476,13 @@ export async function repayFromOwner(
 export async function recoverFromPay(
   tx: Tx,
   actor: Actor,
-  input: { ownerId: string; amount: string; on: string; memo?: string },
+  input: { requestId: string; ownerId: string; amount: string; on: string; memo?: string },
 ): Promise<{ entryId: string; outstanding: string }> {
   const run = async (trx: Tx) => {
     const owner = await ownersRepo.getById(trx, actor.orgId, input.ownerId);
     if (!owner) throw new Error(`recoverFromPay: owner ${input.ownerId} does not exist.`);
     await authorize(trx, actor, 'approve_expense', { storeId: owner.storeId });
+    const requestId = requireRequestId('recoverFromPay', input.requestId);
     const parsed = parseMoneyInput(input.amount, 'recoverFromPay: the amount', 'The amount settled');
     await assertWithinReceivable(trx, actor.orgId, owner.id, parsed, 'recoverFromPay');
 
@@ -491,12 +496,12 @@ export async function recoverFromPay(
       );
     }
 
-    const result = await postEntry(trx, {
+    const result = await postEntryOnce(trx, {
       orgId: actor.orgId,
       entryDate: input.on,
       sourceType: 'owner_pay_recovery',
       sourceId: owner.id,
-      idempotencyKey: `owner:${owner.id}:pay-recovery:${input.on}:${parsed}`,
+      idempotencyKey: `owner:${owner.id}:pay-recovery:${requestId}`,
       memo: input.memo?.trim() || 'Owner receivable moved to salary advance',
       postedBy: actor.personId,
       lines: [
@@ -547,7 +552,7 @@ export async function recoverFromPay(
 export async function writeOffReceivable(
   tx: Tx,
   actor: Actor,
-  input: { ownerId: string; amount: string; reason: string; on: string },
+  input: { requestId: string; ownerId: string; amount: string; reason: string; on: string },
 ): Promise<{ entryId: string; outstanding: string }> {
   const run = async (trx: Tx) => {
     const owner = await ownersRepo.getById(trx, actor.orgId, input.ownerId);
@@ -555,6 +560,7 @@ export async function writeOffReceivable(
     // ⚠️ `approve_expense`, not `transfer_funds`. Deciding the business will never see money again
     // is an approval, and the person who took it should not be the one who forgives it.
     await authorize(trx, actor, 'approve_expense', { storeId: owner.storeId });
+    const requestId = requireRequestId('writeOffReceivable', input.requestId);
 
     const reason = input.reason.trim();
     if (!reason) {
@@ -573,12 +579,12 @@ export async function writeOffReceivable(
     );
     await assertMonthOpen(trx, actor.orgId, owner.id, input.on, 'writeOffReceivable');
 
-    const result = await postEntry(trx, {
+    const result = await postEntryOnce(trx, {
       orgId: actor.orgId,
       entryDate: input.on,
       sourceType: 'owner_writeoff',
       sourceId: owner.id,
-      idempotencyKey: `owner:${owner.id}:writeoff:${input.on}:${parsed}`,
+      idempotencyKey: `owner:${owner.id}:writeoff:${requestId}`,
       memo: `Owner receivable written off — ${reason}`,
       postedBy: actor.personId,
       lines: [

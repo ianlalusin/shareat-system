@@ -21,7 +21,7 @@ interface SearchParams {
   warning?: string;
 }
 
-const KIND_LABEL: Record<string, string> = { supplier: 'Supplier', purchase: 'Cash purchase', commissary: 'Commissary' };
+const KIND_LABEL: Record<string, string> = { supplier: 'Supplier', purchase: 'Cash purchase', commissary: 'Commissary', inter_entity: 'From another company' };
 
 export default async function DeliveriesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
@@ -54,9 +54,14 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: P
             books all follow from that one action.
           </PageDescription>
         </div>
-        <Link href={`/inventory?store=${storeId}`} className="text-sm underline underline-offset-4">
-          ← Stock on hand
-        </Link>
+        <div className="flex flex-wrap items-baseline gap-4">
+          <Link href="/inventory/deliveries/inbound" className="inline-flex min-h-6 items-center text-sm underline underline-offset-4">
+            Shipments to receive
+          </Link>
+          <Link href={`/inventory?store=${storeId}`} className="text-sm underline underline-offset-4">
+            ← Stock on hand
+          </Link>
+        </div>
       </div>
 
       <FlashBanner flash={sp} />

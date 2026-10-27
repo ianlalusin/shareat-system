@@ -33,6 +33,8 @@ export interface CustomerRow {
   priceListId: string | null;
   /** T-132. NULL means no limit set — which is not the same as a limit of zero. */
   creditLimit: string | null;
+  /** T-398 S5c. Days the customer has to pay: shown and kept for ageing, NEVER an input to the credit gate. NULL = none stated. */
+  creditTermsDays: number | null;
   customerGroup: CustomerGroup;
   status: CustomerStatus;
   notes: string | null;
@@ -73,6 +75,7 @@ export async function insertCustomer(
     priceListId: string | null;
     customerGroup: CustomerGroup;
     notes: string | null;
+    creditTermsDays?: number | null;
     createdBy: string;
   },
 ): Promise<{ id: string }> {

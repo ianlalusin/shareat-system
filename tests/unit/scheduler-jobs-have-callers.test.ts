@@ -150,6 +150,7 @@ const KNOWN_JOB_NAMES = [
   'runFindingObservation',
   'runFirestoreRelay',
   'runFiscalPeriodSeed',
+  'runInterEntityReconcile', // T-398 S5e: the 06:30 Manila inter-entity reconciliation (scripts/inter-entity-reconcile.ts)
   'runMonthEnd',
   'runOrderWastageBackstopSweep',
   'runOrphanFileSweep',

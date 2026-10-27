@@ -5,6 +5,11 @@
  * count for the block and a separate list for the screen, and the interesting failure is not that
  * they can disagree — it is that when they do, the screen shows nothing to fix and the block still
  * refuses to open the day. One source, two consumers.
+ *
+ * ⭐ T-398 S5e (ruling 7, QO-2): ONE deliberate exception to "the same query". A `franchise_credit` row (a short receipt at a franchise,
+ * ending in a credit note) is a to-do for the commissary manager, so `unresolved` lists it; but its goods never sat in 1340 and a franchise
+ * sale must not stop the commissary opening its next day, so `blocking` leaves it out. They differ by exactly that one predicate, and no
+ * month close waits on these rows either (the close reads findings, not this table).
  */
 import { and, asc, eq, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import { tradeDiscrepancies, type DiscrepancyDirection } from '../../schema/trade-discrepancies';
@@ -112,6 +117,8 @@ export async function blocking(
         eq(tradeDiscrepancies.orgId, orgId),
         eq(tradeDiscrepancies.storeId, storeId),
         ne(tradeDiscrepancies.status, 'resolved'),
+        // S5e (QO-2): a franchise credit is listed (`unresolved`) but never stops a day - its goods never sat in 1340.
+        or(isNull(tradeDiscrepancies.disposition), ne(tradeDiscrepancies.disposition, 'franchise_credit')),
         or(
           isNull(tradeDiscrepancies.deferredTo),
           lte(tradeDiscrepancies.deferredTo, forDate),
@@ -169,4 +176,68 @@ export async function closeAsLateReceipt(tx: Tx, id: string, resolvedBy: string)
       deferredTo: null,
     })
     .where(and(eq(tradeDiscrepancies.id, id), sql`${tradeDiscrepancies.status} <> 'resolved'`));
+}
+
+export interface FranchiseCreditInput {
+  readonly orgId: string;
+  readonly storeId: string;
+  readonly orderId: string;
+  readonly orderLineId: string;
+  readonly shipmentLineId: string;
+  readonly quantity: Quantity;
+  readonly value: Money;
+  readonly note: string | null;
+}
+
+/**
+ * S5e, the 06:30 job: ONE open `franchise_credit` row for a short shipment line, in the SELLER's organisation. Idempotent: the unique index on the
+ * order line makes a second run write nothing. Returns true when a row was written.
+ */
+export async function createFranchiseCredit(tx: Tx, input: FranchiseCreditInput): Promise<boolean> {
+  const rows = await tx
+    .insert(tradeDiscrepancies)
+    .values({
+      direction: 'short',
+      disposition: 'franchise_credit',
+      orgId: input.orgId,
+      storeId: input.storeId,
+      orderId: input.orderId,
+      orderLineId: input.orderLineId,
+      interEntityShipmentLineId: input.shipmentLineId,
+      quantity: input.quantity,
+      value: input.value,
+      note: input.note,
+    })
+    .onConflictDoNothing({ target: tradeDiscrepancies.orderLineId })
+    .returning({ id: tradeDiscrepancies.id });
+  return rows.length > 0;
+}
+
+export interface FranchiseCreditRow {
+  readonly id: string;
+  readonly shipmentLineId: string;
+  readonly orderLineId: string;
+  readonly quantity: string;
+  readonly value: string;
+  readonly status: string;
+}
+
+/** The unresolved `franchise_credit` rows of one shipment (read FOR UPDATE: two managers cannot credit the same shortfall twice). */
+export async function openFranchiseCreditsOfShipment(tx: Tx, orgId: string, shipmentId: string): Promise<FranchiseCreditRow[]> {
+  const rows = (await tx.execute(sql`
+    select d.id::text as id, d.inter_entity_shipment_line_id::text as shipment_line_id, d.order_line_id::text as order_line_id,
+           d.quantity::text as quantity, d.value::text as value, d.status as status
+    from trade_discrepancies d join inter_entity_shipment_lines l on l.id = d.inter_entity_shipment_line_id
+    where d.org_id = ${orgId} and l.shipment_id = ${shipmentId} and d.disposition = 'franchise_credit' and d.status <> 'resolved'
+    order by l.line_no
+    for update of d`)) as unknown as { id: string; shipment_line_id: string; order_line_id: string; quantity: string; value: string; status: string }[];
+  return rows.map((r) => ({ id: r.id, shipmentLineId: r.shipment_line_id, orderLineId: r.order_line_id, quantity: r.quantity, value: r.value, status: r.status }));
+}
+
+/** S5e: the credit note was posted - the row is resolved as `franchise_credit`, carrying the entry. */
+export async function resolveFranchiseCredit(tx: Tx, input: { id: string; journalEntryId: string; resolvedBy: string }): Promise<void> {
+  await tx
+    .update(tradeDiscrepancies)
+    .set({ status: 'resolved', disposition: 'franchise_credit', journalEntryId: input.journalEntryId, resolvedAt: new Date(), resolvedBy: input.resolvedBy, deferredTo: null })
+    .where(eq(tradeDiscrepancies.id, input.id));
 }

@@ -298,6 +298,9 @@ traced; "grep only" = not traced further than the pattern match.
 | `receivedQuantity` L189 | apps/erp/src/app/inventory/deliveries/actions.ts | OUT | quantity, not money — grep only |
 | `shortageReason` L190 | apps/erp/src/app/inventory/deliveries/actions.ts | OUT | free text — grep only |
 | `locationId` L191 | apps/erp/src/app/inventory/deliveries/actions.ts | OUT | id — grep only |
+| `line` L30 | apps/erp/src/app/inventory/deliveries/inbound/actions.ts | OUT | id (shipment line id) — T-398 S5, grep only |
+| `item` L31 | apps/erp/src/app/inventory/deliveries/inbound/actions.ts | OUT | id (item id) — T-398 S5, grep only |
+| `receivedQuantity` L32 | apps/erp/src/app/inventory/deliveries/inbound/actions.ts | OUT | quantity, not money; T-398 S5 inbound receipt form, counts are checked in `receiveInterEntityShipment` — grep only |
 | `confirmedKeys` L60 | apps/erp/src/app/inventory/pos-usage/actions.ts | OUT | a list of keys/ids — grep only |
 | `${prefix}ItemId` L49 | apps/erp/src/app/inventory/production/actions.ts | OUT | id — grep only |
 | `${prefix}Quantity` L50 | apps/erp/src/app/inventory/production/actions.ts | OUT | quantity, not money — grep only |

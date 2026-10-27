@@ -27,6 +27,9 @@ interface SearchParams {
 export default async function ReturnsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
   const { actor } = await requireSession('/inventory/returns');
+  // T-488: minted per render and submitted back, so a double click is a replay of ONE posting and a second genuine
+  // transaction on the same day carries its own id (the entry is keyed on it, never on the figures).
+  const requestId = crypto.randomUUID();
   const stores = await listStores(actor.orgId);
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : stores[0]?.id;
 
@@ -156,6 +159,7 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
                   <input type="hidden" name="storeId" value={storeId} />
                   <input type="hidden" name="supplierId" value={supplierId} />
                   <input type="hidden" name="moneyAccountId" value={moneyAccountId ?? ''} />
+                  <input type="hidden" name="requestId" value={requestId} />
                   <Field label={<span className="sr-only">Refund amount</span>} className="min-w-0 flex-1" rule={INVENTORY_REFUND_RULES.amount}>
                     <Input {...nativeAttrs(INVENTORY_REFUND_RULES.amount)} placeholder="refund amount" className="min-w-0 w-full" />
                   </Field>

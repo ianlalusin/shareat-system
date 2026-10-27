@@ -870,7 +870,7 @@ describe('an internal transfer is not a sale', () => {
     expect(Number(net!.due_from)).toBe(Number(net!.due_to));
   });
 
-  it('⛔ another ORG is refused for now, and the message says why', async () => {
+  it('T-398 S5c: an inter-entity customer (another ORG) can now be ordered for; nothing ships until dispatch', async () => {
     const f = await fixture('interorg');
     const [otherOrg] = await sql<{ id: string }[]>`
       insert into organizations (name, code) values (${`Other ${uid('o')}`}, ${uid('oc')}) returning id`;
@@ -879,15 +879,22 @@ describe('an internal transfer is not a sale', () => {
         name: `Franchise ${uid('fr')}`, customerGroup: 'franchise', counterpartyOrgId: otherOrg!.id,
       }),
     );
-    const itemId = await plainItem(f);
-    await expect(
-      asOrg(f.orgId, (tx) =>
-        createTradeOrder(tx, f.manager, {
-          storeId: f.storeId, customerId: c.id, orderDate: '2026-01-10',
-          lines: [{ itemId, quantity: '1', rate: '100' }],
-        }),
-      ),
-    ).rejects.toThrow(/no second org exists/);
+    const itemId = await wholesaleItem(f, 'Franchise goods');
+    const created = await asOrg(f.orgId, (tx) =>
+      createTradeOrder(tx, f.manager, {
+        storeId: f.storeId, customerId: c.id, orderDate: '2026-01-10',
+        lines: [{ itemId, quantity: '1', rate: '100' }],
+      }),
+    );
+    expect(created.totalAmount).toBe('100.00');
+    const order = await asOrg(f.orgId, (tx) => tradeRepo.getOrderById(tx, f.orgId, created.orderId));
+    expect(order!.status).toBe('draft');
+    expect(order!.customerId).toBe(c.id);
+    // a draft order has moved nothing: no shipment note, no receivable, no entry
+    const [n] = await sql<{ shipments: number; charges: number }[]>`
+      select (select count(*)::int from inter_entity_shipments where trade_order_id = ${created.orderId}) as shipments,
+             (select count(*)::int from ar_charges where org_id = ${f.orgId}) as charges`;
+    expect(n).toEqual({ shipments: 0, charges: 0 });
   });
 });
 

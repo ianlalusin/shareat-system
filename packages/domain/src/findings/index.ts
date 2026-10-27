@@ -22,6 +22,8 @@ import { maxPayoutGapDays, type PeriodConfig, type PayoutConfig } from '../payro
 // shared with `bookMissedMonth`'s own screen list, so the close check and the screen can never
 // disagree about which month still counts as missing.
 import { subjectsOwingWithoutEntry } from '../missed-months';
+// T-398 S5e - the inter-entity reconciliation is ONE machine: this feed derives it live, the 06:30 job stores the to-do from the same call.
+import { balanceGapDetail, hasGap, reconcileInterEntity, shipmentGapDetail } from '../trade/inter-entity-reconcile';
 
 /** ⭐ An accepted risk should be re-accepted, not forgotten. */
 export const ACKNOWLEDGEMENT_DAYS = 30;
@@ -131,6 +133,36 @@ async function periodicPostingsStillMissing(
     });
   }
   return out;
+}
+
+/**
+ * T-398 S5e - the two inter-entity findings, in the caller's OWN words, derived live from `reconcileInterEntity` (the same call the 06:30 job makes).
+ * `inter_entity_shipment_gap`: a received shipment the two companies' books disagree on. `inter_entity_balance_gap`: the pair's running balance
+ * disagrees by more than the shipment gaps explain (a payment or a return one side has not entered). Exact centavos, no tolerance. Both soft: they are
+ * a conversation between two companies, not a broken ledger, and they clear themselves the moment both sides agree.
+ */
+async function interEntityFindings(tx: Tx, orgId: string): Promise<findingsRepo.DetectedFinding[]> {
+  const found = await reconcileInterEntity(tx, orgId);
+  return [
+    ...found.shipments
+      .filter((s) => hasGap(s.gap))
+      .map((s) => ({
+        kind: 'inter_entity_shipment_gap',
+        key: `inter_entity_shipment_gap:${s.shipmentId}`,
+        storeId: s.storeId,
+        severity: 'soft' as const,
+        detail: shipmentGapDetail(s),
+      })),
+    ...found.pairs
+      .filter((p) => hasGap(p.gap))
+      .map((p) => ({
+        kind: 'inter_entity_balance_gap',
+        key: `inter_entity_balance_gap:${p.counterpartyOrgId}`,
+        storeId: null,
+        severity: 'soft' as const,
+        detail: balanceGapDetail(p),
+      })),
+  ];
 }
 
 /**
@@ -249,6 +281,8 @@ export async function listFindings(
     // T-395 S2 (R12) - repeated wrong PINs at a terminal, and a store whose PIN sign-in is stopped. Both soft.
     ...(await findingsRepo.pinSignInFailures(tx, orgId)),
     ...(await findingsRepo.pinSignInStopped(tx, orgId)),
+    // T-398 S5e - the commissary's books against a linked franchise's (and the franchise's against the commissary's), in each side's own words.
+    ...(await interEntityFindings(tx, orgId)),
   ];
 
   return decorateFindings(tx, orgId, detected);

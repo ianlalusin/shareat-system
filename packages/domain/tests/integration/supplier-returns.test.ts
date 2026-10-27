@@ -537,7 +537,7 @@ describe('T-170 — the credit is spendable', () => {
     await invoicedReturnCredit(f, '100.0000'); // 1000.00 credit
 
     const res = await asOrg(f.orgId, (tx) =>
-      refundSupplierCredit(tx, {
+      refundSupplierCredit(tx, { requestId: crypto.randomUUID(),
         storeId: f.storeId, supplierId: f.supplierId,
         moneyAccountId: f.moneyAccountId, amount: '1000.00', businessDate: '2026-02-02', actor: f.manager,
       }),
@@ -598,7 +598,7 @@ describe('T-170 — void reverses everything, together', () => {
 
     // Spend HALF the credit via a refund, leaving less than this return contributed.
     await asOrg(f.orgId, (tx) =>
-      refundSupplierCredit(tx, {
+      refundSupplierCredit(tx, { requestId: crypto.randomUUID(),
         storeId: f.storeId, supplierId: f.supplierId,
         moneyAccountId: f.moneyAccountId, amount: '600.00', businessDate: '2026-01-07', actor: f.manager,
       }),
@@ -815,7 +815,7 @@ describe('T-231 / DEF-210 — a supplier return is stamped with the actor’s or
     // books, found nothing, and reported "only 0.00 of credit is available". That refusal was the
     // cross-org READ made visible: the function was asking the wrong organisation's ledger.
     const res = await systemTransaction((tx) =>
-      refundSupplierCredit(tx, {
+      refundSupplierCredit(tx, { requestId: crypto.randomUUID(),
         // @ts-expect-error T-231/DEF-210 — the field is GONE. Supplying another org's id
         // must not compile; if someone re-adds it this directive goes unused and the build fails.
         orgId: victimOrgId,

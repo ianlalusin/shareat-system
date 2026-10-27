@@ -175,7 +175,7 @@ const builders: Record<string, Builder> = {
         interestMethod: 'straight', paymentFrequency: 'daily', termPeriods: 90, startDate: '2026-05-11',
       }),
     );
-    const d = await asOrgOn(f.orgId, (tx) => D.disburseLoan(tx, f.admin, { loanId: loan.id, amount: '1000.00', intoMoneyAccountId: safe!.id, on: '2026-05-11' }));
+    const d = await asOrgOn(f.orgId, (tx) => D.disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: loan.id, amount: '1000.00', intoMoneyAccountId: safe!.id, on: '2026-05-11' }));
     return {
       adminPin,
       managerPin,

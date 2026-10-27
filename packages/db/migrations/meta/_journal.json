@@ -1389,6 +1389,13 @@
       "breakpoints": true
     },
     {
+      "idx": 218,
+      "version": "7",
+      "when": 1804908707084,
+      "tag": "0218_t398_s5_inter_entity_shipments",
+      "breakpoints": true
+    },
+    {
       "idx": 219,
       "version": "7",
       "when": 1804995107084,

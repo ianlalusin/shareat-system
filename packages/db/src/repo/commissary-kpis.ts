@@ -199,6 +199,8 @@ const OVERDUE_FROM_DAYS = 15;
  * Every unresolved receiving dispute, with its AGE — the figure whose absence let 4 of 9 live
  * disputes pass 15 days unnoticed (phase-6 plan §9 item 9, an exit criterion for the phase).
  *
+ * T-398 S5e: `franchise_credit` rows are left out (they have their own reconcile findings and never sat in 1340).
+ *
  * ⭐ **The set is `status <> 'resolved'` — the identical predicate `tradeDiscrepanciesRepo.unresolved`
  * and `.blocking` use, and this is a THIRD CONSUMER of it, never a third definition.** That file's
  * header states why: v1 kept a separate count for the day-open block and a separate list for the
@@ -241,6 +243,7 @@ export async function openDisputes(
     from trade_discrepancies d
     where d.org_id = ${filter.orgId}
       and d.status <> 'resolved'
+      and d.disposition is distinct from 'franchise_credit'
       ${scope}
   `)) as unknown as {
     count: number;
@@ -262,6 +265,7 @@ export async function openDisputes(
     join trade_orders o on o.id = d.order_id
     where d.org_id = ${filter.orgId}
       and d.status <> 'resolved'
+      and d.disposition is distinct from 'franchise_credit'
       ${scope}
     order by d.created_at asc
     limit ${DISPUTE_ROW_CAP}

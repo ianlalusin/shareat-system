@@ -23,7 +23,7 @@
  * `returnableQuantity` caps an internal line at `receivedQuantity` and an external line at
  * `fulfilledQuantity`/`quantity` (what was actually sold) — reported here, not silently assumed.
  */
-import { arRepo, commissaryRepo, customerReturnsRepo, customersRepo, itemsRepo, journalRepo, moneyAccountsRepo, moneyTransfersRepo, stockLayersRepo, stockLedgerRepo, stockLocationsRepo, tradeRepo, type Tx } from '@shareat/db';
+import { arRepo, commissaryRepo, customerReturnsRepo, customersRepo, interEntityRepo, itemsRepo, journalRepo, moneyAccountsRepo, moneyTransfersRepo, stockLayersRepo, stockLedgerRepo, stockLocationsRepo, tradeRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import type {
   CustomerReturnSettlement,
@@ -74,13 +74,25 @@ async function loadOrderContext(tx: Tx, orgId: string, tradeOrderId: string) {
 
 async function returnableCap(
   tx: Tx,
-  orderLine: { id: string; quantity: string; fulfilledQuantity: string | null; receivedQuantity: string | null },
+  orgId: string,
+  orderLine: { id: string; orderId: string; quantity: string; fulfilledQuantity: string | null; receivedQuantity: string | null },
   treatment: CustomerReturnTreatment,
 ): Promise<Quantity> {
-  const basis =
-    treatment === 'internal'
-      ? quantity(orderLine.receivedQuantity ?? '0')
-      : quantity(orderLine.fulfilledQuantity ?? orderLine.quantity);
+  let basis: Quantity;
+  if (treatment === 'inter_entity') {
+    // H1 (S5e): a franchise can only send back what it counted at its door. Nothing is returnable until it has received the shipment.
+    const shipment = await interEntityRepo.findByTradeOrder(tx, orgId, orderLine.orderId);
+    const counted =
+      shipment && shipment.status === 'received'
+        ? (await interEntityRepo.linesOf(tx, shipment.id)).find((l) => l.tradeOrderLineId === orderLine.id)?.receivedQuantity
+        : null;
+    basis = quantity(counted ?? '0');
+  } else {
+    basis =
+      treatment === 'internal'
+        ? quantity(orderLine.receivedQuantity ?? '0')
+        : quantity(orderLine.fulfilledQuantity ?? orderLine.quantity);
+  }
   const already = quantity(await customerReturnsRepo.returnedQuantityForOrderLine(tx, orderLine.id));
   const remaining = subtractQuantity(basis, already);
   return isPositiveQuantity(remaining) ? remaining : quantity('0');
@@ -96,7 +108,7 @@ export async function customerReturnableQuantity(tx: Tx, orgId: string, tradeOrd
   if (!orderLine) return quantity('0');
   const ctx = await loadOrderContext(tx, orgId, orderLine.orderId);
   if (!ctx) return quantity('0');
-  return returnableCap(tx, orderLine, ctx.treatment);
+  return returnableCap(tx, orgId, orderLine, ctx.treatment);
 }
 
 /** Contract: `customerCreditBalance(customerId)` — derived from `2140`, never stored (DEF-075). */
@@ -170,15 +182,14 @@ export async function recordCustomerReturn(
     const customer = await customersRepo.getById(trx, input.orgId, order.customerId);
     if (!customer) return { ok: false, reason: 'the order names a customer that no longer exists.' };
     const treatment = customersRepo.treatmentOf(customer);
+    // T-398 S5e (4b, E21): a franchise in another organisation is billed like an outside buyer, so its goods coming back are posted like an outside
+    // buyer's return - in THIS organisation's books only. The franchise records its own side (a supplier return); the reconciliation pairs the two.
     if (treatment === 'inter_entity') {
-      return {
-        ok: false,
-        reason:
-          `${customer.name} belongs to another organisation — their side of this return cannot ` +
-          'be posted from here. See docs/tasks/133-inter-entity-trade.md §4.',
-      };
+      const shipment = await interEntityRepo.findByTradeOrder(trx, input.orgId, order.id);
+      if (!shipment || shipment.status !== 'received') {
+        return { ok: false, reason: `${customer.name} has not confirmed receipt of this shipment yet, so there is nothing to return. Wait until it has received it.` };
+      }
     }
-
     if (treatment === 'internal') {
       if (order.status !== 'received') {
         return { ok: false, reason: 'this internal transfer has not been received at the branch yet.' };
@@ -198,7 +209,7 @@ export async function recordCustomerReturn(
       if (!orderLine || orderLine.orderId !== order.id) {
         return { ok: false, reason: `line ${l.tradeOrderLineId} does not belong to this order.` };
       }
-      const cap = await returnableCap(trx, orderLine, treatment);
+      const cap = await returnableCap(trx, input.orgId, orderLine, treatment);
       const qty = quantity(l.quantity);
       if (!isPositiveQuantity(qty)) return { ok: false, reason: 'a return line must be a positive quantity.' };
       if (compareQuantity(qty, cap) > 0) {
@@ -368,7 +379,7 @@ async function recordExternalReturn(
 
   await customerReturnsRepo.createReturn(tx, {
     id: returnId, orgId: input.orgId, storeId: order.storeId, tradeOrderId: order.id, customerId: order.customerId,
-    treatment: 'external', returnedOn: input.returnedOn, reason: input.reason.trim(), settlement,
+    treatment: customersRepo.treatmentOf(customer) === 'inter_entity' ? 'inter_entity' : 'external', returnedOn: input.returnedOn, reason: input.reason.trim(), settlement,
     journalEntryId: posted.entryId, createdBy: input.actor.personId, lines: lineInputs,
   });
 

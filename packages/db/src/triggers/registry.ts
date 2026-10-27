@@ -1106,6 +1106,71 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
       'A lobby entry party_size may not be lowered below its pending-or-approved discount claims (the other side of lobby_discount_claims_cap); counts the sibling claims, other rows current state, under the entry row lock the UPDATE already holds (0215, T-479, DEF-774).',
   },
   // ---------------------------------------------------------------------------------------------
+  // T-398 S5 (0218) - the inter-entity shipment link guard. Reads the shipping organisation's order and customer rows: validator, origin.
+  // ---------------------------------------------------------------------------------------------
+  inter_entity_shipments_link_check_trg: {
+    table: 'inter_entity_shipments',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'A shipment may only go to the organisation the order customer is linked to (customers.counterparty_org_id = buyer_org_id) and may only be written by the shipping organisation; decides from the order and customer rows, other rows current state (0218, T-398 S5).',
+  },
+  inter_entity_shipments_receipt_guard_trg: {
+    table: 'inter_entity_shipments',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Only receive_inter_entity_shipment() (the table owner) may write received_at / received_by / received_total / status received; the app role is refused 42501. Decides from the calling role, not from row history (0218, T-398 S5).',
+  },
+  inter_entity_shipment_lines_receipt_guard_trg: {
+    table: 'inter_entity_shipment_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Only receive_inter_entity_shipment() (the table owner) may write received_quantity; the app role is refused 42501. Decides from the calling role, not from row history (0218, T-398 S5).',
+  },
+  inter_entity_shipments_freeze_guard_trg: {
+    table: 'inter_entity_shipments',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Once a shipment is received or void the app role may not change billed_total, credited_total, the organisations or the order link (42501); credited_total moves only on the owner path. Decides from the calling role and OLD/NEW (0218, T-398 S5 audit).',
+  },
+  inter_entity_shipment_lines_freeze_guard_trg: {
+    table: 'inter_entity_shipment_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Once the parent shipment is received or void the app role may not change a line quantity, rate, line_total, item or links (42501); reads the parent shipment status, another row current state (0218, T-398 S5 audit).',
+  },
+  inter_entity_shipments_billed_sum_trg: {
+    table: 'inter_entity_shipments',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Deferred constraint trigger: billed_total must equal the sum of the shipment lines line_total at commit (23514); reads the sibling lines, other rows current state (0218, T-398 S5 audit).',
+  },
+  inter_entity_shipment_lines_billed_sum_trg: {
+    table: 'inter_entity_shipment_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Deferred constraint trigger on the lines side of the billed_total = sum(line_total) check; reads the header and sibling lines, other rows current state (0218, T-398 S5 audit).',
+  },
+  supplier_invoices_system_made_guard_trg: {
+    table: 'supplier_invoices',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'A system-made bill (QI-2): the app role cannot set/clear the flag or link or change a flagged bill money/supplier/dates (42501); any role is refused 23514 unless it links a received shipment addressed to the invoice organisation and total = received_total. Reads the shipment, another row current state (0218, T-398 S5d).',
+  },
+  supplier_invoice_lines_system_made_guard_trg: {
+    table: 'supplier_invoice_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'The app role may not add, change or delete a line of a system-made bill (42501); reads the parent invoice flag, another row current state (0218, T-398 S5d).',
+  },
   // T-475 S3 (0217) - an admin may verify the supplier invoice they logged themselves. The capability trigger reads ANOTHER row's current state
   // (the verifier's active role): validator, origin. The flag guard decides only from OLD/NEW: history_guard, ENABLE ALWAYS (R3).
   // ---------------------------------------------------------------------------------------------

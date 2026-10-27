@@ -25,7 +25,7 @@ interface LineDraft {
 const TREATMENT_HINT: Record<string, string> = {
   internal: 'One of our own stores — an internal transfer. No revenue, no receivable; stock moves at cost and the branch price is the default rate.',
   external: 'An outside buyer — a real sale. Dispatch raises the receivable and books wholesale revenue; the price list is the default rate.',
-  inter_entity: 'Another company — not yet supported: their side of the trade cannot be posted from here (T-133 §4).',
+  inter_entity: 'Inter-entity sale to another company. Dispatch bills them and ships the stock; they confirm what they received on their side.',
 };
 
 export function NewOrderForm({
@@ -56,7 +56,6 @@ export function NewOrderForm({
 
   const customer = customers.find((c) => c.id === customerId);
   const treatment = customer?.treatment ?? 'external';
-  const unsupported = treatment === 'inter_entity';
   const itemById = new Map(items.map((i) => [i.id, i]));
 
   function defaultRate(itemId: string): string | null {
@@ -134,12 +133,12 @@ export function NewOrderForm({
       <p
         className={`text-xs ${treatment === 'internal'
             ? 'text-info'
-            : unsupported
-              ? 'text-danger'
-              : 'text-neutral-600 dark:text-neutral-400'
+            : 'text-neutral-600 dark:text-neutral-400'
           }`}
       >
-        {TREATMENT_HINT[treatment]}
+        {treatment === 'inter_entity' && customer?.counterpartyOrgName
+          ? `Inter-entity sale to ${customer.counterpartyOrgName}. Dispatch bills them and ships the stock; they confirm what they received on their side.`
+          : TREATMENT_HINT[treatment]}
         {treatment === 'internal' && customer?.counterpartyStoreId === sellingStoreId && (
           <span className="ml-1 text-danger">⛔ That is the selling store itself — a store cannot transfer to itself.</span>
         )}
@@ -234,7 +233,7 @@ export function NewOrderForm({
         </FormGrid>
       </FormSection>
 
-      <Button type="submit" variant="primary" disabled={unsupported}>
+      <Button type="submit" variant="primary">
         Save draft
       </Button>
     </CheckedForm>

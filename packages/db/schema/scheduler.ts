@@ -118,6 +118,12 @@ export const SCHEDULER_JOBS = [
    * Its job function, run-recording PINNED row and docs/ops unit pair land in S2/S3.
    */
   'pos_receipt_bridge',
+  /**
+   * `inter_entity_reconcile` - T-398 S5e, DAILY 06:30 Manila. Compares the commissary's books with each linked franchise's for every received
+   * shipment (and the pair's running balance), and raises one `franchise_credit` discrepancy in the SELLER's organisation per short shipment line.
+   * Posts nothing and never writes a franchise's books. Needs migration 0218's `scheduler_runs_job_check`.
+   */
+  'inter_entity_reconcile',
 ] as const;
 export type SchedulerJob = (typeof SCHEDULER_JOBS)[number];
 
@@ -187,7 +193,8 @@ export const schedulerRuns = pgTable(
       // build the database and this file does not — but the NEXT widening migration is written by
       // copying this list, and copying the short one would silently drop a job from the constraint
       // and break it at its next run. Both are corrected together in 0136; keep them together.
-      sql`${t.job} in ('depreciation', 'amortisation', 'attendance_sweep', 'mirror_publish', 'inbox_relay', 'order_wastage_backstop', 'finding_observation', 'budget_reissue', 'recurring_expenses', 'orphan_file_sweep', 'fiscal_period_seed', 'usage_auto_post', 'pos_day_import', 'pos_receipt_bridge')`,
+      // NOTE: migration 0218 (T-398 S5) restates this list and adds 'inter_entity_reconcile' (T-398 S5e: migration + this list + SCHEDULER_JOBS together).
+      sql`${t.job} in ('depreciation', 'amortisation', 'attendance_sweep', 'mirror_publish', 'inbox_relay', 'order_wastage_backstop', 'finding_observation', 'budget_reissue', 'recurring_expenses', 'orphan_file_sweep', 'fiscal_period_seed', 'usage_auto_post', 'pos_day_import', 'pos_receipt_bridge', 'inter_entity_reconcile')`,
     ),
     check('scheduler_runs_outcome_check', sql`${t.outcome} in ('ok', 'partial', 'failed')`),
     check('scheduler_runs_period_shape_check', sql`${t.period} ~ '^[0-9]{4}-[0-9]{2}$'`),

@@ -6,7 +6,7 @@
  * `expenses/routing.ts` already uses, and the reason the FIFO arithmetic could be tested before a
  * table existed.
  */
-import { and, asc, eq, gt, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { stockLayerConsumptions, stockLayers } from '../../schema/stock-layers';
 import type { Tx } from '../client';
 import { compareDecimal, decimal, type Decimal, type Money, type Quantity } from '@shareat/core/money';
@@ -271,4 +271,17 @@ export async function valuation(
     .where(where)
     .groupBy(stockLayers.itemId)
     .orderBy(asc(stockLayers.itemId));
+}
+
+/**
+ * T-398 S5e: what a set of movements relieved from stock IN TOTAL, reversed rows included (a later return gives quantity back, but the dispatch
+ * still consumed it). The credit note for a short franchise receipt prices the short quantity from this, never from today's layers.
+ */
+export async function totalConsumedCost(tx: Tx, movementIds: readonly string[]): Promise<string> {
+  if (movementIds.length === 0) return '0.00';
+  const [row] = await tx
+    .select({ cost: sql<string>`coalesce(sum(${stockLayerConsumptions.cost}), 0)::text` })
+    .from(stockLayerConsumptions)
+    .where(inArray(stockLayerConsumptions.movementId, [...movementIds]));
+  return row!.cost;
 }

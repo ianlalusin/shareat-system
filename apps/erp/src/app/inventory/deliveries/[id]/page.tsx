@@ -29,7 +29,7 @@ import { withFlash } from '@/lib/flash';
 export const metadata = { title: 'Delivery — Shareat System' };
 export const dynamic = 'force-dynamic';
 
-const KIND_LABEL: Record<string, string> = { supplier: 'Supplier delivery', purchase: 'Cash purchase', commissary: 'Commissary delivery' };
+const KIND_LABEL: Record<string, string> = { supplier: 'Supplier delivery', purchase: 'Cash purchase', commissary: 'Commissary delivery', inter_entity: 'Shipment from another company' };
 /** ⭐ `not_received` is auto-set by the server on a zero-received line — a system conclusion,
  *  never an operator's picker choice (T-166's own design). */
 const PICKABLE_REASONS = SHORTAGE_REASONS.filter((r) => r !== 'not_received');

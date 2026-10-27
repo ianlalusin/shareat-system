@@ -69,6 +69,7 @@ const COMMANDS: Record<string, string> = {
   'Record handover': 'books a cash handover',
   'Record': 'books a payout (cash-requests)',
   'Post': 'posts to the ledger',
+  'Post credit note': 'T-398 S5e: posts the franchise shortage credit note',
   'Post correction': 'posts to the ledger',
   'Post payout(s)': 'posts to the ledger',
   'Post payslip(s)': 'posts to the ledger',

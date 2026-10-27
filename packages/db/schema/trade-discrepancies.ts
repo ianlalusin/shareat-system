@@ -33,6 +33,7 @@
  */
 import { sql } from 'drizzle-orm';
 import { check, date, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid, foreignKey } from 'drizzle-orm/pg-core';
+import { interEntityShipmentLines } from './inter-entity';
 import { journalEntries } from './journal';
 import { organizations } from './organizations';
 import { persons } from './persons';
@@ -45,7 +46,8 @@ export type DiscrepancyStatus = (typeof DISCREPANCY_STATUSES)[number];
 export const DISCREPANCY_DIRECTIONS = ['short', 'over'] as const;
 export type DiscrepancyDirection = (typeof DISCREPANCY_DIRECTIONS)[number];
 
-export const DISCREPANCY_DISPOSITIONS = ['audit', 'loss', 'charge', 'late_receipt', 'extra_dispatch', 'return'] as const;
+/** `franchise_credit` - T-398 S5 (migration 0218): a short receipt at a franchise ends in a credit note the commissary posts in its own books. */
+export const DISCREPANCY_DISPOSITIONS = ['audit', 'loss', 'charge', 'late_receipt', 'extra_dispatch', 'return', 'franchise_credit'] as const;
 export type DiscrepancyDisposition = (typeof DISCREPANCY_DISPOSITIONS)[number];
 
 /** T-343 S6a — presentation label, exhaustive over `DISCREPANCY_DISPOSITIONS`. */
@@ -56,6 +58,7 @@ export const DISCREPANCY_DISPOSITION_LABEL: Readonly<Record<DiscrepancyDispositi
   late_receipt: 'Late receipt',
   extra_dispatch: 'Commissary sent more — book the extra',
   return: 'Returned to commissary / branch recount',
+  franchise_credit: 'Credit note to the franchise',
 };
 
 function humanise(value: string): string {
@@ -121,6 +124,11 @@ export const tradeDiscrepancies = pgTable(
     journalEntryId: uuid('journal_entry_id').references(() => journalEntries.id, { onDelete: 'restrict' }),
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
     resolvedBy: uuid('resolved_by').references(() => persons.id, { onDelete: 'restrict' }),
+    /**
+     * T-398 S5 (migration 0218), QO-2 - the shipment line a `franchise_credit` discrepancy is about. Nullable: only the inter-entity short receipt sets it.
+     * Composite FK (org_id, inter_entity_shipment_line_id) -> inter_entity_shipment_lines (org_id, id).
+     */
+    interEntityShipmentLineId: uuid('inter_entity_shipment_line_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -132,10 +140,10 @@ export const tradeDiscrepancies = pgTable(
     check('trade_discrepancies_value_check', sql`${t.value} > 0 or (${t.direction} = 'over' and ${t.value} >= 0)`),
     check('trade_discrepancies_direction_check', sql`${t.direction} in ('short','over')`),
     // NOTE: the `disposition` enum CHECK itself is `trade_discrepancies_disposition_check` (0071, re-added by 0179 with
-    // 'extra_dispatch','return'); this one pairs a disposition with its direction (0179).
+    // 'extra_dispatch','return'; widened again by 0218 with 'franchise_credit', T-398 S5); this one pairs a disposition with its direction (0179, widened by 0218: short also admits 'franchise_credit').
     check(
       'trade_discrepancies_disposition_direction_check',
-      sql`${t.disposition} is null or ${t.disposition} = 'audit' or (${t.direction} = 'short' and ${t.disposition} in ('loss','charge','late_receipt')) or (${t.direction} = 'over' and ${t.disposition} in ('extra_dispatch','return'))`,
+      sql`${t.disposition} is null or ${t.disposition} = 'audit' or (${t.direction} = 'short' and ${t.disposition} in ('loss','charge','late_receipt','franchise_credit')) or (${t.direction} = 'over' and ${t.disposition} in ('extra_dispatch','return'))`,
     ),
     // NOTE: `trade_discrepancies_direction_fixed_trg` (BEFORE UPDATE OF direction, ENABLE ALWAYS) is hand-added in migration 0179.
     check(
@@ -198,6 +206,12 @@ export const tradeDiscrepancies = pgTable(
       columns: [t.orgId, t.orderLineId],
       foreignColumns: [tradeOrderLines.orgId, tradeOrderLines.id],
       name: 'trade_discrepancies_order_line_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-398 S5, migration 0218 - same-org composite to the shipment line a franchise credit is about; references `inter_entity_shipment_lines_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.interEntityShipmentLineId],
+      foreignColumns: [interEntityShipmentLines.orgId, interEntityShipmentLines.id],
+      name: 'trade_discrepancies_inter_entity_shipment_line_id_same_org_fk',
     }).onDelete('restrict'),
   ],
 );

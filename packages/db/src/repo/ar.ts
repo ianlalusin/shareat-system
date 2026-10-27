@@ -271,8 +271,25 @@ export async function outstandingForCharge(tx: Tx, orgId: string, chargeId: stri
     ),
     written as (
       select ar_charge_id, sum(amount) as amt from ar_write_offs group by ar_charge_id
+    ),
+    -- DEF-748 (S5e): every credit already taken off this charge's receivable by a document of its own - a posted customer return and a
+    -- franchise credit note - is the 1210 credit leg of that document's entry. Without it a second return or credit treats the charge as still
+    -- fully owed and over-credits 1210 instead of going to store credit (2140).
+    credit_entries as (
+      select r.journal_entry_id as entry_id
+      from customer_returns r join trade_orders o on o.id = r.trade_order_id
+      where o.org_id = ${orgId} and o.ar_charge_id = ${chargeId} and r.status = 'posted' and r.journal_entry_id is not null
+      union
+      select d.journal_entry_id
+      from trade_discrepancies d join trade_orders o on o.id = d.order_id
+      where o.org_id = ${orgId} and o.ar_charge_id = ${chargeId} and d.disposition = 'franchise_credit' and d.status = 'resolved' and d.journal_entry_id is not null
+    ),
+    credited as (
+      select coalesce(sum(jl.credit - jl.debit), 0) as amt
+      from journal_lines jl join accounts a on a.id = jl.account_id
+      where jl.entry_id in (select entry_id from credit_entries) and a.code = '1210' and a.org_id = ${orgId}
     )
-    select (ch.total_amount - coalesce(al.amt, 0) - coalesce(w.amt, 0))::text as outstanding
+    select (ch.total_amount - coalesce(al.amt, 0) - coalesce(w.amt, 0) - (select amt from credited))::text as outstanding
     from ar_charges ch
     left join allocated al on al.ar_charge_id = ch.id
     left join written w on w.ar_charge_id = ch.id
