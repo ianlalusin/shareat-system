@@ -74,9 +74,10 @@ describe('L0 -- journal entry', () => {
     expect(WHEN_0218).toBe(1804908707084);
   });
 
-  it('the entry is the LAST one and strictly after every earlier entry (journal stays ordered by when)', () => {
+  // T-492 S2: 0219 now follows 0218, so 0218 is no longer the head; the ordering loop still pins its place.
+  it('the 0218 entry is present and the journal stays strictly ordered by when (later migrations may follow it)', () => {
     const j = journal();
-    expect(j[j.length - 1]!.tag.startsWith('0218_'), 'RED today: 0218 not the head').toBe(true);
+    expect(j.filter((e) => e.tag.startsWith('0218_')), '0218 has exactly one journal entry').toHaveLength(1);
     for (let i = 1; i < j.length; i++) expect(j[i]!.when, `${j[i]!.tag} when must exceed ${j[i - 1]!.tag}`).toBeGreaterThan(j[i - 1]!.when);
   });
 
