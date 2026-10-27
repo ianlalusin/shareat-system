@@ -14,7 +14,7 @@
 import { journalRepo, liabilitiesRepo, moneyAccountsRepo, type Tx } from '@shareat/db';
 import type { LiabilityCategory } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
-import { postEntry } from '../ledger/post-entry';
+import { postEntryOnce, requireRequestId } from '../ledger/replay';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { checkDraw } from '../money-accounts/overdraft';
 import { refuse } from '../shared/refusal';
@@ -71,6 +71,8 @@ export async function chargeLiability(
   tx: Tx,
   actor: Actor,
   input: {
+    /** The form's per-render id (T-488) - the entry is keyed on it, never on the figures. */
+    requestId: string;
     liabilityId: string;
     amount: string;
     /** The account the obligation was incurred FOR — an expense, or an asset. */
@@ -85,6 +87,7 @@ export async function chargeLiability(
     await authorize(trx, actor, 'approve_expense', { storeId: liability.storeId });
     // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
     assertFieldRules(LIABILITY_CHARGE_RULES, { amount: input.amount, againstAccountCode: input.againstAccountCode, on: input.on });
+    const requestId = requireRequestId('chargeLiability', input.requestId);
     // ⛔ T-366 S1b / DEF-529 — row-lock the liability before anything reads what it owes.
     await liabilitiesRepo.lockForPayment(trx, actor.orgId, liability.id);
     // Re-read under the lock: a retire that committed while we waited is now visible.
@@ -104,12 +107,12 @@ export async function chargeLiability(
 
     await assertChargeableAccount(trx, actor.orgId, input.againstAccountCode);
 
-    const result = await postEntry(trx, {
+    const result = await postEntryOnce(trx, {
       orgId: actor.orgId,
       entryDate: input.on,
       sourceType: 'liability_charge',
       sourceId: liability.id,
-      idempotencyKey: `liability:${liability.id}:charge:${input.on}:${amount}:${input.againstAccountCode}`,
+      idempotencyKey: `liability:${liability.id}:charge:${requestId}`,
       memo: input.memo?.trim() || `Charge — ${liability.name}`,
       postedBy: actor.personId,
       lines: [
@@ -169,7 +172,7 @@ async function assertChargeableAccount(trx: Tx, orgId: string, code: string): Pr
 export async function payLiability(
   tx: Tx,
   actor: Actor,
-  input: { liabilityId: string; amount: string; fromMoneyAccountId: string; on: string; memo?: string },
+  input: { requestId: string; liabilityId: string; amount: string; fromMoneyAccountId: string; on: string; memo?: string },
 ): Promise<{ entryId: string; outstanding: string; settled: boolean; warning?: string }> {
   const run = async (trx: Tx) => {
     const liability = await liabilitiesRepo.getById(trx, actor.orgId, input.liabilityId);
@@ -177,6 +180,7 @@ export async function payLiability(
     await authorize(trx, actor, 'approve_expense', { storeId: liability.storeId });
     // T-440 / S9: the screen's own rules judge the boxes AFTER the gate (T-364 order). Moved here from the action.
     assertFieldRules(LIABILITY_PAY_RULES, { amount: input.amount, fromMoneyAccountId: input.fromMoneyAccountId, on: input.on });
+    const requestId = requireRequestId('payLiability', input.requestId);
     // ⛔ T-366 S1 / DEF-374 — row-lock the liability before `positionOf` reads what is owed.
     await liabilitiesRepo.lockForPayment(trx, actor.orgId, liability.id);
 
@@ -202,12 +206,12 @@ export async function payLiability(
     }
     const warning = await checkDraw(trx, actor.orgId, account, amount, 'payLiability');
 
-    const result = await postEntry(trx, {
+    const result = await postEntryOnce(trx, {
       orgId: actor.orgId,
       entryDate: input.on,
       sourceType: 'liability_payment',
       sourceId: liability.id,
-      idempotencyKey: `liability:${liability.id}:payment:${input.on}:${amount}`,
+      idempotencyKey: `liability:${liability.id}:payment:${requestId}`,
       memo: input.memo?.trim() || `Payment — ${liability.name}`,
       postedBy: actor.personId,
       lines: [

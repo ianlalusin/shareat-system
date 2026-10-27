@@ -140,6 +140,44 @@ describe('http implementation (S3 routes)', () => {
     expect(JSON.parse(String(init.body))).toEqual(input);
   });
 
+  it('DEF-782: a 428 LOBBY_COOKIE_NEEDED is retried ONCE with the same request and id, and the second answer is the result', async () => {
+    // kills: no retry (the first check-in is orphaned); a retry with a new id or a changed body; a retry loop
+    const needed = () => new Response(JSON.stringify({ ok: false, error: 'Please try again.', code: 'LOBBY_COOKIE_NEEDED' }), { status: 428, headers: { 'content-type': 'application/json' } });
+    const good = () => new Response(JSON.stringify({ ok: true, created: true, entry: { entryId: 'e1', code: '4821', status: 'waiting', partiesAhead: 0 } }), { status: 200, headers: { 'content-type': 'application/json' } });
+    const f = vi.fn().mockResolvedValueOnce(needed()).mockResolvedValueOnce(good());
+    vi.stubGlobal('fetch', f);
+    const input = { storeCode: 'LIPA', displayName: 'Ana', partySize: 2, clientRequestId: ID };
+    const r = await createHttpLobbyData().checkIn(input);
+    expect(r.ok).toBe(true);
+    expect(f).toHaveBeenCalledTimes(2);
+    const [a, b] = f.mock.calls as unknown as [[string, RequestInit], [string, RequestInit]];
+    expect(b[0]).toBe(a[0]);
+    expect(b[1].body).toBe(a[1].body);
+    expect(b[1].credentials).toBe('include');
+    expect(JSON.parse(String(b[1].body)).clientRequestId).toBe(ID);
+  });
+
+  it('DEF-782: a second 428 (cookies blocked) is the ordinary error state: status 428 and the counter sentence, not the server sentence, after exactly two calls', async () => {
+    // kills: an endless retry loop; swallowing the second refusal
+    const f = vi.fn(async () => new Response(JSON.stringify({ ok: false, error: 'Please try again.', code: 'LOBBY_COOKIE_NEEDED' }), { status: 428, headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', f);
+    const r = await createHttpLobbyData().checkIn({ storeCode: 'LIPA', displayName: 'Ana', partySize: 2, clientRequestId: ID });
+    expect(f).toHaveBeenCalledTimes(2);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect([r.status, r.error]).toEqual([428, 'Please check in at the counter.']);
+  });
+
+  it('DEF-782: any other status is not retried (400, 409, 500, and a 428 WITHOUT the cookie-needed code)', async () => {
+    // kills: retrying every failure; retrying on the status alone
+    for (const [status, code] of [[400, undefined], [409, undefined], [500, undefined], [428, 'SOMETHING_ELSE']] as const) {
+      const f = vi.fn(async () => new Response(JSON.stringify({ ok: false, error: 'Please check in at the counter.', ...(code ? { code } : {}) }), { status, headers: { 'content-type': 'application/json' } }));
+      vi.stubGlobal('fetch', f);
+      const r = await createHttpLobbyData().checkIn({ storeCode: 'LIPA', displayName: 'Ana', partySize: 2, clientRequestId: ID });
+      expect(f, `status ${status}`).toHaveBeenCalledTimes(1);
+      expect(r.ok).toBe(false);
+    }
+  });
+
   it('myEntry GETs /api/lobby/me?s=CODE (the store code is the only thing in the URL)', async () => {
     // kills: a name, code or entry id in the query string (4.3)
     const f = stub({ ok: true, entry: { entryId: 'e1', code: '4821', status: 'waiting', partiesAhead: 0, displayName: 'Ana', partySize: 2, standLabel: null, handoffUrl: null } });

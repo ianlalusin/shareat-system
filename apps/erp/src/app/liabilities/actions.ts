@@ -58,6 +58,7 @@ export async function chargeAction(formData: FormData): Promise<void> {
   try {
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       chargeLiability(tx, actor, {
+        requestId: str(formData, 'requestId'),
         liabilityId: id,
         amount: str(formData, 'amount'),
         againstAccountCode: str(formData, 'againstAccountCode'),
@@ -79,6 +80,7 @@ export async function payAction(formData: FormData): Promise<void> {
   try {
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       payLiability(tx, actor, {
+        requestId: str(formData, 'requestId'),
         liabilityId: id,
         amount: str(formData, 'amount'),
         fromMoneyAccountId: str(formData, 'fromMoneyAccountId'),

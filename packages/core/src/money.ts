@@ -205,6 +205,21 @@ export function multiplyToMoney(qty: Decimal<string>, cost: Decimal<string>): Mo
 }
 
 /**
+ * T-489 (DEF-780) - exact `quantity x conversion factor` to a stock quantity (three decimals), in scaled bigint (no
+ * float, no `Number()`). A (14,3) purchase quantity and a (14,6) factor give a product at nine decimals, kept whole
+ * until the end. ROUNDING: HALF-UP away from zero on the absolute value, ONCE, at the third decimal - the project's
+ * one rule (see `multiplyToMoney`). A result that does not fit numeric(14,3) throws RangeError, as `decimal()` does.
+ */
+export function multiplyQuantityByFactor(qty: Decimal<'14,3'>, factor: Decimal<'14,6'>): Decimal<'14,3'> {
+  const a = scaledOf(qty);
+  const b = scaledOf(factor);
+  const product = a.n * b.n; // scale a.scale + b.scale
+  const drop = a.scale + b.scale - 3;
+  if (drop <= 0) return decimal(product * 10n ** BigInt(-drop), '14,3');
+  return decimal(divideRoundHalfUp(product, 10n ** BigInt(drop)), '14,3');
+}
+
+/**
  * T-371 S4 — divide money by a positive integer (a month count, a quantity of whole units). ROUNDING: HALF-UP away
  * from zero on the absolute value, once, to the centavo - what `(Number(x) / 12).toFixed(2)` effectively intended.
  */

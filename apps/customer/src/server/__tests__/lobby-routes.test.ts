@@ -149,7 +149,11 @@ async function reply(res: Response): Promise<Reply> {
 }
 async function checkIn(s: Store, o: { body?: Record<string, unknown> | string; cookie?: string | null; ip?: string | null } = {}): Promise<Reply> {
   const body = typeof o.body === 'string' ? o.body : { storeCode: s.code, ...PARTY, clientRequestId: randomUUID(), ...(o.body ?? {}) };
-  return reply(await (await routes.checkIn())(mk('/api/lobby/check-in', { body, cookie: o.cookie, ip: o.ip })));
+  // T-491: a check-in only commits when the phone already holds its cookie. `cookie: undefined` = a phone that holds a fresh one (the
+  // normal case, reported back as r.cookie); `cookie: null` = a phone with none at all (the server must refuse, writing nothing).
+  const sent = o.cookie === undefined ? strangerCookie() : o.cookie;
+  const r = await reply(await (await routes.checkIn())(mk('/api/lobby/check-in', { body, cookie: sent, ip: o.ip })));
+  return o.cookie === undefined ? { ...r, cookie: sent } : r;
 }
 async function me(s: Store | null, cookie: string | null, q?: string): Promise<Reply> {
   const qs = q ?? (s ? `?s=${encodeURIComponent(s.code)}` : '');
@@ -199,13 +203,13 @@ describe('A. POST /api/lobby/check-in', () => {
     expect(await countEntries(s)).toBe(1);
   });
 
-  it('A2 Set-Cookie is lobby_dev, HttpOnly, Secure (over plain http too), SameSite=Lax, Path=/api/lobby, no Domain, 256-bit random, different each time [kills: not HttpOnly, Secure only in production, SameSite None/Strict/absent, Domain set, constant or short value]', async () => {
+  it('A2 the 428 that hands out the cookie sets lobby_dev, HttpOnly, Secure (over plain http too), SameSite=Lax, Path=/api/lobby, no Domain, 256-bit random, different each time; a check-in that already holds a cookie sets none [kills: not HttpOnly, Secure only in production, SameSite None/Strict/absent, Domain set, constant or short value, a second cookie issued]', async () => {
     const s = await mkStore();
-    const a = await checkIn(s);
-    const b = await checkIn(s);
+    const a = await checkIn(s, { cookie: null });
+    const b = await checkIn(s, { cookie: null });
     for (const r of [a, b]) {
-      expect(r.status).toBe(200);
-      expect(r.setCookie, 'Set-Cookie on check-in').toBeTruthy();
+      expect(r.status).toBe(428);
+      expect(r.setCookie, 'Set-Cookie on the cookie-needed reply').toBeTruthy();
       const attrs = r.setCookie!.split(';').map((x) => x.trim());
       expect(attrs[0]).toMatch(/^lobby_dev=[A-Za-z0-9_-]{43}$/);
       const lower = attrs.slice(1).map((x) => x.toLowerCase());
@@ -217,6 +221,43 @@ describe('A. POST /api/lobby/check-in', () => {
       expect(lower.some((x) => x.startsWith('max-age=') || x.startsWith('expires=')), 'the cookie must outlive a page reload').toBe(true);
     }
     expect(a.cookie).not.toBe(b.cookie);
+    const held = await checkIn(s, { cookie: a.cookie });
+    expect(held.status).toBe(200);
+    expect(held.setCookie, 'a phone that already holds its cookie is not given another').toBeNull();
+  });
+
+  it('A2b (DEF-782) a check-in with no cookie answers 428 LOBBY_COOKIE_NEEDED with a fresh Set-Cookie and creates NOTHING; a malformed cookie counts as none [kills: committing before the phone holds its cookie, 200/400 for a cookie-less phone, no cookie handed out]', async () => {
+    const s = await mkStore();
+    const r = await checkIn(s, { cookie: null });
+    expect(r.status).toBe(428);
+    expect(r.body.ok).toBe(false);
+    expect(r.body.code).toBe('LOBBY_COOKIE_NEEDED');
+    expect(typeof r.body.error).toBe('string');
+    expect(r.cookie).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expectJsonNoStore(r);
+    const malformed = await checkIn(s, { cookie: 'short' });
+    expect([malformed.status, malformed.body.code]).toEqual([428, 'LOBBY_COOKIE_NEEDED']);
+    expect(await countEntries(s), 'nothing written without a cookie').toBe(0);
+    // the retry with the cookie it was handed (same request id) succeeds and writes one row
+    const rid = randomUUID();
+    const first = await checkIn(s, { cookie: null, body: { clientRequestId: rid } });
+    const retry = await checkIn(s, { cookie: first.cookie, body: { clientRequestId: rid } });
+    expect([retry.status, retry.body.created]).toEqual([200, true]);
+    expect(await countEntries(s)).toBe(1);
+  });
+
+  it('A2c (DEF-782) a lost response after the cookie exists is safe: the retry with the same cookie and clientRequestId returns the SAME entry, no second row [kills: retry creating a second row or being refused]', async () => {
+    const s = await mkStore();
+    const cookie = strangerCookie();
+    const rid = randomUUID();
+    const first = await checkIn(s, { cookie, body: { clientRequestId: rid } });
+    expect(first.status).toBe(200);
+    // the first response is discarded (lost on the way); the phone retries with what it still holds
+    const retry = await checkIn(s, { cookie, body: { clientRequestId: rid } });
+    expect(retry.status).toBe(200);
+    expect(retry.body.entry.entryId).toBe(first.body.entry.entryId);
+    expect(retry.body.created).toBe(false);
+    expect(await countEntries(s)).toBe(1);
   });
 
   it('A3 only HMAC hashes reach the database: device_hash = HMAC(secret, cookie), ip_hash = HMAC(secret, x-real-ip); no raw cookie or ip in any column [kills: raw value stored, unsalted sha256, wrong secret, ip taken from another header]', async () => {
@@ -234,7 +275,7 @@ describe('A. POST /api/lobby/check-in', () => {
     // a client-chosen header must not pick the ip that is limited: x-forwarded-for is ignored when x-real-ip is present
     const req = new Request(`${ORIGIN}/api/lobby/check-in`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-real-ip': '198.51.100.24', 'x-forwarded-for': '1.2.3.4' },
+      headers: { 'content-type': 'application/json', 'x-real-ip': '198.51.100.24', 'x-forwarded-for': '1.2.3.4', cookie: `lobby_dev=${strangerCookie()}` },
       body: JSON.stringify({ storeCode: s.code, ...PARTY, clientRequestId: randomUUID() }),
     });
     const spoofed = await reply(await (await routes.checkIn())(req));
