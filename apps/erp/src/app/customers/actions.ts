@@ -37,6 +37,18 @@ function str(fd: FormData, key: string): string {
   return typeof v === 'string' ? v.trim() : '';
 }
 
+/**
+ * T-398 S5c. Days to pay, as the supplier form offers it: an explicit choice, never a bare number box. Raw here, judged in the domain after
+ * `authorize`. Cash on delivery and an absent selector are NULL; an unrecognised mode is refused, never read as a day count.
+ */
+function creditTermsFrom(fd: FormData): string | null | undefined {
+  if (!fd.has('termsMode')) return undefined;
+  const mode = str(fd, 'termsMode');
+  if (mode === 'cod') return null;
+  if (mode === 'credit') return str(fd, 'creditTermsDays');
+  return 'unrecognised';
+}
+
 export async function createCustomerAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   let message = '';
@@ -59,6 +71,7 @@ export async function createCustomerAction(formData: FormData): Promise<void> {
         priceListId: str(formData, 'priceListId') || null,
         customerGroup: (str(formData, 'customerGroup') || 'wholesale') as CustomerGroup,
         notes: str(formData, 'notes') || null,
+        creditTermsDays: creditTermsFrom(formData),
       });
     });
     // ⚠️ Says what the treatment MEANS, because "internal" alone does not tell anyone that the

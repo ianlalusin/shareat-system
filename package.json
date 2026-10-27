@@ -51,6 +51,7 @@
     "usage-auto-post": "tsx scripts/usage-auto-post.ts",
     "pos-day-import": "tsx scripts/pos-day-import.ts",
     "pos-receipt-bridge": "tsx scripts/pos-receipt-bridge.ts",
+    "inter-entity-reconcile": "tsx scripts/inter-entity-reconcile.ts",
     "fiscal-period-seed": "tsx scripts/fiscal-period-seed.ts",
     "bootstrap-org": "tsx scripts/bootstrap-org.ts",
     "provision-terminal": "tsx scripts/provision-terminal.ts",

@@ -76,7 +76,7 @@ describe('T-445 approved compact controls', () => {
     expect(html).toContain('aria-label="Remove line"');
     expect((html.match(/<form\b/g) ?? []).length).toBe(1);
   });
-  it('preserves trade order defaults and the unsupported-counterparty refusal while sectioning fields', () => {
+  it('preserves trade order defaults and the inter-entity customer being allowed while sectioning fields', () => {
     const props: Parameters<typeof NewOrderForm>[0] = {
       action: () => {}, storeId: 'store', today: '2026-10-19',
       stores: [{ id: 'store', name: 'Lipa', code: 'LIPA' }],
@@ -90,6 +90,8 @@ describe('T-445 approved compact controls', () => {
     expect(html).toContain('placeholder="₱0.1800"');
     expect(html).not.toMatch(/<button[^>]*type="submit"[^>]*disabled=""/);
     const refused = renderToStaticMarkup(createElement(NewOrderForm, { ...props, customers: props.customers.map(c => ({ ...c, treatment: 'inter_entity' as const })) }));
-    expect(refused).toMatch(/<button[^>]*type="submit"[^>]*disabled=""/);
+    // T-398 S5 (Ian's ruling, fix e3c2cda): an inter-entity customer is now selectable and Save stays ENABLED; the old 'not supported' disabled state is gone.
+    expect(refused).not.toMatch(/<button[^>]*type="submit"[^>]*disabled=""/);
+    expect(refused).toContain('Inter-entity sale to another company');
   });
 });

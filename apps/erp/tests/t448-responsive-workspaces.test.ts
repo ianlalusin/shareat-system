@@ -47,7 +47,8 @@ describe('T-448 responsive dashboards and record details', () => {
   it('covers the dashboard and every entity detail, excluding the weekly report drilldown', () => {
     expect(readFileSync(join(root, 'app/page.tsx'), 'utf8')).toContain('view="dashboard"');
     const details = pages(join(root, 'app')).filter((p) => /\[[^/\\]+\][\\/]page\.tsx$/.test(p) && !p.includes(`${join('reports', 'dual-run')}`));
-    expect(details.length).toBe(26);
+    // T-398 S5: 26 -> 27, new detail page app/inventory/deliveries/inbound/[shipmentId]/page.tsx
+    expect(details.length).toBe(27);
     for (const p of details) {
       const src = readFileSync(p, 'utf8');
       expect(src, p).toContain('view="detail"');

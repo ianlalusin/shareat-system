@@ -1491,6 +1491,60 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
       'higher here than in an automated load, precisely because these figures are typed by hand ' +
       'from a spreadsheet.',
   },
+  // ---- T-398 S5a: franchise (inter-entity) sale. VAT lines are FENCED on Q5 (due 13 Nov): NO leg asserts a VAT line is absent. ----
+  {
+    id: 'trade_dispatch.franchise',
+    sourceType: 'trade_order_dispatch',
+    title: 'Franchise dispatch, seller — a real sale, identical to an outside buyer',
+    narrative: '10 kg at P310 to Padre Garcia, another company; FIFO cost P250/kg. Shown as one entry; the code posts the sale and the cost as two.',
+    input: { customerId: 'CUST-PG', quantity: '10.000', rate: '310.00', unitCost: '250.0000' },
+    expect: [
+      D('1210', '3100.00', { type: 'customer', id: 'customer:CUST-PG' }),
+      C('4300', '3100.00', null),
+      D('5100', '2500.00', null),
+      C('1310', '2500.00', null),
+    ],
+    entryDate: '2026-12-01',
+    trap: 'Byte-identical to an external sale; never the 1340/1250/2150 elimination.',
+  },
+  {
+    id: 'trade_receipt.franchise',
+    sourceType: 'stock_receipt',
+    title: 'Franchise receipt, buyer — the stock arrives at the shipment rate',
+    narrative: 'Padre Garcia receives 10 kg at the shipment rate of P310; posted in its own organisation.',
+    input: { shipmentId: 'SHIP-1', receivedQuantity: '10.000', rate: '310.00' },
+    expect: [D('1310', '3100.00', null), C('2120', '3100.00', null)],
+    entryDate: '2026-12-02',
+    trap: 'Valued at what was received times the shipment rate, never the dispatched quantity.',
+  },
+  {
+    id: 'trade_receipt.franchise-bill',
+    sourceType: 'stock_receipt_invoice',
+    title: 'Franchise receipt, buyer — the shipment is the bill',
+    narrative: 'Same transaction: a system supplier bill for the received value clears GRNI to accounts payable.',
+    input: { shipmentId: 'SHIP-1', supplierId: 'SUP-COMMISSARY', billTotal: '3100.00' },
+    expect: [
+      D('2120', '3100.00', null),
+      C('2110', '3100.00', { type: 'supplier', id: 'supplier:SUP-COMMISSARY' }),
+    ],
+    entryDate: '2026-12-02',
+    trap: 'Never 2110 without the bill row; no 5450 variance line can arise.',
+  },
+  {
+    id: 'trade_dispatch.franchise_transit_shortage',
+    sourceType: 'trade_order_credit',
+    title: 'Franchise transit shortage, seller — the credit note',
+    narrative: 'Padre Garcia received 8 of 10 kg; the commissary credits the P620 gap and moves P500 cost from COGS to loss.',
+    input: { customerId: 'CUST-PG', shippedQuantity: '10.000', receivedQuantity: '8.000', rate: '310.00', unitCost: '250.0000' },
+    expect: [
+      D('4950', '620.00', null),
+      C('1210', '620.00', { type: 'customer', id: 'customer:CUST-PG' }),
+      D('5300', '500.00', null),
+      C('5100', '500.00', null),
+    ],
+    entryDate: '2026-12-03',
+    trap: 'Not recordCustomerReturn (nothing comes back); not 5400 (a loss, not a count variance).',
+  },
 ];
 
 /** Every fixture id — used by the doc-parity test and to guard against an accidental
