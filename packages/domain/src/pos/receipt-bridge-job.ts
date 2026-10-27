@@ -307,9 +307,14 @@ async function bridgeForOrg(
             if (res.result === 'written') {
               posted += 1;
               if (res.date !== null) writtenDates.add(res.date);
-            } else if (res.result === 'unchanged') unchanged += 1;
-            else if (res.result === 'raced') raced += 1;
-            else if (res.result === 'below_floor') belowFloor += 1;
+            } else if (res.result === 'unchanged') {
+              unchanged += 1;
+              // F25 (DEF-788): a re-read of an already-stored receipt still names its day, so a crash after an earlier write cannot leave that day's check stale.
+              if (res.date !== null) writtenDates.add(res.date);
+            } else if (res.result === 'raced') {
+              raced += 1;
+              if (res.date !== null) writtenDates.add(res.date);
+            } else if (res.result === 'below_floor') belowFloor += 1;
             else failures.push(line(`${label}: receipt ${r.id} has no usable date from POS, so it was not copied.`));
           } catch (e) {
             failures.push(line(`${label}: receipt ${r.id} was not copied: ${reasonOf(e)}`));
