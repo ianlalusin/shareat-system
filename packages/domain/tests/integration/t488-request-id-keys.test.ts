@@ -403,3 +403,87 @@ describe('T-488 — postEntryOnce compares a multi-line entry as a set, not by p
     ).toBe('This was already recorded with different figures. Reload the page and try again.');
   });
 });
+
+describe('T-488 S2 (DEF-787) — a replay must also match the entry date', () => {
+  const REFUSED = 'This was already recorded with different figures. Reload the page and try again.';
+
+  async function postOn(f: Fixture, key: string, entryDate: string, sourceId: string) {
+    return asOrg(f.orgId, (tx) =>
+      postEntryOnce(tx, {
+        orgId: f.orgId, entryDate, sourceType: 'opening_balance', sourceId,
+        idempotencyKey: key, postedBy: f.adminId,
+        lines: [
+          { accountCode: '1110', storeId: f.storeId, debit: '1000.00' },
+          { accountCode: '3900', storeId: f.storeId, credit: '1000.00' },
+        ],
+      }),
+    );
+  }
+  const countOf = async (orgId: string, key: string) => {
+    const [row] = await sql<{ n: string }[]>`
+      select count(*)::text as n from journal_entries where org_id = ${orgId} and idempotency_key = ${key}
+    `;
+    return Number(row!.n);
+  };
+
+  it('same requestId + same lines, 31 Jan then 1 Feb -> refused, nothing new written', async () => {
+    const f = await fixture('s2a');
+    const key = `t488:s2a:${randomUUID()}`;
+    const src = uid('s2a');
+    await postOn(f, key, '2026-01-31', src);
+    expect(await userMessageOf(postOn(f, key, '2026-02-01', src))).toBe(REFUSED);
+    expect(await countOf(f.orgId, key)).toBe(1);
+  });
+
+  it('dates two months apart -> refused', async () => {
+    const f = await fixture('s2b');
+    const key = `t488:s2b:${randomUUID()}`;
+    const src = uid('s2b');
+    await postOn(f, key, '2026-01-10', src);
+    expect(await userMessageOf(postOn(f, key, '2026-03-10', src))).toBe(REFUSED);
+    expect(await countOf(f.orgId, key)).toBe(1);
+  });
+
+  it('an identical retry after the original month is CLOSED -> returns the original entry (created: false)', async () => {
+    const f = await fixture('s2c');
+    const key = `t488:s2c:${randomUUID()}`;
+    const src = uid('s2c');
+    const first = await postOn(f, key, '2026-01-31', src);
+    expect(first.created).toBe(true);
+    await sql`
+      update fiscal_periods set status = 'closed'
+      where org_id = ${f.orgId} and starts_on = '2026-01-01'
+    `;
+    const again = await postOn(f, key, '2026-01-31', src);
+    expect(again).toEqual({ entryId: first.entryId, created: false });
+    expect(await countOf(f.orgId, key)).toBe(1);
+  });
+
+  it('disburseLoan with only `on` changed -> refused, one entry', async () => {
+    const s = await builders.disburseLoan!();
+    const f2 = s; // scenario owns its fixture; reuse its call but vary the date through a direct second call below
+    const id = randomUUID();
+    await run(f2, id, '2000.00');
+    // Same scenario helper pins `on: 2026-01-10`; replay the same call with another date via the domain function.
+    const [loan] = await sql<{ id: string; created_by: string | null }[]>`
+      select id, null as created_by from loans where org_id = ${s.orgId} and id = ${s.sourceId}
+    `;
+    const [adminRow] = await sql<{ person_id: string }[]>`
+      select person_id from person_roles where org_id = ${s.orgId} and role = 'admin' limit 1
+    `;
+    const [safe] = await sql<{ id: string }[]>`
+      select ma.id from money_accounts ma join stores st on st.id = ma.store_id
+      where st.org_id = ${s.orgId} and ma.instrument = 'cash' and ma.custodian = 'office' and ma.is_foundation limit 1
+    `;
+    expect(
+      await userMessageOf(
+        asOrg(s.orgId, (tx) =>
+          disburseLoan(tx, actor(s.orgId, adminRow!.person_id), {
+            loanId: loan!.id, amount: '2000.00', intoMoneyAccountId: safe!.id, on: '2026-02-11', requestId: id,
+          }),
+        ),
+      ),
+    ).toBe(REFUSED);
+    expect(await entriesOf(s)).toBe(1);
+  });
+});
