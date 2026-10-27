@@ -1,0 +1,17 @@
+# T-398 S5e - DAILY, 06:30 Manila (after the 06:00 POS day import; it touches no sales day, so the two never contend).
+#
+# 06:30 Manila, not UTC: the franchise's receiving counts and both sides' postings are dated by the Manila calendar day, and the
+# commissary manager reads the result with the morning's to-do list.
+# `Persistent=true`: a missed run (a reboot, an outage) runs at boot. The findings feed shows the same disagreement live, so a skipped
+# night loses only the stored to-do row, which the next run writes.
+
+[Unit]
+Description=Shareat - 06:30 Manila inter-entity reconciliation, daily (T-398 S5e)
+
+[Timer]
+OnCalendar=*-*-* 06:30:00 Asia/Manila
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

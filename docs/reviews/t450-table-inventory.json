@@ -168,6 +168,18 @@
     "headerless": 0
   },
   {
+    "file": "apps/erp/src/app/inventory/deliveries/inbound/[shipmentId]/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/inventory/deliveries/inbound/page.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
     "file": "apps/erp/src/app/inventory/deliveries/page.tsx",
     "tables": 1,
     "sharedTables": 0,

@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { SHORTAGE_REASONS } from '@shareat/db/schema';
 import { add, compare, money, ZERO } from '@shareat/core/money';
 import { requireSession } from '../../../../lib/session';
-import { dispatchOrderAction, receiveOrderAction, setBirInvoiceNoAction, voidOrderAction } from '../actions';
+import { dispatchOrderAction, postFranchiseCreditAction, receiveOrderAction, setBirInvoiceNoAction, voidOrderAction } from '../actions';
 import { canSeeCreditLimit, creditPreview, orderDetail, peso, storeMoneyAccounts, today } from '../lib';
 import { ACTION_LINK } from '@/components/action-link';
 import { PhotoUpload } from '@/components/upload/PhotoUpload';
@@ -63,7 +63,8 @@ export default async function TradeOrderPage({
 
   const isInternal = treatment === 'internal';
   const canDispatch = order.status === 'draft' || order.status === 'confirmed';
-  const canReceive = order.status === 'dispatched';
+  // T-398 S5c: another company confirms receipt in its own books, so the seller is not offered the button.
+  const canReceive = order.status === 'dispatched' && treatment !== 'inter_entity';
   // ⛔ Void after receipt on an INTERNAL transfer needs a two-store reverse-transfer that is not
   // built (T-165) — the domain refuses it, so the button is not offered. A received SALE may
   // still be voided: AR unwinds the charge and the stock comes back.
@@ -117,9 +118,27 @@ export default async function TradeOrderPage({
         <p className={`mt-1 text-xs ${TREATMENT_TONE[treatment] ?? ''}`}>
           {customer.name} · {TREATMENT_LABEL[treatment]}
         </p>
+        {detail.interEntity && (
+          <p className="mt-1 text-xs text-violet-700 dark:text-violet-400">
+            Inter-entity sale to {detail.interEntity.buyerName}
+            {detail.interEntity.receivedOn && <> · Received by {detail.interEntity.buyerName} on {detail.interEntity.receivedOn}</>}
+          </p>
+        )}
       </div>
 
       <FlashBanner flash={sp} />
+
+      {detail.interEntity?.creditDue && detail.interEntity.canPostCredit && (
+        <form action={postFranchiseCreditAction} className="flex flex-wrap items-center gap-3 rounded-md border border-amber-400 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-100">
+          <input type="hidden" name="orderId" value={order.id} />
+          <span>
+            {detail.interEntity.buyerName} received less than was billed: {peso(detail.interEntity.creditDue)} is still to be credited.
+          </span>
+          <Button type="submit" variant="primary">
+            Post credit note
+          </Button>
+        </form>
+      )}
 
       <StatusHero kind={hero.kind} word={statusLabel(order.status)} step={heroStep} steps={tradeOrderSteps} line={heroLine} tone={hero.tone}>
         {canDispatch && (

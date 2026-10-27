@@ -20,6 +20,7 @@ import {
   check,
   date,
   index,
+  integer,
   numeric,
   pgTable,
   text,
@@ -161,6 +162,12 @@ export const customers = pgTable(
       onDelete: 'restrict',
     }),
 
+    /**
+     * T-398 S5 (migration 0218), C5 - days the customer is given to pay. NULL = not stated. Display and ageing only; never an accounting
+     * input. `customers_credit_terms_days_check`: NULL or 0..365 (the `suppliers_credit_terms_days_check` shape).
+     */
+    creditTermsDays: integer('credit_terms_days'),
+
     priceListId: uuid('price_list_id').references(() => priceLists.id, { onDelete: 'restrict' }),
     /**
      * ⭐ T-132. How much this customer may owe us before a dispatch is refused.
@@ -227,6 +234,7 @@ export const customers = pgTable(
           or (${t.reconciledAsOf} is not null and ${t.reconciledAt} is not null
               and ${t.reconciledBy} is not null)`,
     ),
+    // NOTE: customers_credit_terms_days_check CHECK (credit_terms_days IS NULL OR credit_terms_days BETWEEN 0 AND 365) - hand-added in migration 0218 (T-398 S5, C5).
     check('customers_credit_limit_finite_check', sql`${t.creditLimit} > '-Infinity'::numeric and ${t.creditLimit} < 'Infinity'::numeric`),
     // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
     // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a

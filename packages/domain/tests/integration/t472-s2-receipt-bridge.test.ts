@@ -775,3 +775,55 @@ describe('X: T-490 (DEF-781) - a day older than yesterday is re-checked when a l
     expect(await headers(f.orgId)).toEqual([]);
   });
 });
+
+describe('Z: T-490 S2 (DEF-788, F25) - a crash between the receipt write and the day re-check cannot leave an old day stale', () => {
+  const OLD = '2027-01-02'; // at or after the floor, older than the 7-day window of NEXT (01-07..01-13)
+  const stale = (f: F) =>
+    sql`update pos_bridge_day_checks set receipt_count = 99, net_sales_centavos = 99 where org_id = ${f.orgId} and store_id = ${f.storeId} and pos_calendar_date = ${OLD}`;
+
+  async function committedOldReceipt(hint: string) {
+    const f = await fixture(hint);
+    const night1 = new FakePort();
+    night1.changed.createdAt = [receipt({ id: 'o', date: OLD, total: '40.00' })];
+    await sweep({ orgId: f.orgId, port: night1 });
+    expect(await checkOf(f, OLD)).toMatchObject({ receipt_count: 1, net_sales_centavos: '4000' });
+    await stale(f); // the crash: the receipt is committed, the check was never (re)written
+    expect(await checkOf(f, OLD)).toMatchObject({ receipt_count: 99 });
+    return f;
+  }
+
+  it('Z1: re-reading the same old receipt (unchanged) repairs the stale check, mints no version, and reads no extra day', async () => {
+    const f = await committedOldReceipt('z1');
+    const versionsBefore = (await headers(f.orgId)).length;
+    const night2 = new FakePort();
+    night2.changed.createdAt = [receipt({ id: 'o', date: OLD, total: '40.00' })];
+    await sweep({ orgId: f.orgId, port: night2, now: NEXT });
+    expect(await checkOf(f, OLD)).toMatchObject({ receipt_count: 1, net_sales_centavos: '4000' });
+    expect((await headers(f.orgId)).length).toBe(versionsBefore);
+    expect((await headers(f.orgId)).filter((h) => h.status === 'gone')).toEqual([]);
+    expect(night2.datesCalled(f.posStoreId, 'listDay')).toEqual(['2027-01-13']);
+    expect(night2.datesCalled(f.posStoreId, 'cross')).toEqual(['2027-01-13']);
+    expect(night2.datesCalled(f.posStoreId, 'listMissing')).toEqual(['2027-01-13']);
+  });
+
+  it('Z2: the same when the re-read answers raced (another run wrote it first)', async () => {
+    const f = await committedOldReceipt('z2');
+    const { posBridgeRepo } = await import('@shareat/db');
+    const spy = vi.spyOn(posBridgeRepo, 'writeVersion').mockResolvedValue('raced');
+    try {
+      const night2 = new FakePort();
+      night2.changed.createdAt = [receipt({ id: 'o', date: OLD, total: '40.00' })];
+      await sweep({ orgId: f.orgId, port: night2, now: NEXT });
+      expect(spy).toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await checkOf(f, OLD)).toMatchObject({ receipt_count: 1, net_sales_centavos: '4000' });
+  });
+
+  it('Z3: an unrelated old day with no returned receipt is still not refreshed (Y4 holds)', async () => {
+    const f = await committedOldReceipt('z3');
+    await sweep({ orgId: f.orgId, port: new FakePort(), now: NEXT }); // nothing returned
+    expect(await checkOf(f, OLD)).toMatchObject({ receipt_count: 99 });
+  });
+});
