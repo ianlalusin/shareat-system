@@ -528,6 +528,18 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'What a job pays. A franchise reading another org’s rates would learn its labour cost.',
   },
+  statutory_employers: {
+    scope: 'org_column',
+    reason: 'T-193. An org’s own employer numbers and due days per agency; none is shared.',
+  },
+  statutory_payments: {
+    scope: 'org_column',
+    reason: 'T-193. What an org paid SSS / PhilHealth / Pag-IBIG / BIR, with the agency reference; another org reading it would learn the payroll size.',
+  },
+  statutory_payment_lines: {
+    scope: 'org_column',
+    reason: 'T-193. The per-store split of an agency payment; carries its own org_id, as its parent does.',
+  },
   statutory_rates: {
     scope: 'org_column',
     reason: 'T-190. An org’s own confirmed statutory rates; each org (Padre Garcia included) confirms its own, so none is shared.',

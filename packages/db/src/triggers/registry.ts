@@ -653,6 +653,18 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'history_guard',
     reason: 'A usage-source switch is never deleted (0196, ENABLE ALWAYS). Decides only from TG_OP.',
   },
+  statutory_payments_history_guard: {
+    table: 'statutory_payments',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A statutory payment is never deleted, un-voided or rewritten except its void and its one journal link (0222, T-193). Decides only from OLD/NEW.',
+  },
+  statutory_payment_lines_parent_open_trg: {
+    table: 'statutory_payment_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason: 'A line may be added only while its parent payment is posted with no journal entry yet (0222, T-193). Reads the PARENT row current state.',
+  },
   statutory_rates_immutable: {
     table: 'statutory_rates',
     mode: 'always',

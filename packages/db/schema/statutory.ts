@@ -12,13 +12,20 @@
  * (`effective_from` must be the 1st) are hand-added in migration 0206; Drizzle has no builder for them.
  */
 import { sql } from 'drizzle-orm';
-import { check, date, foreignKey, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { check, date, foreignKey, index, integer, numeric, pgTable, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { journalEntries } from './journal';
+import { moneyAccounts } from './money-accounts';
 import { organizations } from './organizations';
 import { persons } from './persons';
 import { stores } from './stores';
 
 export const STATUTORY_AGENCIES = ['sss', 'philhealth', 'pagibig'] as const;
 export type StatutoryAgency = (typeof STATUTORY_AGENCIES)[number];
+/** T-193: the four agencies payroll pays out to. BIR is NOT in STATUTORY_AGENCIES (that list keys rate tables and payslips_skipped_agencies_check). */
+export const STATUTORY_PAYMENT_AGENCIES = ['sss', 'philhealth', 'pagibig', 'bir'] as const;
+export type StatutoryPaymentAgency = (typeof STATUTORY_PAYMENT_AGENCIES)[number];
+export const STATUTORY_PAYMENT_STATUSES = ['posted', 'voided'] as const;
+export type StatutoryPaymentStatus = (typeof STATUTORY_PAYMENT_STATUSES)[number];
 export const CONTRIBUTION_BASE_KINDS = ['gross', 'basic'] as const;
 export type ContributionBaseKind = (typeof CONTRIBUTION_BASE_KINDS)[number];
 export const WITHHOLDING_FREQUENCIES = ['monthly', 'semi_monthly', 'weekly'] as const;
@@ -132,5 +139,104 @@ export const minimumWages = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'minimum_wages_confirmed_by_same_org_fk',
     }).onDelete('restrict'),
+  ],
+);
+
+/*
+ * T-193, migration 0222 - paying the agencies what payroll credited to 2210-2240. Owed is DERIVED from posted payslips;
+ * these tables store what was PAID. Never called "remittance" (that is the cashier's handover).
+ * NOTE: hand-added in migration 0222 - the RLS (ENABLE + FORCE, org_isolation USING + WITH CHECK), the column-level UPDATE
+ * grants, the partial unique `statutory_payments_posted_reference_unique`, the same-org FKs, the CHECKs below, the
+ * `statutory_payments_history_guard` trigger (ENABLE ALWAYS) and the `statutory_payment_lines_parent_open_trg` trigger
+ * (origin). Drizzle has no builder for the triggers, grants or RLS.
+ */
+export const statutoryEmployers = pgTable(
+  'statutory_employers',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'restrict' }),
+    agency: text('agency', { enum: STATUTORY_PAYMENT_AGENCIES }).notNull(),
+    /** Digits only; null for BIR. */
+    employerNo: text('employer_no'),
+    dueDay: integer('due_day').notNull(),
+    createdBy: uuid('created_by').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: uuid('updated_by').references(() => persons.id, { onDelete: 'restrict' }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('statutory_employers_org_agency_unique').on(t.orgId, t.agency),
+    check('statutory_employers_agency_check', sql`${t.agency} in ('sss', 'philhealth', 'pagibig', 'bir')`),
+    check(
+      'statutory_employers_employer_no_check',
+      sql`(${t.agency} = 'bir') = (${t.employerNo} is null) and (${t.employerNo} is null or ${t.employerNo} ~ '^[0-9]+$')`,
+    ),
+    check('statutory_employers_due_day_check', sql`${t.dueDay} between 1 and 31`),
+    check('statutory_employers_updated_pair_check', sql`(${t.updatedBy} is null) = (${t.updatedAt} is null)`),
+    foreignKey({ columns: [t.orgId, t.createdBy], foreignColumns: [persons.orgId, persons.id], name: 'statutory_employers_created_by_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.orgId, t.updatedBy], foreignColumns: [persons.orgId, persons.id], name: 'statutory_employers_updated_by_same_org_fk' }).onDelete('restrict'),
+  ],
+);
+
+export const statutoryPayments = pgTable(
+  'statutory_payments',
+  {
+    /** The form-minted paymentId (no default on purpose). */
+    id: uuid('id').primaryKey(),
+    orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'restrict' }),
+    agency: text('agency', { enum: STATUTORY_PAYMENT_AGENCIES }).notNull(),
+    /** First day of the month the payment covers. */
+    month: date('month').notNull(),
+    paidOn: date('paid_on').notNull(),
+    moneyAccountId: uuid('money_account_id').notNull().references(() => moneyAccounts.id, { onDelete: 'restrict' }),
+    referenceNo: text('reference_no').notNull(),
+    penalty: numeric('penalty', { precision: 14, scale: 2 }).notNull().default('0'),
+    notes: text('notes'),
+    journalEntryId: uuid('journal_entry_id').references(() => journalEntries.id, { onDelete: 'restrict' }),
+    status: text('status', { enum: STATUTORY_PAYMENT_STATUSES }).notNull().default('posted'),
+    voidReason: text('void_reason'),
+    voidedBy: uuid('voided_by').references(() => persons.id, { onDelete: 'restrict' }),
+    voidedAt: timestamp('voided_at', { withTimezone: true }),
+    createdBy: uuid('created_by').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('statutory_payments_org_id_id_unique').on(t.orgId, t.id),
+    uniqueIndex('statutory_payments_posted_reference_unique').on(t.orgId, t.agency, t.referenceNo).where(sql`${t.status} = 'posted'`),
+    index('statutory_payments_org_agency_month_idx').on(t.orgId, t.agency, t.month),
+    check('statutory_payments_agency_check', sql`${t.agency} in ('sss', 'philhealth', 'pagibig', 'bir')`),
+    check('statutory_payments_month_first_check', sql`extract(day from ${t.month}) = 1`),
+    check('statutory_payments_paid_on_check', sql`${t.paidOn} >= ${t.month}`),
+    check('statutory_payments_reference_no_check', sql`${t.referenceNo} = btrim(${t.referenceNo}) and ${t.referenceNo} <> ''`),
+    check('statutory_payments_penalty_check', sql`${t.penalty} >= 0`),
+    check('statutory_payments_penalty_finite_check', sql`${t.penalty} > '-Infinity'::numeric and ${t.penalty} < 'Infinity'::numeric`),
+    check(
+      'statutory_payments_status_check',
+      sql`(${t.status} = 'posted' and ${t.voidReason} is null and ${t.voidedBy} is null and ${t.voidedAt} is null) or (${t.status} = 'voided' and ${t.voidReason} is not null and btrim(${t.voidReason}) <> '' and ${t.voidedBy} is not null and ${t.voidedAt} is not null)`,
+    ),
+    foreignKey({ columns: [t.orgId, t.moneyAccountId], foreignColumns: [moneyAccounts.orgId, moneyAccounts.id], name: 'statutory_payments_money_account_id_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.orgId, t.journalEntryId], foreignColumns: [journalEntries.orgId, journalEntries.id], name: 'statutory_payments_journal_entry_id_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.orgId, t.createdBy], foreignColumns: [persons.orgId, persons.id], name: 'statutory_payments_created_by_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.orgId, t.voidedBy], foreignColumns: [persons.orgId, persons.id], name: 'statutory_payments_voided_by_same_org_fk' }).onDelete('restrict'),
+  ],
+);
+
+export const statutoryPaymentLines = pgTable(
+  'statutory_payment_lines',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'restrict' }),
+    paymentId: uuid('payment_id').notNull().references(() => statutoryPayments.id, { onDelete: 'restrict' }),
+    storeId: uuid('store_id').notNull().references(() => stores.id, { onDelete: 'restrict' }),
+    amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('statutory_payment_lines_payment_store_unique').on(t.paymentId, t.storeId),
+    index('statutory_payment_lines_org_store_idx').on(t.orgId, t.storeId),
+    check('statutory_payment_lines_amount_check', sql`${t.amount} > 0`),
+    check('statutory_payment_lines_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
+    foreignKey({ columns: [t.orgId, t.paymentId], foreignColumns: [statutoryPayments.orgId, statutoryPayments.id], name: 'statutory_payment_lines_payment_id_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.orgId, t.storeId], foreignColumns: [stores.orgId, stores.id], name: 'statutory_payment_lines_store_id_same_org_fk' }).onDelete('restrict'),
   ],
 );
