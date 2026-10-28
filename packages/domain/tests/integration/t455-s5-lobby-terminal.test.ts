@@ -188,8 +188,8 @@ const lobbyStoreOf = async (s: S) => (await sql<{ paused: boolean; pos_seen_at: 
 const auditFor = async (s: S, action?: string) =>
   await sql<{ action: string; actor_person_id: string | null; source: string; before: unknown; after: unknown; entity_id: string }[]>`
     select action, actor_person_id, source, before, after, entity_id from audit_log
-     where org_id = ${s.orgId} and store_id = ${s.storeId} and action like 'lobby.%' ${action ? dsql`and action = ${action}` : dsql``} order by occurred_at, id`;
-const auditAll = async (s: S) => (await sql`select * from audit_log where org_id = ${s.orgId} and action like 'lobby.%'`).length;
+     where org_id = ${s.orgId} and store_id = ${s.storeId} and action like 'lobby.%' ${action ? sql`and action = ${action}` : sql``} order by occurred_at, id`;
+const auditAll = async (s: S) => (await sql`select * from audit_log where org_id = ${s.orgId} and store_id = ${s.storeId} and action like 'lobby.%'`).length;
 
 // ================================================================================================ A. the tablet is the actor
 

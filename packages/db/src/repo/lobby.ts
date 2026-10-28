@@ -451,3 +451,57 @@ export async function purgeBirthdayNames(tx: Tx, orgId: string, afterHours: numb
     .returning({ id: lobbyBirthdayRequests.id });
   return rows.length;
 }
+
+// ------------------------------------------------------------------------------------------------ T-455 S5: the POS tablet's reads
+
+export interface TerminalLineRow {
+  readonly entryId: string;
+  readonly lineKind: 'package' | 'a_la_carte';
+  readonly qty: number;
+  readonly variantId: string;
+  readonly optionValueIds: string[];
+  /** Item name, plus the variant's label when it has one. */
+  readonly label: string;
+  /** The store's ACTIVE menu_pos_v1_links key for this variant, or null (the screen then shows the label as text). */
+  readonly posItemKey: string | null;
+}
+
+/** Stamp the POS card's poll time on the store's lobby row. Returns false when the store has no `lobby_stores` row (none is created). */
+export async function stampPosSeen(tx: Tx, orgId: string, storeId: string): Promise<boolean> {
+  const rows = await tx
+    .update(lobbyStores)
+    .set({ posSeenAt: sql`now()` })
+    .where(and(eq(lobbyStores.orgId, orgId), eq(lobbyStores.storeId, storeId)))
+    .returning({ storeId: lobbyStores.storeId });
+  return rows.length > 0;
+}
+
+/** Set the store's pause switch. Returns false when the store has no `lobby_stores` row (none is created). */
+export async function setPaused(tx: Tx, orgId: string, storeId: string, paused: boolean): Promise<boolean> {
+  const rows = await tx
+    .update(lobbyStores)
+    .set({ paused, updatedAt: sql`now()` })
+    .where(and(eq(lobbyStores.orgId, orgId), eq(lobbyStores.storeId, storeId)))
+    .returning({ storeId: lobbyStores.storeId });
+  return rows.length > 0;
+}
+
+/** Every line of the given entries (of one store), with its option ids, a label and the store's ACTIVE POS key. Never drops a line. */
+export async function listLinesForEntries(tx: Tx, orgId: string, storeId: string, entryIds: readonly string[]): Promise<TerminalLineRow[]> {
+  if (entryIds.length === 0) return [];
+  const idList = sql.join(entryIds.map((id) => sql`${id}::uuid`), sql`, `);
+  const rows = (await tx.execute(sql`
+    select l.entry_id as "entryId", l.line_kind as "lineKind", l.qty as "qty", l.variant_id as "variantId",
+           coalesce((select array_agg(o.option_value_id::text order by o.option_value_id)
+                       from lobby_entry_line_options o where o.org_id = l.org_id and o.line_id = l.id), '{}') as "optionValueIds",
+           case when v.label is null or length(trim(v.label)) = 0 then mi.name else mi.name || ' ' || v.label end as "label",
+           (select k.pos_item_key from menu_pos_v1_links k
+             where k.org_id = l.org_id and k.store_id = ${storeId} and k.variant_id = l.variant_id and k.status = 'active' limit 1) as "posItemKey"
+      from lobby_entry_lines l
+      join menu_item_variants v on v.org_id = l.org_id and v.id = l.variant_id
+      join menu_items mi on mi.org_id = v.org_id and mi.id = v.menu_item_id
+     where l.org_id = ${orgId} and l.entry_id in (${idList})
+     order by l.created_at, l.id
+  `)) as unknown as TerminalLineRow[];
+  return rows;
+}
