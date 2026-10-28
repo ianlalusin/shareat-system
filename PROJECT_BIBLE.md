@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1732` 13. Decision log
-- `1733–1752` 14. Amendment protocol
-- `1753–1757` 15. Engineering standards — the industry practices this project follows
-  - `1758–1763` 15.1 Build order: walking skeleton first
-  - `1764–1775` 15.2 Golden-master testing — the most important practice here
-  - `1776–1784` 15.3 Strangler Fig, not big-bang cutover
-  - `1785–1789` 15.4 No dual-write
-  - `1790–1798` 15.5 Expand/contract migrations
-  - `1799–1807` 15.6 Observability from day zero, not later
-  - `1808–1812` 15.7 CI gates
-  - `1813–1817` 15.8 Backups and a tested restore
-  - `1818–1822` 15.9 Twelve-Factor config
-  - `1823–1830` 15.10 Append-only ledgers — but not event sourcing
-  - `1831–1835` 15.11 Defence in depth
-  - `1836–1864` 15.12 Skills are lenses, not assurance
-  - `1865–1871` 15.13 Reconciliation is a permanent feature
-- `1872–1876` 16. The accounting spine
-  - `1877–1908` 16.0 What we are actually fixing — the diagnosis
-  - `1909–1952` 16.1 The ten invariants — non-negotiable
-  - `1953–1967` 16.2 The oracle: how "correct" is tested
-  - `1968–1989` 16.3 The model — header + lines, not legs
-  - `1990–2009` 16.4 Deliberately simpler than ERPNext
-  - `2010–2078` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2079–2103` 16.6 What v1 already gets right — preserve the intent
-  - `2104–2125` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2126–2140` 16.8 What v1's accounting already gets right
-  - `2141–2184` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2185–2235` 16.10 Posting patterns — one canonical pattern per business event
-  - `2236–2268` 16.11 Inventory's accounting integration
+- `1329–1733` 13. Decision log
+- `1734–1753` 14. Amendment protocol
+- `1754–1758` 15. Engineering standards — the industry practices this project follows
+  - `1759–1764` 15.1 Build order: walking skeleton first
+  - `1765–1776` 15.2 Golden-master testing — the most important practice here
+  - `1777–1785` 15.3 Strangler Fig, not big-bang cutover
+  - `1786–1790` 15.4 No dual-write
+  - `1791–1799` 15.5 Expand/contract migrations
+  - `1800–1808` 15.6 Observability from day zero, not later
+  - `1809–1813` 15.7 CI gates
+  - `1814–1818` 15.8 Backups and a tested restore
+  - `1819–1823` 15.9 Twelve-Factor config
+  - `1824–1831` 15.10 Append-only ledgers — but not event sourcing
+  - `1832–1836` 15.11 Defence in depth
+  - `1837–1865` 15.12 Skills are lenses, not assurance
+  - `1866–1872` 15.13 Reconciliation is a permanent feature
+- `1873–1877` 16. The accounting spine
+  - `1878–1909` 16.0 What we are actually fixing — the diagnosis
+  - `1910–1953` 16.1 The ten invariants — non-negotiable
+  - `1954–1968` 16.2 The oracle: how "correct" is tested
+  - `1969–1990` 16.3 The model — header + lines, not legs
+  - `1991–2010` 16.4 Deliberately simpler than ERPNext
+  - `2011–2079` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2080–2104` 16.6 What v1 already gets right — preserve the intent
+  - `2105–2126` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2127–2141` 16.8 What v1's accounting already gets right
+  - `2142–2185` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2186–2236` 16.10 Posting patterns — one canonical pattern per business event
+  - `2237–2269` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1729,6 +1729,7 @@ just a patch.**
 | 399 | 2026-10-26 | **A MONTH CANNOT CLOSE WHILE A SALES DAY DATED IN IT IS UNPOSTED; A SALES DAY CAN BE VERIFIED INTO A CLOSED MONTH ONLY THROUGH THE ADMIN CLOSED-MONTH OVERRIDE (T-487, DEF-779). Reverses the ADR-006 §8.2 note that left sales days out of the close gate.** (1) `closePeriod`'s draft gate now also counts sales days dated in the period with status `open` or `submitted`, POS-sourced or typed; `verified` and `voided` never block. The old note said `open` can mean "today is still happening" — true for today, never for a month that has ended, and a day left unposted there is revenue the ledger never receives. (2) `verifySalesDay` refuses a closed month in words (the `approveExpense` sentence pair) and takes the existing admin-only `override_period_lock` override, which writes a `period_overrides` row; a locked month never takes it. (3) Reopening stays never built (ADR-006). | Audit finding F15 (Claude accounting-core pass, 26 Oct), re-verified on main 26605d1; Opus planner (AUDIT session) under Ian's 2026-10-26 instruction to fix the money findings | Yes. Reverting re-opens a close with revenue off the books and no in-product remedy |
 | 400 | 2026-10-27 | **A STOCK QUANTITY ROUNDS HALF-UP, AWAY FROM ZERO, AT THE THIRD DECIMAL, ONCE, AT THE END (T-489, DEF-780).** Quantities are `numeric(14,3)`; a conversion factor is `numeric(14,6)`. `quantity × factor` is computed exactly in scaled integers (`multiplyQuantityByFactor`, `packages/core/src/money.ts`), never through a float, and rounded once to three decimals, half-up away from zero — the same rule money already follows (`multiply`, `multiplyToMoney`). A received quantity above zero that converts to zero base units is REFUSED, never skipped as "nothing arrived". Records a rule the code already implied but no document named (§6 says only "never float"). | Audit finding F20 (Claude posting-paths pass, 26 Oct): `toBaseUnits` applied the factor at three decimals through a float and truncated, so 0.0625 became 0.063 and a factor under 0.0005 received nothing. Opus planner (AUDIT session) | Yes. A different rounding rule would change received quantities from then on, never past ones |
 | 401 | 2026-10-27 | **A FORM'S REQUEST ID IS ONE TRANSACTION: A REPLAY MUST MATCH BOTH ITS LINES AND ITS ENTRY DATE, OR IT IS REFUSED (T-488 S2, DEF-787; CORRECTS T-488 RULING 3, WHICH COMPARED LINES ONLY).** Since T-488 the nine owner, liability, loan and supplier-refund postings key on a per-form `requestId` instead of `(document, date, amount)` (bible §4.2 rule 10). `postEntry` answers a known key before it reads the date, so a lost response followed by the same form re-sent with a CHANGED date returned the original entry as success. `postEntryOnce` now compares the saved header's `entry_date` too, as dates only (never re-resolving the period, so an unchanged retry still succeeds after its month closed); a mismatch is refused with "This was already recorded with different figures. Reload the page and try again." Nothing in the ledger is moved or rewritten. | Codex audit 17th pass (`request-id-replay-ignores-entry-date`, F24), confirmed on main 822e7ec; Opus planner (AUDIT session); task number ruled by the orchestrator | Yes. Reverting lets a changed date be silently ignored on a retried form |
+| 402 | 2026-10-28 | **A CUSTOMER CASH REFUND IS PAID FROM A MONEY ACCOUNT OF THE STORE THAT MAKES THE REFUND; ANOTHER STORE'S ACCOUNT, OR A STAFF CASH FLOAT (1120), IS REFUSED (T-493 S2, DEF-797).** `recordCustomerReturn` (external sale, cash refund) now refuses, before any stock moves, a money account whose store is not the order's store ("That money account belongs to another store. A refund is paid from this store's own cash.") and a 1120 staff float (a float belongs to one person's cash request, as payroll and service charges already rule). No inter-store refund path is built: stores do not pay each other's refunds. Customer collections and AP payments already guard cross-store money with `transfer_funds` and inter-store legs; refunds simply do not cross stores. | Audit finding F23 (Claude posting-paths pass, 26 Oct); **Ian's ruling, 2026-10-28, in the AUDIT session: "yes refuse"** (offered: refuse vs allow with a transfer) | Yes. Allowing it later means adding the transfer permission and inter-store legs, as AR/AP do |
 
 ## 14. Amendment protocol
 
