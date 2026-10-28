@@ -18,7 +18,7 @@ import { config } from 'dotenv';
 import { httpHeartbeat } from './lib/backup/heartbeat';
 import { fsStore, resolveSpacesConfig, spacesStore, type ObjectStore } from './lib/backup/object-store';
 import { redact } from './lib/backup/pg-tools';
-import { runDrill } from './lib/backup/run-drill';
+import { drillExitCode, runDrill } from './lib/backup/run-drill';
 
 config({ path: '.env.local' });
 
@@ -59,7 +59,7 @@ async function main(): Promise<number> {
     console.log(
       `[restore-drill] summary: ${r.ok ? 'ok' : 'FAILED'} ${r.dumpKey ?? '-'} download ${r.durations.downloadMs} ms, restore ${r.durations.restoreMs} ms, check ${r.durations.checkMs} ms, ${r.mismatches.length} mismatch(es)`,
     );
-    return r.ok ? 0 : 1;
+    return drillExitCode(r);
   } finally {
     await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
   }
