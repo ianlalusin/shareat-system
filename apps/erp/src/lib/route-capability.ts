@@ -108,6 +108,10 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/staff/hire': 'enrol_staff',
   // T-398 S5d: goods another company sent us are received by whoever may receive a delivery. The longer key wins over the open /inventory.
   '/inventory/deliveries/inbound': 'receive_delivery',
+  // T-398 S6d: the franchisor looks at a franchisee's sales and stock (each press is logged by the database); the franchisee's owner reads who looked.
+  '/franchise/sales': 'view_franchise_sales',
+  '/franchise/stock': 'view_franchise_sales',
+  '/franchise/access-log': 'view_franchise_access_log',
 };
 
 /**

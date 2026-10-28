@@ -288,7 +288,7 @@ export { DISCREPANCY_DISPOSITION_LABEL, discrepancyDispositionLabel } from '../s
 export { APP_ROLE } from './rls/registry';
 // T-231 / DEF-211 — the ONE Drizzle-shaped principal helper. Replaces the copies in
 // apps/erp/src/app/expenses/lib.ts and packages/domain/src/scheduler/index.ts.
-export { withOrgPrincipal, withSystemOrgPrincipal } from './rls/principal';
+export { withOrgPrincipal, withActorPrincipal, withSystemOrgPrincipal } from './rls/principal';
 export * as stockLocationsRepo from './repo/stock-locations';
 // DEF-135 (2026-09-03) — the usage document's and the count session's SQL. Until now the only
 // writers of either table were test fixtures.
@@ -353,6 +353,9 @@ export * as posTerminalLinksRepo from './repo/pos-terminal-links';
 export * as posTabletPairingsRepo from './repo/pos-tablet-pairings';
 // T-455 S2 - the customer lobby: the only place its SQL is written.
 export * as lobbyRepo from './repo/lobby';
+// T-398 S6 - the franchisor's view of a franchisee (sales, stock), its access log and break-glass logging: the only place its SQL is written.
+export * as franchiseRepo from './repo/franchise';
+export type { FranchiseeRow, FranchiseSalesRow, FranchiseStockRow, AccessLogRow } from './repo/franchise';
 export type {
   PosItemMapRow,
   PosMapRequestRow,
