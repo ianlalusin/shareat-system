@@ -11,7 +11,8 @@
     "./logger": "./src/logger.ts",
     "./env": "./src/env.ts",
     "./exif": "./src/exif.ts",
-    "./sentence": "./src/sentence.ts"
+    "./sentence": "./src/sentence.ts",
+    "./csv": "./src/csv.ts"
   },
   "dependencies": {
     "pino": "^9.6.0",
