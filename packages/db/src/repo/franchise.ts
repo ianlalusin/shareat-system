@@ -173,6 +173,19 @@ export async function logBreakGlassApproval(tx: Tx, personId: string, capability
   return rows[0]?.logged === true;
 }
 
+/**
+ * The approval verifiers' entry point. `log_break_glass_approval` refuses 42501 unless `app.person_id` is the approver himself, and the verifier's lookup
+ * transaction carries the org only. So this sets the person to the PIN's OWNER, calls the logger, and puts back whatever `app.person_id` held before -
+ * the setting is transaction-local and is restored, so the rest of the caller's transaction runs as the same person it did before. Returns whether a row was added.
+ */
+export async function logBreakGlassApprovalAsApprover(tx: Tx, approverPersonId: string, capability: string, storeId: string | null): Promise<boolean> {
+  const prior = (await tx.execute(sql`select coalesce(current_setting('app.person_id', true), '') as p`)) as unknown as { p: string }[];
+  await tx.execute(sql`select set_config('app.person_id', ${approverPersonId}, true)`);
+  const logged = await logBreakGlassApproval(tx, approverPersonId, capability, storeId);
+  await tx.execute(sql`select set_config('app.person_id', ${prior[0]?.p ?? ''}, true)`);
+  return logged;
+}
+
 export interface AccessLogRow {
   readonly id: string;
   readonly what: FranchiseLogKind;

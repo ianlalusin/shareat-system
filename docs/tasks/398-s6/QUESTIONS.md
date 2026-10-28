@@ -40,3 +40,6 @@ checked figures.
   `keep`; QO-8's stale spec text folded into the spec by the orchestrator at merge).
 - QI-1 and QI-2 go to Ian; S6 builds the stated defaults meanwhile (unchecked days visible and labelled, totals from
   checked days only; payments by kind, never by account).
+- S6c audit (28 Oct): CLEAN. Noted, not changed: if the approval log write itself fails, the approval fails closed
+  (raw error, and it counts as a wrong-PIN miss) - accepted for an audit log the owner is owed; a friendlier sentence
+  can come with S6d. The capability-list drift is already pinned (tests/unit/t398-s6-approval-capability-list.test.ts).
