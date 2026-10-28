@@ -53,3 +53,32 @@ describe('T-495 S2 - nested redaction', () => {
     expect(out()).toContain('"count":3');
   });
 });
+
+describe('T-495 R1 - key variants at depth 0-4 and inside arrays', () => {
+  const KEYS = ['pin', 'PIN', 'Pin', 'password', 'Password', 'token', 'accessToken', 'refreshToken', 'apiKey', 'api_key', 'secret', 'clientSecret', 'authorization', 'Authorization', 'cookie', 'Cookie', 'set-cookie'];
+  const wrap = (depth: number, inner: unknown): unknown => {
+    let v = inner;
+    for (let i = 0; i < depth; i++) v = { [`l${i}`]: v };
+    return v;
+  };
+  const cases: Array<[string, unknown]> = [];
+  for (const k of KEYS) {
+    for (const depth of [0, 1, 2, 3, 4]) {
+      cases.push([`${k} at depth ${depth}`, wrap(depth, { [k]: `SYNTH-${k}-${depth}`, harmless: 'visible-sibling' })]);
+    }
+    cases.push([`${k} inside an array`, { items: [{ [k]: `SYNTH-${k}-arr`, harmless: 'visible-sibling' }] }]);
+  }
+  it.each(cases)('%s is redacted, sibling prints', (_l, payload) => {
+    const { log, out } = capture();
+    log.info(payload as object, 'x');
+    expect(out()).not.toMatch(/SYNTH-/);
+    expect(out()).toContain('visible-sibling');
+  });
+
+  it.each([0, 2, 4])('credentials (whole object) at depth %i is redacted', (depth) => {
+    const { log, out } = capture();
+    log.info(wrap(depth, { credentials: { user: 'SYNTH-CRED-USER', other: 'SYNTH-CRED-OTHER' }, harmless: 'visible-sibling' }) as object, 'x');
+    expect(out()).not.toMatch(/SYNTH-/);
+    expect(out()).toContain('visible-sibling');
+  });
+});

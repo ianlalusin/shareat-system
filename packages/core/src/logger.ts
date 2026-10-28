@@ -40,13 +40,31 @@ const SENSITIVE_KEYS = [
   'privateKey',
   'DATABASE_URL',
   'template', // biometric templates - never logged
+  'refreshToken',
+  'apiKey',
+  'api_key',
+  'clientSecret',
+  'cookie',
+  'set-cookie',
+  'credentials', // the whole object
 ];
 
 const REDACT_DEPTH = 4;
 
 export const REDACT_CENSOR = '[REDACTED]';
-export const REDACT_PATHS = SENSITIVE_KEYS.flatMap((key) =>
-  Array.from({ length: REDACT_DEPTH + 1 }, (_, depth) => `${'*.'.repeat(depth)}${key}`),
+// Case variants (pin, PIN, Pin) are generated from the one canonical list above - never hand-listed.
+const keyVariants = (key: string): string[] => [
+  ...new Set([key, key.toLowerCase(), key.toUpperCase(), key.charAt(0).toUpperCase() + key.slice(1)]),
+];
+// fast-redact needs bracket notation for keys that are not plain identifiers (set-cookie).
+const asPathSegment = (key: string): string => (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? key : `["${key}"]`);
+const joinPath = (depth: number, key: string): string => {
+  const seg = asPathSegment(key);
+  const prefix = '*.'.repeat(depth);
+  return seg.startsWith('[') ? `${prefix.replace(/\.$/, '')}${seg}` : `${prefix}${seg}`;
+};
+export const REDACT_PATHS = SENSITIVE_KEYS.flatMap(keyVariants).flatMap((key) =>
+  Array.from({ length: REDACT_DEPTH + 1 }, (_, depth) => joinPath(depth, key)),
 );
 
 export const logger = pino({
