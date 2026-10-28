@@ -15,6 +15,8 @@
  * works while proving nothing about whether it is the only way in.
  */
 
+import { refuse } from '@shareat/db';
+
 export interface PutInput {
   path: string;
   bytes: Uint8Array;
@@ -101,7 +103,8 @@ export function setStorageDriver(driver: StorageDriver | null): void {
 export function resolveStorageDriver(): StorageDriver {
   const configured = holder()[DRIVER_SLOT];
   if (configured) return configured;
-  if (process.env.FIREBASE_STORAGE_BUCKET) {
+  const bucket = (process.env.FIREBASE_STORAGE_BUCKET ?? '').trim();
+  if (bucket) {
     throw new Error(
       'storage: FIREBASE_STORAGE_BUCKET is set but no driver is installed. Call ' +
         'setStorageDriver() with the Firebase adapter at startup — falling back to memory here ' +
@@ -111,6 +114,16 @@ export function resolveStorageDriver(): StorageDriver {
         'scripts/orphan-file-sweep.ts does (DEF-308).',
     );
   }
+  // ⛔ T-495 S1 (DEF-791): the memory driver is for development and tests ONLY. A production process that reaches here has no bucket
+  // configured (or blank) and no installed driver; serving memory would acknowledge a receipt and lose it with the process. Refuse.
+  // The check lives here, not in env(): env() also runs at build time, which must not need production settings.
+  if (process.env.NODE_ENV === 'production') {
+    throw refuse(
+      'storage: FIREBASE_STORAGE_BUCKET is not set and no driver is installed, so a production process would keep uploads in ' +
+        'volatile memory and lose them on restart. Set FIREBASE_STORAGE_BUCKET to the private bucket (docs/ops/README.md) so the ' +
+        'boot hook (apps/erp/src/instrumentation.ts) installs the Firebase driver.',
+      'File storage is not set up on this server, so uploads cannot be kept. Ask an administrator to configure it.',
+    );  }
   const memory = inMemoryDriver();
   holder()[DRIVER_SLOT] = memory;
   return memory;

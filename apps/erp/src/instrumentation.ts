@@ -2,9 +2,10 @@
  * Server startup. Runs once per Next.js server instance, before any request is served.
  *
  * ⭐ **This is where the storage driver is installed, and it has to be here rather than in a route.**
- * `resolveStorageDriver()` throws if `FIREBASE_STORAGE_BUCKET` is set and no driver has been
- * installed — deliberately, because falling back to the in-memory driver on a server would accept a
- * receipt, report success, and lose it when the process restarts. Installing from a request handler
+ * `resolveStorageDriver()` throws if no driver has been installed and the process is in production
+ * (bucket set or not) — deliberately, because falling back to the in-memory driver on a server would
+ * accept a receipt, report success, and lose it when the process restarts. In production `register()`
+ * itself throws when `FIREBASE_STORAGE_BUCKET` is missing or blank (T-495 S1). Installing from a request handler
  * would make that failure depend on which page happened to be visited first.
  *
  * ⚠️ `register()` must complete before the server accepts requests, so a misconfigured bucket fails
@@ -21,11 +22,17 @@ export async function register(): Promise<void> {
     import('@shareat/storage-firebase'),
   ]);
 
-  // Null means no bucket is configured — development and tests, where the in-memory driver is
-  // correct and `resolveStorageDriver()` supplies it on its own.
+  // Null means no usable bucket is configured (absent, empty or whitespace-only). Development and
+  // tests keep the in-memory driver; production refuses to boot (T-495 S1, DEF-791).
   const config = firebaseConfigFromEnv();
   if (!config) {
-    console.log('[storage] no FIREBASE_STORAGE_BUCKET — using the in-memory driver (dev/test).');
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'storage: FIREBASE_STORAGE_BUCKET is not set. Production refuses volatile memory storage - uploads would be lost on restart. ' +
+          'Set FIREBASE_STORAGE_BUCKET to the private bucket (docs/ops/README.md).',
+      );
+    }
+    console.log('[storage] no FIREBASE_STORAGE_BUCKET - using the in-memory driver (dev/test only).');
     return;
   }
 

@@ -19,8 +19,14 @@ const isDev = process.env.NODE_ENV !== 'production';
 /**
  * Keys whose values are redacted wherever they appear. Add to this list rather than
  * remembering not to log something.
+ *
+ * T-495 S2 (DEF-792) - the supported contract: a sensitive key is redacted at the root and at up to
+ * FOUR levels of nesting (`k`, `*.k`, `*.*.k`, `*.*.*.k`, `*.*.*.*.k`), in a payload or in a child
+ * logger's bindings. Deeper than that, or inside a free-text message, is NOT covered - keep secrets
+ * out of those. The paths are generated from this one list so a key cannot be protected at one depth
+ * and forgotten at another.
  */
-const REDACT_PATHS = [
+const SENSITIVE_KEYS = [
   'password',
   'passcode',
   'pin',
@@ -33,16 +39,37 @@ const REDACT_PATHS = [
   'serviceAccount',
   'privateKey',
   'DATABASE_URL',
-  'template', // biometric templates — never logged
-  '*.password',
-  '*.passcode',
-  '*.token',
-  '*.secret',
+  'template', // biometric templates - never logged
+  'refreshToken',
+  'apiKey',
+  'api_key',
+  'clientSecret',
+  'cookie',
+  'set-cookie',
+  'credentials', // the whole object
 ];
+
+const REDACT_DEPTH = 4;
+
+export const REDACT_CENSOR = '[REDACTED]';
+// Case variants (pin, PIN, Pin) are generated from the one canonical list above - never hand-listed.
+const keyVariants = (key: string): string[] => [
+  ...new Set([key, key.toLowerCase(), key.toUpperCase(), key.charAt(0).toUpperCase() + key.slice(1)]),
+];
+// fast-redact needs bracket notation for keys that are not plain identifiers (set-cookie).
+const asPathSegment = (key: string): string => (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? key : `["${key}"]`);
+const joinPath = (depth: number, key: string): string => {
+  const seg = asPathSegment(key);
+  const prefix = '*.'.repeat(depth);
+  return seg.startsWith('[') ? `${prefix.replace(/\.$/, '')}${seg}` : `${prefix}${seg}`;
+};
+export const REDACT_PATHS = SENSITIVE_KEYS.flatMap(keyVariants).flatMap((key) =>
+  Array.from({ length: REDACT_DEPTH + 1 }, (_, depth) => joinPath(depth, key)),
+);
 
 export const logger = pino({
   level,
-  redact: { paths: REDACT_PATHS, censor: '[REDACTED]' },
+  redact: { paths: REDACT_PATHS, censor: REDACT_CENSOR },
   base: { app: 'shareat-system' },
   ...(isDev
     ? {
@@ -84,7 +111,18 @@ export function jobResult(
   counts: Record<string, number>,
   extra?: Record<string, unknown>,
 ) {
-  const failed = counts.failed ?? counts.errors ?? 0;
+  // T-495 S3 (DEF-793) - bible 15.6 made counts mandatory in a comment; this is the code. A job that cannot say what it did must not look finished.
+  const entries = Object.entries(counts);
+  if (entries.length === 0) {
+    throw new TypeError(`jobResult(${job}): counts are mandatory - report what the job processed, skipped and failed (bible 15.6).`);
+  }
+  for (const [name, n] of entries) {
+    if (typeof n !== 'number' || !Number.isFinite(n) || n < 0) {
+      throw new TypeError(`jobResult(${job}): count "${name}" must be a finite number of zero or more, got ${String(n)}.`);
+    }
+  }
+  // `failed` and `errors` are independent indicators: either one above zero makes the line an error (a zero in one must never hide the other).
+  const failed = (counts.failed ?? 0) + (counts.errors ?? 0);
   const line = { job, ...counts, ...extra };
   if (failed > 0) {
     logger.error(line, `${job} finished WITH FAILURES`);
