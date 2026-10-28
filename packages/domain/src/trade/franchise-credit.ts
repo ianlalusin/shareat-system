@@ -49,6 +49,12 @@ export async function postFranchiseShortageCredit(
   }
   await authorize(tx, actor, 'resolve_trade_discrepancy', { storeId: shipment.storeId });
 
+  // ⛔ T-494 (F27 / DEF-790): the order's charge is locked BEFORE anything is read or locked under it - the same lock `recordCollection`, the
+  // write-off and `voidCharge` take - so a collection committing between this note's read of the open amount and its commit cannot over-credit
+  // 1210. LOCK ORDER, everywhere: the charge row first, then the shipment / discrepancy rows (`openFranchiseCreditsOfShipment` is FOR UPDATE).
+  const order = await tradeRepo.getOrderById(tx, actor.orgId, shipment.tradeOrderId);
+  if (order?.arChargeId) await arRepo.lockChargesForAllocation(tx, actor.orgId, [order.arChargeId]);
+
   const open = await tradeDiscrepanciesRepo.openFranchiseCreditsOfShipment(tx, actor.orgId, shipment.id);
   if (open.length === 0) {
     if (compare(money(shipment.creditedTotal), ZERO) > 0) {
@@ -63,7 +69,6 @@ export async function postFranchiseShortageCredit(
     );
   }
 
-  const order = await tradeRepo.getOrderById(tx, actor.orgId, shipment.tradeOrderId);
   if (!order || !order.arChargeId) {
     throw internalFault(`postFranchiseShortageCredit: shipment ${shipment.id}'s order has no receivable charge.`);
   }
