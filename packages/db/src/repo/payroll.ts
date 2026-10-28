@@ -134,6 +134,17 @@ export async function getPayRun(tx: Tx, orgId: string, id: string): Promise<PayR
   return (row as PayRunRow | undefined) ?? null;
 }
 
+/** T-193: SELECT ... FOR UPDATE of ONE run. Returns the row as it is AFTER the lock was won (a run voided while we waited reads voided), or null. */
+export async function lockPayRun(tx: Tx, orgId: string, id: string): Promise<PayRunRow | null> {
+  const [row] = await tx
+    .select()
+    .from(payRuns)
+    .where(and(eq(payRuns.id, id), eq(payRuns.orgId, orgId)))
+    .limit(1)
+    .for('update');
+  return (row as PayRunRow | undefined) ?? null;
+}
+
 export async function listPayRuns(
   tx: Tx,
   orgId: string,
