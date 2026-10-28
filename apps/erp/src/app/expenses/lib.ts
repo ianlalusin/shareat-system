@@ -19,6 +19,8 @@ import {
   moneyAccountsRepo, schema, expensesRepo, journalRepo,
   withOrgPrincipal as dbWithOrgPrincipal, type Tx,
 } from '@shareat/db';
+// T-398 S6c: the org principal PLUS the acting person (franchisor reads). Re-export only.
+export { withActorPrincipal } from '@shareat/db';
 import { recordIfUnmappedConstraint } from '../../lib/constraint-messages';
 
 /*

@@ -486,7 +486,7 @@ describe('T-389 K2 - the typed slot in the signed flash', () => {
   it('round-trips signed: the cookie holds t exactly; the page gets sp.typed; the URL holds only f', async () => {
     const { f, u, url } = await post('/ap/suppliers/x', {}, { error: 'No.', typed: TYPED });
     expect([...u.searchParams.keys()]).toEqual(['f']);
-    for (const needle of ['Typed', 'supplier.edit', encodeURIComponent('a & b'), 'positionIds', 'p3']) expect(url).not.toContain(needle);
+    for (const needle of ['Typed', 'supplier.edit', encodeURIComponent('a & b'), 'positionIds', 'p3']) expect(url.replace(/f=[^&]*/, '')).not.toContain(needle); // DEF-801: the f= value is a random base64url id and can contain 'p3'; check the URL without it
     expect(decoded().t).toEqual(TYPED);
     const sp = await readFull({ f: f! });
     expect(sp.error).toBe('No.');

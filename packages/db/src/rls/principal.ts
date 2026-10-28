@@ -157,17 +157,42 @@ export async function withSystemOrgPrincipal<T>(
   return openAs('system', orgId, fn);
 }
 
+/**
+ * T-398 S6 (K5) - the org principal PLUS the acting person. `withOrgPrincipal` sets the org only; the definers that act for a person (the franchisor's
+ * `franchise_*` readers, `receive_inter_entity_shipment`, the system-bill definer) read `app.person_id` and refuse 42501 without it.
+ *
+ * Same single round trip and the same transaction scope as `withOrgPrincipal`: every setting is `set_config(..., true)`, so the role, the org AND the person
+ * revert at COMMIT or ROLLBACK and the next transaction on the pooled connection sees none of them. A session-scoped setting here would serve the NEXT request
+ * under the PREVIOUS person's identity.
+ */
+export async function withActorPrincipal<T>(
+  orgId: string,
+  personId: string,
+  fn: (tx: Tx) => Promise<T>,
+): Promise<T> {
+  return openAs('staff', orgId, fn, personId);
+}
+
 /** The one implementation. See `withOrgPrincipal` above for why it is a single round trip. */
 async function openAs<T>(
   kind: 'staff' | 'system',
   orgId: string,
   fn: (tx: Tx) => Promise<T>,
+  personId?: string,
 ): Promise<T> {
   return transaction(async (tx) => {
-    await tx.execute(dsql`
-      select set_config('role', ${APP_ROLE}, true),
-             set_config('app.principal_kind', ${kind}, true),
-             set_config('app.org_id', ${orgId}, true)`);
+    if (personId === undefined) {
+      await tx.execute(dsql`
+        select set_config('role', ${APP_ROLE}, true),
+               set_config('app.principal_kind', ${kind}, true),
+               set_config('app.org_id', ${orgId}, true)`);
+    } else {
+      await tx.execute(dsql`
+        select set_config('role', ${APP_ROLE}, true),
+               set_config('app.principal_kind', ${kind}, true),
+               set_config('app.org_id', ${orgId}, true),
+               set_config('app.person_id', ${personId}, true)`);
+    }
     return fn(tx);
   });
 }
