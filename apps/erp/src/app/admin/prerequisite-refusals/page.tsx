@@ -1,5 +1,5 @@
 import { toBusinessDate } from '@shareat/core/datetime';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '../../../lib/page-access';
 import { refusalCounts } from './lib';
 import { Page } from '@/components/shell/Page';
 
@@ -16,7 +16,8 @@ export const dynamic = 'force-dynamic';
  * slice 2.
  */
 export default async function PrerequisiteRefusalsPage() {
-  const { actor } = await requireSession('/admin/prerequisite-refusals');
+  const { actor, refusal } = await requirePageAccess('/admin/prerequisite-refusals');
+  if (refusal) return refusal;
   const rows = await refusalCounts(actor.orgId);
 
   return (

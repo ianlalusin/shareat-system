@@ -157,8 +157,8 @@ describe('T-288 — ROUTE_CAPABILITY covers what it claims, and only what it can
  * ⛔ Add a route here only when a bible row / task says it is open - never to make this guard green. An unmapped page with no
  * decision is a defect to report, not an entry to add.
  *
- * Empty today: every mapped page is covered by ROUTE_CAPABILITY, and the one unmapped page found (/admin/prerequisite-refusals,
- * T-245) has no recorded decision that it is open - see ADMIN_ROUTES_AWAITING_A_DECISION below.
+ * Empty today: every mapped page is covered by ROUTE_CAPABILITY. The one page once unmapped (/admin/prerequisite-refusals, T-245) was
+ * mapped to manage_stores by Ian's ruling of 2026-10-28 (bible row 403).
  */
 const APPROVED_OPEN_ADMIN_ROUTES: Readonly<Record<string, string>> = {};
 
@@ -168,7 +168,7 @@ const APPROVED_OPEN_ADMIN_ROUTES: Readonly<Record<string, string>> = {};
  * and a separate assertion below fails when an entry here is no longer a real unmapped page (so this list can only shrink).
  * Resolution is Ian's: map it to a capability (and gate the page with requirePageAccess) or record a decision that it is open.
  */
-const ADMIN_ROUTES_AWAITING_A_DECISION: readonly string[] = ['/admin/prerequisite-refusals'];
+const ADMIN_ROUTES_AWAITING_A_DECISION: readonly string[] = [];
 
 /** Has the permission map an entry (any value, `null` included - an explicit open entry is still an entry) for this route? */
 function hasMapEntry(route: string): boolean {

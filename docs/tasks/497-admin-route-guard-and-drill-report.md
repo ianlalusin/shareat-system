@@ -45,3 +45,16 @@ S1 = F31 (branch `audit/t497-s1-admin-route-guard`), S2 = F32 (branch `audit/t49
 ## Acceptance (each slice)
 Red then green; root typecheck clean; the WHOLE unit project green (`npx vitest run --project unit --testTimeout=120000
 --maxWorkers=3`, re-run timeout-only failures alone); `tests/unit/register-row-shape.test.ts` green. LF only.
+
+## S1 addendum — Ian's ruling, 2026-10-28: "Prerequisite walls" is admins only
+The S1 guard found one unmapped admin page: `/admin/prerequisite-refusals` (T-245). Ian ruled: **admins only**, the
+same permission as the Stores admin page (`manage_stores`). So:
+- `apps/erp/src/lib/route-capability.ts`: add `'/admin/prerequisite-refusals': 'manage_stores'` next to `/admin/stores`.
+- `apps/erp/src/app/admin/prerequisite-refusals/page.tsx`: replace `requireSession(...)` with
+  `requirePageAccess('/admin/prerequisite-refusals')` and render the refusal exactly as `admin/stores/page.tsx` does.
+- `tests/unit/route-capability-coverage.test.ts`: `ADMIN_ROUTES_AWAITING_A_DECISION` becomes empty (keep the constant and
+  its "can only shrink" check); the existing reverse-direction checks must pass for the new entry.
+- Test (red first): a user without `manage_stores` is refused this route; a holder is admitted — follow the existing
+  `routeCapability` / page-access unit-test pattern (find it under `apps/erp/tests` or `tests/unit`).
+- `PROJECT_BIBLE.md` §13: row **403**, dated 2026-10-28, recording the ruling (Ian; F31 / DEF-794 / T-497 S1); then
+  `npm run toc`.
