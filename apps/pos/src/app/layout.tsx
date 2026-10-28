@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Suspense } from 'react';
 import { Toaster } from '@/components/ui/toaster';
 import './globals.css';
-import { Baloo_2, Poppins } from 'next/font/google';
+import localFont from 'next/font/local';
 import { cn } from '@/lib/utils';
 import { FirstLoginGuard } from '@/components/auth/first-login-guard';
 import { Providers } from './providers';
@@ -12,17 +12,21 @@ import { OutboxSync } from '@/components/shared/OutboxSync';
 import { UnsentBanner } from '@/components/shared/UnsentBanner';
 import { XSlipScheduler } from '@/components/shared/XSlipScheduler';
 
-// Define fonts
-const fontSans = Poppins({
-  subsets: ["latin"],
-  variable: "--font-sans",
-  weight: ['400', '500', '600', '700']
+// T-496 — fonts are committed woff2 files (./fonts); the build never calls Google. Latin subset.
+const fontSans = localFont({
+  src: [
+    { path: './fonts/poppins-latin-400-normal.woff2', weight: '400', style: 'normal' },
+    { path: './fonts/poppins-latin-500-normal.woff2', weight: '500', style: 'normal' },
+    { path: './fonts/poppins-latin-600-normal.woff2', weight: '600', style: 'normal' },
+    { path: './fonts/poppins-latin-700-normal.woff2', weight: '700', style: 'normal' },
+  ],
+  variable: '--font-sans',
 })
 
-const fontSerif = Baloo_2({
-  subsets: ["latin"],
-  variable: "--font-serif",
-  weight: ['400', '700']
+const fontSerif = localFont({
+  src: './fonts/baloo-2-latin-wght-normal.woff2',
+  weight: '400 800',
+  variable: '--font-serif',
 })
 
 // PWA Metadata

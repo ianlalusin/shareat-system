@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
-import { Baloo_2, Plus_Jakarta_Sans } from 'next/font/google';
+import localFont from 'next/font/local';
 import './globals.css';
 import { AppShell } from '../components/shell/AppShell';
 import { Toaster } from '../components/feedback/Toaster';
@@ -8,16 +8,16 @@ import { TooltipLayer } from '@/components/ui/TooltipLayer';
 import { readToastFlash } from '../lib/flash-toast';
 import { THEME_COOKIE_NAME, parseTheme } from '../components/shell/theme-state';
 
-// T-387 S1 — self-hosted at BUILD time (CI); the server never calls Google at runtime.
-const fontDisplay = Baloo_2({
-  subsets: ['latin'],
-  weight: ['600', '700', '800'],
+// T-496 — fonts are committed woff2 files (./fonts); the build never calls Google. Latin subset, variable weight.
+const fontDisplay = localFont({
+  src: './fonts/baloo-2-latin-wght-normal.woff2',
+  weight: '400 800',
   variable: '--font-display',
   display: 'swap',
 });
-const fontBody = Plus_Jakarta_Sans({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700', '800'],
+const fontBody = localFont({
+  src: './fonts/plus-jakarta-sans-latin-wght-normal.woff2',
+  weight: '200 800',
   variable: '--font-body',
   display: 'swap',
 });
