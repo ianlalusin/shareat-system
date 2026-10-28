@@ -35,5 +35,7 @@ export function installScriptStorageDriver(scriptName: string): void {
   }
   // Null means no bucket configured — development and tests, where the in-memory default
   // `resolveStorageDriver()` supplies on its own is correct, the same rule instrumentation.ts uses.
-  console.log(`${scriptName}: no FIREBASE_STORAGE_BUCKET — using the in-memory driver (dev/test).`);
+  console.log(
+    `${scriptName}: no FIREBASE_STORAGE_BUCKET — the in-memory driver is for dev/test only; with NODE_ENV=production the first storage call is refused (T-495).`,
+  );
 }
