@@ -184,7 +184,8 @@ they need weekly, the boundary is wrong.
 | Capability | Scope | super | admin | manager | staff | Notes |
 |---|---|:--:|:--:|:--:|:--:|---|
 | `cross_org_access` | platform | ✅ | ✗ | ✗ | ✗ | **Break-glass.** Re-auth, stated reason, every use logged (bible row 114) |
-| `view_franchise_sales` | platform | ✅ | ✗ | ✗ | ✗ | The franchisor view — **sales only**, never their costs or profit (ADR-008 §5) |
+| `view_franchise_sales` | platform | ✅ | ✗ | ✗ | ✗ | The franchisor view — **sales and stock levels**, per Q2 (b), never costs, prices paid or profit (ADR-008 §5). Read only through the two `franchise_*` definers, which log every call. Denial: `t398-s6-franchise-capabilities.test.ts` |
+| `view_franchise_access_log` | org | ✅ | ✅ | ✅ | ✗ | T-398 S6. The franchisee's owner reads every look and every break-glass use by the franchisor (Q1 a, Q10 a). Role-only (no grant). Denial: `t398-s6-franchise-capabilities.test.ts` |
 
 ---
 
