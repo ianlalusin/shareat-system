@@ -35,3 +35,25 @@ passing; add one action-level case if that file has the pattern.
 ## Acceptance
 Red then green; `cutover.test.ts`, `t390-s5-opening-web.test.ts`, `t343-s5-5v-followups.test.ts` green; root + ERP
 typecheck clean; the WHOLE unit project green (`npx vitest run --project unit`).
+
+## S2 — 2026-10-28 (Opus planner, AUDIT session): a customer cash refund comes from the refunding store's own account (F23, DEF-797)
+Source: audit finding F23 (Claude posting-paths pass, `C:\Users\ianla\shareat-audits\OPEN\audit-2026-10-26-claude-posting-paths-pass.md`),
+re-confirmed on main fd3ae7b. **Ian's ruling, 2026-10-28: "yes refuse"** — a refund from another store's money account is refused
+(no transfer / inter-store path). Branch `audit/t493-s2-refund-own-store-account`, own PR; DEF-797 and bible row 402 from the orchestrator.
+- **Today:** `packages/domain/src/trade/returns.ts` ~317-326 (`recordCustomerReturn`, `input.refund`) loads the money account and
+  credits it at `order.storeId` without checking `account.storeId === order.storeId`, so a refund could take money out of another
+  store's safe while the books say the refunding store paid. Customer collections (`ar/index.ts` ~572-586) and AP payments guard
+  the cross-store case properly. The refund screen hides the account choice today, so this is caller-guarded, not yet observed.
+- **Rulings:** (1) after loading the account, refuse unless `account.storeId === order.storeId`: "That money account belongs to
+  another store. A refund is paid from this store's own cash." (same `{ ok: false, reason }` shape the function already returns;
+  if it has a user-facing reason field, use it). (2) Refuse the staff cash float (GL 1120) by name, before posting, as payroll does
+  (T-486 / `assertPayrollMoneyAccount` in `payroll/index.ts`; reuse the same reason wording style): a float belongs to one person's
+  cash request and a refund has none to attach (today the database would reject it with a developer error). (3) Change nothing else
+  in `returns.ts` (#86 is also changing this file: keep the diff to these checks).
+- **Tests first (real Postgres, dedicated fresh *_test DB):** in the existing customer-returns integration test (or a new
+  `t493-s2-refund-own-store.test.ts`): refund from another store's account → refused, nothing written (no return row, no journal
+  entry, no stock movement); refund from the store's 1120 float → refused by name, nothing written; refund from the store's own
+  office cash → unchanged (posts).
+- Files: `packages/domain/src/trade/returns.ts`, the test file, this spec, `docs/DEFECTS-REGISTER.md` (DEF-797, full row shape),
+  `PROJECT_BIBLE.md` row 402 (planner writes it).
+- Acceptance: red then green; customer-returns / trade tests green; root + ERP typecheck; WHOLE unit project; register-row-shape.

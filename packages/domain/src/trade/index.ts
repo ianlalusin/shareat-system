@@ -24,12 +24,12 @@
  * v2, so a dispatch relieves no stock. Wholesale revenue is measurable after this task; wholesale
  * MARGIN is not. See the spec's Out of scope.
  */
-import { auditLogRepo, commissaryRepo, customersRepo, interEntityRepo, itemsRepo, journalRepo, moneyTransfersRepo, stockLedgerRepo, stockLocationsRepo, tradeRepo, type Tx } from '@shareat/db';
+import { arRepo, auditLogRepo, commissaryRepo, customersRepo, interEntityRepo, itemsRepo, journalRepo, moneyTransfersRepo, stockLedgerRepo, stockLocationsRepo, tradeRepo, type Tx } from '@shareat/db';
 import { authorize, AuthorizationError, type Actor, type Capability, can } from '@shareat/auth';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { assertFiguresReconcile } from '../shared/reconcile';
 import { parseQuantityInput } from '../shared/quantity-input';
-import { recordCharge, recordChargeWithCollection, voidCharge, type PayNowInput } from '../ar';
+import { CHARGE_HAS_CREDIT_SENTENCE, recordCharge, recordChargeWithCollection, voidCharge, type PayNowInput } from '../ar';
 import { branchPriceFor } from '../items';
 import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
@@ -838,6 +838,13 @@ export async function voidTradeOrder(
         `voidTradeOrder: shipment ${shipment.id} was received by the buyer on ${day}.`,
         `${customer?.name ?? 'The buyer'} received this order on ${day}, so it can no longer be voided. Correct a shortage with a credit note or a return instead.`,
       );
+    }
+
+    // DEF-796: a sale whose charge has a posted return or credit note cannot be voided - said before the stock checks below.
+    if (order.arChargeId && (order.status === 'dispatched' || order.status === 'received')) {
+      if ((await arRepo.postedCreditCount(trx, actor.orgId, order.arChargeId)) > 0) {
+        throw refuse(`voidTradeOrder: order ${order.id} has a posted return or credit note against it.`, CHARGE_HAS_CREDIT_SENTENCE);
+      }
     }
 
     // T-369 S4: voiding a DISPATCHED order gives the goods back, dated by the order; a closed month's stock

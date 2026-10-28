@@ -2,7 +2,7 @@
  * T-387 slice S1 — the root layout: both font variables and `data-theme` on `<html>`, plus the
  * brand metadata. Vitest runs `.test.ts` in a node environment with no jsdom (task L6), so this
  * renders with `renderToStaticMarkup` and mocks the three things a node test cannot supply:
- * `next/headers` (the theme cookie), `next/font/google` (build-time font loader) and `AppShell`.
+ * `next/headers` (the theme cookie), `next/font/local` (font loader) and `AppShell`.
  *
  * Font export names are the real ones: `Baloo 2` -> `Baloo_2`, `Plus Jakarta Sans` ->
  * `Plus_Jakarta_Sans` (both present in next/dist/compiled/@next/font/dist/google/font-data.json).
@@ -19,10 +19,12 @@ vi.mock('next/headers', () => ({
       name === 'shareat_theme' && state.cookie !== undefined ? { name, value: state.cookie } : undefined,
   }),
 }));
-
-vi.mock('next/font/google', () => ({
-  Baloo_2: () => ({ variable: '__baloo', className: 'baloo-class' }),
-  Plus_Jakarta_Sans: () => ({ variable: '__jakarta', className: 'jakarta-class' }),
+// T-496 - fonts now load via next/font/local; return a per-call value keyed on the CSS variable.
+vi.mock('next/font/local', () => ({
+  default: (opts: { variable: string }) =>
+    opts.variable === '--font-display'
+      ? { variable: '__baloo', className: 'baloo-class' }
+      : { variable: '__jakarta', className: 'jakarta-class' },
 }));
 
 vi.mock('../src/components/shell/AppShell', () => ({
