@@ -146,6 +146,101 @@ describe('T-288 — ROUTE_CAPABILITY covers what it claims, and only what it can
   });
 });
 
+// =====================================================================================================================
+// T-497 S1 / DEF-794 - a page under /admin or /settings with NO permission-map entry used to pass this file silently
+// (`capabilityForRoute(...) === null` was skipped above). docs/tasks/288-staff-pin-sees-every-admin-screen.md requires
+// enumeration and a red when a route lacks an entry; bible section 7 rule 11 is default-deny. Nothing here changes a page's access.
+// =====================================================================================================================
+
+/**
+ * Routes under /admin or /settings that are open to any signed-in person BY RECORDED DECISION. Each entry cites the decision.
+ * ⛔ Add a route here only when a bible row / task says it is open - never to make this guard green. An unmapped page with no
+ * decision is a defect to report, not an entry to add.
+ *
+ * Empty today: every mapped page is covered by ROUTE_CAPABILITY, and the one unmapped page found (/admin/prerequisite-refusals,
+ * T-245) has no recorded decision that it is open - see ADMIN_ROUTES_AWAITING_A_DECISION below.
+ */
+const APPROVED_OPEN_ADMIN_ROUTES: Readonly<Record<string, string>> = {};
+
+/**
+ * ⚠️ KNOWN GAP, reported not hidden (DEF-794 follow-up): pages that are unmapped and have no decision that they are open.
+ * Listing one here keeps the guard honest about it without inventing a capability; the guard still FAILS for any route not here,
+ * and a separate assertion below fails when an entry here is no longer a real unmapped page (so this list can only shrink).
+ * Resolution is Ian's: map it to a capability (and gate the page with requirePageAccess) or record a decision that it is open.
+ */
+const ADMIN_ROUTES_AWAITING_A_DECISION: readonly string[] = ['/admin/prerequisite-refusals'];
+
+/** Has the permission map an entry (any value, `null` included - an explicit open entry is still an entry) for this route? */
+function hasMapEntry(route: string): boolean {
+  return Object.keys(ROUTE_CAPABILITY).some((k) => route === k || route.startsWith(`${k}/`));
+}
+
+function isAdminOrSettings(route: string): boolean {
+  return /^\/(admin|settings)(\/|$)/.test(route);
+}
+
+/** The admin/settings routes (from `routes`) with no map entry and no approved-open decision. */
+function unmappedAdminRoutes(routes: readonly string[]): string[] {
+  return routes
+    .map(staticPrefix)
+    .filter((r) => isAdminOrSettings(r) && !hasMapEntry(r) && !(r in APPROVED_OPEN_ADMIN_ROUTES))
+    .sort();
+}
+
+describe('T-497 S1 - every /admin and /settings page has a permission-map entry or an approved-open decision', () => {
+  const realRoutes = trackedPages().map(routeOf);
+
+  it('the real tree: no unmapped admin/settings page beyond the known, reported ones', () => {
+    const unexpected = unmappedAdminRoutes(realRoutes).filter((r) => !ADMIN_ROUTES_AWAITING_A_DECISION.includes(r));
+    expect(unexpected).toEqual([]);
+  });
+
+  it('the awaiting-a-decision list only shrinks: each entry is a real, still-unmapped page', () => {
+    const stillUnmapped = unmappedAdminRoutes(realRoutes);
+    for (const r of ADMIN_ROUTES_AWAITING_A_DECISION) expect(stillUnmapped, r).toContain(r);
+  });
+
+  it('every approved-open entry names a real page, cites a decision, and is genuinely unmapped', () => {
+    for (const [route, why] of Object.entries(APPROVED_OPEN_ADMIN_ROUTES)) {
+      expect(realRoutes.map(staticPrefix), route).toContain(route);
+      expect(why.length, route).toBeGreaterThan(0);
+      expect(hasMapEntry(route), route).toBe(false);
+    }
+  });
+
+  it('⛔ PLANT - a NEW unmapped page under /admin makes the guard fail (it passed before T-497)', () => {
+    expect(unmappedAdminRoutes([...realRoutes, '/admin/audit-unlisted-private'])).toContain('/admin/audit-unlisted-private');
+  });
+
+  it('PLANT - the same under /settings, and a dynamic child of an unmapped admin route', () => {
+    // /settings itself is mapped, so a new settings page is covered by the prefix; an unmapped sibling area is not.
+    expect(unmappedAdminRoutes(['/admin/brand-new/[id]'])).toEqual(['/admin/brand-new']);
+    expect(unmappedAdminRoutes(['/settings/anything-new'])).toEqual([]);
+  });
+
+  it('positive control - a new page under a MAPPED admin route is covered by the prefix (and the gate test above checks it calls a gate)', () => {
+    expect(unmappedAdminRoutes(['/admin/users/audit-unlisted-private'])).toEqual([]);
+  });
+
+  it('PLANT - removing an existing map entry makes its page unmapped', () => {
+    const realStores = realRoutes.filter((r) => r.startsWith('/admin/stores'));
+    expect(realStores.length).toBeGreaterThan(0);
+    const withoutEntry = (route: string) =>
+      Object.keys(ROUTE_CAPABILITY).filter((k) => k !== '/admin/stores').some((k) => route === k || route.startsWith(`${k}/`));
+    // With the real map /admin/stores is covered; with its entry removed no other key covers it.
+    expect(hasMapEntry('/admin/stores')).toBe(true);
+    expect(realStores.map(staticPrefix).some((r) => !withoutEntry(r))).toBe(true);
+  });
+
+  it('an approved-open route passes; an absent one does not (the list is the only way out)', () => {
+    // Exercised through the same predicate with a local approved list so the real list can stay empty.
+    const approved: Record<string, string> = { '/admin/some-open-page': 'bible row N / T-NNN (example)' };
+    const check = (routes: string[]) => routes.filter((r) => isAdminOrSettings(r) && !hasMapEntry(r) && !(r in approved));
+    expect(check(['/admin/some-open-page'])).toEqual([]);
+    expect(check(['/admin/some-other-page'])).toEqual(['/admin/some-other-page']);
+  });
+});
+
 describe('capabilityForRoute — prefix matching', () => {
   it('an exact route matches', () => {
     expect(accepts('/admin/users')).toEqual(['manage_users']);
