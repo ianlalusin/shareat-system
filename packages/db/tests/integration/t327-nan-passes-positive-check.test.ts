@@ -78,7 +78,9 @@ describe('T-327 test 1 — the finite check refuses a raw NaN', () => {
       const constraintName = (caught as { constraint_name?: unknown } | null)?.constraint_name;
       expect(constraintName).toMatch(/_finite_check$/);
     } finally {
-      if (insertedId) await sql`delete from pay_rates where id = ${insertedId}`;
+      // T-498 S1: no delete. pay_rates is append-only (0221); a stray row (only if the CHECK regressed) stays in this
+      // test's own fresh org, and the assertions above already failed loudly.
+      void insertedId;
     }
   });
 });

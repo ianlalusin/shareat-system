@@ -1408,6 +1408,13 @@
       "when": 1805081507084,
       "tag": "0220_t398_s6_franchise_view",
       "breakpoints": true
+    },
+    {
+      "idx": 221,
+      "version": "7",
+      "when": 1805167907084,
+      "tag": "0221_t498_pay_rates_append_only",
+      "breakpoints": true
     }
   ]
 }
