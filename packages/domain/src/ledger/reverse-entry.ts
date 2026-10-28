@@ -181,18 +181,29 @@ async function runReverseEntry(tx: Tx, input: ReverseEntryInput): Promise<Revers
 
   // Contract §5 — scoped to exactly this transaction's line inserts, set immediately
   // before postEntry runs them. See migration 0005 and this file's top comment.
+  // T-492 (DEF-785, F17): switched off again in `finally`, right after this one write - the exemption is for the one
+  // reversal (bible row 193), so a later ordinary posting in the same transaction is judged by the trigger as usual.
   await journalRepo.beginReversalPostingContext(tx);
-
-  const posted = await postEntry(tx, {
-    orgId: original.orgId,
-    entryDate: reversalDate,
-    sourceType: original.sourceType,
-    sourceId: original.sourceId,
-    idempotencyKey,
-    memo,
-    postedBy: input.reversedBy ?? null,
-    lines: reversalLines,
-  });
+  let posted: Awaited<ReturnType<typeof postEntry>>;
+  let wrote = false;
+  try {
+    posted = await postEntry(tx, {
+      orgId: original.orgId,
+      entryDate: reversalDate,
+      sourceType: original.sourceType,
+      sourceId: original.sourceId,
+      idempotencyKey,
+      memo,
+      postedBy: input.reversedBy ?? null,
+      lines: reversalLines,
+    });
+    wrote = true;
+  } finally {
+    // If the write itself failed, the transaction is aborted and rolls back with the flag; the switch-off must not
+    // replace the real refusal with "transaction is aborted". A switch-off that fails after a SUCCESSFUL write throws.
+    if (wrote) await journalRepo.endReversalPostingContext(tx);
+    else await journalRepo.endReversalPostingContext(tx).catch(() => undefined);
+  }
 
   if (posted.created) {
     // Only when THIS call is the one that actually created the reversal — a

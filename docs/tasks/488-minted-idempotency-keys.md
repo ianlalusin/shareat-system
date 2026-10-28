@@ -68,3 +68,22 @@ DEF-778 reported). ⛔ Do not touch `packages/domain/src/trade/**`, `deliveries/
 New tests red on 26605d1 for the stated reasons, then green; existing owners/liabilities/loans/supplier-returns
 integration tests green; root + ERP typecheck clean; guard/census unit files green (re-measure census only where the
 guard says so, never by hand).
+
+## S2 — 2026-10-27 (Opus planner, AUDIT session): a replay must also match the entry DATE (F24, DEF-787)
+Source: Codex 17th pass, `request-id-replay-ignores-entry-date` (`C:\Users\ianla\shareat-audits\OPEN\audit-2026-10-27-seventeenth-pass.md`),
+numbered F24; confirmed on main 822e7ec. Branch `audit/t488-s2-replay-entry-date`, its own PR. Numbers from the orchestrator.
+**Spec correction:** Ruling 3 said the replay compares the LINES only. A request-id key no longer carries the date, and
+`postEntry` returns an existing key before reading `input.entryDate` (`ledger/post-entry.ts` ~149-160), so a lost
+response followed by the same form re-sent with a CHANGED date (31 Jan -> 1 Feb, same amount) returned the January entry
+as "success". Ruling 3 now reads: **lines AND the entry's date** must match; otherwise refuse with the same sentence
+("This was already recorded with different figures. Reload the page and try again.").
+- `postEntryOnce` (`ledger/replay.ts`) reads the existing header's `entry_date` (extend `findEntryByIdempotencyKey` in
+  `packages/db/src/repo/journal.ts` to also return `entryDate`, or add a small header read; one place) and compares it
+  with `input.entryDate` as dates. Compare only; never re-resolve the period, so an unchanged retry still succeeds after
+  the original month closed. `postEntry` itself is not changed; nothing in the ledger is moved or rewritten.
+- Tests first (real Postgres, dedicated fresh *_test DB), in `t488-request-id-keys.test.ts`: same requestId + same lines,
+  date 31 Jan vs 1 Feb → refused, nothing new written; dates two months apart → refused; identical retry after the
+  original month is CLOSED → returns the original entry (`created: false`); `disburseLoan` with only `on` changed → refused.
+- Files: `packages/domain/src/ledger/replay.ts`, `packages/db/src/repo/journal.ts`, the T-488 test file, this spec,
+  `docs/DEFECTS-REGISTER.md` (DEF-787, full row shape), `PROJECT_BIBLE.md` row 401 (planner writes it).
+- Acceptance: red then green; owners/liabilities/loans/supplier-returns tests green; root + ERP typecheck; WHOLE unit project.

@@ -35,6 +35,17 @@ export async function postEntryOnce(tx: Tx, input: PostEntryInput): Promise<Post
   const result = await postEntry(tx, input);
   if (result.created) return result;
 
+  // DEF-787 (T-488 S2): `postEntry` answers a known key before it reads `entryDate`, and a request-id key no longer
+  // carries the date, so a re-sent form with a changed date would be handed the old entry. Compare the dates only;
+  // never re-resolve the period, so an unchanged retry still succeeds after the original month has closed.
+  const header = await journalRepo.findEntryByIdempotencyKey(tx, input.orgId, input.idempotencyKey);
+  if (header && String(header.entryDate).slice(0, 10) !== String(input.entryDate).slice(0, 10)) {
+    throw refuse(
+      `postEntryOnce: idempotency key '${input.idempotencyKey}' was already posted on ${header.entryDate}, not ${input.entryDate}`,
+      'This was already recorded with different figures. Reload the page and try again.',
+    );
+  }
+
   const existing = await journalRepo.findLinesForEntryWithAccountCodes(tx, result.entryId);
   // Compared as sorted sets of normalised lines, not by position: the answer must not depend on how the repo orders rows.
   // Both sides' figures go through the same minting, so '2000' and '2000.00' read alike.
