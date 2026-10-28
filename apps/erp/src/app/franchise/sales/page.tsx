@@ -27,7 +27,8 @@ export default async function FranchiseSalesPage({ searchParams }: { searchParam
 
   const today = toBusinessDate();
   let from: string = addDays(today, -6);
-  if (chosen && from < chosen.salesVisibleFrom) from = chosen.salesVisibleFrom;
+  // ISO dates sort as text: the later of the two (never before the date the agreement shows from).
+  if (chosen) from = [from, chosen.salesVisibleFrom].sort()[1] ?? from;
   const qFrom = one(sp.from);
   const qTo = one(sp.to);
   if (qFrom && DATE.test(qFrom)) from = qFrom;
