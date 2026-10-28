@@ -9,7 +9,7 @@
  * **106 of 794 live rows (13.3%)** — that is what a maintained figure looks like after a year, and
  * it is why every number below is a query.
  */
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, sql, type SQL } from 'drizzle-orm';
 import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
 import type { SafeInsert } from './numeric-input';
@@ -201,7 +201,43 @@ export interface ArOpenItem {
   totalAmount: string;
   allocatedAmount: string;
   writtenOffAmount: string;
+  /** T-494: what credit notes and posted returns have already taken off this charge's receivable (2dp; 0.00 when none). */
+  creditedAmount: string;
   outstanding: string;
+}
+
+/**
+ * ⭐ T-494 (DEF-789) - THE one definition of "credited against a charge", as SQL. Every figure that says what is still owed on a charge
+ * (`openItems`, `outstandingForCharge`, `aging`, `listChargesForCustomer`) splices THIS text in and subtracts `cr.amt`; a second copy is how
+ * a collection came to be capped on a figure that ignored a credit note and drove 1210 negative.
+ *
+ * DEF-748 (S5e): every credit already taken off a charge's receivable by a document of its own - a posted customer return and a resolved
+ * franchise credit note - is the 1210 credit leg of that document's entry. `orderScope` narrows which trade orders (and so which charges) the
+ * CTEs read; it is a performance filter only and never changes what one charge's credited figure is.
+ *
+ * Defines the CTEs `credit_entries` and `credited(ar_charge_id, amt)`; the caller joins `credited cr on cr.ar_charge_id = ch.id`.
+ */
+function creditedCtes(orgId: string, orderScope: SQL): SQL {
+  return sql`
+    credit_entries as (
+      select o.ar_charge_id as charge_id, r.journal_entry_id as entry_id
+      from customer_returns r join trade_orders o on o.id = r.trade_order_id
+      where o.org_id = ${orgId} and o.ar_charge_id is not null ${orderScope}
+        and r.status = 'posted' and r.journal_entry_id is not null
+      union
+      select o.ar_charge_id, d.journal_entry_id
+      from trade_discrepancies d join trade_orders o on o.id = d.order_id
+      where o.org_id = ${orgId} and o.ar_charge_id is not null ${orderScope}
+        and d.disposition = 'franchise_credit' and d.status = 'resolved' and d.journal_entry_id is not null
+    ),
+    credited as (
+      select ce.charge_id as ar_charge_id, sum(jl.credit - jl.debit) as amt
+      from credit_entries ce
+      join journal_lines jl on jl.entry_id = ce.entry_id
+      join accounts a on a.id = jl.account_id
+      where a.code = '1210' and a.org_id = ${orgId}
+      group by ce.charge_id
+    )`;
 }
 
 /**
@@ -227,18 +263,21 @@ export async function openItems(
     ),
     written as (
       select ar_charge_id, sum(amount) as amt from ar_write_offs group by ar_charge_id
-    )
+    ),
+    ${creditedCtes(orgId, sql`and o.customer_id = ${customerId}`)}
     select ch.id as charge_id, ch.customer_id, ch.store_id, ch.charge_date::text as charge_date,
            ch.due_date::text as due_date, ch.reference_no, ch.total_amount::text as total_amount,
            coalesce(al.amt, 0)::text as allocated_amount,
            coalesce(w.amt, 0)::text as written_off_amount,
-           (ch.total_amount - coalesce(al.amt, 0) - coalesce(w.amt, 0))::text as outstanding
+           coalesce(cr.amt, 0)::text as credited_amount,
+           (ch.total_amount - coalesce(al.amt, 0) - coalesce(w.amt, 0) - coalesce(cr.amt, 0))::text as outstanding
     from ar_charges ch
     left join allocated al on al.ar_charge_id = ch.id
     left join written w on w.ar_charge_id = ch.id
+    left join credited cr on cr.ar_charge_id = ch.id
     where ch.org_id = ${orgId} and ch.customer_id = ${customerId} and ch.store_id = ${storeId}
       and ch.status = 'posted'
-      and (ch.total_amount - coalesce(al.amt, 0) - coalesce(w.amt, 0)) > ${EPSILON}
+      and (ch.total_amount - coalesce(al.amt, 0) - coalesce(w.amt, 0) - coalesce(cr.amt, 0)) > ${EPSILON}
     order by ch.charge_date asc
   `)) as unknown as Record<string, string>[];
   return rows.map((r) => ({
@@ -251,6 +290,7 @@ export async function openItems(
     totalAmount: Number(r.total_amount).toFixed(2),
     allocatedAmount: Number(r.allocated_amount).toFixed(2),
     writtenOffAmount: Number(r.written_off_amount).toFixed(2),
+    creditedAmount: Number(r.credited_amount).toFixed(2),
     outstanding: Number(r.outstanding).toFixed(2),
   }));
 }
@@ -272,27 +312,12 @@ export async function outstandingForCharge(tx: Tx, orgId: string, chargeId: stri
     written as (
       select ar_charge_id, sum(amount) as amt from ar_write_offs group by ar_charge_id
     ),
-    -- DEF-748 (S5e): every credit already taken off this charge's receivable by a document of its own - a posted customer return and a
-    -- franchise credit note - is the 1210 credit leg of that document's entry. Without it a second return or credit treats the charge as still
-    -- fully owed and over-credits 1210 instead of going to store credit (2140).
-    credit_entries as (
-      select r.journal_entry_id as entry_id
-      from customer_returns r join trade_orders o on o.id = r.trade_order_id
-      where o.org_id = ${orgId} and o.ar_charge_id = ${chargeId} and r.status = 'posted' and r.journal_entry_id is not null
-      union
-      select d.journal_entry_id
-      from trade_discrepancies d join trade_orders o on o.id = d.order_id
-      where o.org_id = ${orgId} and o.ar_charge_id = ${chargeId} and d.disposition = 'franchise_credit' and d.status = 'resolved' and d.journal_entry_id is not null
-    ),
-    credited as (
-      select coalesce(sum(jl.credit - jl.debit), 0) as amt
-      from journal_lines jl join accounts a on a.id = jl.account_id
-      where jl.entry_id in (select entry_id from credit_entries) and a.code = '1210' and a.org_id = ${orgId}
-    )
-    select (ch.total_amount - coalesce(al.amt, 0) - coalesce(w.amt, 0) - (select amt from credited))::text as outstanding
+    ${creditedCtes(orgId, sql`and o.ar_charge_id = ${chargeId}`)}
+    select (ch.total_amount - coalesce(al.amt, 0) - coalesce(w.amt, 0) - coalesce(cr.amt, 0))::text as outstanding
     from ar_charges ch
     left join allocated al on al.ar_charge_id = ch.id
     left join written w on w.ar_charge_id = ch.id
+    left join credited cr on cr.ar_charge_id = ch.id
     where ch.org_id = ${orgId} and ch.id = ${chargeId} and ch.status = 'posted'
   `)) as unknown as Record<string, string>[];
   return row ? Number(row.outstanding).toFixed(2) : '0.00';
@@ -355,15 +380,17 @@ export async function aging(
     written as (
       select ar_charge_id, sum(amount) as amt from ar_write_offs group by ar_charge_id
     ),
+    ${creditedCtes(orgId, storeId ? sql`and o.store_id = ${storeId}` : sql``)},
     open as (
       select ch.customer_id, ch.store_id,
              coalesce(ch.due_date, ch.charge_date) as aging_date,
-             (ch.total_amount - coalesce(al.amt, 0) - coalesce(w.amt, 0)) as outstanding
+             (ch.total_amount - coalesce(al.amt, 0) - coalesce(w.amt, 0) - coalesce(cr.amt, 0)) as outstanding
       from ar_charges ch
       left join allocated al on al.ar_charge_id = ch.id
       left join written w on w.ar_charge_id = ch.id
+      left join credited cr on cr.ar_charge_id = ch.id
       where ch.org_id = ${orgId} and ch.status = 'posted'
-        and (ch.total_amount - coalesce(al.amt, 0) - coalesce(w.amt, 0)) > ${EPSILON}
+        and (ch.total_amount - coalesce(al.amt, 0) - coalesce(w.amt, 0) - coalesce(cr.amt, 0)) > ${EPSILON}
         ${storeId ? sql`and ch.store_id = ${storeId}` : sql``}
     )
     select customer_id, store_id,
@@ -532,6 +559,8 @@ export interface ArChargeListRow {
   totalAmount: string;
   allocatedAmount: string;
   writtenOffAmount: string;
+  /** T-494: credit notes and posted returns already taken off this charge (2dp). */
+  creditedAmount: string;
   outstanding: string;
   status: ArDocStatus;
   journalEntryId: string | null;
@@ -571,19 +600,22 @@ export async function listChargesForCustomer(
     ),
     written as (
       select ar_charge_id, sum(amount) as amt from ar_write_offs group by ar_charge_id
-    )
+    ),
+    ${creditedCtes(orgId, sql`and o.customer_id = ${customerId}`)}
     select ch.id as charge_id, ch.store_id, ch.charge_date::text as charge_date,
            ch.due_date::text as due_date, ch.reference_no, ch.notes,
            ch.total_amount::text as total_amount,
            coalesce(al.amt, 0)::text as allocated_amount,
            coalesce(w.amt, 0)::text as written_off_amount,
+           coalesce(cr.amt, 0)::text as credited_amount,
            (case when ch.status = 'posted'
-                 then ch.total_amount - coalesce(al.amt, 0) - coalesce(w.amt, 0)
+                 then ch.total_amount - coalesce(al.amt, 0) - coalesce(w.amt, 0) - coalesce(cr.amt, 0)
                  else 0 end)::text as outstanding,
            ch.status, ch.journal_entry_id, ch.created_by
     from ar_charges ch
     left join allocated al on al.ar_charge_id = ch.id
     left join written w on w.ar_charge_id = ch.id
+    left join credited cr on cr.ar_charge_id = ch.id
     where ch.org_id = ${orgId} and ch.customer_id = ${customerId} ${storeFilter}
     order by ch.charge_date desc, ch.created_at desc
     limit ${opts.limit ?? 200}
@@ -598,6 +630,7 @@ export async function listChargesForCustomer(
     totalAmount: Number(r.total_amount).toFixed(2),
     allocatedAmount: Number(r.allocated_amount).toFixed(2),
     writtenOffAmount: Number(r.written_off_amount).toFixed(2),
+    creditedAmount: Number(r.credited_amount).toFixed(2),
     outstanding: Number(r.outstanding).toFixed(2),
     status: String(r.status) as ArDocStatus,
     journalEntryId: r.journal_entry_id ? String(r.journal_entry_id) : null,
