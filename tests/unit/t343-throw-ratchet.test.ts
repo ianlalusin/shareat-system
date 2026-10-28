@@ -64,6 +64,7 @@ const DB_SRC_OUTSIDE_REPO = 'packages/db/src/*';
  * message (R1.2).
  */
 const CEILINGS: Record<string, number> = {
+  'packages/domain/src/franchise': 0, // T-398 S6: new directory, no raw throws
   'packages/db/src/audit': 0, // T-402 S1b: new directory (catalogue, redact, canonical-json), ceiling = count at birth
   'packages/db/src/pos-v1': 0, // T-375 S1: new directory enters at its measured count (wire.ts + fixtures.ts, no throws)
   'packages/domain/src/dual-run': 3, // T-392 S4 (2026-10-12): new directory, ceiling = count at birth

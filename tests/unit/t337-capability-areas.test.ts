@@ -59,9 +59,9 @@ describe('U1 — CAPABILITY_AREA is keyed on exactly the 112 capabilities; every
     // ⭐ 98 -> 99 (T-350/DEF-477): `set_channel_payout` joins CAPABILITY_AREA.
     // ⭐ 99 -> 100 (T-382 S1, A4): `unlink_store_from_pos` joins CAPABILITY_AREA.
     // ⭐ 100 -> 101 (T-385 S3): `verify_own_sales_day` joins CAPABILITY_AREA.
-    expect(Object.keys(_control).length, 'positive control: unmutated form has all 117 keys').toBe(117);
-    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(116);
-    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(118);
+    expect(Object.keys(_control).length, 'positive control: unmutated form has all 118 keys').toBe(118);
+    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(117);
+    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(119);
   });
 });
 
@@ -141,11 +141,11 @@ const ORACLE: Readonly<Record<CapabilityArea, readonly string[]>> = {
     // of an existing resource, not a new one.
     'set_channel_payout',
   ],
-  franchise: ['cross_org_access', 'view_franchise_sales'],
+  franchise: ['cross_org_access', 'view_franchise_sales', 'view_franchise_access_log'], // T-398 S6: + view_franchise_access_log (117 -> 118)
 };
 
 describe('U2 — the literal per-area table matches CAPABILITY_AREA exactly', () => {
-  it('every capability inverts to the oracle\'s area, and the counts match §1 (117 total)', () => {
+  it('every capability inverts to the oracle\'s area, and the counts match §1 (118 total)', () => {
     const inverted: Record<string, string[]> = {};
     for (const [cap, area] of Object.entries(CAPABILITY_AREA)) (inverted[area] ??= []).push(cap);
     const sortedInverted = Object.fromEntries(Object.entries(inverted).map(([k, v]) => [k, [...v].sort()]));
@@ -157,7 +157,7 @@ describe('U2 — the literal per-area table matches CAPABILITY_AREA exactly', ()
     const total = Object.values(ORACLE).reduce((sum, caps) => sum + caps.length, 0);
     // ⭐ 100 -> 101 (T-385 S3): `verify_own_sales_day`.
     // ⭐ 101 -> 108 (T-401 S2): the seven menu capabilities, area sales.
-    expect(total).toBe(117);
+    expect(total).toBe(118);
     // ⭐ 108 -> 109 (T-403): `manage_recipes` joins production.
   });
 

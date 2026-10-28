@@ -157,3 +157,6 @@ export * from './lobby';
 
 // T-398 S5 - the inter-entity shipment (Padre Garcia): seller-owned note the buyer may read and stamp received (migration 0218).
 export * from './inter-entity';
+
+// T-398 S6 - the franchisor view of a franchisee: agreements and the append-only access log (migration 0220).
+export * from './franchise';

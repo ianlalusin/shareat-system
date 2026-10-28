@@ -40,7 +40,7 @@ export interface TriggerEntry {
 
 export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
   // ---------------------------------------------------------------------------------------------
-  // ALWAYS (35 after T-475 S3, 34 after T-455 S1, was 31) — history guards. R1's own table, in R1's own order, plus later additions.
+  // ALWAYS (36 after T-398 S6, 35 after T-475 S3, 34 after T-455 S1, was 31) — history guards. R1's own table, in R1's own order, plus later additions.
   // ---------------------------------------------------------------------------------------------
   journal_entries_posted_immutable: {
     table: 'journal_entries',
@@ -1162,6 +1162,29 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'validator',
     reason:
       'Deferred constraint trigger on the lines side of the billed_total = sum(line_total) check; reads the header and sibling lines, other rows current state (0218, T-398 S5 audit).',
+  },
+  // ---------------------------------------------------------------------------------------------
+  // T-398 S6 (0220) - the franchisor's access log. The log's two guards are history_guard / ALWAYS (ALWAYS 35 -> 36); the rest decide from the calling role or derive a row.
+  // ---------------------------------------------------------------------------------------------
+  franchise_access_log_append_only_trg: {
+    table: 'franchise_access_log',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A franchise access-log row can never be updated or deleted, by any role (0220, T-398 S6). Decides from nothing but the operation.',
+  },
+  franchise_agreements_app_guard_trg: {
+    table: 'franchise_agreements',
+    mode: 'origin',
+    kind: 'validator',
+    reason: 'The application role may not update or delete a franchise agreement (42501); the owner path may (0220, T-398 S6). Decides from the calling role.',
+  },
+  sessions_break_glass_log_trg: {
+    table: 'sessions',
+    mode: 'origin',
+    kind: 'derivation',
+    reason:
+      'Every session created for an agreement franchisor person writes one break_glass_sign_in row in the franchisee access log, in the same transaction (0220, T-398 S6, K4). ' +
+      'Derives a row from the new session row and the agreement; a no-op for everybody else.',
   },
   supplier_invoices_system_made_guard_trg: {
     table: 'supplier_invoices',

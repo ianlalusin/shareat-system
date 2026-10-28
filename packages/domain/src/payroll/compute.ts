@@ -203,8 +203,9 @@ export function computePay(days: DayInput[], m: Multipliers): ComputedPay {
       continue;
     }
 
-    // ⭐ Minutes become hours in HALF-HOUR STEPS, remainder dropped — `steppedHours`. 1h50m of
-    // overtime is 1.5 hours; 25 minutes is none. ⛔ Late is NOT stepped, and is not computed here.
+    // ⭐ Minutes become hours on the half-hour LADDER — `steppedHours`: per hour, 0-24 min is +0, 25-49 is +0.5,
+    // 50-59 rounds up to +1. So 25 minutes of overtime is 0.5 hours and 1h50m is 2 hours. The dated ruling and the
+    // table are at the top of this file. ⛔ Late is NOT stepped, and is not computed here.
     const otHours = steppedHours(day.otMinutes);
     const ndHours = steppedHours(day.nightDiffMinutes);
     const holHours = steppedHours(day.holidayMinutes);
