@@ -111,6 +111,16 @@ export function resolveStorageDriver(): StorageDriver {
         'scripts/orphan-file-sweep.ts does (DEF-308).',
     );
   }
+  // ⛔ T-495 S1 (DEF-791): the memory driver is for development and tests ONLY. A production process that reaches here has no bucket
+  // configured (or blank) and no installed driver; serving memory would acknowledge a receipt and lose it with the process. Refuse.
+  // The check lives here, not in env(): env() also runs at build time, which must not need production settings.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'storage: FIREBASE_STORAGE_BUCKET is not set and no driver is installed, so a production process would keep uploads in ' +
+        'volatile memory and lose them on restart. Set FIREBASE_STORAGE_BUCKET to the private bucket (docs/ops/README.md) so the ' +
+        'boot hook (apps/erp/src/instrumentation.ts) installs the Firebase driver.',
+    );
+  }
   const memory = inMemoryDriver();
   holder()[DRIVER_SLOT] = memory;
   return memory;
