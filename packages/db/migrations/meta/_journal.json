@@ -1401,6 +1401,13 @@
       "when": 1804995107084,
       "tag": "0219_t492_reversed_header_frozen",
       "breakpoints": true
+    },
+    {
+      "idx": 221,
+      "version": "7",
+      "when": 1805167907084,
+      "tag": "0221_t498_pay_rates_append_only",
+      "breakpoints": true
     }
   ]
 }

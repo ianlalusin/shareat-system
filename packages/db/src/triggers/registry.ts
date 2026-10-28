@@ -182,6 +182,12 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     reason: 'The audit log is append-only (0167). Decides only from TG_OP. The auditor\'s own repro (DEF-487). ' +
       'T-402 (0197): the table is partitioned; the trigger is on the parent AND on every partition, ENABLE ALWAYS on each (R6).',
   },
+  pay_rates_append_only: {
+    table: 'pay_rates',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A pay rate is never changed or removed; a wrong rate is superseded by a new row (0221, T-498 S1, DEF-799). Decides only from TG_OP.',
+  },
   trade_orders_ready_is_final_trg: {
     table: 'trade_orders',
     mode: 'always',

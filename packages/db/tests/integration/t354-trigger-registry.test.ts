@@ -113,7 +113,8 @@ describe('T1 — registry floor', () => {
     // T-190 (migration 0206): the three reference-row immutable guards 28 -> 31. NB: 0206 does not ENABLE ALWAYS them yet, so T3 is red until migration 0207 does.
     // T-455 S1 (migration 0215): the three lobby forward-only guards (lobby_entries / lobby_birthday_requests / lobby_discount_claims) 31 -> 34.
     // T-475 S3 (0217): supplier_invoices_self_verified_immutable 34 -> 35.
-    expect(always.length, 'expected exactly 35 ALWAYS triggers (R1 + 0175 + 0179 + 0183 + 0189 + 0196 + 0206 + 0215 + 0217)').toBe(35);
+    // T-498 S1 (0221): pay_rates_append_only 35 -> 36.
+    expect(always.length, 'expected exactly 36 ALWAYS triggers (R1 + 0175 + 0179 + 0183 + 0189 + 0196 + 0206 + 0215 + 0217 + 0221)').toBe(36);
 
     const alwaysNames = new Set(always.map(([name]) => name));
     for (const { trigger } of ALWAYS_TRIGGERS) {
