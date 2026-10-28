@@ -45,6 +45,8 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   // --- Who may act, and where. The keys to the building. -------------------------------------
   '/admin/users': 'manage_users',
   '/admin/stores': 'manage_stores',
+  // T-497 S1 (Ian, 2026-10-28, bible row 403): the prerequisite-walls report is admins only, same word as Stores.
+  '/admin/prerequisite-refusals': 'manage_stores',
   // T-290 — position access defaults. `grant_capability` is org-scoped and is the capability the
   // screen's every write already checks inside the domain; the page gate reads the same word.
   '/admin/access-defaults': 'grant_capability',
