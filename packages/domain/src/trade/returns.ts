@@ -178,6 +178,10 @@ export async function recordCustomerReturn(
     for (const line of input.lines) assertFieldRules(RETURN_RECORD_RULES, { quantity: line.quantity, reason: input.reason });
     const closed = await closedStockPeriodSentence(trx, input.orgId, input.returnedOn, 'returned');
     if (closed) return { ok: false, reason: closed };
+    // ⛔ T-494 (F27): the order's charge is locked BEFORE stock or the outstanding is touched - the lock `recordCollection`, the write-off and the
+    // franchise shortage credit take - so a collection or credit committing meanwhile cannot leave this return splitting on a stale figure. Lock
+    // order everywhere: the charge row first, then shipment / discrepancy / stock rows. (Without a charge - an internal transfer - nothing to lock.)
+    if (order.arChargeId) await arRepo.lockChargesForAllocation(trx, input.orgId, [order.arChargeId]);
 
     const customer = await customersRepo.getById(trx, input.orgId, order.customerId);
     if (!customer) return { ok: false, reason: 'the order names a customer that no longer exists.' };
@@ -656,6 +660,8 @@ export async function applyCredit(
     // T-371 — parsed AFTER authorize() (R5), so a typo is refused in a sentence that QUOTES what was typed; it was
     // `Number(input.amount)`, which turned 'abc' into NaN, slipped past both guards and was forwarded as the text "NaN".
     const amount = parseMoneyInput(input.amount, 'applyCredit: the amount', 'The amount');
+    // ⛔ T-494 (F27): lock the charge before reading what is owed on it (`recordCollection` below takes the same lock again, in this transaction).
+    await arRepo.lockChargesForAllocation(trx, orgId, [order.arChargeId]);
     const outstanding = money(await arRepo.outstandingForCharge(trx, orgId, order.arChargeId));
     if (compare(amount, ZERO) <= 0) return { ok: false, reason: 'the amount must be greater than zero.' };
     if (compare(amount, outstanding) > 0) {

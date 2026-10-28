@@ -285,6 +285,7 @@ export default async function CustomerDetailPage({
                   <th className="px-3 py-2 text-right font-medium">Total</th>
                   <th className="px-3 py-2 text-right font-medium">Settled</th>
                   <th className="px-3 py-2 text-right font-medium">Written off</th>
+                  <th className="px-3 py-2 text-right font-medium">Credited</th>
                   <th className="px-3 py-2 text-right font-medium">Outstanding</th>
                   <th className="px-3 py-2 font-medium">Status</th>
                 </tr>
@@ -325,6 +326,7 @@ export default async function CustomerDetailPage({
                       <td className="px-3 py-3 text-right font-mono tabular-nums">{peso(c.totalAmount)}</td>
                       <td className="px-3 py-3 text-right font-mono tabular-nums">{peso(c.allocatedAmount)}</td>
                       <td className="px-3 py-3 text-right font-mono tabular-nums">{peso(c.writtenOffAmount)}</td>
+                      <td className="px-3 py-3 text-right font-mono tabular-nums">{peso(c.creditedAmount)}</td>
                       <td className="px-3 py-3 text-right font-mono tabular-nums">{peso(c.outstanding)}</td>
                       <td className="px-3 py-3 text-xs">{c.status}</td>
                     </LinkRow>

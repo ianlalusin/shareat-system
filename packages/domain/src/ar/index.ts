@@ -18,7 +18,12 @@ import { authorizeOtherStores, withInterStoreLegs } from '../ledger/inter-store'
 import { reverseEntry } from '../ledger/reverse-entry';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
+
 import { allocateOldestFirst, type AllocationItem, type TypedAmount } from '../shared/allocate-oldest-first';
+
+/** DEF-796. Said when a charge with a posted return or credit note is asked to void (voidCharge and voidTradeOrder). */
+export const CHARGE_HAS_CREDIT_SENTENCE =
+  'This charge has a customer return or credit note against it. Reverse the return or credit note first, then void it.';
 
 export const AR_CONTROL_CODE = arRepo.AR_CONTROL_CODE;
 export const STORE_CREDIT_CODE = arRepo.STORE_CREDIT_CODE;
@@ -371,6 +376,9 @@ export async function voidCharge(
         `voidCharge: charge ${charge.id} has payments allocated to it.`,
         'This charge has payments against it. Void the payment first.',
       );
+    }
+    if ((await arRepo.postedCreditCount(trx, actor.orgId, charge.id)) > 0) {
+      throw refuse(`voidCharge: charge ${charge.id} has a posted return or credit note against it.`, CHARGE_HAS_CREDIT_SENTENCE);
     }
 
     const result = await reverseEntry(trx, {
