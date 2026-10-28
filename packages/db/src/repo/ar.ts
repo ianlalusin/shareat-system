@@ -341,6 +341,19 @@ export async function liveAllocationCount(tx: Tx, orgId: string, chargeId: strin
   return (row ? Number(row.n) : 0) + (wo ? Number(wo.n) : 0);
 }
 
+/**
+ * DEF-796. How many posted customer returns and resolved franchise credit notes are credited against this charge - the same
+ * `credit_entries` rows `creditedCtes` reads for every outstanding figure. A charge with any cannot be voided: reversing its entry would
+ * undo the receivable a second time.
+ */
+export async function postedCreditCount(tx: Tx, orgId: string, chargeId: string): Promise<number> {
+  const [row] = (await tx.execute(sql`
+    with ${creditedCtes(orgId, sql`and o.ar_charge_id = ${chargeId}`)}
+    select count(*)::int as n from credit_entries
+  `)) as unknown as { n: number }[];
+  return row ? Number(row.n) : 0;
+}
+
 /** T-433. What has been paid against this charge: the sum of its posted allocations, as 2dp text. */
 export async function paidForCharge(tx: Tx, orgId: string, chargeId: string): Promise<string> {
   const [row] = (await tx.execute(sql`
@@ -607,7 +620,7 @@ export async function listChargesForCustomer(
            ch.total_amount::text as total_amount,
            coalesce(al.amt, 0)::text as allocated_amount,
            coalesce(w.amt, 0)::text as written_off_amount,
-           coalesce(cr.amt, 0)::text as credited_amount,
+           (case when ch.status = 'posted' then coalesce(cr.amt, 0) else 0 end)::text as credited_amount,
            (case when ch.status = 'posted'
                  then ch.total_amount - coalesce(al.amt, 0) - coalesce(w.amt, 0) - coalesce(cr.amt, 0)
                  else 0 end)::text as outstanding,

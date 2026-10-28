@@ -5,7 +5,7 @@ import { sql as dsql } from 'drizzle-orm';
 import { arRepo, closeDb, interEntityRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import * as domain from '@shareat/domain';
 import {
-  createCustomer, createItem, createTradeOrder, recordCollection, recordCustomerReturn, suggestCollectionAllocation, writeOffCharge,
+  applyCredit, createCustomer, createItem, createTradeOrder, recordCollection, recordCustomerReturn, suggestCollectionAllocation, voidCharge, voidTradeOrder, writeOffCharge,
 } from '@shareat/domain';
 import { receiveDelivery } from '../../src/deliveries/receive';
 import { quantity } from '../../src/stock/quantity';
@@ -327,5 +327,142 @@ describe('(e) F27: a collection and a shortage credit on one charge serialise on
     expect(refused.message).toContain('has only ₱2480.00 outstanding');
     expect(n(await receivable(w.f, w.customerId))).toBe(2480);
     expect(n(await storeCredit(w.f, w.customerId))).toBe(0);
+  });
+});
+
+// ================================================================================================ follow-ups
+describe('T-494 follow-ups', () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  /** An outside buyer sale, 10 kg at 310.00, dispatched (charge 3100.00). */
+  async function externalSale(hint: string) {
+    const w = await world(hint);
+    const f = w.f;
+    const ext = await buyer(sql, f);
+    const itemId = await mkItem(f, 'Pork belly', true);
+    await stockAt(f, itemId, '10', '250.0000');
+    const order = await asOrg(f.orgId, (tx) =>
+      createTradeOrder(tx, f.manager, { storeId: f.storeId, customerId: ext, orderDate: '2026-10-10', lines: [{ itemId, quantity: '10', rate: '310.00' }] }),
+    );
+    const r = await dispatch(f, f.manager, order.orderId);
+    const lineId = (await sql<{ id: string }[]>`select id from trade_order_lines where order_id = ${order.orderId}`)[0]!.id;
+    return { f, ext, orderId: order.orderId, lineId, chargeId: r.chargeId! };
+  }
+  const returnOf = (x: { f: Fx; orderId: string; lineId: string }, qty = '2') =>
+    asOrg(x.f.orgId, (t) =>
+      recordCustomerReturn(t, { tradeOrderId: x.orderId, returnedOn: '2026-10-16', reason: 'Returned.', lines: [{ tradeOrderLineId: x.lineId, quantity: qty }], actor: x.f.manager }),
+    );
+
+  /** Hold the charge with an uncommitted 100.00 collection, start `racer`, assert it is still waiting after 500 ms, then release. */
+  async function raceBehindCollection(x: { f: Fx; ext: string; chargeId: string }, racer: () => Promise<unknown>) {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    let holderReady!: () => void;
+    const ready = new Promise<void>((r) => { holderReady = r; });
+    const holder = asOrg(x.f.orgId, async (tx) => {
+      await collectOn(x.f, x.ext, x.chargeId, '100.00', '100.00', tx);
+      holderReady();
+      await gate;
+    });
+    await ready;
+    let done = false;
+    const p = racer().then((r) => { done = true; return r; });
+    await sleep(500);
+    expect(done, 'must still be waiting on the charge lock while the collection is uncommitted').toBe(false);
+    release();
+    await holder;
+    return p;
+  }
+
+  it('L1. recordCustomerReturn WAITS on the charge lock held by an uncommitted collection, then proceeds and splits on the net figure', async () => {
+    const x = await externalSale('l1');
+    const res = (await raceBehindCollection(x, () => returnOf(x))) as { ok: boolean };
+    expect(res.ok, JSON.stringify(res)).toBe(true);
+    // 3100.00 - 100.00 collected - 620.00 returned
+    expect(await netOf(x.f, x.chargeId)).toBe('2380.00');
+    expect(n(await receivable(x.f, x.ext))).toBe(2380);
+    expect(n(await storeCredit(x.f, x.ext))).toBe(0);
+  });
+
+  it('L2. applyCredit WAITS on the charge lock held by an uncommitted collection, then proceeds on the net figure', async () => {
+    const x = await externalSale('l2');
+    // pay the first charge in full, then return 2 kg: 620.00 becomes store credit to spend
+    await collectOn(x.f, x.ext, x.chargeId, '3100.00');
+    const back = await returnOf(x);
+    expect(back.ok, JSON.stringify(back)).toBe(true);
+    expect(n(await storeCredit(x.f, x.ext)), 'the return on a paid charge left 620.00 store credit').toBe(620);
+    // a second sale to spend it on
+    const f = x.f;
+    const itemId = await mkItem(f, 'Pork loin', true);
+    await stockAt(f, itemId, '5', '250.0000');
+    const o2 = await asOrg(f.orgId, (tx) =>
+      createTradeOrder(tx, f.manager, { storeId: f.storeId, customerId: x.ext, orderDate: '2026-10-11', lines: [{ itemId, quantity: '5', rate: '310.00' }] }),
+    );
+    const r2 = await dispatch(f, f.manager, o2.orderId);
+    const y = { f, ext: x.ext, chargeId: r2.chargeId! };
+    const res = (await raceBehindCollection(y, () =>
+      asOrg(f.orgId, (tx) => applyCredit(tx, f.manager, { tradeOrderId: o2.orderId, amount: '200.00', collectionDate: '2026-10-16', moneyAccountId: f.drawerA })),
+    )) as { ok: boolean };
+    expect(res.ok, JSON.stringify(res)).toBe(true);
+    // 1550.00 - 100.00 cash - 200.00 credit
+    expect(await netOf(f, y.chargeId)).toBe('1250.00');
+  });
+
+  describe('V1 (DEF-796) a charge with a posted credit cannot be voided', () => {
+    it('V1a. voidCharge after a posted customer return is refused in words, writes nothing, 1210 unchanged', async () => {
+      const x = await externalSale('v1a');
+      const back = await returnOf(x);
+      expect(back.ok, JSON.stringify(back)).toBe(true);
+      const before = await receivable(x.f, x.ext);
+      expect(n(before)).toBe(2480);
+      const refused = await sayOf(asOrg(x.f.orgId, (tx) => voidCharge(tx, x.f.manager, { chargeId: x.chargeId, reason: 'Wrong buyer' })));
+      expect(refused.said ?? refused.message, 'tells the user to reverse the return first').toMatch(/return|credit/i);
+      expect(await receivable(x.f, x.ext)).toBe(before);
+      const [c] = await sql<{ status: string }[]>`select status from ar_charges where id = ${x.chargeId}`;
+      expect(c!.status).toBe('posted');
+    });
+
+    it('V1b. voidCharge after a resolved franchise credit note is refused in words, 1210 unchanged', async () => {
+      const w = await world('v1b');
+      const s = await sellAndShort(w);
+      await credit(w, s);
+      const before = await receivable(w.f, w.customerId);
+      expect(n(before)).toBe(2480);
+      const refused = await sayOf(asOrg(w.f.orgId, (tx) => voidCharge(tx, w.f.manager, { chargeId: s.chargeId, reason: 'Wrong buyer' })));
+      expect(refused.said ?? refused.message).toMatch(/return|credit/i);
+      expect(await receivable(w.f, w.customerId)).toBe(before);
+    });
+
+    it('V1c. voidTradeOrder on an order whose charge has a posted return is refused, nothing written', async () => {
+      const x = await externalSale('v1c');
+      const back = await returnOf(x);
+      expect(back.ok, JSON.stringify(back)).toBe(true);
+      const before = await receivable(x.f, x.ext);
+      const refused = await sayOf(asOrg(x.f.orgId, (tx) => voidTradeOrder(tx, x.f.manager, { orderId: x.orderId, reason: 'Wrong buyer' })));
+      expect(refused.said ?? refused.message).toMatch(/return|credit/i);
+      expect(await receivable(x.f, x.ext)).toBe(before);
+      const [o] = await sql<{ status: string }[]>`select status from trade_orders where id = ${x.orderId}`;
+      expect(o!.status).not.toBe('voided');
+    });
+
+    it('V1d. control: a charge with no credits still voids, 1210 returns to 0', async () => {
+      const x = await externalSale('v1d');
+      await asOrg(x.f.orgId, (tx) => voidCharge(tx, x.f.manager, { chargeId: x.chargeId, reason: 'Wrong buyer' }));
+      expect(n(await receivable(x.f, x.ext))).toBe(0);
+    });
+  });
+
+  it('C1. listChargesForCustomer: a voided charge row shows creditedAmount 0 and its columns add up to outstanding 0', async () => {
+    const x = await externalSale('c1');
+    const back = await returnOf(x);
+    expect(back.ok, JSON.stringify(back)).toBe(true);
+    // the row state a legacy void left behind (the guard now stops it being made through the domain)
+    await sql`update ar_charges set status = 'voided', voided_by = ${x.f.manager.personId}, voided_at = now(), void_reason = 'legacy void' where id = ${x.chargeId}`;
+    const list = await asOrg(x.f.orgId, (tx) => arRepo.listChargesForCustomer(tx, x.f.orgId, x.ext));
+    const row = list.find((r) => r.chargeId === x.chargeId)!;
+    expect(row.status).toBe('voided');
+    expect(row.outstanding).toBe('0.00');
+    expect(row.creditedAmount, 'a voided charge carries no credit').toBe('0.00');
+    // No total-minus-columns check: a voided row keeps its totalAmount for legibility (ar.test.ts:471-475). DEF-796 follow-up, orchestrator 28 Oct.
   });
 });
