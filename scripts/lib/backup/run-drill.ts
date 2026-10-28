@@ -45,7 +45,12 @@ export interface DrillResult {
   mismatches: string[];
   restoredBytes: number | null;
   durations: { downloadMs: number; restoreMs: number; checkMs: number };
+  /** Set when the run failed for a reason other than a data mismatch (DEF-795: the report could not be saved). */
+  error?: string;
 }
+
+/** DEF-795: the drill report is a required output (T-393 R8/R14); the exit code follows `ok`. */
+export const drillExitCode = (r: Pick<DrillResult, 'ok'>): number => (r.ok ? 0 : 1);
 
 const log = (s: string) => console.log(`[restore-drill] ${s}`);
 const dbNameOf = (url: string): string => decodeURIComponent(new URL(url).pathname.replace(/^\//, ''));
@@ -93,6 +98,7 @@ export async function runDrill(deps: DrillDeps): Promise<DrillResult> {
   let refusedUpFront = false;
 
   await safeBeat('start');
+  /** Resolves to the failure reason, or null when the report was saved (DEF-795: a failed save fails the run). */
   const writeReport = async (ok: boolean, mismatches: string[], error?: string): Promise<string | null> => {
     try {
       const local = path.join(tmpDir, `drill-report-${date}.json`);
@@ -100,10 +106,11 @@ export async function runDrill(deps: DrillDeps): Promise<DrillResult> {
       const body = clean(JSON.stringify({ ok, date, dumpKey, restoredBytes, durations, mismatches, ...(error ? { error } : {}) }, null, 2));
       await writeFile(local, body);
       await store.put(reportKey, local, {});
-      return reportKey;
-    } catch (e) {
-      log(clean(`report not written: ${e instanceof Error ? e.message : String(e)}`));
       return null;
+    } catch (e) {
+      const why = clean(e instanceof Error ? e.message : String(e));
+      log(`report not written: ${why}`);
+      return why;
     }
   };
   const dropScratch = async (): Promise<void> => {
@@ -240,15 +247,48 @@ export async function runDrill(deps: DrillDeps): Promise<DrillResult> {
   process.removeListener('SIGTERM', onSignal);
   process.removeListener('SIGINT', onSignal);
 
+  return settleDrill({ result, failure, target, refusedUpFront, reportKey, dumpKey, durations, files, writeReport, safeBeat, clean, log });
+}
+
+export interface SettleInput {
+  result: DrillResult | undefined;
+  failure: Error | undefined;
+  target: string;
+  refusedUpFront: boolean;
+  reportKey: string;
+  dumpKey: string | null;
+  durations: DrillResult['durations'];
+  files: string[];
+  /** Resolves to the failure reason, or null when the report was saved. */
+  writeReport: (ok: boolean, mismatches: string[], error?: string) => Promise<string | null>;
+  safeBeat: (what: 'start' | 'ok' | 'fail', reason?: string) => Promise<void>;
+  clean: (s: string) => string;
+  log: (s: string) => void;
+}
+
+/**
+ * DEF-795: save the required report, then signal. A report that cannot be saved FAILS the run (`ok:false`, failure
+ * heartbeat, reason in `error`), while the data-check outcome (`mismatches`, timings) is kept. Heartbeat delivery
+ * stays best-effort (`safeBeat`). Exported so the unit tests need no Postgres.
+ */
+export async function settleDrill(i: SettleInput): Promise<DrillResult> {
+  const { result, failure, clean, log, safeBeat } = i;
   try {
     if (result) {
-      result.reportKey = await writeReport(result.ok, result.mismatches);
+      const reportError = await i.writeReport(result.ok, result.mismatches);
+      if (reportError === null) result.reportKey = i.reportKey;
+      else {
+        result.reportKey = null;
+        result.ok = false;
+        result.error = clean(`${result.mismatches.length === 0 ? 'restore checks passed but the' : 'restore check failed and the'} drill report could not be saved: ${reportError}`);
+      }
       if (result.ok) {
-        log(`ok: ${dumpKey} restored and ties; download ${durations.downloadMs} ms, restore ${durations.restoreMs} ms, check ${durations.checkMs} ms`);
+        log(`ok: ${i.dumpKey} restored and ties; download ${i.durations.downloadMs} ms, restore ${i.durations.restoreMs} ms, check ${i.durations.checkMs} ms`);
         await safeBeat('ok');
       } else {
         const m = result.mismatches;
-        const msg = clean(`restore check failed: ${m.slice(0, 5).join('; ')}${m.length > 5 ? ` (+${m.length - 5} more)` : ''}`);
+        const checkMsg = m.length > 0 ? clean(`restore check failed: ${m.slice(0, 5).join('; ')}${m.length > 5 ? ` (+${m.length - 5} more)` : ''}`) : '';
+        const msg = reportError === null ? checkMsg : m.length > 0 ? `${checkMsg}; ${result.error}` : (result.error as string);
         log(`FAILED: ${msg}`);
         await safeBeat('fail', msg);
       }
@@ -257,11 +297,12 @@ export async function runDrill(deps: DrillDeps): Promise<DrillResult> {
     const msg = clean(failure?.message ?? 'unknown failure');
     log(`FAILED: ${msg}`);
     // Not for a refused target or a refused overlap: nothing ran, and the other run owns today's report.
-    if (target !== '' && !refusedUpFront) await writeReport(false, [], msg);
-    await safeBeat('fail', msg);
-    throw new Error(msg);
+    const reportError = i.target !== '' && !i.refusedUpFront ? await i.writeReport(false, [], msg) : null;
+    const full = reportError === null ? msg : `${msg}; the drill report could not be saved: ${reportError}`;
+    await safeBeat('fail', full);
+    throw new Error(full);
   } finally {
-    for (const f of files) await rm(f, { force: true }).catch(() => {});
+    for (const f of i.files) await rm(f, { force: true }).catch(() => {});
   }
 }
 

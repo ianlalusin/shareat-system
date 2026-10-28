@@ -248,6 +248,17 @@ async function recordExternalReturn(
     return { ok: false, reason: 'this order raised no receivable — that is a bug for an external sale.' };
   }
 
+  // T-493 S2 (F23, DEF-797) — judged BEFORE any stock moves, so a refusal leaves nothing behind.
+  if (input.refund && input.moneyAccountId) {
+    const refundAccount = await moneyAccountsRepo.getById(tx, input.orgId, input.moneyAccountId);
+    if (refundAccount && refundAccount.storeId !== order.storeId) {
+      return { ok: false, reason: "That money account belongs to another store. A refund is paid from this store's own cash." };
+    }
+    if (refundAccount && refundAccount.glAccountCode === '1120') {
+      return { ok: false, reason: 'That account is a staff cash float, which belongs to one person through a cash request. A refund cannot be paid from it. Choose an office or e-wallet account.' };
+    }
+  }
+
   const movements = await stockLedgerRepo.movementsBySource(tx, 'trade_order_dispatch', order.id);
   const returnId = await customerReturnsRepo.nextReturnId(tx);
   const movedAt = new Date(`${input.returnedOn}T00:00:00Z`);
