@@ -15,6 +15,7 @@
 import { accessRepo, leaveRepo, advisoryLocksRepo, type Tx } from '@shareat/db';
 import { authorize, heldCapabilities, type Actor } from '@shareat/auth';
 import { toBusinessDate } from '@shareat/core/datetime';
+import { escapeCsvCell } from '@shareat/core/csv';
 import { gone } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { SETTINGS_LEAVE_CAP_RULES, SETTINGS_LEAVE_KIND_RULES } from '../field-rules/settings';
@@ -732,18 +733,12 @@ export function leaveGrid(tx: Tx, actor: Actor, input: { storeId: string; from: 
   return run(tx, (trx) => rows(trx, actor, input, ['pending', 'approved']));
 }
 
-const csvCell = (v: string): string => {
-  // A leading = + - @ would be run as a formula by a spreadsheet: neutralise it. Then quote anything with a delimiter.
-  const safe = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
-  return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
-};
-
 export function exportLeaveCsv(tx: Tx, actor: Actor, input: { storeId: string; from: string; to: string }): Promise<string> {
   return run(tx, async (trx) => {
     const list = await rows(trx, actor, input, ['pending', 'approved', 'voided', 'superseded_by_work']);
     const header = ['Date', 'Person', 'Kind', 'Leave type', 'Status', 'Pay', 'Punches that day', 'Proof attached'];
     const lines = [header, ...list.map((r) => [r.date, r.personName, r.kind, r.leaveType, r.status, r.paid ? 'Paid' : 'Unpaid', r.clash ? 'Yes' : 'No', r.hasProof ? 'Yes' : 'No'])];
-    return lines.map((l) => l.map(csvCell).join(',')).join('\r\n') + '\r\n';
+    return lines.map((l) => l.map(escapeCsvCell).join(',')).join('\r\n') + '\r\n';
   });
 }
 
