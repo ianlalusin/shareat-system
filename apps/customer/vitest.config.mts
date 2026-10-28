@@ -18,6 +18,7 @@ export default defineConfig({
       '@shareat/core/env': `${repo}packages/core/src/env.ts`,
       '@shareat/core/exif': `${repo}packages/core/src/exif.ts`,
       '@shareat/core/sentence': `${repo}packages/core/src/sentence.ts`,
+      '@shareat/core/csv': `${repo}packages/core/src/csv.ts`,
       '@shareat/core': `${repo}packages/core/src/index.ts`,
       '@shareat/db/pos-v1/wire': `${repo}packages/db/src/pos-v1/wire.ts`,
       '@shareat/db/schema': `${repo}packages/db/schema/index.ts`,
