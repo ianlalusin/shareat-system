@@ -25,9 +25,10 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { useWeatherLogger } from "@/hooks/useWeatherLogger";
 import { WeatherLoggerModal } from "@/components/shared/WeatherLoggerModal";
 import { WeatherLogFloatingButton } from "@/components/dashboard/WeatherLogFloatingButton";
-import { WaitlistCard, type WaitlistEntry } from "./WaitlistCard";
+import { LobbyCard, linkSeat } from "./LobbyCard";
+import { prefillForSeat, type LobbyEntry } from "@/lib/pos2/lobby";
 import type { PendingSeat } from "./start-session-form";
-import { deleteDoc, doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { takeReservationSeatHandoff } from "@/lib/reservations/seat-handoff";
 import { useLocalProfile } from "@/context/local-profile-context";
 import { reservationEvent, appendReservationEvent } from "@/lib/reservations/history";
@@ -52,12 +53,24 @@ export function SessionListView() {
 
     const { isModalOpen, closeModal } = useWeatherLogger();
 
-    const handleRequestSeat = (entry: WaitlistEntry) => {
-        setPendingSeat({ id: entry.id, name: entry.name, partySize: entry.partySize, phone: entry.phone });
+    // T-455 S5: seat a party from the lobby line through the existing pendingSeat path: pax, name + note in the notes, mapped lines,
+    // unmapped lines shown as text for the cashier to tap in by hand.
+    const handleRequestSeat = (entry: LobbyEntry) => {
+        const prefill = prefillForSeat(entry);
+        setPendingSeat({
+            id: entry.entryId,
+            name: entry.displayName ?? "Guest",
+            partySize: prefill.partySize,
+            phone: entry.phone,
+            lobbyEntryId: entry.entryId,
+            notes: prefill.notes,
+            items: prefill.items,
+            textLines: prefill.textLines,
+        });
         setNewSessionAccordion("new-session");
     };
     const handleClearSeat = () => setPendingSeat(null);
-    const handleSeatCompleted = async (sessionId: string) => {
+    const handleSeatCompleted = async (sessionId: string, standLabel?: string) => {
         if (!activeStore || !pendingSeat) return;
         try {
             if (pendingSeat.reservationId) {
@@ -80,8 +93,9 @@ export function SessionListView() {
                         updatedAt: serverTimestamp(),
                     });
                 }
-            } else {
-                await deleteDoc(doc(db, "stores", activeStore.id, "waitlist", pendingSeat.id));
+            } else if (pendingSeat.lobbyEntryId && sessionId) {
+                // Lobby line: the session stands whatever happens; linkSeat tells the lobby (or leaves "Retry link" on the row).
+                await linkSeat(activeStore.id, { entryId: pendingSeat.lobbyEntryId, sessionId, standLabel: standLabel || "-" });
             }
         } catch (err) {
             console.warn("[Seat] Failed to finalize seat source after seating", err);
@@ -296,7 +310,7 @@ export function SessionListView() {
                                 </AccordionItem>
                             </Accordion>
 
-                            <WaitlistCard
+                            <LobbyCard
                                 storeId={activeStore.id}
                                 onSeat={handleRequestSeat}
                                 activeSeatingId={pendingSeat?.id ?? null}

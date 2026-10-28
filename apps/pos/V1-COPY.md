@@ -115,7 +115,9 @@ New in T-425, not from v1: `src/lib/terminal/db.ts`, `src/lib/outbox/**`, `src/l
 - `src/components/cashier/bill-adjustments.tsx` (T-426): prevent duplicate bill-level statutory discount application.
 - `src/components/cashier/bill-totals.tsx` (T-426): use per-diner statutory calculation and qualifying share breakdown.
 - `src/components/cashier/session-detail-view.tsx` (T-426): mount statutory capture and carry qualifying records through billing.
-- `src/components/cashier/session-list-view.tsx` (T-427): expose Convert and its connectivity restriction.
+- `src/components/cashier/session-list-view.tsx` (T-427, T-455 S5): expose Convert and its connectivity restriction; mount the lobby line (LobbyCard) and seat from it.
+- `src/components/cashier/ParkWalkInModal.tsx` (T-455 S5): the walk-in is written to the customer lobby line through /api/pos2/lobby/park, no Firestore write.
+- `src/components/cashier/start-session-form.tsx` (T-455 S5): pre-fill pax, notes and package from a lobby entry; pass the stand to onSeatCompleted.
 - `src/components/receipt/receipt-view.tsx` (T-426/T-461): per-diner statutory display, exact staged item amounts, modifiers and current adjustments.
 - `src/lib/logs/describe-log.ts` (T-426): readable statutory change descriptions without government identifiers.
 - `src/lib/printing/receiptFormatter.ts` (T-426/T-461): statutory summary and exact staged item amounts; exclude free/void quantities and include modifiers.
