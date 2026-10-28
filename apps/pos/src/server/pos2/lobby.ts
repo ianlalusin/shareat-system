@@ -38,6 +38,26 @@ async function run(req: Request, deps: Pos2Deps, move: (c: Ctx) => Promise<Respo
   }
 }
 
+const DEFAULT_JOIN_ORIGIN = 'https://customer.shareat.net';
+
+/**
+ * The hand-off link is shown on a diner's phone, so only the customer join page is kept: https, the allowed origin
+ * (POS_LOBBY_JOIN_ORIGIN, default the customer app), path exactly /join, and a non-empty 't' query value. Anything else is dropped (null), not an error.
+ */
+function allowedJoinUrl(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  try {
+    const allowed = new URL((process.env.POS_LOBBY_JOIN_ORIGIN ?? '').trim() || DEFAULT_JOIN_ORIGIN);
+    const u = new URL(raw.trim());
+    if (u.protocol !== 'https:' || allowed.protocol !== 'https:') return null;
+    if (u.origin !== allowed.origin || u.username !== '' || u.password !== '') return null;
+    if (u.pathname !== '/join' || (u.searchParams.get('t') ?? '') === '') return null;
+    return raw.trim();
+  } catch {
+    return null;
+  }
+}
+
 const BAD_ENTRY = 'Choose a party from the list.';
 const entryIdOf = (b: Record<string, unknown>): string | null => (isUuid(b.entryId) ? b.entryId : null);
 const textOrNull = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
@@ -76,16 +96,7 @@ export const handleLobbySeat = (req: Request, deps: Pos2Deps): Promise<Response>
     const entryId = entryIdOf(b);
     if (!entryId) return fail(400, BAD_ENTRY);
     if (!isNonBlank(b.sessionId) || !isNonBlank(b.standLabel)) return fail(400, 'Start the table session first, then pick the stand and seat the party.');
-    // Only an https link is kept; anything else (http, javascript:, data:, junk) is dropped, not stored.
-    let joinUrl: string | null = null;
-    if (typeof b.joinUrl === 'string') {
-      try {
-        const u = new URL(b.joinUrl.trim());
-        if (u.protocol === 'https:') joinUrl = b.joinUrl.trim();
-      } catch {
-        joinUrl = null;
-      }
-    }
+    const joinUrl = allowedJoinUrl(b.joinUrl);
     return jsonResponse(200, { ok: true, ...(await c.lobby.seat(c.tablet, { entryId, sessionId: b.sessionId.trim(), standLabel: b.standLabel.trim(), joinUrl })) });
   });
 

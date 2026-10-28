@@ -6,7 +6,7 @@
  * no free typing. Seat hands the party to the Start Session form; once the session exists `linkSeat` fetches its join link and tells the
  * lobby, and if that fails the row keeps a "Retry link" button until it works or the cashier dismisses it.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,9 @@ import { postPos2 } from "@/lib/pos2/client";
 import {
   LOBBY_RETRY_LABEL,
   LOBBY_UNAVAILABLE,
+  canAddWalkIn,
+  createPollGuard,
+  dismissLink,
   filterByCode,
   keypadPress,
   linkSeatedSession,
@@ -74,6 +77,8 @@ export function LobbyCard({ storeId, onSeat, activeSeatingId }: Props) {
   const [paused, setPaused] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [unavailable, setUnavailable] = useState<string | null>(null);
+  const [serverDown, setServerDown] = useState(false);
+  const pollGuard = useRef(createPollGuard());
   const [digits, setDigits] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -84,20 +89,30 @@ export function LobbyCard({ storeId, onSeat, activeSeatingId }: Props) {
 
   const refresh = useCallback(async () => {
     if (!storeId) return;
+    // One list call at a time: a poll that finds one running is skipped (and re-run once it ends); an older answer never replaces a newer one.
+    const seq = pollGuard.current.begin();
+    if (seq === null) return;
     try {
       const r = await postPos2<{ lobbyEnabled: boolean; paused: boolean; entries: LobbyEntry[] }>("lobby/list", { storeId });
-      setEntries(r.entries);
-      setLobbyEnabled(r.lobbyEnabled);
-      setPaused(r.paused);
-      setUnavailable(null);
+      if (pollGuard.current.accept(seq)) {
+        setEntries(r.entries);
+        setLobbyEnabled(r.lobbyEnabled);
+        setPaused(r.paused);
+        setUnavailable(null);
+        setServerDown(false);
+      }
     } catch (err) {
       // 503 / no answer: the one waiting-list sentence. Any other failure keeps the last list and says why in plain words.
       const f = lobbyFailure(err as Err);
-      setUnavailable(f.kind === "unavailable" ? LOBBY_UNAVAILABLE : f.message);
+      if (pollGuard.current.accept(seq)) {
+        setUnavailable(f.kind === "unavailable" ? LOBBY_UNAVAILABLE : f.message);
+        setServerDown(f.kind === "unavailable");
+      }
     } finally {
       setPending(readPendingLinks(storeId));
       setNow(Date.now());
       setIsLoading(false);
+      if (pollGuard.current.end()) void refresh();
     }
   }, [storeId]);
 
@@ -140,7 +155,7 @@ export function LobbyCard({ storeId, onSeat, activeSeatingId }: Props) {
 
   const handleRetry = async (e: LobbyEntry, link: PendingLink) => {
     setBusyId(e.entryId);
-    const ok = await linkSeat(storeId, link);
+    const ok = await linkSeat(storeId, link); // a 409 inside linkSeat means "already done": cleared, no error
     setBusyId(null);
     toast(ok ? { title: "Linked", description: e.displayName ?? e.code } : { variant: "destructive", title: "Could not link yet", description: "The table session is fine. Try again." });
   };
@@ -150,7 +165,8 @@ export function LobbyCard({ storeId, onSeat, activeSeatingId }: Props) {
     act(
       e,
       async () => {
-        await postPos2("lobby/seat", { storeId, entryId: e.entryId, sessionId: link.sessionId, standLabel: link.standLabel, joinUrl: null });
+        const r = await dismissLink({ ...link, seat: (b) => postPos2("lobby/seat", { storeId, ...b }) });
+        if (!r.done) throw r.error;
         clearPendingLink(storeId, e.entryId);
       },
       "Dismissed",
@@ -189,9 +205,11 @@ export function LobbyCard({ storeId, onSeat, activeSeatingId }: Props) {
                 {paused ? "Resume lobby" : "Pause lobby"}
               </Button>
             )}
-            <Button size="sm" onClick={() => setModalOpen(true)} disabled={isLoading}>
-              <Plus className="h-4 w-4 mr-1" /> Add walk-in
-            </Button>
+            {canAddWalkIn({ unavailable: serverDown }) && (
+              <Button size="sm" onClick={() => setModalOpen(true)} disabled={isLoading}>
+                <Plus className="h-4 w-4 mr-1" /> Add walk-in
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="pt-0 px-4 pb-4 space-y-3">

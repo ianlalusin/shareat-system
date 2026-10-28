@@ -76,7 +76,7 @@ const SPECS: RouteSpec[] = [
   { name: 'list', fn: 'list', handler: 'handleLobbyList', route: () => import('@/app/api/pos2/lobby/list/route'), body: {} },
   { name: 'park', fn: 'park', handler: 'handleLobbyPark', route: () => import('@/app/api/pos2/lobby/park/route'), body: { displayName: DINER, partySize: 5, phone: PHONE, note: 'window seat' } },
   { name: 'call', fn: 'call', handler: 'handleLobbyCall', route: () => import('@/app/api/pos2/lobby/call/route'), body: { entryId: ENTRY } },
-  { name: 'seat', fn: 'seat', handler: 'handleLobbySeat', route: () => import('@/app/api/pos2/lobby/seat/route'), body: { entryId: ENTRY, sessionId: 'SESS-1', standLabel: '7', joinUrl: 'https://customer.shareat.net/join?token=abc' } },
+  { name: 'seat', fn: 'seat', handler: 'handleLobbySeat', route: () => import('@/app/api/pos2/lobby/seat/route'), body: { entryId: ENTRY, sessionId: 'SESS-1', standLabel: '7', joinUrl: 'https://customer.shareat.net/join?t=abc' } },
   { name: 'remove', fn: 'remove', handler: 'handleLobbyRemove', route: () => import('@/app/api/pos2/lobby/remove/route'), body: { entryId: ENTRY } },
   { name: 'pause', fn: 'pause', handler: 'handleLobbyPause', route: () => import('@/app/api/pos2/lobby/pause/route'), body: { paused: true } },
 ];
@@ -203,13 +203,45 @@ describe('per-route payloads', () => {
 
   it('seat: an https joinUrl is forwarded; http, javascript:, data:, garbage, a non-string and a missing one are all dropped to null, never stored [kills: M7]', async () => {
     const ok = await call(spec('seat'), full(spec('seat')));
-    expect(ok.l.calls[0]!.input).toEqual({ entryId: ENTRY, sessionId: 'SESS-1', standLabel: '7', joinUrl: 'https://customer.shareat.net/join?token=abc' });
+    expect(ok.l.calls[0]!.input).toEqual({ entryId: ENTRY, sessionId: 'SESS-1', standLabel: '7', joinUrl: 'https://customer.shareat.net/join?t=abc' });
     for (const bad of ['http://customer.shareat.net/join?token=abc', 'javascript:alert(1)', 'data:text/html,hi', 'customer.shareat.net/join', '', 42, { u: 1 }, null, undefined]) {
       const l = makeLobby();
       const r = await call(spec('seat'), full(spec('seat'), { joinUrl: bad }), { lobby: l });
       expect(r.status, String(bad)).toBe(200);
       expect((l.calls[0]!.input as { joinUrl: unknown }).joinUrl, `joinUrl ${JSON.stringify(bad)} must be dropped`).toBeNull();
     }
+  });
+
+  it('seat: joinUrl is kept only for the customer join page: right origin, https, path /join, non-empty t; every other URL is dropped to null, not an error', async () => {
+    const good = 'https://customer.shareat.net/join?t=abc';
+    const bads = [
+      'https://evil.example/join?t=abc',
+      'http://customer.shareat.net/join?t=abc',
+      'https://customer.shareat.net/other?t=abc',
+      'https://customer.shareat.net/join/extra?t=abc',
+      'https://customer.shareat.net/join',
+      'https://customer.shareat.net/join?t=',
+      'https://customer.shareat.net@evil.example/join?t=x',
+      'https://customer.shareat.net:8443/join?t=abc',
+    ];
+    const ok = await call(spec('seat'), full(spec('seat'), { joinUrl: good }));
+    expect((ok.l.calls[0]!.input as { joinUrl: unknown }).joinUrl).toBe(good);
+    for (const bad of bads) {
+      const l = makeLobby();
+      const r = await call(spec('seat'), full(spec('seat'), { joinUrl: bad }), { lobby: l });
+      expect(r.status, bad).toBe(200);
+      expect((l.calls[0]!.input as { joinUrl: unknown }).joinUrl, bad).toBeNull();
+    }
+  });
+
+  it('seat: POS_LOBBY_JOIN_ORIGIN overrides the allowed origin', async () => {
+    vi.stubEnv('POS_LOBBY_JOIN_ORIGIN', 'https://join.example.test');
+    const l = makeLobby();
+    await call(spec('seat'), full(spec('seat'), { joinUrl: 'https://join.example.test/join?t=z' }), { lobby: l });
+    expect((l.calls[0]!.input as { joinUrl: unknown }).joinUrl).toBe('https://join.example.test/join?t=z');
+    const l2 = makeLobby();
+    await call(spec('seat'), full(spec('seat'), { joinUrl: 'https://customer.shareat.net/join?t=z' }), { lobby: l2 });
+    expect((l2.calls[0]!.input as { joinUrl: unknown }).joinUrl).toBeNull();
   });
 
   it('call / seat / remove: an entryId that is not a uuid is a 400 before the port (no database syntax error can be provoked) [kills: M9]', async () => {

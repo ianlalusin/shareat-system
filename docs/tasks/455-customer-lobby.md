@@ -330,8 +330,10 @@ says the moves are recorded "with the tablet's person". So:
    cover them now with seeded lines. Never returns `handoff_url`, `device_hash`, `ip_hash`.
 5. **Routes** (all POST, JSON body with `storeId` + `deviceId`, like the other pos2 routes):
    `/api/pos2/lobby/list`, `/park`, `/call`, `/seat`, `/remove`, `/pause`. `LobbyRefusal` -> 409 with its one sentence;
-   unexpected -> `guarded()`'s 500. Seat body: `{ entryId, sessionId, standLabel, joinUrl? }`; `joinUrl` must be
-   `https:` (else dropped, not stored).
+   unexpected -> `guarded()`'s 500. Seat body: `{ entryId, sessionId, standLabel, joinUrl? }`; `joinUrl` is kept only if it is
+   `https:` on the allowed join origin (env `POS_LOBBY_JOIN_ORIGIN`, default `https://customer.shareat.net`), path exactly
+   `/join`, with a non-empty `t` query value (POS v1 builds `/join?t=<token>`); anything else is dropped to null, not an error,
+   so a phone is never sent to a foreign link.
 6. **Screens.** `LobbyCard` replaces `WaitlistCard` on /cashier: rows "4821 · Ana · 5 pax · Pork+Chicken · 12 min",
    10 s poll (the poll is the `list` call), code search on an on-screen number pad (row 371: no free typing),
    "Add walk-in" (reuses `ParkWalkInModal`'s form, now writing through `/park`: no Firestore `addDoc` left), row actions

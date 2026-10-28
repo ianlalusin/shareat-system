@@ -26,7 +26,7 @@
  *   M6 a failed seat call throws / hides the retry; M7 seat called after a failed join-url fetch; M8 the diner's name missing from the notes.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { LOBBY_RETRY_LABEL, LOBBY_UNAVAILABLE, filterByCode, keypadPress, linkSeatedSession, lobbyFailure, lobbyRowSummary, prefillForSeat } from '@/lib/pos2/lobby';
+import { canAddWalkIn, createPollGuard, dismissLink, LOBBY_RETRY_LABEL, LOBBY_UNAVAILABLE, filterByCode, keypadPress, linkSeatedSession, lobbyFailure, lobbyRowSummary, prefillForSeat } from '@/lib/pos2/lobby';
 
 const DOT = '·';
 const entry = (code: string, extra: Record<string, unknown> = {}) => ({
@@ -144,5 +144,49 @@ describe('after the session starts: link it to the waiting entry; if that fails 
     });
     expect(r).toEqual({ linked: false, retryLabel: 'Retry link' });
     expect(seat).not.toHaveBeenCalled();
+  });
+});
+
+describe('audit fixes: already-done, dismiss, retry, poll guard, walk-in button', () => {
+  const base = { entryId: 'E1', sessionId: 'S1', standLabel: '7' };
+  it('a 409 on the seat step means already done: linked, no retry label, no throw', async () => {
+    const seat = vi.fn(async () => { throw Object.assign(new Error('closed'), { status: 409 }); });
+    expect(await linkSeatedSession({ ...base, fetchJoinUrl: async () => 'https://customer.shareat.net/join?t=a', seat })).toEqual({ linked: true, alreadyDone: true });
+  });
+  it('Retry re-fetches the join URL every time, then seats with the fresh one', async () => {
+    let n = 0;
+    const urls: string[] = [];
+    const fetchJoinUrl = vi.fn(async () => `https://customer.shareat.net/join?t=${++n}`);
+    const seat = vi.fn(async (b: { joinUrl: string }) => { urls.push(b.joinUrl); if (urls.length === 1) throw Object.assign(new Error('x'), { status: 503 }); });
+    expect((await linkSeatedSession({ ...base, fetchJoinUrl, seat })).linked).toBe(false);
+    expect((await linkSeatedSession({ ...base, fetchJoinUrl, seat })).linked).toBe(true);
+    expect(fetchJoinUrl).toHaveBeenCalledTimes(2);
+    expect(urls).toEqual(['https://customer.shareat.net/join?t=1', 'https://customer.shareat.net/join?t=2']);
+  });
+  it('Dismiss seats with joinUrl null; 409 counts as done; other failures are reported, not hidden', async () => {
+    const seat = vi.fn(async (_b: unknown) => ({ ok: true }));
+    expect(await dismissLink({ ...base, seat })).toEqual({ done: true });
+    expect(seat).toHaveBeenCalledWith({ ...base, joinUrl: null });
+    const closed = async () => { throw Object.assign(new Error('c'), { status: 409 }); };
+    expect(await dismissLink({ ...base, seat: closed })).toEqual({ done: true });
+    const down = async () => { throw Object.assign(new Error('d'), { status: 503 }); };
+    expect((await dismissLink({ ...base, seat: down })).done).toBe(false);
+  });
+  it('poll guard: a second poll while one runs is skipped and re-run once; an older answer never overwrites a newer one', () => {
+    const g = createPollGuard();
+    const a = g.begin();
+    expect(a).toBe(1);
+    expect(g.begin()).toBeNull();
+    expect(g.accept(a!)).toBe(true);
+    expect(g.end()).toBe(true); // a skipped poll asks for one more
+    const b = g.begin();
+    expect(b).toBe(2);
+    expect(g.accept(b!)).toBe(true);
+    expect(g.accept(1)).toBe(false); // stale answer
+    expect(g.end()).toBe(false);
+  });
+  it('Add walk-in is hidden when the card is in the needs-the-POS-server state', () => {
+    expect(canAddWalkIn({ unavailable: true })).toBe(false);
+    expect(canAddWalkIn({ unavailable: false })).toBe(true);
   });
 });

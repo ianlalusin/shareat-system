@@ -105,12 +105,78 @@ export async function linkSeatedSession(i: {
   standLabel: string;
   fetchJoinUrl: () => Promise<string>;
   seat: (b: { entryId: string; sessionId: string; standLabel: string; joinUrl: string }) => Promise<unknown>;
-}): Promise<{ linked: true } | { linked: false; retryLabel: typeof LOBBY_RETRY_LABEL }> {
+}): Promise<{ linked: true; alreadyDone?: true } | { linked: false; retryLabel: typeof LOBBY_RETRY_LABEL }> {
   try {
     const joinUrl = await i.fetchJoinUrl();
     await i.seat({ entryId: i.entryId, sessionId: i.sessionId, standLabel: i.standLabel, joinUrl });
     return { linked: true };
-  } catch {
+  } catch (err) {
+    // A 409 (the place in line is already closed) means an earlier seat call went through and only its reply was lost: nothing is left to do.
+    if (isAlreadyDone(err as { status?: unknown })) return { linked: true, alreadyDone: true };
     return { linked: false, retryLabel: LOBBY_RETRY_LABEL };
   }
+}
+
+/** A 409 from the lobby routes on a seat call: the entry is already closed, so the link is as done as it will get. */
+export function isAlreadyDone(err: { status?: unknown } | null | undefined): boolean {
+  return !!err && err.status === 409;
+}
+
+/**
+ * "Dismiss" on a Retry-link row: record the party as seated with NO join link (only the phone hand-off is lost). A 409 counts as done.
+ * Returns { done: true } when the pending note can be cleared, otherwise { done: false, error } for the screen to show.
+ */
+export async function dismissLink(i: {
+  entryId: string;
+  sessionId: string;
+  standLabel: string;
+  seat: (b: { entryId: string; sessionId: string; standLabel: string; joinUrl: null }) => Promise<unknown>;
+}): Promise<{ done: true } | { done: false; error: unknown }> {
+  try {
+    await i.seat({ entryId: i.entryId, sessionId: i.sessionId, standLabel: i.standLabel, joinUrl: null });
+    return { done: true };
+  } catch (err) {
+    if (isAlreadyDone(err as { status?: unknown })) return { done: true };
+    return { done: false, error: err };
+  }
+}
+
+/**
+ * The poll's traffic rule. Only one list call runs at a time (a poll that finds one running is skipped, but remembered so the caller
+ * polls once more when it ends), and an answer older than one already shown is never applied.
+ */
+export function createPollGuard() {
+  let running = false;
+  let queued = false;
+  let issued = 0;
+  let applied = 0;
+  return {
+    /** A sequence number to run with, or null when a call is already running (a re-run is then queued). */
+    begin(): number | null {
+      if (running) {
+        queued = true;
+        return null;
+      }
+      running = true;
+      return ++issued;
+    },
+    /** True when this answer may replace what is shown (it is newer than the last one applied). */
+    accept(seq: number): boolean {
+      if (seq <= applied) return false;
+      applied = seq;
+      return true;
+    },
+    /** The call is over. True when another poll was asked for meanwhile. */
+    end(): boolean {
+      running = false;
+      const again = queued;
+      queued = false;
+      return again;
+    },
+  };
+}
+
+/** The Add walk-in button is shown unless the card is in the "needs the POS server" state (it would only fail). */
+export function canAddWalkIn(state: { unavailable: boolean }): boolean {
+  return !state.unavailable;
 }
