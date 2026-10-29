@@ -33,6 +33,7 @@ import type {
 import { add, compare, decimal, money, multiply, subtract, ZERO, type Money } from '@shareat/core/money';
 import { parseMoneyInput } from '../shared/money-input';
 import { perBaseUnit } from '../deliveries/receive';
+import { refuse } from '../shared/refusal';
 import { postEntry, type PostEntryLine } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { consume, reverseConsumption } from '../stock/consume';
@@ -206,7 +207,9 @@ export async function recordCustomerReturn(
     if (!reason) return { ok: false, reason: 'say why the goods are coming back.' };
     if (input.lines.length === 0) return { ok: false, reason: 'a return with no lines is nothing.' };
 
-    // ⭐ EVERY refusal decided before the first write — the T-166 lesson.
+    // ⭐ Every refusal that does not depend on a stock write is decided before the first write — the T-166 lesson. The two posting
+    // helpers below finish the job (item, account, dispatch movement, refund account) for every line before they move any stock, and
+    // throw (so the transaction rolls back) on the one refusal only a stock write can make.
     const prepared: PreparedLine[] = [];
     for (const l of input.lines) {
       const orderLine = await tradeRepo.getLineById(trx, input.orgId, l.tradeOrderLineId);
@@ -244,33 +247,30 @@ async function recordExternalReturn(
   customer: CustomerRow,
   prepared: readonly PreparedLine[],
 ): Promise<RecordCustomerReturnOutcome> {
+  // T-499: no `{ ok: false }` after the first stock write — a refusal there throws, so the transaction rolls back.
   if (!order.arChargeId) {
     return { ok: false, reason: 'this order raised no receivable — that is a bug for an external sale.' };
   }
 
-  // T-493 S2 (F23, DEF-797) — judged BEFORE any stock moves, so a refusal leaves nothing behind.
-  if (input.refund && input.moneyAccountId) {
-    const refundAccount = await moneyAccountsRepo.getById(tx, input.orgId, input.moneyAccountId);
-    if (refundAccount && refundAccount.storeId !== order.storeId) {
+  // T-493 S2 (F23, DEF-797) + T-499 — the refund's money account is judged BEFORE any stock moves, so a refusal leaves nothing behind.
+  let refundAccount: Awaited<ReturnType<typeof moneyAccountsRepo.getById>>;
+  if (input.refund) {
+    if (!input.moneyAccountId) return { ok: false, reason: 'a cash refund needs a money account.' };
+    refundAccount = await moneyAccountsRepo.getById(tx, input.orgId, input.moneyAccountId);
+    if (!refundAccount) return { ok: false, reason: 'that money account does not exist.' };
+    if (refundAccount.storeId !== order.storeId) {
       return { ok: false, reason: "That money account belongs to another store. A refund is paid from this store's own cash." };
     }
-    if (refundAccount && refundAccount.glAccountCode === '1120') {
+    if (refundAccount.glAccountCode === '1120') {
       return { ok: false, reason: 'That account is a staff cash float, which belongs to one person through a cash request. A refund cannot be paid from it. Choose an office or e-wallet account.' };
     }
   }
 
   const movements = await stockLedgerRepo.movementsBySource(tx, 'trade_order_dispatch', order.id);
-  const returnId = await customerReturnsRepo.nextReturnId(tx);
-  const movedAt = new Date(`${input.returnedOn}T00:00:00Z`);
 
-  const lineInputs: ReturnLineRecord[] = [];
-  const cogsGroups = new Map<string, { inventoryAccount: string; lines: ConsumedLine[] }>();
-  const wastageGroups = new Map<string, { inventoryAccount: string; lines: ConsumedLine[] }>();
-  let totalAmount: Money = ZERO;
-  let lineNo = 0;
-
+  // T-499 — everything that does not depend on a prior stock write, for EVERY line, before the first one moves.
+  const resolved: { p: PreparedLine; inventoryAccount: string; original: (typeof movements)[number] }[] = [];
   for (const p of prepared) {
-    lineNo += 1;
     const item = await itemsRepo.getItemById(tx, input.orgId, p.orderLine.itemId);
     if (!item) return { ok: false, reason: 'a line names an item that no longer exists.' };
     const inventoryAccount = INVENTORY_ACCOUNT_BY_ITEM_KIND[item.kind];
@@ -281,6 +281,20 @@ async function recordExternalReturn(
     if (!original) {
       return { ok: false, reason: `no dispatch movement found for ${item.name} on this order — that is a bug.` };
     }
+    resolved.push({ p, inventoryAccount, original });
+  }
+
+  const returnId = await customerReturnsRepo.nextReturnId(tx);
+  const movedAt = new Date(`${input.returnedOn}T00:00:00Z`);
+
+  const lineInputs: ReturnLineRecord[] = [];
+  const cogsGroups = new Map<string, { inventoryAccount: string; lines: ConsumedLine[] }>();
+  const wastageGroups = new Map<string, { inventoryAccount: string; lines: ConsumedLine[] }>();
+  let totalAmount: Money = ZERO;
+  let lineNo = 0;
+
+  for (const { p, inventoryAccount, original } of resolved) {
+    lineNo += 1;
 
     // ⭐ Invariant 4 — the rate CAPTURED on the order line, never today's price list.
     // T-371 — exact (scaled bigint, half-up once at the centavo), never a float product.
@@ -295,7 +309,7 @@ async function recordExternalReturn(
       originalMovementId: original.id, quantity: p.quantity, movedAt,
       kind: 'usage', sourceType: 'customer_return', sourceId: returnId, createdBy: input.actor.personId,
     });
-    if (!reversed.ok) return reversed;
+    if (!reversed.ok) throw refuse(`recordCustomerReturn: reverseConsumption refused after stock moved — ${reversed.reason}`, reversed.reason);
 
     lineInputs.push({
       lineNo: String(lineNo), tradeOrderLineId: p.orderLine.id, quantity: p.quantity, saleable: p.saleable,
@@ -317,7 +331,7 @@ async function recordExternalReturn(
         quantity: p.quantity, movedAt, kind: 'wastage',
         sourceType: 'customer_return_unsellable', sourceId: returnId, createdBy: input.actor.personId,
       });
-      if (!rewasted.ok) return rewasted;
+      if (!rewasted.ok) throw refuse(`recordCustomerReturn: consume refused after stock moved — ${rewasted.reason}`, rewasted.reason);
       const wgroup = wastageGroups.get(inventoryAccount);
       if (wgroup) wgroup.lines.push(...rewasted.lines);
       else wastageGroups.set(inventoryAccount, { inventoryAccount, lines: [...rewasted.lines] });
@@ -329,9 +343,7 @@ async function recordExternalReturn(
   let settlement: CustomerReturnSettlement;
 
   if (input.refund) {
-    if (!input.moneyAccountId) return { ok: false, reason: 'a cash refund needs a money account.' };
-    const account = await moneyAccountsRepo.getById(tx, input.orgId, input.moneyAccountId);
-    if (!account) return { ok: false, reason: 'that money account does not exist.' };
+    const account = refundAccount!; // set and judged above, before any stock moved
     settlement = 'cash_refund';
     creditLines.push({
       accountCode: account.glAccountCode, storeId: order.storeId, credit: totalAmount,
@@ -412,6 +424,7 @@ async function recordInternalReturn(
   customer: CustomerRow,
   prepared: readonly PreparedLine[],
 ): Promise<RecordCustomerReturnOutcome> {
+  // T-499: no `{ ok: false }` after the first stock write — a refusal there throws, so the transaction rolls back.
   const branchStoreId = customer.counterpartyStoreId!;
   const commissaryStoreId = order.storeId;
   const branchLocation = await stockLocationsRepo.defaultLocationFor(tx, branchStoreId);
@@ -426,17 +439,9 @@ async function recordInternalReturn(
     return { ok: false, reason: 'could not resolve both store codes for the return.' };
   }
 
-  const returnId = await customerReturnsRepo.nextReturnId(tx);
-  const movedAt = new Date(`${input.returnedOn}T00:00:00Z`);
-
-  const lineInputs: ReturnLineRecord[] = [];
-  const branchGroups = new Map<string, { inventoryAccount: string; amount: string }>();
-  const commissaryGroups = new Map<string, { inventoryAccount: string; amount: string }>();
-  let totalValue: Money = ZERO;
-  let lineNo = 0;
-
+  // T-499 — everything that does not depend on a prior stock write, for EVERY line, before the first one moves.
+  const resolved: { p: PreparedLine; item: NonNullable<Awaited<ReturnType<typeof itemsRepo.getItemById>>>; branchItemId: string; branchAccount: string; commissaryAccount: string }[] = [];
   for (const p of prepared) {
-    lineNo += 1;
     const item = await itemsRepo.getItemById(tx, input.orgId, p.orderLine.itemId);
     if (!item) return { ok: false, reason: 'a line names an item that no longer exists.' };
 
@@ -450,6 +455,20 @@ async function recordInternalReturn(
     if (!branchAccount || !commissaryAccount) {
       return { ok: false, reason: `item kind has no inventory account in COA-ALIGNMENT §4.1.` };
     }
+    resolved.push({ p, item, branchItemId, branchAccount, commissaryAccount });
+  }
+
+  const returnId = await customerReturnsRepo.nextReturnId(tx);
+  const movedAt = new Date(`${input.returnedOn}T00:00:00Z`);
+
+  const lineInputs: ReturnLineRecord[] = [];
+  const branchGroups = new Map<string, { inventoryAccount: string; amount: string }>();
+  const commissaryGroups = new Map<string, { inventoryAccount: string; amount: string }>();
+  let totalValue: Money = ZERO;
+  let lineNo = 0;
+
+  for (const { p, item, branchItemId, branchAccount, commissaryAccount } of resolved) {
+    lineNo += 1;
 
     // The branch gives back what it holds — FIFO, oldest-first. There is nothing to REVERSE
     // (the branch never consumed this; it just received it and is handing it back), so this is
@@ -459,7 +478,7 @@ async function recordInternalReturn(
       quantity: p.quantity, movedAt, kind: 'transfer_out', sourceType: 'customer_return', sourceId: returnId,
       createdBy: input.actor.personId,
     });
-    if (!consumed.ok) return consumed;
+    if (!consumed.ok) throw refuse(`recordCustomerReturn: consume refused after stock moved — ${consumed.reason}`, consumed.reason);
 
     const value = consumed.totalCost;
     totalValue = add(totalValue, value);
