@@ -24,7 +24,7 @@ import {
   upsertStorePosition,
 } from '@shareat/domain';
 import { planParties, type ExistingParty, type PartiesSnapshot, type PartyEntity } from '../../packages/etl/src/master-data/parties-plan';
-import { assertRunTarget, selectTargetStores, type StoreMapRow } from '../../packages/etl/src/master-data/store-map';
+import { assertClosedStoresExcluded, assertRunTarget, selectTargetStores, type StoreMapRow } from '../../packages/etl/src/master-data/store-map';
 import { planStaff, type PlannedEmployment, type StaffSnapshot } from '../../packages/etl/src/master-data/staff-plan';
 import { planItems, type ExistingItem, type ExistingLink, type ItemsSnapshot, type Row } from '../../packages/etl/src/master-data/items-plan';
 
@@ -177,6 +177,7 @@ async function itemsBody(tx: Tx, input: ApplyItemsInput, actor: Actor): Promise<
 }
 
 export async function applyItems(input: ApplyItemsInput): Promise<ApplyItemsResult> {
+  assertClosedStoresExcluded(input.map); // T-454: before any database read
   const actor = requireActor('applyItems', input);
   return inOwnTransaction(input, (tx) => itemsBody(tx, input, actor));
 }
@@ -330,6 +331,7 @@ async function partiesBody(tx: Tx, entity: PartyEntity, input: ApplyPartiesInput
 }
 
 async function applyParties(entity: PartyEntity, input: ApplyPartiesInput): Promise<ApplyItemsResult> {
+  assertClosedStoresExcluded(input.map); // T-454: before any database read
   const actor = requireActor(entity === 'supplier' ? 'applySuppliers' : 'applyCustomers', input);
   return inOwnTransaction(input, (tx) => partiesBody(tx, entity, input, actor));
 }
@@ -520,10 +522,12 @@ async function staffBody(tx: Tx, input: ApplyStaffInput, actor: Actor): Promise<
 }
 
 export async function applyPositions(input: ApplyStaffInput): Promise<ApplyItemsResult> {
+  assertClosedStoresExcluded(input.map); // T-454: before any database read
   const actor = requireActor('applyPositions', input);
   return inOwnTransaction(input, (tx) => positionsBody(tx, input, actor));
 }
 export async function applyStaff(input: ApplyStaffInput): Promise<ApplyItemsResult> {
+  assertClosedStoresExcluded(input.map); // T-454: before any database read
   const actor = requireActor('applyStaff', input);
   return inOwnTransaction(input, (tx) => staffBody(tx, input, actor));
 }
@@ -549,6 +553,7 @@ export interface ApplyMasterDataInput extends Omit<ApplyItemsInput, 'snapshot'> 
 }
 
 export async function applyMasterData(input: ApplyMasterDataInput): Promise<Partial<Record<MasterDataEntity, ApplyItemsResult>>> {
+  assertClosedStoresExcluded(input.map); // T-454: before any database read
   const actor = requireActor('applyMasterData', input);
   for (const n of input.only ?? []) {
     if (!(ENTITY_ORDER as readonly string[]).includes(n)) {

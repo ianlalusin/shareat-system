@@ -62,7 +62,8 @@ const mapCsv = (se: string, pg: string): string =>
     'v1_store_id,name,role,org_code,store_code',
     `${L},SharEat Lipa,own,${se},LIPA`,
     `${M},SharEat Malvar,own,${se},MLVR`,
-    `${B},SharEat Banay-Banay,own,${se},BNBN`,
+    // T-454 S2: Banay-Banay closes 31 Dec (row 377)
+    `${B},SharEat Banay-Banay,exclude,${se},BNBN`,
     `${P},SharEat Padre Garcia,franchise,${pg},PGAR`,
   ].join('\r\n');
 
