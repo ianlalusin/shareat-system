@@ -301,3 +301,47 @@ Domain, with Max-Age); hashes are HMAC-SHA256 hex keyed by `LOBBY_HASH_SECRET`; 
 - `NEXT_PUBLIC_LOBBY_DEMO=1` makes the screens use the fixture (demo, no server). Never set it in production.
 - S4 audit (25 Oct): `GET /api/lobby/store` has no per-IP limit (public, read-only, 3-4 small queries). Accepted for now;
   ⛔ before S9 add an nginx `limit_req` zone for `/api/lobby/` on order.shareat.net.
+
+## S5 rulings (POS session, Opus, 2026-10-29)
+Spec gap found while specifying: the S2 staff functions `authorize(record_sale)` an ERP person, but a POS v2 cashier is a
+Firebase user with no ERP person, and the tablet's terminal person holds no capability by design (T-304). §4.6 already
+says the moves are recorded "with the tablet's person". So:
+
+1. **Who is calling.** Every `/api/pos2/lobby/*` route runs `authenticate()` (Firebase token, `staff/{uid}` active and
+   assigned to the body's `storeId` = the POS store id), then requires a uuid `deviceId` and resolves the tablet with
+   `resolvePosTerminalLink` (live store link + this store's ACTIVE terminal link). No link or a bad id: **403** "This
+   tablet is not registered for the lobby." The ERP store is `link.erpStoreId`; the body never names an ERP store.
+2. **Terminal actor in the domain.** New `packages/domain/src/lobby/terminal.ts`, taking
+   `TerminalActor { orgId, erpStoreId, terminalPersonId, cashierName }`. It does NOT call `authorize()`: the trust chain is
+   rule 1 (the same chain `approveManagerPin` and `resolveTerminalNo` already use). Each function checks that the entry's
+   `store_id` equals `erpStoreId`; another store's entry answers exactly like a ghost id (`LOBBY_NOT_FOUND`), so a tablet
+   cannot probe other stores. One shared implementation per move: `staff.ts` and `terminal.ts` call the same internal
+   core (one store check passed in), never two copies of the state logic. Audit rows: `actorPersonId = terminalPersonId`,
+   `source 'pos'`, `after.cashier = cashierName` (staff name, not diner data); never a diner name or phone.
+3. **Moves:** `listForTerminal` (live line, oldest first, AND stamps `lobby_stores.pos_seen_at = now()` when the store has
+   a `lobby_stores` row), `parkForTerminal`, `callForTerminal`, `seatForTerminal`, `removeForTerminal`,
+   `setLobbyPausedForTerminal(paused)` (audit `lobby.pause` / `lobby.resume`; needs a `lobby_stores` row, else
+   `LOBBY_NOT_FOUND`). The audit catalogue gains `lobby.pause` and `lobby.resume` (raise its cap by 2).
+4. **List payload.** Each row: entryId, code, displayName, partySize, status, source, note, phone (staff rows only),
+   createdAt, calledAt, and `lines: [{ lineKind, qty, variantId, optionValueIds, label, posItemKey | null }]`.
+   `posItemKey` comes from the store's ACTIVE `menu_pos_v1_links` row for that variant; none -> `null` and the screen
+   shows `label` as text to tap in by hand (§2.5: never dropped). The list also returns `{ lobbyEnabled, paused }`
+   (`lobbyEnabled` = a `lobby_stores` row exists and is enabled). Lines are empty until S4b ships; the code and tests
+   cover them now with seeded lines. Never returns `handoff_url`, `device_hash`, `ip_hash`.
+5. **Routes** (all POST, JSON body with `storeId` + `deviceId`, like the other pos2 routes):
+   `/api/pos2/lobby/list`, `/park`, `/call`, `/seat`, `/remove`, `/pause`. `LobbyRefusal` -> 409 with its one sentence;
+   unexpected -> `guarded()`'s 500. Seat body: `{ entryId, sessionId, standLabel, joinUrl? }`; `joinUrl` is kept only if it is
+   `https:` on the allowed join origin (env `POS_LOBBY_JOIN_ORIGIN`, default `https://customer.shareat.net`), path exactly
+   `/join`, with a non-empty `t` query value (POS v1 builds `/join?t=<token>`); anything else is dropped to null, not an error,
+   so a phone is never sent to a foreign link.
+6. **Screens.** `LobbyCard` replaces `WaitlistCard` on /cashier: rows "4821 · Ana · 5 pax · Pork+Chicken · 12 min",
+   10 s poll (the poll is the `list` call), code search on an on-screen number pad (row 371: no free typing),
+   "Add walk-in" (reuses `ParkWalkInModal`'s form, now writing through `/park`: no Firestore `addDoc` left), row actions
+   Call / Seat / Remove (Remove asks once), "Pause lobby" toggle shown only when `lobbyEnabled`. Birthday and claim
+   badges wait for S6/S7. **Seat** reuses today's `pendingSeat` path into `start-session-form.tsx`, pre-filled with pax,
+   name in notes, mapped lines (unmapped shown as text). After the session starts, POS fetches the join URL the same way
+   the PIN slip does (`/api/pins/join-url`) and calls `/seat`. If join-url or `/seat` fails the session stands; the row
+   shows "Retry link" until it succeeds or the cashier dismisses it.
+7. **POS server down / not configured (503) or offline:** the card says "The waiting list needs the POS server. Seat
+   walk-ins as usual." Nothing else on /cashier changes.
+8. **R1:** this slice merges before 20 Nov or after 14 Dec, never between (Lipa soak and go-live).
