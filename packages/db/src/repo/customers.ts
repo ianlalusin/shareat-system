@@ -419,3 +419,15 @@ export async function hasFranchiseAgreementWith(tx: Tx, orgId: string, otherOrgI
   return rows.length > 0;
 }
 
+
+/** T-398 S7c: set a customer's credit limit at onboarding (a `(14,2)` decimal string; null = not set). The ordinary credit screens own later changes. */
+export async function setCreditLimit(tx: Tx, orgId: string, id: string, creditLimit: string | null): Promise<void> {
+  const updated = await tx.execute(sql`update customers set credit_limit = ${creditLimit}, updated_at = now() where id = ${id} and org_id = ${orgId} returning id`);
+  if ((updated as unknown as unknown[]).length === 0) throw recordGone(`setCreditLimit: customer ${id} does not exist in org ${orgId}`, 'customer');
+}
+
+/** T-398 S7c: the item ids already quoted on a price list (the onboarding re-run adds only what is missing, so a quoted rate is never moved). */
+export async function quotedItemIds(tx: Tx, priceListId: string): Promise<Set<string>> {
+  const rows = (await tx.execute(sql`select item_id from price_list_items where price_list_id = ${priceListId}`)) as unknown as { item_id: string }[];
+  return new Set(rows.map((r) => String(r.item_id)));
+}

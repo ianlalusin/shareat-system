@@ -54,6 +54,7 @@
     "inter-entity-reconcile": "tsx scripts/inter-entity-reconcile.ts",
     "fiscal-period-seed": "tsx scripts/fiscal-period-seed.ts",
     "bootstrap-org": "tsx scripts/bootstrap-org.ts",
+    "onboard-franchise": "tsx scripts/onboard-franchise.ts",
     "provision-terminal": "tsx scripts/provision-terminal.ts",
     "backfill-fiscal-periods": "tsx scripts/backfill-fiscal-periods.ts",
     "backfill-canonical-positions": "tsx scripts/backfill-canonical-positions.ts",

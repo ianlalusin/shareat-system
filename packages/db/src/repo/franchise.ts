@@ -247,3 +247,31 @@ export async function listAccessLog(tx: Tx, orgId: string, filter: AccessLogFilt
     .limit(limit);
   return rows;
 }
+
+/**
+ * T-398 S7b: the franchise agreement row, written by the onboarding CLI's owner transaction ONLY. The app role has SELECT and nothing more (migration 0220);
+ * nothing a request can reach calls this.
+ */
+export async function insertAgreement(
+  tx: Tx,
+  input: { franchiseeOrgId: string; franchisorOrgId: string; franchisorPersonId: string; salesVisibleFrom: string },
+): Promise<{ id: string }> {
+  const rows = (await tx.execute(sql`
+    insert into franchise_agreements (org_id, franchisor_org_id, franchisor_person_id, sales_visible_from)
+    values (${input.franchiseeOrgId}, ${input.franchisorOrgId}, ${input.franchisorPersonId}, ${input.salesVisibleFrom})
+    returning id
+  `)) as unknown as { id: string }[];
+  return { id: String(rows[0]!.id) };
+}
+
+/** The franchisee's agreement (id, franchisor org, the franchisor's own person in the franchisee), or undefined: the onboarding re-run check and the way to find that person. */
+export async function getAgreement(
+  tx: Tx,
+  franchiseeOrgId: string,
+): Promise<{ id: string; franchisorOrgId: string; franchisorPersonId: string } | undefined> {
+  const rows = (await tx.execute(sql`
+    select id, franchisor_org_id, franchisor_person_id from franchise_agreements where org_id = ${franchiseeOrgId} limit 1
+  `)) as unknown as { id: string; franchisor_org_id: string; franchisor_person_id: string }[];
+  const r = rows[0];
+  return r ? { id: String(r.id), franchisorOrgId: String(r.franchisor_org_id), franchisorPersonId: String(r.franchisor_person_id) } : undefined;
+}

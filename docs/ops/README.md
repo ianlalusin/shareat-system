@@ -15,6 +15,17 @@
 
 > **Cutover (31 Dec - 2 Jan) and its rehearsals:** the step-by-step runbook, go/no-go list and rollback rule are in [`cutover-runbook.md`](./cutover-runbook.md) (T-394 S3).
 
+## Onboarding a franchise
+
+How a franchise company (Padre Garcia, PG) is set up in v2. The data file holds names and emails only. The real file lives on Ian's PC or at `/srv/shareat-shared/onboarding/padre-garcia.json` (mode 0600) and is never committed to git or pasted in chat. The committed `scripts/fixtures/onboarding/MOCK-padre-garcia.onboarding.json` is for rehearsals; a mock file is refused against a production database.
+
+1. `npm run onboard-franchise -- --file <path> --by <Ian's person id in his own company>` prints the plan and writes nothing ("(dry run: nothing written)"). The same line with `--confirm` writes it. A second run says "already onboarded".
+2. T-391 for PG, dry run first: `npm run master-data -- run --snapshot <snapshot> --map <stores.csv> --org <PG uuid> --org-code <PG code> --stores <PG store code> --actor <Ian's PG person>`. Read it, then repeat with `--apply`. Skip the apply if the dry run plans nothing.
+3. Clock terminal: `npm run provision-terminal -- --org=<PG uuid> --store=<PG store code> --uid=<firebase uid> --confirm` (`--org` is required when the same store code exists in more than one company).
+4. The POS link is made inside PG's company on PG's first v2 day (1 Jan), never earlier: the morning import drafts up to 7 days back but never before the link date.
+
+Rehearsal recipe (the same steps on a fresh copy with the MOCK file): onboard the mock file; T-391 dry run on `packages/etl/tests/fixtures/t391-v1-snapshot.json` for the PG store; one commissary dispatch; PG receives it (the mirrored items appear in the receipt form with no hand setup); Ian opens the franchise sales and stock pages; PG's manager opens the access log; two-performer purge; an opening per company; 3900 = 0 in each. Keep a screenshot of each, plus `select org_id, count(*) from journal_lines group by 1`.
+
 ## CI and deploy can run on Ian's PC (added 2026-10-11)
 
 Setting the repository variable `CI_RUNNER=shareat-local` moves every CI and deploy job onto a self-hosted runner on Ian's PC, which saves GitHub-hosted minutes; deleting the variable moves them back. Setup, caveats (the PC must be on; port 5435) and rollback: [`self-hosted-runner.md`](./self-hosted-runner.md).

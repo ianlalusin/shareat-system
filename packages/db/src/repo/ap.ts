@@ -154,6 +154,8 @@ export async function updateSupplier(
     creditTermsDays: number | null;
     // ---- T-391 S4: system-managed; only setSupplierCounterpartyStore passes it
     counterpartyStoreId: string | null;
+    // ---- T-398 S7c: system-managed; only the franchise onboarding passes it (the buyer's link to the seller company)
+    counterpartyOrgId: string | null;
   }>,
 ): Promise<void> {
   const updated = await tx

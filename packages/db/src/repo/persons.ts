@@ -264,3 +264,11 @@ export async function setSignatureFileId(tx: Tx, orgId: string, personId: string
     .set({ signatureFileId: fileId, updatedAt: sql`now()` })
     .where(and(eq(persons.id, personId), eq(persons.orgId, orgId)));
 }
+
+/**
+ * T-398 S7b: record a person's email as an identity (kind 'email'). Not verified: the person proves it by signing in.
+ * `person_identities` has no org column; the unique index on (kind, lower(trim(value))) makes one email belong to one person system-wide.
+ */
+export async function insertEmailIdentity(tx: Tx, personId: string, email: string): Promise<void> {
+  await tx.execute(sql`insert into person_identities (person_id, kind, value) values (${personId}, 'email', ${email.trim()})`);
+}

@@ -38,7 +38,6 @@ createPaymentConversionServer
 customerReturnableQuantity
 datesInWeek
 dayIdOf
-declareSupplierItem
 deleteDocumentNonBlocking
 depreciateAsset
 depreciationDrift

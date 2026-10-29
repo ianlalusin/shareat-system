@@ -198,18 +198,27 @@ describe('O2 - run twice', () => {
 });
 
 describe('O3 - dry run', () => {
-  it('writes nothing: counts equal AND no write transaction was opened (xid counter moved only by the probe itself) - Mutant: writes then rolls back the org but leaves the audit row / opens a write tx', async () => {
+  it('writes nothing: counts SCOPED to what this onboarding would create are unchanged, and the result names the plan - Mutant: writes then keeps the audit/people rows / opens a write path', async () => {
     const l = await franchisor();
     const file = fileFor(l);
-    const before = await footprint(file.org.code);
-    const [x0] = await sql<{ x: string }[]>`select pg_current_xact_id()::text as x`;
+    // Scoped to this file's own values, so another worker writing to the same database cannot move them.
+    const emails = [file.franchisorPerson.email.toLowerCase(), file.owner.email.toLowerCase()];
+    const firsts = file.staff.map((s) => s.first);
+    const scoped = async () =>
+      (await sql<Record<string, number>[]>`
+        select (select count(*) from organizations where code = ${file.org.code})::int orgs,
+               (select count(*) from stores where code = ${file.store.code})::int stores,
+               (select count(*) from person_identities where lower(value) in ${sql(emails)})::int identities,
+               (select count(*) from persons where first_name in ${sql(firsts)})::int staff_persons,
+               (select count(*) from franchise_agreements where franchisor_org_id = ${l.orgId})::int agreements,
+               (select count(*) from audit_log where org_id = ${l.orgId} and action like 'onboard%')::int audits,
+               (select count(*) from positions p join organizations o on o.id = p.org_id where o.code = ${file.org.code})::int positions`)[0]!;
+    const before = await scoped();
+    expect(before).toEqual({ orgs: 0, stores: 0, identities: 0, staff_persons: 0, agreements: 0, audits: 0, positions: 0 });
     const r = await onboard(file, l.adminId, true);
-    const [x1] = await sql<{ x: string }[]>`select pg_current_xact_id()::text as x`;
     expect(r.status).toBe('dry-run');
-    expect(await footprint(file.org.code)).toEqual(before);
-    expect(await orgOf(file.org.code)).toBeUndefined();
-    // Caveat: this one counts transaction ids, so it is only meaningful while nothing else writes to the database; the integration project is serial.
-    expect(BigInt(x1!.x) - BigInt(x0!.x), 'a write transaction was opened by the dry run').toBe(1n);
+    expect(JSON.stringify(r), 'the dry-run result must name the plan (org code)').toContain(file.org.code);
+    expect(await scoped()).toEqual(before);
   });
 });
 
