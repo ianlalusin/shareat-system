@@ -4,14 +4,29 @@
  * ⭐ Everything here is DERIVED on every read. There is no "wizard state" beyond the recorded
  * completions — the progress you see is the ledger's own answer, asked again.
  */
-import { cutoverRepo, itemsRepo } from '@shareat/db';
+import { asc, and, eq } from 'drizzle-orm';
+import { cutoverRepo, itemsRepo, schema } from '@shareat/db';
 import { countedStockValue, cutoverProgress, openingGaps, openingTieOut, addQuantity, quantity, type CutoverProgress, type OpeningGaps, type TieOut } from '@shareat/domain';
 import type { OpeningDraft } from '@shareat/db';
-import { withOrgPrincipal } from '../expenses/lib';
+import { withOrgPrincipal, type StoreOption } from '../expenses/lib';
 
 export { peso } from '../../lib/format';
-export { listStores, withOrgPrincipal } from '../expenses/lib';
+export { withOrgPrincipal } from '../expenses/lib';
 export type { StoreOption } from '../expenses/lib';
+
+/**
+ * T-454: the wizard asks about ACTIVE stores only. A closed store (Banay-Banay after 31 Dec 2026) is deactivated, and no
+ * count, opening or per-store step is demanded of it. The expense screens keep their own all-stores `listStores`.
+ */
+export async function listStores(orgId: string): Promise<StoreOption[]> {
+  return withOrgPrincipal(orgId, (tx) =>
+    tx
+      .select({ id: schema.stores.id, name: schema.stores.name, code: schema.stores.code })
+      .from(schema.stores)
+      .where(and(eq(schema.stores.orgId, orgId), eq(schema.stores.isActive, true)))
+      .orderBy(asc(schema.stores.name)),
+  );
+}
 
 /** The conversion date the double-counting guard measures "pre-cutover" against. */
 export const CONVERSION_DATE = '2027-01-01';

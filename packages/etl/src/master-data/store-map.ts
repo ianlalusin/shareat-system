@@ -92,3 +92,19 @@ export function assertRunTarget(rows: readonly StoreMapRow[], opts: { orgCode: s
     throw new Error(`stores.csv has no store for org "${opts.orgCode}". Refused (R6).`);
   }
 }
+
+/** v1 stores that close and are never loaded into v2 (T-454; bible rows 377, 384). Banay-Banay closes 31 Dec 2026. */
+export const CLOSED_V1_STORES: Readonly<Record<string, string>> = {
+  iGOW7q2pZbeHWV832UNh: 'SharEat Banay-Banay (closes 31 Dec 2026, rows 377, 384)',
+};
+
+/** A closed store may only appear in stores.csv as `exclude`. Called first by every CLI entry point that reads a map. */
+export function assertClosedStoresExcluded(rows: readonly StoreMapRow[]): void {
+  for (const r of rows) {
+    if (r.v1StoreId in CLOSED_V1_STORES && r.role !== 'exclude') {
+      throw new Error(
+        `Banay-Banay closes on 31 Dec 2026 and is not loaded into v2 (bible row 377). Set its role to exclude in stores.csv (it is "${r.role}" now).`,
+      );
+    }
+  }
+}

@@ -78,7 +78,7 @@ async function run(): Promise<number> {
   if (doApply && !actorId) fail('--apply needs --actor <person uuid>: the load writes as a named person who holds approve_item (R8).');
   const { assertSheetsOutsideRepo, parseCsv, toCsv } = await import('../packages/etl/src/master-data/sheets');
   assertSheetsOutsideRepo(sheetsDir, REPO_ROOT);
-  const { assertRunTarget, parseStoreMap } = await import('../packages/etl/src/master-data/store-map');
+  const { assertClosedStoresExcluded, assertRunTarget, parseStoreMap } = await import('../packages/etl/src/master-data/store-map');
   const { verifySnapshotSha } = await import('../packages/etl/src/master-data/snapshot');
   const { planItems, staleAnswersCsv, ITEM_SHEETS, ITEM_SHEET_COLUMNS } = await import('../packages/etl/src/master-data/items-plan');
   const { closeDb, organizationsRepo, withOrgPrincipal } = await import('@shareat/db');
@@ -90,6 +90,7 @@ async function run(): Promise<number> {
   console.log(`Snapshot sha256 ${sha}`);
   const snapshot = JSON.parse(readFileSync(snapshotPath, 'utf8'));
   const map = parseStoreMap(readFileSync(mapPath, 'utf8'));
+  assertClosedStoresExcluded(map); // T-454: before any database read or sheet write
   const orgRowCode = await withOrgPrincipal(orgId, async (tx) => (await organizationsRepo.identityOf(tx, orgId))?.code ?? '');
   assertRunTarget(map, { orgCode, orgRowCode }); // the --org row must be the org --org-code names
   const storeCodes = arg('--stores')?.split(',').map((s) => s.trim()).filter(Boolean);
@@ -252,10 +253,11 @@ async function readinessCmd(): Promise<number> {
   const actorId = arg('--actor');
   const snapshotPath = arg('--snapshot');
   if (!orgId || !mapPath || !actorId) fail('Pass --org <uuid> --map <stores.csv> --actor <person uuid> [--org-code <code>] [--stores LIPA,MLVR] [--snapshot <file>].');
-  const { parseStoreMap, assertRunTarget } = await import('../packages/etl/src/master-data/store-map');
+  const { parseStoreMap, assertRunTarget, assertClosedStoresExcluded } = await import('../packages/etl/src/master-data/store-map');
   const { closeDb, organizationsRepo, withOrgPrincipal } = await import('@shareat/db');
   const { readiness } = await import('./lib/master-data-readiness');
   const map = parseStoreMap(readFileSync(mapPath, 'utf8'));
+  assertClosedStoresExcluded(map); // T-454: before any database read
   const storeCodes = arg('--stores')?.split(',').map((s) => s.trim()).filter(Boolean);
   const snapshot = snapshotPath ? JSON.parse(readFileSync(snapshotPath, 'utf8')) : undefined;
   try {

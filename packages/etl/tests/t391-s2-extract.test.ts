@@ -215,7 +215,8 @@ describe('what extract writes, and what leaves the machine (R15, tests 15a and 2
     const rows = parseCsv(readFileSync(join(dir, 'stores.csv'), 'utf8'));
     expect(rows).toHaveLength(7);
     const role = Object.fromEntries(rows.map((r) => [r.v1_store_id, r.role]));
-    expect(role).toEqual({ [L]: 'own', [M]: 'own', [B]: 'own', [D]: 'own', [P]: 'franchise', [T1]: 'exclude', [T2]: 'exclude' });
+    // T-454 S2: Banay-Banay closes 31 Dec (row 377)
+    expect(role).toEqual({ [L]: 'own', [M]: 'own', [B]: 'exclude', [D]: 'own', [P]: 'franchise', [T1]: 'exclude', [T2]: 'exclude' });
     for (const r of rows) {
       expect(r.org_code).toBe('');
       expect(r.store_code).toBe('');
