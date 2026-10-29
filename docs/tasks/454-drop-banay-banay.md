@@ -233,3 +233,20 @@ For example: stock moved to Lipa, cash handed to Lipa, equipment listed under Li
 else owns part of Banay-Banay and Lipa pays them, your accountant records that payment in v1 too. v2 needs nothing
 from it, because it only sees Lipa's balances afterwards. **Recommended:** everything dated 31 Dec, after closing.
 Then the dual run never reports it and S5 is not needed.
+
+## 10. Ian's answers (2026-10-29, orchestrator session) — these bind
+
+- **Q1 = (a).** All Banay-Banay staff move to Lipa from 1 Jan (no list needed).
+- **Q2 = (a), done offline.** No count is recorded in any system for Banay-Banay. It closes manually; what is left is
+  simply included in **Lipa's own opening count**. Everything is closed within 2026.
+- **Q3 = (a).** Everything is paid and collected before 31 Dec; nothing open moves to Lipa.
+- **Q4: manual and offline.** The buy-back is not recorded store-to-store in v1; Lipa's opening figures carry it.
+  **S5 is not built** (no v1 transfer legs to classify).
+
+### Planner ruling on S4 (follows from Q2/Q4)
+Banay-Banay's v1 cash, stock and equipment balances will **not** be zero on 31 Dec, because the hand-over is offline
+and nothing moves them in v1. So `--expect-zero` checks **party balances only** (every supplier and customer at ₱0.00,
+by name, which proves Q3) and exits 1 on any open party balance. Account balances (cash, stock 1310-1330, equipment)
+are **printed as information** under the heading "Handled offline, carried in Lipa's opening" and never fail the
+check. T10 becomes: a ₱100.00 cash balance alone → exit 0 with the information line; T11 unchanged (an open
+supplier balance → exit 1). Timeline rows for 23 Dec and 31 Dec read accordingly: no v1 entries for the move.

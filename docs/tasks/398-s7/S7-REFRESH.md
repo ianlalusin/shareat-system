@@ -275,3 +275,14 @@ sales view starts. Under (c), needed by 27 Nov for a 4 Dec production run.
 
 **For the orchestrator:** reserve the PG HR task now (row 369: PG's government rates and the approver for its
 manager's own leave, needed before 1 Jan). No task file exists on main.
+
+## 15. Ian's answers (2026-10-29, orchestrator session) — these bind
+- **Q-S7-1 = (c).** PG sells on POS v1 from 16 Nov; purchases and expenses on paper until 1 Jan; v2 from 1 Jan, opening
+  from its 31 Dec count, cash and what it owes the commissary. No "keep PG" purge mode is built.
+- **Q-S7-2 = (a).** Lipa (the commissary) records each PG order in v1 itself; PG never touches v1. The read-only v1
+  check of `settleBranchSaleAction` without "received" is still owed before 16 Nov (Haiku, read-only).
+- **Q-S7-3 = (a).** Linking a customer to another company: admin only, only to a company with a franchise agreement;
+  the picker lists only those (S7d as specified).
+- **Q-S7-4 = (a).** Onboarding copies every commissary-sold item to PG (name and unit only) and declares them on PG's
+  commissary supplier (§5 step 9).
+- Build on the **MOCK** data file now (Ian, 29 Oct); real data swapped in by file before the production run.
