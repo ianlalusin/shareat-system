@@ -12,7 +12,7 @@ import { journalRepo, type Tx } from '@shareat/db';
 import { postEntry, lineAmount, type PostEntryInput, type PostEntryResult } from './post-entry';
 import { refuse } from '../shared/refusal';
 
-const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** The form's request id, or a refusal: a missing or non-uuid value means a stale or hand-built form. */
 export function requireRequestId(fn: string, requestId: string | null | undefined): string {

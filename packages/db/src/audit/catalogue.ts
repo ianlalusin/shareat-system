@@ -129,6 +129,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-190: a person's government numbers were set or cleared. Records FIELD NAMES only, never a number.
   def('staff_gov_ids.changed', 'security', 'high', 'store', 'persons', 'T-190', { viewers: 'admin' }),
   def('payroll_rate.change', 'money', 'high', 'org', 'statutory_rates', 'T-190', ADMIN),
+  // T-193 S3: recording a payment to SSS / PhilHealth / Pag-IBIG / BIR (S4 adds the void). Org-scoped, admin-readable; payloads carry agency, month, receipt no. and amounts, never a government number.
+  def('statutory_payment.record', 'money', 'high', 'org', 'statutory_payments', 'T-193', ADMIN),
   def('create_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('update_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('reactivate_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),

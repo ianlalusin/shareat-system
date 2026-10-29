@@ -8,7 +8,7 @@
  */
 import { and, eq, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
-import { statutoryPaymentLines, statutoryPayments, type StatutoryPaymentAgency } from '../../schema/statutory';
+import { statutoryEmployers, statutoryPaymentLines, statutoryPayments, type StatutoryPaymentAgency } from '../../schema/statutory';
 import type { Money } from '@shareat/core/money';
 
 export type StatutoryAgency = StatutoryPaymentAgency;
@@ -281,4 +281,36 @@ export async function lockMonthRuns(tx: Tx, orgId: string, month: string, storeI
     order by id
     for update`);
   return (rows as unknown as { id: string }[]).map((r) => r.id);
+}
+
+/** The employer number on file for SSS / PhilHealth / Pag-IBIG (BIR has none: the organization's TIN is the number). Null = none on file. */
+export async function employerNumber(tx: Tx, orgId: string, agency: StatutoryAgency): Promise<string | null> {
+  const [row] = await tx
+    .select({ employerNo: statutoryEmployers.employerNo })
+    .from(statutoryEmployers)
+    .where(and(eq(statutoryEmployers.orgId, orgId), eq(statutoryEmployers.agency, agency)))
+    .limit(1);
+  return row?.employerNo ?? null;
+}
+
+/** The POSTED payment that already carries this agency receipt (the partial unique index, asked in words before it fires). */
+export async function findPostedByReference(
+  tx: Tx,
+  orgId: string,
+  agency: StatutoryAgency,
+  referenceNo: string,
+): Promise<{ id: string } | null> {
+  const [row] = await tx
+    .select({ id: statutoryPayments.id })
+    .from(statutoryPayments)
+    .where(
+      and(
+        eq(statutoryPayments.orgId, orgId),
+        eq(statutoryPayments.agency, agency),
+        eq(statutoryPayments.referenceNo, referenceNo),
+        eq(statutoryPayments.status, 'posted'),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
 }

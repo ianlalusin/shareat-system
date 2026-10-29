@@ -1348,6 +1348,64 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
   },
 
   // =========================================================================================
+  // statutory_payment (T-193) - paying SSS / PhilHealth / Pag-IBIG / BIR what payroll already credited to 2210-2240.
+  // NOT liability_payment: reverseLiabilityEntry accepts that source type, so reusing it would expose a statutory
+  // entry to the generic liability reversal. `storeRef` means two distinct stores in the cross-store example, as in
+  // reimbursement.payout-cross-store: 'branch1' is the OWING store (Lipa, whose SSS it is) and 'commissary' is the
+  // PAYING store (Malvar, whose safe pays) - not a commissary relationship. Store-party ids are store CODES.
+  // =========================================================================================
+  {
+    id: 'statutory_payment.same-store',
+    sourceType: 'statutory_payment',
+    title: 'Statutory payment - one store pays its own SSS from its own safe',
+    narrative: 'Lipa pays its October SSS, \u20b13,180.00 (employee, employer and EC shares together), out of Lipa\'s office ' +
+      'safe. The cost was booked when payroll posted; this only settles the payable.',
+    input: { agency: 'sss', month: '2026-10-01', paidOn: '2026-11-10', referenceNo: 'PRN-0001', lines: [{ store: 'STORE-BRANCH1', amount: '3180.00' }], penalty: '0.00' },
+    expect: [
+      D('2210', '3180.00', null, { storeRef: 'branch1', lineMemo: 'SSS remitted' }),
+      C('1130', '3180.00', null, { storeRef: 'branch1', lineMemo: 'cash out of the office safe' }),
+    ],
+    entryDate: '2026-11-10',
+    trap: 'This is NOT an expense. Debiting 6110 SSS expense counts the same contribution twice and leaves 2210 at ' +
+      '\u20b13,180.00 for ever (bible section 16.7).',
+  },
+  {
+    id: 'statutory_payment.cross-store',
+    sourceType: 'statutory_payment',
+    title: "Statutory payment from another store's safe - each store's own lines net to zero",
+    narrative: "The same \u20b13,180.00 of SSS, owed at Lipa, is paid out of MALVAR's office safe. The safe's credit sits at the " +
+      "safe's store, so Malvar's safe is the one that falls; Lipa's payable is discharged with Malvar's money, so Lipa now " +
+      'owes Malvar and Malvar is owed by Lipa, in the same single entry. A payment naming three stores gets one such pair per store paid for.',
+    input: { agency: 'sss', month: '2026-10-01', paidOn: '2026-11-10', referenceNo: 'PRN-0002', lines: [{ store: 'STORE-BRANCH1', amount: '3180.00' }], payingStoreCode: 'STORE-COMMISSARY' },
+    expect: [
+      D('2210', '3180.00', null, { storeRef: 'branch1', lineMemo: 'SSS remitted' }),
+      C('2150', '3180.00', { type: 'store', id: 'STORE-COMMISSARY' }, { storeRef: 'branch1', lineMemo: 'due to commissary' }),
+      D('1250', '3180.00', { type: 'store', id: 'STORE-BRANCH1' }, { storeRef: 'commissary', lineMemo: 'due from branch' }),
+      C('1130', '3180.00', null, { storeRef: 'commissary', lineMemo: 'cash out of the paying safe' }),
+    ],
+    entryDate: '2026-11-10',
+    trap: "Debiting 2210 at the PAYING store balances perfectly and is wrong: the owing store's payable never falls and the " +
+      "paying store's goes negative (DEF-551). The pair's party is the other store's CODE, never its id.",
+  },
+  {
+    id: 'statutory_payment.with-penalty',
+    sourceType: 'statutory_payment',
+    title: "Statutory payment with the agency's surcharge - a new cost, never part of the payable",
+    narrative: 'The same \u20b13,180.00 of SSS is paid on 15 December with a \u20b163.60 surcharge. The surcharge is a cost of its ' +
+      'own and goes to 6810 Penalties and surcharges at the paying store; the safe pays both together.',
+    input: { agency: 'sss', month: '2026-10-01', paidOn: '2026-12-15', referenceNo: 'PRN-0003', lines: [{ store: 'STORE-BRANCH1', amount: '3180.00' }], penalty: '63.60' },
+    expect: [
+      D('2210', '3180.00', null, { storeRef: 'branch1', lineMemo: 'SSS remitted' }),
+      D('6810', '63.60', null, { storeRef: 'branch1', lineMemo: 'agency surcharge' }),
+      C('1130', '3243.60', null, { storeRef: 'branch1', lineMemo: 'cash out of the office safe' }),
+    ],
+    entryDate: '2026-12-15',
+    trap: 'Adding the surcharge to the 2210 line makes the payment look like it settled \u20b13,243.60 of contributions, so ' +
+      'the month shows overpaid and the surcharge never reaches the profit and loss statement. Booking it to 6110 is the ' +
+      'same double count as the first example.',
+  },
+
+  // =========================================================================================
   // Owner equity movements — capital_contribution / drawing. Not in T-108's own v1-leg-count
   // frequency table (too rare to register meaningfully), but ADR-005's scope-gap section names
   // "owner equity movements" explicitly as one of five capabilities v1 already posts that
