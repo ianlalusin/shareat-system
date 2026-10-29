@@ -1,25 +1,26 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase/client";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Loader2, Minus, Plus, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAuthContext } from "@/context/auth-context";
+import { postPos2 } from "@/lib/pos2/client";
+import { lobbyFailure } from "@/lib/pos2/lobby";
 
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   storeId: string;
+  /** Called after the walk-in is on the line, so the card can refresh at once. */
+  onParked?: () => void;
 }
 
-export function ParkWalkInModal({ open, onOpenChange, storeId }: Props) {
+/** T-455 S5: the walk-in is written to the customer lobby line in Postgres through /api/pos2/lobby/park (no Firestore write). */
+export function ParkWalkInModal({ open, onOpenChange, storeId, onParked }: Props) {
   const { toast } = useToast();
-  const { appUser } = useAuthContext();
   const [name, setName] = useState("");
   const [partySize, setPartySize] = useState(2);
   const [phone, setPhone] = useState("");
@@ -35,33 +36,30 @@ export function ParkWalkInModal({ open, onOpenChange, storeId }: Props) {
     }
   }, [open]);
 
-  const canSubmit = name.trim().length >= 1 && partySize >= 1;
+  const canSubmit = name.trim().length >= 1 && partySize >= 1 && partySize <= 30;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setSaving(true);
     try {
-      const now = Date.now();
-      await addDoc(collection(db, "stores", storeId, "waitlist"), {
-        name: name.trim(),
+      const r = await postPos2<{ code: string }>("lobby/park", {
+        storeId,
+        displayName: name.trim(),
         partySize,
         phone: phone.trim() || null,
-        notes: notes.trim() || null,
-        status: "waiting",
-        createdAt: serverTimestamp(),
-        createdAtClientMs: now,
-        parkedByUid: appUser?.uid ?? null,
+        note: notes.trim() || null,
       });
-      toast({ title: "Added to waitlist", description: `${name.trim()} · ${partySize} pax` });
+      toast({ title: `Added to the line: ${r.code}`, description: `${name.trim()} · ${partySize} pax` });
       onOpenChange(false);
+      onParked?.();
     } catch (err: any) {
-      toast({ variant: "destructive", title: "Error", description: err?.message || "Could not save." });
+      toast({ variant: "destructive", title: "Could not add", description: lobbyFailure(err).message });
     } finally {
       setSaving(false);
     }
   };
 
-  const bump = (delta: number) => setPartySize(p => Math.max(1, Math.min(99, p + delta)));
+  const bump = (delta: number) => setPartySize(p => Math.max(1, Math.min(30, p + delta)));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -69,10 +67,10 @@ export function ParkWalkInModal({ open, onOpenChange, storeId }: Props) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="h-5 w-5 text-primary" />
-            Park walk-in
+            Add walk-in
           </DialogTitle>
           <DialogDescription>
-            Add a customer to the waitlist. Seat them when a table opens.
+            Add a customer to the waiting line. Seat them when a table opens.
           </DialogDescription>
         </DialogHeader>
 
@@ -101,7 +99,7 @@ export function ParkWalkInModal({ open, onOpenChange, storeId }: Props) {
                 value={partySize}
                 onChange={(e) => {
                   const n = parseInt(e.target.value.replace(/\D/g, ""), 10);
-                  setPartySize(isNaN(n) ? 0 : Math.max(0, Math.min(99, n)));
+                  setPartySize(isNaN(n) ? 0 : Math.max(0, Math.min(30, n)));
                 }}
                 className="text-center text-lg h-10 tabular-nums"
                 disabled={saving}
@@ -118,7 +116,7 @@ export function ParkWalkInModal({ open, onOpenChange, storeId }: Props) {
               type="tel"
               inputMode="tel"
               value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/[^\d+\-\s]/g, "").slice(0, 20))}
+              onChange={(e) => setPhone(e.target.value.replace(/[^\d+\-\s]/g, "").slice(0, 30))}
               placeholder="09xx xxx xxxx"
               disabled={saving}
             />
@@ -128,7 +126,7 @@ export function ParkWalkInModal({ open, onOpenChange, storeId }: Props) {
             <Label>Notes <span className="text-xs text-muted-foreground font-normal">(optional)</span></Label>
             <Input
               value={notes}
-              onChange={(e) => setNotes(e.target.value.slice(0, 80))}
+              onChange={(e) => setNotes(e.target.value.slice(0, 60))}
               placeholder="birthday, window seat, etc."
               disabled={saving}
             />
@@ -138,7 +136,7 @@ export function ParkWalkInModal({ open, onOpenChange, storeId }: Props) {
         <DialogFooter>
           <Button onClick={handleSubmit} disabled={saving || !canSubmit} className="w-full">
             {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserPlus className="h-4 w-4 mr-2" />}
-            Add to waitlist
+            Add to the line
           </Button>
         </DialogFooter>
       </DialogContent>

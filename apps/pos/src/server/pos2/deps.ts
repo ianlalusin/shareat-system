@@ -11,7 +11,7 @@ import 'server-only';
  * Missing or blank -> `{ ok: false, status: 503 }`, so a misconfigured box answers a plain sentence instead of crash-looping. Everything heavy
  * (firebase-admin, @shareat/db, @shareat/auth) is imported LAZILY here, so importing a route module touches neither the SDK nor the database.
  */
-import type { Pos2Deps } from './types';
+import type { LobbyTablet, Pos2Deps } from './types';
 
 export const POS2_NOT_CONFIGURED = 'POS server is not configured';
 
@@ -103,7 +103,58 @@ async function buildDeps(keyFile: string, orgId: string): Promise<Pos2Deps> {
         const shift = await dbPkg.tillShiftsRepo.openShiftFor(tx, orgId, link.storeId);
         return shift ? { openedAtMs: shift.openedAt.getTime() } : null;
       }),
+    // T-455 S5: the tablet's lobby moves. Trust chain = the route's token + staff assignment, then the tablet's ACTIVE terminal link here.
+    lobby: buildLobbyPort(orgId, auth, dbPkg, async () => import('@shareat/domain')),
     nowMs: () => Date.now(),
     newId: () => firestore.collection('_ids').doc().id ?? randomUUID(),
+  };
+}
+
+/**
+ * T-455 S5 - the lobby port: each move runs in ONE `withOrgPrincipal(orgId)` transaction. The domain's `LobbyRefusal` already carries
+ * `name === 'LobbyRefusal'` and a one-sentence `userMessage`, so it propagates as is and the handler answers it as a 409.
+ * The domain package is imported lazily, like the other heavy packages, so importing a route module loads none of it.
+ */
+function buildLobbyPort(
+  orgId: string,
+  auth: typeof import('@shareat/auth'),
+  dbPkg: typeof import('@shareat/db'),
+  loadDomain: () => Promise<typeof import('@shareat/domain')>,
+): Pos2Deps['lobby'] {
+  const actorOf = (a: LobbyTablet) => ({ orgId, erpStoreId: a.erpStoreId, terminalPersonId: a.terminalPersonId, cashierName: a.cashierName });
+  return {
+    resolveTablet: async ({ posStoreId, deviceId }) => {
+      try {
+        const link = await dbPkg.withOrgPrincipal(orgId, (tx) => auth.resolvePosTerminalLink(tx, { orgId, posStoreId, deviceId }));
+        return { erpStoreId: link.erpStoreId, terminalPersonId: link.terminalPersonId };
+      } catch (err) {
+        if (err instanceof auth.AuthenticationError) return null;
+        throw err;
+      }
+    },
+    list: async (a) => {
+      const d = await loadDomain();
+      return dbPkg.withOrgPrincipal(orgId, (tx) => d.listForTerminal(tx, actorOf(a)));
+    },
+    park: async (a, i) => {
+      const d = await loadDomain();
+      return dbPkg.withOrgPrincipal(orgId, (tx) => d.parkForTerminal(tx, actorOf(a), i));
+    },
+    call: async (a, i) => {
+      const d = await loadDomain();
+      return dbPkg.withOrgPrincipal(orgId, (tx) => d.callForTerminal(tx, actorOf(a), i.entryId));
+    },
+    seat: async (a, i) => {
+      const d = await loadDomain();
+      return dbPkg.withOrgPrincipal(orgId, (tx) => d.seatForTerminal(tx, actorOf(a), i));
+    },
+    remove: async (a, i) => {
+      const d = await loadDomain();
+      return dbPkg.withOrgPrincipal(orgId, (tx) => d.removeForTerminal(tx, actorOf(a), i.entryId));
+    },
+    pause: async (a, i) => {
+      const d = await loadDomain();
+      return dbPkg.withOrgPrincipal(orgId, (tx) => d.setLobbyPausedForTerminal(tx, actorOf(a), i.paused));
+    },
   };
 }
