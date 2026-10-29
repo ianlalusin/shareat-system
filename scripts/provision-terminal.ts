@@ -41,6 +41,8 @@ import { provisionPosTerminalLink, revokePosTerminalLink } from '../packages/dom
 
 interface Args {
   storeCode: string;
+  /** T-398 S7e: the company the store belongs to. REQUIRED when the same code exists in more than one company (K8). */
+  orgId?: string;
   uid: string;
   confirm: boolean;
   /** T-424: set when linking a POS v2 tablet instead of creating a terminal person. */
@@ -56,6 +58,7 @@ Usage:
   npm run provision-terminal -- --store=LIPA --revoke-pos-device=<uuid> --admin=<id> [--confirm]
 
 --store is REQUIRED, and so is --uid (or the four --link-pos-device options); nothing has a default.
+--org=<company uuid> is needed only when the same store code exists in more than one company; the script refuses and says so rather than guess.
 Without --confirm the script prints the plan and writes nothing.
 `;
 
@@ -71,27 +74,35 @@ function parseArgs(argv: readonly string[]): Args {
     if (!match) throw new Error(`provision-terminal: unrecognised argument "${arg}".\n${USAGE}`);
     raw.set(match[1]!, match[2]!);
   }
+  const org = raw.get('org')?.trim();
+  if (raw.has('org') && !(org && UUID_RE.test(org))) {
+    throw new Error(`provision-terminal: --org must be a company id (a uuid).
+${USAGE}`);
+  }
+  const withOrg = <T extends object>(a: T): T & { orgId?: string } => (org ? { ...a, orgId: org.toLowerCase() } : a);
   const required = (key: string): string => {
     const value = raw.get(key)?.trim();
     if (!value) throw new Error(`provision-terminal: --${key} is required and has no default.\n${USAGE}`);
     return value;
   };
   if (raw.has('revoke-pos-device')) {
-    return { storeCode: required('store'), uid: '', confirm, link: null, revoke: { deviceId: required('revoke-pos-device').toLowerCase(), adminPersonId: required('admin') } };
+    return withOrg({ storeCode: required('store'), uid: '', confirm, link: null, revoke: { deviceId: required('revoke-pos-device').toLowerCase(), adminPersonId: required('admin') } });
   }
   if (raw.has('link-pos-device')) {
     const terminalNo = Number(required('terminal-no'));
     if (!Number.isInteger(terminalNo) || terminalNo < 1 || terminalNo > 99) throw new Error(`provision-terminal: --terminal-no must be a whole number from 1 to 99.
 ${USAGE}`);
-    return {
+    return withOrg({
       storeCode: required('store'),
       uid: '',
       confirm,
       link: { deviceId: required('link-pos-device'), terminalNo, terminalPersonId: required('terminal-person'), adminPersonId: required('admin') },
-    };
+    });
   }
-  return { storeCode: required('store'), uid: required('uid'), confirm, link: null };
+  return withOrg({ storeCode: required('store'), uid: required('uid'), confirm, link: null });
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface StoreLookup {
   id: string;
@@ -99,14 +110,15 @@ interface StoreLookup {
   name: string;
 }
 
-/** ⚠️ Not `stores.getById` — that needs the org already, and this script's only input is a code.
- *  Fine only because `systemTransaction` bypasses RLS (a script run by a person, not a request)
- *  and because this project is one organisation today (T-304's own text). A second organisation
- *  would need `--org=` added here — flagged rather than pre-built for a case that does not exist. */
-async function findStoreByCode(tx: Tx, code: string): Promise<StoreLookup | undefined> {
-  const [row] = (await tx.execute(sql`
-    select id, org_id, name from stores where code = ${code} limit 1
-  `)) as unknown as { id: string; org_id: string; name: string }[];
+/** ⚠️ Not `stores.getById` — that needs the org already, and this script's input is a code (plus, since T-398 S7e, an optional company).
+ *  `systemTransaction` bypasses RLS (a script run by a person, not a request), so every company's stores are visible: with two companies a code
+ *  can match twice. Without `--org` that is `ambiguous` (never `limit 1`: it silently picked one); with `--org` only that company's store counts. */
+async function findStoreByCode(tx: Tx, code: string, orgId?: string): Promise<StoreLookup | 'ambiguous' | undefined> {
+  const rows = (await (orgId
+    ? tx.execute(sql`select id, org_id, name from stores where code = ${code} and org_id = ${orgId} limit 2`)
+    : tx.execute(sql`select id, org_id, name from stores where code = ${code} limit 2`))) as unknown as { id: string; org_id: string; name: string }[];
+  if (rows.length > 1) return 'ambiguous';
+  const row = rows[0];
   return row ? { id: row.id, orgId: row.org_id, name: row.name } : undefined;
 }
 
@@ -143,7 +155,13 @@ async function main(): Promise<void> {
 
   await assertSystemRoleBypassesRls();
 
-  const store = await systemTransaction((tx) => findStoreByCode(tx, args.storeCode));
+  const found0 = await systemTransaction((tx) => findStoreByCode(tx, args.storeCode, args.orgId));
+  if (found0 === 'ambiguous') {
+    console.error(`REFUSED: the store code "${args.storeCode}" is used by more than one company, so it is ambiguous. Re-run with --org=<company id>. Nothing was written.`);
+    process.exitCode = 1;
+    return;
+  }
+  const store = found0;
   if (!store) {
     console.error(`REFUSED: no store with code "${args.storeCode}". Nothing was written.`);
     process.exitCode = 1;

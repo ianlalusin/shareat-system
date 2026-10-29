@@ -30,6 +30,7 @@ const alias = {
   '@shareat/core/exif': `${root}packages/core/src/exif.ts`,
   '@shareat/core/sentence': `${root}packages/core/src/sentence.ts`,
   '@shareat/core/csv': `${root}packages/core/src/csv.ts`,
+  '@shareat/core/production-hosts': `${root}packages/core/src/production-hosts.ts`,
   '@shareat/core': `${root}packages/core/src/index.ts`,
   '@shareat/db/pos-v1/wire': `${root}packages/db/src/pos-v1/wire.ts`,
   '@shareat/db/schema': `${root}packages/db/schema/index.ts`,

@@ -12,7 +12,8 @@
     "./env": "./src/env.ts",
     "./exif": "./src/exif.ts",
     "./sentence": "./src/sentence.ts",
-    "./csv": "./src/csv.ts"
+    "./csv": "./src/csv.ts",
+    "./production-hosts": "./src/production-hosts.ts"
   },
   "dependencies": {
     "pino": "^9.6.0",

@@ -387,19 +387,35 @@ export async function rateFor(
 }
 
 /**
- * Other organisations in the system — the franchise link's picker.
+ * The companies a customer may be linked to - the franchise link's picker (T-398 S7d, DEF-747).
  *
- * ⚠️ **Never this org.** Linking a customer to our own organisation would derive as an
- * inter-entity sale to ourselves: real revenue against no external party. The service refuses it
- * too; excluding it here means the UI cannot offer the mistake in the first place.
+ * ⚠️ **Only companies that share a franchise agreement with the caller's organisation, and never this one.** Linking a customer to our own
+ * organisation would derive as an inter-entity sale to ourselves: real revenue against no external party. The list comes from the
+ * `linkable_counterparty_orgs()` definer (migration 0223), which reads the caller's organisation from the transaction itself; `orgId` is
+ * kept so callers read the same as before.
  */
 export async function otherOrgs(
   tx: Tx,
-  orgId: string,
+  _orgId: string,
 ): Promise<{ id: string; name: string; code: string }[]> {
   const rows = (await tx.execute(sql`
-    select id, name, code from organizations where id <> ${orgId} and is_active order by name
+    select org_id, name, code from linkable_counterparty_orgs()
   `)) as unknown as Record<string, string>[];
-  return rows.map((r) => ({ id: String(r.id), name: String(r.name), code: String(r.code) }));
+  return rows.map((r) => ({ id: String(r.org_id), name: String(r.name), code: String(r.code) }));
+}
+
+/**
+ * True when a franchise agreement joins `orgId` and `otherOrgId`, in either direction (T-398 S7d, DEF-747). A plain SELECT under the caller's
+ * principal: the agreements' dual policy lets either side read the row. No row (or an organisation that does not exist) is simply false, so
+ * the caller cannot tell the two apart.
+ */
+export async function hasFranchiseAgreementWith(tx: Tx, orgId: string, otherOrgId: string): Promise<boolean> {
+  const rows = (await tx.execute(sql`
+    select 1 as ok from franchise_agreements
+    where (org_id = ${orgId} and franchisor_org_id = ${otherOrgId})
+       or (org_id = ${otherOrgId} and franchisor_org_id = ${orgId})
+    limit 1
+  `)) as unknown as unknown[];
+  return rows.length > 0;
 }
 

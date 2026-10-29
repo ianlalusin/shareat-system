@@ -1,0 +1,25 @@
+{
+  "mock": true,
+  "franchisorOrgCode": "shareat",
+  "org": { "code": "MOCK_PG", "name": "Mock Padre Garcia Foods" },
+  "store": {
+    "code": "MPG",
+    "name": "Mock SharEat Padre Garcia",
+    "v1StoreId": "y1DMgfisuTHBF57cNL6i",
+    "posStoreId": "MOCK-POS-STORE-0001"
+  },
+  "franchisorPerson": { "last": "Mock", "first": "Franchisor", "middle": null, "email": "franchisor.pg@example.test" },
+  "owner": { "last": "Mock", "first": "Owner", "middle": null, "email": "owner.pg@example.test" },
+  "staff": [
+    { "last": "Mock", "first": "Cook", "middle": null, "position": "Kitchen Staff" },
+    { "last": "Mock", "first": "Cashier", "middle": null, "position": "Cashier" }
+  ],
+  "agreement": { "salesVisibleFrom": "2027-01-01" },
+  "commissary": {
+    "customerName": "SharEat Padre Garcia",
+    "supplierName": "SharEat Commissary",
+    "creditLimit": null,
+    "creditTermsDays": null,
+    "priceListName": "Padre Garcia franchise prices"
+  }
+}
