@@ -312,7 +312,7 @@ describe('refusals - in words, and nothing is written', () => {
 
   it("the payment's entry was already reversed by another route: refused in words as a RefusalError (not a plain Error), nothing written, payment stays posted, no second reversal (kills: pre-check removed - reverseEntry throws a plain Error)", async () => {
     const { w, inp, p } = await paid('valready');
-    await asOrg(w.orgId, (tx) => reverseEntry(tx, { orgId: w.orgId, entryId: p.entryId, reason: 'Reversed straight in the journal', reversedBy: w.adminId }));
+    await asOrg(w.orgId, (tx) => reverseEntry(tx, { entryId: p.entryId, reason: 'Reversed straight in the journal', reversedBy: w.adminId }));
     const before = await snap(w);
     const e = await refusal(voidIt(w, { paymentId: inp.paymentId, reason: REASON }), 'a void of a payment whose entry is already reversed');
     expect(e.name).toBe('RefusalError');

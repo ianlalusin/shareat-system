@@ -33,7 +33,10 @@ const COMPONENTS_ROOT = resolve(__dirname, '..', 'src', 'components');
 const rel = (f: string) => relative(APP_ROOT, f).replace(/\\/g, '/');
 
 /** Files whose raw record-bound form is deliberate. Each needs a reason. Empty at the end of S3b. */
-const EXEMPT: Record<string, string> = {};
+const EXEMPT: Record<string, string> = {
+  // T-193 S5: an add form (hidden request id and hidden month/agency inputs), not a record-bound edit-in-place form.
+  'payroll/statutory-payments/new/page.tsx': 'T-193 S5: an add form with hidden id inputs, not record-bound',
+};
 
 /**
  * L5 / Q2 = a (Ian; orchestrator ruling 2026-10-08). A COMMAND posts money, moves stock, changes a record's

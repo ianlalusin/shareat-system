@@ -77,6 +77,8 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/payroll': 'run_payroll',
   // T-190: the statutory tables decide every payslip's deductions, so they are admin-only (the longer prefix wins over `/payroll`).
   '/payroll/rates': 'manage_payroll_rates',
+  // T-193 S5: what is owed to SSS / PhilHealth / Pag-IBIG / BIR and what was paid. Government numbers, so `remit_statutory` (the longer prefix wins over `/payroll`, so /new and /<id> inherit it).
+  '/payroll/statutory-payments': 'remit_statutory',
   // T-369 S1: names colleagues' money owed, like `/payroll`. The longer prefix wins over `/expenses`.
   '/expenses/reimbursements': 'record_ap_payment',
   '/owners': 'view_financial_reports',

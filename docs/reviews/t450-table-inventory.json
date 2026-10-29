@@ -354,6 +354,18 @@
     "headerless": 0
   },
   {
+    "file": "apps/erp/src/app/payroll/statutory-payments/[id]/page.tsx",
+    "tables": 0,
+    "sharedTables": 1,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/payroll/statutory-payments/page.tsx",
+    "tables": 0,
+    "sharedTables": 1,
+    "headerless": 0
+  },
+  {
     "file": "apps/erp/src/app/payroll/thirteenth-month/page.tsx",
     "tables": 1,
     "sharedTables": 0,

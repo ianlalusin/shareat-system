@@ -14,6 +14,7 @@ import {
   journalRepo,
   moneyAccountsRepo,
   organizationsRepo,
+  schema,
   statutoryPaymentsRepo,
   storesRepo,
   type Tx,
@@ -55,7 +56,7 @@ export interface RecordStatutoryPaymentInput {
   penalty?: string;
   notes?: string | null;
   /** Posts into a CLOSED month only; the actor is checked for `override_period_lock` by `postEntry`. */
-  periodOverride?: { actor: Actor; reason: 'data_entry_error'; note?: string | null };
+  periodOverride?: { actor: Actor; reason: schema.PeriodOverrideReason; note?: string | null };
 }
 
 export interface RecordStatutoryPaymentResult {
@@ -208,6 +209,12 @@ export async function recordStatutoryPayment(
   await authorize(tx, actor, 'remit_statutory');
   const paymentId = requireRequestId('recordStatutoryPayment', input.paymentId);
   const n = normalise(input);
+  if (input.periodOverride && !(schema.PERIOD_OVERRIDE_REASONS as readonly string[]).includes(input.periodOverride.reason)) {
+    throw refuse(
+      `recordStatutoryPayment: unknown closed-month override reason ${String(input.periodOverride.reason)}.`,
+      'Choose a reason for posting into the closed month from the list.',
+    );
+  }
 
   // The replay first: a re-sent form gets its original answer, whatever has happened to the month since.
   const replayed = await replayOf(tx, actor.orgId, n, paymentId);

@@ -118,6 +118,8 @@ const NAV_SHAPES = {
   year: YEAR,
   cap: CAP,
   view: /^(cards|roster|positions)$/,
+  // T-193 S5: which agency the statutory-payment form reopens on after a refusal.
+  agency: /^(sss|philhealth|pagibig|bir)$/,
 } as const satisfies Record<string, RegExp>;
 
 export type NavKey = keyof typeof NAV_SHAPES;

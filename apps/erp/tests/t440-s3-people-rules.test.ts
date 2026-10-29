@@ -89,6 +89,12 @@ const ROWS: Record<string, Row> = {
   'payroll.addMinimumWage.dailyRate': { ok: '645.00', bad: [['-7', 'The minimum daily wage must be an amount of 0.01 or more.']] },
   'payroll.addMinimumWage.wageOrderRef': { ok: 'NCR-26', bad: [['  ', REQ('The wage order')]] },
   'payroll.postSeparation.separationPayAmount': { ok: '1500.00', bad: [['-7', 'The separation pay must be an amount of 0 or more.']] },
+  // T-193 S5: record a statutory payment.
+  'payroll.recordStatutoryPayment.month': { ok: DATE, bad: [['soon', 'Choose the month this payment is for.']], blank: 'Choose the month this payment is for.' },
+  'payroll.recordStatutoryPayment.paidOn': { ok: DATE, bad: [['soon', 'The payment date must be a date, like 2026-11-10.']], blank: 'The payment date must be a date, like 2026-11-10.' },
+  'payroll.recordStatutoryPayment.referenceNo': { ok: 'PRN-2026-10-0001', bad: [['  ', 'Enter the agency receipt or payment reference number.']], blank: 'Enter the agency receipt or payment reference number.' },
+  'payroll.recordStatutoryPayment.penalty': { ok: '63.60', bad: [['-7', 'The penalty must be an amount of 0 or more.']] },
+  'payroll.recordStatutoryPayment.notes': { ok: 'Paid at the SSS branch', bad: [] },
 
   // ---- attendance ----
   'attendance.approveOvertime.approvedOtMinutes': {

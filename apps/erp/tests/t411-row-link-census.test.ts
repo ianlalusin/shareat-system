@@ -85,6 +85,7 @@ const NO_ROW_TARGET: readonly string[] = [
   'app/money-accounts/page.tsx',
   'app/money-transfers/page.tsx',
   'app/payroll/page.tsx',
+  'app/payroll/statutory-payments/page.tsx', // T-193 S5: rows with something outstanding are a LinkRow to the record form
   'app/prepaid/[id]/page.tsx',
   'app/remittance/page.tsx',
   'app/sales-days/SalesDayForm.tsx',
@@ -105,6 +106,7 @@ const NO_ROW_TARGET: readonly string[] = [
   'app/items/[id]/page.tsx',
   'app/menu/items/[id]/page.tsx',
   'app/owners/[id]/page.tsx',
+  'app/payroll/statutory-payments/[id]/page.tsx', // T-193 S5: the payment's own lines, no row destination
   'app/payroll/thirteenth-month/page.tsx',
   'app/sales-days/[id]/page.tsx',
   'app/settings/pos-link/page.tsx',

@@ -44,6 +44,8 @@ export const DESTRUCTIVE_TARGETS = {
   money_transfer: { table: 'money_transfers', store: sql`t.store_id` },
   pay_run: { table: 'pay_runs', store: sql`t.store_id` },
   separation: { table: 'separations', store: sql`t.store_id` },
+  // T-193 S5: a payment to SSS / PhilHealth / Pag-IBIG / BIR spans stores, so it has no store of its own (the organisation's PIN bucket).
+  statutory_payment: { table: 'statutory_payments', store: null, status: sql`t.status` },
   thirteenth_month_run: { table: 'thirteenth_month_runs', store: sql`t.store_id` },
   prepaid_item: { table: 'prepaid_items', store: sql`t.store_id` },
   remittance: { table: 'remittances', store: sql`t.store_id` },
