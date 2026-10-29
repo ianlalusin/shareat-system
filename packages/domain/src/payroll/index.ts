@@ -10,7 +10,7 @@
  */
 import { sql } from 'drizzle-orm';
 import { ZERO, add, compare, decimal, divideMoney, formatMoney, money, subtract, type Money } from '@shareat/core/money';
-import { attendanceConfigRepo, moneyAccountsRepo, payrollRepo, statutoryRepo, type Tx } from '@shareat/db';
+import { attendanceConfigRepo, moneyAccountsRepo, payrollRepo, statutoryPaymentsRepo, statutoryRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { parseMoneyInput } from '../shared/money-input';
 import { assertFieldRules } from '../shared/field-rules-assert';
@@ -812,14 +812,25 @@ export async function voidPayRun(
   input: { runId: string; reason: string; on?: string },
 ): Promise<{ reversed: number; unfrozenDays: number }> {
   const run = async (trx: Tx) => {
-    const payRun = await payrollRepo.getPayRun(trx, actor.orgId, input.runId);
-    if (!payRun) throw new Error('voidPayRun: that run does not exist.');
-    await authorize(trx, actor, 'run_payroll', { storeId: payRun.storeId });
+    const found = await payrollRepo.getPayRun(trx, actor.orgId, input.runId);
+    if (!found) throw new Error('voidPayRun: that run does not exist.');
+    await authorize(trx, actor, 'run_payroll', { storeId: found.storeId });
 
     const reason = input.reason.trim();
     if (!reason) throw new Error('voidPayRun: voiding a run needs a reason.');
+    // T-193: hold the run before judging it, so a statutory payment in flight finishes first and a payment that starts after waits for us.
+    const payRun = (await payrollRepo.lockPayRun(trx, actor.orgId, input.runId)) ?? found;
     if (payRun.status !== 'posted') {
       throw new Error(`voidPayRun: this run is ${payRun.status}, not posted.`);
+    }
+
+    const standing = await statutoryPaymentsRepo.postedForRun(trx, actor.orgId, input.runId);
+    if (standing.length > 0) {
+      const first = standing[0]!;
+      throw refuse(
+        `voidPayRun: run ${input.runId} has a posted statutory payment (${first.referenceNo}).`,
+        `This pay run cannot be voided: payment ${first.referenceNo} to the agency for its month is still recorded. Void that payment first, then void the run.`,
+      );
     }
 
     const slips = await payrollRepo.listPayslips(trx, input.runId);

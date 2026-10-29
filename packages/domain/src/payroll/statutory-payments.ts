@@ -25,6 +25,7 @@ import { RefusalError, refuse, humanDate } from '../shared/refusal';
 import { PAYROLL_STATUTORY_PAYMENT_RULES } from '../field-rules/payroll';
 import { requireRequestId, postEntryOnce, UUID_SHAPE } from '../ledger/replay';
 import { withInterStoreLegs } from '../ledger/inter-store';
+import { reverseEntry } from '../ledger/reverse-entry';
 import type { PostEntryLine } from '../ledger/post-entry';
 import { checkDraw } from '../money-accounts/overdraft';
 import { buildPeriodFacts, periodRefusal } from '../business-rules/expenses';
@@ -340,4 +341,114 @@ export async function recordStatutoryPayment(
   });
 
   return { id: paymentId, entryId: posted.entryId, created: true };
+}
+
+export interface VoidStatutoryPaymentInput {
+  paymentId: string;
+  reason: string;
+  /** The date the reversal posts on. Omitted: the payment's own date, which needs that month to still be open. */
+  on?: string;
+}
+
+export interface VoidStatutoryPaymentResult {
+  id: string;
+  reversalEntryId: string;
+}
+
+/**
+ * T-193 S4 - take back a payment to an agency: its OWN ledger entry is reversed exactly (every leg, the cross-store pair and the
+ * penalty), the payment is marked voided and the month is owed again. A voided payment is final; a fresh payment is a fresh form.
+ * Order: the capability FIRST -> the reason -> the payment locked FOR UPDATE and judged -> the reversal month in words -> reverse -> mark -> audit.
+ */
+export async function voidStatutoryPayment(
+  tx: Tx,
+  actor: Actor,
+  input: VoidStatutoryPaymentInput,
+): Promise<VoidStatutoryPaymentResult> {
+  await authorize(tx, actor, 'remit_statutory');
+  const reason = (typeof input.reason === 'string' ? input.reason : '').trim();
+  if (!reason) {
+    throw refuse('voidStatutoryPayment: no reason.', 'Give a reason for voiding this payment.');
+  }
+  const NOT_FOUND = 'That payment does not exist. Reload the page and try again.';
+  if (typeof input.paymentId !== 'string' || !UUID_SHAPE.test(input.paymentId)) {
+    throw refuse('voidStatutoryPayment: paymentId is not a uuid.', NOT_FOUND);
+  }
+  if (input.on !== undefined) {
+    try {
+      parseBusinessDate(input.on);
+    } catch {
+      throw refuse(`voidStatutoryPayment: on ${String(input.on)} is not a date.`, 'The date to void on must be a date, like 2026-12-05.');
+    }
+  }
+
+  // The lock comes before the status read: a second void waits here and then finds the first one's result.
+  const row = await statutoryPaymentsRepo.lockById(tx, actor.orgId, input.paymentId);
+  if (!row) throw refuse(`voidStatutoryPayment: payment ${input.paymentId} does not exist.`, NOT_FOUND);
+  if (row.status === 'voided') {
+    throw refuse(`voidStatutoryPayment: payment ${row.id} is already voided.`, 'This payment was already voided.');
+  }
+  if (!row.journalEntryId) {
+    throw refuse(`voidStatutoryPayment: payment ${row.id} has no ledger entry.`, 'This payment has no ledger entry to reverse. Reload the page and try again.');
+  }
+
+  // The month the reversal lands in, in words (reverseEntry's own answers are developer text).
+  const original = await journalRepo.findEntryById(tx, row.journalEntryId);
+  if (!original) throw refuse(`voidStatutoryPayment: entry ${row.journalEntryId} does not exist.`, 'This payment has no ledger entry to reverse. Reload the page and try again.');
+  if (original.status === 'reversed') {
+    throw refuse(
+      `voidStatutoryPayment: entry ${original.id} of payment ${row.id} is already reversed.`,
+      "This payment's entry was already reversed in the journal; it cannot be voided again here.",
+    );
+  }
+
+  const landing = input.on ?? original.entryDate;
+  const period = input.on
+    ? await journalRepo.findPeriodForDate(tx, actor.orgId, input.on)
+    : await journalRepo.findPeriodById(tx, original.periodId);
+  if (!period) {
+    throw refuse(`voidStatutoryPayment: no fiscal period covers ${landing}.`, `There is no fiscal period for ${humanDate(parseBusinessDate(landing))} yet.`);
+  }
+  const blocked = periodRefusal(buildPeriodFacts(period), { override: false });
+  if (blocked) {
+    const sentence = input.on
+      ? `${blocked.sentence}`
+      : `${blocked.sentence} Choose a date in an open month to void this payment on.`;
+    throw refuse(`voidStatutoryPayment: the fiscal period covering ${landing} is ${blocked.kind}.`, sentence);
+  }
+
+  const reversed = await reverseEntry(tx, {
+    entryId: row.journalEntryId,
+    reason,
+    reversedBy: actor.personId,
+    ...(input.on ? { reversalDate: input.on } : {}),
+  });
+
+  const ok = await statutoryPaymentsRepo.markVoided(tx, actor.orgId, row.id, { voidedBy: actor.personId, reason });
+  if (!ok) {
+    throw refuse(`voidStatutoryPayment: payment ${row.id} was voided by someone else first.`, 'This payment was already voided.');
+  }
+
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'statutory_payment.void',
+    storeId: null,
+    entityId: row.id,
+    before: { table: 'statutory_payments', status: 'posted' },
+    after: {
+      table: 'statutory_payments',
+      event: 'voided',
+      status: 'voided',
+      reason,
+      agency: row.agency,
+      month: String(row.month).slice(0, 10),
+      referenceNo: row.referenceNo,
+      reversalEntryId: reversed.reversalEntryId,
+      reversalDate: landing,
+      lines: row.lines.map((l) => ({ store: l.storeId, amount: l.amount })),
+    },
+    source: 'web',
+  });
+
+  return { id: row.id, reversalEntryId: reversed.reversalEntryId };
 }

@@ -314,3 +314,34 @@ export async function findPostedByReference(
     .limit(1);
   return row ?? null;
 }
+
+/** T-193 S4: SELECT ... FOR UPDATE of ONE payment (the row as it is AFTER the lock was won), then the whole payment. Null = none in this organization. */
+export async function lockById(tx: Tx, orgId: string, id: string): Promise<StatutoryPaymentRow | null> {
+  const rows = await tx.execute(sql`select id::text as id from statutory_payments where id = ${id}::uuid and org_id = ${orgId} for update`);
+  if ((rows as unknown as { id: string }[]).length === 0) return null;
+  return getById(tx, orgId, id);
+}
+
+/**
+ * T-193 S4: the POSTED payments that stand for a pay run: the run's store has a line, the payment's month is the calendar month of the
+ * run's `period_end`, and the agency is one the run's payslips carry a non-zero amount for. A voided payment never counts.
+ */
+export async function postedForRun(
+  tx: Tx,
+  orgId: string,
+  runId: string,
+): Promise<{ id: string; referenceNo: string; agency: StatutoryAgency }[]> {
+  const rows = await tx.execute(sql`
+    with accrued as (
+      select o.agency, o.store_id, date_trunc('month', o.period_end)::date as month
+      from (${owedSlips} where pr.org_id = ${orgId} and pr.id = ${runId}::uuid) o
+      group by 1, 2, 3
+      having sum(o.ee + o.er + o.ec) > 0
+    )
+    select sp.id::text as id, sp.reference_no as "referenceNo", sp.agency as agency
+    from accrued a
+    join statutory_payments sp on sp.org_id = ${orgId} and sp.agency = a.agency and sp.month = a.month and sp.status = 'posted'
+    join statutory_payment_lines spl on spl.payment_id = sp.id and spl.org_id = sp.org_id and spl.store_id = a.store_id
+    order by sp.created_at, sp.id`);
+  return rows as unknown as { id: string; referenceNo: string; agency: StatutoryAgency }[];
+}
