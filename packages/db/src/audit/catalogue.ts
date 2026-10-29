@@ -124,6 +124,9 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('lobby.call', 'order', 'low', 'store', 'lobby_entry', 'T-455'),
   def('lobby.seat', 'order', 'normal', 'store', 'lobby_entry', 'T-455'),
   def('lobby.remove', 'order', 'normal', 'store', 'lobby_entry', 'T-455'),
+  // T-455 S5: the POS lobby card pauses / resumes the store's diner check-in (entity = the store; payload: paused + the cashier's name).
+  def('lobby.pause', 'order', 'normal', 'store', 'stores', 'T-455'),
+  def('lobby.resume', 'order', 'normal', 'store', 'stores', 'T-455'),
   // T-190: a change to the statutory tables (rate row, withholding table, minimum wage): add, confirm or discard. ONE entry (the catalogue
   // size is capped); `after.table` / `after.event` say which. Dotted: new. Org-scoped, admin-readable; rows are immutable once confirmed.
   // T-190: a person's government numbers were set or cleared. Records FIELD NAMES only, never a number.

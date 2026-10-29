@@ -75,7 +75,10 @@ const REGISTRY_BEFORE_S4 = 100;
 // T-398 S5b (0218): +3 (inter_entity_shipments link check + two receipt guards). 7 -> 10.
 // T-398 S5 audit (0218): +4 (two freeze triggers + two deferred sum-check constraint triggers). 10 -> 14.
 // T-398 S5d QI-2 (0218): +2 (supplier_invoices_system_made_guard_trg, supplier_invoice_lines_system_made_guard_trg). 14 -> 16.
-const REGISTRY_ADDED_AFTER_S4 = 16;
+// T-398 S6 (0220): +3 (franchise_access_log_append_only_trg, franchise_agreements_app_guard_trg, sessions_break_glass_log_trg). 16 -> 19.
+// T-498 S1 (0221): +1 (pay_rates_append_only history guard). 19 -> 20.
+// T-193 S1 (0222): +2 (statutory_payments_history_guard, statutory_payment_lines_parent_open_trg). 20 -> 22. Merge of main + T-193: re-measured (177 total).
+const REGISTRY_ADDED_AFTER_S4 = 22;
 
 function pinMismatch(keys: readonly string[], pin: { count: number; sha256: string }): string | null {
   if (keys.length !== pin.count) return `count ${keys.length} != pinned ${pin.count}`;

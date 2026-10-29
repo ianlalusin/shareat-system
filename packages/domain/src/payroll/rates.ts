@@ -417,7 +417,7 @@ export function saveStatutoryEmployer(
     }
     const dayText = input.dueDay.trim();
     const dueDay = /^[0-9]{1,2}$/.test(dayText) ? Number(dayText) : NaN;
-    if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) {
+    if (!Array.from({ length: 31 }, (_, i) => i + 1).includes(dueDay)) {
       throw refuse(`saveStatutoryEmployer: due day "${dayText}" is not 1-31`, `The ${label} due day must be a whole number from 1 to 31: the day of the following month the payment is due.`);
     }
     const before = await statutoryPaymentsRepo.lockEmployer(trx, actor.orgId, agency);

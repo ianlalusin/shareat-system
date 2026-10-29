@@ -126,13 +126,14 @@ const pad = (n: number, w = 2): string => String(n).padStart(w, '0');
 /** Whole days from `from` to `to` (both 'YYYY-MM-DD'); negative when `to` is earlier. */
 function dayDiff(from: string, to: string): number {
   const ms = (d: string) => Date.UTC(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, Number(d.slice(8, 10)));
-  return Math.round((ms(to) - ms(from)) / 86_400_000);
+  const n = Math.round((ms(to) - ms(from)) / 86_400_000);
+  return Number.isFinite(n) ? n : 0; // a malformed date is 'no difference', never late
 }
 /** The due date of a month's contributions: `dueDay` of the FOLLOWING month, clamped to that month's last day. 'YYYY-MM-DD'. */
 export function dueDateOf(month: string, dueDay: number): string {
   let y = Number(month.slice(0, 4));
   let m = Number(month.slice(5, 7)) + 1;
-  if (m > 12) {
+  if (m === 13) {
     m = 1;
     y += 1;
   }
@@ -189,7 +190,7 @@ export async function monthDetailFor(
       if (owing) {
         daysLate = Math.max(0, dayDiff(dueDate, today));
         const ahead = dayDiff(today, dueDate);
-        dueSoon = daysLate === 0 && ahead >= 0 && ahead <= 5;
+        dueSoon = daysLate === 0 && [0, 1, 2, 3, 4, 5].includes(ahead);
       } else if (paidSome) {
         const lastPaid = payments
           .filter((p) => p.status === 'posted')
@@ -233,21 +234,21 @@ export async function statutoryTileFor(actor: Actor, today?: string): Promise<St
     }
     let totalOutstanding: Money = ZERO;
     let totalOverdue: Money = ZERO;
-    let oldest: string | null = null;
+    const unpaidMonths: string[] = [];
     const per = new Map<StatutoryAgency, { outstanding: Money; overdue: Money }>();
     for (const m of months.values()) {
       const dueDay = dueDays.get(m.agency);
-      const overdue = dueDay !== undefined && compare(m.outstanding, ZERO) > 0 && dayDiff(dueDateOf(m.month, dueDay), now) > 0;
+      const overdue = dueDay !== undefined && compare(m.outstanding, ZERO) > 0 && now.localeCompare(dueDateOf(m.month, dueDay)) > 0;
       const a = per.get(m.agency) ?? { outstanding: ZERO, overdue: ZERO };
       per.set(m.agency, { outstanding: add(a.outstanding, m.outstanding), overdue: overdue ? add(a.overdue, m.outstanding) : a.overdue });
       totalOutstanding = add(totalOutstanding, m.outstanding);
       if (overdue) totalOverdue = add(totalOverdue, m.outstanding);
-      if (compare(m.outstanding, ZERO) > 0 && (oldest === null || m.month < oldest)) oldest = m.month;
+      if (compare(m.outstanding, ZERO) > 0) unpaidMonths.push(m.month);
     }
     return {
       totalOutstanding,
       totalOverdue,
-      oldestUnpaidMonth: oldest,
+      oldestUnpaidMonth: unpaidMonths.sort()[0] ?? null,
       agencies: AGENCIES.flatMap((a) => {
         const v = per.get(a.value);
         return v && (compare(v.outstanding, ZERO) !== 0 || compare(v.overdue, ZERO) !== 0)

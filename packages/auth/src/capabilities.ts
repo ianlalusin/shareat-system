@@ -325,7 +325,9 @@ export type Capability =
   | 'verify_own_supplier_invoice'
   // Platform — super-admin only
   | 'cross_org_access'
-  | 'view_franchise_sales';
+  | 'view_franchise_sales'
+  /** T-398 S6: the franchisee's owner reads who looked at its data and every break-glass use. ROLE ONLY (see `ROLE_ONLY_CAPABILITIES`). */
+  | 'view_franchise_access_log';
 
 export const CAPABILITIES: readonly Capability[] = [
   'record_sale',
@@ -446,6 +448,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'verify_own_supplier_invoice',
   'cross_org_access',
   'view_franchise_sales',
+  'view_franchise_access_log',
 ];
 
 // -----------------------------------------------------------------------------------------
@@ -653,6 +656,7 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
 
   cross_org_access: 'platform',
   view_franchise_sales: 'platform',
+  view_franchise_access_log: 'org',
 };
 
 // -----------------------------------------------------------------------------------------
@@ -827,6 +831,7 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
 
   cross_org_access: 'franchise',
   view_franchise_sales: 'franchise',
+  view_franchise_access_log: 'franchise',
 };
 
 // -----------------------------------------------------------------------------------------
@@ -1111,6 +1116,8 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
 
   cross_org_access: { super_admin: true, admin: false, manager: false, staff: false },
   view_franchise_sales: { super_admin: true, admin: false, manager: false, staff: false },
+  // T-398 S6 (QO-3): admin, manager and super admin BY ROLE only - see ROLE_ONLY_CAPABILITIES. Matrix-held, so no backfill.
+  view_franchise_access_log: { super_admin: true, admin: true, manager: true, staff: false },
 };
 
 /** `close_period` is the one capability with an extra, data-dependent condition beyond the
@@ -1126,7 +1133,7 @@ export const CONDITIONAL_CAPABILITIES: ReadonlySet<Capability> = new Set<Capabil
  * (`grantableCapabilitiesFor`), the position-default offer list and `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER` all consult it
  * through `grantsConfer()`; none string-compares a capability name. `verify_own_supplier_invoice` is the first member.
  */
-export const ROLE_ONLY_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>(['verify_own_supplier_invoice']);
+export const ROLE_ONLY_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>(['verify_own_supplier_invoice', 'view_franchise_access_log']);
 
 /** May a person-level grant confer `capability`? False for a role-only capability. */
 export function grantsConfer(capability: Capability): boolean {
@@ -1329,7 +1336,8 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   view_activity_log_restricted: 'view the whole activity log, including grants, exports and denials',
   verify_own_supplier_invoice: 'verify a supplier invoice you logged yourself',
   cross_org_access: 'access another organisation (break-glass)',
-  view_franchise_sales: 'view franchise sales',
+  view_franchise_sales: 'view franchise sales and stock levels',
+  view_franchise_access_log: 'view who looked at your franchise data',
 };
 
 function humanise(value: string): string {

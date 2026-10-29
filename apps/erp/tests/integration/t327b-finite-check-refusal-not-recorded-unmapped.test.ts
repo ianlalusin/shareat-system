@@ -116,10 +116,9 @@ describe('T-327b — recordIfUnmappedConstraint agrees with errorMessage on what
           insert into pay_rates (org_id, employment_id, basis, amount, effective_from, created_by)
           values (${orgId}, ${employmentId}, 'daily', 'NaN', '2026-01-01', ${personId})
           returning id`,
-      async (rows) => {
-        const insertedId = rows[0]?.id;
-        if (insertedId) await sql`delete from pay_rates where id = ${insertedId}`;
-      },
+      // T-498 S1: no cleanup. pay_rates is append-only (0221), so a stray row cannot be deleted; the row is
+      // scoped to this test's own fresh org, and the assertion below fails loudly if the insert ever succeeds.
+      async () => {},
     );
     const constraintName = (err as { constraint_name?: unknown } | null)?.constraint_name;
     expect(constraintName).toMatch(/_finite_check$/);

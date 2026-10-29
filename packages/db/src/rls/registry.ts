@@ -26,7 +26,8 @@ export type RlsScope =
   /**
    * T-398 S5 (A10) - `org_id` (the owner, who alone writes) AND a second organisation column (`counterpartyColumn`) that may only READ:
    * SELECT is `org_id = app_current_org() OR <counterpartyColumn> = app_current_org()`; INSERT / UPDATE name `org_id` only; no DELETE.
-   * Only the two inter-entity shipment tables use it - it is the one defined cross-organisation handoff, not an escape hatch.
+   * Closed list of four: the two inter-entity shipment tables (S5) and the two franchise tables (T-398 S6: franchise_agreements, franchise_access_log, where the second
+   * organisation is the FRANCHISOR who may read). It is the defined cross-organisation handoff, not an escape hatch.
    */
   | 'dual_org_counterparty';
 
@@ -36,7 +37,7 @@ export interface RlsEntry {
   readonly reason: string;
   /** `derived` only — the SQL predicate linking this table to an org-bearing parent. */
   readonly via?: string;
-  /** `dual_org_counterparty` only - the column naming the organisation that may READ the row (the buyer), e.g. `buyer_org_id`. */
+  /** `dual_org_counterparty` only - the column naming the organisation that may READ the row (the buyer, or the franchisor), e.g. `buyer_org_id` / `franchisor_org_id`. */
   readonly counterpartyColumn?: string;
   /**
    * ⛔ **An ACCESS table keyed on a person — its policy MUST also prove the person belongs to
@@ -727,6 +728,21 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     reason:
       'T-398 S5 (0218): the lines of an inter-entity shipment - name, unit, quantity, rate, line total and what the buyer counted. Carries org_id and buyer_org_id itself ' +
       '(QO-7), composite to its header, so the same SELECT rule holds without a derived predicate. No cost, layer or person name.',
+  },
+  // T-398 S6 (0220): the franchisor's view of a franchisee. org_id = the franchisee; the franchisor (franchisor_org_id) may only READ.
+  franchise_agreements: {
+    scope: 'dual_org_counterparty',
+    counterpartyColumn: 'franchisor_org_id',
+    reason:
+      'T-398 S6 (0220): which organisation is whose franchisor, and from which date it may see sales. SELECT only for the app role (admits org_id or franchisor_org_id); ' +
+      'written by the owner path (S7 onboarding), never by a definer or trigger of the app; a third organisation sees nothing.',
+  },
+  franchise_access_log: {
+    scope: 'dual_org_counterparty',
+    counterpartyColumn: 'franchisor_org_id',
+    reason:
+      'T-398 S6 (0220): every look the franchisor takes at the franchisee and every break-glass sign-in and PIN approval, written by the franchise_* definers, log_break_glass_approval ' +
+      'and the sessions trigger. SELECT only for the app role (admits org_id or franchisor_org_id); append-only for every role (ENABLE ALWAYS triggers); a third organisation sees nothing.',
   },
   trade_order_lines: {
     scope: 'org_column',

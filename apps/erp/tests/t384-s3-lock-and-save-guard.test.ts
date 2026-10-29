@@ -50,6 +50,8 @@ const EXEMPT: Record<string, string> = {
 const COMMANDS: Record<string, string> = {
   'Remove staff positions': 'T-451: explicit removal of legacy assignments for privileged roles; existing role and authorization stay intact',
   'View certificate': 'T-436: opens a leave certificate (one-time link, audited); a POST so the view is recorded',
+  'Look at sales': 'T-398 S6d: a read that writes an access-log row, like "View certificate"',
+  'Look at stock': 'T-398 S6d: a read that writes an access-log row, like "View certificate"',
   'Cancel': 'T-436: withdraws a pending leave request',
   'Request leave': 'T-436: files a pending leave request for approval',
   'Record absence': 'T-436: records a leave or absence day that already happened',

@@ -149,7 +149,7 @@ describe('K1b -- the exemptions file after S3 (D2): no org->org left open, NO_FK
   it('RED until the builder edits NO_FK_REFERENCES: 24 entries, no ref-gap kind remains', () => {
     // T-455 S1 (0215): +lobby_entries.client_request_id (idempotency-key). 24 -> 25.
     // T-472 S1 (0216): +5 pos_bridge external keys (pos_store_id x2, firestore_doc_id, parent_doc_id, pos_item_id). 25 -> 30.
-    expect(NO_FK_REFERENCES.length, `NO_FK_REFERENCES has ${NO_FK_REFERENCES.length} entries; S3 leaves 24`).toBe(30);
+    expect(NO_FK_REFERENCES.length, `NO_FK_REFERENCES has ${NO_FK_REFERENCES.length} entries; S3 leaves 24`).toBe(31); // T-398 S6 (0220): +franchise_access_log.session_id (snapshot), 30 -> 31
     expect(NO_FK_REFERENCES.filter((e) => e.kind === 'ref-gap').map((e) => e.column)).toEqual([]);
   });
   it('RED until reclassified (D2): pos_v1_day_feeds.batch_id is an idempotency-key (it has no parent), still declared, still FK-less', async () => {

@@ -80,7 +80,7 @@ export const VIA_HEADER_GUARDED: readonly string[] = [
 
 export interface NoFkReference {
   readonly column: string;
-  readonly kind: 'external-key' | 'idempotency-key' | 'polymorphic' | 'asserted-party' | 'ref-gap';
+  readonly kind: 'external-key' | 'idempotency-key' | 'polymorphic' | 'asserted-party' | 'ref-gap' | 'snapshot';
   readonly reason: string;
 }
 
@@ -95,6 +95,7 @@ export const NO_FK_REFERENCES: readonly NoFkReference[] = [
   { column: 'etl_runs.started_by', kind: 'external-key', reason: 'operator label of an ETL run; the ETL tables have no tenancy' },
   { column: 'etl_source_documents.doc_id', kind: 'external-key', reason: 'Firestore document id of the v1 source row' },
   { column: 'inbox_quarantine.client_punch_id', kind: 'idempotency-key', reason: 'client-generated idempotency key of the quarantined inbox event' },
+  { column: 'franchise_access_log.session_id', kind: 'snapshot', reason: 'T-398 S6 (K12): the session a break-glass sign-in created, copied at write time; sessions is purged at cutover and the log is kept, so an FK would block the purge' },
   { column: 'journal_entries.source_id', kind: 'polymorphic', reason: 'text id of the source document named by source_type; written by the posting layer' },
   { column: 'journal_lines.channel_id', kind: 'external-key', reason: 'free-text second reporting dimension, no channels table (journal_lines schema comment)' },
   { column: 'journal_lines.party_id', kind: 'asserted-party', reason: 'text counterparty id with party_type; ASSERTED by census leg C5 against the party table of the line\'s own org (journal_lines has no org_id: its org is journal_entries.org_id)' },

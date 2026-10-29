@@ -842,6 +842,20 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'Operational (T-398 S5, B4): the line snapshot and the franchise’s counted quantity for one shipment. Purges with its header and with the trade order lines it copied.',
   },
 
+  // ---- T-398 S6: the franchisor's view of a franchisee (Padre Garcia) --------------------------
+  franchise_agreements: {
+    class: 'keep',
+    reason:
+      'Configuration (T-398 S6, QO-7): which organisation is whose franchisor, the franchisor person inside the franchisee and the first date sales are visible. ' +
+      'A standing arrangement about the shape of the business; it does not become false when the ledger restarts.',
+  },
+  franchise_access_log: {
+    class: 'keep',
+    reason:
+      'Append-only history the franchisee is owed (T-398 S6, QO-7): every look the franchisor took and every break-glass sign-in and approval. Its triggers refuse any ' +
+      'rewrite or truncate, so it could not be purged anyway; session_id carries no foreign key, so purging sessions does not touch it.',
+  },
+
   // ---- T-171: the commissary catalogue --------------------------------------------------
   commissary_links: {
     // ⭐ keep: WHICH branch may order from WHICH commissary is a standing arrangement about the

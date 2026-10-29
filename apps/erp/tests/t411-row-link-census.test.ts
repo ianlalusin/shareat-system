@@ -73,6 +73,8 @@ const NO_ROW_TARGET: readonly string[] = [
   'app/admin/access-defaults/grid.tsx',
   'app/attendance/lane/page.tsx',
   'app/attendance/terminals/page.tsx',
+  'app/franchise/access-log/page.tsx', // T-398 S6d: the owner's log, no per-row record page
+  'app/franchise/views.tsx', // T-398 S6d: franchisor sales/stock result tables, no per-row record page
   'app/inventory/counts/[id]/page.tsx',
   'app/inventory/deliveries/inbound/[shipmentId]/page.tsx', // T-398 S5: shipment line items, no per-row record page
   'app/inventory/locations/page.tsx',

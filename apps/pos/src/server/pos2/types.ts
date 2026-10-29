@@ -39,8 +39,32 @@ export interface Pos2Deps {
   resolveTerminalNo(input: { posStoreId: string; deviceId: string }): Promise<number | null>;
   /** The ERP till shift open for that POS store, if any. */
   openTillShift(posStoreId: string): Promise<{ openedAtMs: number } | null>;
+  /** T-455 S5: the customer-lobby moves a tablet makes (see `Pos2LobbyPort`). */
+  lobby: Pos2LobbyPort;
   /** The server clock. */
   nowMs(): number;
   /** A fresh Firestore document id. */
   newId(): string;
+}
+
+/** T-455 S5 - who a lobby move is made as: the tablet's live link (never the request body) plus the signed-in staffer's name. */
+export interface LobbyTablet {
+  erpStoreId: string;
+  terminalPersonId: string;
+  cashierName: string;
+}
+
+/**
+ * T-455 S5 - the lobby port. Production wraps `resolvePosTerminalLink` and the domain's terminal moves inside `withOrgPrincipal(POS_ORG_ID)`;
+ * a domain `LobbyRefusal` is rethrown as an Error whose `name` is 'LobbyRefusal' and whose `userMessage` is its one plain sentence.
+ */
+export interface Pos2LobbyPort {
+  /** null = no live store link, or no ACTIVE terminal link for this device. */
+  resolveTablet(input: { posStoreId: string; deviceId: string }): Promise<{ erpStoreId: string; terminalPersonId: string } | null>;
+  list(a: LobbyTablet): Promise<{ lobbyEnabled: boolean; paused: boolean; entries: unknown[] }>;
+  park(a: LobbyTablet, i: { displayName: string; partySize: number; phone: string | null; note: string | null }): Promise<{ entryId: string; code: string }>;
+  call(a: LobbyTablet, i: { entryId: string }): Promise<{ entryId: string; status: 'called' }>;
+  seat(a: LobbyTablet, i: { entryId: string; sessionId: string; standLabel: string; joinUrl: string | null }): Promise<{ entryId: string; status: 'seated' }>;
+  remove(a: LobbyTablet, i: { entryId: string }): Promise<{ entryId: string; status: 'removed' }>;
+  pause(a: LobbyTablet, i: { paused: boolean }): Promise<{ paused: boolean }>;
 }

@@ -15,7 +15,7 @@
  * A capped terminal reads the T-416 cap for EVERY attempt, but its sentence names the STORE MANAGER (a terminal has no user page).
  */
 import type { Tx } from '@shareat/db';
-import { sessionsRepo, accessRepo, pinAttemptsRepo, posTerminalLinksRepo } from '@shareat/db';
+import { sessionsRepo, accessRepo, pinAttemptsRepo, posTerminalLinksRepo, franchiseRepo } from '@shareat/db';
 import type { Actor } from './authorize';
 import { can } from './authorize';
 import { AuthenticationError } from './errors';
@@ -68,6 +68,8 @@ export async function verifyPosManagerApproval(tx: Tx | null, input: PosApproval
         if (!(verified && maySignIn && !ownerIsTerminal && terminalOk && (isAdmin || holdsCapability))) {
           throw new AuthenticationError(POS_APPROVAL_REFUSED);
         }
+        // T-398 S6c: break-glass log, only after every check passed, in this lookup transaction; the PIN OWNER is the person logged.
+        await franchiseRepo.logBreakGlassApprovalAsApprover(lookupTx, credential.personId, 'approve_pos_correction', erpStoreId);
         return { approverPersonId: credential.personId };
       },
       { dailyMissBudget: pinAttemptsRepo.APPROVAL_DAILY_MISS_CAP, stopAutoReopenMinutes: pinAttemptsRepo.APPROVAL_CAP_AUTO_LIFT_MINUTES },

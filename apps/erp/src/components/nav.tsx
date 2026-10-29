@@ -140,6 +140,16 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
     ],
   },
   {
+    label: 'Franchise',
+    icon: 'trade',
+    links: [
+      // T-398 S6d - gated by capabilitiesForRoute: sales and stock for the franchisor, the access log for the franchisee's owner.
+      { href: '/franchise/sales', label: 'Franchise sales' },
+      { href: '/franchise/stock', label: 'Franchise stock' },
+      { href: '/franchise/access-log', label: 'Who looked at our data' },
+    ],
+  },
+  {
     label: 'Reports',
     icon: 'reports',
     links: [
