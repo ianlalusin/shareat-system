@@ -282,7 +282,7 @@ async function completeBothSides(
       priceListId,
       creditTermsDays: file.commissary.creditTermsDays,
     });
-    if (file.commissary.creditLimit !== null) await customersRepo.setCreditLimit(tx, c.franchisor.id, created.id, file.commissary.creditLimit);
+    if (file.commissary.creditLimit !== null) await customersRepo.setCreditLimit(tx, c.franchisor.id, created.id, money(file.commissary.creditLimit));
     wrote = true;
   }
 

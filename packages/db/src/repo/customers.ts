@@ -420,10 +420,14 @@ export async function hasFranchiseAgreementWith(tx: Tx, orgId: string, otherOrgI
 }
 
 
-/** T-398 S7c: set a customer's credit limit at onboarding (a `(14,2)` decimal string; null = not set). The ordinary credit screens own later changes. */
-export async function setCreditLimit(tx: Tx, orgId: string, id: string, creditLimit: string | null): Promise<void> {
-  const updated = await tx.execute(sql`update customers set credit_limit = ${creditLimit}, updated_at = now() where id = ${id} and org_id = ${orgId} returning id`);
-  if ((updated as unknown as unknown[]).length === 0) throw recordGone(`setCreditLimit: customer ${id} does not exist in org ${orgId}`, 'customer');
+/** T-398 S7c: set a customer's credit limit at onboarding. `creditLimit` is a `(14,2)` brand minted by `money()`; the ordinary credit screens own later changes. */
+export async function setCreditLimit(tx: Tx, orgId: string, id: string, creditLimit: Money): Promise<void> {
+  const updated = await tx
+    .update(customers)
+    .set({ creditLimit, updatedAt: sql`now()` })
+    .where(and(eq(customers.id, id), eq(customers.orgId, orgId)))
+    .returning({ id: customers.id });
+  if (updated.length === 0) throw recordGone(`setCreditLimit: customer ${id} does not exist in org ${orgId}`, 'customer');
 }
 
 /** T-398 S7c: the item ids already quoted on a price list (the onboarding re-run adds only what is missing, so a quoted rate is never moved). */
