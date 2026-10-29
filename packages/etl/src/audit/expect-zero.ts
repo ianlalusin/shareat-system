@@ -36,8 +36,15 @@ export function checkExpectZero(docs: readonly LandedDocLike[], opts: ExpectZero
     .filter((b) => b.storeCode === opts.storeId && !isZero(b.netBalance))
     .sort((a, b) => a.accountCode.localeCompare(b.accountCode));
 
+  const findings = result.findings.filter((f) => f.storeCode === opts.storeId);
+  const noRecords = result.legsIncluded === 0;
+  if (noRecords) lines.push(`${store}: no v1 records found for ${opts.storeId} at ${opts.asOf}`);
+  for (const f of findings) lines.push(`  FINDING ${f.type}: ${f.message} (${f.docPath})`);
+
   if (openParties.length === 0) {
-    lines.push(`${store}: every supplier and customer balance is zero at ${opts.asOf}`);
+    if (!noRecords && findings.length === 0) {
+      lines.push(`${store}: every supplier, customer and employee balance is zero at ${opts.asOf}`);
+    }
   } else {
     lines.push(`${store}: ${openParties.length} open party balance(s) at ${opts.asOf}`);
     for (const p of openParties) {
@@ -52,5 +59,5 @@ export function checkExpectZero(docs: readonly LandedDocLike[], opts: ExpectZero
     for (const a of openAccounts) lines.push(`  ${a.accountCode}  PHP ${a.netBalance}`);
   }
 
-  return { exitCode: openParties.length === 0 ? 0 : 1, lines };
+  return { exitCode: openParties.length === 0 && findings.length === 0 && !noRecords ? 0 : 1, lines };
 }

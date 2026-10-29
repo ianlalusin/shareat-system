@@ -71,8 +71,15 @@ describe('T9. every party is zero', () => {
     expect(r.exitCode).toBe(0);
     expect(text(r)).toMatch(/Banay-Banay[\s\S]*zero[\s\S]*2026-12-31/i);
   });
-  it('a store with no legs at all is zero (exit 0)', async () => {
-    expect((await check([])).exitCode).toBe(0);
+  // wording (auditor D): the check covers employees too, so the success line must say so
+  it('the success line names suppliers, customers AND employees', async () => {
+    const r = await check([
+      leg(BANAY, { accountId: 'ap__SUP1', direction: 'in', amount: 5, supplierId: 'SUP1' }),
+      leg(BANAY, { accountId: 'ap__SUP1', direction: 'out', amount: 5, supplierId: 'SUP1' }),
+    ]);
+    expect(text(r)).toMatch(/supplier/i);
+    expect(text(r)).toMatch(/customer/i);
+    expect(text(r)).toMatch(/employee/i);
   });
 });
 
@@ -123,12 +130,19 @@ describe('T11. an open party balance fails, party by party', () => {
   });
   // mutant killed: store filter ignored (another store's open party fails Banay-Banay)
   it('another store\'s open party balance is not Banay-Banay\'s', async () => {
-    const r = await check([leg(LIPA, { accountId: 'ap__SUP9', direction: 'in', amount: 900, supplierId: 'SUP9' })]);
+    const r = await check([
+      leg(LIPA, { accountId: 'ap__SUP9', direction: 'in', amount: 900, supplierId: 'SUP9' }),
+      leg(BANAY, { accountId: 'ap__SUP1', direction: 'in', amount: 30, supplierId: 'SUP1' }),
+      leg(BANAY, { accountId: 'ap__SUP1', direction: 'out', amount: 30, supplierId: 'SUP1' }),
+    ]);
     expect(r.exitCode).toBe(0);
   });
   // mutant killed: asOf ignored (a leg dated after 31 Dec counts)
   it('a leg dated after the as-of date is not counted', async () => {
-    const r = await check([leg(BANAY, { accountId: 'ap__SUP1', direction: 'in', amount: 50, supplierId: 'SUP1', businessDate: '2027-01-02' })]);
+    const r = await check([
+      leg(BANAY, { accountId: 'cash__cashier', direction: 'in', amount: 1 }),
+      leg(BANAY, { accountId: 'ap__SUP1', direction: 'in', amount: 50, supplierId: 'SUP1', businessDate: '2027-01-02' }),
+    ]);
     expect(r.exitCode).toBe(0);
   });
   it('a party failure and a cash balance together: exit 1, both listed', async () => {
@@ -162,5 +176,69 @@ describe('T12. the check writes nothing', () => {
 describe('guard (fence). the audit keeps Banay-Banay in OPERATING_STORES', () => {
   it('is still a named operating store of the v1 audit', () => {
     expect(OPERATING_STORES[BANAY]).toMatch(/Banay-Banay/);
+  });
+});
+
+describe('C. boundary and size pins', () => {
+  // mutant killed: the as-of date made exclusive (> becomes >=)
+  it('a party leg dated exactly 2026-12-31 is included (exit 1)', async () => {
+    const r = await check([leg(BANAY, { accountId: 'ap__SUP1', direction: 'in', amount: 50, supplierId: 'SUP1', businessDate: '2026-12-31' })]);
+    expect(r.exitCode).toBe(1);
+  });
+  // v1 normalises every businessDate to bare YYYY-MM-DD (ERP-rebuild src/lib/financial/journal/journal-writer.ts:35,87), so a
+  // time part cannot occur; the bare 31 Dec leg above is the guard for that boundary. No time-part leg is tested.
+  // mutant killed: a tolerance / rounding that hides small balances
+  it('a P0.01 open supplier balance fails', async () => {
+    const r = await check([leg(BANAY, { accountId: 'ap__SUP1', direction: 'in', amount: 0.01, supplierId: 'SUP1' })]);
+    expect(r.exitCode).toBe(1);
+    expect(text(r)).toMatch(/0.01/);
+  });
+  // mutant killed: employee parties left out of the open-party test
+  it.each([
+    ['1230 staff advance', { accountId: 'staff_advance__EMP1', employeeId: 'EMP1' }],
+    ['2130 staff reimbursable', { accountId: 'staff_reimbursable__EMP1', employeeId: 'EMP1' }],
+  ])('an open employee party (%s) fails', async (_n, o) => {
+    const r = await check([leg(BANAY, { direction: 'in', amount: 300, ...o })]);
+    expect(r.exitCode).toBe(1);
+    expect(text(r)).toContain('EMP1');
+  });
+});
+
+describe('B. data findings and typo guard', () => {
+  // mutant killed: findings ignored / only party balances inspected
+  const offsetting = (o: Record<string, unknown>) => [
+    leg(BANAY, { direction: 'in', amount: 10, ...o }),
+    leg(BANAY, { direction: 'out', amount: 10, ...o }),
+  ];
+  const cases: Array<[string, LandedDocLike[]]> = [
+    ['missing_business_date', offsetting({ accountId: 'cash__cashier', businessDate: null })],
+    ['unresolvable_account', offsetting({ accountId: 'totally__unknown_thing' })],
+    ['party_id_mismatch', offsetting({ accountId: 'ap__SUP-ENCODED', supplierId: 'SUP-REAL' })],
+    ['missing_party_field', offsetting({ accountId: 'ap__SUP1', supplierId: null })],
+    ['precision_loss', offsetting({ accountId: 'cash__cashier', amount: 10.005 })],
+    ['unadaptable_leg', offsetting({ accountId: 'cash__cashier', amount: 'abc' })],
+    [
+      'malformed_leg',
+      [
+        leg(BANAY, { accountId: 'cash__cashier', direction: 'in', amount: 1 }),
+        { docPath: `stores/${BANAY}/journal/broken`, collectionPath: `stores/${BANAY}/journal`, storeCode: BANAY, payload: { direction: 'in' } },
+      ],
+    ],
+  ];
+  it.each(cases)('a %s finding makes it exit 1 and is printed', async (type, docs) => {
+    const r = await check(docs);
+    expect(r.exitCode).toBe(1);
+    expect(text(r)).toContain(type);
+  });
+  // mutant killed: an empty store passes (a mistyped store id would "prove" zero)
+  it('a store with no legs in scope exits 1 and says no v1 records were found', async () => {
+    const r = await check([]);
+    expect(r.exitCode).toBe(1);
+    expect(text(r)).toMatch(new RegExp(`no v1 records found for ${BANAY}`));
+  });
+  it('legs of other stores only: also exit 1 with the same sentence', async () => {
+    const r = await check([leg(LIPA, { accountId: 'cash__cashier', direction: 'in', amount: 5 })]);
+    expect(r.exitCode).toBe(1);
+    expect(text(r)).toMatch(/no v1 records found/);
   });
 });

@@ -40,6 +40,7 @@ function parseArgs(argv: readonly string[]): { asOf: string; stores: string[]; e
   if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) {
     throw new Error(`--as-of must be YYYY-MM-DD, got "${asOf}"`);
   }
+  if (stores.length > 0 && !expectZero) throw new Error('--stores only works with --expect-zero.');
   if (expectZero && stores.length !== 1) throw new Error('--expect-zero needs exactly one store: --stores <v1 store id>');
   return { asOf, stores, expectZero };
 }
