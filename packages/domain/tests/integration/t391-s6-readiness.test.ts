@@ -65,6 +65,7 @@ const uid = (p: string) => `${p}${Date.now().toString(36)}${++seq}`.toUpperCase(
 const L = 'b9DzsnPbr1BUnY88lyT4';
 const M = 'dZUyvX4q824JBSVDAfE9';
 const B = 'iGOW7q2pZbeHWV832UNh';
+const D = 'dvoTestStoreId000001'; // T-454 S2: Davao stands in for Banay-Banay as the third own store
 const P = 'y1DMgfisuTHBF57cNL6i';
 
 const mapCsv = (se: string, pg: string): string =>
@@ -72,7 +73,9 @@ const mapCsv = (se: string, pg: string): string =>
     'v1_store_id,name,role,org_code,store_code',
     `${L},SharEat Lipa,own,${se},LIPA`,
     `${M},SharEat Malvar,own,${se},MLVR`,
-    `${B},SharEat Banay-Banay,own,${se},BNBN`,
+    // T-454 S2: Banay-Banay closes 31 Dec (row 377)
+    `${B},SharEat Banay-Banay,exclude,${se},BNBN`,
+    `${D},SharEat Davao,own,${se},DAVAO`,
     `${P},SharEat Padre Garcia,franchise,${pg},PGAR`,
   ].join('\r\n');
 
@@ -115,7 +118,7 @@ async function mkOrg(code: string, storeCodes: string[]) {
 async function env(hint: string): Promise<Env> {
   const orgCode = uid(`R${hint}`);
   const pgCode = uid(`G${hint}`);
-  const a = await mkOrg(orgCode, ['LIPA', 'MLVR', 'BNBN']);
+  const a = await mkOrg(orgCode, ['LIPA', 'MLVR', 'DAVAO']);
   const b = await mkOrg(pgCode, ['PGAR']);
   const act = (orgId: string, personId: string): Actor => ({ orgId, personId });
   return {
@@ -307,7 +310,7 @@ describe('S6 readiness - the verdict per store (test 24)', () => {
     'a store missing only %s is named with exactly that reason. Killing mutant: that check removed or its reason mislabelled',
     async (_label, reason) => {
       const e = await env('ON');
-      const sc = 'BNBN';
+      const sc = 'DAVAO';
       if (reason !== 'no_pos_link') await linkPos(e, sc);
       if (reason !== 'no_cash_account') await cashAccount(e, sc);
       else await noCash(e, sc);
@@ -382,14 +385,14 @@ describe('S6 readiness - who counts as an encoder or a verifier (S8, row 303)', 
       const e = await env('SC');
       await seedDefaults(e, 'MLVR'); // Malvar only: Cashier holds both there
       await employ(e, 'LIPA', 'Lipa Cashier', 'Cashier'); // Lipa's defaults were never seeded: no grants
-      await seedDefaults(e, 'BNBN');
-      await employ(e, 'BNBN', 'Bnbn Cashier', 'Cashier');
-      await toggleDefault(e, 'BNBN', 'Cashier', 'receive_delivery', false); // revoked through the production toggle: the holder's grant goes too
+      await seedDefaults(e, 'DAVAO');
+      await employ(e, 'DAVAO', 'Davao Cashier', 'Cashier');
+      await toggleDefault(e, 'DAVAO', 'Cashier', 'receive_delivery', false); // revoked through the production toggle: the holder's grant goes too
       const r = await reportA(e);
       expect(storeOf(r, 'LIPA').encoders).toEqual([]);
-      expect(storeOf(r, 'BNBN').encoders).toEqual([]);
+      expect(storeOf(r, 'DAVAO').encoders).toEqual([]);
       expect(storeOf(r, 'LIPA').reasons).toContain('no_encoder');
-      expect(storeOf(r, 'BNBN').reasons).toContain('no_encoder');
+      expect(storeOf(r, 'DAVAO').reasons).toContain('no_encoder');
     },
     60_000,
   );
@@ -559,7 +562,7 @@ describe('S6 readiness - what loaded against the plan', () => {
       const one = await reportA(e, { storeCodes: ['MLVR'] });
       expect(one.stores.map((x: Any) => x.storeCode)).toEqual(['MLVR']);
       const all = await reportA(e);
-      expect(all.stores.map((x: Any) => x.storeCode)).toEqual(['LIPA', 'MLVR', 'BNBN']);
+      expect(all.stores.map((x: Any) => x.storeCode)).toEqual(['LIPA', 'MLVR', 'DAVAO']);
     },
     60_000,
   );

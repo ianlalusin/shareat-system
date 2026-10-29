@@ -58,7 +58,8 @@ const mapCsv = (se: string, pg: string): string =>
     'v1_store_id,name,role,org_code,store_code',
     `${L},SharEat Lipa,own,${se},LIPA`,
     `${M},SharEat Malvar,own,${se},MLVR`,
-    `${B},SharEat Banay-Banay,own,${se},BNBN`,
+    // T-454 S2: Banay-Banay closes 31 Dec (row 377)
+    `${B},SharEat Banay-Banay,exclude,${se},BNBN`,
     `${P},SharEat Padre Garcia,franchise,${pg},PGAR`,
   ].join('\r\n');
 
@@ -176,7 +177,7 @@ describe('S3 apply - creates and links exactly the plan', () => {
     async () => {
       const e = await env('A');
       const s = snap([
-        rec(L, 'Pork Belly'), rec(M, 'pork belly '), rec(L, 'White Onion'), rec(M, 'White Onion'), rec(B, 'Soy Sauce', 'ltr'), rec(L, 'Garlic', 'kg'),
+        rec(L, 'Pork Belly'), rec(M, 'pork belly '), rec(L, 'White Onion'), rec(M, 'White Onion'), rec(M, 'Soy Sauce', 'ltr'), rec(L, 'Garlic', 'kg'),
       ]);
       const plan = planOf(e, s);
       const wantCreates = plan.writes.filter((w: Any) => w.op === 'create');
@@ -332,7 +333,7 @@ describe('S3 apply - idempotence, dry run, held', () => {
     'a second apply changes nothing: no item, no link, counters unchanged, no new audit row except the apply row itself. Killing mutants: the code allocated before the existing-name check; links re-inserted',
     async () => {
       const e = await env('ID');
-      const s = snap([rec(L, 'Pork Belly'), rec(M, 'Pork Belly'), rec(L, 'Flour'), rec(B, 'Soy Sauce', 'ltr')]);
+      const s = snap([rec(L, 'Pork Belly'), rec(M, 'Pork Belly'), rec(L, 'Flour'), rec(M, 'Soy Sauce', 'ltr')]);
       await run(e, s);
       const one = await state(e.orgId);
       expect(one.items.length).toBe(3);
