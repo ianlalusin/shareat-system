@@ -46,3 +46,12 @@ export const PAYROLL_MIN_WAGE_RULES = defineFieldRules('payroll.addMinimumWage',
 export const PAYROLL_SEPARATION_RULES = defineFieldRules('payroll.postSeparation', {
   separationPayAmount: { label: 'The separation pay', optional: true, kind: 'money', min: 0 },
 });
+
+/** T-193: record a payment to SSS / PhilHealth / Pag-IBIG / BIR. The per-store amounts are judged line by line in the domain. */
+export const PAYROLL_STATUTORY_PAYMENT_RULES = defineFieldRules('payroll.recordStatutoryPayment', {
+  month: { label: 'The month', kind: 'date', requires: 'Choose the month this payment is for.' },
+  paidOn: { label: 'The payment date', kind: 'date', requires: 'The payment date must be a date, like 2026-11-10.' },
+  referenceNo: { label: 'The agency receipt number', kind: 'text', requires: 'Enter the agency receipt or payment reference number.' },
+  penalty: { label: 'The penalty', optional: true, kind: 'money', min: 0 },
+  notes: { label: 'The notes', optional: true, kind: 'text' },
+});

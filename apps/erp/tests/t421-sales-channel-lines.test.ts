@@ -29,6 +29,8 @@ vi.mock('../src/app/findings/lib', async () => ({
   lastCompletedPeriod: () => '2026-09',
   findingsFor: async () => ({ feed: { findings: [] }, readiness: {} }),
 }));
+// T-193: the dashboard also loads the Government payments tile; a non-holder gets null.
+vi.mock('../src/app/payroll/statutory-payments/lib', () => ({ statutoryTileFor: async () => null }));
 vi.mock('@/components/shell/Page', () => ({
   Page: ({ children }: { children: unknown }) => children,
 }));

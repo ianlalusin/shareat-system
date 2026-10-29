@@ -17,6 +17,7 @@ import {
   discardMinimumWage,
   discardStatutoryRate,
   discardWithholdingBracketSet,
+  saveStatutoryEmployer,
 } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
@@ -181,4 +182,18 @@ export async function discardMinimumWageAction(fd: FormData): Promise<void> {
   }
   revalidatePath(PAGE);
   return await redirectWithFlash(PAGE, {}, { ok: 'Minimum wage discarded.' });
+}
+
+/** T-193 S6: the employer number and due day for one agency. The domain authorizes `manage_payroll_rates`, judges the figures and audits. */
+export async function saveStatutoryEmployerAction(fd: FormData): Promise<void> {
+  const actor = await requireActor(PAGE);
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      saveStatutoryEmployer(tx, actor, { agency: str(fd, 'agency'), employerNo: str(fd, 'employerNo'), dueDay: str(fd, 'dueDay') }),
+    );
+  } catch (err) {
+    return await redirectWithFlash(PAGE, {}, { error: errorMessage(err) });
+  }
+  revalidatePath(PAGE);
+  return await redirectWithFlash(PAGE, {}, { ok: 'Employer number and due day saved.' });
 }

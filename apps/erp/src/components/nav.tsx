@@ -62,6 +62,8 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       { href: '/payroll', label: 'Payroll' },
       // T-190: SSS / PhilHealth / Pag-IBIG / tax tables and minimum wages. Gated by `manage_payroll_rates` in ROUTE_CAPABILITY.
       { href: '/payroll/rates', label: 'Payroll rates' },
+      // T-193 S5: paying SSS / PhilHealth / Pag-IBIG / BIR. Gated by `remit_statutory` in ROUTE_CAPABILITY.
+      { href: '/payroll/statutory-payments', label: 'Government payments' },
       { href: '/expenses', label: 'Expenses' },
       // T-369 S1 (DEF-198): paying staff back what they spent out of pocket. Gated by
       // `record_ap_payment` in ROUTE_CAPABILITY, so the link only shows to someone who can open it.

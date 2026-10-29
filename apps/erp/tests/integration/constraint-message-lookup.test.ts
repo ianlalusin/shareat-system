@@ -671,11 +671,53 @@ describe('T-443 variation and duplicate-request messages', () => {
   }
 });
 
+// T-193: provoke each statutory payment backstop for real; the dictionary keys must match the names the database raises.
+describe('T-193 government payments messages', () => {
+  async function paymentWorld() {
+    const code = uid('t193-lookup');
+    const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${code}, ${code}) returning id`;
+    await seedChartOfAccounts(sql, org!.id);
+    const [person] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${org!.id}, 'Accountant') returning id`;
+    const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${org!.id}, ${uid('ST')}, 'Lipa') returning id`;
+    const [acct] = await sql<{ id: string }[]>`
+      insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian, is_active)
+      values (${org!.id}, ${store!.id}, ${uid('Bank')}, 'bank', '1140', 'office', true) returning id`;
+    const pay = async (reference: string) => {
+      const id = crypto.randomUUID();
+      await sql`insert into statutory_payments (id, org_id, agency, month, paid_on, money_account_id, reference_no, penalty, created_by)
+                values (${id}, ${org!.id}, 'sss', '2027-01-01', '2027-02-10', ${acct!.id}, ${reference}, 0, ${person!.id})`;
+      return id;
+    };
+    return { orgId: org!.id, personId: person!.id, storeId: store!.id, pay };
+  }
+  for (const key of ['statutory_payments_posted_reference_unique', 'statutory_payments_history_guard', 'statutory_payment_lines_parent_open']) {
+    it(key, async () => {
+      const w = await paymentWorld();
+      let err: unknown;
+      if (key === 'statutory_payments_posted_reference_unique') {
+        await w.pay('PRN-DUP-1');
+        err = await provoke(() => w.pay('PRN-DUP-1'));
+      } else if (key === 'statutory_payments_history_guard') {
+        const id = await w.pay('PRN-HIST-1');
+        err = await provoke(() => sql`update statutory_payments set penalty = 5 where id = ${id}`);
+      } else {
+        const id = await w.pay('PRN-LINE-1');
+        await sql`update statutory_payments set status = 'voided', void_reason = 'wrong month', voided_by = ${w.personId}, voided_at = now() where id = ${id}`;
+        err = await provoke(() => sql`insert into statutory_payment_lines (org_id, payment_id, store_id, amount) values (${w.orgId}, ${id}, ${w.storeId}, 10)`);
+      }
+      const row = record(key, err);
+      expect(row.constraintName, 'the database raised this exact constraint name').toBe(key);
+      expect(row.message, `a raw driver error reached the person: ${row.message}`).toBe(CONSTRAINT_MESSAGES[key as keyof typeof CONSTRAINT_MESSAGES]);
+    });
+  }
+});
+
 it('sanity: every CONSTRAINT_MESSAGES key was exercised above', () => {
   const exercised = new Set(rows.map((r) => r.key));
   const missing = Object.keys(CONSTRAINT_MESSAGES).filter((k) => !exercised.has(k));
   expect(missing).toEqual([]);
   // 26 (T-271) + T-370 S3's semi-monthly two-days key + T-369 S7's sales-day unique key + T-375 S4's four lock keys + T-378 S1's four unit/kind keys + T-378 S2's items_base_unit_fixed + T-382's two unlink CHECK keys + T-383 S1's items blank-name and blank-code CHECK keys + T-385 S2's sales_days_verify_requires_submitted + T-386 S2's items_code_never_reused + T-386 S6's items_code_shape_check = 44 rows provoked above.
   // T-443: three real item variation/open-request errors above.
-  expect(rows.length).toBe(50);
+  // T-193: 50 -> 53, three real statutory payment errors above.
+  expect(rows.length).toBe(53);
 });

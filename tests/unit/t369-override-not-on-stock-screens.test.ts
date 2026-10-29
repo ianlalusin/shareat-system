@@ -22,7 +22,7 @@ const SRC = path.join(repoRoot, 'apps/erp/src');
 const APP = path.join(SRC, 'app');
 const COMPONENT = path.join(SRC, 'components', 'ClosedMonthOverride.tsx');
 // T-487 (DEF-779): the sales-day verify page posts revenue only (stock moves through a separate POS usage pull), so it is a money screen, not a stock one: Ian's "no override for stock, ever" still holds.
-const ALLOWED_IMPORTERS = new Set(['app/expenses/reimbursements/page.tsx', 'app/expenses/[id]/page.tsx', 'app/ap/invoices/[id]/page.tsx', 'app/sales-days/[id]/page.tsx']);
+const ALLOWED_IMPORTERS = new Set(['app/expenses/reimbursements/page.tsx', 'app/expenses/[id]/page.tsx', 'app/ap/invoices/[id]/page.tsx', 'app/sales-days/[id]/page.tsx', 'app/payroll/statutory-payments/new/page.tsx']); // T-193 S4: the remittance form lets the super-admin override a closed month (flag for orchestrator review)
 const STOCK_DIRS = ['inventory', 'commissary', 'trade'];
 
 function walk(dir: string): string[] {

@@ -83,6 +83,8 @@ const rows: Row[] = [
   { file: 'app/loans/[id]/page.tsx', tier: 'P', label: 'Reverse loan entry', danger: true, visible: 'Reverse loan entry', action: 'reverseEntryAction', actionFile: 'app/loans/actions.ts', mutation: 'reverseLoanEntry' },
   { file: 'app/money-transfers/page.tsx', tier: 'P', label: 'Reverse money transfer', danger: true, visible: 'Reverse money transfer', action: 'voidMoneyTransferAction', actionFile: 'app/money-transfers/actions.ts', mutation: 'voidMoneyTransfer' },
   { file: 'app/payroll/page.tsx', tier: 'P', label: 'Void pay run', danger: true, visible: 'Void pay run', action: 'voidPayRunAction', actionFile: 'app/payroll/actions.ts', mutation: 'voidPayRun' },
+  // T-193 S5: voiding a statutory payment is Tier P (admin PIN), like voidPayRun.
+  { file: 'app/payroll/statutory-payments/[id]/page.tsx', tier: 'P', label: 'Void payment', danger: true, visible: 'Void payment', action: 'voidStatutoryPaymentAction', actionFile: 'app/payroll/statutory-payments/actions.ts', mutation: 'voidStatutoryPayment' },
   { file: 'app/payroll/separations/page.tsx', tier: 'P', label: 'Void separation', danger: true, visible: 'Void separation', action: 'voidSeparationAction', actionFile: 'app/payroll/separations/actions.ts', mutation: 'voidSeparation' },
   { file: 'app/payroll/separations/page.tsx', tier: 'P', label: 'Post separation', danger: false, visible: 'Post separation', action: 'postSeparationAction', actionFile: 'app/payroll/separations/actions.ts', mutation: 'postSeparation' },
   { file: 'app/payroll/thirteenth-month/page.tsx', tier: 'P', label: 'Void 13th-month run', danger: true, visible: 'Void 13th-month run', action: 'void13thMonthRunAction', actionFile: 'app/payroll/thirteenth-month/actions.ts', mutation: 'void13thMonthRun' },
@@ -214,11 +216,11 @@ const FORM_READ = /formData|\bfd\b|str\(|opt\(|requireId\(|\.get\(/;
 describe('the census arithmetic (green today: the literal map matches the spec + the audit-round conditionals)', () => {
   it('69 controls: P 33 (36 - the 3 T-418 draft deletes), R 19 (18 + T-464 Un-pair tablet), W 13 (10 + the 3 T-418 draft deletes), X 4; 64 are danger (2 conditional), in 50 files', () => {
     const by = (t: Tier) => rows.filter((r) => r.tier === t).length;
-    expect([by('P'), by('R'), by('W'), by('X')]).toEqual([33, 19, 13, 4]); // T-418: three draft deletes moved P -> W; T-464: +1 R
-    expect(rows).toHaveLength(69); // T-464: +Un-pair tablet
-    expect(rows.filter((r) => r.danger)).toHaveLength(64);
+    expect([by('P'), by('R'), by('W'), by('X')]).toEqual([34, 19, 13, 4]); // T-418: three draft deletes moved P -> W; T-464: +1 R
+    expect(rows).toHaveLength(70); // T-464: +Un-pair tablet; T-193 S5: +Void statutory payment (P)
+    expect(rows.filter((r) => r.danger)).toHaveLength(65);
     expect(rows.filter((r) => r.conditional)).toHaveLength(2);
-    expect(new Set(rows.filter((r) => r.danger).map((r) => r.file)).size).toBe(50);
+    expect(new Set(rows.filter((r) => r.danger).map((r) => r.file)).size).toBe(51);
   });
   it('every P / R row names its visible label (audit L8), and no two rows in one file share an action AND a label by accident', () => {
     for (const r of rows.filter((x) => x.tier === 'P' || x.tier === 'R')) {
@@ -300,7 +302,7 @@ describe('every file: ConfirmDestructive count by tier, and what is left bare (V
       const src = readFileSync(abs, 'utf8');
       total += count(src, DANGER) + confirmWindows(src).length;
     }
-    expect(total).toBe(69);
+    expect(total).toBe(70); // T-193 S5: +Void payment (statutory payments)
   });
 });
 

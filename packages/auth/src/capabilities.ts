@@ -235,6 +235,8 @@ export type Capability =
   | 'run_payroll'
   /** T-190. Admin-only: the statutory rate, withholding and minimum-wage tables decide every payslip's deductions. */
   | 'manage_payroll_rates'
+  /** T-193. Admin-only: recording (and voiding) a payment to SSS, PhilHealth, Pag-IBIG or BIR moves money against what payroll set aside. */
+  | 'remit_statutory'
   /**
    * T-434, bible row 353. Seeing a staff member's SIGNATURE IMAGE (payslips, cash advance forms, ID cards print it). A signature can be
    * forged, so this is NOT folded into `enrol_staff` and does not imply `run_payroll`. Store-scoped; admins hold it, managers do not;
@@ -405,6 +407,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'set_pay_rate',
   'run_payroll',
   'manage_payroll_rates',
+  'remit_statutory',
   'view_staff_signature',
   'pair_pos_tablet',
   'provision_clock_terminal',
@@ -595,6 +598,8 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   run_payroll: 'store',
   // T-190. The rate tables are per org (each org confirms its own), not per store.
   manage_payroll_rates: 'org',
+  // T-193. One payment can settle several stores, so the scope is the organization.
+  remit_statutory: 'org',
   view_staff_signature: 'store',
   pair_pos_tablet: 'store',
   provision_clock_terminal: 'store',
@@ -789,6 +794,7 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   set_pay_rate: 'staff',
   run_payroll: 'staff',
   manage_payroll_rates: 'staff', // T-190
+  remit_statutory: 'staff', // T-193
   view_staff_signature: 'staff',
   pair_pos_tablet: 'staff', // T-464
   provision_clock_terminal: 'staff',
@@ -1018,6 +1024,8 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   run_payroll: { super_admin: true, admin: true, manager: false, staff: false },
   // T-190: admin-only. A manager must not be able to move the table that sets every payslip's deductions.
   manage_payroll_rates: { super_admin: true, admin: true, manager: false, staff: false },
+  // T-193: admin-only. A manager must not decide what the company pays an agency.
+  remit_statutory: { super_admin: true, admin: true, manager: false, staff: false },
   // T-434 (bible row 353): manager DENIED - a signature is forgeable. Position-grantable (a payroll clerk); never implies run_payroll.
   view_staff_signature: { super_admin: true, admin: true, manager: false, staff: false },
   // T-464 (Ian, 2026-10-22): a manager of the store or an admin may pair and un-pair its POS tablet. Staff never.
@@ -1288,6 +1296,7 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   set_pay_rate: 'set a pay rate',
   run_payroll: 'run payroll',
   manage_payroll_rates: 'add or confirm the SSS, PhilHealth, Pag-IBIG and tax tables',
+  remit_statutory: 'record a payment to SSS, PhilHealth, Pag-IBIG or BIR',
   view_staff_signature: "see a staff member's signature",
   pair_pos_tablet: "pair or un-pair a store's POS tablet",
   provision_clock_terminal: 'set up a clock-in tablet',

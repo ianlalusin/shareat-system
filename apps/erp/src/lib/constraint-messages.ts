@@ -21,6 +21,10 @@ const SALES_LOCKED_SENTENCE =
   "Sales figures for this store come only from POS and can't be changed here. A wrong sale is refunded on the POS.";
 
 export const CONSTRAINT_MESSAGES: Record<string, string> = {
+  // T-193 (0222): the database's last word on a statutory payment. The domain and the screen refuse first, in these words.
+  statutory_payments_posted_reference_unique: 'That agency receipt number is already recorded on another payment. Each receipt can be used once.',
+  statutory_payments_history_guard: 'A recorded payment cannot be changed. Void it and record a new one.',
+  statutory_payment_lines_parent_open: 'The lines of a recorded payment cannot be changed. Void the payment and record a new one.',
   // T-375 S4 (R6): the 0185 lock on a linked store's sales figures, tender rows and channel rows, and the link's store.
   sales_days_figures_locked: SALES_LOCKED_SENTENCE,
   sales_day_tenders_locked: SALES_LOCKED_SENTENCE,

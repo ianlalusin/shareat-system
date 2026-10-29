@@ -139,7 +139,8 @@ describe('T-271 — mechanism proof: a DEF-279 trigger name can now be mapped', 
     // T-386 S2 (2026-10-09): 42 -> 43, deliberately: items_code_never_reused.
     // T-386 S6: 43 -> 44; T-391 S1: 44 -> 47, deliberately: items_code_shape_check.
     // T-443: 47 -> 50, the variation guard, self-check, and open-request unique index.
-    expect(Object.keys(CONSTRAINT_MESSAGES).length).toBe(50);
+    // T-193: 50 -> 53, the three statutory payment backstops: statutory_payments_posted_reference_unique, statutory_payments_history_guard, statutory_payment_lines_parent_open.
+    expect(Object.keys(CONSTRAINT_MESSAGES).length).toBe(53);
 
     // And the allowlist reads the same after restore as before the mutation ever happened.
     expect(isUnfitForAStranger(err, TEST_SENTENCE)).toBe(true);

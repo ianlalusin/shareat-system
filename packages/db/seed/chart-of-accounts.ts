@@ -394,6 +394,7 @@ export const CHART_OF_ACCOUNTS: readonly ChartOfAccountsSeedAccount[] = [
   leaf('6700', 'Depreciation', 'expense', 'debit', '6000', { legacyCode: 'expense__depreciation' }),
   leaf('6750', 'Amortisation', 'expense', 'debit', '6000', { legacyCode: 'expense__amortization' }),
   leaf('6800', 'Taxes and licences', 'expense', 'debit', '6000', { legacyCode: 'expense__tax' }), // confirmed §3
+  leaf('6810', 'Penalties and surcharges', 'expense', 'debit', '6000'), // 🆕 — T-193, bible row 365 Q3 (migration 0222 adds it to existing orgs)
   leaf('6850', 'Administrative expenses', 'expense', 'debit', '6000'), // 🆕 — T-102b, §4.2
   leaf('6860', 'Bad debt expense', 'expense', 'debit', '6000'), // 🆕 — T-102b, §4.2
   leaf('6870', 'Bank charges', 'expense', 'debit', '6000'), // 🆕 — T-102b, §4.2

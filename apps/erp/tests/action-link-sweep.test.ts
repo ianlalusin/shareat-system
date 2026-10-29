@@ -205,7 +205,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
   //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
   //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 116 FAIL / 49 UNRESOLVED', () => {
+  it('accepted-baseline totals: 116 FAIL / 50 UNRESOLVED', () => {
     // 62 -> 63 UNRESOLVED, T-386 S4 2026-10-09: the rename "use the suggested code" checkbox on app/items/ItemCodeField.tsx
     // (an intrinsic checkbox box; baselined in touch-target-baseline.json per Ian's §6.1 ruling).
     // 63 -> 66 UNRESOLVED, T-387 S3 2026-10-10. +3: the kit's new native `<select>` (Select.tsx) and `<textarea>` (Textarea.tsx)
@@ -233,7 +233,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 48 -> 47 UNRESOLVED, T-441 S7 (22 Oct): components/PhotoInput.tsx deleted; its baseline entry removed from touch-target-baseline.json.
     // 47 -> 48 UNRESOLVED, T-440 (17 Oct): expenses/recurring gained a second intrinsic checkbox box (touch-target-baseline.json entry added).
     // T-448 x main (05ada44) merge: re-measured
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 116, unresolved: 49 });
+    // 49 -> 50 UNRESOLVED, merge of main + T-193: re-measured; src/app/page.tsx gov-tile 'Set it under Employer numbers' inline Link (font size unresolvable), baseline entry added.
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 116, unresolved: 50 });
   });
 
   // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
@@ -474,6 +475,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // T-464: +8 controls (measured), all >= 24px, none baselined: the paired-tablet sign-in form and /settings/pos-tablet.
     // T-448 x main (b2a0ebe) merge: re-measured
     // T-448 x main (05ada44) merge: re-measured
+    // 49 -> 50 UNRESOLVED, merge of main + T-193: re-measured; src/app/page.tsx gov-tile 'Set it under Employer numbers' inline Link (font size unresolvable), baseline entry added.
     // T-441 S7 (22 Oct): PhotoInput.tsx deleted (its 2 controls leave the census with it): 1400 -> 1398.
     // T-448 follow-up (24 Oct): trial balance's inline filter form replaced by the shared ReportFilters
     // (its 6 controls leave the census; the shared component's were already counted), measured: 1407 -> 1401.
@@ -486,7 +488,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1414 -> 1415, T-398 S5e: one new control (the credit-note action on the order page), re-measured by runCensus().
     // Merge of T-398 S5 with main 26605d1 (T-448 A3): re-measured by runCensus() = 1413 (1401 + S5 +12).
     // 1413 -> 1422, T-398 S6d: the franchise screens' controls (+9), re-measured by runCensus().
-    expect(results.length).toBe(1422);
+    // 1434 -> 1440, T-193 S6: month detail, its CSV link, and the employer-number forms. Merge of main + T-193: re-measured.
+    expect(results.length).toBe(1450);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

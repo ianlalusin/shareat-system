@@ -212,6 +212,7 @@ export * as findingsRepo from './repo/findings';
 export * as prerequisiteRefusalsRepo from './repo/prerequisite-refusals';
 export type { RefusalCount } from './repo/prerequisite-refusals';
 export * as cutoverRepo from './repo/cutover';
+export * as statutoryPaymentsRepo from './repo/statutory-payments';
 export * as statutoryDiscountsRepo from './repo/statutory-discounts';
 export type {
   StatutoryDiscountRow,

@@ -5,7 +5,7 @@
  * `audit_log` row in the same transaction. Rows are IMMUTABLE once confirmed (migration 0206): there is no edit. A correction is a new
  * row with a later `effective_from`; only a row that was never confirmed and never used can be deleted.
  */
-import { auditLogRepo, statutoryRepo, type Tx } from '@shareat/db';
+import { auditLogRepo, statutoryPaymentsRepo, statutoryRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { parseDecimalInput } from '../shared/money-input';
 import { gone, refuse } from '../shared/refusal';
@@ -382,3 +382,61 @@ export function setGovernmentIds(
   });
 }
 
+
+const EMPLOYER_AGENCIES = ['sss', 'philhealth', 'pagibig', 'bir'] as const;
+type EmployerAgency = (typeof EMPLOYER_AGENCIES)[number];
+const EMPLOYER_LABEL: Record<EmployerAgency, string> = { sss: 'SSS', philhealth: 'PhilHealth', pagibig: 'Pag-IBIG', bir: 'BIR' };
+
+/**
+ * T-193 S6: sets the organization's employer number and due day for ONE agency (one row per agency, company-wide: bible row 365 Q1).
+ * Inserts the row when the agency has none, otherwise updates it in place. BIR has no employer number (it uses the organization's TIN).
+ * Authorizes `manage_payroll_rates` first, judges the figures in words, and writes one `statutory_employer.change` audit row
+ * carrying the old and the new number and due day.
+ */
+export function saveStatutoryEmployer(
+  tx: Tx,
+  actor: Actor,
+  input: { agency: string; employerNo: string; dueDay: string },
+): Promise<{ agency: EmployerAgency }> {
+  return run(tx, async (trx) => {
+    await authorize(trx, actor, CAPABILITY);
+    const agency = EMPLOYER_AGENCIES.find((a) => a === input.agency);
+    if (!agency) {
+      throw refuse(`saveStatutoryEmployer: unknown agency "${input.agency}"`, 'Pick SSS, PhilHealth, Pag-IBIG or BIR.');
+    }
+    const label = EMPLOYER_LABEL[agency];
+    const employerNo = input.employerNo.trim();
+    if (agency === 'bir') {
+      if (employerNo !== '') {
+        throw refuse('saveStatutoryEmployer: BIR given an employer number', 'BIR uses the company TIN, so it has no employer number here. Leave the number blank.');
+      }
+    } else if (employerNo === '') {
+      throw refuse(`saveStatutoryEmployer: ${agency} employer number blank`, `Enter the ${label} employer number, digits only.`);
+    } else if (!/^[0-9]+$/.test(employerNo)) {
+      throw refuse(`saveStatutoryEmployer: ${agency} employer number "${employerNo}" is not digits`, `The ${label} employer number must be digits only, with no letters, spaces or dashes.`);
+    }
+    const dayText = input.dueDay.trim();
+    const dueDay = /^[0-9]{1,2}$/.test(dayText) ? Number(dayText) : NaN;
+    if (!Array.from({ length: 31 }, (_, i) => i + 1).includes(dueDay)) {
+      throw refuse(`saveStatutoryEmployer: due day "${dayText}" is not 1-31`, `The ${label} due day must be a whole number from 1 to 31: the day of the following month the payment is due.`);
+    }
+    const before = await statutoryPaymentsRepo.lockEmployer(trx, actor.orgId, agency);
+    const id = await statutoryPaymentsRepo.upsertEmployer(trx, {
+      orgId: actor.orgId,
+      agency,
+      employerNo: agency === 'bir' ? null : employerNo,
+      dueDay,
+      actorId: actor.personId,
+    });
+    await auditLogRepo.append(trx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'statutory_employer.change',
+      storeId: null,
+      entityId: id,
+      before: before ? { agency, employerNo: before.employerNo, dueDay: before.dueDay } : null,
+      after: { table: 'statutory_employers', event: before ? 'change' : 'add', agency, employerNo: agency === 'bir' ? null : employerNo, dueDay },
+      source: 'web',
+    });
+    return { agency };
+  });
+}

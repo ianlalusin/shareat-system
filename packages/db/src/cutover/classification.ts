@@ -537,6 +537,20 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'every employment unpayable on 2 January. ⚠️ Effective-dated rows from 2026 stay: a rate ' +
       'that took effect in November is still the rate in force in January until somebody changes it.',
   },
+  statutory_employers: {
+    class: 'keep',
+    reason:
+      'T-193. The employer number and due day per agency are CONFIGURATION, keyed once; purging them would force a re-key before the first January 2027 payment.',
+  },
+  statutory_payments: {
+    class: 'purge',
+    reason:
+      'T-193. Agency payments made during the pilot are test history: they point at purged journal entries and cover pilot-period payslips. v2 payroll starts 1 January 2027 with none.',
+  },
+  statutory_payment_lines: {
+    class: 'purge',
+    reason: 'T-193. The per-store split of a pilot agency payment; purged together with its parent statutory_payments.',
+  },
   statutory_rates: {
     class: 'keep',
     reason:

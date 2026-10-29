@@ -335,10 +335,10 @@ describe('invariant 10 — account count matches the (amended) COA-ALIGNMENT lis
     // is forward-corrected rather than left silently wrong (bible §2 rule 8 precedent:
     // an applied migration is never edited, but a test asserting a now-superseded fact
     // is updated forward, the same way migration 0002 corrected 3200 forward).
-    expect(CHART_OF_ACCOUNTS.length).toBe(102);
+    expect(CHART_OF_ACCOUNTS.length).toBe(103); // T-193 S1 (0222): +6810
     const headers = CHART_OF_ACCOUNTS.filter((a) => a.parentCode === null);
     expect(headers.length).toBe(7);
-    expect(CHART_OF_ACCOUNTS.length - headers.length).toBe(95);
+    expect(CHART_OF_ACCOUNTS.length - headers.length).toBe(96); // T-193 S1 (0222): +6810
   });
 
   it('every account actually lands in the database for a freshly seeded org', async () => {
@@ -351,7 +351,7 @@ describe('invariant 10 — account count matches the (amended) COA-ALIGNMENT lis
     // ⭐ 100 -> 101 on 2026-08-29 (T-153): `1115 Cash on hand — till float`. The side pocket gets
     // its own account so its balance is an INVARIANT against the configured target, and so
     // remittance can never sweep it out of `1110`.
-    expect(rows.length).toBe(102); // T-102b, T-123 (2160, 4500), T-127 (1260), T-128 (2500), T-132 (4300), T-133 (5175), T-150 (6420), T-153 (1115), T-163 (5450)
+    expect(rows.length).toBe(103); // T-193 S1 (0222): +6810. T-102b, T-123 (2160, 4500), T-127 (1260), T-128 (2500), T-132 (4300), T-133 (5175), T-150 (6420), T-153 (1115), T-163 (5450)
   });
 
   it('4200 is not seeded — REVENUE AMENDMENT, take-out folded into 4150', async () => {
@@ -581,17 +581,17 @@ describe('T-102b invariant 5 — re-running the seed inserts nothing and changes
 
 describe('T-102b invariant 6 — total account count is 92 (T-102\'s 75 + these 17)', () => {
   it('the seed data has exactly 102 accounts', () => {
-    expect(CHART_OF_ACCOUNTS.length).toBe(102);
+    expect(CHART_OF_ACCOUNTS.length).toBe(103); // T-193 S1 (0222): +6810
     const headers = CHART_OF_ACCOUNTS.filter((a) => a.parentCode === null);
     expect(headers.length).toBe(7);
-    expect(CHART_OF_ACCOUNTS.length - headers.length).toBe(95);
+    expect(CHART_OF_ACCOUNTS.length - headers.length).toBe(96); // T-193 S1 (0222): +6810
   });
 
   it('every account lands in the database for a freshly seeded org', async () => {
     const orgId = await insertOrg('102b-inv6');
     await seedChartOfAccounts(sql, orgId);
     const rows = await fetchAccounts(orgId);
-    expect(rows.length).toBe(102);
+    expect(rows.length).toBe(103); // T-193 S1 (0222): +6810
   });
 });
 

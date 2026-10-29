@@ -115,7 +115,8 @@ describe('T1 — registry floor', () => {
     // T-475 S3 (0217): supplier_invoices_self_verified_immutable 34 -> 35.
     // T-398 S6 (no TRUNCATE trigger, orchestrator 28 Oct): franchise_access_log_append_only_trg 35 -> 36.
     // T-498 S1 (0221): pay_rates_append_only 36 -> 37.
-    expect(always.length, 'expected exactly 37 ALWAYS triggers (R1 + 0175 + 0179 + 0183 + 0189 + 0196 + 0206 + 0215 + 0217 + 0220 + 0221)').toBe(37);
+    // T-193 S1 (0222): statutory_payments_history_guard. Merge of main + T-193: re-measured.
+    expect(always.length, 'expected exactly 38 ALWAYS triggers (R1 + 0175 + 0179 + 0183 + 0189 + 0196 + 0206 + 0215 + 0217 + 0220 + 0221 + 0222)').toBe(38);
 
     const alwaysNames = new Set(always.map(([name]) => name));
     for (const { trigger } of ALWAYS_TRIGGERS) {
