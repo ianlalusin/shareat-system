@@ -22,7 +22,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
   throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - name must contain "_test".`);
 }
 
-import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
+import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { cutoverProgress, openingTieOut } from '@shareat/domain';
 
@@ -71,13 +71,13 @@ describe('T-454 T13a the tie-out does not demand anything of an inactive, empty 
 describe('T-454 T13b the cutover wizard asks about active stores only', () => {
   it('its store list holds the active store and not the inactive one', async () => {
     // Imported lazily: the module pulls the ERP app's server helpers.
-    const lib = await import('../../../../apps/erp/src/app/cutover/lib');
+    const lib = await import('../../src/app/cutover/lib');
     const ids = (await lib.listStores(orgId)).map((s) => s.id);
     expect(ids).toContain(activeId);
     expect(ids).not.toContain(inactiveId);
   });
   it('cutoverProgress over that list has no per-store step for the inactive store', async () => {
-    const lib = await import('../../../../apps/erp/src/app/cutover/lib');
+    const lib = await import('../../src/app/cutover/lib');
     const ids = (await lib.listStores(orgId)).map((s) => s.id);
     const p = await asOrg(orgId, (tx) => cutoverProgress(tx, orgId, ids));
     const mine = (p.steps as unknown as Array<{ storeId?: string | null }>).filter((s) => s.storeId === inactiveId);
