@@ -15,17 +15,22 @@ import postgres from 'postgres';
 
 config({ path: '.env.local' });
 
-import { reconstructBalances, type LandedDocLike } from '../packages/etl/src/audit/balances';
+import { checkExpectZero } from '../packages/etl/src/audit/expect-zero';
+import { OPERATING_STORES, reconstructBalances, type LandedDocLike } from '../packages/etl/src/audit/balances';
 import { classifyGroups } from '../packages/etl/src/audit/groups';
 import { crossCheck } from '../packages/etl/src/audit/compare';
 import { renderAuditReport } from '../packages/etl/src/audit/report';
 
 const SOURCE_SYSTEM = 'erp_v1';
 
-function parseArgs(argv: readonly string[]): { asOf: string } {
+function parseArgs(argv: readonly string[]): { asOf: string; stores: string[]; expectZero: boolean } {
   let asOf: string | null = null;
+  const stores: string[] = [];
+  let expectZero = false;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--as-of') asOf = argv[++i] ?? null;
+    else if (argv[i] === '--stores') stores.push(...(argv[++i] ?? '').split(',').map((x) => x.trim()).filter(Boolean));
+    else if (argv[i] === '--expect-zero') expectZero = true;
   }
   if (asOf === null) {
     // Default to today rather than erroring: unlike `capture`, this reads nothing external,
@@ -35,11 +40,12 @@ function parseArgs(argv: readonly string[]): { asOf: string } {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) {
     throw new Error(`--as-of must be YYYY-MM-DD, got "${asOf}"`);
   }
-  return { asOf };
+  if (expectZero && stores.length !== 1) throw new Error('--expect-zero needs exactly one store: --stores <v1 store id>');
+  return { asOf, stores, expectZero };
 }
 
 async function main(): Promise<void> {
-  const { asOf } = parseArgs(process.argv.slice(2));
+  const { asOf, stores, expectZero } = parseArgs(process.argv.slice(2));
 
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL is not set. See .env.example.');
@@ -65,6 +71,19 @@ async function main(): Promise<void> {
     }));
 
     console.log(`Loaded ${docs.length.toLocaleString()} current landed documents.`);
+
+    if (expectZero) {
+      // T-454 S4: read-only close-out proof for one store; writes no report file.
+      const storeId = stores[0]!;
+      const check = checkExpectZero(docs, {
+        storeId,
+        asOf,
+        storeName: OPERATING_STORES[storeId]?.replace(/^SharEat /, ''),
+      });
+      for (const line of check.lines) console.log(line);
+      process.exitCode = check.exitCode;
+      return;
+    }
 
     const collectionCounts = [...docs.reduce((m, d) => {
       const name = d.collectionPath.split('/').pop() ?? d.collectionPath;

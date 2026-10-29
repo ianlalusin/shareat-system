@@ -12,7 +12,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
-import { PADRE_GARCIA_V1_STORE_ID } from './store-map';
+import { CLOSED_V1_STORES, PADRE_GARCIA_V1_STORE_ID } from './store-map';
 import { toCsv } from './sheets';
 
 export interface V1DocSnapshotLike {
@@ -50,6 +50,7 @@ const OWN_V1_STORE_IDS: ReadonlySet<string> = new Set([
 
 function roleOf(storeId: string): 'own' | 'franchise' | 'exclude' {
   if (storeId === PADRE_GARCIA_V1_STORE_ID) return 'franchise';
+  if (storeId in CLOSED_V1_STORES) return 'exclude'; // Banay-Banay closes 31 Dec 2026 and is not loaded (bible rows 377, 384)
   if (OWN_V1_STORE_IDS.has(storeId)) return 'own';
   return 'exclude'; // the two test stores, and any store not in the roster: Ian opts it in on stores.csv
 }

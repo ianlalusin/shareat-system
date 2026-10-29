@@ -4,7 +4,7 @@
  */
 import { authorize, canAt, type Actor } from '@shareat/auth';
 import { storeReadinessRepo, storesRepo, type Tx } from '@shareat/db';
-import { selectTargetStores, type StoreMapRow } from '../../packages/etl/src/master-data/store-map';
+import { assertClosedStoresExcluded, selectTargetStores, type StoreMapRow } from '../../packages/etl/src/master-data/store-map';
 
 export type ReadinessReason = 'no_pos_link' | 'no_cash_account' | 'no_encoder' | 'no_verifier' | 'encoder_is_verifier';
 export interface ReadinessPerson {
@@ -36,6 +36,7 @@ const ENDED = new Set(['resigned', 'terminated', 'inactive']);
 const byName = (a: ReadinessPerson, b: ReadinessPerson): number => a.displayName.localeCompare(b.displayName) || a.personId.localeCompare(b.personId);
 
 export async function readiness(tx: Tx, actor: Actor, input: ReadinessInput): Promise<{ orgId: string; stores: StoreReadiness[] }> {
+  assertClosedStoresExcluded(input.map); // T-454: before any database read
   let targets: StoreMapRow[];
   try {
     targets = [...selectTargetStores(input.map, { orgCode: input.orgCode, storeCodes: input.storeCodes })];
