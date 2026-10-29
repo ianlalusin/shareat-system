@@ -874,6 +874,11 @@ describe('an internal transfer is not a sale', () => {
     const f = await fixture('interorg');
     const [otherOrg] = await sql<{ id: string }[]>`
       insert into organizations (name, code) values (${`Other ${uid('o')}`}, ${uid('oc')}) returning id`;
+    // DEF-747 (T-398 S7d): linking to another company needs a franchise agreement; written as the owner, like onboarding does.
+    const [otherPerson] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${otherOrg!.id}, 'Franchisor person') returning id`;
+    await sql`
+      insert into franchise_agreements (org_id, franchisor_org_id, franchisor_person_id, sales_visible_from)
+      values (${otherOrg!.id}, ${f.orgId}, ${otherPerson!.id}, '2026-01-01')`;
     const c = await asOrg(f.orgId, (tx) =>
       createCustomer(tx, f.admin, {
         name: `Franchise ${uid('fr')}`, customerGroup: 'franchise', counterpartyOrgId: otherOrg!.id,

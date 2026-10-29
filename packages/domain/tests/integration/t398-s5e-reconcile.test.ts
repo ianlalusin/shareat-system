@@ -97,6 +97,13 @@ interface World {
   supplierId: string; // PG's supplier row for Lipa
 }
 
+/** DEF-747 (T-398 S7d): a customer may only point at another company when a franchise agreement joins the two. Written as the owner, like onboarding does. */
+async function agree(franchisorOrgId: string, franchiseeOrgId: string, franchisorPersonId: string): Promise<void> {
+  await sql`
+    insert into franchise_agreements (org_id, franchisor_org_id, franchisor_person_id, sales_visible_from)
+    values (${franchiseeOrgId}, ${franchisorOrgId}, ${franchisorPersonId}, '2026-01-01') on conflict do nothing`;
+}
+
 async function world(hint: string, names: { lipa?: string } = {}): Promise<World> {
   const tag = uid(hint);
   const f = await fixture(sql, `${hint}f`);
@@ -111,6 +118,7 @@ async function world(hint: string, names: { lipa?: string } = {}): Promise<World
   await sql`update persons set display_name = ${lipaManagerName} where id = ${f.manager.personId}`;
   const [sup] = await sql<{ id: string }[]>`
     insert into suppliers (org_id, name, status, created_by, counterparty_org_id) values (${g.orgId}, ${lipaName}, 'active', ${g.manager.personId}, ${f.orgId}) returning id`;
+  await agree(f.orgId, g.orgId, g.manager.personId);
   const customer = await asOrg(f.orgId, (tx) =>
     createCustomer(tx, f.admin, { name: pgName, customerGroup: 'franchise', counterpartyOrgId: g.orgId, priceListId: null }),
   );

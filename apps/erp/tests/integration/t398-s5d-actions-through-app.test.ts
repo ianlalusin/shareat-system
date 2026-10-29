@@ -54,6 +54,13 @@ const form = (fields: Record<string, string | string[]>) => {
   return fd;
 };
 
+/** DEF-747 (T-398 S7d): a customer may only point at another company when a franchise agreement joins the two. Written as the owner, like onboarding does. */
+async function agree(franchisorOrgId: string, franchiseeOrgId: string, franchisorPersonId: string): Promise<void> {
+  await sql`
+    insert into franchise_agreements (org_id, franchisor_org_id, franchisor_person_id, sales_visible_from)
+    values (${franchiseeOrgId}, ${franchisorOrgId}, ${franchisorPersonId}, '2026-01-01') on conflict do nothing`;
+}
+
 interface World { f: Fx; g: Fx; orderId: string; pork: string; supplierId: string }
 /** f sells 10.000 kg pork at 310.00 (cost 250.0000) to g; g has a supplier row for f and the pork item mapped. */
 async function world(hint: string): Promise<World> {
@@ -61,6 +68,7 @@ async function world(hint: string): Promise<World> {
   const g = await fixture(sql, `${hint}g`);
   const sellerPork = await wholesaleItem(f, 'Pork');
   await stock(sql, f, sellerPork, '20');
+  await agree(f.orgId, g.orgId, g.manager.personId);
   const cust = await asOrg(f.orgId, (tx) =>
     createCustomer(tx, f.admin, { name: `Padre Garcia ${uid('pg')}`, customerGroup: 'franchise', counterpartyOrgId: g.orgId, priceListId: null }),
   );
