@@ -243,6 +243,85 @@ describe('re-run completes a half-done onboarding (s5: two transactions)', () =>
   });
 });
 
+/** A refusal is an Error that is NOT "the function does not exist". */
+async function refused(p: Promise<unknown>): Promise<Error> {
+  const err = await p.then(() => null, (e: Error) => e);
+  expect(err, 'the re-run must be refused').toBeInstanceOf(Error);
+  expect(err!.message).not.toMatch(/is not a function|not defined/);
+  return err!;
+}
+
+describe('re-run against an existing company that does not fit (audit round) - refused, nothing written on either side', () => {
+  const scope = async (l: World, other: World, pg: string, file: OnboardingFile) => ({
+    customersL: (await sql`select 1 from customers where org_id = ${l.orgId}`).length,
+    customersL2: (await sql`select 1 from customers where org_id = ${other.orgId}`).length,
+    suppliersPg: (await sql`select 1 from suppliers where org_id = ${pg}`).length,
+    itemsPg: (await sql`select 1 from items where org_id = ${pg}`).length,
+    declared: (await sql`select 1 from supplier_items where org_id = ${pg}`).length,
+    agreements: (await sql<{ franchisor_org_id: string }[]>`select franchisor_org_id from franchise_agreements where org_id = ${pg}`).map((r) => r.franchisor_org_id),
+    priceLists: (await sql`select 1 from price_lists where org_id in (${l.orgId}, ${other.orgId}) and name = ${file.commissary.priceListName}`).length,
+  });
+
+  it('the existing org already has an agreement with a DIFFERENT franchisor: refused, naming the code, nothing written - Mutant: the agreement is assumed to be ours and the Ian-side half is written for the wrong franchisor', async () => {
+    const l = await franchisor();
+    const other = await franchisor();
+    const file = fileFor(l);
+    await onboard(file, l.adminId);
+    const pg = (await orgId(file.org.code))!;
+    await sql`update franchise_agreements set franchisor_org_id = ${other.orgId} where org_id = ${pg}`;
+    // wipe the Ian-side half so a wrongly accepted re-run would visibly write it
+    await sql`delete from customers where org_id = ${l.orgId} and name = ${file.commissary.customerName}`;
+    const before = await scope(l, other, pg, file);
+    const err = await refused(onboard(file, l.adminId));
+    expect(err.message).toContain(file.org.code);
+    expect(await scope(l, other, pg, file)).toEqual(before);
+    expect(before.agreements).toEqual([other.orgId]);
+  });
+
+  it('a same-named PG supplier already linked to a DIFFERENT, non-null org is refused, never re-pointed - Mutant: upsert that overwrites counterparty_org_id', async () => {
+    const l = await franchisor();
+    const other = await franchisor();
+    const file = fileFor(l);
+    await onboard(file, l.adminId);
+    const pg = (await orgId(file.org.code))!;
+    await sql`update suppliers set counterparty_org_id = ${other.orgId} where org_id = ${pg} and name = ${file.commissary.supplierName}`;
+    const err = await refused(onboard(file, l.adminId));
+    expect(err.message).toContain(file.commissary.supplierName);
+    const rows = await sql<{ counterparty_org_id: string | null }[]>`select counterparty_org_id from suppliers where org_id = ${pg} and name = ${file.commissary.supplierName}`;
+    expect(rows).toEqual([{ counterparty_org_id: other.orgId }]);
+  });
+
+  it('a same-named PG supplier with NO counterparty is linked to the franchisor org (one supplier, no twin) - Mutant: a second supplier created / the null one left unlinked', async () => {
+    const l = await franchisor();
+    const file = fileFor(l);
+    await onboard(file, l.adminId);
+    const pg = (await orgId(file.org.code))!;
+    await sql`update suppliers set counterparty_org_id = null where org_id = ${pg} and name = ${file.commissary.supplierName}`;
+    await onboard(file, l.adminId);
+    const rows = await sql<{ counterparty_org_id: string | null }[]>`select counterparty_org_id from suppliers where org_id = ${pg} and name = ${file.commissary.supplierName}`;
+    expect(rows).toEqual([{ counterparty_org_id: l.orgId }]);
+  });
+
+  it.each([['null', null], ['another org', 'OTHER']] as const)(
+    'a same-named Ian-side customer whose counterparty is %s is refused, naming the customer, never treated as done - Mutant: customer exists by name counts as complete',
+    async (_label, which) => {
+      const l = await franchisor();
+      const other = await franchisor();
+      const file = fileFor(l);
+      await onboard(file, l.adminId);
+      const pg = (await orgId(file.org.code))!;
+      const target = which === 'OTHER' ? other.orgId : null;
+      await sql`update customers set counterparty_org_id = ${target} where org_id = ${l.orgId} and name = ${file.commissary.customerName}`;
+      const before = await scope(l, other, pg, file);
+      const err = await refused(onboard(file, l.adminId));
+      expect(err.message).toContain(file.commissary.customerName);
+      expect(await scope(l, other, pg, file)).toEqual(before);
+      const [c] = await sql<{ counterparty_org_id: string | null }[]>`select counterparty_org_id from customers where org_id = ${l.orgId} and name = ${file.commissary.customerName}`;
+      expect(c!.counterparty_org_id, 'the wrong link must be left as found').toBe(target);
+    },
+  );
+});
+
 describe('O8 - T-391 meets the onboarded names', () => {
   /* eslint-disable @typescript-eslint/no-explicit-any */
   const MAP = (pgOrg: string) =>

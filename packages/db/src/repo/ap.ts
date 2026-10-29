@@ -54,6 +54,8 @@ export interface SupplierRow {
   address: string | null;
   contactNo: string | null;
   counterpartyStoreId: string | null;
+  /** T-398 S5/S7c: the seller company when this supplier is another company (inter-entity). */
+  counterpartyOrgId: string | null;
   vatStatus: SupplierVatStatus | null;
   status: SupplierStatus;
   notes: string | null;

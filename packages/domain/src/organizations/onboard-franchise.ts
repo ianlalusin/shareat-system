@@ -116,6 +116,12 @@ export async function onboardFranchiseOrganization(
       }
       const agreement = await franchiseRepo.getAgreement(tx, existing.id);
       if (agreement) {
+        if (agreement.franchisorOrgId !== franchisor.id) {
+          throw refuse(
+            `onboardFranchiseOrganization: "${file.org.code}" already has an agreement with a different franchisor.`,
+            `The company ${file.org.code} already has a franchise agreement with a different franchisor company than the one named in the file, so nothing was written.`,
+          );
+        }
         return { kind: 'existing' as const, franchisor, orgId: existing.id, adminPersonId: agreement.franchisorPersonId };
       }
       throw refuse(
@@ -238,6 +244,24 @@ async function completeBothSides(
     if (price) lines.push({ ...o, rate: price.price });
   }
 
+  // Refuse a name that is already taken by something linked elsewhere, BEFORE any write on either side. Never re-point a link.
+  const customers = await customersRepo.listCustomers(tx, c.franchisor.id);
+  const sameCustomer = customers.find((cu) => cu.name.trim().toLowerCase() === file.commissary.customerName.trim().toLowerCase());
+  if (sameCustomer && sameCustomer.counterpartyOrgId !== c.pgOrgId) {
+    throw refuse(
+      `onboardFranchiseOrganization: customer "${file.commissary.customerName}" exists but is not linked to the new company.`,
+      `A customer named ${file.commissary.customerName} already exists but is not linked to this franchise company. A person has to settle it; nothing was written.`,
+    );
+  }
+  const suppliers = await apRepo.listSuppliers(tx, c.pgOrgId, { includeInactive: true });
+  const found = suppliers.find((sp) => sp.name.trim().toLowerCase() === file.commissary.supplierName.trim().toLowerCase());
+  if (found && found.counterpartyOrgId !== null && found.counterpartyOrgId !== c.franchisor.id) {
+    throw refuse(
+      `onboardFranchiseOrganization: supplier "${file.commissary.supplierName}" is already linked to another company.`,
+      `A supplier named ${file.commissary.supplierName} already exists in the new company and is linked to a different company. A person has to settle it; nothing was written.`,
+    );
+  }
+
   // 8. Ian's side: the price list, its lines, the customer.
   const lists = await customersRepo.listPriceLists(tx, c.franchisor.id, { includeRetired: true });
   let priceListId = lists.find((l) => l.name === file.commissary.priceListName)?.id;
@@ -251,8 +275,7 @@ async function completeBothSides(
     await customersRepo.upsertPriceListItem(tx, { orgId: c.franchisor.id, priceListId, itemId: line.itemId, rate: money(line.rate), unit: null });
     wrote = true;
   }
-  const customers = await customersRepo.listCustomers(tx, c.franchisor.id);
-  if (!customers.some((cu) => cu.name.trim().toLowerCase() === file.commissary.customerName.trim().toLowerCase())) {
+  if (!sameCustomer) {
     const created = await createCustomer(tx, c.by, {
       name: file.commissary.customerName,
       counterpartyOrgId: c.pgOrgId,
@@ -264,8 +287,6 @@ async function completeBothSides(
   }
 
   // 9. PG's side: the commissary supplier, then a PG item for every line, declared on it.
-  const suppliers = await apRepo.listSuppliers(tx, c.pgOrgId, { includeInactive: true });
-  const found = suppliers.find((sp) => sp.name.trim().toLowerCase() === file.commissary.supplierName.trim().toLowerCase());
   let supplierId = found?.id;
   if (!supplierId) {
     supplierId = (await createSupplier(tx, c.pgAdmin, { name: file.commissary.supplierName })).id;

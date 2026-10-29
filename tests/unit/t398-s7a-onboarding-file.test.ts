@@ -144,7 +144,22 @@ describe('S7a - assertOnboardingFileAllowed', () => {
   });
   it('O12 control: mock file on a local test database is allowed (mutant: refuse every mock file)', async () => {
     expect(await allow(mockRaw(), MOCK_PATH, { NODE_ENV: 'development', SYSTEM_DATABASE_URL: LOCAL_URL })).toBe('');
-    expect(await allow(mockRaw(), MOCK_PATH, { NODE_ENV: 'test', SYSTEM_DATABASE_URL: undefined })).toBe('');
+    expect(await allow(mockRaw(), MOCK_PATH, { NODE_ENV: 'test', DATABASE_URL: LOCAL_URL })).toBe('');
+  });
+
+  // The real connection is SYSTEM_DATABASE_URL ?? DATABASE_URL (packages/db/src/client.ts:98), so the guard must judge the same one.
+  it('O12: SYSTEM_DATABASE_URL unset but DATABASE_URL on the production host is refused - Mutant: guard reads SYSTEM_DATABASE_URL only', async () => {
+    expect(await allow(mockRaw(), MOCK_PATH, { NODE_ENV: 'development', SYSTEM_DATABASE_URL: undefined, DATABASE_URL: prodUrl() })).not.toBe('');
+  });
+  it('O12: SYSTEM_DATABASE_URL blank and DATABASE_URL on the production host is refused - Mutant: blank treated as set, so the fallback is never consulted', async () => {
+    expect(await allow(mockRaw(), MOCK_PATH, { NODE_ENV: 'development', SYSTEM_DATABASE_URL: '  ', DATABASE_URL: prodUrl() })).not.toBe('');
+  });
+  it('O12: BOTH database URLs empty or unset is refused (no database to judge) - Mutant: an unset pair counts as not-production', async () => {
+    expect(await allow(mockRaw(), MOCK_PATH, { NODE_ENV: 'development' })).not.toBe('');
+    expect(await allow(mockRaw(), MOCK_PATH, { NODE_ENV: 'development', SYSTEM_DATABASE_URL: '', DATABASE_URL: ' ' })).not.toBe('');
+  });
+  it('O12 control: a local SYSTEM_DATABASE_URL wins over a production DATABASE_URL, as the connection would (not over-refusing)', async () => {
+    expect(await allow(mockRaw(), MOCK_PATH, { NODE_ENV: 'development', SYSTEM_DATABASE_URL: LOCAL_URL, DATABASE_URL: prodUrl() })).toBe('');
   });
   it('guard 2: a NON-mock file inside the repo is refused, outside is allowed (mutant: path check dropped / inverted)', async () => {
     const real = { ...mockRaw(), mock: false };

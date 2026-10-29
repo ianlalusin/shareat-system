@@ -199,12 +199,14 @@ export function assertOnboardingFileAllowed(file: OnboardingFile, ctx: { path: s
   const { env } = ctx;
   if (file.mock) {
     if (env.NODE_ENV === 'production') fail('a mock file cannot be used when NODE_ENV is production.');
-    const url = env.SYSTEM_DATABASE_URL;
-    if (url !== undefined && url.trim() !== '') {
-      const host = hostOf(url);
-      if (host === null) fail('a mock file cannot be used when the database host cannot be read from SYSTEM_DATABASE_URL.');
-      if (productionHosts(env).includes(host)) fail('a mock file cannot be used against a production database host.');
-    }
+    // The connection the scripts really use is SYSTEM_DATABASE_URL, else DATABASE_URL (a blank counts as unset). Judge that one.
+    const system = env.SYSTEM_DATABASE_URL?.trim();
+    const plain = env.DATABASE_URL?.trim();
+    const url = system ? system : plain;
+    if (!url) fail('a mock file cannot be used when no database URL is set, because the target host cannot be checked.');
+    const host = hostOf(url);
+    if (host === null) fail('a mock file cannot be used when the database host cannot be read from the database URL.');
+    if (productionHosts(env).includes(host)) fail('a mock file cannot be used against a production database host.');
     return;
   }
   const rel = relative(resolve(ctx.repoRoot), resolve(ctx.path));
