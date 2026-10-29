@@ -241,7 +241,8 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // ⭐ 114 -> 115 (T-190): `manage_payroll_rates` (org, admin only: the accountant).
     // ⭐ 115 -> 116 (T-464): `pair_pos_tablet` (store, admin yes, manager yes, staff no).
     // ⭐ 116 -> 117 (T-475 S3): `verify_own_supplier_invoice` (org, admin yes, manager no; ROLE ONLY).
-    expect(rows.length).toBe(117);
+    // T-398 S6: 117 -> 118 (`view_franchise_access_log`, org, super/admin/manager yes, staff no; ROLE ONLY).
+    expect(rows.length).toBe(118);
     // ⭐ 109 -> 111 (T-402 S1b): `view_activity_log` (store) and `view_activity_log_restricted` (org).
     // ⭐ 108 -> 109 (T-403): `manage_recipes` (org, admin-only).
   });
@@ -314,13 +315,14 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 117 capabilities', () => {
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 118 capabilities', () => {
     // ⭐ 99 -> 100 (T-382 S1, A3): `unlink_store_from_pos`. ⛔ RED until the builder adds it to capabilities.ts.
     // ⭐ 100 -> 101 (T-385 S3, A3): `verify_own_sales_day`. ⛔ RED until the builder adds it to capabilities.ts.
     // ⭐ 101 -> 108 (T-401 S2): the seven menu capabilities.
-    expect(CAPABILITIES.length).toBe(117);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(117);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(117);
+    // T-398 S6: 117 -> 118, `view_franchise_access_log`.
+    expect(CAPABILITIES.length).toBe(118);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(118);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(118);
     // ⭐ 108 -> 109 (T-403): `manage_recipes`.
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));

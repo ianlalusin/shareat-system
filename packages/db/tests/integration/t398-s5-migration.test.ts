@@ -238,9 +238,10 @@ describe('G -- registrations: RLS registry kind, cutover classification, census,
     expect(src).toMatch(/counterpartyColumn/);
   });
 
-  it('G1c only these two tables use the new kind (it is not a general escape hatch)', () => {
+  // T-398 S6 (K8): the kind is now also used by the two franchise tables (franchise_agreements, franchise_access_log), still a closed list of four.
+  it('G1c only these two shipment tables plus the two franchise tables (T-398 S6) use the new kind (it is not a general escape hatch)', () => {
     const users = Object.entries(RLS_REGISTRY).filter(([, e]) => (e as unknown as { scope: string }).scope === 'dual_org_counterparty').map(([t]) => t).sort();
-    expect(users, 'RED today: none').toEqual([...TABLES].sort());
+    expect(users, 'RED today: none').toEqual([...TABLES, 'franchise_access_log', 'franchise_agreements'].sort());
   });
 
   it.each(TABLES)('G2 %s is classified in CUTOVER_CLASSIFICATION as purge, with a reason (operational, purged per org)', (t) => {

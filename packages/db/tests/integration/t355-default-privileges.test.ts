@@ -288,6 +288,8 @@ const T356_REVOKES: Record<string, readonly string[]> = {
   attendance_punches: ['UPDATE', 'DELETE'],
   etl_source_documents: ['UPDATE', 'DELETE'],
   missed_month_adjustments: ['UPDATE', 'DELETE'],
+  // T-498 S1 (0221, DEF-799): pay_rates is append-only.
+  pay_rates: ['UPDATE', 'DELETE'],
 };
 
 describe('E1 sanity — every T356_REVOKES key exists in the fixture, and every removed privilege was present in it', () => {

@@ -17,7 +17,7 @@
  * is not an oracle for "right PIN, wrong person".
  */
 import type { Tx } from '@shareat/db';
-import { sessionsRepo, accessRepo, pinAttemptsRepo } from '@shareat/db';
+import { sessionsRepo, accessRepo, pinAttemptsRepo, franchiseRepo } from '@shareat/db';
 import type { Actor } from './authorize';
 import { can } from './authorize';
 import type { Capability } from './capabilities';
@@ -60,6 +60,8 @@ export async function verifyAdminApproval(tx: Tx | null, input: AdminApprovalInp
       const maySignIn = await accessRepo.personMaySignInToOrg(lookupTx, credential.personId, actor.orgId);
       const isTerminal = await accessRepo.personIsTerminal(lookupTx, actor.orgId, credential.personId);
       if (!(verified && maySignIn && !isTerminal && (isAdmin || fallback))) throw new AuthenticationError(ADMIN_PIN_REFUSED);
+      // T-398 S6c: break-glass log. Only after every check passed, in this lookup transaction; the PIN OWNER is the person logged (a no-op for anyone who is not a franchisor person).
+      await franchiseRepo.logBreakGlassApprovalAsApprover(lookupTx, credential.personId, capability, storeId);
       return { approverPersonId: credential.personId };
     },
     { dailyMissBudget: pinAttemptsRepo.APPROVAL_DAILY_MISS_CAP, stopAutoReopenMinutes: pinAttemptsRepo.APPROVAL_CAP_AUTO_LIFT_MINUTES },

@@ -163,6 +163,9 @@ export * from './leave';
 // T-455 S2 - the customer lobby: diner check-in, cashier moves, nightly expiry/purge. Callers arrive with S3 (customer server) and S5 (POS card).
 export * from './lobby/checkin';
 export * from './lobby/staff';
+export * from './lobby/terminal';
 export * from './lobby/purge';
 export { LobbyRefusal, LOBBY_REFUSAL_CODES } from './lobby/refusal';
 export type { LobbyRefusalCode } from './lobby/refusal';
+// T-398 S6 - the franchisor view of a franchisee: sales per day, stock on hand, and the franchisee-side access log. Callers arrive with the S6d screens.
+export * from './franchise';

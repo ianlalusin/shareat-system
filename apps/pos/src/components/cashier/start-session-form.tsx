@@ -70,6 +70,14 @@ export interface PendingSeat {
      * links the new session) on completion instead of deleting a waitlist entry.
      */
     reservationId?: string;
+    /** T-455 S5: present when the party comes from the lobby line; the lobby entry is linked to the new session on completion. */
+    lobbyEntryId?: string;
+    /** Pre-filled into the Notes box (the diner name and the entry note). */
+    notes?: string;
+    /** Lines with a POS item key (a key that is one of this store's packages selects it). */
+    items?: { posItemKey: string; qty: number }[];
+    /** Lines with no POS item key: shown to the cashier as plain text to tap in by hand. */
+    textLines?: { label: string; qty: number }[];
 }
 
 interface StartSessionFormProps {
@@ -82,7 +90,7 @@ interface StartSessionFormProps {
     offersUnlimited?: boolean;
     offersAlaCarte?: boolean;
     pendingSeat?: PendingSeat | null;
-    onSeatCompleted?: (sessionId: string) => void;
+    onSeatCompleted?: (sessionId: string, standLabel?: string) => void;
     onSeatCleared?: () => void;
 }
 
@@ -156,6 +164,9 @@ export function StartSessionForm({ tables, packages, flavors, user, storeId, off
         if (pendingSeat.partySize > 0) {
             unlimitedForm.setValue("guestCount", pendingSeat.partySize);
         }
+        if (pendingSeat.notes) unlimitedForm.setValue("notes", pendingSeat.notes);
+        const keyed = pendingSeat.items?.find((it) => packages.some((p) => p.packageId === it.posItemKey));
+        if (keyed) unlimitedForm.setValue("packageId", keyed.posItemKey);
         // Defer scroll so the tab change and setValue commit first.
         setTimeout(() => {
             formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -236,7 +247,7 @@ export function StartSessionForm({ tables, packages, flavors, user, storeId, off
             const newSessionId = await startSession(storeId, sessionPayload, user);
 
             if (pendingSeat) {
-                onSeatCompleted?.(newSessionId);
+                onSeatCompleted?.(newSessionId, chosenTable.tableNumber);
             }
 
             toast({ title: 'Session Created!', description: `Table ${chosenTable.tableNumber} is now pending server verification.` });
@@ -299,6 +310,11 @@ export function StartSessionForm({ tables, packages, flavors, user, storeId, off
                     <div className="flex-1 min-w-0 text-sm">
                         <span className="font-semibold">Seating: {pendingSeat.name}</span>
                         <span className="text-muted-foreground"> · {pendingSeat.partySize} pax</span>
+                        {pendingSeat.textLines && pendingSeat.textLines.length > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                                Tap in by hand: {pendingSeat.textLines.map((l) => `${l.qty} x ${l.label}`).join(", ")}
+                            </p>
+                        )}
                     </div>
                     <Button
                         type="button"

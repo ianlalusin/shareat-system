@@ -92,7 +92,7 @@ function expectedRetention(category: string, sensitivity: string): 'r10y' | 'r2y
 describe('T-402 S1b - the catalogue is closed, typed and in one file (R2, R3, R4)', () => {
   it('has roughly the specified size (~95 entries; the 22 existing + ~33 S2/S3 + ~40 reserved) and every entry has every field', () => {
     expect(AUDIT_CATALOGUE.length).toBeGreaterThanOrEqual(90);
-    expect(AUDIT_CATALOGUE.length).toBeLessThanOrEqual(210); // 195 -> 210, T-455 S2 (lobby.park/call/seat/remove) + T-475 S3 (ap_invoice.self_verified) + room for T-398 S5 / T-455 S6-S7; 190 -> 195, T-464: pos_tablet.paired / pos_tablet.unpaired; 170 -> 190, T-436: 11 leave.*/leave_cap/leave_type/sil/leave_document audit actions; 160 -> 170, T-434: staff_photo.*/staff_signature.* audit actions (set/replaced/removed/viewed/view_refused); raise deliberately
+    expect(AUDIT_CATALOGUE.length).toBeLessThanOrEqual(212); // 210 -> 212, T-455 S5 (lobby.pause/lobby.resume); 195 -> 210, T-455 S2 (lobby.park/call/seat/remove) + T-475 S3 (ap_invoice.self_verified) + room for T-398 S5 / T-455 S6-S7; 190 -> 195, T-464: pos_tablet.paired / pos_tablet.unpaired; 170 -> 190, T-436: 11 leave.*/leave_cap/leave_type/sil/leave_document audit actions; 160 -> 170, T-434: staff_photo.*/staff_signature.* audit actions (set/replaced/removed/viewed/view_refused); raise deliberately
     for (const e of AUDIT_CATALOGUE) {
       expect(typeof e.action, 'action').toBe('string');
       expect(CATEGORIES, `${e.action} category`).toContain(e.category);

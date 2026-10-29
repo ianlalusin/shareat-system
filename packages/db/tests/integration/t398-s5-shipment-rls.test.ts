@@ -49,6 +49,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 
 import { menuFixture, sql, uid, asApp, type PgErr, type MenuFx } from './_fixtures/t401-menu';
+import { seedFranchiseAgreementAndLog } from './_fixtures/t398-s6-franchise'; // T-398 S6 (X1 widening)
 import { CROSS_ORG_BY_DESIGN, OPEN_DEF_491 } from '../../src/rls/same-org-fk-exemptions';
 import { APP_ROLE, RLS_REGISTRY } from '../../src/rls/registry';
 
@@ -725,6 +726,8 @@ describe('R -- RLS catalog: ENABLE + FORCE; SELECT widened to the buyer, nothing
   it('X1 cross-org sweep: both orgs seeded; as PG, EVERY RLS_REGISTRY table with an org_id shows 0 of Ian\'s rows except the two shipment tables; the same the other way (kills: any new table leaking)', async () => {
     const w = await world();
     await newShipment(w);
+    // T-398 S6 (K8): the two franchise tables are the other legitimate dual-org tables. Seed an agreement Ian(A) -> PG(B) and one log row as owner.
+    await seedFranchiseAgreementAndLog(sql, { franchisee: w.b, franchisor: w.a });
     const cols = await sql<{ table_name: string }[]>`select table_name from information_schema.columns where table_schema = 'public' and column_name = 'org_id'`;
     const withOrg = new Set(cols.map((c) => c.table_name));
     const tables = Object.keys(RLS_REGISTRY).filter((t) => withOrg.has(t));
@@ -751,12 +754,29 @@ describe('R -- RLS catalog: ENABLE + FORCE; SELECT widened to the buyer, nothing
     const asB = await leaks(w.b.orgId, w.a.orgId);
     const asA = await leaks(w.a.orgId, w.b.orgId);
     for (const [who, seen] of [['PG sees Ian', asB], ['Ian sees PG', asA]] as const) {
-      const unexpected = Object.entries(seen).filter(([t]) => ![SHIP, LINE].includes(t));
+      const unexpected = Object.entries(seen).filter(([t]) => ![SHIP, LINE, 'franchise_agreements', 'franchise_access_log'].includes(t)); // T-398 S6: + the two franchise tables
       expect(unexpected, `X1 ${who}: rows of the other org visible in ${JSON.stringify(unexpected)}`).toEqual([]);
     }
     expect(asB[SHIP], 'positive control: PG does see the shipment').toBeGreaterThanOrEqual(1);
     expect(asB[LINE], 'positive control: PG does see the line').toBeGreaterThanOrEqual(1);
     expect(asA[SHIP], 'Ian sees PG-labelled rows? no: shipments carry org_id = Ian, so PG\'s org_id has none').toBeUndefined();
+    // T-398 S6: the franchise tables carry org_id = the franchisee (PG): Ian (the franchisor, A) sees them, PG sees none with org_id = Ian,
+    // and a THIRD org C sees neither table's rows for A or B (kills: a franchise table readable by a third org).
+    expect(asA['franchise_agreements'], 'positive control: Ian sees the agreement (franchisor arm)').toBeGreaterThanOrEqual(1);
+    expect(asA['franchise_access_log'], 'positive control: Ian sees the log row (franchisor arm)').toBeGreaterThanOrEqual(1);
+    expect(asB['franchise_agreements'], 'PG: no agreement row has org_id = Ian').toBeUndefined();
+    expect(asB['franchise_access_log'], 'PG: no log row has org_id = Ian').toBeUndefined();
+    for (const [viewer, other] of [[w.c.orgId, w.a.orgId], [w.c.orgId, w.b.orgId]] as const) {
+      const third = await asApp(viewer, async (tx) => {
+        const q = asSql(tx);
+        return [
+          (await q`select count(*)::int n from franchise_agreements where org_id = ${other} or franchisor_org_id = ${other}`)[0]!.n,
+          (await q`select count(*)::int n from franchise_access_log where org_id = ${other} or franchisor_org_id = ${other}`)[0]!.n,
+        ];
+      });
+      expect(third.err?.message, 'RED today: franchise tables absent').toBeUndefined();
+      expect(third.value, 'X1 third org C sees 0 rows of either franchise table').toEqual([0, 0]);
+    }
   });
 });
 

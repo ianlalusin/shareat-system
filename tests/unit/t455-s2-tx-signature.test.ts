@@ -53,6 +53,9 @@ const PINNED: Record<string, string[]> = {
   'checkin.ts': ['cancelMyEntry', 'checkIn', 'getMyEntry', 'lobbyPartiesAhead'],
   'staff.ts': ['callEntry', 'listLobbyEntries', 'parkWalkIn', 'removeEntry', 'seatEntry'],
   'purge.ts': ['expireStaleLobbyEntries', 'purgeLobbyPersonalData', 'runLobbyNightly', 'sweepStalePendingClaims'],
+  // T-455 S5: the shared core of the cashier moves and the POS tablet's moves (each takes tx: Tx first).
+  'core.ts': ['callCore', 'listCore', 'parkCore', 'removeCore', 'seatCore'],
+  'terminal.ts': ['callForTerminal', 'listForTerminal', 'parkForTerminal', 'removeForTerminal', 'seatForTerminal', 'setLobbyPausedForTerminal'],
 };
 /** Exported functions that are allowed to have no `tx` (pure helpers). Empty on purpose: keep helpers unexported (CONTRACT QUESTION 9). */
 const NO_TX_ALLOWED: string[] = [];
