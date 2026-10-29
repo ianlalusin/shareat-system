@@ -6,7 +6,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { ACTION_LINK } from '@/components/action-link';
-import { Banner, Button, FlashBanner, LinkRow, RowLink, Select, Table, Td, NumTd, Th } from '@/components/ui';
+import { Banner, Button, FlashBanner, LinkRow, RowAction, RowLink, Select, Table, Td, NumTd, Th } from '@/components/ui';
 
 export const metadata = { title: 'Government payments — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -131,7 +131,17 @@ export default async function StatutoryPaymentsPage({ searchParams }: { searchPa
                       {monthWords(r.month)}
                     </RowLink>
                   ) : monthWords(r.month)}</Td>
-                  <Td>{agencyLabel(r.agency)}</Td>
+                  <Td>
+                    <RowAction>
+                      <Link
+                        href={`/payroll/statutory-payments/month?agency=${r.agency}&month=${r.month}`}
+                        className={ACTION_LINK}
+                        aria-label={`Payslips and payments behind ${agencyLabel(r.agency)} for ${monthWords(r.month)}`}
+                      >
+                        {agencyLabel(r.agency)}
+                      </Link>
+                    </RowAction>
+                  </Td>
                   <Td>{nameOf(r.storeId)}</Td>
                   <NumTd>{formatMoney(money(r.owed))}</NumTd>
                   <NumTd>{formatMoney(money(r.paid))}</NumTd>

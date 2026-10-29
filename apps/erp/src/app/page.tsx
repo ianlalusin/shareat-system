@@ -1,9 +1,10 @@
 import { getApAgingReport, getArAgingReport, getBalanceSheet, getIncomeStatement, getSalesRollup, usageCheckScorecard } from '@shareat/domain';
 import { attendanceDaysRepo, cashRequestsRepo, commissaryKpisRepo, lowStockRepo } from '@shareat/db';
-import { add, compare, isZero, money, negate, subtract, ZERO } from '@shareat/core/money';
+import { add, compare, formatMoney, isZero, money, negate, subtract, ZERO } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 import Link from 'next/link';
 import { reportScope, runReport } from './reports/lib';
+import { monthWords, statutoryTileFor } from './payroll/statutory-payments/lib';
 import { findingsFor, lastCompletedPeriod } from './findings/lib';
 import { dayCount, eachDay, fmtNum, previousRange, resolveRange, shortDay } from './dashboard/lib';
 import { EmptyState } from '@/components/reports/EmptyState';
@@ -61,6 +62,7 @@ export default async function DashboardPage({
   const [
     { incomeStatement, balanceSheet, arAging, apAging, salesNow, salesPrev, salesByStore, lowStock, openFloats, onShift, inFlight, disputes, received, usageScorecard },
     { feed },
+    govTile,
   ] = await Promise.all([
     runReport(orgId, async (tx) => {
       const [
@@ -104,6 +106,8 @@ export default async function DashboardPage({
       };
     }),
     findingsFor(orgId, period),
+    // T-193 S6: null for anyone who does not hold remit_statutory - the tile is for the accountant, never a manager.
+    statutoryTileFor(scope.actor, today),
   ]);
 
   const hardFindingsOpen = feed.findings.filter((f) => f.severity === 'hard' && f.status === 'open').length;
@@ -305,6 +309,45 @@ export default async function DashboardPage({
             <OutlineCount href="/cash-requests" count={openFloats} label="Open floats" hint="cash requests awaiting liquidation" />
           </div>
         </section>
+
+        {govTile ? (
+          <section aria-label="Government payments" className="flex flex-col gap-2">
+            <div className="flex items-center gap-4 border-t-2 border-ink pt-3">
+              <h2 className="m-0 font-display text-[28px] font-bold leading-none">Government payments</h2>
+              <span className="text-[13px] text-muted">SSS, PhilHealth, Pag-IBIG and BIR · owed and not yet paid</span>
+            </div>
+            <MetricStrip label="Government payments owed" columns={4}>
+              {[
+                { label: 'Owed to government', value: formatMoney(money(govTile.totalOutstanding)), note: 'not yet paid', href: '/payroll/statutory-payments' },
+                { label: 'Overdue', value: formatMoney(money(govTile.totalOverdue)), note: 'past the due date', href: '/payroll/statutory-payments' },
+                {
+                  label: 'Oldest unpaid month',
+                  value: govTile.oldestUnpaidMonth ? monthWords(govTile.oldestUnpaidMonth) : 'None',
+                  currency: false,
+                  note: govTile.oldestUnpaidMonth ? 'still owed' : 'everything is paid',
+                  href: '/payroll/statutory-payments',
+                },
+                {
+                  label: 'Agencies owed',
+                  value: String(govTile.agencies.length),
+                  currency: false,
+                  note: govTile.agencies.map((a) => a.agency.toUpperCase()).join(', ') || 'none',
+                  href: '/payroll/statutory-payments',
+                },
+              ].map((s) => (
+                <StatCard key={s.label} {...s} className="sm:border-r sm:last:border-r-0" />
+              ))}
+            </MetricStrip>
+            {govTile.agencies.some((a) => a.noDueDay) ? (
+              <p className="text-[13px] text-muted">
+                No due day set for {govTile.agencies.filter((a) => a.noDueDay).map((a) => a.agency.toUpperCase()).join(', ')}, so overdue cannot be told.{' '}
+                <Link href="/payroll/rates" className="underline underline-offset-2">
+                  Set it under Employer numbers
+                </Link>
+              </p>
+            ) : null}
+          </section>
+        ) : null}
 
         {usageScorecard.length > 0 ? (
           <section className="flex flex-col gap-2">

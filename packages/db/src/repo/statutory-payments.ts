@@ -29,6 +29,8 @@ export interface MonthDetailRow {
   storeId: string;
   personId: string;
   personName: string;
+  /** The person's number at THIS agency (SSS no., PhilHealth no., Pag-IBIG no., TIN for BIR), read now; null = none on file. */
+  govNo: string | null;
   ee: string;
   er: string;
   ec: string;
@@ -120,6 +122,7 @@ export async function monthDetail(
   const rows = await tx.execute(sql`
     select o.payslip_id::text as "payslipId", o.run_id::text as "runId", o.store_id::text as "storeId",
            o.person_id::text as "personId", p.display_name as "personName",
+           (case ${agency}::text when 'sss' then p.sss_no when 'philhealth' then p.philhealth_no when 'pagibig' then p.pagibig_no else p.tin end) as "govNo",
            o.ee::numeric(14,2)::text as ee, o.er::numeric(14,2)::text as er, o.ec::numeric(14,2)::text as ec,
            (o.ee + o.er + o.ec)::numeric(14,2)::text as total,
            (${agency}::text = any(o.skipped_agencies)) as "notDeducted"
@@ -129,6 +132,58 @@ export async function monthDetail(
     where o.agency = ${agency}
     order by o.store_id, p.display_name, o.payslip_id`);
   return rows as unknown as MonthDetailRow[];
+}
+
+/** The POSTED and VOIDED payments of one agency and month (oldest first), each with its lines. */
+export async function paymentsForMonth(tx: Tx, orgId: string, agency: StatutoryAgency, month: string): Promise<StatutoryPaymentRow[]> {
+  const ids = await tx
+    .select({ id: statutoryPayments.id })
+    .from(statutoryPayments)
+    .where(and(eq(statutoryPayments.orgId, orgId), eq(statutoryPayments.agency, agency), eq(statutoryPayments.month, month)))
+    .orderBy(statutoryPayments.createdAt, statutoryPayments.id);
+  const out: StatutoryPaymentRow[] = [];
+  for (const { id } of ids) {
+    const p = await getById(tx, orgId, id);
+    if (p) out.push(p);
+  }
+  return out;
+}
+
+export interface StatutoryEmployerRow {
+  agency: StatutoryAgency;
+  employerNo: string | null;
+  dueDay: number;
+}
+
+/** Every employer number / due day on file for the organization (at most one row per agency). */
+export async function listEmployers(tx: Tx, orgId: string): Promise<StatutoryEmployerRow[]> {
+  return tx
+    .select({ agency: statutoryEmployers.agency, employerNo: statutoryEmployers.employerNo, dueDay: statutoryEmployers.dueDay })
+    .from(statutoryEmployers)
+    .where(eq(statutoryEmployers.orgId, orgId))
+    .orderBy(statutoryEmployers.agency);
+}
+
+/** The row for one agency, locked for the change that follows. Null = none yet. */
+export async function lockEmployer(tx: Tx, orgId: string, agency: StatutoryAgency): Promise<StatutoryEmployerRow | null> {
+  const rows = await tx.execute(sql`
+    select agency, employer_no as "employerNo", due_day as "dueDay" from statutory_employers
+    where org_id = ${orgId} and agency = ${agency} for update`);
+  return ((rows as unknown as StatutoryEmployerRow[])[0] ?? null) as StatutoryEmployerRow | null;
+}
+
+/** Inserts the (organization, agency) row, or updates its number and due day in place (stamping who and when). */
+export async function upsertEmployer(
+  tx: Tx,
+  input: { orgId: string; agency: StatutoryAgency; employerNo: string | null; dueDay: number; actorId: string },
+): Promise<string> {
+  const rows = await tx.execute(sql`
+    insert into statutory_employers (org_id, agency, employer_no, due_day, created_by)
+    values (${input.orgId}, ${input.agency}, ${input.employerNo}, ${input.dueDay}, ${input.actorId})
+    on conflict (org_id, agency) do update
+      set employer_no = excluded.employer_no, due_day = excluded.due_day, updated_by = ${input.actorId}, updated_at = now()
+    returning id::text as id`);
+  return (rows as unknown as { id: string }[])[0]!.id;
 }
 
 /** ALL-TIME: outstanding (owed - paid over every month) next to the ledger's 22x0 balance (credit - debit, non-draft entries) per agency and store. */

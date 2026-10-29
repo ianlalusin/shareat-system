@@ -360,6 +360,12 @@
     "headerless": 0
   },
   {
+    "file": "apps/erp/src/app/payroll/statutory-payments/month/page.tsx",
+    "tables": 0,
+    "sharedTables": 2,
+    "headerless": 0
+  },
+  {
     "file": "apps/erp/src/app/payroll/statutory-payments/page.tsx",
     "tables": 0,
     "sharedTables": 1,

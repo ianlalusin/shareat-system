@@ -132,6 +132,10 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-193 S3: recording (and, S4, voiding) a payment to SSS / PhilHealth / Pag-IBIG / BIR. Org-scoped, admin-readable; payloads carry agency, month, receipt no. and amounts, never a government number.
   def('statutory_payment.record', 'money', 'high', 'org', 'statutory_payments', 'T-193', ADMIN),
   def('statutory_payment.void', 'money', 'high', 'org', 'statutory_payments', 'T-193', ADMIN),
+  // T-193 S6: one row per month-detail CSV download (personal data leaves the system). Payload: agency, month, row count - never a government number.
+  def('statutory_payment.export', 'security', 'normal', 'org', 'statutory_payments', 'T-193', ADMIN),
+  // T-193 S6: an employer number or due day was set or changed on /payroll/rates. Org-scoped, admin-readable; before/after carry the old and new number and due day.
+  def('statutory_employer.change', 'money', 'high', 'org', 'statutory_employers', 'T-193', ADMIN),
   def('create_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('update_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('reactivate_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),

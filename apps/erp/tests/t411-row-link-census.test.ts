@@ -52,6 +52,7 @@ const ROW_LINK: readonly string[] = [
   'app/trade/orders/[id]/page.tsx',
   'app/trade/orders/page.tsx',
   'app/wastage/page.tsx',
+  'app/payroll/statutory-payments/month/page.tsx', // T-193 S6: payment rows link to the payment page
 ];
 
 /** Tables with no row destination: reports, editing grids, read-only detail lines. Untouched by T-411. */

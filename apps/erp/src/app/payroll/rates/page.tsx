@@ -12,8 +12,9 @@ import {
   discardMinimumWageAction,
   discardStatutoryRateAction,
   discardWithholdingBracketSetAction,
+  saveStatutoryEmployerAction,
 } from './actions';
-import { listStores, ratesView } from './lib';
+import { employersView, listStores, ratesView } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Button, CardGrid, Field, FlashBanner, FormGrid, FormModal, FormSection, HelpTip, Input, Select } from '@/components/ui';
@@ -22,6 +23,12 @@ export const metadata = { title: 'Payroll rates — Shareat System' };
 export const dynamic = 'force-dynamic';
 
 const AGENCY_NAME = { sss: 'SSS', philhealth: 'PhilHealth', pagibig: 'Pag-IBIG' } as const;
+const EMPLOYER_AGENCIES = [
+  { value: 'sss', label: 'SSS' },
+  { value: 'philhealth', label: 'PhilHealth' },
+  { value: 'pagibig', label: 'Pag-IBIG' },
+  { value: 'bir', label: 'BIR' },
+] as const;
 const FREQUENCY_NAME = { monthly: 'Monthly', semi_monthly: 'Semi-monthly', weekly: 'Weekly' } as const;
 
 /**
@@ -35,7 +42,7 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
   const sp = await withFlash(searchParams);
   const { actor, refusal } = await requirePageAccess('/payroll/rates');
   if (refusal) return refusal;
-  const [view, stores] = await Promise.all([ratesView(actor.orgId), listStores(actor.orgId)]);
+  const [view, stores, employerView] = await Promise.all([ratesView(actor.orgId), listStores(actor.orgId), employersView(actor.orgId)]);
 
   return (
     <Page density="table" className="space-y-6">
@@ -357,6 +364,48 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
         )}
       </section>
       </CardGrid>
+
+      <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <div className="flex items-center gap-1">
+          <h2 className="text-sm font-medium">Employer numbers</h2>
+          <HelpTip label="Employer numbers">
+            The company&rsquo;s own number at each agency, and the day of the FOLLOWING month the payment is due. A payment to an agency is
+            refused until its employer number is on file. BIR has no employer number: it uses the company TIN.
+          </HelpTip>
+        </div>
+        <ul className="space-y-2 text-sm">
+          {EMPLOYER_AGENCIES.map((a) => {
+            const row = employerView.employers.find((e) => e.agency === a.value);
+            return (
+              <li key={a.value} className="flex flex-wrap items-end gap-x-4 gap-y-2 border-t border-neutral-200 pt-2 dark:border-neutral-800">
+                <div className="min-w-24">
+                  <span className="font-medium">{a.label}</span>
+                  <div className="font-mono text-xs text-neutral-500">
+                    {a.value === 'bir' ? (employerView.tin ? `TIN ${employerView.tin}` : 'No TIN on file') : (row?.employerNo ?? 'No number yet')}
+                    {' · '}
+                    {row ? `due day ${row.dueDay}` : 'no due day yet'}
+                  </div>
+                </div>
+                <form action={saveStatutoryEmployerAction} className="flex flex-wrap items-end gap-3">
+                  <input type="hidden" name="agency" value={a.value} />
+                  {a.value !== 'bir' && (
+                    <Field label="Employer number" width="name">
+                      <Input name="employerNo" defaultValue={row?.employerNo ?? ''} className="w-full" />
+                    </Field>
+                  )}
+                  {a.value === 'bir' && <input type="hidden" name="employerNo" value="" />}
+                  <Field label="Due day (1-31)" width="code">
+                    <Input name="dueDay" defaultValue={row ? String(row.dueDay) : ''} className="w-full" />
+                  </Field>
+                  <Button type="submit" variant="secondary">
+                    Save
+                  </Button>
+                </form>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
     </Page>
   );
 }

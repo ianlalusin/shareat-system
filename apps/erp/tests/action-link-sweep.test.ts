@@ -485,8 +485,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1405 -> 1414, T-398 S5d: inbound list + receipt form, re-measured.
     // 1414 -> 1415, T-398 S5e: one new control (the credit-note action on the order page), re-measured by runCensus().
     // Merge of T-398 S5 with main 26605d1 (T-448 A3): re-measured by runCensus() = 1413 (1401 + S5 +12).
-    // 1413 -> 1434, T-193 S5: the statutory-payments list, record form and payment page, re-measured by runCensus() after the builder's last change.
-    expect(results.length).toBe(1434);
+    // 1434 -> 1440, T-193 S6: month detail, its CSV link, and the employer-number forms, re-measured by runCensus().
+    expect(results.length).toBe(1440);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
