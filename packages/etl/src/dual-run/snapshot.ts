@@ -50,11 +50,10 @@ export interface V1Snapshot {
   receipts?: SnapshotReceipt[];
 }
 
-/** The four operating v1 stores. Anything not here or in EXCLUDED is refused, never skipped. */
+/** The three operating v1 stores. Anything not here or in EXCLUDED is refused, never skipped. */
 const OPERATING: Record<string, string> = {
   b9DzsnPbr1BUnY88lyT4: 'SharEat Lipa',
   dZUyvX4q824JBSVDAfE9: 'SharEat Malvar',
-  iGOW7q2pZbeHWV832UNh: 'SharEat Banay-Banay',
   eVYKj6wABdakk8RgEotW: 'SharEat Davao',
 };
 /** Named exclusions: Padre Garcia is not part of the dual run; the test stores are not trading. */
@@ -62,6 +61,7 @@ const EXCLUDED: Record<string, string> = {
   y1DMgfisuTHBF57cNL6i: 'not operating yet',
   XbkyEgZqunmj2wzhicNf: 'test store',
   TEST: 'test store',
+  iGOW7q2pZbeHWV832UNh: 'closing 31 Dec 2026; dropped from v2 (bible rows 377, 384)',
 };
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v));
