@@ -16,6 +16,7 @@ import { withOrgPrincipal } from '../../expenses/lib';
 import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash, type Nav } from '@/lib/flash';
 import { verifyAdminApproval } from '@shareat/auth';
+import { refuse } from '@shareat/db';
 import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
 function str(fd: FormData, key: string): string {
@@ -45,8 +46,11 @@ export async function recordReturnAction(fd: FormData): Promise<void> {
   const keep: Nav = store ? { store } : {};
   let result: Awaited<ReturnType<typeof recordCustomerReturn>>;
   try {
-    result = await withOrgPrincipal(actor.orgId, (tx) =>
-      recordCustomerReturn(tx, {
+    // T-499 (DEF-798): `withOrgPrincipal` COMMITS on a returned value and rolls back only on a throw, so a refused return
+    // (`{ ok: false }`) is thrown INSIDE the callback - nothing the domain did before refusing is ever committed. The
+    // catch below shows the same plain sentence the refusal carried.
+    result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      const outcome = await recordCustomerReturn(tx, {
         tradeOrderId,
         returnedOn: toBusinessDate(),
         reason,
@@ -54,12 +58,13 @@ export async function recordReturnAction(fd: FormData): Promise<void> {
         refund,
         moneyAccountId,
         actor,
-      }),
-    );
+      });
+      if (!outcome.ok) throw refuse(`recordReturnAction: ${outcome.reason}`, outcome.reason);
+      return outcome;
+    });
   } catch (err) {
     return await redirectWithFlash('/trade/returns', keep, { error: errorMessage(err) });
   }
-  if (!result.ok) return await redirectWithFlash('/trade/returns', keep, { error: errorMessage(new Error(result.reason)) });
 
   revalidatePath('/trade/returns');
   return await redirectWithFlash('/trade/returns', keep, { ok: RETURN_OK[result.settlement] ?? 'Return recorded.' });
