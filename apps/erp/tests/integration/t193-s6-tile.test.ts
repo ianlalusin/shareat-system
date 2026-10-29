@@ -194,3 +194,15 @@ describe('T-193 S6 - an agency with money outstanding and no due day on file (ki
     expect(plain(await render(dashboard, w.admin))).not.toMatch(/No due day set/);
   });
 });
+
+describe('T-193 S6 - one peso sign on the dashboard tile (kills: value pre-formatted AND the card adds its own currency sign)', () => {
+  it('the rendered dashboard has no doubled peso sign and shows the total with exactly one', async () => {
+    const w = await mkWorld(sql, 's6tilepeso');
+    const peso = String.fromCharCode(0x20b1);
+    const t = plain(await render(dashboard, w.admin));
+    expect(t.includes(peso + peso), 'no doubled peso sign anywhere on the dashboard').toBe(false);
+    const hits = t.match(new RegExp(`${peso}?8,925\.50`, 'g')) ?? [];
+    expect(hits.length, 'the total is on the tile').toBeGreaterThan(0);
+    expect(hits.every((h) => h === `${peso}8,925.50`), `exactly one peso sign before the total (got ${hits.join(' | ')})`).toBe(true);
+  });
+});

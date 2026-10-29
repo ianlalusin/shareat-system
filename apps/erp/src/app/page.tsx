@@ -1,6 +1,6 @@
 import { getApAgingReport, getArAgingReport, getBalanceSheet, getIncomeStatement, getSalesRollup, usageCheckScorecard } from '@shareat/domain';
 import { attendanceDaysRepo, cashRequestsRepo, commissaryKpisRepo, lowStockRepo } from '@shareat/db';
-import { add, compare, formatMoney, isZero, money, negate, subtract, ZERO } from '@shareat/core/money';
+import { add, compare, isZero, money, negate, subtract, ZERO } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 import Link from 'next/link';
 import { reportScope, runReport } from './reports/lib';
@@ -318,8 +318,8 @@ export default async function DashboardPage({
             </div>
             <MetricStrip label="Government payments owed" columns={4}>
               {[
-                { label: 'Owed to government', value: formatMoney(money(govTile.totalOutstanding)), note: 'not yet paid', href: '/payroll/statutory-payments' },
-                { label: 'Overdue', value: formatMoney(money(govTile.totalOverdue)), note: 'past the due date', href: '/payroll/statutory-payments' },
+                { label: 'Owed to government', value: `₱${fmtNum(govTile.totalOutstanding)}`, currency: false, note: 'not yet paid', href: '/payroll/statutory-payments' },
+                { label: 'Overdue', value: `₱${fmtNum(govTile.totalOverdue)}`, currency: false, note: 'past the due date', href: '/payroll/statutory-payments' },
                 {
                   label: 'Oldest unpaid month',
                   value: govTile.oldestUnpaidMonth ? monthWords(govTile.oldestUnpaidMonth) : 'None',
