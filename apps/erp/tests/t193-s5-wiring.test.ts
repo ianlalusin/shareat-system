@@ -97,6 +97,6 @@ describe('W6 constraint messages', () => {
     expect(code).toContain('statutory_payments_posted_reference_unique');
     // the two trigger names of 0222 (the history guard and the line-freeze trigger)
     expect(code).toContain('statutory_payments_history_guard');
-    expect(code).toContain('statutory_payment_lines_parent_open_trg');
+    expect(code).toContain('statutory_payment_lines_parent_open');
   });
 });
