@@ -18,6 +18,7 @@ import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
 import type { SafeInsert } from './numeric-input';
 import { recordGone } from './record-gone';
+import { refuse } from '../refusal';
 import { accounts } from '../../schema/accounts';
 import { stores } from '../../schema/stores';
 import { journalEntries, journalLines } from '../../schema/journal';
@@ -162,20 +163,54 @@ export async function getById(
 }
 
 /**
- * T-501 (DEF-802) - lock one money account row (`SELECT ... FOR NO KEY UPDATE`, org-scoped: a row lock that excludes other draws but not FK key-share inserts) until the caller's transaction ends,
- * so a second draw on the same account waits, then reads a balance that includes the first draw's posting.
+ * T-501 (DEF-802) - lock what a draw's balance reads, then return the account row re-read UNDER the lock.
+ *
+ * `balanceOf` sums a BALANCE SCOPE: (org, store, GL code) for 1110/1120/1130 - so two safes in one store share one pool -
+ * and the account itself for 1140. The lock covers that scope: every money-account row in it, taken in ascending id order,
+ * `FOR NO KEY UPDATE` (excludes other draws, but not FK key-share inserts naming an account, e.g. a transfer's
+ * destination, which would otherwise deadlock A->B against B->A). Held to the end of the caller's transaction.
+ * A missing or other-org row refuses in words (never a silent no-lock).
+ *
+ * DEVIATION from spec A2 (flagged): row locks, not `pg_advisory_xact_lock`. Same effect (one pool, one holder), no hash
+ * collisions, and t369-s1's positive control ("a different payee must never block B") counts ADVISORY waits as payee
+ * contention, so a second advisory lock would have misreported ordinary same-account draws as payee serialisation.
  */
-export async function lockForDraw(tx: Tx, orgId: string, accountId: string): Promise<void> {
-  await tx
-    .select({ id: moneyAccounts.id })
+const scopeKey = (orgId: string, a: { id: string; glAccountCode: string; storeId: string }) =>
+  a.glAccountCode === '1140' ? `${orgId}|acct|${a.id}` : `${orgId}|${a.storeId}|${a.glAccountCode}`;
+
+const noAccount = () =>
+  refuse('lockForDraw: money account missing or in another org', 'This money account no longer exists. Reload the page and try again.');
+
+export async function lockForDraw(tx: Tx, orgId: string, accountId: string): Promise<MoneyAccountRow> {
+  const first = await getById(tx, orgId, accountId);
+  if (!first) throw noAccount();
+  const scope =
+    first.glAccountCode === '1140'
+      ? eq(moneyAccounts.id, accountId)
+      : and(eq(moneyAccounts.storeId, first.storeId), eq(moneyAccounts.glAccountCode, first.glAccountCode));
+  const rows = await tx
+    .select(COLUMNS)
     .from(moneyAccounts)
-    .where(and(eq(moneyAccounts.id, accountId), eq(moneyAccounts.orgId, orgId)))
-    .for('no key update'); // not FOR UPDATE: FK inserts naming this account (a transfer's destination) take KEY SHARE and must not queue behind it (deadlock A->B vs B->A)
+    .where(and(eq(moneyAccounts.orgId, orgId), scope))
+    .orderBy(asc(moneyAccounts.id))
+    .for('no key update');
+  const mine = rows.find((r) => r.id === accountId);
+  if (!mine) throw noAccount();
+  return mine as MoneyAccountRow;
 }
 
-/** Locks several accounts in ASCENDING id order, so two transactions drawing the same pair cannot deadlock. */
-export async function lockForDraws(tx: Tx, orgId: string, ids: readonly string[]): Promise<void> {
-  for (const id of [...new Set(ids)].sort()) await lockForDraw(tx, orgId, id);
+/** Locks several accounts ordered by balance scope (then id), so two transactions drawing the same set cannot deadlock. */
+export async function lockForDraws(tx: Tx, orgId: string, ids: readonly string[]): Promise<Map<string, MoneyAccountRow>> {
+  const keyed: { id: string; k: string }[] = [];
+  for (const id of new Set(ids)) {
+    const row = await getById(tx, orgId, id);
+    if (!row) throw noAccount();
+    keyed.push({ id, k: scopeKey(orgId, row) });
+  }
+  keyed.sort((x, y) => x.k.localeCompare(y.k) || x.id.localeCompare(y.id));
+  const out = new Map<string, MoneyAccountRow>();
+  for (const { id } of keyed) out.set(id, await lockForDraw(tx, orgId, id));
+  return out;
 }
 
 export interface ListMoneyAccountsFilter {

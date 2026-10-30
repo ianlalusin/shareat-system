@@ -52,9 +52,9 @@ export async function checkDraw(
   context: string,
 ): Promise<string | null> {
   // T-501: lock the account row FIRST, so a concurrent draw waits and then reads a balance that includes ours.
-  await moneyAccountsRepo.lockForDraw(tx, orgId, account.id);
-  const available = money(await moneyAccountsRepo.balanceOf(tx, orgId, account));
-  const verdict = judgeDraw(account, available, drawn);
+  const locked = await moneyAccountsRepo.lockForDraw(tx, orgId, account.id);
+  const available = money(await moneyAccountsRepo.balanceOf(tx, orgId, locked));
+  const verdict = judgeDraw(locked, available, drawn);
   if (verdict.blocked) throw refuse(`${context}: ${verdict.message}`, verdict.message ?? 'That account cannot cover this amount.');
   return verdict.message ?? null;
 }

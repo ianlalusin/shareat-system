@@ -3,11 +3,12 @@ import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
-import { closeDb, transaction, APP_ROLE, RefusalError, type Tx } from '@shareat/db';
+import { closeDb, moneyAccountsRepo, transaction, APP_ROLE, RefusalError, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { money } from '@shareat/core/money';
-import { createMoneyTransfer } from '@shareat/domain';
-import { judgeDraw } from '../../src/money-accounts/overdraft';
+import { approveExpense, createExpense, createMoneyTransfer } from '@shareat/domain';
+import { seedExpenseCategories } from '../../../db/seed/expense-categories';
+import { checkDraw, judgeDraw } from '../../src/money-accounts/overdraft';
 
 /**
  * T-501 (DEF-802) - TESTER. docs/tasks/501-def802-draw-lock.md section 3.
@@ -113,14 +114,14 @@ const settle = <T>(p: Promise<T>): Promise<Settled<T>> =>
  * A third connection watches B's backend: with a row lock it is seen WAITING (wait_event_type Lock); without one B runs straight past.
  * Only then is A released to commit. Not a bare Promise.all race: B's read of the balance happens while A is uncommitted, always.
  */
-async function raceTwoDraws(f: Fx, from: string, to: string, amount: string) {
+async function raceTwoOps<T>(f: Fx, opA: (tx: Tx) => Promise<T>, opB: (tx: Tx) => Promise<T>) {
   const aReady = deferred<void>();
   const gate = deferred<void>();
   const bPid = deferred<number>();
 
   const a = settle(asOrg(f.orgId, async (tx) => {
     try {
-      const v = await draw(f, tx, from, to, amount);
+      const v = await opA(tx);
       aReady.resolve();
       await gate.promise;
       return v;
@@ -134,7 +135,7 @@ async function raceTwoDraws(f: Fx, from: string, to: string, amount: string) {
   const b = settle(asOrg(f.orgId, async (tx) => {
     const rows = await tx.execute(dsql`select pg_backend_pid() as pid`);
     bPid.resolve(Number((rows as unknown as { pid: number }[])[0]?.pid));
-    return draw(f, tx, from, to, amount);
+    return opB(tx);
   }));
 
   let bDoneFlag = false;
@@ -151,6 +152,9 @@ async function raceTwoDraws(f: Fx, from: string, to: string, amount: string) {
   const results = await Promise.all([a, b]);
   return { results, bWaited };
 }
+
+const raceTwoDraws = (f: Fx, from: string, to: string, amount: string, fromB: string = from) =>
+  raceTwoOps(f, (tx) => draw(f, tx, from, to, amount), (tx) => draw(f, tx, fromB, to, amount));
 
 describe('T-501 draw lock (DEF-802)', () => {
   // D1 - kills: checkDraw keeps `throw new Error(`${context}: ${message}`)` (a plain Error, developer text, outside the refusal plumbing).
@@ -212,5 +216,89 @@ describe('T-501 draw lock (DEF-802)', () => {
       settle(asOrg(f.orgId, (tx) => draw(f, tx, f.drawer.id, f.safe.id, '100.00'))),
     ]);
     expect([x.status, y.status]).toEqual(['fulfilled', 'fulfilled']);
+  });
+
+  // ----------------------------------------------------------------------------------------- audit round (spec section 7)
+
+  /** A verified invoice + a draft expense paying `amount` out of `accountId`; created and approved as the org's admin. */
+  async function draftExpense(f: Fx, amount: string, accountId: string): Promise<string> {
+    await seedExpenseCategories(sql, f.orgId);
+    const [cat] = await sql<{ id: string }[]>`select id from expense_categories where org_id = ${f.orgId} and category = 'Cost of Goods Sold — General'`;
+    const [ver] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${f.orgId}, 'Verifier') returning id`;
+    const [sup] = await sql<{ id: string }[]>`insert into suppliers (org_id, name, created_by) values (${f.orgId}, ${uid('sup')}, ${f.admin.personId}) returning id`;
+    const [file] = await sql<{ id: string }[]>`
+      insert into stored_files (org_id, store_id, purpose, storage_path, content_type, byte_size, checksum, uploaded_by)
+      values (${f.orgId}, ${f.storeId}, 'receipt_photo', ${`orgs/${f.orgId}/stores/${f.storeId}/receipt_photo/${uid('f')}.jpg`}, 'image/jpeg', 1024, ${uid('sum')}, ${f.admin.personId})
+      returning id`;
+    const [inv] = await sql<{ id: string }[]>`
+      insert into supplier_invoices (org_id, store_id, supplier_id, invoice_date, total_amount, status, receipt_file_id, verified_by, verified_at, created_by,
+        attested_supplier, attested_invoice, attested_items, attested_price)
+      values (${f.orgId}, ${f.storeId}, ${sup!.id}, '2026-01-01', '99999999.00', 'verified', ${file!.id}, ${ver!.id}, now(), ${f.admin.personId}, true, true, true, true)
+      returning id`;
+    const made = await asOrg(f.orgId, (tx) =>
+      createExpense(tx, f.admin, {
+        storeId: f.storeId, supplierId: sup!.id, supplierInvoiceId: inv!.id, businessDate: '2026-01-15', categoryId: cat!.id,
+        particulars: 'T-501 draw', payments: [{ method: 'cash', amount, moneyAccountId: accountId }],
+      }),
+    );
+    return made.id;
+  }
+
+  // D6 - kills: approveExpense reading balanceOf + judgeDraw WITHOUT locking the account it draws from (A1).
+  it('D6: two approveExpense calls on one 1,000 office safe, 700 each - one posts, one is refused, balance ends 300', async () => {
+    const f = await fixture('d6');
+    await postCash(f, '1130', '1000.00');
+    const e1 = await draftExpense(f, '700.00', f.safe.id);
+    const e2 = await draftExpense(f, '700.00', f.safe.id);
+    const { results, bWaited } = await raceTwoOps(f, (tx) => approveExpense(tx, f.admin, e1), (tx) => approveExpense(tx, f.admin, e2));
+
+    const bad = results.filter((r): r is Extract<typeof r, { status: 'rejected' }> => r.status === 'rejected');
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(bad).toHaveLength(1);
+    expect(bad[0]!.reason).toBeInstanceOf(RefusalError);
+    expect(await ledgerBalance(f, '1130')).toBe(300);
+    expect(bWaited).toBe(true);
+  });
+
+  // D7 - kills: a lock on the account ROW only. balanceOf sums (GL code, store), so two 1130 safes in one store share ONE pool (A2).
+  it('D7: two office safes in the same store pooling 1,000 - 700 from each at once - one is refused', async () => {
+    const f = await fixture('d7');
+    const [safe2] = await sql<{ id: string }[]>`
+      insert into money_accounts (org_id, store_id, name, instrument, gl_account_code, custodian)
+      values (${f.orgId}, ${f.storeId}, 'Second safe', 'cash', '1130', 'office') returning id`;
+    await postCash(f, '1130', '1000.00');
+    const { results, bWaited } = await raceTwoDraws(f, f.safe.id, f.drawer.id, '700.00', safe2!.id);
+
+    const bad = results.filter((r): r is Extract<typeof r, { status: 'rejected' }> => r.status === 'rejected');
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(bad).toHaveLength(1);
+    expect(bad[0]!.reason).toBeInstanceOf(RefusalError);
+    expect(await ledgerBalance(f, '1130')).toBe(300);
+    expect(bWaited).toBe(true);
+  });
+
+  // D8 - kills: lockForDraw returning silently (no lock, no error) when the row is missing or belongs to another org (A3).
+  it('D8: lockForDraw on a missing or other-org account id refuses "no longer exists"', async () => {
+    const f = await fixture('d8');
+    const other = await fixture('d8b');
+    for (const id of ['00000000-0000-4000-8000-000000000501', other.safe.id]) {
+      const err = await asOrg(f.orgId, (tx) => moneyAccountsRepo.lockForDraw(tx, f.orgId, id)).then(() => null, (e: unknown) => e);
+      expect(err).toBeInstanceOf(RefusalError);
+      expect((err as RefusalError).userMessage).toMatch(/no longer exists/);
+    }
+  });
+
+  // A4 - kills: checkDraw judging the caller's stale MoneyAccountRow instead of the row re-read under the lock.
+  it('A4: overdraft_limit lowered (committed) after the caller loaded the row - checkDraw judges the re-read limit', async () => {
+    const f = await fixture('a4');
+    await postCash(f, '1110', '1000.00'); // drawer holds 1,000; limit 20,000, so a 5,000 draw is only a warning ...
+    const err = await asOrg(f.orgId, async (tx) => {
+      const stale = await moneyAccountsRepo.getById(tx, f.orgId, f.drawer.id);
+      expect(stale!.overdraftLimit).toBe('20000.00');
+      await sql`update money_accounts set overdraft_limit = '100.00' where id = ${f.drawer.id}`; // ... until another transaction commits a 100 limit.
+      return checkDraw(tx, f.orgId, stale!, money('5000.00'), 'a4');
+    }).then(() => null, (e: unknown) => e);
+    expect(err).toBeInstanceOf(RefusalError);
+    expect((err as RefusalError).userMessage).toMatch(/past the/);
   });
 });

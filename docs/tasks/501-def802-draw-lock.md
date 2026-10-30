@@ -69,3 +69,6 @@ D1-D5 red→green, every existing test of the 12 callers green, throw ratchet do
   silent no-lock. Test **D8**.
 - **A4 (low).** `lockForDraw` returns the row re-read under the lock, and `checkDraw` judges that row, not the caller's
   stale copy (overdraft limit changed mid-draw).
+- **A2 as built (ruling 30 Oct):** no advisory lock. `lockForDraw` row-locks (`FOR NO KEY UPDATE`, ascending id) every
+  `money_accounts` row in the balance scope ((org, store, GL code); the account alone for 1140). Same serialisation,
+  no hash collisions, and it keeps t369-s1's "two payees never contend on an advisory lock" control true. Accepted.
