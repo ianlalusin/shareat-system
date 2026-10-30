@@ -55,3 +55,17 @@ D1-D5 red→green, every existing test of the 12 callers green, throw ratchet do
   serialises every draw on the same account (D2, D3). Accepted.
 - All 12 callers draw from one account; `lockForDraws` exists for the next caller that draws two.
 - Throw ratchet for `packages/domain/src/money-accounts`: 9 → 7 (measured).
+
+## 7. Audit round (Sonnet audit of 53f887d, orchestrator rulings 30 Oct) — these bind
+- **A1 (high).** `approveExpense` (`expenses/approve.ts`) draws money without `checkDraw`: it calls `balanceOf` +
+  `judgeDraw` itself. It must lock every account it draws from, through `lockForDraws`, before its balance loop, on the
+  path that posts. Test **D6**: two approvals on one ₱1,000 safe, ₱700 each → one refused, balance 300.
+- **A2 (medium).** The lock must cover what `balanceOf` sums. For a non-1140 account that is (org, GL code, store),
+  not the account row, and one store may hold two 1130 safes. `lockForDraw` therefore ALSO takes
+  `pg_advisory_xact_lock` on a stable key of the balance scope ((org, store, GL code) for non-1140; the account id for
+  1140), and `lockForDraws` orders by that key. Test **D7**: two safes in one store, ₱1,000 pooled, ₱700 drawn from each
+  at once → one refused.
+- **A3 (low).** `lockForDraw` on a missing or other-org row refuses ("This money account no longer exists"), never a
+  silent no-lock. Test **D8**.
+- **A4 (low).** `lockForDraw` returns the row re-read under the lock, and `checkDraw` judges that row, not the caller's
+  stale copy (overdraft limit changed mid-draw).
