@@ -25,6 +25,7 @@
     "capture": "tsx scripts/capture.ts",
     "master-data": "tsx scripts/master-data.ts",
     "dual-run": "tsx scripts/dual-run.ts",
+    "v1-expense-export": "tsx scripts/v1-expense-export.ts",
     "db:generate": "npm run db:generate -w @shareat/db",
     "db:migrate": "npm run db:migrate -w @shareat/db",
     "provision-test-role": "node scripts/provision-test-role.mjs",
