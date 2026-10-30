@@ -1,10 +1,9 @@
-import { PAYROLL_BRACKET_SET_RULES, PAYROLL_MIN_WAGE_RULES, PAYROLL_STATUTORY_RATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { PAYROLL_BRACKET_SET_RULES, PAYROLL_MIN_WAGE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { CheckedForm } from '@/components/forms';
 import { requirePageAccess } from '../../../lib/page-access';
 import { withFlash } from '../../../lib/flash';
 import {
   addMinimumWageAction,
-  addStatutoryRateAction,
   addWithholdingBracketSetAction,
   confirmMinimumWageAction,
   confirmStatutoryRateAction,
@@ -15,6 +14,8 @@ import {
   saveStatutoryEmployerAction,
 } from './actions';
 import { employersView, listStores, ratesView } from './lib';
+import { EMPLOYER_NO_HINT, rateSummary } from './rate-fields';
+import { StatutoryRateForm } from './StatutoryRateForm';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Button, CardGrid, Field, FlashBanner, FormGrid, FormModal, FormSection, HelpTip, Input, Select } from '@/components/ui';
@@ -64,131 +65,21 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-medium">Contributions (SSS, PhilHealth, Pag-IBIG)</h2>
           <FormModal trigger="+ Add row" triggerVariant="secondary" triggerLabel="Add a contribution row" title="Add a contribution row" size="lg">
-            <CheckedForm rules={PAYROLL_STATUTORY_RATE_RULES} action={addStatutoryRateAction}>
-            <>
-              <FormSection title="Agency and effective date">
-                <FormGrid layout="fields">
-                  <div className="min-w-0 erp-field-code">
-                    <Field label="Agency">
-                      <Select name="agency" defaultValue="sss">
-                        <option value="sss">SSS</option>
-                        <option value="philhealth">PhilHealth</option>
-                        <option value="pagibig">Pag-IBIG</option>
-                      </Select>
-                    </Field>
-                  </div>
-                  <div className="min-w-0 erp-field-date">
-                    <Field label="Effective from" hint="The 1st of a month" rule={PAYROLL_STATUTORY_RATE_RULES.effectiveFrom}>
-                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.effectiveFrom)} placeholder="2026-07-01" className="w-full" />
-                    </Field>
-                  </div>
-                  <div className="min-w-0 erp-field-code">
-                    <Field label="Counted on">
-                      <Select name="baseKind" defaultValue="basic">
-                        <option value="basic">Basic pay</option>
-                        <option value="gross">Gross pay</option>
-                      </Select>
-                    </Field>
-                  </div>
-                </FormGrid>
-              </FormSection>
-              <FormSection title="Contribution rates">
-                <FormGrid layout="fields">
-                  <div className="min-w-0 erp-field-code">
-                    <Field label="Employee rate" hint="0.05 is 5%" rule={PAYROLL_STATUTORY_RATE_RULES.eeRate}>
-                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.eeRate)} className="w-full" />
-                    </Field>
-                  </div>
-                  <div className="min-w-0 erp-field-code">
-                    <Field label="Employer rate" rule={PAYROLL_STATUTORY_RATE_RULES.erRate}>
-                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.erRate)} className="w-full" />
-                    </Field>
-                  </div>
-                </FormGrid>
-              </FormSection>
-              <FormSection title="Pay bands">
-                <FormGrid layout="fields">
-                  <div className="min-w-0 erp-field-code">
-                    <Field label="Floor" hint="Lowest pay it counts" rule={PAYROLL_STATUTORY_RATE_RULES.floor}>
-                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.floor)} className="w-full" />
-                    </Field>
-                  </div>
-                  <div className="min-w-0 erp-field-code">
-                    <Field label="Ceiling" hint="Highest pay it counts" rule={PAYROLL_STATUTORY_RATE_RULES.ceiling}>
-                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.ceiling)} className="w-full" />
-                    </Field>
-                  </div>
-                  <div className="min-w-0 erp-field-code">
-                    <Field label="Step" hint="SSS rounds pay to this" rule={PAYROLL_STATUTORY_RATE_RULES.step}>
-                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.step)} className="w-full" />
-                    </Field>
-                  </div>
-                </FormGrid>
-              </FormSection>
-              <FormSection title="Pag-IBIG low band">
-                <FormGrid layout="fields">
-                  <div className="min-w-0 erp-field-code">
-                    <Field label="Low band: pay up to" hint="Pag-IBIG" rule={PAYROLL_STATUTORY_RATE_RULES.lowThreshold}>
-                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.lowThreshold)} className="w-full" />
-                    </Field>
-                  </div>
-                  <div className="min-w-0 erp-field-code">
-                    <Field label="Low band: employee rate" rule={PAYROLL_STATUTORY_RATE_RULES.lowEeRate}>
-                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.lowEeRate)} className="w-full" />
-                    </Field>
-                  </div>
-                </FormGrid>
-              </FormSection>
-              <FormSection title="Employees’ compensation">
-                <FormGrid layout="fields">
-                  <div className="min-w-0 erp-field-code">
-                    <Field label="EC: switch point" hint="SSS" rule={PAYROLL_STATUTORY_RATE_RULES.ecThreshold}>
-                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.ecThreshold)} className="w-full" />
-                    </Field>
-                  </div>
-                  <div className="min-w-0 erp-field-code">
-                    <Field label="EC below the switch point" rule={PAYROLL_STATUTORY_RATE_RULES.ecLow}>
-                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.ecLow)} className="w-full" />
-                    </Field>
-                  </div>
-                  <div className="min-w-0 erp-field-code">
-                    <Field label="EC at or above it" rule={PAYROLL_STATUTORY_RATE_RULES.ecHigh}>
-                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.ecHigh)} className="w-full" />
-                    </Field>
-                  </div>
-                </FormGrid>
-              </FormSection>
-              <FormSection title="Source">
-                <FormGrid layout="fields">
-                  <div className="min-w-0 erp-field-long">
-                    <Field label="Where it comes from" hint="Circular or law" span="full" rule={PAYROLL_STATUTORY_RATE_RULES.sourceRef}>
-                      <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.sourceRef)} className="w-full" />
-                    </Field>
-                  </div>
-                  <div className="flex items-end">
-                    <Button type="submit" variant="primary">
-                      Save
-                    </Button>
-                  </div>
-                </FormGrid>
-              </FormSection>
-            </>
-            </CheckedForm>
+            <StatutoryRateForm />
           </FormModal>
         </div>
         {view.rates.length === 0 ? (
-          <p className="text-sm text-neutral-500">No contribution rates yet.</p>
+          <p className="text-sm text-neutral-500">No contribution rates yet. Add one each for SSS, PhilHealth and Pag-IBIG, then approve each one. Payroll cannot post until all three are approved.</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {view.rates.map((r) => (
               <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-neutral-200 pt-2 dark:border-neutral-800">
                 <span className="font-medium">{AGENCY_NAME[r.agency]}</span>
                 <span className="font-mono text-xs">from {r.effectiveFrom}</span>
-                <span className="font-mono text-xs">
-                  employee {r.eeRate} · employer {r.erRate} · on {r.baseKind} pay
-                </span>
-                <span className="font-mono text-xs">
-                  floor {r.floor ?? '-'} · ceiling {r.ceiling ?? '-'}
+                <span className="flex basis-full flex-col font-mono text-xs">
+                  {rateSummary(r).map((line) => (
+                    <span key={line}>{line}</span>
+                  ))}
                 </span>
                 <span className="text-xs text-neutral-500">{r.sourceRef}</span>
                 {r.confirmedAt ? (
@@ -252,7 +143,7 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
           </FormModal>
         </div>
         {view.bracketSets.length === 0 ? (
-          <p className="text-sm text-neutral-500">No withholding tables yet.</p>
+          <p className="text-sm text-neutral-500">No withholding tables yet. Add a withholding table (the BIR brackets) for your pay frequency, then approve it.</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {view.bracketSets.map((b) => (
@@ -329,7 +220,7 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
           </FormModal>
         </div>
         {view.minimumWages.length === 0 ? (
-          <p className="text-sm text-neutral-500">No minimum wages yet.</p>
+          <p className="text-sm text-neutral-500">No minimum wages yet. Add a minimum wage for each store, then approve it.</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {view.minimumWages.map((m) => (
@@ -390,7 +281,8 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
                   <input type="hidden" name="agency" value={a.value} />
                   {a.value !== 'bir' && (
                     <Field label="Employer number" width="name">
-                      <Input name="employerNo" defaultValue={row?.employerNo ?? ''} className="w-full" />
+                      <Input name="employerNo" defaultValue={row?.employerNo ?? ''} placeholder={a.value === 'sss' ? '03-1234567-8' : undefined} className="w-full" />
+                      <span className="mt-1 block text-xs text-muted">{EMPLOYER_NO_HINT[a.value]}</span>
                     </Field>
                   )}
                   {a.value === 'bir' && <input type="hidden" name="employerNo" value="" />}
