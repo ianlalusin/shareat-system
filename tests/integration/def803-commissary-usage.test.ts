@@ -62,6 +62,16 @@ describe('commissaryUsage', () => {
     expect(shown(u)).toEqual([...COMMISSARY_NAV_HREFS].sort());
   });
 
+  it('single-room store with an offering row but no link yet: all three shown - Mutant: offerings ignored (first link impossible)', async () => {
+    const ian = await org();
+    const cm = await ian.store('CM', 'single_room');
+    const [it] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${ian.orgId}, 'OFFR-001', 'Offered', 'raw_material', 'kg', ${ian.adminId}) returning id`;
+    await sql`insert into commissary_item_offerings (org_id, commissary_store_id, item_id, status, created_by) values (${ian.orgId}, ${cm}, ${it!.id}, 'active', ${ian.adminId})`;
+    const u = await usage(ian.orgId);
+    expect(u.hasCommissary).toBe(true);
+    expect(shown(u)).toEqual([...COMMISSARY_NAV_HREFS].sort());
+  });
+
   it('does not read another org links - Mutant: tenant leak', async () => {
     const ian = await org();
     const cm = await ian.store('CM', 'single_room');

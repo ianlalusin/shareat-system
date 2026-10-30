@@ -294,7 +294,8 @@ export async function commissaryUsage(tx: Tx, orgId: string): Promise<{ hasCommi
   const rows = (await tx.execute(sql`
     select
       (exists (select 1 from commissary_links where org_id = ${orgId})
-        or exists (select 1 from stores where org_id = ${orgId} and stock_model = 'multi_room')) as "hasCommissary",
+        or exists (select 1 from stores where org_id = ${orgId} and stock_model = 'multi_room')
+        or exists (select 1 from commissary_item_offerings where org_id = ${orgId})) as "hasCommissary",
       exists (select 1 from commissary_links where org_id = ${orgId}) as "hasBranchLink"
   `)) as unknown as { hasCommissary: boolean; hasBranchLink: boolean }[];
   const r = rows[0];
