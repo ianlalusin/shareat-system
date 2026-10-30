@@ -1,6 +1,6 @@
 # T-455: Customer app lobby: menu, self check-in, booking code, birthday-song request, discount-ID claim
 
-**Status:** 2026-10-25: S1 LIVE (#64, migration 0215, + T-479 party-shrink cap); S2 merged (#66); S3 in PR #70; S4 built on lane/t455-s4 (S4b lobby menu + chips new); S5 POS lobby card next; lobby OFF until S9. Spec 2026-10-24 (Opus planner); switch-on date is Q3 below.
+**Status:** 2026-10-25: S1 LIVE (#64, migration 0215, + T-479 party-shrink cap); S2 merged (#66); S3 in PR #70; S4 merged (#73); S5 POS lobby card merged (#97, merge `5a7bb8d`, with audit fixes `5cc5660`); S6-S9: verify; lobby OFF until S9. Spec 2026-10-24 (Opus planner); switch-on date is Q3 below.
 **Model:** Sonnet tester -> Sonnet builder -> Sonnet auditor per slice (S7/S8 touch personal data: money/PII lane rules).
 **Migration:** one, **0215 (renumbered from 0217 on 25 Oct; 0216 is POS T-472, 0217 is T-475 S3)** by the orchestrator. Hand-authored (ADR-012 §5).
 **Authority:** bible rows 251, 283, 330, 349, 353, 357, 358, 364, 371, 372, 378, 379, 380, 383; ADR-015 (+ amendment

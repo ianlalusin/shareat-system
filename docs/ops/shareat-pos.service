@@ -23,6 +23,9 @@ RestartSec=5
 # ⚠️ NEVER build here. This is a 4 GB droplet shared with the ERP; a build OOMs it. This unit runs an
 # already-installed, already-built tree shipped by CI — bible §2.10.
 Environment=NODE_ENV=production
+# POS v2 settings (POS_FIREBASE_SA_KEY_FILE, DATABASE_URL, POS_ORG_ID): docs/ops/pos2-runbook.md section 2.
+# Without this file every /api/pos2/* route answers 503 "POS server is not configured".
+EnvironmentFile=/srv/shareat-shared/pos2.env
 
 # Risk R6: the POS process must never starve the ERP on a 4 GB box.
 MemoryMax=768M

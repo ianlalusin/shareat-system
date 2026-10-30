@@ -53,6 +53,10 @@ chown -R shareat:shareat /var/lib/shareat-backup
 chmod 700 /var/lib/shareat-backup /var/lib/shareat-backup/tmp
 chown -R shareat:shareat /srv/shareat-releases /srv/shareat-shared /var/log/shareat
 chmod 700 /srv/shareat-shared/secrets
+# POS v2 log (shareat-pos.service appends here; runbook section 4). Idempotent.
+touch /var/log/shareat/pos.log
+chown shareat:shareat /var/log/shareat/pos.log
+chmod 640 /var/log/shareat/pos.log
 
 # The deploy's releases/current-symlink swap creates/replaces /srv/shareat itself, which needs
 # WRITE on the containing directory (/srv), not on shareat-releases or shareat-shared — found the
@@ -83,6 +87,7 @@ SUDOERS_FILE=/etc/sudoers.d/shareat-deploy
 cat > "$SUDOERS_FILE" <<'EOF'
 # T-205 — deploy needs to restart the web process after shipping a release. Nothing else.
 shareat ALL=(root) NOPASSWD: /usr/bin/systemctl restart shareat-erp.service
+shareat ALL=(root) NOPASSWD: /usr/bin/systemctl restart shareat-pos.service
 EOF
 chmod 440 "$SUDOERS_FILE"
 visudo -cf "$SUDOERS_FILE"
@@ -151,6 +156,19 @@ if [ -n "$DOMAIN" ]; then
   cat > /etc/caddy/Caddyfile <<EOF
 $DOMAIN {
   reverse_proxy 127.0.0.1:9008
+}
+EOF
+  # POS v2 (pos2.shareat.net -> 127.0.0.1:9009), runbook section 3. The block above rewrites the whole
+  # Caddyfile on every run and this appends the POS block, so a re-run stays idempotent. Caddy gets its TLS
+  # cert only while DNS for pos2.shareat.net points here (it does: 159.223.46.224).
+  cat >> /etc/caddy/Caddyfile <<EOF
+
+pos2.shareat.net {
+  encode zstd gzip
+  request_body {
+    max_size 1MB
+  }
+  reverse_proxy 127.0.0.1:9009
 }
 EOF
   systemctl reload caddy 2>/dev/null || systemctl restart caddy
