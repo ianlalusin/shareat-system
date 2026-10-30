@@ -433,7 +433,7 @@ either order. **Lipa's run needs S1-S5; S6 is wanted before 17 Oct but does not 
 | 16 Oct | Ian finishes Lipa's held rows. Dry run again, then `--apply`. `readiness --stores LIPA`. **T-390 S4 can price Lipa from this point** |
 | 17 Oct | Lipa's manager issues PINs; Ian grants the manager role from `access-to-grant.csv`; the encoder signs in |
 | 19 Oct | Lipa double entry starts (row 303) |
-| by 31 Oct | Re-extract, then the same for `--stores MLVR,BNBN,DVO` (codes per Q1). The droplet emits the roster skeleton; HR fills it locally, and `validate-hr` reports `N of 126 complete` for the 31 Oct checkpoint (row 302) |
+| by 31 Oct | Re-extract, then the same for `--stores MLVR,DVO` (codes per Q1). The droplet emits the roster skeleton; HR fills it locally, and `validate-hr` reports `N of 126 complete` for the 31 Oct checkpoint (row 302) |
 | 2 Nov | All four double-enter |
 | after T-398 | `--org <Padre Garcia org> --actor <a PG person> --stores <PG code>` |
 
@@ -467,7 +467,7 @@ After each apply, delete the snapshot and sheets from the droplet (they hold nam
 ## Questions for Ian
 
 **Q1. Which v2 store is each v1 store?** The load needs, for each of Lipa, Malvar, Banay-Banay and Davao, the store
-code it has in v2 (`stores.csv`). Is there a commissary store in v2, and does any v1 store's data belong to it?
+code it has in v2 (`stores.csv`). Note: Banay-Banay: `exclude` (row 377, T-454). Is there a commissary store in v2, and does any v1 store's data belong to it?
 - **(a) The four operating stores map to their v2 stores; the commissary has no v1 data to load.** Recommended:
   v1's only commissary is `Test Commissary`, a test store (STORE-ROSTER).
 - (b) A named v1 store feeds the commissary (tell us which).

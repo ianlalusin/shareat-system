@@ -233,6 +233,8 @@ Customer v2 sends **no push**: on-page notices only (A6).
 | Customer v2 | P3 (Q2 2027), moving store by store with POS (row 269) |
 | First-store date | **OPEN** — A8 Q2 |
 
+*Note, 2026-10-30: Banay-Banay dropped, row 377 (T-454). It closes 31 Dec 2026 and is not in this rollout; the pace line above is kept as it was ruled.*
+
 ### A8. Still OPEN for Ian
 
 | # | Question | Recommended | If not answered |

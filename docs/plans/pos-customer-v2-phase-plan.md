@@ -82,7 +82,7 @@ or POS release approval; planner synchronization of historical dates and bible d
 | **M** ERP master lists for the till | Nov - Dec 2026 | T-401 menu (S1-S5 shipped; S6 open), tables, kitchen routing, tablet register | menu loaded for Lipa by 18 Dec |
 | **S** monorepo setup (NEW) | 26 Oct - 6 Nov | `apps/pos`, `apps/customer` workspaces, per-app CI and APK build, per-app deploy (§4) | empty-shell APK installs on a tablet |
 | **P0** copy, fix, harden POS | 9 Nov - 18 Dec build · 14-22 Dec soak · **11 Jan 2027 Lipa live** | v1 screens + redesigned payment/table screens; money, receipts, void, refund, SC/PWD, offline fixes; still on Firebase | 24-h soak: 0 lost, 0 doubled |
-| P0 rollout | 25 Jan Malvar · 1 Feb Banay-Banay · 8 Feb Davao | `rollout-pace` = a (first store 2 weeks, then one a week) | each store 1 week clean |
+| P0 rollout | 25 Jan Malvar · 1 Feb Davao | `rollout-pace` = a (first store 2 weeks, then one a week) | each store 1 week clean |
 | **P1** menu, staff, sign-in from ERP | Feb - Mar 2027 | PIN sign-in on a registered tablet (offline verifier), position pick (row 323), menu/tenders/discounts from ERP, Firebase staff sign-in off | per store |
 | **P2** receipts into the ERP | Mar - May 2027 | receipts/payments/refunds in Postgres, server recompute-and-compare, POS till *screen* over ERP till rows (row 319), platform sales on the till, day feed + usage pull off per store | per store |
 | **P3** live tables, kitchen, **Customer v2** | May - Jun 2027 | tables/KDS/diner orders on Postgres; Customer v2 live (§5); loyalty ledger; Firebase project closed 90 days after last store | per store, POS + Customer together |
