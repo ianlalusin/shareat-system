@@ -10,6 +10,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { parseDecimalInput } from '../shared/money-input';
 import { gone, refuse } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
+import { normaliseEmployerNo } from './employer-no';
 import { STAFF_GOV_ID_RULES } from '../field-rules/staff';
 import { PAYROLL_BRACKET_SET_RULES, PAYROLL_MIN_WAGE_RULES, PAYROLL_STATUTORY_RATE_RULES } from '../field-rules/payroll';
 
@@ -405,7 +406,7 @@ export function saveStatutoryEmployer(
       throw refuse(`saveStatutoryEmployer: unknown agency "${input.agency}"`, 'Pick SSS, PhilHealth, Pag-IBIG or BIR.');
     }
     const label = EMPLOYER_LABEL[agency];
-    const employerNo = input.employerNo.trim();
+    const employerNo = normaliseEmployerNo(input.employerNo);
     if (agency === 'bir') {
       if (employerNo !== '') {
         throw refuse('saveStatutoryEmployer: BIR given an employer number', 'BIR uses the company TIN, so it has no employer number here. Leave the number blank.');
@@ -413,7 +414,7 @@ export function saveStatutoryEmployer(
     } else if (employerNo === '') {
       throw refuse(`saveStatutoryEmployer: ${agency} employer number blank`, `Enter the ${label} employer number, digits only.`);
     } else if (!/^[0-9]+$/.test(employerNo)) {
-      throw refuse(`saveStatutoryEmployer: ${agency} employer number "${employerNo}" is not digits`, `The ${label} employer number must be digits only, with no letters, spaces or dashes.`);
+      throw refuse(`saveStatutoryEmployer: ${agency} employer number "${employerNo}" is not digits`, `The ${label} employer number must be digits only (spaces and dashes are fine, like 03-1234567-8); no letters.`);
     }
     const dayText = input.dueDay.trim();
     const dueDay = /^[0-9]{1,2}$/.test(dayText) ? Number(dayText) : NaN;

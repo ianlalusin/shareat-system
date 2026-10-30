@@ -1061,11 +1061,14 @@ export async function personHasActiveGrant(
   personId: string,
   grantName: string,
   atStoreId?: string,
+  orgLevelOnly = false,
 ): Promise<boolean> {
   const filters = [eq(personGrants.personId, personId), eq(personGrants.grantName, grantName), isNull(personGrants.revokedAt)];
   if (atStoreId !== undefined) {
     filters.push(or(isNull(personGrants.storeId), eq(personGrants.storeId, atStoreId))!);
   }
+  // DEF-805: `orgLevelOnly` counts person-level rows only; a store-scoped grant never confers org-wide authority.
+  if (orgLevelOnly) filters.push(isNull(personGrants.storeId));
   const [row] = await tx
     .select({ id: personGrants.id })
     .from(personGrants)
