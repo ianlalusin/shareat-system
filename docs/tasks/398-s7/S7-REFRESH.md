@@ -286,3 +286,6 @@ manager's own leave, needed before 1 Jan). No task file exists on main.
 - **Q-S7-4 = (a).** Onboarding copies every commissary-sold item to PG (name and unit only) and declares them on PG's
   commissary supplier (§5 step 9).
 - Build on the **MOCK** data file now (Ian, 29 Oct); real data swapped in by file before the production run.
+- Orchestrator rulings (29 Oct, S7b build): PG's owner also gets PG **store scope** (source `manual`) so the org-wide
+  manager can act on the store; staff from the file are hired as **probationary** (a new store's new hires). Audit
+  action `onboard.franchise`. `onboard-franchise.ts` is an admitted `systemTransaction` caller.

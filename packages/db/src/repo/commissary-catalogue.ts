@@ -264,3 +264,21 @@ export async function removeMap(tx: Tx, orgId: string, id: string): Promise<bool
     .returning({ id: commissaryItemMap.id });
   return deleted.length > 0;
 }
+
+/**
+ * T-398 S7c: the active items any commissary store of this org offers (an ACTIVE offering row on an ACTIVE item), one row per item, by name.
+ * The franchise onboarding prices each of these on the franchisee's price list.
+ */
+export async function listActiveOfferedItems(
+  tx: Tx,
+  orgId: string,
+): Promise<{ itemId: string; name: string; baseUnit: string; kind: string }[]> {
+  const rows = (await tx.execute(sql`
+    select distinct i.id as "itemId", i.name, i.base_unit as "baseUnit", i.kind
+    from commissary_item_offerings o
+    join items i on i.id = o.item_id and i.org_id = o.org_id
+    where o.org_id = ${orgId} and o.status = 'active' and i.status = 'active'
+    order by i.name asc, i.id asc
+  `)) as unknown as { itemId: string; name: string; baseUnit: string; kind: string }[];
+  return rows;
+}

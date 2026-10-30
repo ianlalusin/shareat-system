@@ -387,19 +387,51 @@ export async function rateFor(
 }
 
 /**
- * Other organisations in the system — the franchise link's picker.
+ * The companies a customer may be linked to - the franchise link's picker (T-398 S7d, DEF-747).
  *
- * ⚠️ **Never this org.** Linking a customer to our own organisation would derive as an
- * inter-entity sale to ourselves: real revenue against no external party. The service refuses it
- * too; excluding it here means the UI cannot offer the mistake in the first place.
+ * ⚠️ **Only companies that share a franchise agreement with the caller's organisation, and never this one.** Linking a customer to our own
+ * organisation would derive as an inter-entity sale to ourselves: real revenue against no external party. The list comes from the
+ * `linkable_counterparty_orgs()` definer (migration 0223), which reads the caller's organisation from the transaction itself; `orgId` is
+ * kept so callers read the same as before.
  */
 export async function otherOrgs(
   tx: Tx,
-  orgId: string,
+  _orgId: string,
 ): Promise<{ id: string; name: string; code: string }[]> {
   const rows = (await tx.execute(sql`
-    select id, name, code from organizations where id <> ${orgId} and is_active order by name
+    select org_id, name, code from linkable_counterparty_orgs()
   `)) as unknown as Record<string, string>[];
-  return rows.map((r) => ({ id: String(r.id), name: String(r.name), code: String(r.code) }));
+  return rows.map((r) => ({ id: String(r.org_id), name: String(r.name), code: String(r.code) }));
 }
 
+/**
+ * True when a franchise agreement joins `orgId` and `otherOrgId`, in either direction (T-398 S7d, DEF-747). A plain SELECT under the caller's
+ * principal: the agreements' dual policy lets either side read the row. No row (or an organisation that does not exist) is simply false, so
+ * the caller cannot tell the two apart.
+ */
+export async function hasFranchiseAgreementWith(tx: Tx, orgId: string, otherOrgId: string): Promise<boolean> {
+  const rows = (await tx.execute(sql`
+    select 1 as ok from franchise_agreements
+    where (org_id = ${orgId} and franchisor_org_id = ${otherOrgId})
+       or (org_id = ${otherOrgId} and franchisor_org_id = ${orgId})
+    limit 1
+  `)) as unknown as unknown[];
+  return rows.length > 0;
+}
+
+
+/** T-398 S7c: set a customer's credit limit at onboarding. `creditLimit` is a `(14,2)` brand minted by `money()`; the ordinary credit screens own later changes. */
+export async function setCreditLimit(tx: Tx, orgId: string, id: string, creditLimit: Money): Promise<void> {
+  const updated = await tx
+    .update(customers)
+    .set({ creditLimit, updatedAt: sql`now()` })
+    .where(and(eq(customers.id, id), eq(customers.orgId, orgId)))
+    .returning({ id: customers.id });
+  if (updated.length === 0) throw recordGone(`setCreditLimit: customer ${id} does not exist in org ${orgId}`, 'customer');
+}
+
+/** T-398 S7c: the item ids already quoted on a price list (the onboarding re-run adds only what is missing, so a quoted rate is never moved). */
+export async function quotedItemIds(tx: Tx, priceListId: string): Promise<Set<string>> {
+  const rows = (await tx.execute(sql`select item_id from price_list_items where price_list_id = ${priceListId}`)) as unknown as { item_id: string }[];
+  return new Set(rows.map((r) => String(r.item_id)));
+}

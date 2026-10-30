@@ -194,7 +194,9 @@ export interface CreateFirstAdminInput {
   readonly orgId: string;
   /** ⚠️ A real person's real name. `persons.display_name` is what the ledger attributes the
    *  organization's first entries to — this is not a service account. */
-  readonly displayName: string;
+  readonly displayName?: string;
+  /** T-398 S7b: the name in parts instead of a display name (Ian's person in a franchisee: row 360). Exactly one of the two is given. */
+  readonly name?: { lastName: string; firstName: string; middleName: string | null };
   /**
    * ⭐ **T-232 slice 2, decision 3 as the database permits it.** Defaults to `true`: the first
    * person of an organization is its owner and receives the four capabilities `super_admin` holds
@@ -246,8 +248,8 @@ export async function createFirstAdmin(
   tx: Tx,
   input: CreateFirstAdminInput,
 ): Promise<CreateFirstAdminResult> {
-  const displayName = input.displayName.trim();
-  if (!displayName) throw new Error('createFirstAdmin: the first admin needs a name.');
+  const displayName = (input.displayName ?? '').trim();
+  if (!displayName && !input.name) throw new Error('createFirstAdmin: the first admin needs a name.');
 
   if (await organizationsRepo.orgHasAnyRole(tx, input.orgId)) {
     throw new Error(
@@ -258,10 +260,9 @@ export async function createFirstAdmin(
     );
   }
 
-  const person = await personsRepo.insertPerson(tx, {
-    orgId: input.orgId,
-    displayName,
-  });
+  const person = input.name
+    ? await personsRepo.insertPerson(tx, { orgId: input.orgId, name: input.name })
+    : await personsRepo.insertPerson(tx, { orgId: input.orgId, displayName });
   await accessRepo.insertRole(tx, {
     personId: person.id,
     orgId: input.orgId,
@@ -528,3 +529,7 @@ export async function organizationIdentity(
     taxType: row.taxType,
   };
 }
+
+// T-398 S7b: the franchise onboarding door. It opens its own owner transaction, so it lives in its own file (this file never calls systemTransaction).
+export { onboardFranchiseOrganization } from './onboard-franchise';
+export type { OnboardFranchiseInput, OnboardFranchiseResult } from './onboard-franchise';

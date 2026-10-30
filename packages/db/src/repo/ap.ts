@@ -54,6 +54,8 @@ export interface SupplierRow {
   address: string | null;
   contactNo: string | null;
   counterpartyStoreId: string | null;
+  /** T-398 S5/S7c: the seller company when this supplier is another company (inter-entity). */
+  counterpartyOrgId: string | null;
   vatStatus: SupplierVatStatus | null;
   status: SupplierStatus;
   notes: string | null;
@@ -154,6 +156,8 @@ export async function updateSupplier(
     creditTermsDays: number | null;
     // ---- T-391 S4: system-managed; only setSupplierCounterpartyStore passes it
     counterpartyStoreId: string | null;
+    // ---- T-398 S7c: system-managed; only the franchise onboarding passes it (the buyer's link to the seller company)
+    counterpartyOrgId: string | null;
   }>,
 ): Promise<void> {
   const updated = await tx

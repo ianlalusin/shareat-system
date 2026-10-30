@@ -296,6 +296,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('data.bulk_import_applied', 'data', 'high', 'org', 'imports', 'T-402', RES),
   def('data.activity_log_exported', 'data', 'high', 'org', 'audit_log', 'T-402', ADMIN_RES),
   def('cutover.purge', 'data', 'critical', 'org', 'organizations', 'T-402', { ...ADMIN, actor: 'either' }),
+  // T-398 S7b: a franchise company was onboarded (written in the FRANCHISOR's company, entity = the new company).
+  def('onboard.franchise', 'data', 'high', 'org', 'organizations', 'T-398', ADMIN),
   def('cutover.opening_entry', 'data', 'critical', 'org', 'organizations', 'T-402', { ...ADMIN, actor: 'either' }),
   def('cutover.step_completed', 'data', 'high', 'org', 'organizations', 'T-402', { ...ADMIN, actor: 'either' }),
 

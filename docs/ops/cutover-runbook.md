@@ -144,6 +144,8 @@ Times are Manila (`Asia/Manila`). Durations `TBD (S4)`. Evidence goes in one dat
 
 **Freeze (R13, t394-q3 a):** from the close of business on 31 Dec until C5 is posted, **staff enter nothing in v2.** v1 stays the book of record. `verify --after-post` is not run on production by the rehearsal tool, so the Checker lists any non-`opening_balance` journal entry created after the purge by looking at the Journal screen sorted by created time; any such entry is a breach to record and decide on (reverse by entry), never to ignore.
 
+**Two companies (Padre Garcia).** Ian's company and Padre Garcia (PG) are purged in the same run, with one performer each: `npm run cutover:purge -- --confirm-database <prod-db> --yes-really-not-local --apply --as-of 2027-01-01 --by <Ian's org performer> --by <Ian's PG person> --dump-dir /srv/shareat-shared/cutover-dump` (or `CUTOVER_PURGE_BY=<id1>,<id2>`; the script maps each person to the company they belong to). The apply refuses if either company's `--by` is missing, and nothing is changed. After the purge each company gets its own opening: PG's 31 Dec count, its cash, and what PG owes the commissary, which must equal Ian's opening receivable from PG (both come from the commissary's v1 balance for PG). 3900 = 0 is checked per company, not once. No real inter-entity trade on production before 1 Jan: a trade between Ian's company and PG is tried only on a rehearsal copy, because the purge would wipe it and the 1 Jan window is for the opening.
+
 ### 3.1 31 December (eve)
 
 | Time | Step | Owner | Command / screen | Duration | Evidence | Checkpoint |

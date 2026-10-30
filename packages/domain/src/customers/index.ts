@@ -94,6 +94,15 @@ export async function createCustomer(
       );
     }
 
+    // ⛔ DEF-747 (T-398 S7d, Ian 2026-10-29). Another company only when a franchise agreement joins the two, in either direction. One sentence for
+    // "no such company" and "no agreement", and it names nobody, so this cannot be used to find out which companies exist.
+    if (orgLink && !(await customersRepo.hasFranchiseAgreementWith(trx, actor.orgId, orgLink))) {
+      throw refuse(
+        'createCustomer: no franchise agreement joins this organisation and the company the customer was to be linked to.',
+        'You can only link a customer to a company you have a franchise agreement with.',
+      );
+    }
+
     const creditTermsDays = judgeCreditTerms(input.creditTermsDays);
 
     const created = await customersRepo.insertCustomer(trx, {

@@ -103,6 +103,11 @@ describe('⭐ the treatment is derived from the links — ADR-008 §2', () => {
     const [other] = await sql<{ id: string }[]>`
       insert into organizations (name, code) values ('Franchise', ${uid('fr')}) returning id
     `;
+    // DEF-747 (T-398 S7d): linking to another company needs a franchise agreement; written as the owner, like onboarding does.
+    const [otherPerson] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${other!.id}, 'Franchisor person') returning id`;
+    await sql`
+      insert into franchise_agreements (org_id, franchisor_org_id, franchisor_person_id, sales_visible_from)
+      values (${other!.id}, ${f.orgId}, ${otherPerson!.id}, '2026-01-01')`;
     // ⛔ v1 models a franchise as a branch (ADR-008 §7), so this movement would eliminate there —
     // hiding revenue that genuinely crosses a legal entity.
     const created = await asOrg(f.orgId, (tx) =>

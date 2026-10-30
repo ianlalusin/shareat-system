@@ -7,8 +7,10 @@
  * need a connection and live in checks.ts. No refusal ever carries a connection string or a password.
  */
 
-/** The production cluster's host (Ian, 2026-10-13). Matched on host only: 25060 (direct) and 25061 (pooler) are the same cluster. */
-export const PINNED_PRODUCTION_HOSTS: readonly string[] = ['shareat-system-db-do-user-39783702-0.m.db.ondigitalocean.com'];
+import { PINNED_PRODUCTION_HOSTS } from '@shareat/core/production-hosts';
+
+/** The production cluster's host lives in @shareat/core (one source); re-exported for the rehearsal scripts and tests. */
+export { PINNED_PRODUCTION_HOSTS };
 
 export const REHEARSAL_DB_RE = /^shareat_rehearsal_[0-9]{8}$/;
 

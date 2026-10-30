@@ -82,8 +82,16 @@ async function stockAt(f: Fx, itemId: string, qty: string, unitCost: string) {
   );
 }
 
+/** DEF-747 (T-398 S7d): a customer may only point at another company when a franchise agreement joins the two. Written as the owner, like onboarding does. */
+async function agree(franchisorOrgId: string, franchiseeOrgId: string, franchisorPersonId: string): Promise<void> {
+  await sql`
+    insert into franchise_agreements (org_id, franchisor_org_id, franchisor_person_id, sales_visible_from)
+    values (${franchiseeOrgId}, ${franchisorOrgId}, ${franchisorPersonId}, '2026-01-01') on conflict do nothing`;
+}
+
 /** Padre Garcia as the seller's customer: linked to the buyer org (that link, not the group label, is what makes it inter-entity). */
 async function pgCustomer(w: World, opts: { group?: 'franchise' | 'wholesale'; creditLimit?: string } = {}) {
+  await agree(w.f.orgId, w.g.orgId, w.g.manager.personId);
   const c = await asOrg(w.f.orgId, (tx) =>
     createCustomer(tx, w.f.admin, {
       name: `Padre Garcia ${uid('pg')}`, customerGroup: opts.group ?? 'franchise', counterpartyOrgId: w.g.orgId, priceListId: null,

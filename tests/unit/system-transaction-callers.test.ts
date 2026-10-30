@@ -32,6 +32,8 @@ const REQUIRED_CALLERS = [
   'packages/domain/src/scheduler/index.ts',
   'scripts/bootstrap-org.ts',
   'apps/erp/src/app/setup/actions.ts',
+  // T-398 S7b: onboarding runs before any org context exists.
+  'packages/domain/src/organizations/onboard-franchise.ts',
   // T-267, Ian's ruling of 2026-09-12 (bible §13 row 195): the bootstrap question
   // "has this system been set up at all?" goes through the same door bootstrap's WRITE
   // already uses. Not a fifth caller admitted by analogy — a named ruling, recorded.
