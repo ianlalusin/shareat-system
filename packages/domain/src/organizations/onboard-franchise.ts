@@ -40,7 +40,7 @@ import {
 } from '@shareat/db';
 import { can, SUPER_ADMIN_ONLY_CAPABILITIES, type Actor } from '@shareat/auth';
 import { toBusinessDate } from '@shareat/core';
-import { money } from '@shareat/core/money';
+import { add, money, ZERO } from '@shareat/core/money';
 import { createStore } from '../stores/service';
 import { createEmployment, createPerson, normaliseName } from '../people';
 import { refuse } from '../shared/refusal';
@@ -76,6 +76,39 @@ function planFor(file: OnboardingFile): string[] {
     `owner: ${file.owner.last}, ${file.owner.first} (manager role, no employment record)`,
     `staff: ${file.staff.length} (${file.staff.map((s) => s.position).join(', ')}); staff codes are issued automatically`,
     `franchise agreement: ${file.org.name} is a franchisee of ${file.franchisorOrgCode}; sales visible from ${file.agreement.salesVisibleFrom}`,
+  ];
+}
+
+interface PriceLine {
+  itemId: string;
+  name: string;
+  baseUnit: string;
+  kind: string;
+  rate: string;
+}
+
+/** The items on the price list: every active commissary-offered item that has a price rule the branch price can answer. Read-only. */
+async function priceLinesFor(tx: Tx, franchisorId: string): Promise<PriceLine[]> {
+  const offered = await commissaryCatalogueRepo.listActiveOfferedItems(tx, franchisorId);
+  const lines: PriceLine[] = [];
+  for (const o of offered) {
+    const price = await branchPriceFor(tx, franchisorId, o.itemId);
+    if (price) lines.push({ ...o, rate: price.price });
+  }
+  return lines;
+}
+
+/**
+ * DEF-803 (b): steps 8-10 as plan lines, so a dry run shows Ian's side too: the customer, the price list with its item count and the total it would
+ * write (S7-REFRESH C5), PG's commissary supplier and how many items are mirrored to PG. Read-only: it only describes what completeBothSides would write.
+ */
+function ianSidePlanFor(file: OnboardingFile, lines: readonly PriceLine[]): string[] {
+  const total = lines.reduce((sum, l) => add(sum, money(l.rate)), ZERO);
+  return [
+    `customer: ${file.commissary.customerName} (in ${file.franchisorOrgCode}, linked to ${file.org.name}, on the price list below)`,
+    `price list: ${file.commissary.priceListName}: ${lines.length} items, total ${total} (today's branch prices, a snapshot)`,
+    `supplier: ${file.commissary.supplierName} (in ${file.org.name}, linked to ${file.franchisorOrgCode})`,
+    `items mirrored to the new company: ${lines.length}, each declared on that supplier (name, unit and kind only; no cost, no price)`,
   ];
 }
 
@@ -130,7 +163,7 @@ export async function onboardFranchiseOrganization(
       );
     }
 
-    if (options.dryRun) return { kind: 'dry-run' as const };
+    if (options.dryRun) return { kind: 'dry-run' as const, ianSide: ianSidePlanFor(file, await priceLinesFor(tx, franchisor.id)) };
 
     // 2. Company and reference data.
     const org = await createOrganization(tx, { code: file.org.code, name: file.org.name });
@@ -203,18 +236,34 @@ export async function onboardFranchiseOrganization(
     return { kind: 'created' as const, franchisor, orgId: org.orgId, storeId: store.storeId, adminPersonId: admin.personId, ownerPersonId: owner.id };
   });
 
-  if (first.kind === 'dry-run') return { status: 'dry-run', orgCode: file.org.code, plan };
+  if (first.kind === 'dry-run') return { status: 'dry-run', orgCode: file.org.code, plan: [...plan, ...first.ianSide] };
 
   // Steps 8-10, in their own transaction.
-  const wrote = await systemTransaction((tx) =>
-    completeBothSides(tx, {
-      file,
-      franchisor: { id: first.franchisor.id },
-      pgOrgId: first.orgId,
-      pgAdmin: { personId: first.adminPersonId, orgId: first.orgId },
-      by: { personId: byPersonId, orgId: first.franchisor.id },
-    }),
-  );
+  const both = {
+    file,
+    franchisor: { id: first.franchisor.id },
+    pgOrgId: first.orgId,
+    pgAdmin: { personId: first.adminPersonId, orgId: first.orgId },
+    by: { personId: byPersonId, orgId: first.franchisor.id },
+  };
+  if (options.dryRun) {
+    // DEF-804: an existing company's dry run must write nothing. Run the real steps to learn what a re-run would add, then roll the transaction back.
+    const rollback = new Error('onboardFranchiseOrganization: dry-run rollback');
+    let wouldWrite = false;
+    let lines: PriceLine[] = [];
+    try {
+      await systemTransaction(async (tx) => {
+        lines = await priceLinesFor(tx, first.franchisor.id);
+        wouldWrite = await completeBothSides(tx, both);
+        throw rollback;
+      });
+    } catch (e) {
+      if (e !== rollback) throw e;
+    }
+    if (!wouldWrite) return { status: 'already-onboarded', orgCode: file.org.code, plan, orgId: first.orgId };
+    return { status: 'dry-run', orgCode: file.org.code, plan: [...plan, ...ianSidePlanFor(file, lines)], orgId: first.orgId };
+  }
+  const wrote = await systemTransaction((tx) => completeBothSides(tx, both));
 
   if (first.kind === 'existing' && !wrote) return { status: 'already-onboarded', orgCode: file.org.code, plan, orgId: first.orgId };
   return {
@@ -237,12 +286,7 @@ async function completeBothSides(
   let wrote = false;
 
   // The items on the price list: every active commissary-offered item that has a price rule the branch price can answer.
-  const offered = await commissaryCatalogueRepo.listActiveOfferedItems(tx, c.franchisor.id);
-  const lines: { itemId: string; name: string; baseUnit: string; kind: string; rate: string }[] = [];
-  for (const o of offered) {
-    const price = await branchPriceFor(tx, c.franchisor.id, o.itemId);
-    if (price) lines.push({ ...o, rate: price.price });
-  }
+  const lines = await priceLinesFor(tx, c.franchisor.id);
 
   // Refuse a name that is already taken by something linked elsewhere, BEFORE any write on either side. Never re-point a link.
   const customers = await customersRepo.listCustomers(tx, c.franchisor.id);

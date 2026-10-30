@@ -282,3 +282,21 @@ export async function listActiveOfferedItems(
   `)) as unknown as { itemId: string; name: string; baseUnit: string; kind: string }[];
   return rows;
 }
+
+/**
+ * DEF-803: does this org use the commissary screens at all? One query, three EXISTS.
+ *  - `hasCommissary`: a store of the org is a commissary - it holds an outgoing link row (either status; DEF-220's definition) OR it is a `multi_room` store
+ *    (the commissary model, T-160), so a commissary that has no link yet still sees the catalogue where the first link is made.
+ *  - `hasBranchLink`: a store of the org is linked to a commissary as a branch (either status).
+ * A franchisee's org (its own single-room store, no links) is both false. Presentation only (the nav); the routes keep their own empty states.
+ */
+export async function commissaryUsage(tx: Tx, orgId: string): Promise<{ hasCommissary: boolean; hasBranchLink: boolean }> {
+  const rows = (await tx.execute(sql`
+    select
+      (exists (select 1 from commissary_links where org_id = ${orgId})
+        or exists (select 1 from stores where org_id = ${orgId} and stock_model = 'multi_room')) as "hasCommissary",
+      exists (select 1 from commissary_links where org_id = ${orgId}) as "hasBranchLink"
+  `)) as unknown as { hasCommissary: boolean; hasBranchLink: boolean }[];
+  const r = rows[0];
+  return { hasCommissary: r?.hasCommissary === true, hasBranchLink: r?.hasBranchLink === true };
+}
