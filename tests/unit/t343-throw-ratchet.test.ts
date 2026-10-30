@@ -100,7 +100,7 @@ const CEILINGS: Record<string, number> = {
   'packages/domain/src/liabilities': 14, // T-343 S5.5v: 16 -> 14, chargeLiability's and payLiability's <= 0 guards converted to refuse(...)
   'packages/domain/src/loans': 11, // T-343 S5.5v: 13 -> 11, disburseLoan's and recordLoanPayment's <= 0 guards converted to refuse(...)
   'packages/domain/src/missed-months': 13,
-  'packages/domain/src/money-accounts': 9, // T-343 S5.5s: 10 -> 9, renameMoneyAccount's overdraftLimit converted to parseMoneyInput
+  'packages/domain/src/money-accounts': 7, // T-343 S5.5s: 10 -> 9, renameMoneyAccount's overdraftLimit converted to parseMoneyInput
   'packages/domain/src/money-transfers': 11,
   'packages/domain/src/organizations': 12,
   'packages/domain/src/owners': 24, // T-343 S5.5v: 27 -> 24, recordDrawing's, assertWithinReceivable's and recordContribution's <= 0 guards converted to refuse(...)

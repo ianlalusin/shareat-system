@@ -48,3 +48,10 @@ money" (bible row 154). It has two faults:
 
 ## 5. Done when
 D1-D5 red→green, every existing test of the 12 callers green, throw ratchet down by one, typecheck clean, Sonnet audit.
+
+## 6. Build notes (orchestrator ruling, 30 Oct)
+- The lock is `FOR NO KEY UPDATE`, not `FOR UPDATE`: plain `FOR UPDATE` deadlocked D4 because a transfer's foreign-key
+  insert on the destination account takes `KEY SHARE`, which conflicts with `FOR UPDATE` only. `FOR NO KEY UPDATE` still
+  serialises every draw on the same account (D2, D3). Accepted.
+- All 12 callers draw from one account; `lockForDraws` exists for the next caller that draws two.
+- Throw ratchet for `packages/domain/src/money-accounts`: 9 → 7 (measured).

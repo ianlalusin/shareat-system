@@ -161,6 +161,23 @@ export async function getById(
   return row as MoneyAccountRow | undefined;
 }
 
+/**
+ * T-501 (DEF-802) - lock one money account row (`SELECT ... FOR NO KEY UPDATE`, org-scoped: a row lock that excludes other draws but not FK key-share inserts) until the caller's transaction ends,
+ * so a second draw on the same account waits, then reads a balance that includes the first draw's posting.
+ */
+export async function lockForDraw(tx: Tx, orgId: string, accountId: string): Promise<void> {
+  await tx
+    .select({ id: moneyAccounts.id })
+    .from(moneyAccounts)
+    .where(and(eq(moneyAccounts.id, accountId), eq(moneyAccounts.orgId, orgId)))
+    .for('no key update'); // not FOR UPDATE: FK inserts naming this account (a transfer's destination) take KEY SHARE and must not queue behind it (deadlock A->B vs B->A)
+}
+
+/** Locks several accounts in ASCENDING id order, so two transactions drawing the same pair cannot deadlock. */
+export async function lockForDraws(tx: Tx, orgId: string, ids: readonly string[]): Promise<void> {
+  for (const id of [...new Set(ids)].sort()) await lockForDraw(tx, orgId, id);
+}
+
 export interface ListMoneyAccountsFilter {
   storeId?: string;
   custodian?: Custodian;
