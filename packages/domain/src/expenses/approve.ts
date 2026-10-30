@@ -197,6 +197,12 @@ export async function gatherApprovalFacts(
   // ⛔/⚠️ OVERDRAWING (bible row 154): the decision lives in `judgeDraw`, shared with `createMoneyTransfer`. Summed PER ACCOUNT
   // across the split (the DEF-065 family of error: a split's rows are only ever right when considered together).
   const drawers: NonNullable<ApprovalFacts['detail']>['drawers'] = [];
+  // T-501 A1: on the posting path, lock every drawn account (ordered) BEFORE any balance is read.
+  if (options.lock) {
+    const present: string[] = []; // a missing account is already a blocker above; do not let the lock turn it into a throw
+    for (const id of draws.accounts.keys()) if (await moneyAccountsRepo.getById(tx, actor.orgId, id)) present.push(id);
+    await moneyAccountsRepo.lockForDraws(tx, actor.orgId, present);
+  }
   for (const [id, drawn] of draws.accounts) {
     const account = wallets.find((w) => w.id === id)?.account ?? (await moneyAccountsRepo.getById(tx, actor.orgId, id));
     if (!account) continue; // a missing account is already a blocker above

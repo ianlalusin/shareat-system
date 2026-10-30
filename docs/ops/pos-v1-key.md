@@ -8,7 +8,7 @@
 |---|---|
 | Lipa | `L5MExycvUOfQ96Y10FqF` |
 | Malvar | `epiOh1uLetFaK4wI6XmO` |
-| Banay-Banay | `zZM9TfGqSyA5eDg2kyrv` |
+| Banay-Banay | `zZM9TfGqSyA5eDg2kyrv` (never added to the v2 key map (T-454)) |
 | Davao | `aH3kgLDVjVnW5VtObMEx` |
 | Padre Garcia (franchise, T-398) | `g2CVxzCKVRE7e0cczU0t` |
 

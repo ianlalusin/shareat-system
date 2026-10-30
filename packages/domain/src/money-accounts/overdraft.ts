@@ -28,6 +28,7 @@
  */
 import { money, type Money } from '@shareat/core/money';
 import { moneyAccountsRepo, type MoneyAccountRow, type Tx } from '@shareat/db';
+import { refuse } from '../shared/refusal';
 
 /**
  * ⭐ **`judgeDraw` and `DrawVerdict` moved to `./draw-verdict` (T-266) and are re-exported here
@@ -50,8 +51,10 @@ export async function checkDraw(
   drawn: Money,
   context: string,
 ): Promise<string | null> {
-  const available = money(await moneyAccountsRepo.balanceOf(tx, orgId, account));
-  const verdict = judgeDraw(account, available, drawn);
-  if (verdict.blocked) throw new Error(`${context}: ${verdict.message}`);
+  // T-501: lock the account row FIRST, so a concurrent draw waits and then reads a balance that includes ours.
+  const locked = await moneyAccountsRepo.lockForDraw(tx, orgId, account.id);
+  const available = money(await moneyAccountsRepo.balanceOf(tx, orgId, locked));
+  const verdict = judgeDraw(locked, available, drawn);
+  if (verdict.blocked) throw refuse(`${context}: ${verdict.message}`, verdict.message ?? 'That account cannot cover this amount.');
   return verdict.message ?? null;
 }
