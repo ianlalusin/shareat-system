@@ -205,7 +205,7 @@ export interface AssignRoleAsActorInput {
  * forbids, arriving with no code change and no error. The empty set therefore refuses, and
  * `roles.test.ts` asserts the set is non-empty so the day it empties is a red test, not a hole.
  */
-async function holdsSuperAdminAuthority(
+export async function holdsSuperAdminAuthority(
   tx: Tx,
   actor: Actor,
   actorRole: string | undefined,

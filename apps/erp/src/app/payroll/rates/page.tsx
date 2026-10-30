@@ -177,7 +177,7 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
           </FormModal>
         </div>
         {view.rates.length === 0 ? (
-          <p className="text-sm text-neutral-500">No contribution rates yet.</p>
+          <p className="text-sm text-neutral-500">No contribution rates yet. Add one each for SSS, PhilHealth and Pag-IBIG, then approve each one. Payroll cannot post until all three are approved.</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {view.rates.map((r) => (
@@ -252,7 +252,7 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
           </FormModal>
         </div>
         {view.bracketSets.length === 0 ? (
-          <p className="text-sm text-neutral-500">No withholding tables yet.</p>
+          <p className="text-sm text-neutral-500">No withholding tables yet. Add a withholding table (the BIR brackets) for your pay frequency, then approve it.</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {view.bracketSets.map((b) => (
@@ -329,7 +329,7 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
           </FormModal>
         </div>
         {view.minimumWages.length === 0 ? (
-          <p className="text-sm text-neutral-500">No minimum wages yet.</p>
+          <p className="text-sm text-neutral-500">No minimum wages yet. Add a minimum wage for each store, then approve it.</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {view.minimumWages.map((m) => (
