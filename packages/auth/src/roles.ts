@@ -215,7 +215,7 @@ export async function holdsSuperAdminAuthority(
   if (SUPER_ADMIN_ONLY_CAPABILITIES.length === 0) return false;
 
   for (const capability of SUPER_ADMIN_ONLY_CAPABILITIES) {
-    if (!(await accessRepo.personHasActiveGrant(tx, actor.personId, capability))) return false;
+    if (!(await accessRepo.personHasActiveGrant(tx, actor.personId, capability, undefined, true))) return false;
   }
   return true;
 }

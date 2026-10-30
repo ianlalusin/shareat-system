@@ -90,6 +90,58 @@ describe('H7 - an admin holding every super-admin grant may approve their own le
   });
 });
 
+/** A fresh person with `role` at the PG store, a job there, and an own pending leave request. */
+async function mkPerson(pg: Pg, role: 'admin' | 'manager', name: string) {
+  const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${pg.pgOrgId}, ${`${name} ${tag()}`}) returning id`;
+  await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${pg.pgOrgId}, ${role})`;
+  await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${pg.storeId})`;
+  return { id: p!.id, who: { personId: p!.id, orgId: pg.pgOrgId }, job: await giveJob(pg, p!.id) };
+}
+type Opts = { skip?: number; revokeOne?: boolean; storeScopedOne?: boolean };
+async function grantAll(pg: Pg, personId: string, o: Opts = {}) {
+  const caps = [...SUPER_ADMIN_ONLY_CAPABILITIES];
+  for (const [i, cap] of caps.entries()) {
+    if (o.skip === i) continue;
+    const storeId = o.storeScopedOne && i === 0 ? pg.storeId : null;
+    const revoked = o.revokeOne && i === 0;
+    await sql`insert into person_grants (person_id, grant_name, store_id, grant_source, revoked_at, revoke_reason)
+              values (${personId}, ${cap}, ${storeId}, 'grant', ${revoked ? new Date() : null}, ${revoked ? 'T-500 test revoke' : null})`;
+  }
+}
+async function ownLeaveRefused(pg: Pg, who: Awaited<ReturnType<typeof mkPerson>>) {
+  const r = await request(pg, who.who, who.job, FUTURE());
+  const err = await approve(pg, who.who, r.requestId).then(() => null, (e: { code?: string }) => e);
+  expect(err?.code, 'own leave refused').toBe('LEAVE_OWN_APPROVAL');
+  expect(await statusOf(r.requestId)).toBe('pending');
+}
+
+describe('H7b-e - the super-admin equivalence must be exact (own leave refused)', () => {
+  it('H7b admin with all but one super-admin grant is refused (kills: every -> some)', async () => {
+    const pg = await mkPg(sql);
+    const a = await mkPerson(pg, 'admin', 'AdminMinusOne');
+    await grantAll(pg, a.id, { skip: 0 });
+    await ownLeaveRefused(pg, a);
+  });
+  it('H7c admin with every grant but one of them revoked is refused (kills: revoked_at IS NULL dropped)', async () => {
+    const pg = await mkPg(sql);
+    const a = await mkPerson(pg, 'admin', 'AdminRevoked');
+    await grantAll(pg, a.id, { revokeOne: true });
+    await ownLeaveRefused(pg, a);
+  });
+  it('H7d a MANAGER holding every super-admin grant is refused (kills: role check dropped)', async () => {
+    const pg = await mkPg(sql);
+    const m = await mkPerson(pg, 'manager', 'ManagerAllGrants');
+    await grantAll(pg, m.id);
+    await ownLeaveRefused(pg, m);
+  });
+  it('H7e DEF-805: an admin whose grants include a STORE-scoped one is refused (kills: store_id ignored; equivalence needs org-level grants)', async () => {
+    const pg = await mkPg(sql);
+    const a = await mkPerson(pg, 'admin', 'AdminStoreScoped');
+    await grantAll(pg, a.id, { storeScopedOne: true });
+    await ownLeaveRefused(pg, a);
+  });
+});
+
 describe('H8 - isolation between Ian\'s company and PG', () => {
   it('PG admin adds a rate: it lands in PG; Ian\'s rows are unchanged; PG cannot read Ian\'s rates (RLS)', async () => {
     const pg = await mkPg(sql);
