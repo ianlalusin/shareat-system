@@ -67,3 +67,23 @@ Row 369 (Ian, 17 Oct): Padre Garcia (its own company, T-398) runs its staff atte
 
 ## 5. Done when
 H1-H8 red→green; t190*, t193*, t436* and all t398-s7*/def803* tests green; typecheck clean; Sonnet audit.
+
+## 6. REVISION 2026-10-31 (Ian) — these bind and replace R1-R4, H1-H4
+
+> **Ian, 31 Oct:** "why are you setting up these data yourself, I'm worried a regular admin user can not do that,
+> please set up the app that these data can manually be set."
+
+- **Nothing is copied automatically.** Step 11 is dropped. PG's admin enters PG's government rates, tax brackets,
+  minimum wage per store and employer numbers **on the existing `/payroll/rates` screen** (actions already exist:
+  add/confirm/discard for rates, bracket sets and minimum wages; `saveStatutoryEmployerAction`).
+- **The task becomes: prove a regular admin of a SECOND company can do all of it through the app**, and fix whatever
+  stops them. New tests (replace H1-H4; H5-H8 stay):
+  - **M1.** As PG's admin (Ian's PG person, an org admin) through the rates page actions: add SSS, PhilHealth,
+    Pag-IBIG rates, a withholding bracket set, a minimum wage for PG's store, and the three employer numbers; confirm
+    each. All land in PG's org, none in Ian's.
+  - **M2.** As PG's owner (store-scoped manager): what the capability matrix says for `manage_payroll_rates` — if
+    refused, the page says so in words (no crash, no blank page).
+  - **M3.** After M1, H5's preview + post succeeds in PG.
+  - **M4.** The rates page, opened in PG with nothing on file, shows an empty state that tells the admin what to add
+    (not an error), and the payroll preview's refusal names the missing rate in words and points to the rates page.
+- **§9.4 smoke:** on screen, as PG's admin, enter one of each and confirm; screenshots.
