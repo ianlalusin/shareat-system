@@ -1365,7 +1365,13 @@ export async function recordPayment(
     if (!inserted) {
       // DEF-778: a simultaneous double submit committed this id first - answer from it (or refuse if the figures differ).
       const winner = await apRepo.getApPaymentById(trx, actor.orgId, requestId);
-      if (!winner) throw internalFault(`recordPayment: ap_payment ${requestId} conflicted but cannot be read back.`);
+      if (!winner) {
+        // The id belongs to another org's payment (org-scoped reads cannot see it).
+        throw refuse(
+          `recordPayment: requestId ${requestId} already belongs to a row outside this org.`,
+          'This form is out of date. Reload the page and try again.',
+        );
+      }
       return replayOfPayment(trx, winner, input, amount);
     }
     const paymentId = inserted.id;
@@ -1423,6 +1429,9 @@ async function replayOfPayment(
       `recordPayment: requestId ${row.id} was already posted with different figures.`,
       'This was already recorded with different figures. Reload the page and try again.',
     );
+  if (row.status === 'voided') {
+    throw refuse(`recordPayment: requestId ${row.id} was voided.`, 'This was voided. Reload the page and start a new one.');
+  }
   if (!row.journalEntryId) throw different();
   const stored = await apRepo.getAllocationsForPayment(trx, row.id);
   const asked = new Map<string, Money>();
@@ -1443,7 +1452,7 @@ async function replayOfPayment(
     String(row.businessDate).slice(0, 10) === String(input.businessDate).slice(0, 10) &&
     compare(money(row.amount), amount) === 0 &&
     compare(creditPosted, creditAsked) === 0 &&
-    (row.cashRequestId === null || row.cashRequestId === (input.cashRequestId ?? null)) &&
+    (row.cashRequestId ?? null) === (input.cashRequestId ?? null) &&
     stored.length === asked.size &&
     stored.every((s) => {
       const want = asked.get(s.expenseId);

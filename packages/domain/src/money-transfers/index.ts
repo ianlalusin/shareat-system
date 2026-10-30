@@ -87,8 +87,25 @@ async function runCreate(
   // DEF-778: the replay is looked up BEFORE the overdraw rule - after the first call spent the money, judging the same
   // request afresh would refuse a harmless double click (or, worse, warn about it).
   const replayed = await moneyTransfersRepo.getById(tx, actor.orgId, requestId);
-  if (replayed) return replayOf(replayed, { from, to, amountOut, amountIn, transferDate: input.transferDate, fee });
+  const replayWanted = {
+    from,
+    to,
+    amountOut,
+    amountIn,
+    transferDate: input.transferDate,
+    fee,
+    feeAccountCode,
+    reference: input.reference?.trim() || null,
+    notes: input.notes?.trim() || null,
+  };
+  if (replayed) return replayOf(replayed, replayWanted);
   // ⛔/⚠️ The overdraw rule (bible row 154) — `checkDraw` is the whole of it, shared with `approveExpense`.
+  // DEF-778 audit: take the T-501 lock on the source BEFORE judging the draw, then look for the replay once more. A simultaneous
+  // double submit queues on this lock; by the time it gets it, the first has committed and spent the money, so judging the
+  // draw afresh would refuse a harmless double click as "cannot cover".
+  await moneyAccountsRepo.lockForDraw(tx, actor.orgId, from.id);
+  const replayedAfterLock = await moneyTransfersRepo.getById(tx, actor.orgId, requestId);
+  if (replayedAfterLock) return replayOf(replayedAfterLock, replayWanted);
   const warning = await prepared.checkDraw();
 
   if (crossStore) {
@@ -145,10 +162,10 @@ async function runCreate(
   if (!posted.created) {
     // A racing double click: the other transaction committed the entry (and its row) while this one waited on the key.
     const winner = await moneyTransfersRepo.getById(tx, actor.orgId, id);
-    if (winner) return replayOf(winner, { from, to, amountOut, amountIn, transferDate: input.transferDate, fee });
+    if (winner) return replayOf(winner, replayWanted);
   }
 
-  const row = await moneyTransfersRepo.insertMoneyTransfer(tx, {
+  const inserted = await moneyTransfersRepo.insertMoneyTransfer(tx, {
     id,
     orgId: actor.orgId,
     storeId: from.storeId,
@@ -164,7 +181,19 @@ async function runCreate(
     createdBy: actor.personId,
   });
 
-  return { id: row.id, entryId: posted.entryId, fee, ...(warning ? { warning } : {}) };
+  if (!inserted) {
+    // A simultaneous double submit committed this id first - or the id belongs to another org, which org-scoped reads cannot see.
+    const winner = await moneyTransfersRepo.getById(tx, actor.orgId, id);
+    if (!winner) {
+      throw refuse(
+        `createMoneyTransfer: requestId ${id} already belongs to a row outside this org.`,
+        'This form is out of date. Reload the page and try again.',
+      );
+    }
+    return replayOf(winner, replayWanted);
+  }
+
+  return { id: inserted.id, entryId: posted.entryId, fee, ...(warning ? { warning } : {}) };
 }
 
 /** DEF-778: a replayed request returns the first result, but only if it asked for the same transfer. */
@@ -177,9 +206,18 @@ function replayOf(
     amountIn: Money;
     transferDate: string;
     fee: string;
+    feeAccountCode: string | null;
+    reference: string | null;
+    notes: string | null;
   },
 ): CreateMoneyTransferResult {
+  if (row.status === 'voided') {
+    throw refuse(`createMoneyTransfer: requestId ${row.id} was voided.`, 'This was voided. Reload the page and start a new one.');
+  }
   const same =
+    (row.feeAccountCode ?? null) === (now.feeAccountCode ?? null) &&
+    (row.reference ?? null) === now.reference &&
+    (row.notes ?? null) === now.notes &&
     row.fromMoneyAccountId === now.from.id &&
     row.toMoneyAccountId === now.to.id &&
     equals(money(row.amountOut), now.amountOut) &&
