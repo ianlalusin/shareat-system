@@ -316,7 +316,7 @@ async function bill(f: Fixture, amount: string): Promise<string> {
 }
 const apPay = (f: Fixture, who: Actor, expenseId: string, from: Account, o: { amount: string; creditApplied?: string }) =>
   asOrg(f.orgId, (tx) =>
-    recordPayment(tx, who, {
+    recordPayment(tx, who, { requestId: crypto.randomUUID(),
       storeId: f.lipaId, supplierId: f.supplierId, businessDate: '2026-01-15', amount: o.amount, moneyAccountId: from.id,
       ...(o.creditApplied ? { creditApplied: o.creditApplied } : {}),
       allocations: [{ expenseId, amountApplied: o.amount }],
@@ -351,7 +351,7 @@ describe('T4 — the admin pays a ₱12,000 Lipa bill from MALVAR\'s safe', () =
     const first = await bill(f, '1000.00');
     // an OVERPAYMENT: hand over 3,000 against a 1,000 bill -> 2,000 of supplier credit (1240) at Lipa
     await asOrg(f.orgId, (tx) =>
-      recordPayment(tx, f.manager, { storeId: f.lipaId, supplierId: f.supplierId, businessDate: '2026-01-12', amount: '3000.00', moneyAccountId: f.lipaSafe.id, allocations: [{ expenseId: first, amountApplied: '1000.00' }] }),
+      recordPayment(tx, f.manager, { requestId: crypto.randomUUID(), storeId: f.lipaId, supplierId: f.supplierId, businessDate: '2026-01-12', amount: '3000.00', moneyAccountId: f.lipaSafe.id, allocations: [{ expenseId: first, amountApplied: '1000.00' }] }),
     );
     const expenseId = await bill(f, '12000.00');
     const before = await snapshot(f);

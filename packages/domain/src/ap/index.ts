@@ -41,6 +41,7 @@ import { add, compare, formatMoney, isZero, money, subtract, ZERO, type Money } 
 import { addDays, parseBusinessDate, type BusinessDate } from '@shareat/core/datetime';
 import { logger } from '@shareat/core/logger';
 import { postEntry } from '../ledger/post-entry';
+import { postEntryOnce, requireRequestId } from '../ledger/replay';
 import { withInterStoreLegs } from '../ledger/inter-store';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { checkDraw } from '../money-accounts/overdraft';
@@ -1032,6 +1033,12 @@ export interface ApPaymentAllocationInput {
 }
 
 export interface RecordApPaymentInput {
+  /**
+   * DEF-778: generated when the form renders and submitted back. It IS the `ap_payments` row's id and the journal key is
+   * `ap_payment:${requestId}:post`, so a double click is a replay (the first result comes back, nothing is posted twice).
+   * A missing or non-uuid value is refused; a replay with other figures is refused.
+   */
+  requestId: string;
   storeId: string;
   supplierId: string;
   businessDate: string;
@@ -1071,12 +1078,18 @@ export async function recordPayment(
 ): Promise<RecordApPaymentResult> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'record_ap_payment', { storeId: input.storeId });
+    const requestId = requireRequestId('recordPayment', input.requestId);
 
     const supplier = await apRepo.getSupplierById(trx, actor.orgId, input.supplierId);
     if (!supplier) throw gone(`recordPayment: supplier ${input.supplierId} does not exist.`, 'supplier');
 
     // T-371 (C4): every figure below stays `Money` and is ordered with `compare` — `Number(…)` let a NaN pass each check.
     const amount = parseMoneyInput(input.amount, 'recordPayment: the amount', 'The payment amount');
+
+    // DEF-778: a replay is looked up BEFORE the open-item and balance checks. After the first call committed, the item may be
+    // fully paid and the account lower, so judging the same request afresh would refuse a harmless double click.
+    const replayed = await apRepo.getApPaymentById(trx, actor.orgId, requestId);
+    if (replayed) return replayOfPayment(trx, replayed, input, amount);
     if (compare(amount, ZERO) <= 0) throw refuse('recordPayment: a payment has to be greater than zero.', 'A payment has to be greater than zero.');
     if (input.allocations.length === 0) {
       throw refuse(
@@ -1122,6 +1135,10 @@ export async function recordPayment(
     // payment posts at `input.storeId`, so settling another store's open item would put the 2110
     // debit on books that never carried the matching credit — one store's payables go negative
     // while the other's never clear, and neither store's trial balance shows why.
+    // DEF-778: a simultaneous double submit queued on the lock above; the first has committed by now, so look again before
+    // judging the open items it just used up.
+    const replayedAfterLock = await apRepo.getApPaymentById(trx, actor.orgId, requestId);
+    if (replayedAfterLock) return replayOfPayment(trx, replayedAfterLock, input, amount);
     const open = await apRepo.openItems(trx, actor.orgId, input.supplierId, input.storeId);
     const byExpense = new Map(open.map((o) => [o.expenseId, o]));
     let allocatedTotal: Money = ZERO;
@@ -1331,7 +1348,8 @@ export async function recordPayment(
       lines: paymentLines,
     });
 
-    const { id: paymentId } = await apRepo.insertApPayment(trx, {
+    const inserted = await apRepo.insertApPayment(trx, {
+      id: requestId,
       orgId: actor.orgId,
       storeId: input.storeId,
       supplierId: input.supplierId,
@@ -1344,8 +1362,15 @@ export async function recordPayment(
       notes: input.notes?.trim() || null,
       createdBy: actor.personId,
     });
+    if (!inserted) {
+      // DEF-778: a simultaneous double submit committed this id first - answer from it (or refuse if the figures differ).
+      const winner = await apRepo.getApPaymentById(trx, actor.orgId, requestId);
+      if (!winner) throw internalFault(`recordPayment: ap_payment ${requestId} conflicted but cannot be read back.`);
+      return replayOfPayment(trx, winner, input, amount);
+    }
+    const paymentId = inserted.id;
 
-    const result = await postEntry(trx, {
+    const result = await postEntryOnce(trx, {
       orgId: actor.orgId,
       entryDate: input.businessDate,
       sourceType: 'ap_payment',
@@ -1380,6 +1405,54 @@ export async function recordPayment(
     };
   };
   return run(tx);
+}
+
+/**
+ * DEF-778: the first result of a request id that has already posted - but only if this call asks for the same payment
+ * (supplier, store, account, date, total, return credit applied and each allocation). Anything else is a reused id and
+ * is refused rather than handed the old payment as if it were this one.
+ */
+async function replayOfPayment(
+  trx: Tx,
+  row: NonNullable<Awaited<ReturnType<typeof apRepo.getApPaymentById>>>,
+  input: RecordApPaymentInput,
+  amount: Money,
+): Promise<RecordApPaymentResult> {
+  const different = () =>
+    refuse(
+      `recordPayment: requestId ${row.id} was already posted with different figures.`,
+      'This was already recorded with different figures. Reload the page and try again.',
+    );
+  if (!row.journalEntryId) throw different();
+  const stored = await apRepo.getAllocationsForPayment(trx, row.id);
+  const asked = new Map<string, Money>();
+  for (const a of input.allocations) {
+    const applied = parseMoneyInput(a.amountApplied, `recordPayment: the allocation for expense ${a.expenseId}`, 'An amount applied to an invoice');
+    asked.set(a.expenseId, add(asked.get(a.expenseId) ?? ZERO, applied));
+  }
+  const creditAsked =
+    parseDecimalInput(input.creditApplied, '14,2', 'recordPayment: creditApplied', 'The credit applied', { blank: 'omit' }) ?? ZERO;
+  const lines = await journalRepo.findLinesForEntryWithAccountCodes(trx, row.journalEntryId);
+  const creditPosted = lines
+    .filter((l) => l.accountCode === ADVANCES_CODE)
+    .reduce((sum, l) => add(sum, money(String(l.credit))), ZERO);
+  const same =
+    row.supplierId === input.supplierId &&
+    row.storeId === input.storeId &&
+    row.moneyAccountId === input.moneyAccountId &&
+    String(row.businessDate).slice(0, 10) === String(input.businessDate).slice(0, 10) &&
+    compare(money(row.amount), amount) === 0 &&
+    compare(creditPosted, creditAsked) === 0 &&
+    (row.cashRequestId === null || row.cashRequestId === (input.cashRequestId ?? null)) &&
+    stored.length === asked.size &&
+    stored.every((s) => {
+      const want = asked.get(s.expenseId);
+      return want !== undefined && compare(money(s.amountApplied), want) === 0;
+    });
+  if (!same) throw different();
+  const allocated = stored.reduce((sum, s) => add(sum, money(s.amountApplied)), ZERO);
+  const unallocated = compare(subtract(amount, allocated), ZERO) < 0 ? ZERO : subtract(amount, allocated);
+  return { paymentId: row.id, entryId: row.journalEntryId, allocated, unallocated };
 }
 
 /** ⚠️ Reversal, never a delete — the original and its mirror both stay on the ledger. Allocation

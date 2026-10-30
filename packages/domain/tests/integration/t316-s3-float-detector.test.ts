@@ -260,7 +260,7 @@ describe('T-S3-4 — ⑥ after remitting D2: the float sits at 18,000 and the de
     await officeOpening(f, '2026-01-01', '90000.00');
     await asOrg(f.orgId, (tx) => setTillFloat(tx, f.admin, { storeId: f.storeId, target: '20000.00' }));
     await asOrg(f.orgId, (tx) =>
-      createMoneyTransfer(tx, f.admin, {
+      createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
         fromMoneyAccountId: f.safe,
         toMoneyAccountId: f.till,
         amountOut: '20000.00',

@@ -301,6 +301,7 @@ export default async function SupplierDetailPage({
             previewAction={autoAllocatePaymentAction}
             supplierId={id}
             storeId={storeId}
+            requestId={crypto.randomUUID()}
             items={openItems}
             wallets={wallets}
             floats={floats}

@@ -195,6 +195,7 @@ describe('T3 (✗ unchanged) — a forged POST naming Malvar by the Lipa manager
     const { createMoneyTransferAction } = await load(() => import('../../src/app/money-transfers/actions'), 'money-transfers/actions.ts');
     const form = () => {
       const fd = new FormData();
+      fd.set('requestId', crypto.randomUUID());
       fd.set('fromMoneyAccountId', f.lipaSafeId);
       fd.set('toMoneyAccountId', f.malvarSafeId);
       fd.set('amountOut', '1000.00');

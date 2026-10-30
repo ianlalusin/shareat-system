@@ -138,7 +138,7 @@ const settle = (transferActions as unknown as { settleBetweenStoresAction: (fd: 
 const recordDiscount = (statutoryActions as unknown as { recordStatutoryDiscountAction: (fd: FormData) => Promise<void> }).recordStatutoryDiscountAction;
 
 const transferForm = (f: Fixture, amountOut: string) =>
-  formOf({ fromMoneyAccountId: f.malvarSafe, toMoneyAccountId: f.lipaSafe, amountOut, amountIn: '', transferDate: '2026-01-16', reference: 'REF-1', notes: '' });
+  formOf({ requestId: crypto.randomUUID(), fromMoneyAccountId: f.malvarSafe, toMoneyAccountId: f.lipaSafe, amountOut, amountIn: '', transferDate: '2026-01-16', reference: 'REF-1', notes: '' });
 
 describe('M5 - a money transfer posts exactly the typed amount (I2)', () => {
   it('1234.56 posts 1234.56 on each leg, one entry, and the page address holds no amount', async () => {

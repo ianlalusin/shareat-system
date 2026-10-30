@@ -226,7 +226,7 @@ describe('T-330 — suggestPaymentAllocation', () => {
     expect(total.toFixed(2)).toBe('4500.00');
 
     await asOrg(f.orgId, (tx) =>
-      recordPayment(tx, f.manager, {
+      recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
         storeId: f.storeId, supplierId: f.supplierId, businessDate: '2026-01-20',
         amount: '4500.00', moneyAccountId: f.drawerId, allocations: result.allocations,
       }),
@@ -369,7 +369,7 @@ describe('T-330 — suggestPaymentAllocation', () => {
       ...result.allocations,
     ];
     const posted = await asOrg(f.orgId, (tx) =>
-      recordPayment(tx, f.manager, {
+      recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
         storeId: f.storeId, supplierId: f.supplierId, businessDate: '2026-01-20',
         amount: '800.00', moneyAccountId: f.drawerId, allocations: merged,
       }),
@@ -418,7 +418,7 @@ describe('T-330 — suggestPaymentAllocation', () => {
     expect(result.unallocated).toBe('300.00');
 
     await asOrg(f.orgId, (tx) =>
-      recordPayment(tx, f.manager, {
+      recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
         storeId: f.storeId, supplierId: f.supplierId, businessDate: '2026-01-20',
         amount: '1300.00', moneyAccountId: f.drawerId, allocations: result.allocations,
       }),

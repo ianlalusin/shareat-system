@@ -83,6 +83,8 @@ export default async function MoneyTransfersPage({
   });
   // Generated per render: the form submits it back, so a double click is a replay of ONE settlement.
   const settlementId = crypto.randomUUID();
+  // DEF-778: the same for the ordinary transfer form - a fresh id per render, so only a re-send of THIS render is a replay.
+  const requestId = crypto.randomUUID();
 
   return (
     <Page density="table">
@@ -189,7 +191,7 @@ export default async function MoneyTransfersPage({
             </>
           }
         >
-          <RecordTransferForm options={accountOptions} today={today} />
+          <RecordTransferForm options={accountOptions} requestId={requestId} today={today} />
         </FormModal>
         {settleOptions.length > 0 ? (
         <FormModal
