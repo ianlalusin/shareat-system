@@ -1,6 +1,6 @@
-# T-396: Link Malvar, Banay-Banay, Davao to POS, and a morning import timer
+# T-396: Link Malvar and Davao to POS, and a morning import timer
 
-**Status:** BUILT, NOT RELEASED 2026-10-18 for S1+S2 (06:00 Manila POS day-import, migration 0209, failure status on /sales-days, heartbeat alert); S3/S4 (link Malvar, Davao, Banay-Banay): POS ids received 2026-10-18; WAITING ON Ian widening the POS key map + POS rollout + receiving accounts, by Fri 23 Oct.
+**Status:** BUILT, NOT RELEASED 2026-10-18 for S1+S2 (06:00 Manila POS day-import, migration 0209, failure status on /sales-days, heartbeat alert); S3/S4 (link Malvar, Davao; Banay-Banay dropped, bible row 377, T-454): POS ids received 2026-10-18; WAITING ON Ian widening the POS key map + POS rollout + receiving accounts, by Fri 23 Oct.
 **Plan:** `docs/plans/remaining-build-plan.md` C8 (§3.3 row T-396), wave 2. **Bible:** rows 284 (Lipa first, Monday
 start), 292 (POS "collected" = a second cash tender), 293 (submitter never verifies), 303 (Lipa double-enters from 19 Oct,
 all four from **Mon 2 Nov**; timer 06:00 Manila; submit and verify stay human). **Builds on:** T-375 (feed, import,
@@ -21,7 +21,7 @@ silence. Nothing is recognised until a person submits and a **different** person
 | Fact | Source |
 |---|---|
 | Lipa is linked (`L5MExycvUOfQ96Y10FqF`), census GATE PASS; tenders: Cash, Collected (cash, row 292), Gcash, Bank (POS "Bank Transfer"), QR (POS "QRPH") | T-375 S0; `docs/ops/lipa-pos-link-runbook.md` |
-| The v2 POS key is **store-scoped and lists Lipa only**. POS answers 403 for any other store and `/api/external/stores` **hides** stores not in the map, so the link page cannot even offer Malvar/Banay-Banay/Davao until Ian widens the map | `POS/src/lib/server/external-auth.ts:29-67`, `POS/src/app/api/external/stores/route.ts`; `docs/ops/pos-v1-key.md` |
+| The v2 POS key is **store-scoped and lists Lipa only**. POS answers 403 for any other store and `/api/external/stores` **hides** stores not in the map, so the link page cannot even offer Malvar/Davao until Ian widens the map | `POS/src/lib/server/external-auth.ts:29-67`, `POS/src/app/api/external/stores/route.ts`; `docs/ops/pos-v1-key.md` |
 | POS store ids are **not** the v1 ERP ids in `docs/STORE-ROSTER.md` (Lipa: ERP `b9Dz…`, POS `L5ME…`). The POS ids are recorded in `docs/ops/pos-v1-key.md` (Ian, 2026-10-18) | grep of `docs/` |
 | POS has no "day closed" flag: `/api/external/sales` reads `stores/{id}/analytics/{yyyymmdd}`, `found:false` when absent. So "closed" = the date is before today in Manila | `POS/src/app/api/external/sales/route.ts:21-33` |
 | `importSalesDay(tx, actor, {storeId, businessDate})` needs `submit_sales_day`; writes `fetched_by`/`created_by` = `actor.personId` (NOT NULL). A non-admin is **create-blocked** behind an older unverified day; an admin bypasses (`canBypassBlock` = `close_period`) | `packages/domain/src/sales-days/import.ts:135-262`, `create-block.ts:78-120` |
@@ -228,8 +228,8 @@ check with `is-enabled`/`is-active`, never `list-timers`); Lipa uses it from the
 creates the heartbeat check (period 1 day, grace ~2 h) in the backup alert service and puts its URL in
 `/srv/shareat-shared/.env.local` as `POS_IMPORT_HEARTBEAT_URL` (with `nano`; never echoed). Expect Lipa's first run to
 draft every un-imported day back to 7 days (≥ 12 Oct link date) and raise the backlog notice once. Then, **per store**
-(Malvar, Banay-Banay, Davao), in `docs/ops/pos-link-runbook.md`:
-1. **Data (Ian, by Fri 23 Oct):** POS id; key map widened with all four ids; POS rolled out; step-4 curl = 200.
+(Malvar, Davao), in `docs/ops/pos-link-runbook.md`:
+1. **Data (Ian, by Fri 23 Oct):** POS id; key map widened with the ids of Lipa, Malvar and Davao; POS rolled out; step-4 curl = 200.
 2. **Dry run:** census (90 days) → GATE PASS in the status line; build money accounts and tenders from its (f) list;
    `npm run pos-link-preflight -- --store=… --pos-store=…` → **GO**.
 3. **Link (the Monday, Q5):** `/settings/pos-link`, channel, VAT inclusive, Link store; amber "not mapped" note gone.
@@ -260,7 +260,7 @@ store 1 skipped, status line green; re-run once more → 0 imported. Open one dr
 |---|---|---|---|
 | Q1 ✅ **(a), row 368** | Whose name the morning import works under | (a) the admin who last saved that store's POS link · (b) a new "system" identity | **(a)**: no new always-on login nobody watches; if that admin leaves, the import stops loudly and someone re-saves the link |
 | Q2 ✅ **(b), row 368 — against the recommendation** | How a failed morning reaches you | (a) red line on Sales days **and** a phone/email alert from the backup alert service · (b) the page only | **(a)**: a page only helps if someone opens it; the alert service is already paid for |
-| Q3 ✅ ids answered 2026-10-18 (in `docs/ops/pos-v1-key.md`); still open: widen the key map + roll POS out, and the receiving account per store | (action) Send the POS store ids of Malvar, Banay-Banay, Davao, add all four to the POS key and roll POS out; say which bank/e-wallet account receives each store's GCash, bank transfer and QRPH | — | By **Fri 23 Oct**, or 26 Oct slips |
+| Q3 ✅ ids answered 2026-10-18 (in `docs/ops/pos-v1-key.md`); still open: widen the key map + roll POS out, and the receiving account per store | (action) Send the POS store ids of Malvar and Davao, add Lipa, Malvar and Davao to the POS key and roll POS out (Banay-Banay is dropped, row 377); say which bank/e-wallet account receives each store's GCash, bank transfer and QRPH | — | By **Fri 23 Oct**, or 26 Oct slips |
 | Q4 ✅ **(a), row 368** | A day POS has no sales for (store closed) | (a) a note, no alarm · (b) an alarm | **(a)**: a closed day is normal; a POS outage still alarms |
 | Q5 ✅ **(a) Mon 26 Oct, row 368** | Which Monday to link the three stores | (a) Mon 26 Oct · (b) Mon 2 Nov | **(a)**: one week of imports to shake out before double entry starts 2 Nov; (b) leaves no slack |
 

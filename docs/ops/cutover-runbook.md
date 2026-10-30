@@ -154,7 +154,7 @@ Times are Manila (`Asia/Manila`). Durations `TBD (S4)`. Evidence goes in one dat
 | `TBD` | **E2** Final nightly backup is green | Checker | `/var/log/shareat/db-backup.log` last line; object under `postgres/daily/<date>/` has `.dump` **and** `.manifest.json` | n/a | log line, key | no manifest = unfinished: run `sudo systemctl start shareat-db-backup.service` and read the log |
 | `TBD` | **E3** Pin the cutover-eve dump | Ian | in the DO Spaces panel copy that night's `.dump`, `.manifest.json` and `.roles.sql` to `postgres/pinned/<date>/` (no script does this; `postgres/pinned/` is never pruned, T-393 R4). Note the dump's sha256 from the manifest | `TBD (S4)` | the three keys | keys exist under `pinned/` |
 | `TBD` | **E4** Last restore drill | Checker | `sudo systemctl start shareat-restore-drill.service`; read its log | `TBD (S4)` | drill report `postgres/drills/<date>.json` | trial balance equals the manifest. **Wizard step C1 is a tick that quotes this report's name (t394-q5 a).** Fails: no-go until fixed |
-| `TBD` | **E5** Counts done, C3 drafting started | counters, encoder | `/cutover/count` per store | `TBD (S4)` (scale Lipa's time by four stores) | wizard shows counts | every item has a number (an empty shelf is a typed zero) |
+| `TBD` | **E5** Counts done, C3 drafting started | counters, encoder | `/cutover/count` per store | `TBD (S4)` (scale Lipa's time by three stores) | wizard shows counts | every item has a number (an empty shelf is a typed zero) |
 | `TBD` | **E6** Go/no-go meeting (§4) | Ian | the tick sheet | | signed sheet | **no-go = stay on v1, new date 1 April 2027 (ADR-005)** |
 
 ### 3.2 1 January (the purge and the opening)
@@ -211,6 +211,20 @@ Success: every line reads `disabled / inactive`. (`db-backup` and `restore-drill
 | 06:00 | **D2** First-day check: the POS import lands in the new books | Checker | Sales Days screen for 1 Jan and 2 Jan; the import timer's last-run line (T-396, once installed) | | | figures present, dated 2027; first document numbers are **1** for each reset sequence |
 | `TBD` | **D3** Rollback deadline check | Ian | §6 | | | C5 posted **by 5 Jan** (t394-q4 a) or go back to v1 |
 | `TBD` | **D4** Sign off the day | Ian | tick sheet | | | done |
+
+### 3.5 Banay-Banay closing (T-454; bible rows 377, 384; Ian's answers 29 Oct)
+
+Banay-Banay closes on 31 Dec 2026 and is never loaded into v2. Its stock, cash and equipment are handed over
+offline, and what is left is simply counted into Lipa's own opening. Its supplier and customer balances are all
+settled before 31 Dec. Steps B0-B4 prove that nothing is still open under Banay-Banay.
+
+| Step | When | Owner | Command / screen | Success | If not |
+|---|---|---|---|---|---|
+| **B0** Precheck | before the 13 Nov rehearsal | Ian | `docs/ops/P454-precheck.sql`, read-only, on production | returns no row | a Banay-Banay row exists: Ian deactivates it on `/admin/stores/<id>`. Never delete it |
+| **B1** Count goes to Lipa | 31 Dec, night | counters, encoder | No count is recorded for Banay-Banay in any system. Its leftover stock is included in Lipa's own opening count (C3) | Lipa's count covers it | nothing separate is entered for Banay-Banay |
+| **B2** Zero check | 31 Dec, before the E-steps end | Ian | `npm run audit -- --stores iGOW7q2pZbeHWV832UNh --as-of 2026-12-31 --expect-zero` | exit 0: every supplier and customer balance is ₱0.00. Cash, stock and equipment print as information under "Handled offline, carried in Lipa's opening" and never fail the check | exit 1 names each open supplier or customer balance: settle it in v1, then run again. No cutover purge until it exits 0 |
+| **B3** Store check | 1 Jan, before P4 | Ian | `P454-precheck.sql` again | no active Banay-Banay store; no rows point at it | deactivate it on `/admin/stores`. Never delete |
+| **B4** Rehearsal report | 13 Nov and 18 Dec rehearsals | Checker | the rehearsal report | lists no Banay-Banay row | fix before the go decision (§4) |
 
 ## 4. Go / no-go checklist (E6, and again before P6)
 

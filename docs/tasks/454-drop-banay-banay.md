@@ -1,7 +1,6 @@
 # T-454: Drop Banay-Banay from v2 (the store closes 31 Dec 2026; Lipa buys it back)
 
-**Status:** SPEC WRITTEN 2026-10-29 by the Opus planner, measured on `origin/main` `b3ace76`. Awaiting the
-orchestrator's review and Ian's answers to §9 (only Q1 and Q2 block anything; see each).
+**Status:** S1, S2, S4 live (PRs #95, #99); S3 docs done; S5 not built (Ian's Q4). Spec written 2026-10-29 by the Opus planner, measured on `origin/main` `b3ace76`.
 **Rulings:** bible row **377** (Ian, 22 Oct: drop Banay-Banay completely from v2) and row **384** (Ian, 24 Oct: it
 closes at the end of 2026, Lipa buys it back, its closing stock, cash and equipment pass to Lipa **in v1 before
 cutover**, nothing of Banay-Banay is opened in v2). **New, Ian 29 Oct: the closing date is 31 Dec 2026** (needs its
