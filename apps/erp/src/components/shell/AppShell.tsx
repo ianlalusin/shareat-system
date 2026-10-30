@@ -19,9 +19,10 @@ import { Suspense } from 'react';
 //    constraint-refusal counter lives; a direct import silently bypasses it.
 import { withOrgPrincipal } from '../../app/expenses/lib';
 import { heldCapabilities } from '@shareat/auth';
+import { commissaryCatalogueRepo } from '@shareat/db';
 import { currentSession } from '../../lib/session';
 import { GROUPS } from '../nav';
-import { navHrefAllowed } from '../../lib/route-capability';
+import { commissaryNavAllowed, navHrefAllowed } from '../../lib/route-capability';
 import { KIOSK_HEADER } from './kiosk';
 import { SIDEBAR_COOKIE_NAME, parseSidebarState } from './sidebar-state';
 import { Sidebar, SidebarProvider } from './Sidebar';
@@ -53,11 +54,13 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
    * and the grant rows once.
    */
   // ⛔ Principalled — see `page-access.tsx`'s note. T-231.
-  const held = await withOrgPrincipal(session.actor.orgId, (tx) =>
-    heldCapabilities(tx, session.actor),
-  );
-  const allowedHrefs = GROUPS.flatMap((g) => g.links.map((l) => l.href)).filter((href) =>
-    navHrefAllowed(href, held as ReadonlySet<string>),
+  // DEF-803: the commissary usage rides the same transaction - one more cheap query, not one per link.
+  const { held, usage } = await withOrgPrincipal(session.actor.orgId, async (tx) => ({
+    held: await heldCapabilities(tx, session.actor),
+    usage: await commissaryCatalogueRepo.commissaryUsage(tx, session.actor.orgId),
+  }));
+  const allowedHrefs = GROUPS.flatMap((g) => g.links.map((l) => l.href)).filter(
+    (href) => navHrefAllowed(href, held as ReadonlySet<string>) && commissaryNavAllowed(href, usage),
   );
 
   return (

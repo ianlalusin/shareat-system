@@ -154,3 +154,18 @@ export function navHrefAllowed(href: string, held: ReadonlySet<string>): boolean
   const accepted = capabilitiesForRoute(href);
   return accepted.length === 0 || accepted.some((c) => held.has(c));
 }
+
+/**
+ * DEF-803 - the three commissary nav items show only when the org actually uses them (T-398 smoketest: a franchisee's owner saw all three, each an empty
+ * state; ADR-008 s6 / O5: PG sees no commissary screen). `commissaryUsage` (packages/db) supplies the two facts. ⛔ Presentation only, like `navHrefAllowed`:
+ * the routes are untouched and still render their empty states on a direct visit.
+ *  - "Commissary catalogue" and "Transit discrepancies": only if the org has a commissary store.
+ *  - "Branch orders": only if the org has a store linked as a branch, or has a commissary.
+ */
+export const COMMISSARY_NAV_HREFS: readonly string[] = ['/commissary/orders', '/commissary/catalogue', '/commissary/discrepancies'];
+
+export function commissaryNavAllowed(href: string, usage: { readonly hasCommissary: boolean; readonly hasBranchLink: boolean }): boolean {
+  if (!COMMISSARY_NAV_HREFS.includes(href)) return true;
+  if (href === '/commissary/orders') return usage.hasCommissary || usage.hasBranchLink;
+  return usage.hasCommissary;
+}
