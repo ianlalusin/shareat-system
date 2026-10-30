@@ -23,19 +23,22 @@ Starting local Firebase emulators alone does not configure the POS server, ERP a
 Real device/printer/payment/visual checks and offline soak remain release gates. No interim Firebase launch is
 required by default; retain these server instructions for paths that still depend on it until their owner changes.
 
-## 0. Historical T-424 server prerequisites (cloud transition only)
+## 0. Switch-on checklist (live: 7 Nov 2026, steps 3-9)
+
+Steps 1-2 are done. Steps 3-9 are the live 7 Nov checklist (phase plan section 0). There is no cloud TEST Firebase project in the plan: the Firebase key is
+the production project the APK signs into (`shareat-hub-v2`), and Ian confirms that project before step 3.
 
 | # | Step | Who | Done when |
 |---|---|---|---|
-| 1 | A TEST copy of the POS Firebase project, so the new POS can be tried before the December soak with nothing real at risk | Ian + orchestrator | A Firebase project exists with the POS rules and a few test staff/store docs |
-| 2 | DNS: `pos2.shareat.net` A record -> `159.223.46.224` | Ian | `nslookup pos2.shareat.net` answers the droplet |
-| 3 | A write key (service-account JSON) for that Firebase project, copied to the box. **Never in the code, never pasted in a chat** | Ian or orchestrator | File exists, `chmod 600`, owner `shareat` |
-| 4 | The environment file (section 2) | orchestrator | `systemctl show shareat-pos -p EnvironmentFiles` lists it |
-| 5 | The Caddy route (section 3) | orchestrator | `curl -s -o /dev/null -w '%{http_code}' https://pos2.shareat.net/api/pos2/refunds` answers 405 (GET) |
-| 6 | The unit (section 4) and the `deploy.yml` change (section 6) | orchestrator | first start (section 5) is healthy |
-| 7 | Migration **0202** (`pos_terminal_links`) is on the database | the normal deploy | `select to_regclass('pos_terminal_links')` is not null |
-| 8 | Each store manager has an ERP PIN (Staff page) AND the permission "approve a POS refund or correction" at their store (`approve_pos_correction`), which an ADMINISTRATOR grants (the access-defaults grid or a hand grant); it is NOT given by default. Administrators hold it implicitly | Ian | A manager's PIN approves a test refund |
-| 9 | Each POS v2 tablet is registered (section 7) | an administrator | The tablet's approvals stop saying "not registered" |
+| 1 | DONE (APK signing secrets are in GitHub, 22 Oct) | Ian | The release workflow can sign the APK |
+| 2 | DONE: DNS `pos2.shareat.net` A record -> `159.223.46.224` (checked 29 Oct) | Ian | `nslookup pos2.shareat.net` answers the droplet |
+| 3 | A write key (service-account JSON) for the Firebase project the APK signs into (`shareat-hub-v2`; Ian confirms), copied to the box. **Never in the code, never pasted in a chat** | Ian or orchestrator | File exists, `chmod 600`, owner `shareat` |
+| 4 | The environment file (section 2); the unit already loads it (`EnvironmentFile=` in `shareat-pos.service`) | orchestrator | `systemctl show shareat-pos -p EnvironmentFiles` lists it |
+| 5 | The Caddy route (section 3; `provision.sh` writes it when run with the domain) | orchestrator | `curl -s -o /dev/null -w '%{http_code}' https://pos2.shareat.net/api/pos2/refunds` answers 405 (GET) |
+| 6 | The unit (section 4) and the `deploy.yml` behaviour (section 6) | orchestrator | first start (section 5) is healthy |
+| 7 | Migration **0202** (`pos_terminal_links`) is on the database (production is already past 0216) | the normal deploy | `select to_regclass('pos_terminal_links')` is not null |
+| 8 | Each store manager has an ERP PIN (Staff page) AND the permission "approve a POS refund or correction" at their store (`approve_pos_correction`), which an ADMINISTRATOR grants (the access-defaults grid or a hand grant); it is NOT given by default. Administrators hold it implicitly | Ian | A manager's PIN approves a refund |
+| 9 | Each POS v2 tablet is registered (section 7). The device id changes on every APK re-install, so the link must be redone after each re-install | an administrator | The tablet's approvals stop saying "not registered" |
 
 ## 1. Pointing the APK at the server
 The APK keeps calling v1 (`NEXT_PUBLIC_API_BASE`, `https://app.shareat.net`) for loyalty, PINs and the rest. Only `/api/pos2/*` goes to
@@ -92,14 +95,12 @@ The server logs an error line (never the request body, never a PIN) on an unexpe
    768 MB cap and the ERP must not slow down (`systemctl show shareat-erp -p MemoryCurrent`). If POS climbs, stop it and tell the lane: the ERP comes first.
 4. Try one refund on the TEST project with a test tablet and a manager PIN (section 7 first). Then run the detector (section 8).
 
-## 6. `deploy.yml` change - PROPOSAL ONLY (the lane does not edit it)
-Today `deploy.yml` ships one artifact built from `apps/erp`. To ship POS v2 beside it, in the same workflow:
-1. After the ERP build: `npm run build -w @shareat/pos` (CI only; **never on the droplet**). Do NOT run `build:cap` here.
-2. Add to the artifact `PATHS`: `apps/pos/.next apps/pos/package.json apps/pos/next.config.mjs apps/pos/public`. The `scripts`, `packages` and `node_modules`
-   entries are already shipped; `firebase-admin` is already in `node_modules` (the ERP uses it).
-3. After the ERP restart step: `sudo /usr/bin/systemctl restart shareat-pos.service` (add it to the `shareat` user's sudoers entry beside `shareat-erp`).
-4. In "Confirm the app is up": also `curl -fsS http://127.0.0.1:9009/` (POS is up) and `curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:9009/api/pos2/refunds -d '{}'` -> `401`.
-5. Keep the APK build separate (`npm run build:cap -w @shareat/pos`): it stashes `src/app/api` and `src/middleware.ts`, so `out/` holds no server code.
+## 6. `deploy.yml` - what ships today
+`deploy.yml` already ships POS v2 beside the ERP (no change needed):
+1. CI builds `apps/pos` (never on the droplet) and adds it to the artifact. The APK build stays separate (`npm run build:cap -w @shareat/pos`), so `out/` holds no server code.
+2. After the ERP restart it restarts `shareat-pos.service` only if `/etc/systemd/system/shareat-pos.service` exists (otherwise "shipped, not started"). A POS restart failure never stops the ERP deploy.
+3. A separate step then health-checks `http://127.0.0.1:9009/api/pos2/health` (6 tries, 5 s apart) and fails the run if POS does not answer.
+4. The `shareat` user may restart it: `provision.sh` lists `systemctl restart shareat-pos.service` in `/etc/sudoers.d/shareat-deploy` beside `shareat-erp`. Re-run `provision.sh` once on the box to apply it.
 Migration 0202 rides the existing migrate step; no extra step.
 
 ## 7. Registering a tablet (once per tablet; again after a re-install)

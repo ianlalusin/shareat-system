@@ -1,6 +1,6 @@
 # T-427: POS v2 — Convert (GCash cash-in / cash-out) as its own screen, through the POS v2 server (P0)
 
-**Status:** spec written 2026-10-17 (Opus planner, POS v2 lane); revised after the Opus review (✎R); ready to build. (Written outside plan mode
+**Status:** (checked 31 Oct against main) building is well under way and on main: red tests `e9830c6`, Convert routes `1aa73d6`, wiring `ac19dc1`, handover retry `d17d0ef`; slices S2/S3 completion, audit and any open disputes: verify. Original: spec written 2026-10-17 (Opus planner, POS v2 lane); revised after the Opus review (✎R); ready to build. (Written outside plan mode
 at Ian's request to cut approval pop-ups; the spec is Opus-written and Opus-reviewed, which is what plan mode secured.)
 **Model:** Sonnet tester -> Sonnet builder -> Sonnet auditor (money lane).
 **Migration:** none.
