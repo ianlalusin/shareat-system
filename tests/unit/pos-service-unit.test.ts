@@ -87,3 +87,21 @@ describe('T-417 shareat-pos.service', () => {
     expect(prov).not.toMatch(/enable[^\n]*shareat-pos/);
   });
 });
+
+describe('POS v2 switch-on prep (7 Nov)', () => {
+  it('the unit loads /srv/shareat-shared/pos2.env. Mutant: EnvironmentFile removed, every pos2 route answers 503', () => {
+    expect(directives()).toContain('EnvironmentFile=/srv/shareat-shared/pos2.env');
+  });
+
+  it('provision.sh lets the deploy user restart shareat-pos.service (exact command), the ERP rule intact. Mutant: sudoers lists only shareat-erp', () => {
+    const sh = readFileSync(path.join(repoRoot, 'docs', 'ops', 'provision.sh'), 'utf8');
+    expect(sh).toContain('shareat ALL=(root) NOPASSWD: /usr/bin/systemctl restart shareat-pos.service');
+    expect(sh).toContain('shareat ALL=(root) NOPASSWD: /usr/bin/systemctl restart shareat-erp.service');
+  });
+
+  it('provision.sh writes the pos2.shareat.net Caddy block to 127.0.0.1:9009 and creates pos.log owned by shareat. Mutant: block or log missing', () => {
+    const sh = readFileSync(path.join(repoRoot, 'docs', 'ops', 'provision.sh'), 'utf8');
+    expect(sh).toMatch(/pos2\.shareat\.net \{[\s\S]*reverse_proxy 127\.0\.0\.1:9009/);
+    expect(sh).toContain('chown shareat:shareat /var/log/shareat/pos.log');
+  });
+});

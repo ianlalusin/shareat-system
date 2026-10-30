@@ -1,6 +1,6 @@
 # T-425: POS v2 offline selling — sale ledger, server-proven sync, reachability, ₱50k warning, X-slip, soak harness (P0, PC-5)
 
-**Status:** spec written 2026-10-17 (Opus planner, POS v2 lane, plan mode); revised after the Opus spec review the
+**Status:** (checked 31 Oct against main) S1-S6 built and on main in `68b5c39` ("WIP ... NOT audited; 2 tests disputed"); later audit and dispute outcome: verify. Real two-tablet soak 23-29 Nov (docs/ops/pos2-soak.md). Original: spec written 2026-10-17 (Opus planner, POS v2 lane, plan mode); revised after the Opus spec review the
 same day (3 blockers, 7 majors, minors: marked ✎R); second review: 5 fixes applied (✎R2), ready to build
 **Model:** Sonnet tester -> Sonnet builder -> Sonnet auditor (money-adjacent: Sonnet, never Haiku).
 **Migration:** none expected.

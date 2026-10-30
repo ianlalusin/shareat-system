@@ -1,6 +1,6 @@
 # T-424: POS v2 server — manager-PIN approvals, refunds, tender corrections, server-gated void (P0, PC-4 part 2)
 
-**Status:** DONE 2026-10-17 — merged to main; in release PR #34 (not yet live; POS v2 lane — in use only after the docs/ops/pos2-runbook.md steps).
+**Status:** DONE 2026-10-17 — merged to main (release PR #34, merge `b113054`; code `4989f43`). Shipped by deploy.yml but NOT started: the unit, env file and Caddy route go live at the 7 Nov switch-on (docs/ops/pos2-runbook.md section 0, steps 3-9). Migration 0202 is deployed.
 review (B1, B2, M1-M6 and minors folded in, marked ✎R). Re-review before build.
 **Model:** Sonnet tester -> Sonnet builder -> Sonnet auditor; S5 (auth) is an auth lane: Sonnet, its own test DB
 copied with `CREATE DATABASE … TEMPLATE shareat_test_t416`.
