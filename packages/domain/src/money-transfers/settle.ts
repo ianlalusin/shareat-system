@@ -217,6 +217,12 @@ async function runSettle(tx: Tx, actor: Actor, input: SettleBetweenStoresInput):
     journalEntryId: posted.entryId,
     createdBy: actor.personId,
   });
+  if (!row) {
+    throw refuse(
+      `settleBetweenStores: settlementId ${settlementId} already belongs to a row this caller cannot replay.`,
+      'This form is out of date. Reload the page and try again.',
+    );
+  }
 
   return {
     id: row.id,

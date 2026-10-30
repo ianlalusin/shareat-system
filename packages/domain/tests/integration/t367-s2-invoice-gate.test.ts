@@ -295,7 +295,7 @@ describe('V3 — a voided invoice (raw SQL, simulating legacy/ETL data) is exclu
 
     const [expenseRow] = await sql<{ id: string }[]>`select id from expenses where supplier_invoice_id = ${invoiceId}`;
     const err = await asOrg(f.orgId, (tx) =>
-      recordPayment(tx, f.managerA, { storeId: f.storeA, supplierId: f.supplierId, businessDate: '2027-02-05', amount: '400.00', moneyAccountId: f.drawerA, allocations: [{ expenseId: expenseRow!.id, amountApplied: '400.00' }] }),
+      recordPayment(tx, f.managerA, { requestId: crypto.randomUUID(), storeId: f.storeA, supplierId: f.supplierId, businessDate: '2027-02-05', amount: '400.00', moneyAccountId: f.drawerA, allocations: [{ expenseId: expenseRow!.id, amountApplied: '400.00' }] }),
     ).catch((e) => e);
     expect(err, 'today: the payment posts because openItems still lists it').toBeInstanceOf(Error);
     const [paidCount] = await sql<{ n: string }[]>`select count(*)::text as n from ap_payments where org_id = ${f.orgId}`;
@@ -309,7 +309,7 @@ describe('V3 — a voided invoice (raw SQL, simulating legacy/ETL data) is exclu
     const open = await openItemsFor(f, f.storeA);
     expect(open).toHaveLength(1);
     await asOrg(f.orgId, (tx) =>
-      recordPayment(tx, f.managerA, { storeId: f.storeA, supplierId: f.supplierId, businessDate: '2027-02-05', amount: '400.00', moneyAccountId: f.drawerA, allocations: [{ expenseId, amountApplied: '400.00' }] }),
+      recordPayment(tx, f.managerA, { requestId: crypto.randomUUID(), storeId: f.storeA, supplierId: f.supplierId, businessDate: '2027-02-05', amount: '400.00', moneyAccountId: f.drawerA, allocations: [{ expenseId, amountApplied: '400.00' }] }),
     );
     expect(await control2110(f.orgId, f.storeA)).toBe('0.00');
   });
@@ -364,7 +364,7 @@ describe('V5 — a paid bill', () => {
     const f = await fixture('v5');
     const invoiceId = await verifiedInvoice(f, f.storeA, f.staffA, f.managerA, '1000.00');
     const { expenseId } = await creditExpense(f, f.storeA, f.managerA, invoiceId, '400.00');
-    await asOrg(f.orgId, (tx) => recordPayment(tx, f.managerA, { storeId: f.storeA, supplierId: f.supplierId, businessDate: '2027-02-05', amount: '400.00', moneyAccountId: f.drawerA, allocations: [{ expenseId, amountApplied: '400.00' }] }));
+    await asOrg(f.orgId, (tx) => recordPayment(tx, f.managerA, { requestId: crypto.randomUUID(), storeId: f.storeA, supplierId: f.supplierId, businessDate: '2027-02-05', amount: '400.00', moneyAccountId: f.drawerA, allocations: [{ expenseId, amountApplied: '400.00' }] }));
 
     const err = await asOrg(f.orgId, (tx) => voidInvoice(tx, f.managerA, { invoiceId, reason: 'no longer needed' })).catch((e) => e);
     expect(err, 'today: voidExpense has no paid-check at all, so this succeeds').toBeInstanceOf(Error);
@@ -383,7 +383,7 @@ describe('V5 — a paid bill', () => {
     const f = await fixture('v5b');
     const invoiceId = await verifiedInvoice(f, f.storeA, f.staffA, f.managerA, '1000.00');
     const { expenseId } = await creditExpense(f, f.storeA, f.managerA, invoiceId, '400.00');
-    await asOrg(f.orgId, (tx) => recordPayment(tx, f.managerA, { storeId: f.storeA, supplierId: f.supplierId, businessDate: '2027-02-05', amount: '400.00', moneyAccountId: f.drawerA, allocations: [{ expenseId, amountApplied: '400.00' }] }));
+    await asOrg(f.orgId, (tx) => recordPayment(tx, f.managerA, { requestId: crypto.randomUUID(), storeId: f.storeA, supplierId: f.supplierId, businessDate: '2027-02-05', amount: '400.00', moneyAccountId: f.drawerA, allocations: [{ expenseId, amountApplied: '400.00' }] }));
     const err = await asOrg(f.orgId, (tx) => voidExpense(tx, f.managerA, expenseId, 'no longer needed')).catch((e) => e);
     expect(err, 'today: no such guard').toBeInstanceOf(Error);
     const msgV5b = (err as { userMessage?: string }).userMessage;
@@ -395,7 +395,7 @@ describe('V5 — a paid bill', () => {
     const f = await fixture('v5-pc');
     const invoiceId = await verifiedInvoice(f, f.storeA, f.staffA, f.managerA, '1000.00');
     const { expenseId } = await creditExpense(f, f.storeA, f.managerA, invoiceId, '400.00');
-    const paid = await asOrg(f.orgId, (tx) => recordPayment(tx, f.managerA, { storeId: f.storeA, supplierId: f.supplierId, businessDate: '2027-02-05', amount: '400.00', moneyAccountId: f.drawerA, allocations: [{ expenseId, amountApplied: '400.00' }] }));
+    const paid = await asOrg(f.orgId, (tx) => recordPayment(tx, f.managerA, { requestId: crypto.randomUUID(), storeId: f.storeA, supplierId: f.supplierId, businessDate: '2027-02-05', amount: '400.00', moneyAccountId: f.drawerA, allocations: [{ expenseId, amountApplied: '400.00' }] }));
     await asOrg(f.orgId, (tx) => voidPayment(tx, f.managerA, { paymentId: paid.paymentId, reason: 'bounced' }));
     await expect(asOrg(f.orgId, (tx) => voidInvoice(tx, f.managerA, { invoiceId, reason: 'no longer needed' }))).resolves.toBeUndefined();
     expect(await control2110(f.orgId, f.storeA)).toBe('0.00');
@@ -414,7 +414,7 @@ describe('V6 — payment vs void', () => {
 
     const { bResult, bWaited } = await runConcurrencyLeg(
       f.orgId,
-      (tx) => recordPayment(tx, f.managerA, { storeId: f.storeA, supplierId: f.supplierId, businessDate: '2027-02-05', amount: '400.00', moneyAccountId: f.drawerA, allocations: [{ expenseId, amountApplied: '400.00' }] }),
+      (tx) => recordPayment(tx, f.managerA, { requestId: crypto.randomUUID(), storeId: f.storeA, supplierId: f.supplierId, businessDate: '2027-02-05', amount: '400.00', moneyAccountId: f.drawerA, allocations: [{ expenseId, amountApplied: '400.00' }] }),
       (tx) => voidExpense(tx, f.managerA, expenseId, 'race'),
       ROW_LOCK,
     );
@@ -440,7 +440,7 @@ describe('V6 — payment vs void', () => {
     const { bResult, bWaited } = await runConcurrencyLeg(
       f.orgId,
       (tx) => voidExpense(tx, f.managerA, expenseId, 'race'),
-      (tx) => recordPayment(tx, f.managerA, { storeId: f.storeA, supplierId: f.supplierId, businessDate: '2027-02-05', amount: '400.00', moneyAccountId: f.drawerA, allocations: [{ expenseId, amountApplied: '400.00' }] }),
+      (tx) => recordPayment(tx, f.managerA, { requestId: crypto.randomUUID(), storeId: f.storeA, supplierId: f.supplierId, businessDate: '2027-02-05', amount: '400.00', moneyAccountId: f.drawerA, allocations: [{ expenseId, amountApplied: '400.00' }] }),
       ROW_LOCK,
     );
     expect(bWaited, 'today: recordPayment / voidExpense share no lock').toBe(true);

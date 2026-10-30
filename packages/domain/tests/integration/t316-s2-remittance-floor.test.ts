@@ -134,7 +134,7 @@ async function openDay(f: F, date: string, cashCollected: string) {
 
 async function fundTill(f: F, amount: string, date = '2026-01-02') {
   await asOrg(f.orgId, (tx) =>
-    createMoneyTransfer(tx, f.admin, {
+    createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
       fromMoneyAccountId: f.safe,
       toMoneyAccountId: f.till,
       amountOut: amount,
@@ -383,7 +383,7 @@ describe('T-S2-7 ⭐ the seam is a decision — a bare transfer of surplus float
   it('float funded 21,000: a cashier→office createMoneyTransfer of 1,000 works; no allocation, V still owes 5,000; the same 1,000 as a remittance overage is refused', async () => {
     const f = await scenario('s7', { float: true, funded: '21000.00' });
     await asOrg(f.orgId, (tx) =>
-      createMoneyTransfer(tx, f.admin, {
+      createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
         fromMoneyAccountId: f.till,
         toMoneyAccountId: f.safe,
         amountOut: '1000.00',

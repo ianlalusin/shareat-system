@@ -484,7 +484,7 @@ describe('T-170 — the credit is spendable', () => {
     const expenseRow = { id: expense.expenseId };
 
     const paid = await asOrg(f.orgId, (tx) =>
-      recordPayment(tx, f.manager, {
+      recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
         storeId: f.storeId, supplierId: f.supplierId, businessDate: '2026-02-02',
         amount: '1000.00', moneyAccountId: f.moneyAccountId, creditApplied: '1000.00',
         allocations: [{ expenseId: expenseRow!.id, amountApplied: '1000.00' }],
@@ -523,7 +523,7 @@ describe('T-170 — the credit is spendable', () => {
 
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordPayment(tx, f.manager, {
+        recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
           storeId: f.storeId, supplierId: f.supplierId, businessDate: '2026-02-02',
           amount: '1000.00', moneyAccountId: f.moneyAccountId, creditApplied: '600.00',
           allocations: [{ expenseId: expenseRow!.id, amountApplied: '1000.00' }],

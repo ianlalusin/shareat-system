@@ -103,7 +103,7 @@ function inputByName(html: string, name: string): string | undefined {
 
 async function renderTransferForm(): Promise<string> {
   const { RecordTransferForm } = await import('../src/app/money-transfers/RecordTransferForm');
-  return renderToStaticMarkup(createElement(RecordTransferForm, { options: [], today: '2026-01-01' }));
+  return renderToStaticMarkup(createElement(RecordTransferForm, { options: [], requestId: '11111111-1111-4111-8111-111111111111', today: '2026-01-01' }));
 }
 
 describe('R-legs — real render: RecordTransferForm.tsx amountIn', () => {

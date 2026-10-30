@@ -64,7 +64,7 @@ afterAll(async () => {
 async function createFixture() {
   const f = await moneyFixture(sql, 't440s6');
   const [office] = await sql<{ id: string }[]>`select id from money_accounts where store_id = ${f.storeId} and instrument = 'cash' and custodian = 'office' and is_foundation`;
-  const transfer = await asOrgOn(f.orgId, (tx) => createMoneyTransfer(tx, f.admin, { fromMoneyAccountId: f.drawerId, toMoneyAccountId: office!.id, amountOut: '10.00', amountIn: '10.00', transferDate: '2026-01-10' }));
+  const transfer = await asOrgOn(f.orgId, (tx) => createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(), fromMoneyAccountId: f.drawerId, toMoneyAccountId: office!.id, amountOut: '10.00', amountIn: '10.00', transferDate: '2026-01-10' }));
   // Requested cash and draft settlement/template records exist before their authorized bad-field posts.
   const [request] = await sql<{ id: string }[]>`insert into cash_requests (org_id, store_id, requested_for, purpose, requested_amount, requested_on, created_by) values (${f.orgId}, ${f.storeId}, ${f.staffId}, 'Synthetic float', '100.00', '2026-01-10', ${f.adminId}) returning id`;
   const [day] = await sql<{ id: string }[]>`insert into sales_days (org_id, store_id, business_date, total_sales, unli_sales, ala_carte_sales, created_by) values (${f.orgId}, ${f.storeId}, '2026-01-10', '0', '0', '0', ${f.adminId}) returning id`;

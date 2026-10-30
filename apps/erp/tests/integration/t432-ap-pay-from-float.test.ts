@@ -192,6 +192,7 @@ async function post(f: F, p: Post): Promise<{ error: string | null; ok: string |
   H.actor = p.as ?? f.manager;
   resetJar();
   const fd = new FormData();
+  fd.set('requestId', crypto.randomUUID());
   fd.set('supplierId', p.supplierId);
   fd.set('storeId', p.storeId);
   fd.set('businessDate', '2026-01-15');
@@ -451,7 +452,7 @@ describe('case 14 - a staff-role actor is refused by the domain, not by the form
     let baseline = '<<NO REFUSAL>>';
     try {
       await asOrg(f.orgId, (tx) =>
-        recordPayment(tx, f.staff, {
+        recordPayment(tx, f.staff, { requestId: crypto.randomUUID(),
           storeId: f.storeA, supplierId: sup, businessDate: '2026-01-15', amount: '1.00', moneyAccountId: f.safeA,
           allocations: [{ expenseId: b.expenseId, amountApplied: '1.00' }],
         }),

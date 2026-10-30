@@ -197,7 +197,7 @@ type Fixture = Awaited<ReturnType<typeof fixture>>;
 /** An ordinary cross-store transfer `from` -> `to` (works today). The SOURCE store gets DR 1250, the DESTINATION store CR 2150:
  *  so `from` -> `to` makes the DESTINATION owe the source. Seed with Malvar safe -> Lipa safe: Lipa owes Malvar. */
 const transfer = (f: Fixture, from: Account, to: Account, amount: string, who: Actor = f.admin) =>
-  asOrg(f.orgId, (tx) => createMoneyTransfer(tx, who, { fromMoneyAccountId: from.id, toMoneyAccountId: to.id, amountOut: amount, amountIn: amount, transferDate: DATE }));
+  asOrg(f.orgId, (tx) => createMoneyTransfer(tx, who, { requestId: crypto.randomUUID(), fromMoneyAccountId: from.id, toMoneyAccountId: to.id, amountOut: amount, amountIn: amount, transferDate: DATE }));
 const seedDebt = (f: Fixture, amount = '650.00') => transfer(f, f.malvarSafe, f.lipaSafe, amount);
 
 interface SettleInput { settlementId?: string; from: Account; to: Account; amountOut: string; amountIn?: string; date?: string }

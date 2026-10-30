@@ -106,7 +106,7 @@ describe('amountIn (DEF-470 item 1) — comma-typed value is ALREADY green (crea
     let caught: unknown;
     try {
       await asOrg(f.orgId, (tx) =>
-        createMoneyTransfer(tx, f.admin, {
+        createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
           fromMoneyAccountId: f.drawerId,
           toMoneyAccountId: f.safeId,
           amountOut: '100.00',
@@ -817,6 +817,7 @@ describe.each([
 
 function transferFormData(f: Awaited<ReturnType<typeof transferFixture>>, amountIn: string): FormData {
   const fd = new FormData();
+  fd.set('requestId', crypto.randomUUID());
   fd.set('fromMoneyAccountId', f.drawerId);
   fd.set('toMoneyAccountId', f.safeId);
   fd.set('amountOut', '100.00');

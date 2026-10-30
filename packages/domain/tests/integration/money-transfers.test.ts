@@ -195,7 +195,7 @@ describe('the posting — POSTING-PATTERNS.md §Transfer', () => {
     const f = await fixture('simple');
     await postCash(f, '1110', '4100', '15000.00');
     const r = await asOrg(f.orgId, (tx) =>
-      createMoneyTransfer(tx, f.admin, {
+      createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
         fromMoneyAccountId: f.drawer.id,
         toMoneyAccountId: f.safe.id,
         amountOut: '15000.00',
@@ -219,7 +219,7 @@ describe('the posting — POSTING-PATTERNS.md §Transfer', () => {
     await fundWallet(f, f.gcash.id, '10000.00');
     // ₱10,000 leaves the wallet, ₱9,950 reaches the safe. The ₱50 is a bank charge.
     const r = await asOrg(f.orgId, (tx) =>
-      createMoneyTransfer(tx, f.admin, {
+      createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
         fromMoneyAccountId: f.gcash.id,
         toMoneyAccountId: f.safe.id,
         amountOut: '10000.00',
@@ -256,7 +256,7 @@ describe('the refusals — T-139 §5', () => {
     const f = await fixture('same');
     await expect(
       asOrg(f.orgId, (tx) =>
-        createMoneyTransfer(tx, f.admin, {
+        createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
           fromMoneyAccountId: f.drawer.id,
           toMoneyAccountId: f.drawer.id,
           amountOut: '100.00',
@@ -272,7 +272,7 @@ describe('the refusals — T-139 §5', () => {
     await postCash(f, '1110', '4100', '200.00');
     await expect(
       asOrg(f.orgId, (tx) =>
-        createMoneyTransfer(tx, f.admin, {
+        createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
           fromMoneyAccountId: f.drawer.id,
           toMoneyAccountId: f.safe.id,
           amountOut: '100.00',
@@ -298,7 +298,7 @@ describe('the refusals — T-139 §5', () => {
     await sql`update money_accounts set is_active = false where id = ${extra.id}`;
     await expect(
       asOrg(f.orgId, (tx) =>
-        createMoneyTransfer(tx, f.admin, {
+        createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
           fromMoneyAccountId: extra.id,
           toMoneyAccountId: f.safe.id,
           amountOut: '100.00',
@@ -315,7 +315,7 @@ describe('the refusals — T-139 §5', () => {
     const theirs = await fixture('theirs');
     await expect(
       asOrg(mine.orgId, (tx) =>
-        createMoneyTransfer(tx, mine.admin, {
+        createMoneyTransfer(tx, mine.admin, { requestId: crypto.randomUUID(),
           fromMoneyAccountId: mine.drawer.id,
           toMoneyAccountId: theirs.safe.id,
           amountOut: '100.00',
@@ -337,7 +337,7 @@ describe('bible row 150 — transfer_funds is MANAGER level', () => {
     // changing what the books can record against.
     await expect(
       asOrg(f.orgId, (tx) =>
-        createMoneyTransfer(tx, actor(f.orgId, managerId), {
+        createMoneyTransfer(tx, actor(f.orgId, managerId), { requestId: crypto.randomUUID(),
           fromMoneyAccountId: f.safe.id,
           toMoneyAccountId: f.drawer.id,
           amountOut: '2000.00',
@@ -354,7 +354,7 @@ describe('bible row 150 — transfer_funds is MANAGER level', () => {
     const staffId = await person(f.orgId, f.storeId, 'Staff', 'staff');
     await expect(
       asOrg(f.orgId, (tx) =>
-        createMoneyTransfer(tx, actor(f.orgId, staffId), {
+        createMoneyTransfer(tx, actor(f.orgId, staffId), { requestId: crypto.randomUUID(),
           fromMoneyAccountId: f.drawer.id,
           toMoneyAccountId: f.safe.id,
           amountOut: '100.00',
@@ -378,7 +378,7 @@ describe('void — through reverseEntry, never a delete', () => {
     const f = await fixture('void');
     await postCash(f, '1110', '4100', '500.00');
     const r = await asOrg(f.orgId, (tx) =>
-      createMoneyTransfer(tx, f.admin, {
+      createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
         fromMoneyAccountId: f.drawer.id,
         toMoneyAccountId: f.safe.id,
         amountOut: '500.00',
@@ -416,7 +416,7 @@ describe('void — through reverseEntry, never a delete', () => {
     const f = await fixture('void2');
     await postCash(f, '1110', '4100', '500.00');
     const r = await asOrg(f.orgId, (tx) =>
-      createMoneyTransfer(tx, f.admin, {
+      createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
         fromMoneyAccountId: f.drawer.id,
         toMoneyAccountId: f.safe.id,
         amountOut: '500.00',
@@ -447,7 +447,7 @@ describe('⛔ overdrawing (Ian, 2026-08-26: "for transfer block overdraw")', () 
     // The drawer reads ₱0 because today's sales are not verified yet. In the real world it is
     // full of cash. Refusing here would refuse a shortfall that is not real.
     const r = await asOrg(f.orgId, (tx) =>
-      createMoneyTransfer(tx, f.admin, {
+      createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
         fromMoneyAccountId: f.drawer.id,
         toMoneyAccountId: f.safe.id,
         amountOut: '5000.00',
@@ -467,7 +467,7 @@ describe('⛔ overdrawing (Ian, 2026-08-26: "for transfer block overdraw")', () 
     const f = await fixture('officedraw');
     await expect(
       asOrg(f.orgId, (tx) =>
-        createMoneyTransfer(tx, f.admin, {
+        createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
           fromMoneyAccountId: f.safe.id,
           toMoneyAccountId: f.drawer.id,
           amountOut: '5000.00',
@@ -480,7 +480,7 @@ describe('⛔ overdrawing (Ian, 2026-08-26: "for transfer block overdraw")', () 
     // Fund the safe and the identical call succeeds, with nothing to warn about.
     await postCash(f, '1130', '4100', '5000.00');
     const r = await asOrg(f.orgId, (tx) =>
-      createMoneyTransfer(tx, f.admin, {
+      createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
         fromMoneyAccountId: f.safe.id,
         toMoneyAccountId: f.drawer.id,
         amountOut: '5000.00',
@@ -498,7 +498,7 @@ describe('⛔ overdrawing (Ian, 2026-08-26: "for transfer block overdraw")', () 
     await postCash(f, '1130', '4100', '750.00');
     await expect(
       asOrg(f.orgId, (tx) =>
-        createMoneyTransfer(tx, f.admin, {
+        createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
           fromMoneyAccountId: f.safe.id,
           toMoneyAccountId: f.drawer.id,
           amountOut: '750.01',
@@ -513,7 +513,7 @@ describe('⛔ overdrawing (Ian, 2026-08-26: "for transfer block overdraw")', () 
     const f = await fixture('reversedraw');
     await postCash(f, '1110', '4100', '1000.00');
     const t = await asOrg(f.orgId, (tx) =>
-      createMoneyTransfer(tx, f.admin, {
+      createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
         fromMoneyAccountId: f.drawer.id,
         toMoneyAccountId: f.safe.id,
         amountOut: '1000.00',
@@ -565,7 +565,7 @@ describe('cross-store -- office to office only (Ian, 2026-08-26; bible row 152)'
     const outsiderId = await person(f.orgId, f.storeId, 'Malvar-only manager', 'manager');
     await expect(
       asOrg(f.orgId, (tx) =>
-        createMoneyTransfer(tx, actor(f.orgId, outsiderId), {
+        createMoneyTransfer(tx, actor(f.orgId, outsiderId), { requestId: crypto.randomUUID(),
           fromMoneyAccountId: f.safe.id,
           toMoneyAccountId: lipa.safe.id,
           amountOut: '5000.00',
@@ -579,7 +579,7 @@ describe('cross-store -- office to office only (Ian, 2026-08-26; bible row 152)'
     await sql`insert into person_store_scope (person_id, store_id) values (${outsiderId}, ${lipa.id})`;
     await expect(
       asOrg(f.orgId, (tx) =>
-        createMoneyTransfer(tx, actor(f.orgId, outsiderId), {
+        createMoneyTransfer(tx, actor(f.orgId, outsiderId), { requestId: crypto.randomUUID(),
           fromMoneyAccountId: f.safe.id,
           toMoneyAccountId: lipa.safe.id,
           amountOut: '5000.00',
@@ -599,7 +599,7 @@ describe('cross-store -- office to office only (Ian, 2026-08-26; bible row 152)'
     // Exactly the "deeply wrong" move: reaching into Malvar's till to spend at Lipa.
     await expect(
       asOrg(f.orgId, (tx) =>
-        createMoneyTransfer(tx, f.admin, {
+        createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
           fromMoneyAccountId: f.drawer.id,
           toMoneyAccountId: lipa.safe.id,
           amountOut: '9000.00',
@@ -613,7 +613,7 @@ describe('cross-store -- office to office only (Ian, 2026-08-26; bible row 152)'
     // receiving side and leave the due-from/due-to pair sitting against a cashier.
     await expect(
       asOrg(f.orgId, (tx) =>
-        createMoneyTransfer(tx, f.admin, {
+        createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
           fromMoneyAccountId: f.safe.id,
           toMoneyAccountId: lipa.drawer.id,
           amountOut: '9000.00',
@@ -631,7 +631,7 @@ describe('cross-store -- office to office only (Ian, 2026-08-26; bible row 152)'
     await postCash(f, '1130', '4100', '20000.00');
 
     const r = await asOrg(f.orgId, (tx) =>
-      createMoneyTransfer(tx, f.admin, {
+      createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
         fromMoneyAccountId: f.safe.id,
         toMoneyAccountId: lipa.safe.id,
         amountOut: '20000.00',
@@ -688,7 +688,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
     const f = await fixture('def272-out');
     await expect(
       asOrg(f.orgId, (tx) =>
-        createMoneyTransfer(tx, f.admin, {
+        createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
           fromMoneyAccountId: f.drawer.id, toMoneyAccountId: f.safe.id,
           amountOut: '0.004', amountIn: '0.004', transferDate: '2026-01-10',
         }),
@@ -700,7 +700,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
     const f = await fixture('def272-in');
     await expect(
       asOrg(f.orgId, (tx) =>
-        createMoneyTransfer(tx, f.admin, {
+        createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
           fromMoneyAccountId: f.drawer.id, toMoneyAccountId: f.safe.id,
           amountOut: '100.00', amountIn: '0.004', transferDate: '2026-01-10',
         }),
@@ -711,7 +711,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
   it('an ordinary transfer still works, and the exact values reach the legs', async () => {
     const f = await fixture('def272-happy');
     const r = await asOrg(f.orgId, (tx) =>
-      createMoneyTransfer(tx, f.admin, {
+      createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
         fromMoneyAccountId: f.drawer.id, toMoneyAccountId: f.safe.id,
         amountOut: '0.01', amountIn: '0.01', transferDate: '2026-01-10',
       }),

@@ -62,7 +62,6 @@ formatKitchenQty
 formatLogAmount
 formatLogDescription
 getActiveFake
-getAllocationsForPayment
 getCalendarWeatherIcon
 getGroupKey
 getKitchenTicketContribution
