@@ -119,3 +119,17 @@ Migration 0224 · next DEF from the board (DEF-806+) · this task T-502.
 ## 9. Open for Ian (asked by the orchestrator, recorded here when answered)
 - **Q1** v1 sub-category becomes "the item" (Group → Category → Item); no free-text sub-category. Recommended: yes.
 - **Q2** `vague.csv` answers (beef cut, ulam, water…) — only change the draft list, not the build.
+
+## 10. Orchestrator rulings after the tester's pass (31 Oct)
+
+| # | Question | Ruling |
+|---|---|---|
+| R1 | Requester ≠ approver does not exist today | Build it. Refused unless the actor `holdsSuperAdminAuthority` (Ian, single-admin orgs). Plain message: "Someone else must approve an item you asked for." |
+| R2 | `approve_item` also gates create/merge/rename/unit | New capability **`approve_item_request`** (admin ✅, manager ✗, cashier ✗). `approve_item` and everything it gates stay super-admin. Update capabilities.ts, the matrix + count, items.test.ts's "an ADMIN cannot approve" leg, and the "waiting for a super-admin" sentence |
+| R3 | Adminless-manager fallback (row 196) | **Excluded.** The item list is org-wide; a manager never approves it. Use the existing exclusion mechanism (e.g. `ROLE_ONLY_CAPABILITIES`) and add a ✗ test for a manager in an org with no admin |
+| R4 | Kind checks | Widen BOTH `items_kind_check` and `item_requests_kind_check`; `item_requests.expense_category_id` gets the same-org composite FK too |
+| R5 | Alias rule one-way | Both ways: creating/renaming an item to a name an alias already holds is refused. Turn the `it.todo` into a test |
+| R6 | Service shape | DB CHECKs as written (pcs, purchasable, never sellable) |
+| R7 | `cogsCategoryForItemKind('service')` | Throws (a service never reaches COGS-by-kind) |
+| C | Never stocked | DB trigger refusing a service item on `stock_movements`, recipe input/output, `delivery_lines`, `stock_usage_lines`; `listItems` gains a stocked-only filter used by every stock/count/recipe/commissary/delivery/trade picker. The invoice-line picker includes services. Tester extends tests to the untested pickers |
+| D | Itemise-first callers | Enforce in `createExpense` and `editExpense` (not `approveExpense`). Option `requireItemised` defaults **true**; the recurring-expense job and inter-entity receipt pass `false` explicitly with a comment (system-made invoices). Follow-up (not this task): recurring templates pick a service item |
