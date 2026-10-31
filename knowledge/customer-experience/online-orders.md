@@ -5,12 +5,12 @@ about: [customer, cashier]
 readers: public
 must_be_exact: true
 related: [customer-experience/take-out-in-store, staff/cashier-take-out-and-online-sop, cash-and-payments/platform-payouts, cash-and-payments/platform-wastage]
-updated: 2026-10-23
+updated: 2026-10-26
 ---
 
 # Online orders
 
-Menu items and prices are always the ones shown in the system for that channel.
+Menu items and prices are the ones shown for that channel when you order.
 
 ## Ways to order
 
@@ -21,8 +21,7 @@ Menu items and prices are always the ones shown in the system for that channel.
 
 ## Delivery or pickup (website, Facebook, call, text)
 
-- Shareat has no delivery staff of its own. For delivery, the store books a rider through a
-  delivery app such as PandaGo, Grab Padala, or Lalamove.
+- Delivery is arranged by the store through a delivery partner.
 - The customer can also pick the order up at the store.
 
 ## Paying (website, Facebook, call, text)
@@ -30,5 +29,5 @@ Menu items and prices are always the ones shown in the system for that channel.
 - We encourage paying online (for example GCash, bank transfer, or another e-wallet) right after
   ordering, for both delivery and pickup.
 - **Delivery:** payment must be received before the rider is dispatched. Cash on delivery is
-  possible only through PandaGo, and only when PandaGo is available.
+  available only for some deliveries. Please ask the store.
 - **Pickup:** the customer may pay at the counter when picking up, if they ask.

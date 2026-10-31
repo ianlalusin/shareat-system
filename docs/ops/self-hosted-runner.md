@@ -1,5 +1,45 @@
 # Self-hosted GitHub Actions runner on Ian's PC
 
+> ## ⭐ Current setup — 2026-10-25 (read this first)
+>
+> ⛔ **ROLLED BACK 2026-10-25: `CI_RUNNER` is UNSET — CI runs on GitHub-hosted runners.** The desktop's
+> first full run (main, run 40170053417) took **2 h 46 min** against ~23 min hosted: integration tests
+> alone ran 2 h 39 min and 5 timed out (backup/restore drill, scratch-DB migration tests), so the
+> deploy was skipped. Unit tests and typecheck were fine (~5 min). Do not set `CI_RUNNER` again until
+> the desktop is fixed and a full run passes in reasonable time.
+>
+> **Cause and decision:** the desktop's disk is an HDD (spinning disk); the integration suite's constant
+> database create/drop is disk-bound. Ian, 2026-10-25: drop the desktop runner (option B); CI stays on
+> GitHub-hosted. Revisit only with an SSD fitted (and ideally native Linux), proven by one full run.
+>
+> | | |
+> |---|---|
+> | Machine | Spare Dell desktop, i5, 8 GB RAM, Windows, nothing else running on it |
+> | Runner | `shareat-desktop`, label `shareat-local`, in WSL distro `shareat-runner` (Ubuntu 24.04), user `shareat` |
+> | Linux memory | `.wslconfig`: `memory=5GB`, `swap=4GB`, `vmIdleTimeout=-1` |
+> | Kept alive by | Task Scheduler `shareat-runner keepalive` at logon (`wsl -d shareat-runner --exec sleep infinity`). Its black `wsl.exe` window must stay open — **closing it stops Linux and the runner** (that killed the first run on 25 Oct) |
+> | Laptop | The old laptop runner (`ians-pc`, distro `shareat-runner` on the laptop) is **unregistered and deleted**; its 13.9 GB disk is gone. Do not recreate it |
+>
+> **Why (Ian, 2026-10-25):** the laptop had 0.2–0.4 GB free of 15.6 GB. Measured: agents' type checks
+> and `npm ci` ≈ 3.5–4 GB at peak, Claude ≈ 3 GB, the idle old runner VM 1.6 GB. After removing the
+> old VM: 1.5 GB free; with no heavy checks running: 2.4 GB free.
+>
+> **What agents on the laptop should do:**
+> - Let CI (the desktop) run the **full** integration suite and the full build. Locally, run only the
+>   typecheck and the tests your change touches; do not run several full type checks or `npm ci` in
+>   parallel worktrees at once.
+> - **CI waiting on "Waiting for a runner"?** The desktop is off, asleep, or its `wsl.exe` window was
+>   closed. Tell Ian. To fall back at once: `gh variable delete CI_RUNNER` (jobs go to GitHub-hosted
+>   runners); set it back with `gh variable set CI_RUNNER --body shareat-local` once
+>   `gh api repos/{owner}/{repo}/actions/runners` shows `shareat-desktop online`.
+> - **"The self-hosted runner lost communication"** = the desktop's Linux stopped (window closed,
+>   sleep, or out of memory). Not a code failure. Re-run once it is back online.
+> - The runner does one job at a time, so a PR's jobs queue behind each other.
+> - ⚠️ `deploy.yml` also follows `CI_RUNNER`, so **deploys now run on the desktop** and the
+>   production SSH key passes through it during a deploy (see below).
+>
+> The sections below are the original laptop guide (2026-10-11); the steps are the same on the desktop.
+
 **Why:** Ian, 2026-10-11 — *"set up the self-hosted runner if this will lower the actions on my
 account in github."* Jobs on a self-hosted runner do not use GitHub-hosted runner minutes. (GitHub
 announced a small per-minute platform fee for self-hosted runners on private repos in December 2025

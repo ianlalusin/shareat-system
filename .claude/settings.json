@@ -11,6 +11,8 @@
       "Write(//C:/Users/ianla/webapps/Shareat Website/**)"
     ],
     "allow": [
+      "Bash(ssh root@159.223.46.224:*)",
+      "Bash(scp:*)",
       "Bash(npm run typecheck)",
       "Bash(npm run -s typecheck)",
       "Bash(npx tsc --noEmit)",
