@@ -43,6 +43,22 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       { href: '/wastage', label: 'Order wastage' },
       { href: '/remittance', label: 'Remittance' },
       { href: '/till', label: 'Till custody' },
+      // Moved here from Trade (Ian, 31 Oct): stores record new supplier invoices every day.
+      // ⚠️ `/ap/invoices` has no page — only `[id]`. It pointed here as a 404 until 2026-08-30
+      // (DEF-107). `/ap` lists pending invoices already; a dedicated register is T-188 §7's
+      // stated omission, not an oversight.
+      { href: '/ap', label: 'Supplier invoices' },
+      { href: '/expenses', label: 'Expenses' },
+      // T-369 S1 (DEF-198): paying staff back what they spent out of pocket. Gated by
+      // `record_ap_payment` in ROUTE_CAPABILITY, so the link only shows to someone who can open it.
+      { href: '/expenses/reimbursements', label: 'Reimbursements' },
+      { href: '/cash-requests', label: 'Cash requests' },
+    ],
+  },
+  {
+    label: 'People',
+    icon: 'people',
+    links: [
       // ⭐ DEF-131 — the FK every Phase 4/5 table depends on had no live path that created one
       // until 2026-09-04. Beside Attendance on purpose: that screen needs an employmentId this
       // one is the only way to create.
@@ -50,32 +66,9 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       { href: '/attendance', label: 'Attendance' },
       // T-436 - ask for leave, decide it, record an absence. Open to everyone: a staff member requests their own.
       { href: '/attendance/leave', label: 'Leave' },
-      // ⭐ DEF-133 — provisioning a clock terminal or enrolling a card/fingerprint had no admin UI
-      // until 2026-09-04; only hand-run SQL could. `provision_clock_terminal` is admin-only.
-      { href: '/attendance/terminals', label: 'Clock terminals' },
-      // ⭐ DEF-197 — the screen that exists so a dead letter is VISIBLE was itself invisible. This
-      // is landmine #14's whole structural fix (bible §12 row 14: v1's recovery path is a banner
-      // saying "tell a manager", and there is nothing for the manager to open), and it was in no
-      // nav group and linked from no page — reachable only by typing the URL, for five days.
-      // Found by T-227's own guard on its first run, which is what a guard is for.
-      { href: '/attendance/lane', label: 'Clock lane' },
       { href: '/payroll', label: 'Payroll' },
-      // T-190: SSS / PhilHealth / Pag-IBIG / tax tables and minimum wages. Gated by `manage_payroll_rates` in ROUTE_CAPABILITY.
-      { href: '/payroll/rates', label: 'Payroll rates' },
       // T-193 S5: paying SSS / PhilHealth / Pag-IBIG / BIR. Gated by `remit_statutory` in ROUTE_CAPABILITY.
       { href: '/payroll/statutory-payments', label: 'Government payments' },
-      { href: '/expenses', label: 'Expenses' },
-      // T-369 S1 (DEF-198): paying staff back what they spent out of pocket. Gated by
-      // `record_ap_payment` in ROUTE_CAPABILITY, so the link only shows to someone who can open it.
-      { href: '/expenses/reimbursements', label: 'Reimbursements' },
-      // ⭐ T-215 — beside Expenses on purpose: a cap only ever changes a decision at the moment of
-      // spending, and `/expenses/new` is where that moment is. This screen is where it gets set.
-      { href: '/budgets', label: 'Budgets' },
-      // ⚠️ T-216 — the TEMPLATE register. Nothing acts on these yet and the screen says so in a
-      // banner: the daily job is blocked on Ian deciding whether a due template drafts an expense
-      // or pays itself. Linked anyway, because a screen reachable only by URL is DEF-181.
-      { href: '/expenses/recurring', label: 'Recurring bills' },
-      { href: '/cash-requests', label: 'Cash requests' },
     ],
   },
   {
@@ -120,16 +113,19 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       // it. Same `view_financial_reports` gate as its neighbours.
       { href: '/service-charge', label: 'Service charge' },
       { href: '/owners', label: 'Owners' },
+      // ⭐ T-215 — a cap only ever changes a decision at the moment of spending, and
+      // `/expenses/new` is where that moment is. This screen is where it gets set.
+      { href: '/budgets', label: 'Budgets' },
+      // ⚠️ T-216 — the TEMPLATE register. Nothing acts on these yet and the screen says so in a
+      // banner: the daily job is blocked on Ian deciding whether a due template drafts an expense
+      // or pays itself. Linked anyway, because a screen reachable only by URL is DEF-181.
+      { href: '/expenses/recurring', label: 'Recurring bills' },
     ],
   },
   {
     label: 'Trade',
     icon: 'trade',
     links: [
-      // ⚠️ `/ap/invoices` has no page — only `[id]`. It pointed here as a 404 until 2026-08-30
-      // (DEF-107). `/ap` lists pending invoices already; a dedicated register is T-188 §7's
-      // stated omission, not an oversight.
-      { href: '/ap', label: 'Supplier invoices' },
       { href: '/ap/suppliers', label: 'Suppliers' },
       { href: '/customers', label: 'Customers' },
       { href: '/customers/price-lists', label: 'Price lists' },
@@ -209,6 +205,17 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       // place and links to both children; `nav-route-reachability` resolves `/settings/attendance`
       // transitively through it, which is why the direct entry is no longer needed here.
       { href: '/settings', label: 'Settings' },
+      // ⭐ DEF-133 — provisioning a clock terminal or enrolling a card/fingerprint had no admin UI
+      // until 2026-09-04; only hand-run SQL could. `provision_clock_terminal` is admin-only.
+      { href: '/attendance/terminals', label: 'Clock terminals' },
+      // ⭐ DEF-197 — the screen that exists so a dead letter is VISIBLE was itself invisible. This
+      // is landmine #14's whole structural fix (bible §12 row 14: v1's recovery path is a banner
+      // saying "tell a manager", and there is nothing for the manager to open), and it was in no
+      // nav group and linked from no page — reachable only by typing the URL, for five days.
+      // Found by T-227's own guard on its first run, which is what a guard is for.
+      { href: '/attendance/lane', label: 'Clock lane' },
+      // T-190: SSS / PhilHealth / Pag-IBIG / tax tables and minimum wages. Gated by `manage_payroll_rates` in ROUTE_CAPABILITY.
+      { href: '/payroll/rates', label: 'Payroll rates' },
     ],
   },
 ];
