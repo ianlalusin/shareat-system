@@ -78,7 +78,8 @@ async function buildDeps(keyFile: string, orgId: string): Promise<Pos2Deps> {
           erpStoreId: link.erpStoreId,
           pin,
           terminalPersonId: link.terminalPersonId,
-          deviceId,
+          // sign_in_attempts.device_id is a FK to persons.id (the terminal's own person row), NOT the tablet's POS device uuid.
+          deviceId: link.terminalPersonId,
         });
         return { ok: true, approverPersonId: approved.approverPersonId, terminalNo: link.terminalNo };
       } catch (err) {
