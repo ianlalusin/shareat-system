@@ -199,7 +199,7 @@ describe('L1 (DEF-459) — the AP allocation-for-expense site logs a malformed a
       let caught: unknown;
       try {
         await asOrg(f.orgId, (tx) =>
-          recordPayment(tx, f.admin, {
+          recordPayment(tx, f.admin, { requestId: crypto.randomUUID(),
             storeId: f.storeId,
             supplierId: supplier.id,
             businessDate: '2026-01-15',

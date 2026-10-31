@@ -588,7 +588,7 @@ describe('E12 two shipments, one payment each side: AR = AP exactly; a one-sided
     const item = items.find((i) => i.outstanding === outstanding);
     expect(item, `PG has an open item of ${outstanding}: ${JSON.stringify(items.map((i) => i.outstanding))}`).toBeDefined();
     return asPerson(w.g.orgId, w.g.manager.personId, (tx) =>
-      recordPayment(tx, w.g.manager, {
+      recordPayment(tx, w.g.manager, { requestId: crypto.randomUUID(),
         storeId: w.g.storeId, supplierId: w.supplierId, businessDate: '2026-10-16', amount, moneyAccountId: w.g.drawerA,
         allocations: [{ expenseId: item!.expenseId, amountApplied: amount }],
       }),

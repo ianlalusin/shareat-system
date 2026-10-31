@@ -137,7 +137,8 @@ describe('T-440 S3: a bad value is refused with the rule sentence and nothing is
       erRate: '0.10',
       sourceRef: 'SSS Circular 2025-001',
     });
-    expect(o.flash.error).toBe('The employee rate must be a number of 0 or more.');
+    // T-500: rate rule now 0 to 1
+    expect(o.flash.error).toBe('The employee rate must be a number from 0 to 1.');
     expect(await count('statutory_rates', f.orgId)).toBe(before);
   });
 

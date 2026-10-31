@@ -132,7 +132,7 @@ describe('an admin saves an employer number and a due day', () => {
 describe('validation in words (nothing written, nothing audited)', () => {
   it.each([
     ['letters in the number', { agency: 'sss', employerNo: '03ABC12345', dueDay: '10' }],
-    ['spaces and dashes in the number', { agency: 'sss', employerNo: '03-0000 0001', dueDay: '10' }],
+    ['dots in the number', { agency: 'sss', employerNo: '03.0000.0001', dueDay: '10' }],
     ['a blank number for SSS', { agency: 'sss', employerNo: '', dueDay: '10' }],
     ['a number for BIR (BIR uses the company TIN)', { agency: 'bir', employerNo: '123456789', dueDay: '10' }],
     ['due day 0', { agency: 'sss', employerNo: '0300000001', dueDay: '0' }],
@@ -152,6 +152,16 @@ describe('validation in words (nothing written, nothing audited)', () => {
     expect(r.ok, `${what}: no success message`).toBeFalsy();
     expect(JSON.stringify(await rows(w)), `${what}: nothing written`).toBe(snapshot);
     expect(await auditCount(w, '%'), `${what}: nothing audited`).toBe(audits);
+  });
+
+  it('T-500: the printed format "03-1234567-8" (dashes, spaces) is accepted and stored digits-only (kills: refused, or stored with dashes)', async () => {
+    const w = await mkWorld(sql, 's6empdash');
+    const r = await save(w.admin, { agency: 'sss', employerNo: '03-1234567-8', dueDay: '10' });
+    expect(r.error, 'no refusal').toBeUndefined();
+    expect(r.ok).toBeTruthy();
+    expect((await rows(w)).find((x) => x.agency === 'sss')!.employer_no).toBe('0312345678');
+    expect((await save(w.admin, { agency: 'philhealth', employerNo: '02 0000 000001', dueDay: '10' })).ok).toBeTruthy();
+    expect((await rows(w)).find((x) => x.agency === 'philhealth')!.employer_no).toBe('020000000001');
   });
 
   it('the number is trimmed but never padded into something else: " 0300000002 " is saved as 0300000002 (kills: padded value stored)', async () => {

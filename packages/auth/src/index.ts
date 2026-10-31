@@ -34,7 +34,7 @@ export { flushSecurityEvents, enqueueEventStoreMismatch, enqueueEventReplayConfl
 export { AuthenticationError, AuthorizationError } from './errors';
 export type { Actor, AuthorizeContext } from './authorize';
 
-export { assignRole, assignRoleAsActor, elevateManager, grantCapabilityAsActor } from './roles';
+export { assignRole, assignRoleAsActor, elevateManager, grantCapabilityAsActor, holdsSuperAdminAuthority } from './roles';
 export type { AssignRoleInput, AssignRoleAsActorInput, AssignRoleResult } from './roles';
 
 export {

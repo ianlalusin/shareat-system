@@ -462,6 +462,8 @@ export async function recordPaymentAction(formData: FormData): Promise<void> {
 
     const result = await withOrgPrincipal(actor.orgId, (tx) =>
       recordPayment(tx, actor, {
+        // DEF-778: minted once when the form rendered; the domain refuses a missing or non-uuid value.
+        requestId: str(formData, 'requestId'),
         storeId,
         supplierId,
         businessDate: str(formData, 'businessDate'),

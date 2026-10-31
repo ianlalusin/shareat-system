@@ -36,6 +36,8 @@ const rel = (f: string) => relative(APP_ROOT, f).replace(/\\/g, '/');
 const EXEMPT: Record<string, string> = {
   // T-193 S5: an add form (hidden request id and hidden month/agency inputs), not a record-bound edit-in-place form.
   'payroll/statutory-payments/new/page.tsx': 'T-193 S5: an add form with hidden id inputs, not record-bound',
+  // DEF-778: an add form whose only hidden *Id is the per-render request id; its date default is a prop, not a record.
+  'money-transfers/RecordTransferForm.tsx': 'DEF-778: an add form with a hidden request id, not record-bound',
 };
 
 /**

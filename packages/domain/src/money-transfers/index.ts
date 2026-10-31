@@ -18,7 +18,9 @@
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { moneyAccountsRepo, moneyTransfersRepo, type Tx } from '@shareat/db';
-import { postEntry } from '../ledger/post-entry';
+import { equals, money, type Money } from '@shareat/core/money';
+import { postEntryOnce, requireRequestId } from '../ledger/replay';
+import { refuse } from '../shared/refusal';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { prepareTransfer } from './prepare';
 
@@ -27,6 +29,12 @@ export { settleBetweenStores } from './settle';
 export type { SettleBetweenStoresInput, SettleBetweenStoresResult } from './settle';
 
 export interface CreateMoneyTransferInput {
+  /**
+   * DEF-778: generated when the form renders and submitted back. The journal key is `transfer:${requestId}:post` and the
+   * `money_transfers` row's id IS this, so a double click is a replay (the first result comes back) and the primary key
+   * backstops a racing one. A missing or non-uuid value is refused; a replay with other figures is refused.
+   */
+  requestId: string;
   fromMoneyAccountId: string;
   toMoneyAccountId: string;
   /**
@@ -72,9 +80,32 @@ async function runCreate(
   actor: Actor,
   input: CreateMoneyTransferInput,
 ): Promise<CreateMoneyTransferResult> {
+  const requestId = requireRequestId('createMoneyTransfer', input.requestId);
   // T-369 S9: everything up to the amounts is `prepareTransfer` (prepare.ts), a pure move out of here, in its old order.
   const { from, to, crossStore, amountOut, amountIn, fee, feeAccountCode, memo, lines, ...prepared } = await prepareTransfer(tx, actor, input);
+
+  // DEF-778: the replay is looked up BEFORE the overdraw rule - after the first call spent the money, judging the same
+  // request afresh would refuse a harmless double click (or, worse, warn about it).
+  const replayed = await moneyTransfersRepo.getById(tx, actor.orgId, requestId);
+  const replayWanted = {
+    from,
+    to,
+    amountOut,
+    amountIn,
+    transferDate: input.transferDate,
+    fee,
+    feeAccountCode,
+    reference: input.reference?.trim() || null,
+    notes: input.notes?.trim() || null,
+  };
+  if (replayed) return replayOf(replayed, replayWanted);
   // ⛔/⚠️ The overdraw rule (bible row 154) — `checkDraw` is the whole of it, shared with `approveExpense`.
+  // DEF-778 audit: take the T-501 lock on the source BEFORE judging the draw, then look for the replay once more. A simultaneous
+  // double submit queues on this lock; by the time it gets it, the first has committed and spent the money, so judging the
+  // draw afresh would refuse a harmless double click as "cannot cover".
+  await moneyAccountsRepo.lockForDraw(tx, actor.orgId, from.id);
+  const replayedAfterLock = await moneyTransfersRepo.getById(tx, actor.orgId, requestId);
+  if (replayedAfterLock) return replayOf(replayedAfterLock, replayWanted);
   const warning = await prepared.checkDraw();
 
   if (crossStore) {
@@ -114,11 +145,10 @@ async function runCreate(
     );
   }
 
-  // The id is generated up front so the idempotency key and the row's own id agree — a retry of
-  // the SAME transfer is a no-op, while a genuinely repeated transfer (two ₱500 top-ups on one
-  // day, which happens) gets its own id and posts properly.
-  const id = crypto.randomUUID();
-  const posted = await postEntry(tx, {
+  // The form's request id is the key and the row's own id - a retry of the SAME submit is a no-op, while a genuinely
+  // repeated transfer (two ₱500 top-ups on one day, which happens) is a new render with its own id and posts properly.
+  const id = requestId;
+  const posted = await postEntryOnce(tx, {
     orgId: actor.orgId,
     entryDate: input.transferDate,
     sourceType: 'transfer',
@@ -129,7 +159,14 @@ async function runCreate(
     lines,
   });
 
-  const row = await moneyTransfersRepo.insertMoneyTransfer(tx, {
+  if (!posted.created) {
+    // A racing double click: the other transaction committed the entry (and its row) while this one waited on the key.
+    const winner = await moneyTransfersRepo.getById(tx, actor.orgId, id);
+    if (winner) return replayOf(winner, replayWanted);
+  }
+
+  const inserted = await moneyTransfersRepo.insertMoneyTransfer(tx, {
+    id,
     orgId: actor.orgId,
     storeId: from.storeId,
     fromMoneyAccountId: from.id,
@@ -144,7 +181,55 @@ async function runCreate(
     createdBy: actor.personId,
   });
 
-  return { id: row.id, entryId: posted.entryId, fee, ...(warning ? { warning } : {}) };
+  if (!inserted) {
+    // A simultaneous double submit committed this id first - or the id belongs to another org, which org-scoped reads cannot see.
+    const winner = await moneyTransfersRepo.getById(tx, actor.orgId, id);
+    if (!winner) {
+      throw refuse(
+        `createMoneyTransfer: requestId ${id} already belongs to a row outside this org.`,
+        'This form is out of date. Reload the page and try again.',
+      );
+    }
+    return replayOf(winner, replayWanted);
+  }
+
+  return { id: inserted.id, entryId: posted.entryId, fee, ...(warning ? { warning } : {}) };
+}
+
+/** DEF-778: a replayed request returns the first result, but only if it asked for the same transfer. */
+function replayOf(
+  row: NonNullable<Awaited<ReturnType<typeof moneyTransfersRepo.getById>>>,
+  now: {
+    from: { id: string };
+    to: { id: string };
+    amountOut: Money;
+    amountIn: Money;
+    transferDate: string;
+    fee: string;
+    feeAccountCode: string | null;
+    reference: string | null;
+    notes: string | null;
+  },
+): CreateMoneyTransferResult {
+  if (row.status === 'voided') {
+    throw refuse(`createMoneyTransfer: requestId ${row.id} was voided.`, 'This was voided. Reload the page and start a new one.');
+  }
+  const same =
+    (row.feeAccountCode ?? null) === (now.feeAccountCode ?? null) &&
+    (row.reference ?? null) === now.reference &&
+    (row.notes ?? null) === now.notes &&
+    row.fromMoneyAccountId === now.from.id &&
+    row.toMoneyAccountId === now.to.id &&
+    equals(money(row.amountOut), now.amountOut) &&
+    equals(money(row.amountIn), now.amountIn) &&
+    String(row.transferDate).slice(0, 10) === String(now.transferDate).slice(0, 10);
+  if (!same || !row.journalEntryId) {
+    throw refuse(
+      `createMoneyTransfer: requestId ${row.id} was already posted with different accounts, amounts or date.`,
+      'This was already recorded with different figures. Reload the page and try again.',
+    );
+  }
+  return { id: row.id, entryId: row.journalEntryId, fee: now.fee };
 }
 
 /**

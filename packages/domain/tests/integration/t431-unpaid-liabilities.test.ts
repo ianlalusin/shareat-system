@@ -329,7 +329,7 @@ describe('kind 1 - supplier invoices unpaid', () => {
     const f = await fixture('c1');
     const { invoiceId, expenseId } = await creditInvoice(f, f.stores.A, '8000.00');
     await asOrg(f.orgId, (tx) =>
-      recordPayment(tx, f.manager, {
+      recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
         storeId: f.stores.A, supplierId: f.supplierId, businessDate: '2026-02-01', amount: '3000.00',
         moneyAccountId: f.drawers.A!, allocations: [{ expenseId, amountApplied: '3000.00' }],
       }),
@@ -347,7 +347,7 @@ describe('kind 1 - supplier invoices unpaid', () => {
     const f = await fixture('c2');
     const { expenseId } = await creditInvoice(f, f.stores.A, '1000.00');
     await asOrg(f.orgId, (tx) =>
-      recordPayment(tx, f.manager, {
+      recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
         storeId: f.stores.A, supplierId: f.supplierId, businessDate: '2026-02-01', amount: '1000.00',
         moneyAccountId: f.drawers.A!, allocations: [{ expenseId, amountApplied: '1000.00' }],
       }),

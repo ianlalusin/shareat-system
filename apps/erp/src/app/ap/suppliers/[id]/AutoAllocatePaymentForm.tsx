@@ -142,6 +142,7 @@ export function AutoAllocatePaymentForm({
   previewAction,
   supplierId,
   storeId,
+  requestId,
   items,
   wallets,
   floats = [],
@@ -153,6 +154,8 @@ export function AutoAllocatePaymentForm({
   previewAction: (req: AutoAllocateRequest) => Promise<AutoAllocateResponse>;
   supplierId: string;
   storeId: string;
+  /** DEF-778: generated when the page renders and submitted back, so a double click is a replay, not a second payment. */
+  requestId: string;
   items: readonly PayableItem[];
   wallets: readonly Wallet[];
   floats?: readonly PayableFloat[];
@@ -281,6 +284,7 @@ export function AutoAllocatePaymentForm({
     <CheckedForm rules={SUPPLIER_PAYMENT_RULES} action={recordPaymentAction} className="space-y-3">
       <input type="hidden" name="supplierId" value={supplierId} />
       <input type="hidden" name="storeId" value={storeId} />
+      <input type="hidden" name="requestId" value={requestId} />
       <div className="space-y-1">
         {items.map((i) => {
           const value = amounts[i.expenseId] ?? '';

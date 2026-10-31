@@ -60,7 +60,7 @@ export interface PreparedTransfer {
 export async function prepareTransfer(
   tx: Tx,
   actor: Actor,
-  input: CreateMoneyTransferInput,
+  input: Omit<CreateMoneyTransferInput, 'requestId'>,
 ): Promise<PreparedTransfer> {
   if (input.fromMoneyAccountId === input.toMoneyAccountId) {
     throw new Error('createMoneyTransfer: the source and destination must be different accounts.');

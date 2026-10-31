@@ -49,6 +49,8 @@ export async function createMoneyTransferAction(formData: FormData): Promise<voi
       const from = UUID_SHAPE.test(fromId) ? await moneyAccountsRepo.getById(tx, actor.orgId, fromId) : null;
       if (from && (await can(tx, actor, 'transfer_funds', { storeId: from.storeId }))) assertFieldRules(TRANSFER_RECORD_RULES, formData);
       return createMoneyTransfer(tx, actor, {
+        // DEF-778: minted once when the form rendered; the domain refuses a missing or non-uuid value.
+        requestId: str(formData, 'requestId'),
         fromMoneyAccountId: fromId,
         toMoneyAccountId: str(formData, 'toMoneyAccountId'),
         amountOut,

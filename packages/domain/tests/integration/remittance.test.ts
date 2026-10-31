@@ -576,7 +576,7 @@ describe('cash arriving by transfer is custody, and never becomes a day’s taki
 
     // The float: office safe -> till, an ordinary money transfer. This is the whole feature.
     await asOrg(f.orgId, (tx) =>
-      createMoneyTransfer(tx, f.admin, {
+      createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
         fromMoneyAccountId: f.safe,
         toMoneyAccountId: f.till,
         amountOut: '20000.00',
@@ -613,7 +613,7 @@ describe('cash arriving by transfer is custody, and never becomes a day’s taki
     await verifiedDay(f, '2026-01-02');
     await tillMovement(f, '2026-01-02', '8000.00');
     await asOrg(f.orgId, (tx) =>
-      createMoneyTransfer(tx, f.admin, {
+      createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
         fromMoneyAccountId: f.safe,
         toMoneyAccountId: f.till,
         amountOut: '20000.00',
@@ -657,7 +657,7 @@ describe('cash arriving by transfer is custody, and never becomes a day’s taki
     await verifiedDay(f, '2026-01-02');
     await tillMovement(f, '2026-01-02', '8000.00');
     await asOrg(f.orgId, (tx) =>
-      createMoneyTransfer(tx, f.admin, {
+      createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
         fromMoneyAccountId: f.safe,
         toMoneyAccountId: f.till,
         amountOut: '20000.00',
@@ -706,7 +706,7 @@ describe('cash arriving by transfer is custody, and never becomes a day’s taki
     await verifiedDay(f, '2026-01-02');
     await tillMovement(f, '2026-01-02', '6500.00');
     await asOrg(f.orgId, (tx) =>
-      createMoneyTransfer(tx, f.admin, {
+      createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
         fromMoneyAccountId: f.safe,
         toMoneyAccountId: f.till,
         amountOut: '15000.00', // ⭐ not 20,000 — a different store, a different number
@@ -761,7 +761,7 @@ describe('T-153 — the till float (a target on the cashier drawer, T-316)', () 
     await officeOpening(f, '2026-01-01', '50000.00');
     const { moneyAccountId } = await potFor(f, '20000.00');
     await asOrg(f.orgId, (tx) =>
-      createMoneyTransfer(tx, f.admin, {
+      createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
         fromMoneyAccountId: f.safe,
         toMoneyAccountId: moneyAccountId,
         amountOut: '20000.00',
@@ -783,7 +783,7 @@ describe('T-153 — the till float (a target on the cashier drawer, T-316)', () 
     const { moneyAccountId } = await potFor(f, '20000.00');
     expect(moneyAccountId).toBe(f.till); // the float sits on the drawer itself
     await asOrg(f.orgId, (tx) =>
-      createMoneyTransfer(tx, f.admin, {
+      createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
         fromMoneyAccountId: f.safe,
         toMoneyAccountId: moneyAccountId,
         amountOut: '20000.00',
@@ -946,7 +946,7 @@ describe('T-324 §7.4 — the declared-overage companions (float-remit shape)', 
     await verifiedDay(f, '2026-01-02');
     await tillMovement(f, '2026-01-02', '8000.00');
     await asOrg(f.orgId, (tx) =>
-      createMoneyTransfer(tx, f.admin, {
+      createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
         fromMoneyAccountId: f.safe,
         toMoneyAccountId: f.till,
         amountOut: '20000.00',

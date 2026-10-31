@@ -236,6 +236,7 @@ async function bill(f: Fixture, amount: string, supplierId = f.supplierId): Prom
 
 interface PayOpts { amount: string; applied?: string; from?: string; on?: string; creditApplied?: string; supplierId?: string; by?: Actor }
 const payInput = (f: Fixture, expenseId: string, o: PayOpts) => ({
+  requestId: crypto.randomUUID(),
   storeId: f.storeId, supplierId: o.supplierId ?? f.supplierId, businessDate: o.on ?? '2026-01-15', amount: o.amount,
   moneyAccountId: o.from ?? f.drawerId, ...(o.creditApplied ? { creditApplied: o.creditApplied } : {}),
   allocations: [{ expenseId, amountApplied: o.applied ?? o.amount }],

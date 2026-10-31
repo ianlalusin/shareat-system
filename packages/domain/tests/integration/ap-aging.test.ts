@@ -228,7 +228,7 @@ describe('getApAgingReport', () => {
     expect(before.reconciles).toBe(true);
 
     await asOrg(f.orgId, (tx) =>
-      recordPayment(tx, f.manager, {
+      recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
         storeId: f.storeId,
         supplierId: f.supplierId,
         businessDate: '2026-02-01',

@@ -4,6 +4,7 @@
  */
 import { defineFieldRules } from './check';
 
+const RATE_SAYS = 'A rate is a decimal from 0 to 1: enter 0.05 for 5%.';
 const EFFECTIVE_DATE_SAYS = 'The effective date must be a date, like 2026-07-01.';
 
 /** One pay-rate row on /payroll. */
@@ -15,13 +16,13 @@ export const PAYROLL_PAY_RATE_RULES = defineFieldRules('payroll.setPayRate', {
 /** Add a contribution row (SSS / PhilHealth / Pag-IBIG). Rates are numbers; the domain keeps its four-decimal-place check. */
 export const PAYROLL_STATUTORY_RATE_RULES = defineFieldRules('payroll.addStatutoryRate', {
   effectiveFrom: { label: 'The effective date', kind: 'date', requires: EFFECTIVE_DATE_SAYS },
-  eeRate: { label: 'The employee rate', kind: 'number', min: 0 },
-  erRate: { label: 'The employer rate', kind: 'number', min: 0 },
+  eeRate: { label: 'The employee rate', kind: 'number', min: 0, max: 1, rangeSays: RATE_SAYS },
+  erRate: { label: 'The employer rate', kind: 'number', min: 0, max: 1, rangeSays: RATE_SAYS },
   floor: { label: 'The floor', optional: true, kind: 'money' },
   ceiling: { label: 'The ceiling', optional: true, kind: 'money' },
   step: { label: 'The step', optional: true, kind: 'money' },
   lowThreshold: { label: 'The low-band threshold', optional: true, kind: 'money' },
-  lowEeRate: { label: 'The low-band employee rate', optional: true, kind: 'number', min: 0 },
+  lowEeRate: { label: 'The low-band employee rate', optional: true, kind: 'number', min: 0, max: 1, rangeSays: RATE_SAYS },
   ecThreshold: { label: 'The EC threshold', optional: true, kind: 'money' },
   ecLow: { label: 'The lower EC amount', optional: true, kind: 'money' },
   ecHigh: { label: 'The higher EC amount', optional: true, kind: 'money' },

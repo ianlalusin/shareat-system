@@ -231,7 +231,7 @@ describe('R1 — tillFloatOffTarget: pre-opening suppression is exact-zero only'
       select id from money_accounts where store_id = ${storeId} and float_target is not null`;
     const safeId = await officeSafeId(f, storeId);
     await withOrgPrincipal(f.orgId, (tx) =>
-      createMoneyTransfer(tx, f.admin, {
+      createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(),
         fromMoneyAccountId: safeId,
         toMoneyAccountId: pot!.id,
         amountOut: '500.00',

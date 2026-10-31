@@ -85,9 +85,11 @@ export type InsertMoneyTransferInput = Pick<
 export async function insertMoneyTransfer(
   tx: Tx,
   input: InsertMoneyTransferInput,
-): Promise<{ id: string }> {
-  const [row] = await tx.insert(moneyTransfers).values(input).returning({ id: moneyTransfers.id });
-  return row!;
+): Promise<{ id: string } | undefined> {
+  // DEF-778: `undefined` means a row with this id already exists (a simultaneous double submit, or another org's id) - the
+  // caller reads it back org-scoped and compares or refuses; never a raw primary-key error.
+  const [row] = await tx.insert(moneyTransfers).values(input).onConflictDoNothing({ target: moneyTransfers.id }).returning({ id: moneyTransfers.id });
+  return row;
 }
 
 export async function getById(

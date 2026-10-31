@@ -101,7 +101,7 @@ type Fixture = Awaited<ReturnType<typeof fixture>>;
 
 /** An ordinary cross-store transfer `from` -> `to`: the SOURCE store gets DR 1250, the DESTINATION CR 2150. malvarSafe -> lipaSafe: Lipa owes Malvar. */
 const transfer = (f: Fixture, from: Account, to: Account, amount: string) =>
-  asOrg(f.orgId, (tx) => createMoneyTransfer(tx, f.admin, { fromMoneyAccountId: from.id, toMoneyAccountId: to.id, amountOut: amount, amountIn: amount, transferDate: DATE }));
+  asOrg(f.orgId, (tx) => createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(), fromMoneyAccountId: from.id, toMoneyAccountId: to.id, amountOut: amount, amountIn: amount, transferDate: DATE }));
 
 type StoreRef = { id: string; code: string };
 interface OneSided {

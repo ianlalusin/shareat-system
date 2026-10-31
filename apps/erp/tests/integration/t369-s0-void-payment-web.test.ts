@@ -170,7 +170,7 @@ async function bill(f: Fixture, amount: string, invoiceNo: string): Promise<{ in
 }
 const payBills = (f: Fixture, amount: string, allocations: { expenseId: string; amountApplied: string }[], on = '2026-01-15', creditApplied?: string) =>
   asOrg(f.orgId, (tx) =>
-    recordPayment(tx, f.manager, {
+    recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
       storeId: f.storeId, supplierId: f.supplierId, businessDate: on, amount, moneyAccountId: f.drawerId,
       ...(creditApplied ? { creditApplied } : {}), referenceNo: 'CHQ-0042', allocations,
     }),
@@ -464,7 +464,7 @@ describe("AUDIT E — the void control is offered only where the actor can use i
     const { admin, malvarSafeId } = await withMalvarSafe(f);
     const a = await bill(f, '3000.00', 'INV-A');
     await asOrg(f.orgId, (tx) =>
-      recordPayment(tx, admin, {
+      recordPayment(tx, admin, { requestId: crypto.randomUUID(),
         storeId: f.storeId, supplierId: f.supplierId, businessDate: '2026-01-15', amount: '3000.00', moneyAccountId: malvarSafeId,
         referenceNo: 'CHQ-0042', allocations: [{ expenseId: a.expenseId, amountApplied: '3000.00' }],
       }),

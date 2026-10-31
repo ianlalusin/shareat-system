@@ -153,7 +153,7 @@ const builders: Record<string, Builder> = {
     const { f, adminPin, managerPin } = await approvedFixture('i10-moneytx');
     const [safe] = await sql<{ id: string }[]>`select id from money_accounts where store_id = ${f.storeId} and instrument = 'cash' and custodian = 'office' and is_foundation`;
     const t = await asOrgOn(f.orgId, (tx) =>
-      D.createMoneyTransfer(tx, f.admin, { fromMoneyAccountId: f.drawerId, toMoneyAccountId: safe!.id, amountOut: '500.00', amountIn: '500.00', transferDate: '2026-01-10' }),
+      D.createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(), fromMoneyAccountId: f.drawerId, toMoneyAccountId: safe!.id, amountOut: '500.00', amountIn: '500.00', transferDate: '2026-01-10' }),
     );
     return {
       adminPin,

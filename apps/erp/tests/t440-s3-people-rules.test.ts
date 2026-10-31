@@ -41,6 +41,7 @@ const REAL = (what: string) => `${what} must be a real date.`;
 const EFFECTIVE = 'The effective date must be a date, like 2026-07-01.';
 const REQ = (what: string) => `${what} is required.`;
 const DATE = '2026-07-01';
+const RATE_SAYS = 'A rate is a decimal from 0 to 1: enter 0.05 for 5%.';
 const DASH = '—';
 
 const ROWS: Record<string, Row> = {
@@ -67,13 +68,13 @@ const ROWS: Record<string, Row> = {
   'payroll.setPayRate.amount': { ok: '350.00', bad: [['-7', 'The pay rate must be an amount of 0.01 or more.']] },
   'payroll.setPayRate.effectiveFrom': { ok: DATE, bad: [['soon', EFFECTIVE]], blank: EFFECTIVE },
   'payroll.addStatutoryRate.effectiveFrom': { ok: DATE, bad: [['soon', EFFECTIVE]], blank: EFFECTIVE },
-  'payroll.addStatutoryRate.eeRate': { ok: '0.05', bad: [['abc', 'The employee rate must be a number of 0 or more.'], ['-0.5', 'The employee rate must be a number of 0 or more.']] },
-  'payroll.addStatutoryRate.erRate': { ok: '0.10', bad: [['abc', 'The employer rate must be a number of 0 or more.']] },
+  'payroll.addStatutoryRate.eeRate': { ok: '0.05', bad: [['abc', 'The employee rate must be a number from 0 to 1.'], ['-0.5', RATE_SAYS]] },
+  'payroll.addStatutoryRate.erRate': { ok: '0.10', bad: [['abc', 'The employer rate must be a number from 0 to 1.']] },
   'payroll.addStatutoryRate.floor': { ok: '5000.00', bad: [['12x', `The floor ${DASH} "12x" is not a valid amount. Use at most two decimal places.`]] },
   'payroll.addStatutoryRate.ceiling': { ok: '35000.00', bad: [['12x', `The ceiling ${DASH} "12x" is not a valid amount. Use at most two decimal places.`]] },
   'payroll.addStatutoryRate.step': { ok: '500.00', bad: [['12x', `The step ${DASH} "12x" is not a valid amount. Use at most two decimal places.`]] },
   'payroll.addStatutoryRate.lowThreshold': { ok: '1500.00', bad: [['12x', `The low-band threshold ${DASH} "12x" is not a valid amount. Use at most two decimal places.`]] },
-  'payroll.addStatutoryRate.lowEeRate': { ok: '0.01', bad: [['abc', 'The low-band employee rate must be a number of 0 or more.']] },
+  'payroll.addStatutoryRate.lowEeRate': { ok: '0.01', bad: [['abc', 'The low-band employee rate must be a number from 0 to 1.']] },
   'payroll.addStatutoryRate.ecThreshold': { ok: '14750.00', bad: [['12x', `The EC threshold ${DASH} "12x" is not a valid amount. Use at most two decimal places.`]] },
   'payroll.addStatutoryRate.ecLow': { ok: '10.00', bad: [['12x', `The lower EC amount ${DASH} "12x" is not a valid amount. Use at most two decimal places.`]] },
   'payroll.addStatutoryRate.ecHigh': { ok: '30.00', bad: [['12x', `The higher EC amount ${DASH} "12x" is not a valid amount. Use at most two decimal places.`]] },

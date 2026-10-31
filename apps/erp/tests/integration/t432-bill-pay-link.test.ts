@@ -169,7 +169,7 @@ describe('case 18 - the link is shown only when the bill is payable (M18)', () =
     const sup = await f.mkSupplier(uid('S18b'));
     const b = await verifiedBill(f, sup, '1000.00');
     await asOrg(f.orgId, (tx) =>
-      recordPayment(tx, f.admin, {
+      recordPayment(tx, f.admin, { requestId: crypto.randomUUID(),
         storeId: f.storeA, supplierId: sup, businessDate: '2026-01-15', amount: '1000.00', moneyAccountId: f.safeA,
         allocations: [{ expenseId: b.expenseId, amountApplied: '1000.00' }],
       }),
@@ -259,6 +259,7 @@ describe('case 21 - a forged ?bill= pre-selects nothing foreign, and posting the
     H.actor = f.admin;
     resetJar();
     const fd = new FormData();
+    fd.set('requestId', crypto.randomUUID());
     fd.set('supplierId', mine);
     fd.set('storeId', f.storeA);
     fd.set('businessDate', '2026-01-15');

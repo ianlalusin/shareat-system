@@ -365,7 +365,10 @@ async function runCreate(
   // WARNING (row 154), which is exactly right here: the till holds what the ledger cannot see
   // until the day is verified.
   for (const { line, amount, declaredToStore } of linesWithOverage) {
+    // DEF-778: a genuine, separate transfer per line, so each gets its own request id (the remittance itself is the unit
+    // of retry, not the line).
     const transfer = await createMoneyTransfer(tx, actor, {
+      requestId: crypto.randomUUID(),
       fromMoneyAccountId: line.fromMoneyAccountId,
       toMoneyAccountId: line.toMoneyAccountId,
       amountOut: amount,

@@ -990,15 +990,18 @@ export type InsertApPaymentInput = Pick<
   SafeInsert<typeof apPayments>,
   'orgId' | 'storeId' | 'supplierId' | 'businessDate' | 'moneyAccountId' | 'createdBy'
 > & {
+  /** DEF-778: the form's request id IS the payment id, so the primary key backstops a racing double click. */
+  id?: string;
   amount: Money;
   cashRequestId: string | null;
   referenceNo: string | null;
   notes: string | null;
 };
 
-export async function insertApPayment(tx: Tx, input: InsertApPaymentInput): Promise<{ id: string }> {
-  const [row] = await tx.insert(apPayments).values(input).returning({ id: apPayments.id });
-  return row!;
+/** DEF-778: `undefined` means a row with this id already exists (a simultaneous double submit committed first) - the caller goes back to the replay comparison. */
+export async function insertApPayment(tx: Tx, input: InsertApPaymentInput): Promise<{ id: string } | undefined> {
+  const [row] = await tx.insert(apPayments).values(input).onConflictDoNothing({ target: apPayments.id }).returning({ id: apPayments.id });
+  return row;
 }
 
 export async function getApPaymentById(tx: Tx, orgId: string, id: string): Promise<ApPaymentRow | undefined> {

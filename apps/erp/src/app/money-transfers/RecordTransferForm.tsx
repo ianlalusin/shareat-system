@@ -38,14 +38,18 @@ function Field({ label, hint, rule, className, children }: { label: React.ReactN
 
 export function RecordTransferForm({
   options,
+  requestId,
   today,
 }: {
   options: readonly PickerOption[];
+  /** DEF-778: generated when the page renders and submitted back, so a double click is a replay, not a second transfer. */
+  requestId: string;
   today: string;
 }) {
 
   return (
     <CheckedForm rules={TRANSFER_RECORD_RULES} action={createMoneyTransferAction} className="space-y-4">
+      <input type="hidden" name="requestId" value={requestId} />
       <div className="grid gap-4 sm:grid-cols-2">
         <TwoWayPicker
           options={options}

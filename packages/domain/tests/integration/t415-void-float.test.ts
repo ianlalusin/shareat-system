@@ -226,6 +226,7 @@ interface PayOpts {
   supplierId?: string; storeId?: string;
 }
 const payInput = (f: Fixture, expenseId: string, o: PayOpts) => ({
+  requestId: crypto.randomUUID(),
   storeId: o.storeId ?? f.storeId, supplierId: o.supplierId ?? f.supplierId, businessDate: '2026-01-15', amount: o.amount,
   moneyAccountId: o.from,
   ...(o.cashRequestId !== undefined ? { cashRequestId: o.cashRequestId } : {}),

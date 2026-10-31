@@ -263,7 +263,7 @@ describe('the open-item allocation this task exists for', () => {
     expect((await asOrg(f.orgId, (tx) => apRepo.positionOf(tx, f.orgId, f.supplierId))).controlBalance).toBe('10000.00');
 
     const paid = await asOrg(f.orgId, (tx) =>
-      recordPayment(tx, f.manager, {
+      recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
         storeId: f.storeId, supplierId: f.supplierId, businessDate: '2026-01-15',
         amount: '10000.00', moneyAccountId: f.drawerId, allocations: [{ expenseId: open[0]!.expenseId, amountApplied: '10000.00' }],
       }),
@@ -282,7 +282,7 @@ describe('the open-item allocation this task exists for', () => {
     const { expenseId } = await creditExpense(f, invoiceId, '6000.00');
 
     await asOrg(f.orgId, (tx) =>
-      recordPayment(tx, f.manager, {
+      recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
         storeId: f.storeId, supplierId: f.supplierId, businessDate: '2026-01-15',
         amount: '4000.00', moneyAccountId: f.drawerId, allocations: [{ expenseId, amountApplied: '4000.00' }],
       }),
@@ -291,7 +291,7 @@ describe('the open-item allocation this task exists for', () => {
     expect(open[0]!.outstanding).toBe('2000.00');
 
     await asOrg(f.orgId, (tx) =>
-      recordPayment(tx, f.manager, {
+      recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
         storeId: f.storeId, supplierId: f.supplierId, businessDate: '2026-01-20',
         amount: '2000.00', moneyAccountId: f.drawerId, allocations: [{ expenseId, amountApplied: '2000.00' }],
       }),
@@ -306,7 +306,7 @@ describe('the open-item allocation this task exists for', () => {
     const { expenseId } = await creditExpense(f, invoiceId, '8000.00');
 
     const result = await asOrg(f.orgId, (tx) =>
-      recordPayment(tx, f.manager, {
+      recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
         storeId: f.storeId, supplierId: f.supplierId, businessDate: '2026-01-15',
         amount: '8500.00', moneyAccountId: f.drawerId, allocations: [{ expenseId, amountApplied: '8000.00' }],
       }),
@@ -332,7 +332,7 @@ describe('the open-item allocation this task exists for', () => {
     const b = await creditExpense(f, invB, '5000.00', 'Invoice B goods');
 
     await asOrg(f.orgId, (tx) =>
-      recordPayment(tx, f.manager, {
+      recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
         storeId: f.storeId, supplierId: f.supplierId, businessDate: '2026-01-20',
         amount: '6000.00', moneyAccountId: f.drawerId,
         allocations: [
@@ -364,7 +364,7 @@ describe('the refusals', () => {
     const before = await asOrg(f.orgId, (tx) => apRepo.positionOf(tx, f.orgId, f.supplierId));
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordPayment(tx, f.manager, {
+        recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
           storeId: f.storeId, supplierId: f.supplierId, businessDate: '2026-01-15',
           amount: '1000.00', moneyAccountId: f.drawerId, allocations: [{ expenseId, amountApplied: '1000.00' }],
         }),
@@ -381,7 +381,7 @@ describe('the refusals', () => {
 
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordPayment(tx, f.manager, {
+        recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
           storeId: f.storeId, supplierId: f.supplierId, businessDate: '2026-01-15',
           amount: '1000.00', moneyAccountId: f.drawerId, allocations: [{ expenseId, amountApplied: '5000.00' }],
         }),
@@ -505,7 +505,7 @@ describe('void a posted AP payment — reversal, not deletion; the item reopens'
     const { expenseId } = await creditExpense(f, invoiceId, '3000.00');
 
     const paid = await asOrg(f.orgId, (tx) =>
-      recordPayment(tx, f.manager, {
+      recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
         storeId: f.storeId, supplierId: f.supplierId, businessDate: '2026-01-15',
         amount: '3000.00', moneyAccountId: f.drawerId, allocations: [{ expenseId, amountApplied: '3000.00' }],
       }),
@@ -660,7 +660,7 @@ describe('⭐ AP is scoped to a STORE, never the whole org', () => {
     // A and clear a liability that was never A's, so A's books go negative and B's never clear.
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordPayment(tx, f.manager, {
+        recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
           storeId: f.storeId,
           supplierId: f.supplierId,
           businessDate: '2026-01-20',
@@ -739,7 +739,7 @@ describe('⭐ AP integrity gaps found by the 2026-08-28 audit', () => {
 
     const pay = () =>
       asOrg(f.orgId, (tx) =>
-        recordPayment(tx, f.manager, {
+        recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
           storeId: f.storeId,
           supplierId: f.supplierId,
           businessDate: '2026-01-20',
@@ -1024,7 +1024,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
     const f = await fixtureWithSupplier('def272-pay');
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordPayment(tx, f.manager, {
+        recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
           storeId: f.storeId, supplierId: f.supplierId,
           businessDate: '2026-01-15', amount: '0.004', moneyAccountId: f.drawerId, allocations: [],
         }),
@@ -1038,7 +1038,7 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
     const expenseId = (await creditExpense(f, invoiceId, '3000.00')).expenseId;
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordPayment(tx, f.manager, {
+        recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
           storeId: f.storeId, supplierId: f.supplierId, businessDate: '2026-01-15',
           amount: '1000.00', moneyAccountId: f.drawerId,
           allocations: [{ expenseId, amountApplied: '0.004' }],
@@ -1120,7 +1120,7 @@ describe('T-343 S5.2 — P3: recordPayment over-allocating one expense names it 
     const { expenseId } = await creditExpense(f, invoiceId, '1000.00', particulars);
 
     const caught = await asOrg(f.orgId, (tx) =>
-      recordPayment(tx, f.manager, {
+      recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
         storeId: f.storeId,
         supplierId: f.supplierId,
         businessDate: '2026-01-15',
@@ -1152,7 +1152,7 @@ describe('T-343 S5.2 — P6: expenseKey’s fallback names a deleted/cross-org e
     const missingExpenseId = crypto.randomUUID();
 
     const caught = await asOrg(f.orgId, (tx) =>
-      recordPayment(tx, f.manager, {
+      recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
         storeId: f.storeId,
         supplierId: f.supplierId,
         businessDate: '2026-01-15',
@@ -1210,7 +1210,7 @@ describe('T-343 S5.2fu — P8: a manager at store A allocating a REAL store-B ex
     const expenseDate = expenseRow!.business_date;
 
     const caught = await asOrg(f.orgId, (tx) =>
-      recordPayment(tx, f.manager, {
+      recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
         storeId: f.storeId, // ⛔ store A — atB.expenseId belongs to store B
         supplierId: f.supplierId,
         businessDate: '2026-03-02',

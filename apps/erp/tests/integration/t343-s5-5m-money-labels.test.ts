@@ -124,7 +124,7 @@ describe('H2 — recordPayment: the payment amount and an allocation each name t
     let caught: unknown;
     try {
       await asOrg(f.orgId, (tx) =>
-        recordPayment(tx, f.manager, {
+        recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
           storeId: f.storeId,
           supplierId: supplier.id,
           businessDate: '2026-01-15',
@@ -149,7 +149,7 @@ describe('H2 — recordPayment: the payment amount and an allocation each name t
     let caught: unknown;
     try {
       await asOrg(f.orgId, (tx) =>
-        recordPayment(tx, f.manager, {
+        recordPayment(tx, f.manager, { requestId: crypto.randomUUID(),
           storeId: f.storeId,
           supplierId: supplier.id,
           businessDate: '2026-01-15',

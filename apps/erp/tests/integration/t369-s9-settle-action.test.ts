@@ -104,7 +104,7 @@ async function fixture(hint: string) {
     );
   }
   const admin = actor(orgId, adminId);
-  await asOrg(orgId, (tx) => createMoneyTransfer(tx, admin, { fromMoneyAccountId: malvarSafe, toMoneyAccountId: lipaSafe, amountOut: '650.00', amountIn: '650.00', transferDate: '2026-01-16' }));
+  await asOrg(orgId, (tx) => createMoneyTransfer(tx, admin, { requestId: crypto.randomUUID(), fromMoneyAccountId: malvarSafe, toMoneyAccountId: lipaSafe, amountOut: '650.00', amountIn: '650.00', transferDate: '2026-01-16' }));
   return { orgId, lipaId, malvarId, lipaSafe, malvarSafe, admin, lipaMgr: actor(orgId, lipaMgrId) };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;

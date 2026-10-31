@@ -88,7 +88,7 @@ async function postCash(f: Fx, debitCode: string, amount: string) {
 }
 
 const draw = (f: Fx, tx: Tx, from: string, to: string, amount: string) =>
-  createMoneyTransfer(tx, f.admin, { fromMoneyAccountId: from, toMoneyAccountId: to, amountOut: amount, amountIn: amount, transferDate: '2026-01-10' });
+  createMoneyTransfer(tx, f.admin, { requestId: crypto.randomUUID(), fromMoneyAccountId: from, toMoneyAccountId: to, amountOut: amount, amountIn: amount, transferDate: '2026-01-10' });
 
 /** Net committed ledger balance of a store's GL cash code (1130 office safe, 1110 cashier drawer). */
 async function ledgerBalance(f: Fx, code: string): Promise<number> {

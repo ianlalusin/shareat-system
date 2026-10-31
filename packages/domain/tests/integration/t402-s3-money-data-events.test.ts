@@ -396,11 +396,11 @@ describe('ap_invoice.approved (verifyInvoice) and ap_payment.recorded (recordPay
     const f = await moneyFixture(sql, 'appay');
     const { expenseId } = await openCreditItem(f, '6000.00');
     const base = { storeId: f.storeId, supplierId: f.supplierId, businessDate: '2026-01-15', amount: '4000.00', moneyAccountId: f.drawerId };
-    await rejection(asOrgOn(f.orgId, (tx) => D.recordPayment(tx, f.manager, { ...base, allocations: [] })));
-    await rolledBack(f.orgId, (tx) => D.recordPayment(tx, f.manager, { ...base, allocations: [{ expenseId, amountApplied: '4000.00' }] }));
+    await rejection(asOrgOn(f.orgId, (tx) => D.recordPayment(tx, f.manager, { requestId: crypto.randomUUID(), ...base, allocations: [] })));
+    await rolledBack(f.orgId, (tx) => D.recordPayment(tx, f.manager, { requestId: crypto.randomUUID(), ...base, allocations: [{ expenseId, amountApplied: '4000.00' }] }));
     expect(await auditRows(sql, f.orgId, 'ap_payment.recorded')).toHaveLength(0);
 
-    const paid = await asOrgOn(f.orgId, (tx) => D.recordPayment(tx, f.manager, { ...base, allocations: [{ expenseId, amountApplied: '4000.00' }] }));
+    const paid = await asOrgOn(f.orgId, (tx) => D.recordPayment(tx, f.manager, { requestId: crypto.randomUUID(), ...base, allocations: [{ expenseId, amountApplied: '4000.00' }] }));
     const rows = await auditRows(sql, f.orgId, 'ap_payment.recorded', paid.paymentId);
     expect(rows).toHaveLength(1);
     expectLabels(rows[0]!, 'ap_payment.recorded', f.storeId);

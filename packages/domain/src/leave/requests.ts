@@ -13,7 +13,7 @@
  * - **The note is personal data** (D13, bible row 353): only the loader returns it, and only to people allowed to open the request.
  */
 import { accessRepo, leaveRepo, advisoryLocksRepo, type Tx } from '@shareat/db';
-import { authorize, heldCapabilities, type Actor } from '@shareat/auth';
+import { authorize, heldCapabilities, holdsSuperAdminAuthority, type Actor } from '@shareat/auth';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { escapeCsvCell } from '@shareat/core/csv';
 import { gone } from '../shared/refusal';
@@ -91,7 +91,7 @@ const run = <T>(tx: Tx, fn: (trx: Tx) => Promise<T>): Promise<T> => fn(tx);
 
 async function isSuperAdmin(tx: Tx, actor: Actor): Promise<boolean> {
   const role = await accessRepo.activeRoleForPerson(tx, actor.personId, actor.orgId);
-  return role?.role === 'super_admin';
+  return holdsSuperAdminAuthority(tx, actor, role?.role);
 }
 
 const payload = (r: { personId: string; employmentId: string; leaveType: string }, dates: readonly string[], extra: Record<string, unknown> = {}) => ({
