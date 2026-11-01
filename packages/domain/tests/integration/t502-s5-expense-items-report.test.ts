@@ -422,6 +422,25 @@ describe('T-502 S5 / the attribution rule (how a posted expense splits over item
     expect(r.total).toBe('100.00');
   });
 
+  it('no line ever carries more than its own total when T <= L: 2.99 over three 1.00 lines -> 1.00 / 1.00 / 0.99 (kills: the whole remainder on the largest line, which gives 1.01)', async () => {
+    const w = await world('attrcap');
+    const items = [await w.item('Cap A', { cat: w.cogsA }), await w.item('Cap B', { cat: w.cogsA }), await w.item('Cap C', { cat: w.cogsA })];
+    await post(w, await bill(w, { lines: items.map((item) => ({ item, total: '1.00' })) }), w.cogsA, '2.99');
+    const r = await report(w.f, w.boss);
+    const got = items.map((id) => itemsOf(r, w.cogsA).find((i) => i.itemId === id)!.total);
+    expect(got).toEqual(['1.00', '1.00', '0.99']);
+    expect(r.total).toBe('2.99');
+  });
+
+  it('one invoice + one category is ONE unit whatever the store: the schema forbids an expense at a store other than its invoice (DEF-508), so a Malvar expense on a Lipa bill is refused (guard)', async () => {
+    const w = await world('attrstore');
+    const a = await w.item('Guard A', { cat: w.cogsA });
+    const inv = await bill(w, { lines: [{ item: a, total: '100.00' }] });
+    await post(w, inv, w.cogsA, '60.00');
+    expect(await refuses(() => post(w, inv, w.cogsA, '40.00', 'malvar'))).not.toBeNull();
+    expect((await report(w.f, w.boss)).total).toBe('60.00');
+  });
+
   it('money above the lines of its category (the open room: an uncategorised line, a fee) is the "(unitemised)" row under that category; the lines count in full', async () => {
     const w = await world('attr3');
     const meat = await w.item('Meat line', { cat: w.cogsA });

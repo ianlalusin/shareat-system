@@ -85,6 +85,8 @@ export interface UnitemisedExpense {
   storeId: string;
   businessDate: string;
   amount: Money;
+  /** This expense's pro-rata share of the part's overflow; the column sums exactly to the "(unitemised)" row. */
+  unitemisedPart: Money;
   particulars: string;
 }
 
@@ -129,10 +131,13 @@ interface AttributedLine {
   lineCents: bigint;
   /** quantity x conversion factor, scale 9. */
   baseQty9: bigint;
+  /** True on the one piece of a line that carries its full line total and quantity into the item's averages. */
+  countLine: boolean;
   attributed: bigint;
 }
 interface Unitemised {
   invoiceId: string;
+  invoiceDate: string;
   storeId: string;
   categoryId: string;
   categoryName: string;
@@ -140,10 +145,40 @@ interface Unitemised {
   cents: bigint;
 }
 
+/**
+ * Splits `total` over `weights` pro-rata (centavos floored). The remainder goes to the heaviest weight, a tie to the lowest
+ * index (callers pass the weights in their tie order). With `caps`, the remainder is dealt one centavo at a time in that same
+ * order, skipping any entry already at its cap, so no entry ever exceeds its cap while total <= sum(caps).
+ */
+function split(total: bigint, weights: readonly bigint[], caps?: readonly bigint[]): bigint[] {
+  const w = weights.reduce((s, c) => s + c, 0n);
+  if (w <= 0n || weights.length === 0) return weights.map(() => 0n);
+  const shares = weights.map((c) => (total * c) / w);
+  let remainder = total - shares.reduce((s, c) => s + c, 0n);
+  const order = weights.map((_, i) => i).sort((x, y) => desc(weights[x]!, weights[y]!) || x - y);
+  if (!caps) {
+    shares[order[0]!] = shares[order[0]!]! + remainder;
+    return shares;
+  }
+  while (remainder > 0n) {
+    let dealt = false;
+    for (const i of order) {
+      if (remainder === 0n) break;
+      if (shares[i]! < caps[i]!) {
+        shares[i] = shares[i]! + 1n;
+        remainder -= 1n;
+        dealt = true;
+      }
+    }
+    if (!dealt) break;
+  }
+  return shares;
+}
+
 async function attribute(tx: Tx, actor: Actor, input: ExpenseItemsInput) {
   const storeIds = await resolveScope(tx, actor, input.storeId);
   const scope = { orgId: actor.orgId, from: input.from, to: input.to, ...(storeIds ? { storeIds } : {}) };
-  const [parts, lines] = await Promise.all([
+  const [rawParts, lines] = await Promise.all([
     expenseItemsRepo.postedParts(tx, scope),
     expenseItemsRepo.linesOfScopedInvoices(tx, scope),
   ]);
@@ -153,28 +188,39 @@ async function attribute(tx: Tx, actor: Actor, input: ExpenseItemsInput) {
     arr.push(l);
     linesByInvoice.set(l.invoiceId, arr);
   }
+  // The unit is ONE INVOICE + ONE CATEGORY (section 16), whatever store each expense sits at.
+  interface Part {
+    invoiceId: string;
+    categoryId: string;
+    categoryName: string;
+    group: string;
+    businessDate: string;
+    stores: Map<string, bigint>;
+  }
+  const partMap = new Map<string, Part>();
+  for (const r of rawParts) {
+    const key = `${r.invoiceId}#${r.categoryId}`;
+    let p = partMap.get(key);
+    if (!p) partMap.set(key, (p = { invoiceId: r.invoiceId, categoryId: r.categoryId, categoryName: r.categoryName, group: r.group, businessDate: r.businessDate, stores: new Map() }));
+    if (r.businessDate > p.businessDate) p.businessDate = r.businessDate;
+    p.stores.set(r.storeId, (p.stores.get(r.storeId) ?? 0n) + toCentavos(money(r.total)));
+  }
   const out: AttributedLine[] = [];
   const unitemised: Unitemised[] = [];
-  for (const p of parts) {
-    const t = toCentavos(money(p.total));
-    const mine = (linesByInvoice.get(p.invoiceId) ?? []).filter((l) => l.categoryId === p.categoryId);
+  for (const p of partMap.values()) {
+    const storeList = [...p.stores.entries()].sort(([a], [b]) => a.localeCompare(b));
+    const storeCents = storeList.map(([, c]) => c);
+    const t = storeCents.reduce((s, c) => s + c, 0n);
+    const mine = (linesByInvoice.get(p.invoiceId) ?? [])
+      .filter((l) => l.categoryId === p.categoryId)
+      .sort((x, y) => x.lineNo - y.lineNo);
     const lineCents = mine.map((l) => toCentavos(money(l.lineTotal)));
     const lTotal = lineCents.reduce((s, c) => s + c, 0n);
-    const base = { invoiceId: p.invoiceId, invoiceDate: p.businessDate, storeId: p.storeId, categoryId: p.categoryId, categoryName: p.categoryName, group: p.group };
+    const base = { invoiceId: p.invoiceId, invoiceDate: p.businessDate, categoryId: p.categoryId, categoryName: p.categoryName, group: p.group };
     let shares: bigint[];
     let over = 0n;
     if (lTotal > 0n && t <= lTotal) {
-      shares = lineCents.map((c) => (t * c) / lTotal);
-      const remainder = t - shares.reduce((s, c) => s + c, 0n);
-      if (remainder > 0n) {
-        let best = 0;
-        for (let i = 1; i < mine.length; i++) {
-          const lc = lineCents[i]!;
-          const bc = lineCents[best]!;
-          if (lc > bc || (lc === bc && mine[i]!.lineNo < mine[best]!.lineNo)) best = i;
-        }
-        shares[best] = shares[best]! + remainder;
-      }
+      shares = split(t, lineCents, lineCents);
     } else if (lTotal > 0n) {
       shares = lineCents;
       over = t - lTotal;
@@ -183,22 +229,37 @@ async function attribute(tx: Tx, actor: Actor, input: ExpenseItemsInput) {
       over = t;
     }
     mine.forEach((l, i) => {
-      out.push({
-        ...base,
-        lineNo: l.lineNo,
-        itemId: l.itemId,
-        itemName: l.itemName,
-        baseUnit: l.baseUnit,
-        purchaseUnit: l.purchaseUnit,
-        subcategoryId: l.subcategoryId,
-        subcategoryName: l.subcategoryName ?? NO_SUBCATEGORY,
-        quantity: l.quantity,
-        lineCents: lineCents[i]!,
-        baseQty9: scaled(l.quantity, 3) * scaled(l.conversionFactor, 6),
-        attributed: shares[i]!,
+      const perStore = split(shares[i]!, storeCents);
+      let counted = false;
+      storeList.forEach(([storeId], k) => {
+        const attributed = perStore[k]!;
+        // The line's own money and quantity count once, on its first store piece that holds any money.
+        const countLine = !counted && attributed > 0n;
+        if (countLine) counted = true;
+        out.push({
+          ...base,
+          storeId,
+          lineNo: l.lineNo,
+          itemId: l.itemId,
+          itemName: l.itemName,
+          baseUnit: l.baseUnit,
+          purchaseUnit: l.purchaseUnit,
+          subcategoryId: l.subcategoryId,
+          subcategoryName: l.subcategoryName ?? NO_SUBCATEGORY,
+          quantity: l.quantity,
+          lineCents: lineCents[i]!,
+          countLine,
+          baseQty9: scaled(l.quantity, 3) * scaled(l.conversionFactor, 6),
+          attributed,
+        });
       });
     });
-    if (over > 0n) unitemised.push({ invoiceId: p.invoiceId, storeId: p.storeId, categoryId: p.categoryId, categoryName: p.categoryName, group: p.group, cents: over });
+    if (over > 0n) {
+      const perStore = split(over, storeCents);
+      storeList.forEach(([storeId], k) => {
+        if (perStore[k]! > 0n) unitemised.push({ ...base, storeId, cents: perStore[k]! });
+      });
+    }
   }
   return { out, unitemised, scope };
 }
@@ -257,8 +318,10 @@ export async function expenseItemsReport(tx: Tx, actor: Actor, input: ExpenseIte
     const key = `${a.invoiceId}#${a.lineNo}`;
     i.total += a.attributed;
     i.lineKeys.add(key);
-    i.lineTotal += a.lineCents;
-    i.baseQty9 += a.baseQty9;
+    if (a.countLine) {
+      i.lineTotal += a.lineCents;
+      i.baseQty9 += a.baseQty9;
+    }
     const st = storeOf(i, a.storeId);
     st.total += a.attributed;
     st.lineKeys.add(key);
@@ -371,17 +434,25 @@ export async function unitemisedExpenses(
   input: ExpenseItemsInput & { categoryId: string },
 ): Promise<UnitemisedExpense[]> {
   const { unitemised, scope } = await attribute(tx, actor, input);
-  const invoices = new Set(unitemised.filter((u) => u.categoryId === input.categoryId).map((u) => u.invoiceId));
-  if (invoices.size === 0) return [];
-  const rows = await expenseItemsRepo.postedExpensesOfCategory(tx, scope, input.categoryId);
-  return rows
-    .filter((r) => invoices.has(r.invoiceId))
-    .map((r) => ({
-      expenseId: r.expenseId,
-      invoiceId: r.invoiceId,
-      storeId: r.storeId,
-      businessDate: r.businessDate,
-      amount: money(r.amount),
-      particulars: r.particulars,
-    }));
+  const overflow = new Map<string, bigint>();
+  for (const u of unitemised) if (u.categoryId === input.categoryId) overflow.set(u.invoiceId, (overflow.get(u.invoiceId) ?? 0n) + u.cents);
+  if (overflow.size === 0) return [];
+  const rows = (await expenseItemsRepo.postedExpensesOfCategory(tx, scope, input.categoryId)).filter((r) => overflow.has(r.invoiceId));
+  const byInvoice = new Map<string, typeof rows>();
+  for (const r of rows) byInvoice.set(r.invoiceId, [...(byInvoice.get(r.invoiceId) ?? []), r]);
+  const part = new Map<string, bigint>();
+  for (const [invoiceId, group] of byInvoice) {
+    const ordered = [...group].sort((x, y) => x.expenseId.localeCompare(y.expenseId));
+    const shares = split(overflow.get(invoiceId)!, ordered.map((r) => toCentavos(money(r.amount))));
+    ordered.forEach((r, i) => part.set(r.expenseId, shares[i]!));
+  }
+  return rows.map((r) => ({
+    expenseId: r.expenseId,
+    invoiceId: r.invoiceId,
+    storeId: r.storeId,
+    businessDate: r.businessDate,
+    amount: money(r.amount),
+    unitemisedPart: fromCentavos(part.get(r.expenseId) ?? 0n),
+    particulars: r.particulars,
+  }));
 }

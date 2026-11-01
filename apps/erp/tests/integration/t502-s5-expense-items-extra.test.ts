@@ -149,3 +149,59 @@ describe('T-502 S5 extra / ruling 6 - the CSV export', () => {
     expect(res.body).toContain('Scoped CSV item');
   });
 });
+
+describe('T-502 S5 extra / audit fixes', () => {
+  const exportRoute = () => import('../../src/app/reports/expense-items/export/route');
+  const get = async (who: Actor, qs: string): Promise<{ status: number; body: string; disposition: string | null }> => {
+    session.actor = who;
+    try {
+      const { GET } = await exportRoute();
+      const res = await GET(new Request(`http://localhost/reports/expense-items/export?${qs}`));
+      return { status: res.status, body: await res.text(), disposition: res.headers.get('Content-Disposition') };
+    } catch (e) {
+      return { status: 500, body: `THROWN ${e instanceof Error ? e.message : String(e)}`, disposition: null };
+    }
+  };
+
+  it('the unitemised column sums EXACTLY to the "(unitemised)" row: 30.00 overflow over 90.00 and 40.00 expenses -> 20.77 + 9.23', async () => {
+    const w = await world('part');
+    const a = await w.item('Part item');
+    const inv = await w.bill([{ item: a, total: '100.00' }], '30.00');
+    await w.post(inv, '90.00');
+    await w.post(inv, '40.00');
+    const { loose, rep } = await asOrg(w.f.orgId, async (tx) => ({
+      loose: await domain.unitemisedExpenses(tx, w.boss, { ...RANGE, categoryId: w.cat }),
+      rep: await domain.expenseItemsReport(tx, w.boss, RANGE),
+    }));
+    const row = rep.groups.flatMap((g) => g.categories).find((c) => c.categoryId === w.cat)!.subcategories.flatMap((s) => s.items).find((i) => i.name === domain.UNITEMISED_NAME)!;
+    expect(row.total).toBe('30.00');
+    expect(loose.map((e) => e.amount).sort()).toEqual(['40.00', '90.00']);
+    expect(loose.map((e) => e.unitemisedPart).sort()).toEqual(['20.77', '9.23']);
+    expect(loose.reduce((s, e) => s + Math.round(Number(e.unitemisedPart) * 100), 0)).toBe(3000);
+  });
+
+  it('a bad from/to (quote, CRLF, garbage, a fake date) falls back to the default range: 200, no raw value in the filename', async () => {
+    const w = await world('dates');
+    for (const bad of ['2026-01-01"\r\nX-Evil: 1', 'garbage', '2026-02-30', '']) {
+      const res = await get(w.boss, `from=${encodeURIComponent(bad)}&to=${encodeURIComponent(bad)}`);
+      expect(res.status).toBe(200);
+      expect(res.disposition).toMatch(/^attachment; filename="expense-items-\d{4}-\d{2}-\d{2}-to-\d{4}-\d{2}-\d{2}\.csv"$/);
+    }
+    const { resolveRange } = await import('../../src/app/reports/expense-items/range');
+    expect(resolveRange('2026-03-01', '2026-02-01', '2026-04-15')).toEqual({ from: '2026-04-01', to: '2026-04-15' });
+    expect(resolveRange('2026-02-01', '2026-02-28', '2026-04-15')).toEqual({ from: '2026-02-01', to: '2026-02-28' });
+  });
+
+  it('the all-stores view has a column for a retired store that holds figures, so the store columns add up to the row total', async () => {
+    const w = await world('retired');
+    const a = await w.item('Retired store item');
+    await w.post(await w.bill([{ item: a, total: '80.00' }]), '80.00');
+    await sql`update stores set is_active = false where id = ${w.f.storeId}`;
+    const res = await get(w.boss, 'from=2026-01-01&to=2026-01-31');
+    expect(res.status).toBe(200);
+    const lines = res.body.trim().split('\r\n');
+    expect(lines[0]).toContain('Lipa spent');
+    const itemRow = lines.find((l) => l.includes('Retired store item'))!;
+    expect(itemRow.split(',').filter((c) => c.endsWith('80.00')).length).toBeGreaterThanOrEqual(2); // row total and the Lipa column
+  });
+});

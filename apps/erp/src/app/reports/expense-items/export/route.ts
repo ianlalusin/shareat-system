@@ -3,19 +3,22 @@ import { formatMoney } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { reportScope, runReport } from '../../lib';
 import { csvResponse } from '@/lib/csv';
+import { resolveRange, storeColumns } from '../range';
 
 /** T-502 S5 - CSV of the "Spending by Item" table. Same scope and same query the screen runs; every cell goes through escapeCsvCell. */
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const today = toBusinessDate();
-  const from = url.searchParams.get('from') ?? `${today.slice(0, 7)}-01`;
-  const to = url.searchParams.get('to') ?? today;
+  const { from, to } = resolveRange(url.searchParams.get('from'), url.searchParams.get('to'), today);
 
   const scope = await reportScope('/reports/expense-items', 'view_financial_reports', url.searchParams.get('store') ?? undefined);
   const storeId = scope.storeId ?? null;
-  const report = await runReport(scope.actor.orgId, (tx) => expenseItemsReport(tx, scope.actor, { from, to, storeId }));
+  const { report, cols } = await runReport(scope.actor.orgId, async (tx) => {
+    const report = await expenseItemsReport(tx, scope.actor, { from, to, storeId });
+    return { report, cols: storeId === null ? await storeColumns(tx, report, scope.stores) : [] };
+  });
 
-  const storeCols = storeId === null && scope.stores.length > 1 ? scope.stores : [];
+  const storeCols = cols.length > 1 ? cols : [];
   const headers = [
     'Group',
     'Category',

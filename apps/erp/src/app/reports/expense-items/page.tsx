@@ -2,6 +2,7 @@ import { expenseItemLines, expenseItemsReport, unitemisedExpenses, UNITEMISED_NA
 import { formatMoney } from '@shareat/core/money';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { reportScope, runReport } from '../lib';
+import { resolveRange, storeColumns } from './range';
 import { EmptyState } from '@/components/reports/EmptyState';
 import { CsvExportLink } from '@/components/reports/CsvExportLink';
 import { Page } from '@/components/shell/Page';
@@ -28,10 +29,6 @@ interface SearchParams {
   unitemised?: string;
 }
 
-function firstOfMonth(businessDate: string): string {
-  return `${businessDate.slice(0, 7)}-01`;
-}
-
 const pct = (n: number) => `${n.toFixed(1)}%`;
 const cell = 'px-3 py-2 text-right tabular-nums';
 const rule = 'border-t border-neutral-200 dark:border-neutral-800';
@@ -40,21 +37,21 @@ export default async function ExpenseItemsPage({ searchParams }: { searchParams:
   const sp = await searchParams;
   const scope = await reportScope('/reports/expense-items', 'view_financial_reports', sp.store);
   const today = toBusinessDate();
-  const from = sp.from ?? firstOfMonth(today);
-  const to = sp.to ?? today;
+  const { from, to } = resolveRange(sp.from, sp.to, today);
   const storeId = scope.storeId ?? null;
   const input = { from, to, storeId };
 
-  const { report, lines, loose } = await runReport(scope.actor.orgId, async (tx) => {
+  const { report, lines, loose, cols } = await runReport(scope.actor.orgId, async (tx) => {
     const report = await expenseItemsReport(tx, scope.actor, input);
     const lines = sp.item ? await expenseItemLines(tx, scope.actor, { ...input, itemId: sp.item }) : null;
     const loose = sp.unitemised ? await unitemisedExpenses(tx, scope.actor, { ...input, categoryId: sp.unitemised }) : null;
-    return { report, lines, loose };
+    const cols = storeId === null ? await storeColumns(tx, report, scope.stores) : [];
+    return { report, lines, loose, cols };
   });
 
-  const storeName = new Map(scope.stores.map((s) => [s.id, s.name]));
-  // The store-vs-store columns show when more than one store is in view.
-  const storeCols = storeId === null && scope.stores.length > 1 ? scope.stores : [];
+  const storeName = new Map([...scope.stores, ...cols].map((s) => [s.id, s.name]));
+  // The store-vs-store columns show when more than one store is in view (any store holding figures counts, active or not).
+  const storeCols = cols.length > 1 ? cols : [];
   const base = { from, to, ...(storeId ? { store: storeId } : {}) };
   const link = (extra: Record<string, string>) => `/reports/expense-items?${new URLSearchParams({ ...base, ...extra }).toString()}`;
   const exportHref = `/reports/expense-items/export?${new URLSearchParams(base).toString()}`;
@@ -161,6 +158,7 @@ export default async function ExpenseItemsPage({ searchParams }: { searchParams:
                   <Th>Date</Th>
                   <Th>Store</Th>
                   <Th numeric>Amount</Th>
+                  <Th numeric>Unitemised part</Th>
                   <Th>Particulars</Th>
                 </tr>
               </thead>
@@ -172,6 +170,7 @@ export default async function ExpenseItemsPage({ searchParams }: { searchParams:
                     </Td>
                     <Td>{storeName.get(e.storeId) ?? 'Store'}</Td>
                     <NumTd>{formatMoney(e.amount)}</NumTd>
+                    <NumTd>{formatMoney(e.unitemisedPart)}</NumTd>
                     <Td>{e.particulars}</Td>
                   </LinkRow>
                 ))}
