@@ -64,6 +64,7 @@ const PINNED: Record<string, string[]> = {
     'declineBirthday',
     'declineBirthdayCore',
     'declineBirthdayForTerminal',
+    'expireSeatedBirthdayRequests',
     'expireStaleBirthdayRequests',
     'getMyBirthday',
     'listBirthdayCore',

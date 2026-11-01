@@ -215,8 +215,8 @@ describe('A. POST /api/lobby/birthday', () => {
     expect(r2.status).toBe(404);
     expect(r2.body).toEqual(SORRY_NOT_FOUND);
     expect(await birthdayRows(mine.entryId)).toHaveLength(0);
-    const [{ n }] = await sql<{ n: number }[]>`select count(*)::int n from lobby_birthday_requests r join lobby_entries e on e.id = r.entry_id where e.store_id = ${b.id}`;
-    expect(n).toBe(0);
+    const countRows = await sql<{ n: number }[]>`select count(*)::int n from lobby_birthday_requests r join lobby_entries e on e.id = r.entry_id where e.store_id = ${b.id}`;
+    expect(countRows[0]?.n).toBe(0);
   });
 
   it('A4 no id or code is an input: a body carrying entryId, requestId or code for ANOTHER diner still acts only on the cookie owner\'s entry [kills: trusting an id from the body]', async () => {
