@@ -1,6 +1,6 @@
-# DEF-808: POS finds cash by `type === 'cash'`, but v1's live data types Cash as `other`
+# T-506: DEF-808 — POS finds cash by `type === 'cash'`, but v1's live data types Cash as `other`
 
-**Status:** SPEC 1 Nov 2026 (POS2 switch-on session). DEF-808 given by BOSS 1 Nov. **T-number: not yet given, ask BOSS.**
+**Status:** SPEC 1 Nov 2026 (POS2 switch-on session). T-506 / DEF-808 given by BOSS 1 Nov.
 Process (BOSS): spec, then tests first, then the fix. No migration. Same fix as #113 (refund server) and #108 (refund screen).
 
 ## 1. The problem in plain words

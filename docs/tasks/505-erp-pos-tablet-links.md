@@ -42,11 +42,11 @@ three times and hit two more gaps that only a UI would have hidden:
 | P9 | Page unit: no terminal person | shows the R6 sentence and no form | R6 |
 
 ## 4. Plain-words acceptance (what Ian checks on the screen)
-Sign in as admin, open Admin > POS tablets, pick SharEat Lipa, paste a device id, press Register: the list shows the new tablet and the old one is marked revoked. A manager opening the same address is refused. A locked tablet shows "Locked since ..." and one button clears it.
+Sign in as admin, open Setup > POS tablets (right after Clock terminals), pick SharEat Lipa, paste a device id, press Register: the list shows the new tablet and the old one is marked revoked. A manager opening the same address is refused. A locked tablet shows "Locked since ..." and one button clears it.
 
 ## 5. Fences
 Write only: the new page and its actions/lib under `apps/erp/src/app/admin/pos-tablets/`, the two read functions in `packages/db/src/repo/`, the nav and route-capability registrations, the tests, this spec, and the T-505 rows in the bible/register. Not `packages/domain/src/pos/terminal-link.ts`, not `scripts/provision-terminal.ts` (it stays as the fallback).
 
 ## 6. Open questions
 - **Q1 (Ian).** Show the full device id or only its last 4 characters? Recommend the last 4 plus a copy button, since the id is not a secret but is long.
-- **Q2 (BOSS).** Menu home: under Settings, or under Admin next to Users and roles? Recommend next to Users and roles.
+- **Q2 (BOSS) — ANSWERED 1 Nov.** Menu home: the Setup group, right after "Clock terminals", labelled "POS tablets" (follows the 1 Nov sidebar regroup, bible row 410).
