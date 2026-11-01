@@ -245,7 +245,7 @@ describe('catch-up: one draft per missed due date', () => {
           storeId: f.storeId, supplierId: f.supplierId, invoiceDate: '2026-09-05', dueDate: '2026-09-05',
           totalAmount: money('25000.00'), invoiceNo: uid('RECUR-t430'), notes: 'x',
         });
-        const expense = await createExpense(tx, f.manager, {
+        const expense = await createExpense(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
           storeId: f.storeId, businessDate: '2026-09-05', categoryId: f.categoryId, supplierId: f.supplierId,
           supplierInvoiceId: invoice.id, particulars: 'x',
           payments: [{ method: 'credit', amount: money('25000.00'), moneyAccountId: null }],

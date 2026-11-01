@@ -23,7 +23,7 @@ Several other places in `apps/pos` still ask for `type === 'cash'` only:
 - **R3. `z-readings.ts` and R4. `handover.ts`: NO CODE CHANGE** (ruled in tests-first, 1 Nov). `isCashTender` is a subset of what `isCashMethod` already counts (a configured name OR `cash`), so a method named exactly "Cash" is counted as cash whatever its type. Widening `cashNames` cannot change a single figure; changing money maths for no observable gain is risk. Pinned instead by a **characterisation test (C3)** that passes before and after, so a later "tidy" of `isCashMethod` cannot silently drop Cash typed `other`. Residual, accepted: a drawer with no "cash" in its name AND typed `other` is not counted; none exists in the live lists.
 - **R5.** `payment-modal.tsx`: pre-select with `isCashTender`.
 - **R6.** No change to `isCashMethod`, `computeZReading`, the Z or handover maths, or any stored document.
-- **R7.** Out of scope, needs a ruling (**Q1**): the e-wallet side of Convert. The tablet's Convert sheet (`ConvertSheet.tsx:58`) and the server (`conversions.ts:63`) both require the wallet to be `type 'online'`. Lipa's GCash is typed `other`, so the sheet lists no wallet at all. Which Lipa methods count as an e-wallet (GCash yes; Bank Transfer? QRPH? Maya?) is a business decision, not a code guess.
+- **R7. ANSWERED (Ian, 1 Nov: "GCash and Maya are e-wallets").** The wallet side of Convert (`ConvertSheet.tsx:58`, `conversions.ts:65`) accepts a method typed `online` OR named exactly GCash or Maya (`lib/cash/ewallet-tender.ts`, `isEwalletTender`). QRPH and Bank Transfer are not e-wallets. Tests: `ewallet-tender.test.ts`, `conversions.test.ts` E1-E2. Lands as a follow-up PR to #119.
 
 ## 3. Tests (written first; Vitest in `apps/pos`)
 

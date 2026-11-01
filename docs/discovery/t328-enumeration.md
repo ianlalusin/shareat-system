@@ -228,6 +228,8 @@ traced; "grep only" = not traced further than the pattern match.
 | `lineRequest_${i}` L129 | apps/erp/src/app/expenses/actions.ts | OUT | an id — grep only |
 | `lineStaff_${i}` L130 | apps/erp/src/app/expenses/actions.ts | OUT | an id — grep only |
 | `lineRef_${i}` L131 | apps/erp/src/app/expenses/actions.ts | OUT | free text — grep only |
+| `partKey_${i}` | apps/erp/src/app/expenses/actions.ts | OUT | T-502 s12 batch action: a part key (a category id, 'uncategorised' or 'fees'), not money — grep only |
+| `partPick_${i}` | apps/erp/src/app/expenses/actions.ts | OUT | T-502 s12 batch action: a category id picked for an open part, not money — grep only |
 | `lineTo_${i}` L68 | apps/erp/src/app/remittance/actions.ts | OUT | an id — grep only |
 | `lineAmount_${i}` L69 | apps/erp/src/app/remittance/actions.ts | IN | `createRemittance` itself validates via `money()` correctly (read the block) — **but** the app-layer pre-filter at L91 silently drops a malformed line before that check ever runs; see 7th-shape row below |
 | `lineOverage_${i}` L70 | apps/erp/src/app/remittance/actions.ts | OUT | `createRemittance` validates every line's `declaredOverage` via `parseMoneyInput` directly during the write (L206) — read the block |

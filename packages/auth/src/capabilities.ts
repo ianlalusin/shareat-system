@@ -327,7 +327,9 @@ export type Capability =
   | 'cross_org_access'
   | 'view_franchise_sales'
   /** T-398 S6: the franchisee's owner reads who looked at its data and every break-glass use. ROLE ONLY (see `ROLE_ONLY_CAPABILITIES`). */
-  | 'view_franchise_access_log';
+  | 'view_franchise_access_log'
+  /** T-502 S2 (R2): approve or reject an item REQUEST. Admin yes, manager no, cashier no. ROLE ONLY and out of the adminless-manager fallback (R3). `approve_item` (create, merge, rename, unit, variant) stays super-admin. */
+  | 'approve_item_request';
 
 export const CAPABILITIES: readonly Capability[] = [
   'record_sale',
@@ -449,6 +451,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'cross_org_access',
   'view_franchise_sales',
   'view_franchise_access_log',
+  'approve_item_request',
 ];
 
 // -----------------------------------------------------------------------------------------
@@ -657,6 +660,8 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   cross_org_access: 'platform',
   view_franchise_sales: 'platform',
   view_franchise_access_log: 'org',
+  // T-502 S2: the item list is org-wide.
+  approve_item_request: 'org',
 };
 
 // -----------------------------------------------------------------------------------------
@@ -740,6 +745,7 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   commit_count: 'inventory',
   manage_items: 'inventory',
   approve_item: 'inventory',
+  approve_item_request: 'inventory',
 
   post_production: 'production',
   edit_posted_production: 'production',
@@ -1118,6 +1124,8 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   view_franchise_sales: { super_admin: true, admin: false, manager: false, staff: false },
   // T-398 S6 (QO-3): admin, manager and super admin BY ROLE only - see ROLE_ONLY_CAPABILITIES. Matrix-held, so no backfill.
   view_franchise_access_log: { super_admin: true, admin: true, manager: true, staff: false },
+  // T-502 S2 (R2, R3; Ian 31 Oct, 2A): any admin decides an item request. ROLE ONLY - the matrix is the only way to hold it, so it is never in the adminless-manager fallback.
+  approve_item_request: { super_admin: true, admin: true, manager: false, staff: false },
 };
 
 /** `close_period` is the one capability with an extra, data-dependent condition beyond the
@@ -1133,7 +1141,7 @@ export const CONDITIONAL_CAPABILITIES: ReadonlySet<Capability> = new Set<Capabil
  * (`grantableCapabilitiesFor`), the position-default offer list and `ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER` all consult it
  * through `grantsConfer()`; none string-compares a capability name. `verify_own_supplier_invoice` is the first member.
  */
-export const ROLE_ONLY_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>(['verify_own_supplier_invoice', 'view_franchise_access_log']);
+export const ROLE_ONLY_CAPABILITIES: ReadonlySet<Capability> = new Set<Capability>(['verify_own_supplier_invoice', 'view_franchise_access_log', 'approve_item_request']);
 
 /** May a person-level grant confer `capability`? False for a role-only capability. */
 export function grantsConfer(capability: Capability): boolean {
@@ -1274,6 +1282,7 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   run_cutover: 'run the changeover to the new books',
   manage_items: 'manage the organisation-wide item list',
   approve_item: 'approve a new item',
+  approve_item_request: 'approve or reject a request for a new item',
   record_supplier_invoice: 'record a supplier invoice',
   verify_supplier_invoice: 'verify a supplier invoice',
   void_supplier_invoice: 'void a supplier invoice',

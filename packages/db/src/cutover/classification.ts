@@ -1044,6 +1044,21 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'A super-admin ruling that two look-alike items are different products (T-443). The items carry forward, so the ' +
       'ruling does; purging it would re-open every dismissed pair.',
   },
+  expense_subcategories: {
+    // keep, like expense_categories: a vocabulary the reports group on, not activity. Items (kept) point at it.
+    class: 'keep',
+    reason:
+      'The admin-managed middle level under an expense category (T-502). Kept items carry their sub-category, so the list carries forward; ' +
+      'purging it would orphan every kept item\'s grouping.',
+  },
+  item_aliases: {
+    // keep, like the items they name: an alias (chili -> Siling Labuyo) is catalogue data, not activity. Items survive the cutover,
+    // so the other names people type for them must too.
+    class: 'keep',
+    reason:
+      'Other names for a kept item (T-502): what staff type when they mean it. The item carries forward, so its names do; ' +
+      'purging them would send every cashier back to inventing a spelling.',
+  },
   supplier_items: {
     // ⭐ keep, like `items`: a declaration that a supplier CAN sell us something carries no
     // balance and is not invalidated by the ledger restarting. ⚠️ The observed half of the

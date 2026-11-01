@@ -262,7 +262,7 @@ async function expenseFixture(hint: string) {
   const draft = async (on: string) => {
     const supplierInvoiceId = await invoice(on);
     const made = await asOrg(orgId, (tx) =>
-      createExpense(tx, admin, {
+      createExpense(tx, admin, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId, supplierId: supplier!.id, supplierInvoiceId, businessDate: on, categoryId: cat!.id,
         particulars: `Pork, cash (${on})`, payments: [{ method: 'cash', amount: '1200.00', moneyAccountId: cash!.id }],
       }),
@@ -379,7 +379,7 @@ describe('verifyInvoice — a pending bill whose draft expense is dated in a clo
       values (${orgId}, ${storeId}, ${supplier!.id}, '2026-01-10', '5000.00', 'pending', ${file!.id}, ${adminId}) returning id`;
     const [cat] = await sql<{ id: string }[]>`select id from expense_categories where org_id = ${orgId} and category = 'Cost of Goods Sold — General'`;
     const made = await asOrg(orgId, (tx) =>
-      createExpense(tx, actor(orgId, adminId), {
+      createExpense(tx, actor(orgId, adminId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId, supplierId: supplier!.id, supplierInvoiceId: inv!.id, businessDate: '2026-01-10', categoryId: cat!.id,
         particulars: 'Pork, on credit', payments: [{ method: 'cash', amount: '1200.00', moneyAccountId: cash!.id }],
       }),

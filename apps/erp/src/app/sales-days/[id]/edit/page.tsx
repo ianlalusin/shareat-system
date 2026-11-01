@@ -6,6 +6,8 @@ import { listStores, listChannels, listStoreMoneyAccounts, getStoreLink, withOrg
 import { requireSession } from '../../../../lib/session';
 import { editSalesDayAction } from '../../actions';
 import { SalesDayForm, type SalesDayDefaults } from '../../SalesDayForm';
+import { CheckedForm } from '@/components/forms';
+import { SALES_DAY_EDIT_RULES } from '@shareat/domain/field-rules';
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -150,7 +152,7 @@ export default async function EditSalesDayPage({
 
       <FlashBanner flash={sp} />
 
-      <form action={editSalesDayAction} className="space-y-6 text-sm">
+      <CheckedForm rules={SALES_DAY_EDIT_RULES} action={editSalesDayAction} className="space-y-6 text-sm">
         <input type="hidden" name="storeId" value={day.storeId} />
         <input type="hidden" name="salesDayId" value={day.id} />
         <SalesDayForm
@@ -162,8 +164,9 @@ export default async function EditSalesDayPage({
           defaults={defaults}
           retiredTenders={retiredTenders}
           submitLabel="Save"
+          draft={{ personId: actor.personId, storeId: day.storeId }}
         />
-      </form>
+      </CheckedForm>
     </Page>
   );
 }

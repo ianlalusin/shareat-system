@@ -246,6 +246,8 @@ export async function runRecurringExpenses(
                 }
 
                 const expense = await createExpense(tx, actor, {
+                  // T-502 section 12: the invoice above is system-made and has no lines by nature, so the itemised rule does not apply.
+                  requireItemised: false,
                   storeId: cur.storeId,
                   businessDate: open.date, // ignored by createExpense; the invoice date wins
                   categoryId: cur.categoryId,

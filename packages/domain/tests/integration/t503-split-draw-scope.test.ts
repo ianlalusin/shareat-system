@@ -112,7 +112,7 @@ async function draftOn(f: Fx, invoiceId: string, payments: Leg[]): Promise<strin
   const made = await asOrg(f.orgId, (tx) =>
     createExpense(tx, f.admin, {
       storeId: f.storeId, supplierId: f.supplierId, supplierInvoiceId: invoiceId, businessDate: '2026-01-15', categoryId: f.catId,
-      particulars: 'T-503 split', payments,
+      particulars: 'T-503 split', payments, requireItemised: false /* legacy fixture: lineless invoice */,
     }),
   );
   return made.id;

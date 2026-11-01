@@ -475,7 +475,7 @@ describe('T-170 — the credit is spendable', () => {
     );
     await asOrg(f.orgId, (tx) => verifyInvoice(tx, f.manager2, inv.id, { supplier: true, invoice: true, items: true, price: true }));
     const expense = await asOrg(f.orgId, (tx) =>
-      recordExpenseForInvoice(tx, f.manager, {
+      recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId, supplierId: f.supplierId, supplierInvoiceId: inv.id,
         categoryId: f.categoryId, particulars: 'Stock purchase',
         payments: [{ method: 'credit', amount: '1000.00' }],
@@ -513,7 +513,7 @@ describe('T-170 — the credit is spendable', () => {
     );
     await asOrg(f.orgId, (tx) => verifyInvoice(tx, f.manager2, inv.id, { supplier: true, invoice: true, items: true, price: true }));
     const expense = await asOrg(f.orgId, (tx) =>
-      recordExpenseForInvoice(tx, f.manager, {
+      recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId, supplierId: f.supplierId, supplierInvoiceId: inv.id,
         categoryId: f.categoryId, particulars: 'Stock purchase',
         payments: [{ method: 'credit', amount: '1000.00' }],

@@ -164,14 +164,24 @@ export const INVOICE_LINE_ROWS = 5;
  * win the catalogue was built for. Everything else in the org follows, because a supplier's first
  * invoice for a new item has to be enterable too.
  */
+export interface PickerOther {
+  id: string;
+  name: string;
+  code: string;
+  baseUnit: string;
+  /** T-502 section 12: the item's category / sub-category (null = none). */
+  expenseCategoryId: string | null;
+  expenseSubcategoryId: string | null;
+}
+
 export async function itemPickerFor(
   orgId: string,
   supplierId: string | null,
-): Promise<{ known: CatalogueEntry[]; others: { id: string; name: string; code: string; baseUnit: string }[] }> {
+): Promise<{ known: CatalogueEntry[]; others: PickerOther[] }> {
   return withOrgPrincipal(orgId, async (tx) => {
     const all = await itemsRepo.listItems(tx, orgId, {});
     if (!supplierId) {
-      return { known: [], others: all.map((i) => ({ id: i.id, name: i.name, code: i.code, baseUnit: i.baseUnit })) };
+      return { known: [], others: all.map((i) => ({ id: i.id, name: i.name, code: i.code, baseUnit: i.baseUnit, expenseCategoryId: i.expenseCategoryId ?? null, expenseSubcategoryId: i.expenseSubcategoryId ?? null })) };
     }
     const known = await itemsRepo.itemsForSupplier(tx, orgId, supplierId);
     const knownIds = new Set(known.map((k) => k.itemId));
@@ -179,7 +189,7 @@ export async function itemPickerFor(
       known,
       others: all
         .filter((i) => !knownIds.has(i.id))
-        .map((i) => ({ id: i.id, name: i.name, code: i.code, baseUnit: i.baseUnit })),
+        .map((i) => ({ id: i.id, name: i.name, code: i.code, baseUnit: i.baseUnit, expenseCategoryId: i.expenseCategoryId ?? null, expenseSubcategoryId: i.expenseSubcategoryId ?? null })),
     };
   });
 }

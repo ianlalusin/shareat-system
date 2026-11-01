@@ -413,7 +413,7 @@ async function shortageRowCount(orgId: string, requestId: string): Promise<numbe
 
 const NEGATIVE_SENTENCE = 'A returned or short amount cannot be negative.';
 
-describe('C1 (DEF-470) — returnedAmount "1,000" (comma), shortAmount "100": the return silently vanished (NaN > 0 is false)', () => {
+describe('C1 (DEF-470) — returnedAmount "1,00" (comma), shortAmount "100": the return silently vanished (NaN > 0 is false)', () => {
   it('wanted: the returned-amount sentence, nothing posted — was red before this fix: only the shortage posted, no refusal', async () => {
     const f = await cashRequestFixture('c1');
     const requestId = await released(f);
@@ -422,7 +422,7 @@ describe('C1 (DEF-470) — returnedAmount "1,000" (comma), shortAmount "100": th
       await asOrg(f.orgId, (tx) =>
         settleCashRequest(tx, f.admin, {
           requestId,
-          returnedAmount: '1,000',
+          returnedAmount: '1,00',
           shortAmount: '100',
           shortReason: 'Lost',
           toMoneyAccountId: f.till,
@@ -432,29 +432,29 @@ describe('C1 (DEF-470) — returnedAmount "1,000" (comma), shortAmount "100": th
     } catch (err) {
       caught = err;
     }
-    expect(caught, 'expected "1,000" to be refused at all — measured pre-fix: it silently succeeded instead').toBeInstanceOf(Error);
+    expect(caught, 'expected "1,00" to be refused at all — measured pre-fix: it silently succeeded instead').toBeInstanceOf(Error);
     const err = caught as Error & { userMessage?: string };
-    expect(err.userMessage).toBe('The returned amount — "1,000" is not a valid amount. Use at most two decimal places.');
+    expect(err.userMessage).toBe('The returned amount — "1,00" is not a valid amount. Use at most two decimal places.');
     expect(await returnRowCount(f.orgId, requestId), 'no return entry').toBe(0);
     expect(await shortageRowCount(f.orgId, requestId), 'no shortage entry either — nothing posted at all').toBe(0);
   });
 });
 
-describe('C2 (DEF-470) — returnedAmount "1,000" (comma) alone: nothing posted, no refusal, no throw at all', () => {
+describe('C2 (DEF-470) — returnedAmount "1,00" (comma) alone: nothing posted, no refusal, no throw at all', () => {
   it('wanted: the returned-amount sentence — was red before this fix: it silently succeeded with nothing posted', async () => {
     const f = await cashRequestFixture('c2');
     const requestId = await released(f);
     let caught: unknown;
     try {
       await asOrg(f.orgId, (tx) =>
-        settleCashRequest(tx, f.admin, { requestId, returnedAmount: '1,000', toMoneyAccountId: f.till, on: '2026-01-10' }),
+        settleCashRequest(tx, f.admin, { requestId, returnedAmount: '1,00', toMoneyAccountId: f.till, on: '2026-01-10' }),
       );
     } catch (err) {
       caught = err;
     }
-    expect(caught, 'expected "1,000" to be refused at all — measured pre-fix: it silently succeeded instead').toBeInstanceOf(Error);
+    expect(caught, 'expected "1,00" to be refused at all — measured pre-fix: it silently succeeded instead').toBeInstanceOf(Error);
     const err = caught as Error & { userMessage?: string };
-    expect(err.userMessage).toBe('The returned amount — "1,000" is not a valid amount. Use at most two decimal places.');
+    expect(err.userMessage).toBe('The returned amount — "1,00" is not a valid amount. Use at most two decimal places.');
     expect(await returnRowCount(f.orgId, requestId)).toBe(0);
   });
 });
@@ -637,7 +637,7 @@ describe('X1 (DEF-470 item 8) — a comma-typed deduction reaches raw Number(), 
           businessDate: '2026-01-10',
           grossAmount: '100000.00',
           netDeposited: '79500.00',
-          deductions: { commission: '1,000' },
+          deductions: { commission: '1,00' },
           settledOn: '2026-01-15',
         } as never),
       );
@@ -645,7 +645,7 @@ describe('X1 (DEF-470 item 8) — a comma-typed deduction reaches raw Number(), 
       caught = err;
     }
     // ⚠️ Measured directly (probed before writing this assertion), not the mechanism guessed from
-    // reading `computeSettlement` alone: `Number('1,000')` is `NaN`, `feesTotal` becomes `NaN`, and
+    // reading `computeSettlement` alone: `Number('1,00')` is `NaN`, `feesTotal` becomes `NaN`, and
     // `blockers` stays empty (every comparison against a NaN is `false`) — so `computeSettlement`
     // itself raises no refusal. But the settlement does NOT quietly post: for `commission`
     // specifically the write hits `channel_settlements_commission_finite_check` (T-327's 160-column
@@ -653,7 +653,7 @@ describe('X1 (DEF-470 item 8) — a comma-typed deduction reaches raw Number(), 
     // name never shown. `wanted`: refused by name before the write is ever attempted.
     expect(caught, 'wanted: refused by name — was red before this fix: an unpresentable raw PostgresError (23514)').toBeInstanceOf(Error);
     const err = caught as Error & { userMessage?: string };
-    expect(err.userMessage).toBe('The commission — "1,000" is not a valid amount. Use at most two decimal places.');
+    expect(err.userMessage).toBe('The commission — "1,00" is not a valid amount. Use at most two decimal places.');
     expect(await settlementCountFor(f.orgId, f.channelId), 'no settlement row should have been created').toBe(0);
   });
 });
@@ -676,7 +676,7 @@ describe('Deductions (DEF-470 item 8) — a comma-typed value refuses by name, o
   // `channel_settlements_identity_check` (migration 0057) first — its SUM formula includes every
   // deduction and `loan_deduction`, so a NaN in ANY addend fails `abs(...) < 0.005` before that
   // column's own (migration 0155) `_finite_check` is ever reached. Either way: no `userMessage`.
-  it.each(DEDUCTIONS)('%s: "1,000" refuses by name — was red before this fix: an unpresentable raw PostgresError (23514), measured per-field, not assumed uniform', async (name) => {
+  it.each(DEDUCTIONS)('%s: "1,00" refuses by name — was red before this fix: an unpresentable raw PostgresError (23514), measured per-field, not assumed uniform', async (name) => {
     const f = await channelSettlementFixture(`ded-${name}`);
     await raiseReceivable(f, '100000.00');
     let caught: unknown;
@@ -689,22 +689,22 @@ describe('Deductions (DEF-470 item 8) — a comma-typed value refuses by name, o
           businessDate: '2026-01-10',
           grossAmount: '100000.00',
           netDeposited: '79500.00',
-          deductions: { [name]: '1,000' },
+          deductions: { [name]: '1,00' },
           settledOn: '2026-01-15',
         } as never),
       );
     } catch (err) {
       caught = err;
     }
-    expect(caught, `expected ${name}="1,000" to be refused at all`).toBeInstanceOf(Error);
+    expect(caught, `expected ${name}="1,00" to be refused at all`).toBeInstanceOf(Error);
     const err = caught as Error & { userMessage?: string };
-    expect(err.userMessage).toBe(`${LABELS[name]} — "1,000" is not a valid amount. Use at most two decimal places.`);
+    expect(err.userMessage).toBe(`${LABELS[name]} — "1,00" is not a valid amount. Use at most two decimal places.`);
     expect(await settlementCountFor(f.orgId, f.channelId)).toBe(0);
   });
 });
 
 describe('Amount docked (DEF-470 item 8) — comma leg + negative range guard', () => {
-  it('"1,000" refuses by name — was red before this fix: measured — an unpresentable raw PostgresError (23514, channel_settlements_identity_check), not the finite_check the deductions hit', async () => {
+  it('"1,00" refuses by name — was red before this fix: measured — an unpresentable raw PostgresError (23514, channel_settlements_identity_check), not the finite_check the deductions hit', async () => {
     const f = await channelSettlementFixture('loan-comma');
     await raiseReceivable(f, '100000.00');
     let caught: unknown;
@@ -717,17 +717,17 @@ describe('Amount docked (DEF-470 item 8) — comma leg + negative range guard', 
           businessDate: '2026-01-10',
           grossAmount: '100000.00',
           netDeposited: '79500.00',
-          loan: { loanId: '00000000-0000-0000-0000-000000000000', amount: '1,000' },
+          loan: { loanId: '00000000-0000-0000-0000-000000000000', amount: '1,00' },
           settledOn: '2026-01-15',
         } as never),
       );
     } catch (err) {
       caught = err;
     }
-    expect(caught, 'expected loan amount "1,000" to be refused at all').toBeInstanceOf(Error);
+    expect(caught, 'expected loan amount "1,00" to be refused at all').toBeInstanceOf(Error);
     const err = caught as Error & { userMessage?: string };
     // T-440: the rule's own sentence (CHANNEL_SETTLEMENT_RECORD_RULES.loanAmount) wins over the old domain sentence.
-    expect(err.userMessage).toBe('The amount docked — "1,000" is not a valid amount. Use at most two decimal places.');
+    expect(err.userMessage).toBe('The amount docked — "1,00" is not a valid amount. Use at most two decimal places.');
   });
 
   it(

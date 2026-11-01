@@ -151,7 +151,7 @@ describe('D1 — createExpense, COD supplier\'s pending invoice, [{credit, 500}]
     const before = await expenseCounts(f.orgId);
     await expect(
       asOrg(f.orgId, (tx) =>
-        createExpense(tx, f.staff, {
+        createExpense(tx, f.staff, { requireItemised: false /* legacy fixture: lineless invoice */,
           storeId: f.storeId, businessDate: '', supplierId: cod.id, supplierInvoiceId: invoiceId,
           categoryId: f.categoryId, particulars: 'D1', payments: [{ method: 'credit', amount: '500.00' }],
         }),
@@ -169,7 +169,7 @@ describe('D2 — recordExpenseForInvoice, COD, verified invoice, [{credit, 500}]
     const before = await expenseCounts(f.orgId);
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordExpenseForInvoice(tx, f.manager, {
+        recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
           storeId: f.storeId, supplierId: cod.id, supplierInvoiceId: invoiceId,
           categoryId: f.categoryId, particulars: 'D2', payments: [{ method: 'credit', amount: '500.00' }],
         }),
@@ -189,7 +189,7 @@ describe('D3 — createExpense, COD, [{cash, 200, drawer}, {credit, 300}]', () =
     const before = await expenseCounts(f.orgId);
     await expect(
       asOrg(f.orgId, (tx) =>
-        createExpense(tx, f.staff, {
+        createExpense(tx, f.staff, { requireItemised: false /* legacy fixture: lineless invoice */,
           storeId: f.storeId, businessDate: '', supplierId: cod.id, supplierInvoiceId: invoiceId,
           categoryId: f.categoryId, particulars: 'D3',
           payments: [{ method: 'cash', amount: '200.00', moneyAccountId: f.drawerId }, { method: 'credit', amount: '300.00' }],
@@ -206,7 +206,7 @@ describe('D4 (green, guard; positive control) — recordExpenseForInvoice, TERMS
     const terms = await termsSupplier(f, 'd4');
     const invoiceId = await verifiedInvoice(f, terms.id, '1000.00');
     const { expenseId } = await asOrg(f.orgId, (tx) =>
-      recordExpenseForInvoice(tx, f.manager, {
+      recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId, supplierId: terms.id, supplierInvoiceId: invoiceId,
         categoryId: f.categoryId, particulars: 'D4', payments: [{ method: 'credit', amount: '500.00' }],
       }),
@@ -222,7 +222,7 @@ describe('D5 (green, guard; positive control) — createExpense, COD, [{cash, 50
     const cod = await codSupplier(f, 'd5');
     const invoiceId = await pendingInvoice(f, cod.id, '1000.00');
     const { id } = await asOrg(f.orgId, (tx) =>
-      createExpense(tx, f.staff, {
+      createExpense(tx, f.staff, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId, businessDate: '', supplierId: cod.id, supplierInvoiceId: invoiceId,
         categoryId: f.categoryId, particulars: 'D5', payments: [{ method: 'cash', amount: '500.00', moneyAccountId: f.drawerId }],
       }),
@@ -240,7 +240,7 @@ describe('D6 (green, guard; ordering) — a STAFF non-holder, createExpense, COD
     const before = await expenseCounts(f.orgId);
     const call = (payments: { method: string; amount: string; moneyAccountId?: string }[]) =>
       asOrg(f.orgId, (tx) =>
-        createExpense(tx, f.bareStaff, {
+        createExpense(tx, f.bareStaff, { requireItemised: false /* legacy fixture: lineless invoice */,
           storeId: f.storeId, businessDate: '', supplierId: cod.id, supplierInvoiceId: invoiceId,
           categoryId: f.categoryId, particulars: 'D6', payments,
         } as Parameters<typeof createExpense>[2]),
@@ -263,7 +263,7 @@ describe('D7 (green, guard; order guard R2) — COD supplier made INACTIVE, cred
     await asOrg(f.orgId, (tx) => editSupplier(tx, f.manager, { supplierId: cod.id, status: 'inactive' }));
     await expect(
       asOrg(f.orgId, (tx) =>
-        createExpense(tx, f.staff, {
+        createExpense(tx, f.staff, { requireItemised: false /* legacy fixture: lineless invoice */,
           storeId: f.storeId, businessDate: '', supplierId: cod.id, supplierInvoiceId: invoiceId,
           categoryId: f.categoryId, particulars: 'D7', payments: [{ method: 'credit', amount: '500.00' }],
         }),
@@ -280,7 +280,7 @@ describe('D8 (green, guard; order guard R2) — supplierId ≠ the invoice\'s su
     const invoiceId = await pendingInvoice(f, cod.id, '1000.00');
     await expect(
       asOrg(f.orgId, (tx) =>
-        createExpense(tx, f.staff, {
+        createExpense(tx, f.staff, { requireItemised: false /* legacy fixture: lineless invoice */,
           storeId: f.storeId, businessDate: '', supplierId: other.id, supplierInvoiceId: invoiceId,
           categoryId: f.categoryId, particulars: 'D8', payments: [{ method: 'credit', amount: '500.00' }],
         }),
@@ -299,7 +299,7 @@ describe('D9 (R2: the invoice\'s supplier is judged) — invoice from COD, then 
 
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordExpenseForInvoice(tx, f.manager, {
+        recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
           storeId: f.storeId, supplierId: cod.id, supplierInvoiceId: codInvoiceId,
           categoryId: f.categoryId, particulars: 'D9a', payments: [{ method: 'credit', amount: '500.00' }],
         }),
@@ -307,7 +307,7 @@ describe('D9 (R2: the invoice\'s supplier is judged) — invoice from COD, then 
     ).rejects.toMatchObject({ userMessage: S(cod.name) });
 
     const { expenseId } = await asOrg(f.orgId, (tx) =>
-      recordExpenseForInvoice(tx, f.manager, {
+      recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId, supplierId: terms.id, supplierInvoiceId: termsInvoiceId,
         categoryId: f.categoryId, particulars: 'D9b', payments: [{ method: 'credit', amount: '500.00' }],
       }),
@@ -323,13 +323,13 @@ describe('E1 — editExpense on a COD draft (cash line), payments: [{credit, 500
     const cod = await codSupplier(f, 'e1');
     const invoiceId = await pendingInvoice(f, cod.id, '1000.00');
     const { id } = await asOrg(f.orgId, (tx) =>
-      createExpense(tx, f.staff, {
+      createExpense(tx, f.staff, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId, businessDate: '', supplierId: cod.id, supplierInvoiceId: invoiceId,
         categoryId: f.categoryId, particulars: 'E1', payments: [{ method: 'cash', amount: '500.00', moneyAccountId: f.drawerId }],
       }),
     );
     await expect(
-      asOrg(f.orgId, (tx) => editExpense(tx, f.staff, id, { payments: [{ method: 'credit', amount: '500.00' }] })),
+      asOrg(f.orgId, (tx) => editExpense(tx, f.staff, id, { requireItemised: false /* legacy fixture: lineless invoice */, payments: [{ method: 'credit', amount: '500.00' }] })),
     ).rejects.toMatchObject({ userMessage: S(cod.name) });
     const [payment] = await sql<{ method: string }[]>`select method from expense_payments where expense_id = ${id}`;
     expect(payment!.method).toBe('cash');
@@ -346,13 +346,13 @@ describe('E2 — editExpense on a TERMS draft with a credit line, re-pointed to 
     // A DRAFT (createExpense alone, never recordExpenseForInvoice — that posts immediately, and
     // editExpense requires status='draft').
     const { id } = await asOrg(f.orgId, (tx) =>
-      createExpense(tx, f.staff, {
+      createExpense(tx, f.staff, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId, businessDate: '', supplierId: terms.id, supplierInvoiceId: termsInvoiceId,
         categoryId: f.categoryId, particulars: 'E2', payments: [{ method: 'credit', amount: '500.00' }],
       }),
     );
     await expect(
-      asOrg(f.orgId, (tx) => editExpense(tx, f.manager, id, { supplierId: cod.id, supplierInvoiceId: codInvoiceId })),
+      asOrg(f.orgId, (tx) => editExpense(tx, f.manager, id, { requireItemised: false /* legacy fixture: lineless invoice */, supplierId: cod.id, supplierInvoiceId: codInvoiceId })),
     ).rejects.toMatchObject({ userMessage: S(cod.name) });
     const [expense] = await sql<{ supplier_invoice_id: string }[]>`select supplier_invoice_id from expenses where id = ${id}`;
     expect(expense!.supplier_invoice_id).toBe(termsInvoiceId);
@@ -365,12 +365,12 @@ describe('E3 (green, guard; positive control) — editExpense on a TERMS draft, 
     const terms = await termsSupplier(f, 'e3');
     const invoiceId = await pendingInvoice(f, terms.id, '1000.00');
     const { id } = await asOrg(f.orgId, (tx) =>
-      createExpense(tx, f.staff, {
+      createExpense(tx, f.staff, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId, businessDate: '', supplierId: terms.id, supplierInvoiceId: invoiceId,
         categoryId: f.categoryId, particulars: 'E3', payments: [{ method: 'cash', amount: '500.00', moneyAccountId: f.drawerId }],
       }),
     );
-    await asOrg(f.orgId, (tx) => editExpense(tx, f.staff, id, { payments: [{ method: 'credit', amount: '500.00' }] }));
+    await asOrg(f.orgId, (tx) => editExpense(tx, f.staff, id, { requireItemised: false /* legacy fixture: lineless invoice */, payments: [{ method: 'credit', amount: '500.00' }] }));
     const [payment] = await sql<{ method: string }[]>`select method from expense_payments where expense_id = ${id}`;
     expect(payment!.method).toBe('credit');
   });

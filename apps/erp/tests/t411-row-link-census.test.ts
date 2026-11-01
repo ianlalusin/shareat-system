@@ -67,6 +67,7 @@ const NO_ROW_TARGET: readonly string[] = [
   'components/reports/SalesRollupTable.tsx',
   'components/reports/StoreComparisonTable.tsx',
   'components/reports/TrialBalanceTable.tsx',
+  'components/expenses/InvoiceBatchRecord.tsx', // T-502 s12: the batch's tick table is a form (one row per part of the bill), no row destination
   // Editing grids / rows are forms (21)
   'app/trade/orders/[id]/print/page.tsx', // T-433 S2: the printable delivery receipt, a print page with no row destination
   'app/page.tsx', // T-401 S6: the usage check scorecard on the dashboard, one row per store, no row destination

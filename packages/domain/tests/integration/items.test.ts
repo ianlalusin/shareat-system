@@ -25,9 +25,9 @@ import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { itemsRepo, closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
+import { approveWithCategory } from './_fixtures/item-category';
 import type { InvoiceLineDraft } from '@shareat/domain';
 import {
-  approveItemRequest,
   clearStoreSellability,
   createItem,
   createSupplier,
@@ -706,7 +706,7 @@ describe('it is hard to duplicate an item on purpose, and harder by accident', (
       requestItem(tx, f.manager, { name: 'Charcoal', kind: 'supply', baseUnit: 'kg' }),
     );
     const { itemId } = await asOrg(f.orgId, (tx) =>
-      approveItemRequest(tx, f.superAdmin, { requestId: req.requestId }),
+      approveWithCategory(tx, f.superAdmin, { requestId: req.requestId }),
     );
     const item = await asOrg(f.orgId, (tx) => itemsRepo.getItemById(tx, f.orgId, itemId));
     expect(item!.name).toBe('Charcoal');
@@ -715,14 +715,16 @@ describe('it is hard to duplicate an item on purpose, and harder by accident', (
     expect(row!.created_item_id).toBe(itemId);
   });
 
-  it('an ADMIN cannot approve — only a super-admin', async () => {
+  it('an ADMIN approves a manager request (T-502 2A, superseding the 2026-08-28 super-admin-only rule); a MANAGER cannot', async () => {
     const f = await fixture('adminapprove');
     const req = await asOrg(f.orgId, (tx) =>
       requestItem(tx, f.manager, { name: 'Charcoal', kind: 'supply', baseUnit: 'kg' }),
     );
     await expect(
-      asOrg(f.orgId, (tx) => approveItemRequest(tx, f.admin, { requestId: req.requestId })),
+      asOrg(f.orgId, (tx) => approveWithCategory(tx, f.manager, { requestId: req.requestId })),
     ).rejects.toThrow(AuthorizationError);
+    const { itemId } = await asOrg(f.orgId, (tx) => approveWithCategory(tx, f.admin, { requestId: req.requestId }));
+    expect(itemId).toBeTruthy();
   });
 
   it('a rejection needs a reason, and one request cannot be decided twice', async () => {
@@ -738,7 +740,7 @@ describe('it is hard to duplicate an item on purpose, and harder by accident', (
       rejectItemRequest(tx, f.superAdmin, { requestId: req.requestId, note: 'We already have Uling.' }),
     );
     await expect(
-      asOrg(f.orgId, (tx) => approveItemRequest(tx, f.superAdmin, { requestId: req.requestId })),
+      asOrg(f.orgId, (tx) => approveWithCategory(tx, f.superAdmin, { requestId: req.requestId })),
     ).rejects.toThrow(/already rejected/);
   });
 });

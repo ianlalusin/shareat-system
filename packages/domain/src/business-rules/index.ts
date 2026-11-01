@@ -25,7 +25,10 @@ import {
   wouldPostCheck,
 } from './expenses';
 
+import { channelsBlankHintCheck, channelsTickedOrTypedCheck } from './sales-day';
+
 export * from './check';
+export * from './sales-day';
 export * from './ap';
 export * from './expenses';
 
@@ -49,6 +52,8 @@ const ALL: ReadonlyArray<BusinessCheck<any>> = [
   invoiceVerifiedCheck,
   periodOpenCheck,
   wouldPostCheck,
+  channelsTickedOrTypedCheck,
+  channelsBlankHintCheck,
 ];
 
 /** Every check by id. The client resolves a check from here; the server calls the same objects. */

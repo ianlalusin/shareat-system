@@ -145,6 +145,9 @@ const EXEMPT: Record<string, string> = {
     'INTERNAL — `createMoneyTransfer` (`money-transfers/index.ts`) and `settleBetweenStores` ' +
     '(`money-transfers/settle.ts`) call it (T-369 S9, DEF-557): the shared half of a transfer (ends, office-only ' +
     'rule, both authorizes, amounts, draw check, fee and cash legs). Not a screen entry point.',
+  writePlatformRows:
+    'INTERNAL — T-504: `editSalesDay` (the one Save) calls it (`sales-days/edit.ts`) to write a ' +
+    'the platform rows of a feed day under the day lock they already hold. Exported for sharing, not as an entry point.',
   writeTenders:
     'INTERNAL — `createSalesDay` and `editSalesDay` call it (`sales-days/create.ts`, `sales-days/edit.ts`) ' +
     'to write the per-wallet tender rows a sales day owns. Exported (T-369 S3) so the edit path shares the ' +

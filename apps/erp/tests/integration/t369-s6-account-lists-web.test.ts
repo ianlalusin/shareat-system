@@ -66,6 +66,7 @@ import type { Actor } from '@shareat/auth';
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';
 import { postEntry } from '../../../../packages/domain/src/ledger/post-entry';
 import { paramsOf } from '../helpers/flash-jar';
+import { itemiseLegacy } from '../../../../packages/domain/tests/integration/_fixtures/legacy-itemise'; // T-502 s12: web tests need an itemised invoice
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -312,6 +313,7 @@ async function s6bFixture(hint: string) {
                                    attested_supplier, attested_invoice, attested_items, attested_price)
     values (${f.orgId}, ${f.lipaId}, ${supplier!.id}, '2026-01-10', '99999999.00', 'verified', ${file!.id}, ${f.manager.personId}, now(), ${f.admin.personId}, true, true, true, true)
     returning id`;
+  await itemiseLegacy(sql, inv!.id);
   const [cat] = await sql<{ id: string }[]>`select id from expense_categories where org_id = ${f.orgId} and category = 'Cost of Goods Sold — General'`;
   // the aggregate staff-float row is never a source (MoneyLines §7.3) - the accounts that ARE offered:
   const offerable = async (storeId: string) => (await sql<{ id: string }[]>`select id from money_accounts where store_id = ${storeId} and custodian <> 'staff'`).map((r) => r.id);

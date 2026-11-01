@@ -240,6 +240,11 @@ vi.mock('../src/app/items/lib', async (importOriginal) => {
     itemKindCounts: async () => ({}),
     variationParentOptions: async () => [],
     variationsOf: async () => [],
+    // T-502: the pages also read the expense-category options, an item's other names, and the admin gate for keeping them.
+    expenseCategoryOptions: async () => [],
+    expenseSubcategoryOptions: async () => [],
+    aliasesOf: async () => [],
+    mayDecideItemRequests: async () => true,
     getItem: (...a: unknown[]) => getItemMock(...a),
     itemPrices: (...a: unknown[]) => itemPricesMock(...a),
     sellabilityByStore: (...a: unknown[]) => sellabilityByStoreMock(...a),
@@ -274,6 +279,9 @@ vi.mock('../src/app/items/actions', () => ({
   dismissDuplicatePairAction: vi.fn(),
   undoDuplicateDismissalAction: vi.fn(),
   setItemVariantOfAction: vi.fn(),
+  addItemAliasAction: vi.fn(),
+  removeItemAliasAction: vi.fn(),
+  setItemExpenseCategoryAction: vi.fn(),
 }));
 
 const whoSellsMock = vi.fn();

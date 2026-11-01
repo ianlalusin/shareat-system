@@ -7,3 +7,6 @@ export * from './void';
 export * from './delete';
 export * from './reimbursement';
 export * from './categories';
+export * from './parts';
+export * from './allocate';
+export * from './batch';

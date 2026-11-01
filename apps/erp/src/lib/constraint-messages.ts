@@ -125,7 +125,29 @@ export const CONSTRAINT_MESSAGES: Record<string, string> = {
     'That variation is not allowed: variations go one level only, must be the same kind as their parent, and a parent that has ' +
     'variations cannot change kind or be merged.',
   items_variant_not_self_check: 'An item cannot be a variation of itself.',
-  item_requests_open_name_key: 'Someone has already asked for an item with that name; it is waiting for a super-admin.',
+  item_requests_open_name_key: 'Someone has already asked for an item with that name; it is waiting for an admin to approve.',
+  // T-502 (0224) - the service kind, the item's expense category, other names (aliases), and the never-stocked rule. The domain speaks first.
+  items_service_unit_check: 'A service item (rent, power, water...) is always counted as "each".',
+  item_requests_service_unit_check: 'A service item (rent, power, water...) is always counted as "each".',
+  items_service_never_sold_check: 'A service item cannot be sold. It is only bought.',
+  item_requests_service_never_sold_check: 'A service item cannot be sold. It is only bought.',
+  items_service_purchasable_check: 'A service item is always something you buy.',
+  items_service_not_variation_check: 'A service item (rent, power, water...) cannot be a variation of another item.',
+  item_requests_service_not_variation_check: 'A service item (rent, power, water...) cannot be a variation of another item.',
+  item_requests_service_purchasable_check: 'A service item is always something you buy.',
+  items_expense_category_same_org_fk: 'Pick an expense category from this organisation.',
+  item_requests_expense_category_same_org_fk: 'Pick an expense category from this organisation.',
+  item_aliases_org_alias_key: 'Another item already uses that other name. Each other name can point to only one item.',
+  item_aliases_alias_not_blank_check: 'An other name cannot be blank.',
+  item_aliases_name_guard: 'That is already the official name of an item, so it cannot also be an other name.',
+  items_name_alias_guard: 'That name is already used as another name for an item. Use that item, or choose a different name.',
+  items_service_kind_has_history: 'This item already has stock, delivery, usage, recipe or invoice history, so it cannot be changed to or from a service.',
+  expense_subcategories_org_name_key: 'That category already has a sub-category with that name (names are compared ignoring case and spacing).',
+  expense_subcategories_name_not_blank_check: 'A sub-category needs a name.',
+  expense_subcategories_name_not_vague_check: 'Give the sub-category a specific name. "Please specify", "Specify", "Other" and "Others" are not allowed, because they hide what the money was for.',
+  expense_subcategories_category_same_org_fk: 'Pick a category from this organisation.',
+  items_subcategory_matches_category: 'That sub-category does not belong to the expense category chosen for this item.',
+  service_item_never_stocked: 'A service item (rent, power, water...) is never stocked, counted, delivered or used in a recipe.',
 };
 
 /**

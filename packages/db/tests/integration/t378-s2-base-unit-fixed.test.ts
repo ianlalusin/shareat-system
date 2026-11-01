@@ -304,6 +304,8 @@ const EXEMPT: Record<string, string> = {
   'item_duplicate_dismissals.item_a_id': 'T-443: a ruling that two items differ; no quantity or price rides on it',
   'item_duplicate_dismissals.item_b_id': 'T-443: a ruling that two items differ; no quantity or price rides on it',
   'item_duplicate_dismissals.org_id': 'T-443: the org half of the composite same-org FKs; not an item id',
+  'item_aliases.item_id': 'T-502 (0224): another NAME for an item; no quantity or price rides on it, so it records no history that should lock the unit',
+  'item_aliases.org_id': 'T-502 (0224): the org half of the composite same-org FK; not an item id',
   'commissary_item_map.org_id': 'DEF-491 (0213): the org half of the composite same-org FK to items; not an item id (its item column leg is NOT exempt)',
   'commissary_item_offerings.org_id': 'DEF-491 (0213): the org half of the composite same-org FK to items; not an item id (its item column leg is NOT exempt)',
   'item_pricing.org_id': 'DEF-491 (0213): the org half of the composite same-org FK to items; not an item id (its item column leg is NOT exempt)',

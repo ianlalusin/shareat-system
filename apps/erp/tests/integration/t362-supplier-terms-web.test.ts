@@ -73,6 +73,7 @@ import { seedExpenseCategories } from '../../../../packages/db/seed/expense-cate
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
 import { paramsOf, urlOf } from '../helpers/flash-jar';
 import { SUPPLIER_ADD_RULES, checkField } from '@shareat/domain/field-rules';
+import { itemiseLegacy } from '../../../../packages/domain/tests/integration/_fixtures/legacy-itemise'; // T-502 s12: web tests need an itemised invoice
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -374,6 +375,7 @@ async function verifiedInvoice(f: Fixture, supplierId: string, totalAmount: stri
   const created = await asOrg(f.orgId, (tx) =>
     recordInvoice(tx, f.admin, { storeId: f.storeId, supplierId, invoiceDate: '2026-01-10', totalAmount, receiptFileId: fileId }),
   );
+  await itemiseLegacy(sql, created.id);
   await asOrg(f.orgId, (tx) =>
     verifyInvoice(tx, f.verifier, created.id, { supplier: true, invoice: true, items: true, price: true }),
   );

@@ -42,6 +42,7 @@ import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accou
 import { seedExpenseCategories } from '../../../../packages/db/seed/expense-categories';
 import { postEntry } from '../../../../packages/domain/src/ledger/post-entry';
 import { actor, asOrg, captureRedirect, closeAfterAll, keepTypingLegs, outcomeOf, person, sql, uid } from './t389-s3-common';
+import { itemiseLegacy } from '../../../../packages/domain/tests/integration/_fixtures/legacy-itemise'; // T-502 s12: web tests need an itemised invoice
 
 closeAfterAll();
 
@@ -77,8 +78,9 @@ async function setup(hint: string) {
     insert into supplier_invoices (org_id, store_id, supplier_id, invoice_date, total_amount, status, receipt_file_id, verified_by, verified_at, created_by,
                                    attested_supplier, attested_invoice, attested_items, attested_price)
     values (${orgId}, ${storeId}, ${supplier!.id}, '2026-02-10', '99999999.00', 'verified', ${file!.id}, ${managerId}, now(), ${adminId}, true, true, true, true) returning id`;
+  await itemiseLegacy(sql, inv!.id);
   const made = await asOrg(orgId, (tx) =>
-    createExpense(tx, admin, {
+    createExpense(tx, admin, { requireItemised: false /* legacy fixture: lineless invoice */,
       storeId, supplierId: supplier!.id, supplierInvoiceId: inv!.id, businessDate: '2026-02-10', categoryId: cat!.id,
       particulars: PARTICULARS, payments: [{ method: 'cash', amount: '1200.00', moneyAccountId: cash!.id }],
     }),

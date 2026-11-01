@@ -36,7 +36,8 @@ export function InvoiceMoneyLines({
   // Follow the invoice select (the same way ClosedMonthOverride follows its date input).
   useEffect(() => {
     const field = rootRef.current?.closest('form')?.elements.namedItem(invoiceField);
-    if (!(field instanceof HTMLSelectElement)) return;
+    // A select (/expenses/new) or a fixed hidden input (the invoice page's own modal): both carry the picked invoice id.
+    if (!(field instanceof HTMLSelectElement || field instanceof HTMLInputElement)) return;
     const sync = () => setPicked(field.value);
     sync();
     field.addEventListener('input', sync);

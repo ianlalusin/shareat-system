@@ -56,6 +56,7 @@ import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accou
 import { seedExpenseCategories } from '../../../../packages/db/seed/expense-categories';
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
 import { paramsOf } from '../helpers/flash-jar';
+import { itemiseLegacy } from '../../../../packages/domain/tests/integration/_fixtures/legacy-itemise'; // T-502 s12: web tests need an itemised invoice
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -140,6 +141,7 @@ async function fixture() {
       insert into supplier_invoices (org_id, store_id, supplier_id, invoice_no, invoice_date, total_amount, status, receipt_file_id, verified_by, verified_at, created_by,
         attested_supplier, attested_invoice, attested_items, attested_price)
       values (${orgId}, ${sid}, ${supplier!.id}, ${no}, '2026-01-10', '5000.00', 'verified', ${file!.id}, ${verifierId}, now(), ${adminId}, true, true, true, true) returning id`;
+    await itemiseLegacy(sql, inv!.id);
     return inv!.id;
   };
   const alphaInvoice = await invoiceAt(alphaId, 'INV-ALPHA-1');

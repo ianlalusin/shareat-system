@@ -6,6 +6,7 @@ import { createExpense } from '@shareat/domain';
 import { seedChartOfAccounts } from '../../../../db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../../db/seed/expense-categories';
 import { postEntry } from '../../../src/ledger/post-entry';
+import { itemiseLegacy } from './legacy-itemise';
 
 /**
  * T-475 S1 (TESTER) - one fixture for the AP live-check integration tests. A fresh org per call (fresh ids, runs on any `_test`
@@ -85,8 +86,10 @@ export async function ap475Fixture(sql: postgres.Sql, hint: string) {
   /** A raw pending (or verified) invoice. `createdBy` defaults to the logging admin. */
   const invoice = async (o: {
     on?: string; total?: string; status?: 'pending' | 'verified'; supplierId?: string; storeId?: string; invoiceNo?: string | null; receiptFileId?: string | null; createdBy?: string;
-  } = {}) =>
-    (await sql<{ id: string }[]>`
+    /** T-502 s12: also give the invoice ONE uncategorised line for its whole total (see `legacy-itemise.ts`), for web tests that record an expense through an action. */
+    itemised?: boolean;
+  } = {}) => {
+    const id = (await sql<{ id: string }[]>`
       insert into supplier_invoices (org_id, store_id, supplier_id, invoice_no, invoice_date, total_amount, status, receipt_file_id, created_by,
                                      verified_by, verified_at, attested_supplier, attested_invoice, attested_items, attested_price)
       values (${orgId}, ${o.storeId ?? storeId}, ${o.supplierId ?? supplierId}, ${o.invoiceNo ?? null}, ${o.on ?? '2026-01-10'}, ${o.total ?? '5000.00'},
@@ -94,6 +97,9 @@ export async function ap475Fixture(sql: postgres.Sql, hint: string) {
               ${o.status === 'verified' ? managerId : null}, ${o.status === 'verified' ? sql`now()` : null},
               ${o.status === 'verified'}, ${o.status === 'verified'}, ${o.status === 'verified'}, ${o.status === 'verified'})
       returning id`)[0]!.id;
+    if (o.itemised) await itemiseLegacy(sql, id);
+    return id;
+  };
 
   /** A draft expense against an invoice, created through the real domain function. */
   const draft = async (invoiceId: string, o: { on?: string; amount?: string; categoryId?: string; particulars?: string; supplierId?: string; payments?: Parameters<typeof createExpense>[2]['payments'] } = {}) => {
@@ -102,6 +108,7 @@ export async function ap475Fixture(sql: postgres.Sql, hint: string) {
         storeId, supplierId: o.supplierId ?? supplierId, supplierInvoiceId: invoiceId, businessDate: o.on ?? '2026-01-10', categoryId: o.categoryId ?? catId,
         particulars: o.particulars ?? `Pork ${uid('d')}`,
         payments: o.payments ?? [{ method: 'cash', amount: o.amount ?? '100.00', moneyAccountId: cash.id }],
+        requireItemised: false, // legacy fixture: lineless invoice
       }),
     );
     return made.id;

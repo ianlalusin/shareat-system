@@ -671,6 +671,143 @@ describe('T-443 variation and duplicate-request messages', () => {
   }
 });
 
+// T-502 (0224): the fourteen item-catalog backstops, each provoked for real (service shape, category FK, aliases, never-stocked).
+describe('T-502 item catalog messages', () => {
+  async function world() {
+    const code = uid('t502-lookup');
+    const [o] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
+    const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${o!.id}, 'Admin') returning id`;
+    const [cat] = await sql<{ id: string }[]>`insert into expense_categories (org_id, "group", category) values (${o!.id}, 'OPEX', ${`Utilities ${code}`}) returning id`;
+    const other = uid('t502-other');
+    const [o2] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${other}`}, ${other}) returning id`;
+    const [cat2] = await sql<{ id: string }[]>`insert into expense_categories (org_id, "group", category) values (${o2!.id}, 'OPEX', ${`Utilities ${other}`}) returning id`;
+    const mk = async (name: string, kind = 'supply', unit = 'pcs') => {
+      const [r] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${o!.id}, ${testItemCode()}, ${name}, ${kind}, ${unit}, ${p!.id}) returning id`;
+      return r!.id;
+    };
+    return { orgId: o!.id, personId: p!.id, catId: cat!.id, foreignCatId: cat2!.id, mk };
+  }
+  const req = (f: Awaited<ReturnType<typeof world>>, kind: string, unit: string, extra: { retail?: boolean; buy?: boolean; cat?: string | null } = {}) =>
+    sql`insert into item_requests (org_id, name, code, kind, base_unit, is_purchasable, sellable_retail, expense_category_id, requested_by)
+        values (${f.orgId}, ${uid('n')}, ${uid('C')}, ${kind}, ${unit}, ${extra.buy ?? true}, ${extra.retail ?? false}, ${extra.cat ?? null}, ${f.personId})`;
+  const check = (key: string, err: unknown) => {
+    const row = record(key, err);
+    expect(row.constraintName).toBe(key);
+    expect(row.message).toBe(CONSTRAINT_MESSAGES[key]);
+  };
+
+  it('items_service_unit_check', async () => {
+    const f = await world();
+    check('items_service_unit_check', await provoke(() => f.mk(uid('Water'), 'service', 'kg')));
+  });
+  it('item_requests_service_unit_check', async () => {
+    const f = await world();
+    check('item_requests_service_unit_check', await provoke(() => req(f, 'service', 'kg')));
+  });
+  it('items_service_never_sold_check', async () => {
+    const f = await world();
+    const err = await provoke(() => sql`insert into items (org_id, code, name, kind, base_unit, sellable_retail, created_by) values (${f.orgId}, ${testItemCode()}, ${uid('Rent')}, 'service', 'pcs', true, ${f.personId})`);
+    check('items_service_never_sold_check', err);
+  });
+  it('item_requests_service_never_sold_check', async () => {
+    const f = await world();
+    check('item_requests_service_never_sold_check', await provoke(() => req(f, 'service', 'pcs', { retail: true })));
+  });
+  it('items_service_purchasable_check', async () => {
+    const f = await world();
+    const err = await provoke(() => sql`insert into items (org_id, code, name, kind, base_unit, is_purchasable, created_by) values (${f.orgId}, ${testItemCode()}, ${uid('Rent')}, 'service', 'pcs', false, ${f.personId})`);
+    check('items_service_purchasable_check', err);
+  });
+  it('item_requests_service_purchasable_check', async () => {
+    const f = await world();
+    check('item_requests_service_purchasable_check', await provoke(() => req(f, 'service', 'pcs', { buy: false })));
+  });
+  it('items_service_not_variation_check', async () => {
+    const f = await world();
+    const parent = await f.mk(uid('Power'), 'service', 'pcs');
+    const err = await provoke(() => sql`insert into items (org_id, code, name, kind, base_unit, variant_of_item_id, created_by) values (${f.orgId}, ${testItemCode()}, ${uid('Rent')}, 'service', 'pcs', ${parent}, ${f.personId})`);
+    check('items_service_not_variation_check', err);
+  });
+  it('item_requests_service_not_variation_check', async () => {
+    const f = await world();
+    const parent = await f.mk(uid('Box'));
+    const err = await provoke(() => sql`insert into item_requests (org_id, name, code, kind, base_unit, variant_of_item_id, requested_by) values (${f.orgId}, ${uid('n')}, ${uid('C')}, 'service', 'pcs', ${parent}, ${f.personId})`);
+    check('item_requests_service_not_variation_check', err);
+  });
+  it('items_expense_category_same_org_fk', async () => {
+    const f = await world();
+    const id = await f.mk(uid('Soap'));
+    check('items_expense_category_same_org_fk', await provoke(() => sql`update items set expense_category_id = ${f.foreignCatId} where id = ${id}`));
+  });
+  it('item_requests_expense_category_same_org_fk', async () => {
+    const f = await world();
+    check('item_requests_expense_category_same_org_fk', await provoke(() => req(f, 'supply', 'pcs', { cat: f.foreignCatId })));
+  });
+  const alias = (f: Awaited<ReturnType<typeof world>>, itemId: string, text: string) =>
+    sql`insert into item_aliases (org_id, item_id, alias, created_by) values (${f.orgId}, ${itemId}, ${text}, ${f.personId})`;
+  it('item_aliases_org_alias_key', async () => {
+    const f = await world();
+    const id = await f.mk(uid('Siling'));
+    await alias(f, id, 'sili');
+    check('item_aliases_org_alias_key', await provoke(() => alias(f, id, ' SILI ')));
+  });
+  it('item_aliases_alias_not_blank_check', async () => {
+    const f = await world();
+    const id = await f.mk(uid('Siling'));
+    check('item_aliases_alias_not_blank_check', await provoke(() => alias(f, id, '   ')));
+  });
+  it('item_aliases_name_guard', async () => {
+    const f = await world();
+    const id = await f.mk(uid('Siling'));
+    await f.mk('Bacon');
+    check('item_aliases_name_guard', await provoke(() => alias(f, id, 'bacon')));
+  });
+  it('items_name_alias_guard', async () => {
+    const f = await world();
+    const id = await f.mk(uid('Siling'));
+    await alias(f, id, 'sili');
+    check('items_name_alias_guard', await provoke(() => f.mk('Sili')));
+  });
+  it('items_service_kind_has_history', async () => {
+    const f = await world();
+    const id = await f.mk(uid('Sauce'), 'raw_material', 'kg');
+    await sql`insert into production_recipes (org_id, name, output_item_id, output_quantity, created_by) values (${f.orgId}, ${uid('Recipe')}, ${id}, 1, ${f.personId})`;
+    check('items_service_kind_has_history', await provoke(() => sql`update items set kind = 'service' where id = ${id}`));
+  });
+  // T-502 section 11: sub-category backstops, each provoked for real.
+  const sub = (f: Awaited<ReturnType<typeof world>>, categoryId: string, name: string) =>
+    sql`insert into expense_subcategories (org_id, category_id, name, created_by) values (${f.orgId}, ${categoryId}, ${name}, ${f.personId}) returning id`;
+  it('expense_subcategories_org_name_key', async () => {
+    const f = await world();
+    await sub(f, f.catId, 'Pork');
+    check('expense_subcategories_org_name_key', await provoke(() => sub(f, f.catId, ' PORK ')));
+  });
+  it('expense_subcategories_name_not_blank_check', async () => {
+    const f = await world();
+    check('expense_subcategories_name_not_blank_check', await provoke(() => sub(f, f.catId, '   ')));
+  });
+  it('expense_subcategories_name_not_vague_check', async () => {
+    const f = await world();
+    check('expense_subcategories_name_not_vague_check', await provoke(() => sub(f, f.catId, 'Please Specify')));
+  });
+  it('expense_subcategories_category_same_org_fk', async () => {
+    const f = await world();
+    check('expense_subcategories_category_same_org_fk', await provoke(() => sub(f, f.foreignCatId, 'Pork')));
+  });
+  it('items_subcategory_matches_category', async () => {
+    const f = await world();
+    const [s] = await sub(f, f.catId, 'Pork');
+    const id = await f.mk(uid('Soap'));
+    check('items_subcategory_matches_category', await provoke(() => sql`update items set expense_subcategory_id = ${s!.id} where id = ${id}`));
+  });
+  it('service_item_never_stocked', async () => {
+    const f = await world();
+    const svc = await f.mk(uid('Power'), 'service', 'pcs');
+    const err = await provoke(() => sql`insert into production_recipes (org_id, name, output_item_id, output_quantity, created_by) values (${f.orgId}, ${uid('Recipe')}, ${svc}, 1, ${f.personId})`);
+    check('service_item_never_stocked', err);
+  });
+});
+
 // T-193: provoke each statutory payment backstop for real; the dictionary keys must match the names the database raises.
 describe('T-193 government payments messages', () => {
   async function paymentWorld() {
@@ -719,5 +856,7 @@ it('sanity: every CONSTRAINT_MESSAGES key was exercised above', () => {
   // 26 (T-271) + T-370 S3's semi-monthly two-days key + T-369 S7's sales-day unique key + T-375 S4's four lock keys + T-378 S1's four unit/kind keys + T-378 S2's items_base_unit_fixed + T-382's two unlink CHECK keys + T-383 S1's items blank-name and blank-code CHECK keys + T-385 S2's sales_days_verify_requires_submitted + T-386 S2's items_code_never_reused + T-386 S6's items_code_shape_check = 44 rows provoked above.
   // T-443: three real item variation/open-request errors above.
   // T-193: 50 -> 53, three real statutory payment errors above.
-  expect(rows.length).toBe(53);
+  // T-502: 53 -> 72, fourteen real item-catalog errors plus five sub-category errors above (re-measured).
+  // T-502 section 13 (A6): 72 -> 74, the two service-not-a-variation CHECK keys (re-measured).
+  expect(rows.length).toBe(74);
 });

@@ -122,6 +122,9 @@ const EXEMPT: Record<string, (typeof EXEMPT_REASONS)[number]> = {
   'packages/domain/src/prepaid/index.ts::run::posted.size > coverageMonths': 'not-a-column-value',
   'packages/domain/src/liabilities/index.ts::isOverdue::dueOn < asOf': 'not-a-column-value',
   'apps/erp/src/app/expenses/actions.ts::parseExpenseForm::i < lineCount': 'not-a-column-value',
+  // T-502 s12: the batch's part count passed `/^\d+$/` first (finite, whole), is a loop bound and a 200 cap, never written to a column.
+  'apps/erp/src/app/expenses/actions.ts::recordInvoiceExpensesBatchAction::i < partCount': 'not-a-column-value',
+  'apps/erp/src/app/expenses/actions.ts::recordInvoiceExpensesBatchAction::partCount > 200': 'not-a-column-value',
   'apps/erp/src/app/expenses/recurring/lib.ts::periodsBehind::nextDue > today': 'not-a-column-value',
   'apps/erp/src/app/expenses/recurring/lib.ts::periodsBehind::cursor <= today': 'not-a-column-value',
   'apps/erp/src/app/expenses/recurring/page.tsx::RecurringExpensesPage::t.nextDueDate <= now': 'not-a-column-value',

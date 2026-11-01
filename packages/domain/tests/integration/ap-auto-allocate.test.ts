@@ -155,7 +155,7 @@ async function verifiedInvoice(f: Fixture, totalAmount: string, over: Record<str
 
 async function creditExpense(f: Fixture, invoiceId: string, amount: string, particulars = 'Stock purchase') {
   return asOrg(f.orgId, (tx) =>
-    recordExpenseForInvoice(tx, f.manager, {
+    recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
       storeId: f.storeId,
       supplierId: f.supplierId,
       supplierInvoiceId: invoiceId,

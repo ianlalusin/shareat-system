@@ -46,7 +46,7 @@ async function activeLocations(tx: Tx, storeId: string): Promise<DeliveryLocatio
 export async function deliveryFormData(orgId: string, storeId: string): Promise<DeliveryFormData> {
   return withOrgPrincipal(orgId, async (tx) => {
     const [itemRows, supplierRows, locations] = await Promise.all([
-      itemsRepo.listItems(tx, orgId, { includeInactive: false }),
+      itemsRepo.listItems(tx, orgId, { includeInactive: false, stockedOnly: true }),
       apRepo.listSuppliers(tx, orgId),
       activeLocations(tx, storeId),
     ]);

@@ -84,7 +84,7 @@ export async function orderFormData(orgId: string): Promise<OrderFormData> {
   return withOrgPrincipal(orgId, async (tx) => {
     const [customerRows, itemRows, lists, rules] = await Promise.all([
       customersRepo.listCustomers(tx, orgId),
-      itemsRepo.listItems(tx, orgId, { includeInactive: false }),
+      itemsRepo.listItems(tx, orgId, { includeInactive: false, stockedOnly: true }),
       customersRepo.listPriceLists(tx, orgId),
       itemsRepo.listItemPricing(tx, orgId),
     ]);

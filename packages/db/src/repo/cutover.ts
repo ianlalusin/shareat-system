@@ -84,6 +84,7 @@ export async function itemsWithoutCount(
     select i.id, i.name
     from items i
     where i.org_id = ${orgId} and i.status = 'active'
+      and i.kind <> 'service' -- T-502 A1: a service is never counted (it has no stock), so it can never wedge B3
       and not exists (
         select 1 from opening_counts oc
         where oc.item_id = i.id and oc.store_id = ${storeId}

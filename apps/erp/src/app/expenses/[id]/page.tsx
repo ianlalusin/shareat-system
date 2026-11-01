@@ -17,9 +17,11 @@ import { personName } from '@/lib/person-name';
 import { typedFor } from '@/lib/keep-typing';
 import { EXPENSE_APPROVE, EXPENSE_DRAFT_EDIT } from '../typed-forms';
 import { CheckedForm, EditableRecord, RuleCheck } from '@/components/forms';
+import { InvoicePartsPicker } from '@/components/expenses/InvoicePartsPicker';
+import { invoicePartsView } from '../parts-view';
 import { EXPENSE_APPROVE_RULES, EXPENSE_DRAFT_EDIT_RULES, EXPENSE_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { accountCodeAndName } from '@/lib/account-label';
-import { Badge, Button, CardGrid, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { Badge, Button, CardGrid, ConfirmDestructive, Field, FlashBanner, FormGrid, Input } from '@/components/ui';
 
 // Derived from the repo function rather than re-declared — the table renders exactly what
 // that reader returns, so the two cannot drift.
@@ -118,6 +120,12 @@ export default async function ExpenseDetailPage({
     expense.categoryId,
     categories.map((c) => ({ id: c.id, accountCode: c.accountCode })),
   );
+  // T-502 section 12: the draft's invoice parts, WITHOUT this draft's own amount counted against them (so its own part still shows
+  // what it holds), and the part this draft currently sits on.
+  const draftParts = await invoicePartsView(orgId, expense.supplierInvoiceId, categories, expense.id);
+  const initialPart =
+    draftParts.parts.find((p) => p.kind === 'category' && p.categoryId === expense.categoryId) ??
+    draftParts.parts.find((p) => p.kind !== 'category');
   // T-475 R14: a refused approval reopens with the closed-month override reason and note still in place.
   const typedApprove = typedFor(sp, EXPENSE_APPROVE, expense.id, actor.personId);
   const typedApproveField = (name: string): string | undefined => {
@@ -199,7 +207,7 @@ export default async function ExpenseDetailPage({
           <>
             <div className="space-y-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
               <h2 className="font-medium">Correct this draft</h2>
-              <p className="text-neutral-600 dark:text-neutral-400">Change the category or particulars.</p>
+              <p className="text-neutral-600 dark:text-neutral-400">Change which part of the bill this is for, or the particulars.</p>
               <EditableRecord
                 rules={EXPENSE_DRAFT_EDIT_RULES}
                 action={updateDraftAction}
@@ -209,27 +217,17 @@ export default async function ExpenseDetailPage({
                 typed={typedFor(sp, EXPENSE_DRAFT_EDIT, expense.id, actor.personId)}
               >
                 <FormGrid layout="fields">
-                  <Field label="Category" width="name">
-                    <Select name="categoryId" defaultValue={expense.categoryId} className="w-full">
-                      {/* ⭐ T-229 slice 2 — retired categories are hidden UNLESS this expense already
-                          carries one. Filtering them out unconditionally would silently re-point the
-                          expense at whatever option happened to be first when the form was saved. */}
-                      {categories
-                        .filter((c) => c.isActive || c.id === expense.categoryId)
-                        .map((c) => (
-                          // T-475 E4 / F4: a category with no ledger account is offered but disabled, as on the new-expense form -
-                          // except the one this draft already sits on (R12), which stays selectable so a re-save keeps it.
-                          <option key={c.id} value={c.id} disabled={!c.accountCode && c.id !== expense.categoryId}>
-                            {c.group} — {c.category}
-                            {c.isActive ? '' : ' (retired)'}
-                            {!c.accountCode ? ' (unmapped — cannot post)' : ''}
-                          </option>
-                        ))}
-                    </Select>
-                  </Field>
-                  <Field label="Particulars" width="long">
-                    <Input name="particulars" defaultValue={expense.particulars} className="w-full" />
-                  </Field>
+                  {/* ⭐ T-502 section 12: a draft is one part of an itemised bill, so the category is chosen by PART, as on the new-expense form. */}
+                  <div className="col-span-full">
+                    <InvoicePartsPicker
+                      views={{ [draftParts.invoiceId]: draftParts }}
+                      categories={categories}
+                      fixedInvoiceId={draftParts.invoiceId}
+                      {...(initialPart ? { initialPartKey: initialPart.key } : {})}
+                      {...(initialPart && initialPart.kind !== 'category' ? { initialPickedCategoryId: expense.categoryId } : {})}
+                      initialParticulars={expense.particulars}
+                    />
+                  </div>
                 </FormGrid>
                 <RuleCheck id="expense.edit.categoryMapped" facts={categoryFacts} />
               </EditableRecord>

@@ -23,10 +23,22 @@ import { refuse, gone } from '../shared/refusal';
 import { money, type Money } from '@shareat/core/money';
 import { parseSalesDayFigures, writeChannels, writeTenders, type CreateSalesDayInput } from './create';
 import { assertStoreTakesTypedDays } from './create-block';
+import { assertFieldRules } from '../shared/field-rules-assert';
+import { SALES_DAY_EDIT_RULES } from '../field-rules/sales-days';
+import { writePlatformRows, type PlatformRowInput } from './platform';
 
-export interface EditSalesDayInput extends Omit<CreateSalesDayInput, 'storeId' | 'businessDate'> {
+type PlatformRows = PlatformRowInput[];
+type TypedEdit = Omit<CreateSalesDayInput, 'storeId' | 'businessDate'> & {
   salesDayId: string;
-}
+  /**
+   * T-504 (one Save): a feed day's "Platform sales" rows, written in THIS transaction beside whatever else the edit carries.
+   * On a typed day they are refused (its platform sales are typed with the day's channels).
+   */
+  platform?: PlatformRows;
+};
+/** A POS-fed day's ONE Save carries only its Platform sales: its figures are POS's and are never typed. */
+type PlatformOnlyEdit = { salesDayId: string; platform: PlatformRows };
+export type EditSalesDayInput = TypedEdit | PlatformOnlyEdit;
 
 export async function editSalesDay(tx: Tx, actor: Actor, input: EditSalesDayInput): Promise<{ id: string }> {
   return runEdit(tx, actor, input);
@@ -38,6 +50,17 @@ async function runEdit(tx: Tx, actor: Actor, input: EditSalesDayInput): Promise<
   if (!day) throw gone(`editSalesDay: sales day ${input.salesDayId} does not exist in org ${actor.orgId}`, 'sales day');
 
   await authorize(tx, actor, day.status === 'submitted' ? 'verify_sales_day' : 'submit_sales_day', { storeId: day.storeId });
+
+  // T-504 (the screen's own rule set judges AFTER the gate, T-364 order). It holds no fields; the channel rule is `writeChannels`'.
+  assertFieldRules(SALES_DAY_EDIT_RULES, {});
+
+  // T-504: a POS-fed day's ONE Save carries only its Platform sales. Same lock, same gate, same audit as `setPlatformSales`.
+  const platformRows = input.platform;
+  if (platformRows !== undefined && (day.source === 'pos_v1_day_feed' || !('totalSales' in input))) {
+    await writePlatformRows(tx, actor, day, platformRows);
+    return { id: day.id };
+  }
+  if (!('totalSales' in input)) throw refuse(`editSalesDay: sales day ${day.id} was given nothing to change`, 'There was nothing to save.');
 
   // T-375 S3 (R13): a store linked to POS since the day was typed has its days imported, never edited here. Asked
   // BEFORE the status rule, so a verified typed day gets the same sentence as an open one.
@@ -65,6 +88,8 @@ async function runEdit(tx: Tx, actor: Actor, input: EditSalesDayInput): Promise<
   const before = await snapshot(tx, day);
 
   if (input.channels) await writeChannels(tx, actor, day.storeId, day.id, input.channels);
+  // T-504: platform rows on a typed day are refused (after the channel rows, so a refusal also rolls those back).
+  if (platformRows) await writePlatformRows(tx, actor, day, platformRows);
   if (input.tenders) {
     // Only the wallets the edit NAMES are changed: a positive amount sets that wallet's row, a typed zero
     // clears it, and a wallet the edit does not mention keeps its row exactly as it was. The form offers

@@ -109,7 +109,7 @@ type Fixture = Awaited<ReturnType<typeof fixture>>;
 
 const cashLine = (f: Fixture, amount = '100.00') => ({ method: 'cash' as const, amount, moneyAccountId: f.drawerId });
 const input = (f: Fixture, payments: unknown[]) =>
-  ({ storeId: f.storeId, supplierId: f.supplierId, supplierInvoiceId: f.invoiceId, businessDate: '2026-01-01', categoryId: f.categoryId, particulars: 'Bank fee', payments }) as never;
+  ({ storeId: f.storeId, supplierId: f.supplierId, supplierInvoiceId: f.invoiceId, businessDate: '2026-01-01', categoryId: f.categoryId, particulars: 'Bank fee', payments, requireItemised: false /* legacy fixture: lineless invoice */ }) as never;
 const create = (f: Fixture, payments: unknown[]) => asPerson(f.orgId, (tx) => createExpense(tx, f.staff, input(f, payments)));
 
 const counts = async (orgId: string) => {
@@ -165,7 +165,7 @@ describe('F3b — editExpense refuses a retired method with the domain sentence;
     const f = await fixture('f3b');
     const { id } = await create(f, [cashLine(f)]);
     await refusedWith(
-      asPerson(f.orgId, (tx) => editExpense(tx, f.staff, id, { payments: [{ method: 'other', amount: '100.00' }] } as never)),
+      asPerson(f.orgId, (tx) => editExpense(tx, f.staff, id, { requireItemised: false /* legacy fixture: lineless invoice */, payments: [{ method: 'other', amount: '100.00' }] } as never)),
       SENTENCE.other,
       "an edit to an 'other' payment",
     );
@@ -177,7 +177,7 @@ describe('F3b — editExpense refuses a retired method with the domain sentence;
     const f = await fixture('f3b-ar');
     const { id } = await create(f, [cashLine(f)]);
     await refusedWith(
-      asPerson(f.orgId, (tx) => editExpense(tx, f.staff, id, { payments: [{ method: 'ar_collection', amount: '100.00' }] } as never)),
+      asPerson(f.orgId, (tx) => editExpense(tx, f.staff, id, { requireItemised: false /* legacy fixture: lineless invoice */, payments: [{ method: 'ar_collection', amount: '100.00' }] } as never)),
       SENTENCE.ar_collection,
       "an edit to an 'ar_collection' payment",
     );
@@ -186,7 +186,7 @@ describe('F3b — editExpense refuses a retired method with the domain sentence;
   it('+control: an edit that replaces the cash line with another cash line saves (amount 120.00)', async () => {
     const f = await fixture('f3b-ok');
     const { id } = await create(f, [cashLine(f)]);
-    await asPerson(f.orgId, (tx) => editExpense(tx, f.staff, id, { payments: [cashLine(f, '120.00')] } as never));
+    await asPerson(f.orgId, (tx) => editExpense(tx, f.staff, id, { requireItemised: false /* legacy fixture: lineless invoice */, payments: [cashLine(f, '120.00')] } as never));
     const rows = await sql<{ amount: string }[]>`select amount::text from expense_payments where expense_id = ${id}`;
     expect(rows).toEqual([{ amount: '120.00' }]);
   });
@@ -202,7 +202,7 @@ describe('F3b2 — on a cash-on-delivery supplier the RETIRED-method sentence wi
     let err: unknown;
     try {
       await asPerson(f.orgId, (tx) =>
-        editExpense(tx, f.staff, id, { payments: [{ method: 'other', amount: '50.00' }, { method: 'credit', amount: '50.00' }] } as never));
+        editExpense(tx, f.staff, id, { requireItemised: false /* legacy fixture: lineless invoice */, payments: [{ method: 'other', amount: '50.00' }, { method: 'credit', amount: '50.00' }] } as never));
     } catch (e) {
       err = e;
     }
@@ -217,7 +217,7 @@ describe('F3b2 — on a cash-on-delivery supplier the RETIRED-method sentence wi
   it("+control: the same edit to ['cash'] saves on that COD supplier", async () => {
     const f = await fixture('f3b2-ok');
     const { id } = await create(f, [cashLine(f, '100.00')]);
-    await asPerson(f.orgId, (tx) => editExpense(tx, f.staff, id, { payments: [cashLine(f, '100.00')] } as never));
+    await asPerson(f.orgId, (tx) => editExpense(tx, f.staff, id, { requireItemised: false /* legacy fixture: lineless invoice */, payments: [cashLine(f, '100.00')] } as never));
     expect((await sql`select method from expense_payments where expense_id = ${id}`).length).toBe(1);
   });
 });
@@ -271,7 +271,7 @@ describe('F3d — approving a LEGACY draft that holds a retired method is refuse
 describe('F3e — the AP path (recordExpenseForInvoice) carries the domain sentence to an AP caller', () => {
   const record = (f: Fixture, payments: unknown[]) =>
     asPerson(f.orgId, (tx) =>
-      recordExpenseForInvoice(tx, f.manager, {
+      recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId, supplierId: f.supplierId, supplierInvoiceId: f.invoiceId, categoryId: f.categoryId, particulars: 'Bank fee', payments,
       } as never),
     );

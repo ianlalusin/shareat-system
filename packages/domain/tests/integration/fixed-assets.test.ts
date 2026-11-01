@@ -744,7 +744,7 @@ async function expenseWithInvoice(
   });
 
   const created = await asPerson(f.orgId, (tx) =>
-    createExpense(tx, actor(f.orgId, f.staffId), {
+    createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
       storeId: f.storeId,
       supplierId: supplier!.id,
       supplierInvoiceId: invoice!.id,
