@@ -10,6 +10,7 @@ import { getDayIdFromTimestamp } from '@/lib/analytics/daily';
 import { parsePesoInput, storedPesosToCentavos } from '@/lib/money/centavos';
 import { formatCentavos } from '@/lib/money/format';
 import { postPos2 } from '@/lib/pos2/client';
+import { isEwalletTender } from '@/lib/cash/ewallet-tender';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -55,7 +56,7 @@ export function ConvertSheet({ storeId }: { storeId: string }) {
     if (!open) return;
     setDayId(getDayIdFromTimestamp(Date.now())); setLoading(true); setRowsFailed(false);
     const stopMethods = onSnapshot(collection(db, 'stores', storeId, 'storeModesOfPayment'), (snap) => {
-      const available = snap.docs.map((d) => d.data()).filter((m) => m.type === 'online' && m.isActive !== false && m.isArchived !== true)
+      const available = snap.docs.map((d) => d.data()).filter((m) => isEwalletTender(m) && m.isActive !== false && m.isArchived !== true)
         .map((m) => String(m.name)).sort();
       setWallets(available);
       setWallet((old) => available.includes(old) ? old : available.find((m) => m.toLowerCase() === 'gcash') ?? available[0] ?? '');
