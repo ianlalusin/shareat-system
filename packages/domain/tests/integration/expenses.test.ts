@@ -376,7 +376,7 @@ describe('invariant 1 — a single cash expense posts exactly POSTING-PATTERNS.m
     const catId = await categoryId(f.orgId, 'Cost of Goods Sold — General');
 
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -407,7 +407,7 @@ describe('invariant 2 — a three-way split posts ONE entry with three credit li
     const catId = await categoryId(f.orgId, 'Supplies and Stocks');
 
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -462,7 +462,7 @@ describe('invariant 3 — reimbursable credits 2130 with the staff party; withou
     const catId = await categoryId(f.orgId, 'Repairs and Maintenance');
 
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -490,7 +490,7 @@ describe('invariant 4 — re-posting is idempotent: one entry, created:false the
     const catId = await categoryId(f.orgId, 'Utilities');
 
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -521,7 +521,7 @@ describe('invariant 5 — a void reverses through reverseEntry and every account
     const catId = await categoryId(f.orgId, 'Cost of Goods Sold — General');
 
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -561,7 +561,7 @@ describe('invariant 6 — a mapped category routes to its declared account', () 
     const catId = await categoryId(f.orgId, 'Rent');
 
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -584,7 +584,7 @@ describe('invariant 7 — an unmapped category BLOCKS, naming the category, neve
     const catId = await insertUnmappedCategory(f.orgId, 'Mystery Spend');
 
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -648,7 +648,7 @@ async function postPersonal(
 ): Promise<{ ok: boolean; code?: string; partyType?: string | null }> {
   const catId = await categoryId(f.orgId, "Owner's Personal Expense");
   const created = await asPerson(f.orgId, (tx) =>
-    createExpense(tx, actor(f.orgId, f.staffId), {
+    createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
       storeId: f.storeId,
       supplierId: f.supplierId,
       supplierInvoiceId: f.supplierInvoiceId,
@@ -706,7 +706,7 @@ describe('invariant 9 — CAPEX routes to a 15xx asset, never a P&L line', () =>
     const catId = await categoryId(f.orgId, 'Capital Expenditure');
 
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -757,7 +757,7 @@ describe('invariant 11 — no VERIFIED invoice, no POSTING (T-196 retimed the ga
 
     // Test 1 — a cashier holding only create_expense drafts against a pending invoice.
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: pending.id,
@@ -806,7 +806,7 @@ describe('invariant 11 — no VERIFIED invoice, no POSTING (T-196 retimed the ga
       }),
     );
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: pending.id,
@@ -829,7 +829,7 @@ describe('invariant 12 — the creator edits their own draft inside 48h; outside
     const catId = await categoryId(f.orgId, 'Smallwares');
 
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -841,7 +841,7 @@ describe('invariant 12 — the creator edits their own draft inside 48h; outside
     );
 
     await asPerson(f.orgId, (tx) =>
-      editExpense(tx, actor(f.orgId, f.staffId), created.id, { particulars: 'Corrected particulars' }),
+      editExpense(tx, actor(f.orgId, f.staffId), created.id, { requireItemised: false /* legacy fixture: lineless invoice */, particulars: 'Corrected particulars' }),
     );
     const [row] = await sql<{ particulars: string }[]>`select particulars from expenses where id = ${created.id}`;
     expect(row!.particulars).toBe('Corrected particulars');
@@ -852,7 +852,7 @@ describe('invariant 12 — the creator edits their own draft inside 48h; outside
     const catId = await categoryId(f.orgId, 'Smallwares');
 
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -868,14 +868,14 @@ describe('invariant 12 — the creator edits their own draft inside 48h; outside
 
     await expect(
       asPerson(f.orgId, (tx) =>
-        editExpense(tx, actor(f.orgId, f.staffId), created.id, { particulars: 'Too late' }),
+        editExpense(tx, actor(f.orgId, f.staffId), created.id, { requireItemised: false /* legacy fixture: lineless invoice */, particulars: 'Too late' }),
       ),
     ).rejects.toThrow(AuthorizationError);
 
     // A manager (who DOES hold edit_any_expense) can still fix it — the window is about
     // WHO may act unsupervised, not a permanent freeze.
     await asPerson(f.orgId, (tx) =>
-      editExpense(tx, actor(f.orgId, f.managerId), created.id, { particulars: 'Fixed by a manager' }),
+      editExpense(tx, actor(f.orgId, f.managerId), created.id, { requireItemised: false /* legacy fixture: lineless invoice */, particulars: 'Fixed by a manager' }),
     );
     const [row] = await sql<{ particulars: string }[]>`select particulars from expenses where id = ${created.id}`;
     expect(row!.particulars).toBe('Fixed by a manager');
@@ -888,7 +888,7 @@ describe('invariant 13 — a posted expense cannot be edited by anyone, includin
     const catId = await categoryId(f.orgId, 'Insurance');
 
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -902,7 +902,7 @@ describe('invariant 13 — a posted expense cannot be edited by anyone, includin
 
     await expect(
       asPerson(f.orgId, (tx) =>
-        editExpense(tx, actor(f.orgId, f.adminId), created.id, { particulars: 'Admin tries to sneak a change in' }),
+        editExpense(tx, actor(f.orgId, f.adminId), created.id, { requireItemised: false /* legacy fixture: lineless invoice */, particulars: 'Admin tries to sneak a change in' }),
       ),
     ).rejects.toThrow(/only a draft may be edited/);
   });
@@ -923,7 +923,7 @@ describe('invariant 14 — each of the five capabilities denies an actor lacking
 
     await expect(
       asPerson(f.orgId, (tx) =>
-        createExpense(tx, actor(f.orgId, nobody), {
+        createExpense(tx, actor(f.orgId, nobody), { requireItemised: false /* legacy fixture: lineless invoice */,
           storeId: f.storeId,
           supplierId: f.supplierId,
           supplierInvoiceId: f.supplierInvoiceId,
@@ -941,7 +941,7 @@ describe('invariant 14 — each of the five capabilities denies an actor lacking
     const catId = await categoryId(f.orgId, 'Bank Fees');
 
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -955,7 +955,7 @@ describe('invariant 14 — each of the five capabilities denies an actor lacking
 
     await expect(
       asPerson(f.orgId, (tx) =>
-        editExpense(tx, actor(f.orgId, f.staffId), created.id, { particulars: 'Should be denied' }),
+        editExpense(tx, actor(f.orgId, f.staffId), created.id, { requireItemised: false /* legacy fixture: lineless invoice */, particulars: 'Should be denied' }),
       ),
     ).rejects.toThrow(AuthorizationError);
   });
@@ -966,7 +966,7 @@ describe('invariant 14 — each of the five capabilities denies an actor lacking
     // Created by the MANAGER, so staff is never the creator and always routes to
     // edit_any_expense regardless of timing.
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.managerId), {
+      createExpense(tx, actor(f.orgId, f.managerId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -979,7 +979,7 @@ describe('invariant 14 — each of the five capabilities denies an actor lacking
 
     await expect(
       asPerson(f.orgId, (tx) =>
-        editExpense(tx, actor(f.orgId, f.staffId), created.id, { particulars: 'Staff should not be able to' }),
+        editExpense(tx, actor(f.orgId, f.staffId), created.id, { requireItemised: false /* legacy fixture: lineless invoice */, particulars: 'Staff should not be able to' }),
       ),
     ).rejects.toThrow(AuthorizationError);
   });
@@ -988,7 +988,7 @@ describe('invariant 14 — each of the five capabilities denies an actor lacking
     const f = await setup('inv14-void');
     const catId = await categoryId(f.orgId, 'Bank Fees');
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -1009,7 +1009,7 @@ describe('invariant 14 — each of the five capabilities denies an actor lacking
     const f = await setup('inv14-approve');
     const catId = await categoryId(f.orgId, 'Bank Fees');
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -1066,7 +1066,7 @@ describe('invariant 16 — an expense in org A is invisible to org B, with no WH
 
     const catId = await categoryId(fA.orgId, 'Bank Fees');
     await asPerson(fA.orgId, (tx) =>
-      createExpense(tx, actor(fA.orgId, fA.staffId), {
+      createExpense(tx, actor(fA.orgId, fA.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: fA.storeId,
         supplierId: fA.supplierId,
         supplierInvoiceId: fA.supplierInvoiceId,
@@ -1100,7 +1100,7 @@ describe('invariant 17 — a DRAFT is deletable; a posted or voided expense neve
     const catId = await categoryId(f.orgId, 'Smallwares');
 
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -1132,7 +1132,7 @@ describe('invariant 17 — a DRAFT is deletable; a posted or voided expense neve
     const catId = await categoryId(f.orgId, 'Insurance');
 
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.managerId), {
+      createExpense(tx, actor(f.orgId, f.managerId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -1157,7 +1157,7 @@ describe('invariant 17 — a DRAFT is deletable; a posted or voided expense neve
     const catId = await categoryId(f.orgId, 'Insurance');
 
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.managerId), {
+      createExpense(tx, actor(f.orgId, f.managerId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -1182,7 +1182,7 @@ describe('invariant 17 — a DRAFT is deletable; a posted or voided expense neve
     const catId = await categoryId(f.orgId, 'Smallwares');
 
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -1254,7 +1254,7 @@ describe('overdrawing an expense account — warn for cashier, block for office 
   async function draft(f: Fixture, amount: string, moneyAccountId: string): Promise<string> {
     const cat = await categoryId(f.orgId, 'Supplies and Stocks');
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -1314,7 +1314,7 @@ describe('overdrawing an expense account — warn for cashier, block for office 
 
     const cat = await categoryId(f.orgId, 'Supplies and Stocks');
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -1343,7 +1343,7 @@ describe('overdrawing an expense account — warn for cashier, block for office 
 
     const cat = await categoryId(f.orgId, 'Supplies and Stocks');
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -1387,7 +1387,7 @@ describe("T-153 — Ian's worked example: the drawer runs out and the float cove
     await fundAccount(f.orgId, f.storeId, '1110', '21000.00', null);
 
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -1431,7 +1431,7 @@ describe("T-153 — Ian's worked example: the drawer runs out and the float cove
     await fundAccount(f.orgId, f.storeId, '1110', '2000.00', null);
 
     const posted = await asPerson(f.orgId, async (tx) => {
-        const created = await createExpense(tx, actor(f.orgId, f.staffId), {
+        const created = await createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
           storeId: f.storeId,
           supplierId: f.supplierId,
           supplierInvoiceId: f.supplierInvoiceId,
@@ -1455,7 +1455,7 @@ describe("T-153 — Ian's worked example: the drawer runs out and the float cove
     await fundAccount(f.orgId, f.storeId, '1110', '2000.00', null);
     await expect(
       asPerson(f.orgId, async (tx) => {
-        const created = await createExpense(tx, actor(f.orgId, f.staffId), {
+        const created = await createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
           storeId: f.storeId,
           supplierId: f.supplierId,
           supplierInvoiceId: f.supplierInvoiceId,
@@ -1474,7 +1474,7 @@ describe('⛔ DEF-157 — payReimbursement settles 2130, which nothing previousl
   async function reimbursableExpense(f: Fixture, amount: string): Promise<void> {
     const catId = await categoryId(f.orgId, 'Supplies and Stocks');
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -1580,7 +1580,7 @@ describe('T-343 S3 — voiding an already-voided expense names the record, never
     const catId = await categoryId(f.orgId, 'Cost of Goods Sold — General');
 
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -1630,7 +1630,7 @@ describe('T-343 S5.1 — expense refusals carry a human sentence', () => {
     const f = await setup('t343-s51-e3a');
     const catId = await categoryId(f.orgId, 'Cost of Goods Sold — General');
     const created = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, actor(f.orgId, f.staffId), {
+      createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: f.supplierInvoiceId,
@@ -1681,7 +1681,7 @@ describe('T-343 S5.1 — expense refusals carry a human sentence', () => {
     let caught: unknown;
     try {
       await asPerson(f.orgId, (tx) =>
-        createExpense(tx, actor(f.orgId, f.staffId), {
+        createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
           storeId: f.storeId,
           supplierId: supplierBId,
           supplierInvoiceId: f.supplierInvoiceId, // belongs to supplier A (f.supplierId)
@@ -1730,7 +1730,7 @@ describe('T-343 S5.1 — expense refusals carry a human sentence', () => {
     let caught: unknown;
     try {
       await asPerson(f.orgId, (tx) =>
-        createExpense(tx, actor(f.orgId, f.staffId), {
+        createExpense(tx, actor(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
           storeId: f.storeId,
           supplierId: supplierBId,
           supplierInvoiceId: f.supplierInvoiceId,

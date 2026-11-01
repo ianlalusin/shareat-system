@@ -776,3 +776,54 @@ export async function setSubcategoryActive(tx: Tx, orgId: string, id: string, is
     .set({ isActive, updatedAt: new Date() })
     .where(and(eq(expenseSubcategories.id, id), eq(expenseSubcategories.orgId, orgId)));
 }
+
+// -------------------------------------------------------------------------------------
+// T-502 section 12 - the "parts" of an itemised invoice. Raw facts only; the rule (rooms, ceilings) lives in the domain.
+// -------------------------------------------------------------------------------------
+
+export interface InvoicePartsFacts {
+  invoiceTotal: string;
+  /** One row per item category on the invoice's lines; `categoryId` null = lines whose item has no category. */
+  lineGroups: { categoryId: string | null; total: string; itemNames: string[] }[];
+  /** Live (not voided) expenses on the invoice, summed per category. */
+  recorded: { categoryId: string; total: string }[];
+  lineCount: number;
+}
+
+/**
+ * The invoice's lines grouped by their item's expense category, and its live expenses grouped by category.
+ * `excludeExpenseId` leaves one expense out (an edit must not count the draft against itself).
+ */
+export async function invoicePartsFacts(
+  tx: Tx,
+  orgId: string,
+  invoiceId: string,
+  excludeExpenseId?: string,
+): Promise<InvoicePartsFacts | undefined> {
+  const [inv] = (await tx.execute(sql`
+    select total_amount::text as total_amount from supplier_invoices where id = ${invoiceId} and org_id = ${orgId}
+  `)) as unknown as { total_amount: string }[];
+  if (!inv) return undefined;
+  const lines = (await tx.execute(sql`
+    select i.expense_category_id as category_id, sum(l.line_total)::text as total,
+           array_agg(i.name order by l.line_no) as item_names, count(*)::int as n
+    from supplier_invoice_lines l
+    join items i on i.id = l.item_id
+    where l.supplier_invoice_id = ${invoiceId}
+    group by i.expense_category_id
+    order by min(l.line_no)
+  `)) as unknown as { category_id: string | null; total: string; item_names: string[]; n: number }[];
+  const live = (await tx.execute(sql`
+    select category_id, sum(total_amount)::text as total
+    from expenses
+    where supplier_invoice_id = ${invoiceId} and org_id = ${orgId} and status <> 'voided'
+      ${excludeExpenseId ? sql`and id <> ${excludeExpenseId}` : sql``}
+    group by category_id
+  `)) as unknown as { category_id: string; total: string }[];
+  return {
+    invoiceTotal: inv.total_amount,
+    lineGroups: lines.map((r) => ({ categoryId: r.category_id, total: r.total, itemNames: r.item_names })),
+    recorded: live.map((r) => ({ categoryId: r.category_id, total: r.total })),
+    lineCount: lines.reduce((n, r) => n + r.n, 0),
+  };
+}

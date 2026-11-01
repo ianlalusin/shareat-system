@@ -199,6 +199,7 @@ export const items = pgTable(
     check('items_service_unit_check', sql`${t.kind} <> 'service' OR ${t.baseUnit} = 'pcs'`),
     check('items_service_never_sold_check', sql`${t.kind} <> 'service' OR (NOT ${t.sellableRetail} AND NOT ${t.sellableWholesale})`),
     check('items_service_purchasable_check', sql`${t.kind} <> 'service' OR ${t.isPurchasable}`),
+    check('items_service_not_variation_check', sql`${t.kind} <> 'service' OR ${t.variantOfItemId} IS NULL`),
     // T-502 S1 (0224): partial in the SQL (WHERE expense_category_id IS NOT NULL).
     index('items_expense_category_idx').on(t.orgId, t.expenseCategoryId),
     // T-391 S1 (0193). The unit list is PURCHASE_UNITS; a test reads it back from pg_constraint.
@@ -353,6 +354,7 @@ export const itemRequests = pgTable(
     check('item_requests_service_unit_check', sql`${t.kind} <> 'service' OR ${t.baseUnit} = 'pcs'`),
     check('item_requests_service_never_sold_check', sql`${t.kind} <> 'service' OR (NOT ${t.sellableRetail} AND NOT ${t.sellableWholesale})`),
     check('item_requests_service_purchasable_check', sql`${t.kind} <> 'service' OR ${t.isPurchasable}`),
+    check('item_requests_service_not_variation_check', sql`${t.kind} <> 'service' OR ${t.variantOfItemId} IS NULL`),
     foreignKey({
       columns: [t.orgId, t.expenseCategoryId],
       foreignColumns: [expenseCategories.orgId, expenseCategories.id],

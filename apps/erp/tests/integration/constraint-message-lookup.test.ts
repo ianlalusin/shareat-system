@@ -722,6 +722,18 @@ describe('T-502 item catalog messages', () => {
     const f = await world();
     check('item_requests_service_purchasable_check', await provoke(() => req(f, 'service', 'pcs', { buy: false })));
   });
+  it('items_service_not_variation_check', async () => {
+    const f = await world();
+    const parent = await f.mk(uid('Power'), 'service', 'pcs');
+    const err = await provoke(() => sql`insert into items (org_id, code, name, kind, base_unit, variant_of_item_id, created_by) values (${f.orgId}, ${testItemCode()}, ${uid('Rent')}, 'service', 'pcs', ${parent}, ${f.personId})`);
+    check('items_service_not_variation_check', err);
+  });
+  it('item_requests_service_not_variation_check', async () => {
+    const f = await world();
+    const parent = await f.mk(uid('Box'));
+    const err = await provoke(() => sql`insert into item_requests (org_id, name, code, kind, base_unit, variant_of_item_id, requested_by) values (${f.orgId}, ${uid('n')}, ${uid('C')}, 'service', 'pcs', ${parent}, ${f.personId})`);
+    check('item_requests_service_not_variation_check', err);
+  });
   it('items_expense_category_same_org_fk', async () => {
     const f = await world();
     const id = await f.mk(uid('Soap'));
@@ -845,5 +857,6 @@ it('sanity: every CONSTRAINT_MESSAGES key was exercised above', () => {
   // T-443: three real item variation/open-request errors above.
   // T-193: 50 -> 53, three real statutory payment errors above.
   // T-502: 53 -> 72, fourteen real item-catalog errors plus five sub-category errors above (re-measured).
-  expect(rows.length).toBe(72);
+  // T-502 section 13 (A6): 72 -> 74, the two service-not-a-variation CHECK keys (re-measured).
+  expect(rows.length).toBe(74);
 });

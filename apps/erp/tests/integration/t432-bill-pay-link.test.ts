@@ -124,7 +124,7 @@ async function verifiedBill(f: F, supplierId: string, amount: string): Promise<{
   const created = await recordBill(f, supplierId, amount);
   await asOrg(f.orgId, (tx) => verifyInvoice(tx, f.admin, created.id, { supplier: true, invoice: true, items: true, price: true }));
   const exp = await asOrg(f.orgId, (tx) =>
-    recordExpenseForInvoice(tx, f.admin, {
+    recordExpenseForInvoice(tx, f.admin, { requireItemised: false /* legacy fixture: lineless invoice */,
       storeId: f.storeA, supplierId, supplierInvoiceId: created.id, categoryId: f.categoryId, particulars: 'Stock purchase', payments: [{ method: 'credit', amount }],
     }),
   );

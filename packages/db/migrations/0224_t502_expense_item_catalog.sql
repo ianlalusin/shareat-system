@@ -17,6 +17,8 @@
 --                                                 advisory lock so two concurrent inserts cannot both pass.
 --   service_item_never_stocked                    (C): a service item is refused on stock_movements, delivery_lines, stock_usage_lines,
 --                                                 production_recipe_lines (item_id) and production_recipes (output_item_id).
+--   service_item_never_stocked, widened (audit A1-A3)  the same trigger on 17 more item_id tables (listed at its CREATE TRIGGERs).
+--   items_service_not_variation_check / item_requests_service_not_variation_check   (audit A6) a service is never a variation.
 --   log_break_glass_approval                      its capability list must equal CAPABILITIES (0220/0222 pin): + approve_item_request.
 --
 -- No existing row is read or changed: the new columns are NULL, no service item exists yet.
@@ -35,11 +37,17 @@ ALTER TABLE "items" ADD CONSTRAINT "items_service_never_sold_check" CHECK ("kind
 --> statement-breakpoint
 ALTER TABLE "items" ADD CONSTRAINT "items_service_purchasable_check" CHECK ("kind" <> 'service' OR "is_purchasable");
 --> statement-breakpoint
+-- Audit ruling A6: a service is never a variation (a variation is a size/brand of a stocked thing). The parent side needs no rule of its
+-- own: items_variant_guard (0210) makes a variation the same kind as its parent, so a service parent could only have service children.
+ALTER TABLE "items" ADD CONSTRAINT "items_service_not_variation_check" CHECK ("kind" <> 'service' OR "variant_of_item_id" IS NULL);
+--> statement-breakpoint
 ALTER TABLE "item_requests" ADD CONSTRAINT "item_requests_service_unit_check" CHECK ("kind" <> 'service' OR "base_unit" = 'pcs');
 --> statement-breakpoint
 ALTER TABLE "item_requests" ADD CONSTRAINT "item_requests_service_never_sold_check" CHECK ("kind" <> 'service' OR (NOT "sellable_retail" AND NOT "sellable_wholesale"));
 --> statement-breakpoint
 ALTER TABLE "item_requests" ADD CONSTRAINT "item_requests_service_purchasable_check" CHECK ("kind" <> 'service' OR "is_purchasable");
+--> statement-breakpoint
+ALTER TABLE "item_requests" ADD CONSTRAINT "item_requests_service_not_variation_check" CHECK ("kind" <> 'service' OR "variant_of_item_id" IS NULL);
 --> statement-breakpoint
 
 -- ---------------------------------------------------------------------------------------------
@@ -174,6 +182,63 @@ CREATE TRIGGER "production_recipe_lines_service_item_guard" BEFORE INSERT OR UPD
 --> statement-breakpoint
 CREATE TRIGGER "production_recipes_service_output_guard" BEFORE INSERT OR UPDATE OF "output_item_id" ON "production_recipes"
 	FOR EACH ROW EXECUTE FUNCTION "items_refuse_service_recipe_output"();
+--> statement-breakpoint
+
+-- Audit rulings A1-A3 (section 13): the same refusal on every other table that carries stock, a count, a threshold or a selling claim
+-- by item_id. Covered: count_lines, stock_transfer_lines, stock_reservations, trade_order_lines, supplier_return_lines, customer_return_lines, stock_layers, store_item_thresholds, opening_counts, store_item_sellability, production_record_lines, menu_depletion_rules, commissary_item_offerings, price_list_items, item_pricing, pos_item_maps, pos_usage_pull_lines.
+-- Deliberately NOT covered (a service may legitimately appear there): supplier_invoice_lines (the one thing a service has),
+-- supplier_items (what a supplier charges: a service is bought), item_aliases and item_duplicate_dismissals (names only),
+-- commissary_item_map (maps two items that commissary_item_offerings already guards), menu_package_refills (refill_item_id is a menu item).
+CREATE TRIGGER "count_lines_service_item_guard" BEFORE INSERT OR UPDATE OF "item_id" ON "count_lines"
+	FOR EACH ROW EXECUTE FUNCTION "items_refuse_service_item"();
+--> statement-breakpoint
+CREATE TRIGGER "stock_transfer_lines_service_item_guard" BEFORE INSERT OR UPDATE OF "item_id" ON "stock_transfer_lines"
+	FOR EACH ROW EXECUTE FUNCTION "items_refuse_service_item"();
+--> statement-breakpoint
+CREATE TRIGGER "stock_reservations_service_item_guard" BEFORE INSERT OR UPDATE OF "item_id" ON "stock_reservations"
+	FOR EACH ROW EXECUTE FUNCTION "items_refuse_service_item"();
+--> statement-breakpoint
+CREATE TRIGGER "trade_order_lines_service_item_guard" BEFORE INSERT OR UPDATE OF "item_id" ON "trade_order_lines"
+	FOR EACH ROW EXECUTE FUNCTION "items_refuse_service_item"();
+--> statement-breakpoint
+CREATE TRIGGER "supplier_return_lines_service_item_guard" BEFORE INSERT OR UPDATE OF "item_id" ON "supplier_return_lines"
+	FOR EACH ROW EXECUTE FUNCTION "items_refuse_service_item"();
+--> statement-breakpoint
+CREATE TRIGGER "customer_return_lines_service_item_guard" BEFORE INSERT OR UPDATE OF "item_id" ON "customer_return_lines"
+	FOR EACH ROW EXECUTE FUNCTION "items_refuse_service_item"();
+--> statement-breakpoint
+CREATE TRIGGER "stock_layers_service_item_guard" BEFORE INSERT OR UPDATE OF "item_id" ON "stock_layers"
+	FOR EACH ROW EXECUTE FUNCTION "items_refuse_service_item"();
+--> statement-breakpoint
+CREATE TRIGGER "store_item_thresholds_service_item_guard" BEFORE INSERT OR UPDATE OF "item_id" ON "store_item_thresholds"
+	FOR EACH ROW EXECUTE FUNCTION "items_refuse_service_item"();
+--> statement-breakpoint
+CREATE TRIGGER "opening_counts_service_item_guard" BEFORE INSERT OR UPDATE OF "item_id" ON "opening_counts"
+	FOR EACH ROW EXECUTE FUNCTION "items_refuse_service_item"();
+--> statement-breakpoint
+CREATE TRIGGER "store_item_sellability_service_item_guard" BEFORE INSERT OR UPDATE OF "item_id" ON "store_item_sellability"
+	FOR EACH ROW EXECUTE FUNCTION "items_refuse_service_item"();
+--> statement-breakpoint
+CREATE TRIGGER "production_record_lines_service_item_guard" BEFORE INSERT OR UPDATE OF "item_id" ON "production_record_lines"
+	FOR EACH ROW EXECUTE FUNCTION "items_refuse_service_item"();
+--> statement-breakpoint
+CREATE TRIGGER "menu_depletion_rules_service_item_guard" BEFORE INSERT OR UPDATE OF "item_id" ON "menu_depletion_rules"
+	FOR EACH ROW EXECUTE FUNCTION "items_refuse_service_item"();
+--> statement-breakpoint
+CREATE TRIGGER "commissary_item_offerings_service_item_guard" BEFORE INSERT OR UPDATE OF "item_id" ON "commissary_item_offerings"
+	FOR EACH ROW EXECUTE FUNCTION "items_refuse_service_item"();
+--> statement-breakpoint
+CREATE TRIGGER "price_list_items_service_item_guard" BEFORE INSERT OR UPDATE OF "item_id" ON "price_list_items"
+	FOR EACH ROW EXECUTE FUNCTION "items_refuse_service_item"();
+--> statement-breakpoint
+CREATE TRIGGER "item_pricing_service_item_guard" BEFORE INSERT OR UPDATE OF "item_id" ON "item_pricing"
+	FOR EACH ROW EXECUTE FUNCTION "items_refuse_service_item"();
+--> statement-breakpoint
+CREATE TRIGGER "pos_item_maps_service_item_guard" BEFORE INSERT OR UPDATE OF "item_id" ON "pos_item_maps"
+	FOR EACH ROW EXECUTE FUNCTION "items_refuse_service_item"();
+--> statement-breakpoint
+CREATE TRIGGER "pos_usage_pull_lines_service_item_guard" BEFORE INSERT OR UPDATE OF "item_id" ON "pos_usage_pull_lines"
+	FOR EACH ROW EXECUTE FUNCTION "items_refuse_service_item"();
 --> statement-breakpoint
 
 -- ---------------------------------------------------------------------------------------------

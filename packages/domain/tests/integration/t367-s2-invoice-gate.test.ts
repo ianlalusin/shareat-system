@@ -147,7 +147,7 @@ async function verifiedInvoice(f: Fixture, storeId: string, staff: Actor, manage
 
 async function creditExpense(f: Fixture, storeId: string, manager: Actor, invoiceId: string, amount: string, particulars = 'Stock purchase') {
   return asOrg(f.orgId, (tx) =>
-    recordExpenseForInvoice(tx, manager, { storeId, supplierId: f.supplierId, supplierInvoiceId: invoiceId, categoryId: f.categoryId, particulars, payments: [{ method: 'credit', amount }] }),
+    recordExpenseForInvoice(tx, manager, { requireItemised: false /* legacy fixture: lineless invoice */, storeId, supplierId: f.supplierId, supplierInvoiceId: invoiceId, categoryId: f.categoryId, particulars, payments: [{ method: 'credit', amount }] }),
   );
 }
 
@@ -240,7 +240,7 @@ describe('V1 — void first, record second', () => {
     const { bResult, bWaited } = await runConcurrencyLeg(
       f.orgId,
       (tx) => voidInvoice(tx, f.managerA, { invoiceId, reason: 'wrong invoice' }),
-      (tx) => recordExpenseForInvoice(tx, f.managerA, { storeId: f.storeA, supplierId: f.supplierId, supplierInvoiceId: invoiceId, categoryId: f.categoryId, particulars: 'race', payments: [{ method: 'credit', amount: '400.00' }] }),
+      (tx) => recordExpenseForInvoice(tx, f.managerA, { requireItemised: false /* legacy fixture: lineless invoice */, storeId: f.storeA, supplierId: f.supplierId, supplierInvoiceId: invoiceId, categoryId: f.categoryId, particulars: 'race', payments: [{ method: 'credit', amount: '400.00' }] }),
       ROW_LOCK,
     );
     expect(bWaited, 'today: voidInvoice takes no lock, so B never waits').toBe(true);
@@ -264,7 +264,7 @@ describe('V2 — record first, void second', () => {
 
     const { bResult, bWaited } = await runConcurrencyLeg(
       f.orgId,
-      (tx) => recordExpenseForInvoice(tx, f.managerA, { storeId: f.storeA, supplierId: f.supplierId, supplierInvoiceId: invoiceId, categoryId: f.categoryId, particulars: 'race', payments: [{ method: 'credit', amount: '400.00' }] }),
+      (tx) => recordExpenseForInvoice(tx, f.managerA, { requireItemised: false /* legacy fixture: lineless invoice */, storeId: f.storeA, supplierId: f.supplierId, supplierInvoiceId: invoiceId, categoryId: f.categoryId, particulars: 'race', payments: [{ method: 'credit', amount: '400.00' }] }),
       (tx) => voidInvoice(tx, f.managerA, { invoiceId, reason: 'wrong invoice' }),
       ROW_LOCK,
     );
@@ -326,8 +326,8 @@ describe('V4 — two recordings racing the same invoice capacity', () => {
 
     const { aResult, bResult, bWaited } = await runConcurrencyLeg(
       f.orgId,
-      (tx) => recordExpenseForInvoice(tx, f.managerA, { storeId: f.storeA, supplierId: f.supplierId, supplierInvoiceId: invoiceId, categoryId: f.categoryId, particulars: 'A', payments: [{ method: 'credit', amount: '700.00' }] }),
-      (tx) => recordExpenseForInvoice(tx, f.managerA, { storeId: f.storeA, supplierId: f.supplierId, supplierInvoiceId: invoiceId, categoryId: f.categoryId, particulars: 'B', payments: [{ method: 'credit', amount: '600.00' }] }),
+      (tx) => recordExpenseForInvoice(tx, f.managerA, { requireItemised: false /* legacy fixture: lineless invoice */, storeId: f.storeA, supplierId: f.supplierId, supplierInvoiceId: invoiceId, categoryId: f.categoryId, particulars: 'A', payments: [{ method: 'credit', amount: '700.00' }] }),
+      (tx) => recordExpenseForInvoice(tx, f.managerA, { requireItemised: false /* legacy fixture: lineless invoice */, storeId: f.storeA, supplierId: f.supplierId, supplierInvoiceId: invoiceId, categoryId: f.categoryId, particulars: 'B', payments: [{ method: 'credit', amount: '600.00' }] }),
       ROW_LOCK,
     );
     expect(bWaited, 'today: assertOpenForRecording takes no lock, so B never waits').toBe(true);
@@ -345,8 +345,8 @@ describe('V4 — two recordings racing the same invoice capacity', () => {
     const invoice2 = await verifiedInvoice(f, f.storeA, f.staffA, f.managerA, '1000.00');
     const { aResult, bResult, bWaited } = await runConcurrencyLeg(
       f.orgId,
-      (tx) => recordExpenseForInvoice(tx, f.managerA, { storeId: f.storeA, supplierId: f.supplierId, supplierInvoiceId: invoice1, categoryId: f.categoryId, particulars: 'A', payments: [{ method: 'credit', amount: '400.00' }] }),
-      (tx) => recordExpenseForInvoice(tx, f.managerA, { storeId: f.storeA, supplierId: f.supplierId, supplierInvoiceId: invoice2, categoryId: f.categoryId, particulars: 'B', payments: [{ method: 'credit', amount: '400.00' }] }),
+      (tx) => recordExpenseForInvoice(tx, f.managerA, { requireItemised: false /* legacy fixture: lineless invoice */, storeId: f.storeA, supplierId: f.supplierId, supplierInvoiceId: invoice1, categoryId: f.categoryId, particulars: 'A', payments: [{ method: 'credit', amount: '400.00' }] }),
+      (tx) => recordExpenseForInvoice(tx, f.managerA, { requireItemised: false /* legacy fixture: lineless invoice */, storeId: f.storeA, supplierId: f.supplierId, supplierInvoiceId: invoice2, categoryId: f.categoryId, particulars: 'B', payments: [{ method: 'credit', amount: '400.00' }] }),
       ROW_LOCK,
     );
     expect(bWaited).toBe(false);
@@ -458,7 +458,7 @@ describe('V7 — double approve', () => {
   it('B waits on the invoice lock, re-reads, returns created:false with A\'s journalEntryId — NOT a refusal; exactly one expense journal entry — Mutant: re-read removed (HEAD, no lock at all), B posts a second entry, red', async () => {
     const f = await fixture('v7');
     const invoiceId = await verifiedInvoice(f, f.storeA, f.staffA, f.managerA, '1000.00');
-    const draft = await asOrg(f.orgId, (tx) => createExpense(tx, f.staffA, { storeId: f.storeA, businessDate: '2027-02-03', categoryId: f.categoryId, supplierId: f.supplierId, supplierInvoiceId: invoiceId, particulars: 'double approve', payments: [{ method: 'credit', amount: '400.00' }] }));
+    const draft = await asOrg(f.orgId, (tx) => createExpense(tx, f.staffA, { requireItemised: false /* legacy fixture: lineless invoice */, storeId: f.storeA, businessDate: '2027-02-03', categoryId: f.categoryId, supplierId: f.supplierId, supplierInvoiceId: invoiceId, particulars: 'double approve', payments: [{ method: 'credit', amount: '400.00' }] }));
 
     const { aResult, bResult, bWaited } = await runConcurrencyLeg(
       f.orgId,
@@ -487,13 +487,13 @@ describe('V8 — editExpense races voidInvoice on the same invoice', () => {
     const f = await fixture('v8');
     const invoiceId = await verifiedInvoice(f, f.storeA, f.staffA, f.managerA, '1000.00');
     const draft = await asOrg(f.orgId, (tx) =>
-      createExpense(tx, f.staffA, { storeId: f.storeA, businessDate: '2027-02-03', categoryId: f.categoryId, supplierId: f.supplierId, supplierInvoiceId: invoiceId, particulars: 'race', payments: [{ method: 'credit', amount: '400.00' }] }),
+      createExpense(tx, f.staffA, { requireItemised: false /* legacy fixture: lineless invoice */, storeId: f.storeA, businessDate: '2027-02-03', categoryId: f.categoryId, supplierId: f.supplierId, supplierInvoiceId: invoiceId, particulars: 'race', payments: [{ method: 'credit', amount: '400.00' }] }),
     );
 
     const { bResult, bWaited } = await runConcurrencyLeg(
       f.orgId,
       (tx) => voidInvoice(tx, f.managerA, { invoiceId, reason: 'race' }),
-      (tx) => editExpense(tx, f.managerA, draft.id, { particulars: 'edited during the race' }),
+      (tx) => editExpense(tx, f.managerA, draft.id, { requireItemised: false /* legacy fixture: lineless invoice */, particulars: 'edited during the race' }),
       ROW_LOCK,
     );
     expect(bWaited, 'editExpense\'s lockInvoiceForRecording call must serialise behind voidInvoice\'s FOR UPDATE on the same invoice row').toBe(true);
@@ -513,17 +513,17 @@ describe('V8 — editExpense races voidInvoice on the same invoice', () => {
     const f = await fixture('v8-pc');
     const invoiceA = await verifiedInvoice(f, f.storeA, f.staffA, f.managerA, '1000.00');
     const draftA = await asOrg(f.orgId, (tx) =>
-      createExpense(tx, f.staffA, { storeId: f.storeA, businessDate: '2027-02-03', categoryId: f.categoryId, supplierId: f.supplierId, supplierInvoiceId: invoiceA, particulars: 'no contention A', payments: [{ method: 'credit', amount: '400.00' }] }),
+      createExpense(tx, f.staffA, { requireItemised: false /* legacy fixture: lineless invoice */, storeId: f.storeA, businessDate: '2027-02-03', categoryId: f.categoryId, supplierId: f.supplierId, supplierInvoiceId: invoiceA, particulars: 'no contention A', payments: [{ method: 'credit', amount: '400.00' }] }),
     );
     const invoiceB = await verifiedInvoice(f, f.storeA, f.staffA, f.managerA, '500.00');
     const draftB = await asOrg(f.orgId, (tx) =>
-      createExpense(tx, f.staffA, { storeId: f.storeA, businessDate: '2027-02-03', categoryId: f.categoryId, supplierId: f.supplierId, supplierInvoiceId: invoiceB, particulars: 'no contention B', payments: [{ method: 'credit', amount: '100.00' }] }),
+      createExpense(tx, f.staffA, { requireItemised: false /* legacy fixture: lineless invoice */, storeId: f.storeA, businessDate: '2027-02-03', categoryId: f.categoryId, supplierId: f.supplierId, supplierInvoiceId: invoiceB, particulars: 'no contention B', payments: [{ method: 'credit', amount: '100.00' }] }),
     );
 
     const { aResult, bResult, bWaited } = await runConcurrencyLeg(
       f.orgId,
-      (tx) => editExpense(tx, f.managerA, draftA.id, { particulars: 'edited A' }),
-      (tx) => editExpense(tx, f.managerA, draftB.id, { particulars: 'edited B' }),
+      (tx) => editExpense(tx, f.managerA, draftA.id, { requireItemised: false /* legacy fixture: lineless invoice */, particulars: 'edited A' }),
+      (tx) => editExpense(tx, f.managerA, draftB.id, { requireItemised: false /* legacy fixture: lineless invoice */, particulars: 'edited B' }),
       ROW_LOCK,
     );
     expect(bWaited, 'different invoices — no shared row to lock, B must not wait').toBe(false);
@@ -541,8 +541,8 @@ describe('X1 — cross-store recording', () => {
     const f = await fixture('x1');
     const invoiceJ = await verifiedInvoice(f, f.storeB, f.staffB, f.managerB, '1000.00');
 
-    const errReal = await asOrg(f.orgId, (tx) => createExpense(tx, f.managerA, { storeId: f.storeA, businessDate: '2027-02-03', categoryId: f.categoryId, supplierId: f.supplierId, supplierInvoiceId: invoiceJ, particulars: 'cross-store', payments: [{ method: 'credit', amount: '100.00' }] })).catch((e) => e);
-    const errFake = await asOrg(f.orgId, (tx) => createExpense(tx, f.managerA, { storeId: f.storeA, businessDate: '2027-02-03', categoryId: f.categoryId, supplierId: f.supplierId, supplierInvoiceId: randomUUID(), particulars: 'cross-store', payments: [{ method: 'credit', amount: '100.00' }] })).catch((e) => e);
+    const errReal = await asOrg(f.orgId, (tx) => createExpense(tx, f.managerA, { requireItemised: false /* legacy fixture: lineless invoice */, storeId: f.storeA, businessDate: '2027-02-03', categoryId: f.categoryId, supplierId: f.supplierId, supplierInvoiceId: invoiceJ, particulars: 'cross-store', payments: [{ method: 'credit', amount: '100.00' }] })).catch((e) => e);
+    const errFake = await asOrg(f.orgId, (tx) => createExpense(tx, f.managerA, { requireItemised: false /* legacy fixture: lineless invoice */, storeId: f.storeA, businessDate: '2027-02-03', categoryId: f.categoryId, supplierId: f.supplierId, supplierInvoiceId: randomUUID(), particulars: 'cross-store', payments: [{ method: 'credit', amount: '100.00' }] })).catch((e) => e);
     expect(errReal, 'today: no store check exists, so createExpense succeeds against store B\'s invoice').toBeInstanceOf(Error);
     expect(errFake).toBeInstanceOf(Error);
     expect((errReal as { userMessage?: string }).userMessage).toBe((errFake as { userMessage?: string }).userMessage);
@@ -560,22 +560,22 @@ describe('X1 — cross-store recording', () => {
     const invoiceVoided = await verifiedInvoice(f, f.storeB, f.staffB, f.managerB, '1000.00');
     await asOrg(f.orgId, (tx) => voidInvoice(tx, f.managerB, { invoiceId: invoiceVoided, reason: 'x' }));
 
-    const errFull = await asOrg(f.orgId, (tx) => createExpense(tx, f.managerA, { storeId: f.storeA, businessDate: '2027-02-03', categoryId: f.categoryId, supplierId: f.supplierId, supplierInvoiceId: invoiceFull, particulars: 'x', payments: [{ method: 'credit', amount: '1.00' }] })).catch((e) => e);
-    const errVoided = await asOrg(f.orgId, (tx) => createExpense(tx, f.managerA, { storeId: f.storeA, businessDate: '2027-02-03', categoryId: f.categoryId, supplierId: f.supplierId, supplierInvoiceId: invoiceVoided, particulars: 'x', payments: [{ method: 'credit', amount: '1.00' }] })).catch((e) => e);
+    const errFull = await asOrg(f.orgId, (tx) => createExpense(tx, f.managerA, { requireItemised: false /* legacy fixture: lineless invoice */, storeId: f.storeA, businessDate: '2027-02-03', categoryId: f.categoryId, supplierId: f.supplierId, supplierInvoiceId: invoiceFull, particulars: 'x', payments: [{ method: 'credit', amount: '1.00' }] })).catch((e) => e);
+    const errVoided = await asOrg(f.orgId, (tx) => createExpense(tx, f.managerA, { requireItemised: false /* legacy fixture: lineless invoice */, storeId: f.storeA, businessDate: '2027-02-03', categoryId: f.categoryId, supplierId: f.supplierId, supplierInvoiceId: invoiceVoided, particulars: 'x', payments: [{ method: 'credit', amount: '1.00' }] })).catch((e) => e);
     expect((errFull as { userMessage?: string }).userMessage).toBe((errVoided as { userMessage?: string }).userMessage);
   });
 
   it('the same through recordExpenseForInvoice', async () => {
     const f = await fixture('x1c');
     const invoiceJ = await verifiedInvoice(f, f.storeB, f.staffB, f.managerB, '1000.00');
-    const err = await asOrg(f.orgId, (tx) => recordExpenseForInvoice(tx, f.managerA, { storeId: f.storeA, supplierId: f.supplierId, supplierInvoiceId: invoiceJ, categoryId: f.categoryId, particulars: 'x', payments: [{ method: 'credit', amount: '100.00' }] })).catch((e) => e);
+    const err = await asOrg(f.orgId, (tx) => recordExpenseForInvoice(tx, f.managerA, { requireItemised: false /* legacy fixture: lineless invoice */, storeId: f.storeA, supplierId: f.supplierId, supplierInvoiceId: invoiceJ, categoryId: f.categoryId, particulars: 'x', payments: [{ method: 'credit', amount: '100.00' }] })).catch((e) => e);
     expect(err, 'today: no store check exists here either').toBeInstanceOf(Error);
   });
 
   it('+control: M_A with I (store A) succeeds', async () => {
     const f = await fixture('x1-pc');
     const invoiceI = await verifiedInvoice(f, f.storeA, f.staffA, f.managerA, '1000.00');
-    await expect(asOrg(f.orgId, (tx) => createExpense(tx, f.managerA, { storeId: f.storeA, businessDate: '2027-02-03', categoryId: f.categoryId, supplierId: f.supplierId, supplierInvoiceId: invoiceI, particulars: 'ok', payments: [{ method: 'credit', amount: '100.00' }] }))).resolves.toBeDefined();
+    await expect(asOrg(f.orgId, (tx) => createExpense(tx, f.managerA, { requireItemised: false /* legacy fixture: lineless invoice */, storeId: f.storeA, businessDate: '2027-02-03', categoryId: f.categoryId, supplierId: f.supplierId, supplierInvoiceId: invoiceI, particulars: 'ok', payments: [{ method: 'credit', amount: '100.00' }] }))).resolves.toBeDefined();
   });
 });
 
@@ -639,5 +639,5 @@ describe('Refusals', () => {
 });
 
 async function creditExpenseInTx(tx: Tx, f: Fixture, invoiceId: string, amount: string) {
-  return recordExpenseForInvoice(tx, f.managerA, { storeId: f.storeA, supplierId: f.supplierId, supplierInvoiceId: invoiceId, categoryId: f.categoryId, particulars: 'hold', payments: [{ method: 'credit', amount }] });
+  return recordExpenseForInvoice(tx, f.managerA, { requireItemised: false /* legacy fixture: lineless invoice */, storeId: f.storeA, supplierId: f.supplierId, supplierInvoiceId: invoiceId, categoryId: f.categoryId, particulars: 'hold', payments: [{ method: 'credit', amount }] });
 }

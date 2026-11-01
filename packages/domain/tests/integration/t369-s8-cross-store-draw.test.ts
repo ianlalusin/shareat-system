@@ -253,7 +253,7 @@ async function splitExpense(f: Fixture, second: Account): Promise<string> {
   );
   await asOrg(f.orgId, (tx) => verifyInvoice(tx, f.manager, inv.id, { supplier: true, invoice: true, items: true, price: true }));
   const created = await asOrg(f.orgId, (tx) =>
-    createExpense(tx, f.staff, {
+    createExpense(tx, f.staff, { requireItemised: false /* legacy fixture: lineless invoice */,
       storeId: f.lipaId, supplierId: f.supplierId, supplierInvoiceId: inv.id, businessDate: '2026-01-10', categoryId: f.categoryId,
       particulars: 'Split-funded purchase',
       payments: [
@@ -307,7 +307,7 @@ async function bill(f: Fixture, amount: string): Promise<string> {
   );
   await asOrg(f.orgId, (tx) => verifyInvoice(tx, f.manager, inv.id, { supplier: true, invoice: true, items: true, price: true }));
   const exp = await asOrg(f.orgId, (tx) =>
-    recordExpenseForInvoice(tx, f.manager, {
+    recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
       storeId: f.lipaId, supplierId: f.supplierId, supplierInvoiceId: inv.id, categoryId: f.categoryId,
       particulars: 'Stock purchase', payments: [{ method: 'credit', amount }],
     }),
@@ -544,7 +544,7 @@ describe("T10 — a Lipa expense paid from MALVAR's e-wallet (1140)", () => {
     );
     await asOrg(f.orgId, (tx) => verifyInvoice(tx, f.manager, inv.id, { supplier: true, invoice: true, items: true, price: true }));
     const created = await asOrg(f.orgId, (tx) =>
-      createExpense(tx, f.staff, {
+      createExpense(tx, f.staff, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.lipaId, supplierId: f.supplierId, supplierInvoiceId: inv.id, businessDate: '2026-01-10', categoryId: f.categoryId,
         particulars: 'Wallet-funded purchase', payments: [{ method: 'online', amount: '1000.00', moneyAccountId: wallet.id }] as never,
       }),

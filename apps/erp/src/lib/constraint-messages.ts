@@ -132,6 +132,8 @@ export const CONSTRAINT_MESSAGES: Record<string, string> = {
   items_service_never_sold_check: 'A service item cannot be sold. It is only bought.',
   item_requests_service_never_sold_check: 'A service item cannot be sold. It is only bought.',
   items_service_purchasable_check: 'A service item is always something you buy.',
+  items_service_not_variation_check: 'A service item (rent, power, water...) cannot be a variation of another item.',
+  item_requests_service_not_variation_check: 'A service item (rent, power, water...) cannot be a variation of another item.',
   item_requests_service_purchasable_check: 'A service item is always something you buy.',
   items_expense_category_same_org_fk: 'Pick an expense category from this organisation.',
   item_requests_expense_category_same_org_fk: 'Pick an expense category from this organisation.',

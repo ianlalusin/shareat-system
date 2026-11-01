@@ -198,7 +198,7 @@ async function recordAndApprove(
 ): Promise<string> {
   const staff = actorOf(f, f.staffId);
   const { id } = await asPerson(f.orgId, (tx) =>
-    createExpense(tx, staff, {
+    createExpense(tx, staff, { requireItemised: false /* legacy fixture: lineless invoice */,
       storeId: f.storeId, businessDate: '2026-01-05', categoryId: f.categoryId,
       supplierId: f.supplierId, supplierInvoiceId: f.supplierInvoiceId,
       particulars: `staff float spend ${total}`, payments,
@@ -276,7 +276,7 @@ describe('T-266 §4 — an expense paid from a staff float', () => {
 
     const staff = actorOf(f, f.staffId);
     const { id } = await asPerson(f.orgId, (tx) =>
-      createExpense(tx, staff, {
+      createExpense(tx, staff, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId, businessDate: '2026-01-05', categoryId: f.categoryId,
         supplierId: f.supplierId, supplierInvoiceId: f.supplierInvoiceId,
         particulars: 'float spend with no request named',

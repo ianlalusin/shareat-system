@@ -455,6 +455,9 @@ export interface CatalogueEntry {
   firstSeenOn: string | null;
   /** How many invoice lines carry it. 0 for a declaration. */
   timesBilled: number;
+  /** T-502 section 12: the item's own expense category and sub-category (null = none), so a screen can group lines by category without a second lookup. */
+  expenseCategoryId: string | null;
+  expenseSubcategoryId: string | null;
 }
 
 /**
@@ -492,7 +495,8 @@ const catalogueQuery = (where: ReturnType<typeof sql>) => sql`
       select 1 from observed o where o.supplier_id = d.supplier_id and o.item_id = d.item_id
     )
   )
-  select m.*, s.name as supplier_name, i.name as item_name, i.code as item_code, i.base_unit
+  select m.*, s.name as supplier_name, i.name as item_name, i.code as item_code, i.base_unit,
+         i.expense_category_id, i.expense_subcategory_id
   from merged m
   join suppliers s on s.id = m.supplier_id
   join items i on i.id = m.item_id
@@ -511,6 +515,8 @@ function mapCatalogue(r: Record<string, unknown>): CatalogueEntry {
     source: String(r.source) as CatalogueSource,
     firstSeenOn: r.first_seen_on ? String(r.first_seen_on) : null,
     timesBilled: Number(r.times_billed ?? 0),
+    expenseCategoryId: r.expense_category_id ? String(r.expense_category_id) : null,
+    expenseSubcategoryId: r.expense_subcategory_id ? String(r.expense_subcategory_id) : null,
   };
 }
 

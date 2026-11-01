@@ -205,7 +205,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
   //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
   //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 116 FAIL / 50 UNRESOLVED', () => {
+  it('accepted-baseline totals: 116 FAIL / 51 UNRESOLVED', () => {
     // 62 -> 63 UNRESOLVED, T-386 S4 2026-10-09: the rename "use the suggested code" checkbox on app/items/ItemCodeField.tsx
     // (an intrinsic checkbox box; baselined in touch-target-baseline.json per Ian's §6.1 ruling).
     // 63 -> 66 UNRESOLVED, T-387 S3 2026-10-10. +3: the kit's new native `<select>` (Select.tsx) and `<textarea>` (Textarea.tsx)
@@ -233,8 +233,9 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 48 -> 47 UNRESOLVED, T-441 S7 (22 Oct): components/PhotoInput.tsx deleted; its baseline entry removed from touch-target-baseline.json.
     // 47 -> 48 UNRESOLVED, T-440 (17 Oct): expenses/recurring gained a second intrinsic checkbox box (touch-target-baseline.json entry added).
     // T-448 x main (05ada44) merge: re-measured
+    // 50 -> 51 UNRESOLVED, T-502 section 12: components/expenses/InvoiceBatchRecord.tsx gained intrinsic include checkboxes (baseline entry added); FAIL unmoved at 116.
     // 49 -> 50 UNRESOLVED, merge of main + T-193: re-measured; src/app/page.tsx gov-tile 'Set it under Employer numbers' inline Link (font size unresolvable), baseline entry added.
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 116, unresolved: 50 });
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 116, unresolved: 51 });
   });
 
   // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
@@ -492,7 +493,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1450 -> 1448, T-500: the contribution-row form moved into StatutoryRateForm and shares its controls (-2); re-measured by runCensus().
     // 1448 -> 1453, T-502: expense-category selects on the request and approve forms (+2) and the item page's Expense category and Other names sections (+3); re-measured by runCensus().
     // 1453 -> 1458, T-502 section 11: sub-category selects on the request, approve and item forms (+3), and the sub-category add/rename/retire controls on the expense categories screen (+2); re-measured by runCensus().
-    expect(results.length).toBe(1458);
+    // 1458 -> 1460, T-502 section 12: the part picker and the invoice page's batch table replaced the old category/payment controls (+2 net); re-measured by runCensus().
+    expect(results.length).toBe(1460);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

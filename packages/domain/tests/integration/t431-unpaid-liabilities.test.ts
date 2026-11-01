@@ -246,7 +246,7 @@ async function creditInvoice(f: Fixture, storeId: string, amount: string, over: 
     verifyInvoice(tx, f.manager, created.id, { supplier: true, invoice: true, items: true, price: true }),
   );
   const exp = await asOrg(f.orgId, (tx) =>
-    recordExpenseForInvoice(tx, f.manager, {
+    recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
       storeId, supplierId: f.supplierId, supplierInvoiceId: created.id, categoryId: f.categoryId,
       particulars: 'Stock purchase', payments: [{ method: 'credit', amount }],
     }),

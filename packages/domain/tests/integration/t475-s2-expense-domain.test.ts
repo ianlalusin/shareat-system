@@ -48,7 +48,7 @@ async function sentenceOf(run: () => Promise<unknown>): Promise<string | null> {
 }
 const create = (f: Fixture, invoiceId: string, o: { supplierId?: string; amount: string; method?: 'cash' | 'credit'; categoryId?: string }) =>
   asOrg(f.orgId, (tx) =>
-    createExpense(tx, f.admin, {
+    createExpense(tx, f.admin, { requireItemised: false /* legacy fixture: lineless invoice */,
       storeId: f.storeId,
       supplierId: o.supplierId ?? f.supplierId,
       supplierInvoiceId: invoiceId,
@@ -134,11 +134,11 @@ describe('T-475 S2 / E4 + R12 - editExpense and a category with no ledger accoun
     const unmapped = await f.unmappedCategory();
     const other = (await sql<{ id: string }[]>`select id from expense_categories where org_id = ${f.orgId} and account_code is not null and id <> ${f.categoryId} limit 1`)[0]!.id;
 
-    const refused = await sentenceOf(() => asOrg(f.orgId, (tx) => editExpense(tx, f.admin, id, { categoryId: unmapped })));
+    const refused = await sentenceOf(() => asOrg(f.orgId, (tx) => editExpense(tx, f.admin, id, { requireItemised: false /* legacy fixture: lineless invoice */, categoryId: unmapped })));
     expect(refused, 'editExpense must refuse a change onto an unmapped category').toBe(E4);
     expect(await categoryOf(id), 'refused: the draft stays where it was').toBe(f.categoryId);
 
-    expect(await sentenceOf(() => asOrg(f.orgId, (tx) => editExpense(tx, f.admin, id, { categoryId: other })))).toBeNull();
+    expect(await sentenceOf(() => asOrg(f.orgId, (tx) => editExpense(tx, f.admin, id, { requireItemised: false /* legacy fixture: lineless invoice */, categoryId: other })))).toBeNull();
     expect(await categoryOf(id)).toBe(other);
   });
 
@@ -149,8 +149,8 @@ describe('T-475 S2 / E4 + R12 - editExpense and a category with no ledger accoun
     const id = await f.draft(inv, { categoryId: unmapped });
 
     // the edit form always posts the category along with the particulars
-    expect(await sentenceOf(() => asOrg(f.orgId, (tx) => editExpense(tx, f.admin, id, { particulars: 'Corrected particulars' })))).toBeNull();
-    expect(await sentenceOf(() => asOrg(f.orgId, (tx) => editExpense(tx, f.admin, id, { categoryId: unmapped, particulars: 'Corrected again' })))).toBeNull();
+    expect(await sentenceOf(() => asOrg(f.orgId, (tx) => editExpense(tx, f.admin, id, { requireItemised: false /* legacy fixture: lineless invoice */, particulars: 'Corrected particulars' })))).toBeNull();
+    expect(await sentenceOf(() => asOrg(f.orgId, (tx) => editExpense(tx, f.admin, id, { requireItemised: false /* legacy fixture: lineless invoice */, categoryId: unmapped, particulars: 'Corrected again' })))).toBeNull();
     const [row] = await sql<{ particulars: string }[]>`select particulars from expenses where id = ${id}`;
     expect(row!.particulars).toBe('Corrected again');
   });
@@ -161,9 +161,9 @@ describe('T-475 S2 / E4 + R12 - editExpense and a category with no ledger accoun
     const unmappedA = await f.unmappedCategory();
     const unmappedB = await f.unmappedCategory();
     const id = await f.draft(inv, { categoryId: unmappedA });
-    expect(await sentenceOf(() => asOrg(f.orgId, (tx) => editExpense(tx, f.admin, id, { categoryId: unmappedB })))).toBe(E4);
+    expect(await sentenceOf(() => asOrg(f.orgId, (tx) => editExpense(tx, f.admin, id, { requireItemised: false /* legacy fixture: lineless invoice */, categoryId: unmappedB })))).toBe(E4);
     expect(await categoryOf(id)).toBe(unmappedA);
-    expect(await sentenceOf(() => asOrg(f.orgId, (tx) => editExpense(tx, f.admin, id, { categoryId: f.categoryId })))).toBeNull();
+    expect(await sentenceOf(() => asOrg(f.orgId, (tx) => editExpense(tx, f.admin, id, { requireItemised: false /* legacy fixture: lineless invoice */, categoryId: f.categoryId })))).toBeNull();
     expect(await categoryOf(id)).toBe(f.categoryId);
   });
 

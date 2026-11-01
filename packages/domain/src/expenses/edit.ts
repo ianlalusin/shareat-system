@@ -13,9 +13,10 @@
  */
 import { authorize, type Actor } from '@shareat/auth';
 import { apRepo, expensesRepo, type Tx } from '@shareat/db';
-import { add } from '@shareat/core/money';
+import { add, money } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
 import { parsePaymentAmount, type CreateExpensePaymentInput } from './create';
+import { buildInvoiceParts, NOT_ITEMISED_SENTENCE, partsRefusal } from './parts';
 import { refuse, gone } from '../shared/refusal';
 import { cashOnDeliverySentence } from '../shared/money-lines';
 import { assertLivePaymentMethod } from './routing';
@@ -61,6 +62,8 @@ export interface EditExpenseInput {
   /** Omit to leave payments unchanged; supply to REPLACE the full set (totalAmount is
    *  recomputed from this set, same "never accepted from the caller" rule as create). */
   payments?: CreateExpensePaymentInput[];
+  /** T-502 section 12 / 14 Q1: default true - the invoice must have lines and the category must be one of its parts. See `CreateExpenseInput`. */
+  requireItemised?: boolean;
 }
 
 export async function editExpense(
@@ -210,6 +213,21 @@ async function runEditExpense(tx: Tx, actor: Actor, expenseId: string, input: Ed
         cashRequestId: p.cashRequestId ?? null,
       })),
     );
+  }
+
+  // T-502 section 12: the draft, as it will stand after this edit, must still be one part of an itemised invoice, within that
+  // part's room (its own current amount does not count against it). A legacy draft on a lineless invoice is refused here until the
+  // invoice is itemised (section 14 Q7).
+  if ((input.requireItemised ?? true) === true) {
+    const invoiceId = patch.supplierInvoiceId ?? expense.supplierInvoiceId;
+    const facts502 = await expensesRepo.invoicePartsFacts(tx, actor.orgId, invoiceId, expenseId);
+    const parts = facts502 ? buildInvoiceParts(facts502) : undefined;
+    if (!parts || !parts.itemised) throw refuse('editExpense: the invoice has no lines', NOT_ITEMISED_SENTENCE);
+    const categoryId = patch.categoryId ?? expense.categoryId;
+    const category = await expensesRepo.getCategoryById(tx, actor.orgId, categoryId);
+    const amount = patch.totalAmount ?? money(expense.totalAmount);
+    const sentence = partsRefusal(parts, categoryId, category?.category ?? 'that category', amount);
+    if (sentence) throw refuse(`editExpense: ${sentence}`, sentence);
   }
 
   if (Object.keys(patch).length > 0) {

@@ -16,7 +16,11 @@ import { canOverrideClosedMonth } from '../../../expenses/reimbursements/lib';
 import { closedMonthOf, closedMonths } from '../../../../lib/period-override';
 import { ClosedMonthOverride } from '@/components/ClosedMonthOverride';
 import { loadMoneyLines } from '@/lib/money-lines/load';
-import { MoneyLines } from '@/components/money/MoneyLines';
+import { hasLeft } from '@/components/expenses/parts-types';
+import { InvoicePartsPicker } from '@/components/expenses/InvoicePartsPicker';
+import { InvoiceBatchRecord } from '@/components/expenses/InvoiceBatchRecord';
+import { invoicePartsView } from '../../../expenses/parts-view';
+import { recordInvoiceExpensesBatchAction } from '../../../expenses/actions';
 import { Page } from '@/components/shell/Page';
 import { CheckedForm, EditableRecord, FieldCheck, RuleCheck } from '@/components/forms';
 import {
@@ -74,16 +78,20 @@ export default async function InvoiceDetailPage({
   // invoice (remaining 0.00) would seed a Credit initialLine of 0.00, and T-353 marks an initial
   // line touched immediately, so "An amount has to be above zero." would paint on first render —
   // DEF-484's shape, reintroduced by this form's own default.
+  // T-502 section 12: the bill's parts (its lines grouped by category, plus Uncategorised and Fees) and what is left under each. They feed
+  // the "Record expenses" batch below and the part select in "+ Record expense".
+  const partsView = await invoicePartsView(orgId, id, categories);
+  const hasRoom = partsView.itemised && !partsView.linesExceedTotal && partsView.parts.some((p) => hasLeft(p.left));
+  const canBatch =
+    invoice.status !== 'voided' &&
+    hasRoom &&
+    (await withOrgPrincipal(orgId, async (tx) => {
+      if (!(await can(tx, actor, 'create_expense', { storeId: invoice.storeId }))) return false;
+      return invoice.status !== 'verified' || (await can(tx, actor, 'approve_expense', { storeId: invoice.storeId }));
+    }));
   const canRecord = invoice.status === 'verified' && Number(capacity?.remaining ?? 0) >= 1;
-  const groups: Array<'COGS' | 'OPEX' | 'PERSONAL' | 'CAPEX'> = ['COGS', 'OPEX', 'PERSONAL', 'CAPEX'];
-  // C1 (Ian, bible row 247) — a supplier WITH terms defaults to one credit line pre-filled with
-  // the remaining amount, so the common case (bill on terms) needs no method click and no empty
-  // amount box painted (T-353: an initial line starts touched and is judged at once). A
-  // cash-on-delivery supplier gets no initialLines at all — MoneyLines' own blank line is cash.
-  const initialLines =
-    supplier?.creditTermsDays != null
-      ? [{ method: 'credit' as const, amount: capacity?.remaining ?? invoice.totalAmount }]
-      : undefined;
+  // C1 (Ian, bible row 247): a supplier WITH terms defaults the payment to Credit - the part picker does that (creditFirst) now that
+  // the amount follows the part chosen (T-502 section 12).
 
   // ⭐ T-196 §6 — what verifying is about to POST. Oldest first, matching verifyInvoice's own
   // posting order (apRepo.liveExpensesForInvoice) exactly, so the running total on screen is the
@@ -545,6 +553,27 @@ return (
         </section>
       )}
 
+      {canBatch && invoice.status !== 'voided' && (
+        <InvoiceBatchRecord
+          action={recordInvoiceExpensesBatchAction}
+          invoiceId={invoice.id}
+          storeId={invoice.storeId}
+          supplierId={invoice.supplierId}
+          supplierName={supplier?.name ?? null}
+          supplierCreditTermsDays={supplier?.creditTermsDays ?? null}
+          invoiceStatus={invoice.status as 'pending' | 'verified'}
+          view={partsView}
+          categories={categories}
+          moneyLines={{
+            sources: moneyLines.sources,
+            otherStoreSources: moneyLines.otherStoreSources,
+            storeNames: moneyLines.storeNames,
+            staff: moneyLines.staff,
+          }}
+          returnTo={`/ap/invoices/${invoice.id}`}
+        />
+      )}
+
       {canRecord && (
         <div className="flex justify-end">
           <FormModal
@@ -555,49 +584,27 @@ return (
           >
           <CheckedForm rules={INVOICE_EXPENSE_RULES} action={recordInvoiceExpenseAction} className="space-y-3">
             <input type="hidden" name="returnTo" value={`/ap/invoices/${invoice.id}`} />
-            <input type="hidden" name="supplierId" value={invoice.supplierId} />
             <input type="hidden" name="supplierInvoiceId" value={invoice.id} />
             <input type="hidden" name="storeId" value={invoice.storeId} />
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Category" rule={INVOICE_EXPENSE_RULES.categoryId}>
-                <Select {...nativeAttrs(INVOICE_EXPENSE_RULES.categoryId)} defaultValue="" className="w-full">
-                  <option value="" disabled>Select…</option>
-                  {/* ⭐ T-229 slice 2 — active only: this select adds a NEW line. The same
-                      `categories` list still labels the EXISTING lines above, retired ones
-                      included. */}
-                  {groups.map((g) => {
-                    const rows = categories.filter((c) => c.group === g && c.isActive);
-                    if (rows.length === 0) return null;
-                    return (
-                      <optgroup key={g} label={g}>
-                        {rows.map((c) => (
-                          <option key={c.id} value={c.id} disabled={!c.accountCode}>{c.category}</option>
-                        ))}
-                      </optgroup>
-                    );
-                  })}
-                </Select>
-              </Field>
-              <Field label="Particulars" rule={INVOICE_EXPENSE_RULES.particulars}>
-                <Input {...nativeAttrs(INVOICE_EXPENSE_RULES.particulars)} className="w-full" />
-              </Field>
-            </div>
-            <div>
-              <h2 className="mb-2 text-sm font-medium">
-                Payments — add a line for each place the money came from.
-              </h2>
-              <MoneyLines
-                direction="out"
-                sources={moneyLines.sources}
-                otherStoreSources={moneyLines.otherStoreSources}
-                storeNames={moneyLines.storeNames}
-                staff={moneyLines.staff}
-                supplierId={invoice.supplierId}
-                supplierName={supplier?.name ?? null}
-                supplierCreditTermsDays={supplier?.creditTermsDays ?? null}
-                initialLines={initialLines}
-              />
-            </div>
+            {/* T-502 section 12: pick WHICH PART of the bill; it pre-fills the particulars and the first payment. */}
+            <InvoicePartsPicker
+              views={{ [invoice.id]: partsView }}
+              categories={categories}
+              fixedInvoiceId={invoice.id}
+              particularsRule={INVOICE_EXPENSE_RULES.particulars}
+              payments={{
+                moneyLines: {
+                  sources: moneyLines.sources,
+                  otherStoreSources: moneyLines.otherStoreSources,
+                  storeNames: moneyLines.storeNames,
+                  staff: moneyLines.staff,
+                },
+                invoices: {
+                  [invoice.id]: { supplierId: invoice.supplierId, supplierName: supplier?.name ?? '', creditTermsDays: supplier?.creditTermsDays ?? null },
+                },
+                creditFirst: true,
+              }}
+            />
             {closedMonth && (
               <>
                 <input type="hidden" name="invoiceDate" value={invoice.invoiceDate} />

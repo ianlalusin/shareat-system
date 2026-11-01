@@ -57,6 +57,7 @@ import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accou
 import { seedExpenseCategories } from '../../../../packages/db/seed/expense-categories';
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
 import { captureRedirect, outcomeOf, resetJar } from '../helpers/flash-jar';
+import { itemiseLegacy } from '../../../../packages/domain/tests/integration/_fixtures/legacy-itemise'; // T-502 s12: web tests need an itemised invoice
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -127,6 +128,7 @@ async function fixture(hint: string) {
       insert into stored_files (org_id, store_id, purpose, storage_path, content_type, byte_size, checksum, uploaded_by)
       values (${orgId}, ${storeId}, 'receipt_photo', ${`orgs/${orgId}/stores/${storeId}/receipt_photo/${uid('f')}.jpg`}, 'image/jpeg', 1024, ${uid('sum')}, ${a.personId}) returning id`;
     const created = await asOrg(orgId, (tx) => recordInvoice(tx, admin, { storeId, supplierId: supplier.id, invoiceDate: '2026-01-10', totalAmount, receiptFileId: file!.id }));
+    await itemiseLegacy(sql, created.id);
     await asOrg(orgId, (tx) => verifyInvoice(tx, verifier, created.id, { supplier: true, invoice: true, items: true, price: true }));
     return created.id;
   }
@@ -185,7 +187,7 @@ describe('M7 - recording an expense against a verified invoice posts exactly wha
     const actionExpenseId = UUID_IN_PATH.exec(seen.out.path)![1]!;
 
     const direct = await asOrg(f.orgId, (tx) =>
-      recordExpenseForInvoice(tx, f.admin, {
+      recordExpenseForInvoice(tx, f.admin, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId, supplierId: f.supplierId, supplierInvoiceId: viaDomain, categoryId: f.categoryId, particulars: 'T-380 S4',
         payments: [{ method: 'cash', amount: '2500.00', moneyAccountId: f.drawerId }],
       }),

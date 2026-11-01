@@ -160,8 +160,17 @@ async function assertCanBeVariationOf(
     const s = 'An item cannot be a variation of itself.';
     throw refuse(s, s);
   }
+  // T-502 A6: the database refuses it too (items_service_not_variation_check); a service is not a size or brand of anything.
+  if (child.kind === 'service') {
+    const s = 'A service (rent, power, water...) cannot be a variation of another item.';
+    throw refuse(s, s);
+  }
   const parent = await itemsRepo.getItemById(trx, orgId, parentId);
   if (!parent) throw gone(`variant parent ${parentId} does not exist.`, 'item');
+  if (parent.kind === 'service') {
+    const s = `"${parent.name}" is a service (rent, power, water...), and a service cannot have variations.`;
+    throw refuse(s, s);
+  }
   if (parent.variantOfItemId !== null) {
     const s = `"${parent.name}" is itself a variation, and variations go one level only. Pick its top-level item instead.`;
     throw refuse(s, s);
@@ -1148,6 +1157,11 @@ export async function mergeItems(
     if (winner.status === 'merged') {
       throw new Error(`mergeItems: ${winner.name} is itself merged — merge into the surviving item.`);
     }
+    // T-502 A5: a service has no stock, so merging it with a stocked item would silently give history to the wrong kind of thing.
+    if ((loser.kind === 'service') !== (winner.kind === 'service')) {
+      const s = 'A service can only be merged into another service.';
+      throw refuse(`mergeItems: ${loser.id} and ${winner.id} differ across the service line`, s);
+    }
     // T-443 R1: a family header cannot be merged away while it still has variations (they would point at a merged parent).
     // A variation MAY be merged; merging into a winner keeps the winner's own parent.
     if ((await itemsRepo.countVariationsOf(trx, actor.orgId, loser.id)) > 0) {
@@ -1172,8 +1186,9 @@ export async function mergeItems(
       action: 'item.merged',
       storeId: null,
       entityId: loser.id,
-      before: { loserName: loser.name, loserCode: loser.code },
-      after: { winnerId: winner.id, winnerName: winner.name, ...report },
+      // T-502 A5: the winner keeps its own expense category; when they differ the loser's is kept here so the decision can be traced.
+      before: { loserName: loser.name, loserCode: loser.code, loserExpenseCategoryId: loser.expenseCategoryId ?? null },
+      after: { winnerId: winner.id, winnerName: winner.name, winnerExpenseCategoryId: winner.expenseCategoryId ?? null, ...report },
       source: 'web',
     });
     return report;
@@ -1413,6 +1428,11 @@ export async function setStoreSellability(
     await authorize(trx, actor, 'manage_items', {});
     const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
     if (!item) throw new Error(`setStoreSellability: item ${input.itemId} does not exist.`);
+    // T-502 A2: a service is only bought and never sold, at any store. The database refuses it too (service_item_never_stocked).
+    if (item.kind === 'service') {
+      const s = `"${item.name}" is a service (rent, power, water...). It is only bought, so it has no per-store selling setting.`;
+      throw refuse(`setStoreSellability: ${item.id} is a service`, s);
+    }
 
     const p = input.isPurchasable ?? null;
     const r = input.sellableRetail ?? null;

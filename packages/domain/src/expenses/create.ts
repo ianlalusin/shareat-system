@@ -42,6 +42,7 @@ import { apRepo, auditLogRepo, expensesRepo, type Tx } from '@shareat/db';
 import { add } from '@shareat/core/money';
 import { logger } from '@shareat/core/logger';
 import { assertLivePaymentMethod, type ExpensePaymentMethod } from './routing';
+import { buildInvoiceParts, NOT_ITEMISED_SENTENCE, partsRefusal } from './parts';
 import { refuse, gone } from '../shared/refusal';
 import { parseDecimalInput } from '../shared/money-input';
 import {
@@ -101,6 +102,12 @@ export interface CreateExpenseInput {
   ownerId?: string | null;
   particulars: string;
   payments: CreateExpensePaymentInput[];
+  /**
+   * T-502 section 12 / 14 Q1: an expense is one category slice of an ITEMISED invoice, so by default an invoice with no lines is refused
+   * and the category must be one of the parts of its lines. `false` is for system-made invoices that have no lines by nature (the
+   * recurring-expense job) and for legacy fixtures. This input is the ONE place the option lives.
+   */
+  requireItemised?: boolean;
 }
 
 export interface CreateExpenseResult {
@@ -179,6 +186,15 @@ async function runCreateExpense(tx: Tx, actor: Actor, input: CreateExpenseInput)
   // The backstop throws the same sentence with its own raw diagnostic (ids, amounts, "does not fit"); run it first so raw and sentence stay separate.
   await apRepo.assertOpenForRecording(tx, actor.orgId, input.supplierInvoiceId, totalAmount, 'draft');
   if (tooBig) throw refuse(`createExpense: ${tooBig.sentence}`, tooBig.sentence);
+
+  // T-502 section 12: the expense follows the invoice's items - a part of the bill, within that part's room.
+  if ((input.requireItemised ?? true) === true) {
+    const facts502 = await expensesRepo.invoicePartsFacts(tx, actor.orgId, input.supplierInvoiceId);
+    const parts = facts502 ? buildInvoiceParts(facts502) : undefined;
+    if (!parts || !parts.itemised) throw refuse('createExpense: the invoice has no lines', NOT_ITEMISED_SENTENCE);
+    const sentence = partsRefusal(parts, input.categoryId, category.category, totalAmount);
+    if (sentence) throw refuse(`createExpense: ${sentence}`, sentence);
+  }
 
   // ⛔ The invoice names its supplier, so the caller's `supplierId` is a SECOND source of truth
   // for the same fact — and two copies of one fact drift (bible §16.1's whole argument). Nothing

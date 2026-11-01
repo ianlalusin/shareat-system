@@ -287,6 +287,7 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('expense.approved', 'money', 'normal', 'store', 'expenses', 'T-402'),
   def('expense.rejected', 'money', 'normal', 'store', 'expenses', 'T-402', RES),
   def('expense.voided', 'money', 'normal', 'store', 'expenses', 'T-402'),
+  def('expense.batch_recorded', 'money', 'normal', 'store', 'expenses', 'T-502'),
   def('sales_day.submitted', 'money', 'normal', 'store', 'sales_days', 'T-402'),
   def('sales_day.verified', 'money', 'normal', 'store', 'sales_days', 'T-402'),
   def('sales_day.reopened', 'money', 'normal', 'store', 'sales_days', 'T-402', RES),

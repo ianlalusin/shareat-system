@@ -137,7 +137,7 @@ function loaderVerdict(tick: boolean): string | null {
 describe('T-475 S2 / E1 - an amount over what the invoice has left (/expenses/new)', () => {
   async function page() {
     const f = await ap475Fixture(sql, 'e1page');
-    const inv = await f.invoice({ total: '5000.00', status: 'verified' });
+    const inv = await f.invoice({ itemised: true, total: '5000.00', status: 'verified' });
     await f.draft(inv, { amount: '100.00' }); // 4900.00 left
     const html = await renderNew(f.admin, f.storeId);
     const row = (await asOrg(f.orgId, (tx) => apRepo.capacityOf(tx, f.orgId, inv)))!;
@@ -174,9 +174,9 @@ describe('T-475 S2 / E2 + C2 (F1) - Credit on /expenses/new follows the picked i
     const terms = await f.supplier({ name: 'Terms Co', creditTermsDays: 30 });
     const cod = await f.supplier({ name: 'Cash Only Co', creditTermsDays: null });
     const dormant = await f.supplier({ name: 'Dormant Co', status: 'inactive' });
-    const a = await f.invoice({ supplierId: terms, status: 'verified', total: '2000.00' });
-    const b = await f.invoice({ supplierId: cod, status: 'pending', total: '3000.00' });
-    const c = await f.invoice({ supplierId: dormant, status: 'verified', total: '4000.00' });
+    const a = await f.invoice({ itemised: true, supplierId: terms, status: 'verified', total: '2000.00' });
+    const b = await f.invoice({ itemised: true, supplierId: cod, status: 'pending', total: '3000.00' });
+    const c = await f.invoice({ itemised: true, supplierId: dormant, status: 'verified', total: '4000.00' });
     const { listOpenInvoicesForPicker } = await import('../../src/app/ap/lib');
     const opts = (await listOpenInvoicesForPicker(f.orgId, f.storeId)) as unknown as Array<Record<string, unknown>>;
     const by = (id: string) => opts.find((o) => o.id === id);
@@ -189,8 +189,8 @@ describe('T-475 S2 / E2 + C2 (F1) - Credit on /expenses/new follows the picked i
     const f = await ap475Fixture(sql, 'e2page');
     const terms = await f.supplier({ name: 'Terms Co', creditTermsDays: 30 });
     const cod = await f.supplier({ name: 'Cash Only Co', creditTermsDays: null });
-    const termsInv = await f.invoice({ supplierId: terms, status: 'verified' });
-    const codInv = await f.invoice({ supplierId: cod, status: 'verified' });
+    const termsInv = await f.invoice({ itemised: true, supplierId: terms, status: 'verified' });
+    const codInv = await f.invoice({ itemised: true, supplierId: cod, status: 'verified' });
     await renderNew(f.admin, f.storeId);
     const credit = lines([{ method: 'credit', amount: '500.00' }]);
     const blocked = verdictOf(ID.creditNeedsTerms, { supplierInvoiceId: codInv, ...credit });
@@ -208,8 +208,8 @@ describe('T-475 S2 / E3 + F5 - an invoice of an inactive supplier', () => {
   it('the picker marks the row "(supplier inactive)" and E3 blocks it with the exact sentence; an active supplier\'s row is neither marked nor blocked (mutant: unmarked / unblocked)', async () => {
     const f = await ap475Fixture(sql, 'e3page');
     const dormant = await f.supplier({ name: 'Dormant Co', status: 'inactive' });
-    const bad = await f.invoice({ supplierId: dormant, status: 'verified', invoiceNo: 'D-1' });
-    const good = await f.invoice({ status: 'verified', invoiceNo: 'G-1' });
+    const bad = await f.invoice({ itemised: true, supplierId: dormant, status: 'verified', invoiceNo: 'D-1' });
+    const good = await f.invoice({ itemised: true, status: 'verified', invoiceNo: 'G-1' });
     const html = await renderNew(f.admin, f.storeId);
 
     expect(optionText(html, bad), 'the inactive supplier\'s invoice is still listed, but marked').toMatch(/supplier inactive/i);
@@ -228,7 +228,7 @@ describe('T-475 S2 / E3 + F5 - an invoice of an inactive supplier', () => {
 describe('T-475 S2 / E4 + F4 + R12 - the draft\'s category select and rule', () => {
   it('on a draft with a mapped category: the select DISABLES a category with no ledger account; E4 blocks a change onto it with the exact sentence, passes a mapped one and the current one (mutant: select enabled / check removed)', async () => {
     const f = await ap475Fixture(sql, 'e4page');
-    const inv = await f.invoice({ status: 'verified' });
+    const inv = await f.invoice({ itemised: true, status: 'verified' });
     const id = await f.draft(inv);
     const unmapped = await f.unmappedCategory();
     const mapped = (await sql<{ id: string }[]>`select id from expense_categories where org_id = ${f.orgId} and account_code is not null and id <> ${f.categoryId} limit 1`)[0]!.id;
@@ -249,7 +249,7 @@ describe('T-475 S2 / E4 + F4 + R12 - the draft\'s category select and rule', () 
 
   it('R12 on the page: a draft that already sits on an unmapped category still shows it (enabled, selected); keeping it passes, another unmapped one blocks (mutant: the current category blocked / hidden)', async () => {
     const f = await ap475Fixture(sql, 'r12page');
-    const inv = await f.invoice({ status: 'verified' });
+    const inv = await f.invoice({ itemised: true, status: 'verified' });
     const current = await f.unmappedCategory();
     const otherUnmapped = await f.unmappedCategory();
     const id = await f.draft(inv, { categoryId: current });
@@ -269,7 +269,7 @@ describe('T-475 S2 / E4 + F4 + R12 - the draft\'s category select and rule', () 
 describe('T-475 S2 / P1 + P3 + R8 - Approve & post: the loader says what the real approval says', () => {
   it('a draft on a PENDING invoice: P1 blocks with the real refusal\'s words (F3); a verified invoice\'s clean draft shows nothing and then really posts (positive control)', async () => {
     const f = await ap475Fixture(sql, 'p1page');
-    const pendingInv = await f.invoice({ status: 'pending' });
+    const pendingInv = await f.invoice({ itemised: true, status: 'pending' });
     const pendingDraft = await f.draft(pendingInv);
     await renderDetail(f.admin, pendingDraft);
     const p1 = verdictOf(ID.invoiceVerified, {});
@@ -279,7 +279,7 @@ describe('T-475 S2 / P1 + P3 + R8 - Approve & post: the loader says what the rea
     expect(p1!.sentence).toBe(await realApproval(f, f.admin, pendingDraft));
     expect(await statusOf(pendingDraft)).toBe('draft');
 
-    const okInv = await f.invoice({ status: 'verified' });
+    const okInv = await f.invoice({ itemised: true, status: 'verified' });
     const okDraft = await f.draft(okInv);
     await renderDetail(f.admin, okDraft);
     for (const id of P_ORDER) expect(verdictOf(id, {}), `${id} on a clean draft`).toBeNull();
@@ -289,7 +289,7 @@ describe('T-475 S2 / P1 + P3 + R8 - Approve & post: the loader says what the rea
 
   it('P3: a draft on an unmapped category blocks with the real refusal\'s words, and P1 does not (mutant: P3 not shown / gather skips the category)', async () => {
     const f = await ap475Fixture(sql, 'p3page');
-    const inv = await f.invoice({ status: 'verified' });
+    const inv = await f.invoice({ itemised: true, status: 'verified' });
     const id = await f.draft(inv, { categoryId: await f.unmappedCategory() });
     await renderDetail(f.admin, id);
     expect(verdictOf(ID.invoiceVerified, {})).toBeNull();
@@ -305,7 +305,7 @@ describe('T-475 S2 / P1 + P3 + R8 - Approve & post: the loader says what the rea
 describe('T-475 S2 / P2 + F7 - the month the draft would post into', () => {
   async function draftIn(hint: string, month: 'locked' | 'closed' | 'open') {
     const f = await ap475Fixture(sql, hint);
-    const inv = await f.invoice({ status: 'verified', on: '2026-01-10' });
+    const inv = await f.invoice({ itemised: true, status: 'verified', on: '2026-01-10' });
     const id = await f.draft(inv, { on: '2026-01-10' });
     if (month !== 'open') await f.setPeriod('2026-01-01', month);
     return { f, id };
@@ -362,10 +362,10 @@ describe('T-475 S2 / P2 + F7 - the month the draft would post into', () => {
 // =====================================================================================================================
 describe('T-475 S2 / R8 - the page\'s verdict and the real refusal agree for the same rows', () => {
   const cases: Array<{ name: string; build: (f: Fixture) => Promise<string>; viewer: 'admin' | 'manager'; month?: 'locked' | 'closed' }> = [
-    { name: 'pending invoice', viewer: 'admin', build: async (f) => f.draft(await f.invoice({ status: 'pending' })) },
-    { name: 'unmapped category', viewer: 'admin', build: async (f) => f.draft(await f.invoice({ status: 'verified' }), { categoryId: await f.unmappedCategory() }) },
-    { name: 'locked month', viewer: 'admin', month: 'locked', build: async (f) => f.draft(await f.invoice({ status: 'verified', on: '2026-01-10' }), { on: '2026-01-10' }) },
-    { name: 'closed month, a manager', viewer: 'manager', month: 'closed', build: async (f) => f.draft(await f.invoice({ status: 'verified', on: '2026-01-10' }), { on: '2026-01-10' }) },
+    { name: 'pending invoice', viewer: 'admin', build: async (f) => f.draft(await f.invoice({ itemised: true, status: 'pending' })) },
+    { name: 'unmapped category', viewer: 'admin', build: async (f) => f.draft(await f.invoice({ itemised: true, status: 'verified' }), { categoryId: await f.unmappedCategory() }) },
+    { name: 'locked month', viewer: 'admin', month: 'locked', build: async (f) => f.draft(await f.invoice({ itemised: true, status: 'verified', on: '2026-01-10' }), { on: '2026-01-10' }) },
+    { name: 'closed month, a manager', viewer: 'manager', month: 'closed', build: async (f) => f.draft(await f.invoice({ itemised: true, status: 'verified', on: '2026-01-10' }), { on: '2026-01-10' }) },
   ];
   for (const c of cases) {
     it(`${c.name}: the first blocker the approve card shows is word for word the real approval's refusal (mutant: leaf and domain sentences diverge)`, async () => {
@@ -384,7 +384,7 @@ describe('T-475 S2 / R8 - the page\'s verdict and the real refusal agree for the
 describe('T-475 S2 / R10 - looking at the page never writes a denial row', () => {
   it('floor staff (who may not create or approve expenses) open /expenses/new and a draft\'s page: both still mount their rule checks, and no audit row and no denial counter is written (mutant: a loader calls authorize())', async () => {
     const f = await ap475Fixture(sql, 'r10');
-    const inv = await f.invoice({ status: 'pending' });
+    const inv = await f.invoice({ itemised: true, status: 'pending' });
     const id = await f.draft(inv);
     const counts = async () =>
       (await sql<{ a: string; c: string }[]>`
@@ -409,7 +409,7 @@ describe('T-475 S2 / audit F1 - P3 still shows the first NON-invoice blocker whe
   async function voidedDraft(hint: string, unmapped: boolean) {
     const f = await ap475Fixture(sql, hint);
     const cat = unmapped ? await f.unmappedCategory() : undefined;
-    const inv = await f.invoice({ status: 'verified' });
+    const inv = await f.invoice({ itemised: true, status: 'verified' });
     const id = await f.draft(inv, cat ? { categoryId: cat } : {});
     await sql`update supplier_invoices set status = 'voided', voided_by = ${f.verifierId}, voided_at = now(), void_reason = 'test' where id = ${inv}`;
     return { f, id, cat };
@@ -418,7 +418,7 @@ describe('T-475 S2 / audit F1 - P3 still shows the first NON-invoice blocker whe
   it('voided invoice + unmapped category: P1 shows the invoice sentence AND P3 shows the unmapped-category sentence (mutant: P3 filters out the whole verdict when the invoice refuses first)', async () => {
     const { f, id, cat } = await voidedDraft('f1a', true);
     // reference: the same category (same fixture, so the same name in the sentence) on a healthy invoice
-    const refDraft = await f.draft(await f.invoice({ status: 'verified' }), { categoryId: cat! });
+    const refDraft = await f.draft(await f.invoice({ itemised: true, status: 'verified' }), { categoryId: cat! });
     const unmappedSentence = (await realApproval(f, f.admin, refDraft))!;
     expect(unmappedSentence, 'fixture: the unmapped-category refusal on a healthy invoice').toBeTruthy();
 
@@ -443,7 +443,7 @@ describe('T-475 S2 / audit F1 - P3 still shows the first NON-invoice blocker whe
 describe('T-475 S2 / browser-smoke finding - the draft screen RuleChecks sit inside a form check context', () => {
   it('E4 (edit card) and P1-P3 (approve card) are each mounted INSIDE a CheckContext, or they render nothing and E4 is dead (mutant: <EditableRecord> given no `rules=`)', async () => {
     const f = await ap475Fixture(sql, 'ctx');
-    const id = await f.draft(await f.invoice({ status: 'verified' }));
+    const id = await f.draft(await f.invoice({ itemised: true, status: 'verified' }));
     await renderDetail(f.admin, id);
     for (const rid of [ID.categoryMapped, ID.invoiceVerified, ID.wouldPost, ID.periodOpen]) {
       const hits = CAPTURED.filter((c) => c.id === rid);

@@ -126,7 +126,9 @@ describe('T-475 S2 - /expenses/new wiring (E1-E3, C2 / F1)', () => {
     const page = code('app/expenses/new/page.tsx');
     no(page, /supplierId=\{null\}/)
     no(page, /supplierCreditTermsDays=\{null\}/)
-    yes(page, /InvoiceMoneyLines/)
+    // T-502 section 12: the page hands the payments to the part picker, which renders InvoiceMoneyLines (the F1 fix is unchanged).
+    yes(page, /InvoicePartsPicker/)
+    yes(code('components/expenses/InvoicePartsPicker.tsx'), /InvoiceMoneyLines/)
   });
 
   it('InvoiceMoneyLines exists, is a client component, and passes a picked invoice\'s supplier and terms to MoneyLines (mutant: wrapper still passes null)', () => {
@@ -174,12 +176,17 @@ describe('T-475 S2 - /expenses/[id] wiring (E4, P1-P3)', () => {
   });
 
   it('the category select disables a category that has no ledger account, unless it is the draft\'s current one (mutant: select offers unmapped enabled - F4)', () => {
+    // T-502 section 12: the draft's category is now chosen by PART; the open parts' category select lives in the shared picker.
     const page = code(PAGE);
-    const at = page.indexOf('name="categoryId"');
+    yes(page, /InvoicePartsPicker/)
+    yes(page, /initialPickedCategoryId/)
+    const picker = code('components/expenses/InvoicePartsPicker.tsx');
+    const at = picker.indexOf('name="pickedCategoryId"');
     expect(at).toBeGreaterThan(0);
-    const select = page.slice(at, page.indexOf('</Select>', at));
+    const select = picker.slice(at, picker.indexOf('</Select>', at));
     yes(select, /disabled=\{/)
     yes(select, /accountCode/)
+    yes(select, /initialPickedCategoryId/)
   });
 
   it('the period lookup is NOT inside the override-holder branch: the old `canOverrideClosedMonth(actor) ?` gate no longer decides whether the month is looked up (mutant: P2 gated on holder again - F7)', () => {

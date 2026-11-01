@@ -91,7 +91,7 @@ const ROWS: Record<string, Row> = {
 
   // ---- expenses ----
   'expenses.create.supplierInvoiceId': R('Choose a supplier invoice.'),
-  'expenses.create.categoryId': R('Choose a category.'),
+  'expenses.create.categoryId': R('Choose which part of the bill this is for.'),
   'expenses.create.particulars': R('Say what this expense was actually for.'),
   'expenses.void.reason': R('Say why this expense is being voided - a reversal with no reason is a gap.'),
   'expenses.reimbursement.amount': M('The reimbursement amount', '0.01'),

@@ -80,7 +80,7 @@ export async function dismissedPairs(orgId: string): Promise<DismissalRow[]> {
 export async function variationParentOptions(orgId: string): Promise<Pick<ItemRow, 'id' | 'name' | 'code' | 'kind' | 'status'>[]> {
   const rows = await listItems(orgId, true);
   return rows
-    .filter((i) => i.variantOfItemId === null && i.status !== 'merged')
+    .filter((i) => i.variantOfItemId === null && i.status !== 'merged' && i.kind !== 'service') // T-502 A6: a service is never a variation parent
     .map((i) => ({ id: i.id, name: i.name, code: i.code, kind: i.kind, status: i.status }));
 }
 

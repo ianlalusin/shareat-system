@@ -190,7 +190,7 @@ async function fixtureWithSupplier(hint: string): Promise<FixtureWithSupplier> {
 
 async function creditExpense(f: FixtureWithSupplier, invoiceId: string, amount: string, particulars = 'Stock purchase') {
   return asOrg(f.orgId, (tx) =>
-    recordExpenseForInvoice(tx, f.manager, {
+    recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
       storeId: f.storeId,
       supplierId: f.supplierId,
       supplierInvoiceId: invoiceId,
@@ -231,7 +231,7 @@ async function draftExpense(
   particulars = 'Draft against a pending invoice',
 ) {
   return asOrg(f.orgId, (tx) =>
-    createExpense(tx, f.staff, {
+    createExpense(tx, f.staff, { requireItemised: false /* legacy fixture: lineless invoice */,
       storeId: f.storeId,
       businessDate: '', // ignored — createExpense forces this from the invoice's own date
       supplierId: f.supplierId,
@@ -406,7 +406,7 @@ describe('the refusals', () => {
     );
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordExpenseForInvoice(tx, f.manager, {
+        recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
           storeId: f.storeId, supplierId: f.supplierId, supplierInvoiceId: pending.id,
           categoryId: f.categoryId, particulars: 'Cash buy, no draft',
           payments: [{ method: 'cash', amount: '500.00', moneyAccountId: f.drawerId }],
@@ -453,7 +453,7 @@ describe('⭐ the gate is universal — cash expenses need a verified invoice to
     const invoiceId = await verifiedInvoice(f, '750.00');
 
     const result = await asOrg(f.orgId, (tx) =>
-      recordExpenseForInvoice(tx, f.manager, {
+      recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId, supplierId: f.supplierId, supplierInvoiceId: invoiceId,
         categoryId: f.categoryId, particulars: 'Cash buy, no draft',
         payments: [{ method: 'cash', amount: '750.00', moneyAccountId: f.drawerId }],
@@ -622,7 +622,7 @@ async function creditExpenseAt(f: FixtureWithSupplier, storeId: string, amount: 
   );
   await asOrg(f.orgId, (tx) => verifyInvoice(tx, f.manager, created.id, { supplier: true, invoice: true, items: true, price: true }));
   const exp = await asOrg(f.orgId, (tx) =>
-    recordExpenseForInvoice(tx, f.manager, {
+    recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
       storeId,
       supplierId: f.supplierId,
       supplierInvoiceId: created.id,
@@ -697,7 +697,7 @@ describe('⭐ AP integrity gaps found by the 2026-08-28 audit', () => {
 
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordExpenseForInvoice(tx, f.manager, {
+        recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
           storeId: f.storeId,
           supplierId: other.id, // ⛔ a DIFFERENT supplier
           supplierInvoiceId: invoiceId,
@@ -727,7 +727,7 @@ describe('⭐ AP integrity gaps found by the 2026-08-28 audit', () => {
     const f = await fixtureWithSupplier('race');
     const invoiceId = await verifiedInvoice(f, '1000.00');
     const exp = await asOrg(f.orgId, (tx) =>
-      recordExpenseForInvoice(tx, f.manager, {
+      recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId,
         supplierId: f.supplierId,
         supplierInvoiceId: invoiceId,
@@ -866,7 +866,7 @@ describe('⛔ a supplier must be ACTIVE, not merely on file', () => {
     // recording the expense is the step that moves money.
     await expect(
       asOrg(f.orgId, (tx) =>
-        recordExpenseForInvoice(tx, f.manager, {
+        recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
           storeId: f.storeId, supplierId: f.supplierId, supplierInvoiceId: invoiceId,
           categoryId: f.categoryId, particulars: 'Buying from a supplier we stopped using',
           payments: [{ method: 'credit', amount: '1000.00' }],

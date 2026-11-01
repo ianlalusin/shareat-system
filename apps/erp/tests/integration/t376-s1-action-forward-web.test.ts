@@ -72,6 +72,7 @@ import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accou
 import { seedExpenseCategories } from '../../../../packages/db/seed/expense-categories';
 import { postEntry } from '../../../../packages/domain/src/ledger/post-entry';
 import { paramsOf } from '../helpers/flash-jar';
+import { itemiseLegacy } from '../../../../packages/domain/tests/integration/_fixtures/legacy-itemise'; // T-502 s12: web tests need an itemised invoice
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -140,10 +141,11 @@ async function fixture(hint: string) {
       : await sql<{ id: string }[]>`
           insert into supplier_invoices (org_id, store_id, supplier_id, invoice_date, total_amount, status, receipt_file_id, created_by)
           values (${orgId}, ${storeId}, ${supplier!.id}, ${o.on}, '5000.00', 'pending', ${file!.id}, ${staffId}) returning id`;
+    await itemiseLegacy(sql, inv!.id);
     const draftIds: string[] = [];
     for (const amount of o.drafts) {
       const made = await asOrg(orgId, (tx) =>
-        createExpense(tx, admin, {
+        createExpense(tx, admin, { requireItemised: false /* legacy fixture: lineless invoice */,
           storeId, supplierId: supplier!.id, supplierInvoiceId: inv!.id, businessDate: o.on, categoryId: cat!.id,
           particulars: `Pork ${amount}`, payments: [{ method: 'cash', amount, moneyAccountId: cash!.id }],
         }),
@@ -315,6 +317,7 @@ describe('F4 - cross-store: the gate is proven at the BILL store before anything
     const [bB] = await sql<{ id: string }[]>`
       insert into supplier_invoices (org_id, store_id, supplier_id, invoice_date, total_amount, status, receipt_file_id, created_by)
       values (${f.orgId}, ${storeB!.id}, ${f.supplierId}, '2026-01-12', '800.00', 'pending', ${fileB!.id}, ${f.staffId}) returning id`;
+    await itemiseLegacy(sql, bB!.id);
     await closeJanuary(f);
     resetSpy();
 

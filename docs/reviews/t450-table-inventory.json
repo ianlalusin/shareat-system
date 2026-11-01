@@ -480,6 +480,12 @@
     "headerless": 0
   },
   {
+    "file": "apps/erp/src/components/expenses/InvoiceBatchRecord.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
     "file": "apps/erp/src/components/reports/ApAgingTable.tsx",
     "tables": 1,
     "sharedTables": 0,

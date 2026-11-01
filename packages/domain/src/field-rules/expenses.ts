@@ -6,7 +6,7 @@ import { defineFieldRules } from './check';
 
 export const EXPENSE_CREATE_RULES = defineFieldRules('expenses.create', {
   supplierInvoiceId: { label: 'The supplier invoice', kind: 'text', requires: 'Choose a supplier invoice.' },
-  categoryId: { label: 'The category', kind: 'text', requires: 'Choose a category.' },
+  categoryId: { label: 'The part of the bill', kind: 'text', requires: 'Choose which part of the bill this is for.' },
   particulars: { label: 'The particulars', kind: 'text', requires: 'Say what this expense was actually for.' },
 });
 

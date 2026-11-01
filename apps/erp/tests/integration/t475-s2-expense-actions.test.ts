@@ -80,7 +80,7 @@ const columnOf = async (id: string) => (await sql<{ category_id: string; particu
 describe('T-475 S2 / E1 raw POST - more than the invoice has left', () => {
   it('one centavo over the room is refused with the capacity sentence and nothing is written; exactly the room saves a draft (mutant: `>=`)', async () => {
     const f = await ap475Fixture(sql, 'e1post');
-    const inv = await f.invoice({ total: '5000.00', status: 'verified' });
+    const inv = await f.invoice({ itemised: true, total: '5000.00', status: 'verified' });
     await f.draft(inv, { amount: '100.00' }); // 4900.00 left
     const before = await rowsFor(inv);
     const refused = await post(f.admin, 'createExpenseAction', newForm(f, inv, { amount: '4900.01' }));
@@ -99,8 +99,8 @@ describe('T-475 S2 / E2 raw POST - Credit against a cash-on-delivery supplier', 
     const f = await ap475Fixture(sql, 'e2post');
     const cod = await f.supplier({ name: 'Cash Only Co', creditTermsDays: null });
     const terms = await f.supplier({ name: 'Terms Co', creditTermsDays: 30 });
-    const codInv = await f.invoice({ supplierId: cod, status: 'verified' });
-    const termsInv = await f.invoice({ supplierId: terms, status: 'verified' });
+    const codInv = await f.invoice({ itemised: true, supplierId: cod, status: 'verified' });
+    const termsInv = await f.invoice({ itemised: true, supplierId: terms, status: 'verified' });
     const refused = await post(f.admin, 'createExpenseAction', newForm(f, codInv, { supplierId: cod, amount: '500.00', method: 'credit' }));
     expect(refused.error, `redirected to ${refused.to}`).toBe(cashOnDeliverySentence('Cash Only Co'));
     expect(await rowsFor(codInv)).toBe(0);
@@ -115,8 +115,8 @@ describe('T-475 S2 / E3 raw POST - an invoice of an inactive supplier', () => {
   it('refused with the exact sentence and nothing is written; an active supplier\'s invoice saves (positive control)', async () => {
     const f = await ap475Fixture(sql, 'e3post');
     const dormant = await f.supplier({ name: 'Dormant Co', status: 'inactive' });
-    const bad = await f.invoice({ supplierId: dormant, status: 'verified' });
-    const good = await f.invoice({ status: 'verified' });
+    const bad = await f.invoice({ itemised: true, supplierId: dormant, status: 'verified' });
+    const good = await f.invoice({ itemised: true, status: 'verified' });
     const refused = await post(f.admin, 'createExpenseAction', newForm(f, bad, { supplierId: dormant, amount: '100.00' }));
     expect(refused.error, `redirected to ${refused.to}`).toBe('Dormant Co is inactive, not active — an expense cannot be recorded against a supplier the business has stopped buying from.');
     expect(await rowsFor(bad)).toBe(0);
@@ -131,7 +131,7 @@ describe('T-475 S2 / E4 + R12 raw POST - the draft edit form (updateDraftAction)
 
   it('a category with no ledger account is refused with the exact sentence and the draft does not move; a mapped category saves (mutant: check removed)', async () => {
     const f = await ap475Fixture(sql, 'e4post');
-    const inv = await f.invoice({ status: 'verified' });
+    const inv = await f.invoice({ itemised: true, status: 'verified' });
     const id = await f.draft(inv, { particulars: 'Original' });
     const unmapped = await f.unmappedCategory();
     const refused = await post(f.admin, 'updateDraftAction', edit(f, id, unmapped));
@@ -146,7 +146,7 @@ describe('T-475 S2 / E4 + R12 raw POST - the draft edit form (updateDraftAction)
 
   it('R12: a draft already on an unmapped category: the form re-posts that same category with new particulars and it SAVES; another unmapped category is refused (mutant: any edit refused / a re-post refused)', async () => {
     const f = await ap475Fixture(sql, 'r12post');
-    const inv = await f.invoice({ status: 'verified' });
+    const inv = await f.invoice({ itemised: true, status: 'verified' });
     const current = await f.unmappedCategory();
     const other = await f.unmappedCategory();
     const id = await f.draft(inv, { categoryId: current, particulars: 'Original' });
@@ -163,12 +163,12 @@ describe('T-475 S2 / E4 + R12 raw POST - the draft edit form (updateDraftAction)
 describe('T-475 S2 / P1 raw POST - approving a draft on a pending invoice', () => {
   it('refused with the "hasn\'t been verified yet" sentence and it stays a draft; a draft on a verified invoice posts (positive control)', async () => {
     const f = await ap475Fixture(sql, 'p1post');
-    const pending = await f.draft(await f.invoice({ status: 'pending' }));
+    const pending = await f.draft(await f.invoice({ itemised: true, status: 'pending' }));
     const refused = await post(f.admin, 'approveExpenseAction', { storeId: f.storeId, expenseId: pending });
     expect(refused.error, `redirected to ${refused.to}`).toMatch(/hasn't been verified yet, so this can't post against it\.$/);
     expect(await statusOf(pending)).toBe('draft');
 
-    const verified = await f.draft(await f.invoice({ status: 'verified' }));
+    const verified = await f.draft(await f.invoice({ itemised: true, status: 'verified' }));
     const ok = await post(f.admin, 'approveExpenseAction', { storeId: f.storeId, expenseId: verified });
     expect(ok.error).toBeUndefined();
     expect(ok.ok).toBe('Expense posted.');
@@ -180,7 +180,7 @@ describe('T-475 S2 / P2 raw POST - a locked or closed month', () => {
   const OVERRIDE = { periodOverrideConfirm: 'on', periodOverrideReason: 'late_supplier_invoice', periodOverrideNote: '' };
   async function draftIn(hint: string, month: 'locked' | 'closed') {
     const f = await ap475Fixture(sql, hint);
-    const id = await f.draft(await f.invoice({ status: 'verified', on: '2026-01-10' }), { on: '2026-01-10' });
+    const id = await f.draft(await f.invoice({ itemised: true, status: 'verified', on: '2026-01-10' }), { on: '2026-01-10' });
     await f.setPeriod('2026-01-01', month);
     return { f, id };
   }
@@ -212,7 +212,7 @@ describe('T-475 S2 / P2 raw POST - a locked or closed month', () => {
 describe('T-475 S2 / audit F4 raw POST - more payment lines than the cap', () => {
   it('51 lines are refused with the cap sentence and nothing is written; 50 is the limit the sentence names (positive control: 1 line saves)', async () => {
     const f = await ap475Fixture(sql, 'f4');
-    const inv = await f.invoice({ total: '5000.00', status: 'verified' });
+    const inv = await f.invoice({ itemised: true, total: '5000.00', status: 'verified' });
     const fields = newForm(f, inv, { amount: '1.00' });
     fields.lineCount = '51';
     for (let i = 1; i < 51; i++) {

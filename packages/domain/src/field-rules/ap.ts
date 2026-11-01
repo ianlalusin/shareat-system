@@ -42,7 +42,7 @@ export const PAYMENT_VOID_RULES = defineFieldRules('ap.voidPayment', {
 
 /** "Record an expense against this invoice" (recordInvoiceExpenseAction, which hands the post to the expense action). */
 export const INVOICE_EXPENSE_RULES = defineFieldRules('ap.recordExpenseForInvoice', {
-  categoryId: { label: 'The category', kind: 'text', requires: 'Choose a category.' },
+  categoryId: { label: 'The part of the bill', kind: 'text', requires: 'Choose which part of the bill this is for.' },
   particulars: { label: 'The particulars', kind: 'text', requires: 'Particulars are required - say what the spend was for.' },
 });
 
