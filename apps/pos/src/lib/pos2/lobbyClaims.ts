@@ -145,7 +145,15 @@ export async function approveClaimFlow(i: ApproveFlowInput): Promise<ApproveResu
   const sessionRef = i.open.sessionRef as string;
   if (i.getStatus) {
     try {
-      if ((await i.getStatus(i.open.claimId)) !== 'pending') return { done: false, reason: 'closed', message: CLAIM_CLOSED_MESSAGE };
+      const status = await i.getStatus(i.open.claimId);
+      if (status === 'approved') {
+        // A lost-answer retry: approved, and this very person (ID, name, kind) is already on the bill. Done; nothing more is written or called.
+        const wantedId = normalizeIdNo(i.form.idNo);
+        const nm = (n: string) => n.trim().replace(/\s+/g, ' ').toUpperCase();
+        const there = i.diners.find((d) => typeof d.idNo === 'string' && normalizeIdNo(d.idNo) === wantedId && typeof d.name === 'string' && nm(d.name) === nm(i.form.name) && d.kind === i.form.kind);
+        if (there) return { done: true, dinerId: there.id };
+      }
+      if (status !== 'pending') return { done: false, reason: 'closed', message: CLAIM_CLOSED_MESSAGE };
     } catch (err) {
       const f = claimFailure(err as { status?: unknown; message?: unknown });
       return { done: false, reason: f.kind === 'unavailable' ? 'unavailable' : 'error', message: f.message };

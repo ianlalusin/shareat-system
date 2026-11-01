@@ -348,6 +348,19 @@ describe('auditor rulings 1, 2 and 4 (added by the builder)', () => {
     }
   });
 
+  it('2b: approved + the same person (ID, name, kind) already on the bill = done, nothing written or called; approved without that person stays the refusal', async () => {
+    const t = mk();
+    const getStatus = async (_id: string) => 'approved';
+    const there = { id: 'd5', idNo: '123 456 1187', name: 'maria santos', kind: 'senior' };
+    expect(await approveClaimFlow({ open: OPEN, form: FORM, diners: [there], addDiner: t.addDiner, approve: t.approve, getStatus } as never)).toEqual({ done: true, dinerId: 'd5' });
+    expect(t.addDiner).not.toHaveBeenCalled();
+    expect(t.approve).not.toHaveBeenCalled();
+    for (const diners of [[], [{ ...there, name: 'Someone Else' }], [{ ...there, kind: 'pwd' }], [{ ...there, idNo: '999-999-9999' }]]) {
+      expect(await approveClaimFlow({ open: OPEN, form: FORM, diners, addDiner: t.addDiner, approve: t.approve, getStatus } as never)).toMatchObject({ done: false, reason: 'closed' });
+    }
+    expect(t.addDiner).not.toHaveBeenCalled();
+  });
+
   it('2: pending proceeds, with the status read first; an unreachable status read writes nothing and says the claims sentence', async () => {
     const t = mk();
     const getStatus = vi.fn(async (_id: string) => 'pending');
