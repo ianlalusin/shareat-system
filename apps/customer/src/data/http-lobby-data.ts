@@ -50,6 +50,28 @@ export interface LobbyBirthday {
   declineReason: string | null;
 }
 
+/** T-455 S7a: what the diner sees of a senior / PWD claim: the ID only as ****1187, never the name or the number. */
+export type LobbyClaimKind = 'senior' | 'pwd';
+export type LobbyClaimStatus = 'pending' | 'approved' | 'rejected' | 'expired';
+
+export interface LobbyClaim {
+  claimId: string;
+  kind: LobbyClaimKind;
+  status: LobbyClaimStatus;
+  idMasked: string;
+  rejectReason: string | null;
+  ocrAssisted: boolean;
+}
+
+export interface LobbyClaimInput {
+  storeCode: string;
+  kind: LobbyClaimKind;
+  holderName: string;
+  idNumber: string;
+  /** S8 only: true when the phone read the card. Typed claims leave it out. */
+  ocrAssisted?: boolean;
+}
+
 /** `error` is always one plain sentence meant for the diner. `status` is the HTTP status (0 when the phone could not reach the server). */
 export type LobbyResult<T> = { ok: true; value: T } | { ok: false; status: number; error: string; code?: string };
 
@@ -123,6 +145,20 @@ export function lobbyCancelBirthday(storeCode: string, base = ''): Promise<Lobby
   return call(base, '/api/lobby/birthday/cancel', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ storeCode }) }, (b) => (b.birthday ?? null) as LobbyBirthday | null);
 }
 
+/** T-455 S7a: my claims, oldest first ([] = nothing claimed yet; a 404 means this phone has no place in line here). */
+export function lobbyClaims(storeCode: string, base = ''): Promise<LobbyResult<LobbyClaim[]>> {
+  return call(base, `/api/lobby/discount?s=${encodeURIComponent(storeCode)}`, { method: 'GET' }, (b) => (Array.isArray(b.claims) ? b.claims : []) as LobbyClaim[]);
+}
+
+/** The name and the ID number travel in the POST body only: never in a URL, never kept by this layer. */
+export function lobbySubmitClaim(input: LobbyClaimInput, base = ''): Promise<LobbyResult<LobbyClaim[]>> {
+  return call(base, '/api/lobby/discount', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) }, (b) => (Array.isArray(b.claims) ? b.claims : []) as LobbyClaim[]);
+}
+
+export function lobbyCancelClaim(storeCode: string, claimId: string, base = ''): Promise<LobbyResult<LobbyClaim[]>> {
+  return call(base, '/api/lobby/discount/cancel', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ storeCode, claimId }) }, (b) => (Array.isArray(b.claims) ? b.claims : []) as LobbyClaim[]);
+}
+
 /** T-455 S4: the store's public line status. A closed store answers 200 with accepting:false; that and any `error` both mean "not joinable". */
 function lobbyStore(storeCode: string, base = ''): Promise<LobbyResult<LobbyStoreView>> {
   return call(base, `/api/lobby/store?s=${encodeURIComponent(storeCode)}`, { method: 'GET' }, (b) => {
@@ -147,5 +183,8 @@ export function createHttpLobbyData(base = ''): LobbyData {
     birthday: (storeCode) => lobbyBirthday(storeCode, base),
     requestBirthday: (storeCode, celebrantName) => lobbyRequestBirthday(storeCode, celebrantName, base),
     cancelBirthday: (storeCode) => lobbyCancelBirthday(storeCode, base),
+    claims: (storeCode) => lobbyClaims(storeCode, base),
+    submitClaim: (input) => lobbySubmitClaim(input, base),
+    cancelClaim: (storeCode, claimId) => lobbyCancelClaim(storeCode, claimId, base),
   };
 }

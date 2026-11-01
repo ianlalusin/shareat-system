@@ -20,6 +20,12 @@ export const LOBBY_REFUSAL_CODES = [
   'LOBBY_BIRTHDAY_CLOSED',
   'LOBBY_BIRTHDAY_NEEDS_TIME',
   'LOBBY_BIRTHDAY_OFF',
+  'LOBBY_CLAIM_FULL',
+  'LOBBY_CLAIM_OFF',
+  'LOBBY_CLAIM_CLOSED',
+  'LOBBY_CLAIM_NEEDS_SEAT',
+  'LOBBY_CLAIM_NEEDS_CARD',
+  'LOBBY_CLAIM_DUPLICATE',
 ] as const;
 export type LobbyRefusalCode = (typeof LOBBY_REFUSAL_CODES)[number];
 
@@ -51,6 +57,13 @@ const SENTENCES: Record<LobbyRefusalCode, string> = {
   LOBBY_BIRTHDAY_CLOSED: 'That birthday song request can no longer be changed.',
   LOBBY_BIRTHDAY_NEEDS_TIME: 'Please pick a time for the birthday song first.',
   LOBBY_BIRTHDAY_OFF: 'Birthday song requests are not available right now.',
+  // T-455 S7a: the senior / PWD discount claim. Each is its own sentence; none names a limit, a table size or an ID number (and none uses the word the tests ban for database wording).
+  LOBBY_CLAIM_FULL: 'No more discount claims can be added for your table.',
+  LOBBY_CLAIM_OFF: 'Discount claims are not available right now.',
+  LOBBY_CLAIM_CLOSED: 'That discount claim can no longer be changed.',
+  LOBBY_CLAIM_NEEDS_SEAT: 'The party must be seated at this table before the discount can be approved.',
+  LOBBY_CLAIM_NEEDS_CARD: 'Please check the card first, then tick that you have seen it.',
+  LOBBY_CLAIM_DUPLICATE: 'That ID has already been entered for your table.',
 };
 
 /** `detail` goes to the log message only (never to the diner). It must carry no name, phone or ID number. */

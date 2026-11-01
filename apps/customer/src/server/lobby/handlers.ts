@@ -2,14 +2,18 @@ import 'server-only';
 import { lobbyRepo, withOrgPrincipal } from '@shareat/db';
 import {
   cancelMyBirthday,
+  cancelMyClaim,
   cancelMyEntry,
   checkIn,
   getMyEntry,
+  listMyClaims,
   LOBBY_POS_STALE_MINUTES,
   readMyBirthday,
   requestBirthday,
+  submitClaim,
   type CheckInLine,
   type MyBirthdayView,
+  type MyClaimView,
 } from '@shareat/domain';
 import { newCookieValue, readCookie, setCookieHeader } from './cookie';
 import { BodyTooLarge, fail, json, MAX_BODY_BYTES, readJsonObject, SENTENCES } from './http';
@@ -25,7 +29,7 @@ import { clientIp, hmacHex, isUuid, readConfig, type LobbyConfig } from './secre
  * The diner is identified ONLY by the cookie. No input names a code or an entry id.
  */
 
-type Route = 'check-in' | 'me' | 'cancel' | 'store' | 'birthday' | 'birthday-cancel';
+type Route = 'check-in' | 'me' | 'cancel' | 'store' | 'birthday' | 'birthday-cancel' | 'discount' | 'discount-cancel';
 const MAX_STORE_CODE = 64;
 
 const storeCodeOf = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 && v.length <= MAX_STORE_CODE ? v : null);
@@ -241,6 +245,86 @@ export async function handleBirthdayCancel(req: Request): Promise<Response> {
     });
     if (!done) return fail(404, SENTENCES.notFound);
     return json(200, { ok: true, birthday: birthdayView(done) });
+  });
+}
+
+/**
+ * The diner's view of her claims: kind, status, the ID masked to its last four, the cashier's reason, the OCR flag. NEVER the name or the full ID
+ * number (4.6), no entry id, no hash. The claim id is returned because cancel needs it, and it only works for the cookie's own claim.
+ */
+const claimsView = (claims: readonly MyClaimView[]) =>
+  claims.map((c) => ({ claimId: c.claimId, kind: c.kind, status: c.status, idMasked: c.idMasked, rejectReason: c.rejectReason, ocrAssisted: c.ocrAssisted }));
+
+/**
+ * POST /api/lobby/discount - the owner of a live entry claims the senior / PWD discount for one person. T-455 S7a. The cookie is the only identity.
+ * The name and the ID number are read from the body, handed to the domain and never logged, echoed or returned.
+ */
+export async function handleClaimSubmit(req: Request): Promise<Response> {
+  return guarded('discount', async () => {
+    const cfg = readConfig();
+    if (!cfg) return notConfigured();
+    const body = await readJsonObject(req);
+    if (!body) return fail(400, SENTENCES.badInput);
+    const storeCode = storeCodeOf(body.storeCode);
+    const owner = await ownerKey(cfg, req, storeCode);
+    if ('stop' in owner) return owner.stop;
+
+    const claims = await withOrgPrincipal(cfg.orgId, async (tx) => {
+      const storeId = await lobbyRepo.getStoreIdByCode(tx, cfg.orgId, storeCode!);
+      if (!storeId) return null;
+      const key = { orgId: cfg.orgId, storeId, deviceHash: owner.deviceHash };
+      await submitClaim(tx, key, {
+        kind: body.kind as 'senior',
+        holderName: body.holderName as string,
+        idNumber: body.idNumber as string,
+        ocrAssisted: body.ocrAssisted === true,
+      });
+      return listMyClaims(tx, key);
+    });
+    if (!claims) return fail(404, SENTENCES.notFound);
+    return json(200, { ok: true, claims: claimsView(claims) });
+  });
+}
+
+/** GET /api/lobby/discount?s=CODE - my claims ([] = nothing claimed yet); a cookie with no place in line at this store is 404. */
+export async function handleClaimRead(req: Request): Promise<Response> {
+  return guarded('discount', async () => {
+    const cfg = readConfig();
+    if (!cfg) return notConfigured();
+    const storeCode = storeCodeOf(new URL(req.url).searchParams.get('s'));
+    const owner = await ownerKey(cfg, req, storeCode);
+    if ('stop' in owner) return owner.stop;
+
+    const claims = await withOrgPrincipal(cfg.orgId, async (tx) => {
+      const storeId = await lobbyRepo.getStoreIdByCode(tx, cfg.orgId, storeCode!);
+      if (!storeId) return null;
+      return listMyClaims(tx, { orgId: cfg.orgId, storeId, deviceHash: owner.deviceHash });
+    });
+    if (!claims) return fail(404, SENTENCES.notFound);
+    return json(200, { ok: true, claims: claimsView(claims) });
+  });
+}
+
+/** POST /api/lobby/discount/cancel - the owner withdraws one of her pending claims (it becomes expired). */
+export async function handleClaimCancel(req: Request): Promise<Response> {
+  return guarded('discount-cancel', async () => {
+    const cfg = readConfig();
+    if (!cfg) return notConfigured();
+    const body = await readJsonObject(req);
+    if (!body) return fail(400, SENTENCES.badInput);
+    const storeCode = storeCodeOf(body.storeCode);
+    const owner = await ownerKey(cfg, req, storeCode);
+    if ('stop' in owner) return owner.stop;
+
+    const claims = await withOrgPrincipal(cfg.orgId, async (tx) => {
+      const storeId = await lobbyRepo.getStoreIdByCode(tx, cfg.orgId, storeCode!);
+      if (!storeId) return null;
+      const key = { orgId: cfg.orgId, storeId, deviceHash: owner.deviceHash };
+      await cancelMyClaim(tx, key, body.claimId as string);
+      return listMyClaims(tx, key);
+    });
+    if (!claims) return fail(404, SENTENCES.notFound);
+    return json(200, { ok: true, claims: claimsView(claims) });
   });
 }
 

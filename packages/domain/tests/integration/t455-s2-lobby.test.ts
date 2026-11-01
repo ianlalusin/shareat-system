@@ -883,10 +883,10 @@ describe('L. closing an entry expires its pending discount claims (S1 audit note
     expect(row.holder_name).toBe('Lola Santos');
   });
 
-  it('L3 sweepStalePendingClaims (ruling 7): a pending claim is swept when its entry is closed (any age, e.g. seated 1 h ago) OR the claim itself is more than 24 h old (even on a live entry); a young claim on a live entry and approved claims stay; PII NULL; returns the count [kills: sweep ignoring closed entries, ignoring claim age, sweeping young live claims, sweeping approved claims]', async () => {
+  it('L3 sweepStalePendingClaims (ruling 7): a pending claim is swept when its entry is closed (seated more than 3 h ago - S7a ruling D4: the claim of a seated entry awaits approval until then) OR the claim itself is more than 24 h old (even on a live entry); a young claim on a live entry and approved claims stay; PII NULL; returns the count [kills: sweep ignoring closed entries, ignoring claim age, sweeping young live claims, sweeping approved claims]', async () => {
     const f = await orgFixture('l3');
     const s = await f.mkStore();
-    const seated = await rawEntry(s, { status: 'seated', ageMin: 120, closedMinAgo: 60, extra: { party_size: 4 } });
+    const seated = await rawEntry(s, { status: 'seated', ageMin: 300, closedMinAgo: 240, extra: { party_size: 4 } }); // S7a D4: was closed 60 min ago; a seated claim now lives 3 h past closing
     const live = await rawEntry(s, { status: 'waiting', ageMin: 30, extra: { party_size: 4 } });
     const closedClaim = await rawClaim(f, seated);
     const closedApproved = await rawClaim(f, seated, 'approved');

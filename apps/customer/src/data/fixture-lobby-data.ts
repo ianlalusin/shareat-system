@@ -1,4 +1,4 @@
-import type { LobbyBirthday, LobbyCheckInInput, LobbyEntrySummary, LobbyMyEntry, LobbyResult, LobbyStatus } from './http-lobby-data';
+import type { LobbyBirthday, LobbyCheckInInput, LobbyClaim, LobbyClaimInput, LobbyEntrySummary, LobbyMyEntry, LobbyResult, LobbyStatus } from './http-lobby-data';
 import type { LobbyData, LobbyStoreView } from './lobby-data';
 
 /**
@@ -36,6 +36,9 @@ interface LobbyDemo {
   /** The cashier accepts / declines the latest place's birthday request (S6a). */
   acceptBirthday(inMinutes: number): void;
   declineBirthday(reason: string): void;
+  /** The cashier approves / rejects the latest place's first pending claim (S7a). */
+  approveClaim(): void;
+  rejectClaim(reason: string): void;
 }
 
 const fail = <T>(status: number, error: string): LobbyResult<T> => ({ ok: false, status, error });
@@ -47,6 +50,10 @@ export function createFixtureLobbyData(opts: { now?: () => number } = {}): Lobby
   let seq = 0;
   let paused = false;
   const birthdays = new Map<string, LobbyBirthday>();
+  /** S7a: only the masked view is kept (the fixture never holds a name or an ID number); `norm` is the normalised ID, for the duplicate rule. */
+  const claimRows = new Map<string, Array<LobbyClaim & { norm: string }>>();
+  const claimView = (c: LobbyClaim & { norm: string }): LobbyClaim => ({ claimId: c.claimId, kind: c.kind, status: c.status, idMasked: c.idMasked, rejectReason: c.rejectReason, ocrAssisted: c.ocrAssisted });
+  const claimsOf = (entryId: string) => (claimRows.get(entryId) ?? []).map(claimView);
 
   const live = (r: Row) => r.status === 'waiting' || r.status === 'called';
   const mine = (storeCode: string) => [...rows].reverse().find((r) => r.storeCode === storeCode && r.device === device);
@@ -135,6 +142,38 @@ export function createFixtureLobbyData(opts: { now?: () => number } = {}): Lobby
       b.status = 'cancelled';
       return { ok: true, value: { ...b } };
     },
+
+    async claims(storeCode): Promise<LobbyResult<LobbyClaim[]>> {
+      const r = mine(storeCode);
+      if (!r) return fail(404, NOT_FOUND);
+      return { ok: true, value: claimsOf(r.entryId) };
+    },
+
+    async submitClaim(input: LobbyClaimInput): Promise<LobbyResult<LobbyClaim[]>> {
+      const r = mine(input.storeCode);
+      if (!r) return fail(404, NOT_FOUND);
+      const name = typeof input.holderName === 'string' ? input.holderName.trim() : '';
+      const id = typeof input.idNumber === 'string' ? input.idNumber.trim() : '';
+      const bare = id.replace(/[\s-]/g, '');
+      if ((input.kind !== 'senior' && input.kind !== 'pwd') || name.length < 1 || name.length > 40 || id.length < 4 || id.length > 40 || bare.length < 4) return fail(400, BAD);
+      if (!live(r)) return fail(409, 'That place in line is already closed.');
+      const rows = claimRows.get(r.entryId) ?? [];
+      if (rows.filter((c) => c.status === 'pending' || c.status === 'approved').length >= r.partySize) return fail(409, 'No more discount claims can be added for your table.');
+      if (rows.some((c) => c.status === 'pending' && c.norm === bare.toLowerCase())) return fail(409, 'That ID has already been entered for your table.');
+      rows.push({ claimId: `claim-${++seq}`, kind: input.kind, status: 'pending', idMasked: `****${bare.slice(-4)}`, rejectReason: null, ocrAssisted: input.ocrAssisted === true, norm: bare.toLowerCase() });
+      claimRows.set(r.entryId, rows);
+      return { ok: true, value: claimsOf(r.entryId) };
+    },
+
+    async cancelClaim(storeCode, claimId): Promise<LobbyResult<LobbyClaim[]>> {
+      const r = mine(storeCode);
+      if (!r) return fail(404, NOT_FOUND);
+      const c = (claimRows.get(r.entryId) ?? []).find((x) => x.claimId === claimId);
+      if (!c) return fail(404, NOT_FOUND);
+      if (c.status !== 'pending') return fail(409, 'That discount claim can no longer be changed.');
+      c.status = 'expired';
+      return { ok: true, value: claimsOf(r.entryId) };
+    },
   };
 
   const demo: LobbyDemo = {
@@ -174,6 +213,19 @@ export function createFixtureLobbyData(opts: { now?: () => number } = {}): Lobby
       if (b && b.status === 'requested') {
         b.status = 'declined';
         b.declineReason = reason;
+      }
+    },
+    approveClaim: () => {
+      const r = latest();
+      const c = r ? (claimRows.get(r.entryId) ?? []).find((x) => x.status === 'pending') : undefined;
+      if (c) c.status = 'approved';
+    },
+    rejectClaim: (reason) => {
+      const r = latest();
+      const c = r ? (claimRows.get(r.entryId) ?? []).find((x) => x.status === 'pending') : undefined;
+      if (c) {
+        c.status = 'rejected';
+        c.rejectReason = reason;
       }
     },
   };
