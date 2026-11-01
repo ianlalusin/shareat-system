@@ -7,6 +7,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(ThermalPrinterPlugin.class);
+        registerPlugin(BirthdaySongPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
