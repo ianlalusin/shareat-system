@@ -6,6 +6,7 @@
  * `systemTransaction` (DEF-742), not this module's: nothing here opens a transaction. Rows are never deleted.
  */
 import { lobbyRepo, type Tx } from '@shareat/db';
+import { expireStaleBirthdayRequests } from './birthday';
 import { LOBBY_ENTRY_TTL_HOURS } from './checkin';
 
 /** Personal columns are NULLed on entries closed longer than this. */
@@ -16,7 +17,10 @@ export const LOBBY_CLAIM_MAX_AGE_HOURS = 24;
 /** Live entries older than 3 h become `expired` (closed_at set) and their pending claims expire with them. Returns the entries expired. */
 export async function expireStaleLobbyEntries(tx: Tx, orgId: string): Promise<number> {
   const ids = await lobbyRepo.expireStaleEntries(tx, orgId, LOBBY_ENTRY_TTL_HOURS);
-  for (const id of ids) await lobbyRepo.expirePendingClaimsOfEntry(tx, orgId, id);
+  for (const id of ids) {
+    await lobbyRepo.expirePendingClaimsOfEntry(tx, orgId, id);
+    await lobbyRepo.expireBirthdayOfEntry(tx, orgId, id); // T-455 S6a
+  }
   return ids.length;
 }
 
@@ -38,12 +42,13 @@ export async function purgeLobbyPersonalData(tx: Tx, orgId: string): Promise<{ e
   return { entriesPurged, birthdayNamesPurged };
 }
 
-/** Expiry, then the claim sweep, then the purge, in that order (an entry closed by step 1 is purged only 24 h later). */
+/** Expiry (entries, then stale birthday requests), then the claim sweep, then the purge, in that order (an entry closed by step 1 is purged only 24 h later). */
 export async function runLobbyNightly(
   tx: Tx,
   orgId: string,
 ): Promise<{ entriesExpired: number; claimsExpired: number; entriesPurged: number; birthdayNamesPurged: number }> {
   const entriesExpired = await expireStaleLobbyEntries(tx, orgId);
+  await expireStaleBirthdayRequests(tx, orgId); // T-455 S6a: accepted and 30 min past their time
   const claimsExpired = await sweepStalePendingClaims(tx, orgId);
   const purged = await purgeLobbyPersonalData(tx, orgId);
   return { entriesExpired, claimsExpired, ...purged };

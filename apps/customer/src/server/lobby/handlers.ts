@@ -1,6 +1,16 @@
 import 'server-only';
 import { lobbyRepo, withOrgPrincipal } from '@shareat/db';
-import { cancelMyEntry, checkIn, getMyEntry, LOBBY_POS_STALE_MINUTES, type CheckInLine } from '@shareat/domain';
+import {
+  cancelMyBirthday,
+  cancelMyEntry,
+  checkIn,
+  getMyEntry,
+  LOBBY_POS_STALE_MINUTES,
+  readMyBirthday,
+  requestBirthday,
+  type CheckInLine,
+  type MyBirthdayView,
+} from '@shareat/domain';
 import { newCookieValue, readCookie, setCookieHeader } from './cookie';
 import { BodyTooLarge, fail, json, MAX_BODY_BYTES, readJsonObject, SENTENCES } from './http';
 import { logFault, logMissingIp, logReply } from './log';
@@ -15,7 +25,7 @@ import { clientIp, hmacHex, isUuid, readConfig, type LobbyConfig } from './secre
  * The diner is identified ONLY by the cookie. No input names a code or an entry id.
  */
 
-type Route = 'check-in' | 'me' | 'cancel' | 'store';
+type Route = 'check-in' | 'me' | 'cancel' | 'store' | 'birthday' | 'birthday-cancel';
 const MAX_STORE_CODE = 64;
 
 const storeCodeOf = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 && v.length <= MAX_STORE_CODE ? v : null);
@@ -158,6 +168,79 @@ export async function handleCancel(req: Request): Promise<Response> {
 
     noteEntry(done.entryId);
     return json(200, { ok: true, entry: { entryId: done.entryId, status: done.status } });
+  });
+}
+
+/** The diner's view of a birthday request: no request id, no entry id, no hash. The time is an ISO string. */
+const birthdayView = (v: MyBirthdayView) => ({
+  status: v.status,
+  celebrantName: v.celebrantName,
+  scheduledAt: v.scheduledAt ? v.scheduledAt.toISOString() : null,
+  declineReason: v.declineReason,
+});
+
+/** POST /api/lobby/birthday - the owner of a live entry asks for the birthday song. T-455 S6a. The cookie is the only identity; the name never reaches a log. */
+export async function handleBirthdayRequest(req: Request): Promise<Response> {
+  return guarded('birthday', async () => {
+    const cfg = readConfig();
+    if (!cfg) return notConfigured();
+    const body = await readJsonObject(req);
+    if (!body) return fail(400, SENTENCES.badInput);
+    const storeCode = storeCodeOf(body.storeCode);
+    const owner = await ownerKey(cfg, req, storeCode);
+    if ('stop' in owner) return owner.stop;
+
+    const made = await withOrgPrincipal(cfg.orgId, async (tx) => {
+      const storeId = await lobbyRepo.getStoreIdByCode(tx, cfg.orgId, storeCode!);
+      if (!storeId) return null;
+      const key = { orgId: cfg.orgId, storeId, deviceHash: owner.deviceHash };
+      await requestBirthday(tx, key, { celebrantName: body.celebrantName as string | null | undefined });
+      return readMyBirthday(tx, key);
+    });
+    if (!made) return fail(404, SENTENCES.notFound);
+    return json(200, { ok: true, birthday: birthdayView(made) });
+  });
+}
+
+/** GET /api/lobby/birthday?s=CODE - what became of my request. null = nothing asked yet; a cookie with no place in line at this store is 404. */
+export async function handleBirthdayRead(req: Request): Promise<Response> {
+  return guarded('birthday', async () => {
+    const cfg = readConfig();
+    if (!cfg) return notConfigured();
+    const storeCode = storeCodeOf(new URL(req.url).searchParams.get('s'));
+    const owner = await ownerKey(cfg, req, storeCode);
+    if ('stop' in owner) return owner.stop;
+
+    const found = await withOrgPrincipal(cfg.orgId, async (tx) => {
+      const storeId = await lobbyRepo.getStoreIdByCode(tx, cfg.orgId, storeCode!);
+      if (!storeId) return undefined;
+      return { view: await readMyBirthday(tx, { orgId: cfg.orgId, storeId, deviceHash: owner.deviceHash }) };
+    });
+    if (!found) return fail(404, SENTENCES.notFound);
+    return json(200, { ok: true, birthday: found.view ? birthdayView(found.view) : null });
+  });
+}
+
+/** POST /api/lobby/birthday/cancel - the owner withdraws the request (requested or accepted only). */
+export async function handleBirthdayCancel(req: Request): Promise<Response> {
+  return guarded('birthday-cancel', async () => {
+    const cfg = readConfig();
+    if (!cfg) return notConfigured();
+    const body = await readJsonObject(req);
+    if (!body) return fail(400, SENTENCES.badInput);
+    const storeCode = storeCodeOf(body.storeCode);
+    const owner = await ownerKey(cfg, req, storeCode);
+    if ('stop' in owner) return owner.stop;
+
+    const done = await withOrgPrincipal(cfg.orgId, async (tx) => {
+      const storeId = await lobbyRepo.getStoreIdByCode(tx, cfg.orgId, storeCode!);
+      if (!storeId) return null;
+      const key = { orgId: cfg.orgId, storeId, deviceHash: owner.deviceHash };
+      await cancelMyBirthday(tx, key);
+      return readMyBirthday(tx, key);
+    });
+    if (!done) return fail(404, SENTENCES.notFound);
+    return json(200, { ok: true, birthday: birthdayView(done) });
   });
 }
 

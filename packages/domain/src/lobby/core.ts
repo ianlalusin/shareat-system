@@ -172,6 +172,7 @@ export async function removeCore(tx: Tx, ctx: MoveCtx, entryId: string, guard: S
   const row = await liveEntryOrRefuse(tx, ctx, entryId, guard);
   await lobbyRepo.markClosed(tx, ctx.orgId, entryId, 'removed', ctx.personId);
   await lobbyRepo.expirePendingClaimsOfEntry(tx, ctx.orgId, entryId);
+  await lobbyRepo.expireBirthdayOfEntry(tx, ctx.orgId, entryId); // S6a: a removed party leaves no live birthday request
   await auditLogRepo.append(tx, ctx.orgId, {
     actorPersonId: ctx.personId,
     action: 'lobby.remove',
