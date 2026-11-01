@@ -180,7 +180,7 @@ export async function orderView(orgId: string, id: string): Promise<OrderView | 
       catalogue: stage === 'draft' ? await orderableCatalogue(tx, orgId, order.storeId, order.requestedByStoreId) : [],
       items:
         stage === 'accepted' || stage === 'ready'
-          ? (await itemsRepo.listItems(tx, orgId)).map((i) => ({ id: i.id, code: i.code, name: i.name, baseUnit: i.baseUnit }))
+          ? (await itemsRepo.listItems(tx, orgId, { stockedOnly: true })).map((i) => ({ id: i.id, code: i.code, name: i.name, baseUnit: i.baseUnit }))
           : [],
       messages: thread,
       authors: new Map(people.map((p) => [p.id, p.name])),

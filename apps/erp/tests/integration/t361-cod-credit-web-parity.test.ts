@@ -59,6 +59,7 @@ import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/i
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import { paramsOf } from '../helpers/flash-jar';
+import { itemiseLegacy } from '../../../../packages/domain/tests/integration/_fixtures/legacy-itemise'; // T-502 s12: web tests need an itemised invoice
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -133,6 +134,7 @@ async function pendingInvoice(f: Fixture, supplierId: string, totalAmount: strin
   const created = await asOrg(f.orgId, (tx) =>
     recordInvoice(tx, f.admin, { storeId: f.storeId, supplierId, invoiceDate: '2026-01-10', totalAmount, receiptFileId: fileId }),
   );
+  await itemiseLegacy(sql, created.id);
   return created.id;
 }
 async function verifiedInvoice(f: Fixture, supplierId: string, totalAmount: string): Promise<string> {

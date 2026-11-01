@@ -23,7 +23,6 @@ import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { closeDb, itemsRepo, transaction, APP_ROLE, RefusalError, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import {
-  approveItemRequest,
   createItem,
   dismissDuplicatePair,
   mergeItems,
@@ -35,6 +34,7 @@ import {
   setItemVariantOf,
   undoDuplicateDismissal,
 } from '@shareat/domain';
+import { approveWithCategory } from './_fixtures/item-category';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -138,17 +138,17 @@ describe('R1 - variations', () => {
 
     // Request with a parent: copied at approval.
     const r1 = await asOrg(f.orgId, (tx) => requestItem(tx, f.manager, { name: 'Kimchi 500g', kind: 'raw_material', baseUnit: 'kg', variantOfItemId: kimchi }));
-    const a1 = await asOrg(f.orgId, (tx) => approveItemRequest(tx, f.superAdmin, { requestId: r1.requestId }));
+    const a1 = await asOrg(f.orgId, (tx) => approveWithCategory(tx, f.superAdmin, { requestId: r1.requestId }));
     expect(await variantOf(a1.itemId)).toBe(kimchi);
 
     // The approver clears it (null) ...
     const r2 = await asOrg(f.orgId, (tx) => requestItem(tx, f.manager, { name: 'Kimchi 1kg', kind: 'raw_material', baseUnit: 'kg', variantOfItemId: kimchi }));
-    const a2 = await asOrg(f.orgId, (tx) => approveItemRequest(tx, f.superAdmin, { requestId: r2.requestId, variantOfItemId: null }));
+    const a2 = await asOrg(f.orgId, (tx) => approveWithCategory(tx, f.superAdmin, { requestId: r2.requestId, variantOfItemId: null }));
     expect(await variantOf(a2.itemId)).toBeNull();
 
     // ... or sets one the requester left blank.
     const r3 = await asOrg(f.orgId, (tx) => requestItem(tx, f.manager, { name: 'Kimchi 10kg', kind: 'raw_material', baseUnit: 'kg' }));
-    const a3 = await asOrg(f.orgId, (tx) => approveItemRequest(tx, f.superAdmin, { requestId: r3.requestId, variantOfItemId: kimchi }));
+    const a3 = await asOrg(f.orgId, (tx) => approveWithCategory(tx, f.superAdmin, { requestId: r3.requestId, variantOfItemId: kimchi }));
     expect(await variantOf(a3.itemId)).toBe(kimchi);
   }, 30_000);
 
@@ -360,7 +360,7 @@ describe('R4 - guard 1, at request time', () => {
     const req = (who: Actor, name: string) => asOrg(f.orgId, (tx) => requestItem(tx, who, { name, kind: 'raw_material', baseUnit: 'kg' }));
     const first = await req(f.manager, 'Dried anchovy');
     const s = await sentence(req(f.admin, 'dried  ANCHOVY'));
-    expect(s).toMatch(/^Manager already asked for "Dried anchovy" on .+; it is waiting for a super-admin\.$/);
+    expect(s).toMatch(/^Manager already asked for "Dried anchovy" on .+; it is waiting for an admin to approve\.$/);
 
     await asOrg(f.orgId, (tx) => rejectItemRequest(tx, f.superAdmin, { requestId: first.requestId, note: 'not now' }));
     const second = await req(f.admin, 'Dried anchovy');
@@ -389,7 +389,7 @@ describe('R5 - guard 2, at approval time', () => {
     const counter = async () =>
       (await sql<{ last_seq: number }[]>`select last_seq from item_code_counters where org_id = ${f.orgId} and stem = 'PORK'`)[0]?.last_seq;
     const before = await counter();
-    const s = await sentence(asOrg(f.orgId, (tx) => approveItemRequest(tx, f.superAdmin, { requestId: asked.requestId })));
+    const s = await sentence(asOrg(f.orgId, (tx) => approveWithCategory(tx, f.superAdmin, { requestId: asked.requestId })));
     expect(s).toMatch(/An item called "pork belly" \([A-Z0-9]{4}-\d{3}\) already exists/);
     expect(await counter()).toBe(before);
     const row = (await sql<{ status: string; created_item_id: string | null }[]>`select status, created_item_id from item_requests where id = ${asked.requestId}`)[0]!;

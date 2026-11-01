@@ -32,7 +32,8 @@ export default async function PriceListPage({
 
   const [list, allItems] = await Promise.all([
     getListDetail(actor.orgId, id),
-    listItems(actor.orgId, false),
+    // T-502 S1: a service (rent, power...) is never sold, so it never gets a rate.
+    listItems(actor.orgId, false, undefined, true),
   ]);
   if (!list) notFound();
 

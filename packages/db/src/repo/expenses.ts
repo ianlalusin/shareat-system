@@ -16,7 +16,7 @@
  * `packages/domain/src/expenses/routing.ts` and `@shareat/auth`'s `authorize()`.
  */
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
-import { expenseCategories, expensePayments, expenses } from '../../schema';
+import { expenseCategories, expensePayments, expenseSubcategories, expenses } from '../../schema';
 import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
 import type { SafeInsert, SafeUpdate } from './numeric-input';
@@ -688,4 +688,142 @@ export async function deleteExpenseDraft(tx: Tx, orgId: string, id: string): Pro
       'a draft',
     );
   }
+}
+
+// -----------------------------------------------------------------------------------------
+// T-502 section 11 - sub-categories under an expense category. Retire, never delete.
+// -----------------------------------------------------------------------------------------
+
+export interface ExpenseSubcategoryRow {
+  id: string;
+  orgId: string;
+  categoryId: string;
+  name: string;
+  isActive: boolean;
+}
+
+const subcategoryColumns = {
+  id: expenseSubcategories.id,
+  orgId: expenseSubcategories.orgId,
+  categoryId: expenseSubcategories.categoryId,
+  name: expenseSubcategories.name,
+  isActive: expenseSubcategories.isActive,
+};
+
+export async function insertSubcategory(
+  tx: Tx,
+  input: { orgId: string; categoryId: string; name: string; createdBy: string },
+): Promise<{ id: string }> {
+  const [row] = await tx.insert(expenseSubcategories).values(input).returning({ id: expenseSubcategories.id });
+  return row!;
+}
+
+export async function getSubcategoryById(tx: Tx, orgId: string, id: string): Promise<ExpenseSubcategoryRow | undefined> {
+  const [row] = await tx
+    .select(subcategoryColumns)
+    .from(expenseSubcategories)
+    .where(and(eq(expenseSubcategories.id, id), eq(expenseSubcategories.orgId, orgId)))
+    .limit(1);
+  return row;
+}
+
+export async function listSubcategories(
+  tx: Tx,
+  orgId: string,
+  opts: { categoryId?: string; activeOnly?: boolean } = {},
+): Promise<ExpenseSubcategoryRow[]> {
+  const conds = [eq(expenseSubcategories.orgId, orgId)];
+  if (opts.categoryId) conds.push(eq(expenseSubcategories.categoryId, opts.categoryId));
+  if (opts.activeOnly) conds.push(eq(expenseSubcategories.isActive, true));
+  return tx
+    .select(subcategoryColumns)
+    .from(expenseSubcategories)
+    .where(and(...conds))
+    .orderBy(asc(expenseSubcategories.name));
+}
+
+/** The name-collision pre-read, normalised exactly as `expense_subcategories_org_name_key` is. Only to WORD the refusal. */
+export async function subcategoryByNormalisedName(
+  tx: Tx,
+  orgId: string,
+  categoryId: string,
+  name: string,
+): Promise<ExpenseSubcategoryRow | undefined> {
+  const [row] = await tx
+    .select(subcategoryColumns)
+    .from(expenseSubcategories)
+    .where(
+      and(
+        eq(expenseSubcategories.orgId, orgId),
+        eq(expenseSubcategories.categoryId, categoryId),
+        sql`lower(trim(${expenseSubcategories.name})) = lower(trim(${name}))`,
+      ),
+    )
+    .limit(1);
+  return row;
+}
+
+export async function renameSubcategory(tx: Tx, orgId: string, id: string, name: string): Promise<void> {
+  await tx
+    .update(expenseSubcategories)
+    .set({ name, updatedAt: new Date() })
+    .where(and(eq(expenseSubcategories.id, id), eq(expenseSubcategories.orgId, orgId)));
+}
+
+export async function setSubcategoryActive(tx: Tx, orgId: string, id: string, isActive: boolean): Promise<void> {
+  await tx
+    .update(expenseSubcategories)
+    .set({ isActive, updatedAt: new Date() })
+    .where(and(eq(expenseSubcategories.id, id), eq(expenseSubcategories.orgId, orgId)));
+}
+
+// -------------------------------------------------------------------------------------
+// T-502 section 12 - the "parts" of an itemised invoice. Raw facts only; the rule (rooms, ceilings) lives in the domain.
+// -------------------------------------------------------------------------------------
+
+export interface InvoicePartsFacts {
+  invoiceTotal: string;
+  /** One row per item category on the invoice's lines; `categoryId` null = lines whose item has no category. */
+  lineGroups: { categoryId: string | null; total: string; itemNames: string[] }[];
+  /** Live (not voided) expenses on the invoice, summed per category. */
+  recorded: { categoryId: string; total: string }[];
+  lineCount: number;
+}
+
+/**
+ * The invoice's lines grouped by their item's expense category, and its live expenses grouped by category.
+ * `excludeExpenseId` leaves one expense out (an edit must not count the draft against itself).
+ */
+export async function invoicePartsFacts(
+  tx: Tx,
+  orgId: string,
+  invoiceId: string,
+  excludeExpenseId?: string,
+): Promise<InvoicePartsFacts | undefined> {
+  const [inv] = (await tx.execute(sql`
+    select total_amount::text as total_amount from supplier_invoices where id = ${invoiceId} and org_id = ${orgId}
+  `)) as unknown as { total_amount: string }[];
+  if (!inv) return undefined;
+  const lines = (await tx.execute(sql`
+    select i.expense_category_id as category_id, sum(l.line_total)::text as total,
+           array_agg(i.name order by l.line_no) as item_names, count(*)::int as n
+    from supplier_invoice_lines l
+    join items i on i.id = l.item_id
+    where l.supplier_invoice_id = ${invoiceId}
+    group by i.expense_category_id
+    order by min(l.line_no)
+  `)) as unknown as { category_id: string | null; total: string; item_names: string[]; n: number }[];
+  const live = (await tx.execute(sql`
+    select category_id, sum(total_amount)::text as total
+    from expenses
+    where supplier_invoice_id = ${invoiceId} and org_id = ${orgId} and status <> 'voided'
+      ${excludeExpenseId ? sql`and id <> ${excludeExpenseId}` : sql``}
+    group by category_id
+  `)) as unknown as { category_id: string; total: string }[];
+  return {
+    invoiceTotal: inv.total_amount,
+    lineGroups: lines.map((r) => ({ categoryId: r.category_id, total: r.total, itemNames: r.item_names })),
+    recorded: live.map((r) => ({ categoryId: r.category_id, total: r.total })),
+    lineCount: lines.reduce((n, r) => n + r.n, 0),
+  };
 }

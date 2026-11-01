@@ -12,9 +12,12 @@ import {
   undoDuplicateDismissalAction,
 } from './actions';
 import { ItemCodeField } from './ItemCodeField';
+import { SubcategorySelect } from './SubcategorySelect';
 import {
   dismissedPairs,
   duplicateCandidates,
+  expenseCategoryOptions,
+  expenseSubcategoryOptions,
   itemKindCounts,
   listItems,
   mayApproveItem,
@@ -44,13 +47,15 @@ export default async function ItemsPage({
   const kind = parseKindFilter(typeof rawParams.kind === 'string' ? rawParams.kind : undefined);
   const sp = await withFlash(Promise.resolve(rawParams));
   const { actor } = await requireSession(kind ? `/items?kind=${kind}` : '/items');
-  const [items, requests, dupes, dismissed, kindCounts, parentOptions] = await Promise.all([
+  const [items, requests, dupes, dismissed, kindCounts, parentOptions, categoryOptions, subcategoryOptions] = await Promise.all([
     listItems(actor.orgId, true, kind),
     pendingRequests(actor.orgId),
     duplicateCandidates(actor.orgId),
     dismissedPairs(actor.orgId),
     itemKindCounts(actor.orgId),
     variationParentOptions(actor.orgId),
+    expenseCategoryOptions(actor.orgId),
+    expenseSubcategoryOptions(actor.orgId),
   ]);
   const rows = arrangeFamilies(items);
   const totalItems = Object.values(kindCounts).reduce((a, b) => a + b, 0);
@@ -64,7 +69,7 @@ export default async function ItemsPage({
         <div>
           <h1 className="text-2xl font-semibold">Items</h1>
           <PageDescription>
-            The shared item catalogue for every store. Request a new item here; a super-admin approves it. Open an item for its settings, suppliers and price history.
+            The shared item catalogue for every store. Request a new item here; an admin approves it. Open an item for its settings, suppliers and price history.
           </PageDescription>
         </div>
         <FormModal
@@ -99,6 +104,29 @@ export default async function ItemsPage({
                 <div className="mt-2">
                   <ItemCodeField nameInputId="item-name" mode="new" canOverride={false} suggestAction={suggestItemCodeAction} />
                 </div>
+              </FormSection>
+              <FormSection title="What it is bought under">
+                <FormGrid layout="fields">
+                  <Field width="long"
+                    span="full"
+                    label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Expense category <span className="italic">(so what it costs shows up under the right heading; an admin needs it to approve)</span></span>}
+                    className="text-sm"
+                  >
+                    <Select name="expenseCategoryId" defaultValue="" className="mt-1 block w-full">
+                      <option value="">Choose a category…</option>
+                      {categoryOptions.map((c) => (
+                        <option key={c.id} value={c.id}>{c.label}</option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field width="long"
+                    span="full"
+                    label={<span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Sub-category <span className="italic">(if the category has them)</span></span>}
+                    className="text-sm"
+                  >
+                    <SubcategorySelect options={subcategoryOptions} defaultCategoryId="" defaultValue="" />
+                  </Field>
+                </FormGrid>
               </FormSection>
               <FormSection title="Item family">
                 <FormGrid layout="fields">
@@ -338,8 +366,8 @@ export default async function ItemsPage({
       {requests.length > 0 && (
         <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="font-medium">
-            {requests.length === 1 ? 'One item is' : `${requests.length} items are`} waiting for a
-            super-admin
+            {requests.length === 1 ? 'One item is' : `${requests.length} items are`} waiting for an
+            admin
           </h2>
           <ul className="space-y-3">
             {requests.map((r) => (
@@ -383,6 +411,20 @@ export default async function ItemsPage({
                         ))}
                       </Select>
                     </Field>
+                    {/* T-502 S1/S2: the expense category (the requester's, pre-selected). A purchasable item needs one to be approved. */}
+                    <label className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                      Expense category
+                      <Select name="expenseCategoryId" defaultValue={r.expenseCategoryId ?? ''}>
+                        <option value="">Choose a category…</option>
+                        {categoryOptions.map((c) => (
+                          <option key={c.id} value={c.id}>{c.label}</option>
+                        ))}
+                      </Select>
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                      Sub-category
+                      <SubcategorySelect options={subcategoryOptions} defaultCategoryId={r.expenseCategoryId ?? ''} defaultValue={r.expenseSubcategoryId ?? ''} />
+                    </label>
                     {/* T-443 R1: the requester's "variation of", which the approver may change or clear. */}
                     <label className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
                       Variation of

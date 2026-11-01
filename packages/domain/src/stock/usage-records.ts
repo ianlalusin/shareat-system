@@ -37,6 +37,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { posMappingRepo, stockUsageRepo, type Tx } from '@shareat/db';
 import { toBusinessDate, type BusinessDate } from '@shareat/core/datetime';
 import { humanDate } from '../shared/refusal-leaf';
+import { refuse } from '../shared/refusal';
 import { voidPullUsageRecord } from './void-pull-usage-record';
 import type { Money } from '@shareat/core/money';
 import { compareQuantity, ZERO_QUANTITY } from './quantity';
@@ -52,9 +53,16 @@ import { checkUsageTolerance, writeToleranceVerified } from './usage-tolerance';
  * `raw_material`/`prepped` (the latter not yet a real `ItemKind`, T-176's future output) and
  * anything else → the `food` catch-all, which is the COA's own designated drain for an
  * unclassified kind rather than a silent guess at a more specific one.
+ *
+ * T-502 S1 (R7): a `service` (rent, power, water...) is never stocked, so it never reaches COGS-by-kind. It throws rather than falling into the
+ * `food` drain, which would file a power bill as food cost.
  */
 export function cogsCategoryForItemKind(kind: string): string {
   switch (kind) {
+    case 'service': {
+      const s = 'A service item (rent, power, water...) is never stocked, so it cannot be used up or counted.';
+      throw refuse('cogsCategoryForItemKind: a service item is never stocked', s);
+    }
     case 'meat_slab':
     case 'meat_sliced':
       return 'meat';

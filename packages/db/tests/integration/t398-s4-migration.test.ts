@@ -118,6 +118,9 @@ async function seed(s: postgres.Sql, mode: Mode): Promise<{ child: string; id: s
       const id = await insertSynthResolved(tx, x.child, a, { [x.col]: `'${value}'::uuid` });
       out.push({ child: x.child, id, value });
     }
+    // The synthesizer fills text columns with filler; a seeded item's kind must be a real one, because a later migration (0224, T-502) re-adds
+    // items_kind_check VALIDATED and a real database holds only real kinds. Replica mode: no trigger fires on this UPDATE.
+    await tx`update items set kind = 'raw_material'`;
     return out;
   });
   await restoreChecks(s, stripped);

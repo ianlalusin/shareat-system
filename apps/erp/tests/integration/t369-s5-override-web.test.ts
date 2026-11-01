@@ -405,7 +405,7 @@ async function expenseFixture(hint: string) {
       values (${orgId}, ${storeId}, ${supplier!.id}, ${on}, '99999999.00', 'verified', ${file!.id}, ${managerId}, now(), ${adminId}, true, true, true, true)
       returning id`;
     const made = await asOrg(orgId, (tx) =>
-      createExpense(tx, admin, {
+      createExpense(tx, admin, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId, supplierId: supplier!.id, supplierInvoiceId: inv!.id, businessDate: on, categoryId: cat!.id,
         particulars: `Pork, cash (${on})`, payments: [{ method: 'cash', amount: '1200.00', moneyAccountId: cash!.id }],
       }),

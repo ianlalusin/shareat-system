@@ -259,6 +259,8 @@ export type {
   DuplicateCandidate,
   DismissalRow,
   ItemNameHit,
+  AliasHit,
+  AliasRow,
   OpenRequestHit,
   ResolvedSellability,
   StoreSellabilityOverrideRow,

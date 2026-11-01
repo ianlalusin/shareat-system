@@ -87,6 +87,7 @@ export async function draftExpense(f: MoneyFx, invoiceId: string, amount: string
     createExpense(tx, f.staff, {
       storeId: f.storeId, businessDate: '', supplierId: f.supplierId, supplierInvoiceId: invoiceId, categoryId: f.categoryId,
       particulars, payments: [{ method: 'cash', amount, moneyAccountId: f.drawerId }],
+      requireItemised: false, // legacy fixture: lineless invoice
     }),
   );
 }

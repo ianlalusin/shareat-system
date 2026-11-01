@@ -20,7 +20,7 @@ export async function posMapScreenData(orgId: string, storeId: string): Promise<
     const [maps, requests, itemRows, recipeRows, locations] = await Promise.all([
       posMappingRepo.listMapsForStore(tx, storeId),
       posMappingRepo.listRequestsForStore(tx, storeId),
-      itemsRepo.listItems(tx, orgId, { includeInactive: false }),
+      itemsRepo.listItems(tx, orgId, { includeInactive: false, stockedOnly: true }),
       productionRepo.listRecipes(tx, orgId, false),
       stockUsageRepo.listOperatingLocations(tx, storeId),
     ]);

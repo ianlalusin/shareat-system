@@ -122,6 +122,8 @@ describe('leg 5 - unmapped kind by name; sub-centavo fixture compared in centavo
   it('valueOpeningStock refuses an item whose kind has no inventory account, by item name', async () => {
     const f = await s2fixture('a5-kind');
     const nm = `Mystery Crate ${uid('k')}`;
+    // Capture the LIVE definition to restore it: a hard-coded kind list reverts every later migration's widening (0224 added 'service') for the whole shared DB.
+    const [kindCheck] = await sql<{ d: string }[]>`select pg_get_constraintdef(oid) as d from pg_constraint where conname = 'items_kind_check' and conrelid = 'items'::regclass`;
     await sql.unsafe('alter table items drop constraint items_kind_check');
     let itemId: string | undefined;
     try {
@@ -137,9 +139,7 @@ describe('leg 5 - unmapped kind by name; sub-centavo fixture compared in centavo
         await sql`delete from opening_counts where item_id = ${itemId}`;
         await sql`delete from items where id = ${itemId}`;
       }
-      await sql.unsafe(
-        `alter table items add constraint items_kind_check check (kind in ('raw_material','supply','retail','meat_slab','meat_sliced'))`,
-      );
+      await sql.unsafe(`alter table items add constraint items_kind_check ${kindCheck!.d}`);
     }
   });
 

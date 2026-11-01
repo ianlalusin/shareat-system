@@ -169,7 +169,7 @@ describe('DEF-778 - AP recordPaymentAction', () => {
     );
     await asOrg(f.orgId, (tx) => verifyInvoice(tx, f.admin, invoice.id, { supplier: true, invoice: true, items: true, price: true }));
     const { expenseId } = await asOrg(f.orgId, (tx) =>
-      recordExpenseForInvoice(tx, f.admin, {
+      recordExpenseForInvoice(tx, f.admin, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId, supplierId: supplier.id, supplierInvoiceId: invoice.id, categoryId: category!.id, particulars: 'Stock purchase',
         payments: [{ method: 'credit', amount: '20000.00' }],
       }),

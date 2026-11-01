@@ -186,7 +186,7 @@ type Leg = { amount: string; cashRequestId: string; moneyAccountId?: string | nu
 async function draft(f: Fixture, legs: Leg[], o: { invoiceId?: string; storeId?: string } = {}): Promise<string> {
   const invoiceId = o.invoiceId ?? (await invoice(f, o.storeId));
   const { id } = await asPerson(f.orgId, (tx) =>
-    createExpense(tx, actorOf(f.orgId, f.staffId), {
+    createExpense(tx, actorOf(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
       storeId: o.storeId ?? f.storeId,
       businessDate: '2026-01-05',
       categoryId: f.categoryId,

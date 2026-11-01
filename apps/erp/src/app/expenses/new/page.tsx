@@ -1,19 +1,21 @@
 import { listStores, listActiveCategoriesGrouped } from '../lib';
 import { loadMoneyLines } from '@/lib/money-lines/load';
-import { InvoiceMoneyLines } from '@/components/money/InvoiceMoneyLines';
 import { listOpenInvoicesForPicker, peso } from '../../ap/lib';
 import { requireSession } from '../../../lib/session';
 import { createExpenseAction } from '../actions';
 import { budgetsRepo } from '@shareat/db';
 import { withOrgPrincipal } from '../lib';
 import { BudgetHint } from './BudgetHint';
+import { InvoicePartsPicker } from '@/components/expenses/InvoicePartsPicker';
+import { invoicePartsView } from '../parts-view';
 import { CheckedForm, FieldCheck, RuleCheck } from '@/components/forms';
 import { buildNewExpenseFacts } from '@shareat/domain/business-rules';
 import { EXPENSE_CREATE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { SubmitButton } from '@/components/feedback/SubmitButton';
+import { Banner, FlashBanner, FormGrid, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 
 export const metadata = { title: 'New expense — Shareat System' };
@@ -54,7 +56,10 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
     ? await withOrgPrincipal(orgId, (tx) => budgetsRepo.listForStorePeriod(tx, orgId, storeId, periodKey))
     : [];
 
-  const groups: Array<'COGS' | 'OPEX' | 'PERSONAL' | 'CAPEX'> = ['COGS', 'OPEX', 'PERSONAL', 'CAPEX'];
+  // T-502 section 12: each pickable invoice's parts (its lines grouped by category, plus Uncategorised and Fees), with what is left.
+  const partsByInvoice = Object.fromEntries(
+    await Promise.all(invoices.map(async (inv) => [inv.id, await invoicePartsView(orgId, inv.id, categories)] as const)),
+  );
 
   return (
     <Page density="table">
@@ -133,56 +138,31 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
               </Select>
             </Field>
 
-            <Field label="Category" rule={EXPENSE_CREATE_RULES.categoryId}>
-              <Select {...nativeAttrs(EXPENSE_CREATE_RULES.categoryId)} defaultValue="">
-                <option value="" disabled>
-                  Select a category
-                </option>
-                {groups.map((g) => {
-                  const rows = categories.filter((c) => c.group === g);
-                  if (rows.length === 0) return null;
-                  return (
-                    <optgroup key={g} label={g}>
-                      {rows.map((c) => (
-                        <option key={c.id} value={c.id} disabled={!c.accountCode}>
-                          {c.category}
-                          {!c.accountCode ? ' (unmapped — cannot post)' : ''}
-                        </option>
-                      ))}
-                    </optgroup>
-                  );
-                })}
-              </Select>
-            </Field>
           </FormGrid>
 
-          <Field label="Particulars — what this was actually for" rule={EXPENSE_CREATE_RULES.particulars}>
-            <Input type="text" {...nativeAttrs(EXPENSE_CREATE_RULES.particulars)} />
-          </Field>
-
-          <div>
-            <h2 className="mb-2 text-sm font-medium">
-              Payments — add a line for each place the money came from. A split expense posts as
-              ONE entry with one credit line per row (invariant 2).
-            </h2>
-            <InvoiceMoneyLines
-              direction="out"
-              sources={moneyLines.sources}
-              otherStoreSources={moneyLines.otherStoreSources}
-              storeNames={moneyLines.storeNames}
-              staff={moneyLines.staff}
-              invoices={invoiceSuppliers}
-            />
-          </div>
+          {/* ⭐ T-502 section 12: the expense follows the bill's items. "Which part of this bill?" replaces the free Category select;
+              it pre-fills Particulars and the first payment, and a bill with no lines gets a panel (Save stays off). */}
+          <InvoicePartsPicker
+            views={partsByInvoice}
+            categories={categories}
+            particularsRule={EXPENSE_CREATE_RULES.particulars}
+            payments={{
+              moneyLines: {
+                sources: moneyLines.sources,
+                otherStoreSources: moneyLines.otherStoreSources,
+                storeNames: moneyLines.storeNames,
+                staff: moneyLines.staff,
+              },
+              invoices: invoiceSuppliers,
+            }}
+          />
 
           {/* T-475 E1-E3: the business rules, live. Each prints its own sentence (the same one the server refuses with) and turns Save off. */}
           <RuleCheck id="expense.new.amountWithinRemaining" facts={invoiceFacts} />
           <RuleCheck id="expense.new.creditNeedsTerms" facts={invoiceFacts} />
           <RuleCheck id="expense.new.supplierActive" facts={invoiceFacts} />
 
-          <Button type="submit" variant="primary">
-            Save draft
-          </Button>
+          <SubmitButton pendingLabel="Saving…">Save draft</SubmitButton>
         </CheckedForm>
         </>
       )}

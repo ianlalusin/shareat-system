@@ -88,7 +88,7 @@ const ROWS: Record<string, Row> = {
   'ap.voidInvoice.reason': req('Say why this invoice is being voided.'),
   'ap.voidPayment.reason': req('Say why this payment is being voided.'),
   'ap.voidPayment.voidOn': { ok: '2026-10-01', bad: [['soon', 'Pick a valid date for the reversal.']] },
-  'ap.recordExpenseForInvoice.categoryId': req('Choose a category.'),
+  'ap.recordExpenseForInvoice.categoryId': req('Choose which part of the bill this is for.'),
   'ap.recordExpenseForInvoice.particulars': req('Particulars are required - say what the spend was for.'),
   // ---- customers
   'customers.createCustomer.name': req('A customer needs a name people will recognise.'),

@@ -9,10 +9,10 @@
  * `costPerUnit` is zero on 71% of its items, which is what a snapshot nobody maintains looks
  * like after a year.
  */
-import { auditLogRepo, itemCodesRepo, itemsRepo, type InvoiceLineInput, type ItemRequestRow, type MergeReport, type OpenRequestHit, type SimilarItem, type Tx } from '@shareat/db';
+import { accessRepo, auditLogRepo, expensesRepo, itemCodesRepo, itemsRepo, type InvoiceLineInput, type ItemRequestRow, type MergeReport, type OpenRequestHit, type SimilarItem, type Tx } from '@shareat/db';
 import type { BaseUnit, ItemKind, ItemStatus, PurchaseUnit } from '@shareat/db/schema';
 import { computeBranchPrice, type BranchPrice } from './branch-price';
-import { authorize, type Actor } from '@shareat/auth';
+import { authorize, holdsSuperAdminAuthority, type Actor } from '@shareat/auth';
 import { decimal, toCentavos, type Decimal } from '@shareat/core/money';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { parseQuantityInput } from '../shared/quantity-input';
@@ -39,7 +39,7 @@ export function normaliseItemName(raw: string): string {
 
 /** T-443: one sentence for both the normal refusal and a request that lost a concurrent insert race. */
 export function openItemRequestSentence(open: Pick<OpenRequestHit, 'name' | 'requestedByName' | 'requestedAt'>): string {
-  return `${open.requestedByName} already asked for "${open.name}" on ${humanDate(toBusinessDate(open.requestedAt))}; it is waiting for a super-admin.`;
+  return `${open.requestedByName} already asked for "${open.name}" on ${humanDate(toBusinessDate(open.requestedAt))}; it is waiting for an admin to approve.`;
 }
 
 /**
@@ -50,7 +50,10 @@ export function openItemRequestSentence(open: Pick<OpenRequestHit, 'name' | 'req
  */
 async function assertItemNameFree(trx: Tx, orgId: string, name: string): Promise<void> {
   const hit = await itemsRepo.findItemByName(trx, orgId, name);
-  if (!hit) return;
+  if (!hit) {
+    await assertNameNotAnAlias(trx, orgId, name);
+    return;
+  }
   const label = `"${hit.name}" (${hit.code})`;
   let sentence: string;
   if (hit.status === 'merged') {
@@ -62,6 +65,85 @@ async function assertItemNameFree(trx: Tx, orgId: string, name: string): Promise
     sentence = `An item called ${label} already exists. Use that item, or choose a different name.`;
   }
   throw refuse(`item name already in use: ${hit.id}`, sentence);
+}
+
+/**
+ * ⭐ T-502 S1 (R5). The other half of "an alias is never an item name": a NAME that an alias already holds is refused, so the picker
+ * never has two answers for one word. The database trigger `items_name_alias_guard` is the backstop; this speaks first.
+ */
+async function assertNameNotAnAlias(trx: Tx, orgId: string, name: string): Promise<void> {
+  const hit = await itemsRepo.findAliasByText(trx, orgId, name);
+  if (!hit) return;
+  const s = `"${name}" is already another name for "${hit.itemName}" (${hit.itemCode}). Use that item, or choose a different name.`;
+  throw refuse(`item name is an alias: ${hit.id}`, s);
+}
+
+/** ⭐ T-502 S1/S2. An expense category an item or request may name: one of THIS org's, and not retired. Plain words; the same-org FK is the backstop. */
+async function assertUsableExpenseCategory(trx: Tx, orgId: string, categoryId: string): Promise<void> {
+  const cat = await expensesRepo.getCategoryById(trx, orgId, categoryId);
+  if (!cat) {
+    const s = "That expense category is not one of this organisation's categories. Pick one from the list.";
+    throw refuse(`expense category ${categoryId} not found in org`, s);
+  }
+  if (!cat.isActive) {
+    const s = `The expense category "${cat.category}" is retired. Pick an active one.`;
+    throw refuse(`expense category ${categoryId} is retired`, s);
+  }
+}
+
+/**
+ * ⭐ T-502 section 11. A sub-category an item or request may name: one of THIS org's, active, and under the category chosen for the same
+ * row. Plain words; the same-org FK and the trigger `items_subcategory_matches_category` are the backstops.
+ */
+async function assertUsableSubcategory(trx: Tx, orgId: string, subcategoryId: string, categoryId: string | null): Promise<void> {
+  const sub = await expensesRepo.getSubcategoryById(trx, orgId, subcategoryId);
+  if (!sub) {
+    const s = "That sub-category is not one of this organisation's sub-categories. Pick one from the list.";
+    throw refuse(`sub-category ${subcategoryId} not found in org`, s);
+  }
+  if (!sub.isActive) {
+    const s = `The sub-category "${sub.name}" is retired. Pick an active one.`;
+    throw refuse(`sub-category ${subcategoryId} is retired`, s);
+  }
+  if (categoryId === null || sub.categoryId !== categoryId) {
+    const s = categoryId === null
+      ? 'Pick the expense category first; a sub-category belongs to one.'
+      : `The sub-category "${sub.name}" belongs to a different expense category than the one chosen. Pick a sub-category under the chosen category.`;
+    throw refuse(s, s);
+  }
+}
+
+/** ⭐ T-502 section 11. When the chosen category has an active sub-category, an approved item must carry one (otherwise optional). */
+async function requireSubcategoryWhenOffered(trx: Tx, orgId: string, categoryId: string | null, subcategoryId: string | null): Promise<void> {
+  if (categoryId === null || subcategoryId !== null) return;
+  const offered = await expensesRepo.listSubcategories(trx, orgId, { categoryId, activeOnly: true });
+  if (offered.length > 0) {
+    const s = 'Pick a sub-category for this item: its expense category has them, and the item needs one so its cost lands in the right group.';
+    throw refuse(s, s);
+  }
+}
+
+/**
+ * ⭐ T-502 S1 (R6). A service (rent, power, water, internet) is counted as "each", is always something you buy and is never sold. The
+ * database CHECKs `items_service_*` are the rule; this speaks. `flags` are the values as they will be stored (absent = the default).
+ */
+function assertServiceShape(
+  kind: ItemKind,
+  baseUnit: BaseUnit,
+  flags: { isPurchasable?: boolean; sellableRetail?: boolean; sellableWholesale?: boolean },
+): void {
+  if (kind !== 'service') return;
+  const bad = (s: string): never => {
+    throw refuse(`service item shape: ${s}`, s);
+  };
+  if (baseUnit !== 'pcs') bad('A service (rent, power, water...) is counted as "each", so its unit must be pcs.');
+  if (flags.isPurchasable === false) bad('A service (rent, power, water...) is always something you buy.');
+  if (flags.sellableRetail === true || flags.sellableWholesale === true) bad('A service (rent, power, water...) cannot be sold; it is only bought.');
+}
+
+async function isSuperAdminAuthority(trx: Tx, actor: Actor): Promise<boolean> {
+  const role = await accessRepo.activeRoleForPerson(trx, actor.personId, actor.orgId);
+  return holdsSuperAdminAuthority(trx, actor, role?.role);
 }
 
 /**
@@ -78,8 +160,17 @@ async function assertCanBeVariationOf(
     const s = 'An item cannot be a variation of itself.';
     throw refuse(s, s);
   }
+  // T-502 A6: the database refuses it too (items_service_not_variation_check); a service is not a size or brand of anything.
+  if (child.kind === 'service') {
+    const s = 'A service (rent, power, water...) cannot be a variation of another item.';
+    throw refuse(s, s);
+  }
   const parent = await itemsRepo.getItemById(trx, orgId, parentId);
   if (!parent) throw gone(`variant parent ${parentId} does not exist.`, 'item');
+  if (parent.kind === 'service') {
+    const s = `"${parent.name}" is a service (rent, power, water...), and a service cannot have variations.`;
+    throw refuse(s, s);
+  }
   if (parent.variantOfItemId !== null) {
     const s = `"${parent.name}" is itself a variation, and variations go one level only. Pick its top-level item instead.`;
     throw refuse(s, s);
@@ -114,6 +205,10 @@ export interface CreateItemInput {
   isPurchasable?: boolean;
   sellableRetail?: boolean;
   sellableWholesale?: boolean;
+  /** ⭐ T-502 S1. Optional on a direct add; an existing item may be given one later (`setItemExpenseCategory`). */
+  expenseCategoryId?: string | null;
+  /** ⭐ T-502 section 11. Optional; must belong to `expenseCategoryId`. */
+  expenseSubcategoryId?: string | null;
 }
 
 /**
@@ -134,6 +229,9 @@ export async function createItem(tx: Tx, actor: Actor, input: CreateItemInput): 
     // T-443 R5: refuse a taken name BEFORE a code is allocated (a late unique violation would burn a number).
     await assertItemNameFree(trx, actor.orgId, name);
     if (input.variantOfItemId) await assertCanBeVariationOf(trx, actor.orgId, input.variantOfItemId, { kind: input.kind });
+    assertServiceShape(input.kind, input.baseUnit, input);
+    if (input.expenseCategoryId) await assertUsableExpenseCategory(trx, actor.orgId, input.expenseCategoryId);
+    if (input.expenseSubcategoryId) await assertUsableSubcategory(trx, actor.orgId, input.expenseSubcategoryId, input.expenseCategoryId || null);
     const typed = (input.code ?? '').trim();
     const code = typed
       ? await validateItemCodeOverride(trx, actor.orgId, typed)
@@ -147,6 +245,8 @@ export async function createItem(tx: Tx, actor: Actor, input: CreateItemInput): 
       notes: input.notes?.trim() || null,
       createdBy: actor.personId,
       variantOfItemId: input.variantOfItemId || null,
+      expenseCategoryId: input.expenseCategoryId || null,
+      expenseSubcategoryId: input.expenseSubcategoryId || null,
       isPurchasable: input.isPurchasable ?? true,
       sellableRetail: input.sellableRetail ?? false,
       sellableWholesale: input.sellableWholesale ?? false,
@@ -193,6 +293,18 @@ export async function updateItem(
     }
     const item = await itemsRepo.getItemById(trx, actor.orgId, itemId);
     if (!item) throw new Error(`updateItem: item ${itemId} does not exist.`);
+    // T-502 (gap 5): the kind cannot cross the service line once the item has history. The database trigger items_service_kind_has_history
+    // is the rule; this speaks first.
+    if (values.kind !== undefined && (values.kind === 'service') !== (item.kind === 'service') && (await itemsRepo.hasServiceKindHistory(trx, itemId))) {
+      const s = 'This item already has stock, delivery, usage, recipe or invoice history, so it cannot be changed to or from a service.';
+      throw refuse(`updateItem: item ${itemId} has history`, s);
+    }
+    // T-502 S1 (R6): the values as they will be stored must still be a legal service (or not become one illegally).
+    assertServiceShape(values.kind ?? item.kind, item.baseUnit, {
+      isPurchasable: values.isPurchasable ?? item.isPurchasable,
+      sellableRetail: values.sellableRetail ?? item.sellableRetail,
+      sellableWholesale: values.sellableWholesale ?? item.sellableWholesale,
+    });
     await itemsRepo.updateItem(trx, actor.orgId, itemId, values);
   };
   return run(tx);
@@ -215,6 +327,7 @@ export async function changeItemBaseUnit(
     const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
     if (!item) throw gone(`changeItemBaseUnit: item ${input.itemId} does not exist.`, 'item');
     if (item.baseUnit === input.baseUnit) return { changed: false };
+    assertServiceShape(item.kind, input.baseUnit, {}); // T-502 R6: a service stays "each"
     // T-391 S1: the buying-unit factor is in the OLD base unit; changing the base under it would silently re-read it.
     if (item.purchaseUnit !== null) {
       const sentence = "Clear the buying unit first; its factor is in the old unit.";
@@ -333,6 +446,8 @@ export async function renameItem(
       code = await validateItemCodeOverride(trx, actor.orgId, typed);
     }
     if (name === item.name && code === item.code) return { changed: false };
+    // T-502 R5: a name an alias already holds is refused in words (items_name_alias_guard is the backstop).
+    if (name.toLowerCase() !== item.name.toLowerCase()) await assertNameNotAnAlias(trx, actor.orgId, name);
     await itemsRepo.updateItem(trx, actor.orgId, input.itemId, { name, code });
     await auditLogRepo.append(trx, actor.orgId, {
       actorPersonId: actor.personId,
@@ -789,6 +904,10 @@ export interface RequestItemInput {
   isPurchasable?: boolean;
   sellableRetail?: boolean;
   sellableWholesale?: boolean;
+  /** ⭐ T-502 S1. What this will be bought under; carried to the item at approval (the approver may change it). Optional at request time, required at approval for a purchasable item. */
+  expenseCategoryId?: string | null;
+  /** ⭐ T-502 section 11. Optional at request time; must belong to `expenseCategoryId`. */
+  expenseSubcategoryId?: string | null;
 }
 
 export interface RequestItemResult {
@@ -799,7 +918,7 @@ export interface RequestItemResult {
 }
 
 /**
- * Ask for an item. Manager and admin may ask; only a super-admin decides.
+ * Ask for an item. Manager and admin may ask; an admin decides (T-502 S2, `approve_item_request`).
  *
  * ⚠️ The similarity check WARNS and never blocks — `Coke 1.5` and `Coke 15` are 55% alike and
  * are genuinely different products. Blocking on that would make the catalogue unusable; showing it
@@ -825,6 +944,9 @@ export async function requestItem(
       );
     }
     if (input.variantOfItemId) await assertCanBeVariationOf(trx, actor.orgId, input.variantOfItemId, { kind: input.kind });
+    assertServiceShape(input.kind, input.baseUnit, input);
+    if (input.expenseCategoryId) await assertUsableExpenseCategory(trx, actor.orgId, input.expenseCategoryId);
+    if (input.expenseSubcategoryId) await assertUsableSubcategory(trx, actor.orgId, input.expenseSubcategoryId, input.expenseCategoryId || null);
     // T-386 R6: a request takes NO code (I3). It stores a frozen preview - the next code at this moment, a preview and not a
     // promise: approval allocates. Nothing is locked or written to the counters here.
     const stem = requireItemCodeStem(name);
@@ -846,6 +968,8 @@ export async function requestItem(
       sellableWholesale: input.sellableWholesale,
       reason: input.reason?.trim() || null,
       variantOfItemId: input.variantOfItemId || null,
+      expenseCategoryId: input.expenseCategoryId || null,
+      expenseSubcategoryId: input.expenseSubcategoryId || null,
       similarWarning,
       requestedBy: actor.personId,
     });
@@ -855,8 +979,10 @@ export async function requestItem(
 }
 
 /**
- * ⛔ Super-admin only. Approving MINTS the item in the same transaction, so an approved request
- * that produced nothing cannot exist — the database refuses that shape outright.
+ * ⭐ T-502 S2 (R1, R2). An ADMIN approves (`approve_item_request`; Ian 31 Oct, 2A, superseding the 2026-08-28 super-admin-only rule).
+ * The person who asked cannot approve their own request unless they hold super-admin authority (Ian alone in a one-admin org).
+ * Approving MINTS the item in the same transaction, so an approved request that produced nothing cannot exist — the database
+ * refuses that shape outright. A purchasable item needs an expense category by now (the request's, or one chosen here).
  */
 export async function approveItemRequest(
   tx: Tx,
@@ -873,21 +999,51 @@ export async function approveItemRequest(
     sellableWholesale?: boolean;
     /** ⭐ T-443 R1. `undefined` keeps the request's choice; `null` clears it; an id sets it (the approver may change it). */
     variantOfItemId?: string | null;
+    /** ⭐ T-502 S1. `undefined` keeps the request's category; an id sets it (the approver may change it). */
+    expenseCategoryId?: string | null;
+    /** ⭐ T-502 section 11. `undefined` keeps the request's (only while it still belongs to the chosen category); required when the category has an active one. */
+    expenseSubcategoryId?: string | null;
   },
 ): Promise<{ itemId: string; code: string }> {
   const run = async (trx: Tx) => {
-    await authorize(trx, actor, 'approve_item', {});
+    await authorize(trx, actor, 'approve_item_request', {});
     assertFieldRules(ITEMS_APPROVE_RULES, { code: input.code, baseUnit: input.baseUnit });
     const req = await itemsRepo.getItemRequestById(trx, actor.orgId, input.requestId);
     if (!req) throw new Error(`approveItemRequest: request ${input.requestId} does not exist.`);
     if (req.status !== 'requested') {
       throw new Error(`approveItemRequest: request is already ${req.status}.`);
     }
+    // T-502 R1: nobody approves what they asked for, unless they hold super-admin authority.
+    if (req.requestedBy === actor.personId && !(await isSuperAdminAuthority(trx, actor))) {
+      const s = 'Someone else must approve an item you asked for.';
+      throw refuse(s, s);
+    }
     // T-443 R5 (guard 2): the name may have been taken since the request was made. Refuse BEFORE a code is allocated (no number is
     // burned) and leave the request `requested` - the approver rejects it with a note.
     await assertItemNameFree(trx, actor.orgId, req.name);
     const variantOf = input.variantOfItemId === undefined ? req.variantOfItemId : input.variantOfItemId;
     if (variantOf) await assertCanBeVariationOf(trx, actor.orgId, variantOf, { kind: req.kind });
+    const isPurchasable = input.isPurchasable ?? req.isPurchasable;
+    const sellableRetail = input.sellableRetail ?? req.sellableRetail;
+    const sellableWholesale = input.sellableWholesale ?? req.sellableWholesale;
+    const baseUnit = input.baseUnit ?? req.baseUnit;
+    assertServiceShape(req.kind, baseUnit, { isPurchasable, sellableRetail, sellableWholesale });
+    // T-502 S1/S2: a purchasable item (a service always is) needs the expense category it is bought under, so its spending is visible.
+    const expenseCategoryId = input.expenseCategoryId === undefined ? req.expenseCategoryId : input.expenseCategoryId;
+    if (isPurchasable && !expenseCategoryId) {
+      const s = 'Pick an expense category for this item before approving it, so what it costs shows up under the right heading.';
+      throw refuse(`approveItemRequest: request ${req.id} has no expense category`, s);
+    }
+    if (expenseCategoryId) await assertUsableExpenseCategory(trx, actor.orgId, expenseCategoryId);
+    // T-502 section 11: the request's sub-category survives only while it is still under the chosen category (the approver may switch category).
+    let expenseSubcategoryId: string | null;
+    if (input.expenseSubcategoryId !== undefined) expenseSubcategoryId = input.expenseSubcategoryId;
+    else if (req.expenseSubcategoryId) {
+      const kept = await expensesRepo.getSubcategoryById(trx, actor.orgId, req.expenseSubcategoryId);
+      expenseSubcategoryId = kept && kept.isActive && kept.categoryId === (expenseCategoryId ?? null) ? kept.id : null;
+    } else expenseSubcategoryId = null;
+    if (expenseSubcategoryId) await assertUsableSubcategory(trx, actor.orgId, expenseSubcategoryId, expenseCategoryId ?? null);
+    await requireSubcategoryWhenOffered(trx, actor.orgId, expenseCategoryId ?? null, expenseSubcategoryId);
     // T-386 R5: the code is allocated HERE, never copied from the request (its stored code is only the requester's preview).
     const stem = requireItemCodeStem(req.name);
     const typed = (input.code ?? '').trim();
@@ -899,13 +1055,15 @@ export async function approveItemRequest(
       code,
       name: req.name,
       kind: req.kind,
-      baseUnit: input.baseUnit ?? req.baseUnit,
+      baseUnit,
       notes: `Approved from item request ${req.id}.`,
       createdBy: actor.personId,
-      isPurchasable: input.isPurchasable ?? req.isPurchasable,
-      sellableRetail: input.sellableRetail ?? req.sellableRetail,
-      sellableWholesale: input.sellableWholesale ?? req.sellableWholesale,
+      isPurchasable,
+      sellableRetail,
+      sellableWholesale,
       variantOfItemId: variantOf ?? null,
+      expenseCategoryId: expenseCategoryId ?? null,
+      expenseSubcategoryId,
     });
     await itemsRepo.decideItemRequest(trx, actor.orgId, req.id, {
       status: 'approved',
@@ -958,7 +1116,7 @@ export async function rejectItemRequest(
   input: { requestId: string; note: string },
 ): Promise<void> {
   const run = async (trx: Tx) => {
-    await authorize(trx, actor, 'approve_item', {});
+    await authorize(trx, actor, 'approve_item_request', {}); // T-502 S2: any admin decides a request
     const note = input.note.trim();
     // A rejection with no reason teaches the requester nothing, and they will simply ask again.
     if (!note) throw new Error('rejectItemRequest: say why, so the requester knows what to do instead.');
@@ -999,6 +1157,11 @@ export async function mergeItems(
     if (winner.status === 'merged') {
       throw new Error(`mergeItems: ${winner.name} is itself merged — merge into the surviving item.`);
     }
+    // T-502 A5: a service has no stock, so merging it with a stocked item would silently give history to the wrong kind of thing.
+    if ((loser.kind === 'service') !== (winner.kind === 'service')) {
+      const s = 'A service can only be merged into another service.';
+      throw refuse(`mergeItems: ${loser.id} and ${winner.id} differ across the service line`, s);
+    }
     // T-443 R1: a family header cannot be merged away while it still has variations (they would point at a merged parent).
     // A variation MAY be merged; merging into a winner keeps the winner's own parent.
     if ((await itemsRepo.countVariationsOf(trx, actor.orgId, loser.id)) > 0) {
@@ -1016,7 +1179,19 @@ export async function mergeItems(
           'past price incomparable.',
       );
     }
-    return itemsRepo.mergeItemInto(trx, actor.orgId, input.loserId, input.winnerId);
+    const report = await itemsRepo.mergeItemInto(trx, actor.orgId, input.loserId, input.winnerId);
+    // T-502 (gap 4): the audit row says what moved and which other names were left behind.
+    await auditLogRepo.append(trx, actor.orgId, {
+      actorPersonId: actor.personId,
+      action: 'item.merged',
+      storeId: null,
+      entityId: loser.id,
+      // T-502 A5: the winner keeps its own expense category; when they differ the loser's is kept here so the decision can be traced.
+      before: { loserName: loser.name, loserCode: loser.code, loserExpenseCategoryId: loser.expenseCategoryId ?? null },
+      after: { winnerId: winner.id, winnerName: winner.name, winnerExpenseCategoryId: winner.expenseCategoryId ?? null, ...report },
+      source: 'web',
+    });
+    return report;
   };
   return run(tx);
 }
@@ -1117,7 +1292,112 @@ export async function undoDuplicateDismissal(
   return { removed: true };
 }
 
-/** What the super-admin review queue reads. Any manager may LOOK; only a super-admin decides. */
+/**
+ * ⭐ T-502 S1. Give an item another name people type for it (chili / sili / siling pula). Admin (`approve_item_request`: the same bar as
+ * deciding a request - the catalogue is kept by admins). Trimmed, inner spaces collapsed. Refused in words when the text is an item
+ * name or already another item's other name; the database (`item_aliases_org_alias_key`, `item_aliases_name_guard`) is the backstop.
+ * Audited `item_alias.added` after the INSERT.
+ */
+export async function addItemAlias(
+  tx: Tx,
+  actor: Actor,
+  input: { itemId: string; alias: string },
+): Promise<{ aliasId: string }> {
+  await authorize(tx, actor, 'approve_item_request', {});
+  const item = await itemsRepo.getItemById(tx, actor.orgId, input.itemId);
+  if (!item) throw gone(`addItemAlias: item ${input.itemId} does not exist.`, 'item');
+  if (item.status === 'merged') {
+    const s = 'This item was merged into another, so it cannot take other names. Add the name to the item it was merged into.';
+    throw refuse(`addItemAlias: item ${item.id} is merged`, s);
+  }
+  const alias = normaliseItemName(input.alias);
+  if (!alias) {
+    const s = 'Type the other name people use for this item.';
+    throw refuse('addItemAlias: blank alias', s);
+  }
+  const asName = await itemsRepo.findItemByName(tx, actor.orgId, alias);
+  if (asName) {
+    const s = `"${alias}" is already the name of the item "${asName.name}" (${asName.code}). An other-name cannot repeat an official name.`;
+    throw refuse(`addItemAlias: alias equals item name ${asName.id}`, s);
+  }
+  const asAlias = await itemsRepo.findAliasByText(tx, actor.orgId, alias);
+  if (asAlias) {
+    const s =
+      asAlias.itemId === item.id
+        ? `"${alias}" is already one of the other names of "${item.name}".`
+        : `"${alias}" is already another name for "${asAlias.itemName}" (${asAlias.itemCode}). Each other name can point to only one item.`;
+    throw refuse(`addItemAlias: alias already used ${asAlias.id}`, s);
+  }
+  const { id } = await itemsRepo.insertAlias(tx, { orgId: actor.orgId, itemId: item.id, alias, createdBy: actor.personId });
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'item_alias.added',
+    storeId: null,
+    entityId: id,
+    before: null,
+    after: { itemId: item.id, alias },
+    source: 'web',
+  });
+  return { aliasId: id };
+}
+
+/** ⭐ T-502 S1. Take an other-name off an item. Admin (`approve_item_request`). Audited `item_alias.removed` after the DELETE; removing twice is a no-op. */
+export async function removeItemAlias(tx: Tx, actor: Actor, input: { aliasId: string }): Promise<{ removed: boolean }> {
+  await authorize(tx, actor, 'approve_item_request', {});
+  const removed = await itemsRepo.deleteAlias(tx, actor.orgId, input.aliasId);
+  if (!removed) return { removed: false };
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'item_alias.removed',
+    storeId: null,
+    entityId: removed.id,
+    before: { itemId: removed.itemId, alias: removed.alias },
+    after: null,
+    source: 'web',
+  });
+  return { removed: true };
+}
+
+/**
+ * ⭐ T-502 S1/S2. Set or change the expense category an item is bought under. Admin (`approve_item_request`). The category must be one of
+ * this org's and active. A purchasable item cannot be left without one (a service always is purchasable). Audited
+ * `item.expense_category_set`, only when something changed.
+ */
+export async function setItemExpenseCategory(
+  tx: Tx,
+  actor: Actor,
+  input: { itemId: string; expenseCategoryId: string | null; expenseSubcategoryId?: string | null },
+): Promise<{ changed: boolean }> {
+  await authorize(tx, actor, 'approve_item_request', {});
+  const item = await itemsRepo.getItemById(tx, actor.orgId, input.itemId);
+  if (!item) throw gone(`setItemExpenseCategory: item ${input.itemId} does not exist.`, 'item');
+  const subcategoryId = input.expenseSubcategoryId ?? null;
+  if ((item.expenseCategoryId ?? null) === input.expenseCategoryId && (item.expenseSubcategoryId ?? null) === subcategoryId) return { changed: false };
+  if (input.expenseCategoryId === null) {
+    if (item.isPurchasable) {
+      const s = 'An item you buy needs an expense category. Pick another one instead of clearing it.';
+      throw refuse(`setItemExpenseCategory: item ${item.id} is purchasable`, s);
+    }
+  } else {
+    await assertUsableExpenseCategory(tx, actor.orgId, input.expenseCategoryId);
+  }
+  // T-502 section 11: category and sub-category are set together; the sub-category must belong to the category and is required when one is offered.
+  if (subcategoryId) await assertUsableSubcategory(tx, actor.orgId, subcategoryId, input.expenseCategoryId);
+  await requireSubcategoryWhenOffered(tx, actor.orgId, input.expenseCategoryId, subcategoryId);
+  await itemsRepo.updateItem(tx, actor.orgId, input.itemId, { expenseCategoryId: input.expenseCategoryId, expenseSubcategoryId: subcategoryId });
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'item.expense_category_set',
+    storeId: null,
+    entityId: input.itemId,
+    before: { expenseCategoryId: item.expenseCategoryId ?? null, expenseSubcategoryId: item.expenseSubcategoryId ?? null },
+    after: { expenseCategoryId: input.expenseCategoryId, expenseSubcategoryId: subcategoryId },
+    source: 'web',
+  });
+  return { changed: true };
+}
+
+/** What the admin review queue reads. Any manager may LOOK; an admin decides (T-502 S2). */
 export async function pendingItemRequests(tx: Tx, actor: Actor): Promise<ItemRequestRow[]> {
   const run = async (trx: Tx) => {
     await authorize(trx, actor, 'manage_items', {});
@@ -1148,6 +1428,11 @@ export async function setStoreSellability(
     await authorize(trx, actor, 'manage_items', {});
     const item = await itemsRepo.getItemById(trx, actor.orgId, input.itemId);
     if (!item) throw new Error(`setStoreSellability: item ${input.itemId} does not exist.`);
+    // T-502 A2: a service is only bought and never sold, at any store. The database refuses it too (service_item_never_stocked).
+    if (item.kind === 'service') {
+      const s = `"${item.name}" is a service (rent, power, water...). It is only bought, so it has no per-store selling setting.`;
+      throw refuse(`setStoreSellability: ${item.id} is a service`, s);
+    }
 
     const p = input.isPurchasable ?? null;
     const r = input.sellableRetail ?? null;

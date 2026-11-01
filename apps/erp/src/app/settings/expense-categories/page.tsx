@@ -1,11 +1,14 @@
 import { requirePageAccess } from '../../../lib/page-access';
 import {
   createCategoryAction,
+  createSubcategoryAction,
   renameCategoryAction,
+  renameSubcategoryAction,
+  setSubcategoryActiveAction,
   setCategoryAccountAction,
   setCategoryActiveAction,
 } from './actions';
-import { categoriesForAdmin, mappableAccounts } from './lib';
+import { categoriesForAdmin, mappableAccounts, subcategoriesForAdmin } from './lib';
 import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -14,7 +17,7 @@ import { SETTINGS_EXPENSE_CATEGORY_RULES, nativeAttrs } from '@shareat/domain/fi
 import { Button, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
-import { EXPENSE_CATEGORY_ACCOUNT, EXPENSE_CATEGORY_RENAME } from './typed-forms';
+import { EXPENSE_CATEGORY_ACCOUNT, EXPENSE_CATEGORY_RENAME, EXPENSE_SUBCATEGORY_RENAME } from './typed-forms';
 
 export const metadata = { title: 'Expense categories — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -51,9 +54,10 @@ export default async function ExpenseCategoriesSettingsPage({
   // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
   if (refusal) return refusal;
 
-  const [categories, accounts] = await Promise.all([
+  const [categories, accounts, subcategories] = await Promise.all([
     categoriesForAdmin(actor.orgId),
     mappableAccounts(actor.orgId),
+    subcategoriesForAdmin(actor.orgId),
   ]);
 
   const unmapped = categories.filter((c) => c.accountCode === null);
@@ -152,6 +156,39 @@ export default async function ExpenseCategoriesSettingsPage({
                         retired
                       </span>
                     )}
+                    {/* T-502 section 11: sub-categories, set on the ITEM (a cashier never picks one). Add, rename, retire; never delete. */}
+                    <div className="mt-2 space-y-1 border-l border-neutral-200 pl-3 dark:border-neutral-800">
+                      {subcategories.filter((s) => s.categoryId === c.id).map((s) => (
+                        <div key={s.id} className={`flex flex-wrap items-center gap-2 text-xs ${s.isActive ? '' : 'opacity-60'}`}>
+                          <span>{s.name}{!s.isActive ? ' (retired)' : ''}</span>
+                          <EditableRecord action={renameSubcategoryAction} label={s.name} hidden={{ subcategoryId: s.id }} typed={typedFor(sp, EXPENSE_SUBCATEGORY_RENAME, s.id, actor.personId)}>
+                            <FormGrid layout="fields">
+                              <Field label="Name" width="name">
+                                <Input name="name" defaultValue={s.name} aria-label={`Name of ${s.name}`} className="w-full" />
+                              </Field>
+                            </FormGrid>
+                          </EditableRecord>
+                          <form action={setSubcategoryActiveAction}>
+                            <input type="hidden" name="subcategoryId" value={s.id} />
+                            <input type="hidden" name="isActive" value={s.isActive ? 'false' : 'true'} />
+                            <button type="submit" className={`${ACTION_LINK} text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200`}>
+                              {s.isActive ? 'Retire' : 'Reinstate'}
+                            </button>
+                          </form>
+                        </div>
+                      ))}
+                      <FormModal trigger="+ Sub-category" title={`Add a sub-category to ${c.category}`} size="sm">
+                        <form action={createSubcategoryAction} className="space-y-3">
+                          <input type="hidden" name="categoryId" value={c.id} />
+                          <FormGrid layout="fields">
+                            <Field label="Name" width="name">
+                              <Input name="name" placeholder="Pork" className="w-full" />
+                            </Field>
+                          </FormGrid>
+                          <Button type="submit" variant="primary">Save</Button>
+                        </form>
+                      </FormModal>
+                    </div>
                     <form action={setCategoryActiveAction} className="mt-1">
                       <input type="hidden" name="categoryId" value={c.id} />
                       <input type="hidden" name="categoryLabel" value={c.category} />

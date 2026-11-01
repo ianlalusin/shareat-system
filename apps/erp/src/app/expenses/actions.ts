@@ -25,6 +25,7 @@ import {
   voidExpense,
   deleteExpenseDraft,
   recordExpenseForInvoice,
+  recordInvoiceExpensesBatch,
   validateMoneyLines,
   internalFault,
   type ExpensePaymentMethod,
@@ -333,6 +334,58 @@ export async function recordExpenseForInvoiceAction(formData: FormData): Promise
     return await redirectWithFlash(parsed.returnPath, parsed.returnNav, { error: errorMessage(err) });
   }
   return await redirectWithFlash(`/expenses/${newId}`, parsed.carry);
+}
+
+/**
+ * T-502 section 12: "Record expenses" on /ap/invoices/[id] - one expense per ticked part of the bill, one transaction.
+ *
+ * A thin adapter like the others: it authorises first (`create_expense` at the form's store, via parseExpenseForm, the same gate as
+ * a single expense; a verified invoice's posting is gated again by `approveExpense` inside the domain), parses the ticked parts and the
+ * payment rows, and hands them to `recordInvoiceExpensesBatch`, which owns every rule (itemised, per-part room, payments = total).
+ * Fields: `partCount`, then `partKey_i` / `partOn_i` (ticked) / `partPick_i` (the category picked for Uncategorised or Fees).
+ */
+export async function recordInvoiceExpensesBatchAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const back = splitReturnTo(str(formData, 'returnTo'), '/ap');
+  let parsed: ParsedExpenseForm;
+  try {
+    parsed = await parseExpenseForm(formData, actor, '/ap', ['create_expense']);
+  } catch (err) {
+    return await redirectWithFlash(back.path, { ...back.nav, ...carryNav(formData) }, { error: errorMessage(err) });
+  }
+
+  let message: string;
+  try {
+    const countRaw = str(formData, 'partCount');
+    if (!/^\d+$/.test(countRaw)) {
+      throw new Error("The parts of the bill didn't arrive complete - reload the page and try again.");
+    }
+    const partCount = Number(countRaw);
+    if (partCount > 200) throw new Error('A bill is recorded in at most 200 parts.');
+    const groups: { categoryId: string | null; fees?: boolean; pickedCategoryId?: string | null }[] = [];
+    for (let i = 0; i < partCount; i++) {
+      if (formData.get(`partOn_${i}`) !== 'on') continue;
+      const key = str(formData, `partKey_${i}`);
+      const pick = str(formData, `partPick_${i}`) || null;
+      if (key === 'uncategorised') groups.push({ categoryId: null, pickedCategoryId: pick });
+      else if (key === 'fees') groups.push({ categoryId: null, fees: true, pickedCategoryId: pick });
+      else groups.push({ categoryId: key });
+    }
+    const result = await withOrgPrincipal(actor.orgId, (tx) =>
+      recordInvoiceExpensesBatch(tx, actor, {
+        storeId: parsed.storeId,
+        supplierInvoiceId: parsed.supplierInvoiceId,
+        supplierId: parsed.supplierId,
+        groups,
+        payments: parsed.payments,
+      }),
+    );
+    const n = result.expenseIds.length;
+    message = `${n} expense${n === 1 ? '' : 's'} recorded - ${result.status === 'posted' ? 'posted' : 'saved as drafts (verifying the invoice posts them)'}.`;
+  } catch (err) {
+    return await redirectWithFlash(parsed.returnPath, parsed.returnNav, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash(parsed.returnPath, parsed.returnNav, { ok: message });
 }
 
 export async function approveExpenseAction(formData: FormData): Promise<void> {

@@ -110,7 +110,7 @@ describe('expense.drafted / expense.approved / expense.voided (createExpense, ap
     const inv = await pendingInvoice(sql, f, '5000.00');
     await rejection(
       asOrgOn(f.orgId, (tx) =>
-        D.createExpense(tx, f.staff, {
+        D.createExpense(tx, f.staff, { requireItemised: false /* legacy fixture: lineless invoice */,
           storeId: f.storeId, businessDate: '', supplierId: f.supplierId, supplierInvoiceId: inv, categoryId: f.categoryId,
           particulars: '   ', payments: [{ method: 'cash', amount: '10.00', moneyAccountId: f.drawerId }],
         }),
@@ -123,7 +123,7 @@ describe('expense.drafted / expense.approved / expense.voided (createExpense, ap
     const f = await moneyFixture(sql, 'exp-draft-rb');
     const inv = await pendingInvoice(sql, f, '5000.00');
     await rolledBack(f.orgId, (tx) =>
-      D.createExpense(tx, f.staff, {
+      D.createExpense(tx, f.staff, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId, businessDate: '', supplierId: f.supplierId, supplierInvoiceId: inv, categoryId: f.categoryId,
         particulars: 'Rolled back', payments: [{ method: 'cash', amount: '10.00', moneyAccountId: f.drawerId }],
       }),
@@ -385,7 +385,7 @@ describe('ap_invoice.approved (verifyInvoice) and ap_payment.recorded (recordPay
     const inv = await pendingInvoice(sql, f, amount);
     await asOrgOn(f.orgId, (tx) => D.verifyInvoice(tx, f.manager, inv, ATTEST));
     return asOrgOn(f.orgId, (tx) =>
-      D.recordExpenseForInvoice(tx, f.manager, {
+      D.recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId, supplierId: f.supplierId, supplierInvoiceId: inv, categoryId: f.categoryId,
         particulars: 'Credit stock', payments: [{ method: 'credit', amount }],
       }),

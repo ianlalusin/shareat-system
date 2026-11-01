@@ -113,7 +113,7 @@ export interface RoomCountRow {
 /** One room's lines: every active item, with THIS ROOM's count (never the store total). DEF-630. */
 export async function loadRoomCountSheet(orgId: string, storeId: string, roomId: string): Promise<RoomCountRow[]> {
   return withOrgPrincipal(orgId, async (tx) => {
-    const items = await itemsRepo.listItems(tx, orgId);
+    const items = await itemsRepo.listItems(tx, orgId, { stockedOnly: true });
     const byItem = await cutoverRepo.countsForRoom(tx, orgId, storeId, roomId);
     return items.map((i) => {
       const c = byItem.get(i.id);
@@ -141,7 +141,7 @@ export interface MergedLine {
 export async function loadMergedLines(orgId: string, storeId: string): Promise<MergedLine[]> {
   return withOrgPrincipal(orgId, async (tx) => {
     const rows = await cutoverRepo.countsForStore(tx, orgId, storeId);
-    const items = await itemsRepo.listItems(tx, orgId);
+    const items = await itemsRepo.listItems(tx, orgId, { stockedOnly: true });
     const unit = new Map(items.map((i) => [i.id, i.baseUnit]));
     const by = new Map<string, MergedLine>();
     for (const r of rows) {

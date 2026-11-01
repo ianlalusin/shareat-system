@@ -236,7 +236,7 @@ describe('T-501 draw lock (DEF-802)', () => {
       values (${f.orgId}, ${f.storeId}, ${sup!.id}, '2026-01-01', '99999999.00', 'verified', ${file!.id}, ${ver!.id}, now(), ${f.admin.personId}, true, true, true, true)
       returning id`;
     const made = await asOrg(f.orgId, (tx) =>
-      createExpense(tx, f.admin, {
+      createExpense(tx, f.admin, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId, supplierId: sup!.id, supplierInvoiceId: inv!.id, businessDate: '2026-01-15', categoryId: cat!.id,
         particulars: 'T-501 draw', payments: [{ method: 'cash', amount, moneyAccountId: accountId }],
       }),

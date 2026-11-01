@@ -967,6 +967,8 @@ export interface RecordExpenseForInvoiceInput {
   payments: CreateExpensePaymentInput[];
   /** T-376 S1: post into a CLOSED month. Authorised inside `postEntry` against `actor`; ignored for an open month. */
   periodOverride?: { reason: PeriodOverrideReason; note?: string | null };
+  /** T-502 section 12 / 14: passed straight to `createExpense` (default true: the invoice must have lines and the category must be one of its parts). */
+  requireItemised?: boolean;
 }
 
 export interface RecordExpenseForInvoiceResult extends ApproveExpenseResult {
@@ -998,6 +1000,7 @@ export async function recordExpenseForInvoice(
       ownerId: input.ownerId ?? null,
       particulars: input.particulars,
       payments: input.payments,
+      ...(input.requireItemised !== undefined ? { requireItemised: input.requireItemised } : {}),
     });
     const approved = await approveExpense(trx, actor, expenseId, { periodOverride: input.periodOverride });
     return { expenseId, ...approved };

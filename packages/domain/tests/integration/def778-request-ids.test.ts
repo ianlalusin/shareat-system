@@ -258,7 +258,7 @@ describe('DEF-778 - AP recordPayment keys on the form requestId', () => {
     );
     await asOrg(f.orgId, (tx) => verifyInvoice(tx, f.manager, invoice.id, { supplier: true, invoice: true, items: true, price: true }));
     const { expenseId } = await asOrg(f.orgId, (tx) =>
-      recordExpenseForInvoice(tx, f.manager, {
+      recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId, supplierId: supplier.id, supplierInvoiceId: invoice.id, categoryId: f.categoryId,
         particulars: 'Stock purchase', payments: [{ method: 'credit', amount: '20000.00' }],
       }),
@@ -433,7 +433,7 @@ describe('DEF-778 audit - AP recordPayment', () => {
     );
     await asOrg(f.orgId, (tx) => verifyInvoice(tx, f.manager, invoice.id, { supplier: true, invoice: true, items: true, price: true }));
     const { expenseId } = await asOrg(f.orgId, (tx) =>
-      recordExpenseForInvoice(tx, f.manager, {
+      recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId, supplierId: supplier.id, supplierInvoiceId: invoice.id, categoryId: f.categoryId,
         particulars: 'Stock purchase', payments: [{ method: 'credit', amount: '20000.00' }],
       }),

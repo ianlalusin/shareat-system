@@ -1229,4 +1229,194 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     reason:
       'The self-verified flag is history: it can be set once with the verification and never cleared, even under session_replication_role = replica. Decides only from OLD/NEW (0217, T-475 S3, R3).',
   },
+  // T-502 (0224) - expense item catalog: 27 validators. Each reads ANOTHER row's current state (item kind, alias names, sub-category), so all are origin.
+  commissary_item_offerings_service_item_guard: {
+    table: 'commissary_item_offerings',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item on commissary_item_offerings (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
+  count_lines_service_item_guard: {
+    table: 'count_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item on count_lines (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
+  customer_return_lines_service_item_guard: {
+    table: 'customer_return_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item on customer_return_lines (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
+  delivery_lines_service_item_guard: {
+    table: 'delivery_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item on delivery_lines (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
+  item_aliases_name_guard: {
+    table: 'item_aliases',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'An alias may not equal an item name in the org (R5): reads the items table, another row current state (0224, T-502).',
+  },
+  item_pricing_service_item_guard: {
+    table: 'item_pricing',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item on item_pricing (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
+  item_requests_subcategory_matches_category: {
+    table: 'item_requests',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'The expense sub-category must belong to the chosen category: reads expense_subcategories, another row current state (0224, T-502).',
+  },
+  items_name_alias_guard: {
+    table: 'items',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'An item may not be created or renamed to a name an alias holds (R5): reads item_aliases, another row current state (0224, T-502).',
+  },
+  items_service_kind_has_history: {
+    table: 'items',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'An item with stock history cannot be turned into (or out of) a service: reads ledger rows, another table current state (0224, T-502).',
+  },
+  items_subcategory_matches_category: {
+    table: 'items',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'The expense sub-category must belong to the chosen category: reads expense_subcategories, another row current state (0224, T-502).',
+  },
+  menu_depletion_rules_service_item_guard: {
+    table: 'menu_depletion_rules',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item on menu_depletion_rules (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
+  opening_counts_service_item_guard: {
+    table: 'opening_counts',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item on opening_counts (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
+  pos_item_maps_service_item_guard: {
+    table: 'pos_item_maps',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item on pos_item_maps (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
+  pos_usage_pull_lines_service_item_guard: {
+    table: 'pos_usage_pull_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item on pos_usage_pull_lines (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
+  price_list_items_service_item_guard: {
+    table: 'price_list_items',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item on price_list_items (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
+  production_recipe_lines_service_item_guard: {
+    table: 'production_recipe_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item on production_recipe_lines (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
+  production_recipes_service_output_guard: {
+    table: 'production_recipes',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item as a recipe output (rule C): reads the item row current kind, another row state (0224, T-502).',
+  },
+  production_record_lines_service_item_guard: {
+    table: 'production_record_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item on production_record_lines (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
+  stock_layers_service_item_guard: {
+    table: 'stock_layers',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item on stock_layers (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
+  stock_movements_service_item_guard: {
+    table: 'stock_movements',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item on stock_movements (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
+  stock_reservations_service_item_guard: {
+    table: 'stock_reservations',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item on stock_reservations (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
+  stock_transfer_lines_service_item_guard: {
+    table: 'stock_transfer_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item on stock_transfer_lines (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
+  stock_usage_lines_service_item_guard: {
+    table: 'stock_usage_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item on stock_usage_lines (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
+  store_item_sellability_service_item_guard: {
+    table: 'store_item_sellability',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item on store_item_sellability (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
+  store_item_thresholds_service_item_guard: {
+    table: 'store_item_thresholds',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item on store_item_thresholds (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
+  supplier_return_lines_service_item_guard: {
+    table: 'supplier_return_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item on supplier_return_lines (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
+  trade_order_lines_service_item_guard: {
+    table: 'trade_order_lines',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Refuses a service item on trade_order_lines (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
 } as const;

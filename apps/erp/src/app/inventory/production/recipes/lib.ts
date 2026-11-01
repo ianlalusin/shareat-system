@@ -32,7 +32,7 @@ export async function canManageRecipes(orgId: string, actor: Actor): Promise<boo
 /** Active items a recipe may use (the pickers); each shows its base unit. */
 export async function recipeItemOptions(orgId: string): Promise<RecipeItemOption[]> {
   return withOrgPrincipal(orgId, async (tx) => {
-    const rows = await itemsRepo.listItems(tx, orgId, { includeInactive: false });
+    const rows = await itemsRepo.listItems(tx, orgId, { includeInactive: false, stockedOnly: true });
     return rows.map((i) => ({ id: i.id, code: i.code, name: i.name, baseUnit: i.baseUnit }));
   });
 }

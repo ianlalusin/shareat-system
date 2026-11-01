@@ -14,13 +14,14 @@
  *
  * and the conversion factor comes from the LINE, never from the item — see `schema/items.ts`.
  */
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, ne, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { recordGone } from './record-gone';
 import {
   items,
   itemRequests,
   itemDuplicateDismissals,
+  itemAliases,
   type ItemRequestStatus,
   type BaseUnit,
   type PurchaseUnit,
@@ -48,6 +49,10 @@ export interface ItemRow {
   notes: string | null;
   /** T-443 R1: the top-level item this one is a variation of (`Kimchi 250g` -> `Kimchi`), or null. */
   variantOfItemId: string | null;
+  /** T-502 S1: the default expense category this item is bought under; null on items made before T-502. */
+  expenseCategoryId: string | null;
+  /** T-502 section 11: the optional middle level under the category. */
+  expenseSubcategoryId: string | null;
   /** T-391 S1: the default buying unit and its ratio to the base unit; both null or both set. */
   purchaseUnit: PurchaseUnit | null;
   purchaseFactor: string | null;
@@ -70,6 +75,9 @@ export async function insertItem(
     sellableWholesale?: boolean;
     /** T-443 R1: copied from the request at approval, or typed by the super-admin on a direct add. */
     variantOfItemId?: string | null;
+    /** T-502 S1: copied from the request at approval (the approver may override), or typed on a direct add. */
+    expenseCategoryId?: string | null;
+    expenseSubcategoryId?: string | null;
   },
 ): Promise<{ id: string }> {
   const [row] = await tx.insert(items).values(input).returning({ id: items.id });
@@ -88,10 +96,13 @@ export async function getItemById(tx: Tx, orgId: string, id: string): Promise<It
 export async function listItems(
   tx: Tx,
   orgId: string,
-  filter: { includeInactive?: boolean; kind?: ItemKind } = {},
+  filter: { includeInactive?: boolean; kind?: ItemKind; stockedOnly?: boolean } = {},
 ): Promise<ItemRow[]> {
   const conditions = [eq(items.orgId, orgId)];
   if (!filter.includeInactive) conditions.push(eq(items.status, 'active'));
+  // T-502 S1 (C): a service (rent, power...) is never stocked, counted, delivered or put in a recipe. Every stock / count / recipe /
+  // commissary / delivery / trade picker passes `stockedOnly`; the invoice-line picker does not (a bill for power names a service).
+  if (filter.stockedOnly) conditions.push(ne(items.kind, 'service'));
   if (filter.kind) conditions.push(eq(items.kind, filter.kind)); // T-443 R3
   const rows = await tx.select().from(items).where(and(...conditions)).orderBy(asc(items.name));
   return rows as ItemRow[];
@@ -109,6 +120,7 @@ export async function listUsableItems(tx: Tx, orgId: string, storeId: string): P
     .where(
       and(
         eq(items.orgId, orgId),
+        ne(items.kind, 'service'), // T-502 S1 (C): a service is never consumed or moved
         sql`(${items.status} = 'active' or (${items.status} = 'inactive' and (
           select coalesce(sum(${stockMovements.quantity}), 0) from ${stockMovements}
           where ${stockMovements.itemId} = ${items.id} and ${stockMovements.storeId} = ${storeId}
@@ -139,6 +151,9 @@ export async function updateItem(
     purchaseFactor: Decimal<'14,6'> | null;
     /** T-443 R1: written by `setItemVariantOf` alone. The database trigger `items_variant_guard` is the rule. */
     variantOfItemId: string | null;
+    /** T-502 S1: written by `setItemExpenseCategory` alone. */
+    expenseCategoryId: string | null;
+    expenseSubcategoryId: string | null;
   }>,
 ): Promise<void> {
   const updated = await tx
@@ -440,6 +455,9 @@ export interface CatalogueEntry {
   firstSeenOn: string | null;
   /** How many invoice lines carry it. 0 for a declaration. */
   timesBilled: number;
+  /** T-502 section 12: the item's own expense category and sub-category (null = none), so a screen can group lines by category without a second lookup. */
+  expenseCategoryId: string | null;
+  expenseSubcategoryId: string | null;
 }
 
 /**
@@ -477,7 +495,8 @@ const catalogueQuery = (where: ReturnType<typeof sql>) => sql`
       select 1 from observed o where o.supplier_id = d.supplier_id and o.item_id = d.item_id
     )
   )
-  select m.*, s.name as supplier_name, i.name as item_name, i.code as item_code, i.base_unit
+  select m.*, s.name as supplier_name, i.name as item_name, i.code as item_code, i.base_unit,
+         i.expense_category_id, i.expense_subcategory_id
   from merged m
   join suppliers s on s.id = m.supplier_id
   join items i on i.id = m.item_id
@@ -496,6 +515,8 @@ function mapCatalogue(r: Record<string, unknown>): CatalogueEntry {
     source: String(r.source) as CatalogueSource,
     firstSeenOn: r.first_seen_on ? String(r.first_seen_on) : null,
     timesBilled: Number(r.times_billed ?? 0),
+    expenseCategoryId: r.expense_category_id ? String(r.expense_category_id) : null,
+    expenseSubcategoryId: r.expense_subcategory_id ? String(r.expense_subcategory_id) : null,
   };
 }
 
@@ -615,6 +636,9 @@ export interface ItemRequestRow {
   reason: string | null;
   /** T-443 R1: the optional "variation of" the requester chose. */
   variantOfItemId: string | null;
+  /** T-502 S1: the expense category the requester chose; copied to the item at approval. */
+  expenseCategoryId: string | null;
+  expenseSubcategoryId: string | null;
   status: ItemRequestStatus;
   similarWarning: string | null;
   requestedBy: string;
@@ -639,6 +663,8 @@ export async function insertItemRequest(
     sellableWholesale?: boolean;
     reason: string | null;
     variantOfItemId?: string | null;
+    expenseCategoryId?: string | null;
+    expenseSubcategoryId?: string | null;
     similarWarning: string | null;
     requestedBy: string;
   },
@@ -703,6 +729,10 @@ export interface MergeReport {
   invoiceLines: number;
   priceListRates: number;
   supplierLinks: number;
+  /** T-502: other names that moved to the winner (including the loser's own name). */
+  aliasesMoved: string[];
+  /** T-502: other names left behind because they would clash with an existing item name or other name. */
+  aliasesSkipped: string[];
 }
 
 /**
@@ -756,7 +786,35 @@ export async function mergeItemInto(
     where id = ${loserId} and org_id = ${orgId}
   `);
 
-  return { invoiceLines: lines.length, priceListRates: rates.length, supplierLinks: links.length };
+  // T-502 (gap 4): the loser's other names MOVE to the winner (delete + insert: aliases are never updated), and the loser's own
+  // name becomes an other name of the winner, so the old spelling still finds the survivor. A name that would clash with another
+  // item's name (the loser itself is merged now, so it does not count) or another item's other name is skipped, not fatal.
+  const loser = (await tx.execute(sql`select name from items where id = ${loserId} and org_id = ${orgId}`)) as unknown as { name: string }[];
+  const moving = (await tx.execute(sql`
+    delete from item_aliases where org_id = ${orgId} and item_id = ${loserId} returning alias, created_by
+  `)) as unknown as { alias: string; created_by: string }[];
+  const wanted = [...moving.map((m) => ({ alias: m.alias, createdBy: m.created_by })), ...(loser[0] ? [{ alias: loser[0].name, createdBy: null as string | null }] : [])];
+  const aliasesMoved: string[] = [];
+  const aliasesSkipped: string[] = [];
+  for (const w of wanted) {
+    const clash = (await tx.execute(sql`
+      select 1 from items i where i.org_id = ${orgId} and i.status <> 'merged' and lower(trim(i.name)) = lower(trim(${w.alias}))
+      union all
+      select 1 from item_aliases a where a.org_id = ${orgId} and lower(trim(a.alias)) = lower(trim(${w.alias}))
+      limit 1
+    `)) as unknown as unknown[];
+    if (clash.length > 0) {
+      aliasesSkipped.push(w.alias);
+      continue;
+    }
+    await tx.execute(sql`
+      insert into item_aliases (org_id, item_id, alias, created_by)
+      values (${orgId}, ${winnerId}, ${w.alias}, coalesce(${w.createdBy}::uuid, (select created_by from items where id = ${winnerId})))
+    `);
+    aliasesMoved.push(w.alias);
+  }
+
+  return { invoiceLines: lines.length, priceListRates: rates.length, supplierLinks: links.length, aliasesMoved, aliasesSkipped };
 }
 
 export interface DuplicateCandidate {
@@ -849,6 +907,77 @@ export async function findItemByName(tx: Tx, orgId: string, name: string): Promi
     mergedIntoName: r.w_name ?? null,
     mergedIntoCode: r.w_code ?? null,
   };
+}
+
+/** T-502 (gap 5): does the item have any row the service-kind trigger cares about? The one definition is the database trigger; this is the page's courtesy read. */
+export async function hasServiceKindHistory(tx: Tx, itemId: string): Promise<boolean> {
+  const rows = (await tx.execute(sql`
+    select (
+      exists (select 1 from stock_movements where item_id = ${itemId})
+      or exists (select 1 from delivery_lines where item_id = ${itemId})
+      or exists (select 1 from stock_usage_lines where item_id = ${itemId})
+      or exists (select 1 from production_recipe_lines where item_id = ${itemId})
+      or exists (select 1 from production_recipes where output_item_id = ${itemId})
+      or exists (select 1 from supplier_invoice_lines where item_id = ${itemId})
+    ) as h
+  `)) as unknown as { h: boolean }[];
+  return rows[0]?.h === true;
+}
+
+/** T-502 S1 (R5). An alias whose text equals `text` ignoring case and surrounding spaces, and the item it names. */
+export interface AliasHit {
+  id: string;
+  alias: string;
+  itemId: string;
+  itemName: string;
+  itemCode: string;
+}
+
+export async function findAliasByText(tx: Tx, orgId: string, text: string): Promise<AliasHit | undefined> {
+  const rows = (await tx.execute(sql`
+    select a.id, a.alias, a.item_id, i.name as item_name, i.code as item_code
+    from item_aliases a
+    join items i on i.id = a.item_id and i.org_id = a.org_id
+    where a.org_id = ${orgId} and lower(trim(a.alias)) = lower(trim(${text}))
+    limit 1
+  `)) as unknown as Record<string, string>[];
+  const r = rows[0];
+  if (!r) return undefined;
+  return { id: String(r.id), alias: String(r.alias), itemId: String(r.item_id), itemName: String(r.item_name), itemCode: String(r.item_code) };
+}
+
+export interface AliasRow {
+  id: string;
+  itemId: string;
+  alias: string;
+  createdBy: string;
+  createdAt: Date;
+}
+
+export async function listAliasesForItem(tx: Tx, orgId: string, itemId: string): Promise<AliasRow[]> {
+  const rows = await tx
+    .select()
+    .from(itemAliases)
+    .where(and(eq(itemAliases.orgId, orgId), eq(itemAliases.itemId, itemId)))
+    .orderBy(asc(itemAliases.alias));
+  return rows as AliasRow[];
+}
+
+export async function insertAlias(
+  tx: Tx,
+  input: { orgId: string; itemId: string; alias: string; createdBy: string },
+): Promise<{ id: string }> {
+  const [row] = await tx.insert(itemAliases).values(input).returning({ id: itemAliases.id });
+  return row!;
+}
+
+/** Removes one alias; returns what was removed (for the audit row), or undefined when it was not there. */
+export async function deleteAlias(tx: Tx, orgId: string, aliasId: string): Promise<AliasRow | undefined> {
+  const rows = await tx
+    .delete(itemAliases)
+    .where(and(eq(itemAliases.id, aliasId), eq(itemAliases.orgId, orgId)))
+    .returning();
+  return rows[0] as AliasRow | undefined;
 }
 
 /** T-443 R4. The OPEN request (`requested`) with this name ignoring case, with who asked and when. */

@@ -64,6 +64,7 @@ import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accou
 import { seedExpenseCategories } from '../../../../packages/db/seed/expense-categories';
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
 import { paramsOf } from '../helpers/flash-jar';
+import { itemiseLegacy } from '../../../../packages/domain/tests/integration/_fixtures/legacy-itemise'; // T-502 s12: web tests need an itemised invoice
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -168,6 +169,7 @@ async function fixture(hint: string) {
     const created = await asOrg(orgId, (tx) =>
       recordInvoice(tx, admin_, { storeId, supplierId, invoiceDate: '2026-01-10', totalAmount, receiptFileId: fileId }),
     );
+    await itemiseLegacy(sql, created.id);
     await asOrg(orgId, (tx) =>
       verifyInvoice(tx, verifier_, created.id, { supplier: true, invoice: true, items: true, price: true }),
     );

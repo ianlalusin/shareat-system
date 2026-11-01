@@ -186,7 +186,7 @@ async function rawInvoice(f: Fixture): Promise<string> {
 async function floatExpenseDraft(f: Fixture, amount: string, cashRequestId: string): Promise<string> {
   const invoiceId = await rawInvoice(f);
   const { id } = await asPerson(f.orgId, (tx) =>
-    createExpense(tx, actorOf(f.orgId, f.staffId), {
+    createExpense(tx, actorOf(f.orgId, f.staffId), { requireItemised: false /* legacy fixture: lineless invoice */,
       storeId: f.storeId,
       businessDate: '2026-01-05',
       categoryId: f.categoryId,
@@ -214,7 +214,7 @@ async function apBill(f: Fixture, amount: string, supplierId = f.supplierId): Pr
   );
   await asPerson(f.orgId, (tx) => verifyInvoice(tx, f.manager, created.id, { supplier: true, invoice: true, items: true, price: true }));
   const exp = await asPerson(f.orgId, (tx) =>
-    recordExpenseForInvoice(tx, f.manager, {
+    recordExpenseForInvoice(tx, f.manager, { requireItemised: false /* legacy fixture: lineless invoice */,
       storeId: f.storeId, supplierId, supplierInvoiceId: created.id, categoryId: f.categoryId,
       particulars: 'Stock purchase', payments: [{ method: 'credit', amount }],
     }),

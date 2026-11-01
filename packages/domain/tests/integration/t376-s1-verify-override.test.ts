@@ -106,7 +106,7 @@ async function fixture(hint: string) {
     const draftIds: string[] = [];
     for (const amount of o.drafts) {
       const made = await asOrg(orgId, (tx) =>
-        createExpense(tx, admin, {
+        createExpense(tx, admin, { requireItemised: false /* legacy fixture: lineless invoice */,
           storeId, supplierId: supplier!.id, supplierInvoiceId: inv!.id, businessDate: o.on, categoryId: cat!.id,
           particulars: `Pork ${amount}`, payments: [{ method: 'cash', amount, moneyAccountId: cash!.id }],
         }),
@@ -319,7 +319,7 @@ describe('T8 (I4) - an actor smuggled inside periodOverride changes nothing', ()
 describe('T9 - recordExpenseForInvoice on a VERIFIED January bill', () => {
   const record = (f: Fixture, who: Actor, invoiceId: string, periodOverride?: { reason: 'late_supplier_invoice'; note?: string }) =>
     asOrg(f.orgId, (tx) =>
-      recordExpenseForInvoice(tx, who, {
+      recordExpenseForInvoice(tx, who, { requireItemised: false /* legacy fixture: lineless invoice */,
         storeId: f.storeId, supplierInvoiceId: invoiceId, supplierId: f.supplierId, categoryId: f.categoryId, particulars: 'Late pork',
         payments: [{ method: 'cash', amount: '700.00', moneyAccountId: f.cashId }],
         ...(periodOverride ? { periodOverride } : {}),

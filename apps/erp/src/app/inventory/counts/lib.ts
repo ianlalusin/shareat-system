@@ -137,7 +137,7 @@ export async function getCountSessionDetail(orgId: string, id: string): Promise<
       countSessionsRepo.expectedItemsAt(tx, locationIds),
       countSessionsRepo.listCountLines(tx, id),
       countSessionsRepo.storeName(tx, session.storeId),
-      itemsRepo.listItems(tx, session.orgId, { includeInactive: true }),
+      itemsRepo.listItems(tx, session.orgId, { includeInactive: true, stockedOnly: true }),
     ]);
     const allItems = itemRows.map((i) => ({ id: i.id, code: i.code, name: i.name, baseUnit: i.baseUnit }));
 
