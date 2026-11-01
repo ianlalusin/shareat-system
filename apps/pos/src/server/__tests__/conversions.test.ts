@@ -168,6 +168,29 @@ describe("DEF-808 - v1's live data types Cash as 'other'", () => {
   });
 });
 
+describe("T-506 - e-wallets by name (Ian 1 Nov: GCash and Maya are e-wallets)", () => {
+  const mop = (id: string, name: string, type: string) =>
+    fs.seed(`stores/${STORE}/storeModesOfPayment/${id}`, { id, name, type, sortOrder: 1, isActive: true, hasRef: false, isArchived: false });
+
+  it('E1: GCash and Maya typed other are accepted as the wallet side', async () => {
+    mop('m-cash', 'Cash', 'other'); mop('m-g', 'GCash', 'other'); mop('m-m', 'Maya', 'other');
+    expect((await convert(body())).status).toBe(200);
+    const r = await convert(body({ requestId: R2, walletMethod: 'Maya' }));
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(fs.get(`stores/${STORE}/paymentConversions/${R2}`)).toMatchObject({ fromMethod: 'Maya', toMethod: 'Cash' });
+  });
+
+  it('E2: QRPH and Bank Transfer typed other are refused as the wallet side', async () => {
+    mop('m-cash', 'Cash', 'other'); mop('m-q', 'QRPH', 'other'); mop('m-b', 'Bank Transfer', 'other');
+    for (const [i, name] of ['QRPH', 'Bank Transfer'].entries()) {
+      const r = await convert(body({ requestId: i ? R2 : R1, walletMethod: name }));
+      refused(r, name);
+      expect(r.body.error).toBe('That payment method is not available.');
+    }
+    expect(convs()).toHaveLength(0);
+  });
+});
+
 describe('Acceptance 2 - two tabs, idempotency', () => {
   it('two tabs, two requestIds, transactions truly overlapping (beforeNextTransaction fires as tab A starts): both recorded, moved by the SUM (M3)', async () => {
     let tabB: Promise<{ status: number; body: any }> | undefined;
