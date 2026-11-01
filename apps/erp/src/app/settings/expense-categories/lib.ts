@@ -29,6 +29,11 @@ export async function categoriesForAdmin(orgId: string): Promise<ExpenseCategory
   return withOrgPrincipal(orgId, (tx) => expensesRepo.listCategoriesForAdmin(tx, orgId));
 }
 
+/** T-502 section 11. Every sub-category (retired too) of the org, for the list under each category. */
+export async function subcategoriesForAdmin(orgId: string) {
+  return withOrgPrincipal(orgId, (tx) => expensesRepo.listSubcategories(tx, orgId));
+}
+
 /** The accounts a category may be mapped to — postable and active only. */
 export async function mappableAccounts(orgId: string): Promise<{ code: string; name: string }[]> {
   return withOrgPrincipal(orgId, (tx) => expensesRepo.mappableAccounts(tx, orgId));

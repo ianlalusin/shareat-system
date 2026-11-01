@@ -25,7 +25,7 @@ beforeEach(() => {
 
 describe('T-443 request race at the action boundary', () => {
   it('after a duplicate race rolls back, names the winning requester and date using a fresh authorised read', async () => {
-    await expect(requestItemAction(form())).rejects.toMatchObject({ flash: { error: 'Alex already asked for "Fresh basil" on Oct 18, 2026; it is waiting for a super-admin.' } });
+    await expect(requestItemAction(form())).rejects.toMatchObject({ flash: { error: 'Alex already asked for "Fresh basil" on Oct 18, 2026; it is waiting for an admin to approve.' } });
     expect(mocks.find).toHaveBeenCalledWith(expect.anything(), 'org-ui', 'Fresh basil');
   });
   it('does not reveal the requester when permission was removed before the fresh read', async () => {

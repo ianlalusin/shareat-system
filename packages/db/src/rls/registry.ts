@@ -702,6 +702,16 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'Which look-alike item pairs a super-admin said are different products (T-443). Org-scoped like the item master ' +
       'it qualifies; another org must never see, or undo, what this org decided.',
   },
+  expense_subcategories: {
+    scope: 'org_column',
+    reason: 'An org\'s own sub-categories under its expense categories (T-502). Org-scoped like the categories they refine.',
+  },
+  item_aliases: {
+    scope: 'org_column',
+    reason:
+      'Other names an org gives its items (T-502). Org-scoped like the item master it names; another org must never see, or ' +
+      'remove, what this org calls its things.',
+  },
   supplier_items: {
     scope: 'org_column',
     reason:

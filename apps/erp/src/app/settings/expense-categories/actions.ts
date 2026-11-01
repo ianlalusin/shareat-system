@@ -10,16 +10,19 @@
  */
 import {
   createCategory,
+  createSubcategory,
   renameCategory,
+  renameSubcategory,
   setCategoryAccount,
   setCategoryActive,
+  setSubcategoryActive,
 } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
 import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
-import { EXPENSE_CATEGORY_ACCOUNT, EXPENSE_CATEGORY_RENAME } from './typed-forms';
+import { EXPENSE_CATEGORY_ACCOUNT, EXPENSE_CATEGORY_RENAME, EXPENSE_SUBCATEGORY_RENAME } from './typed-forms';
 
 function str(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -112,4 +115,43 @@ export async function setCategoryActiveAction(formData: FormData): Promise<void>
       ? `${label} is available again.`
       : `${label} is retired. It stays on every expense already recorded in it, and stops being offered for new ones.`,
   });
+}
+
+/**
+ * T-502 section 11 - sub-categories. Same gate as the categories above (`manage_chart_of_accounts`, inside each domain function).
+ * Add, rename, retire; never delete. The cashier never picks a sub-category: the item carries it.
+ */
+export async function createSubcategoryAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/settings/expense-categories');
+  const name = str(formData, 'name');
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => createSubcategory(tx, actor, { categoryId: str(formData, 'categoryId'), name }));
+  } catch (err) {
+    return await redirectWithFlash('/settings/expense-categories', {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash('/settings/expense-categories', {}, { ok: `Sub-category "${name}" added.` });
+}
+
+export async function renameSubcategoryAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/settings/expense-categories');
+  const subcategoryId = str(formData, 'subcategoryId');
+  const name = str(formData, 'name');
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => renameSubcategory(tx, actor, { subcategoryId, name }));
+  } catch (err) {
+    return await redirectWithFlash('/settings/expense-categories', {}, { error: errorMessage(err), typed: keepTyping(formData, EXPENSE_SUBCATEGORY_RENAME, subcategoryId, { actorId: actor.personId }) });
+  }
+  return await redirectWithFlash('/settings/expense-categories', {}, { ok: `Renamed to "${name}". Items keep it.` });
+}
+
+export async function setSubcategoryActiveAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/settings/expense-categories');
+  const subcategoryId = str(formData, 'subcategoryId');
+  const isActive = str(formData, 'isActive') === 'true';
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => setSubcategoryActive(tx, actor, { subcategoryId, isActive }));
+  } catch (err) {
+    return await redirectWithFlash('/settings/expense-categories', {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash('/settings/expense-categories', {}, { ok: isActive ? 'Sub-category is available again.' : 'Sub-category retired. Items that have it keep it; it stops being offered.' });
 }

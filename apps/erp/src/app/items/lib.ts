@@ -1,6 +1,8 @@
 /** Server-only helpers for the item master. T-145. */
 import {
+  expensesRepo,
   itemsRepo,
+  type AliasRow,
   type DismissalRow,
   type DuplicateCandidate,
   type ItemKind,
@@ -57,8 +59,9 @@ export function soldAsLabel(item: Pick<ItemRow, 'isPurchasable' | 'sellableRetai
   return [sold || '—', made].filter(Boolean).join(' · ');
 }
 
-export async function listItems(orgId: string, includeInactive = true, kind?: ItemKind): Promise<ItemRow[]> {
-  return withOrgPrincipal(orgId, (tx) => itemsRepo.listItems(tx, orgId, { includeInactive, ...(kind ? { kind } : {}) }));
+/** `stockedOnly` (T-502 S1): leave out service items (rent, power...), for a picker of things that are stocked or sold. */
+export async function listItems(orgId: string, includeInactive = true, kind?: ItemKind, stockedOnly = false): Promise<ItemRow[]> {
+  return withOrgPrincipal(orgId, (tx) => itemsRepo.listItems(tx, orgId, { includeInactive, ...(kind ? { kind } : {}), ...(stockedOnly ? { stockedOnly } : {}) }));
 }
 
 export { parseKindFilter } from './family';
@@ -111,7 +114,33 @@ export async function itemPrices(
   }));
 }
 
-/** Requests waiting for a super-admin. Everyone with manage_items may LOOK; only a super-admin decides. */
+/** T-502. The active expense categories a request / approval / item page offers, grouped as "Group - Category". Retired ones are never offered for a NEW choice. */
+export async function expenseCategoryOptions(orgId: string): Promise<{ id: string; label: string }[]> {
+  return withOrgPrincipal(orgId, async (tx) => {
+    const rows = await expensesRepo.listCategories(tx, orgId, { activeOnly: true });
+    return rows.map((c) => ({ id: c.id, label: `${c.group} · ${c.category}` }));
+  });
+}
+
+/** T-502 section 11. Every ACTIVE sub-category with its category, for the filtered sub-category select on the item forms. */
+export async function expenseSubcategoryOptions(orgId: string): Promise<{ id: string; categoryId: string; name: string }[]> {
+  return withOrgPrincipal(orgId, async (tx) => {
+    const rows = await expensesRepo.listSubcategories(tx, orgId, { activeOnly: true });
+    return rows.map((s) => ({ id: s.id, categoryId: s.categoryId, name: s.name }));
+  });
+}
+
+/** T-502. The other names of one item, for its page. */
+export async function aliasesOf(orgId: string, itemId: string): Promise<AliasRow[]> {
+  return withOrgPrincipal(orgId, (tx) => itemsRepo.listAliasesForItem(tx, orgId, itemId));
+}
+
+/** T-502 S2. Presentation aid only (the domain stays the enforcement): may this person decide item requests and keep names and categories? */
+export async function mayDecideItemRequests(actor: Actor): Promise<boolean> {
+  return withOrgPrincipal(actor.orgId, (tx) => can(tx, actor, 'approve_item_request', {}));
+}
+
+/** Requests waiting for an admin (T-502 S2). Everyone with manage_items may LOOK; an admin decides. */
 export async function pendingRequests(orgId: string): Promise<ItemRequestRow[]> {
   return withOrgPrincipal(orgId, (tx) => itemsRepo.listItemRequests(tx, orgId, { status: "requested" }));
 }

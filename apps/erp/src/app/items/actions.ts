@@ -25,6 +25,9 @@ import {
   renameItem,
   rejectItemRequest,
   requestItem,
+  addItemAlias,
+  removeItemAlias,
+  setItemExpenseCategory,
   setItemStatus,
   setItemVariantOf,
   setStoreSellability,
@@ -41,7 +44,7 @@ import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
-import { ITEM_FLAGS, ITEM_RENAME, ITEM_STORE_SELLABILITY, ITEM_UNIT, ITEM_VARIANT } from './typed-forms';
+import { ITEM_ALIAS, ITEM_CATEGORY, ITEM_FLAGS, ITEM_RENAME, ITEM_STORE_SELLABILITY, ITEM_UNIT, ITEM_VARIANT } from './typed-forms';
 import { errorMessage as sharedErrorMessage, resolveConstraintName } from '@/lib/constraint-messages';
 import { isPresentable } from '../../lib/error-shape';
 import { loadDestructiveTarget, retypeRefusalError } from '@/lib/destructive';
@@ -97,6 +100,9 @@ export async function requestItemAction(formData: FormData): Promise<void> {
         reason: str(formData, 'reason') || null,
         // T-443 R1: optional "Variation of"; blank means none.
         variantOfItemId: str(formData, 'variantOfItemId') || null,
+        // T-502 S1: the expense category travels with the request; the approver may change it.
+        expenseCategoryId: str(formData, 'expenseCategoryId') || null,
+        expenseSubcategoryId: str(formData, 'expenseSubcategoryId') || null, // T-502 section 11
         // T-378 R7 (DEF-599): the ticks travel with the request, so approval can carry them to the item.
         isPurchasable: flag(formData, 'isPurchasable'),
         sellableRetail: flag(formData, 'sellableRetail'),
@@ -120,8 +126,8 @@ export async function requestItemAction(formData: FormData): Promise<void> {
     '/items',
     {},
     warning
-      ? { ok: 'Request submitted for a super-admin to approve.', warning }
-      : { ok: 'Request submitted for a super-admin to approve.' },
+      ? { ok: 'Request submitted for an admin to approve.', warning }
+      : { ok: 'Request submitted for an admin to approve.' },
   );
 }
 
@@ -141,6 +147,8 @@ export async function createItemAction(formData: FormData): Promise<void> {
         baseUnit: str(formData, 'baseUnit') as BaseUnit,
         notes: str(formData, 'notes') || null,
         variantOfItemId: str(formData, 'variantOfItemId') || null, // T-443 R1
+        expenseCategoryId: str(formData, 'expenseCategoryId') || null, // T-502 S1
+        expenseSubcategoryId: str(formData, 'expenseSubcategoryId') || null, // T-502 section 11
         // ⭐ DEF-130. Read from the form — a missing checkbox is an explicit "no", which for
         // `isPurchasable` means the form's default-ticked box was deliberately unticked.
         isPurchasable: flag(formData, 'isPurchasable'),
@@ -332,6 +340,11 @@ export async function approveItemRequestAction(formData: FormData): Promise<void
         sellableWholesale: confirmed ? flag(formData, 'sellableWholesale') : undefined,
         // T-443 R1: the approve form always submits the select; blank clears the requester's choice, a value sets it.
         variantOfItemId: formData.has('variantOfItemId') ? str(formData, 'variantOfItemId') || null : undefined,
+        // T-502 S1/S2: the approve form carries the category (pre-selected to the requester's); blank keeps the request's, and the domain
+        // refuses a purchasable item that still has none.
+        expenseCategoryId: str(formData, 'expenseCategoryId') || undefined,
+        // T-502 section 11: blank keeps the request's (while it fits the category); the domain requires one when the category has some.
+        expenseSubcategoryId: formData.has('expenseSubcategoryId') ? str(formData, 'expenseSubcategoryId') || undefined : undefined,
       }),
     );
     approvedCode = approved.code;
@@ -359,8 +372,8 @@ export async function rejectItemRequestAction(formData: FormData): Promise<void>
   try {
     await withOrgPrincipal(actor.orgId, async (tx) => {
       // T-440 S9 (iii): the field check stays here, and runs only for a caller `rejectItemRequest`'s first authorize()
-      // ('approve_item') would let in; anyone else is refused by that gate before any field sentence.
-      if (await can(tx, actor, 'approve_item', {})) assertFieldRules(ITEMS_REJECT_RULES, formData);
+      // ('approve_item_request', T-502 S2) would let in; anyone else is refused by that gate before any field sentence.
+      if (await can(tx, actor, 'approve_item_request', {})) assertFieldRules(ITEMS_REJECT_RULES, formData);
       return rejectItemRequest(tx, actor, {
         requestId: str(formData, 'requestId'),
         note: str(formData, 'note'),
@@ -370,6 +383,56 @@ export async function rejectItemRequestAction(formData: FormData): Promise<void>
     return await redirectWithFlash('/items', {}, { error: errorMessage(err) });
   }
   return await redirectWithFlash('/items', {}, { ok: 'Rejected, with your reason recorded for the requester.' });
+}
+
+/** T-502 S1. Admin (`approve_item_request`): give an item another name people type for it. */
+export async function addItemAliasAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const itemId = str(formData, 'itemId');
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => addItemAlias(tx, actor, { itemId, alias: str(formData, 'alias') }));
+  } catch (err) {
+    if (err instanceof AuthorizationError) {
+      return await redirectWithFlash(`/items/${itemId}`, {}, { error: 'Only an admin can add other names to an item.', typed: keepTyping(formData, ITEM_ALIAS, itemId, { actorId: actor.personId }) }, { anchor: 'aliases' });
+    }
+    return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err), typed: keepTyping(formData, ITEM_ALIAS, itemId, { actorId: actor.personId }) }, { anchor: 'aliases' });
+  }
+  return await redirectWithFlash(`/items/${itemId}`, {}, { ok: 'Other name added. The item picker now finds it by that name too.' }, { anchor: 'aliases' });
+}
+
+/** T-502 S1. Admin (`approve_item_request`): take an other-name off an item. */
+export async function removeItemAliasAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const itemId = str(formData, 'itemId');
+  let message = '';
+  try {
+    const { removed } = await withOrgPrincipal(actor.orgId, (tx) => removeItemAlias(tx, actor, { aliasId: str(formData, 'aliasId') }));
+    message = removed ? 'Other name removed.' : 'That other name was already gone.';
+  } catch (err) {
+    if (err instanceof AuthorizationError) {
+      return await redirectWithFlash(`/items/${itemId}`, {}, { error: 'Only an admin can remove other names from an item.' }, { anchor: 'aliases' });
+    }
+    return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err) }, { anchor: 'aliases' });
+  }
+  return await redirectWithFlash(`/items/${itemId}`, {}, { ok: message }, { anchor: 'aliases' });
+}
+
+/** T-502 S1/S2. Admin (`approve_item_request`): set or change the expense category an item is bought under. */
+export async function setItemExpenseCategoryAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const itemId = str(formData, 'itemId');
+  const expenseCategoryId = str(formData, 'expenseCategoryId') || null;
+  let message = '';
+  try {
+    const { changed } = await withOrgPrincipal(actor.orgId, (tx) => setItemExpenseCategory(tx, actor, { itemId, expenseCategoryId, expenseSubcategoryId: str(formData, 'expenseSubcategoryId') || null }));
+    message = changed ? 'Expense category saved.' : 'No change.';
+  } catch (err) {
+    if (err instanceof AuthorizationError) {
+      return await redirectWithFlash(`/items/${itemId}`, {}, { error: "Only an admin can change an item's expense category.", typed: keepTyping(formData, ITEM_CATEGORY, itemId, { actorId: actor.personId }) }, { anchor: 'category' });
+    }
+    return await redirectWithFlash(`/items/${itemId}`, {}, { error: errorMessage(err), typed: keepTyping(formData, ITEM_CATEGORY, itemId, { actorId: actor.personId }) }, { anchor: 'category' });
+  }
+  return await redirectWithFlash(`/items/${itemId}`, {}, { ok: message }, { anchor: 'category' });
 }
 
 /** ⛔ T-443 R1. Super-admin only (`approve_item`): make this item a variation of another, or detach it (blank parent). */

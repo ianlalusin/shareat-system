@@ -33,6 +33,7 @@ describe('L1 — label maps match the S6a contract exactly, exhaustive over thei
       retail: 'Retail item',
       meat_slab: 'Meat (slab)',
       meat_sliced: 'Meat (sliced)',
+      service: 'Service', // T-502 S1
     });
     expect(Object.keys(ITEM_KIND_LABEL).sort()).toEqual([...ITEM_KINDS].sort());
   });

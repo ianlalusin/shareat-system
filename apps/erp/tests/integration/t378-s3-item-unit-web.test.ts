@@ -80,8 +80,10 @@ async function fixture(hint: string) {
     await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${store!.id})`;
     return { orgId, personId: p!.id };
   };
+  // T-502 S2: approving a purchasable item needs an expense category; the approve forms below pass this one.
+  const [cat] = await sql<{ id: string }[]>`insert into expense_categories (org_id, "group", category) values (${orgId}, 'OPEX', 'Supplies') returning id`;
   return {
-    orgId, storeId: store!.id,
+    orgId, storeId: store!.id, categoryId: cat!.id,
     superAdmin: await mk('Super', 'super_admin'),
     admin: await mk('Admin', 'admin'),
     manager: await mk('Manager', 'manager'),
@@ -311,7 +313,7 @@ describe('W4 - the approve form confirms the unit and flags (R5)', () => {
       const req = await pendingRequest(f, 'pcs', false);
       ACTOR_HOLDER.actor = f.superAdmin;
       const to = await redirectOf(() =>
-        actions.approveItemRequestAction(form({ requestId: req.id, baseUnit: 'kg', sellableRetail: 'on' })),
+        actions.approveItemRequestAction(form({ expenseCategoryId: f.categoryId, requestId: req.id, baseUnit: 'kg', sellableRetail: 'on' })),
       );
       expect(param(to, 'error')).toBeNull();
       const [it] = await sql<{ base_unit: string; sellable_retail: boolean }[]>`

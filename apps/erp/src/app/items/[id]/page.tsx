@@ -2,12 +2,15 @@ import { ITEMS_RENAME_RULES, ITEMS_UNIT_RULES, nativeAttrs } from '@shareat/doma
 import { notFound } from 'next/navigation';
 import { requireSession } from '../../../lib/session';
 import { can } from '@shareat/auth';
-import { getItem, itemPrices, peso, retireReadout, sellabilityByStore, soldAsLabel, unitHistoryExists, variationParentOptions, variationsOf, withOrgPrincipal } from '../lib';
+import { aliasesOf, expenseCategoryOptions, expenseSubcategoryOptions, getItem, itemPrices, mayDecideItemRequests, peso, retireReadout, sellabilityByStore, soldAsLabel, unitHistoryExists, variationParentOptions, variationsOf, withOrgPrincipal } from '../lib';
 import { whoSells } from '../../ap/lib';
 import {
+  addItemAliasAction,
   changeItemUnitAction,
   clearStoreSellabilityAction,
+  removeItemAliasAction,
   renameItemAction,
+  setItemExpenseCategoryAction,
   setItemStatusAction,
   setItemVariantOfAction,
   setStoreSellabilityAction,
@@ -15,10 +18,11 @@ import {
   updateItemFlagsAction,
 } from '../actions';
 import { ItemCodeField } from '../ItemCodeField';
+import { SubcategorySelect } from '../SubcategorySelect';
 import { BASE_UNITS, itemKindLabel } from '@shareat/db';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
-import { ITEM_FLAGS, ITEM_RENAME, ITEM_STORE_SELLABILITY, ITEM_UNIT, ITEM_VARIANT } from '../typed-forms';
+import { ITEM_ALIAS, ITEM_CATEGORY, ITEM_FLAGS, ITEM_RENAME, ITEM_STORE_SELLABILITY, ITEM_UNIT, ITEM_VARIANT } from '../typed-forms';
 import { Page } from '@/components/shell/Page';
 import { EditableRecord } from '@/components/forms';
 import { Banner, Button, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, Input, Select, SplitWorkspace } from '@/components/ui';
@@ -67,6 +71,9 @@ export default async function ItemDetailPage({
   // T-378 S4 (DEF-600). Presentation aid only: the same gate the action uses, asked here so the form is drawn only for
   // who may use it. `changeItemBaseUnit` stays the enforcement. Pattern: channel-settlements/page.tsx.
   const mayApproveItem = await withOrgPrincipal(actor.orgId, (tx) => can(tx, actor, 'approve_item', {}));
+  // T-502 S1/S2. An admin (not only a super-admin) keeps the item's expense category and other names; presentation aid, the domain is the gate.
+  const mayKeepCatalogue = await mayDecideItemRequests(actor);
+  const [aliases, categoryChoices, subcategoryChoices] = await Promise.all([aliasesOf(actor.orgId, id), expenseCategoryOptions(actor.orgId), expenseSubcategoryOptions(actor.orgId)]);
   // T-443 R1. The variations of this item, its parent (if it is one), and - for who may group items - the parents it could go under.
   const variations = await variationsOf(actor.orgId, id);
   const parentItem = item.variantOfItemId ? await getItem(actor.orgId, item.variantOfItemId) : undefined;
@@ -150,6 +157,71 @@ export default async function ItemDetailPage({
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
             Only a super-admin can rename, retire or restore an item.
           </p>
+        )}
+      </section>
+
+      {/* T-502 S1/S2. The expense category this item is bought under, so cost drivers read Group -> Category -> Item. Admin sets it. */}
+      <section id="category" className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">Expense category</h2>
+        {mayKeepCatalogue ? (
+          <EditableRecord action={setItemExpenseCategoryAction} label={`${item.name} expense category`} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_CATEGORY, item.id, actor.personId)}>
+            <FormGrid>
+              <Field width="long" label="Bought under">
+                <Select name="expenseCategoryId" defaultValue={item.expenseCategoryId ?? ''} className="w-full">
+                  <option value="">{item.isPurchasable ? 'Choose a category…' : '(none)'}</option>
+                  {categoryChoices.map((c) => (
+                    <option key={c.id} value={c.id}>{c.label}</option>
+                  ))}
+                </Select>
+              </Field>
+              <Field width="long" label="Sub-category">
+                <SubcategorySelect options={subcategoryChoices} defaultCategoryId={item.expenseCategoryId ?? ''} defaultValue={item.expenseSubcategoryId ?? ''} />
+              </Field>
+            </FormGrid>
+          </EditableRecord>
+        ) : (
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+            {item.expenseCategoryId
+              ? `Bought under: ${categoryChoices.find((c) => c.id === item.expenseCategoryId)?.label ?? 'a retired category'}${item.expenseSubcategoryId ? ` · ${subcategoryChoices.find((s) => s.id === item.expenseSubcategoryId)?.name ?? 'a retired sub-category'}` : ''}. Only an admin can change it.`
+              : 'No expense category yet. Only an admin can set it.'}
+          </p>
+        )}
+      </section>
+
+      {/* T-502 S1. Other names people type for this item (chili / sili / siling pula). The picker finds the item by any of them. */}
+      <section id="aliases" className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+        <h2 className="font-medium">Other names</h2>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          Names people use for {item.name}. Each other name belongs to one item only, and cannot be the official name of another item.
+        </p>
+        {aliases.length > 0 ? (
+          <ul className="space-y-1 text-sm">
+            {aliases.map((a) => (
+              <li key={a.id} className="flex flex-wrap items-center gap-2">
+                <span>{a.alias}</span>
+                {mayKeepCatalogue && (
+                  <form action={removeItemAliasAction}>
+                    <input type="hidden" name="itemId" value={item.id} />
+                    <input type="hidden" name="aliasId" value={a.id} />
+                    <Button type="submit" variant="ghost">Remove</Button>
+                  </form>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">No other names yet.</p>
+        )}
+        {mayKeepCatalogue && item.status !== 'merged' ? (
+          <EditableRecord action={addItemAliasAction} label={`${item.name} other name`} hidden={{ itemId: item.id }} typed={typedFor(sp, ITEM_ALIAS, item.id, actor.personId)}>
+            <FormGrid>
+              <Field width="name" label="Add another name">
+                <Input name="alias" type="text" placeholder="sili" className="w-full" />
+              </Field>
+            </FormGrid>
+          </EditableRecord>
+        ) : (
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">Only an admin can add or remove other names.</p>
         )}
       </section>
 

@@ -40,13 +40,16 @@ import {
   foreignKey,
 } from 'drizzle-orm/pg-core';
 import { organizations } from './organizations';
+import { expenseCategories, expenseSubcategories } from './expenses';
 import { persons } from './persons';
 import { stores } from './stores';
 import { supplierInvoices } from './suppliers';
 
 /** v1's own vocabulary, from live data: raw_material 340 · supply 207 · retail 234 ·
  *  meat_slab 17 · meat_sliced 44. The meat split is real, not decorative. */
-export const ITEM_KINDS = ['raw_material', 'supply', 'retail', 'meat_slab', 'meat_sliced'] as const;
+/** T-502 S1: `service` (rent, power, water, internet) is bought on an invoice but NEVER stocked: base unit pcs, purchasable, never sold
+ *  (CHECKs `items_service_*`, migration 0224) and refused by trigger on every stock table. */
+export const ITEM_KINDS = ['raw_material', 'supply', 'retail', 'meat_slab', 'meat_sliced', 'service'] as const;
 export type ItemKind = (typeof ITEM_KINDS)[number];
 
 /** T-343 S6a — presentation label, exhaustive over `ITEM_KINDS`. */
@@ -56,6 +59,7 @@ export const ITEM_KIND_LABEL: Readonly<Record<ItemKind, string>> = {
   retail: 'Retail item',
   meat_slab: 'Meat (slab)',
   meat_sliced: 'Meat (sliced)',
+  service: 'Service',
 };
 
 function humanise(value: string): string {
@@ -161,6 +165,13 @@ export const items = pgTable(
      * `organizations.usage_tolerance`. Written by `setItemUsageTolerance` alone (admin).
      */
     usageTolerance: numeric('usage_tolerance', { precision: 5, scale: 4 }),
+    /**
+     * T-502 S1 (migration 0224). The default expense category of what this item is bought for, so cost drivers read Group -> Category -> Item.
+     * NULL for items made before T-502; required when a request is approved (domain). Same-org composite FK only (no single-column FK).
+     */
+    expenseCategoryId: uuid('expense_category_id'),
+    /** T-502 section 11 (0224). Optional middle level under the category; REQUIRED at approval when the category has an active one. Trigger `items_subcategory_matches_category`. */
+    expenseSubcategoryId: uuid('expense_subcategory_id'),
     notes: text('notes'),
     createdBy: uuid('created_by')
       .notNull()
@@ -182,6 +193,14 @@ export const items = pgTable(
     // T-386 S6 (migration 0192): 4 letters/digits, a dash, 3 digits, never 000. Added NOT VALID then validated.
     check('items_code_shape_check', sql`${t.code} ~ '^[A-Z0-9]{4}-[0-9]{3}$' and right(${t.code}, 3) <> '000'`),
     check('items_name_not_blank_check', sql`length(trim(${t.name})) > 0`),
+    // T-502 S1 (0224): the service shape (R6). items_kind_check itself is hand-written SQL (a text enum has no CHECK in the builder).
+    // NOTE: trigger items_name_alias_guard hand-added in migration 0224 (an item cannot take a name an alias holds, R5); the
+    // service_item_never_stocked triggers live on the stock tables.
+    check('items_service_unit_check', sql`${t.kind} <> 'service' OR ${t.baseUnit} = 'pcs'`),
+    check('items_service_never_sold_check', sql`${t.kind} <> 'service' OR (NOT ${t.sellableRetail} AND NOT ${t.sellableWholesale})`),
+    check('items_service_purchasable_check', sql`${t.kind} <> 'service' OR ${t.isPurchasable}`),
+    // T-502 S1 (0224): partial in the SQL (WHERE expense_category_id IS NOT NULL).
+    index('items_expense_category_idx').on(t.orgId, t.expenseCategoryId),
     // T-391 S1 (0193). The unit list is PURCHASE_UNITS; a test reads it back from pg_constraint.
     check('items_purchase_pair_check', sql`(${t.purchaseUnit} IS NULL) = (${t.purchaseFactor} IS NULL)`),
     check(
@@ -227,6 +246,17 @@ export const items = pgTable(
       columns: [t.orgId, t.parentSlabItemId],
       foreignColumns: [t.orgId, t.id],
       name: 'items_parent_slab_item_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-502 S1, migration 0224 - the category is a category of the SAME org; references `expense_categories_org_id_id_unique` (0213).
+    foreignKey({
+      columns: [t.orgId, t.expenseCategoryId],
+      foreignColumns: [expenseCategories.orgId, expenseCategories.id],
+      name: 'items_expense_category_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.expenseSubcategoryId],
+      foreignColumns: [expenseSubcategories.orgId, expenseSubcategories.id],
+      name: 'items_expense_subcategory_same_org_fk',
     }).onDelete('restrict'),
   ],
 );
@@ -297,6 +327,10 @@ export const itemRequests = pgTable(
     reason: text('reason'),
     /** T-443 R1 (0210). The top-level item this request is a variation of; copied to the item at approval (the approver may change it). */
     variantOfItemId: uuid('variant_of_item_id'),
+    /** T-502 S1 (0224). The requester's expense category; copied to the item at approval (the approver may change it). */
+    expenseCategoryId: uuid('expense_category_id'),
+    /** T-502 section 11 (0224). The requester's sub-category; copied to the item at approval. Trigger `item_requests_subcategory_matches_category`. */
+    expenseSubcategoryId: uuid('expense_subcategory_id'),
     status: text('status', { enum: ITEM_REQUEST_STATUSES }).notNull().default('requested'),
     /** ⚠️ Frozen at request time. Recomputing at approval would answer a different question — the
      *  catalogue moves — and the approver needs to see what the requester was shown. */
@@ -315,6 +349,20 @@ export const itemRequests = pgTable(
     // T-443 R4 (0210): the database backstop of the request-time duplicate guard. Partial in the SQL: WHERE status = 'requested'.
     // Two identical OPEN requests cannot exist; a decided one never blocks a new ask.
     uniqueIndex('item_requests_open_name_key').on(t.orgId, sql`lower(${t.name})`).where(sql`${t.status} = 'requested'`),
+    // T-502 S1 (0224): the service shape (R6), same as items.
+    check('item_requests_service_unit_check', sql`${t.kind} <> 'service' OR ${t.baseUnit} = 'pcs'`),
+    check('item_requests_service_never_sold_check', sql`${t.kind} <> 'service' OR (NOT ${t.sellableRetail} AND NOT ${t.sellableWholesale})`),
+    check('item_requests_service_purchasable_check', sql`${t.kind} <> 'service' OR ${t.isPurchasable}`),
+    foreignKey({
+      columns: [t.orgId, t.expenseCategoryId],
+      foreignColumns: [expenseCategories.orgId, expenseCategories.id],
+      name: 'item_requests_expense_category_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.expenseSubcategoryId],
+      foreignColumns: [expenseSubcategories.orgId, expenseSubcategories.id],
+      name: 'item_requests_expense_subcategory_same_org_fk',
+    }).onDelete('restrict'),
     // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons FKs above
     // (see the note in schema/persons.ts for the unique they reference).
     foreignKey({
@@ -338,6 +386,43 @@ export const itemRequests = pgTable(
       columns: [t.orgId, t.createdItemId],
       foreignColumns: [items.orgId, items.id],
       name: 'item_requests_created_item_id_same_org_fk',
+    }).onDelete('restrict'),
+  ],
+);
+
+/**
+ * ⭐ T-502 S1 (migration 0224). Other names for an item: chili / sili / siling pula -> "Siling Labuyo". The picker matches them (S3);
+ * the item keeps ONE official name. An alias is added or removed, never edited. Unique per org ignoring case and surrounding spaces.
+ *
+ * NOTE: hand-added in migration 0224 - ENABLE + FORCE RLS and the policy `item_aliases_org_isolation` (app_current_org()), the unique
+ * EXPRESSION index `item_aliases_org_alias_key` on (org_id, lower(trim(alias))) (the builder cannot say it; do NOT restore a
+ * uniqueIndex line here), the trigger `item_aliases_name_guard` (an alias may not equal an item NAME) and its mirror
+ * `items_name_alias_guard` on items, and the grants (SELECT, INSERT, DELETE; no UPDATE).
+ */
+export const itemAliases = pgTable(
+  'item_aliases',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    itemId: uuid('item_id').notNull(),
+    alias: text('alias').notNull(),
+    createdBy: uuid('created_by').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('item_aliases_item_idx').on(t.orgId, t.itemId),
+    check('item_aliases_alias_not_blank_check', sql`length(trim(${t.alias})) > 0`),
+    foreignKey({
+      columns: [t.orgId, t.itemId],
+      foreignColumns: [items.orgId, items.id],
+      name: 'item_aliases_item_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'item_aliases_created_by_same_org_fk',
     }).onDelete('restrict'),
   ],
 );

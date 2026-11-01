@@ -71,7 +71,7 @@ const uid = (p: string) => `${p}-${Date.now()}-${++seq}`;
 
 const S_SHAPE = 'An item code is 4 letters or numbers, a dash and 3 digits, like CHWN-001.';
 const NOT_SUPER_ADMIN = 'Only a super-admin can rename, retire or restore an item.';
-const REQUESTED = 'Request submitted for a super-admin to approve.';
+const REQUESTED = 'Request submitted for an admin to approve.';
 
 afterAll(async () => {
   const { closeDb } = await import('@shareat/db');
@@ -91,8 +91,10 @@ async function fixture(hint: string) {
     await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${store!.id})`;
     return { orgId, personId: p!.id };
   };
+  // T-502 S2: approving a purchasable item needs an expense category; the approve forms below pass this one.
+  const [cat] = await sql<{ id: string }[]>`insert into expense_categories (org_id, "group", category) values (${orgId}, 'OPEX', 'Supplies') returning id`;
   return {
-    orgId, storeId: store!.id,
+    orgId, storeId: store!.id, categoryId: cat!.id,
     superAdmin: await mk('Super', 'super_admin'),
     admin: await mk('Admin', 'admin'),
     manager: await mk('Manager', 'manager'),
@@ -342,13 +344,13 @@ describe('W4 - the pending list and approval', () => {
       const r1 = (await requestByName(f, 'Chicken winglets'))!;
       const r2 = (await requestByName(f, 'Chicken wing tips'))!;
       ACTOR_HOLDER.actor = f.superAdmin;
-      const bad = await redirectOf(() => actions.approveItemRequestAction(form({ requestId: r2.id, code: 'bad' })));
+      const bad = await redirectOf(() => actions.approveItemRequestAction(form({ expenseCategoryId: f.categoryId, requestId: r2.id, code: 'bad' })));
       expect(param(bad, 'error')).toBe(S_SHAPE);
       expect((await requestByName(f, 'Chicken wing tips'))?.status).toBe('requested');
-      const a = await redirectOf(() => actions.approveItemRequestAction(form({ requestId: r1.id, code: '' })));
+      const a = await redirectOf(() => actions.approveItemRequestAction(form({ expenseCategoryId: f.categoryId, requestId: r1.id, code: '' })));
       expect(param(a, 'error')).toBeNull();
       expect(param(a, 'ok')).toBe('Approved as CHWN-002.');
-      const b = await redirectOf(() => actions.approveItemRequestAction(form({ requestId: r2.id, code: 'CHWX-001' })));
+      const b = await redirectOf(() => actions.approveItemRequestAction(form({ expenseCategoryId: f.categoryId, requestId: r2.id, code: 'CHWX-001' })));
       expect(param(b, 'ok')).toBe('Approved as CHWX-001.');
       expect((await byName(f, 'Chicken wing tips'))?.code).toBe('CHWX-001');
     },

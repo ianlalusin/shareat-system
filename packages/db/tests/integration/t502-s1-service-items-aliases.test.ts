@@ -258,7 +258,27 @@ describe('S1.3 - item_aliases', () => {
     expect(idx!.def).toMatch(/org_id/);
   });
 
-  // Spec gap, proposed: the mirror image of "alias != item name". If an item may be created or renamed to a name that an
-  // alias already uses, the picker has two answers for one word. Decide in the spec, then turn this into a real test.
-  it.todo('PROPOSED: creating or renaming an item to a name an alias already uses is refused');
+  // R5 (orchestrator ruling, 31 Oct): the alias rule runs BOTH ways. If an item could be created or renamed to a name an alias already
+  // uses, the picker would have two answers for one word.
+  it('creating an item with a name an alias already uses is refused (case/space-insensitive); another org is fine', async () => {
+    const o = await org('al-rev-new');
+    const other = await org('al-rev-other');
+    await alias(o, await item(o, `Siling Labuyo ${uid('x')}`), 'sili');
+    for (const clash of ['sili', 'SILI', '  Sili ']) {
+      expect(await sqlstate(() => item(o, clash))).not.toBeNull();
+    }
+    const [n] = await sql<{ n: number }[]>`select count(*)::int as n from items where org_id = ${o.orgId} and lower(trim(name)) = 'sili'`;
+    expect(n!.n).toBe(0);
+    await item(other, 'sili'); // names and aliases are per org
+  });
+
+  it('renaming an item to a name an alias already uses is refused, and the old name stays', async () => {
+    const o = await org('al-rev-rename');
+    await alias(o, await item(o, `Siling Labuyo ${uid('x')}`), 'sili');
+    const id = await item(o, 'Bell Pepper');
+    expect(await sqlstate(() => sql`update items set name = 'Sili' where id = ${id}`)).not.toBeNull();
+    const [row] = await sql`select name from items where id = ${id}`;
+    expect(row!.name).toBe('Bell Pepper');
+    await sql`update items set name = 'Capsicum' where id = ${id}`; // control: a free name still renames
+  });
 });

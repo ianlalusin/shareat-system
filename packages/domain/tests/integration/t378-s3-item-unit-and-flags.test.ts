@@ -24,7 +24,6 @@ import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import {
-  approveItemRequest,
   changeItemBaseUnit,
   createItem,
   createSupplier,
@@ -34,6 +33,7 @@ import {
   verifyInvoice,
 } from '@shareat/domain';
 import { testItemCode } from './_fixtures/item-code';
+import { approveWithCategory } from './_fixtures/item-category';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -225,7 +225,7 @@ describe('F - the three ticks reach the item through request -> approve (DEF-599
         const { requestId } = await asOrg(f.orgId, (tx) =>
           requestItem(tx, f.manager, { name: `Req ${uid('n')}`, kind: 'retail', baseUnit: 'pcs', ...leg.input }),
         );
-        const { itemId } = await asOrg(f.orgId, (tx) => approveItemRequest(tx, f.superAdmin, { requestId }));
+        const { itemId } = await asOrg(f.orgId, (tx) => approveWithCategory(tx, f.superAdmin, { requestId }));
         expect((await itemRow(itemId))![leg.col]).toBe(leg.want);
       },
       30_000,
@@ -239,7 +239,7 @@ describe('F - the three ticks reach the item through request -> approve (DEF-599
       const { requestId } = await asOrg(f.orgId, (tx) =>
         requestItem(tx, f.manager, { name: `Req ${uid('n')}`, kind: 'retail', baseUnit: 'pcs' }),
       );
-      const { itemId } = await asOrg(f.orgId, (tx) => approveItemRequest(tx, f.superAdmin, { requestId }));
+      const { itemId } = await asOrg(f.orgId, (tx) => approveWithCategory(tx, f.superAdmin, { requestId }));
       const r = (await itemRow(itemId))!;
       expect([r.is_purchasable, r.sellable_retail, r.sellable_wholesale]).toEqual([true, false, false]);
     },
@@ -259,7 +259,7 @@ describe('A - the approver confirms the unit and flags (R5)', () => {
       const f = await fixture('a1');
       const { requestId } = await request(f);
       const { itemId } = await asOrg(f.orgId, (tx) =>
-        approveItemRequest(tx, f.superAdmin, { requestId, baseUnit: 'pcs' } as never),
+        approveWithCategory(tx, f.superAdmin, { requestId, baseUnit: 'pcs' } as never),
       );
       expect((await itemRow(itemId))!.base_unit).toBe('pcs');
       const [req] = await sql<{ base_unit: string }[]>`select base_unit from item_requests where id = ${requestId}`;
@@ -274,7 +274,7 @@ describe('A - the approver confirms the unit and flags (R5)', () => {
       const f = await fixture('a2');
       const { requestId } = await request(f, { sellableRetail: false });
       const { itemId } = await asOrg(f.orgId, (tx) =>
-        approveItemRequest(tx, f.superAdmin, { requestId, sellableRetail: true } as never),
+        approveWithCategory(tx, f.superAdmin, { requestId, sellableRetail: true } as never),
       );
       expect((await itemRow(itemId))!.sellable_retail).toBe(true);
     },
@@ -290,7 +290,7 @@ describe('A - the approver confirms the unit and flags (R5)', () => {
         requestItem(tx, f.manager, { name, kind: 'retail', baseUnit: 'kg' }),
       );
       const err = await failure(
-        asOrg(f.orgId, (tx) => approveItemRequest(tx, f.superAdmin, { requestId, baseUnit: '' } as never)),
+        asOrg(f.orgId, (tx) => approveWithCategory(tx, f.superAdmin, { requestId, baseUnit: '' } as never)),
       );
       expect(constraintOf(err)).toBe('items_base_unit_check');
       const [req] = await sql<{ status: string }[]>`select status from item_requests where id = ${requestId}`;

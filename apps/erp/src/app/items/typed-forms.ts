@@ -13,3 +13,5 @@ export const ITEM_STORE_SELLABILITY = defineTypedForm({
   fields: ['isPurchasable', 'sellableRetail', 'sellableWholesale', 'note'],
 });
 export const ITEM_VARIANT = defineTypedForm({ form: 'item.variant', fields: ['parentId'] }); // T-443
+export const ITEM_CATEGORY = defineTypedForm({ form: 'item.expenseCategory', fields: ['expenseCategoryId', 'expenseSubcategoryId'] }); // T-502
+export const ITEM_ALIAS = defineTypedForm({ form: 'item.alias', fields: ['alias'] }); // T-502

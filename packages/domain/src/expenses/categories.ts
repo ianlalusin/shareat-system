@@ -31,7 +31,7 @@
  * screen is presentation (DEF-051); the control is the mutation.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { expensesRepo, type Tx } from '@shareat/db';
+import { auditLogRepo, expensesRepo, type Tx } from '@shareat/db';
 import { RefusalError, refuse, gone } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { SETTINGS_EXPENSE_CATEGORY_RULES } from '../field-rules/settings';
@@ -273,4 +273,99 @@ export async function setCategoryActive(
   const existing = await expensesRepo.getCategoryById(tx, actor.orgId, input.categoryId);
   if (!existing) throw gone('setCategoryActive: that category does not exist in this organisation.', 'expense category');
   await expensesRepo.setCategoryActive(tx, actor.orgId, input.categoryId, input.isActive);
+}
+
+// -----------------------------------------------------------------------------------------
+// T-502 section 11 - sub-categories. Same capability as the categories above (manage_chart_of_accounts); add, rename, retire; never delete.
+// The name is never typed on an expense: the ITEM carries it. The database refuses vague names; this speaks first.
+// -----------------------------------------------------------------------------------------
+
+const VAGUE_SUBCATEGORY = new Set(['please specify', 'specify', 'other', 'others']);
+
+function cleanSubcategoryName(raw: string): string {
+  const name = String(raw ?? '').trim().replace(/\s+/g, ' ');
+  if (!name) {
+    const s = 'Give the sub-category a name.';
+    throw refuse(s, s);
+  }
+  if (VAGUE_SUBCATEGORY.has(name.toLowerCase())) {
+    const s = 'Give the sub-category a specific name. "Please specify", "Specify", "Other" and "Others" are not allowed, because they hide what the money was for.';
+    throw refuse(s, s);
+  }
+  return name;
+}
+
+async function refuseDuplicateSubcategory(tx: Tx, orgId: string, categoryId: string, name: string, exceptId?: string): Promise<void> {
+  const hit = await expensesRepo.subcategoryByNormalisedName(tx, orgId, categoryId, name);
+  if (hit && hit.id !== exceptId) {
+    const s = `This category already has a sub-category called "${hit.name}" (names are compared ignoring case and spacing).`;
+    throw refuse(s, s);
+  }
+}
+
+export async function createSubcategory(
+  tx: Tx,
+  actor: Actor,
+  input: { categoryId: string; name: string },
+): Promise<{ subcategoryId: string }> {
+  await authorize(tx, actor, CAPABILITY, {});
+  const category = await expensesRepo.getCategoryById(tx, actor.orgId, input.categoryId);
+  if (!category) throw gone('createSubcategory: that category does not exist in this organisation.', 'expense category');
+  const name = cleanSubcategoryName(input.name);
+  await refuseDuplicateSubcategory(tx, actor.orgId, input.categoryId, name);
+  const { id } = await expensesRepo.insertSubcategory(tx, { orgId: actor.orgId, categoryId: input.categoryId, name, createdBy: actor.personId });
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'expense_subcategory.created',
+    storeId: null,
+    entityId: id,
+    before: null,
+    after: { categoryId: input.categoryId, name },
+    source: 'web',
+  });
+  return { subcategoryId: id };
+}
+
+export async function renameSubcategory(
+  tx: Tx,
+  actor: Actor,
+  input: { subcategoryId: string; name: string },
+): Promise<void> {
+  await authorize(tx, actor, CAPABILITY, {});
+  const sub = await expensesRepo.getSubcategoryById(tx, actor.orgId, input.subcategoryId);
+  if (!sub) throw gone('renameSubcategory: that sub-category does not exist in this organisation.', 'sub-category');
+  const name = cleanSubcategoryName(input.name);
+  if (name === sub.name) return;
+  await refuseDuplicateSubcategory(tx, actor.orgId, sub.categoryId, name, sub.id);
+  await expensesRepo.renameSubcategory(tx, actor.orgId, sub.id, name);
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'expense_subcategory.renamed',
+    storeId: null,
+    entityId: sub.id,
+    before: { name: sub.name },
+    after: { name },
+    source: 'web',
+  });
+}
+
+export async function setSubcategoryActive(
+  tx: Tx,
+  actor: Actor,
+  input: { subcategoryId: string; isActive: boolean },
+): Promise<void> {
+  await authorize(tx, actor, CAPABILITY, {});
+  const sub = await expensesRepo.getSubcategoryById(tx, actor.orgId, input.subcategoryId);
+  if (!sub) throw gone('setSubcategoryActive: that sub-category does not exist in this organisation.', 'sub-category');
+  if (sub.isActive === input.isActive) return;
+  await expensesRepo.setSubcategoryActive(tx, actor.orgId, sub.id, input.isActive);
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'expense_subcategory.active_set',
+    storeId: null,
+    entityId: sub.id,
+    before: { isActive: sub.isActive },
+    after: { isActive: input.isActive },
+    source: 'web',
+  });
 }

@@ -31,7 +31,7 @@ export async function productionScreenData(orgId: string, storeId: string): Prom
   return withOrgPrincipal(orgId, async (tx) => {
     const [locations, itemRows, usableRows, recipes, records] = await Promise.all([
       stockUsageRepo.listOperatingLocations(tx, storeId),
-      itemsRepo.listItems(tx, orgId, { includeInactive: false }),
+      itemsRepo.listItems(tx, orgId, { includeInactive: false, stockedOnly: true }),
       itemsRepo.listUsableItems(tx, orgId, storeId),
       productionRepo.listRecipes(tx, orgId),
       productionRepo.listProductionRecords(tx, storeId),
@@ -78,7 +78,7 @@ export async function productionRecordDetail(orgId: string, id: string): Promise
 
     const [rows, itemRows, locationName] = await Promise.all([
       productionRepo.listProductionRecordLines(tx, id),
-      itemsRepo.listItems(tx, orgId, { includeInactive: true }),
+      itemsRepo.listItems(tx, orgId, { includeInactive: true, stockedOnly: true }),
       stockUsageRepo.locationName(tx, record.locationId),
     ]);
     const itemsById = new Map(itemRows.map((i) => [i.id, i]));

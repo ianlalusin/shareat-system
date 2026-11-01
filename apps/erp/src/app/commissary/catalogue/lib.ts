@@ -46,7 +46,7 @@ export async function catalogueData(orgId: string, commissaryStoreId: string): P
     const [allLinks, offerings, items] = await Promise.all([
       commissaryCatalogueRepo.listLinks(tx, orgId),
       commissaryCatalogueRepo.listOfferings(tx, orgId, commissaryStoreId),
-      itemsRepo.listItems(tx, orgId, { includeInactive: false }),
+      itemsRepo.listItems(tx, orgId, { includeInactive: false, stockedOnly: true }),
     ]);
     return {
       links: allLinks.filter((l) => l.commissaryStoreId === commissaryStoreId),
@@ -75,7 +75,7 @@ export async function mapData(
     const [map, offerings, items] = await Promise.all([
       commissaryCatalogueRepo.listMap(tx, orgId, commissaryStoreId, branchStoreId),
       commissaryCatalogueRepo.listOfferings(tx, orgId, commissaryStoreId),
-      itemsRepo.listItems(tx, orgId, { includeInactive: false }),
+      itemsRepo.listItems(tx, orgId, { includeInactive: false, stockedOnly: true }),
     ]);
     const commissaryItems: ItemOption[] = offerings
       .filter((o) => o.status === 'active' && o.itemStatus === 'active')

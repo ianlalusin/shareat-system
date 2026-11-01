@@ -30,7 +30,8 @@ import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import * as domain from '@shareat/domain';
-import { approveItemRequest, createItem, mergeItems, requestItem } from '@shareat/domain';
+import { createItem, mergeItems, requestItem } from '@shareat/domain';
+import { approveWithCategory } from './_fixtures/item-category';
 
 type BaseUnit = 'kg' | 'pcs';
 type Kind = 'raw_material' | 'retail';
@@ -95,7 +96,7 @@ const create = (f: Fixture, who: Actor, i: NewItem) =>
 const request = (f: Fixture, who: Actor, i: NewItem & { code?: string }) =>
   asOrg(f.orgId, (tx) => requestItem(tx, who, { kind: 'raw_material', baseUnit: 'kg', ...i } as unknown as Parameters<typeof requestItem>[2]));
 const approve = (f: Fixture, who: Actor, requestId: string, code?: string) =>
-  asOrg(f.orgId, (tx) => approveItemRequest(tx, who, { requestId, ...(code === undefined ? {} : { code }) } as never));
+  asOrg(f.orgId, (tx) => approveWithCategory(tx, who, { requestId, ...(code === undefined ? {} : { code }) } as never));
 const rename = (f: Fixture, who: Actor, itemId: string, name: string, code: string, adopt?: boolean) =>
   asOrg(f.orgId, (tx) => renameItem(tx, who, { itemId, name, code, ...(adopt === undefined ? {} : { adoptSuggestedCode: adopt }) }));
 const suggest = (f: Fixture, who: Actor, name: string, forItemId?: string) =>
@@ -293,7 +294,8 @@ describe('A - createItem allocates the code', () => {
       expect(await itemCount(f)).toBe(0);
       const r = await request(f, f.manager, { name: 'Chicken wings' }).catch(() => null);
       if (r) {
-        for (const who of [f.manager, f.admin]) {
+        // T-502 S2 (2A): an ADMIN now decides item requests (approve_item_request), so only the manager is refused here; a code override stays super-admin (createItem above).
+        for (const who of [f.manager]) {
           expect(await failure(approve(f, who, r.requestId))).toBeInstanceOf(AuthorizationError);
           expect(await failure(approve(f, who, r.requestId, 'CHWN-050'))).toBeInstanceOf(AuthorizationError);
         }

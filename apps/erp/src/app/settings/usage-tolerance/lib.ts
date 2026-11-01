@@ -25,7 +25,7 @@ export interface ToleranceView {
 
 export async function toleranceView(orgId: string): Promise<ToleranceView> {
   return withOrgPrincipal(orgId, async (tx) => {
-    const rows = await itemsRepo.listItems(tx, orgId);
+    const rows = await itemsRepo.listItems(tx, orgId, { stockedOnly: true });
     const { org, byItem } = await stockUsageRepo.usageTolerancesFor(tx, orgId, rows.map((r) => r.id));
     return { org, items: rows.map((r) => ({ id: r.id, name: r.name, code: r.code, override: byItem.get(r.id) ?? null })) };
   });

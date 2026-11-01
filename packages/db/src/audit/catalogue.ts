@@ -103,6 +103,14 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('rename_item', 'stock', 'normal', 'org', 'items', 'T-391'),
   // T-453 (DEF-728): the three T-443 catalogue writes that were unaudited.
   def('item.variant_set', 'stock', 'normal', 'org', 'items', 'T-453'),
+  // T-502 S1/S2: other names for an item, and the item's default expense category.
+  def('item_alias.added', 'stock', 'normal', 'org', 'item_aliases', 'T-502'),
+  def('item_alias.removed', 'stock', 'normal', 'org', 'item_aliases', 'T-502'),
+  def('item.expense_category_set', 'stock', 'normal', 'org', 'items', 'T-502'),
+  def('item.merged', 'stock', 'normal', 'org', 'items', 'T-502'),
+  def('expense_subcategory.created', 'settings', 'normal', 'org', 'expense_subcategories', 'T-502'),
+  def('expense_subcategory.renamed', 'settings', 'normal', 'org', 'expense_subcategories', 'T-502'),
+  def('expense_subcategory.active_set', 'settings', 'normal', 'org', 'expense_subcategories', 'T-502'),
   def('item_duplicate.dismissed', 'stock', 'normal', 'org', 'item_duplicate_dismissals', 'T-453'),
   def('item_duplicate.dismissal_undone', 'stock', 'normal', 'org', 'item_duplicate_dismissals', 'T-453'),
   def('retire_item', 'stock', 'normal', 'org', 'items', 'T-383'),

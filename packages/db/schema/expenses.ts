@@ -39,6 +39,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
   foreignKey,
@@ -326,5 +327,45 @@ export const expensePayments = pgTable(
     ),
     check('expense_payments_amount_positive_check', sql`${t.amount} > 0`),
     check('expense_payments_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
+  ],
+);
+
+/**
+ * ⭐ T-502 section 11 (migration 0224). A middle level under an expense category, set on the ITEM, never typed on an expense. Managed by an
+ * admin on the expense-categories screen (add, rename, retire; never deleted). Vague names ("Please Specify", "Other"...) are refused.
+ *
+ * NOTE: hand-added in migration 0224 - the unique EXPRESSION index `expense_subcategories_org_name_key` on (org_id, category_id,
+ * lower(trim(name))) (the builder cannot say it; do NOT restore a uniqueIndex line here), the CHECK `expense_subcategories_name_not_vague_check`,
+ * ENABLE + FORCE RLS and the policy `expense_subcategories_org_isolation`, the grants (SELECT, INSERT, UPDATE; no DELETE), and the triggers
+ * `items_subcategory_matches_category` / `item_requests_subcategory_matches_category` (a row's sub-category belongs to its category).
+ */
+export const expenseSubcategories = pgTable(
+  'expense_subcategories',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    categoryId: uuid('category_id').notNull(),
+    name: text('name').notNull(),
+    isActive: boolean('is_active').notNull().default(true),
+    createdBy: uuid('created_by').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
+  },
+  (t) => [
+    unique('expense_subcategories_org_id_id_unique').on(t.orgId, t.id),
+    check('expense_subcategories_name_not_blank_check', sql`length(trim(${t.name})) > 0`),
+    check('expense_subcategories_name_not_vague_check', sql`lower(trim(${t.name})) NOT IN ('please specify', 'specify', 'other', 'others')`),
+    foreignKey({
+      columns: [t.orgId, t.categoryId],
+      foreignColumns: [expenseCategories.orgId, expenseCategories.id],
+      name: 'expense_subcategories_category_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'expense_subcategories_created_by_same_org_fk',
+    }).onDelete('restrict'),
   ],
 );

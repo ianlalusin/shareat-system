@@ -10,6 +10,8 @@ export const EXPENSE_CATEGORY_RENAME = defineTypedForm({
   fields: ['category'],
 });
 
+export const EXPENSE_SUBCATEGORY_RENAME = defineTypedForm({ form: 'expenseSubcategory.rename', fields: ['name'] }); // T-502
+
 export const EXPENSE_CATEGORY_ACCOUNT = defineTypedForm({
   form: 'expenseCategory.account',
   fields: ['accountCode'],
