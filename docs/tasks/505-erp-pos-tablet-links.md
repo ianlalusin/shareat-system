@@ -50,8 +50,8 @@ Write only: the new page and its actions/lib under `apps/erp/src/app/admin/pos-t
 ## 5a. What the build added beyond the fences (1 Nov, found by the repo's own guards)
 - `packages/domain/src/field-rules/pos-tablets.ts` (`POS_TABLET_REGISTER_RULES`, exported from the field-rules index): every ERP form must be a `CheckedForm` with a rule set (T-440 guards), asserted in the action AFTER the authorize call (T-440 S9).
 - The census guards that count controls were re-measured, not loosened: t412 (R row + totals 71), t348 (PageDescription 130), action-link-sweep (1455), t328 enumeration (OUT row for the terminal number), t384-s3 COMMANDS (two verbs, with reasons), and the two `domain-actions-have-callers` exemption rows for `provisionPosTerminalLink` / `revokePosTerminalLink` were deleted because the screen is now their caller.
-- Revoke retypes "Terminal N" (the number of the link the server loads). Device id is shown as its last four characters with the full id in a hover title; there is no copy button yet (Q1 still open for Ian).
+- Revoke retypes "Terminal N" (the number of the link the server loads). Device id is shown as its last four characters with the full id in a hover title; no copy button (Q1 ruled by BOSS).
 
 ## 6. Open questions
-- **Q1 (Ian).** Show the full device id or only its last 4 characters? Recommend the last 4 plus a copy button, since the id is not a secret but is long.
+- **Q1 - ANSWERED 1 Nov (BOSS ruling).** Last 4 characters shown, the full device id in the hover title so an admin can match it to the tablet's Settings > Terminal screen. No copy button (the admin pastes the id in, not out). The build already does this.
 - **Q2 (BOSS) — ANSWERED 1 Nov.** Menu home: the Setup group, right after "Clock terminals", labelled "POS tablets" (follows the 1 Nov sidebar regroup, bible row 410).
