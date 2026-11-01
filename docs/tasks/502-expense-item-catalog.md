@@ -133,3 +133,21 @@ Migration 0224 · next DEF from the board (DEF-806+) · this task T-502.
 | R7 | `cogsCategoryForItemKind('service')` | Throws (a service never reaches COGS-by-kind) |
 | C | Never stocked | DB trigger refusing a service item on `stock_movements`, recipe input/output, `delivery_lines`, `stock_usage_lines`; `listItems` gains a stocked-only filter used by every stock/count/recipe/commissary/delivery/trade picker. The invoice-line picker includes services. Tester extends tests to the untested pickers |
 | D | Itemise-first callers | Enforce in `createExpense` and `editExpense` (not `approveExpense`). Option `requireItemised` defaults **true**; the recurring-expense job and inter-entity receipt pass `false` explicitly with a comment (system-made invoices). Follow-up (not this task): recurring templates pick a service item |
+
+## 11. Q1 answered — sub-category KEPT, on the item (Ian, 1 Nov: "yes")
+
+Supersedes §2's "v1's sub-category is NOT brought back" and §9 Q1. Ian asked why the item should replace the
+sub-category; the answer (a middle level that GROUPS items — Meat → Pork → kasim/jowls/belly — is worth having for
+reports; the v1 harm came from the cashier typing it on every expense) led to this design, which he approved:
+
+- New table `expense_subcategories (id, org_id, category_id → expense_categories, name, is_active, created_by,
+  created_at)`; unique `(org_id, category_id, lower(trim(name)))` (expression index, hand-added); same-org composite
+  FKs; RLS by org; retire, never delete. **No free text, no "Please Specify"/"OTHER"/"Specify"/"Others" names**
+  (refused by a CHECK on `lower(trim(name))`, plain message).
+- `items.expense_subcategory_id` and `item_requests.expense_subcategory_id` nullable, same-org FKs; a trigger refuses
+  a sub-category whose `category_id` differs from the row's `expense_category_id`.
+- **Required at approve** when the chosen category has at least one active sub-category; optional otherwise.
+- **The cashier never picks it.** Category and sub-category come from the item. Admin manages the list on the
+  expense categories screen (add, rename, retire) and sets it on the item page.
+- S5 report drills Group → Category → Sub-category → Item (items with no sub-category show under "(none)").
+- Capability: managing sub-categories uses the same capability as managing expense categories today (T-229).
