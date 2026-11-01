@@ -46,6 +46,7 @@ import { PosNotConfiguredError, PosUnreachableError } from '../../src/pos/v1-fee
 import { humanDate as humanDateOf } from '../../src/shared/refusal-leaf';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import { D1_FIGURES, D2B_FIGURES, importTestDay, linkTestStore, seedTestTenders, sha256, stubFetchers } from './_fixtures/pos-day';
+import { tickMissingChannels } from './_fixtures/no-sales-ticks';
 
 const hd = (d: string) => humanDateOf(parseBusinessDate(d));
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -225,7 +226,10 @@ describe('I1 - a new date on a linked store imports one feed-sourced day', () =>
   it('submit then verify posts D1\'s lines: Dr 1110 700, Dr 1140 350, Dr 4900 100, Cr 4100 600, Cr 4150 500, Cr 4500 50', async () => {
     const f = await fixture('i1v');
     const { id } = await imp(f, f.staff, D10);
-    await asOrg(f.orgId, (tx) => submitSalesDay(tx, f.staff, id));
+    await asOrg(f.orgId, async (tx) => {
+      await tickMissingChannels(tx, id); // T-504
+      await submitSalesDay(tx, f.staff, id);
+    });
     const { journalEntryId } = await asOrg(f.orgId, (tx) => verifySalesDay(tx, f.manager, id));
     expect(lineText(await linesFor(journalEntryId))).toEqual(
       ['Cr 4100 600.00', 'Cr 4150 500.00', 'Cr 4500 50.00', 'Dr 1110 700.00', 'Dr 1140 350.00', 'Dr 4900 100.00'].sort(),
@@ -241,7 +245,10 @@ describe('I1b - a refund day posts its refunds to 4950 and never to comps (R4)',
     expect({ refunds: day.refunds, comps: day.comps, cash: day.cash_collected, total: day.total_sales }).toEqual({
       refunds: '100.00', comps: '0.00', cash: '600.00', total: '1100.00',
     });
-    await asOrg(f.orgId, (tx) => submitSalesDay(tx, f.staff, id));
+    await asOrg(f.orgId, async (tx) => {
+      await tickMissingChannels(tx, id); // T-504
+      await submitSalesDay(tx, f.staff, id);
+    });
     const { journalEntryId } = await asOrg(f.orgId, (tx) => verifySalesDay(tx, f.manager, id));
     const lines = await linesFor(journalEntryId);
     expect(lineText(lines)).toEqual(
@@ -315,7 +322,10 @@ describe('I3 - a verified day is never re-imported', () => {
   it('the verified sentence, and no new feed row; control: the open day re-imports (I2)', async () => {
     const f = await fixture('i3');
     const { id } = await imp(f, f.staff, D10);
-    await asOrg(f.orgId, (tx) => submitSalesDay(tx, f.staff, id));
+    await asOrg(f.orgId, async (tx) => {
+      await tickMissingChannels(tx, id); // T-504
+      await submitSalesDay(tx, f.staff, id);
+    });
     await asOrg(f.orgId, (tx) => verifySalesDay(tx, f.manager, id));
     const before = await feedRows(f.storeId, D10);
     expect(before).toHaveLength(2);
@@ -343,7 +353,10 @@ describe('I3b - the verified re-gate AFTER the fetch, under the day lock', () =>
   it('the day is verified by someone else while POS is being fetched: refused with the verified sentence, zero new feed rows, figures unmoved', async () => {
     const f = await fixture('i3b');
     const { id } = await imp(f, f.staff, D10);
-    await asOrg(f.orgId, (tx) => submitSalesDay(tx, f.staff, id));
+    await asOrg(f.orgId, async (tx) => {
+      await tickMissingChannels(tx, id); // T-504
+      await submitSalesDay(tx, f.staff, id);
+    });
     const rec = fetchersWith(async () => {
       await asOrg(f.orgId, (tx) => verifySalesDay(tx, f.manager, id));
     });
@@ -359,7 +372,10 @@ describe('I3b - the verified re-gate AFTER the fetch, under the day lock', () =>
   it('control: the same fetcher without the concurrent verify imports (four feed rows, figures follow POS)', async () => {
     const f = await fixture('i3bc');
     const { id } = await imp(f, f.staff, D10);
-    await asOrg(f.orgId, (tx) => submitSalesDay(tx, f.staff, id));
+    await asOrg(f.orgId, async (tx) => {
+      await tickMissingChannels(tx, id); // T-504
+      await submitSalesDay(tx, f.staff, id);
+    });
     const rec = fetchersWith(async () => {});
     await asOrg(f.orgId, (tx) => importTestDay(tx, f.manager, { storeId: f.storeId, businessDate: D10, fetchers: rec.fetchers }));
     expect(await feedRows(f.storeId, D10)).toHaveLength(4);
@@ -590,7 +606,10 @@ describe('I8 - re-importing a submitted day is the verifier\'s act', () => {
   it('submit_sales_day only -> AuthorizationError; verify_sales_day -> imported and the figures follow POS', async () => {
     const f = await fixture('i8');
     const { id } = await imp(f, f.staff, D10);
-    await asOrg(f.orgId, (tx) => submitSalesDay(tx, f.staff, id));
+    await asOrg(f.orgId, async (tx) => {
+      await tickMissingChannels(tx, id); // T-504
+      await submitSalesDay(tx, f.staff, id);
+    });
     const later = { ...D1_FIGURES, paidTotal: 1150, methods: { Cash: 700, GCash: 450 } };
 
     const err = await imp(f, f.staff, D10, { figures: later }).then(() => null, (e) => e);

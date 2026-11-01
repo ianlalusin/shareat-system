@@ -165,8 +165,8 @@ describe('T-S1-1 digits (mutants: <= for <; strip removed)', () => {
 });
 
 describe('T-S1-2 money uses parseMoneyInput itself (mutant: Number(x) > 0)', () => {
-  const bad = ['0.004', '1.234', 'abc', '1e400', '1,250.00'];
-  it.each(bad)('"%s" fails with parseMoneyInput\'s own sentence (A7: commas are refused)', async (raw) => {
+  const bad = ['0.004', '1.234', 'abc', '1e400', '1,25.00'];
+  it.each(bad)('"%s" fails with parseMoneyInput\'s own sentence (A7: a comma outside groups of three is refused; T-504 accepts 1,250.00)', async (raw) => {
     const s = await fixtureSet();
     const { parseMoneyInput } = await moneyInput();
     let expected: string | undefined;

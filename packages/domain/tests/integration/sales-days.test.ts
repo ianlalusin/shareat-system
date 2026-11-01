@@ -35,6 +35,7 @@ import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import { submitThenVerify } from './_fixtures/sales-day-flow';
+import { tickMissingChannels } from './_fixtures/no-sales-ticks';
 import {
   createSalesDay,
   TransitShortfallBlockedError,
@@ -231,7 +232,10 @@ describe('invariant 1 — an unverified sales day recognises NO revenue', () => 
     const { id } = await asPerson(f.orgId, (tx) =>
       createSalesDay(tx, actor(f.orgId, f.staffId), simpleDay(f.storeId, D1)),
     );
-    await asPerson(f.orgId, (tx) => submitSalesDay(tx, actor(f.orgId, f.staffId), id));
+    await asPerson(f.orgId, async (tx) => {
+      await tickMissingChannels(tx, id); // T-504
+      await submitSalesDay(tx, actor(f.orgId, f.staffId), id);
+    });
 
     expect((await dayRow(id))!.status).toBe('submitted');
     expect(await ledgerLineCount(f.orgId, id)).toBe(0);

@@ -38,6 +38,7 @@ import { AuthorizationError, type Actor } from '@shareat/auth';
 import * as D from '@shareat/domain';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import { submitThenVerify } from './_fixtures/sales-day-flow';
+import { tickMissingChannels } from './_fixtures/no-sales-ticks';
 
 const sql = postgres(url, { max: 10 });
 let seq = 0;
@@ -194,7 +195,12 @@ function figures(f: Fixture, walkIn: string, extra: Record<string, unknown> = {}
 }
 async function mkDay(f: Fixture, date: string, walkIn: string, opts: { submit?: boolean; by?: Actor } = {}): Promise<string> {
   const { id } = await asOrg(f.orgId, (tx) => D.createSalesDay(tx, opts.by ?? f.staff, { storeId: f.storeId, businessDate: date, ...figures(f, walkIn) }));
-  if (opts.submit) await asOrg(f.orgId, (tx) => D.submitSalesDay(tx, opts.by ?? f.staff, id));
+  if (opts.submit) {
+    await asOrg(f.orgId, async (tx) => {
+      await tickMissingChannels(tx, id); // T-504: submit needs every channel an amount or a tick
+      await D.submitSalesDay(tx, opts.by ?? f.staff, id);
+    });
+  }
   return id;
 }
 /** The "Lipa shape": ₱1,000 of sales, the channel claims only ₱500. */
@@ -295,7 +301,8 @@ describe("T3 (✗) — staff cannot edit a SUBMITTED day (it is the verifier's);
     );
     expect(refused.err).toBeInstanceOf(AuthorizationError);
     expect((await dayRow(id)).total_sales).toBe('1000.00');
-    expect(await channelAmounts(id)).toEqual({ [f.walkIn]: '500.00' });
+    // T-504: submitting needed Foodpanda ticked "No sales" (the fixture helper did it), so its 0.00 row is there too.
+    expect(await channelAmounts(id)).toEqual({ [f.walkIn]: '500.00', [f.foodpanda]: '0.00' });
 
     await edit(f, f.manager, id, figures(f, '1000.00'));
     expect(await channelAmounts(id)).toEqual({ [f.walkIn]: '1000.00' });

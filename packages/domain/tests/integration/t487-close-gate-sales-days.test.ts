@@ -24,6 +24,7 @@ import * as D from '@shareat/domain';
 import { importTestDay } from './_fixtures/pos-day';
 import { asOrgOn, s6Fixture, type S6F } from './_fixtures/pos-s6';
 import { mkSubmitter, mkTypedDay } from './_fixtures/sales-day-flow';
+import { tickMissingChannels } from './_fixtures/no-sales-ticks';
 
 const sql = postgres(url, { max: 5 });
 afterAll(async () => {
@@ -52,7 +53,11 @@ type VerifyFn = (...a: unknown[]) => Promise<{ journalEntryId: string }>;
 const posDay = async (f: S6F, date: string): Promise<string> =>
   (await asOrgOn(f.orgId, (tx) => importTestDay(tx, f.manager, { storeId: f.storeId, businessDate: date }))).id;
 const typedDay = async (f: S6F, date: string): Promise<string> => (await mkTypedDay(sql, f, [f.managerId, f.adminId], date)).id;
-const submit = (f: S6F, dayId: string) => asOrgOn(f.orgId, (tx) => D.submitSalesDay(tx, f.manager, dayId));
+const submit = (f: S6F, dayId: string) =>
+  asOrgOn(f.orgId, async (tx) => {
+    await tickMissingChannels(tx, dayId); // T-504: submit needs Foodpanda ticked "No sales" or typed
+    await D.submitSalesDay(tx, f.manager, dayId);
+  });
 const verify = (f: S6F, dayId: string, options?: { periodOverride?: typeof OVERRIDE }) =>
   asOrgOn(f.orgId, (tx) => (D.verifySalesDay as unknown as VerifyFn)(tx, f.admin, dayId, options));
 const close = (f: S6F, period = M) => asOrgOn(f.orgId, (tx) => D.closePeriod(tx, f.admin, { period }));

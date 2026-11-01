@@ -26,6 +26,8 @@ import { reverseEntry } from '../ledger/reverse-entry';
 import { routeInputForDay } from './compose';
 import { routeSalesDay } from './routing';
 import { refuse, gone, internalFault } from '../shared/refusal';
+import { isZero, money } from '@shareat/core/money';
+import { submitMissingSentence } from '../business-rules/sales-day';
 
 export interface VerifySalesDayResult {
   journalEntryId: string;
@@ -53,6 +55,7 @@ async function runSubmit(tx: Tx, actor: Actor, salesDayId: string): Promise<void
       `Only an open sales day can be submitted — this one is ${day.status}.`,
     );
   }
+  await assertChannelsComplete(tx, actor, day);
   await salesDaysRepo.markSubmitted(tx, actor.orgId, salesDayId, actor.personId);
   // T-402 S3 (C4): the step's event, same transaction, after its own write.
   await auditLogRepo.append(tx, actor.orgId, {
@@ -64,6 +67,26 @@ async function runSubmit(tx: Tx, actor: Actor, salesDayId: string): Promise<void
     after: { status: 'submitted' },
     source: 'web',
   });
+}
+
+/**
+ * T-504 - a day is only submitted once EVERY active channel the person types has an amount above zero or "No sales" ticked.
+ * A typed day: every active channel. A POS-fed day: only the active NON-remitted ones (the Platform sales section; the
+ * remitted ones are POS's figures). A retired channel is never required. This also catches days saved before the rule.
+ * The sentence names every channel still missing, in the order the form shows them.
+ */
+async function assertChannelsComplete(tx: Tx, actor: Actor, day: { id: string; storeId: string; source: string }): Promise<void> {
+  const configured = await salesDaysRepo.listChannels(tx, actor.orgId, day.storeId, { activeOnly: true });
+  const required = day.source === 'pos_v1_day_feed' ? configured.filter((c) => !c.isRemittedDaily) : configured;
+  if (required.length === 0) return;
+  const rows = new Map((await salesDaysRepo.getChannelsForDay(tx, day.id)).map((r) => [r.channelId, r]));
+  const missing = required.filter((c) => {
+    const r = rows.get(c.id);
+    return !r || (!r.noSales && isZero(money(r.amount)));
+  });
+  if (missing.length === 0) return;
+  const names = missing.map((c) => c.name);
+  throw refuse(`submitSalesDay: sales day ${day.id} has channels with neither sales nor "no sales": ${names.join(', ')}`, submitMissingSentence(names));
 }
 
 // -------------------------------------------------------------------------------------

@@ -11,10 +11,10 @@ import { sql as dsql } from 'drizzle-orm';
  * ⛔ TESTER, not BUILDER.
  * - C1/C1n (DEF-457): before eb40f35, `apps/erp/src/app/customers/actions.ts`'s
  *   `recordCollectionAction` spread `creditApplied` only when `Number(creditApplied) > 0` —
- *   `Number('1,000')` is `NaN`, so a comma-typed credit was silently DROPPED (never reached the
+ *   `Number('1,00')` is `NaN`, so a comma-typed credit was silently DROPPED (never reached the
  *   domain's own already-correct `parseMoneyInput` call at `packages/domain/src/ar/index.ts:245-247`),
  *   and the collection proceeded as if no credit was applied at all: it succeeded, and the money
- *   account was debited the full (un-netted) amount. Verified directly (`Number('1,000') > 0` is
+ *   account was debited the full (un-netted) amount. Verified directly (`Number('1,00') > 0` is
  *   `false` in Node) before writing this file. Real Postgres throughout (bible §9 rule 3) — the app
  *   action itself, not the domain function, was red: the domain's own parse was already correct.
  *   eb40f35 fixed the app-layer gate; both legs below are green now.
@@ -143,19 +143,19 @@ async function collectionCountFor(customerId: string): Promise<number> {
 
 describe('C1 (DEF-457) — a comma-typed store credit is silently dropped, never reaches parseMoneyInput', () => {
   it(
-    'creditApplied "1,000": was red before eb40f35 — the collection used to SUCCEED, full amount debited, no refusal naming the credit',
+    'creditApplied "1,00": was red before eb40f35 — the collection used to SUCCEED, full amount debited, no refusal naming the credit',
     async () => {
       const f = await arFixture('c1');
       ACTOR_HOLDER.actor = f.admin;
       const { recordCollectionAction } = await import('../../src/app/customers/actions');
 
       const before = await collectionCountFor(f.customerId);
-      const to = await expectRedirectTo(() => recordCollectionAction(collectionFormData(f, '1,000')));
+      const to = await expectRedirectTo(() => recordCollectionAction(collectionFormData(f, '1,00')));
       const params = paramsOf(to);
 
       // Was asserted directly against the pre-fix behaviour (no `error` param — the action
       // redirected with `ok` instead — and a collection row was written); green since eb40f35.
-      expectRuleSentence(params.get('error'), COLLECTION_RECORD_RULES.creditApplied, '1,000');
+      expectRuleSentence(params.get('error'), COLLECTION_RECORD_RULES.creditApplied, '1,00');
       const after = await collectionCountFor(f.customerId);
       expect(after, 'no collection row should have been written').toBe(before);
     },

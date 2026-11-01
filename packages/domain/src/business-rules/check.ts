@@ -21,6 +21,11 @@ export interface BusinessCheck<F = unknown> {
   readonly id: string;
   /** Every form control name `run` reads. The form tracks exactly these. Never empty. */
   readonly watch: readonly string[];
+  /**
+   * T-504: for a check whose control names carry ids only the page's facts know (one pair per sales channel). When present the form
+   * tracks `watchFor(facts)` as well as `watch`, and `watch` may be empty.
+   */
+  readonly watchFor?: (facts: F) => readonly string[];
   run(facts: F, values: FormValues): Verdict;
 }
 

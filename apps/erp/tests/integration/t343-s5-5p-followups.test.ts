@@ -11,7 +11,7 @@ import { sql as dsql } from 'drizzle-orm';
  * ⛔ TESTER, not BUILDER.
  * - P1/P1n/P2/P3/P4 (DEF-460): before `d072356`, `apps/erp/src/app/prepaid/actions.ts`'s
  *   `writeOffAction` spread `refundAmount`/`refundAccountCode` only when `refund && Number(refund) >
- *   0`. `Number('1,000')` is `NaN` (comma), so a comma-typed refund was silently DROPPED and the
+ *   0`. `Number('1,00')` is `NaN` (comma), so a comma-typed refund was silently DROPPED and the
  *   write-off proceeded with no refund at all — the whole remaining balance expensed, no refusal
  *   naming the refund (P1). An empty refund box stayed green (P1n). P2-P4 drive the SAME gate with
  *   values that already pass `Number(x) > 0` (so they DID reach `writeOffPrepaidItem` before the
@@ -155,18 +155,18 @@ afterAll(async () => {
 
 describe('P1 (DEF-460) — a comma-typed refund is silently dropped, never reaches parseMoneyInput', () => {
   it(
-    'refundAmount "1,000": was red before d072356 — the write-off used to SUCCEED, whole balance expensed, no refusal naming the refund',
+    'refundAmount "1,00": was red before d072356 — the write-off used to SUCCEED, whole balance expensed, no refusal naming the refund',
     async () => {
       const f = await prepaidFixture('p1');
       ACTOR_HOLDER.actor = f.admin;
       const { writeOffAction } = await import('../../src/app/prepaid/actions');
 
       const to = await expectRedirectTo(() =>
-        writeOffAction(writeOffFormData(f, { refundAmount: '1,000', refundAccountCode: '1110' })),
+        writeOffAction(writeOffFormData(f, { refundAmount: '1,00', refundAccountCode: '1110' })),
       );
       const params = paramsOf(to);
 
-      expectRuleSentence(params.get('error'), PREPAID_WRITE_OFF_RULES.refundAmount, '1,000');
+      expectRuleSentence(params.get('error'), PREPAID_WRITE_OFF_RULES.refundAmount, '1,00');
       expect(await journalEntryCountFor(f.itemId), 'no journal entry should have been posted').toBe(0);
       expect(await prepaidStatus(f.itemId), 'a refusal must not flip the item to written_off').toBe('active');
     },

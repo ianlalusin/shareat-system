@@ -50,6 +50,8 @@ import { getSalesRollup } from '../../src/reports/sales-rollup';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import { importTestDay, linkTestStore, seedTestTenders } from './_fixtures/pos-day';
 import { mkSubmitter } from './_fixtures/sales-day-flow';
+import { tickMissingChannels } from './_fixtures/no-sales-ticks';
+import { editSalesDay } from '../../src/sales-days/edit';
 
 const sql = postgres(url, { max: 12 });
 let seq = 0;
@@ -83,7 +85,14 @@ interface PlatformApi {
     input: { salesDayId: string; rows: { channelId: string; amount: unknown; noSales: boolean }[] },
   ) => Promise<unknown>;
 }
-const platformApi = async () => (await import('../../src/sales-days/platform')) as unknown as PlatformApi;
+// T-504: `setPlatformSales` was folded into `editSalesDay` (the one Save); this shim keeps every call below as it was.
+const platformApi = async (): Promise<PlatformApi> => ({
+  setPlatformSales: (tx, actor, input) =>
+    editSalesDay(tx, actor, {
+      salesDayId: input.salesDayId,
+      platform: input.rows.map((r) => ({ channelId: r.channelId, amount: String(r.amount), noSales: r.noSales })),
+    }),
+});
 const setPlatform = async (f: F, who: Actor, dayId: string, rows: { channelId: string; amount: string; noSales?: boolean }[]) => {
   const { setPlatformSales } = await platformApi();
   return asOrg(f.orgId, (tx) =>
@@ -145,7 +154,11 @@ async function fixture(hint: string) {
 type F = Awaited<ReturnType<typeof fixture>>;
 
 const imp = (f: F, who: Actor, date: string) => asOrg(f.orgId, (tx) => importTestDay(tx, who, { storeId: f.storeId, businessDate: date }));
-const submit = (f: F, who: Actor, id: string) => asOrg(f.orgId, (tx) => submitSalesDay(tx, who, id));
+const submit = (f: F, who: Actor, id: string) =>
+  asOrg(f.orgId, async (tx) => {
+    await tickMissingChannels(tx, id); // T-504: submit needs every Platform sales channel typed or ticked "No sales"
+    await submitSalesDay(tx, who, id);
+  });
 const verify = (f: F, who: Actor, id: string) => asOrg(f.orgId, (tx) => verifySalesDay(tx, who, id));
 const channelRows = (dayId: string) => sql<{ channel_id: string; amount: string; no_sales: boolean }[]>`
   select channel_id, amount, no_sales from sales_day_channels where sales_day_id = ${dayId} order by amount desc, channel_id`;
