@@ -67,4 +67,9 @@ export interface Pos2LobbyPort {
   seat(a: LobbyTablet, i: { entryId: string; sessionId: string; standLabel: string; joinUrl: string | null }): Promise<{ entryId: string; status: 'seated' }>;
   remove(a: LobbyTablet, i: { entryId: string }): Promise<{ entryId: string; status: 'removed' }>;
   pause(a: LobbyTablet, i: { paused: boolean }): Promise<{ paused: boolean }>;
+  /** T-455 S6b: the store's open birthday requests (requested + accepted), oldest first. */
+  birthdayList(a: LobbyTablet): Promise<{ birthdays: unknown[] }>;
+  birthdayAccept(a: LobbyTablet, i: { requestId: string; scheduledAt: Date }): Promise<{ requestId: string; status: 'accepted'; scheduledAt: Date }>;
+  birthdayDecline(a: LobbyTablet, i: { requestId: string; reason: string }): Promise<{ requestId: string; status: 'declined' }>;
+  birthdayPlay(a: LobbyTablet, i: { requestId: string }): Promise<{ requestId: string; status: 'played' }>;
 }

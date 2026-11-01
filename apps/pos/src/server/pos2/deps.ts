@@ -157,5 +157,21 @@ function buildLobbyPort(
       const d = await loadDomain();
       return dbPkg.withOrgPrincipal(orgId, (tx) => d.setLobbyPausedForTerminal(tx, actorOf(a), i.paused));
     },
+    birthdayList: async (a) => {
+      const d = await loadDomain();
+      return { birthdays: await dbPkg.withOrgPrincipal(orgId, (tx) => d.listBirthdayForTerminal(tx, actorOf(a))) };
+    },
+    birthdayAccept: async (a, i) => {
+      const d = await loadDomain();
+      return dbPkg.withOrgPrincipal(orgId, (tx) => d.acceptBirthdayForTerminal(tx, actorOf(a), i));
+    },
+    birthdayDecline: async (a, i) => {
+      const d = await loadDomain();
+      return dbPkg.withOrgPrincipal(orgId, (tx) => d.declineBirthdayForTerminal(tx, actorOf(a), i));
+    },
+    birthdayPlay: async (a, i) => {
+      const d = await loadDomain();
+      return dbPkg.withOrgPrincipal(orgId, (tx) => d.markBirthdayPlayedForTerminal(tx, actorOf(a), i.requestId));
+    },
   };
 }
