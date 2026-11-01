@@ -31,6 +31,7 @@ import {
   recordPunch,
   seedAttendanceConfig,
   seedCanonicalPositions,
+  shiftDayRange,
   todayStateFor,
   toShiftDay,
 } from '@shareat/domain';
@@ -52,7 +53,19 @@ async function asOrg<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
 }
 const actor = (orgId: string, personId: string): Actor => ({ personId, orgId });
 
-const minsAgo = (m: number) => new Date(Date.now() - m * 60_000);
+/**
+ * `m` minutes ago, but never before the START of the current shift day (05:00 Manila = 21:00 UTC). The punches are real-time
+ * (the "late arrival" check compares them to the database clock, so the clock cannot be faked), and the cases reach back up to
+ * 60 minutes. In the first hour after 05:00 Manila that reached into YESTERDAY's shift day while `today()` was the new one, so
+ * every case failed, only then (main CI, 05:14 Manila). Inside that hour the offsets are scaled down to fit; the order of the
+ * punches is kept, which is all the cases rely on.
+ */
+const minsAgo = (m: number) => {
+  const now = Date.now();
+  const room = now - shiftDayRange(toShiftDay(new Date(now))).start.getTime();
+  const fit = Math.min(1, room / (65 * 60_000));
+  return new Date(now - m * 60_000 * fit);
+};
 
 async function newStore(orgId: string, hint: string): Promise<string> {
   const [store] = await sql<{ id: string }[]>`
