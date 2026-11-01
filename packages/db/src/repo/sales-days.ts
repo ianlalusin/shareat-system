@@ -523,6 +523,8 @@ export async function findOldestUnverifiedBefore(
 export interface ListSalesDaysInput {
   orgId: string;
   storeId?: string;
+  /** DEF-809: limit to these stores (the viewer's own). An empty list matches nothing. Ignored when `storeId` is given. */
+  storeIds?: readonly string[];
   status?: SalesDayStatus;
   /** T-507: open + submitted (waiting for verification). Ignored when `status` is given. */
   unverified?: boolean;
@@ -532,6 +534,7 @@ export interface ListSalesDaysInput {
 export async function listSalesDays(tx: Tx, input: ListSalesDaysInput): Promise<SalesDayRow[]> {
   const filters = [eq(salesDays.orgId, input.orgId)];
   if (input.storeId) filters.push(eq(salesDays.storeId, input.storeId));
+  else if (input.storeIds) filters.push(input.storeIds.length ? inArray(salesDays.storeId, [...input.storeIds]) : sql`false`);
   if (input.status) filters.push(eq(salesDays.status, input.status));
   else if (input.unverified) filters.push(inArray(salesDays.status, [...UNVERIFIED_STATUSES]));
   return tx

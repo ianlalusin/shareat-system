@@ -458,6 +458,11 @@ export async function platformAging(
       join accounts a on a.id = jl.account_id
       join sales_channels sc on sc.id::text = jl.party_id and sc.org_id = je.org_id and sc.receivable_account_code = a.code
       where je.org_id = ${orgId} and je.status <> 'draft' and jl.party_type = 'channel'
+        -- A void posts a full-mirror reversal (journal_entries.reversal_of_entry_id). Net each reversal against the entry it reverses by
+        -- dropping BOTH from the aging items; otherwise its credit would FIFO-consume the oldest unrelated debit. A full reversal nets to
+        -- zero, so the account balance (platformControlBalance, which keeps every line) still ties.
+        and je.reversal_of_entry_id is null
+        and not exists (select 1 from journal_entries rv where rv.reversal_of_entry_id = je.id and rv.status <> 'draft')
         ${storeId ? sql`and jl.store_id = ${storeId}` : sql``}
     ),
     credited as (

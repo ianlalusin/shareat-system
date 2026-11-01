@@ -163,3 +163,33 @@ describe('T-507 ruling 3: /sales-days?status=unverified is open + submitted, sto
     expect(html).not.toContain('2027-03-26');
   });
 });
+
+describe('DEF-809: /sales-days is gated by submit_sales_day and scoped to the viewer stores', () => {
+  const daysPage = () => import('../../src/app/sales-days/page');
+  const daysFor = async (actor: Actor, search: Record<string, string> = {}) => {
+    try {
+      return plain(await render(daysPage, actor, { search }));
+    } catch (e) {
+      return `THROWN ${e instanceof Error ? e.message : String(e)}`;
+    }
+  };
+  it('Batangas manager does not see Lipa days (no Lipa dates), even with a forged ?store=<Lipa>', async () => {
+    const w = await world();
+    for (const search of [{} as Record<string, string>, { store: w.lipa }]) {
+      const html = await daysFor(w.mgrBat, search);
+      expect(html, 'must list a Batangas day').toContain('2027-02-20');
+      for (const d of ['2027-03-28', '2027-03-20', '2027-03-10', '2027-01-05', '2026-12-15']) {
+        expect(html, `must NOT list Lipa day ${d}`).not.toContain(d);
+      }
+    }
+  });
+  it('staff (no submit_sales_day) is refused: no totals, a refusal instead', async () => {
+    const w = await world();
+    const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${w.orgId}, 'T507 Staff') returning id`;
+    await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${w.orgId}, 'staff')`;
+    await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${w.lipa})`;
+    const html = await daysFor({ personId: p!.id, orgId: w.orgId } as Actor);
+    expect(html).toMatch(/^THROWN/);
+    expect(html).not.toContain('2027-03-20');
+  });
+});

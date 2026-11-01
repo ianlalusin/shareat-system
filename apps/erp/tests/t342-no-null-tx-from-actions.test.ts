@@ -47,17 +47,17 @@ const ALLOWLIST: ReadonlySet<string> = new Set([
   // signInWithFirebase(null, { verifiedUid }) — first-run setup, before any session/org exists.
   'app/setup/actions.ts:105', // T-440: was :102 - the setup fields moved onto rules above it
   // resolveTerminalIdentity(null, identity.uid) — resolving WHO is signing in, pre-session.
-  'app/sign-in/actions.ts:59', // T-464: was :49 - the tablet imports sit above it
-  'app/sign-in/actions.ts:86', // T-464: was :76
+  'app/sign-in/actions.ts:60', // T-464: was :49 - the tablet imports sit above it
+  'app/sign-in/actions.ts:87', // T-464: was :76
   // signInWithPin(null, { orgId, storeId, pin, deviceId }) — the call that CREATES the session;
   // no actor/principal can exist before it returns.
-  'app/sign-in/actions.ts:87', // T-464: was :77
+  'app/sign-in/actions.ts:88', // T-464: was :77
   // signOut(null, token) — second arg is a raw session token, not an Actor/Ctx; DEF-288 already
   // covers why this one is deliberately a bare transaction (see its own comment at that line).
-  'app/sign-in/actions.ts:201', // T-464: was :151 - signInWithTabletPinAction and forgetDeadPosTabletAction sit above it
+  'app/sign-in/actions.ts:202', // T-464: was :151 - signInWithTabletPinAction and forgetDeadPosTabletAction sit above it
   // signInOnPairedTablet(null, { cookieToken, staffCode, pin }) - T-464: the paired tablet's sign-in. The pairing it resolves from the cookie
   // DISCOVERS the org and store, so there is no actor to scope a principal to; it opens the auth door / org principal itself.
-  'app/sign-in/actions.ts:123',
+  'app/sign-in/actions.ts:124',
   // signOut(null, token) - T-464: pairing ends the manager's own session (a raw session token, not an Actor), the same DEF-288 shape as above.
   'app/settings/pos-tablet/actions.ts:47',
   // runDepreciation(null, actor, { through }) — Amendment A1 (spec ruling): deliberate, NOT the

@@ -42,3 +42,5 @@
 4. Drill link `/channel-settlements?channel=<id>` (the existing preselect) is right.
 5. Same gate as the existing page (record_ar_collection); no new visibility rules.
 6. Wording as pinned.
+
+Aging is as of today with an aging date (same as the customer section); entries after the as-of date are not excluded.
