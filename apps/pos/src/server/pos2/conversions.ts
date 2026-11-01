@@ -3,6 +3,7 @@ import 'server-only';
 import { getDayIdFromTimestamp, getDayStartMs } from '@/lib/analytics/daily';
 import { storedPesosToCentavos, toWirePesos } from '@/lib/money/centavos';
 import { isCashTender } from '@/lib/receipts/refund-cash-methods';
+import { isEwalletTender } from '@/lib/cash/ewallet-tender';
 import { safeKey } from './analytics/delta-core';
 import { authenticate } from './identity';
 import { requireRole } from './roles';
@@ -62,7 +63,7 @@ export async function handleConversion(req: Request, deps: Pos2Deps): Promise<Re
       // DEF-808: v1's live data types Cash as 'other', so the cash side is found by type OR the exact name "Cash" (never Gcash).
       const cash = rows.filter((m: Record<string, any>) => isCashTender(m))
         .sort((a: Record<string, any>, z: Record<string, any>) => (a.sortOrder ?? 0) - (z.sortOrder ?? 0) || String(a.name).localeCompare(String(z.name)))[0];
-      const wallet = rows.find((m: Record<string, any>) => norm(String(m.name ?? '')) === norm(walletMethod) && m.type === 'online');
+      const wallet = rows.find((m: Record<string, any>) => norm(String(m.name ?? '')) === norm(walletMethod) && isEwalletTender(m));
       if (!cash || !wallet) throw new Refusal(409, 'That payment method is not available.');
       const fromMethod = String(direction === 'cash_in' ? wallet.name : cash.name);
       const toMethod = String(direction === 'cash_in' ? cash.name : wallet.name);

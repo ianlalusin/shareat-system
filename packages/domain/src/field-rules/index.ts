@@ -35,3 +35,4 @@ export * from './budgets';
 export * from './till';
 export * from './reports';
 export * from './clock';
+export * from './pos-tablets';
