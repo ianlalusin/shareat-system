@@ -140,12 +140,14 @@ CREATE TRIGGER "items_name_alias_guard" BEFORE INSERT OR UPDATE OF "name" ON "it
 
 -- ---------------------------------------------------------------------------------------------
 -- C: a service item is never stocked, counted, costed by recipe or delivered.
+-- F38: the guards lock the item row FOR SHARE so a concurrent kind UPDATE (row lock) serialises against them, and vice versa: the
+-- history trigger below runs inside the UPDATE that holds the row lock, so a guard that already holds FOR SHARE blocks that UPDATE until it commits.
 CREATE FUNCTION "items_refuse_service_item"() RETURNS trigger
 LANGUAGE plpgsql AS $$
 DECLARE
 	item_kind text;
 BEGIN
-	SELECT i."kind" INTO item_kind FROM "items" i WHERE i."id" = NEW."item_id";
+	SELECT i."kind" INTO item_kind FROM "items" i WHERE i."id" = NEW."item_id" FOR SHARE;
 	IF item_kind = 'service' THEN
 		RAISE EXCEPTION 'A service item (rent, power, water...) is never stocked, counted, delivered or used in a recipe.'
 			USING ERRCODE = '23514', CONSTRAINT = 'service_item_never_stocked';
@@ -159,7 +161,7 @@ LANGUAGE plpgsql AS $$
 DECLARE
 	item_kind text;
 BEGIN
-	SELECT i."kind" INTO item_kind FROM "items" i WHERE i."id" = NEW."output_item_id";
+	SELECT i."kind" INTO item_kind FROM "items" i WHERE i."id" = NEW."output_item_id" FOR SHARE;
 	IF item_kind = 'service' THEN
 		RAISE EXCEPTION 'A service item (rent, power, water...) can never be the product of a recipe.'
 			USING ERRCODE = '23514', CONSTRAINT = 'service_item_never_stocked';
