@@ -101,8 +101,12 @@ const viewOf = (row: lobbyRepo.ClaimRow): MyClaimView => ({
   ocrAssisted: row.ocrAssisted,
 });
 
-/** Spaces and hyphens removed. */
-const stripped = (id: string): string => id.replace(/[\s-]/g, '');
+/** Every Unicode space (incl. NBSP, U+2000-200B, U+3000) and hyphen look-alike removed. The ONE normalisation: duplicates compare in JS, never in SQL. */
+const SPACE_OR_HYPHEN = /[\s\u00a0\u2000-\u200b\u3000\ufeff\-\u2010-\u2014]/g;
+const stripped = (id: string): string => id.replace(SPACE_OR_HYPHEN, '');
+
+/** At most this many claim rows (any status) per entry, so submit/cancel loops cannot grow rows forever. */
+export const LOBBY_CLAIM_ROWS_MAX = 10;
 
 /** The diner's fields, trimmed and bounded. A refusal names nothing that was typed. */
 function cleanClaim(input: { kind?: unknown; holderName?: unknown; idNumber?: unknown; ocrAssisted?: unknown }): {
@@ -125,7 +129,7 @@ function cleanClaim(input: { kind?: unknown; holderName?: unknown; idNumber?: un
     holderName,
     idNumber,
     idLast4: bare.slice(-4),
-    normalisedId: bare.toLowerCase(),
+    normalisedId: bare.toUpperCase(),
     ocrAssisted: input.ocrAssisted === true,
   };
 }
@@ -150,7 +154,9 @@ export async function submitClaim(tx: Tx, key: MyEntryKey, input: SubmitClaimInp
   if ((entry.status !== 'waiting' && entry.status !== 'called') || entry.stale) throw lobbyRefusal('LOBBY_ENTRY_CLOSED');
   if (!(await lobbyRepo.isClaimsEnabled(tx, key.orgId, key.storeId))) throw lobbyRefusal('LOBBY_CLAIM_OFF', 'switch off');
   if ((await lobbyRepo.countClaimSlots(tx, key.orgId, entry.id)) >= entry.partySize) throw lobbyRefusal('LOBBY_CLAIM_FULL');
-  if (await lobbyRepo.hasPendingClaimWithId(tx, key.orgId, entry.id, c.normalisedId)) throw lobbyRefusal('LOBBY_CLAIM_DUPLICATE');
+  if ((await lobbyRepo.countClaimRows(tx, key.orgId, entry.id)) >= LOBBY_CLAIM_ROWS_MAX) throw lobbyRefusal('LOBBY_CLAIM_FULL', 'row cap');
+  const pending = await lobbyRepo.listPendingClaimIdNumbers(tx, key.orgId, entry.id);
+  if (pending.some((p) => stripped(p).toUpperCase() === c.normalisedId)) throw lobbyRefusal('LOBBY_CLAIM_DUPLICATE');
   const claimId = await lobbyRepo.insertClaim(tx, key.orgId, entry.id, {
     kind: c.kind,
     holderName: c.holderName,

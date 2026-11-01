@@ -451,6 +451,28 @@ describe('E. a second PENDING claim with the same ID in one entry is refused', (
     expect(await claimRows(rej.id)).toHaveLength(2);
   });
 
+  it('E4 unicode spaces and hyphen look-alikes are the same card: "1234 5678" vs NBSP vs non-breaking hyphen is LOBBY_CLAIM_DUPLICATE [kills: SQL and JS normalising differently]', async () => {
+    const f = await fx('e4');
+    const e = await entry(f.A, { party: 5 });
+    await claim(f, e.key, '1234 5678');
+    for (const again of ['1234\u00a05678', '1234\u20115678', '1234\u30005678', '1234\u2013\u200b5678']) {
+      expectRefusal(await refusedIn(f.orgId, (tx) => submitClaim(tx, e.key, { kind: 'senior', holderName: HOLDER, idNumber: again })), 'LOBBY_CLAIM_DUPLICATE', JSON.stringify(again));
+    }
+    expect(await claimRows(e.id)).toHaveLength(1);
+  });
+
+  it('E5 LIFETIME CAP: an entry holds at most 10 claim rows of any status; the 11th is refused LOBBY_CLAIM_FULL even with free slots [kills: submit/cancel loops growing rows forever]', async () => {
+    const f = await fx('e5');
+    const e = await entry(f.A, { party: 5 });
+    for (let i = 0; i < 10; i++) await rawClaim(f, e.id, 'expired');
+    expectRefusal(await refusedIn(f.orgId, (tx) => submitClaim(tx, e.key, { kind: 'senior', holderName: HOLDER, idNumber: '9999-0000' })), 'LOBBY_CLAIM_FULL', '11th row');
+    expect(await claimRows(e.id)).toHaveLength(10);
+    const g = await entry(f.A, { party: 5 });
+    for (let i = 0; i < 9; i++) await rawClaim(f, g.id, 'rejected');
+    await claim(f, g.key, '9999-0000');
+    expect(await claimRows(g.id)).toHaveLength(10);
+  });
+
   it('E3 a refused duplicate writes nothing and leaves the first claim pending with its name [kills: a duplicate replacing or expiring the first]', async () => {
     const f = await fx('e3');
     const e = await entry(f.A, { party: 3 });

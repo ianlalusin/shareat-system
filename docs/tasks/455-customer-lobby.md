@@ -372,3 +372,4 @@ Tester assumptions 1–9 and 11 ACCEPTED as written in the t455-s7a test headers
   case-insensitive) in the same entry is refused (new code LOBBY_CLAIM_DUPLICATE, plain sentence). Approved claims are
   de-duplicated at the POS by T-426's existing refusal (S7b).
 - Audit catalogue +3 (lobby.claim_open / _approve / _reject); raise t402-s1b and t453 ceilings together, re-measured.
+- Audit 2 Nov: one ID normalisation for duplicates; at most 10 claim rows per entry; S7b's reject uses a fixed reason list (no free text reaches the diner); pending PII lives at most until the nightly sweep (3 h after seating, 24 h max) — accepted.

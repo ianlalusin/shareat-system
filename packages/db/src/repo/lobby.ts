@@ -761,21 +761,22 @@ export async function countClaimSlots(tx: Tx, orgId: string, entryId: string): P
   return r?.n ?? 0;
 }
 
-/** Is there already a PENDING claim in this entry with this normalised ID (spaces and hyphens removed, lower case)? */
-export async function hasPendingClaimWithId(tx: Tx, orgId: string, entryId: string, normalisedId: string): Promise<boolean> {
+/** Every claim row of the entry, any status (the lifetime cap). */
+export async function countClaimRows(tx: Tx, orgId: string, entryId: string): Promise<number> {
   const [r] = await tx
-    .select({ id: lobbyDiscountClaims.id })
+    .select({ n: sql<number>`count(*)::int` })
     .from(lobbyDiscountClaims)
-    .where(
-      and(
-        eq(lobbyDiscountClaims.orgId, orgId),
-        eq(lobbyDiscountClaims.entryId, entryId),
-        eq(lobbyDiscountClaims.status, 'pending'),
-        sql`lower(regexp_replace(${lobbyDiscountClaims.idNumber}, '[[:space:]-]', '', 'g')) = ${normalisedId}`,
-      ),
-    )
-    .limit(1);
-  return r !== undefined;
+    .where(and(eq(lobbyDiscountClaims.orgId, orgId), eq(lobbyDiscountClaims.entryId, entryId)));
+  return r?.n ?? 0;
+}
+
+/** The raw ID numbers of this entry's PENDING claims (at most a handful). The domain normalises and compares them, so there is one rule. */
+export async function listPendingClaimIdNumbers(tx: Tx, orgId: string, entryId: string): Promise<string[]> {
+  const rows = await tx
+    .select({ idNumber: lobbyDiscountClaims.idNumber })
+    .from(lobbyDiscountClaims)
+    .where(and(eq(lobbyDiscountClaims.orgId, orgId), eq(lobbyDiscountClaims.entryId, entryId), eq(lobbyDiscountClaims.status, 'pending')));
+  return rows.flatMap((r) => (r.idNumber === null ? [] : [r.idNumber]));
 }
 
 export interface NewClaim {
