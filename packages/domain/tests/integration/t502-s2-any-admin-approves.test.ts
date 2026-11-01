@@ -176,7 +176,11 @@ describe('S2 x - the capability refuses manager and cashier, and writes nothing'
 
 describe('S2 - the expense category on a request and on the item', () => {
   const PLAIN = /categor/i;
-  const TECHNICAL = /violates|constraint|null value|not-null|23\d{3}|items_/i;
+  const TECHNICAL_RE = /violates|constraint|null value|not-null|23\d{3}|items_/i;
+  // The refusal's developer text embeds the row's random UUID. A UUID is hex, so 1 run in a few dozen it contains "23" + three digits
+  // (e.g. "...b23800...") and tripped the SQLSTATE-shaped `23\d{3}` alternative: a flaky false "raw DB error". Ids are not DB wording.
+  const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+  const TECHNICAL = { test: (m: string) => TECHNICAL_RE.test(m.replace(UUID_RE, '<id>')) };
 
   it('approving a purchasable item with NO category is refused in plain words; request stays open; no item', async () => {
     const w = await world('cat-none');
@@ -184,7 +188,7 @@ describe('S2 - the expense category on a request and on the item', () => {
     const err = await approve(w, w.admin, r.requestId).then(() => null, (e: unknown) => e as Error);
     expect(err).toBeInstanceOf(Error);
     expect(err!.message).toMatch(PLAIN);
-    expect(err!.message).not.toMatch(TECHNICAL);
+    expect(TECHNICAL.test(err!.message), err!.message).toBe(false);
     expect((await reqRow(r.requestId)).status).toBe('requested');
     expect(await itemCount(w.orgId)).toBe(0);
   });
@@ -223,7 +227,7 @@ describe('S2 - the expense category on a request and on the item', () => {
     const b = await world('cat-xorg-b');
     const err = await ask(a, a.manager, { expenseCategoryId: b.categoryId }).then(() => null, (e: unknown) => e as Error);
     expect(err).toBeInstanceOf(Error);
-    expect(err!.message).not.toMatch(TECHNICAL);
+    expect(TECHNICAL.test(err!.message), err!.message).toBe(false);
   });
 
   it('a retired (inactive) category cannot be chosen for a new request', async () => {
