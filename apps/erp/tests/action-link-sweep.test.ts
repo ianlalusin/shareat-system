@@ -498,7 +498,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1460 -> 1457, T-502 section 14: the batch Save, the invoice modal's Record expense and /expenses/new's Save draft became SubmitButton (-3, not census candidates); re-measured by runCensus().
     // merged with main: +1, T-504: sales-days/DraftMemory.tsx, the "Discard" button of the restored-draft line (ACTION_LINK, 32px), re-measured.
     // 1468 -> 1469, T-507: the Due-from-delivery-platforms section's unverified-days link (+1, 44px; the channel row link is a RowLink, not a census candidate); merged with main, re-measured by runCensus().
-    expect(results.length).toBe(1469);
+    // 1469 -> 1473, merged with main after t502-s5 (re-measured by runCensus()).
+    expect(results.length).toBe(1473);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

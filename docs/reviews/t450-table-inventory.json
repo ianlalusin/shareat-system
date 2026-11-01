@@ -414,6 +414,12 @@
     "headerless": 0
   },
   {
+    "file": "apps/erp/src/app/reports/expense-items/page.tsx",
+    "tables": 0,
+    "sharedTables": 3,
+    "headerless": 0
+  },
+  {
     "file": "apps/erp/src/app/sales-days/[id]/page.tsx",
     "tables": 3,
     "sharedTables": 0,
