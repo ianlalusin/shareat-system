@@ -342,3 +342,16 @@ describe('S4 who may import (approve_item_request): admin yes, manager no, cashi
     await expect(confirm(w, csv('Foil,supply,roll,Cleaning supplies,,'), w.manager)).rejects.toBeInstanceOf(AuthorizationError);
   });
 });
+
+describe('S4 confirm - two admins at once', () => {
+  it('the second confirm waits, then finds the items already there: no raw DB error', async () => {
+    const w = await world('race');
+    const file = csv('Race foil,supply,roll,Cleaning supplies,,', 'Race bag,supply,pcs,Cleaning supplies,,');
+    const settled = await Promise.allSettled([confirm(w, file), confirm(w, file)]);
+    expect(settled.every((r) => r.status === 'fulfilled')).toBe(true);
+    const results = settled.map((r) => (r as PromiseFulfilledResult<{ created: number; skipped: number; aliasesAdded: number }>).value);
+    expect(results.map((r) => r.created).sort()).toEqual([0, 2]);
+    expect(results.find((r) => r.created === 0)!.skipped).toBe(2);
+    expect(await itemCount(w)).toBe(2);
+  });
+});

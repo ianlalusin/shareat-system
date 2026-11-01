@@ -7,7 +7,7 @@
  * left alone, so uploading the same file twice changes nothing. Capability `approve_item_request` (any admin). Inserts go through
  * the repo, not `createItem` (that one is super-admin), and the code allocator still issues the codes.
  */
-import { auditLogRepo, expensesRepo, itemsRepo, ITEM_KINDS, BASE_UNITS, type Tx } from '@shareat/db';
+import { advisoryLocksRepo, auditLogRepo, expensesRepo, itemsRepo, ITEM_KINDS, BASE_UNITS, type Tx } from '@shareat/db';
 import type { BaseUnit, ItemKind } from '@shareat/db/schema';
 import { authorize, type Actor } from '@shareat/auth';
 import { parseCsv, type CsvRecord } from '@shareat/core/csv';
@@ -99,6 +99,7 @@ function parseFile(csvText: string): { line: number; cells: Record<Column, strin
     at[col] = i;
   }
   const data = records.slice(1);
+  // The 1 MiB byte cap above bounds the parse, so counting rows after parseCsv costs at most a 1 MiB parse - acceptable, no pre-count needed.
   if (data.length > ITEM_IMPORT_MAX_ROWS) {
     const s = `This file has ${data.length.toLocaleString('en-US')} items; one import takes at most ${ITEM_IMPORT_MAX_ROWS.toLocaleString('en-US')}. Split it into smaller files.`;
     throw refuse(s, s);
@@ -246,6 +247,8 @@ export async function confirmItemImport(
   csvText: string,
 ): Promise<{ created: number; skipped: number; aliasesAdded: number }> {
   await authorize(tx, actor, 'approve_item_request', {});
+  // One import per org at a time, BEFORE analysing: a racing second confirm waits, then sees these items as `exists`.
+  await advisoryLocksRepo.lockItemImport(tx, actor.orgId);
   const plan = await analyse(tx, actor.orgId, csvText);
   const sum = summarise(plan);
   if (!sum.canConfirm) {
