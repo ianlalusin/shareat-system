@@ -373,3 +373,11 @@ Tester assumptions 1–9 and 11 ACCEPTED as written in the t455-s7a test headers
   de-duplicated at the POS by T-426's existing refusal (S7b).
 - Audit catalogue +3 (lobby.claim_open / _approve / _reject); raise t402-s1b and t453 ceilings together, re-measured.
 - Audit 2 Nov: one ID normalisation for duplicates; at most 10 claim rows per entry; S7b's reject uses a fixed reason list (no free text reaches the diner); pending PII lives at most until the nightly sweep (3 h after seating, 24 h max) — accepted.
+
+## S6b rulings (BOSS orchestrator, Opus, 2026-11-02) — after the tester's pass
+Tester assumptions A2–A10 in apps/pos/src/lib/birthday/player.test.ts header ACCEPTED as written.
+- A1 mp3s: the Shareat song (Suno paid plan) ships. The happy-birthday recording ships only once Ian confirms the
+  business owns or licensed that recording (the melody is public domain; a recording may not be). PR is held until then.
+- A6: localStorage holds request id, time and store only — no diner name.
+- A7: the 30-minute rule uses the tablet clock; accepted (the server does not time-gate play, S6a ruling 7).
+- R1: merges before 20 Nov or after 14 Dec.
