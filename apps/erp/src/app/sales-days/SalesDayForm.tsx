@@ -11,6 +11,8 @@
  */
 import type { ReactNode } from 'react';
 import { Button, Input } from '@/components/ui';
+import { RuleCheck } from '@/components/forms';
+import { DraftMemory } from './DraftMemory';
 import { accountLabel } from '@/lib/account-label';
 import type { ChannelOption } from './lib';
 
@@ -40,12 +42,16 @@ export interface SalesDayFormProps {
    *  input (an edit keeps them as they are). */
   retiredTenders?: { name: string; amount: string }[];
   submitLabel: string;
+  /** T-504: who and which store, for the browser-side draft memory (keyed by person + store + date). */
+  draft: { personId: string; storeId: string };
 }
 
-export function SalesDayForm({ storeLabel, businessDate, dateEditable, dateField, channels, wallets, defaults, retiredTenders, submitLabel }: SalesDayFormProps) {
+export function SalesDayForm({ storeLabel, businessDate, dateEditable, dateField, channels, wallets, defaults, retiredTenders, submitLabel, draft }: SalesDayFormProps) {
+  const channelFacts = { channels: channels.map((c) => ({ id: c.id, name: c.name })) };
   const fig = (name: string) => defaults?.figures?.[name];
   return (
     <>
+      <DraftMemory personId={draft.personId} storeId={draft.storeId} businessDate={businessDate} dateFieldName={dateEditable ? 'businessDate' : undefined} />
       <section className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1">
           <span className={LABEL}>Store</span>
@@ -128,8 +134,9 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, dateField
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             A <strong>remitted</strong> channel&apos;s money reaches the till. A{' '}
             <strong>non-remitted</strong> one (Foodpanda, GrabFood) settles to a bank later and
-            posts a receivable instead. ⭐ Tick <em>no sales</em> to say so explicitly —{' '}
-            <strong>that is different from leaving it blank.</strong>
+            posts a receivable instead. ⭐ Every channel needs an amount, or <em>No sales</em> ticked —{' '}
+            <strong>a zero is not the same as saying there were none.</strong> You can save with a box blank
+            and finish later, but the day cannot be submitted until each one is filled.
           </p>
           <table className="w-full border-collapse">
             <thead>
@@ -171,6 +178,9 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, dateField
               })}
             </tbody>
           </table>
+          {/* T-504: the rule, live. Zero-with-no-tick and amount-with-tick turn Save off; a blank only warns (a draft may carry it). */}
+          <RuleCheck id="salesDay.channels.tickedOrTyped" facts={channelFacts} />
+          <RuleCheck id="salesDay.channels.blankHint" facts={channelFacts} />
         </section>
       )}
 

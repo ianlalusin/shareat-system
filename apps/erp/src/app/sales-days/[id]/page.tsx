@@ -6,7 +6,7 @@ import { add, compare, formatMoney, money, ZERO } from '@shareat/core/money';
 import { addDays, formatBusinessDateTime, parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { listStores, listActingPersons, getStoreLink } from '../lib';
 import { requireSession } from '../../../lib/session';
-import { postPosCorrectionAction, recheckPosDayAction, reimportSalesDayAction, setPlatformSalesAction, submitSalesDayAction, verifySalesDayAction, voidSalesDayAction } from '../actions';
+import { postPosCorrectionAction, recheckPosDayAction, reimportSalesDayAction, editSalesDayAction, submitSalesDayAction, verifySalesDayAction, voidSalesDayAction } from '../actions';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { canOverrideClosedMonth } from '../../expenses/reimbursements/lib';
 import { closedMonthOf, closedMonths } from '../../../lib/period-override';
@@ -19,8 +19,9 @@ import { accountLabel, accountCodeAndName } from '@/lib/account-label';
 
 import { typedFor } from '@/lib/keep-typing';
 import { PLATFORM_SALES_EDIT } from '../typed-forms';
-import { CheckedForm, EditableRecord, FieldCheck } from '@/components/forms';
-import { SALES_DAY_CORRECTION_RULES, SALES_DAY_VOID_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
+import { DraftMark, DraftMemory, DraftSettle } from '../DraftMemory';
+import { CheckedForm, EditableRecord, FieldCheck, RuleCheck } from '@/components/forms';
+import { SALES_DAY_CORRECTION_RULES, SALES_DAY_EDIT_RULES, SALES_DAY_VOID_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { ACTION_LINK } from '@/components/action-link';
 import { Badge, Banner, Button, ConfirmDestructive, FlashBanner, FormGrid, Input } from '@/components/ui';
 
@@ -156,7 +157,7 @@ export default async function SalesDayDetailPage({
     </>
   );
 
-  const hasPlatformRows = channels.some((r) => platformChannels.some((c) => c.id === r.channelId));
+    const hasPlatformRows = channels.some((r) => platformChannels.some((c) => c.id === r.channelId));
   return (
     <Page view="detail" sectioned density="table">
       <div className="flex items-start justify-between gap-4">
@@ -182,6 +183,7 @@ export default async function SalesDayDetailPage({
       </div>
 
       <FlashBanner flash={sp} />
+      <DraftSettle personId={actor.personId} storeId={day.storeId} businessDate={day.businessDate} hadError={Boolean(sp.error)} />
 
       {day.status !== 'verified' && day.status !== 'voided' && (
         <Banner tone="warning">
@@ -417,50 +419,60 @@ export default async function SalesDayDetailPage({
             none, or tick &quot;no sales&quot; to confirm there were none.
           </p>
           {(() => {
+            // T-504 (one Save): the Platform boxes are part of the day's ONE save. `platform=1` tells the action to read the boxes as
+            // platform rows; the domain writes them in the same transaction as everything else the edit carries.
+            const facts = { channels: platformChannels.map((c) => ({ id: c.id, name: c.name })) };
             const platformFields = (
-            <FormGrid>
-              {platformChannels.map((c) => {
-                const row = channels.find((r) => r.channelId === c.id);
-                return (
-                  <div key={c.id} className="min-w-0 space-y-1">
-                    <label htmlFor={`channel_${c.id}`} className="block">
-                      {c.name}
-                    </label>
-                    <Input
-                      id={`channel_${c.id}`}
-                      name={`channel_${c.id}`}
-                      inputMode="decimal"
-                      defaultValue={row && !row.noSales ? row.amount : ''}
-                      className="w-full text-right tabular-nums"
-                    />
-                    <label className="flex items-center gap-1 text-neutral-600 dark:text-neutral-400">
-                      <input type="checkbox" name={`nosales_${c.id}`} defaultChecked={row?.noSales ?? false} />
-                      no sales
-                    </label>
-                  </div>
-                );
-              })}
-            </FormGrid>
+              <>
+                <DraftMemory personId={actor.personId} storeId={day.storeId} businessDate={day.businessDate} />
+                <FormGrid>
+                  {platformChannels.map((c) => {
+                    const row = channels.find((r) => r.channelId === c.id);
+                    return (
+                      <div key={c.id} className="min-w-0 space-y-1">
+                        <label htmlFor={`channel_${c.id}`} className="block">
+                          {c.name}
+                        </label>
+                        <Input
+                          id={`channel_${c.id}`}
+                          name={`channel_${c.id}`}
+                          inputMode="decimal"
+                          defaultValue={row && !row.noSales ? row.amount : ''}
+                          className="w-full text-right tabular-nums"
+                        />
+                        <label className="flex items-center gap-1 text-neutral-600 dark:text-neutral-400">
+                          <input type="checkbox" name={`nosales_${c.id}`} defaultChecked={row?.noSales ?? false} />
+                          no sales
+                        </label>
+                      </div>
+                    );
+                  })}
+                </FormGrid>
+                <RuleCheck id="salesDay.channels.tickedOrTyped" facts={facts} />
+                <RuleCheck id="salesDay.channels.blankHint" facts={facts} />
+              </>
             );
             return hasPlatformRows ? (
               <EditableRecord
                 key={platformChannels.map((c) => { const r = channels.find((x) => x.channelId === c.id); return `${c.id}:${r?.amount ?? ''}:${r?.noSales ? 1 : 0}`; }).join('|')}
-                action={setPlatformSalesAction}
+                action={editSalesDayAction}
                 label="platform sales"
-                hidden={{ storeId: sp.store ?? '', salesDayId: day.id }}
+                hidden={{ storeId: sp.store ?? '', salesDayId: day.id, platform: '1' }}
                 typed={typedFor(sp, PLATFORM_SALES_EDIT, day.id, actor.personId)}
+                rules={SALES_DAY_EDIT_RULES}
               >
                 {platformFields}
               </EditableRecord>
             ) : (
-              <form action={setPlatformSalesAction} className="space-y-3">
+              <CheckedForm rules={SALES_DAY_EDIT_RULES} action={editSalesDayAction} className="space-y-3">
                 <input type="hidden" name="storeId" value={sp.store ?? ''} />
                 <input type="hidden" name="salesDayId" value={day.id} />
+                <input type="hidden" name="platform" value="1" />
                 {platformFields}
-                <Button type="submit" variant="secondary">
+                <Button type="submit" variant="primary">
                   Save
                 </Button>
-              </form>
+              </CheckedForm>
             );
           })()}
         </section>
@@ -470,6 +482,7 @@ export default async function SalesDayDetailPage({
         {day.status === 'open' && (
           <form action={submitSalesDayAction} className="space-y-3 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800">
             {hiddenIds}
+            <DraftMark personId={actor.personId} storeId={day.storeId} businessDate={day.businessDate} />
             <h2 className="font-medium">Submit</h2>
             <p className="text-neutral-600 dark:text-neutral-400">
               Hands the day on for checking. <strong>Still recognises nothing</strong> — submitting

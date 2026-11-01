@@ -1,10 +1,10 @@
 /** @shareat/domain's sales-day module — docs/tasks/123-sales-day.md. */
 export * from './routing';
 export * from './create';
+export * from './platform';
 export * from './edit';
 export * from './verify';
 export * from './live-day';
 export * from './import';
 export * from './compose';
-export * from './platform';
 export * from './correction';

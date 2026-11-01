@@ -33,6 +33,7 @@ import * as D from '@shareat/domain';
 import { importTestDay } from './_fixtures/pos-day';
 import { asOrgOn, DAY, s6Fixture } from './_fixtures/pos-s6';
 import { mkTypedDay, submitThenVerify } from './_fixtures/sales-day-flow';
+import { tickMissingChannels } from './_fixtures/no-sales-ticks';
 
 const sql = postgres(url, { max: 5 });
 afterAll(async () => {
@@ -77,7 +78,10 @@ describe('T-385 S1 - verifySalesDay requires a submitted day', () => {
 
   it('V2: a SUBMITTED day verifies and posts (control)', async () => {
     const { f, dayId } = await setup('v2');
-    await asOrgOn(f.orgId, (tx) => D.submitSalesDay(tx, f.admin, dayId));
+    await asOrgOn(f.orgId, async (tx) => {
+      await tickMissingChannels(tx, dayId); // T-504: submit needs Foodpanda ticked "No sales" or typed
+      await D.submitSalesDay(tx, f.admin, dayId);
+    });
     const res = await asOrgOn(f.orgId, (tx) => D.verifySalesDay(tx, f.manager, dayId));
     expect(res.created).toBe(true);
     expect((await dayRow(dayId)).status).toBe('verified');
@@ -132,7 +136,10 @@ describe('T-385 S1 - verifySalesDay requires a submitted day', () => {
     expect(userMessage(err)).toBe(NOT_SUBMITTED);
     expect(await entryCount(id)).toBe(0);
 
-    await asOrgOn(f.orgId, (tx) => D.submitSalesDay(tx, f.admin, id));
+    await asOrgOn(f.orgId, async (tx) => {
+      await tickMissingChannels(tx, id); // T-504: submit needs Foodpanda ticked "No sales" or typed
+      await D.submitSalesDay(tx, f.admin, id);
+    });
     const res = await asOrgOn(f.orgId, (tx) => D.verifySalesDay(tx, f.manager, id));
     expect(res.created).toBe(true);
     expect((await dayRow(id)).status).toBe('verified');

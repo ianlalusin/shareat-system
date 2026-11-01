@@ -1,6 +1,7 @@
 import type postgres from 'postgres';
 import type { Actor } from '@shareat/auth';
 import { salesDaysRepo, type Tx } from '@shareat/db';
+import { tickMissingChannels } from './no-sales-ticks';
 
 /**
  * T-385 - `docs/tasks/385-verify-only-after-submit.md`: a sales day is verified only after it is submitted, and (S3,
@@ -24,7 +25,10 @@ export async function submitThenVerify(tx: Tx, verifier: Actor, salesDayId: stri
   // loaded lazily so a packages/db test can import `forceVerifiedSql` without pulling in the domain package
   const { submitSalesDay, verifySalesDay } = await import('@shareat/domain');
   const day = await salesDaysRepo.getById(tx, verifier.orgId, salesDayId);
-  if (day && day.status === 'open') await submitSalesDay(tx, submitter, salesDayId);
+  if (day && day.status === 'open') {
+    await tickMissingChannels(tx, salesDayId); // T-504: submit needs every channel an amount or a tick
+    await submitSalesDay(tx, submitter, salesDayId);
+  }
   return verifySalesDay(tx, verifier, salesDayId);
 }
 
