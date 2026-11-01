@@ -38,6 +38,7 @@ import {
   claimListLine,
   claimSaveBlock,
   claimsByEntry,
+  emptyClaimForm,
   prefillFromClaim,
   rejectClaimFlow,
   rejectReasonText,
@@ -272,5 +273,37 @@ describe('failure wording', () => {
     expect(other.kind).toBe('error');
     expect(other.message.length).toBeGreaterThan(0);
     expect(claimFailure(null).kind).toBe('error');
+  });
+});
+
+describe('S7b rulings 9 and 11 (added by the builder)', () => {
+  const mk = () => {
+    const addDiner = vi.fn(async (_e: { kind: string; name: string; idNo: string }) => ({ dinerId: 'diner-1' }));
+    const approve = vi.fn(async (_b: Record<string, unknown>) => ({ ok: true }));
+    return { addDiner, approve };
+  };
+
+  it('(b) a 409 on a retried approve, then a refetch showing the claim approved: shown as done, no second diner', async () => {
+    const t = mk();
+    t.approve.mockRejectedValueOnce(Object.assign(new Error('Already decided.'), { status: 409 }));
+    const isApproved = vi.fn(async (_id: string) => true);
+    const r = await approveClaimFlow({ open: OPEN, form: FORM, diners: [{ id: 'diner-1', idNo: '123-456-1187' }], addDiner: t.addDiner, approve: t.approve, isApproved } as never);
+    expect(r).toMatchObject({ done: true, dinerId: 'diner-1' });
+    expect(isApproved).toHaveBeenCalledWith(OPEN.claimId);
+    expect(t.addDiner).not.toHaveBeenCalled();
+  });
+
+  it('(b) a 409 where the refetch does NOT show approved, or the refetch fails, stays a refusal with the server sentence', async () => {
+    for (const isApproved of [async () => false, async () => { throw new Error('offline'); }]) {
+      const t = mk();
+      t.approve.mockRejectedValueOnce(Object.assign(new Error('Ask the diner to show the card first.'), { status: 409 }));
+      const r = await approveClaimFlow({ open: OPEN, form: FORM, diners: [], addDiner: t.addDiner, approve: t.approve, isApproved } as never);
+      expect(r).toMatchObject({ done: false, reason: 'refused', message: 'Ask the diner to show the card first.' });
+    }
+  });
+
+  it('(c) the empty form (what the dialog resets to on close) holds no name, no ID number and the tick off', () => {
+    expect(emptyClaimForm()).toEqual({ kind: 'senior', name: '', idNo: '', cardSeen: false });
+    expect(emptyClaimForm()).not.toBe(emptyClaimForm());
   });
 });
