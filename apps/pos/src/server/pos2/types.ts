@@ -67,4 +67,9 @@ export interface Pos2LobbyPort {
   seat(a: LobbyTablet, i: { entryId: string; sessionId: string; standLabel: string; joinUrl: string | null }): Promise<{ entryId: string; status: 'seated' }>;
   remove(a: LobbyTablet, i: { entryId: string }): Promise<{ entryId: string; status: 'removed' }>;
   pause(a: LobbyTablet, i: { paused: boolean }): Promise<{ paused: boolean }>;
+  /** T-455 S7b: senior / PWD discount claims. Lists carry ****last4 only; `claimOpen` is the one answer with the name and ID number. */
+  claims(a: LobbyTablet): Promise<{ claims: unknown[] }>;
+  claimOpen(a: LobbyTablet, i: { claimId: string }): Promise<Record<string, unknown>>;
+  claimApprove(a: LobbyTablet, i: { claimId: string; cardSeen: boolean; sessionRef: string; statutoryDinerRef: string }): Promise<{ claimId: string; status: 'approved' }>;
+  claimReject(a: LobbyTablet, i: { claimId: string; reason: string }): Promise<{ claimId: string; status: 'rejected' }>;
 }

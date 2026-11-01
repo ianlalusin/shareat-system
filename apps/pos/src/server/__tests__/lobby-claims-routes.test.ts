@@ -251,9 +251,15 @@ describe('claim-reject', () => {
       expect(r.status, String(bad)).toBe(400);
       untouched(l, String(bad));
     }
-    const r = await call(spec('claim-reject'), full(spec('claim-reject'), { reason: 'Maria lied about her age' }));
-    expect(r.status).toBe(200);
-    expect(JSON.stringify(r.l.calls[0]!.input)).not.toMatch(/lied/);
-    expect((r.l.calls[0]!.input as { reason: string }).reason).toBe(LOBBY_REJECT_REASONS.find((x) => x.code === 'id_mismatch')!.label);
+  });
+
+  // S7b ruling 4 (amends the tester's "ignored"): free text in the body is REFUSED so a client bug is visible, and never reaches the port.
+  it('a body carrying free text (`reason`, `note`, `text`, `message`) is a 400 and the port is never called [kills: M6]', async () => {
+    for (const key of ['reason', 'note', 'text', 'message']) {
+      const l = makeLobby();
+      const r = await call(spec('claim-reject'), full(spec('claim-reject'), { [key]: 'Maria lied about her age' }), { lobby: l });
+      expect(r.status, key).toBe(400);
+      untouched(l, key);
+    }
   });
 });
