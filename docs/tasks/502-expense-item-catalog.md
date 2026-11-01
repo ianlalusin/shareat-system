@@ -276,3 +276,15 @@ Shown when the invoice has lines and at least one group has something left.
 5–8. As the tester assumed (sub-category required when the category has active ones; blank/retired category refused;
    a name starting = + - @ is invalid; return shapes and line numbers as in the tests).
 - CSV parsing: a small hand-written parser in packages/core (quotes, escaped quotes, BOM, CRLF/LF), unit-tested. No new dependency.
+
+## 16. S5 rulings after the tester's pass (1 Nov)
+- Attribution unit is **invoice + category** (not each expense — avoids double counting two expenses of one category on
+  one invoice): T = posted expenses of category C on the invoice, L = lines of C. T ≤ L → T shared pro-rata by
+  line_total, centavos floored, remainder to the largest line (tie → lowest line_no). T > L → lines in full, T − L to
+  "(unitemised)". No lines of C → all T to "(unitemised)" under sub-category "(none)". Date = invoice date.
+1. Capability `view_financial_reports`; scope via reportScope.
+2. storeId null = all stores the viewer may see (no refusal).
+3. Unit price = Σ line_total / Σ (qty × conversion_factor), half-up to centavos.
+4. pct is a number 0–100, shown with one decimal.
+5. Drill-down on "(unitemised)" lists the EXPENSES (date, store, amount, particulars, link to the invoice).
+6. CSV export of the report table (escapeCsvCell from packages/core), same scope.

@@ -5,6 +5,7 @@ import { toBusinessDate } from '@shareat/core/datetime';
 import { EmptyState } from '@/components/reports/EmptyState';
 import { AgingFilters } from '@/components/reports/AgingFilters';
 import { ArAgingTable, ArAgingReconciliationIndicator, type ArAgingTableRow } from '@/components/reports/ArAgingTable';
+import { PlatformAgingSection } from '@/components/reports/PlatformAgingSection';
 import { CsvExportLink } from '@/components/reports/CsvExportLink';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -109,6 +110,24 @@ export default async function ArAgingPage({
       ) : (
         <EmptyState message={`No open receivables as of ${asOfDate}.`} />
       )}
+
+      <PlatformAgingSection
+        rows={report.platform.rows.map((r) => ({
+          channelId: r.channelId,
+          channelName: r.channelName,
+          storeLabel: storeRows.find((s) => s.id === r.storeId)?.name ?? '',
+          current: r.current,
+          d1to30: r.d1to30,
+          d31to60: r.d31to60,
+          d61to90: r.d61to90,
+          d90plus: r.d90plus,
+          total: r.total,
+        }))}
+        totals={report.platform.totals}
+        waitingForVerification={report.platform.waitingForVerification}
+        reconciles={report.platform.reconciles}
+        controlBalance={report.platform.controlBalance}
+      />
     </Page>
   );
 }

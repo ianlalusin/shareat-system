@@ -49,10 +49,12 @@ const ROW_LINK: readonly string[] = [
   'app/owners/page.tsx',
   'app/prepaid/page.tsx',
   'app/sales-days/page.tsx',
+  'components/reports/PlatformAgingSection.tsx', // T-507: each channel row opens its settlements (LinkRow/RowLink)
   'app/trade/orders/[id]/page.tsx',
   'app/trade/orders/page.tsx',
   'app/wastage/page.tsx',
   'app/payroll/statutory-payments/month/page.tsx', // T-193 S6: payment rows link to the payment page
+  'app/reports/expense-items/page.tsx', // T-502 S5: item rows open the bill lines behind them, drill rows open the bill
 ];
 
 /** Tables with no row destination: reports, editing grids, read-only detail lines. Untouched by T-411. */
