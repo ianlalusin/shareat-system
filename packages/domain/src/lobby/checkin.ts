@@ -109,6 +109,8 @@ async function viewOf(tx: Tx, orgId: string, row: lobbyRepo.EntryRow, status: Lo
 async function closeAndExpireClaims(tx: Tx, orgId: string, entryId: string, status: 'cancelled' | 'expired'): Promise<void> {
   await lobbyRepo.markClosed(tx, orgId, entryId, status, null);
   await lobbyRepo.expirePendingClaimsOfEntry(tx, orgId, entryId);
+  // T-455 S6a: an entry closed unseated leaves no live birthday request behind.
+  await lobbyRepo.expireBirthdayOfEntry(tx, orgId, entryId);
 }
 
 /**

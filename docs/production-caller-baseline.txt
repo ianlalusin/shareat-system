@@ -3,6 +3,7 @@ GET
 POST
 __resetChatPresenceTracker
 __setPhase5AvailableForTests
+acceptBirthdayForTerminal
 acknowledgementHistory
 activateTerminal
 addDocumentNonBlocking
@@ -38,6 +39,7 @@ createPaymentConversionServer
 customerReturnableQuantity
 datesInWeek
 dayIdOf
+declineBirthdayForTerminal
 deleteDocumentNonBlocking
 depreciateAsset
 depreciationDrift
@@ -85,6 +87,8 @@ jobResult
 kdsEventDayId
 listAdjustments
 listAvailableCommissaries
+listBirthdayForTerminal
+listBirthdayRequests
 listCategoryLives
 listLiveForStore
 listLobbyEntries
@@ -96,6 +100,8 @@ listWriteOffsForCharge
 loadMod
 lobbyPartiesAhead
 makeDeps
+markBirthdayPlayed
+markBirthdayPlayedForTerminal
 markReviewed
 memoryLocalStorage
 middleware
