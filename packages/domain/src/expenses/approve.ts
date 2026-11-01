@@ -16,7 +16,7 @@ import { authorize, can, CAPABILITY_LABEL, type Actor, type Capability } from '@
 import { apRepo, auditLogRepo, cashRequestsRepo, expensesRepo, goneSentence, journalRepo, moneyAccountsRepo, ownersRepo, personsRepo, type Tx } from '@shareat/db';
 import type { PeriodOverrideReason } from '@shareat/db/schema';
 import { add, compare, formatMoney, money, subtract, ZERO, type Money } from '@shareat/core/money';
-import { judgeDraw } from '../money-accounts/draw-verdict';
+import { judgeDraw, type DrawVerdict } from '../money-accounts/draw-verdict';
 import {
   buildPeriodFacts,
   buildWouldPostFacts,
@@ -113,6 +113,8 @@ export interface ApprovalBlocker {
 export interface ApprovalCarried {
   accounts: Map<string, Money>;
   requests: Map<string, Money>;
+  /** T-503: the same draws per BALANCE POOL (`drawScopeKey`), so a draft is judged against what a pool-mate account already carries. When set it replaces `accounts` for the money-account check. */
+  scopes?: Map<string, Money>;
 }
 
 export interface ApprovalVerdictOptions extends ApproveExpenseOptions {
@@ -137,6 +139,50 @@ export function approvalDraws(payments: readonly PaymentRowT[]): ApprovalCarried
     accounts.set(p.moneyAccountId, add(accounts.get(p.moneyAccountId) ?? ZERO, money(p.amount)));
   }
   return { requests, accounts };
+}
+
+/** ⭐ T-503 (DEF-807): which balance an account's `available` figure really is - the key `balanceOf` and `lockForDraw` also use. */
+export function drawScopeKey(a: Pick<MoneyAccountT, 'id' | 'storeId' | 'glAccountCode'>): string {
+  return a.glAccountCode === '1140' ? `wallet:${a.id}` : `pool:${a.storeId}:${a.glAccountCode}`;
+}
+
+/**
+ * ⭐ T-503 (DEF-807): judge each BALANCE once, not each account. A cash account's balance (1110/1120/1130) is the whole pool of
+ * (store, GL code), so two accounts in one pool both read the same `available`; judging each one's own draw against it lets a
+ * split of 700 + 700 over a pooled 1,000 pass twice. `drawn` here is already the figure to judge per account (the caller adds
+ * what earlier drafts carry). A pool of one is judged exactly as before; a pool of several is judged as one account named
+ * "A + B", blocking if any member blocks (office/staff), with the SMALLEST overdraft limit - never widened. 1140 wallets keep their own.
+ */
+export function judgeDrawers(
+  drawers: ReadonlyArray<{ account: MoneyAccountT; available: Money; drawn: Money }>,
+  carriedByScope?: ReadonlyMap<string, Money>,
+): Array<{ accounts: MoneyAccountT[]; verdict: DrawVerdict }> {
+  const pools = new Map<string, Array<{ account: MoneyAccountT; available: Money; drawn: Money }>>();
+  for (const d of drawers) {
+    const key = drawScopeKey(d.account);
+    pools.set(key, [...(pools.get(key) ?? []), d]);
+  }
+  const out: Array<{ accounts: MoneyAccountT[]; verdict: DrawVerdict }> = [];
+  for (const [key, members] of pools) {
+    const first = members[0]!;
+    const carried = carriedByScope?.get(key) ?? ZERO;
+    if (members.length === 1) {
+      out.push({ accounts: [first.account], verdict: judgeDraw(first.account, first.available, add(first.drawn, carried)) });
+      continue;
+    }
+    const accounts = members.map((m) => m.account);
+    const blocking = accounts.find((a) => a.custodian !== 'cashier');
+    const limit = accounts.map((a) => money(a.overdraftLimit)).reduce((lo, l) => (compare(l, lo) < 0 ? l : lo));
+    const combined = {
+      name: accounts.map((a) => a.name).join(' + '),
+      custodian: blocking ? blocking.custodian : ('cashier' as const),
+      overdraftLimit: limit.toString(),
+      floatTarget: null,
+    };
+    const total = members.reduce((sum, m) => add(sum, m.drawn), carried);
+    out.push({ accounts, verdict: judgeDraw(combined, first.available, total) });
+  }
+  return out;
 }
 
 export async function gatherApprovalFacts(
@@ -343,11 +389,15 @@ export function approvalVerdict(facts: ApprovalFacts, options: ApprovalVerdictOp
   }
 
   // ⛔ BLOCKED for an office or staff account, WARNED for a cashier one (see `approvalWarnings`).
-  for (const d of detail.drawers) {
-    const drawn = add(d.drawn, carriedFor(options.carried, 'accounts', d.account.id));
-    const judged = judgeDraw(d.account, d.available, drawn);
-    if (judged.blocked) {
-      const message = judged.message ?? `"${d.account.name}" cannot cover this.`;
+  // ⭐ T-503: accounts that share one balance pool are judged together (see `judgeDrawers`).
+  const carriedScopes = options.carried?.scopes;
+  const judgedPools = judgeDrawers(
+    carriedScopes ? detail.drawers : detail.drawers.map((d) => ({ ...d, drawn: add(d.drawn, carriedFor(options.carried, 'accounts', d.account.id)) })),
+    carriedScopes,
+  );
+  for (const judged of judgedPools) {
+    if (judged.verdict.blocked) {
+      const message = judged.verdict.message ?? `"${judged.accounts.map((a) => a.name).join(' + ')}" cannot cover this.`;
       return { raw: `approveExpense: expense ${expenseId} cannot post: ${message}`, sentence: message };
     }
   }
@@ -382,9 +432,8 @@ export function approvalVerdict(facts: ApprovalFacts, options: ApprovalVerdictOp
 /** ⚠️ Cashier-account shortfalls that are allowed but must be SURFACED (bible row 154: a warning nobody sees is v1's disease). */
 export function approvalWarnings(facts: ApprovalFacts): string[] {
   const warnings: string[] = [];
-  for (const d of facts.detail?.drawers ?? []) {
-    const judged = judgeDraw(d.account, d.available, d.drawn);
-    if (!judged.blocked && judged.message) warnings.push(judged.message);
+  for (const judged of judgeDrawers(facts.detail?.drawers ?? [])) {
+    if (!judged.verdict.blocked && judged.verdict.message) warnings.push(judged.verdict.message);
   }
   return warnings;
 }
@@ -400,7 +449,7 @@ export async function previewInvoiceDrafts(
   invoiceId: string,
 ): Promise<Array<{ draftId: string; particulars: string; verdict: ApprovalBlocker | null }>> {
   const live = await apRepo.liveExpensesForInvoice(tx, actor.orgId, invoiceId);
-  const carried: ApprovalCarried = { accounts: new Map(), requests: new Map() };
+  const carried: ApprovalCarried = { accounts: new Map(), requests: new Map(), scopes: new Map() };
   const rows: Array<{ draftId: string; particulars: string; verdict: ApprovalBlocker | null }> = [];
   for (const d of live.filter((e) => e.status === 'draft')) {
     const facts = await gatherApprovalFacts(tx, actor, d.id, { lock: false });
@@ -410,6 +459,10 @@ export async function previewInvoiceDrafts(
     if (verdict === null || verdict.liftable) {
       const draws = approvalDraws(facts.detail?.payments ?? []);
       for (const [id, amount] of draws.accounts) carried.accounts.set(id, add(carried.accounts.get(id) ?? ZERO, amount));
+      for (const drawer of facts.detail?.drawers ?? []) {
+        const key = drawScopeKey(drawer.account);
+        carried.scopes!.set(key, add(carried.scopes!.get(key) ?? ZERO, drawer.drawn));
+      }
       for (const [id, amount] of draws.requests) carried.requests.set(id, add(carried.requests.get(id) ?? ZERO, amount));
     }
   }
