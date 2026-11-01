@@ -130,6 +130,17 @@ function TradeIcon(props: IconProps) {
   );
 }
 
+/** People — staff, attendance, payroll; two figures (head and shoulders), one behind the other. */
+function PeopleIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3 19.5c0-3.3 2.7-5.25 6-5.25s6 1.95 6 5.25" />
+      <path d="M15.75 5.25a3 3 0 0 1 0 5.5M18 14.6c1.8.7 3 2.2 3 4.9" />
+    </IconBase>
+  );
+}
+
 /** Reports — findings, statements, reconciliation. */
 function ReportsIcon(props: IconProps) {
   return (
@@ -152,14 +163,15 @@ function SetupIcon(props: IconProps) {
   );
 }
 
-/** The six `GROUPS` labels in `nav.tsx`, as string keys — never a component reference. A component
+/** The `GROUPS` labels in `nav.tsx`, as string keys — never a component reference. A component
  *  function cannot cross the server → client boundary as a prop (T-234 QUESTION 4 / the
  *  orchestrator's answer), so every consumer imports this map itself and looks the icon up
  *  locally, rather than receiving it pre-resolved. */
-export type GroupIconKey = 'daily' | 'inventory' | 'money' | 'trade' | 'reports' | 'setup';
+export type GroupIconKey = 'daily' | 'people' | 'inventory' | 'money' | 'trade' | 'reports' | 'setup';
 
 export const GROUP_ICONS: Record<GroupIconKey, (props: IconProps) => React.JSX.Element> = {
   daily: DailyIcon,
+  people: PeopleIcon,
   inventory: InventoryIcon,
   money: MoneyIcon,
   trade: TradeIcon,

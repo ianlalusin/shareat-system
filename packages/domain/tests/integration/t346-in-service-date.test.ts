@@ -113,6 +113,18 @@ async function insertMonths(
   }
 }
 
+/**
+ * Open every month from (startYear, startMonth) through Manila today, if today is on or after
+ * that month. Code under test dates reversals / catch-ups at TODAY, so a fixture that stops at a
+ * fixed month goes stale the day after (DEF-283 class).
+ */
+async function insertMonthsThroughToday(orgId: string, startYear: number, startMonth: number): Promise<void> {
+  const [ty, tm] = (await manilaTodayRaw()).split('-').map(Number) as [number, number];
+  if (ty > startYear || (ty === startYear && tm >= startMonth)) {
+    await insertMonths(orgId, startYear, startMonth, ty, tm);
+  }
+}
+
 interface OrgFixture {
   orgId: string;
   storeId: string;
@@ -373,6 +385,7 @@ describe('I6 — setAssetInService moves an asset later: without confirm it list
   async function postedThroughOctober(hint: string) {
     const f = await rolesFixture(hint, '2026-01-01'); // opens well before acquisition — not held
     await insertMonths(f.orgId, 2026, 3, 2026, 10);
+    await insertMonthsThroughToday(f.orgId, 2026, 11); // reversals of closed months are dated today
     const assetId = await makeAsset(f); // acquired 2026-03-15
     await runThrough(f.orgId, '2026-10'); // 03..10 post, 1,000.00 each
     // Close 03-05 together (order-guard: no open period may precede a closing one); 06+ stay open.
@@ -527,6 +540,7 @@ describe('I10 — a HELD asset and T-345\'s catch-up', () => {
     const f = await rolesFixture('i10-correction', '2026-01-01'); // not held
     await insertMonths(f.orgId, 2026, 1, 2026, 3, { status: 'closed', closedAt: '2026-04-01T00:00:00Z', closedBy: f.adminId });
     await insertMonths(f.orgId, 2026, 5, 2026, 10);
+    await insertMonthsThroughToday(f.orgId, 2026, 11); // catch-up books at today's date
     const assetId = await makeAsset(f);
 
     await withOrgPrincipal(f.orgId, (tx) =>
