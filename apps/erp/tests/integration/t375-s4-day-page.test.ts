@@ -60,6 +60,7 @@ import { importTestDay, linkTestStore, seedTestTenders } from '../../../../packa
 import { errorMessage } from '../../src/lib/constraint-messages';
 import SalesDayDetailPage from '../../src/app/sales-days/[id]/page';
 import EditSalesDayPage from '../../src/app/sales-days/[id]/edit/page';
+import { tickMissingChannels } from '../../../../packages/domain/tests/integration/_fixtures/no-sales-ticks';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -183,14 +184,20 @@ describe('W1 - the day page of a feed day on a linked store', () => {
   it('submitted: the section is still there', async () => {
     const f = await fixture('sub');
     const { id } = await feedDay(f, D10);
-    await asOrg(f.orgId, (tx) => submitSalesDay(tx, f.admin, id));
+    await asOrg(f.orgId, async (tx) => {
+      await tickMissingChannels(tx, id); // T-504: submit needs Foodpanda ticked "No sales" or typed
+      await submitSalesDay(tx, f.admin, id);
+    });
     expect(await renderDay(f, id, f.storeId)).toMatch(PLATFORM_H2);
   });
 
   it('verified: no Platform sales section (control)', async () => {
     const f = await fixture('ver');
     const { id } = await feedDay(f, D10);
-    await asOrg(f.orgId, (tx) => submitSalesDay(tx, f.admin, id));
+    await asOrg(f.orgId, async (tx) => {
+      await tickMissingChannels(tx, id); // T-504: submit needs Foodpanda ticked "No sales" or typed
+      await submitSalesDay(tx, f.admin, id);
+    });
     await asOrg(f.orgId, (tx) => verifySalesDayAs(tx, f, id));
     expect(await renderDay(f, id, f.storeId)).not.toMatch(PLATFORM_H2);
   });

@@ -105,8 +105,13 @@ export function parseDecimalInput<S extends `${number},${number}`>(
     throw Object.assign(err, { userMessage: `${humanLabel} — can't be left blank. Enter ${article}.` });
   }
 
+  // T-504 item 7 - thousands commas ("16,980", "1,234,567.8"): ONLY correct groups of three are accepted, then the commas
+  // are dropped so the stored value never holds one. Anything else keeps the comma and fails decimal() as before.
+  const typed = typeof raw === 'string' ? raw.trim() : raw;
+  const commaFree = typeof typed === 'string' && /^[+-]?[1-9]\d{0,2}(,\d{3})+(\.\d*)?$/.test(typed) ? typed.replace(/,/g, '') : (raw as string);
+
   try {
-    return decimal(raw as string, shape);
+    return decimal(commaFree, shape);
   } catch (e) {
     // T-343 S5.5n / DEF-458 — `decimal()`'s two failures need different advice: a malformed STRING (`TypeError`) is
     // fixed by retyping it; an out-of-range VALUE (`RangeError`, the column's `precision − scale` integer digits) is not

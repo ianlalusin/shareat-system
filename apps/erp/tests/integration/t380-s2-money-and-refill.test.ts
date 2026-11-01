@@ -15,7 +15,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
  * M4b guard (HEAD's `back()` is typed `never`, so the write is skipped; M4b exists to catch the
  * converted form losing its `return await`).
  *
- * Spec correction found by the tester (reported): M1 says `refundAmount '1,000.50'` posts 100050
+ * Spec correction found by the tester (reported): M1 says `refundAmount '1,00.50'` posts 100050
  * centavos. It cannot: `parseMoneyInput` refuses a comma ("1,000" is refused, DEF-460, S5.5p), so M1
  * posts `'1000.50'`. The comma value is what M2 round-trips, because it is a REFUSED amount.
  *
@@ -23,7 +23,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
  *  - M1: put `ok` (or any figure) back in the query -> the URL assertions go red.
  *  - M2: put `keep` in the query; drop `await` on the catch-path call (the success redirect or
  *    `ok` wins, so `flash.error` is gone and the journal count is 1); encode the refill through
- *    `Number()` ('1,000.50' -> 1000.5, byte-for-byte assertion red).
+ *    `Number()` ('1,00.50' -> 1000.5, byte-for-byte assertion red).
  *  - M3: leave `confirm`/`plan`/`reason` in the URL; drop `await` -> the confirm step is skipped.
  *  - M4/M4b: drop `await` on the `:199` call -> `setStoreOpeningDate` runs on '2026-13-40'.
  *  - W-S2: leave the net total in the `ok=` URL.
@@ -226,8 +226,8 @@ describe('M2 (R8) - a refused write-off writes nothing and the form comes back b
   };
 
   it(
-    'refund "1,000.50" (a comma: refused by parseMoneyInput): zero entries, status active, no typed value in the URL, ' +
-      'flash.refundAmount === "1,000.50", the page renders value="1,000.50" and the reason as typed. ' +
+    'refund "1,00.50" (a comma: refused by parseMoneyInput): zero entries, status active, no typed value in the URL, ' +
+      'flash.refundAmount === "1,00.50", the page renders value="1,00.50" and the reason as typed. ' +
       'Red on HEAD: the URL carries every refill. Mutants: keep in the query; Number() on the refill; drop await on the catch-path call',
     async () => {
       const f = await prepaidFixture('m2a');
@@ -236,7 +236,7 @@ describe('M2 (R8) - a refused write-off writes nothing and the form comes back b
 
       const reason = 'Cancelled early, per Ms. Reyes call';
       const signal = await captureRedirect(() =>
-        writeOffAction(writeOffForm(f, { reason, refundAmount: '1,000.50', refundAccountCode: '1110' })),
+        writeOffAction(writeOffForm(f, { reason, refundAmount: '1,00.50', refundAccountCode: '1110' })),
       );
 
       expect(await writeOffEntryCount(f.itemId), 'a refusal posts nothing').toBe(0);
@@ -248,14 +248,14 @@ describe('M2 (R8) - a refused write-off writes nothing and the form comes back b
       }
 
       const out = outcomeOf(signal);
-      expect(out.flash.error).toBe('The refund amount — "1,000.50" is not a valid amount. Use at most two decimal places.');
-      expect(out.flash.refundAmount, 'byte for byte, never reformatted').toBe('1,000.50');
+      expect(out.flash.error).toBe('The refund amount — "1,00.50" is not a valid amount. Use at most two decimal places.');
+      expect(out.flash.refundAmount, 'byte for byte, never reformatted').toBe('1,00.50');
       expect(out.flash.reason).toBe(reason);
       expect(out.flash.refundAccountCode).toBe('1110');
       expect(out.flash.writtenOffOn).toBe('2026-04-10');
 
       const html = await renderItem(f.itemId, signal.url);
-      expect(tagOf(html, 'refundAmount')).toMatch(/value="1,000\.50"/);
+      expect(tagOf(html, 'refundAmount')).toMatch(/value="1,00.50"/);
       expect(tagOf(html, 'reason')).toContain(`value="${reason}"`);
       // The refund account is a <select> (a pick list of cash/e-wallet accounts), not a text <input>: the refill shows as the
       // <option> carrying `selected`.
@@ -269,7 +269,7 @@ describe('M2 (R8) - a refused write-off writes nothing and the form comes back b
       const html2 = renderToStaticMarkup(
         (await PrepaidItemPage({ params: Promise.resolve({ id: f.itemId }), searchParams: Promise.resolve(onlyToken) })) as never,
       );
-      expect(tagOf(html2, 'refundAmount')).toMatch(/value="1,000\.50"/);
+      expect(tagOf(html2, 'refundAmount')).toMatch(/value="1,00.50"/);
       expect(tagOf(html2, 'reason')).toContain(`value="${reason}"`);
       expect(html2).toContain('is not a valid amount');
     },

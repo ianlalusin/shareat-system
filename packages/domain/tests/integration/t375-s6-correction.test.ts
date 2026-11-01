@@ -261,7 +261,7 @@ describe('C7 - platform sales on the day', () => {
     const f = await s6Fixture(sql, 'c7');
     const { id: dayId } = await imp(f, DAY);
     await asOrgOn(f.orgId, (tx) =>
-      D.setPlatformSales(tx, f.manager, { salesDayId: dayId, rows: [{ channelId: f.foodpandaId, amount: '200.00', noSales: false }] }),
+      D.editSalesDay(tx, f.manager, { salesDayId: dayId, platform: [{ channelId: f.foodpandaId, amount: '200.00', noSales: false }] }),
     );
     const { journalEntryId } = await verify(f, dayId);
     expect(lineText(await lines(journalEntryId)), 'control: the day\'s own entry carries the platform lines').toEqual(
@@ -480,7 +480,7 @@ describe('G - the link\'s sales channel changed after verify', () => {
     await correct(f, f.manager, { salesDayId: dayId, feedId, entryDate: OPEN_DATE });
     const c = (await corrections(dayId))[0]!;
     expect(lineText(await lines(c.journal_entry_id))).toEqual(['Cr 1110 50.00', 'Dr 4100 50.00']);
-    const ch = await sql<{ channel_id: string }[]>`select channel_id from sales_day_channels where sales_day_id = ${dayId}`;
+    const ch = await sql<{ channel_id: string }[]>`select channel_id from sales_day_channels where sales_day_id = ${dayId} and not no_sales`; // T-504: not the "No sales" tick the submit fixture added
     expect(ch.map((r) => r.channel_id), 'the day keeps its own channel row').toEqual([f.walkInId]);
   });
 });

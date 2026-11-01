@@ -140,6 +140,7 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
                   channels={activeChannels}
                   wallets={wallets}
                   submitLabel="Save draft"
+                  draft={{ personId: actor.personId, storeId: storeId ?? '' }}
                 />
               </CheckedForm>
             </>

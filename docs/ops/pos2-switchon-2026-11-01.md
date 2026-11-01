@@ -88,7 +88,7 @@ Also empty the Recycle Bin. Good: the file is gone from Downloads.
 
 ## 2. The settings file `/srv/shareat-shared/pos2.env`
 
-Three values, all required. If one is blank the server answers 503 "POS server is not configured" to every route (it does not crash).
+Six values, all required. If one of the first three is blank the server answers 503 "POS server is not configured" to every route (it does not crash). The last three are the app's own settings contract (`packages/core/src/env.ts`): without them the server starts, answers health and the 401 test, then fails every refund, so **those two checks do not prove the file is complete** (found 31 Oct at Lipa).
 
 **2.1 Start the file and add the key path. Who: orchestrator. Where: server shell (`ssh root@159.223.46.224`).**
 ```
@@ -125,7 +125,22 @@ echo 'POS_ORG_ID=<uuid from 2.3>' >> /srv/shareat-shared/pos2.env
 chown shareat:shareat /srv/shareat-shared/pos2.env && chmod 600 /srv/shareat-shared/pos2.env
 ls -l /srv/shareat-shared/pos2.env; cut -d= -f1 /srv/shareat-shared/pos2.env
 ```
-Good: mode `-rw-------`, owner `shareat`, and exactly three names: `POS_FIREBASE_SA_KEY_FILE`, `DATABASE_URL`, `POS_ORG_ID`. Fix duplicates or blanks before moving on.
+Good: mode `-rw-------`, owner `shareat`, and these names: `POS_FIREBASE_SA_KEY_FILE`, `DATABASE_URL`, `POS_ORG_ID` (plus the three from 2.5). Fix duplicates or blanks before moving on.
+
+**2.5 Add the three shared-app settings. Who: orchestrator. Where: server shell.**
+```
+f=/srv/shareat-shared/pos2.env
+if [ -n "$(tail -c1 $f)" ]; then echo >> $f; fi
+v="$(grep -m1 '^SESSION_SECRET=' /srv/shareat-shared/.env.local | cut -d= -f2- | tr -d '\r' | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")"
+[ -n "$v" ] && printf 'SESSION_SECRET=%s\n' "$v" >> $f; unset v
+echo 'FIREBASE_PROJECT_ID=shareat-hub-v2' >> $f
+echo 'FIREBASE_SERVICE_ACCOUNT_KEY_FILE=/srv/shareat-shared/secrets/pos2-firebase-key.json' >> $f
+chown shareat:shareat $f && chmod 600 $f; cut -d= -f1 $f
+```
+- ⛔ **`SESSION_SECRET` MUST be the SAME value as the ERP's (`/srv/shareat-shared/.env.local`).** Every stored PIN is looked up by a hash derived from it (`pinLookupHash`, `packages/auth/src/credentials.ts`). A separate random secret on the POS side means NO PIN is ever found: every manager approval reads "That PIN cannot approve this", and each try counts toward the tablet's 5-a-day lock. (31 Oct: a separate secret was set first; every PIN failed until it was copied from the ERP.)
+- `FIREBASE_PROJECT_ID` is the project the TABLET signs into (`shareat-hub-v2`), NOT the ERP's own `FIREBASE_PROJECT_ID`.
+- Check without printing: both secrets' `sha256sum | cut -c1-12` must be equal.
+- A tablet locked by wrong PINs is cleared in the ERP once T-505 ships; until then, by an admin via the `resetApprovalPinCap` function (it has no ERP page for a terminal).
 
 ---
 

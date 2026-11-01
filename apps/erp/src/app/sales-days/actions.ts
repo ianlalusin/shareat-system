@@ -14,16 +14,16 @@
  */
 import {
   assertFieldRules, createSalesDay, editSalesDay, importSalesDay, postPosCorrection, recheckPosDay, recheckRecentDays, reimportSalesDay,
-  setPlatformSales, submitSalesDay, verifySalesDay, voidSalesDay,
+  submitSalesDay, verifySalesDay, voidSalesDay,
 } from '@shareat/domain';
 import { logger } from '@shareat/core/logger';
 import { SALES_DAY_IMPORT_RULES, SALES_DAY_VOID_RULES } from '@shareat/domain/field-rules';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
-import { redirectWithFlash, splitReturnTo, type Nav } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
 import { PLATFORM_SALES_EDIT } from './typed-forms';
+import { redirectWithFlash, splitReturnTo, type Nav } from '@/lib/flash';
 import { authorize, can, verifyAdminApproval } from '@shareat/auth';
 import { salesDaysRepo } from '@shareat/db';
 import { closedMonthOf, closedMonths, periodOverrideProblem, readPeriodOverride } from '@/lib/period-override';
@@ -71,12 +71,10 @@ function parseDayFigures(formData: FormData) {
     if (!key.startsWith('channel_') || typeof value !== 'string') continue;
     const channelId = key.slice('channel_'.length);
     const noSales = formData.get(`nosales_${channelId}`) === 'on';
-    const raw = value.trim();
-    // ⭐ Absent, zero, and "confirmed no sales" are three different things (T-134 B3's lesson,
-    // and v1's own noSalesChannelIds). An untouched box writes no row at all.
-    if (raw === '' && !noSales) continue;
-    // A confirmed "no sales" IS a typed zero (the reporter's claim), not a guessed one.
-    channels.push({ channelId, amount: noSales ? '0' : raw, noSales });
+    // T-504: passed on exactly as typed. A blank stays blank and a ticked box keeps its amount, so the domain's ONE rule judges
+    // them (a blank is a draft; a zero with no tick, or an amount with the tick, is refused in words). The action used to drop
+    // blank rows and turn a ticked box into '0' - which silently threw away a typed amount (DEF-628).
+    channels.push({ channelId, amount: value.trim(), noSales });
   }
 
   return {
@@ -95,6 +93,20 @@ function parseDayFigures(formData: FormData) {
     channels,
     tenders,
   };
+}
+
+/**
+ * T-504: the Platform sales boxes of a POS-fed day, channel_<id> / nosales_<id> pairs (the id is in the field name), passed on as
+ * typed - the domain parses them in words after authorize() and refuses a remitted channel, a negative or a verified day.
+ */
+function parsePlatformRows(formData: FormData): { channelId: string; amount: string; noSales: boolean }[] {
+  const rows: { channelId: string; amount: string; noSales: boolean }[] = [];
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith('channel_') || typeof value !== 'string') continue;
+    const channelId = key.slice('channel_'.length);
+    rows.push({ channelId, amount: value.trim(), noSales: formData.get(`nosales_${channelId}`) === 'on' });
+  }
+  return rows;
 }
 
 export async function createSalesDayAction(formData: FormData): Promise<void> {
@@ -223,12 +235,20 @@ export async function editSalesDayAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
   const id = str(formData, 'salesDayId');
   const nav = carryNav(formData);
+  const platformForm = str(formData, 'platform') === '1';
   try {
+    // T-504 (one Save): a POS-fed day's form posts `platform=1` and carries only its Platform sales boxes; a typed day's form
+    // carries the whole report. Either way ONE action and ONE transaction.
     await withOrgPrincipal(actor.orgId, (tx) =>
-      editSalesDay(tx, actor, { salesDayId: id, ...parseDayFigures(formData) }),
+      editSalesDay(tx, actor, platformForm
+        ? { salesDayId: id, platform: parsePlatformRows(formData) }
+        : { salesDayId: id, ...parseDayFigures(formData) }),
     );
   } catch (err) {
-    return await redirectWithFlash(`/sales-days/${id}`, nav, { error: errorMessage(err) });
+    // T-389: a refused platform Save keeps what was typed (the day page's EditableRecord reopens holding it).
+    return await redirectWithFlash(`/sales-days/${id}`, nav, platformForm
+      ? { error: errorMessage(err), typed: keepTyping(formData, PLATFORM_SALES_EDIT, id, { actorId: actor.personId }) }
+      : { error: errorMessage(err) });
   }
   return await redirectWithFlash(`/sales-days/${id}`, nav);
 }
@@ -292,29 +312,4 @@ export async function voidSalesDayAction(formData: FormData): Promise<void> {
     return await redirectWithFlash(`/sales-days/${id}`, nav, { error: errorMessage(err) });
   }
   return await redirectWithFlash(`/sales-days/${id}`, nav, { ok: 'Sales day voided.', stamp: 'VOID' });
-}
-
-/**
- * T-375 S4 (R8): the **Platform sales** section of a feed day. Rows arrive as channel_<id> / nosales_<id> pairs (the
- * channel id is in the field name, as on the typed form). A blank box clears that channel's row; the domain refuses a
- * remitted channel, a negative amount and a day that is verified. Every outcome returns to the day's own page.
- */
-export async function setPlatformSalesAction(formData: FormData): Promise<void> {
-  const actor = await requireActor();
-  const id = str(formData, 'salesDayId');
-  const nav = carryNav(formData);
-
-  const rows: { channelId: string; amount: string; noSales: boolean }[] = [];
-  for (const [key, value] of formData.entries()) {
-    if (!key.startsWith('channel_') || typeof value !== 'string') continue;
-    const channelId = key.slice('channel_'.length);
-    // Passed on as typed: the domain parses it in words after authorize().
-    rows.push({ channelId, amount: value.trim(), noSales: formData.get(`nosales_${channelId}`) === 'on' });
-  }
-  try {
-    await withOrgPrincipal(actor.orgId, (tx) => setPlatformSales(tx, actor, { salesDayId: id, rows }));
-  } catch (err) {
-    return await redirectWithFlash(`/sales-days/${id}`, nav, { error: errorMessage(err), typed: keepTyping(formData, PLATFORM_SALES_EDIT, id, { actorId: actor.personId }) });
-  }
-  return await redirectWithFlash(`/sales-days/${id}`, nav);
 }

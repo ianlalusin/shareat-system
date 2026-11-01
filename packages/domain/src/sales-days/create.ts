@@ -29,7 +29,8 @@
 import { authorize, type Actor } from '@shareat/auth';
 import { moneyAccountsRepo, salesDaysRepo, type Tx } from '@shareat/db';
 import { add, compare, isZero, ZERO, type Money } from '@shareat/core/money';
-import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
+import { interpretChannelEntry } from './channel-entry';
+import { parseDecimalInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { SALES_DAY_CREATE_RULES } from '../field-rules/sales-days';
@@ -176,21 +177,12 @@ export async function writeChannels(
         "One of the sales channels on this day isn't set up for this store. Reload the page and try again.",
       );
     }
-    // T-371: parsed in words (was a raw `money()` whose TypeError is a developer message). The column is
-    // NOT NULL DEFAULT '0', but a channel row is only sent when it carries a figure or a confirmed zero.
-    const amount = parseMoneyInput(c.amount, `sales day channels: "${cfg.name}"'s amount`, `The amount for "${cfg.name}"`);
-    const noSales = c.noSales ?? false;
-    if (noSales && !isZero(amount)) {
-      throw refuse(
-        `sales day channels: "${cfg.name}" is marked "no sales" but carries ${amount} — ` +
-          `a confirmed zero and an amount are different claims`,
-        `"${cfg.name}" is marked "no sales" but carries ${amount} — a confirmed zero and an amount are different claims.`,
-      );
-    }
-    return { channelId: c.channelId, amount, noSales };
+    // T-504: one rule, one copy (`channel-entry.ts`). A blank unticked box is a draft: no row (and on an edit, the old row clears).
+    const entry = interpretChannelEntry(cfg.name, c.amount, c.noSales ?? false, 'sales day channels');
+    return entry.blank ? null : { channelId: c.channelId, amount: entry.amount, noSales: entry.noSales };
   });
 
-  await salesDaysRepo.replaceChannels(tx, salesDayId, rows);
+  await salesDaysRepo.replaceChannels(tx, salesDayId, rows.filter((r): r is NonNullable<typeof r> => r !== null));
 }
 
 /** Sum of a day's figures, for callers that want to show a total before writing. Pure. */

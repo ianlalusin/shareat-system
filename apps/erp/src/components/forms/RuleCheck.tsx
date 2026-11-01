@@ -48,7 +48,17 @@ export function RuleCheck({ id, facts: given }: { id: string; facts?: unknown })
   const values = ctx?.values;
 
   // Ask the form to read the controls this check reads. Released on unmount.
-  useIsomorphicLayoutEffect(() => (check && track ? track(check.watch) : undefined), [check, track]);
+  // T-504: a check may also name controls only its facts know (`watchFor`, one pair per sales channel).
+  useIsomorphicLayoutEffect(() => {
+    if (!check || !track) return undefined;
+    let extra: readonly string[] = [];
+    try {
+      extra = check.watchFor && facts !== undefined ? check.watchFor(facts) : [];
+    } catch {
+      extra = [];
+    }
+    return track([...check.watch, ...extra]);
+  }, [check, track, facts]);
 
   const verdict = useMemo(() => {
     if (!check || !active || !values) return null;
