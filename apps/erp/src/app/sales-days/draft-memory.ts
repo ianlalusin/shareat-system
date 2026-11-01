@@ -72,3 +72,17 @@ export function takeSaving(storage: StorageLike | null | undefined, key: string)
     return false;
   }
 }
+
+/**
+ * What to write when the person edits. A box the person has NOT touched in this visit keeps what the draft already holds (else
+ * what the page shows), so a re-render or a hydration reset that blanks a box can never overwrite a remembered figure with an
+ * empty one. A box they touched is written exactly as it is now, including cleared to nothing.
+ */
+export function mergeForSave(stored: Record<string, string> | null, dom: Record<string, string>, touched: ReadonlySet<string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(dom)) {
+    out[name] = touched.has(name) || !stored || !(name in stored) ? value : (stored[name] ?? value);
+  }
+  if (stored) for (const [name, value] of Object.entries(stored)) if (!(name in out) && !touched.has(name)) out[name] = value;
+  return out;
+}

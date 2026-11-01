@@ -7,7 +7,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { ACTION_LINK } from '@/components/action-link';
-import { clearDraft, draftKey, loadDraft, markSaving, saveDraft, takeSaving } from './draft-memory';
+import { clearDraft, draftKey, loadDraft, markSaving, mergeForSave, saveDraft, takeSaving } from './draft-memory';
 
 function storageOrNull(): Storage | null {
   try {
@@ -40,14 +40,27 @@ function readFields(form: HTMLFormElement): Record<string, string> {
   return out;
 }
 
-function applyFields(form: HTMLFormElement, fields: Record<string, string>, skip?: string): void {
+/** Sets a control the way typing does (the native setter, then a bubbling event) so React's delegated listeners and CheckedForm's live rules see it. */
+function setLikeTyping(el: Control, value: string): void {
+  const proto = el instanceof HTMLInputElement ? HTMLInputElement.prototype : el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLSelectElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+  if (setter) setter.call(el, value);
+  else el.value = value;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+/** Puts the remembered values into the boxes. Skips `skip` and any box in `touched` (the person has typed there since). */
+function applyFields(form: HTMLFormElement, fields: Record<string, string>, skip: string | undefined, touched: ReadonlySet<string>): void {
   for (const el of controls(form)) {
-    if (el.name === skip) continue;
-    if (el instanceof HTMLInputElement && el.type === 'checkbox') el.checked = el.name in fields;
-    else if (el.name in fields) el.value = fields[el.name] ?? '';
+    if (el.name === skip || touched.has(el.name)) continue;
+    if (el instanceof HTMLInputElement && el.type === 'checkbox') {
+      const want = el.name in fields;
+      if (el.checked !== want) {
+        el.checked = want;
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    } else if (el.name in fields && el.value !== (fields[el.name] ?? '')) setLikeTyping(el, fields[el.name] ?? '');
   }
-  // CheckedForm re-reads every watched control on a reset event, so its live rules judge the restored values.
-  form.dispatchEvent(new Event('reset'));
 }
 
 function timeLabel(iso: string): string {
@@ -72,6 +85,7 @@ export function DraftMemory({
 }) {
   const root = useRef<HTMLDivElement>(null);
   const [restored, setRestored] = useState<string | null>(null);
+  const forget = useRef<() => void>(() => undefined);
 
   const dateIn = (form: HTMLFormElement): string => {
     const el = dateFieldName ? form.elements.namedItem(dateFieldName) : null;
@@ -85,19 +99,50 @@ export function DraftMemory({
     const storage = storageOrNull();
     const keyNow = () => draftKey(personId, storeId, dateIn(form));
     let activeKey = keyNow();
+    // Names the person has edited in this visit; a restore never overwrites one, and a save always writes it as it is.
+    const touched = new Set<string>();
+    // True while WE set values, so the events that setting raises are never mistaken for the person typing (no save on mount).
+    let applying = false;
+    let lastFields: Record<string, string> | null = null;
+    const timers: ReturnType<typeof setTimeout>[] = [];
 
+    forget.current = () => {
+      lastFields = null;
+      timers.forEach(clearTimeout);
+    };
+    const apply = (): void => {
+      if (!lastFields) return;
+      applying = true;
+      try {
+        applyFields(form, lastFields, dateFieldName, touched);
+      } finally {
+        applying = false;
+      }
+    };
     const restore = (key: string): void => {
       const d = loadDraft(storage, key);
-      if (!d) return;
-      applyFields(form, d.fields, dateFieldName);
+      if (!d) {
+        lastFields = null;
+        return;
+      }
+      lastFields = d.fields;
+      apply();
       setRestored(d.savedAt);
     };
     restore(activeKey);
+    // Hydration and the browser's own form restore can land after this effect and put the boxes back to blank: put the draft in
+    // again (never over a box the person has touched) once the page has settled, then stop.
+    const again = () => apply();
+    if (lastFields) {
+      timers.push(setTimeout(again, 0), setTimeout(again, 250), setTimeout(again, 1000));
+      window.addEventListener('load', again, { once: true });
+    }
     // New-day page only (the date box is editable): this page is never where a successful Save lands, so a marker found here is
     // left over from a create that was refused and bounced back. Drop it, or a later visit to that day would delete the kept draft.
     if (dateFieldName) takeSaving(storage, activeKey);
 
     const onEdit = (e: Event) => {
+      if (applying) return;
       const t = e.target;
       if (!(t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement)) return;
       if (!t.name || (t instanceof HTMLInputElement && t.type === 'hidden')) return;
@@ -108,10 +153,12 @@ export function DraftMemory({
         if (oldKey !== activeKey) {
           clearDraft(storage, oldKey);
           setRestored(null);
+          touched.clear();
           restore(activeKey);
         }
       }
-      saveDraft(storage, activeKey, readFields(form));
+      touched.add(t.name);
+      saveDraft(storage, activeKey, mergeForSave(loadDraft(storage, activeKey)?.fields ?? null, readFields(form), touched));
     };
     const onSubmit = () => markSaving(storage, activeKey);
 
@@ -122,11 +169,14 @@ export function DraftMemory({
       form.removeEventListener('input', onEdit);
       form.removeEventListener('change', onEdit);
       form.removeEventListener('submit', onSubmit);
+      timers.forEach(clearTimeout);
+      window.removeEventListener('load', again);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [personId, storeId, businessDate, dateFieldName]);
 
   const discard = () => {
+    forget.current();
     const form = root.current?.closest('form');
     if (form) {
       clearDraft(storageOrNull(), draftKey(personId, storeId, dateIn(form)));
