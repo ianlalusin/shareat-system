@@ -95,7 +95,7 @@ async function fixture(
   const storeId = store!.id;
   await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status)
             select ${orgId}, m::date, (m + interval '1 month - 1 day')::date, 'open'
-              from generate_series('2026-01-01'::date, '2026-12-01'::date, interval '1 month') m`;
+              from generate_series('2026-01-01'::date, greatest('2026-12-01'::date, date_trunc('month', now() at time zone 'Asia/Manila')::date), interval '1 month') m`;
   const [config] = await sql<{ id: string }[]>`
     insert into store_attendance_config (org_id, store_id, effective_from, required_hours_per_shift, overtime_multiplier,
                                          night_diff_multiplier, overtime_mode, overtime_fixed_hourly, holiday_regular_multiplier,

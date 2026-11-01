@@ -53,7 +53,7 @@ async function fixture(hint: string) {
   const storeId = store!.id;
   await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status)
             select ${orgId}, m::date, (m + interval '1 month - 1 day')::date, 'open'
-              from generate_series('2026-01-01'::date, '2026-12-01'::date, interval '1 month') m`;
+              from generate_series('2026-01-01'::date, greatest('2026-12-01'::date, date_trunc('month', now() at time zone 'Asia/Manila')::date), interval '1 month') m`;
 
   const mk = async (name: string, role: string) => {
     const [p] = await sql<{ id: string }[]>`

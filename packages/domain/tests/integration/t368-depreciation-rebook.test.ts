@@ -97,6 +97,16 @@ async function insertMonths(
   }
 }
 
+/**
+ * insertMonths through the later of (endYear, endMonth) and Manila today. Code under test dates
+ * reversals / catch-ups at TODAY, so a fixture ending at a fixed December goes stale on 1 Jan (DEF-806).
+ */
+async function insertMonthsThroughAtLeast(orgId: string, startYear: number, startMonth: number, endYear: number, endMonth: number): Promise<void> {
+  const [ty, tm] = (await manilaTodayRaw()).split('-').map(Number) as [number, number];
+  const [ey, em] = ty > endYear || (ty === endYear && tm > endMonth) ? [ty, tm] : [endYear, endMonth];
+  await insertMonths(orgId, startYear, startMonth, ey, em);
+}
+
 interface OrgFixture {
   orgId: string;
   storeId: string;
@@ -250,7 +260,7 @@ const planTokenOf = (ids: string[]) => createHash('sha256').update([...ids].sort
 
 async function postedFixture(hint: string, through: string) {
   const f = await rolesFixture(hint, '2026-01-01');
-  await insertMonths(f.orgId, 2026, 3, 2026, 12);
+  await insertMonthsThroughAtLeast(f.orgId, 2026, 3, 2026, 12);
   const assetId = await makeAsset(f);
   await runThrough(f.orgId, through);
   return { f, assetId };
@@ -366,7 +376,7 @@ describe('R6/R7 — the confirm is pinned to the exact entries it showed (DEF-44
 describe('R8 — the store-wide cascade pins its plan the same way', () => {
   it('setStoreOpeningDate across two follower assets: no token -> planToken T1; a follower changes (one month re-booked) -> T1 refused as changed with a new token, nothing reversed; the new token reverses all six', async () => {
     const f = await rolesFixture('r8', '2026-02-01');
-    await insertMonths(f.orgId, 2026, 1, 2026, 12);
+    await insertMonthsThroughAtLeast(f.orgId, 2026, 1, 2026, 12);
     const a1 = await makeAsset(f, { name: 'Chiller A', acquiredOn: '2026-01-01' } as Record<string, unknown>);
     const a2 = await makeAsset(f, { name: 'Chiller B', acquiredOn: '2026-01-01' } as Record<string, unknown>);
     expect(await inServiceOf(a1)).toEqual({ source: 'store_opening', on: '2026-02-01' });
@@ -454,7 +464,7 @@ describe('R9 — the re-book of a reversed month whose fiscal period is CLOSED',
   it('March with NO fiscal-period row: the skip does not swallow the hole — the asset is still recorded under failed with the "no fiscal period covers" refusal', async () => {
     // March's period row cannot be deleted once an entry points at it, so the hole is built from the start: periods begin in April
     const f = await rolesFixture('r9d', '2026-01-01');
-    await insertMonths(f.orgId, 2026, 4, 2026, 12);
+    await insertMonthsThroughAtLeast(f.orgId, 2026, 4, 2026, 12);
     const assetId = await makeAsset(f);
     const result = await runThrough(f.orgId, '2026-05');
     const failure = result.failed.find((x) => x.assetId === assetId);
