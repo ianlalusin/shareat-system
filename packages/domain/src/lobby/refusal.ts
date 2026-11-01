@@ -16,6 +16,10 @@ export const LOBBY_REFUSAL_CODES = [
   'LOBBY_NOT_FOUND',
   'LOBBY_ENTRY_CLOSED',
   'LOBBY_SEAT_NEEDS_SESSION',
+  'LOBBY_BIRTHDAY_EXISTS',
+  'LOBBY_BIRTHDAY_CLOSED',
+  'LOBBY_BIRTHDAY_NEEDS_TIME',
+  'LOBBY_BIRTHDAY_OFF',
 ] as const;
 export type LobbyRefusalCode = (typeof LOBBY_REFUSAL_CODES)[number];
 
@@ -42,6 +46,11 @@ const SENTENCES: Record<LobbyRefusalCode, string> = {
   LOBBY_NOT_FOUND: 'We could not find that place in line.',
   LOBBY_ENTRY_CLOSED: 'That place in line is already closed.',
   LOBBY_SEAT_NEEDS_SESSION: 'Start the table session first, then pick the stand and seat the party.',
+  // T-455 S6a: the birthday-song request. Each is its own sentence (none is the counter sentence); none names a limit or a table.
+  LOBBY_BIRTHDAY_EXISTS: 'A birthday song has already been requested for your table.',
+  LOBBY_BIRTHDAY_CLOSED: 'That birthday song request can no longer be changed.',
+  LOBBY_BIRTHDAY_NEEDS_TIME: 'Please pick a time for the birthday song first.',
+  LOBBY_BIRTHDAY_OFF: 'Birthday song requests are not available right now.',
 };
 
 /** `detail` goes to the log message only (never to the diner). It must carry no name, phone or ID number. */

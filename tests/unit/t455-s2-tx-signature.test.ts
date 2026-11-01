@@ -55,6 +55,27 @@ const PINNED: Record<string, string[]> = {
   'purge.ts': ['expireStaleLobbyEntries', 'purgeLobbyPersonalData', 'runLobbyNightly', 'sweepStalePendingClaims'],
   // T-455 S5: the shared core of the cashier moves and the POS tablet's moves (each takes tx: Tx first).
   'core.ts': ['callCore', 'listCore', 'parkCore', 'removeCore', 'seatCore'],
+  // T-455 S6a: the birthday-song request - the diner's three moves, the shared cores, the ERP cashier's door and the tablet's door (each takes tx: Tx first).
+  'birthday.ts': [
+    'acceptBirthday',
+    'acceptBirthdayCore',
+    'acceptBirthdayForTerminal',
+    'cancelMyBirthday',
+    'declineBirthday',
+    'declineBirthdayCore',
+    'declineBirthdayForTerminal',
+    'expireSeatedBirthdayRequests',
+    'expireStaleBirthdayRequests',
+    'getMyBirthday',
+    'listBirthdayCore',
+    'listBirthdayForTerminal',
+    'listBirthdayRequests',
+    'markBirthdayPlayed',
+    'markBirthdayPlayedCore',
+    'markBirthdayPlayedForTerminal',
+    'readMyBirthday',
+    'requestBirthday',
+  ],
   'terminal.ts': ['callForTerminal', 'listForTerminal', 'parkForTerminal', 'removeForTerminal', 'seatForTerminal', 'setLobbyPausedForTerminal'],
 };
 /** Exported functions that are allowed to have no `tx` (pure helpers). Empty on purpose: keep helpers unexported (CONTRACT QUESTION 9). */

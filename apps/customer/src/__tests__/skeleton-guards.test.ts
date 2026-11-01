@@ -85,7 +85,7 @@ function elements(src: string, names: string[]): { open: string; inner: string }
 }
 
 // ---------- detectors (all pure) ----------
-const EXPECTED_ROUTES = ['/', '/join', '/menu', '/cart', '/orders', '/bill', '/feedback', '/account', '/lobby', '/lobby/check-in', '/lobby/wait'];
+const EXPECTED_ROUTES = ['/', '/join', '/menu', '/cart', '/orders', '/bill', '/feedback', '/account', '/lobby', '/lobby/check-in', '/lobby/wait', '/lobby/birthday'];
 
 /** page files (paths relative to src/app) -> route paths. Route groups "(x)" do not add a segment. */
 function routesFrom(pageFiles: string[]): string[] {
@@ -377,7 +377,7 @@ describe('skeleton guards on apps/customer', () => {
     expect(files.length).toBeGreaterThan(0);
   });
 
-  it('route set is exactly the 8 spec routes plus the 3 T-455 S4 lobby screens', () => {
+  it('route set is exactly the 8 spec routes plus the 3 T-455 S4 lobby screens and the S6a birthday screen', () => {
     const pages = walk(join(SRC, 'app')).map((f) => rel(join(SRC, 'app'), f));
     expect(routesFrom(pages)).toEqual([...EXPECTED_ROUTES].sort());
   });

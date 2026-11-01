@@ -39,6 +39,17 @@ export interface LobbyMyEntry extends LobbyEntrySummary {
   handoffUrl: string | null;
 }
 
+/** T-455 S6a: what the diner sees of her birthday-song request. No request id, no entry id: the cookie is the identity. */
+export type LobbyBirthdayStatus = 'requested' | 'accepted' | 'declined' | 'played' | 'expired' | 'cancelled';
+
+export interface LobbyBirthday {
+  status: LobbyBirthdayStatus;
+  celebrantName: string | null;
+  /** ISO time the cashier accepted the song for, or null. */
+  scheduledAt: string | null;
+  declineReason: string | null;
+}
+
 /** `error` is always one plain sentence meant for the diner. `status` is the HTTP status (0 when the phone could not reach the server). */
 export type LobbyResult<T> = { ok: true; value: T } | { ok: false; status: number; error: string; code?: string };
 
@@ -98,6 +109,20 @@ export function lobbyCancel(storeCode: string, base = ''): Promise<LobbyResult<{
   );
 }
 
+/** T-455 S6a: my birthday request. `null` = nothing asked yet (a 404 means this phone has no place in line here). */
+export function lobbyBirthday(storeCode: string, base = ''): Promise<LobbyResult<LobbyBirthday | null>> {
+  return call(base, `/api/lobby/birthday?s=${encodeURIComponent(storeCode)}`, { method: 'GET' }, (b) => (b.birthday ?? null) as LobbyBirthday | null);
+}
+
+export function lobbyRequestBirthday(storeCode: string, celebrantName: string | null, base = ''): Promise<LobbyResult<LobbyBirthday | null>> {
+  const body = celebrantName === null ? { storeCode } : { storeCode, celebrantName };
+  return call(base, '/api/lobby/birthday', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }, (b) => (b.birthday ?? null) as LobbyBirthday | null);
+}
+
+export function lobbyCancelBirthday(storeCode: string, base = ''): Promise<LobbyResult<LobbyBirthday | null>> {
+  return call(base, '/api/lobby/birthday/cancel', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ storeCode }) }, (b) => (b.birthday ?? null) as LobbyBirthday | null);
+}
+
 /** T-455 S4: the store's public line status. A closed store answers 200 with accepting:false; that and any `error` both mean "not joinable". */
 function lobbyStore(storeCode: string, base = ''): Promise<LobbyResult<LobbyStoreView>> {
   return call(base, `/api/lobby/store?s=${encodeURIComponent(storeCode)}`, { method: 'GET' }, (b) => {
@@ -119,5 +144,8 @@ export function createHttpLobbyData(base = ''): LobbyData {
     checkIn: (input) => lobbyCheckIn(input, base),
     myEntry: (storeCode) => lobbyMyEntry(storeCode, base),
     cancel: (storeCode) => lobbyCancel(storeCode, base),
+    birthday: (storeCode) => lobbyBirthday(storeCode, base),
+    requestBirthday: (storeCode, celebrantName) => lobbyRequestBirthday(storeCode, celebrantName, base),
+    cancelBirthday: (storeCode) => lobbyCancelBirthday(storeCode, base),
   };
 }
