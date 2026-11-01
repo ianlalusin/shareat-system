@@ -20,6 +20,6 @@ describe('T-453 T6 item audit actions are in the catalogue', () => {
     expect([e!.category, e!.sensitivity, e!.scope]).toEqual([rename.category, rename.sensitivity, rename.scope]);
   });
   it('the list stays under the ceiling (189 entries after this task)', () => {
-    expect(AUDIT_CATALOGUE.length).toBeLessThanOrEqual(218); // 217 -> 218, T-502 S5 merge with main (re-measured: 218 entries); // 215 -> 217 kept in step with t402-s1b (T-455 S7a: 217 entries); 212 -> 215 kept in step with t402-s1b (T-455 S6a + T-502: 214 entries); 210 -> 212 T-455 S5 lobby.pause/resume; raised with t402-s1b-catalogue (195 -> 210: T-455 S2 lobby + T-475 S3); T-464 before
+    expect(AUDIT_CATALOGUE.length).toBeLessThanOrEqual(218); // 217 -> 218 kept in step with t402-s1b (two merges each added one audit action); 215 -> 217 kept in step with t402-s1b (T-455 S7a: 217 entries); 212 -> 215 kept in step with t402-s1b (T-455 S6a + T-502: 214 entries); 210 -> 212 T-455 S5 lobby.pause/resume; raised with t402-s1b-catalogue (195 -> 210: T-455 S2 lobby + T-475 S3); T-464 before
   });
 });

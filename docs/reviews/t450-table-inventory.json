@@ -534,6 +534,12 @@
     "headerless": 0
   },
   {
+    "file": "apps/erp/src/components/reports/PlatformAgingSection.tsx",
+    "tables": 1,
+    "sharedTables": 0,
+    "headerless": 0
+  },
+  {
     "file": "apps/erp/src/components/reports/SalesRollupTable.tsx",
     "tables": 3,
     "sharedTables": 0,

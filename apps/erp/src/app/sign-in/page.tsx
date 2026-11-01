@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { safeNext } from './lib';
+import { landingForActor } from './landing';
 import { TerminalSignInForm } from './TerminalSignInForm';
 import { EmailSignInForm } from './EmailSignInForm';
 import { TabletSignInForm } from './TabletSignInForm';
@@ -44,7 +44,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
   // ⚠️ `safeNext` and not an inline check: this line accepted `next=//evil.com` until T-232's review
   // found it, because `startsWith('/')` is true of a protocol-relative URL. One rule, one place.
   const existing = await currentSession();
-  if (existing) redirect(safeNext(sp.next ?? ''));
+  if (existing) redirect(await landingForActor(existing.actor, sp.next ?? ''));
 
   // T-464 - a PAIRED POS tablet shows Employee ID + PIN only. The pairing is resolved from the httpOnly cookie on the server, on every
   // load (so a revoke bites at once); a cookie that names nothing live is forgotten and the page is today's, unchanged.

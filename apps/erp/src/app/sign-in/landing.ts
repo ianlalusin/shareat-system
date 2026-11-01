@@ -1,0 +1,47 @@
+/**
+ * Where a sign-in lands when `next` says nothing usable. DEF-809 follow-up.
+ *
+ * `/sales-days` is gated by `submit_sales_day` (position-granted for staff, T-318), so sending EVERYONE there
+ * put a staff member without the grant on a refusal page. An explicit safe `next` still wins; otherwise a person
+ * who may submit a sales day at ANY store they can see lands on `/sales-days`, and everyone else on `STAFF_HOME`.
+ *
+ * ⚠️ `/` is NOT a safe fallback: it is gated by `view_financial_reports` (manager and up). `/cash-requests` is a
+ * top-level page that needs only a session. The question goes through `can()`, the same decision `authorize` makes,
+ * so position grants count.
+ */
+import { can, type Actor } from '@shareat/auth';
+import { actorForToken } from '../../lib/session';
+import { scopedStores } from '../reports/lib';
+import { withOrgPrincipal } from '../expenses/lib';
+import { safeNext } from './lib';
+
+export const SALES_DAYS_HOME = '/sales-days';
+export const STAFF_HOME = '/cash-requests';
+
+/** The `next` the visitor asked for, if it is a safe in-app path; otherwise null (never the default). */
+export function explicitNext(raw: string): string | null {
+  const safe = safeNext(raw);
+  // safeNext returns SALES_DAYS_HOME for anything unusable; a real request for it is told apart by the raw text.
+  if (safe === SALES_DAYS_HOME && raw !== SALES_DAYS_HOME) return null;
+  return safe;
+}
+
+export async function landingForActor(actor: Actor, raw: string): Promise<string> {
+  const explicit = explicitNext(raw);
+  if (explicit) return explicit;
+  const allowed = await withOrgPrincipal(actor.orgId, async (tx) => {
+    const { stores } = await scopedStores(tx, actor);
+    for (const s of stores) {
+      if (await can(tx, actor, 'submit_sales_day', { storeId: s.id })) return true;
+    }
+    return false;
+  });
+  return allowed ? SALES_DAYS_HOME : STAFF_HOME;
+}
+
+/** For the actions: the session cookie is not readable in the same request, so resolve the fresh token. */
+export async function landingForToken(token: string, raw: string): Promise<string> {
+  const explicit = explicitNext(raw);
+  if (explicit) return explicit;
+  return landingForActor(await actorForToken(token), raw);
+}

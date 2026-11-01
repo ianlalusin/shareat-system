@@ -112,6 +112,14 @@ export async function currentSession(): Promise<ResolvedSession | null> {
 }
 
 /**
+ * The actor behind a session token the server just issued (sign-in's landing decision). The cookie set in the same
+ * request is not readable yet, so the token is resolved directly. Same `resolveActor(null, ...)` shape as `currentSession`.
+ */
+export async function actorForToken(token: string): Promise<ResolvedSession['actor']> {
+  return (await resolveActor(null, token)).actor;
+}
+
+/**
  * The session, or a redirect to sign in. **Use this in every page and action that acts.**
  *
  * ⚠️ It redirects rather than returning null on purpose: a caller that has to remember to check
