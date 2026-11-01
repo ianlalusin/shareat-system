@@ -30,7 +30,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
-import { createSalesDay, editSalesDay, submitSalesDay } from '../../src';
+import { createSalesDay, editSalesDay, submitSalesDay, verifySalesDay } from '../../src';
 import { importTestDay, linkTestStore, seedTestTenders } from './_fixtures/pos-day';
 
 const sql = postgres(url, { max: 8 });
@@ -107,7 +107,8 @@ async function fixture(hint: string) {
   await linkTestStore(sql, { orgId, storeId: feedStoreId, channelId: fd.walkIn, createdBy: adminId });
   await seedTestTenders(sql, { orgId, storeId: feedStoreId, walletAccountId: gcash!.id });
   const manager: Actor = { personId: managerId, orgId };
-  return { orgId, typedStoreId, feedStoreId, t, fd, manager };
+  const admin: Actor = { personId: adminId, orgId };
+  return { orgId, typedStoreId, feedStoreId, t, fd, manager, admin };
 }
 type F = Awaited<ReturnType<typeof fixture>>;
 
@@ -442,3 +443,24 @@ describe('T-504 feed day (source pos_v1_day_feed): only the Platform sales secti
     expect(await statusOf(id)).toBe('submitted');
   });
 });
+
+describe('T-504 verify: a verifier who blanks a channel on a submitted day cannot post it', () => {
+  it('blank Grab by edit, then verify -> refused naming Grab; tick No sales, then verify works', async () => {
+    const f = await fixture('ver-blank');
+    const { id } = await create(f, GOOD(f));
+    await asOrg(f.orgId, (tx) => submitSalesDay(tx, f.manager, id));
+    await asOrg(f.orgId, (tx) =>
+      editSalesDayAsAdmin(tx, f, id, [{ channelId: f.t.walkIn, amount: '1000.00' }, { channelId: f.t.foodpanda, amount: '0', noSales: true }, { channelId: f.t.grab, amount: '' }]),
+    );
+    expect(await sentenceOf(asOrg(f.orgId, (tx) => verifySalesDay(tx, f.admin, id)))).toBe(SUBMIT_MISSING('GrabFood'));
+    expect(await statusOf(id)).toBe('submitted');
+    await asOrg(f.orgId, (tx) =>
+      editSalesDayAsAdmin(tx, f, id, [{ channelId: f.t.walkIn, amount: '1000.00' }, { channelId: f.t.foodpanda, amount: '0', noSales: true }, { channelId: f.t.grab, amount: '0', noSales: true }]),
+    );
+    await asOrg(f.orgId, (tx) => verifySalesDay(tx, f.admin, id));
+    expect(await statusOf(id)).toBe('verified');
+  });
+});
+function editSalesDayAsAdmin(tx: Tx, f: F, dayId: string, channels: Row[]) {
+  return editSalesDay(tx, f.admin, { salesDayId: dayId, ...FIG, channels });
+}

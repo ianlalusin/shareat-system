@@ -36,7 +36,7 @@ describe('valid groupings parse, and the stored value never holds a comma', () =
 });
 
 describe('wrong groupings are refused with the EXISTING sentence', () => {
-  it.each(['1,5', '16,98,0', ',100', '1,,000', '16,980,', '1,0000', '12,34', '1,000.5,0', '1.000,50', ',', '1, 000'])('%s', (raw) => {
+  it.each(['1,5', '16,98,0', ',100', '1,,000', '16,980,', '1,0000', '12,34', '1,000.5,0', '1.000,50', ',', '1, 000', '0,500', '01,000', '00,100'])('%s', (raw) => {
     expect(messageOf(() => parse(raw))).toBe(`The amount for "Foodpanda" — "${raw}" is not a valid amount. Use at most two decimal places.`);
   });
   it('an over-large comma figure still gets the "too large" sentence, not "not valid"', () => {

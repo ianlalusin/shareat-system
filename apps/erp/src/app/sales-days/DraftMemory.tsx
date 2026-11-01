@@ -93,6 +93,9 @@ export function DraftMemory({
       setRestored(d.savedAt);
     };
     restore(activeKey);
+    // New-day page only (the date box is editable): this page is never where a successful Save lands, so a marker found here is
+    // left over from a create that was refused and bounced back. Drop it, or a later visit to that day would delete the kept draft.
+    if (dateFieldName) takeSaving(storage, activeKey);
 
     const onEdit = (e: Event) => {
       const t = e.target;

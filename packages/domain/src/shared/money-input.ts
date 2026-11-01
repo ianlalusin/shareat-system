@@ -108,7 +108,7 @@ export function parseDecimalInput<S extends `${number},${number}`>(
   // T-504 item 7 - thousands commas ("16,980", "1,234,567.8"): ONLY correct groups of three are accepted, then the commas
   // are dropped so the stored value never holds one. Anything else keeps the comma and fails decimal() as before.
   const typed = typeof raw === 'string' ? raw.trim() : raw;
-  const commaFree = typeof typed === 'string' && /^[+-]?\d{1,3}(,\d{3})+(\.\d*)?$/.test(typed) ? typed.replace(/,/g, '') : (raw as string);
+  const commaFree = typeof typed === 'string' && /^[+-]?[1-9]\d{0,2}(,\d{3})+(\.\d*)?$/.test(typed) ? typed.replace(/,/g, '') : (raw as string);
 
   try {
     return decimal(commaFree, shape);

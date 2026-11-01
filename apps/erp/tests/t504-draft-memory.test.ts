@@ -11,7 +11,7 @@
  *   `storage` is Storage-like ({ getItem, setItem, removeItem }) or null/undefined (no storage at all).
  */
 import { describe, expect, it } from 'vitest';
-import { clearDraft, draftKey, loadDraft, saveDraft } from '../src/app/sales-days/draft-memory';
+import { clearDraft, draftKey, loadDraft, markSaving, saveDraft, takeSaving } from '../src/app/sales-days/draft-memory';
 
 function memory(): Storage & { map: Map<string, string> } {
   const map = new Map<string, string>();
@@ -107,5 +107,21 @@ describe('storage unavailable: the form still works, just without memory', () =>
       expect(loadDraft(s as never, KEY)).toBeNull();
       expect(() => clearDraft(s as never, KEY)).not.toThrow();
     }
+  });
+});
+
+describe('saving marker', () => {
+  it('is consumed once: a second take sees nothing, so a stale marker cannot clear a draft later', () => {
+    const m = memory();
+    markSaving(m, KEY);
+    expect(takeSaving(m, KEY)).toBe(true);
+    expect(takeSaving(m, KEY)).toBe(false);
+  });
+  it('taking a marker leaves the kept draft alone', () => {
+    const m = memory();
+    saveDraft(m, KEY, FIELDS);
+    markSaving(m, KEY);
+    takeSaving(m, KEY);
+    expect(loadDraft(m, KEY)?.fields).toEqual(FIELDS);
   });
 });

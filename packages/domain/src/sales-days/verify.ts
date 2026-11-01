@@ -142,6 +142,9 @@ async function runVerify(tx: Tx, actor: Actor, salesDayId: string, options?: Ver
     );
   }
 
+  // T-504: a verifier may edit a submitted day and blank a channel; the same completeness rule as submit holds at the post.
+  await assertChannelsComplete(tx, actor, day);
+
   // T-385 S3: the person who submitted a day may not verify it, unless they hold verify_own_sales_day (super-admin only).
   if (day.submittedBy && day.submittedBy === actor.personId) {
     const exempt = await can(tx, actor, 'verify_own_sales_day');
