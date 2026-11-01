@@ -12,6 +12,16 @@ const BAD_TIME = 'Choose a time for the birthday song.';
 const BAD_REASON = 'Choose a reason to decline.';
 const REASON_MAX = 80;
 
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
+/** A strict ISO 8601 timestamp: the pattern, a real date, and (for the Z form) the same instant when written back. */
+function strictIso(raw: unknown): Date | null {
+  if (typeof raw !== 'string' || !ISO.test(raw)) return null;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return null;
+  if (raw.endsWith('Z') && d.toISOString().slice(0, 19) !== raw.slice(0, 19)) return null;
+  return d;
+}
+
 const requestIdOf = (b: Record<string, unknown>): string | null => (isUuid(b.requestId) ? b.requestId : null);
 
 export const handleLobbyBirthdayList = (req: Request, deps: Pos2Deps): Promise<Response> =>
@@ -21,9 +31,8 @@ export const handleLobbyBirthdayAccept = (req: Request, deps: Pos2Deps): Promise
   run(req, deps, async (c) => {
     const requestId = requestIdOf(c.body);
     if (!requestId) return fail(400, BAD_REQUEST);
-    const raw = c.body.scheduledAt;
-    const scheduledAt = typeof raw === 'string' && raw.trim() !== '' ? new Date(raw) : null;
-    if (!scheduledAt || Number.isNaN(scheduledAt.getTime())) return fail(400, BAD_TIME);
+    const scheduledAt = strictIso(c.body.scheduledAt);
+    if (!scheduledAt) return fail(400, BAD_TIME);
     return jsonResponse(200, { ok: true, ...(await c.lobby.birthdayAccept(c.tablet, { requestId, scheduledAt })) });
   });
 

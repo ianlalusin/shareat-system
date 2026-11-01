@@ -29,12 +29,15 @@ export interface Scheduler {
   stop(requestId: string): void;
   flushPlayed(): Promise<void>;
   state(): SchedulerState;
+  /** Unmount: clears every timer and the countdown. Storage is left as is, so a remount restores the schedule. */
+  dispose(): void;
   /** Called whenever the state changes (a screen re-reads `state()`); returns the unsubscribe. */
   subscribe(listener: () => void): () => void;
 }
 
 export const BIRTHDAY_STALE_MINUTES = 30;
 const STALE_MS = BIRTHDAY_STALE_MINUTES * 60_000;
+const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 
 interface Stored {
   items: { requestId: string; scheduledAt: number }[];
@@ -51,6 +54,7 @@ export function createBirthdayScheduler(deps: SchedulerDeps): Scheduler {
   const listeners = new Set<() => void>();
   let countdown: { requestId: string; secondsLeft: number } | null = null;
   let tick: ReturnType<typeof setInterval> | null = null;
+  let disposed = false;
 
   const emit = () => listeners.forEach((l) => l());
 
@@ -74,6 +78,7 @@ export function createBirthdayScheduler(deps: SchedulerDeps): Scheduler {
   }
 
   async function fire(requestId: string): Promise<void> {
+    if (disposed) return;
     items.delete(requestId);
     endCountdown();
     let started = false;
@@ -88,6 +93,7 @@ export function createBirthdayScheduler(deps: SchedulerDeps): Scheduler {
     }
     persist();
     emit();
+    if (disposed) return;
     if (started) await flushPlayed();
     startNextDue();
   }
@@ -110,8 +116,22 @@ export function createBirthdayScheduler(deps: SchedulerDeps): Scheduler {
   }
 
   function startNextDue(): void {
-    if (countdown) return;
+    if (countdown || disposed) return;
     const now = Date.now();
+    let dropped = false;
+    for (const [id, at] of [...items]) {
+      if (now - at > STALE_MS) {
+        items.delete(id);
+        const t = timers.get(id);
+        if (t) clearTimeout(t);
+        timers.delete(id);
+        dropped = true;
+      }
+    }
+    if (dropped) {
+      persist();
+      emit();
+    }
     const due = [...items].filter(([, at]) => at <= now).sort((a, b) => a[1] - b[1])[0];
     if (due) startCountdown(due[0]);
   }
@@ -129,8 +149,10 @@ export function createBirthdayScheduler(deps: SchedulerDeps): Scheduler {
     }
     timers.set(requestId, setTimeout(() => {
       timers.delete(requestId);
-      startNextDue();
-    }, wait));
+      const due = items.get(requestId);
+      if (due !== undefined && due > Date.now()) arm(requestId); // fired early (clock moved, or a clamped long wait): wait again
+      else startNextDue();
+    }, Math.min(wait, MAX_TIMEOUT_MS)));
   }
 
   async function flushPlayed(): Promise<void> {
@@ -142,8 +164,13 @@ export function createBirthdayScheduler(deps: SchedulerDeps): Scheduler {
         const i = toMark.indexOf(id);
         if (i >= 0) toMark.splice(i, 1);
         persist();
-      } catch {
-        /* offline or refused: stays queued, retried on the next poll */
+      } catch (err) {
+        // 409: the server closed that request (played, expired, cancelled): never going to succeed, drop it. Offline (0) / 5xx: retry on the next poll.
+        if ((err as { status?: unknown } | null)?.status === 409) {
+          const i = toMark.indexOf(id);
+          if (i >= 0) toMark.splice(i, 1);
+          persist();
+        }
       } finally {
         inFlight.delete(id);
       }
@@ -191,6 +218,13 @@ export function createBirthdayScheduler(deps: SchedulerDeps): Scheduler {
     flushPlayed,
     state() {
       return { countdown, pending: [...items.keys()] };
+    },
+    dispose() {
+      disposed = true;
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+      endCountdown();
+      listeners.clear();
     },
     subscribe(listener) {
       listeners.add(listener);

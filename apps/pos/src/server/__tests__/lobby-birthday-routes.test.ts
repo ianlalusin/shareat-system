@@ -177,7 +177,7 @@ describe('per-route payloads', () => {
     const past = makeLobby();
     const rp = await call(spec('accept'), full(spec('accept'), { scheduledAt: '2020-01-01T00:00:00.000Z' }), { lobby: past });
     expect(rp.status).toBe(200);
-    for (const bad of ['', 'tomorrow', 'not-a-date', 12345, null, undefined, {}]) {
+    for (const bad of ['', 'tomorrow', 'not-a-date', '1', '2026', '2026-11-20', '2026-02-30T10:00:00.000Z', 12345, null, undefined, {}]) {
       const l = makeLobby();
       const r = await call(spec('accept'), full(spec('accept'), { scheduledAt: bad }), { lobby: l });
       expect(r.status, String(bad)).toBe(400);

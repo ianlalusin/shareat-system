@@ -42,10 +42,11 @@ const memoryStorage = () => {
   return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k) };
 };
 
-export function BirthdayPrompt({ storeId }: { storeId: string | undefined }) {
+export function BirthdayPrompt({ storeId, sessionOpen = false }: { storeId: string | undefined; sessionOpen?: boolean }) {
   const { toast } = useToast();
   const [rows, setRows] = useState<BirthdayRow[]>([]);
   const [answered, setAnswered] = useState<string[]>([]);
+  const [opened, setOpened] = useState(false);
   const [busy, setBusy] = useState(false);
   const [declining, setDeclining] = useState(false);
   const [when, setWhen] = useState<"now" | "later">("now");
@@ -75,6 +76,7 @@ export function BirthdayPrompt({ storeId }: { storeId: string | undefined }) {
     setSched(s.state());
     return () => {
       off();
+      s.dispose();
       scheduler.current = null;
     };
   }, [storeId]);
@@ -107,6 +109,7 @@ export function BirthdayPrompt({ storeId }: { storeId: string | undefined }) {
     try {
       await postPos2("lobby/birthday/accept", { storeId, requestId: current.requestId, scheduledAt: new Date(at).toISOString() });
       setAnswered((a) => [...a, current.requestId]);
+      setOpened(false);
       scheduler.current?.accept({ requestId: current.requestId, scheduledAt: at });
       toast({ title: "Birthday song accepted", description: when === "now" ? "Plays now." : `Plays at ${time}.` });
       setWhen("now");
@@ -124,6 +127,7 @@ export function BirthdayPrompt({ storeId }: { storeId: string | undefined }) {
     try {
       await postPos2("lobby/birthday/decline", { storeId, requestId: current.requestId, reason });
       setAnswered((a) => [...a, current.requestId]);
+      setOpened(false);
       setDeclining(false);
     } catch (err) {
       fail(err);
@@ -134,26 +138,29 @@ export function BirthdayPrompt({ storeId }: { storeId: string | undefined }) {
   };
 
   if (sched.countdown) {
+    // A small bar, not a modal: an open table session underneath stays usable while the countdown runs.
     const { requestId, secondsLeft } = sched.countdown;
     return (
-      <Dialog open>
-        <DialogContent className="sm:max-w-sm" onInteractOutside={(e) => e.preventDefault()}>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Cake className="h-5 w-5" /> Birthday song in {secondsLeft}...</DialogTitle>
-            <DialogDescription>The song will play on this tablet. Tap Stop to cancel it.</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="destructive" size="lg" onClick={() => scheduler.current?.stop(requestId)}>Stop</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <div className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-between gap-3 border-t bg-background p-3 shadow-lg" role="status">
+        <span className="flex items-center gap-2 font-medium"><Cake className="h-5 w-5" /> Birthday song in {secondsLeft}...</span>
+        <Button variant="destructive" size="lg" onClick={() => scheduler.current?.stop(requestId)}>Stop</Button>
+      </div>
     );
   }
 
   if (!current) return null;
+  if (sessionOpen && !opened) {
+    // Never block an open session: a small banner, the dialog opens only when the cashier taps Answer.
+    return (
+      <div className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-between gap-3 border-t bg-background p-3 shadow-lg" role="status">
+        <span className="flex items-center gap-2 font-medium"><Cake className="h-5 w-5" /> Birthday request waiting</span>
+        <Button size="lg" onClick={() => setOpened(true)}>Answer</Button>
+      </div>
+    );
+  }
   return (
     <Dialog open>
-      <DialogContent className="sm:max-w-sm" onInteractOutside={(e) => e.preventDefault()}>
+      <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Cake className="h-5 w-5" /> Birthday song request</DialogTitle>
           <DialogDescription>

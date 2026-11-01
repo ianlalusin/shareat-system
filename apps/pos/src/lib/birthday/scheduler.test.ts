@@ -151,3 +151,61 @@ describe('reload and the 30 minute rule [M6, M7]', () => {
     expect(() => s.accept({ requestId: REQ, scheduledAt: T0 + MIN })).not.toThrow();
   });
 });
+
+describe('audit rulings 1, 2, 4, 5', () => {
+  it('[1] dispose: nothing fires after unmount; a remount plays once and marks once', async () => {
+    const t = build();
+    t.s.accept({ requestId: REQ, scheduledAt: T0 + MIN });
+    await vi.advanceTimersByTimeAsync(MIN + 3000); // countdown running
+    t.s.dispose();
+    await vi.advanceTimersByTimeAsync(5 * MIN);
+    expect(t.playSong).not.toHaveBeenCalled();
+    expect(t.markPlayed).not.toHaveBeenCalled();
+    const again = build({ storage: t.storage });
+    again.s.restore();
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(again.playSong).toHaveBeenCalledTimes(1);
+    expect(again.marks).toEqual([REQ]);
+    await vi.advanceTimersByTimeAsync(5 * MIN);
+    expect(again.playSong).toHaveBeenCalledTimes(1);
+    expect(t.playSong).not.toHaveBeenCalled();
+  });
+
+  it('[2] a 409 on mark-played drops the id; offline (0) and 5xx keep it', async () => {
+    for (const [status, kept] of [[409, false], [0, true], [503, true]] as const) {
+      let calls = 0;
+      const t = build({ markPlayed: async () => { calls += 1; throw Object.assign(new Error('x'), { status }); } });
+      t.s.accept({ requestId: REQ, scheduledAt: T0 - 1000 });
+      await vi.advanceTimersByTimeAsync(10_000);
+      const after = calls;
+      await t.s.flushPlayed();
+      expect(calls - after, String(status)).toBe(kept ? 1 : 0);
+      expect(JSON.stringify([...t.storage.m.values()]).includes(REQ), String(status)).toBe(kept);
+    }
+  });
+
+  it('[4] a timer that fires early re-arms and does not start the countdown; a far-future time does not fire at once', async () => {
+    const t = build();
+    t.s.accept({ requestId: REQ, scheduledAt: T0 + 5 * MIN });
+    vi.setSystemTime(T0 - 60 * MIN); // the clock went backwards
+    await vi.advanceTimersByTimeAsync(5 * MIN);
+    expect(t.s.state().countdown).toBeNull();
+    expect(t.playSong).not.toHaveBeenCalled();
+    expect(t.s.state().pending).toEqual([REQ]);
+    const far = build();
+    far.s.accept({ requestId: REQ2, scheduledAt: T0 + 30 * 24 * 60 * MIN });
+    await vi.advanceTimersByTimeAsync(MIN);
+    expect(far.s.state().countdown).toBeNull();
+    expect(far.s.state().pending).toEqual([REQ2]);
+  });
+
+  it('[5] a timer firing more than 30 minutes late drops the item and never plays it', async () => {
+    const t = build();
+    t.s.accept({ requestId: REQ, scheduledAt: T0 + MIN });
+    vi.setSystemTime(T0 + 32 * MIN);
+    await vi.advanceTimersByTimeAsync(2 * MIN);
+    expect(t.playSong).not.toHaveBeenCalled();
+    expect(t.s.state().pending).toEqual([]);
+    expect([...t.storage.m.values()].join('')).not.toContain(REQ);
+  });
+});

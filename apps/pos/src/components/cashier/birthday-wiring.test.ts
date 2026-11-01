@@ -49,3 +49,19 @@ describe('the manual button and the cashier screen', () => {
     expect(page).toContain('BirthdaySongButton');
   });
 });
+
+describe('never block an open session (audit ruling 3)', () => {
+  it('the prompt takes a sessionOpen flag, shows a non-modal banner, and the countdown bar has no outside-click lock', () => {
+    const src = stripComments(read('BirthdayPrompt.tsx'));
+    expect(src).toContain('sessionOpen');
+    expect(src).toContain('Birthday request waiting');
+    expect(src).toContain('Answer');
+    expect(src).not.toContain('onInteractOutside');
+    expect(src).toContain('.dispose()');
+  });
+  it('the cashier page passes the open-session flag', () => {
+    const page = readFileSync(new URL('../../app/cashier/page.tsx', import.meta.url), 'utf8');
+    expect(page).toMatch(/BirthdayPrompt[^>]*sessionOpen=/);
+  });
+});
+

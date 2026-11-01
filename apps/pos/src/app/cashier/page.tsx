@@ -50,7 +50,7 @@ function CashierPageContent() {
       {sessionId ? <SessionDetailView sessionId={sessionId} /> : <SessionListView />}
       <ChatInbox storeId={activeStore?.id} />
       {!sessionId && <BirthdaySongButton />}
-      <BirthdayPrompt storeId={activeStore?.id} />
+      <BirthdayPrompt storeId={activeStore?.id} sessionOpen={!!sessionId} />
     </RoleGuard>
   );
 }
