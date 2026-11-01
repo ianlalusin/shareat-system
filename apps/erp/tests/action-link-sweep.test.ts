@@ -491,13 +491,16 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1413 -> 1422, T-398 S6d: the franchise screens' controls (+9), re-measured by runCensus().
     // 1434 -> 1440, T-193 S6: month detail, its CSV link, and the employer-number forms. Merge of main + T-193: re-measured.
     // 1450 -> 1448, T-500: the contribution-row form moved into StatutoryRateForm and shares its controls (-2); re-measured by runCensus().
+    // 1448 -> 1455, T-505: the POS tablets screen (store picker, revoke form, register form, clear-lock form); re-measured by runCensus().
     // 1448 -> 1453, T-502: expense-category selects on the request and approve forms (+2) and the item page's Expense category and Other names sections (+3); re-measured by runCensus().
     // 1453 -> 1458, T-502 section 11: sub-category selects on the request, approve and item forms (+3), and the sub-category add/rename/retire controls on the expense categories screen (+2); re-measured by runCensus().
     // 1458 -> 1460, T-502 section 12: the part picker and the invoice page's batch table replaced the old category/payment controls (+2 net); re-measured by runCensus().
     // 1460 -> 1457, T-502 section 14: the batch Save, the invoice modal's Record expense and /expenses/new's Save draft became SubmitButton (-3, not census candidates); re-measured by runCensus().
     // merged with main: +1, T-504: sales-days/DraftMemory.tsx, the "Discard" button of the restored-draft line (ACTION_LINK, 32px), re-measured.
     // 1457 -> 1461, T-502 S5: /reports/expense-items (3 link candidates in LinkRows plus the filter form's controls); re-measured by runCensus(), FAIL/UNRESOLVED unmoved. merged with main (T-502 S5 +4), re-measured: 1458 -> 1462.
-    expect(results.length).toBe(1462);
+    // merged with main (T-505), re-measured: 1458 -> 1465.
+    // merged with main after #121, re-measured.
+    expect(results.length).toBe(1469);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

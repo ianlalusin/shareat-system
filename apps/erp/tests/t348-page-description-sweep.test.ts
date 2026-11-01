@@ -165,7 +165,8 @@ describe('T-348 S2 — the population lands exactly, nothing dropped or doubled 
     // 120 -> 122, T-398 S5e: the two inbound shipment pages (S5d) each carry a <PageDescription> (verified in both files).
     // 122 -> 125, T-398 S6d: the three franchise pages each carry a <PageDescription>.
     // 125 -> 126, T-193 S6: the month detail page carries a <PageDescription>. Merge of main + T-193: re-measured.
-    expect(count).toBe(130);
+    // 129 -> 130, T-505: /admin/pos-tablets carries its <PageDescription>.
+    expect(count).toBe(131);
   });
 });
 
