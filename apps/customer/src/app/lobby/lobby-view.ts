@@ -1,4 +1,4 @@
-import type { LobbyCheckInInput, LobbyCheckInLine, LobbyMyEntry, LobbyResult } from '@/data/http-lobby-data';
+import type { LobbyBirthday, LobbyCheckInInput, LobbyCheckInLine, LobbyMyEntry, LobbyResult } from '@/data/http-lobby-data';
 import type { LobbyStoreView } from '@/data/lobby-data';
 
 /**
@@ -145,5 +145,57 @@ export function waitView(entry: LobbyMyEntry): WaitView {
       return { kind: 'handoff', code, positionText: '', notice: null, canCancel: false, handoffUrl: entry.handoffUrl };
     default:
       return { kind: 'closed', code, positionText: '', notice: null, canCancel: false, handoffUrl: null };
+  }
+}
+
+// ---------- birthday screen (T-455 S6a) ----------
+
+export const BIRTHDAY_NAME_MAX = 40;
+
+export type BirthdayNameCheck = { ok: true; value: string | null } | { ok: false; error: string };
+
+/** The celebrant's first name is optional: blank is "no name". Up to 40 characters after trimming. */
+export function validateBirthdayName(raw: string): BirthdayNameCheck {
+  const t = (raw ?? '').trim();
+  if (t.length > BIRTHDAY_NAME_MAX) return { ok: false, error: `Keep the name to ${BIRTHDAY_NAME_MAX} characters.` };
+  return { ok: true, value: t.length > 0 ? t : null };
+}
+
+export type BirthdayKind = 'form' | 'waiting' | 'accepted' | 'declined' | 'played' | 'expired';
+
+export interface BirthdayScreenView {
+  kind: BirthdayKind;
+  /** One plain sentence for the status; empty for the form. */
+  message: string;
+  canCancel: boolean;
+  /** Stop refreshing: nothing can change any more. */
+  final: boolean;
+}
+
+/** "7:30 PM" in the phone's own time zone. */
+export function formatBirthdayTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
+/** No request (or a cancelled one) shows the form again; the others show what became of it. */
+export function birthdayScreenView(b: LobbyBirthday | null): BirthdayScreenView {
+  if (!b || b.status === 'cancelled') return { kind: 'form', message: '', canCancel: false, final: false };
+  switch (b.status) {
+    case 'requested':
+      return { kind: 'waiting', message: 'Waiting for the cashier to answer.', canCancel: true, final: false };
+    case 'accepted': {
+      const at = b.scheduledAt ? formatBirthdayTime(b.scheduledAt) : '';
+      return { kind: 'accepted', message: at ? `Accepted for ${at}.` : 'Accepted.', canCancel: true, final: false };
+    }
+    case 'declined': {
+      const why = (b.declineReason ?? '').trim().replace(/[.]+$/, '');
+      return { kind: 'declined', message: why ? `Sorry, not tonight: ${why}.` : 'Sorry, not tonight.', canCancel: false, final: true };
+    }
+    case 'played':
+      return { kind: 'played', message: 'Your birthday song has played. Happy birthday!', canCancel: false, final: true };
+    default:
+      return { kind: 'expired', message: 'This request has ended. Please ask the cashier.', canCancel: false, final: true };
   }
 }

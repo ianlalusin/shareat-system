@@ -345,3 +345,17 @@ says the moves are recorded "with the tablet's person". So:
 7. **POS server down / not configured (503) or offline:** the card says "The waiting list needs the POS server. Seat
    walk-ins as usual." Nothing else on /cashier changes.
 8. **R1:** this slice merges before 20 Nov or after 14 Dec, never between (Lipa soak and go-live).
+
+## S6a rulings (BOSS orchestrator, Opus, 2026-11-01) — after the tester's pass
+
+All twelve tester assumptions are ACCEPTED as written in the t455-s6a test-file headers, with these specifics:
+1. API as assumed (diner / staff with `record_sale` at the request's store / tablet `…ForTerminal`, one shared core, like S5).
+2. Refusal codes LOBBY_BIRTHDAY_EXISTS / _CLOSED / _NEEDS_TIME / _OFF, each its own plain sentence; customer route maps them to 409.
+3. Clock = database clock. `expireStaleBirthdayRequests(tx, orgId)` runs on every birthday read/list and in `runLobbyNightly`.
+4. **Entry closes unseated → BOTH requested and accepted requests become expired.** Seating leaves the request as it is
+   (the song plays at the table). Add the accepted-on-close test.
+5. Audit actions lobby.birthday_accept / _decline / _play; raise the audit catalogue cap by exactly 3 (re-measured).
+6. Decline reason free text, trimmed, 1–80 characters; the three presets live in the POS screen (S6b), not the domain.
+7. A past `scheduledAt` is allowed ("Now"); play is not time-gated in S6a.
+8–12. As assumed.
+13. Audit 1 Nov: seated entries' unanswered requests expire in the nightly job 3 h after the entry closed; cancel vs played race answers 409.
