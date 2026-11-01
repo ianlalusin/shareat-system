@@ -69,6 +69,7 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/reports/ap-aging': 'view_financial_reports',
   '/reports/ar-aging': 'view_financial_reports',
   '/reports/store-comparison': 'view_financial_reports',
+  '/reports/expense-items': 'view_financial_reports',
   '/reports/sales-rollup': 'view_financial_reports',
 
   // --- What the business owes and owns, and what people are paid ------------------------------

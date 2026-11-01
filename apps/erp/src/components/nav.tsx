@@ -164,6 +164,7 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       { href: '/reports/ar-aging', label: 'AR aging' },
       { href: '/reports/cash-flow', label: 'Cash flow' },
       { href: '/reports/store-comparison', label: 'Store comparison' },
+      { href: '/reports/expense-items', label: 'Spending by item' },
       { href: '/reports/sales-rollup', label: 'Sales rollup' },
       { href: '/reports/pos-reconciliation', label: 'POS reconciliation' },
       { href: '/reports/dual-run', label: 'Dual run' },

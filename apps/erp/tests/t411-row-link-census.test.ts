@@ -53,6 +53,7 @@ const ROW_LINK: readonly string[] = [
   'app/trade/orders/page.tsx',
   'app/wastage/page.tsx',
   'app/payroll/statutory-payments/month/page.tsx', // T-193 S6: payment rows link to the payment page
+  'app/reports/expense-items/page.tsx', // T-502 S5: item rows open the bill lines behind them, drill rows open the bill
 ];
 
 /** Tables with no row destination: reports, editing grids, read-only detail lines. Untouched by T-411. */
