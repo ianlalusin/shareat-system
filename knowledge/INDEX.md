@@ -42,10 +42,10 @@ loosely or fill gaps.
 
 | Page | Title | About | Readers | Summary | Updated |
 |---|---|---|---|---|---|
-| [customer-experience/dine-in-journey.md](customer-experience/dine-in-journey.md) | Dine-in customer journey — arrival to payment | customer, cashier, server, cook | public | The standard visit: greeting, order at cashier, QR code, rules, seating, refills, bill and payment at cashier, review | 2026-10-23 |
+| [customer-experience/dine-in-journey.md](customer-experience/dine-in-journey.md) | Dine-in customer journey — arrival to payment | customer, cashier, server, cook | public | The standard visit: greeting, order at cashier, QR code, rules, seating, refills, bill and payment at cashier, review | 2026-10-26 |
 | [customer-experience/take-out-in-store.md](customer-experience/take-out-in-store.md) | Walk-in take-out — ordering at the store | customer, cashier, cook | public | Order at cashier; waiting customers pay at order or pickup, leaving customers pay first. must_be_exact | 2026-10-23 |
-| [customer-experience/online-orders.md](customer-experience/online-orders.md) | Online orders — Foodpanda, GrabFood, website, Facebook, call and text | customer, cashier | public | Channels per store, rider-app delivery or pickup, pay online first, COD only via PandaGo. must_be_exact | 2026-10-23 |
-| [customer-experience/customer-app.md](customer-experience/customer-app.md) | The customer app during dine-in | customer, server, cook, manager | public | App buttons: refill, add griller, assistance, loyalty card, games, à la carte (if manager allows) | 2026-10-23 |
+| [customer-experience/online-orders.md](customer-experience/online-orders.md) | Online orders — Foodpanda, GrabFood, website, Facebook, call and text | customer, cashier | public | Channels per store, rider-app delivery or pickup, pay online first, COD only on some deliveries. must_be_exact | 2026-10-26 |
+| [customer-experience/customer-app.md](customer-experience/customer-app.md) | The customer app during dine-in | customer, server, cook, manager | public | App buttons: refill, add griller, assistance, loyalty card, games, à la carte (if manager allows) | 2026-10-26 |
 
 ### store-operations
 
@@ -73,8 +73,8 @@ loosely or fill gaps.
 
 | Page | Title | About | Readers | Summary | Updated |
 |---|---|---|---|---|---|
-| [policies/allergies-and-dietary-requests.md](policies/allergies-and-dietary-requests.md) | Allergies and dietary requests | customer, cashier, server, cook | public | No-pork tables get a clean setup all session; no nuts; seafood only on purpose; buffet can't be adjusted, à la carte can; never claim halal. must_be_exact | 2026-10-23 |
-| [policies/leftover-policy.md](policies/leftover-policy.md) | No-leftover policy | customer, server, cashier | public | Leftovers charged, never taken home; server decides; amounts set in the POS. must_be_exact | 2026-10-23 |
+| [policies/allergies-and-dietary-requests.md](policies/allergies-and-dietary-requests.md) | Allergies and dietary requests | customer, cashier, server, cook | public | No-pork tables get a clean setup all session; no nuts; seafood only on purpose; buffet can't be adjusted, à la carte can; never claim halal. must_be_exact | 2026-10-26 |
+| [policies/leftover-policy.md](policies/leftover-policy.md) | No-leftover policy | customer, server, cashier | public | Leftovers charged, never taken home; amounts can change, the cashier gives the current amount. must_be_exact | 2026-10-26 |
 
 ### planned
 

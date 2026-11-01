@@ -5,7 +5,7 @@ about: [customer, cashier, server, cook]
 readers: public
 must_be_exact: true
 related: [customer-experience/dine-in-journey, staff/cashier-dine-in-sop, staff/server-and-kitchen-sop]
-updated: 2026-10-23
+updated: 2026-10-26
 ---
 
 # Allergies and dietary requests
@@ -13,8 +13,8 @@ updated: 2026-10-23
 Customers tell the cashier about allergies or dietary needs when ordering. The cashier enters
 them as notes, and the kitchen sees them.
 
-⛔ **Never describe Shareat or any table as "halal".** Shareat is not halal-certified. Say "no
-pork is served to your table" instead.
+Shareat is not halal-certified, so we never describe Shareat or any table as "halal". If your
+table does not eat pork, we serve no pork to your table for the whole session.
 
 ## No pork
 
@@ -27,7 +27,7 @@ pork is served to your table" instead.
 
 - **Nuts:** not used in our food.
 - **Shrimp and seafood:** served only when ordered on purpose, so no one gets them by accident.
-  A customer who orders shrimp is assumed not to be allergic to it.
+  Please tell the cashier if you have a shrimp or seafood allergy.
 - **Soy:** used rarely. We cannot promise a dish has no soy.
 
 ## Leaving items out

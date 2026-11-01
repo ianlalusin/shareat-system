@@ -65,35 +65,35 @@
 - `1212–1246` 10. Phase plan
 - `1247–1263` 11. Migration & ETL rules
 - `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1734` 13. Decision log
-- `1735–1754` 14. Amendment protocol
-- `1755–1759` 15. Engineering standards — the industry practices this project follows
-  - `1760–1765` 15.1 Build order: walking skeleton first
-  - `1766–1777` 15.2 Golden-master testing — the most important practice here
-  - `1778–1786` 15.3 Strangler Fig, not big-bang cutover
-  - `1787–1791` 15.4 No dual-write
-  - `1792–1800` 15.5 Expand/contract migrations
-  - `1801–1809` 15.6 Observability from day zero, not later
-  - `1810–1814` 15.7 CI gates
-  - `1815–1819` 15.8 Backups and a tested restore
-  - `1820–1824` 15.9 Twelve-Factor config
-  - `1825–1832` 15.10 Append-only ledgers — but not event sourcing
-  - `1833–1837` 15.11 Defence in depth
-  - `1838–1866` 15.12 Skills are lenses, not assurance
-  - `1867–1873` 15.13 Reconciliation is a permanent feature
-- `1874–1878` 16. The accounting spine
-  - `1879–1910` 16.0 What we are actually fixing — the diagnosis
-  - `1911–1954` 16.1 The ten invariants — non-negotiable
-  - `1955–1969` 16.2 The oracle: how "correct" is tested
-  - `1970–1991` 16.3 The model — header + lines, not legs
-  - `1992–2011` 16.4 Deliberately simpler than ERPNext
-  - `2012–2080` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2081–2105` 16.6 What v1 already gets right — preserve the intent
-  - `2106–2127` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2128–2142` 16.8 What v1's accounting already gets right
-  - `2143–2186` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2187–2237` 16.10 Posting patterns — one canonical pattern per business event
-  - `2238–2270` 16.11 Inventory's accounting integration
+- `1329–1741` 13. Decision log
+- `1742–1761` 14. Amendment protocol
+- `1762–1766` 15. Engineering standards — the industry practices this project follows
+  - `1767–1772` 15.1 Build order: walking skeleton first
+  - `1773–1784` 15.2 Golden-master testing — the most important practice here
+  - `1785–1793` 15.3 Strangler Fig, not big-bang cutover
+  - `1794–1798` 15.4 No dual-write
+  - `1799–1807` 15.5 Expand/contract migrations
+  - `1808–1816` 15.6 Observability from day zero, not later
+  - `1817–1821` 15.7 CI gates
+  - `1822–1826` 15.8 Backups and a tested restore
+  - `1827–1831` 15.9 Twelve-Factor config
+  - `1832–1839` 15.10 Append-only ledgers — but not event sourcing
+  - `1840–1844` 15.11 Defence in depth
+  - `1845–1873` 15.12 Skills are lenses, not assurance
+  - `1874–1880` 15.13 Reconciliation is a permanent feature
+- `1881–1885` 16. The accounting spine
+  - `1886–1917` 16.0 What we are actually fixing — the diagnosis
+  - `1918–1961` 16.1 The ten invariants — non-negotiable
+  - `1962–1976` 16.2 The oracle: how "correct" is tested
+  - `1977–1998` 16.3 The model — header + lines, not legs
+  - `1999–2018` 16.4 Deliberately simpler than ERPNext
+  - `2019–2088` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2089–2113` 16.6 What v1 already gets right — preserve the intent
+  - `2114–2135` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2136–2150` 16.8 What v1's accounting already gets right
+  - `2151–2194` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2195–2245` 16.10 Posting patterns — one canonical pattern per business event
+  - `2246–2278` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1731,6 +1731,13 @@ just a patch.**
 | 401 | 2026-10-27 | **A FORM'S REQUEST ID IS ONE TRANSACTION: A REPLAY MUST MATCH BOTH ITS LINES AND ITS ENTRY DATE, OR IT IS REFUSED (T-488 S2, DEF-787; CORRECTS T-488 RULING 3, WHICH COMPARED LINES ONLY).** Since T-488 the nine owner, liability, loan and supplier-refund postings key on a per-form `requestId` instead of `(document, date, amount)` (bible §4.2 rule 10). `postEntry` answers a known key before it reads the date, so a lost response followed by the same form re-sent with a CHANGED date returned the original entry as success. `postEntryOnce` now compares the saved header's `entry_date` too, as dates only (never re-resolving the period, so an unchanged retry still succeeds after its month closed); a mismatch is refused with "This was already recorded with different figures. Reload the page and try again." Nothing in the ledger is moved or rewritten. | Codex audit 17th pass (`request-id-replay-ignores-entry-date`, F24), confirmed on main 822e7ec; Opus planner (AUDIT session); task number ruled by the orchestrator | Yes. Reverting lets a changed date be silently ignored on a retried form |
 | 402 | 2026-10-28 | **A CUSTOMER CASH REFUND IS PAID FROM A MONEY ACCOUNT OF THE STORE THAT MAKES THE REFUND; ANOTHER STORE'S ACCOUNT, OR A STAFF CASH FLOAT (1120), IS REFUSED (T-493 S2, DEF-797).** `recordCustomerReturn` (external sale, cash refund) now refuses, before any stock moves, a money account whose store is not the order's store ("That money account belongs to another store. A refund is paid from this store's own cash.") and a 1120 staff float (a float belongs to one person's cash request, as payroll and service charges already rule). No inter-store refund path is built: stores do not pay each other's refunds. Customer collections and AP payments already guard cross-store money with `transfer_funds` and inter-store legs; refunds simply do not cross stores. | Audit finding F23 (Claude posting-paths pass, 26 Oct); **Ian's ruling, 2026-10-28, in the AUDIT session: "yes refuse"** (offered: refuse vs allow with a transfer) | Yes. Allowing it later means adding the transfer permission and inter-store legs, as AR/AP do |
 | 403 | 2026-10-28 | **THE PREREQUISITE-WALLS PAGE IS ADMINS ONLY (manage_stores).** The report at `/admin/prerequisite-refusals` (T-245) had no permission-map entry, so any signed-in person could open it. It now needs `manage_stores`, the same permission as the Stores admin page, and the page refuses everyone else. | Ian, 2026-10-28; F31 / DEF-794 / T-497 S1 | Yes. Reverting would open the page to every signed-in person again |
+| 404 | 2026-10-29 | **THE GOVERNMENT-PAYMENTS SCREEN SHOWS NO ESTIMATED PENALTY (T-193, AMENDS ROW 365).** A late SSS / PhilHealth / Pag-IBIG / BIR month shows that it is late, but no estimated penalty amount. The real penalty is still booked only when paid, from the agency's receipt, to 6810. | Ian, 2026-10-29 ("a"); PR #98 | Yes. An estimate can be added later as a display-only figure; it must never post. |
+| 405 | 2026-10-29 | **BANAY-BANAY'S CLOSE AND PADRE GARCIA'S START (T-454 S7, EXTENDS ROWS 377 AND 384).** (1) Banay-Banay staff move to Lipa. (2) No system stock count: Banay-Banay closes manually and its stock enters Lipa's 2026 closing / 2027 opening. (3) Every Banay-Banay bill is settled before close. (4) The buy-back is recorded offline; Lipa's opening carries it. (5) Padre Garcia sells on POS v1 from 16 Nov and moves to POS v2 on 1 Jan. (6) Lipa records Padre Garcia's orders in v1 until then. (7) Linking a customer to another company is admin-only and needs a signed agreement. (8) Padre Garcia starts with a copy of the commissary item list. | Ian, 2026-10-29; PR #99, `docs/tasks/454-drop-banay-banay.md` | Partly. (5) and (6) are dates and can move; (2)-(4) are one-off close decisions. |
+| 406 | 2026-10-30 | **A COMPANY'S PAYROLL AND GOVERNMENT RATES ARE SET BY ITS OWN ADMIN ON SCREEN; NOTHING IS COPIED OR SEEDED FOR THEM (T-500).** The orchestrator may not load rates, employer numbers or agency settings into a company. The Payroll rates screen must be usable by a regular admin (empty states, plain help, "0.05 for 5%"). | Ian, 2026-10-30 ("why are you setting up these data yourself... create the ui so admin user can set rates"); PR #104 | No. Setting up a company's data on its behalf is what this row forbids. |
+| 407 | 2026-10-31 | **CREATING A FRANCHISE COMPANY STAYS A COMMAND-LINE STEP FOR NOW (T-398 S7, option B).** `scripts/onboard-franchise.ts --file --by --confirm` (dry run first) is the only way to create one; no screen is built yet. | Ian, 2026-10-31 ("ok b"); PR #100 | Yes. A screen is a later task when franchises are added often enough to need one. |
+| 408 | 2026-10-31 | **LIPA TRIES POS V2 AND ERP V2 IN NOVEMBER, WITH TODAY'S SIGN-IN AND TODAY'S SCREENS.** The minimum a store can use: Lipa only; store email + PIN sign-in (tablet pairing T-464 is not wired yet); one tablet first, then the whole store. POS v2 writes v1's Firestore format, so the ERP's 06:00 day import keeps working; the receipt bridge to Postgres starts 1 Jan. The POS v2 server is switched on with Ian on Sun 1 Nov (`docs/ops/pos2-switchon-2026-11-01.md`); the tablet installs `pos-v2-933.apk` (includes the PR #108 refund fix). | Ian, 2026-10-31 ("ship minimum deliverable... i want to try both this coming month", "yes lipa, go", "tomorrow morning") | Yes. The trial can stop and Lipa returns to POS v1 (checklist section 7). |
+| 409 | 2026-10-31 | **ONE ITEM LIST FOR EVERYTHING BOUGHT; ANY ADMIN APPROVES NEW ITEMS; SERVICES ARE ITEMS; SUB-CATEGORY LIVES ON THE ITEM (T-502).** 1A: expenses use the existing `items` master, never a second list. 2A: any org admin (capability `approve_item_request`, never a manager, not the requester unless super-admin authority) approves an item request, **superseding the 2026-08-28 super-admin-only rule for requests** (creating, merging, renaming items stays super-admin). 3A: rent, power, water, internet are `service` items, never stocked. Sub-category (Ian, 1 Nov): an admin-managed list under each category, set once on the item; the cashier picks only the item; no "Please Specify"/"Other". Meat stays slab vs sliced, with dine-in/panda/retail as variations; butane is a supply. The v1 item list (258 items from 4,078 spellings) enters through an admin import screen, never a script. | Ian, 2026-10-31 ("1a 2a 3a") and 2026-11-01 ("yes" to sub-category on the item); `docs/tasks/502-expense-item-catalog.md` | Yes, before data accumulates; after, removing a level means re-filing items. |
+| 410 | 2026-11-01 | **THE ERP SIDEBAR'S "DAILY" GROUP IS FOR EVERYDAY STORE WORK ONLY.** Daily: Dashboard, Sales days, Channel settlements, Order wastage, Remittance, Till custody, Supplier invoices (recorded every day, as in v1), Expenses, Reimbursements, Cash requests. Staff, Attendance, Leave, Payroll and Government payments form a People group; set-once screens (Clock terminals, Clock lane, Payroll rates) sit in Setup; Budgets and Recurring bills in Money. A new screen joins Daily only if a store uses it every day. | Ian, 2026-11-01 ("yes go put invoices to daily too"); PR #110 | Yes. Navigation only; every route and permission is unchanged. |
 
 ## 14. Amendment protocol
 
@@ -2073,6 +2080,7 @@ Requirements this creates:
    arriving as a surprise.
    *Amended by row 365 (Ian, 2026-10-17): the report shows an ESTIMATED penalty; the real
    penalty is booked when paid, from the receipt, to 6810. Nothing accrues automatically.*
+   *Amended again by row 404 (Ian, 2026-10-29): no estimated penalty is shown either; a late month only says it is late.*
 5. **Partial remittance** must be representable — real catch-up payments are partial.
 6. The subledger total must reconcile to the control account (invariant 6).
 

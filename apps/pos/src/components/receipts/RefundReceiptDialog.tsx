@@ -21,6 +21,7 @@ import { PIN_LENGTH, PinPad } from "@/components/pos2/PinPad";
 // T-425 (bible row 356): no refunds without the internet. The server needs the manager PIN and the real receipt, so it is refused here with a plain sentence.
 import { OFFLINE_REFUND_MESSAGE, canRefundOffline } from "@/lib/offline/offlineRules";
 import { useOnlineStatus } from "@/hooks/use-online-status";
+import { refundCashMethods } from "@/lib/receipts/refund-cash-methods";
 
 /**
  * T-424 S9 - the refund dialog. A refund is checked by the POS v2 server (never the tablet): it needs a manager's ERP PIN, prices each unit as
@@ -49,7 +50,7 @@ function RefundContent({ receipt, paymentMethods, onClose, onSuccess }: RefundRe
   const [reason, setReason] = useState("");
   const [pin, setPin] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const cashMethods = useMemo(() => paymentMethods.filter((m) => m.type === "cash" && m.isActive !== false && !m.isArchived), [paymentMethods]);
+  const cashMethods = useMemo(() => refundCashMethods(paymentMethods), [paymentMethods]);
   const [tenderId, setTenderId] = useState<string>("");
   const chosenTender = tenderId || cashMethods[0]?.id || "";
   // One receipt number per distinct request: a retry (wrong PIN, lost connection) re-sends the SAME number, so the server can tell a retry from a new refund.
