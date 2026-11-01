@@ -439,7 +439,10 @@ describe('T10 (R5) — edit vs verify', () => {
 
     const { aResult, bResult, bWaited } = await runConcurrencyLeg(
       f.orgId,
-      editOp(f.manager, id, figures(f, '1000.00')),
+      // T-504: the edit must keep Foodpanda ticked "No sales", or verify refuses the blank channel.
+      editOp(f.manager, id, figures(f, '1000.00', {
+        channels: [{ channelId: f.walkIn, amount: '1000.00' }, { channelId: f.foodpanda, amount: '0.00', noSales: true }],
+      })),
       (tx) => D.verifySalesDay(tx, f.manager, id),
       ROW_LOCK,
     );
