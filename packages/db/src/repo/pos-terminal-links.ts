@@ -4,7 +4,8 @@
  *
  * Every read is org-scoped explicitly as well as by RLS. Nothing here deletes: a replaced link is REVOKED (revoked_at / revoked_by).
  */
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import type { Tx } from '../client';
 import { personCredentials } from '../../schema/sessions';
 import { persons } from '../../schema/persons';
@@ -133,4 +134,56 @@ export async function getActiveLinkByDevice(tx: Tx, orgId: string, deviceId: str
     .where(and(eq(posTerminalLinks.orgId, orgId), eq(posTerminalLinks.deviceId, deviceId), isNull(posTerminalLinks.revokedAt)))
     .limit(1);
   return row;
+}
+
+/** One tablet link as the POS tablets screen shows it (T-505): names joined in, so the page never looks a person up itself. */
+export interface PosTabletLinkView {
+  readonly id: string;
+  readonly terminalNo: number;
+  readonly deviceId: string;
+  readonly terminalPersonId: string;
+  readonly terminalPersonName: string;
+  readonly createdAt: Date;
+  readonly createdByName: string | null;
+  readonly revokedAt: Date | null;
+  readonly revokedByName: string | null;
+}
+
+/**
+ * T-505: a store's ACTIVE tablet link (at most one, by the partial unique index) and its last `revokedLimit` revoked links, newest
+ * revocation first. A read only; the authorisation gate is the caller's (the page's lib), same as every other read in this repo.
+ */
+export async function listForStore(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  opts: { revokedLimit: number },
+): Promise<{ active: PosTabletLinkView | null; revoked: PosTabletLinkView[] }> {
+  const terminal = alias(persons, 'terminal_person');
+  const creator = alias(persons, 'creator_person');
+  const revoker = alias(persons, 'revoker_person');
+  const select = () =>
+    tx
+      .select({
+        id: posTerminalLinks.id,
+        terminalNo: posTerminalLinks.terminalNo,
+        deviceId: posTerminalLinks.deviceId,
+        terminalPersonId: posTerminalLinks.terminalPersonId,
+        terminalPersonName: terminal.displayName,
+        createdAt: posTerminalLinks.createdAt,
+        createdByName: creator.displayName,
+        revokedAt: posTerminalLinks.revokedAt,
+        revokedByName: revoker.displayName,
+      })
+      .from(posTerminalLinks)
+      .innerJoin(terminal, eq(terminal.id, posTerminalLinks.terminalPersonId))
+      .leftJoin(creator, eq(creator.id, posTerminalLinks.createdBy))
+      .leftJoin(revoker, eq(revoker.id, posTerminalLinks.revokedBy));
+  const scope = and(eq(posTerminalLinks.orgId, orgId), eq(posTerminalLinks.storeId, storeId));
+  const [active] = await select().where(and(scope, isNull(posTerminalLinks.revokedAt))).limit(1);
+  const revoked = await select()
+    .where(and(scope, isNotNull(posTerminalLinks.revokedAt)))
+    .orderBy(desc(posTerminalLinks.revokedAt), desc(posTerminalLinks.id))
+    .limit(opts.revokedLimit);
+  return { active: active ?? null, revoked };
 }

@@ -1,6 +1,6 @@
 # T-505: ERP screen to register, list and revoke POS v2 tablets, and to clear a tablet's approval lock
 
-**Status:** SPEC 1 Nov 2026 (POS2 switch-on session). T-505 given by BOSS 1 Nov, asked for by Ian 1 Nov ("admin or super admin can add a tablet as a terminal in the UI").
+**Status:** BUILT 1 Nov 2026 (tests P1-P9 green; PR pending CI). Spec 1 Nov 2026 (POS2 switch-on session). T-505 given by BOSS 1 Nov, asked for by Ian 1 Nov ("admin or super admin can add a tablet as a terminal in the UI").
 Process (BOSS): spec, then tests first, then build, then audit. Migration: none expected (ask BOSS for a number if one turns out to be needed; next free 0225).
 
 ## 1. The problem in plain words
@@ -46,6 +46,11 @@ Sign in as admin, open Setup > POS tablets (right after Clock terminals), pick S
 
 ## 5. Fences
 Write only: the new page and its actions/lib under `apps/erp/src/app/admin/pos-tablets/`, the two read functions in `packages/db/src/repo/`, the nav and route-capability registrations, the tests, this spec, and the T-505 rows in the bible/register. Not `packages/domain/src/pos/terminal-link.ts`, not `scripts/provision-terminal.ts` (it stays as the fallback).
+
+## 5a. What the build added beyond the fences (1 Nov, found by the repo's own guards)
+- `packages/domain/src/field-rules/pos-tablets.ts` (`POS_TABLET_REGISTER_RULES`, exported from the field-rules index): every ERP form must be a `CheckedForm` with a rule set (T-440 guards), asserted in the action AFTER the authorize call (T-440 S9).
+- The census guards that count controls were re-measured, not loosened: t412 (R row + totals 71), t348 (PageDescription 130), action-link-sweep (1455), t328 enumeration (OUT row for the terminal number), t384-s3 COMMANDS (two verbs, with reasons), and the two `domain-actions-have-callers` exemption rows for `provisionPosTerminalLink` / `revokePosTerminalLink` were deleted because the screen is now their caller.
+- Revoke retypes "Terminal N" (the number of the link the server loads). Device id is shown as its last four characters with the full id in a hover title; there is no copy button yet (Q1 still open for Ian).
 
 ## 6. Open questions
 - **Q1 (Ian).** Show the full device id or only its last 4 characters? Recommend the last 4 plus a copy button, since the id is not a secret but is long.

@@ -208,6 +208,7 @@ traced; "grep only" = not traced further than the pattern match.
 | `termPeriods` L45 | apps/erp/src/app/loans/actions.ts | OUT | a period count, not money — grep only |
 | `coverageMonths` L45 | apps/erp/src/app/prepaid/actions.ts | OUT | a month count, not money — grep only |
 | `coverageMonths` L90 | apps/erp/src/app/prepaid/actions.ts | OUT | a month count, not money — grep only |
+| `terminalNo` L33 | apps/erp/src/app/admin/pos-tablets/actions.ts | OUT | a terminal number (1 to 99), not money — T-505 |
 
 ### 4th spelling — template-literal field names (17/17)
 

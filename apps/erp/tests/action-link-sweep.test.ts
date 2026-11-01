@@ -490,7 +490,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1413 -> 1422, T-398 S6d: the franchise screens' controls (+9), re-measured by runCensus().
     // 1434 -> 1440, T-193 S6: month detail, its CSV link, and the employer-number forms. Merge of main + T-193: re-measured.
     // 1450 -> 1448, T-500: the contribution-row form moved into StatutoryRateForm and shares its controls (-2); re-measured by runCensus().
-    expect(results.length).toBe(1448);
+    // 1448 -> 1455, T-505: the POS tablets screen (store picker, revoke form, register form, clear-lock form); re-measured by runCensus().
+    expect(results.length).toBe(1455);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
