@@ -331,6 +331,29 @@ describe('B. cancelMyBirthday: before play only', () => {
     expectRefusal(await refusedIn(f.orgId, (tx) => cancelMyBirthday(tx, none.key)), 'LOBBY_NOT_FOUND', 'cancel with no request');
   });
 
+  it('B5 CANCEL RACING A STAFF PLAY: staff has the accepted row moved to played (not yet committed) while the diner cancels; the diner gets LOBBY_BIRTHDAY_CLOSED, not a trigger error, and the row stays played [kills: unlocked read then blind update hitting the forward-only trigger]', async () => {
+    const f = await fx('b5');
+    const e = await entry(f.A);
+    const id = await rawBirthday(f, e.id, 'accepted');
+    let release!: () => void;
+    const hold = new Promise<void>((r) => (release = r));
+    let played!: () => void;
+    const playedFlag = new Promise<void>((r) => (played = r));
+    const staff = sql.begin(async (t) => {
+      await t`update lobby_birthday_requests set status = 'played', played_at = now() where id = ${id}`;
+      played();
+      await hold;
+    });
+    await playedFlag;
+    const cancel = refusedIn(f.orgId, (tx) => cancelMyBirthday(tx, e.key));
+    await new Promise((r) => setTimeout(r, 400));
+    release();
+    await staff;
+    const err = await cancel;
+    expectPlain(expectRefusal(err, 'LOBBY_BIRTHDAY_CLOSED', 'cancel racing play'), 'cancel racing play');
+    expect((await birthdayOf(id)).status).toBe('played');
+  });
+
   it('B4 what the diner reads back: an accepted request shows its time, a declined one its reason [kills: time or reason missing from the diner view]', async () => {
     const f = await fx('b4');
     const a = await entry(f.A);
@@ -446,6 +469,27 @@ describe('C. accepted and not played 30 minutes after scheduled_at -> expired; c
       expect(after.scheduled_at).toEqual(before[i]!.scheduled_at);
     }
     expect((await birthdayOf(seatedId)).status).toBe('accepted');
+  });
+
+  it('C8 NIGHTLY: an unanswered (requested or accepted) request on a SEATED entry expires once the entry closed more than 3 h ago; 2 h ago, a live entry and a played request stay [kills: seated requests living forever on the cashier list, wrong boundary, expiring played]', async () => {
+    const f = await fx('c8');
+    const seatedX = { session_ref: 'S1', stand_label: '7' };
+    const oldReq = await entry(f.A, { status: 'seated', ageMin: 400, closedMinAgo: 181, extra: seatedX });
+    const oldAcc = await entry(f.A, { status: 'seated', ageMin: 400, closedMinAgo: 181, extra: seatedX });
+    const oldPlayed = await entry(f.A, { status: 'seated', ageMin: 400, closedMinAgo: 181, extra: seatedX });
+    const recent = await entry(f.A, { status: 'seated', ageMin: 400, closedMinAgo: 120, extra: seatedX });
+    const live = await entry(f.A, { ageMin: 100 });
+    const a = await rawBirthday(f, oldReq.id, 'requested');
+    const b = await rawBirthday(f, oldAcc.id, 'accepted', { scheduledMinAgo: -600 });
+    const c = await rawBirthday(f, oldPlayed.id, 'played', { scheduledMinAgo: -600 });
+    const d = await rawBirthday(f, recent.id, 'requested');
+    const g = await rawBirthday(f, live.id, 'requested');
+    await asOrg(f.orgId, (tx) => runLobbyNightly(tx, f.orgId));
+    expect((await birthdayOf(a)).status, 'requested, seated 3h+ ago').toBe('expired');
+    expect((await birthdayOf(b)).status, 'accepted, seated 3h+ ago').toBe('expired');
+    expect((await birthdayOf(c)).status, 'played').toBe('played');
+    expect((await birthdayOf(d)).status, 'seated 2h ago').toBe('requested');
+    expect((await birthdayOf(g)).status, 'live entry').toBe('requested');
   });
 });
 

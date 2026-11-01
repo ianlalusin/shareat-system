@@ -623,6 +623,22 @@ export async function expireStaleBirthdays(tx: Tx, orgId: string, minutes: numbe
   return rows.length;
 }
 
+/** Requested or accepted requests of SEATED entries that closed more than `minutes` ago (database clock) -> expired. Returns the count. */
+export async function expireSeatedEntryBirthdays(tx: Tx, orgId: string, minutes: number): Promise<number> {
+  const rows = await tx
+    .update(lobbyBirthdayRequests)
+    .set({ status: 'expired' })
+    .where(
+      and(
+        eq(lobbyBirthdayRequests.orgId, orgId),
+        inArray(lobbyBirthdayRequests.status, ['requested', 'accepted']),
+        sql`exists (select 1 from ${lobbyEntries} e where e.id = ${lobbyBirthdayRequests.entryId} and e.org_id = ${orgId} and e.status = 'seated' and e.closed_at < now() - make_interval(mins => ${minutes}))`,
+      ),
+    )
+    .returning({ id: lobbyBirthdayRequests.id });
+  return rows.length;
+}
+
 /** An entry closed unseated: its requested AND accepted request is expired (a seated entry leaves it as it is). */
 export async function expireBirthdayOfEntry(tx: Tx, orgId: string, entryId: string): Promise<number> {
   const rows = await tx

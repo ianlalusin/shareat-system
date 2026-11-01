@@ -6,7 +6,7 @@
  * `systemTransaction` (DEF-742), not this module's: nothing here opens a transaction. Rows are never deleted.
  */
 import { lobbyRepo, type Tx } from '@shareat/db';
-import { expireStaleBirthdayRequests } from './birthday';
+import { expireSeatedBirthdayRequests, expireStaleBirthdayRequests } from './birthday';
 import { LOBBY_ENTRY_TTL_HOURS } from './checkin';
 
 /** Personal columns are NULLed on entries closed longer than this. */
@@ -49,6 +49,7 @@ export async function runLobbyNightly(
 ): Promise<{ entriesExpired: number; claimsExpired: number; entriesPurged: number; birthdayNamesPurged: number }> {
   const entriesExpired = await expireStaleLobbyEntries(tx, orgId);
   await expireStaleBirthdayRequests(tx, orgId); // T-455 S6a: accepted and 30 min past their time
+  await expireSeatedBirthdayRequests(tx, orgId); // seated entry closed 3 h ago, request still unanswered
   const claimsExpired = await sweepStalePendingClaims(tx, orgId);
   const purged = await purgeLobbyPersonalData(tx, orgId);
   return { entriesExpired, claimsExpired, ...purged };

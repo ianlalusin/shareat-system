@@ -358,3 +358,4 @@ All twelve tester assumptions are ACCEPTED as written in the t455-s6a test-file 
 6. Decline reason free text, trimmed, 1–80 characters; the three presets live in the POS screen (S6b), not the domain.
 7. A past `scheduledAt` is allowed ("Now"); play is not time-gated in S6a.
 8–12. As assumed.
+13. Audit 1 Nov: seated entries' unanswered requests expire in the nightly job 3 h after the entry closed; cancel vs played race answers 409.

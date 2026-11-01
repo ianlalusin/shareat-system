@@ -60,6 +60,11 @@ export async function expireStaleBirthdayRequests(tx: Tx, orgId: string): Promis
   return lobbyRepo.expireStaleBirthdays(tx, orgId, LOBBY_BIRTHDAY_EXPIRE_MINUTES);
 }
 
+/** Unanswered (requested or accepted) requests on a SEATED entry that closed more than 3 hours ago (database clock) -> expired. Nightly only. */
+export async function expireSeatedBirthdayRequests(tx: Tx, orgId: string): Promise<number> {
+  return lobbyRepo.expireSeatedEntryBirthdays(tx, orgId, 180);
+}
+
 function cleanCelebrant(name: unknown): string | null {
   if (name === undefined || name === null) return null;
   if (typeof name !== 'string') throw lobbyRefusal('LOBBY_BAD_INPUT', 'celebrant type');
@@ -118,6 +123,9 @@ export async function cancelMyBirthday(tx: Tx, key: MyEntryKey): Promise<{ reque
   const row = await lobbyRepo.findBirthdayOfEntry(tx, key.orgId, entry.id);
   if (!row) throw lobbyRefusal('LOBBY_NOT_FOUND');
   if (row.status !== 'requested' && row.status !== 'accepted') throw lobbyRefusal('LOBBY_BIRTHDAY_CLOSED');
+  // Lock the row and look again: a staff move (played) that commits between the read above and the update would hit the forward-only trigger.
+  const locked = await lobbyRepo.getBirthdayForUpdate(tx, key.orgId, row.id);
+  if (!locked || (locked.status !== 'requested' && locked.status !== 'accepted')) throw lobbyRefusal('LOBBY_BIRTHDAY_CLOSED');
   await lobbyRepo.cancelBirthday(tx, key.orgId, row.id);
   return { requestId: row.id, status: 'cancelled' };
 }
