@@ -33,6 +33,7 @@ import {
 } from '@shareat/domain/field-rules';
 import { ACTION_LINK } from '@/components/action-link';
 import { PhotoThumb } from '@/components/upload/PhotoThumb';
+import { SubmitButton } from '@/components/feedback/SubmitButton';
 import { Badge, Button, ConfirmDestructive, FlashBanner, Input, LinkRow, RowLink, Select, FormModal } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -611,9 +612,9 @@ return (
                 <ClosedMonthOverride closedMonths={[closedMonth]} dateFieldName="invoiceDate" initialDate={invoice.invoiceDate} />
               </>
             )}
-            <Button type="submit" variant="secondary">
+            <SubmitButton variant="secondary" pendingLabel="Saving…">
               Record expense
-            </Button>
+            </SubmitButton>
           </CheckedForm>
           </FormModal>
         </div>

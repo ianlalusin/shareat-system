@@ -253,3 +253,13 @@ Shown when the invoice has lines and at least one group has something left.
 | — | `recordExpenseForInvoice` ("+ Record expense" on the invoice page) | Follows the same rules (it is a single-group record); its modal gets the "Which part of this bill?" select like /expenses/new |
 | — | Recurring job | Passes `requireItemised: false` with a comment (system-made lineless invoice). Inter-entity never calls createExpense — nothing to change |
 | — | ~40 existing tests on lineless invoices | Shared fixtures (t475-ap `f.draft`, t402-s3-money, others) pass `requireItemised: false` with a one-line comment "legacy fixture: lineless invoice". Do not itemise them; do not weaken any assertion |
+
+### §14 addendum after the audit of 1f35989 (1 Nov)
+- **Q4 as built is the ruling:** a category's headroom = lines(C) − live(C) + (open room computed WITHOUT C's own
+  spill). The literal sentence above double-counted C's own spill; `headroomFor` (parts.ts) is correct.
+- **Uncategorised recorded as a real category** is absorbed into that category while it is under its own lines; the
+  invoice-wide total can never be exceeded and every row stays consistent. Accepted — no stored link.
+- **Double-submit:** the batch and the single-expense Save buttons disable while the request is in flight (existing
+  pending-button pattern). No server idempotency key.
+- **Closed month:** the batch has no closed-month override; a verified invoice in a closed month is recorded one part at
+  a time with "+ Record expense" (which has the override). Accepted.

@@ -14,7 +14,8 @@ import { EXPENSE_CREATE_RULES, nativeAttrs, type FieldRule } from '@shareat/doma
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, FlashBanner, FormGrid, Select } from '@/components/ui';
+import { SubmitButton } from '@/components/feedback/SubmitButton';
+import { Banner, FlashBanner, FormGrid, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 
 export const metadata = { title: 'New expense — Shareat System' };
@@ -161,9 +162,7 @@ export default async function NewExpensePage({ searchParams }: { searchParams: P
           <RuleCheck id="expense.new.creditNeedsTerms" facts={invoiceFacts} />
           <RuleCheck id="expense.new.supplierActive" facts={invoiceFacts} />
 
-          <Button type="submit" variant="primary">
-            Save draft
-          </Button>
+          <SubmitButton pendingLabel="Saving…">Save draft</SubmitButton>
         </CheckedForm>
         </>
       )}

@@ -10,11 +10,12 @@
  *
  * Posts `partCount`, `partKey_i`, `partOn_i`, `partPick_i` and the MoneyLines rows. The server re-judges everything.
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { add, compare, money, ZERO, type Money } from '@shareat/core/money';
 import { allocateBatchPayments } from '@shareat/domain/expenses/allocate';
 import { METHOD_LABELS, type MoneyLineMethod, type SourceOption } from '@shareat/domain/money-lines';
-import { Button, Select } from '@/components/ui';
+import { Select } from '@/components/ui';
+import { SubmitButton } from '@/components/feedback/SubmitButton';
 import { MoneyLines, type MoneyLinesProps } from '@/components/money/MoneyLines';
 import { hasLeft, type CategoryChoice, type InvoicePartsView } from './parts-types';
 
@@ -96,28 +97,29 @@ export function InvoiceBatchRecord({
   const canSave = matches && !missingPick;
 
   // Follow the payment rows (typed amounts, added/removed rows, picked sources) without owning them.
+  // ⛔ NEVER a native input listener on the form that calls setState: the browser runs a microtask checkpoint
+  // between listeners, so React renders the parent (with the OLD payment rows) BEFORE its own root handler has seen the
+  // keystroke - the controlled Amount box is rewritten with its old value and onChange never fires (typing "does nothing").
+  // The form's React `onInput`/`onChange` below run inside React's own dispatch, after the row's onChange, in one batch.
+  const lastSig = useRef('');
+  const syncPaid = useCallback(() => {
+    const form = formRef.current;
+    if (!form) return;
+    const next = readRows(form);
+    const sig = JSON.stringify(next);
+    if (sig === lastSig.current) return; // no change: never re-render (the observer below also watches what a render writes)
+    lastSig.current = sig;
+    setPaid(next);
+  }, []);
+  // Rows added/removed and values a render wrote (no input event): the observer fires AFTER React has committed, which is safe.
   useEffect(() => {
     const form = formRef.current;
     if (!form) return undefined;
-    let last = '';
-    const read = () => {
-      const next = readRows(form);
-      const sig = JSON.stringify(next);
-      if (sig === last) return; // no change: never re-render (the observer below also watches what a render writes)
-      last = sig;
-      setPaid(next);
-    };
-    read();
-    form.addEventListener('input', read);
-    form.addEventListener('change', read);
-    const observer = typeof MutationObserver === 'undefined' ? null : new MutationObserver(read);
+    syncPaid();
+    const observer = typeof MutationObserver === 'undefined' ? null : new MutationObserver(syncPaid);
     observer?.observe(form, { childList: true, subtree: true, attributes: true, attributeFilter: ['value'] });
-    return () => {
-      form.removeEventListener('input', read);
-      form.removeEventListener('change', read);
-      observer?.disconnect();
-    };
-  }, []);
+    return () => observer?.disconnect();
+  }, [syncPaid]);
 
   const sourceName = (id: string | null): string | null => {
     if (!id) return null;
@@ -150,7 +152,7 @@ export function InvoiceBatchRecord({
   const offered = categories.filter((c) => c.isActive);
 
   return (
-    <form ref={formRef} action={action} className="space-y-4 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800" data-batch-record>
+    <form ref={formRef} action={action} onInput={syncPaid} onChange={syncPaid} className="space-y-4 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800" data-batch-record>
       <input type="hidden" name="returnTo" value={returnTo} />
       <input type="hidden" name="supplierId" value={supplierId} />
       <input type="hidden" name="supplierInvoiceId" value={invoiceId} />
@@ -267,9 +269,9 @@ export function InvoiceBatchRecord({
 
       {children}
 
-      <Button type="submit" variant="secondary" disabled={!canSave}>
-        Record {ticked.length} expense{ticked.length === 1 ? '' : 's'}
-      </Button>
+      <SubmitButton variant="secondary" pendingLabel="Saving…" disabled={!canSave}>
+        {`Record ${ticked.length} expense${ticked.length === 1 ? '' : 's'}`}
+      </SubmitButton>
     </form>
   );
 }

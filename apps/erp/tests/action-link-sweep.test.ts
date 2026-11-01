@@ -494,7 +494,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1448 -> 1453, T-502: expense-category selects on the request and approve forms (+2) and the item page's Expense category and Other names sections (+3); re-measured by runCensus().
     // 1453 -> 1458, T-502 section 11: sub-category selects on the request, approve and item forms (+3), and the sub-category add/rename/retire controls on the expense categories screen (+2); re-measured by runCensus().
     // 1458 -> 1460, T-502 section 12: the part picker and the invoice page's batch table replaced the old category/payment controls (+2 net); re-measured by runCensus().
-    expect(results.length).toBe(1460);
+    // 1460 -> 1457, T-502 section 14: the batch Save, the invoice modal's Record expense and /expenses/new's Save draft became SubmitButton (-3, not census candidates); re-measured by runCensus().
+    expect(results.length).toBe(1457);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
