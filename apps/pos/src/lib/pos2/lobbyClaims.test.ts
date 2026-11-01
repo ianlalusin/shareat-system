@@ -38,6 +38,8 @@ import {
   claimListLine,
   claimSaveBlock,
   claimsByEntry,
+  CLAIMS_REFRESH_FAILED,
+  claimPollOutcome,
   emptyClaimForm,
   prefillFromClaim,
   rejectClaimFlow,
@@ -153,7 +155,7 @@ describe('approveClaimFlow: the T-426 diner is written once, even when approve i
   const mk = (over: Record<string, unknown> = {}) => {
     const addDiner = vi.fn(async (_e: { kind: string; name: string; idNo: string }) => ({ dinerId: 'diner-1' }));
     const approve = vi.fn(async (_b: Record<string, unknown>) => ({ ok: true }));
-    return { addDiner, approve, base: { open: OPEN, form: FORM, diners: [] as { id: string; idNo: string }[], addDiner, approve, ...over } };
+    return { addDiner, approve, base: { open: OPEN, form: FORM, diners: [] as { id: string; idNo: string; name?: string; kind?: string }[], addDiner, approve, ...over } };
   };
 
   it('happy path: diner written with the form values, THEN approve with cardSeen true, the session and the diner id [kills: M6 approve before diner, M7 wrong ref]', async () => {
@@ -179,15 +181,15 @@ describe('approveClaimFlow: the T-426 diner is written once, even when approve i
     const first = await approveClaimFlow(t.base as never);
     expect(first).toMatchObject({ done: false, reason: 'retry', dinerId: 'diner-1', message: CLAIM_RETRY_MESSAGE });
     // the screen re-reads the session: the diner is now on it, typed with different spacing / case
-    const second = await approveClaimFlow({ ...t.base, diners: [{ id: 'diner-1', idNo: '123 456 1187' }] } as never);
+    const second = await approveClaimFlow({ ...t.base, diners: [{ id: 'diner-1', idNo: '123 456 1187', name: 'maria  santos', kind: 'senior' }] } as never);
     expect(second).toMatchObject({ done: true, dinerId: 'diner-1' });
     expect(t.addDiner).toHaveBeenCalledTimes(1);
     expect(t.approve).toHaveBeenCalledTimes(2);
     expect(t.approve.mock.calls[1]![0]).toMatchObject({ claimId: OPEN.claimId, statutoryDinerRef: 'diner-1', sessionRef: 'SESS-1' });
   });
 
-  it('a person already on the bill under letters in another case is found too (ID normalisation is the T-426 one)', async () => {
-    const t = mk({ open: { ...OPEN, idNumber: 'pwd-ab 12' }, form: { ...FORM, kind: 'pwd', idNo: 'pwd-ab 12' }, diners: [{ id: 'd9', idNo: 'PWDAB12' }] });
+  it('a person already on the bill under letters in another case is found too when name and kind also match (ID normalisation is the T-426 one)', async () => {
+    const t = mk({ open: { ...OPEN, idNumber: 'pwd-ab 12' }, form: { ...FORM, kind: 'pwd', idNo: 'pwd-ab 12' }, diners: [{ id: 'd9', idNo: 'PWDAB12', name: 'Maria Santos', kind: 'pwd' }] });
     const r = await approveClaimFlow(t.base as never);
     expect(t.addDiner).not.toHaveBeenCalled();
     expect(t.approve).toHaveBeenCalledWith(expect.objectContaining({ statutoryDinerRef: 'd9' }));
@@ -199,7 +201,7 @@ describe('approveClaimFlow: the T-426 diner is written once, even when approve i
     t.approve.mockRejectedValueOnce(Object.assign(new Error('x'), { status: 0 }));
     expect(await approveClaimFlow(t.base as never)).toMatchObject({ done: false, reason: 'retry' });
     t.approve.mockRejectedValueOnce(Object.assign(new Error('Ask the diner to show the card first.'), { status: 409 }));
-    const r = await approveClaimFlow({ ...t.base, diners: [{ id: 'diner-1', idNo: '123-456-1187' }] } as never);
+    const r = await approveClaimFlow({ ...t.base, diners: [{ id: 'diner-1', idNo: '123-456-1187', name: 'Maria Santos', kind: 'senior' }] } as never);
     expect(r).toMatchObject({ done: false, reason: 'refused', message: 'Ask the diner to show the card first.' });
     expect(t.addDiner).toHaveBeenCalledTimes(1);
   });
@@ -287,7 +289,7 @@ describe('S7b rulings 9 and 11 (added by the builder)', () => {
     const t = mk();
     t.approve.mockRejectedValueOnce(Object.assign(new Error('Already decided.'), { status: 409 }));
     const isApproved = vi.fn(async (_id: string) => true);
-    const r = await approveClaimFlow({ open: OPEN, form: FORM, diners: [{ id: 'diner-1', idNo: '123-456-1187' }], addDiner: t.addDiner, approve: t.approve, isApproved } as never);
+    const r = await approveClaimFlow({ open: OPEN, form: FORM, diners: [{ id: 'diner-1', idNo: '123-456-1187', name: 'Maria Santos', kind: 'senior' }], addDiner: t.addDiner, approve: t.approve, isApproved } as never);
     expect(r).toMatchObject({ done: true, dinerId: 'diner-1' });
     expect(isApproved).toHaveBeenCalledWith(OPEN.claimId);
     expect(t.addDiner).not.toHaveBeenCalled();
@@ -298,7 +300,7 @@ describe('S7b rulings 9 and 11 (added by the builder)', () => {
     const isApproved = vi.fn(async (_id: string) => true);
     await approveClaimFlow({ open: OPEN, form: FORM, diners: [], addDiner: t.addDiner, approve: t.approve, isApproved } as never);
     t.approve.mockRejectedValueOnce(Object.assign(new Error('x'), { status: 503 }));
-    await approveClaimFlow({ open: OPEN, form: FORM, diners: [{ id: 'diner-1', idNo: '123-456-1187' }], addDiner: t.addDiner, approve: t.approve, isApproved } as never);
+    await approveClaimFlow({ open: OPEN, form: FORM, diners: [{ id: 'diner-1', idNo: '123-456-1187', name: 'Maria Santos', kind: 'senior' }], addDiner: t.addDiner, approve: t.approve, isApproved } as never);
     expect(isApproved).not.toHaveBeenCalled();
   });
 
@@ -314,5 +316,53 @@ describe('S7b rulings 9 and 11 (added by the builder)', () => {
   it('(c) the empty form (what the dialog resets to on close) holds no name, no ID number and the tick off', () => {
     expect(emptyClaimForm()).toEqual({ kind: 'senior', name: '', idNo: '', cardSeen: false });
     expect(emptyClaimForm()).not.toBe(emptyClaimForm());
+  });
+});
+
+describe('auditor rulings 1, 2 and 4 (added by the builder)', () => {
+  const mk = () => {
+    const addDiner = vi.fn(async (_e: { kind: string; name: string; idNo: string }) => ({ dinerId: 'diner-1' }));
+    const approve = vi.fn(async (_b: Record<string, unknown>) => ({ ok: true }));
+    return { addDiner, approve };
+  };
+
+  it('1: the same card on the bill under a DIFFERENT name or kind is not adopted: refused "This card is already on this bill.", nothing written, approve not called', async () => {
+    for (const diner of [{ id: 'd1', idNo: '123-456-1187', name: 'Someone Else', kind: 'senior' }, { id: 'd1', idNo: '123-456-1187', name: 'Maria Santos', kind: 'pwd' }, { id: 'd1', idNo: '123-456-1187' }]) {
+      const t = mk();
+      const r = await approveClaimFlow({ open: OPEN, form: FORM, diners: [diner], addDiner: t.addDiner, approve: t.approve } as never);
+      expect(r).toMatchObject({ done: false, reason: 'card-on-bill', message: 'This card is already on this bill.' });
+      expect(t.addDiner).not.toHaveBeenCalled();
+      expect(t.approve).not.toHaveBeenCalled();
+    }
+  });
+
+  it('2: the status is read BEFORE the diner is written; anything but pending writes nothing and says so', async () => {
+    for (const status of ['approved', 'rejected', 'expired']) {
+      const t = mk();
+      const getStatus = vi.fn(async (_id: string) => status);
+      const r = await approveClaimFlow({ open: OPEN, form: FORM, diners: [], addDiner: t.addDiner, approve: t.approve, getStatus } as never);
+      expect(r, status).toMatchObject({ done: false, reason: 'closed', message: 'That discount claim can no longer be changed.' });
+      expect(getStatus).toHaveBeenCalledWith(OPEN.claimId);
+      expect(t.addDiner).not.toHaveBeenCalled();
+      expect(t.approve).not.toHaveBeenCalled();
+    }
+  });
+
+  it('2: pending proceeds, with the status read first; an unreachable status read writes nothing and says the claims sentence', async () => {
+    const t = mk();
+    const getStatus = vi.fn(async (_id: string) => 'pending');
+    expect(await approveClaimFlow({ open: OPEN, form: FORM, diners: [], addDiner: t.addDiner, approve: t.approve, getStatus } as never)).toMatchObject({ done: true });
+    expect(getStatus.mock.invocationCallOrder[0]).toBeLessThan(t.addDiner.mock.invocationCallOrder[0]!);
+    const t2 = mk();
+    const down = async () => { throw Object.assign(new Error('x'), { status: 503 }); };
+    expect(await approveClaimFlow({ open: OPEN, form: FORM, diners: [], addDiner: t2.addDiner, approve: t2.approve, getStatus: down } as never)).toMatchObject({ done: false, message: CLAIMS_UNAVAILABLE });
+    expect(t2.addDiner).not.toHaveBeenCalled();
+  });
+
+  it('4: a poll failure other than 503 / no answer says "could not refresh" and keeps the old list; 503 / 0 hide the strip', () => {
+    expect(CLAIMS_REFRESH_FAILED).toBe('Discount claims could not refresh. Try again in a moment.');
+    expect(claimPollOutcome({ status: 503 })).toEqual({ down: true, notice: null });
+    expect(claimPollOutcome({ status: 0 })).toEqual({ down: true, notice: null });
+    for (const e of [{ status: 500 }, { status: 401 }, { status: 409, message: 'x' }, null]) expect(claimPollOutcome(e as never)).toEqual({ down: false, notice: CLAIMS_REFRESH_FAILED });
   });
 });

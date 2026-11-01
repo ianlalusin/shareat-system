@@ -273,6 +273,7 @@ export async function approveClaimCore(
   if (input.cardSeen !== true) throw lobbyRefusal('LOBBY_CLAIM_NEEDS_CARD');
   const ref = typeof input.statutoryDinerRef === 'string' ? input.statutoryDinerRef.trim() : '';
   if (ref.length < 1 || ref.length > LOBBY_CLAIM_REF_MAX) throw lobbyRefusal('LOBBY_BAD_INPUT', 'statutory diner ref');
+  if (await lobbyRepo.dinerRefTakenInEntry(tx, ctx.orgId, row.entryId, ref, row.id)) throw lobbyRefusal('LOBBY_CLAIM_DINER_TAKEN');
   await lobbyRepo.approveClaimRow(tx, ctx.orgId, row.id, { sessionRef, statutoryDinerRef: ref, personId: ctx.personId });
   await auditLogRepo.append(tx, ctx.orgId, {
     actorPersonId: ctx.personId,

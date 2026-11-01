@@ -193,3 +193,19 @@ describe('claimStatusForTerminal: the exact status of one claim, nothing else', 
     expect(await auditFor(f.B)).toHaveLength(0);
   });
 });
+
+describe('approve: one statutory diner is linked to one approved claim per entry (auditor ruling 1)', () => {
+  it('claim B on the same entry cannot reuse the diner of claim A: LOBBY_CLAIM_DINER_TAKEN, B stays pending; another ref, or the same ref on another entry, is fine', async () => {
+    const f = await fx('s7b-taken');
+    const entryId = await entry(f.A, { status: 'seated', party: 4 });
+    const a = await claim(f, f.A, { entryId });
+    const b = await claim(f, f.A, { entryId, last4: '2200' });
+    await asOrg(f.orgId, (tx) => approveClaimForTerminal(tx, f.tabletFor(f.A), approveInput(a.id, { statutoryDinerRef: 'SD-A' })));
+    const e = expectRefusal(await refusedIn(f.orgId, (tx) => approveClaimForTerminal(tx, f.tabletFor(f.A), approveInput(b.id, { statutoryDinerRef: 'SD-A' }))), 'LOBBY_CLAIM_DINER_TAKEN', 'reused diner');
+    expect(e.userMessage).toBe('This senior / PWD diner is already linked to another claim on this table.');
+    expect(await rowOf(b.id)).toMatchObject({ status: 'pending', statutory_diner_ref: null });
+    expect(await asOrg(f.orgId, (tx) => approveClaimForTerminal(tx, f.tabletFor(f.A), approveInput(b.id, { statutoryDinerRef: 'SD-B' })))).toMatchObject({ status: 'approved' });
+    const other = await claim(f, f.A, { status: 'seated' });
+    expect(await asOrg(f.orgId, (tx) => approveClaimForTerminal(tx, f.tabletFor(f.A), approveInput(other.id, { statutoryDinerRef: 'SD-A' })))).toMatchObject({ status: 'approved' });
+  });
+});

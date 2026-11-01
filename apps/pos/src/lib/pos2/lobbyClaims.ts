@@ -7,6 +7,9 @@ import { normalizeIdNo } from '@/lib/statutory/capture';
 
 export const CLAIMS_UNAVAILABLE = 'Discount claims need the POS server. Record the senior / PWD discount by hand as usual.';
 export const CLAIM_RETRY_MESSAGE = 'Saved on this bill. The claim is not confirmed yet. Try again when the POS server is back.';
+export const CLAIMS_REFRESH_FAILED = 'Discount claims could not refresh. Try again in a moment.';
+export const CLAIM_CLOSED_MESSAGE = 'That discount claim can no longer be changed.';
+export const CARD_ON_BILL_MESSAGE = 'This card is already on this bill.';
 const GENERIC_ERROR = 'Could not reach the discount claims. Try again.';
 const DOT = '·';
 
@@ -109,18 +112,25 @@ export function claimFailure(err: { status?: unknown; message?: unknown } | null
   return { kind: 'error', message: GENERIC_ERROR };
 }
 
+/** What a failed claims poll means for the screen: 503 / no answer hides the strip; anything else keeps the old list and shows one notice. */
+export function claimPollOutcome(err: { status?: unknown; message?: unknown } | null | undefined): { down: boolean; notice: string | null } {
+  return claimFailure(err).kind === 'unavailable' ? { down: true, notice: null } : { down: false, notice: CLAIMS_REFRESH_FAILED };
+}
+
 export type ApproveResult =
   | { done: true; dinerId: string }
-  | { done: false; reason: 'blocked' | 'diner' | 'retry' | 'refused' | 'error'; message: string; dinerId?: string };
+  | { done: false; reason: 'blocked' | 'closed' | 'card-on-bill' | 'unavailable' | 'diner' | 'retry' | 'refused' | 'error'; message: string; dinerId?: string };
 
 export interface ApproveFlowInput {
   open: OpenedClaim;
   form: ClaimForm;
   /** The diners already on the session (re-read before a retry). */
-  diners: readonly { id: string; idNo: string }[];
+  diners: readonly { id: string; idNo: string; name?: string; kind?: string }[];
   /** Writes the T-426 diner through the one transactional writer. */
   addDiner: (e: { kind: ClaimKind; name: string; idNo: string }) => Promise<{ dinerId: string }>;
   approve: (b: { claimId: string; cardSeen: true; sessionRef: string; statutoryDinerRef: string }) => Promise<unknown>;
+  /** Read BEFORE anything is written: only a `pending` claim goes on. */
+  getStatus?: (claimId: string) => Promise<string>;
   /** After a 409: has the claim in fact been approved (a retry whose first call worked but whose answer was lost)? Optional. */
   isApproved?: (claimId: string) => Promise<boolean>;
 }
@@ -133,8 +143,24 @@ export async function approveClaimFlow(i: ApproveFlowInput): Promise<ApproveResu
   const block = claimSaveBlock(i.form, i.open.sessionRef);
   if (!block.ok) return { done: false, reason: 'blocked', message: block.message };
   const sessionRef = i.open.sessionRef as string;
+  if (i.getStatus) {
+    try {
+      if ((await i.getStatus(i.open.claimId)) !== 'pending') return { done: false, reason: 'closed', message: CLAIM_CLOSED_MESSAGE };
+    } catch (err) {
+      const f = claimFailure(err as { status?: unknown; message?: unknown });
+      return { done: false, reason: f.kind === 'unavailable' ? 'unavailable' : 'error', message: f.message };
+    }
+  }
   const wanted = normalizeIdNo(i.form.idNo);
-  let dinerId = i.diners.find((d) => typeof d.idNo === 'string' && normalizeIdNo(d.idNo) === wanted)?.id;
+  const sameName = (n: string) => n.trim().replace(/\s+/g, ' ').toUpperCase();
+  const onBill = i.diners.find((d) => typeof d.idNo === 'string' && normalizeIdNo(d.idNo) === wanted);
+  let dinerId: string | undefined;
+  if (onBill) {
+    // The same card is reused only when it is the same person and kind (a retry of this very claim); anything else is a different record.
+    const same = typeof onBill.name === 'string' && sameName(onBill.name) === sameName(i.form.name) && onBill.kind === i.form.kind;
+    if (!same) return { done: false, reason: 'card-on-bill', message: CARD_ON_BILL_MESSAGE };
+    dinerId = onBill.id;
+  }
   if (!dinerId) {
     try {
       dinerId = (await i.addDiner({ kind: i.form.kind, name: i.form.name.trim(), idNo: i.form.idNo.trim() })).dinerId;

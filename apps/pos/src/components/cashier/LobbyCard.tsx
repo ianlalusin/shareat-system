@@ -32,8 +32,8 @@ import {
 } from "@/lib/pos2/lobby";
 import {
   CLAIMS_UNAVAILABLE,
+  claimPollOutcome,
   claimBadgeLabel,
-  claimFailure,
   claimListLine,
   claimsByEntry,
   type ClaimListItem,
@@ -89,6 +89,7 @@ export function LobbyCard({ storeId, onSeat, activeSeatingId }: Props) {
   const [serverDown, setServerDown] = useState(false);
   const [claims, setClaims] = useState<ClaimListItem[]>([]);
   const [claimsDown, setClaimsDown] = useState(false);
+  const [claimsNotice, setClaimsNotice] = useState<string | null>(null);
   const [openClaimId, setOpenClaimId] = useState<string | null>(null);
   const pollGuard = useRef(createPollGuard());
   const [digits, setDigits] = useState("");
@@ -126,10 +127,16 @@ export function LobbyCard({ storeId, onSeat, activeSeatingId }: Props) {
       const c = await postPos2<{ claims: ClaimListItem[] }>("lobby/claims", { storeId });
       setClaims(c.claims);
       setClaimsDown(false);
+      setClaimsNotice(null);
     } catch (err) {
-      if (claimFailure(err as Err).kind === "unavailable") {
+      // 503 / no answer hides the strip; any other failure keeps the old list and says it could not refresh.
+      const o = claimPollOutcome(err as Err);
+      if (o.down) {
         setClaims([]);
         setClaimsDown(true);
+        setClaimsNotice(null);
+      } else {
+        setClaimsNotice(o.notice);
       }
     } finally {
       setPending(readPendingLinks(storeId));
@@ -334,6 +341,7 @@ export function LobbyCard({ storeId, onSeat, activeSeatingId }: Props) {
               })}
             </ul>
           )}
+          {!claimsDown && claimsNotice && <p className="text-xs text-muted-foreground text-center py-2">{claimsNotice}</p>}
           {claimsDown && <p className="text-xs text-muted-foreground text-center py-2">{CLAIMS_UNAVAILABLE}</p>}
           {!claimsDown && claims.length > 0 && (
             <div className="space-y-2 border-t pt-3">

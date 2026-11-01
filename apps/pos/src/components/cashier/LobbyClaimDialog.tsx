@@ -97,7 +97,7 @@ export function LobbyClaimDialog({ storeId, claimId, onClose }: Props) {
         setProblem("This table's session could not be found. Refresh and try again.");
         return;
       }
-      const diners = (session.statutoryDiners ?? []).map((d) => ({ id: d.id, idNo: d.idNo }));
+      const diners = (session.statutoryDiners ?? []).map((d) => ({ id: d.id, idNo: d.idNo, name: d.name, kind: d.kind }));
       const heads = resolveHeads(session) ?? undefined;
       const actor = getActorStamp(appUser);
       const r = await approveClaimFlow({
@@ -119,6 +119,7 @@ export function LobbyClaimDialog({ storeId, claimId, onClose }: Props) {
         },
         approve: (b) => postPos2("lobby/claim-approve", { storeId, claimId: b.claimId, cardSeen: b.cardSeen, sessionId: b.sessionRef, statutoryDinerId: b.statutoryDinerRef }),
         // A retried approve whose first call worked but whose answer was lost: done only when the server says this claim is approved.
+        getStatus: async (id) => (await postPos2<{ status: string }>("lobby/claim-status", { storeId, claimId: id })).status,
         isApproved: async (id) => (await postPos2<{ status: string }>("lobby/claim-status", { storeId, claimId: id })).status === "approved",
       });
       if (r.done) {

@@ -112,3 +112,14 @@ describe('S7b rulings 9 and 11 (added by the builder)', () => {
     expect(src).toMatch(/status === ["']approved["']/);
   });
 });
+
+describe('auditor rulings 2 and 4 (added by the builder)', () => {
+  it('2: the dialog gives the approve flow getStatus (lobby/claim-status), read before any write', () => {
+    expect(dialog()).toContain('getStatus');
+  });
+  it('4: the card shows CLAIMS_REFRESH_FAILED via claimPollOutcome and a failed poll does not empty the list unless the server is down', () => {
+    const src = card();
+    expect(src).toContain('claimPollOutcome');
+    expect(src).toMatch(/o\.down/);
+  });
+});
