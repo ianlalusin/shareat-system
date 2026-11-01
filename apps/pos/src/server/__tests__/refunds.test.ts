@@ -202,6 +202,20 @@ describe('Acceptance 5 - idempotent on receiptNumber (a timed-out retry never pa
 });
 
 describe('Acceptance 5 - refusals', () => {
+  it("v1's live data types Cash as 'other' (Lipa, 31 Oct): a tender named Cash is accepted, a Gcash typed 'other' is refused", async () => {
+    const mop = (id: string, name: string) =>
+      fs.seed(`stores/${STORE}/storeModesOfPayment/${id}`, { id, name, type: 'other', sortOrder: 1, isActive: true, hasRef: false, isArchived: false });
+    mop('m-cash-other', 'Cash');
+    mop('m-gcash-other', 'Gcash');
+    const no = await refund(baseBody({ tenderMethodId: 'm-gcash-other' }));
+    expect(no.status).toBe(409);
+    expect(no.body.error).toMatch(/cash/i);
+    expect(refundDocs()).toHaveLength(0);
+    const yes = await refund(baseBody({ tenderMethodId: 'm-cash-other' }));
+    expect(yes.status).toBe(200);
+    expect(fs.get(`stores/${STORE}/receipts/${yes.body.refundReceiptId}`)).toMatchObject({ refundTender: { methodId: 'm-cash-other', methodName: 'Cash' } });
+  });
+
   it('a non-cash tender is refused (E-wallet refunds come later) (M6)', async () => {
     for (const id of ['m-gcash', 'm-card', 'no-such-method', 'm-maya']) {
       const r = await refund(baseBody({ tenderMethodId: id }));
