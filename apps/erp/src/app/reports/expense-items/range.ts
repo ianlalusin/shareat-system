@@ -1,12 +1,17 @@
 import { inArray } from 'drizzle-orm';
 import { schema, type Tx } from '@shareat/db';
 import type { ExpenseItemsReport } from '@shareat/domain';
+import { parseBusinessDate } from '@shareat/core/datetime';
 
 /** A real calendar date written YYYY-MM-DD. */
 export function isRealDate(v: string | null | undefined): v is string {
   if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
-  const d = new Date(`${v}T00:00:00Z`);
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+  try {
+    parseBusinessDate(v);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** from/to from the URL; anything invalid (or from after to) falls back to month-to-date. */
