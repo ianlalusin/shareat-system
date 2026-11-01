@@ -122,6 +122,27 @@ export async function personIsTerminal(tx: Tx, orgId: string, personId: string):
   return row !== undefined;
 }
 
+/**
+ * T-505: the terminal persons (persons.kind 'terminal') holding a LIVE Firebase credential at `storeId` - the people a POS tablet can be
+ * linked to. A person with a revoked credential, or one credentialed to another store, is not listed. Name order, then id.
+ */
+export async function terminalPersonsForStore(tx: Tx, orgId: string, storeId: string): Promise<Array<{ personId: string; displayName: string }>> {
+  return tx
+    .selectDistinct({ personId: persons.id, displayName: persons.displayName })
+    .from(persons)
+    .innerJoin(personCredentials, eq(personCredentials.personId, persons.id))
+    .where(
+      and(
+        eq(persons.orgId, orgId),
+        eq(persons.kind, 'terminal'),
+        eq(personCredentials.kind, 'firebase'),
+        eq(personCredentials.storeId, storeId),
+        isNull(personCredentials.revokedAt),
+      ),
+    )
+    .orderBy(asc(persons.displayName), asc(persons.id));
+}
+
 /** T-412: the organisation's active administrators and whether each holds a live sign-in PIN - the Staff page's "Administrator
  * PINs" list (an administrator who signs in by email only has no PIN until Staff issues one). One row per person. */
 export async function listActiveAdminsWithPinState(
