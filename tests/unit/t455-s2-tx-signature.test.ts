@@ -76,6 +76,24 @@ const PINNED: Record<string, string[]> = {
     'readMyBirthday',
     'requestBirthday',
   ],
+  // T-455 S7a: the senior / PWD discount claim - the diner's three moves, the shared cores, the ERP cashier's door and the tablet's door (each takes tx: Tx first).
+  'claims.ts': [
+    'approveClaim',
+    'approveClaimCore',
+    'approveClaimForTerminal',
+    'cancelMyClaim',
+    'listClaimRequests',
+    'listClaimsCore',
+    'listClaimsForTerminal',
+    'listMyClaims',
+    'openClaim',
+    'openClaimCore',
+    'openClaimForTerminal',
+    'rejectClaim',
+    'rejectClaimCore',
+    'rejectClaimForTerminal',
+    'submitClaim',
+  ],
   'terminal.ts': ['callForTerminal', 'listForTerminal', 'parkForTerminal', 'removeForTerminal', 'seatForTerminal', 'setLobbyPausedForTerminal'],
 };
 /** Exported functions that are allowed to have no `tx` (pure helpers). Empty on purpose: keep helpers unexported (CONTRACT QUESTION 9). */

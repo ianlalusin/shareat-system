@@ -1,6 +1,6 @@
 /**
  * The only place SQL is written for the customer lobby (T-455, migration 0215): `lobby_stores`, `lobby_entries`, `lobby_entry_lines`,
- * `lobby_entry_line_options`, `lobby_birthday_requests` (the purge; from S6a the birthday-song request too) and `lobby_discount_claims` (expiry only; S7 owns the rest).
+ * `lobby_entry_line_options`, `lobby_birthday_requests` (the purge; from S6a the birthday-song request too) and `lobby_discount_claims` (expiry, and from S7a the claim itself).
  * docs/tasks/455-customer-lobby.md.
  *
  * Every function takes the caller's transaction and an org id and filters by it explicitly as well as by RLS. No function here opens a
@@ -384,8 +384,12 @@ export async function expireStaleEntries(tx: Tx, orgId: string, ttlHours: number
   return rows.map((r) => r.id);
 }
 
-/** Pending claims whose entry is closed (any age) or that are themselves older than `maxAgeHours` -> expired, name and ID NULL. */
-export async function sweepStalePendingClaims(tx: Tx, orgId: string, maxAgeHours: number): Promise<number> {
+/**
+ * Pending claims are swept (expired, name and ID NULL) when: their entry closed UNSEATED (immediately); their entry was SEATED and closed more than
+ * `seatedGraceMinutes` ago (S6a ruling 13: a claim awaiting approval at a table that sat a moment ago must live); or the claim itself is older than
+ * `maxAgeHours`. A pending claim on a seated entry that closed recently is NOT swept (S7a ruling, case D4).
+ */
+export async function sweepStalePendingClaims(tx: Tx, orgId: string, maxAgeHours: number, seatedGraceMinutes = 180): Promise<number> {
   const rows = await tx
     .update(lobbyDiscountClaims)
     .set({ status: 'expired', holderName: null, idNumber: null, decidedAt: sql`now()` })
@@ -395,7 +399,9 @@ export async function sweepStalePendingClaims(tx: Tx, orgId: string, maxAgeHours
         eq(lobbyDiscountClaims.status, 'pending'),
         or(
           sql`${lobbyDiscountClaims.createdAt} < now() - make_interval(hours => ${maxAgeHours})`,
-          sql`exists (select 1 from lobby_entries e where e.org_id = ${lobbyDiscountClaims.orgId} and e.id = ${lobbyDiscountClaims.entryId} and e.status in ('seated','cancelled','removed','expired'))`,
+          sql`exists (select 1 from lobby_entries e where e.org_id = ${lobbyDiscountClaims.orgId} and e.id = ${lobbyDiscountClaims.entryId} and (
+                e.status in ('cancelled','removed','expired')
+                or (e.status = 'seated' and e.closed_at < now() - make_interval(mins => ${seatedGraceMinutes}))))`,
         ),
       ),
     )
@@ -686,4 +692,200 @@ export async function listOpenBirthdays(tx: Tx, orgId: string, storeId: string):
     .where(and(eq(lobbyBirthdayRequests.orgId, orgId), eq(lobbyEntries.storeId, storeId), inArray(lobbyBirthdayRequests.status, ['requested', 'accepted'])))
     .orderBy(asc(lobbyBirthdayRequests.createdAt), asc(lobbyBirthdayRequests.id));
   return rows.map((r) => ({ ...r, status: r.status as 'requested' | 'accepted' }));
+}
+
+
+// ------------------------------------------------------------------------------------------------ T-455 S7a: the senior / PWD discount claim
+
+/** A claim's state with its entry's facts. NEVER carries the holder name or ID number: those come only from `getClaimPii`. */
+export interface ClaimRow {
+  readonly id: string;
+  readonly entryId: string;
+  readonly storeId: string;
+  readonly code: string;
+  readonly kind: 'senior' | 'pwd';
+  readonly idLast4: string;
+  readonly ocrAssisted: boolean;
+  readonly status: 'pending' | 'approved' | 'rejected' | 'expired';
+  readonly rejectReason: string | null;
+  readonly entryStatus: 'waiting' | 'called' | 'seated' | 'cancelled' | 'removed' | 'expired';
+  readonly entrySessionRef: string | null;
+  readonly standLabel: string | null;
+  readonly partySize: number;
+}
+
+const claimCols = {
+  id: lobbyDiscountClaims.id,
+  entryId: lobbyDiscountClaims.entryId,
+  storeId: lobbyEntries.storeId,
+  code: lobbyEntries.code,
+  kind: lobbyDiscountClaims.kind,
+  idLast4: lobbyDiscountClaims.idLast4,
+  ocrAssisted: lobbyDiscountClaims.ocrAssisted,
+  status: lobbyDiscountClaims.status,
+  rejectReason: lobbyDiscountClaims.rejectReason,
+  entryStatus: lobbyEntries.status,
+  entrySessionRef: lobbyEntries.sessionRef,
+  standLabel: lobbyEntries.standLabel,
+  partySize: lobbyEntries.partySize,
+};
+
+const claimJoinEntry = and(eq(lobbyEntries.orgId, lobbyDiscountClaims.orgId), eq(lobbyEntries.id, lobbyDiscountClaims.entryId));
+
+/** Does this store's lobby row allow discount claims? A store with no lobby row answers false. */
+export async function isClaimsEnabled(tx: Tx, orgId: string, storeId: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ on: lobbyStores.claimsEnabled })
+    .from(lobbyStores)
+    .where(and(eq(lobbyStores.orgId, orgId), eq(lobbyStores.storeId, storeId)))
+    .limit(1);
+  return row?.on ?? false;
+}
+
+/** The entry's claims, oldest first (any status). No name, no ID number. */
+export async function listClaimsOfEntry(tx: Tx, orgId: string, entryId: string): Promise<ClaimRow[]> {
+  return tx
+    .select(claimCols)
+    .from(lobbyDiscountClaims)
+    .innerJoin(lobbyEntries, claimJoinEntry)
+    .where(and(eq(lobbyDiscountClaims.orgId, orgId), eq(lobbyDiscountClaims.entryId, entryId)))
+    .orderBy(asc(lobbyDiscountClaims.createdAt), asc(lobbyDiscountClaims.id));
+}
+
+/** Pending + approved claims of the entry: the slots taken (rejected and expired ones free theirs). */
+export async function countClaimSlots(tx: Tx, orgId: string, entryId: string): Promise<number> {
+  const [r] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(lobbyDiscountClaims)
+    .where(and(eq(lobbyDiscountClaims.orgId, orgId), eq(lobbyDiscountClaims.entryId, entryId), inArray(lobbyDiscountClaims.status, ['pending', 'approved'])));
+  return r?.n ?? 0;
+}
+
+/** Is there already a PENDING claim in this entry with this normalised ID (spaces and hyphens removed, lower case)? */
+export async function hasPendingClaimWithId(tx: Tx, orgId: string, entryId: string, normalisedId: string): Promise<boolean> {
+  const [r] = await tx
+    .select({ id: lobbyDiscountClaims.id })
+    .from(lobbyDiscountClaims)
+    .where(
+      and(
+        eq(lobbyDiscountClaims.orgId, orgId),
+        eq(lobbyDiscountClaims.entryId, entryId),
+        eq(lobbyDiscountClaims.status, 'pending'),
+        sql`lower(regexp_replace(${lobbyDiscountClaims.idNumber}, '[[:space:]-]', '', 'g')) = ${normalisedId}`,
+      ),
+    )
+    .limit(1);
+  return r !== undefined;
+}
+
+export interface NewClaim {
+  readonly kind: 'senior' | 'pwd';
+  readonly holderName: string;
+  readonly idNumber: string;
+  readonly idLast4: string;
+  readonly ocrAssisted: boolean;
+}
+
+export async function insertClaim(tx: Tx, orgId: string, entryId: string, c: NewClaim): Promise<string> {
+  const [row] = await tx
+    .insert(lobbyDiscountClaims)
+    .values({ orgId, entryId, kind: c.kind, holderName: c.holderName, idNumber: c.idNumber, idLast4: c.idLast4, ocrAssisted: c.ocrAssisted, status: 'pending' })
+    .returning({ id: lobbyDiscountClaims.id });
+  return (row as { id: string }).id;
+}
+
+/** One claim of this org by id with its entry's facts, the claim row locked for the move that follows. No name, no ID number. */
+export async function getClaimForUpdate(tx: Tx, orgId: string, claimId: string): Promise<ClaimRow | undefined> {
+  const [row] = await tx
+    .select(claimCols)
+    .from(lobbyDiscountClaims)
+    .innerJoin(lobbyEntries, claimJoinEntry)
+    .where(and(eq(lobbyDiscountClaims.orgId, orgId), eq(lobbyDiscountClaims.id, claimId)))
+    .limit(1)
+    .for('update', { of: lobbyDiscountClaims });
+  return row;
+}
+
+/** The ONLY read of a claim's holder name and ID number (the cashier's "Open claim"). Pending claims hold them; every other state has NULLs. */
+export async function getClaimPii(tx: Tx, orgId: string, claimId: string): Promise<{ holderName: string | null; idNumber: string | null } | undefined> {
+  const [row] = await tx
+    .select({ holderName: lobbyDiscountClaims.holderName, idNumber: lobbyDiscountClaims.idNumber })
+    .from(lobbyDiscountClaims)
+    .where(and(eq(lobbyDiscountClaims.orgId, orgId), eq(lobbyDiscountClaims.id, claimId)))
+    .limit(1);
+  return row;
+}
+
+/** pending -> approved. Name and ID go to NULL (the database CHECK); the cashier, the session, the statutory record and the time are stored. */
+export async function approveClaimRow(tx: Tx, orgId: string, claimId: string, a: { sessionRef: string; statutoryDinerRef: string; personId: string }): Promise<void> {
+  await tx
+    .update(lobbyDiscountClaims)
+    .set({
+      status: 'approved',
+      holderName: null,
+      idNumber: null,
+      sessionRef: a.sessionRef,
+      statutoryDinerRef: a.statutoryDinerRef,
+      actedByPersonId: a.personId,
+      cardSeenAt: sql`now()`,
+      decidedAt: sql`now()`,
+    })
+    .where(and(eq(lobbyDiscountClaims.orgId, orgId), eq(lobbyDiscountClaims.id, claimId)));
+}
+
+/** pending -> rejected with the reason. Name and ID go to NULL; the slot is free again. */
+export async function rejectClaimRow(tx: Tx, orgId: string, claimId: string, reason: string, personId: string): Promise<void> {
+  await tx
+    .update(lobbyDiscountClaims)
+    .set({ status: 'rejected', holderName: null, idNumber: null, rejectReason: reason, actedByPersonId: personId, decidedAt: sql`now()` })
+    .where(and(eq(lobbyDiscountClaims.orgId, orgId), eq(lobbyDiscountClaims.id, claimId)));
+}
+
+/** The diner withdraws a pending claim: it becomes expired (the table has no 'cancelled' status), name and ID NULL, slot free. */
+export async function expireClaimRow(tx: Tx, orgId: string, claimId: string): Promise<void> {
+  await tx
+    .update(lobbyDiscountClaims)
+    .set({ status: 'expired', holderName: null, idNumber: null, decidedAt: sql`now()` })
+    .where(and(eq(lobbyDiscountClaims.orgId, orgId), eq(lobbyDiscountClaims.id, claimId)));
+}
+
+export interface ClaimListRow {
+  readonly claimId: string;
+  readonly entryId: string;
+  readonly code: string;
+  readonly displayName: string | null;
+  readonly standLabel: string | null;
+  readonly partySize: number;
+  readonly kind: 'senior' | 'pwd';
+  readonly idLast4: string;
+  readonly ocrAssisted: boolean;
+  readonly createdAt: Date;
+}
+
+/** The store's pending claims on live or seated entries, oldest first. Never selects a name, ID number, hash, hand-off link or phone. */
+export async function listPendingClaims(tx: Tx, orgId: string, storeId: string): Promise<ClaimListRow[]> {
+  return tx
+    .select({
+      claimId: lobbyDiscountClaims.id,
+      entryId: lobbyDiscountClaims.entryId,
+      code: lobbyEntries.code,
+      displayName: lobbyEntries.displayName,
+      standLabel: lobbyEntries.standLabel,
+      partySize: lobbyEntries.partySize,
+      kind: lobbyDiscountClaims.kind,
+      idLast4: lobbyDiscountClaims.idLast4,
+      ocrAssisted: lobbyDiscountClaims.ocrAssisted,
+      createdAt: lobbyDiscountClaims.createdAt,
+    })
+    .from(lobbyDiscountClaims)
+    .innerJoin(lobbyEntries, claimJoinEntry)
+    .where(
+      and(
+        eq(lobbyDiscountClaims.orgId, orgId),
+        eq(lobbyEntries.storeId, storeId),
+        eq(lobbyDiscountClaims.status, 'pending'),
+        inArray(lobbyEntries.status, ['waiting', 'called', 'seated']),
+      ),
+    )
+    .orderBy(asc(lobbyDiscountClaims.createdAt), asc(lobbyDiscountClaims.id));
 }

@@ -1,4 +1,4 @@
-import type { LobbyBirthday, LobbyCheckInInput, LobbyEntrySummary, LobbyMyEntry, LobbyResult } from './http-lobby-data';
+import type { LobbyBirthday, LobbyClaim, LobbyClaimInput, LobbyCheckInInput, LobbyEntrySummary, LobbyMyEntry, LobbyResult } from './http-lobby-data';
 
 /**
  * T-455 S4 - the one door every lobby screen uses to reach data. The http client (S3 routes + the store read) and the fixture both implement it.
@@ -22,4 +22,8 @@ export interface LobbyData {
   birthday(storeCode: string): Promise<LobbyResult<LobbyBirthday | null>>;
   requestBirthday(storeCode: string, celebrantName: string | null): Promise<LobbyResult<LobbyBirthday | null>>;
   cancelBirthday(storeCode: string): Promise<LobbyResult<LobbyBirthday | null>>;
+  /** T-455 S7a: the senior / PWD discount claims of this phone's place in line (typed; masked IDs only). */
+  claims(storeCode: string): Promise<LobbyResult<LobbyClaim[]>>;
+  submitClaim(input: LobbyClaimInput): Promise<LobbyResult<LobbyClaim[]>>;
+  cancelClaim(storeCode: string, claimId: string): Promise<LobbyResult<LobbyClaim[]>>;
 }
