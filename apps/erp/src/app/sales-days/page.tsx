@@ -34,8 +34,11 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
       ? sp.status
       : undefined;
 
+  // T-507: the "Waiting for verification" filter is open + submitted, the days that have recognised nothing yet.
+  const unverified = sp.status === 'unverified';
+
   const days = await withOrgPrincipal(orgId, (tx) =>
-    salesDaysRepo.listSalesDays(tx, { orgId, storeId, status, limit: 100 }),
+    salesDaysRepo.listSalesDays(tx, { orgId, storeId, status, unverified, limit: 100 }),
   );
   // T-396 S2: the morning POS import's health, only for a person who may submit a sales day, and each line only at the
   // stores they may submit for.
@@ -122,9 +125,10 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
         <Picker
           name="status"
           label="Status"
-          value={status ?? ''}
+          value={unverified ? 'unverified' : (status ?? '')}
           options={[
             { v: '', t: 'All' },
+            { v: 'unverified', t: 'Waiting for verification' },
             { v: 'open', t: 'Open' },
             { v: 'submitted', t: 'Submitted' },
             { v: 'verified', t: 'Verified' },
