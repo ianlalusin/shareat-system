@@ -43,6 +43,30 @@ export async function GET(request: Request) {
     formatMoney(report.totals.total),
   ]);
 
+  // T-507: the delivery-platform section follows the customer section, set apart by its own heading row.
+  rows.push(['', '', '', '', '', '', '']);
+  rows.push(['Due from delivery platforms', 'Current', '1-30 days', '31-60 days', '61-90 days', '90+ days', 'Total']);
+  for (const r of report.platform.rows) {
+    rows.push([
+      r.channelName,
+      formatMoney(r.current),
+      formatMoney(r.d1to30),
+      formatMoney(r.d31to60),
+      formatMoney(r.d61to90),
+      formatMoney(r.d90plus),
+      formatMoney(r.total),
+    ]);
+  }
+  rows.push([
+    'Total delivery platforms',
+    formatMoney(report.platform.totals.current),
+    formatMoney(report.platform.totals.d1to30),
+    formatMoney(report.platform.totals.d31to60),
+    formatMoney(report.platform.totals.d61to90),
+    formatMoney(report.platform.totals.d90plus),
+    formatMoney(report.platform.totals.total),
+  ]);
+
   return csvResponse(
     `ar-aging-as-of-${asOfDate}.csv`,
     ['Customer', 'Current', '1-30 days', '31-60 days', '61-90 days', '90+ days', 'Total'],

@@ -49,6 +49,7 @@ const ROW_LINK: readonly string[] = [
   'app/owners/page.tsx',
   'app/prepaid/page.tsx',
   'app/sales-days/page.tsx',
+  'components/reports/PlatformAgingSection.tsx', // T-507: each channel row opens its settlements (LinkRow/RowLink)
   'app/trade/orders/[id]/page.tsx',
   'app/trade/orders/page.tsx',
   'app/wastage/page.tsx',

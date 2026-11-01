@@ -188,14 +188,21 @@ describe('S2-3 / S2-4 cadence', () => {
 });
 
 describe('S2-5 / S2-5b who sees what', () => {
-  it('a person without submit_sales_day sees no status block, though the same run is on show for an admin - kills: leaks the run to everyone', async () => {
+  it('a person without submit_sales_day is refused the page, though the same run is on show for an admin - kills: leaks the run to everyone', async () => {
     const f = await fixture('staff');
     await insertRun(f, { failures: [{ subjectId: f.storeA, subjectName: 'Store Alpha, 14 Oct', reason: 'ZZ-STAFF-REASON no wallet.' }] });
     expect(await renderPageAs(f, f.admin)).toContain('ZZ-STAFF-REASON');
-    const html = await renderPageAs(f, f.staff);
-    expect(html).not.toContain('ZZ-STAFF-REASON');
-    expect(html).not.toMatch(/pos-day-import/);
-    expect(html).not.toMatch(/never run/i);
+    // DEF-809: /sales-days is gated by submit_sales_day, so staff are refused outright and no part of the run is rendered.
+    const refusal = await renderPageAs(f, f.staff).then(
+      html => ({ html }),
+      (e: unknown) => ({ error: e }),
+    );
+    expect('html' in refusal ? refusal.html : '').not.toContain('ZZ-STAFF-REASON');
+    expect('error' in refusal).toBe(true);
+    const err = (refusal as { error: unknown }).error as { name?: string; capability?: string; message?: string };
+    expect(err.name).toBe('AuthorizationError');
+    expect(err.capability).toBe('submit_sales_day');
+    expect(String(err.message)).not.toContain('ZZ-STAFF-REASON');
   }, 30_000);
 
   it('a manager scoped to store A sees A lines (failure and notice), none of store B - kills: shows every store refusals org-wide', async () => {

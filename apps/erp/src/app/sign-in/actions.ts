@@ -32,6 +32,7 @@ import {
 } from '../../lib/session';
 import { verifyFirebaseIdToken } from '../../lib/firebase-auth-admin';
 import { NOT_LINKED_MESSAGE, resolveVerifiedSignIn, safeNext } from './lib';
+import { landingForToken } from './landing';
 // ⭐ T-235 / DEF-222 — the one environment gate both pre-session screens share.
 import { preSessionMessage, SIGN_IN_POLICY } from '../../lib/pre-session-message';
 
@@ -86,7 +87,7 @@ export async function signInWithTerminalPinAction(formData: FormData): Promise<v
     const { orgId, storeId, deviceId } = await resolveTerminalIdentity(null, identity.uid);
     const result = await signInWithPin(null, { orgId, storeId, pin, deviceId });
     await setSessionCookie(result.token, result.expiresAt);
-    redirectTo = next;
+    redirectTo = await landingForToken(result.token, str(formData, 'next'));
   } catch (err) {
     // ⚠️ A wrong PIN and an unknown one still say the SAME thing — `signInWithPin` decides that,
     // and nothing here distinguishes them.
@@ -123,7 +124,7 @@ export async function signInWithTabletPinAction(formData: FormData): Promise<voi
     const result = await signInOnPairedTablet(null, { cookieToken, staffCode, pin });
     await setSessionCookie(result.token, result.expiresAt);
     if (cookieToken) await setPosTabletCookie(cookieToken); // keep the cookie fresh while the tablet is in use
-    redirectTo = next;
+    redirectTo = await landingForToken(result.token, str(formData, 'next'));
   } catch (err) {
     // A revoked / stale / forged pairing is dead: forget it so the sign-in page falls back to today's screen.
     if (err instanceof AuthenticationError && err.message === TABLET_NOT_PAIRED) await clearPosTabletCookie();
@@ -168,7 +169,7 @@ export async function signInWithEmailAction(formData: FormData): Promise<void> {
 
     if (outcome.kind === 'signed-in') {
       await setSessionCookie(outcome.token, outcome.expiresAt);
-      redirectTo = next;
+      redirectTo = await landingForToken(outcome.token, str(formData, 'next'));
     } else if (outcome.kind === 'first-run') {
       // ⭐ The one door to `/setup`, and it opens only because the database holds ZERO
       // organizations. The cookie carries the verified identity across the redirect; it authorises
