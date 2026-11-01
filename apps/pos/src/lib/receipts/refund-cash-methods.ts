@@ -6,11 +6,10 @@ import type { ModeOfPayment } from "@/lib/types";
  * so the type alone matched nothing and the refund screen said "no cash payment method set up". Ian: ERP 2 will label cash as
  * "cash"; the name check then does nothing and can stay.
  */
+export function isCashTender(m: { type?: unknown; name?: unknown }): boolean {
+  return String(m.type ?? "").toLowerCase() === "cash" || String(m.name ?? "").trim().toLowerCase() === "cash";
+}
+
 export function refundCashMethods(methods: readonly ModeOfPayment[]): ModeOfPayment[] {
-  return methods.filter(
-    (m) =>
-      m.isActive !== false &&
-      !m.isArchived &&
-      (String(m.type || "").toLowerCase() === "cash" || String(m.name || "").trim().toLowerCase() === "cash"),
-  );
+  return methods.filter((m) => m.isActive !== false && !m.isArchived && isCashTender(m));
 }

@@ -14,6 +14,7 @@ import 'server-only';
 import { storedPesosToCentavos, toWirePesos } from '@/lib/money/centavos';
 import { netQtyOf, paidShares, unitsRefundCentavos } from '@/lib/money/refundShare';
 import { formatTerminalReceiptNumber } from '@/lib/terminal/counter';
+import { isCashTender } from '@/lib/receipts/refund-cash-methods';
 import { requireManagerApproval } from './approval';
 import { Refusal, bodyHash, fail, guarded, isNonBlank, jsonResponse } from './http';
 import { authenticate } from './identity';
@@ -125,7 +126,8 @@ export async function handleRefund(req: Request, deps: Pos2Deps): Promise<Respon
       if (!tenderSnap.exists) throw new Refusal(409, 'That payment method is not available.');
       const tender = tenderSnap.data() as Record<string, any>;
       if (tender.isActive === false || tender.isArchived === true) throw new Refusal(409, 'That payment method is not available.');
-      if (tender.type !== 'cash') throw new Refusal(409, CASH_ONLY_MESSAGE);
+      // Same rule as the refund screen: v1's live data types Cash as 'other', so the type alone would refuse real cash.
+      if (!isCashTender(tender)) throw new Refusal(409, CASH_ONLY_MESSAGE);
 
       // COUNT the refunds that already exist for this parent (never the client-writable counters on the parent).
       const existing = await tx.get(db.collection(receiptsPath).where('parentReceiptId', '==', parentId));
