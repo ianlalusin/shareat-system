@@ -21,6 +21,7 @@ import {
   itemKindCounts,
   listItems,
   mayApproveItem,
+  mayDecideItemRequests,
   parseKindFilter,
   pendingRequestCodes,
   pendingRequests,
@@ -29,6 +30,8 @@ import {
 } from './lib';
 import { arrangeFamilies } from './family';
 import { BASE_UNITS, ITEM_KINDS, ITEM_KIND_LABEL, itemKindLabel } from '@shareat/db';
+import Link from 'next/link';
+import { ACTION_LINK } from '@/components/action-link';
 import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
 import { Banner, Button, Checkbox, FlashBanner, Input, LinkRow, RowLink, Select, FormGrid, FormSection, Field, FormModal } from '@/components/ui';
@@ -61,7 +64,7 @@ export default async function ItemsPage({
   const totalItems = Object.values(kindCounts).reduce((a, b) => a + b, 0);
   // T-386 R10. Presentation aids only (the domain stays the enforcement): who gets the override inputs, and what each pending
   // request would be coded if approved right now (its stored code is only the requester's frozen preview).
-  const [canOverride, willBe] = await Promise.all([mayApproveItem(actor), pendingRequestCodes(actor, requests)]);
+  const [canOverride, willBe, canImport] = await Promise.all([mayApproveItem(actor), pendingRequestCodes(actor, requests), mayDecideItemRequests(actor)]);
 
   return (
     <Page density="table">
@@ -72,6 +75,9 @@ export default async function ItemsPage({
             The shared item catalogue for every store. Request a new item here; an admin approves it. Open an item for its settings, suppliers and price history.
           </PageDescription>
         </div>
+        <div className="flex flex-wrap items-center gap-4">
+        {/* T-502 S4: the admin's CSV import; shown only to those who hold approve_item_request (the page and the domain refuse everyone else). */}
+        {canImport && <Link href="/items/import" className={ACTION_LINK}>Import items from a file</Link>}
         <FormModal
           trigger="+ Request item"
           title="Request a new item"
@@ -199,6 +205,7 @@ export default async function ItemsPage({
               </div>
             </CheckedForm>
         </FormModal>
+        </div>
       </div>
 
       <FlashBanner flash={sp} />
