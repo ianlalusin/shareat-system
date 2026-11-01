@@ -89,3 +89,25 @@ describe('LobbyClaimDialog: the pre-filled T-426 dialog', () => {
     expect(dialog()).toMatch(/CLAIM_RETRY_MESSAGE|CLAIMS_UNAVAILABLE|\.message/);
   });
 });
+
+describe('S7b rulings 9 and 11 (added by the builder)', () => {
+  it('(c) closing the dialog clears the name / ID number: the form is reset to emptyClaimForm and the opened claim dropped on close', () => {
+    const src = dialog();
+    expect(src).toContain('emptyClaimForm');
+    expect(src).toMatch(/onOpenChange/);
+    expect(src).toMatch(/setForm\(emptyClaimForm\(\)\)/);
+    expect(src).toMatch(/setOpened\(null\)/);
+  });
+
+  it('(c) the card mounts the dialog only while a claim is open, and passes only the claim id (no name / ID number in props)', () => {
+    const src = card();
+    expect(src).toMatch(/openClaimId\s*&&|openClaimId\s*\?/);
+    expect(src).not.toMatch(/<LobbyClaimDialog[^>]*(name|idNo|idNumber|holder)/);
+  });
+
+  it('(b) the dialog gives the approve flow an isApproved check that refetches the claim list', () => {
+    const src = dialog();
+    expect(src).toContain('isApproved');
+    expect(src).toContain("lobby/claims");
+  });
+});
