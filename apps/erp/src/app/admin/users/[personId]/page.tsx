@@ -539,9 +539,12 @@ function GrantPicker({ personId, offerable }: { personId: string; offerable: rea
         </fieldset>
       ))}
 
-      <Button type="submit" variant="secondary">
-        Grant selected
-      </Button>
+      {/* Stays at the bottom of the screen while the long list scrolls, so the save is never off-screen. Red = the brand fill (primary). */}
+      <div className="sticky bottom-0 z-10 -mx-2 border-t border-surface-border bg-canvas/95 px-2 py-3 backdrop-blur">
+        <Button type="submit" variant="primary">
+          Grant selected
+        </Button>
+      </div>
     </form>
   );
 }
