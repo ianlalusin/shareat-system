@@ -98,6 +98,16 @@ async function insertMonths(
   }
 }
 
+/**
+ * insertMonths through the later of (endYear, endMonth) and Manila today. Code under test dates
+ * reversals / catch-ups at TODAY, so a fixture ending at a fixed December goes stale on 1 Jan (DEF-806).
+ */
+async function insertMonthsThroughAtLeast(orgId: string, startYear: number, startMonth: number, endYear: number, endMonth: number): Promise<void> {
+  const [ty, tm] = (await manilaTodayRaw()).split('-').map(Number) as [number, number];
+  const [ey, em] = ty > endYear || (ty === endYear && tm > endMonth) ? [ty, tm] : [endYear, endMonth];
+  await insertMonths(orgId, startYear, startMonth, ey, em);
+}
+
 interface OrgFixture {
   orgId: string;
   storeId: string;
@@ -262,7 +272,7 @@ const sameTerms = (t: Awaited<ReturnType<typeof termsOf>>): TermsInput => ({
 });
 async function termsFixture(hint: string, through?: string) {
   const f = await rolesFixture(hint, '2026-01-01');
-  await insertMonths(f.orgId, 2026, 3, 2026, 12);
+  await insertMonthsThroughAtLeast(f.orgId, 2026, 3, 2026, 12);
   const assetId = await makeAsset(f);
   if (through) await runThrough(f.orgId, through);
   return { f, assetId };

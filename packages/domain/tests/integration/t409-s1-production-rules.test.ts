@@ -95,7 +95,7 @@ beforeEach(async () => {
     values (${orgA}, ${'orgs/' + orgA + '/p.jpg'}, 'image/jpeg', 10, 'x', 'receipt_photo', ${managerId}) returning id`;
   fileA = f!.id;
   await seedChartOfAccounts(sql, orgA);
-  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${orgA}, m::date, (m + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2026-01-01'::date, '2026-12-01'::date, interval '1 month') m`;
+  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${orgA}, m::date, (m + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2026-01-01'::date, greatest('2026-12-01'::date, date_trunc('month', now() at time zone 'Asia/Manila')::date), interval '1 month') m`;
 
   // Recipe: 2 kg Soup from 500 g Flour + 1.5 kg Stock.
   const [rec] = await sql<{ id: string }[]>`
