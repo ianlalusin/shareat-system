@@ -494,8 +494,10 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1448 -> 1453, T-502: expense-category selects on the request and approve forms (+2) and the item page's Expense category and Other names sections (+3); re-measured by runCensus().
     // 1453 -> 1458, T-502 section 11: sub-category selects on the request, approve and item forms (+3), and the sub-category add/rename/retire controls on the expense categories screen (+2); re-measured by runCensus().
     // 1458 -> 1460, T-502 section 12: the part picker and the invoice page's batch table replaced the old category/payment controls (+2 net); re-measured by runCensus().
-    // 1460 -> 1457, T-502 section 14: the batch Save, the invoice modal's Record expense and /expenses/new's Save draft became SubmitButton (-3, not census candidates); re-measured by runCensus(). 1457 -> 1461, T-502 S5: /reports/expense-items (3 link candidates in LinkRows plus the filter form's controls); re-measured by runCensus(), FAIL/UNRESOLVED unmoved.
-    expect(results.length).toBe(1461);
+    // 1460 -> 1457, T-502 section 14: the batch Save, the invoice modal's Record expense and /expenses/new's Save draft became SubmitButton (-3, not census candidates); re-measured by runCensus().
+    // merged with main: +1, T-504: sales-days/DraftMemory.tsx, the "Discard" button of the restored-draft line (ACTION_LINK, 32px), re-measured.
+    // 1457 -> 1461, T-502 S5: /reports/expense-items (3 link candidates in LinkRows plus the filter form's controls); re-measured by runCensus(), FAIL/UNRESOLVED unmoved. merged with main (T-502 S5 +4), re-measured: 1458 -> 1462.
+    expect(results.length).toBe(1462);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

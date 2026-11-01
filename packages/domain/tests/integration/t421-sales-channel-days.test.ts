@@ -89,7 +89,7 @@ beforeAll(async () => {
   const verify = (dayId: string) => asOrgOn(f.orgId, (tx) => submitThenVerify(tx, f.manager, dayId, f.admin));
   const platform = (dayId: string, channelId: string, amount: string) =>
     asOrgOn(f.orgId, (tx) =>
-      D.setPlatformSales(tx, f.manager, { salesDayId: dayId, rows: [{ channelId, amount, noSales: false }] } as never),
+      D.editSalesDay(tx, f.manager, { salesDayId: dayId, platform: [{ channelId, amount, noSales: false }] } as never),
     );
 
   // D1: Walk-in 1,000.10 from the feed + Grab 200.20 typed = 1,200.30

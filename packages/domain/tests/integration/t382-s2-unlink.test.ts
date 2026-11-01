@@ -42,6 +42,7 @@ import { humanDate as humanDateOf } from '../../src/shared/refusal-leaf';
 import { importTestDay, stubFetchers } from './_fixtures/pos-day';
 import { asOrgOn, actorOf, R1_FIGURES, insertSalesRecheck, s6Fixture, uid } from './_fixtures/pos-s6';
 import { submitThenVerify } from './_fixtures/sales-day-flow';
+import { tickMissingChannels } from './_fixtures/no-sales-ticks';
 
 const hd = (d: string) => humanDateOf(parseBusinessDate(d));
 const sql = postgres(url, { max: 12 });
@@ -336,7 +337,10 @@ describe('U7 - R3: an unlink waits for every imported day to be verified or with
   it('a SUBMITTED feed day -> the same', async () => {
     const f = await fixture('u7s');
     const { id } = await imp(f, D1);
-    await asOrgOn(f.orgId, (tx) => D.submitSalesDay(tx, f.manager, id));
+    await asOrgOn(f.orgId, async (tx) => {
+      await tickMissingChannels(tx, id); // T-504
+      await D.submitSalesDay(tx, f.manager, id);
+    });
     const s = await sentenceOf(unlink(f, f.superAdmin));
     expect(s).toContain(hd(D1));
     expect(s.startsWith(S.unverified('Lipa'))).toBe(true);

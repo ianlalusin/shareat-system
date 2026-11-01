@@ -3,7 +3,7 @@ import { vi } from 'vitest';
 
 /**
  * T-389 S3 (TESTER) - sales-days/[id]: the Platform sales form of a POS-feed day.
- * Census: sales-days/[id]/page.tsx, <EditableRecord action={setPlatformSalesAction} label="platform sales" hidden={{
+ * Census: sales-days/[id]/page.tsx, <EditableRecord action={editSalesDayAction} (T-504: platform=1, the ONE Save) label="platform sales" hidden={{
  * storeId, salesDayId }}>, one box + one "no sales" tick per non-remitted channel (`channel_<id>`, `nosales_<id>`), shown
  * once the day already has a platform row (otherwise it is an add form: N1, out of scope). Refusal driven: a NEGATIVE
  * amount on one channel ("... can't be negative"), with another channel's "no sales" ticked.
@@ -97,7 +97,7 @@ keepTypingLegs<C>({
   marker: (c) => `name="channel_${c.foodpandaId}"`,
   refusedForm: (c, over = {}) => {
     const base: Record<string, string> = {
-      storeId: c.storeId, salesDayId: c.salesDayId,
+      storeId: c.storeId, salesDayId: c.salesDayId, platform: '1',
       [`channel_${c.foodpandaId}`]: '-777.77',
       [`channel_${c.grabId}`]: '',
       [`nosales_${c.grabId}`]: 'on',
@@ -108,8 +108,8 @@ keepTypingLegs<C>({
   },
   async submit(_c, fd, who) {
     h.actor = who;
-    const { setPlatformSalesAction } = await import('../../src/app/sales-days/actions');
-    const signal = await captureRedirect(() => setPlatformSalesAction(fd));
+    const { editSalesDayAction } = await import('../../src/app/sales-days/actions');
+    const signal = await captureRedirect(() => editSalesDayAction(fd));
     const o = outcomeOf(signal);
     return { signal, error: o.flash.error, ok: o.flash.ok };
   },
@@ -142,6 +142,7 @@ keepTypingLegs<C>({
     const fd = new FormData();
     fd.set('storeId', c.storeId);
     fd.set('salesDayId', c.salesDayId);
+    fd.set('platform', '1');
     fd.set(`channel_${c.foodpandaId}`, '600.00');
     fd.set(`channel_${c.grabId}`, '');
     fd.set(`nosales_${c.grabId}`, 'on');

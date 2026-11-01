@@ -8,6 +8,13 @@ export const SALES_DAY_CREATE_RULES = defineFieldRules('sales-days.create', {
   businessDate: { label: 'The business date', kind: 'date' },
 });
 
+/**
+ * T-504: the EDIT forms (a typed day, and a feed day's Platform sales). They have no field-rule inputs: the store and the date are
+ * never typed, and each channel box is judged by the business rule `salesDay.channels.tickedOrTyped`. The set exists so a
+ * CheckedForm has one to name; it holds no fields.
+ */
+export const SALES_DAY_EDIT_RULES = defineFieldRules('sales-days.edit', {});
+
 export const SALES_DAY_IMPORT_RULES = defineFieldRules('sales-days.import', {
   businessDate: { label: 'The business date', kind: 'date' },
 });
