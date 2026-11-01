@@ -67,6 +67,7 @@ function makeLobby(over: Partial<Record<string, (...a: any[]) => Promise<unknown
       calls.push({ fn: 'claimOpen', actor: a, input: i });
       return { claimId: CLAIM, entryId: 'e1', code: '4821', kind: 'senior', holderName: HOLDER, idNumber: ID_NO, idLast4: '1187', ocrAssisted: false, partySize: 5, standLabel: '7', sessionRef: 'SESS-1' };
     },
+    claimStatus: async (a: unknown, i: unknown) => { calls.push({ fn: 'claimStatus', actor: a, input: i }); return { status: 'approved', holderName: HOLDER }; },
     claimApprove: async (a: unknown, i: unknown) => { calls.push({ fn: 'claimApprove', actor: a, input: i }); return { claimId: CLAIM, status: 'approved' }; },
     claimReject: async (a: unknown, i: unknown) => { calls.push({ fn: 'claimReject', actor: a, input: i }); return { claimId: CLAIM, status: 'rejected' }; },
     ...over,
@@ -78,6 +79,7 @@ interface RouteSpec { name: string; fn: string; handler: string; route: () => Pr
 const SPECS: RouteSpec[] = [
   { name: 'claims', fn: 'claims', handler: 'handleLobbyClaims', route: () => import('@/app/api/pos2/lobby/claims/route'), body: {} },
   { name: 'claim-open', fn: 'claimOpen', handler: 'handleLobbyClaimOpen', route: () => import('@/app/api/pos2/lobby/claim-open/route'), body: { claimId: CLAIM } },
+  { name: 'claim-status', fn: 'claimStatus', handler: 'handleLobbyClaimStatus', route: () => import('@/app/api/pos2/lobby/claim-status/route'), body: { claimId: CLAIM } },
   { name: 'claim-approve', fn: 'claimApprove', handler: 'handleLobbyClaimApprove', route: () => import('@/app/api/pos2/lobby/claim-approve/route'), body: { claimId: CLAIM, cardSeen: true, sessionId: 'SESS-1', statutoryDinerId: 'diner-1' } },
   { name: 'claim-reject', fn: 'claimReject', handler: 'handleLobbyClaimReject', route: () => import('@/app/api/pos2/lobby/claim-reject/route'), body: { claimId: CLAIM, reasonCode: 'id_mismatch' } },
 ];
@@ -180,7 +182,7 @@ describe.each(SPECS.map((s) => [s.name, s] as const))('%s', (_n, sp) => {
 
 describe('claim id checks', () => {
   it('open / approve / reject: a claimId that is not a uuid is a 400 before the port [kills: M8]', async () => {
-    for (const n of ['claim-open', 'claim-approve', 'claim-reject']) {
+    for (const n of ['claim-open', 'claim-status', 'claim-approve', 'claim-reject']) {
       for (const bad of ['4821', 'abc', '', 7, null, undefined]) {
         const l = makeLobby();
         const r = await call(spec(n), full(spec(n), { claimId: bad }), { lobby: l });
@@ -206,6 +208,14 @@ describe('claim-open', () => {
     expect(r.l.calls[0]!.input).toEqual({ claimId: CLAIM });
     expect(r.body).toMatchObject({ ok: true, holderName: HOLDER, idNumber: ID_NO, sessionRef: 'SESS-1' });
     expect(r.headers.get('cache-control') ?? '').toMatch(/no-store/);
+  });
+});
+
+describe('claim-status', () => {
+  it('passes the claim id only and answers the status and nothing else (an extra port field is dropped)', async () => {
+    const r = await call(spec('claim-status'), full(spec('claim-status')));
+    expect(r.l.calls[0]!.input).toEqual({ claimId: CLAIM });
+    expect(r.body).toEqual({ ok: true, status: 'approved' });
   });
 });
 

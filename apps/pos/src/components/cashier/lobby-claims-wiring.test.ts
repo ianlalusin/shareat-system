@@ -105,9 +105,10 @@ describe('S7b rulings 9 and 11 (added by the builder)', () => {
     expect(src).not.toMatch(/<LobbyClaimDialog[^>]*(name|idNo|idNumber|holder)/);
   });
 
-  it('(b) the dialog gives the approve flow an isApproved check that refetches the claim list', () => {
+  it('(b) the dialog gives the approve flow an isApproved check that asks lobby/claim-status for the exact status', () => {
     const src = dialog();
     expect(src).toContain('isApproved');
-    expect(src).toContain("lobby/claims");
+    expect(src).toContain('lobby/claim-status');
+    expect(src).toMatch(/status === ["']approved["']/);
   });
 });

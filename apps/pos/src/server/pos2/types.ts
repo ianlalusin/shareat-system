@@ -70,6 +70,7 @@ export interface Pos2LobbyPort {
   /** T-455 S7b: senior / PWD discount claims. Lists carry ****last4 only; `claimOpen` is the one answer with the name and ID number. */
   claims(a: LobbyTablet): Promise<{ claims: unknown[] }>;
   claimOpen(a: LobbyTablet, i: { claimId: string }): Promise<Record<string, unknown>>;
+  claimStatus(a: LobbyTablet, i: { claimId: string }): Promise<{ status: string }>;
   claimApprove(a: LobbyTablet, i: { claimId: string; cardSeen: boolean; sessionRef: string; statutoryDinerRef: string }): Promise<{ claimId: string; status: 'approved' }>;
   claimReject(a: LobbyTablet, i: { claimId: string; reason: string }): Promise<{ claimId: string; status: 'rejected' }>;
 }

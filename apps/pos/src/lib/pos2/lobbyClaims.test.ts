@@ -293,6 +293,15 @@ describe('S7b rulings 9 and 11 (added by the builder)', () => {
     expect(t.addDiner).not.toHaveBeenCalled();
   });
 
+  it('(b) the status check runs only after a 409 (never on success or on an offline retry)', async () => {
+    const t = mk();
+    const isApproved = vi.fn(async (_id: string) => true);
+    await approveClaimFlow({ open: OPEN, form: FORM, diners: [], addDiner: t.addDiner, approve: t.approve, isApproved } as never);
+    t.approve.mockRejectedValueOnce(Object.assign(new Error('x'), { status: 503 }));
+    await approveClaimFlow({ open: OPEN, form: FORM, diners: [{ id: 'diner-1', idNo: '123-456-1187' }], addDiner: t.addDiner, approve: t.approve, isApproved } as never);
+    expect(isApproved).not.toHaveBeenCalled();
+  });
+
   it('(b) a 409 where the refetch does NOT show approved, or the refetch fails, stays a refusal with the server sentence', async () => {
     for (const isApproved of [async () => false, async () => { throw new Error('offline'); }]) {
       const t = mk();

@@ -133,6 +133,13 @@ export const handleLobbyClaimOpen = (req: Request, deps: Pos2Deps): Promise<Resp
     return jsonResponse(200, { ok: true, ...pick(await c.lobby.claimOpen(c.tablet, { claimId }), CLAIM_OPEN_FIELDS) });
   });
 
+export const handleLobbyClaimStatus = (req: Request, deps: Pos2Deps): Promise<Response> =>
+  run(req, deps, async (c) => {
+    const claimId = claimIdOf(c.body);
+    if (!claimId) return fail(400, BAD_CLAIM);
+    return jsonResponse(200, { ok: true, ...pick(await c.lobby.claimStatus(c.tablet, { claimId }), ['status']) });
+  });
+
 export const handleLobbyClaimApprove = (req: Request, deps: Pos2Deps): Promise<Response> =>
   run(req, deps, async (c) => {
     const b = c.body;

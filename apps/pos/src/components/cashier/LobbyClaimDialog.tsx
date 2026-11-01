@@ -30,7 +30,6 @@ import {
   rejectClaimFlow,
   type ClaimForm,
   type ClaimKind,
-  type ClaimListItem,
   type OpenedClaim,
 } from "@/lib/pos2/lobbyClaims";
 import { getActorStamp } from "./firestore";
@@ -119,11 +118,8 @@ export function LobbyClaimDialog({ storeId, claimId, onClose }: Props) {
           return { dinerId: found.id };
         },
         approve: (b) => postPos2("lobby/claim-approve", { storeId, claimId: b.claimId, cardSeen: b.cardSeen, sessionId: b.sessionRef, statutoryDinerId: b.statutoryDinerRef }),
-        // A retried approve whose first call worked but whose answer was lost: the pending list no longer holds the claim.
-        isApproved: async (id) => {
-          const list = await postPos2<{ claims: ClaimListItem[] }>("lobby/claims", { storeId });
-          return !list.claims.some((c) => c.claimId === id);
-        },
+        // A retried approve whose first call worked but whose answer was lost: done only when the server says this claim is approved.
+        isApproved: async (id) => (await postPos2<{ status: string }>("lobby/claim-status", { storeId, claimId: id })).status === "approved",
       });
       if (r.done) {
         toast({ title: "Discount claim approved" });
