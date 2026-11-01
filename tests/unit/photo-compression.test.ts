@@ -182,6 +182,7 @@ describe('⛔ THE PLANT — every file input in the app goes through PhotoInput'
     const offenders = tracked.filter((f) => {
       if (f.endsWith('components/PhotoInput.tsx')) return false;
       if (f === 'apps/erp/src/components/upload/PhotoUpload.tsx') return false; // T-441 shared control owns its raw file input (re-uses the compression path)
+      if (f === 'apps/erp/src/components/upload/CsvFileInput.tsx') return false; // CSV upload for /items/import, not a photo - T-502 S4
       const src = readFileSync(path.join(repoRoot, f), 'utf8')
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .split('\n')

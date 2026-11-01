@@ -1,4 +1,4 @@
-import type { LobbyBirthday, LobbyCheckInInput, LobbyCheckInLine, LobbyMyEntry, LobbyResult } from '@/data/http-lobby-data';
+import type { LobbyBirthday, LobbyClaim, LobbyCheckInInput, LobbyCheckInLine, LobbyMyEntry, LobbyResult } from '@/data/http-lobby-data';
 import type { LobbyStoreView } from '@/data/lobby-data';
 
 /**
@@ -197,5 +197,64 @@ export function birthdayScreenView(b: LobbyBirthday | null): BirthdayScreenView 
       return { kind: 'played', message: 'Your birthday song has played. Happy birthday!', canCancel: false, final: true };
     default:
       return { kind: 'expired', message: 'This request has ended. Please ask the cashier.', canCancel: false, final: true };
+  }
+}
+
+// ---------- senior / PWD discount screen (T-455 S7a) ----------
+
+export const CLAIM_NAME_MAX = 40;
+export const CLAIM_ID_MIN = 4;
+export const CLAIM_ID_MAX = 40;
+
+export interface ClaimForm {
+  kind: 'senior' | 'pwd' | '';
+  holderName: string;
+  idNumber: string;
+}
+
+export type ClaimFormCheck =
+  | { ok: true; value: { kind: 'senior' | 'pwd'; holderName: string; idNumber: string } }
+  | { ok: false; errors: { kind?: string; holderName?: string; idNumber?: string } };
+
+/** The same bounds the server enforces (name 1..40, ID 4..40 with at least 4 letters or digits once spaces and hyphens are ignored). Typed only. */
+export function validateClaimForm(f: ClaimForm): ClaimFormCheck {
+  const errors: { kind?: string; holderName?: string; idNumber?: string } = {};
+  if (f.kind !== 'senior' && f.kind !== 'pwd') errors.kind = 'Please choose Senior or PWD.';
+  const name = (f.holderName ?? '').trim();
+  if (name.length < 1) errors.holderName = 'Please type the name as it is on the card.';
+  else if (name.length > CLAIM_NAME_MAX) errors.holderName = `Keep the name to ${CLAIM_NAME_MAX} characters.`;
+  const id = (f.idNumber ?? '').trim();
+  const bare = id.replace(/[\s-]/g, '');
+  if (id.length > CLAIM_ID_MAX) errors.idNumber = `Keep the ID number to ${CLAIM_ID_MAX} characters.`;
+  else if (bare.length < CLAIM_ID_MIN) errors.idNumber = 'Please type the ID number as it is on the card.';
+  if (Object.keys(errors).length > 0) return { ok: false, errors };
+  return { ok: true, value: { kind: f.kind as 'senior' | 'pwd', holderName: name, idNumber: id } };
+}
+
+export interface ClaimRowView {
+  claimId: string;
+  /** "Senior" or "PWD". */
+  kindLabel: string;
+  /** "****1187". */
+  idMasked: string;
+  /** One plain sentence for the claim's status. */
+  message: string;
+  canCancel: boolean;
+}
+
+/** What the claim list shows: the kind, the masked ID and what became of it. The name and the full ID are never on this screen after Send. */
+export function claimRowView(c: LobbyClaim): ClaimRowView {
+  const kindLabel = c.kind === 'pwd' ? 'PWD' : 'Senior';
+  switch (c.status) {
+    case 'pending':
+      return { claimId: c.claimId, kindLabel, idMasked: c.idMasked, message: 'Waiting for the cashier to check your card.', canCancel: true };
+    case 'approved':
+      return { claimId: c.claimId, kindLabel, idMasked: c.idMasked, message: 'Approved. The discount has been added.', canCancel: false };
+    case 'rejected': {
+      const why = (c.rejectReason ?? '').trim().replace(/[.]+$/, '');
+      return { claimId: c.claimId, kindLabel, idMasked: c.idMasked, message: why ? `Not approved: ${why}.` : 'Not approved.', canCancel: false };
+    }
+    default:
+      return { claimId: c.claimId, kindLabel, idMasked: c.idMasked, message: 'This claim has ended. Please ask the cashier.', canCancel: false };
   }
 }

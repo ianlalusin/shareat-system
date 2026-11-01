@@ -50,6 +50,8 @@ const EXEMPT: Record<string, string> = {
 // `<button>` labels written in app/ - they are the `label=` prop of <ConfirmDestructive>, whose own submit button is the one
 // control (apps/erp/tests/t412-destructive-census.test.ts is the guard for those). Their entries left this list with them.
 const COMMANDS: Record<string, string> = {
+  'Register tablet': 'T-505: links a POS tablet to the store so it can ask a manager for a refund approval (grants access); audited',
+  'Clear the lock': "T-505: lifts a tablet's approval lock (restores access) after wrong manager PINs; audited",
   'Remove staff positions': 'T-451: explicit removal of legacy assignments for privileged roles; existing role and authorization stay intact',
   'View certificate': 'T-436: opens a leave certificate (one-time link, audited); a POST so the view is recorded',
   'Look at sales': 'T-398 S6d: a read that writes an access-log row, like "View certificate"',
@@ -85,6 +87,8 @@ const COMMANDS: Record<string, string> = {
   'Pay': 'books a payment',
   'Clear the approval-PIN cap': 'lifts an administrator-PIN cap early (T-416, audited)',
   'Reopen PIN sign-in': 'lets PIN sign-in back in at a stopped store (T-395 S2, audited)',
+  'Check the file': 'T-502 S4: reads an uploaded CSV and shows what an import would do; writes nothing',
+  'Confirm and create the items': 'T-502 S4: creates the previewed items and other names in one transaction (admin, audited)',
   'Add directly (super-admin)': 'creates an item with no approval, bypassing the request flow (items page)',
   'Charge': 'books a charge',
   'Charge to this person': 'books a charge',

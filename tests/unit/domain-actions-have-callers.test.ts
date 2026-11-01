@@ -103,14 +103,12 @@ const EXEMPT: Record<string, string> = {
     'UNWIRED — T-455 S6a built the ERP-cashier door (authorize record_sale) beside the tablet door; the POS tablet (S6b, ForTerminal) is the real caller and no ERP screen is planned. Remove this row if an ERP screen ever calls it.',
   markBirthdayPlayed:
     'UNWIRED — T-455 S6a built the ERP-cashier door (authorize record_sale) beside the tablet door; the POS tablet (S6b, ForTerminal) is the real caller and no ERP screen is planned. Remove this row if an ERP screen ever calls it.',
+  listClaimRequests:
+    'UNWIRED — T-455 S7a built the ERP-cashier door (authorize record_sale) beside the tablet door; the POS tablet (S7b, ForTerminal) is the real caller and no ERP screen is planned. Remove this row if an ERP screen ever calls it.',
+  openClaim:
+    'UNWIRED — T-455 S7a built the ERP-cashier door (authorize record_sale) beside the tablet door; the POS tablet (S7b, ForTerminal) is the real caller and no ERP screen is planned. Remove this row if an ERP screen ever calls it.',
   gatherApprovalFacts:
     'INTERNAL — T-475 S1 split approveExpense into facts + verdict; previewInvoiceDrafts (the AP verify preview) and approveExpense call it in the same file.',
-  revokePosTerminalLink:
-    'UNWIRED — T-424 audit: scripts/provision-terminal.ts (--revoke-pos-device) is its caller, run by an administrator; no ERP screen yet. ' +
-    'It retires a lost or replaced POS v2 tablet.',
-  provisionPosTerminalLink:
-    'UNWIRED — T-424 S5: scripts/provision-terminal.ts (--link-pos-device) is its caller, run by an administrator; no ERP screen yet. ' +
-    "The tablet's device id is read from POS v2 Settings and typed into that command.",
   recordRemittanceEvent:
     'INTERNAL — `createRemittance` calls it (`remittance/index.ts:422`) in the same transaction, after its own rows (T-402 S3 C4); ' +
     'a separate file only so the action-coverage scan does not read the TYPE members in index.ts as audit actions.',

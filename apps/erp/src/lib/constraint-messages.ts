@@ -140,6 +140,7 @@ export const CONSTRAINT_MESSAGES: Record<string, string> = {
   item_aliases_org_alias_key: 'Another item already uses that other name. Each other name can point to only one item.',
   item_aliases_alias_not_blank_check: 'An other name cannot be blank.',
   item_aliases_name_guard: 'That is already the official name of an item, so it cannot also be an other name.',
+  items_org_name_key: 'An item with that name already exists. Use that item, or choose a different name.',
   items_name_alias_guard: 'That name is already used as another name for an item. Use that item, or choose a different name.',
   items_service_kind_has_history: 'This item already has stock, delivery, usage, recipe or invoice history, so it cannot be changed to or from a service.',
   expense_subcategories_org_name_key: 'That category already has a sub-category with that name (names are compared ignoring case and spacing).',

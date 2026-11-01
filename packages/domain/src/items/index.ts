@@ -28,6 +28,7 @@ import { ITEMS_APPROVE_RULES, ITEMS_REQUEST_RULES, ITEMS_UNIT_RULES } from '../f
 
 export { ITEM_CODE_RE, formatItemCode, itemCodeStem, parseItemCode } from './code';
 export { allocateItemCode, requireItemCodeStem } from './code-allocation';
+export * from './import';
 
 /**
  * ⭐ T-443 R4. Every item and request NAME is written trimmed with inner whitespace collapsed to one space, so

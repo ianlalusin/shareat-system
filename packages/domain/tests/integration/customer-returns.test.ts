@@ -588,7 +588,7 @@ describe('T-231 / DEF-210 — a customer return is stamped with the actor’s or
       insert into organizations (name, code) values (${'Victim ' + uid('v')}, ${uid('vic')}) returning id`;
     await seedChartOfAccounts(sql, victim!.id);
     await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status)
-              select ${victim!.id}::uuid, d::date, (d + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2025-01-01'::date, '2026-12-01'::date, '1 month') d`;
+              select ${victim!.id}::uuid, d::date, (d + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2025-01-01'::date, greatest('2026-12-01'::date, date_trunc('month', now() at time zone 'Asia/Manila')::date), '1 month') d`;
 
     const res = await systemTransaction((tx) =>
       recordCustomerReturn(tx, {
@@ -647,7 +647,7 @@ describe('T-231 / DEF-210 — a customer return is stamped with the actor’s or
       insert into organizations (name, code) values (${'Victim ' + uid('v')}, ${uid('vic')}) returning id`;
     await seedChartOfAccounts(sql, victim!.id);
     await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status)
-              select ${victim!.id}::uuid, d::date, (d + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2025-01-01'::date, '2026-12-01'::date, '1 month') d`;
+              select ${victim!.id}::uuid, d::date, (d + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2025-01-01'::date, greatest('2026-12-01'::date, date_trunc('month', now() at time zone 'Asia/Manila')::date), '1 month') d`;
 
     const res = await systemTransaction((tx) =>
       applyCredit(tx, f.manager, {

@@ -73,6 +73,7 @@ export const READERS: Readonly<Record<string, 'STOCK' | 'LABEL' | 'ACCOUNT'>> = 
   'packages/domain/src/commissary/discrepancy.ts': 'ACCOUNT',
   'packages/domain/src/cutover/opening-stock.ts': 'ACCOUNT',
   'packages/domain/src/items/index.ts': 'LABEL',
+  'packages/domain/src/items/import.ts': 'LABEL', // T-502 S4: validates kind/unit on a CSV row and creates purchasable items only; never stocks or posts
   'packages/domain/src/stock/usage-post-core.ts': 'ACCOUNT',
   'packages/domain/src/stock/usage-records.ts': 'ACCOUNT',
   'packages/domain/src/stock/receipt-posting.ts': 'ACCOUNT',

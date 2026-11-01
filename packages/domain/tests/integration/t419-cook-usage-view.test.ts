@@ -101,7 +101,7 @@ beforeEach(async () => {
     values (${orgA}, ${'orgs/' + orgA + '/p.jpg'}, 'image/jpeg', 10, 'x', 'receipt_photo', ${managerId}) returning id`;
   fileA = f!.id;
   await seedChartOfAccounts(sql, orgA);
-  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${orgA}, m::date, (m + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2026-01-01'::date, '2026-12-01'::date, interval '1 month') m`;
+  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${orgA}, m::date, (m + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2026-01-01'::date, greatest('2026-12-01'::date, date_trunc('month', now() at time zone 'Asia/Manila')::date), interval '1 month') m`;
 
   const [rec] = await sql<{ id: string }[]>`
     insert into production_recipes (org_id, name, output_item_id, output_quantity, created_by)

@@ -49,6 +49,9 @@
       "@shareat/domain/item-code": [
         "./packages/domain/src/item-code.ts"
       ],
+      "@shareat/domain/item-import-limits": [
+        "./packages/domain/src/items/import-limits.ts"
+      ],
       "@shareat/domain/field-rules": [
         "./packages/domain/src/field-rules/index.ts"
       ],

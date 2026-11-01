@@ -359,3 +359,17 @@ All twelve tester assumptions are ACCEPTED as written in the t455-s6a test-file 
 7. A past `scheduledAt` is allowed ("Now"); play is not time-gated in S6a.
 8–12. As assumed.
 13. Audit 1 Nov: seated entries' unanswered requests expire in the nightly job 3 h after the entry closed; cancel vs played race answers 409.
+
+## S7a rulings (BOSS orchestrator, Opus, 2026-11-02) — after the tester's pass
+Tester assumptions 1–9 and 11 ACCEPTED as written in the t455-s7a test headers. Specifics:
+- Full holder name and ID are kept ONLY while a claim is pending; nulled on approve, reject, expire and diner cancel
+  (cancel = status `expired`, slot freed). Only `openClaim` returns them (pending only), audited `lobby.claim_open`
+  each time. Diner and staff lists show `****last4` only. No name or ID in any audit row or log.
+- **Bug fix (case D4):** `sweepStalePendingClaims` (repo/lobby.ts ~398) must NOT expire a pending claim just because its
+  entry is seated (approval needs a seated entry). Sweep a pending claim when its entry closed unseated (immediately),
+  when a seated entry closed more than 3 h ago, or when the claim is 24 h old — matching S6a ruling 13.
+- **Duplicate card in one entry:** a second PENDING claim with the same normalised ID number (spaces/hyphens removed,
+  case-insensitive) in the same entry is refused (new code LOBBY_CLAIM_DUPLICATE, plain sentence). Approved claims are
+  de-duplicated at the POS by T-426's existing refusal (S7b).
+- Audit catalogue +3 (lobby.claim_open / _approve / _reject); raise t402-s1b and t453 ceilings together, re-measured.
+- Audit 2 Nov: one ID normalisation for duplicates; at most 10 claim rows per entry; S7b's reject uses a fixed reason list (no free text reaches the diner); pending PII lives at most until the nightly sweep (3 h after seating, 24 h max) — accepted.

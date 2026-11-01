@@ -185,7 +185,7 @@ beforeEach(async () => {
   await sql`insert into production_recipe_lines (recipe_id, item_id, quantity, unit) values (${recipeId}, ${itemCheese}, 0.2, 'g')`;
   await sql`insert into production_recipe_lines (recipe_id, item_id, quantity, unit) values (${recipeId}, ${itemSauce}, 1, 'box')`;
 
-  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${orgA}, m::date, (m + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2026-01-01'::date, '2026-12-01'::date, interval '1 month') m`;
+  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${orgA}, m::date, (m + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2026-01-01'::date, greatest('2026-12-01'::date, date_trunc('month', now() at time zone 'Asia/Manila')::date), interval '1 month') m`;
   await seedChartOfAccounts(sql, orgA);
 
   // T-375 S5: the store is LINKED to POS, with the tenders D1's methods resolve to; days are imported, never typed.
