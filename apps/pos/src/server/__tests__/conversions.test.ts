@@ -147,6 +147,27 @@ describe('Acceptance 1 - direction and the figures', () => {
   });
 });
 
+describe("DEF-808 - v1's live data types Cash as 'other'", () => {
+  const mop = (id: string, name: string, type: string, extra: Record<string, unknown> = {}) =>
+    fs.seed(`stores/${STORE}/storeModesOfPayment/${id}`, { id, name, type, sortOrder: 1, isActive: true, hasRef: false, isArchived: false, ...extra });
+
+  it('C1: a method named Cash and typed other is the cash side of a conversion', async () => {
+    mop('m-cash', 'Cash', 'other');
+    const r = await convert(body());
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(fs.get(`stores/${STORE}/paymentConversions/${R1}`)).toMatchObject({ fromMethod: 'GCash', toMethod: 'Cash' });
+  });
+
+  it('C2: a Gcash or Bank Transfer typed other is never taken as cash; with no cash the conversion is refused', async () => {
+    mop('m-cash', 'Bank Transfer', 'other');
+    mop('x-gcash', 'Gcash', 'other');
+    const r = await convert(body());
+    refused(r, 'no cash method');
+    expect(r.body.error).toBe('That payment method is not available.');
+    expect(convs()).toHaveLength(0);
+  });
+});
+
 describe('Acceptance 2 - two tabs, idempotency', () => {
   it('two tabs, two requestIds, transactions truly overlapping (beforeNextTransaction fires as tab A starts): both recorded, moved by the SUM (M3)', async () => {
     let tabB: Promise<{ status: number; body: any }> | undefined;

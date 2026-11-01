@@ -76,6 +76,18 @@ beforeEach(async () => {
   await sale('a2', 250.5, at('2026-10-14T19:30:00'));
 });
 
+describe("DEF-808 C3 - characterisation: Cash typed 'other' is still counted as cash (passes before and after the DEF-808 fix)", () => {
+  it('the Z cash line counts the Cash sales and not a GCash sale, when v1 types every method other', async () => {
+    for (const [id, name] of [['m-cash', 'Cash'], ['m-gcash', 'GCash']] as const) {
+      fs.seed(`stores/${STORE}/storeModesOfPayment/${id}`, { id, name, type: 'other', sortOrder: 1, isActive: true, hasRef: false, isArchived: false });
+    }
+    await seedSale(fs, { id: 'g1', lines: [{ id: 'l-g1', unit: 999, qty: 1 }], total: 999, mop: { GCash: 999 }, createdAtClientMs: at('2026-10-14T12:00:00'), receiptNumber: 'SHT-01-g1' });
+    const r = await closeDay(zbody(), { token: 'tok-cashier' });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body.reading.cash.salesCentavos).toBe(75_050); // a1 500 + a2 250.50, both Cash; the 999 GCash sale is not cash
+  });
+});
+
 describe('Ruling 3 - who may close the day, and the manager PIN', () => {
   it('a cashier presses it, a manager approves with the PIN: Z-0001 is written with the figures', async () => {
     const r = await closeDay(zbody(), { token: 'tok-cashier' });

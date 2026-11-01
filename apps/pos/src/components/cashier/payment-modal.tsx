@@ -29,6 +29,7 @@ import { storedPesosToCentavos, toWirePesos } from "@/lib/money/centavos";
 import { NEEDS_INTERNET, offlineTenderRule } from "@/lib/offline/offlineRules";
 // A peso amount made exact (whole centavos back to the peso number the form holds).
 import { roundMoney as normalizePesos } from "@/lib/money";
+import { defaultPaymentMethodId } from "@/lib/cash/default-payment-method";
 
 // --- Validation ---
 function validatePayments(payments: Payment[], grandTotalCents: number, paymentMethods: ModeOfPayment[], isOnline = true): string | null {
@@ -212,8 +213,7 @@ export function PaymentModal({
       const remainingCents = Math.max(0, storedPesosToCentavos(grandTotal) - seededCents);
       const remaining = toWirePesos(remainingCents);
 
-      const cashMethod = paymentMethods.find(pm => pm.type === "cash");
-      const defaultMethodId = cashMethod?.id || (paymentMethods.length > 0 ? paymentMethods[0].id : "");
+      const defaultMethodId = defaultPaymentMethodId(paymentMethods);
 
       let lines: Payment[];
       if (prepaidLines.length === 0) {
@@ -251,8 +251,7 @@ export function PaymentModal({
   const canComplete = grandTotalCents > 0 && remainingCents <= 1 && !hasUnpaidGatewayRow;
 
   const addPayment = () => {
-    const cashMethod = paymentMethods.find(pm => pm.type === "cash");
-    const defaultMethodId = cashMethod?.id || (paymentMethods.length > 0 ? paymentMethods[0].id : "");
+    const defaultMethodId = defaultPaymentMethodId(paymentMethods);
     const newAmount = remainingBalance > 0 ? normalizePesos(remainingBalance) : 0;
     const newId = `pay-${Date.now()}`;
     setPayments(prev => [...prev, { id: newId, methodId: defaultMethodId, amount: newAmount, reference: "" }]);

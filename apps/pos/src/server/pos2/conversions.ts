@@ -2,6 +2,7 @@ import 'server-only';
 /** T-427: Convert moves the payment mix, never sales; authorization and all refusals precede writes. */
 import { getDayIdFromTimestamp, getDayStartMs } from '@/lib/analytics/daily';
 import { storedPesosToCentavos, toWirePesos } from '@/lib/money/centavos';
+import { isCashTender } from '@/lib/receipts/refund-cash-methods';
 import { safeKey } from './analytics/delta-core';
 import { authenticate } from './identity';
 import { requireRole } from './roles';
@@ -58,7 +59,8 @@ export async function handleConversion(req: Request, deps: Pos2Deps): Promise<Re
       if (existing.exists) return { previous: existing.data() as Record<string, any> };
       const methods = await tx.get(db.collection(`stores/${storeId}/storeModesOfPayment`).limit(200));
       const rows = methods.docs.map((d: any) => d.data() as Record<string, any>).filter(active);
-      const cash = rows.filter((m: Record<string, any>) => m.type === 'cash')
+      // DEF-808: v1's live data types Cash as 'other', so the cash side is found by type OR the exact name "Cash" (never Gcash).
+      const cash = rows.filter((m: Record<string, any>) => isCashTender(m))
         .sort((a: Record<string, any>, z: Record<string, any>) => (a.sortOrder ?? 0) - (z.sortOrder ?? 0) || String(a.name).localeCompare(String(z.name)))[0];
       const wallet = rows.find((m: Record<string, any>) => norm(String(m.name ?? '')) === norm(walletMethod) && m.type === 'online');
       if (!cash || !wallet) throw new Refusal(409, 'That payment method is not available.');
