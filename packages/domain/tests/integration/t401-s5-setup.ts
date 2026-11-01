@@ -103,7 +103,7 @@ export async function world(hint: string): Promise<World> {
   await sql`insert into production_recipe_lines (recipe_id, item_id, quantity, unit) values (${r!.id}, ${cheese}, 0.2, 'kg')`;
   await sql`insert into production_recipe_lines (recipe_id, item_id, quantity, unit) values (${r!.id}, ${rice}, 0.1, 'kg')`;
 
-  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${orgId}, m::date, (m + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2026-01-01'::date, '2026-12-01'::date, interval '1 month') m`;
+  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${orgId}, m::date, (m + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2026-01-01'::date, greatest('2026-12-01'::date, date_trunc('month', now() at time zone 'Asia/Manila')::date), interval '1 month') m`;
   await seedChartOfAccounts(sql, orgId);
 
   for (const [sid, tag] of [[storeA, 'A'], [storeB, 'B']] as const) {

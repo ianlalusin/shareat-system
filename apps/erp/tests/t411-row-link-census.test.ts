@@ -58,6 +58,8 @@ const ROW_LINK: readonly string[] = [
 
 /** Tables with no row destination: reports, editing grids, read-only detail lines. Untouched by T-411. */
 const NO_ROW_TARGET: readonly string[] = [
+  // T-502 S4: the import preview rows are findings about lines of an uploaded file; there is nothing to open
+  'app/items/import/page.tsx',
   // Reports (9)
   'components/reports/ApAgingTable.tsx',
   'components/reports/ArAgingTable.tsx',

@@ -264,6 +264,19 @@ Shown when the invoice has lines and at least one group has something left.
 - **Closed month:** the batch has no closed-month override; a verified invoice in a closed month is recorded one part at
   a time with "+ Record expense" (which has the override). Accepted.
 
+## 15. S4 rulings after the tester's pass (1 Nov)
+1. Capability `approve_item_request` (any admin, 2A). The import is an admin's bulk create+approve: it inserts through the
+   repo (not createItem's super-admin gate), keeps the code allocator (CHWN-001 style), and audits every created item and
+   alias as the confirming admin. Requester ≠ approver does not apply (there is no request).
+2. **No partial confirm.** Any row that is not `new` or `exists` blocks Confirm; the preview lists every problem so the
+   admin fixes the file and re-uploads.
+3. A row matching an existing item is skipped; the preview says so per row ("already in the list — its other names and
+   category in the file were not applied").
+4. Caps: 1,000 rows, 1 MiB, checked before parsing.
+5–8. As the tester assumed (sub-category required when the category has active ones; blank/retired category refused;
+   a name starting = + - @ is invalid; return shapes and line numbers as in the tests).
+- CSV parsing: a small hand-written parser in packages/core (quotes, escaped quotes, BOM, CRLF/LF), unit-tested. No new dependency.
+
 ## 16. S5 rulings after the tester's pass (1 Nov)
 - Attribution unit is **invoice + category** (not each expense — avoids double counting two expenses of one category on
   one invoice): T = posted expenses of category C on the invoice, L = lines of C. T ≤ L → T shared pro-rata by

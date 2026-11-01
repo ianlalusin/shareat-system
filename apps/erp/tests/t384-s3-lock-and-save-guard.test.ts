@@ -87,6 +87,8 @@ const COMMANDS: Record<string, string> = {
   'Pay': 'books a payment',
   'Clear the approval-PIN cap': 'lifts an administrator-PIN cap early (T-416, audited)',
   'Reopen PIN sign-in': 'lets PIN sign-in back in at a stopped store (T-395 S2, audited)',
+  'Check the file': 'T-502 S4: reads an uploaded CSV and shows what an import would do; writes nothing',
+  'Confirm and create the items': 'T-502 S4: creates the previewed items and other names in one transaction (admin, audited)',
   'Add directly (super-admin)': 'creates an item with no approval, bypassing the request flow (items page)',
   'Charge': 'books a charge',
   'Charge to this person': 'books a charge',

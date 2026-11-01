@@ -1467,3 +1467,15 @@ export async function retireReadout(tx: Tx, orgId: string, itemId: string): Prom
     activeMenuRules: Number(menuRules[0]?.n ?? 0),
   };
 }
+
+/** T-502 S4. Every item name in the org, any status (a retired or merged item still owns its name). The import's one read of what exists. */
+export async function listItemNamesForImport(tx: Tx, orgId: string): Promise<{ id: string; name: string }[]> {
+  const rows = (await tx.execute(sql`select id, name from items where org_id = ${orgId}`)) as unknown as { id: string; name: string }[];
+  return rows.map((r) => ({ id: String(r.id), name: String(r.name) }));
+}
+
+/** T-502 S4. Every other-name in the org, with the item it points at. */
+export async function listAliasTextsForImport(tx: Tx, orgId: string): Promise<{ alias: string; itemId: string }[]> {
+  const rows = (await tx.execute(sql`select alias, item_id from item_aliases where org_id = ${orgId}`)) as unknown as { alias: string; item_id: string }[];
+  return rows.map((r) => ({ alias: String(r.alias), itemId: String(r.item_id) }));
+}

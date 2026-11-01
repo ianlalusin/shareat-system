@@ -11,6 +11,8 @@ import { LOBBY_ENTRY_TTL_HOURS } from './checkin';
 
 /** Personal columns are NULLed on entries closed longer than this. */
 export const LOBBY_PURGE_AFTER_HOURS = 24;
+/** A seated entry's pending claims are swept once the entry has been closed this long (S6a ruling 13, S7a ruling: D4). */
+export const LOBBY_CLAIM_SEATED_GRACE_MINUTES = 180;
 /** A claim still pending after this long is swept even when its entry is live (S2 ruling 7). */
 export const LOBBY_CLAIM_MAX_AGE_HOURS = 24;
 
@@ -25,11 +27,11 @@ export async function expireStaleLobbyEntries(tx: Tx, orgId: string): Promise<nu
 }
 
 /**
- * A pending claim is swept when its entry is closed (any age) or the claim itself is older than 24 h. Name and ID number go to NULL
+ * A pending claim is swept when its entry closed unseated (any age), its seated entry closed more than 3 h ago, or the claim itself is older than 24 h. Name and ID number go to NULL
  * (the database CHECK); id_last4, kind, outcome and time stay. Approved claims are the receipt record and are never touched. Returns the count.
  */
 export async function sweepStalePendingClaims(tx: Tx, orgId: string): Promise<number> {
-  return lobbyRepo.sweepStalePendingClaims(tx, orgId, LOBBY_CLAIM_MAX_AGE_HOURS);
+  return lobbyRepo.sweepStalePendingClaims(tx, orgId, LOBBY_CLAIM_MAX_AGE_HOURS, LOBBY_CLAIM_SEATED_GRACE_MINUTES);
 }
 
 /**

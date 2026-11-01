@@ -65,7 +65,7 @@ let fixtureStep = 'money base';
 async function createFixture() {
   const f = await moneyFixture(sql, 't440s4');
   await sql`update person_roles set role = 'super_admin' where person_id = ${f.adminId} and org_id = ${f.orgId}`;
-  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${f.orgId}::uuid, d::date, (d + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2026-03-01'::date, '2026-12-01'::date, '1 month') d`;
+  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) select ${f.orgId}::uuid, d::date, (d + interval '1 month' - interval '1 day')::date, 'open' from generate_series('2026-03-01'::date, greatest('2026-12-01'::date, date_trunc('month', now() at time zone 'Asia/Manila')::date), '1 month') d`;
   fixtureStep = 'pending invoice';
   const invoiceId = await pendingInvoice(sql, f, '100.00');
   // A valid draft payment needs no journal yet; it is never posted by these refusal cases.

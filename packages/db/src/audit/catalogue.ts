@@ -108,6 +108,7 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('item_alias.removed', 'stock', 'normal', 'org', 'item_aliases', 'T-502'),
   def('item.expense_category_set', 'stock', 'normal', 'org', 'items', 'T-502'),
   def('item.merged', 'stock', 'normal', 'org', 'items', 'T-502'),
+  def('item.imported', 'stock', 'normal', 'org', 'items', 'T-502'),
   def('expense_subcategory.created', 'settings', 'normal', 'org', 'expense_subcategories', 'T-502'),
   def('expense_subcategory.renamed', 'settings', 'normal', 'org', 'expense_subcategories', 'T-502'),
   def('expense_subcategory.active_set', 'settings', 'normal', 'org', 'expense_subcategories', 'T-502'),
@@ -139,6 +140,10 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('lobby.birthday_accept', 'order', 'low', 'store', 'lobby_birthday_request', 'T-455'),
   def('lobby.birthday_decline', 'order', 'low', 'store', 'lobby_birthday_request', 'T-455'),
   def('lobby.birthday_play', 'order', 'low', 'store', 'lobby_birthday_request', 'T-455'),
+  // T-455 S7a: the cashier / tablet opens (the only full view of name + ID), approves or rejects a senior/PWD claim (entity = the claim; payload: code, kind, status, last 4, reason, cashier - NEVER a name or an ID number).
+  def('lobby.claim_open', 'order', 'normal', 'store', 'lobby_discount_claim', 'T-455'),
+  def('lobby.claim_approve', 'order', 'normal', 'store', 'lobby_discount_claim', 'T-455'),
+  def('lobby.claim_reject', 'order', 'low', 'store', 'lobby_discount_claim', 'T-455'),
   // T-190: a change to the statutory tables (rate row, withholding table, minimum wage): add, confirm or discard. ONE entry (the catalogue
   // size is capped); `after.table` / `after.event` say which. Dotted: new. Org-scoped, admin-readable; rows are immutable once confirmed.
   // T-190: a person's government numbers were set or cleared. Records FIELD NAMES only, never a number.

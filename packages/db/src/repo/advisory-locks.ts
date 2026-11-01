@@ -88,6 +88,15 @@ export async function lockInterStorePair(tx: Tx, storeA: string, storeB: string)
   );
 }
 
+/** Namespace (first int4) for the per-org item-import lock. T-502 S4. */
+const ITEM_IMPORT_LOCK_NAMESPACE = 502001;
+
+/** Serialises every item-import confirm for one org, taken BEFORE the file is analysed: a second admin confirming at once
+ *  waits, then sees the first import's committed items as `exists` (so no name clash, and no deadlock on the code counters). */
+export async function lockItemImport(tx: Tx, orgId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(${ITEM_IMPORT_LOCK_NAMESPACE}::int4, hashtext(${'item_import:' + orgId}))`);
+}
+
 /** Namespace (first int4) for the dual-run store-week lock. T-392 S4. */
 const DUAL_RUN_WEEK_LOCK_NAMESPACE = 392001;
 

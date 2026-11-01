@@ -103,6 +103,10 @@ const EXEMPT: Record<string, string> = {
     'UNWIRED — T-455 S6a built the ERP-cashier door (authorize record_sale) beside the tablet door; the POS tablet (S6b, ForTerminal) is the real caller and no ERP screen is planned. Remove this row if an ERP screen ever calls it.',
   markBirthdayPlayed:
     'UNWIRED — T-455 S6a built the ERP-cashier door (authorize record_sale) beside the tablet door; the POS tablet (S6b, ForTerminal) is the real caller and no ERP screen is planned. Remove this row if an ERP screen ever calls it.',
+  listClaimRequests:
+    'UNWIRED — T-455 S7a built the ERP-cashier door (authorize record_sale) beside the tablet door; the POS tablet (S7b, ForTerminal) is the real caller and no ERP screen is planned. Remove this row if an ERP screen ever calls it.',
+  openClaim:
+    'UNWIRED — T-455 S7a built the ERP-cashier door (authorize record_sale) beside the tablet door; the POS tablet (S7b, ForTerminal) is the real caller and no ERP screen is planned. Remove this row if an ERP screen ever calls it.',
   gatherApprovalFacts:
     'INTERNAL — T-475 S1 split approveExpense into facts + verdict; previewInvoiceDrafts (the AP verify preview) and approveExpense call it in the same file.',
   recordRemittanceEvent:
