@@ -99,6 +99,14 @@ function WaitScreen() {
         </div>
       ) : null}
       {view.canCancel ? (
+        <Link
+          href={`/lobby/birthday?s=${encodeURIComponent(storeCode)}`}
+          className="mt-6 flex min-h-[44px] w-full items-center justify-center rounded-md border border-border bg-card px-3 text-sm font-semibold"
+        >
+          Request birthday song
+        </Link>
+      ) : null}
+      {view.canCancel ? (
         <div className="mt-8">
           {confirming ? (
             <div className="flex items-center justify-center gap-2">

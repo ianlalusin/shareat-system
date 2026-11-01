@@ -1,6 +1,6 @@
 /**
  * The only place SQL is written for the customer lobby (T-455, migration 0215): `lobby_stores`, `lobby_entries`, `lobby_entry_lines`,
- * `lobby_entry_line_options`, `lobby_birthday_requests` (the purge only) and `lobby_discount_claims` (expiry only; S7 owns the rest).
+ * `lobby_entry_line_options`, `lobby_birthday_requests` (the purge; from S6a the birthday-song request too) and `lobby_discount_claims` (expiry only; S7 owns the rest).
  * docs/tasks/455-customer-lobby.md.
  *
  * Every function takes the caller's transaction and an org id and filters by it explicitly as well as by RLS. No function here opens a
@@ -9,7 +9,7 @@
  * entry life and the 24-hour purge all compare against `now()` in SQL.
  */
 import { randomInt } from 'node:crypto';
-import { and, asc, eq, inArray, isNotNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, or, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
 import { lobbyBirthdayRequests, lobbyDiscountClaims, lobbyEntries, lobbyEntryLineOptions, lobbyEntryLines, lobbyStores } from '../../schema/lobby';
 import { menuItemVariants, menuOptionValues } from '../../schema/menu';
@@ -504,4 +504,186 @@ export async function listLinesForEntries(tx: Tx, orgId: string, storeId: string
      order by l.created_at, l.id
   `)) as unknown as TerminalLineRow[];
   return rows;
+}
+
+
+// ------------------------------------------------------------------------------------------------ T-455 S6a: the birthday-song request
+
+export interface BirthdayRow {
+  readonly id: string;
+  readonly entryId: string;
+  readonly storeId: string;
+  /** The entry's booking code (a number, not diner data). */
+  readonly code: string;
+  readonly celebrantName: string | null;
+  readonly status: 'requested' | 'accepted' | 'declined' | 'played' | 'expired' | 'cancelled';
+  readonly scheduledAt: Date | null;
+  readonly declineReason: string | null;
+}
+
+const birthdayCols = {
+  id: lobbyBirthdayRequests.id,
+  entryId: lobbyBirthdayRequests.entryId,
+  storeId: lobbyEntries.storeId,
+  code: lobbyEntries.code,
+  celebrantName: lobbyBirthdayRequests.celebrantName,
+  status: lobbyBirthdayRequests.status,
+  scheduledAt: lobbyBirthdayRequests.scheduledAt,
+  declineReason: lobbyBirthdayRequests.declineReason,
+};
+
+const joinEntry = and(eq(lobbyEntries.orgId, lobbyBirthdayRequests.orgId), eq(lobbyEntries.id, lobbyBirthdayRequests.entryId));
+
+/** Does this store's lobby row allow birthday requests? A store with no lobby row answers false. */
+export async function isBirthdayEnabled(tx: Tx, orgId: string, storeId: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ on: lobbyStores.birthdayEnabled })
+    .from(lobbyStores)
+    .where(and(eq(lobbyStores.orgId, orgId), eq(lobbyStores.storeId, storeId)))
+    .limit(1);
+  return row?.on ?? false;
+}
+
+/** The entry's request: the live (not cancelled) one when there is one, else the newest cancelled one. */
+export async function findBirthdayOfEntry(tx: Tx, orgId: string, entryId: string): Promise<BirthdayRow | undefined> {
+  const [row] = await tx
+    .select(birthdayCols)
+    .from(lobbyBirthdayRequests)
+    .innerJoin(lobbyEntries, joinEntry)
+    .where(and(eq(lobbyBirthdayRequests.orgId, orgId), eq(lobbyBirthdayRequests.entryId, entryId)))
+    .orderBy(sql`(${lobbyBirthdayRequests.status} = 'cancelled')`, desc(lobbyBirthdayRequests.createdAt), desc(lobbyBirthdayRequests.id))
+    .limit(1);
+  return row;
+}
+
+/** One request of this org by id, with its entry's store and code, the request row locked for the move that follows. */
+export async function getBirthdayForUpdate(tx: Tx, orgId: string, requestId: string): Promise<BirthdayRow | undefined> {
+  const [row] = await tx
+    .select(birthdayCols)
+    .from(lobbyBirthdayRequests)
+    .innerJoin(lobbyEntries, joinEntry)
+    .where(and(eq(lobbyBirthdayRequests.orgId, orgId), eq(lobbyBirthdayRequests.id, requestId)))
+    .limit(1)
+    .for('update', { of: lobbyBirthdayRequests });
+  return row;
+}
+
+/** Insert a requested row. undefined when the entry already holds a live request (the partial unique index), without aborting the transaction. */
+export async function insertBirthday(tx: Tx, orgId: string, entryId: string, celebrantName: string | null): Promise<string | undefined> {
+  const [row] = await tx
+    .insert(lobbyBirthdayRequests)
+    .values({ orgId, entryId, celebrantName, status: 'requested' })
+    .onConflictDoNothing()
+    .returning({ id: lobbyBirthdayRequests.id });
+  return row?.id;
+}
+
+export async function cancelBirthday(tx: Tx, orgId: string, requestId: string): Promise<void> {
+  await tx
+    .update(lobbyBirthdayRequests)
+    .set({ status: 'cancelled' })
+    .where(and(eq(lobbyBirthdayRequests.orgId, orgId), eq(lobbyBirthdayRequests.id, requestId)));
+}
+
+/** requested -> accepted with the time (the trigger stamps accepted_at). */
+export async function acceptBirthdayRow(tx: Tx, orgId: string, requestId: string, scheduledAt: Date, personId: string): Promise<void> {
+  await tx
+    .update(lobbyBirthdayRequests)
+    .set({ status: 'accepted', scheduledAt, actedByPersonId: personId })
+    .where(and(eq(lobbyBirthdayRequests.orgId, orgId), eq(lobbyBirthdayRequests.id, requestId)));
+}
+
+export async function declineBirthdayRow(tx: Tx, orgId: string, requestId: string, reason: string, personId: string): Promise<void> {
+  await tx
+    .update(lobbyBirthdayRequests)
+    .set({ status: 'declined', declineReason: reason, actedByPersonId: personId })
+    .where(and(eq(lobbyBirthdayRequests.orgId, orgId), eq(lobbyBirthdayRequests.id, requestId)));
+}
+
+export async function playBirthdayRow(tx: Tx, orgId: string, requestId: string, personId: string): Promise<void> {
+  await tx
+    .update(lobbyBirthdayRequests)
+    .set({ status: 'played', playedAt: sql`now()`, actedByPersonId: personId })
+    .where(and(eq(lobbyBirthdayRequests.orgId, orgId), eq(lobbyBirthdayRequests.id, requestId)));
+}
+
+/** Accepted requests whose time passed more than `minutes` ago (database clock) -> expired. Returns the count. */
+export async function expireStaleBirthdays(tx: Tx, orgId: string, minutes: number): Promise<number> {
+  const rows = await tx
+    .update(lobbyBirthdayRequests)
+    .set({ status: 'expired' })
+    .where(
+      and(
+        eq(lobbyBirthdayRequests.orgId, orgId),
+        eq(lobbyBirthdayRequests.status, 'accepted'),
+        sql`${lobbyBirthdayRequests.scheduledAt} < now() - make_interval(mins => ${minutes})`,
+      ),
+    )
+    .returning({ id: lobbyBirthdayRequests.id });
+  return rows.length;
+}
+
+/** Requested or accepted requests of SEATED entries that closed more than `minutes` ago (database clock) -> expired. Returns the count. */
+export async function expireSeatedEntryBirthdays(tx: Tx, orgId: string, minutes: number): Promise<number> {
+  const rows = await tx
+    .update(lobbyBirthdayRequests)
+    .set({ status: 'expired' })
+    .where(
+      and(
+        eq(lobbyBirthdayRequests.orgId, orgId),
+        inArray(lobbyBirthdayRequests.status, ['requested', 'accepted']),
+        sql`exists (select 1 from ${lobbyEntries} e where e.id = ${lobbyBirthdayRequests.entryId} and e.org_id = ${orgId} and e.status = 'seated' and e.closed_at < now() - make_interval(mins => ${minutes}))`,
+      ),
+    )
+    .returning({ id: lobbyBirthdayRequests.id });
+  return rows.length;
+}
+
+/** An entry closed unseated: its requested AND accepted request is expired (a seated entry leaves it as it is). */
+export async function expireBirthdayOfEntry(tx: Tx, orgId: string, entryId: string): Promise<number> {
+  const rows = await tx
+    .update(lobbyBirthdayRequests)
+    .set({ status: 'expired' })
+    .where(
+      and(
+        eq(lobbyBirthdayRequests.orgId, orgId),
+        eq(lobbyBirthdayRequests.entryId, entryId),
+        inArray(lobbyBirthdayRequests.status, ['requested', 'accepted']),
+      ),
+    )
+    .returning({ id: lobbyBirthdayRequests.id });
+  return rows.length;
+}
+
+export interface BirthdayListRow {
+  readonly requestId: string;
+  readonly entryId: string;
+  readonly code: string;
+  readonly displayName: string | null;
+  readonly standLabel: string | null;
+  readonly celebrantName: string | null;
+  readonly status: 'requested' | 'accepted';
+  readonly scheduledAt: Date | null;
+  readonly createdAt: Date;
+}
+
+/** The store's open requests (requested + accepted), oldest first. Never selects a hash, hand-off link or phone. */
+export async function listOpenBirthdays(tx: Tx, orgId: string, storeId: string): Promise<BirthdayListRow[]> {
+  const rows = await tx
+    .select({
+      requestId: lobbyBirthdayRequests.id,
+      entryId: lobbyBirthdayRequests.entryId,
+      code: lobbyEntries.code,
+      displayName: lobbyEntries.displayName,
+      standLabel: lobbyEntries.standLabel,
+      celebrantName: lobbyBirthdayRequests.celebrantName,
+      status: lobbyBirthdayRequests.status,
+      scheduledAt: lobbyBirthdayRequests.scheduledAt,
+      createdAt: lobbyBirthdayRequests.createdAt,
+    })
+    .from(lobbyBirthdayRequests)
+    .innerJoin(lobbyEntries, joinEntry)
+    .where(and(eq(lobbyBirthdayRequests.orgId, orgId), eq(lobbyEntries.storeId, storeId), inArray(lobbyBirthdayRequests.status, ['requested', 'accepted'])))
+    .orderBy(asc(lobbyBirthdayRequests.createdAt), asc(lobbyBirthdayRequests.id));
+  return rows.map((r) => ({ ...r, status: r.status as 'requested' | 'accepted' }));
 }

@@ -1,4 +1,4 @@
-import type { LobbyCheckInInput, LobbyEntrySummary, LobbyMyEntry, LobbyResult, LobbyStatus } from './http-lobby-data';
+import type { LobbyBirthday, LobbyCheckInInput, LobbyEntrySummary, LobbyMyEntry, LobbyResult, LobbyStatus } from './http-lobby-data';
 import type { LobbyData, LobbyStoreView } from './lobby-data';
 
 /**
@@ -33,6 +33,9 @@ interface LobbyDemo {
   seat(url: string | null, standLabel: string, opts?: { repeatLink?: boolean }): void;
   close(status: 'removed' | 'expired' | 'cancelled'): void;
   asNewDevice(): void;
+  /** The cashier accepts / declines the latest place's birthday request (S6a). */
+  acceptBirthday(inMinutes: number): void;
+  declineBirthday(reason: string): void;
 }
 
 const fail = <T>(status: number, error: string): LobbyResult<T> => ({ ok: false, status, error });
@@ -43,6 +46,7 @@ export function createFixtureLobbyData(opts: { now?: () => number } = {}): Lobby
   let device = 1;
   let seq = 0;
   let paused = false;
+  const birthdays = new Map<string, LobbyBirthday>();
 
   const live = (r: Row) => r.status === 'waiting' || r.status === 'called';
   const mine = (storeCode: string) => [...rows].reverse().find((r) => r.storeCode === storeCode && r.device === device);
@@ -102,6 +106,35 @@ export function createFixtureLobbyData(opts: { now?: () => number } = {}): Lobby
       r.status = 'cancelled';
       return { ok: true, value: { entryId: r.entryId, status: 'cancelled' } };
     },
+
+    async birthday(storeCode): Promise<LobbyResult<LobbyBirthday | null>> {
+      const r = mine(storeCode);
+      if (!r) return fail(404, NOT_FOUND);
+      return { ok: true, value: birthdays.get(r.entryId) ?? null };
+    },
+
+    async requestBirthday(storeCode, celebrantName): Promise<LobbyResult<LobbyBirthday | null>> {
+      const r = mine(storeCode);
+      if (!r) return fail(404, NOT_FOUND);
+      const name = celebrantName === null ? null : celebrantName.trim() || null;
+      if (name !== null && name.length > 40) return fail(400, BAD);
+      if (!live(r)) return fail(409, 'That place in line is already closed.');
+      const had = birthdays.get(r.entryId);
+      if (had && had.status !== 'cancelled') return fail(409, 'A birthday song has already been requested for your table.');
+      const b: LobbyBirthday = { status: 'requested', celebrantName: name, scheduledAt: null, declineReason: null };
+      birthdays.set(r.entryId, b);
+      return { ok: true, value: { ...b } };
+    },
+
+    async cancelBirthday(storeCode): Promise<LobbyResult<LobbyBirthday | null>> {
+      const r = mine(storeCode);
+      if (!r) return fail(404, NOT_FOUND);
+      const b = birthdays.get(r.entryId);
+      if (!b) return fail(404, NOT_FOUND);
+      if (b.status !== 'requested' && b.status !== 'accepted') return fail(409, 'That birthday song request can no longer be changed.');
+      b.status = 'cancelled';
+      return { ok: true, value: { ...b } };
+    },
   };
 
   const demo: LobbyDemo = {
@@ -126,6 +159,22 @@ export function createFixtureLobbyData(opts: { now?: () => number } = {}): Lobby
     },
     asNewDevice: () => {
       device += 1;
+    },
+    acceptBirthday: (inMinutes) => {
+      const r = latest();
+      const b = r ? birthdays.get(r.entryId) : undefined;
+      if (b && b.status === 'requested') {
+        b.status = 'accepted';
+        b.scheduledAt = new Date(now() + inMinutes * 60_000).toISOString();
+      }
+    },
+    declineBirthday: (reason) => {
+      const r = latest();
+      const b = r ? birthdays.get(r.entryId) : undefined;
+      if (b && b.status === 'requested') {
+        b.status = 'declined';
+        b.declineReason = reason;
+      }
     },
   };
 
