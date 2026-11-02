@@ -425,6 +425,122 @@ export async function aging(
   }));
 }
 
+export interface PlatformAgingBucket {
+  channelId: string;
+  channelName: string;
+  storeId: string;
+  receivableAccountCode: string;
+  current: string;
+  d1to30: string;
+  d31to60: string;
+  d61to90: string;
+  d90plus: string;
+}
+
+/**
+ * T-507 - what each delivery platform owes, aged. The platform receivable has no charge documents: the verified sales day debits the
+ * channel's own receivable account (`sales_channels.receivable_account_code`, never a hard-coded 1220) and a settlement credits it, so the
+ * ledger lines ARE the items. Same bucket edges as `aging` above; each debit is aged by its journal entry date and credits are matched
+ * FIFO (oldest debit first) per channel. A channel owed a net credit shows it in `current` so the row still ties to the ledger.
+ */
+export async function platformAging(
+  tx: Tx,
+  orgId: string,
+  asOfDate: string,
+  storeId?: string,
+): Promise<PlatformAgingBucket[]> {
+  const rows = (await tx.execute(sql`
+    with lines as (
+      select sc.id as channel_id, sc.name as channel_name, sc.store_id, sc.receivable_account_code as code,
+             je.entry_date, jl.id as line_id, (jl.debit - jl.credit) as net
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id
+      join accounts a on a.id = jl.account_id
+      join sales_channels sc on sc.id::text = jl.party_id and sc.org_id = je.org_id and sc.receivable_account_code = a.code
+      where je.org_id = ${orgId} and je.status <> 'draft' and jl.party_type = 'channel'
+        -- A void posts a full-mirror reversal (journal_entries.reversal_of_entry_id). Net each reversal against the entry it reverses by
+        -- dropping BOTH from the aging items; otherwise its credit would FIFO-consume the oldest unrelated debit. A full reversal nets to
+        -- zero, so the account balance (platformControlBalance, which keeps every line) still ties.
+        and je.reversal_of_entry_id is null
+        and not exists (select 1 from journal_entries rv where rv.reversal_of_entry_id = je.id and rv.status <> 'draft')
+        ${storeId ? sql`and jl.store_id = ${storeId}` : sql``}
+    ),
+    credited as (
+      select channel_id, coalesce(sum(-net) filter (where net < 0), 0) as credits,
+             coalesce(sum(net) filter (where net > 0), 0) as debits
+      from lines group by channel_id
+    ),
+    items as (
+      select l.channel_id, l.channel_name, l.store_id, l.code, l.entry_date, l.net as amount,
+             sum(l.net) over (partition by l.channel_id order by l.entry_date, l.line_id) as running
+      from lines l where l.net > 0
+    ),
+    open as (
+      select i.channel_id, i.channel_name, i.store_id, i.code, i.entry_date as aging_date,
+             greatest(0, least(i.amount, i.running - c.credits)) as outstanding
+      from items i join credited c on c.channel_id = i.channel_id
+      union all
+      select l.channel_id, l.channel_name, l.store_id, l.code, ${asOfDate}::date as aging_date, (c.debits - c.credits) as outstanding
+      from (select distinct channel_id, channel_name, store_id, code from lines) l
+      join credited c on c.channel_id = l.channel_id
+      where c.credits > c.debits
+    )
+    select channel_id::text, channel_name, store_id::text, code,
+      coalesce(sum(outstanding) filter (where aging_date >= ${asOfDate}), 0)::text as current,
+      coalesce(sum(outstanding) filter (where aging_date < ${asOfDate} and aging_date >= (${asOfDate}::date - 30)), 0)::text as d1to30,
+      coalesce(sum(outstanding) filter (where aging_date < (${asOfDate}::date - 30) and aging_date >= (${asOfDate}::date - 60)), 0)::text as d31to60,
+      coalesce(sum(outstanding) filter (where aging_date < (${asOfDate}::date - 60) and aging_date >= (${asOfDate}::date - 90)), 0)::text as d61to90,
+      coalesce(sum(outstanding) filter (where aging_date < (${asOfDate}::date - 90)), 0)::text as d90plus
+    from open
+    group by channel_id, channel_name, store_id, code
+    having abs(sum(outstanding)) > ${EPSILON}
+    order by channel_name, channel_id
+  `)) as unknown as Record<string, string>[];
+  return rows.map((r) => ({
+    channelId: String(r.channel_id),
+    channelName: String(r.channel_name),
+    storeId: String(r.store_id),
+    receivableAccountCode: String(r.code),
+    current: Number(r.current).toFixed(2),
+    d1to30: Number(r.d1to30).toFixed(2),
+    d31to60: Number(r.d31to60).toFixed(2),
+    d61to90: Number(r.d61to90).toFixed(2),
+    d90plus: Number(r.d90plus).toFixed(2),
+  }));
+}
+
+/** T-507 - the platform receivable accounts' own balance (each channel on the account it names), as the aging's tie-out. */
+export async function platformControlBalance(tx: Tx, orgId: string, storeId?: string): Promise<string> {
+  const [row] = (await tx.execute(sql`
+    select coalesce(sum(jl.debit - jl.credit), 0)::text as balance
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    where je.org_id = ${orgId} and je.status <> 'draft' and jl.party_type = 'channel'
+      and exists (
+        select 1 from sales_channels sc
+        where sc.id::text = jl.party_id and sc.org_id = je.org_id and sc.receivable_account_code = a.code
+      )
+      ${storeId ? sql`and jl.store_id = ${storeId}` : sql``}
+  `)) as unknown as Record<string, string>[];
+  return Number(row?.balance ?? 0).toFixed(2);
+}
+
+/** T-507 - open or submitted sales days with a platform (non-remitted) channel amount above zero: sales not yet receivable. */
+export async function daysWaitingForVerification(tx: Tx, orgId: string, storeId?: string): Promise<number> {
+  const [row] = (await tx.execute(sql`
+    select count(*)::int as n
+    from sales_days sd
+    where sd.org_id = ${orgId} and sd.status in ('open', 'submitted')
+      ${storeId ? sql`and sd.store_id = ${storeId}` : sql``}
+      and exists (
+        select 1 from sales_day_channels sdc join sales_channels sc on sc.id = sdc.channel_id
+        where sdc.sales_day_id = sd.id and sc.is_remitted_daily = false and sdc.amount > 0
+      )
+  `)) as unknown as { n: number }[];
+  return row ? Number(row.n) : 0;
+}
+
 /**
  * ⛔ Lock the charges a collection is about to settle, BEFORE reading their balances.
  *

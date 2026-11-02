@@ -3,9 +3,8 @@ import { posBridgeRepo, salesDaysRepo } from '@shareat/db';
 import { SchedulerStatus } from '../../components/scheduler-status';
 import { formatMoney, money } from '@shareat/core/money';
 import { addDays, parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
-import { listStores } from './lib';
 import { receiptCheckLine } from './receipt-check';
-import { requireSession } from '../../lib/session';
+import { reportScope } from '../reports/lib';
 import { withOrgPrincipal } from '../expenses/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -24,18 +23,25 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
 
   // ⭐ The org comes from the SESSION, not the URL. A person cannot browse another org's sales
   // days by editing a query string, and RLS refuses them underneath even if they try.
-  const { actor } = await requireSession('/sales-days');
-  const stores = await listStores(actor.orgId);
+  // DEF-809: the list shows every day's totals, cash and online money, so it is for people who may submit a sales day (managers
+  // and up, never staff), and only at the stores they hold. `reportScope` refuses otherwise and drops a forged ?store=.
+  const scope = await reportScope('/sales-days', 'submit_sales_day', sp.store);
+  const { actor, stores } = scope;
   const orgId = actor.orgId;
 
+  // "All stores" for a multi-store person means all of THEIR stores (storeIds below), never the org's.
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : undefined;
+  const viewerStoreIds = stores.map((s) => s.id);
   const status =
     sp.status === 'open' || sp.status === 'submitted' || sp.status === 'verified' || sp.status === 'voided'
       ? sp.status
       : undefined;
 
+  // T-507: the "Waiting for verification" filter is open + submitted, the days that have recognised nothing yet.
+  const unverified = sp.status === 'unverified';
+
   const days = await withOrgPrincipal(orgId, (tx) =>
-    salesDaysRepo.listSalesDays(tx, { orgId, storeId, status, limit: 100 }),
+    salesDaysRepo.listSalesDays(tx, { orgId, storeId, storeIds: viewerStoreIds, status, unverified, limit: 100 }),
   );
   // T-396 S2: the morning POS import's health, only for a person who may submit a sales day, and each line only at the
   // stores they may submit for.
@@ -122,9 +128,10 @@ export default async function SalesDaysPage({ searchParams }: { searchParams: Pr
         <Picker
           name="status"
           label="Status"
-          value={status ?? ''}
+          value={unverified ? 'unverified' : (status ?? '')}
           options={[
             { v: '', t: 'All' },
+            { v: 'unverified', t: 'Waiting for verification' },
             { v: 'open', t: 'Open' },
             { v: 'submitted', t: 'Submitted' },
             { v: 'verified', t: 'Verified' },
