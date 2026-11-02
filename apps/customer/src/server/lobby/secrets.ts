@@ -29,7 +29,7 @@ export function hmacHex(secret: string, value: string): string {
 }
 
 /**
- * The client network address, from `x-real-ip` ONLY (our nginx overwrites it; `x-forwarded-for` is chosen by the diner and is never read).
+ * The client network address, from `x-real-ip` ONLY (our Caddy overwrites it; `x-forwarded-for` is chosen by the diner and is never read).
  * null when absent: the caller answers 503 rather than putting every diner under one shared value. The only stand-in is the explicit
  * env var LOBBY_TEST_IP_STANDIN (read per request), for calling a route without a proxy.
  */

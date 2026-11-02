@@ -24,6 +24,7 @@
 import {
   filesRepo,
   fiscalPeriodsRepo,
+  lobbyRepo,
   schedulerRepo,
   storesRepo,
   systemTransaction,
@@ -221,6 +222,14 @@ export function lastCompletedPeriod(today = new Date()): string {
  */
 export async function listOrgsToRun(orgId?: string) {
   return systemTransaction((tx) => schedulerRepo.listOrgsToRun(tx, orgId));
+}
+
+/**
+ * T-455 S9a (DEF-742): the nightly lobby job's org list - every org with a `lobby_stores` row, ascending id. The same one-call-site rule as `listOrgsToRun` above: the lobby
+ * domain modules never open a transaction (tests/unit/t455-s2-tx-signature.test.ts), so the cross-org listing lives here with the other scheduler glue.
+ */
+export async function listLobbyOrgIds(): Promise<string[]> {
+  return systemTransaction((tx) => lobbyRepo.listOrgIdsWithLobbyStore(tx));
 }
 
 /**

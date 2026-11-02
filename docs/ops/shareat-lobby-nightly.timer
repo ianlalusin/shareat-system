@@ -1,0 +1,14 @@
+# T-455 S9a - DAILY at 05:30 Manila, after the 05:00 day roll (the purge clock runs from each entry's closed_at, so the exact minute does not matter; the order
+# with the other nightly jobs does not either: this one touches only lobby_* tables).
+
+[Unit]
+Description=Shareat - nightly customer-lobby purge (T-455 S9a)
+
+[Timer]
+OnCalendar=*-*-* 05:30:00 Asia/Manila
+# Catch up after a reboot or an outage rather than skipping silently - the same reasoning as every other daily job's timer (DEF-044).
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

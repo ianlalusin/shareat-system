@@ -57,6 +57,10 @@ chmod 700 /srv/shareat-shared/secrets
 touch /var/log/shareat/pos.log
 chown shareat:shareat /var/log/shareat/pos.log
 chmod 640 /var/log/shareat/pos.log
+# Customer app / lobby logs (shareat-customer.service and shareat-lobby-nightly.service append here; docs/ops/customer-lobby-runbook.md). Idempotent.
+touch /var/log/shareat/customer.log /var/log/shareat/lobby-nightly.log
+chown shareat:shareat /var/log/shareat/customer.log /var/log/shareat/lobby-nightly.log
+chmod 640 /var/log/shareat/customer.log /var/log/shareat/lobby-nightly.log
 
 # The deploy's releases/current-symlink swap creates/replaces /srv/shareat itself, which needs
 # WRITE on the containing directory (/srv), not on shareat-releases or shareat-shared — found the
@@ -88,6 +92,7 @@ cat > "$SUDOERS_FILE" <<'EOF'
 # T-205 — deploy needs to restart the web process after shipping a release. Nothing else.
 shareat ALL=(root) NOPASSWD: /usr/bin/systemctl restart shareat-erp.service
 shareat ALL=(root) NOPASSWD: /usr/bin/systemctl restart shareat-pos.service
+shareat ALL=(root) NOPASSWD: /usr/bin/systemctl restart shareat-customer.service
 EOF
 chmod 440 "$SUDOERS_FILE"
 visudo -cf "$SUDOERS_FILE"
@@ -169,6 +174,21 @@ pos2.shareat.net {
     max_size 1MB
   }
   reverse_proxy 127.0.0.1:9009
+}
+EOF
+  # Customer lobby (order.shareat.net -> 127.0.0.1:9010), docs/ops/customer-lobby-runbook.md. The app reads the diner's address ONLY from X-Real-IP, so the proxy
+  # must OVERWRITE it with the real peer address (header_up) and never pass one through. No X-Forwarded-For is read anywhere. Appended, like the POS block, so a re-run
+  # stays idempotent. Caddy gets its cert only while DNS for order.shareat.net points here.
+  cat >> /etc/caddy/Caddyfile <<EOF
+
+order.shareat.net {
+  encode zstd gzip
+  request_body {
+    max_size 64KB
+  }
+  reverse_proxy 127.0.0.1:9010 {
+    header_up X-Real-IP {remote_host}
+  }
 }
 EOF
   systemctl reload caddy 2>/dev/null || systemctl restart caddy

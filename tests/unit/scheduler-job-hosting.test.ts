@@ -76,12 +76,14 @@ function knownScripts(): string[] {
  *   so it is listed only in the `.service` allowance.
  * - `pos` — T-417: `shareat-pos.service` is POS v2's web process (second long-running `next start` on 9009,
  *   beside the ERP), not a scheduled job. No timer; `.service` allowance only, like `erp`.
+ * - `customer` — T-455 S9a: `shareat-customer.service` is the customer app's web process (third long-running `next start`, 9010, the lobby), not a
+ *   scheduled job. No timer; `.service` allowance only, like `erp` and `pos`.
  * - `month-end-retry` — a SECOND timer firing the SAME `shareat-month-end.service` (its own
  *   `[Timer] Unit=shareat-month-end.service` line, not derived from its filename). It has no
  *   `.service` of its own by design (Ian's 03:00 retry, `docs/ops/shareat-month-end-retry.timer`'s
  *   own header) — listed only in the `.timer` allowance.
  */
-const NAMED_NON_JOB_SERVICE = ['erp', 'pos'];
+const NAMED_NON_JOB_SERVICE = ['erp', 'pos', 'customer'];
 const NAMED_SECONDARY_TIMER_ONLY = ['month-end-retry'];
 
 /**
@@ -100,6 +102,9 @@ const NAMED_PLATFORM_JOB: Record<string, string> = {
     'T-393 S2: the weekly restore of the newest complete dump into a scratch database, with the trial-balance ' +
     'tie check, is cluster-wide, so it cannot be a per-org SCHEDULER_JOBS entry (scheduler_runs.org_id is NOT ' +
     'NULL); its run record is the drill report in Spaces and the heartbeat.',
+  'lobby-nightly':
+    'T-455 S9a: the 05:30 Manila customer-lobby purge loops every org with a lobby_stores row itself; scheduler_runs.job is a closed ' +
+    'CHECK and widening it needs a migration this slice does not need, so its run record is the exit code, the per-org counts and the journal.',
 };
 
 /**
@@ -191,8 +196,8 @@ describe('T-273 — every scheduler job is hosted by a docs/ops/ unit pair, or a
     expect(unexplained).toEqual([]);
   });
 
-  it('T-393 S2: the named platform jobs are exactly db-backup and restore-drill and none is a SCHEDULER_JOBS script', () => {
-    expect(Object.keys(NAMED_PLATFORM_JOB)).toEqual(['db-backup', 'restore-drill']);
+  it('T-393 S2 / T-455 S9a: the named platform jobs are exactly db-backup, restore-drill and lobby-nightly and none is a SCHEDULER_JOBS script', () => {
+    expect(Object.keys(NAMED_PLATFORM_JOB)).toEqual(['db-backup', 'restore-drill', 'lobby-nightly']);
     for (const name of Object.keys(NAMED_PLATFORM_JOB)) {
       expect(knownScripts(), `${name} is a per-org job script; it does not belong in NAMED_PLATFORM_JOB`).not.toContain(name);
     }

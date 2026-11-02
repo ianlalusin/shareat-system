@@ -30,6 +30,9 @@ export interface PrincipalSink {
 
 export const APP_ROLE = 'shareat_app';
 
+/** T-455 S9a (migration 0225): the NOLOGIN role the public lobby routes run as - the lobby_* tables, the store name and the menu ids, nothing else. */
+export const LOBBY_ROLE = 'shareat_lobby';
+
 /**
  * Applies `principal` to the CURRENT TRANSACTION. Call it as the first statement inside every
  * transaction that serves a request.
@@ -124,6 +127,19 @@ export async function withOrgPrincipal<T>(orgId: string, fn: (tx: Tx) => Promise
 }
 
 /**
+ * T-455 S9a - the transaction for the PUBLIC diner routes of the customer lobby (apps/customer/src/server/lobby/handlers.ts). Identical to
+ * `withOrgPrincipal` in shape (one round trip, every setting transaction-scoped, so the role and the org revert at COMMIT or ROLLBACK) with ONE difference
+ * that is the whole point: the role is `shareat_lobby` (migration 0225), which can read and write only the lobby_* tables and read the store name and the menu
+ * ids. A diner route that is bugged or attacked therefore cannot reach sales, persons, the books or the audit log: PostgreSQL answers 42501.
+ *
+ * ⛔ Staff paths (the POS terminal, the cashier) must NOT use this: they run on `withOrgPrincipal` / `withActorPrincipal` and need the wider role.
+ * ⛔ The org is still required: the same RLS policies apply to this role, so a transaction without it sees no row.
+ */
+export async function withLobbyPrincipal<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return openAs('lobby', orgId, fn);
+}
+
+/**
  * ⭐ **The same thing for work that no person asked for** — a cron, the month-end runner, a
  * backstop sweep. T-140, DEF-287.
  *
@@ -175,20 +191,21 @@ export async function withActorPrincipal<T>(
 
 /** The one implementation. See `withOrgPrincipal` above for why it is a single round trip. */
 async function openAs<T>(
-  kind: 'staff' | 'system',
+  kind: 'staff' | 'system' | 'lobby',
   orgId: string,
   fn: (tx: Tx) => Promise<T>,
   personId?: string,
 ): Promise<T> {
+  const role = kind === 'lobby' ? LOBBY_ROLE : APP_ROLE;
   return transaction(async (tx) => {
     if (personId === undefined) {
       await tx.execute(dsql`
-        select set_config('role', ${APP_ROLE}, true),
+        select set_config('role', ${role}, true),
                set_config('app.principal_kind', ${kind}, true),
                set_config('app.org_id', ${orgId}, true)`);
     } else {
       await tx.execute(dsql`
-        select set_config('role', ${APP_ROLE}, true),
+        select set_config('role', ${role}, true),
                set_config('app.principal_kind', ${kind}, true),
                set_config('app.org_id', ${orgId}, true),
                set_config('app.person_id', ${personId}, true)`);

@@ -151,6 +151,7 @@ const KNOWN_JOB_NAMES = [
   'runFirestoreRelay',
   'runFiscalPeriodSeed',
   'runInterEntityReconcile', // T-398 S5e: the 06:30 Manila inter-entity reconciliation (scripts/inter-entity-reconcile.ts)
+  'runLobbyNightlyJob', // T-455 S9a: the 05:30 Manila customer-lobby purge (scripts/lobby-nightly.ts)
   'runMonthEnd',
   'runOrderWastageBackstopSweep',
   'runOrphanFileSweep',

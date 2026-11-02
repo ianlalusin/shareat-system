@@ -2,7 +2,7 @@ import 'server-only';
 import { randomBytes } from 'node:crypto';
 /**
  * T-455 S3 - the diner's device cookie. The only thing that identifies a diner: 32 random bytes, base64url (43 chars). The server keeps
- * only its HMAC. Path-scoped to /api/lobby, no Domain, Secure always (nginx terminates TLS), HttpOnly, SameSite=Lax.
+ * only its HMAC. Path-scoped to /api/lobby, no Domain, Secure always (Caddy terminates TLS), HttpOnly, SameSite=Lax.
  */
 
 export const COOKIE_NAME = 'lobby_dev';

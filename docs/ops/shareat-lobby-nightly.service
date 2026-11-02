@@ -1,0 +1,25 @@
+# T-455 S9a - the nightly customer-lobby purge. INSTALL INSTRUCTIONS: docs/ops/customer-lobby-runbook.md
+#
+# Runs as a `system` principal with no session and no person: it lists every org that has a lobby_stores row, then for each one expires stale entries, sweeps
+# stale pending discount claims and NULLs the personal columns of entries closed more than 24 h ago (privacy rule, bible and task 455 section 4.7).
+# No row is deleted. Counts only are written to the log, never a name.
+
+[Unit]
+Description=Shareat - nightly customer-lobby purge (T-455 S9a)
+After=network-online.target
+Wants=network-online.target
+# No After=postgresql.service - the database is DO Managed Postgres, off-box (ADR-002 s1).
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/shareat
+ExecStart=/usr/bin/npm run lobby-nightly
+User=shareat
+Group=shareat
+
+# NEVER build here. This is a 4 GB droplet; a build OOMs it. This unit runs an already-installed tree shipped by CI (bible 2.10).
+Environment=NODE_ENV=production
+
+# The exit code is load-bearing: non-zero when any org failed (or none was found), so the host's mailer speaks up.
+StandardOutput=append:/var/log/shareat/lobby-nightly.log
+StandardError=append:/var/log/shareat/lobby-nightly.log

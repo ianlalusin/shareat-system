@@ -193,3 +193,50 @@ describe('GET /api/lobby/store', () => {
     expect(r.body).toEqual({ ok: false, error: 'That request is too large.' });
   });
 });
+
+// ================================================================================================ T-455 S9a item 3: the per-IP read limiter
+describe('S9a-3 the per-IP limit on the public store read', () => {
+  const asIp = (ip: string) => ({ 'x-real-ip': ip });
+
+  it('S11 the 61st read from one IP inside a minute answers 429 with the counter sentence; a different IP is still served; the 60 before it were 200 [kills: no limit; limit 59 or 61; one global counter; a different sentence or a code in the body]', async () => {
+    const { resetLobbyReadLimiterForTests } = await import('@/server/lobby/rate-limit');
+    resetLobbyReadLimiterForTests();
+    const s = await mkStore();
+    for (let i = 1; i <= 60; i++) expect((await store(s.code, asIp('203.0.113.77'))).status, `read ${i}`).toBe(200);
+    const over = await store(s.code, asIp('203.0.113.77'));
+    expect(over.status).toBe(429);
+    expect(over.body).toEqual({ ok: false, error: COUNTER });
+    expect(over.res.headers.get('cache-control')).toMatch(/no-store/);
+    expect(over.res.headers.get('set-cookie')).toBeNull();
+    expect((await store(s.code, asIp('203.0.113.78'))).status).toBe(200);
+  });
+
+  it('S12 the limiter does not touch check-in: an IP that is over the read limit can still check in (the domain\'s own per-hour limits apply there) [kills: the read limiter wired into the check-in route]', async () => {
+    const { resetLobbyReadLimiterForTests } = await import('@/server/lobby/rate-limit');
+    resetLobbyReadLimiterForTests();
+    const s = await mkStore();
+    for (let i = 0; i < 61; i++) await store(s.code, asIp('203.0.113.90'));
+    expect((await store(s.code, asIp('203.0.113.90'))).status).toBe(429);
+    const { POST } = await import('@/app/api/lobby/check-in/route');
+    const cookie = randomBytes(32).toString('base64url');
+    const r = await POST(
+      new Request(`${ORIGIN}/api/lobby/check-in`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: `lobby_dev=${cookie}`, 'x-real-ip': '203.0.113.90' },
+        body: JSON.stringify({ storeCode: s.code, displayName: 'Limit Test', partySize: 2, clientRequestId: randomUUID() }),
+      }),
+    );
+    expect(r.status).toBe(200);
+  });
+
+  it('S13 an over-limit read does not reach the database: no query runs once the IP is refused [kills: limiting after the lookup]', async () => {
+    const { resetLobbyReadLimiterForTests } = await import('@/server/lobby/rate-limit');
+    resetLobbyReadLimiterForTests();
+    const s = await mkStore();
+    for (let i = 0; i < 60; i++) await store(s.code, asIp('203.0.113.91'));
+    // pause the store in the database: if the 61st read still reached the lookup it would answer the closed-store 200, not 429
+    await sql`update lobby_stores set paused = true where store_id = ${s.id}`;
+    const over = await store(s.code, asIp('203.0.113.91'));
+    expect(over.status).toBe(429);
+  });
+});

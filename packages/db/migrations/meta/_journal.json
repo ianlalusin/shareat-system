@@ -1436,6 +1436,13 @@
       "when": 1805427107084,
       "tag": "0224_t502_expense_item_catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 225,
+      "version": "7",
+      "when": 1805513507084,
+      "tag": "0225_t455_s9a_lobby_role",
+      "breakpoints": true
     }
   ]
 }

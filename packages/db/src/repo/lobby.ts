@@ -47,6 +47,15 @@ export async function getLobbyStore(tx: Tx, orgId: string, storeId: string, posW
   return row;
 }
 
+/**
+ * T-455 S9a: every organisation that has at least one `lobby_stores` row, in ascending id. The nightly job's org list (DEF-742): this reads ACROSS orgs, so the caller
+ * must be on `systemTransaction` (RLS would show one org or none to any other principal). Returns ids only: no name, no store, no count.
+ */
+export async function listOrgIdsWithLobbyStore(tx: Tx): Promise<string[]> {
+  const rows = await tx.selectDistinct({ orgId: lobbyStores.orgId }).from(lobbyStores).orderBy(asc(lobbyStores.orgId));
+  return rows.map((r) => r.orgId);
+}
+
 /** T-455 S3: a store's id from its public code (unique per org). undefined when the code names no store of this org. */
 export async function getStoreIdByCode(tx: Tx, orgId: string, code: string): Promise<string | undefined> {
   const [row] = await tx.select({ id: stores.id }).from(stores).where(and(eq(stores.orgId, orgId), eq(stores.code, code))).limit(1);

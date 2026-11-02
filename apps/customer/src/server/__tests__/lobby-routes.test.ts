@@ -589,3 +589,29 @@ describe('D. no personal data in any log channel (section 4.3)', () => {
     expect((await sql<{ display_name: string }[]>`select display_name from lobby_entries where store_id = ${s.id}`)[0]!.display_name).toBe(PARTY.displayName);
   });
 });
+
+// ================================================================================================ T-455 S9a item 1: the diner routes run as shareat_lobby
+describe('F. S9a the diner transaction runs as the lobby role', () => {
+  it('F1 check-in and cancel write under shareat_lobby, never shareat_app or the owner (a trigger records current_user on every lobby_entries write) [kills: a route still on withOrgPrincipal; the owner connection]', async () => {
+    await sql.unsafe(`create table if not exists t455s9a_role_probe (who text not null, op text not null)`);
+    await sql.unsafe(`grant insert on t455s9a_role_probe to public`);
+    await sql.unsafe(`create or replace function t455s9a_probe_role() returns trigger language plpgsql as $$ begin insert into t455s9a_role_probe values (current_user, TG_OP); return NEW; end $$`);
+    await sql.unsafe(`drop trigger if exists t455s9a_probe on lobby_entries`);
+    await sql.unsafe(`create trigger t455s9a_probe before insert or update on lobby_entries for each row execute function t455s9a_probe_role()`);
+    try {
+      await sql`delete from t455s9a_role_probe`;
+      const s = await mkStore();
+      const made = await checkIn(s);
+      expect(made.status).toBe(200);
+      const gone = await cancel(s, made.cookie);
+      expect(gone.status).toBe(200);
+      const rows = await sql<{ who: string; op: string }[]>`select who, op from t455s9a_role_probe order by op`;
+      expect(rows.length, 'the trigger saw the INSERT and the UPDATE').toBeGreaterThanOrEqual(2);
+      expect([...new Set(rows.map((r) => r.who))]).toEqual(['shareat_lobby']);
+    } finally {
+      await sql.unsafe(`drop trigger if exists t455s9a_probe on lobby_entries`);
+      await sql.unsafe(`drop function if exists t455s9a_probe_role()`);
+      await sql.unsafe(`drop table if exists t455s9a_role_probe`);
+    }
+  });
+});

@@ -187,7 +187,7 @@ merges with the Lipa soak (risk R1).
 | **S7a** claims, server + phone (typed) | [O] | `packages/domain/src/lobby/claims.ts`, customer route + `/lobby/discount` | claim > party size refused; approve unseated refused; approve without `cardSeen` refused; name/ID null after approve, reject, expire; full view writes audit row; other-store staff gets 403 | S6b |
 | **S7b** claims, POS | [P] | claims badge, pre-filled T-426 dialog, "card seen" tick, approve/reject calls | save writes `statutoryDiners` once even on a retried approve (T-426 dup refusal); untick blocks save; list shows only last 4 | after S7a |
 | **S8** on-phone OCR — **SKIPPED for now (Ian, 2 Nov 2026)** | [O] | spike first: tesseract.js at an exact version, self-hosted assets, accuracy on >= 20 real OSCA/PWD cards (kept off the repo), size and time on a low-end phone; then `src/lib/id-ocr/**` | guard: no upload path (4.4); worker lazy-loaded (main bundle unchanged in size budget test); parser fixtures are **synthetic** cards only; OCR failure falls back to the typed form | after S7a; drop if the spike misses (2/3 of fields right on 80% of cards) |
-| **S9** ops | [O] | Customer server as the third service on 159.223.46.224 (built in CI, never on the droplet, DEF-238), nginx for order.shareat.net, secrets `LOBBY_HASH_SECRET`/`LOBBY_ORG_ID`, nightly purge, `lobby_stores` seed for Lipa, runbook; measure memory after start (plan R6) | runbook dry-run on the emulator profile; memory figure recorded | last |
+| **S9** ops | [O] | Customer server as the third service on 159.223.46.224 (built in CI, never on the droplet, DEF-238), Caddy for order.shareat.net, secrets `LOBBY_HASH_SECRET`/`LOBBY_ORG_ID`, nightly purge, `lobby_stores` seed for Lipa, runbook; measure memory after start (plan R6) | runbook dry-run on the emulator profile; memory figure recorded | last |
 | **A** audit | Sonnet | diff vs this spec; each acceptance case with real output; looks for a code used as a key, PII in logs/URLs, an upload path, a price from the phone, a second statutory copy | FINDINGS <= 30 lines | end |
 
 Workers never run git; LF only; ports 9009 (POS) and 9010 (Customer) only.
@@ -283,10 +283,10 @@ with the one sentence "Please check in at the counter." (no code in the body); 4
 401/404 share one sentence; cookie `lobby_dev` (43 base64url chars, HttpOnly, Secure, SameSite=Lax, Path=/api/lobby, no
 Domain, with Max-Age); hashes are HMAC-SHA256 hex keyed by `LOBBY_HASH_SECRET`; `/me?s=<storeCode>`, cancel takes
 `{storeCode}`. The discount-claim log-capture case moves to S7a (its routes live there) and S7a repeats it.
-- **Client IP:** read only `x-real-ip`, set by OUR nginx (never `x-forwarded-for`, which the diner controls). If it is
+- **Client IP:** read only `x-real-ip`, set by OUR Caddy (never `x-forwarded-for`, which the diner controls). If it is
   missing outside tests, answer **503** and log once (no IP in the log): never fall back to one shared value, which
   would put every diner of a store under one 5-per-hour limit. ⛔ Before S9 switches the lobby on, confirm the
-  order.shareat.net nginx block sets `proxy_set_header X-Real-IP $remote_addr;`.
+  order.shareat.net Caddy block sets `header_up X-Real-IP {remote_host}` (done in S9a: docs/ops/provision.sh).
 - `LOBBY_HASH_SECRET` missing → 503 "not configured" (fail closed), never an unkeyed hash.
 - ⛔ **Hard gate before S9 (S3 audit, 25 Oct):** S3's diner routes run through `withOrgPrincipal` (org-wide app
   connection). That is acceptable while the lobby is off; S9 must not switch the lobby on until the diner path runs on a
@@ -300,7 +300,7 @@ Domain, with Max-Age); hashes are HMAC-SHA256 hex keyed by `LOBBY_HASH_SECRET`; 
   page says the menu is shown at the table.
 - `NEXT_PUBLIC_LOBBY_DEMO=1` makes the screens use the fixture (demo, no server). Never set it in production.
 - S4 audit (25 Oct): `GET /api/lobby/store` has no per-IP limit (public, read-only, 3-4 small queries). Accepted for now;
-  ⛔ before S9 add an nginx `limit_req` zone for `/api/lobby/` on order.shareat.net.
+  ⛔ before S9 add a per-IP limit for `/api/lobby/` on order.shareat.net (S9a: an in-process 60-per-minute limiter, Caddy has no `limit_req`).
 
 ## S5 rulings (POS session, Opus, 2026-10-29)
 Spec gap found while specifying: the S2 staff functions `authorize(record_sale)` an ERP person, but a POS v2 cashier is a
@@ -430,3 +430,19 @@ Discovery on main 8f50225: nothing builds, ships or restarts apps/customer; the 
    measure memory (`systemctl status`) and record it · how to switch off (pause the store, or stop the unit).
 **S9b:** Ian runs the runbook after S9a is deployed. The orchestrator verifies read-only: the health check, a 503-free
 `GET /api/lobby/store?s=<code>`, and the timer listed.
+
+## S9a builder notes (2026-11-02)
+- **Migration 0225** `shareat_lobby` (NOLOGIN, no password, no default privileges). Grants pinned by `packages/db/tests/integration/t455-s9a-lobby-role.test.ts` R2:
+  SELECT on `stores`, `menu_item_variants`, `menu_option_values`, `lobby_stores` (plus column UPDATE on `lobby_stores.updated_at` only, so `SELECT ... FOR UPDATE` works while every
+  switch stays read-only); SELECT/INSERT/UPDATE on `lobby_entries`, `lobby_birthday_requests`, `lobby_discount_claims`; SELECT/INSERT on the two entry-line tables. The diner routes call
+  `withLobbyPrincipal` (packages/db/src/rls/principal.ts). The S4b lobby menu route does not exist yet: when it is built it needs no new grant (variant and option ids are already readable).
+- **Limiter** applies to `GET /api/lobby/store` today (60 per minute per x-real-ip, in memory, 429 with the counter sentence). A request with NO x-real-ip is not limited (the S4 contract
+  says the store read works without one; Caddy always sets it). `lobbyReadAllowed(req)` is ready for the S4b menu route.
+- **Nightly job** `runLobbyNightlyJob` (packages/domain/src/scheduler/lobby-nightly.ts; the org list helper `listLobbyOrgIds` is in scheduler/index.ts because the lobby modules may not open a transaction) is NOT a `SCHEDULER_JOBS` entry (that list is a closed CHECK; widening it needs a migration). It is a named
+  platform job in tests/unit/scheduler-job-hosting.test.ts. Zero orgs with a lobby row exits 0 (the timer is armed before the first store is switched on).
+- **customer.env needs more than the three values the ruling lists.** `@shareat/db` calls `env()` (packages/core/src/env.ts), which in production also requires `SESSION_SECRET` (32+),
+  `FIREBASE_PROJECT_ID` and `FIREBASE_SERVICE_ACCOUNT_KEY_FILE`. Without them every database call throws "REFUSED TO START". The runbook generates a separate unused `SESSION_SECRET`
+  and copies the two Firebase lines (a project name and a path); `SYSTEM_DATABASE_URL` is deliberately NOT copied.
+- **deploy.yml** customer blocks are marked `# >>> Customer lobby` / `# <<< Customer lobby`; `tests/unit/ci-app-jobs.test.ts` strips them like the POS blocks, so the ERP-bytes hash is unchanged.
+  A carried-forward customer build is protected from the 3-release cleanup the same way POS is (`.customer-running`, DEF-770 pattern).
+- **Not tested here, needs the server (S9b):** that `next build` of apps/customer succeeds in CI, that `next start` boots with the production env above, and the memory reading.
