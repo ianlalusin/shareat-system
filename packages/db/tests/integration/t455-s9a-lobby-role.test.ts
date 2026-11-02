@@ -304,6 +304,38 @@ describe('S9a-1 a production-shaped login can become the lobby role', () => {
       select g.rolname as role from pg_auth_members m join pg_roles g on g.oid = m.roleid join pg_roles u on u.oid = m.member where u.rolname = ${LOBBY_ROLE}`;
     expect(lobbyMemberOf).toEqual([]);
   });
+
+  it('R5 the membership is SET-only: inherit_option=false, set_option=true [kills: plain GRANT, which makes shareat_app inherit the lobby role]', async () => {
+    const rows = await sql<{ inherit_option: boolean; set_option: boolean }[]>`
+      select m.inherit_option, m.set_option from pg_auth_members m join pg_roles g on g.oid = m.roleid join pg_roles u on u.oid = m.member
+      where g.rolname = ${LOBBY_ROLE} and u.rolname = 'shareat_app'`;
+    expect(rows).toEqual([{ inherit_option: false, set_option: true }]);
+  });
+
+  it('R6 shareat_app gains NO table privilege from the lobby role: stores.name stays unreadable, the lobby role still reads it [kills: inherited lobby SELECT defeating the column revokes]', async () => {
+    const asLogin = postgres(loginUrl, { max: 1 });
+    try {
+      // Superuser transaction (rolled back): narrow shareat_app to column grants on stores, exactly the authorize.test.ts store-detail mechanism,
+      // then probe as shareat_app. If shareat_app inherited shareat_lobby (table-level SELECT on stores) the name read would succeed.
+      await sql.begin(async (t) => {
+        await t.unsafe('revoke select on stores from shareat_app');
+        await t.unsafe('grant select (id, org_id) on stores to shareat_app');
+        await t.unsafe('set local role shareat_app');
+        await expect(t.unsafe('select id, org_id from stores limit 1')).resolves.toBeDefined();
+        await expect(t.unsafe('select name from stores limit 1')).rejects.toMatchObject({ code: '42501' });
+        throw new Error('r6-rollback');
+      }).catch((e: unknown) => {
+        if (!(e instanceof Error) || e.message !== 'r6-rollback') throw e;
+      });
+      // R4 half: the production-shaped login can still SET ROLE shareat_lobby, and that role does hold SELECT on stores
+      await asLogin.begin(async (t) => {
+        await t.unsafe(`set local role ${LOBBY_ROLE}`);
+        await expect(t.unsafe('select name from stores limit 1')).resolves.toBeDefined();
+      });
+    } finally {
+      await asLogin.end();
+    }
+  });
 });
 
 describe('S9a-1 the migration file', () => {

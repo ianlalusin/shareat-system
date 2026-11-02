@@ -59,5 +59,5 @@ GRANT SELECT, INSERT ON "lobby_entry_lines", "lobby_entry_line_options" TO "shar
 
 -- Production's application login (`shareat_app_prod`) is a member of `shareat_app` ONLY (docs/ops/README.md): it cannot SET ROLE to a role it is not a member of, so without this
 -- line every diner route would answer "permission denied to set role". Granting the lobby role TO shareat_app means any login that can become shareat_app can also become
--- shareat_lobby, while shareat_lobby itself stays a member of nothing (the direction matters: the reverse would hand the narrow role the wide one). Pinned by R1 and R4.
-GRANT "shareat_lobby" TO "shareat_app";
+-- shareat_lobby (SET only, WITH INHERIT FALSE: PG16+ syntax; plain inherit would hand shareat_app the lobby SELECT on stores and defeat column revokes), while shareat_lobby itself stays a member of nothing (the direction matters: the reverse would hand the narrow role the wide one). Pinned by R1 and R4.
+GRANT "shareat_lobby" TO "shareat_app" WITH INHERIT FALSE, SET TRUE;
