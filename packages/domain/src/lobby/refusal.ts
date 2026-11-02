@@ -26,6 +26,7 @@ export const LOBBY_REFUSAL_CODES = [
   'LOBBY_CLAIM_NEEDS_SEAT',
   'LOBBY_CLAIM_NEEDS_CARD',
   'LOBBY_CLAIM_DUPLICATE',
+  'LOBBY_CLAIM_DINER_TAKEN',
 ] as const;
 export type LobbyRefusalCode = (typeof LOBBY_REFUSAL_CODES)[number];
 
@@ -64,6 +65,7 @@ const SENTENCES: Record<LobbyRefusalCode, string> = {
   LOBBY_CLAIM_NEEDS_SEAT: 'The party must be seated at this table before the discount can be approved.',
   LOBBY_CLAIM_NEEDS_CARD: 'Please check the card first, then tick that you have seen it.',
   LOBBY_CLAIM_DUPLICATE: 'That ID has already been entered for your table.',
+  LOBBY_CLAIM_DINER_TAKEN: 'This senior / PWD diner is already linked to another claim on this table.',
 };
 
 /** `detail` goes to the log message only (never to the diner). It must carry no name, phone or ID number. */

@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Delete, Link2, Loader2, Pause, Phone, Play, Plus, Users, X } from "lucide-react";
 import { ParkWalkInModal } from "./ParkWalkInModal";
+import { LobbyClaimDialog } from "./LobbyClaimDialog";
 import { useConfirmDialog } from "@/components/global/confirm-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { auth } from "@/lib/firebase/client";
@@ -29,6 +30,14 @@ import {
   lobbyRowSummary,
   type LobbyEntry,
 } from "@/lib/pos2/lobby";
+import {
+  CLAIMS_UNAVAILABLE,
+  claimPollOutcome,
+  claimBadgeLabel,
+  claimListLine,
+  claimsByEntry,
+  type ClaimListItem,
+} from "@/lib/pos2/lobbyClaims";
 import { addPendingLink, clearPendingLink, readPendingLinks, type PendingLink } from "@/lib/pos2/lobbyPending";
 
 const POLL_MS = 10_000;
@@ -78,6 +87,10 @@ export function LobbyCard({ storeId, onSeat, activeSeatingId }: Props) {
   const [isLoading, setIsLoading] = useState(true);
   const [unavailable, setUnavailable] = useState<string | null>(null);
   const [serverDown, setServerDown] = useState(false);
+  const [claims, setClaims] = useState<ClaimListItem[]>([]);
+  const [claimsDown, setClaimsDown] = useState(false);
+  const [claimsNotice, setClaimsNotice] = useState<string | null>(null);
+  const [openClaimId, setOpenClaimId] = useState<string | null>(null);
   const pollGuard = useRef(createPollGuard());
   const [digits, setDigits] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
@@ -108,6 +121,23 @@ export function LobbyCard({ storeId, onSeat, activeSeatingId }: Props) {
         setUnavailable(f.kind === "unavailable" ? LOBBY_UNAVAILABLE : f.message);
         setServerDown(f.kind === "unavailable");
       }
+    }
+    // Pending senior / PWD claims ride the same poll (one extra request, no second timer). A failure here never disturbs the line.
+    try {
+      const c = await postPos2<{ claims: ClaimListItem[] }>("lobby/claims", { storeId });
+      setClaims(c.claims);
+      setClaimsDown(false);
+      setClaimsNotice(null);
+    } catch (err) {
+      // 503 / no answer hides the strip; any other failure keeps the old list and says it could not refresh.
+      const o = claimPollOutcome(err as Err);
+      if (o.down) {
+        setClaims([]);
+        setClaimsDown(true);
+        setClaimsNotice(null);
+      } else {
+        setClaimsNotice(o.notice);
+      }
     } finally {
       setPending(readPendingLinks(storeId));
       setNow(Date.now());
@@ -128,6 +158,7 @@ export function LobbyCard({ storeId, onSeat, activeSeatingId }: Props) {
   }, [refresh]);
 
   const shown = useMemo(() => filterByCode(entries, digits), [entries, digits]);
+  const claimCounts = useMemo(() => claimsByEntry(claims), [claims]);
 
   const act = async (entry: LobbyEntry, run: () => Promise<unknown>, done: string) => {
     setBusyId(entry.entryId);
@@ -257,6 +288,9 @@ export function LobbyCard({ storeId, onSeat, activeSeatingId }: Props) {
                     <div className="flex items-center gap-2">
                       <p className="flex-1 min-w-0 font-bold truncate">{lobbyRowSummary(e, now)}</p>
                       {e.status === "called" && <Badge variant="secondary" className="text-[10px]">Called</Badge>}
+                      {claimBadgeLabel(claimCounts[e.entryId]) && (
+                        <Badge variant="outline" className="text-[10px]">{claimBadgeLabel(claimCounts[e.entryId])}</Badge>
+                      )}
                     </div>
                     {(e.phone || e.note || unmapped.length > 0) && (
                       <div className="flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap">
@@ -307,10 +341,37 @@ export function LobbyCard({ storeId, onSeat, activeSeatingId }: Props) {
               })}
             </ul>
           )}
+          {!claimsDown && claimsNotice && <p className="text-xs text-muted-foreground text-center py-2">{claimsNotice}</p>}
+          {claimsDown && <p className="text-xs text-muted-foreground text-center py-2">{CLAIMS_UNAVAILABLE}</p>}
+          {!claimsDown && claims.length > 0 && (
+            <div className="space-y-2 border-t pt-3">
+              <p className="text-sm font-semibold">Discount claims</p>
+              <ul className="space-y-1">
+                {claims.map((c) => (
+                  <li key={c.claimId} className="flex items-center gap-2 text-sm">
+                    <span className="flex-1 min-w-0 truncate">{claimListLine(c)}</span>
+                    <Button size="sm" variant="outline" className="h-8" onClick={() => setOpenClaimId(c.claimId)}>
+                      Open
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       <ParkWalkInModal open={modalOpen} onOpenChange={setModalOpen} storeId={storeId} onParked={() => void refresh()} />
+      {openClaimId && (
+        <LobbyClaimDialog
+          storeId={storeId}
+          claimId={openClaimId}
+          onClose={() => {
+            setOpenClaimId(null);
+            void refresh();
+          }}
+        />
+      )}
       {ConfirmDialog}
     </>
   );

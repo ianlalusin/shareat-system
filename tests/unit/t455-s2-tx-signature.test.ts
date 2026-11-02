@@ -82,6 +82,8 @@ const PINNED: Record<string, string[]> = {
     'approveClaimCore',
     'approveClaimForTerminal',
     'cancelMyClaim',
+    'claimStatusCore',
+    'claimStatusForTerminal',
     'listClaimRequests',
     'listClaimsCore',
     'listClaimsForTerminal',

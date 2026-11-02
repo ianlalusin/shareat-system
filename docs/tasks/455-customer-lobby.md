@@ -381,4 +381,15 @@ Tester assumptions A2–A10 in apps/pos/src/lib/birthday/player.test.ts header A
   "yes we own the happy birthday recording" — both mp3s ship.
 - A6: localStorage holds request id, time and store only — no diner name.
 - A7: the 30-minute rule uses the tablet clock; accepted (the server does not time-gate play, S6a ruling 7).
+
+## S7b rulings (BOSS orchestrator, Opus, 2026-11-02) — after the tester's pass
+Tester assumptions 1–11 in the S7b test headers ACCEPTED as written, with these specifics:
+- 2. Reject list as pinned (four codes, four sentences). The diner only ever sees the sentence for the code.
+- 4. Free text in a reject body is REFUSED (400), not silently ignored, so a client bug is visible.
+- 8. Order stays: write the diner via `mutateStatutoryDiners`, then approve. If approve is refused, the diner stays on the
+  bill (the cashier saw the card); the dialog says the claim was not confirmed, with the server's sentence.
+- 9. One exception to "409 is a refusal": a retried approve whose first call succeeded but whose answer was lost. On 409
+  the tablet refetches claims; if that claim is now `approved`, show it as done. Add that test.
+- 11. Name and ID number live only in the open dialog's state and are cleared when it closes; never in props of the
+  card, localStorage, query strings or console output.
 - R1: merges before 20 Nov or after 14 Dec.
