@@ -398,3 +398,35 @@ Tester assumptions 1–11 in the S7b test headers ACCEPTED as written, with thes
 
 "skip the camera reader for now". S8 (on-phone OCR of senior/PWD cards) is not built. Diners type card details
 (S7a). Reopen only if Ian supplies >= 20 real card photos for the spike (kept off the repo). Next lobby slice: S9 ops.
+
+## S9 rulings (BOSS orchestrator, Opus, 2026-11-02) — split into S9a (code) and S9b (Ian's server steps)
+Discovery on main 8f50225: nothing builds, ships or restarts apps/customer; the host proxy is **Caddy, not nginx**
+(docs/ops/provision.sh); no lobby role, purge timer, health check or `lobby_stores` seed exists.
+**S9a: code, one PR, [O] plus deploy.yml (which also ships POS: merge before 20 Nov, R1).**
+1. **Lobby DB role (the S3 hard gate).** Copy the 0011 pattern: a migration (next free number; check open PRs) creates
+   `shareat_lobby NOLOGIN`, grants it only what the diner routes touch (`lobby_*` tables as needed, read on the menu
+   tables S4b reads), and RLS policies apply to it as to `shareat_app`. The diner routes run `SET LOCAL ROLE shareat_lobby`
+   in their transaction instead of the org-wide principal. No new login and no new password. Staff (POS) paths are
+   unchanged. Tests: every diner route still passes on the new role; a diner transaction cannot read `sales`/`persons`
+   (permission denied); the grant list is pinned by a census test. Full suite on a fresh gate DB (migration rule).
+2. **Client IP.** Caddy sets it: `reverse_proxy 127.0.0.1:9010 { header_up X-Real-IP {remote_host} }`. Code keeps reading
+   only `x-real-ip` and keeps the 503 when it is missing. Every nginx mention in this doc now reads Caddy.
+3. **Rate limit on `/api/lobby/*`.** Stock Caddy has no `limit_req`. Add an in-process per-IP-hash limiter (one process,
+   memory only, fixed window) in the customer server: 60 requests per minute per IP on `GET /api/lobby/store` and
+   `/menu`, over-limit gives 429 with the same counter sentence. The domain's check-in limits stay as they are.
+4. **Nightly purge.** A script that loops every org with a `lobby_stores` row (systemTransaction, DEF-742) and calls
+   `runLobbyNightly`, plus `shareat-lobby-nightly.service` + `.timer` at 05:30 Asia/Manila (after the 05:00 day roll),
+   following the existing timer units in docs/ops. Test: two orgs, both purged; one org failing does not stop the other.
+5. **Deploy.** Copy the POS pattern in deploy.yml: build customer with continue-on-error, marker
+   `apps/customer/.customer-build-ok`, pack only on the marker, carry the last good build forward, restart
+   `shareat-customer.service` only if its unit exists, health check `http://127.0.0.1:9010/lobby` gives 200, 6 tries,
+   never failing the ERP deploy. New unit `docs/ops/shareat-customer.service`: port 9010 on 127.0.0.1, User=shareat,
+   EnvironmentFile `/srv/shareat-shared/customer.env`, `MemoryMax=512M`. `NEXT_PUBLIC_LOBBY_DEMO` must not be set in the
+   deploy build (guard test). Port 9010 is this repo's customer port. The 9004 in the global table is the old CUSTOMER repo.
+6. **Runbook** `docs/ops/customer-lobby-runbook.md`, written for Ian in plain steps, with the commands for each:
+   DNS record for order.shareat.net · create customer.env (`LOBBY_HASH_SECRET` of 32+ random characters generated on the
+   server, `LOBBY_ORG_ID`, `DATABASE_URL`) · install the unit, then the Caddy block, then reload · enable the timer ·
+   switch Lipa on with one SQL insert into `lobby_stores` (Ian runs it; the orchestrator never seeds company data) ·
+   measure memory (`systemctl status`) and record it · how to switch off (pause the store, or stop the unit).
+**S9b:** Ian runs the runbook after S9a is deployed. The orchestrator verifies read-only: the health check, a 503-free
+`GET /api/lobby/store?s=<code>`, and the timer listed.
