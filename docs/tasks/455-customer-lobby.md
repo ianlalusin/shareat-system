@@ -377,7 +377,8 @@ Tester assumptions 1–9 and 11 ACCEPTED as written in the t455-s7a test headers
 ## S6b rulings (BOSS orchestrator, Opus, 2026-11-02) — after the tester's pass
 Tester assumptions A2–A10 in apps/pos/src/lib/birthday/player.test.ts header ACCEPTED as written.
 - A1 mp3s: the Shareat song (Suno paid plan) ships. The happy-birthday recording ships only once Ian confirms the
-  business owns or licensed that recording (the melody is public domain; a recording may not be). PR is held until then.
+  business owns or licensed that recording (the melody is public domain; a recording may not be). CONFIRMED by Ian, 2 Nov 2026:
+  "yes we own the happy birthday recording" — both mp3s ship.
 - A6: localStorage holds request id, time and store only — no diner name.
 - A7: the 30-minute rule uses the tablet clock; accepted (the server does not time-gate play, S6a ruling 7).
 - R1: merges before 20 Nov or after 14 Dec.
