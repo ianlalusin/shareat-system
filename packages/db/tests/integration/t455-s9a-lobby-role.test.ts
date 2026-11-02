@@ -18,7 +18,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { randomBytes } from 'node:crypto';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
@@ -60,7 +61,7 @@ async function probe(tx: Parameters<Parameters<typeof withLobbyPrincipal>[1]>[0]
   }
 }
 
-type Fx = { orgId: string; otherOrgId: string; storeId: string; storeCode: string; otherStoreId: string; variantId: string; personId: string };
+type Fx = { orgId: string; otherOrgId: string; storeId: string; storeCode: string; otherStoreId: string; variantId: string; valueId: string; personId: string };
 let fx: Fx;
 
 beforeAll(async () => {
@@ -77,7 +78,17 @@ beforeAll(async () => {
   const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, ${uid('Person')}) returning id`;
   await sql`insert into lobby_stores (org_id, store_id, enabled) values (${orgId}, ${st!.id}, true)`;
   await sql`insert into lobby_stores (org_id, store_id, enabled) values (${otherOrgId}, ${st2!.id}, true)`;
-  fx = { orgId, otherOrgId, storeId: st!.id, storeCode: sc, otherStoreId: st2!.id, variantId: '', personId: p!.id };
+  const [cat] = await sql<{ id: string }[]>`insert into menu_categories (org_id, name, sort_order, status, created_by) values (${orgId}, ${uid('Cat')}, 0, 'active', ${p!.id}) returning id`;
+  const [item] = await sql<{ id: string }[]>`
+    insert into menu_items (org_id, category_id, name, item_type, sold_a_la_carte, sold_in_package_session, diner_orderable, sort_order, status, created_by)
+    values (${orgId}, ${cat!.id}, ${uid('Pork')}, 'a_la_carte', true, false, true, 0, 'active', ${p!.id}) returning id`;
+  const [variant] = await sql<{ id: string }[]>`
+    insert into menu_item_variants (org_id, menu_item_id, label, is_default, sort_order, status, created_by) values (${orgId}, ${item!.id}, null, true, 0, 'active', ${p!.id}) returning id`;
+  const [grp] = await sql<{ id: string }[]>`
+    insert into menu_option_groups (org_id, name, selection_mode, min_selections, max_selections, status, created_by) values (${orgId}, ${uid('Grp')}, 'single', 1, 1, 'active', ${p!.id}) returning id`;
+  const [val] = await sql<{ id: string }[]>`
+    insert into menu_option_values (org_id, option_group_id, name, sort_order, status, created_by) values (${orgId}, ${grp!.id}, ${uid('Val')}, 0, 'active', ${p!.id}) returning id`;
+  fx = { orgId, otherOrgId, storeId: st!.id, storeCode: sc, otherStoreId: st2!.id, variantId: variant!.id, valueId: val!.id, personId: p!.id };
 });
 afterAll(async () => {
   await closeDb();
@@ -223,11 +234,75 @@ describe('S9a-1 withLobbyPrincipal', () => {
       )) as unknown as Array<{ id: string }>;
       const id = ins[0]!.id;
       await tx.execute(dsql`update lobby_entries set status = 'cancelled', closed_at = now() where id = ${id}`);
+      // the pre-order lines: INSERT on both line tables is proven here, not assumed (the check-in writes them)
+      const variants = (await tx.execute(dsql`select id from menu_item_variants where org_id = ${fx.orgId} limit 1`)) as unknown as Array<{ id: string }>;
+      expect(variants.length, 'fixture variant visible to the role').toBe(1);
+      const line = (await tx.execute(
+        dsql`insert into lobby_entry_lines (org_id, entry_id, variant_id, qty, line_kind) values (${fx.orgId}, ${id}, ${variants[0]!.id}, 2, 'package') returning id`,
+      )) as unknown as Array<{ id: string }>;
+      const values = (await tx.execute(dsql`select id from menu_option_values where org_id = ${fx.orgId} limit 1`)) as unknown as Array<{ id: string }>;
+      expect(values.length, 'fixture option value visible to the role').toBe(1);
+      await tx.execute(dsql`insert into lobby_entry_line_options (org_id, line_id, option_value_id) values (${fx.orgId}, ${line[0]!.id}, ${values[0]!.id})`);
+      const back = (await tx.execute(dsql`select count(*)::int as n from lobby_entry_line_options where line_id = ${line[0]!.id}`)) as unknown as Array<{ n: number }>;
+      expect(back[0]!.n).toBe(1);
       await tx.execute(dsql`select count(*) from menu_item_variants where org_id = ${fx.orgId}`);
       await tx.execute(dsql`select count(*) from menu_option_values where org_id = ${fx.orgId}`);
       return id;
     });
     expect(created).toMatch(/^[0-9a-f-]{36}$/);
+  });
+});
+
+describe('S9a-1 a production-shaped login can become the lobby role', () => {
+  // docs/ops/README.md: production's login (`shareat_app_prod`) is a member of `shareat_app` ONLY. SET ROLE needs membership of the target role, so
+  // 0225 must GRANT shareat_lobby TO shareat_app, or every diner route answers "permission denied to set role". Nothing here names a database or a login
+  // that exists outside this test: the login is created, used and dropped here.
+  const login = `s9a_probe_${randomBytes(4).toString('hex')}`;
+  const password = randomBytes(16).toString('hex');
+  let loginUrl = '';
+
+  beforeAll(async () => {
+    await sql.unsafe(`create role "${login}" login password '${password}' nosuperuser nocreaterole nocreatedb nobypassrls`);
+    await sql.unsafe(`grant "shareat_app" to "${login}"`);
+    const u = new URL(url);
+    u.username = login;
+    u.password = password;
+    loginUrl = u.toString();
+  });
+  afterAll(async () => {
+    await sql.unsafe(`drop role if exists "${login}"`);
+  });
+
+  it('R4 a LOGIN that is a member of shareat_app only (not a superuser) runs withLobbyPrincipal and reads a lobby row; shareat_lobby is still a member of nothing [kills: no GRANT shareat_lobby TO shareat_app (production 500s on every diner route)]', async () => {
+    const [who] = await sql<{ rolsuper: boolean; rolbypassrls: boolean }[]>`select rolsuper, rolbypassrls from pg_roles where rolname = ${login}`;
+    expect(who).toMatchObject({ rolsuper: false, rolbypassrls: false });
+    const memberOf = await sql<{ role: string }[]>`
+      select g.rolname as role from pg_auth_members m join pg_roles g on g.oid = m.roleid join pg_roles u on u.oid = m.member where u.rolname = ${login} order by 1`;
+    expect(memberOf.map((r) => r.role)).toEqual(['shareat_app']);
+
+    // A fresh copy of the db package bound to the probe login (env() caches the URL per module instance); the shared pool is closed first so it is rebuilt.
+    await closeDb();
+    const prev = process.env.DATABASE_URL;
+    process.env.DATABASE_URL = loginUrl;
+    vi.resetModules();
+    try {
+      const fresh = await import('../../src');
+      const seen = await fresh.withLobbyPrincipal(fx.orgId, async (tx) => {
+        const who2 = (await tx.execute(dsql`select session_user as s, current_user as u`)) as unknown as Array<{ s: string; u: string }>;
+        const rows = (await tx.execute(dsql`select count(*)::int as n from lobby_stores`)) as unknown as Array<{ n: number }>;
+        return { session: who2[0]!.s, role: who2[0]!.u, lobbyRows: rows[0]!.n };
+      });
+      expect(seen).toEqual({ session: login, role: LOBBY_ROLE, lobbyRows: 1 });
+      await fresh.closeDb();
+    } finally {
+      if (prev === undefined) delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL = prev;
+      vi.resetModules();
+    }
+    // the grant went to shareat_app, not to the lobby role: shareat_lobby is a member of nothing (R1 pins this too)
+    const lobbyMemberOf = await sql<{ role: string }[]>`
+      select g.rolname as role from pg_auth_members m join pg_roles g on g.oid = m.roleid join pg_roles u on u.oid = m.member where u.rolname = ${LOBBY_ROLE}`;
+    expect(lobbyMemberOf).toEqual([]);
   });
 });
 

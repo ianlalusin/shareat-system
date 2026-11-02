@@ -17,7 +17,7 @@ import { describe, expect, it, vi } from 'vitest';
  */
 vi.mock('server-only', () => ({}));
 
-import { createFixedWindowLimiter, LOBBY_READ_LIMIT, LOBBY_READ_WINDOW_MS, lobbyReadAllowed, resetLobbyReadLimiterForTests } from '@/server/lobby/rate-limit';
+import { addressBucket, createFixedWindowLimiter, LOBBY_READ_LIMIT, LOBBY_READ_WINDOW_MS, lobbyReadAllowed, resetLobbyReadLimiterForTests } from '@/server/lobby/rate-limit';
 
 describe('createFixedWindowLimiter', () => {
   it('L1 allows exactly `limit` hits per key in a window and refuses the next [kills: off by one either way; allow-all]', () => {
@@ -99,5 +99,43 @@ describe('lobbyReadAllowed', () => {
     expect(lobbyReadAllowed(req('203.0.113.50'))).toBe(false);
     resetLobbyReadLimiterForTests();
     expect(lobbyReadAllowed(req('203.0.113.50'))).toBe(true);
+  });
+});
+
+describe('IPv6 is limited per /64, IPv4 per address', () => {
+  const req = (ip: string) => new Request('http://order.test/api/lobby/store?s=X', { headers: { 'x-real-ip': ip } });
+
+  it('L10 two addresses in the same /64 share one count: a household or a rotating-suffix attacker cannot get 60 per address [kills: keying on the full IPv6 address]', () => {
+    resetLobbyReadLimiterForTests();
+    for (let i = 1; i <= 60; i++) expect(lobbyReadAllowed(req(`2001:db8:abcd:12::${i.toString(16)}`)), `hit ${i}`).toBe(true);
+    expect(lobbyReadAllowed(req('2001:db8:abcd:12:ffff:eeee:dddd:cccc'))).toBe(false);
+    expect(lobbyReadAllowed(req('2001:0db8:abcd:0012:0:0:0:99'))).toBe(false); // the same /64 written long, with leading zeros
+    expect(lobbyReadAllowed(req('2001:DB8:ABCD:12::1'))).toBe(false); // and in capitals
+  });
+
+  it('L11 a different /64 is a different bucket; IPv4 stays per address [kills: a /48 or /32 bucket; IPv4 grouped]', () => {
+    resetLobbyReadLimiterForTests();
+    for (let i = 1; i <= 60; i++) lobbyReadAllowed(req('2001:db8:abcd:12::1'));
+    expect(lobbyReadAllowed(req('2001:db8:abcd:13::1'))).toBe(true); // next /64
+    expect(lobbyReadAllowed(req('2001:db8:abce:12::1'))).toBe(true); // differs in the third group
+    for (let i = 1; i <= 60; i++) expect(lobbyReadAllowed(req('203.0.113.7')), `v4 hit ${i}`).toBe(true);
+    expect(lobbyReadAllowed(req('203.0.113.7'))).toBe(false);
+    expect(lobbyReadAllowed(req('203.0.113.8'))).toBe(true);
+  });
+
+  it('L12 an IPv4-mapped IPv6 address counts as that IPv4 address, not as one shared /64 [kills: ::ffff:a.b.c.d collapsing every IPv4 client into one bucket]', () => {
+    resetLobbyReadLimiterForTests();
+    for (let i = 1; i <= 60; i++) expect(lobbyReadAllowed(req('::ffff:203.0.113.20'))).toBe(true);
+    expect(lobbyReadAllowed(req('203.0.113.20'))).toBe(false); // the same client
+    expect(lobbyReadAllowed(req('::ffff:203.0.113.21'))).toBe(true); // another client
+  });
+
+  it('L13 addressBucket: the /64 prefix, and an unparseable value falls back to itself [kills: a throw on junk; a wrong prefix length]', () => {
+    expect(addressBucket('2001:db8:abcd:12:1:2:3:4')).toBe('v6:2001:db8:abcd:12');
+    expect(addressBucket('2001:db8::1')).toBe('v6:2001:db8:0:0');
+    expect(addressBucket('::1')).toBe('v6:0:0:0:0');
+    expect(addressBucket('fe80::1%eth0')).toBe('v6:fe80:0:0:0');
+    expect(addressBucket('203.0.113.7')).toBe('v4:203.0.113.7');
+    expect(addressBucket('not an address:')).toBe('raw:not an address:');
   });
 });

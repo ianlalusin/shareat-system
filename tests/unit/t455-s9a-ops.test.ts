@@ -344,7 +344,7 @@ describe('S9a-6 the runbook', () => {
       'SESSION_SECRET',
       'FIREBASE_PROJECT_ID',
       'FIREBASE_SERVICE_ACCOUNT_KEY_FILE',
-      'chmod 600 /srv/shareat-shared/customer.env',
+      'chmod 600 "$f"',
       'shareat-customer.service',
       'systemctl daemon-reload',
       'caddy validate',
@@ -359,14 +359,16 @@ describe('S9a-6 the runbook', () => {
     ]) expect(rb, needle).toContain(needle);
     const at = (s: string) => rb.indexOf(s);
     expect(at('nslookup order.shareat.net')).toBeLessThan(at('openssl rand -base64 48'));
-    expect(at('openssl rand -base64 48')).toBeLessThan(at('systemctl daemon-reload'));
-    expect(at('systemctl daemon-reload')).toBeLessThan(at('caddy validate'));
+    expect(at('systemctl daemon-reload')).toBeLessThan(at('openssl rand -base64 48')); // the unit files are installed (step 2) before the settings file (step 3)
+    expect(at('openssl rand -base64 48')).toBeLessThan(at('caddy validate'));
     expect(at('caddy validate')).toBeLessThan(at('systemctl enable --now shareat-lobby-nightly.timer'));
     expect(at('systemctl enable --now shareat-lobby-nightly.timer')).toBeLessThan(at('insert into lobby_stores'));
   });
 
   it('B2 it contains no real secret: LOBBY_HASH_SECRET is only ever a placeholder, no connection string with a password, no key material, never nginx or the old droplet [kills: a pasted secret; the wrong host]', () => {
-    for (const l of rb.split('\n').filter((x) => x.includes('SYSTEM_DATABASE_URL'))) expect(l, 'the admin database login must never be copied into customer.env').toMatch(/never|not/i);
+    // The `asql` helper READS SYSTEM_DATABASE_URL in-process (the admin-connection pattern of docs/ops/pos2-switchon-2026-11-01.md 2.3); every OTHER mention must forbid copying it.
+    for (const l of rb.split('\n').filter((x) => x.includes('SYSTEM_DATABASE_URL') && !x.trimStart().startsWith('U="$(grep'))) expect(l, 'the admin database login must never be copied into customer.env').toMatch(/never|not|admin connection|the same way/i);
+    for (const l of rb.split('\n').filter((x) => x.includes('SYSTEM_DATABASE_URL'))) expect(l, 'no line may write SYSTEM_DATABASE_URL into a file').not.toMatch(/>>|tee /);
     for (const m of rb.matchAll(/(?:LOBBY_HASH_SECRET|SESSION_SECRET)\s*=\s*(\S+)/g)) expect(m[1], 'secret value must be a <placeholder>').toMatch(/^<[^>]+>$|^"?\$\(|^\$\{?[A-Z_]+/);
     expect(rb).not.toMatch(/postgres(ql)?:\/\/[^\s<]*:[^\s<@]+@/);
     expect(rb).not.toMatch(/BEGIN [A-Z ]*PRIVATE KEY|AKIA[0-9A-Z]{12,}/);
@@ -374,6 +376,23 @@ describe('S9a-6 the runbook', () => {
     expect(rb).not.toMatch(/nginx/i);
     expect(rb).not.toContain('159.223.78.207');
     expect(rb).toContain('159.223.46.224');
+  });
+
+  it('B5 audit rulings: SQL runs as the admin connection and is never echoed; step 2 installs only the S9a files from merged main (no whole-folder copy, no provision.sh run); DNS is "DNS only"; customer.env is never truncated and re-running is safe [kills: SQL as the app login; scp -r docs/ops; provision.sh re-run; a proxied record; a truncating install]', () => {
+    expect(rb).toContain('SYSTEM_DATABASE_URL');
+    expect(rb).toContain('asql "insert into lobby_stores');
+    expect(rb).not.toMatch(/psql|sudo -u shareat sh -c/); // the app login (DATABASE_URL) is not used for the SQL steps
+    expect(rb).not.toMatch(/echo "?\$U|echo "?\$DATABASE_URL|printenv/);
+    expect(rb).toContain('PR #131');
+    expect(rb).toMatch(/origin\/main:docs\/ops\/shareat-customer\.service/);
+    expect(rb).toMatch(/origin\/main:docs\/ops\/shareat-lobby-nightly\.timer/);
+    expect(rb).not.toMatch(/scp -r docs\/ops|rm -rf \/root\/shareat-ops/);
+    expect(rb).not.toMatch(/^bash \/root\/shareat-ops\/provision\.sh/m);
+    expect(rb).toMatch(/visudo -cf/);
+    expect(rb).toMatch(/DNS only/);
+    expect(rb).toMatch(/\[ -e "\$f" \] \|\| install -m 600/); // create only if missing
+    expect(rb).not.toMatch(/install -m 600 \/dev\/null \/srv/); // the old unconditional (truncating) form
+    expect(rb).toMatch(/logged out/i); // regenerating LOBBY_HASH_SECRET logs every waiting diner out
   });
 
   it('B3 it says who runs what (Ian runs the SQL insert; nobody seeds company data for him), how to switch it off, and to record the memory reading [kills: an agent-run seed; no off switch]', () => {

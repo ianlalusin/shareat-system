@@ -26,6 +26,7 @@
 -- LOCK BUDGET (ADR-012 s5). Nothing is rewritten or scanned: one CREATE ROLE and GRANTs (catalog updates only). First statement SET LOCAL lock_timeout = '5s'
 -- (resets at commit). GRANT takes a brief lock on each named table's catalog row, not on its data.
 --
+-- Membership: GRANT "shareat_lobby" TO "shareat_app" (last statement) so a production login that is a member of shareat_app can SET ROLE to the lobby role (audit blocker, 2 Nov).
 -- Objects: no table, so no cutover classification and no RLS registry entry is added. The role is idempotent (a re-run on a database that has it changes nothing).
 -- Every statement is its own breakpoint; the last statement closes the file.
 
@@ -54,3 +55,9 @@ GRANT SELECT, INSERT, UPDATE ON "lobby_entries", "lobby_birthday_requests", "lob
 --> statement-breakpoint
 
 GRANT SELECT, INSERT ON "lobby_entry_lines", "lobby_entry_line_options" TO "shareat_lobby";
+--> statement-breakpoint
+
+-- Production's application login (`shareat_app_prod`) is a member of `shareat_app` ONLY (docs/ops/README.md): it cannot SET ROLE to a role it is not a member of, so without this
+-- line every diner route would answer "permission denied to set role". Granting the lobby role TO shareat_app means any login that can become shareat_app can also become
+-- shareat_lobby, while shareat_lobby itself stays a member of nothing (the direction matters: the reverse would hand the narrow role the wide one). Pinned by R1 and R4.
+GRANT "shareat_lobby" TO "shareat_app";
