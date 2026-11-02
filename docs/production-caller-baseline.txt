@@ -13,7 +13,6 @@ allocationsFor
 apiUrl
 applyCreditAction
 applyReceiptDeltaServerFirst
-approveClaimForTerminal
 arrivalLag
 assetsMissingCapitalisation
 branchOrderDetail
@@ -92,7 +91,6 @@ listBirthdayForTerminal
 listBirthdayRequests
 listCategoryLives
 listClaimRequests
-listClaimsForTerminal
 listLiveForStore
 listLobbyEntries
 listOrderMessages
@@ -113,7 +111,6 @@ nameMatches
 newCorrelationId
 oldWholeBillSeniorDiscount
 openClaim
-openClaimForTerminal
 openFloatsForStore
 oracleStat
 parkWalkIn
@@ -139,7 +136,6 @@ realSourceTypesForSpecName
 recentRuns
 reconcileSupplier
 recordClientEvents
-rejectClaimForTerminal
 remainingFor
 remainingOf
 removeEntry
