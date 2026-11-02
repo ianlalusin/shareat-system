@@ -71,8 +71,9 @@ describe('T-417 ERP CI is untouched (case 13)', () => {
     const out: string[] = [];
     let skip = false;
     for (const line of s.split('\n')) {
-      if (line.includes('# >>> POS v2')) { skip = true; continue; }
-      if (line.includes('# <<< POS v2')) { skip = false; continue; }
+      // T-455 S9a: the customer lobby's steps live between `# >>> Customer lobby` and `# <<< Customer lobby`, stripped the same way.
+      if (line.includes('# >>> POS v2') || line.includes('# >>> Customer lobby')) { skip = true; continue; }
+      if (line.includes('# <<< POS v2') || line.includes('# <<< Customer lobby')) { skip = false; continue; }
       if (!skip) out.push(line);
     }
     return out.join('\n');

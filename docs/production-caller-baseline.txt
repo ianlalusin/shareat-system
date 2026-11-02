@@ -137,6 +137,7 @@ remainingOf
 removeEntry
 removeUsageLine
 reserveNext
+resetLobbyReadLimiterForTests
 resetNonCentavoCount
 resolveFingerprintMatchToken
 retireMenuItem
@@ -149,7 +150,6 @@ roundMoney
 runAnalyze
 runCapture
 runLoad
-runLobbyNightly
 saleOps
 sampleCandidates
 seatEntry

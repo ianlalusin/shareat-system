@@ -1,5 +1,5 @@
 import 'server-only';
-import { lobbyRepo, withOrgPrincipal } from '@shareat/db';
+import { lobbyRepo, withLobbyPrincipal } from '@shareat/db';
 import {
   cancelMyBirthday,
   cancelMyClaim,
@@ -18,11 +18,12 @@ import {
 import { newCookieValue, readCookie, setCookieHeader } from './cookie';
 import { BodyTooLarge, fail, json, MAX_BODY_BYTES, readJsonObject, SENTENCES } from './http';
 import { logFault, logMissingIp, logReply } from './log';
+import { lobbyReadAllowed } from './rate-limit';
 import { COOKIE_NEEDED_SENTENCE, COOKIE_NEEDED_STATUS, LOBBY_COOKIE_NEEDED, refusalReply } from './refusals';
 import { clientIp, hmacHex, isUuid, readConfig, type LobbyConfig } from './secrets';
 
 /**
- * T-455 S3 - the three diner routes as thin glue. Every rule (limits, ownership, expiry, hand-off once) lives in packages/domain/src/lobby;
+ * T-455 S3 - the three diner routes as thin glue (S9a: every transaction runs as the NOLOGIN role `shareat_lobby`, migration 0225, never the org-wide role). Every rule (limits, ownership, expiry, hand-off once) lives in packages/domain/src/lobby;
  * this file only: reads the settings, reads the capped body, turns the cookie and ip into keyed hashes, finds the store by its public code,
  * runs the domain call in one org-scoped transaction, and maps a typed refusal to a status and its one plain sentence.
  *
@@ -87,7 +88,7 @@ export async function handleCheckIn(req: Request): Promise<Response> {
       );
     }
 
-    const result = await withOrgPrincipal(cfg.orgId, async (tx) => {
+    const result = await withLobbyPrincipal(cfg.orgId, async (tx) => {
       const storeId = await lobbyRepo.getStoreIdByCode(tx, cfg.orgId, storeCode);
       if (!storeId) return null;
       return checkIn(tx, {
@@ -129,7 +130,7 @@ export async function handleMe(req: Request): Promise<Response> {
     const owner = await ownerKey(cfg, req, storeCode);
     if ('stop' in owner) return owner.stop;
 
-    const view = await withOrgPrincipal(cfg.orgId, async (tx) => {
+    const view = await withLobbyPrincipal(cfg.orgId, async (tx) => {
       const storeId = await lobbyRepo.getStoreIdByCode(tx, cfg.orgId, storeCode!);
       if (!storeId) return null;
       return getMyEntry(tx, { orgId: cfg.orgId, storeId, deviceHash: owner.deviceHash });
@@ -163,7 +164,7 @@ export async function handleCancel(req: Request): Promise<Response> {
     const owner = await ownerKey(cfg, req, storeCode);
     if ('stop' in owner) return owner.stop;
 
-    const done = await withOrgPrincipal(cfg.orgId, async (tx) => {
+    const done = await withLobbyPrincipal(cfg.orgId, async (tx) => {
       const storeId = await lobbyRepo.getStoreIdByCode(tx, cfg.orgId, storeCode!);
       if (!storeId) return null;
       return cancelMyEntry(tx, { orgId: cfg.orgId, storeId, deviceHash: owner.deviceHash });
@@ -194,7 +195,7 @@ export async function handleBirthdayRequest(req: Request): Promise<Response> {
     const owner = await ownerKey(cfg, req, storeCode);
     if ('stop' in owner) return owner.stop;
 
-    const made = await withOrgPrincipal(cfg.orgId, async (tx) => {
+    const made = await withLobbyPrincipal(cfg.orgId, async (tx) => {
       const storeId = await lobbyRepo.getStoreIdByCode(tx, cfg.orgId, storeCode!);
       if (!storeId) return null;
       const key = { orgId: cfg.orgId, storeId, deviceHash: owner.deviceHash };
@@ -215,7 +216,7 @@ export async function handleBirthdayRead(req: Request): Promise<Response> {
     const owner = await ownerKey(cfg, req, storeCode);
     if ('stop' in owner) return owner.stop;
 
-    const found = await withOrgPrincipal(cfg.orgId, async (tx) => {
+    const found = await withLobbyPrincipal(cfg.orgId, async (tx) => {
       const storeId = await lobbyRepo.getStoreIdByCode(tx, cfg.orgId, storeCode!);
       if (!storeId) return undefined;
       return { view: await readMyBirthday(tx, { orgId: cfg.orgId, storeId, deviceHash: owner.deviceHash }) };
@@ -236,7 +237,7 @@ export async function handleBirthdayCancel(req: Request): Promise<Response> {
     const owner = await ownerKey(cfg, req, storeCode);
     if ('stop' in owner) return owner.stop;
 
-    const done = await withOrgPrincipal(cfg.orgId, async (tx) => {
+    const done = await withLobbyPrincipal(cfg.orgId, async (tx) => {
       const storeId = await lobbyRepo.getStoreIdByCode(tx, cfg.orgId, storeCode!);
       if (!storeId) return null;
       const key = { orgId: cfg.orgId, storeId, deviceHash: owner.deviceHash };
@@ -269,7 +270,7 @@ export async function handleClaimSubmit(req: Request): Promise<Response> {
     const owner = await ownerKey(cfg, req, storeCode);
     if ('stop' in owner) return owner.stop;
 
-    const claims = await withOrgPrincipal(cfg.orgId, async (tx) => {
+    const claims = await withLobbyPrincipal(cfg.orgId, async (tx) => {
       const storeId = await lobbyRepo.getStoreIdByCode(tx, cfg.orgId, storeCode!);
       if (!storeId) return null;
       const key = { orgId: cfg.orgId, storeId, deviceHash: owner.deviceHash };
@@ -295,7 +296,7 @@ export async function handleClaimRead(req: Request): Promise<Response> {
     const owner = await ownerKey(cfg, req, storeCode);
     if ('stop' in owner) return owner.stop;
 
-    const claims = await withOrgPrincipal(cfg.orgId, async (tx) => {
+    const claims = await withLobbyPrincipal(cfg.orgId, async (tx) => {
       const storeId = await lobbyRepo.getStoreIdByCode(tx, cfg.orgId, storeCode!);
       if (!storeId) return null;
       return listMyClaims(tx, { orgId: cfg.orgId, storeId, deviceHash: owner.deviceHash });
@@ -316,7 +317,7 @@ export async function handleClaimCancel(req: Request): Promise<Response> {
     const owner = await ownerKey(cfg, req, storeCode);
     if ('stop' in owner) return owner.stop;
 
-    const claims = await withOrgPrincipal(cfg.orgId, async (tx) => {
+    const claims = await withLobbyPrincipal(cfg.orgId, async (tx) => {
       const storeId = await lobbyRepo.getStoreIdByCode(tx, cfg.orgId, storeCode!);
       if (!storeId) return null;
       const key = { orgId: cfg.orgId, storeId, deviceHash: owner.deviceHash };
@@ -340,12 +341,14 @@ export async function handleStore(req: Request): Promise<Response> {
   return guarded('store', async () => {
     const declared = Number(req.headers.get('content-length') ?? '0');
     if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return fail(413, SENTENCES.tooLarge);
+    // T-455 S9a: 60 reads a minute per client address, counted in this process before any query runs. Over the limit: the same counter sentence.
+    if (!lobbyReadAllowed(req)) return fail(429, SENTENCES.counter);
 
     const orgId = (process.env.LOBBY_ORG_ID ?? '').trim();
     const storeCode = storeCodeOf(new URL(req.url).searchParams.get('s'));
     if (!isUuid(orgId) || !storeCode) return closedStore();
 
-    const view = await withOrgPrincipal(orgId, async (tx) => {
+    const view = await withLobbyPrincipal(orgId, async (tx) => {
       const storeId = await lobbyRepo.getStoreIdByCode(tx, orgId, storeCode);
       if (!storeId) return null;
       const sw = await lobbyRepo.getLobbyStore(tx, orgId, storeId, LOBBY_POS_STALE_MINUTES, false);

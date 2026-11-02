@@ -106,6 +106,16 @@ jobs:
         run: rm -f apps/pos/.pos-build-ok && npm run build -w @shareat/pos && touch apps/pos/.pos-build-ok
 
       # <<< POS v2
+      # >>> Customer lobby (build)
+      # The customer app's web process (T-455 S9a: the diner lobby at order.shareat.net, port 9010). Same rules as the POS build: a failure here must never block an ERP
+      # deploy, and only a build that exits 0 leaves apps/customer/.customer-build-ok; packaging and the server key on that marker, never on .next.
+      - name: Build customer lobby (web)
+        continue-on-error: true
+        env:
+          NODE_ENV: production
+        run: rm -f apps/customer/.customer-build-ok && npm run build -w @shareat/customer && touch apps/customer/.customer-build-ok
+
+      # <<< Customer lobby
       - name: Prune devDependencies (bible §8 — runtime deps only from here on)
         run: npm ci --omit=dev --no-audit --no-fund
 
@@ -120,6 +130,13 @@ jobs:
             [ -d apps/pos/node_modules ] && PATHS="$PATHS apps/pos/node_modules"
           fi
           # <<< POS v2
+          # >>> Customer lobby (package): only a build that left its marker is shipped
+          if [ -f apps/customer/.customer-build-ok ]; then
+            [ -d apps/customer/public ] && PATHS="$PATHS apps/customer/public"
+            [ -d apps/customer/node_modules ] && PATHS="$PATHS apps/customer/node_modules"
+            PATHS="$PATHS apps/customer/.next apps/customer/.customer-build-ok apps/customer/package.json apps/customer/next.config.mjs"
+          fi
+          # <<< Customer lobby
           tar -czf /tmp/shareat-artifact.tar.gz \
             --exclude='.git' \
             --exclude='secrets' \
@@ -190,6 +207,26 @@ jobs:
               fi
             fi
             # <<< POS v2
+            # >>> Customer lobby (carry-forward): a release without a good customer build keeps the last good one; never fatal
+            CUSTOMER_RESTART=0
+            if [ -f "$RELEASE/apps/customer/.customer-build-ok" ]; then
+              CUSTOMER_RESTART=1
+            else
+              PREV_RELEASE="$(readlink -f /srv/shareat 2>/dev/null || true)"
+              if [ -n "$PREV_RELEASE" ] && [ "$PREV_RELEASE" != "$RELEASE" ] && [ -f "$PREV_RELEASE/apps/customer/.customer-build-ok" ]; then
+                if rm -rf "$RELEASE/apps/customer" && cp -a "$PREV_RELEASE/apps/customer" "$RELEASE/apps/customer"; then
+                  echo "::warning::Customer lobby did not build in this deploy; kept the last good build from $PREV_RELEASE (not restarted)"
+                  # the running process still lives in PREV_RELEASE; record it once (chained carry-forwards keep the original)
+                  [ -e /srv/shareat-releases/.customer-running ] || echo "$PREV_RELEASE" > /srv/shareat-releases/.customer-running || echo "::warning::Customer lobby could not record the running release (.customer-running)"
+                else
+                  rm -rf "$RELEASE/apps/customer" || true
+                  echo "::warning::Customer lobby carry-forward failed (copy from $PREV_RELEASE); left as is, ERP deploy continues"
+                fi
+              else
+                echo "Customer lobby: no good build in this release and none to carry forward; not restarting it"
+              fi
+            fi
+            # <<< Customer lobby
             ln -sfn "$RELEASE" /srv/shareat.new
             mv -Tf /srv/shareat.new /srv/shareat
             sudo /usr/bin/systemctl restart shareat-erp.service
@@ -203,6 +240,15 @@ jobs:
               fi
             fi
             # <<< POS v2
+            # >>> Customer lobby (restarts only once its unit is installed, runbook): a failure here never stops the ERP deploy
+            if [ "$CUSTOMER_RESTART" = 1 ] && [ -f /etc/systemd/system/shareat-customer.service ]; then
+              CUSTOMER_UP=1
+              sudo /usr/bin/systemctl restart shareat-customer.service || { CUSTOMER_UP=0; echo "Customer lobby restart failed; ERP unaffected" >&2; }
+              if [ "$CUSTOMER_UP" = 1 ]; then
+                echo "$RELEASE" > /srv/shareat-releases/.customer-running || echo "::warning::Customer lobby could not record the running release (.customer-running)"
+              fi
+            fi
+            # <<< Customer lobby
             # >>> POS v2 (DEF-770): never prune the release the running POS lives in; never fatal
             POS_KEEP="$(cat /srv/shareat-releases/.pos-running 2>/dev/null || true)"
             POS_KEEP="${POS_KEEP%/}"
@@ -210,6 +256,13 @@ jobs:
               touch -m "$POS_KEEP" || echo "::warning::POS v2 could not protect $POS_KEEP from the release cleanup"
             fi
             # <<< POS v2
+            # >>> Customer lobby (retention): never prune the release the running customer app lives in; never fatal
+            CUSTOMER_KEEP="$(cat /srv/shareat-releases/.customer-running 2>/dev/null || true)"
+            CUSTOMER_KEEP="${CUSTOMER_KEEP%/}"
+            if [ -n "$CUSTOMER_KEEP" ] && [ -d "$CUSTOMER_KEEP" ]; then
+              touch -m "$CUSTOMER_KEEP" || echo "::warning::Customer lobby could not protect $CUSTOMER_KEEP from the release cleanup"
+            fi
+            # <<< Customer lobby
 
             # Keep the last 3 releases only
             ls -1dt /srv/shareat-releases/*/ | tail -n +4 | xargs -r rm -rf
@@ -251,6 +304,28 @@ jobs:
           REMOTE
 
       # <<< POS v2
+      # >>> Customer lobby (health): last, so a customer failure is visible without hiding a healthy ERP; it never fails the deploy
+      - name: Confirm customer lobby is up (when installed)
+        continue-on-error: true
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ env.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" bash -s <<'REMOTE'
+            set -euo pipefail
+            if [ ! -f /etc/systemd/system/shareat-customer.service ]; then
+              echo "Customer lobby unit not installed yet: shipped, not started"
+              exit 0
+            fi
+            for i in 1 2 3 4 5 6; do
+              if curl -fsS -o /dev/null http://127.0.0.1:9010/lobby; then
+                echo "Customer lobby healthy after ${i} attempt(s)"
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "::error::Customer lobby health check failed after 30s (the ERP is unaffected)" >&2
+            exit 1
+          REMOTE
+
+      # <<< Customer lobby
       # A GitHub-hosted runner is thrown away after the job, taking the key with it. A self-hosted
       # runner (docs/ops/self-hosted-runner.md) is not, so the production SSH key and the artifact
       # are removed explicitly, pass or fail.
