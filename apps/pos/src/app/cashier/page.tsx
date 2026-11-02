@@ -10,6 +10,8 @@ import { useLocalProfile } from "@/context/local-profile-context";
 import { useIdleTimer } from "@/hooks/useIdleTimer";
 import { useStoreContext } from "@/context/store-context";
 import { ChatInbox } from "@/components/cashier/ChatInbox";
+import { BirthdayPrompt } from "@/components/cashier/BirthdayPrompt";
+import { BirthdaySongButton } from "@/components/cashier/BirthdaySongButton";
 
 const SessionDetailView = dynamic(
   () => import('@/components/cashier/session-detail-view').then((mod) => mod.SessionDetailView),
@@ -47,6 +49,8 @@ function CashierPageContent() {
     <RoleGuard allow={["admin", "manager", "cashier"]}>
       {sessionId ? <SessionDetailView sessionId={sessionId} /> : <SessionListView />}
       <ChatInbox storeId={activeStore?.id} />
+      {!sessionId && <BirthdaySongButton />}
+      <BirthdayPrompt storeId={activeStore?.id} sessionOpen={!!sessionId} />
     </RoleGuard>
   );
 }
