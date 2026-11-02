@@ -8,6 +8,7 @@ import 'server-only';
  * a plain 500 whose log line carries the error NAME only (an error message could hold a diner's name or phone).
  */
 import { fail, isNonBlank, isUuid, jsonResponse, UNEXPECTED_ERROR } from './http';
+import { rejectReasonText } from '@/lib/pos2/lobbyClaims';
 import { authenticate } from './identity';
 import type { LobbyTablet, Pos2Deps } from './types';
 
@@ -104,4 +105,62 @@ export const handleLobbyPause = (req: Request, deps: Pos2Deps): Promise<Response
   run(req, deps, async (c) => {
     if (typeof c.body.paused !== 'boolean') return fail(400, 'Choose pause or resume.');
     return jsonResponse(200, { ok: true, ...(await c.lobby.pause(c.tablet, { paused: c.body.paused })) });
+  });
+
+// ---- T-455 S7b: senior / PWD discount claims ------------------------------------------------------------------------------------
+
+const BAD_CLAIM = 'Choose a claim from the list.';
+const claimIdOf = (b: Record<string, unknown>): string | null => (isUuid(b.claimId) ? b.claimId : null);
+const pick = (src: unknown, keys: readonly string[]): Record<string, unknown> => {
+  const o = (src ?? {}) as Record<string, unknown>;
+  return Object.fromEntries(keys.filter((k) => k in o).map((k) => [k, o[k]]));
+};
+/** The list answers only these fields: a port that leaked a name or an ID number would not reach the tablet's list. */
+const CLAIM_LIST_FIELDS = ['claimId', 'entryId', 'code', 'displayName', 'standLabel', 'partySize', 'kind', 'idMasked', 'ocrAssisted', 'status', 'createdAt'] as const;
+const CLAIM_OPEN_FIELDS = ['claimId', 'entryId', 'code', 'kind', 'holderName', 'idNumber', 'idLast4', 'ocrAssisted', 'partySize', 'standLabel', 'sessionRef'] as const;
+
+export const handleLobbyClaims = (req: Request, deps: Pos2Deps): Promise<Response> =>
+  run(req, deps, async (c) => {
+    const r = await c.lobby.claims(c.tablet);
+    return jsonResponse(200, { ok: true, claims: r.claims.map((row) => pick(row, CLAIM_LIST_FIELDS)) });
+  });
+
+// jsonResponse is `no-store`: this answer carries a name and an ID number.
+export const handleLobbyClaimOpen = (req: Request, deps: Pos2Deps): Promise<Response> =>
+  run(req, deps, async (c) => {
+    const claimId = claimIdOf(c.body);
+    if (!claimId) return fail(400, BAD_CLAIM);
+    return jsonResponse(200, { ok: true, ...pick(await c.lobby.claimOpen(c.tablet, { claimId }), CLAIM_OPEN_FIELDS) });
+  });
+
+export const handleLobbyClaimStatus = (req: Request, deps: Pos2Deps): Promise<Response> =>
+  run(req, deps, async (c) => {
+    const claimId = claimIdOf(c.body);
+    if (!claimId) return fail(400, BAD_CLAIM);
+    return jsonResponse(200, { ok: true, ...pick(await c.lobby.claimStatus(c.tablet, { claimId }), ['status']) });
+  });
+
+export const handleLobbyClaimApprove = (req: Request, deps: Pos2Deps): Promise<Response> =>
+  run(req, deps, async (c) => {
+    const b = c.body;
+    const claimId = claimIdOf(b);
+    if (!claimId) return fail(400, BAD_CLAIM);
+    if (b.cardSeen !== true) return fail(400, 'Tick the box once you have seen the card.');
+    if (!isNonBlank(b.sessionId) || !isNonBlank(b.statutoryDinerId) || b.statutoryDinerId.trim().length > 80) {
+      return fail(400, 'Seat the party and save the diner on the bill first.');
+    }
+    const r = await c.lobby.claimApprove(c.tablet, { claimId, cardSeen: true, sessionRef: b.sessionId.trim(), statutoryDinerRef: b.statutoryDinerId.trim() });
+    return jsonResponse(200, { ok: true, ...r });
+  });
+
+export const handleLobbyClaimReject = (req: Request, deps: Pos2Deps): Promise<Response> =>
+  run(req, deps, async (c) => {
+    const b = c.body;
+    const claimId = claimIdOf(b);
+    if (!claimId) return fail(400, BAD_CLAIM);
+    // Free text is refused, not ignored, so a client bug is visible (S7b ruling 4). The diner only ever reads the sentence for a code.
+    if (['reason', 'note', 'text', 'message'].some((k) => k in b)) return fail(400, 'Choose one of the reasons.');
+    const reason = rejectReasonText(b.reasonCode);
+    if (reason === null) return fail(400, 'Choose one of the reasons.');
+    return jsonResponse(200, { ok: true, ...(await c.lobby.claimReject(c.tablet, { claimId, reason })) });
   });

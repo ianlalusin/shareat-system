@@ -817,6 +817,23 @@ export async function getClaimPii(tx: Tx, orgId: string, claimId: string): Promi
   return row;
 }
 
+/** True when another APPROVED claim of the same entry already carries this statutory diner reference. */
+export async function dinerRefTakenInEntry(tx: Tx, orgId: string, entryId: string, statutoryDinerRef: string, exceptClaimId: string): Promise<boolean> {
+  const [r] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(lobbyDiscountClaims)
+    .where(
+      and(
+        eq(lobbyDiscountClaims.orgId, orgId),
+        eq(lobbyDiscountClaims.entryId, entryId),
+        eq(lobbyDiscountClaims.status, 'approved'),
+        eq(lobbyDiscountClaims.statutoryDinerRef, statutoryDinerRef),
+        sql`${lobbyDiscountClaims.id} <> ${exceptClaimId}`,
+      ),
+    );
+  return (r?.n ?? 0) > 0;
+}
+
 /** pending -> approved. Name and ID go to NULL (the database CHECK); the cashier, the session, the statutory record and the time are stored. */
 export async function approveClaimRow(tx: Tx, orgId: string, claimId: string, a: { sessionRef: string; statutoryDinerRef: string; personId: string }): Promise<void> {
   await tx

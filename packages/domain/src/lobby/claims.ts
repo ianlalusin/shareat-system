@@ -218,6 +218,12 @@ export async function listClaimsCore(tx: Tx, orgId: string, storeId: string): Pr
   }));
 }
 
+/** One claim's status and nothing else (no name, no ID number, no audit row). Another store's claim answers like a ghost id. */
+export async function claimStatusCore(tx: Tx, ctx: MoveCtx, claimId: string, guard: StoreGuard): Promise<{ status: ClaimStatus }> {
+  const row = await claimOrRefuse(tx, ctx, claimId, guard);
+  return { status: row.status };
+}
+
 /** "Open claim": the only call that returns the full name and ID number. Pending claims only. One `lobby.claim_open` audit row each time (code, kind, last 4: no name, no ID). */
 export async function openClaimCore(tx: Tx, ctx: MoveCtx, claimId: string, guard: StoreGuard): Promise<OpenClaimView> {
   const row = await claimOrRefuse(tx, ctx, claimId, guard);
@@ -267,6 +273,7 @@ export async function approveClaimCore(
   if (input.cardSeen !== true) throw lobbyRefusal('LOBBY_CLAIM_NEEDS_CARD');
   const ref = typeof input.statutoryDinerRef === 'string' ? input.statutoryDinerRef.trim() : '';
   if (ref.length < 1 || ref.length > LOBBY_CLAIM_REF_MAX) throw lobbyRefusal('LOBBY_BAD_INPUT', 'statutory diner ref');
+  if (await lobbyRepo.dinerRefTakenInEntry(tx, ctx.orgId, row.entryId, ref, row.id)) throw lobbyRefusal('LOBBY_CLAIM_DINER_TAKEN');
   await lobbyRepo.approveClaimRow(tx, ctx.orgId, row.id, { sessionRef, statutoryDinerRef: ref, personId: ctx.personId });
   await auditLogRepo.append(tx, ctx.orgId, {
     actorPersonId: ctx.personId,
@@ -347,6 +354,10 @@ export async function openClaimForTerminal(tx: Tx, actor: TerminalActor, claimId
 
 export async function approveClaimForTerminal(tx: Tx, actor: TerminalActor, input: ApproveClaimInput) {
   return approveClaimCore(tx, terminalCtx(actor), input, terminalGuard(actor));
+}
+
+export async function claimStatusForTerminal(tx: Tx, actor: TerminalActor, claimId: string): Promise<{ status: ClaimStatus }> {
+  return claimStatusCore(tx, terminalCtx(actor), claimId, terminalGuard(actor));
 }
 
 export async function rejectClaimForTerminal(tx: Tx, actor: TerminalActor, input: RejectClaimInput) {

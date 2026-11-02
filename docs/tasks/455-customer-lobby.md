@@ -373,3 +373,15 @@ Tester assumptions 1–9 and 11 ACCEPTED as written in the t455-s7a test headers
   de-duplicated at the POS by T-426's existing refusal (S7b).
 - Audit catalogue +3 (lobby.claim_open / _approve / _reject); raise t402-s1b and t453 ceilings together, re-measured.
 - Audit 2 Nov: one ID normalisation for duplicates; at most 10 claim rows per entry; S7b's reject uses a fixed reason list (no free text reaches the diner); pending PII lives at most until the nightly sweep (3 h after seating, 24 h max) — accepted.
+
+## S7b rulings (BOSS orchestrator, Opus, 2026-11-02) — after the tester's pass
+Tester assumptions 1–11 in the S7b test headers ACCEPTED as written, with these specifics:
+- 2. Reject list as pinned (four codes, four sentences). The diner only ever sees the sentence for the code.
+- 4. Free text in a reject body is REFUSED (400), not silently ignored, so a client bug is visible.
+- 8. Order stays: write the diner via `mutateStatutoryDiners`, then approve. If approve is refused, the diner stays on the
+  bill (the cashier saw the card); the dialog says the claim was not confirmed, with the server's sentence.
+- 9. One exception to "409 is a refusal": a retried approve whose first call succeeded but whose answer was lost. On 409
+  the tablet refetches claims; if that claim is now `approved`, show it as done. Add that test.
+- 11. Name and ID number live only in the open dialog's state and are cleared when it closes; never in props of the
+  card, localStorage, query strings or console output.
+- R1: merges before 20 Nov or after 14 Dec.

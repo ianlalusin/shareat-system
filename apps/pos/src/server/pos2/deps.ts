@@ -157,5 +157,25 @@ function buildLobbyPort(
       const d = await loadDomain();
       return dbPkg.withOrgPrincipal(orgId, (tx) => d.setLobbyPausedForTerminal(tx, actorOf(a), i.paused));
     },
+    claims: async (a) => {
+      const d = await loadDomain();
+      return { claims: await dbPkg.withOrgPrincipal(orgId, (tx) => d.listClaimsForTerminal(tx, actorOf(a))) };
+    },
+    claimOpen: async (a, i) => {
+      const d = await loadDomain();
+      return { ...(await dbPkg.withOrgPrincipal(orgId, (tx) => d.openClaimForTerminal(tx, actorOf(a), i.claimId))) };
+    },
+    claimStatus: async (a, i) => {
+      const d = await loadDomain();
+      return dbPkg.withOrgPrincipal(orgId, (tx) => d.claimStatusForTerminal(tx, actorOf(a), i.claimId));
+    },
+    claimApprove: async (a, i) => {
+      const d = await loadDomain();
+      return dbPkg.withOrgPrincipal(orgId, (tx) => d.approveClaimForTerminal(tx, actorOf(a), i));
+    },
+    claimReject: async (a, i) => {
+      const d = await loadDomain();
+      return dbPkg.withOrgPrincipal(orgId, (tx) => d.rejectClaimForTerminal(tx, actorOf(a), i));
+    },
   };
 }
