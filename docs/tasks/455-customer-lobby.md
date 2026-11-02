@@ -186,7 +186,7 @@ merges with the Lipa soak (risk R1).
 | **S6b** birthday, POS | [P] | prompt, time picker, scheduler on the tablet, port v1 player + plugin + mp3s + manual button | fake clock: plays at the time, not before; countdown Stop cancels; offline accepted request still plays; app reopened after 30 min does not play; port parity with v1 `player.test.ts` | after S6a |
 | **S7a** claims, server + phone (typed) | [O] | `packages/domain/src/lobby/claims.ts`, customer route + `/lobby/discount` | claim > party size refused; approve unseated refused; approve without `cardSeen` refused; name/ID null after approve, reject, expire; full view writes audit row; other-store staff gets 403 | S6b |
 | **S7b** claims, POS | [P] | claims badge, pre-filled T-426 dialog, "card seen" tick, approve/reject calls | save writes `statutoryDiners` once even on a retried approve (T-426 dup refusal); untick blocks save; list shows only last 4 | after S7a |
-| **S8** on-phone OCR | [O] | spike first: tesseract.js at an exact version, self-hosted assets, accuracy on >= 20 real OSCA/PWD cards (kept off the repo), size and time on a low-end phone; then `src/lib/id-ocr/**` | guard: no upload path (4.4); worker lazy-loaded (main bundle unchanged in size budget test); parser fixtures are **synthetic** cards only; OCR failure falls back to the typed form | after S7a; drop if the spike misses (2/3 of fields right on 80% of cards) |
+| **S8** on-phone OCR — **SKIPPED for now (Ian, 2 Nov 2026)** | [O] | spike first: tesseract.js at an exact version, self-hosted assets, accuracy on >= 20 real OSCA/PWD cards (kept off the repo), size and time on a low-end phone; then `src/lib/id-ocr/**` | guard: no upload path (4.4); worker lazy-loaded (main bundle unchanged in size budget test); parser fixtures are **synthetic** cards only; OCR failure falls back to the typed form | after S7a; drop if the spike misses (2/3 of fields right on 80% of cards) |
 | **S9** ops | [O] | Customer server as the third service on 159.223.46.224 (built in CI, never on the droplet, DEF-238), nginx for order.shareat.net, secrets `LOBBY_HASH_SECRET`/`LOBBY_ORG_ID`, nightly purge, `lobby_stores` seed for Lipa, runbook; measure memory after start (plan R6) | runbook dry-run on the emulator profile; memory figure recorded | last |
 | **A** audit | Sonnet | diff vs this spec; each acceptance case with real output; looks for a code used as a key, PII in logs/URLs, an upload path, a price from the phone, a second statutory copy | FINDINGS <= 30 lines | end |
 
@@ -393,3 +393,8 @@ Tester assumptions 1–11 in the S7b test headers ACCEPTED as written, with thes
 - 11. Name and ID number live only in the open dialog's state and are cleared when it closes; never in props of the
   card, localStorage, query strings or console output.
 - R1: merges before 20 Nov or after 14 Dec.
+
+## S8 decision (Ian, 2026-11-02)
+
+"skip the camera reader for now". S8 (on-phone OCR of senior/PWD cards) is not built. Diners type card details
+(S7a). Reopen only if Ian supplies >= 20 real card photos for the spike (kept off the repo). Next lobby slice: S9 ops.
