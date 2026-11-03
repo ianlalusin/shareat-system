@@ -74,6 +74,7 @@ the pathology without the platform that forced it.
 - **Recommended: weighted average** — matches the prior plan's recommendation and is
   simpler to reconcile. **This is a business/accounting call, not a technical one.**
   FIFO is materially more work and changes reported margins.
+  **Superseded 2026-08-24 (bible row 110): "Inventory costing is FIFO".** The recommendation above was not taken.
 
 ## 5. Single company with many stores, or true multi-company tenancy? ✅ **RESOLVED — MULTI-COMPANY**
 
@@ -85,6 +86,7 @@ the pathology without the platform that forced it.
 - **Recommended: single company, many stores — but keep an `organizations` table from
   day one.** Costs almost nothing now; retrofitting tenancy later is painful. Note there
   is a second entity in play (SEBN) in the ERPNext work, which may force this.
+  **Superseded 2026-08-24 (bible row 111): MULTI-COMPANY**, future tenants are franchises with separate owners. `organizations` is a real boundary, not a single-row placeholder.
 
 ## 6. Account IDs: keep string codes like `cash__cashier`, or numeric? ✅ **RESOLVED — NUMERIC**
 
@@ -120,6 +122,8 @@ behaviour than it first appeared — it just needs to be uniform.
   must be recorded rather than silently produce zeroes.
 
 ## 9. Opening INVENTORY at 1 Jan 2027 — zero, or counted value? ⏰ HAS A DEADLINE
+
+> **ANSWERED 2026-08-24 (bible row 109):** "inventory at COUNTED value" (not zero), so "the 31 December valued count is now REQUIRED and cannot be reconstructed afterwards". The text below is the original question, kept as history.
 
 **Context, confirmed by Ian 2026-08-24:** *"Inventory is linked to expense, that's where the value
 goes by linking it — that is exactly why we need this v2 project, to simplify and correct it."*
@@ -183,6 +187,8 @@ easiest to overlook**, because the value is the figure everyone looks at.
 
 ### The open sub-question: what the opening entry looks like
 
+> **ANSWERED 2026-08-24 (bible row 109):** "assets at NET BOOK VALUE with remaining lifespan defined", "Assets at net book value only, with remaining lifespan defined explicitly so depreciation can be computed". That is option (b) below. The table is kept as history.
+
 | | |
 |---|---|
 | **(a) Cost + accumulated depreciation** — `1510` at original cost, `1590` at accumulated | Standard presentation. The data already exists in v1, so it costs **one extra line per asset** and nothing else. Keeps gross PPE visible, which matters for insurance, for disposal gain/loss, and for telling a nearly-new asset from a nearly-written-off one |
@@ -204,6 +210,8 @@ is exactly the kind of thing a migration is the natural excuse for.
 > than either alone. Scheduled separately, the second one gets skipped.
 
 ## 11. Where the opening equity lands — 3100 Owner's capital, or 3300 Retained earnings?
+
+> **ANSWERED 2026-08-24 (bible row 109):** "opening equity clears to 3300 RETAINED EARNINGS" ("Opening equity to **3300**, not 3100"). The text below is the original question, kept as history; the "fixture currently uses 3100" remark below was true when written (24 Aug) and is not re-checked here.
 
 **Raised 2026-08-24 by T-108's opening-balance fixture.** ADR-005 requires 3900 Opening Balance
 Equity to net to exactly zero but does not say what clears it, so the implementer had to choose.
@@ -238,6 +246,6 @@ identically and this is cosmetic.
 
 Postgres + Drizzle · Firebase Auth retained as IdP, roles in Postgres · Firestore
 two-lane mirror/inbox replacing the IndexedDB sync engine · clock terminal on the
-client SDK · face templates permanently excluded · biometric mirror device-only ·
+client SDK [**direction changed 5 Oct, bible row 280:** the target is a complete Firebase exit (database, sign-in and push), phased; nothing changes until the phase that replaces each part is planned. Rows 378 and 379 (22 Oct) allow the interim release of POS v2 on v1's Firebase, so current Firebase use is not banned] · face templates permanently excluded · biometric mirror device-only ·
 one `person` spine with server-issued sessions · attendance config added to the hot
 set · ports 9008/5435 · attendance is Phase 2.

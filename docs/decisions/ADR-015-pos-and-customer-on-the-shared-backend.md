@@ -85,7 +85,7 @@
 | Refill request, kitchen ticket | Any device; prints on the Bluetooth kitchen printer. Refills carry no price |
 | SC/PWD and preset discounts | From the mirrored rules; the server recomputes after sync |
 | Cashier change mid-outage | Offline PIN sign-in against a device-only verifier (P1, O5) |
-| Same-day cash refund | Same device, manager PIN (P2, O6) |
+| ~~Same-day cash refund~~ | ~~Same device, manager PIN (P2, O6)~~ **Superseded 17 Oct (row 356): no refunds offline; "Refunds need the internet." Voiding an unpaid table offline is manager/admin only, marked `voidedOffline`, reviewed after sync (T-425).** |
 
 | Refused offline | Why |
 |---|---|
@@ -136,7 +136,7 @@ beyond P0.
 
 - POS BIR registration (PTU/MIN per tablet): numbering is designed to the per-machine series either way.
 - Offline-proposal Q1–Q4, Q6 (tablets per store, router UPS, printers, offline tenders, offline refunds): the
-  recommendations above stand until Ian rules.
+  recommendations above stand until Ian rules. [Offline refunds: **superseded 17 Oct, row 356:** no refunds while offline in this phase.]
 - Firebase exit scope (§6).
 
 ---
@@ -178,7 +178,7 @@ Customer v2 sends **no push**: on-page notices only (A6).
 | **Keep today's tablets** (`tablet-model` = b) and **Bluetooth thermal printers** (`printers` = a) | 13 Oct | Model, Android version and memory are counted before the soak; only failing tablets are replaced |
 | Router on a **small UPS per store**; stores also have generators | `router-ups` = a | — |
 | Offline, take **cash, plus GCash/Maya recorded with the reference number as "to check"** | `offline-tenders` = a | **Narrows §5's refused list:** e-wallets are accepted offline as unverified, checked on sync. Card stays refused |
-| Offline refunds: **same tablet, same day, cash only, manager PIN** | `offline-refunds` = a | Confirms §5 O6 |
+| ~~Offline refunds: **same tablet, same day, cash only, manager PIN**~~ **Superseded 17 Oct (bible row 356, narrows A3):** NO refunds while offline in this phase ("Refunds need the internet."). Voiding an UNPAID table offline is allowed only for a signed-in manager or admin, marked `voidedOffline`, listed by pos2-audit and reviewed after sync. Spec T-425. | `offline-refunds` = a, then row 356 | ~~Confirms §5 O6~~ Row 356 overrides it: §5 O6 no longer allows offline refunds |
 | **Warn the manager at ₱50,000 unsent; keep selling** | `offline-cap` = b | A warning in the P0 offline slice; no hard stop |
 
 ### A4. Receipts and money on the till (RULED)
@@ -209,6 +209,7 @@ Customer v2 sends **no push**: on-page notices only (A6).
    rule) pre-fills a draft; staff adjust it; the manager posts (rows 318, 335). **A draft not posted by 14:00 the
    next day posts automatically**, logged as an automatic posting. Row 335 stands: the v1 usage pull becomes a check
    only (±10% gap flagged) once S6 lands. Specced as T-401 S6, not yet built.
+   > **Note, rows 341 and 342 (15 Oct, supersede row 335's "pull becomes a check only"):** row 341: "THE v1 PULL CREATES PRE-FILLED USAGE DRAFTS; UNPOSTED PULL DRAFTS AUTO-POST AT 14:00 MANILA NEXT DAY." One draft per store+day (+location) at the expected quantity; staff correct lines; the manager posts. A pull draft still unposted at 14:00 the next day auto-posts, flagged `auto_posted`. Manual drafts never auto-post. Row 342: day close shows a WARNING for unposted usage and never blocks a sales day; month close is BLOCKED while pull drafts are unposted, unexplained out-of-band lines remain, or manual usage drafts are open. So "check only" in this item is history; the current rule is the pull draft.
 3. Store orders addressed to a store show on the POS screen (row 318). One person, one ID (row 322); a person with two
    or more positions picks one at sign-in, and the pick only narrows (row 323).
 
