@@ -44,6 +44,7 @@ const POS_ID = 'Choose or enter the POS store this store sells under.';
 const POS_NAME = 'Give the POS store a name so people can recognise it.';
 const POS_CHANNEL = "Choose the sales channel POS's sales land in.";
 const POS_TAX = "Choose the tax type shown in the POS store's settings.";
+const PCODE = 'A store code is a UUID for Grab, or 3 to 12 letters or digits for Foodpanda.';
 const BLANK = '   ';
 
 const ROWS: Record<string, Row> = {
@@ -62,6 +63,8 @@ const ROWS: Record<string, Row> = {
   'settings.linkStoreToPos.salesChannelId': { ok: 'chan-1', bad: [[BLANK, POS_CHANNEL]], blank: POS_CHANNEL },
   'settings.linkStoreToPos.posTaxType': { ok: 'vat', bad: [[BLANK, POS_TAX]], blank: POS_TAX },
   'settings.unlinkStoreFromPos.reason': { ok: 'Moved to a new POS', bad: [[BLANK, UNLINK], ['q'.repeat(501), UNLINK]], blank: UNLINK },
+  'settings.setSalesChannelPlatformCode.platform': { ok: 'grab', bad: [['amazon', 'Choose Grab, Foodpanda, or none.']] },
+  'settings.setSalesChannelPlatformCode.code': { ok: 'AB12', bad: [['--', PCODE], ['not a code!', PCODE]] },
   'settings.tender.name': { ok: 'GCash', bad: [[BLANK, 'Give the tender a name.']], blank: 'Give the tender a name.' },
   'settings.tender.kind': { ok: 'wallet', bad: [[BLANK, 'Choose whether this tender is cash or a wallet.']], blank: 'Choose whether this tender is cash or a wallet.' },
   'findings.createMissingClosedPeriod.reason': { ok: 'Books were never opened', bad: [[BLANK, 'Say why this month is being created now.']], blank: 'Say why this month is being created now.' },

@@ -145,6 +145,10 @@ const ROWS: Record<string, Row> = {
   'loans.recordLoanPayment.fromMoneyAccountId': req('Choose the account the payment comes from.'),
   'loans.recordLoanPayment.on': date('The payment date'),
   'loans.reverseLoanEntry.reason': req('Say why this is being reversed.'),
+  'loans.updateLoanRepaymentAmount.repaymentAmount': (() => {
+    const says = 'The repayment amount must be an amount greater than zero, or empty to clear it.';
+    return { ok: '10.5', stored: '10.50', bad: [MONEY_BAD('The repayment amount'), ['0', says], ['-5', says]] } as Row;
+  })(),
   // ---- prepaid
   'prepaid.createPrepaidItem.name': reqMax('The name', 120),
   'prepaid.createPrepaidItem.storeId': req('Choose a store.'),

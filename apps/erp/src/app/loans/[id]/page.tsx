@@ -221,7 +221,7 @@ export default async function LoanPage({
               />
             </Field>
             <Button type="submit" variant="secondary">
-              Save amount
+              Save
             </Button>
           </CheckedForm>
         </section>

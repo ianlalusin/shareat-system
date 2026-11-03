@@ -57,6 +57,8 @@ File `packages/db/migrations/0228_t511_settlement_intake.sql`. Header names T-51
 - Capability cell tests (3), pins re-measured, `docs` row regex test.
 - App: action tests (copy `t350-channel-payout-change-render` and `t389-s2-sales-channels-web`), render tests for the two forms by role; re-measure `action-link-sweep` / `touch-target-baseline` (sales-channels baseline [16,16,16,20], loans/[id] [20]), `t440-s2-live-check-guard` (spread `nativeAttrs(...)` inside `Field`), `domain-actions-have-callers` (both new functions have a caller), the redirect-in-catch sweep. Baselines are re-measured with the orchestrator's approval, never hand-edited.
 
+**G7 baseline +2 (BOSS 4 Nov); converting to EditableRecord is a follow-up when these screens grow.** The two admin-only single-field forms of slice 2b (`loans/[id]/page.tsx` repayment amount, `settings/sales-channels/page.tsx` platform and store code) are separate `CheckedForm`s with hidden ids by design; `apps/erp/tests/editable-record-baseline.json` raises `loans/[id]/page.tsx` from 2 to 3 and adds `settings/sales-channels/page.tsx: 1`.
+
 ## Out of slice 2
 Readers, ingest, review screen, loan check, approval, posting change (0229), deferral (0230), the Foodpanda/Grab mapping, any discount leg (ruled out: staff record net), READMEs (not tracked on main), constraint-message keys (optional; if added, two pins change).
 

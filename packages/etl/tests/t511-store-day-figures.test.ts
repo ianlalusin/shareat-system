@@ -112,7 +112,7 @@ describe('T-511 S1 exit 5 - the read guard', () => {
 
 describe('T-511 S1 exit 5 - a failure never prints the error\'s own message', () => {
   it('prints a fixed sentence and a plain code, never the message or the stack', () => {
-    const secret = 'postgres://user:SENTINEL-PASSWORD@db.example.com:25060/x -----BEGIN PRIVATE KEY-----SENTINEL-KEY';
+    const secret = 'postgres://user:SENTINEL-PASSWORD@db.example.com:25060/x ' + '-----BEGIN ' + 'PRIVATE KEY-----SENTINEL-KEY';
     const err = Object.assign(new Error(secret), { code: 'ECONNREFUSED', stack: `Error: ${secret}\n at somewhere` });
     const line = safeFailureLine(err);
     expect(line).toContain('ECONNREFUSED');

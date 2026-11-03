@@ -333,7 +333,7 @@ function PlatformCodeForm({ channel, storeId }: { channel: SalesChannelAdminRow;
           </Field>
         </FormGrid>
         <Button type="submit" variant="secondary">
-          Save platform and code
+          Save
         </Button>
       </CheckedForm>
     </section>
