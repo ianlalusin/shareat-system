@@ -97,7 +97,9 @@ The two options as put to Ian, kept for the record. v1 has each package twice (L
   overnight containment, overlap refused, all-day vs dayparted clash refused, retire refused, cross-store daypart refused by FK,
   existing offers unchanged. **Full suite on a fresh gate DB** (migration rule).
 - **S2 domain:** live-offer resolution (R4), authorize (R8), audit (R12). Tests: Sunday 16:59 / 17:00 / 07:59 / 08:00 in
-  `Asia/Manila`, day-of-week at midnight, not-offered-now result with `availableFrom`.
+  `Asia/Manila`, day-of-week at midnight, not-offered-now result with `availableFrom`. The resolver's not-offered-now result
+  also carries `availableAt` (UTC instant of the next opening) and `availableDay` (store-local weekday, 0-6); bad zone, instant,
+  window or tied offers resolve to `invalid` with a reason (`daypart.ts`).
 - **S3 ERP screens (R9).**
 - **S4 projection (R6).** Needs T-508 S3 merged first.
 - **S5 cutover load (R10)** with the signed pairing table and the load report. Practice proof with Lipa's real two

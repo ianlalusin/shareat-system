@@ -32,14 +32,21 @@ export type DaypartInvalidReason =
 
 export type DaypartValidation = { readonly ok: true } | { readonly ok: false; readonly reason: DaypartInvalidReason };
 
-const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
+/** 'HH:MM', or 'HH:MM:SS' as a Postgres `time` prints it. Seconds are accepted only when they are '00'. */
+const HHMM = /^([01]\d|2[0-3]):([0-5]\d)(?::(00))?$/;
 const MINUTES_PER_DAY = 1440;
 const MINUTES_PER_WEEK = 7 * MINUTES_PER_DAY;
+const DAY_MS = MINUTES_PER_DAY * 60_000;
 
-/** 'HH:MM' as minutes since local midnight, or null when malformed. */
+/** 'HH:MM' (or 'HH:MM:00') as minutes since local midnight, or null when malformed. */
 function minutesOf(hhmm: string): number | null {
-  const m = HHMM.exec(hhmm);
+  const m = typeof hhmm === 'string' ? HHMM.exec(hhmm) : null;
   return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+
+/** Minutes since midnight as the normalised 'HH:MM'. */
+function hhmmOf(minutes: number): string {
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 }
 
 export function validateDaypart(w: DaypartWindow): DaypartValidation {
@@ -58,23 +65,35 @@ const isValid = (w: DaypartWindow): boolean => validateDaypart(w).ok;
 
 // ---- store-local time ------------------------------------------------------------------------------------------------
 
-const formatters = new Map<string, Intl.DateTimeFormat>();
-function formatterFor(timeZone: string): Intl.DateTimeFormat {
+const formatters = new Map<string, Intl.DateTimeFormat | null>();
+/** The formatter for an explicit IANA zone, or null when the zone is missing or not a real zone. Never the machine zone. */
+function formatterFor(timeZone: unknown): Intl.DateTimeFormat | null {
+  if (typeof timeZone !== 'string' || timeZone.trim() === '') return null;
   let f = formatters.get(timeZone);
-  if (!f) {
-    f = new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      hourCycle: 'h23',
-      year: 'numeric',
-      month: 'numeric',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: 'numeric',
-      second: 'numeric',
-    });
+  if (f === undefined) {
+    try {
+      f = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        hourCycle: 'h23',
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: 'numeric',
+        second: 'numeric',
+      });
+    } catch {
+      f = null;
+    }
     formatters.set(timeZone, f);
   }
   return f;
+}
+
+/** Why the inputs cannot be used, or null when both are fine. The instant is checked first. */
+function badInput(instantUtc: unknown, timeZone: unknown): 'invalid_instant' | 'invalid_time_zone' | null {
+  if (!(instantUtc instanceof Date) || Number.isNaN(instantUtc.getTime())) return 'invalid_instant';
+  return formatterFor(timeZone) === null ? 'invalid_time_zone' : null;
 }
 
 interface LocalParts {
@@ -89,9 +108,10 @@ interface LocalParts {
   readonly minuteOfDay: number;
 }
 
+/** Callers have already passed `badInput`. */
 function localParts(instant: Date, timeZone: string): LocalParts {
   const get: Record<string, number> = {};
-  for (const p of formatterFor(timeZone).formatToParts(instant)) {
+  for (const p of formatterFor(timeZone)!.formatToParts(instant)) {
     if (p.type !== 'literal') get[p.type] = Number(p.value);
   }
   const year = get.year!;
@@ -117,17 +137,34 @@ function offsetMs(instantMs: number, timeZone: string): number {
   return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(instantMs / 1000) * 1000;
 }
 
-/** A store-local wall-clock time as the UTC instant. A time skipped by DST resolves to a nearby instant, never throws. */
-function zonedToUtc(year: number, month: number, day: number, hour: number, minute: number, timeZone: string): Date {
+/**
+ * A store-local wall-clock time as UTC instants (ms), ascending.
+ * - An ordinary time gives one instant.
+ * - A time that happens twice (clocks went back) gives both, so a boundary is never slept through.
+ * - A time DST skips gives the transition itself: the first valid instant at or after the skipped time.
+ */
+function zonedToUtcAll(year: number, month: number, day: number, hour: number, minute: number, timeZone: string): number[] {
   const guess = Date.UTC(year, month - 1, day, hour, minute, 0);
-  const first = guess - offsetMs(guess, timeZone);
-  return new Date(guess - offsetMs(first, timeZone));
+  const offsets = [...new Set([offsetMs(guess - DAY_MS, timeZone), offsetMs(guess, timeZone), offsetMs(guess + DAY_MS, timeZone)])];
+  const valid = [...new Set(offsets.map((o) => guess - o).filter((t) => offsetMs(t, timeZone) === guess - t))].sort((a, b) => a - b);
+  if (valid.length > 0) return valid;
+  // Skipped by a spring-forward: search for the transition between the instant read with the larger and with the smaller offset.
+  let lo = guess - Math.max(...offsets);
+  let hi = guess - Math.min(...offsets);
+  const before = offsetMs(lo, timeZone);
+  if (offsetMs(hi, timeZone) === before) return [hi];
+  while (hi - lo > 1) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (offsetMs(mid, timeZone) === before) lo = mid;
+    else hi = mid;
+  }
+  return [hi];
 }
 
 // ---- containment -----------------------------------------------------------------------------------------------------
 
 export function daypartContains(w: DaypartWindow, instantUtc: Date, timeZone: string): boolean {
-  if (!isValid(w)) return false; // fail closed
+  if (!isValid(w) || badInput(instantUtc, timeZone) !== null) return false; // fail closed
   const s = minutesOf(w.start)!;
   const e = minutesOf(w.end)!;
   const { dow, minuteOfDay: m } = localParts(instantUtc, timeZone);
@@ -168,13 +205,15 @@ interface Boundary {
   readonly time: string;
 }
 
-/** The first window opening (`opensOnly`) or opening-or-closing strictly after `instantUtc`, scanning the coming 8 local days. */
+/** The first window opening (`opensOnly`) or opening-or-closing strictly after `instantUtc`, scanning the coming 8 local days. Inputs already checked. */
 function nextBoundary(windows: readonly DaypartWindow[], instantUtc: Date, timeZone: string, opensOnly: boolean): Boundary | null {
   const now = instantUtc.getTime();
   const today = localParts(instantUtc, timeZone);
   let best: Boundary | null = null;
-  const consider = (at: Date, time: string): void => {
-    if (at.getTime() > now && (best === null || at.getTime() < best.at.getTime())) best = { at, time };
+  const consider = (instants: readonly number[], time: string): void => {
+    for (const t of instants) {
+      if (t > now && (best === null || t < best.at.getTime())) best = { at: new Date(t), time };
+    }
   };
   for (const w of windows) {
     if (!isValid(w)) continue;
@@ -184,17 +223,21 @@ function nextBoundary(windows: readonly DaypartWindow[], instantUtc: Date, timeZ
     for (let off = -1; off <= 8; off++) {
       const day = new Date(Date.UTC(today.year, today.month - 1, today.day + off));
       if (!w.days.includes(day.getUTCDay())) continue;
-      consider(zonedToUtc(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), Math.floor(s / 60), s % 60, timeZone), w.start);
+      consider(zonedToUtcAll(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), Math.floor(s / 60), s % 60, timeZone), hhmmOf(s));
       if (opensOnly) continue;
-      const endDay = overnight ? new Date(day.getTime() + MINUTES_PER_DAY * 60_000) : day;
-      consider(zonedToUtc(endDay.getUTCFullYear(), endDay.getUTCMonth() + 1, endDay.getUTCDate(), Math.floor(e / 60), e % 60, timeZone), w.end);
+      const endDay = overnight ? new Date(day.getTime() + DAY_MS) : day;
+      consider(zonedToUtcAll(endDay.getUTCFullYear(), endDay.getUTCMonth() + 1, endDay.getUTCDate(), Math.floor(e / 60), e % 60, timeZone), hhmmOf(e));
     }
   }
   return best;
 }
 
-/** The next UTC instant, strictly after `instantUtc`, at which any window opens or closes; null when there are no windows. Use as `nextChangeAt`. */
+/**
+ * The next UTC instant, strictly after `instantUtc`, at which any window opens or closes; null when there are no windows or
+ * the time zone or instant is unusable. Use as `nextChangeAt`.
+ */
 export function nextDaypartBoundary(dayparts: readonly DaypartWindow[], instantUtc: Date, timeZone: string): Date | null {
+  if (badInput(instantUtc, timeZone) !== null) return null;
   return nextBoundary(dayparts, instantUtc, timeZone, false)?.at ?? null;
 }
 
@@ -209,22 +252,40 @@ export interface DaypartOfferRow {
   readonly daypartId: string | null;
 }
 
+export type LiveOfferInvalidReason =
+  | 'mixed_all_day_and_daypart'
+  | 'unknown_daypart'
+  | 'invalid_daypart'
+  | 'overlapping_dayparts'
+  | 'tied_offers'
+  | 'invalid_time_zone'
+  | 'invalid_instant';
+
 export type LiveOfferResult<O extends DaypartOfferRow> =
   | { readonly kind: 'offer'; readonly offer: O }
-  | { readonly kind: 'not_offered_now'; readonly availableFrom: string | null }
   | {
-      readonly kind: 'invalid';
-      readonly reason: 'mixed_all_day_and_daypart' | 'unknown_daypart' | 'overlapping_dayparts';
-    };
+      readonly kind: 'not_offered_now';
+      /** Store-local 'HH:MM' of the next window opening; null when nothing will open. */
+      readonly availableFrom: string | null;
+      /** That opening as a UTC instant (null when nothing will open). */
+      readonly availableAt: Date | null;
+      /** Store-local day of week (0 = Sunday .. 6) of that opening; null when nothing will open. */
+      readonly availableDay: number | null;
+    }
+  | { readonly kind: 'invalid'; readonly reason: LiveOfferInvalidReason };
+
+const NOTHING_AHEAD = { kind: 'not_offered_now', availableFrom: null, availableAt: null, availableDay: null } as const;
 
 /**
  * R4 - which offer of ONE variant on ONE channel is live at `instantUtc`.
  *
  * Per daypart (null = all day) the latest offer with `effectiveFrom <= now` stands; if it is withdrawn that daypart offers
  * nothing. A variant with live dayparted offers resolves to the one whose window holds now, else "not offered now" with
- * `availableFrom` (the next window start among its live dayparted offers). A variant with no live dayparted offer resolves to
- * its live all-day offer. A live all-day offer next to a live dayparted one is a data error (R3), as is a live offer whose
- * daypart is unknown or two live windows that both hold now: all `invalid`, never a fallback to another price.
+ * `availableFrom` / `availableAt` / `availableDay` (the next window opening among its live dayparted offers only). A variant
+ * with no live dayparted offer resolves to its live all-day offer. Everything that cannot be answered is `invalid`, never a
+ * fallback to another price: a live all-day offer next to a live dayparted one (R3), a live offer whose daypart is unknown or
+ * whose window is malformed, two live windows that both hold now, two latest offers tied on `effectiveFrom`, an unusable time
+ * zone or instant. The reason never depends on the order of the input arrays.
  */
 export function resolveLiveOffer<O extends DaypartOfferRow>(
   offers: readonly O[],
@@ -232,22 +293,27 @@ export function resolveLiveOffer<O extends DaypartOfferRow>(
   instantUtc: Date,
   timeZone: string,
 ): LiveOfferResult<O> {
-  const now = instantUtc.getTime();
-  const latest = new Map<string | null, O>();
-  for (const o of offers) {
-    if (o.effectiveFrom.getTime() > now) continue;
-    const cur = latest.get(o.daypartId);
-    if (!cur || o.effectiveFrom.getTime() > cur.effectiveFrom.getTime()) latest.set(o.daypartId, o);
-  }
+  const bad = badInput(instantUtc, timeZone);
+  if (bad) return { kind: 'invalid', reason: bad };
 
-  const liveAllDay = latest.get(null);
+  const now = instantUtc.getTime();
+  const latest = new Map<string | null, { at: number; rows: O[] }>();
+  for (const o of offers) {
+    const at = o.effectiveFrom.getTime();
+    if (!(at <= now)) continue; // future (or unreadable) effectiveFrom: not in force
+    const cur = latest.get(o.daypartId);
+    if (!cur || at > cur.at) latest.set(o.daypartId, { at, rows: [o] });
+    else if (at === cur.at) cur.rows.push(o);
+  }
+  if ([...latest.values()].some((g) => g.rows.length > 1)) return { kind: 'invalid', reason: 'tied_offers' };
+
+  const standing = new Map<string | null, O>([...latest].map(([k, g]) => [k, g.rows[0]!]));
+  const liveAllDay = standing.get(null);
   const allDay = liveAllDay && !liveAllDay.withdrawn ? liveAllDay : undefined;
-  const liveDayparted = [...latest.entries()].filter(([id, o]) => id !== null && !o.withdrawn).map(([, o]) => o);
+  const liveDayparted = [...standing.entries()].filter(([id, o]) => id !== null && !o.withdrawn).map(([, o]) => o);
 
   if (allDay && liveDayparted.length > 0) return { kind: 'invalid', reason: 'mixed_all_day_and_daypart' };
-  if (liveDayparted.length === 0) {
-    return allDay ? { kind: 'offer', offer: allDay } : { kind: 'not_offered_now', availableFrom: null };
-  }
+  if (liveDayparted.length === 0) return allDay ? { kind: 'offer', offer: allDay } : NOTHING_AHEAD;
 
   const byId = new Map(dayparts.map((d) => [d.id, d]));
   const windows: DaypartWindow[] = [];
@@ -256,9 +322,13 @@ export function resolveLiveOffer<O extends DaypartOfferRow>(
     if (!w) return { kind: 'invalid', reason: 'unknown_daypart' };
     windows.push(w);
   }
+  if (!windows.every(isValid)) return { kind: 'invalid', reason: 'invalid_daypart' };
 
   const holding = liveDayparted.filter((o) => daypartContains(byId.get(o.daypartId!)!, instantUtc, timeZone));
   if (holding.length > 1) return { kind: 'invalid', reason: 'overlapping_dayparts' };
   if (holding.length === 1) return { kind: 'offer', offer: holding[0]! };
-  return { kind: 'not_offered_now', availableFrom: nextBoundary(windows, instantUtc, timeZone, true)?.time ?? null };
+
+  const next = nextBoundary(windows, instantUtc, timeZone, true);
+  if (!next) return NOTHING_AHEAD;
+  return { kind: 'not_offered_now', availableFrom: next.time, availableAt: next.at, availableDay: localParts(next.at, timeZone).dow };
 }
