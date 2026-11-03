@@ -131,7 +131,7 @@ export default async function ExpensesListPage({ searchParams }: { searchParams:
         </div>
       )}
 
-      <p className="text-xs text-neutral-400 dark:text-neutral-600">
+      <p className="text-xs text-neutral-500 dark:text-neutral-400">
         {toBusinessDate()} today (Asia/Manila)
       </p>
     </Page>

@@ -288,7 +288,7 @@ export default async function AssetDetailPage({
               </Field>
               {/* ⚠️ Changing a life does NOT rewrite what has already posted. Past periods are
                   history; the remaining ones re-derive from the new terms. */}
-              <p className="text-xs text-neutral-400 dark:text-neutral-600">
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
                 Changing the life or interval affects periods not yet posted. Entries already
                 posted are history and are not rewritten.
               </p>
@@ -339,7 +339,7 @@ export default async function AssetDetailPage({
                           {postedSet.has(p.period) ? (
                             <span className="text-success">Posted</span>
                           ) : (
-                            <span className="text-neutral-400 dark:text-neutral-600">—</span>
+                            <span className="text-neutral-500 dark:text-neutral-400">—</span>
                           )}
                         </td>
                       </tr>
@@ -393,7 +393,7 @@ function Field({ label, hint, rule, children }: { label: string; hint?: string; 
   const body = (
     <>      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
-      {hint && <span className="text-xs text-neutral-400 dark:text-neutral-600">{hint}</span>}
+      {hint && <span className="text-xs text-neutral-500 dark:text-neutral-400">{hint}</span>}
     
     </>
   );
@@ -412,7 +412,7 @@ function Figure({ label, value, note }: { label: string; value: string; note: st
     <div className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
       <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{label}</div>
       <div className="mt-1 text-xl font-semibold tabular-nums">{value}</div>
-      <div className="mt-1 text-xs text-neutral-400 dark:text-neutral-600">{note}</div>
+      <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{note}</div>
     </div>
   );
 }

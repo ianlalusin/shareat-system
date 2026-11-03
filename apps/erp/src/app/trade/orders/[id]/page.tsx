@@ -274,7 +274,7 @@ export default async function TradeOrderPage({
                     <>
                       {' '}+ freight {peso(order.deliveryFee)}
                       {compare(money(order.otherFees), ZERO) > 0 && <> + other {peso(order.otherFees)}</>}
-                      {' '}<span className="text-neutral-400">(on top of the goods, never into an item&rsquo;s cost)</span>
+                      {' '}<span className="text-neutral-500">(on top of the goods, never into an item&rsquo;s cost)</span>
                     </>
                   )}
                 </td>
@@ -305,7 +305,7 @@ export default async function TradeOrderPage({
 
       {order.notes && (
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          <span className="text-xs uppercase tracking-wide text-neutral-400">Notes</span> · {order.notes}
+          <span className="text-xs uppercase tracking-wide text-neutral-500">Notes</span> · {order.notes}
         </p>
       )}
 
@@ -343,31 +343,31 @@ export default async function TradeOrderPage({
 
       {(order.status === 'dispatched' || order.status === 'received' || order.status === 'void') && (
         <dl className="grid gap-x-6 gap-y-1 text-xs text-neutral-600 sm:grid-cols-2 dark:text-neutral-400">
-          <dt className="text-neutral-400">Dispatched</dt>
+          <dt className="text-neutral-500">Dispatched</dt>
           <dd>{when(order.dispatchedAt)}</dd>
-          <dt className="text-neutral-400">Received</dt>
+          <dt className="text-neutral-500">Received</dt>
           <dd>{when(order.receivedAt)}</dd>
           {order.journalEntryId && (
             <>
-              <dt className="text-neutral-400">Journal entry</dt>
+              <dt className="text-neutral-500">Journal entry</dt>
               <dd className="font-mono">{order.journalEntryId}</dd>
             </>
           )}
           {order.arChargeId && (
             <>
-              <dt className="text-neutral-400">Receivable</dt>
+              <dt className="text-neutral-500">Receivable</dt>
               <dd className="font-mono">{order.arChargeId}</dd>
             </>
           )}
           {order.creditOverrideReason && (
             <>
-              <dt className="text-neutral-400">Credit limit exceeded because</dt>
+              <dt className="text-neutral-500">Credit limit exceeded because</dt>
               <dd>{order.creditOverrideReason}</dd>
             </>
           )}
           {order.status === 'void' && (
             <>
-              <dt className="text-neutral-400">Voided</dt>
+              <dt className="text-neutral-500">Voided</dt>
               <dd>
                 {when(order.voidedAt)} — {order.voidReason}
               </dd>

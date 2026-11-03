@@ -269,7 +269,7 @@ export function SettlementForm({
             </span>
           )}
           {channel?.destinationAccountName && (
-            <span className="text-neutral-400 dark:text-neutral-600">
+            <span className="text-neutral-500 dark:text-neutral-400">
               Banks into {channel.destinationAccountName}
             </span>
           )}
@@ -494,7 +494,7 @@ export function SettlementForm({
         )}
       </div>
 
-      <p className="text-xs text-neutral-400 dark:text-neutral-600">
+      <p className="text-xs text-neutral-500 dark:text-neutral-400">
         Every platform fee is booked here, once. ⛔ Do not also raise an expense document for the
         same fee — that double-count cost ₱198,148.29 across two stores in the legacy system, and
         this screen is the single place these legs are written.

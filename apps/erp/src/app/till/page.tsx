@@ -203,7 +203,7 @@ function OpenShift({
               <span className={LABEL}>
                 {a.name}
                 {a.floatTarget && (
-                  <span className="ml-1 text-neutral-400">float {peso(Number(a.floatTarget))}</span>
+                  <span className="ml-1 text-neutral-500">float {peso(Number(a.floatTarget))}</span>
                 )}
               </span>
               <input

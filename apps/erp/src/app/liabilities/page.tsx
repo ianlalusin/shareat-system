@@ -167,7 +167,7 @@ export default async function LiabilitiesPage({
                     <RowLink href={`/liabilities/${r.id}`}>
                       {r.name}
                     </RowLink>
-                    <div className="text-xs text-neutral-400 dark:text-neutral-600">
+                    <div className="text-xs text-neutral-500 dark:text-neutral-400">
                       {CATEGORY_LABEL[r.category] ?? r.category}
                     </div>
                   </td>

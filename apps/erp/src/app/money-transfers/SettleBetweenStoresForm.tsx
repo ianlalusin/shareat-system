@@ -25,7 +25,7 @@ function Field({ label, hint, rule, className, children }: { label: React.ReactN
   const body = (
     <>      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
-      {hint && <span className="text-xs text-neutral-400 dark:text-neutral-600">{hint}</span>}
+      {hint && <span className="text-xs text-neutral-500 dark:text-neutral-400">{hint}</span>}
     
     </>
   );

@@ -121,7 +121,7 @@ export default async function EmploymentDetailPage({
                   className="rounded-lg border border-neutral-200 px-3 py-1.5 dark:border-neutral-800"
                 >
                   {p.name}
-                  {p.isPrimary && <span className="ml-1 text-xs text-neutral-400">(primary)</span>}
+                  {p.isPrimary && <span className="ml-1 text-xs text-neutral-500">(primary)</span>}
                 </li>
               ))
             )}

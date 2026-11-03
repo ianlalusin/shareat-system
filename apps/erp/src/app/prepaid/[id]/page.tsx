@@ -90,7 +90,7 @@ export default async function PrepaidItemPage({
             {/* ⛔ None of these is a column. "Released" is summed from the ledger and "still unused"
                 is cost minus that — so they cannot drift from the books, which is exactly what v1's
                 stored amortizedToDate / remainingBookValue pair did. */}
-            <p className="text-xs text-neutral-400 dark:text-neutral-600">
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
               Released and still-unused are summed from the ledger on load, never stored — so they
               cannot disagree with the books they describe.
             </p>
@@ -170,7 +170,7 @@ export default async function PrepaidItemPage({
         {/* ⭐ Running it again is SAFE and is how you catch up — months already out no-op. v1's
             scheduler silently stopped for two months and its register still looked fine, because
             the register was a maintained column (DEF-044). */}
-        <p className="text-xs text-neutral-400 dark:text-neutral-600">
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
           Releasing is safe to repeat: months already posted are skipped, so catching up after a
           missed run is just running it again.
         </p>
@@ -199,7 +199,7 @@ export default async function PrepaidItemPage({
                     {p.posted ? (
                       <span className="text-success">Released</span>
                     ) : (
-                      <span className="text-neutral-400 dark:text-neutral-600">Not yet</span>
+                      <span className="text-neutral-500 dark:text-neutral-400">Not yet</span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">
@@ -286,7 +286,7 @@ export default async function PrepaidItemPage({
             {/* ⚠️ The trap worth naming on the page: booking the whole remainder as expense AND
                 the refund as income double-counts the cancellation — and the entry still balances,
                 so nothing would catch it. */}
-            <p className="text-xs text-neutral-400 dark:text-neutral-600">
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
               Only the part that did <strong>not</strong> come back reaches the P&amp;L. The refund
               moves from one balance-sheet account to another.
             </p>

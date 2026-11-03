@@ -81,7 +81,7 @@ export function BalanceSheetFilters({
           <option value="include">Included</option>
           <option value="exclude">Excluded</option>
         </Select>
-        <span className="text-xs text-neutral-400 dark:text-neutral-600">
+        <span className="text-xs text-neutral-500 dark:text-neutral-400">
           Defaults to included — a balance sheet is an as-of view (ADR-006), same default as the
           trial balance.
         </span>

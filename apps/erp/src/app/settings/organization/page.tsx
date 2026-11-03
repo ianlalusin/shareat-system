@@ -101,7 +101,7 @@ export default async function OrganizationSettingsPage({
             label={
               <span className="text-neutral-600 dark:text-neutral-400">
                 Registered name{' '}
-                <span className="text-neutral-400">
+                <span className="text-neutral-500">
                   — the everyday name stays &ldquo;{identity.name}&rdquo;
                 </span>
               </span>
@@ -118,7 +118,7 @@ export default async function OrganizationSettingsPage({
           <Field
             label={
               <span className="text-neutral-600 dark:text-neutral-400">
-                TIN <span className="text-neutral-400">— digits; dashes are fine and are removed</span>
+                TIN <span className="text-neutral-500">— digits; dashes are fine and are removed</span>
               </span>
             }
             rule={SETTINGS_ORGANIZATION_RULES.tin}

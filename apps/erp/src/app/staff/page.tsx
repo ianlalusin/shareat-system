@@ -157,7 +157,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
                 <details>
                   <summary className="flex min-h-11 cursor-pointer items-center px-3 py-1.5">
                     {p.name}
-                    {p.isCanonical && <span className="ml-1 text-xs text-neutral-400">(canonical)</span>}
+                    {p.isCanonical && <span className="ml-1 text-xs text-neutral-500">(canonical)</span>}
                     <span className="ml-1">· {holders.length}</span>
                   </summary>
                   {holders.length === 0 ? (

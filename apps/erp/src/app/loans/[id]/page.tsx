@@ -76,7 +76,7 @@ export default async function LoanPage({
             </div>
             {/* ⛔ v1 stored all four of these on the loan row and they drifted so far that both live
                 Grab loans were unusable. Here they are one query over the ledger. */}
-            <p className="text-xs text-neutral-400 dark:text-neutral-600">
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
               Interest paid to date: <strong>{peso(loan.position.interestPaid)}</strong>. Every
               figure is summed from the ledger on load, never stored — so none of them can disagree
               with the books.
@@ -152,7 +152,7 @@ export default async function LoanPage({
               Interest built up since {loan.lastPaymentOn ?? loan.startDate}
             </span>{' '}
             <span className="font-mono font-medium tabular-nums">{peso(loan.accruedNow)}</span>
-            <div className="mt-1 text-xs text-neutral-400 dark:text-neutral-600">
+            <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
               A payment of {peso(loan.instalment)} is one scheduled instalment. ⚠️ Paying less is
               normal and is handled — it simply retires less principal, or none.
             </div>
@@ -277,7 +277,7 @@ export default async function LoanPage({
           </div>
           {/* ⚠️ A reversed payment disappears from this list rather than sitting beside its own
               undo — netting is right for a figure and wrong for a history. */}
-          <p className="text-xs text-neutral-400 dark:text-neutral-600">
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
             Reversing writes the opposite entry; the two net to nothing and the debt returns to what
             it was. A reversed payment leaves this list — it never happened as far as the loan is
             concerned, and both entries stay in the ledger.

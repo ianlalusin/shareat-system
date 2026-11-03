@@ -143,7 +143,7 @@ export function DesktopGrid({
             {positions.map((p) => (
               <th key={p.id} className="px-3 py-2 font-medium">
                 {p.name}
-                {!p.isCanonical && <span className="ml-1 text-[10px] text-neutral-400">(this store)</span>}
+                {!p.isCanonical && <span className="ml-1 text-[10px] text-neutral-500">(this store)</span>}
                 <span className="block text-[11px] font-normal text-neutral-500 dark:text-neutral-400">
                   {p.holderCount} holder{p.holderCount === 1 ? '' : 's'}
                 </span>
@@ -280,7 +280,7 @@ export function MobileSections({
         >
           <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
             {p.name}
-            {!p.isCanonical && <span className="ml-1 text-xs text-neutral-400">(this store)</span>}
+            {!p.isCanonical && <span className="ml-1 text-xs text-neutral-500">(this store)</span>}
             <span className="ml-2 text-xs font-normal text-neutral-500 dark:text-neutral-400">
               {p.holderCount} holder{p.holderCount === 1 ? '' : 's'}
             </span>

@@ -295,7 +295,7 @@ export default async function OwnerPage({
                       {c.adjustmentAmount ? (
                         <>
                           {peso(c.adjustmentAmount)}
-                          <div className="text-xs font-sans text-neutral-400 dark:text-neutral-600">
+                          <div className="text-xs font-sans text-neutral-500 dark:text-neutral-400">
                             {c.adjustmentReason}
                           </div>
                         </>

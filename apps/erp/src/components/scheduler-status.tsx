@@ -168,7 +168,7 @@ export async function SchedulerStatus({
 
   return (
     <>
-      <p className="text-xs text-neutral-400 dark:text-neutral-600">
+      <p className="text-xs text-neutral-500 dark:text-neutral-400">
         {label} last ran <strong className="font-medium">{when}</strong> for {last.period} ·{' '}
         {last.postedCount} posted, {last.skippedCount} already done, no failures · {last.trigger}
       </p>

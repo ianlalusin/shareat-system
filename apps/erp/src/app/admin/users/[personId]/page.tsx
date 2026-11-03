@@ -181,7 +181,7 @@ export default async function UserAccessPage({
             {stores.map((s) => (
               <li key={s.id} className="flex items-center justify-between gap-3 text-sm">
                 <span>
-                  {s.name} <span className="font-mono text-xs text-neutral-400">{s.code}</span>
+                  {s.name} <span className="font-mono text-xs text-neutral-500">{s.code}</span>
                 </span>
                 <form action={setStoreScopeAction}>
                   <input type="hidden" name="personId" value={personId} />

@@ -22,7 +22,7 @@ function Field({ label, hint, rule, className, children }: { label: React.ReactN
   const body = (
     <>      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
-      {hint && <span className="text-xs text-neutral-400 dark:text-neutral-600">{hint}</span>}
+      {hint && <span className="text-xs text-neutral-500 dark:text-neutral-400">{hint}</span>}
     
     </>
   );
@@ -98,7 +98,7 @@ export function RecordTransferForm({
         <Input name="notes" className="w-full" />
       </Field>
 
-      <p className="text-xs text-neutral-400 dark:text-neutral-600">
+      <p className="text-xs text-neutral-500 dark:text-neutral-400">
         Any gap between the two amounts is booked as a fee to <span>bank charges</span> — a real expense, not a rounding difference. Money that arrives without leaving
         somewhere is income, and cannot be recorded here. A transfer between two stores also records
         what one owes the other, so the group&apos;s books still balance while each store carries its

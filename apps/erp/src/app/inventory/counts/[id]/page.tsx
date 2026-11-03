@@ -265,17 +265,17 @@ export default async function CountSessionPage({
 
       {(detail.status === 'closed' || detail.status === 'cancelled') && (
         <dl className="grid gap-x-6 gap-y-1 text-xs text-neutral-600 sm:grid-cols-2 dark:text-neutral-400">
-          <dt className="text-neutral-400">Opened by</dt>
+          <dt className="text-neutral-500">Opened by</dt>
           <dd>
             {detail.openedByName} · {when(detail.openedAt)}
           </dd>
-          <dt className="text-neutral-400">{detail.status === 'closed' ? 'Committed' : 'Cancelled'}</dt>
+          <dt className="text-neutral-500">{detail.status === 'closed' ? 'Committed' : 'Cancelled'}</dt>
           <dd>
             {detail.closedByName} · {when(detail.closedAt)}
           </dd>
           {detail.journalEntryId && (
             <>
-              <dt className="text-neutral-400">Journal entry</dt>
+              <dt className="text-neutral-500">Journal entry</dt>
               <dd className="font-mono">{detail.journalEntryId}</dd>
             </>
           )}

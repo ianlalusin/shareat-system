@@ -33,7 +33,7 @@ export default function GlobalError({
             The application failed to load. Try again, or come back in a moment.
           </p>
           {error.digest && (
-            <p className="font-mono text-xs text-neutral-400 dark:text-neutral-600">
+            <p className="font-mono text-xs text-neutral-500 dark:text-neutral-400">
               Reference: {error.digest}
             </p>
           )}

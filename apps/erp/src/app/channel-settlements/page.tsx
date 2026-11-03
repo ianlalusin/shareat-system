@@ -304,7 +304,7 @@ export default async function ChannelSettlementsPage({
                 </div>
               ))}
             </div>
-            <p className="text-xs text-neutral-400 dark:text-neutral-600">
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
               {peso(owed)} outstanding across every channel — summed from{' '}
               <span>due from delivery platforms</span> by party on this request, never from a stored
               balance. A negative would mean more was settled than was ever owed.
@@ -445,7 +445,7 @@ export default async function ChannelSettlementsPage({
                   >
                     <td className="px-3 py-2 whitespace-nowrap">
                       {s.businessDate}
-                      <div className="text-xs text-neutral-400 dark:text-neutral-600">
+                      <div className="text-xs text-neutral-500 dark:text-neutral-400">
                         settled {s.settledOn}
                       </div>
                     </td>
@@ -457,12 +457,12 @@ export default async function ChannelSettlementsPage({
                         </span>
                       )}
                       {s.reference && (
-                        <div className="text-xs text-neutral-400 dark:text-neutral-600">
+                        <div className="text-xs text-neutral-500 dark:text-neutral-400">
                           {s.reference}
                         </div>
                       )}
                       {s.voidReason && (
-                        <div className="text-xs text-neutral-400 dark:text-neutral-600">
+                        <div className="text-xs text-neutral-500 dark:text-neutral-400">
                           {s.voidReason}
                         </div>
                       )}
@@ -477,7 +477,7 @@ export default async function ChannelSettlementsPage({
                       {Number(s.loanDeduction) !== 0 ? (
                         peso(s.loanDeduction)
                       ) : (
-                        <span className="text-neutral-300 dark:text-neutral-700">—</span>
+                        <span className="text-neutral-500 dark:text-neutral-400">—</span>
                       )}
                     </td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">
@@ -490,7 +490,7 @@ export default async function ChannelSettlementsPage({
                           +{peso(s.settlementGain)}
                         </span>
                       ) : (
-                        <span className="text-neutral-300 dark:text-neutral-700">—</span>
+                        <span className="text-neutral-500 dark:text-neutral-400">—</span>
                       )}
                     </td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">
@@ -518,7 +518,7 @@ export default async function ChannelSettlementsPage({
               </tbody>
             </table>
           </div>
-          <p className="text-xs text-neutral-400 dark:text-neutral-600">
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
             Voiding writes an opposite entry and puts the receivable back — it never deletes the
             original. A correction is void and re-post, because a posted settlement is immutable.
           </p>
