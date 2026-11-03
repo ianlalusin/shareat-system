@@ -66,3 +66,6 @@ spike/**/ui-debug.log
 firebase/node_modules/
 firebase/*-debug.log
 firebase/firestore.rules.real
+
+# T-511: real customer data until redacted; never commit
+docs/discovery/fixtures-staging/
