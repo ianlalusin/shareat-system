@@ -105,7 +105,6 @@ The practice POS store id is `practice-store`; the ERP store is linked to it, an
 - ERP: stop it (close its window, or end the program that listens on port 9008), then run step 3 again.
 - Fill the company again after the pretend Firebase restarted: step 2.
 - Check that a manager PIN is accepted, without touching the POS: `node --env-file=C:\Users\ianla\webapps\shareat-system\.env.local scripts/practice-erp-start.mjs check-approval`
-- Log in without the sign-in screen (for scripts): `... scripts/practice-erp-start.mjs session <person id>` prints a one-hour cookie value (ids are in `apps/pos/emulator/.practice/practice-erp.json`).
 
 ## What works with the Practice ERP running
 

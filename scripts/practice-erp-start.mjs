@@ -1,7 +1,6 @@
 // Starts / seeds the PRACTICE ERP: a local ERP on port 9008 against the throwaway database shareat_test_pospractice, with the local Firebase
 // emulators for sign-in and NO real key, project, host or Firebase. Everything is synthetic.
 //   node scripts/practice-erp-start.mjs seed [--device=<uuid>]   (fills the fake company; safe to repeat)
-//   node scripts/practice-erp-start.mjs session <personId>       (prints a 1-hour login cookie value for curl checks)
 //   node scripts/practice-erp-start.mjs dev                      (the ERP on http://127.0.0.1:9008; leave running)
 // Run from the repo root. TEST_DATABASE_URL (or POS_PRACTICE_DATABASE_URL) must be in the shell, e.g. via
 //   node --env-file=<main checkout>/.env.local scripts/practice-erp-start.mjs dev
@@ -16,8 +15,8 @@ import { buildPracticeEnv, resolvePracticeDatabaseUrl } from './lib/practice-env
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dir = join(repo, 'apps', 'pos', 'emulator', '.practice');
 const mode = process.argv[2];
-if (!['seed', 'dev', 'session', 'check-approval'].includes(mode ?? '')) {
-  console.error('usage: node scripts/practice-erp-start.mjs seed [--device=<uuid>] | dev | session <personId>');
+if (!['seed', 'dev', 'check-approval'].includes(mode ?? '')) {
+  console.error('usage: node scripts/practice-erp-start.mjs seed [--device=<uuid>] | dev');
   process.exit(2);
 }
 
@@ -57,8 +56,6 @@ for (const k of ['FIREBASE_SERVICE_ACCOUNT_KEY', 'FIREBASE_SERVICE_ACCOUNT_KEY_F
 const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 const args = mode === 'seed'
   ? ['tsx', 'scripts/practice-erp-seed.ts', ...process.argv.slice(3)]
-  : mode === 'session'
-    ? ['tsx', 'scripts/practice-erp-session.ts', ...process.argv.slice(3)]
     : mode === 'check-approval'
       ? ['tsx', 'scripts/practice-erp-check-approval.ts']
       : ['next', 'dev', '--port', '9008', '--hostname', '127.0.0.1'];

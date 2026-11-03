@@ -61,6 +61,10 @@ const REQUIRED_CALLERS = [
   'scripts/backfill-fiscal-periods.ts',
   // DEF-742 — enumerates every org; lists via listOrgsToRun on a bare transaction(), must move to systemTransaction.
   'scripts/backfill-store-attendance-config.ts',
+  // Practice copy (F43 PR) — the bootstrap-org.ts shape: creates a fake organisation, its stores and
+  // persons before any organisation-scoped session can exist. Run by a person on this machine only;
+  // refuses unless DATABASE_URL names a local `_test` database (scripts/lib/practice-env.mjs).
+  'scripts/practice-erp-seed.ts',
 ] as const;
 
 /**
