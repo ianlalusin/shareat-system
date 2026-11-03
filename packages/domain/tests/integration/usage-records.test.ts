@@ -454,8 +454,10 @@ describe('T-168/DEF-135 — draft editing and deletion', () => {
     expect(draft.ok).toBe(true);
     if (!draft.ok) return;
 
+    // T-512: the same item twice is refused now, so the added line is a second item.
+    const [other] = await sql<{ id: string }[]>`insert into items (org_id, code, name, kind, base_unit, created_by) values (${orgA},${testItemCode()},'Chicken Thigh','raw_material','kg',${staffId}) returning id`;
     const added = await asOrg(orgA, (tx) =>
-      addUsageLine(tx, staffActor, { recordId: draft.recordId, itemId: itemA, quantity: '2' }),
+      addUsageLine(tx, staffActor, { recordId: draft.recordId, itemId: other!.id, quantity: '2' }),
     );
     expect(added.ok).toBe(true);
     if (!added.ok) return;

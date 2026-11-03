@@ -42,7 +42,7 @@ import { voidPullUsageRecord } from './void-pull-usage-record';
 import type { Money } from '@shareat/core/money';
 import { compareQuantity, ZERO_QUANTITY } from './quantity';
 import { parseRequiredQuantity } from './quantity-field';
-import { voidUsageRecord, type VoidUsageInput } from './usage';
+import { repeatedItemSentence, voidUsageRecord, type VoidUsageInput } from './usage';
 import { postLoadedUsageRecord } from './usage-post-core';
 import { isReservedUsageCategory, isWastageReason } from './wastage-reasons';
 import { checkUsageTolerance, writeToleranceVerified } from './usage-tolerance';
@@ -151,6 +151,10 @@ export async function saveUsageDraft(tx: Tx, actor: Actor, input: SaveUsageDraft
     }
   }
 
+  // T-512 (CR-1): each item once; two lines for one item could never post. Before any insert.
+  const repeated = await repeatedItemSentence(tx, input.orgId, lines.map((l) => ({ key: l.itemId, itemId: l.itemId })));
+  if (repeated) return { ok: false, reason: repeated };
+
   let reasonCode: string | null = null;
   if (input.kind === 'wastage') {
     reasonCode = input.reasonCode?.trim() || null;
@@ -227,6 +231,9 @@ export async function addUsageLine(
     return { ok: false, reason: 'a line must have a quantity greater than zero' };
   }
   const existing = await stockUsageRepo.listUsageLines(tx, input.recordId);
+  // T-512 (CR-1): the draft already has this item; refuse rather than make a pair that cannot post.
+  const dup = existing.find((l) => l.itemId === input.itemId);
+  if (dup) return { ok: false, reason: `Item ${dup.itemName} is on this record twice. Put it on one line with the total quantity.` };
   // Max + 1, not count + 1: after a line is removed the count is smaller than the highest number in use, and (record, line_no) is unique.
   const nextNo = existing.reduce((m, l) => Math.max(m, Number(l.lineNo) || 0), existing.length) + 1;
   const [line] = await stockUsageRepo.insertUsageLines(tx, input.recordId, [
@@ -291,6 +298,9 @@ export async function postUsage(
   if (lines.length === 0) {
     return { ok: false, reason: 'a usage record with no lines posts nothing' };
   }
+  // T-512 (CR-1): protects a draft saved before the save-time check existed. Before the tolerance gate and any write.
+  const repeated = await repeatedItemSentence(tx, record.orgId, lines.map((l) => ({ key: l.itemId, itemId: l.itemId })));
+  if (repeated) return { ok: false, reason: repeated };
 
   // T-401 S6: the tolerance band, on `usage` only (wastage is not compared). Before any write, so a refusal changes nothing.
   const reason = input.verifyOutOfTolerance?.reason;
