@@ -61,11 +61,25 @@ const nextConfig = {
   // NOTE: the `eslint` key was removed in Next.js 16 and is silently ignored, so it is
   // not set here. Lint is currently NOT enforced anywhere — see docs/DEFECTS-REGISTER.md
   // DEF-027. Tracked as a gap rather than papered over with a key that does nothing.
+  // Practice ERP only (scripts/practice-erp-start.mjs sets PRACTICE_ERP=1). In a git worktree whose node_modules is a junction into another
+  // checkout, `@shareat/auth` and `@shareat/storage-firebase` would resolve to THAT checkout's packages, and Turbopack refuses files outside its
+  // root. So: root = the folder holding both checkouts, auth pinned to this tree, storage stubbed (in-memory only, no Firebase Storage code).
+  // Alias targets are relative to the app folder (apps/erp).
   // Turbopack must resolve from the monorepo root, or it walks up and finds a lockfile
   // outside the workspace and warns on every build.
-  turbopack: {
-    root: path.join(__dirname, '..', '..'),
-  },
+  turbopack:
+    process.env.PRACTICE_ERP === '1'
+      ? {
+          root: path.join(__dirname, '..', '..', '..'),
+          resolveAlias: {
+            '@shareat/auth': './' + path.relative(__dirname, path.join(__dirname, '..', '..', 'packages', 'auth', 'src', 'index.ts')).split(path.sep).join('/'),
+            '@shareat/auth/errors': './' + path.relative(__dirname, path.join(__dirname, '..', '..', 'packages', 'auth', 'src', 'errors.ts')).split(path.sep).join('/'),
+            '@shareat/storage-firebase': './' + path.relative(__dirname, path.join(__dirname, '..', '..', 'scripts', 'lib', 'practice-storage-stub.mjs')).split(path.sep).join('/'),
+          },
+        }
+      : {
+          root: path.join(__dirname, '..', '..'),
+        },
 };
 
 module.exports = nextConfig;
