@@ -59,9 +59,10 @@ describe('U1 — CAPABILITY_AREA is keyed on exactly the 112 capabilities; every
     // ⭐ 98 -> 99 (T-350/DEF-477): `set_channel_payout` joins CAPABILITY_AREA.
     // ⭐ 99 -> 100 (T-382 S1, A4): `unlink_store_from_pos` joins CAPABILITY_AREA.
     // ⭐ 100 -> 101 (T-385 S3): `verify_own_sales_day` joins CAPABILITY_AREA.
-    expect(Object.keys(_control).length, 'positive control: unmutated form has all 120 keys').toBe(120);
-    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(119);
-    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(121);
+    // ⭐ T-511 S2a (2026-11-03): 120 -> 123 (+ upload_settlement_files in sales, edit_platform_store_code and edit_loan_repayment_amount in admin). RED until built.
+    expect(Object.keys(_control).length, 'positive control: unmutated form has all 123 keys').toBe(123);
+    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(122);
+    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(124);
   });
 });
 
@@ -84,6 +85,8 @@ const ORACLE: Readonly<Record<CapabilityArea, readonly string[]>> = {
     'approve_pos_correction',
     // T-401 S2: the seven menu capabilities sit in sales.
     'view_menu', 'add_menu_item', 'manage_menu', 'request_menu_item', 'set_menu_price', 'set_menu_depletion', 'switch_usage_source',
+    // ⭐ T-511 S2a (2026-11-03): uploading a Grab / Foodpanda settlement statement sits in sales ("Sales & cash", where the store's channel takings live).
+    'upload_settlement_files',
   ],
   expenses: [
     'create_expense', 'edit_own_expense', 'edit_any_expense', 'void_expense', 'approve_expense',
@@ -144,12 +147,15 @@ const ORACLE: Readonly<Record<CapabilityArea, readonly string[]>> = {
     // (packages/auth/src/capabilities.ts:721, matching :720), same reasoning: admin-only routing
     // of an existing resource, not a new one.
     'set_channel_payout',
+    // ⭐ T-511 S2a (2026-11-03): the two admin edits of the settlement-upload feature (area admin; 120 -> 123 with the upload capability in sales).
+    // Same reasoning as `set_channel_payout` directly above: an admin-only edit of an existing resource's routing/config.
+    'edit_platform_store_code', 'edit_loan_repayment_amount',
   ],
   franchise: ['cross_org_access', 'view_franchise_sales', 'view_franchise_access_log'], // T-398 S6: + view_franchise_access_log (117 -> 118)
 };
 
 describe('U2 — the literal per-area table matches CAPABILITY_AREA exactly', () => {
-  it('every capability inverts to the oracle\'s area, and the counts match §1 (120 total)', () => {
+  it('every capability inverts to the oracle\'s area, and the counts match §1 (123 total)', () => {
     const inverted: Record<string, string[]> = {};
     for (const [cap, area] of Object.entries(CAPABILITY_AREA)) (inverted[area] ??= []).push(cap);
     const sortedInverted = Object.fromEntries(Object.entries(inverted).map(([k, v]) => [k, [...v].sort()]));
@@ -162,7 +168,8 @@ describe('U2 — the literal per-area table matches CAPABILITY_AREA exactly', ()
     // ⭐ 100 -> 101 (T-385 S3): `verify_own_sales_day`.
     // ⭐ 101 -> 108 (T-401 S2): the seven menu capabilities, area sales.
     // T-193 S3: `remit_statutory` joins staff. Merge of main + T-193: re-measured.
-    expect(total).toBe(120);
+    // ⭐ T-511 S2a (2026-11-03): 120 -> 123.
+    expect(total).toBe(123);
     // ⭐ 108 -> 109 (T-403): `manage_recipes` joins production.
   });
 

@@ -32,11 +32,12 @@ const root = join(__dirname, '..', '..');
 const row = (cap: string) => (CAPABILITY_MATRIX as Record<string, Record<string, boolean> | undefined>)[cap];
 
 describe('T-398 S6a -- view_franchise_access_log, cell by cell', () => {
-  it('is a Capability and is listed in CAPABILITIES (120 in all). Mutant: not registered', () => {
+  it('is a Capability and is listed in CAPABILITIES (123 in all). Mutant: not registered', () => {
     expect((CAPABILITIES as readonly string[]).includes(LOG)).toBe(true);
     const typed: Capability = LOG as Capability;
     expect(typed).toBe(LOG);
-    expect(CAPABILITIES.length).toBe(120);
+    // T-511 S2a (2026-11-03): 120 -> 123 (upload_settlement_files, edit_platform_store_code, edit_loan_repayment_amount). RED until built.
+    expect(CAPABILITIES.length).toBe(123);
   });
 
   it('super_admin OK, admin OK, manager OK, staff NO. Mutant: staff true (a waiter would read who looked at the franchise)', () => {

@@ -50,6 +50,8 @@ export const FILE_PURPOSES = [
   // T-434, migration 0204. The signature is PNG-only and read through its own rule (never the shared one).
   'staff_photo',
   'staff_signature',
+  // T-511 S2a (migration 0228): a Grab / Foodpanda settlement statement (CSV or zip). Read through the shared rule (upload_settlement_files).
+  'channel_settlement_file',
 ] as const;
 export type FilePurpose = (typeof FILE_PURPOSES)[number];
 

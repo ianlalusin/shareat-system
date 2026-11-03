@@ -52,6 +52,8 @@ export interface LoanRow {
   closedOn: string | null;
   closeReason: string | null;
   notes: string | null;
+  /** T-511 S2a: the expected daily repayment (numeric(14,2) as text); NULL = not recorded. Edited only by `edit_loan_repayment_amount` (a later slice). */
+  repaymentAmount: string | null;
   createdAt: Date;
 }
 

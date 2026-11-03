@@ -1,5 +1,7 @@
 import { config } from 'dotenv';
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
@@ -288,7 +290,8 @@ describe('M1 the registry is exactly the set of foreign keys into stored_files',
     const actual = fks.map((r) => `${r.tbl.replace(/^public\./, '')}.${r.col}`).sort();
     const declared = registry().map((r) => `${r.table}.${r.column}`).sort();
     expect(declared).toEqual(actual);
-    expect(actual.length).toBe(6);
+    // T-511 S2a (2026-11-03): 6 -> 8 (settlement_uploads.file_id and settlement_uploads.pdf_file_id). RED until migration 0228 + the two ref() lines land.
+    expect(actual.length).toBe(8);
   });
 
   it('A1: every uuid column named *file_id in public is in the registry (a file column added WITHOUT an FK is caught too)', async () => {
@@ -647,4 +650,33 @@ describe('census: a save through the real path leaves no referenced-but-unlinked
   // T-441 S2 actual customer/trade/delivery actions, both upload paths and failed-claim rollback:
   // apps/erp/tests/integration/t441-s2-receipt-actions.test.ts. Kept at the app layer so packages never import an app.
   it.todo('channel_settlements.withholding_certificate_file_id: settle a channel with a certificate - flips on in T-441 S2');
+});
+
+// ------------------------------------------------------------------ T-511 S2a: the new purpose and the explicit allow lists (BOSS ruling 4)
+
+type RefWithPurposes = Ref & { allowedPurposes: readonly string[] };
+const refOf = (table: string, column: string): RefWithPurposes => {
+  const hit = (registry() as readonly RefWithPurposes[]).find((r) => r.table === table && r.column === column);
+  if (!hit) throw new Error(`FILE_REFERENCES has no entry for ${table}.${column}`);
+  return hit;
+};
+
+describe('T-511 S2a: FILE_REFERENCES allow lists for the settlement file purpose', () => {
+  it('settlement_uploads.file_id and .pdf_file_id are registered and accept ONLY channel_settlement_file [kills: missing ref(); a wider allow list]', () => {
+    expect(refOf('settlement_uploads', 'file_id').allowedPurposes).toEqual(['channel_settlement_file']);
+    expect(refOf('settlement_uploads', 'pdf_file_id').allowedPurposes).toEqual(['channel_settlement_file']);
+  });
+
+  it('channel_settlements.withholding_certificate_file_id does NOT accept channel_settlement_file and keeps its five existing purposes (guarded ones stay out) [kills: the new purpose silently valid there]', () => {
+    const allowed = refOf('channel_settlements', 'withholding_certificate_file_id').allowedPurposes;
+    expect(allowed).not.toContain('channel_settlement_file');
+    expect([...allowed].sort()).toEqual(['ar_collection_proof', 'memo_document', 'onboarding_document', 'receipt_photo', 'wastage_dispute']);
+  });
+
+  it('that allow list is EXPLICIT in repo/files.ts (not derived by filtering FILE_PURPOSES, which would re-admit every future purpose) [kills: FILE_PURPOSES.filter(...) left in place]', () => {
+    const src = readFileSync(join(__dirname, '../../../db/src/repo/files.ts'), 'utf8');
+    const line = src.split(/\r?\n/).find((l) => l.includes("'withholding_certificate_file_id'"));
+    expect(line, "no ref('channel_settlements', 'withholding_certificate_file_id', ...) line in repo/files.ts").toBeDefined();
+    expect(line).not.toMatch(/FILE_PURPOSES/);
+  });
 });

@@ -118,6 +118,9 @@ export interface SalesChannelRow {
   wastageTypeMode: 'tracked' | 'instant';
   destinationMoneyAccountId: string | null;
   taxTreatment: string;
+  /** T-511 S2a: which delivery platform this channel is, and the store code that platform prints on its statements. Both set or both NULL. */
+  platform: 'grab' | 'foodpanda' | null;
+  platformStoreCode: string | null;
 }
 
 /**
@@ -148,6 +151,8 @@ export async function listChannels(
       wastageTypeMode: salesChannels.wastageTypeMode,
       destinationMoneyAccountId: salesChannels.destinationMoneyAccountId,
       taxTreatment: salesChannels.taxTreatment,
+      platform: salesChannels.platform,
+      platformStoreCode: salesChannels.platformStoreCode,
     })
     .from(salesChannels)
     .where(where)
@@ -198,6 +203,8 @@ export async function channelById(tx: Tx, orgId: string, channelId: string): Pro
       wastageTypeMode: salesChannels.wastageTypeMode,
       destinationMoneyAccountId: salesChannels.destinationMoneyAccountId,
       taxTreatment: salesChannels.taxTreatment,
+      platform: salesChannels.platform,
+      platformStoreCode: salesChannels.platformStoreCode,
     })
     .from(salesChannels)
     .where(and(eq(salesChannels.orgId, orgId), eq(salesChannels.id, channelId)))

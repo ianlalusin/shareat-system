@@ -38,7 +38,8 @@ describe('the leaf (audit A7)', () => {
     const { PURPOSE_LIMITS, MAX_IMAGE_BYTES } = await loadLimits();
     expect(MAX_IMAGE_BYTES).toBe(1024 * 1024);
     expect(Object.keys(PURPOSE_LIMITS).sort()).toEqual(
-      ['ar_collection_proof', 'leave_document', 'memo_document', 'onboarding_document', 'receipt_photo', 'staff_photo', 'staff_signature', 'wastage_dispute'],
+      // T-511 S2a (2026-11-03): + 'channel_settlement_file' (CSV / zip settlement statements). RED until the builder adds the purpose.
+      ['ar_collection_proof', 'channel_settlement_file', 'leave_document', 'memo_document', 'onboarding_document', 'receipt_photo', 'staff_photo', 'staff_signature', 'wastage_dispute'],
     );
     const src = read('packages/domain/src/files/limits.ts');
     expect(src).not.toMatch(/@shareat\/db/); // type-only imports count: client-bundle-boundary walks them too

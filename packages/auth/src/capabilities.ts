@@ -258,6 +258,14 @@ export type Capability =
    *  after it is set, but not by a manager. Separate from `manage_store_settings`, same as
    *  `set_cash_policy` above. */
   | 'set_channel_payout'
+  /** T-511 S2a (2026-11-03). Upload a Grab / Foodpanda settlement statement (CSV or zip). Store scope; a manager uploads their own
+   *  store's statements, staff do not. Also gates reading the stored file until the review screen's read exception (slice 5). */
+  | 'upload_settlement_files'
+  /** T-511 S2a. Admin-only (precedent `set_channel_payout`): which Grab / Foodpanda store code a sales channel answers to. A manager
+   *  cannot change which store an uploaded file is booked against. */
+  | 'edit_platform_store_code'
+  /** T-511 S2a. Admin-only: the expected daily repayment of a loan, the figure the company-wide loan check compares a statement to. */
+  | 'edit_loan_repayment_amount'
   | 'manage_price_lists'
   // T-401 S2 - the ERP menu and catalog master. view_menu/manage_menu/set_menu_depletion are org; set_menu_price is store.
   | 'view_menu'
@@ -416,6 +424,9 @@ export const CAPABILITIES: readonly Capability[] = [
   'manage_store_settings',
   'set_cash_policy',
   'set_channel_payout',
+  'upload_settlement_files',
+  'edit_platform_store_code',
+  'edit_loan_repayment_amount',
   'manage_price_lists',
   'view_menu',
   'add_menu_item',
@@ -610,6 +621,9 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   manage_store_settings: 'store',
   set_cash_policy: 'store',
   set_channel_payout: 'store',
+  upload_settlement_files: 'store',
+  edit_platform_store_code: 'store',
+  edit_loan_repayment_amount: 'store',
   manage_price_lists: 'org',
   // T-401. The menu is org master data; a price is per store (position-grantable per store, T-318).
   view_menu: 'org',
@@ -826,6 +840,10 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   manage_store_settings: 'admin',
   set_cash_policy: 'admin',
   set_channel_payout: 'admin',
+  // T-511 S2a: a statement upload is a sales-side task (the store's channel takings live under "sales"); the two edits are admin configuration.
+  upload_settlement_files: 'sales',
+  edit_platform_store_code: 'admin',
+  edit_loan_repayment_amount: 'admin',
   manage_price_lists: 'admin',
   view_menu: 'sales',
   add_menu_item: 'sales',
@@ -1056,6 +1074,12 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   set_cash_policy: { super_admin: true, admin: true, manager: false, staff: false },
   /** T-350 (DEF-477). Ian, 2026-09-28: admin only. */
   set_channel_payout: { super_admin: true, admin: true, manager: false, staff: false },
+  /** T-511 S2a (2026-11-03). A manager uploads their own store's Grab / Foodpanda statements; staff do not. */
+  upload_settlement_files: { super_admin: true, admin: true, manager: true, staff: false },
+  /** T-511 S2a. Admin only (precedent `set_channel_payout`): re-pointing a channel at another platform store code changes which store a file books to. */
+  edit_platform_store_code: { super_admin: true, admin: true, manager: false, staff: false },
+  /** T-511 S2a. Admin only: the figure the loan check compares a statement's deduction against. */
+  edit_loan_repayment_amount: { super_admin: true, admin: true, manager: false, staff: false },
   manage_price_lists: { super_admin: true, admin: true, manager: false, staff: false },
   // T-401 (Ian, 2026-10-13). Items are centralised: only super admin ADDS an item or variant (and resolves requests).
   // Editing the rest of the menu stays admin. A manager prices their own store (store scope is what limits "own") and
@@ -1312,6 +1336,9 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   manage_store_settings: 'manage store settings',
   set_cash_policy: "set a store's cash policy",
   set_channel_payout: "change where a sales channel's payouts bank",
+  upload_settlement_files: 'upload a Grab or Foodpanda settlement statement',
+  edit_platform_store_code: "change a sales channel's Grab or Foodpanda store code",
+  edit_loan_repayment_amount: "change a loan's expected daily repayment",
   manage_price_lists: 'manage price lists',
   view_menu: 'view the menu and its prices',
   add_menu_item: 'add items and variants to the menu',

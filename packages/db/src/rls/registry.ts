@@ -1182,6 +1182,24 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'Which stock-usage source a store reads; the store belongs to one org.',
   },
+
+  // ---- T-511 S2a: the Grab / Foodpanda settlement upload staging tables (migration 0228) ------------------------------------
+  settlement_uploads: {
+    scope: 'org_column',
+    reason: 'One row per uploaded Grab or Foodpanda statement (T-511): what an org sells on each platform and who uploaded it. Org-scoped; another org must never see it.',
+  },
+  settlement_day_lines: {
+    scope: 'org_column',
+    reason: 'What a platform statement said about one channel and day, and the review decision (T-511): commission, fees, loan deductions. Commercially sensitive; org-scoped.',
+  },
+  settlement_loan_lines: {
+    scope: 'org_column',
+    reason: 'The loan deduction and disbursal lines of a staged day, and which loan each was allocated to (T-511). Org-scoped like the loans they point at.',
+  },
+  settlement_other_lines: {
+    scope: 'org_column',
+    reason: 'Adjustments, charges and compensation read from a statement (T-511). Org-scoped like the statement they came from.',
+  },
 };
 
 export function rlsScopeOf(table: string): RlsEntry | undefined {
