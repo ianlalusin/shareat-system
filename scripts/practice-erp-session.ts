@@ -10,7 +10,7 @@ import { newSessionToken, sessionTokenHash } from '../packages/auth/src/credenti
 
 const dbName = (process.env.DATABASE_URL ?? '').split('?')[0]!.split('/').pop() ?? '';
 if (!/_test/.test(dbName)) throw new Error(`practice-erp-session: refusing, "${dbName}" is not a _test database.`);
-const personId = process.argv[2];
+const personId: string = process.argv[2] ?? '';
 if (!personId) throw new Error('usage: node scripts/practice-erp-start.mjs session <personId>');
 
 async function main() {
