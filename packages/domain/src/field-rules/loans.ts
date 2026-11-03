@@ -38,3 +38,8 @@ export const LOAN_PAYMENT_RULES = defineFieldRules('loans.recordLoanPayment', {
 export const LOAN_REVERSE_RULES = defineFieldRules('loans.reverseLoanEntry', {
   reason: { label: 'The reason', kind: 'text', requires: 'Say why this is being reversed.' },
 });
+
+/** T-511 S2b: an admin records a loan's expected daily repayment (`updateLoanRepaymentAmountAction`). A blank clears it. */
+export const LOAN_REPAYMENT_RULES = defineFieldRules('loans.updateLoanRepaymentAmount', {
+  repaymentAmount: { label: 'The repayment amount', optional: true, kind: 'money', min: 0.01, requires: 'The repayment amount must be an amount greater than zero, or empty to clear it.' },
+});

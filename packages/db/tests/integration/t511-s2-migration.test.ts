@@ -247,6 +247,27 @@ describe('T-511 S2a / 0228 - the four tables exist with FORCE RLS and the org is
     expect(bad, 'FKs that are neither org->organizations nor composite (org_id, col)').toEqual([]);
   });
 
+  // T-511 S2b nit (3 Nov): the relaxed shape above only checks "3 columns, starts with org_id, targets sales_channels, name ends _channel_store_same_org_fk";
+  // a 3-column FK on any OTHER columns (say (org_id, file_id, store_id)) carrying that name would pass it. Pin the columns exactly.
+  it('every 3-column FK is EXACTLY (org_id, channel_id, store_id) -> sales_channels (org_id, id, store_id), in that order, and there is at least one [kills: a 3-column FK on other columns; a reordered key; a key into another parent]', async () => {
+    const rows = await sql<{ rel: string; con: string; cols: string[]; ref: string; refcols: string[] }[]>`
+      select cl.relname as rel, con.conname as con,
+             (select array_agg(a.attname::text order by k.ord) from unnest(con.conkey) with ordinality as k(attnum, ord)
+                join pg_attribute a on a.attrelid = con.conrelid and a.attnum = k.attnum) as cols,
+             con.confrelid::regclass::text as ref,
+             (select array_agg(a.attname::text order by k.ord) from unnest(con.confkey) with ordinality as k(attnum, ord)
+                join pg_attribute a on a.attrelid = con.confrelid and a.attnum = k.attnum) as refcols
+        from pg_constraint con join pg_class cl on cl.oid = con.conrelid join pg_namespace ns on ns.oid = cl.relnamespace
+       where ns.nspname = 'public' and con.contype = 'f' and cl.relname = any(${TABLES as unknown as string[]}) and cardinality(con.conkey) = 3`;
+    expect(rows.length, '3-column FKs found (the channel+store twin, on the tables that carry both)').toBeGreaterThan(0);
+    for (const r of rows) {
+      expect(r.cols, `${r.rel}.${r.con}: referencing columns`).toEqual(['org_id', 'channel_id', 'store_id']);
+      expect(r.ref, `${r.rel}.${r.con}: parent`).toMatch(/(^|\.)sales_channels$/);
+      expect(r.refcols, `${r.rel}.${r.con}: referenced columns`).toEqual(['org_id', 'id', 'store_id']);
+      expect(r.con, `${r.rel}.${r.con}: name`).toMatch(/_channel_store_same_org_fk$/);
+    }
+  });
+
   it('uploads and day lines (the parents of other new tables) each carry exactly one UNIQUE (org_id, id) (t398 K2) [kills: none, or a duplicate index beside the constraint]', async () => {
     for (const t of ['settlement_uploads', 'settlement_day_lines']) {
       const rows = await sql<{ cols: string }[]>`

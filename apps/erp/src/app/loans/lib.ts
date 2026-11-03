@@ -6,6 +6,7 @@
  * to store it again, which is exactly what v1 did four times over.
  */
 import { toBusinessDate } from '@shareat/core/datetime';
+import { can, type Actor } from '@shareat/auth';
 import { loansRepo, moneyAccountsRepo, type LoanPosition, type LoanRow } from '@shareat/db';
 import { accruedInterest, scheduledInstalment } from '@shareat/domain';
 import { compare, money, ZERO as NO_MONEY } from '@shareat/core/money';
@@ -15,8 +16,18 @@ export { peso } from '../../lib/format';
 export { listStores, withOrgPrincipal } from '../expenses/lib';
 export type { StoreOption } from '../expenses/lib';
 
-export interface LoanListRow extends LoanRow {
+/**
+ * ⛔ T-511 S2b - DEFAULT-CLOSED: the repayment amount is NOT part of what these loaders return. `loansRepo` reads the whole row,
+ * so it is dropped here; a page that wants it for someone allowed to see it asks `repaymentAmountFor` (which asks `can` first).
+ * A page that forgets to hide the figure cannot leak what it was never handed.
+ */
+export interface LoanListRow extends Omit<LoanRow, 'repaymentAmount'> {
   position: LoanPosition;
+}
+
+function withoutRepaymentAmount(row: LoanRow): Omit<LoanRow, 'repaymentAmount'> {
+  const { repaymentAmount: _held, ...rest } = row;
+  return rest;
 }
 
 const ZERO: LoanPosition = {
@@ -32,7 +43,7 @@ export async function listRegister(orgId: string): Promise<LoanListRow[]> {
       loansRepo.listLoans(tx, orgId),
       loansRepo.positionsByLoan(tx, orgId),
     ]);
-    return rows.map((l) => ({ ...l, position: positions.get(l.id) ?? ZERO }));
+    return rows.map((l) => ({ ...withoutRepaymentAmount(l), position: positions.get(l.id) ?? ZERO }));
   });
 }
 
@@ -81,7 +92,7 @@ export async function getDetail(orgId: string, id: string): Promise<LoanDetail |
         : '0.00';
 
     return {
-      ...loan,
+      ...withoutRepaymentAmount(loan),
       position,
       payments,
       instalment: scheduledInstalment({
@@ -95,6 +106,24 @@ export async function getDetail(orgId: string, id: string): Promise<LoanDetail |
       accruedNow: String(accruedNow),
       lastPaymentOn,
     };
+  });
+}
+
+/**
+ * T-511 S2b: the expected daily repayment of a loan, for the one person allowed to see and edit it. `can` is asked FIRST, at the
+ * loan's own store, and the figure is read only when it says yes: a manager gets `{ canEdit: false, amount: null }` and the page
+ * draws neither the figure nor the form. Presentation only: `updateLoanRepaymentAmount` authorizes again.
+ */
+export async function repaymentAmountFor(
+  actor: Actor,
+  loan: { id: string; storeId: string },
+): Promise<{ canEdit: boolean; amount: string | null }> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    if (!(await can(tx, actor, 'edit_loan_repayment_amount', { storeId: loan.storeId }))) {
+      return { canEdit: false, amount: null };
+    }
+    const row = await loansRepo.getById(tx, actor.orgId, loan.id);
+    return { canEdit: true, amount: row?.repaymentAmount ?? null };
   });
 }
 

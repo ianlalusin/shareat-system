@@ -60,6 +60,25 @@ export const SETTINGS_SALES_CHANNEL_RULES = defineFieldRules('settings.salesChan
 });
 
 /**
+ * T-511 S2b: /settings/sales-channels, the separate admin-only "Platform and store code" form. A blank pair clears it.
+ * The code pattern accepts BOTH shapes (a Grab store UUID, or a Foodpanda code of 3 to 12 letters or digits); which shape
+ * a given platform needs is the domain function's check, because it depends on the other box.
+ */
+const PLATFORM_CODE_SAYS = 'A store code is a UUID for Grab, or 3 to 12 letters or digits for Foodpanda.';
+const HEX = '[0-9A-Fa-f]';
+export const SETTINGS_PLATFORM_CODE_RULES = defineFieldRules('settings.setSalesChannelPlatformCode', {
+  platform: { label: 'The platform', optional: true, kind: 'pattern', pattern: '^(grab|foodpanda)$', patternSays: 'Grab, Foodpanda, or none', requires: 'Choose Grab, Foodpanda, or none.' },
+  code: {
+    label: 'The store code',
+    optional: true,
+    kind: 'pattern',
+    pattern: `^(?:${HEX}{8}-${HEX}{4}-${HEX}{4}-${HEX}{4}-${HEX}{12}|[A-Za-z0-9]{3,12})$`,
+    patternSays: 'a UUID (Grab) or 3 to 12 letters or digits (Foodpanda)',
+    requires: PLATFORM_CODE_SAYS,
+  },
+});
+
+/**
  * /settings/pos-link, the link form. `posStoreName` is a typed box only when POS cannot list its stores; in picker mode the
  * form carries a fixed value for it (the action takes POS's own name from the list), so the set is the same in both modes.
  */

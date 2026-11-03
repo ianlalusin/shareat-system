@@ -29,11 +29,11 @@
  *   plainly: *"today every channel is `expense`."* Offering the other value would let a manager
  *   pick a posture the ledger cannot honour.
  */
-import { posV1Repo, salesDaysRepo, storesRepo, type Tx } from '@shareat/db';
-import { authorize, type Actor } from '@shareat/auth';
+import { auditLogRepo, posV1Repo, salesDaysRepo, storesRepo, type Tx } from '@shareat/db';
+import { authorize, can, type Actor } from '@shareat/auth';
 import { refuse } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
-import { SETTINGS_SALES_CHANNEL_RULES } from '../field-rules/settings';
+import { SETTINGS_PLATFORM_CODE_RULES, SETTINGS_SALES_CHANNEL_RULES } from '../field-rules/settings';
 
 /** Store-scoped, manager ✅ — `packages/auth/src/capabilities.ts:206`, `:492`. */
 const CAPABILITY = 'manage_store_settings' as const;
@@ -51,6 +51,9 @@ export interface SalesChannelAdminRow {
   readonly destinationMoneyAccountId: string | null;
   /** Read-only here — one supported value, see the module comment. */
   readonly taxTreatment: string;
+  /** T-511 S2b — read-only here; `setSalesChannelPlatformCode` owns both (admin only). */
+  readonly platform: 'grab' | 'foodpanda' | null;
+  readonly platformStoreCode: string | null;
 }
 
 export interface CreateSalesChannelInput {
@@ -225,6 +228,101 @@ export async function updateSalesChannel(tx: Tx, actor: Actor, input: UpdateSale
   });
 }
 
+// ---- T-511 S2b: which delivery platform a channel is, and the store code its statements print --------------------------
+
+const GRAB_UUID = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
+const FOODPANDA_CODE = /^[A-Za-z0-9]{3,12}$/;
+const PLATFORM_NAME = { grab: 'Grab', foodpanda: 'Foodpanda' } as const;
+
+/**
+ * ⚠️ Only to recognise the unique index refusing the code (a race the pre-read cannot see). The error may arrive wrapped,
+ * so the cause chain is walked, as `pos/store-link.ts` does for its own index.
+ */
+function isPlatformCodeTaken(err: unknown): boolean {
+  for (let e: unknown = err, i = 0; e && i < 4; i++, e = (e as { cause?: unknown }).cause) {
+    const x = e as { code?: string; constraint_name?: string };
+    if (x.code === '23505' && x.constraint_name === 'sales_channels_org_platform_code_key') return true;
+  }
+  return false;
+}
+
+/**
+ * ⭐ **Say which platform a channel is and what store code that platform prints on its statements** (T-511 S2b).
+ * Both boxes blank clears it. Copy of `setChannelPayoutDestination`'s order: read the channel, authorize on the CHANNEL's own
+ * store, judge the boxes AFTER the gate (a manager posting garbage is told they may not, not that the code is malformed),
+ * a same-value save writes nothing (no `updated_at` move, no audit row), and a real change writes its audit row in the same
+ * transaction.
+ *
+ * ⛔ The unique index `sales_channels_org_platform_code_key` is the authority on "one channel per code"; the read below only
+ * words the sentence, and a race the read could not see ends in the same refusal.
+ */
+export async function setSalesChannelPlatformCode(
+  tx: Tx,
+  actor: Actor,
+  input: { channelId: string; platform: 'grab' | 'foodpanda' | null; code: string | null },
+): Promise<{ wrote: boolean }> {
+  const channel = await salesDaysRepo.channelById(tx, actor.orgId, input.channelId);
+  if (!channel) {
+    throw refuse(`setSalesChannelPlatformCode: channel ${input.channelId} does not exist.`, 'That channel no longer exists.');
+  }
+  // Admin only (Ian, T-511 S2): the code decides which store an uploaded settlement file books to.
+  await authorize(tx, actor, 'edit_platform_store_code', { storeId: channel.storeId });
+  const checked = assertFieldRules(SETTINGS_PLATFORM_CODE_RULES, { platform: input.platform ?? '', code: input.code ?? '' });
+  const platform = (checked.platform ?? null) as 'grab' | 'foodpanda' | null;
+  const code = checked.code ?? null;
+
+  if (platform && !code) {
+    throw refuse('setSalesChannelPlatformCode: a platform needs a code.', `Enter the store code ${PLATFORM_NAME[platform]} prints on its statements, or choose no platform.`);
+  }
+  if (!platform && code) {
+    throw refuse('setSalesChannelPlatformCode: a code needs a platform.', 'Choose the platform this store code belongs to, or clear the code.');
+  }
+  if (platform === 'grab' && code && !GRAB_UUID.test(code)) {
+    throw refuse('setSalesChannelPlatformCode: not a Grab store UUID.', 'A Grab store code is the 36-character Store ID from the Grab files, in the form 8-4-4-4-12 letters and digits separated by dashes.');
+  }
+  if (platform === 'foodpanda' && code && !FOODPANDA_CODE.test(code)) {
+    throw refuse('setSalesChannelPlatformCode: not a Foodpanda store code.', 'A Foodpanda store code is 3 to 12 letters or digits.');
+  }
+
+  // Same value: nothing to write. Compared as typed (a case-only edit of the code is a real change).
+  if (channel.platform === platform && channel.platformStoreCode === code) return { wrote: false };
+
+  if (platform && code) {
+    const holder = await salesDaysRepo.channelByPlatformCode(tx, actor.orgId, platform, code, input.channelId);
+    if (holder) {
+      // Name the holder only to someone who could edit its code too: a store-scoped admin must not learn another store's channel names.
+      const named = await can(tx, actor, 'edit_platform_store_code', { storeId: holder.storeId });
+      throw refuse(
+        `setSalesChannelPlatformCode: code held by channel ${holder.id}.`,
+        named
+          ? `That code is already used by ${holder.storeName} ${holder.name}${holder.isActive ? '' : ' (retired)'}.`
+          : 'That code is already used by another channel.',
+      );
+    }
+  }
+
+  try {
+    await salesDaysRepo.setChannelPlatformCode(tx, actor.orgId, input.channelId, platform, code);
+  } catch (err) {
+    if (isPlatformCodeTaken(err)) {
+      throw refuse('setSalesChannelPlatformCode: the unique index refused the code.', 'That code is already used by another channel.');
+    }
+    throw err;
+  }
+
+  // Same transaction, only on a real write. `source: 'web'`: the settings screen is the only caller today.
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'sales_channel.platform_code_edited',
+    storeId: channel.storeId,
+    entityId: input.channelId,
+    before: { platform: channel.platform, platformStoreCode: channel.platformStoreCode },
+    after: { platform, platformStoreCode: code },
+    source: 'web',
+  });
+  return { wrote: true };
+}
+
 /**
  * ⛔ **Deactivate, never delete, and there is no delete function here on purpose.**
  * `sales_day_channels`, `order_wastages` and `channel_settlements` all reference a channel with
@@ -269,6 +367,8 @@ export async function listSalesChannelsForAdmin(
     isActive: r.isActive,
     destinationMoneyAccountId: r.destinationMoneyAccountId,
     taxTreatment: r.taxTreatment,
+    platform: r.platform,
+    platformStoreCode: r.platformStoreCode,
   }));
 }
 

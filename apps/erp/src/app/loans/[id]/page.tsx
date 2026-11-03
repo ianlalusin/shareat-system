@@ -2,15 +2,15 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { compare, money, subtract, ZERO } from '@shareat/core/money';
 import { requirePageAccess } from '../../../lib/page-access';
-import { disburseLoanAction, recordPaymentAction, reverseEntryAction } from '../actions';
-import { METHOD_LABEL, getDetail, moneyAccounts, peso, today } from '../lib';
+import { disburseLoanAction, recordPaymentAction, reverseEntryAction, updateLoanRepaymentAmountAction } from '../actions';
+import { METHOD_LABEL, getDetail, moneyAccounts, peso, repaymentAmountFor, today } from '../lib';
 import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { Button, ConfirmDestructive, FlashBanner, FormModal, Input, Select, statusLabel } from '@/components/ui';
 import { CheckedForm, FieldCheck } from '@/components/forms';
-import { LOAN_DRAW_RULES, LOAN_PAYMENT_RULES, LOAN_REVERSE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
+import { LOAN_DRAW_RULES, LOAN_PAYMENT_RULES, LOAN_REPAYMENT_RULES, LOAN_REVERSE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Loan — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -40,6 +40,8 @@ export default async function LoanPage({
   const requestId = crypto.randomUUID();
 
   const accounts = await moneyAccounts(actor.orgId, loan.storeId);
+  // T-511 S2b: the loaders above hand over NO repayment amount; only someone who may edit it is given it (and the form).
+  const repayment = await repaymentAmountFor(actor, loan);
   // T-371 R4/C4: re-minted database values, ordered in exact centavos — no float tolerance needed.
   const undrawn = subtract(money(loan.principalAmount), money(loan.position.disbursed));
   const owes = compare(money(loan.position.outstanding), ZERO) > 0;
@@ -187,6 +189,41 @@ export default async function LoanPage({
               </div>
             </CheckedForm>
           </FormModal>
+        </section>
+      )}
+
+      {/* ── Expected daily repayment (admin only) ─────────────────────────────────────── */}
+      {repayment.canEdit && (
+        <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+          <div>
+            <h2 className="font-medium">Expected repayment per day</h2>
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+              {repayment.amount === null ? (
+                <>Not recorded yet.</>
+              ) : (
+                <>
+                  Recorded: <span className="font-mono font-medium tabular-nums">{peso(repayment.amount)}</span>.
+                </>
+              )}{' '}
+              Used to check what a delivery platform takes off its payouts against this loan. Empty clears it.
+            </p>
+          </div>
+          <CheckedForm rules={LOAN_REPAYMENT_RULES} action={updateLoanRepaymentAmountAction} className="flex flex-wrap items-end gap-3">
+            <input type="hidden" name="loanId" value={loan.id} />
+            <Field label="Amount per day" rule={LOAN_REPAYMENT_RULES.repaymentAmount}>
+              <input
+                {...nativeAttrs(LOAN_REPAYMENT_RULES.repaymentAmount)}
+                name="repaymentAmount"
+                inputMode="decimal"
+                defaultValue={repayment.amount ?? ''}
+                placeholder="0.00"
+                className={INPUT}
+              />
+            </Field>
+            <Button type="submit" variant="secondary">
+              Save amount
+            </Button>
+          </CheckedForm>
         </section>
       )}
 

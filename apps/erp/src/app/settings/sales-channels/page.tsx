@@ -2,16 +2,17 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { listStores } from '../../expenses/lib';
 import {
   createSalesChannelAction,
+  setPlatformCodeAction,
   setSalesChannelActiveAction,
   updateSalesChannelAction,
 } from './actions';
-import { channelsForStore, moneyAccountNames, receivableOptions, type SalesChannelAdminRow } from './lib';
+import { canEditPlatformCode, channelsForStore, moneyAccountNames, receivableOptions, type SalesChannelAdminRow } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { CheckedForm, EditableRecord } from '@/components/forms';
-import { SETTINGS_SALES_CHANNEL_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { SETTINGS_PLATFORM_CODE_RULES, SETTINGS_SALES_CHANNEL_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Banner, Button, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
@@ -80,10 +81,12 @@ export default async function SalesChannelsSettingsPage({
     );
   }
 
-  const [channels, accounts, walletNames] = await Promise.all([
+  const [channels, accounts, walletNames, canSetPlatformCode] = await Promise.all([
     channelsForStore(actor, storeId),
     receivableOptions(actor),
     moneyAccountNames(actor),
+    // T-511 S2b: admin only, at THIS store. Presentation: the domain function is the gate.
+    canEditPlatformCode(actor, storeId),
   ]);
 
   const active = channels.filter((c) => c.isActive);
@@ -126,7 +129,7 @@ export default async function SalesChannelsSettingsPage({
       )}
 
       {active.map((c) => (
-        <ChannelCard key={c.id} channel={c} storeId={storeId} accounts={accounts} walletNames={walletNames} sp={sp} actorId={actor.personId} />
+        <ChannelCard key={c.id} channel={c} storeId={storeId} accounts={accounts} walletNames={walletNames} sp={sp} actorId={actor.personId} canSetPlatformCode={canSetPlatformCode} />
       ))}
 
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
@@ -216,6 +219,7 @@ function ChannelCard({
   walletNames,
   sp,
   actorId,
+  canSetPlatformCode,
 }: {
   channel: SalesChannelAdminRow;
   storeId: string;
@@ -223,6 +227,7 @@ function ChannelCard({
   walletNames: Map<string, string>;
   sp: Parameters<typeof typedFor>[0];
   actorId: string;
+  canSetPlatformCode: boolean;
 }) {
   const wallet = channel.destinationMoneyAccountId ? walletNames.get(channel.destinationMoneyAccountId) : null;
   return (
@@ -278,6 +283,8 @@ function ChannelCard({
         />
       </EditableRecord>
 
+      {canSetPlatformCode && <PlatformCodeForm channel={channel} storeId={storeId} />}
+
       <form action={setSalesChannelActiveAction}>
         <input type="hidden" name="storeId" value={storeId} />
         <input type="hidden" name="channelId" value={channel.id} />
@@ -290,6 +297,45 @@ function ChannelCard({
           Retire this channel
         </button>
       </form>
+    </section>
+  );
+}
+
+/**
+ * T-511 S2b: its own form, admin only, so the shared edit form (which a manager posts) carries no platform field at all.
+ * The platform and the code a delivery platform prints on its statements decide which channel an uploaded file books to.
+ */
+function PlatformCodeForm({ channel, storeId }: { channel: SalesChannelAdminRow; storeId: string }) {
+  return (
+    <section className="space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+      <h3 className="text-sm font-medium">Platform and store code</h3>
+      <p className="text-xs text-neutral-500 dark:text-neutral-400">
+        Only for a delivery platform channel. Leave both empty for a walk-in channel. Admin only.
+      </p>
+      <CheckedForm rules={SETTINGS_PLATFORM_CODE_RULES} action={setPlatformCodeAction} className="space-y-3 text-sm">
+        <input type="hidden" name="storeId" value={storeId} />
+        <input type="hidden" name="channelId" value={channel.id} />
+        <FormGrid>
+          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Platform</span>} rule={SETTINGS_PLATFORM_CODE_RULES.platform}>
+            <Select {...nativeAttrs(SETTINGS_PLATFORM_CODE_RULES.platform)} defaultValue={channel.platform ?? ''} className="mt-1 w-full">
+              <option value="">— none —</option>
+              <option value="grab">Grab</option>
+              <option value="foodpanda">Foodpanda</option>
+            </Select>
+          </Field>
+          <Field label={<span className="text-neutral-600 dark:text-neutral-400">Store code</span>} rule={SETTINGS_PLATFORM_CODE_RULES.code}>
+            <Input
+              {...nativeAttrs(SETTINGS_PLATFORM_CODE_RULES.code)}
+              defaultValue={channel.platformStoreCode ?? ''}
+              placeholder="Grab: a UUID. Foodpanda: 3-12 letters or digits"
+              className="mt-1 w-full"
+            />
+          </Field>
+        </FormGrid>
+        <Button type="submit" variant="secondary">
+          Save platform and code
+        </Button>
+      </CheckedForm>
     </section>
   );
 }

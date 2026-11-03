@@ -106,6 +106,14 @@ export async function listLoans(
   return rows as LoanRow[];
 }
 
+/** T-511 S2b: the only writer of `repayment_amount`. NULL clears it. Moves `updated_at`; the caller skips a same-value no-op. */
+export async function setRepaymentAmount(tx: Tx, orgId: string, id: string, amount: Money | null): Promise<void> {
+  await tx
+    .update(loans)
+    .set({ repaymentAmount: amount, updatedAt: sql`now()` })
+    .where(and(eq(loans.id, id), eq(loans.orgId, orgId)));
+}
+
 export async function setStatus(
   tx: Tx,
   orgId: string,

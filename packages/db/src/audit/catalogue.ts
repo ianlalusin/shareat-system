@@ -128,6 +128,9 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-464: pairing a store's POS tablet and un-pairing it (dotted: new).
   def('pos_tablet.paired', 'security', 'high', 'store', 'pos_tablet_pairings', 'T-464'),
   def('pos_tablet.unpaired', 'security', 'high', 'store', 'pos_tablet_pairings', 'T-464'),
+  // T-511 S2b: an admin names a sales channel's delivery platform and statement store code, and records a loan's expected daily repayment (dotted: new).
+  def('sales_channel.platform_code_edited', 'settings', 'high', 'store', 'sales_channels', 'T-511'),
+  def('loan.repayment_amount_edited', 'money', 'high', 'store', 'loans', 'T-511'),
   // T-455 S2: a cashier's moves on the customer lobby line (park a walk-in, call, seat, remove). Payloads carry code, size, stand and session id - never a name or phone.
   def('lobby.park', 'order', 'normal', 'store', 'lobby_entry', 'T-455'),
   def('lobby.call', 'order', 'low', 'store', 'lobby_entry', 'T-455'),

@@ -9,7 +9,7 @@
  * here would protect only this one caller, and the screen would be one new form away from a hole.
  */
 import { revalidatePath } from 'next/cache';
-import { createSalesChannel, setSalesChannelActive, updateSalesChannel } from '@shareat/domain';
+import { createSalesChannel, setSalesChannelActive, setSalesChannelPlatformCode, updateSalesChannel } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
@@ -118,5 +118,32 @@ export async function setSalesChannelActiveAction(fd: FormData): Promise<void> {
       ? `"${name}" is active again and can be chosen on new sales days.`
       : `"${name}" is retired. It stays on everything already recorded, and anything still open ` +
         'against it can still be resolved.',
+  });
+}
+
+/**
+ * T-511 S2b: the separate admin-only "Platform and store code" form. It is not the shared edit form (a manager posts that one),
+ * and nothing here reads platform or code from it. A blank platform and a blank code clear the pair; the domain function
+ * judges every box after its own gate, so a forged platform value is refused there, not here.
+ */
+export async function setPlatformCodeAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/settings/sales-channels');
+  const storeId = str(fd, 'storeId');
+  let wrote = false;
+  try {
+    const result = await withOrgPrincipal(actor.orgId, (tx) =>
+      setSalesChannelPlatformCode(tx, actor, {
+        channelId: str(fd, 'channelId'),
+        platform: (str(fd, 'platform') || null) as 'grab' | 'foodpanda' | null,
+        code: str(fd, 'code') || null,
+      }),
+    );
+    wrote = result.wrote;
+  } catch (err) {
+    return await redirectWithFlash('/settings/sales-channels', { store: storeId }, { error: errorMessage(err) });
+  }
+  revalidatePath('/settings/sales-channels');
+  return await redirectWithFlash('/settings/sales-channels', { store: storeId }, {
+    ok: wrote ? 'Platform and store code saved.' : 'Nothing changed: that is already the saved platform and code.',
   });
 }
