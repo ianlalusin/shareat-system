@@ -184,6 +184,36 @@ describe('T-513 - disposal date vs posted depreciation', () => {
     expect(r.loss).toBe('110000.00');
   });
 
+  it('(g) a reversal of a reversal makes the original live again: 15 Mar refused, 31 Mar allowed', async () => {
+    const f = await setup('g');
+    const assetId = await threeMonths(f);
+    const [march] = await sql<{ id: string }[]>`
+      select id from journal_entries
+      where org_id = ${f.orgId} and source_type = 'depreciation' and source_id = ${assetId}
+        and entry_date = '2026-03-31' and reversal_of_entry_id is null
+    `;
+    expect(march).toBeDefined();
+    await asPerson(f.orgId, (tx) =>
+      reverseEntry(tx, { entryId: march!.id, reason: 'T-513 test: void March', reversedBy: f.adminId }),
+    );
+    const [r1] = await sql<{ id: string }[]>`
+      select id from journal_entries where org_id = ${f.orgId} and reversal_of_entry_id = ${march!.id}
+    `;
+    expect(r1).toBeDefined();
+    await asPerson(f.orgId, (tx) =>
+      reverseEntry(tx, { entryId: r1!.id, reason: 'T-513 test: void the void', reversedBy: f.adminId }),
+    );
+
+    await expect(dispose(f, assetId, '2026-03-15')).rejects.toThrow(
+      /disposal date 2026-03-15 is before depreciation already posted up to 2026-03-31/,
+    );
+    expect(await disposalEntryCount(f.orgId, assetId)).toBe(0);
+
+    const r = await dispose(f, assetId, '2026-03-31');
+    expect(r.accumulated).toBe('15000.00');
+    expect(r.loss).toBe('105000.00');
+  });
+
   it('(e) an asset with no depreciation can still be disposed after acquisition', async () => {
     const f = await setup('e');
     const assetId = await anAsset(f);

@@ -28,10 +28,12 @@ Same-day is allowed (disposedOn == latest depreciation entry date). Reversed dep
 those with a reversal) do not count; match exactly what `accumulatedFromLedger` treats as live so the two never disagree.
 
 **Built note (3 Nov):** `accumulatedFromLedger` sums every non-draft entry, so a reversed original and its reversal
-net to zero there. A latest-date read cannot net, so `latestDepreciationDate` uses the same attribution plus two
-conditions that drop BOTH halves of a reversed pair (`status <> 'reversed'` and `reversal_of_entry_id IS NULL`). The two
-reads therefore agree on which depreciation is live. (`reverseEntry` dates the reversal on the original's date by
-default, which would otherwise pin the latest date.) The numeric-write guard needed one EXEMPT line for the new
+net to zero there. A latest-date read cannot net row by row, so `latestDepreciationDate` is chain-aware: a recursive
+CTE walks each depreciation entry up `reversal_of_entry_id` to its ROOT (the entry with no parent), sums the signed 1590
+amounts (credit minus debit, same attribution and non-draft filter as `accumulatedFromLedger`) per root, and treats a
+root as live when its net is non-zero. It returns the max root `entry_date`, or null. Plain void: net 0, root dropped.
+Reversal of a reversal: net equals the original, root live (test g). Rebook: new entries are their own roots. The two
+reads therefore agree on which depreciation is live. The numeric-write guard needed one EXEMPT line for the new
 ISO-date string comparison, the same as the existing `disposedOn < acquiredOn` line.
 A held asset with no depreciation keeps today's behaviour (only the acquisition-date check applies). Do not add an
 in_service_on rule in this task.
