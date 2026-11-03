@@ -41,6 +41,7 @@ they need weekly, the boundary is wrong.
 | `resolve_till_variance` | store | ✅ | ✅ | ✅ | **✗** | T-186. ⛔ **The asymmetry with the row above IS the control.** Charging a counted shortage names a person and moves `1230`; a cashier must never be able to charge, forgive or write off their own count. Same shape as `submit_sales_day` / `verify_sales_day` |
 | `unlink_store_from_pos` | org | ✅ | ✗ | ✗ | ✗ | T-382. Ian 2026-10-07: super-admin only, with a reason, audited. Linking stays `manage_chart_of_accounts` |
 | `verify_own_sales_day` | org | ✅ | ✗ | ✗ | ✗ | T-385. Ian 2026-10-09: the person who submitted a sales day may not verify it; a super-admin may verify their own submission. Backfilled to every existing owner by 0188 |
+| `upload_settlement_files` | store | ✅ | ✅ | ✅ | ✗ | T-511 S2a (2026-11-03). Upload a Grab or Foodpanda settlement statement (CSV or zip) for a store. A manager uploads their own store's statements; staff do not. Also gates reading the stored file until the review screen's own read exception (slice 5). Reading and approving the figures are separate steps |
 
 ## Expenses
 
@@ -163,6 +164,8 @@ they need weekly, the boundary is wrong.
 | `manage_store_settings` | store | ✅ | ✅ | ✅ | ✗ | *"Store settings tied to operation"* — Ian's words |
 | `set_cash_policy` | store | ✅ | ✅ | **✗** | ✗ | The remittance cadence and un-remitted ceiling (T-152). Ian, 2026-08-29: *"configurable by admin."* ⛔ **Manager is deliberately ✗ while `manage_store_settings` is ✅** — the ceiling is the number a store's cash custody is *measured against*, so whoever is measured must not move it. A manager running late could otherwise raise it and watch the finding vanish. A risk limit is not an operating setting |
 | `set_channel_payout` | store | ✅ | ✅ | **✗** | ✗ | T-350 / DEF-477. Ian, 2026-09-28: admin only. |
+| `edit_platform_store_code` | store | ✅ | ✅ | **✗** | ✗ | T-511 S2a (2026-11-03). Which Grab or Foodpanda store code a sales channel answers to, so an uploaded settlement file maps to the right store. Admin only, like `set_channel_payout`: a manager must not be able to re-point a channel and so change the store a file books against. Audited (`sales_channel.platform_code_edited`, slice 2b) |
+| `edit_loan_repayment_amount` | store | ✅ | ✅ | **✗** | ✗ | T-511 S2a (2026-11-03). The expected daily repayment of a loan: the figure the company-wide loan check compares a statement's deduction to. Admin only: whoever is checked must not move the figure. Audited (`loan.repayment_amount_edited`, slice 2b) |
 | `manage_price_lists` | org | ✅ | ✅ | ✗ | ✗ | Pricing is a commercial decision, not an operational one |
 | `view_menu` | org | ✅ | ✅ | ✅ | ✗ | T-401 (area sales). Read the menu, offers and their history. Staff position-granted only (T-318) |
 | `add_menu_item` | org | ✅ | **✗** | ✗ | ✗ | T-401, Ian Q2 2026-10-13: items are centralised and only super admin adds them. `createMenuItem`, `addMenuVariant` and every request resolution (approve, duplicate, reject). ⛔ Admin is deliberately ✗ while `manage_menu` is ✅ |

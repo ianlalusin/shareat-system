@@ -130,6 +130,12 @@ export const loans = pgTable(
     closeReason: text('close_reason'),
 
     notes: text('notes'),
+    /**
+     * T-511 S2a (migration 0228). The expected daily repayment: the figure the company-wide loan check compares a settlement
+     * statement's loan deduction to. NULL = not recorded ("no matching loan recorded"). Edited only through
+     * `edit_loan_repayment_amount` (admin), never at creation.
+     */
+    repaymentAmount: numeric('repayment_amount', { precision: 14, scale: 2 }),
     createdBy: uuid('created_by')
       .notNull()
       .references(() => persons.id, { onDelete: 'restrict' }),
@@ -162,6 +168,8 @@ export const loans = pgTable(
           or (${t.closedOn} is not null and ${t.closeReason} is not null)`,
     ),
     check('loans_principal_amount_finite_check', sql`${t.principalAmount} > '-Infinity'::numeric and ${t.principalAmount} < 'Infinity'::numeric`),
+    check('loans_repayment_amount_positive_check', sql`${t.repaymentAmount} > 0`),
+    check('loans_repayment_amount_finite_check', sql`${t.repaymentAmount} > '-Infinity'::numeric and ${t.repaymentAmount} < 'Infinity'::numeric`),
     check('loans_interest_rate_finite_check', sql`${t.interestRate} > '-Infinity'::numeric and ${t.interestRate} < 'Infinity'::numeric`),
     // T-398 S1 / DEF-491, migration 0194 - same-org twins of the single-column persons/stores FKs
     // above: RLS checks only this row's own org_id and the FK check runs as the table owner, so a

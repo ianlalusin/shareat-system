@@ -131,11 +131,25 @@ export const salesChannels = pgTable(
     wastageTypeMode: text('wastage_type_mode', { enum: SALES_CHANNEL_WASTAGE_MODES })
       .notNull()
       .default('tracked'),
+    /**
+     * T-511 S2a (migration 0228). Which delivery platform this channel is and the store code that platform prints on its
+     * statements (Grab: a store UUID; Foodpanda: a short alphanumeric code). Both set or both NULL. Edited only through
+     * `edit_platform_store_code` (admin). An uploaded statement maps to a channel by (platform, code).
+     */
+    platform: text('platform', { enum: ['grab', 'foodpanda'] as const }),
+    platformStoreCode: text('platform_store_code'),
     isActive: boolean('is_active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
   (t) => [
+    // NOTE (T-511 S2a, migration 0228): a code identifies ONE channel per platform in an org: unique index
+    // `sales_channels_org_platform_code_key` on `(org_id, platform, lower(trim(platform_store_code)))` WHERE the code is not null.
+    // Case- and whitespace-insensitive, spans ACTIVE AND INACTIVE channels (a retired channel keeps its code). An expression index
+    // the builder cannot express, hand-added in migration 0228; do NOT restore a `uniqueIndex(...)` line here (same reason as below).
+    check('sales_channels_platform_check', sql`${t.platform} is null or ${t.platform} in ('grab', 'foodpanda')`),
+    check('sales_channels_platform_code_pair_check', sql`(${t.platform} is null) = (${t.platformStoreCode} is null)`),
+    check('sales_channels_platform_code_not_blank_check', sql`${t.platformStoreCode} is null or length(trim(${t.platformStoreCode})) > 0`),
     // NOTE: uniqueness is `(org_id, store_id, lower(trim(name)))` — case- and whitespace-
     // INSENSITIVE, bible §4.4 rule 3, DEF-205. That is an expression index Drizzle's builder
     // cannot express; it is hand-added in migration 0133, exactly as `positions`
@@ -179,6 +193,10 @@ export const salesChannels = pgTable(
     // NOTE: sales_channels_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0213 (T-398 S3 / DEF-491), no Drizzle mirror here.
     // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES sales_channels (org_id, id)`
     // same-org FKs declared beside their own tables have a real unique target.
+    // NOTE: sales_channels_org_id_id_store_id_unique UNIQUE (org_id, id, store_id) - hand-added in migration 0228 (T-511 S2a delta), no Drizzle mirror here.
+    // Trivially true as well; it is the target of the 3-column (org_id, channel_id, store_id) FK on settlement_uploads and settlement_day_lines
+    // (schema/settlement-intake.ts), which makes the database refuse a row whose store_id differs from its channel's store. The 2-column
+    // (org_id, id) unique above stays the single target of every other composite twin (t398 K2 counts only that one).
   ],
 );
 

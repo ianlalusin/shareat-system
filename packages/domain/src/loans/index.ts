@@ -10,14 +10,14 @@
  * layer on top; they are not what a loan is.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { journalRepo, loansRepo, moneyAccountsRepo, type Tx } from '@shareat/db';
+import { auditLogRepo, journalRepo, loansRepo, moneyAccountsRepo, type Tx } from '@shareat/db';
 import { compare, decimal, money, subtract, ZERO, type Decimal, type Money } from '@shareat/core/money';
 import { checkDraw } from '../money-accounts/overdraft';
 import { parseMoneyInput } from '../shared/money-input';
 import { parseWholeNumberInput } from '../shared/whole-number-input';
 import { refuse } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
-import { LOAN_ADD_RULES, LOAN_DRAW_RULES, LOAN_PAYMENT_RULES } from '../field-rules/loans';
+import { LOAN_ADD_RULES, LOAN_DRAW_RULES, LOAN_PAYMENT_RULES, LOAN_REPAYMENT_RULES } from '../field-rules/loans';
 import { postEntry } from '../ledger/post-entry';
 import { postEntryOnce, requireRequestId } from '../ledger/replay';
 import { authorizeOtherStores, withInterStoreLegs } from '../ledger/inter-store';
@@ -389,4 +389,48 @@ export async function reverseLoanEntry(
     return { reversalEntryId: reversal.reversalEntryId, created: reversal.created };
   };
   return run(tx);
+}
+
+/**
+ * ⭐ **Record the amount a loan is expected to repay each day** (T-511 S2b): the figure the loan check compares a platform's
+ * deduction against. Admin only (`edit_loan_repayment_amount`), at the LOAN's own store. An empty amount clears it.
+ *
+ * Order, as `setChannelPayoutDestination`: read the loan, authorize, judge the box AFTER the gate, same value writes nothing
+ * (no `updated_at` move, no audit row), a real change writes its audit row in the same transaction. The amount is parsed
+ * with the money helpers and compared as money, never as a float.
+ */
+export async function updateLoanRepaymentAmount(
+  tx: Tx,
+  actor: Actor,
+  input: { loanId: string; repaymentAmount: string | null },
+): Promise<{ wrote: boolean }> {
+  const loan = await loansRepo.getById(tx, actor.orgId, input.loanId);
+  if (!loan) {
+    throw refuse(`updateLoanRepaymentAmount: loan ${input.loanId} does not exist.`, 'That loan no longer exists.');
+  }
+  await authorize(tx, actor, 'edit_loan_repayment_amount', { storeId: loan.storeId });
+  const checked = assertFieldRules(LOAN_REPAYMENT_RULES, { repaymentAmount: input.repaymentAmount ?? '' });
+  const typed = checked.repaymentAmount ?? null;
+  const next = typed === null ? null : parseMoneyInput(typed, 'updateLoanRepaymentAmount: the repayment amount', 'The repayment amount');
+  if (next !== null && compare(next, ZERO) <= 0) {
+    throw refuse('updateLoanRepaymentAmount: the amount has to be greater than zero.', 'The repayment amount must be an amount greater than zero, or empty to clear it.');
+  }
+
+  const current = loan.repaymentAmount === null ? null : money(loan.repaymentAmount);
+  const same = current === null || next === null ? current === next : compare(current, next) === 0;
+  if (same) return { wrote: false };
+
+  await loansRepo.setRepaymentAmount(tx, actor.orgId, loan.id, next);
+
+  // Same transaction, only on a real write. `source: 'web'`: the loan screen is the only caller today.
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'loan.repayment_amount_edited',
+    storeId: loan.storeId,
+    entityId: loan.id,
+    before: { repaymentAmount: loan.repaymentAmount },
+    after: { repaymentAmount: next === null ? null : String(next) },
+    source: 'web',
+  });
+  return { wrote: true };
 }

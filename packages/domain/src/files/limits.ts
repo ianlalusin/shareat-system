@@ -20,6 +20,8 @@ export const LIMIT_PURPOSES = [
   'leave_document',
   'staff_photo',
   'staff_signature',
+  // T-511 S2a (migration 0228): a Grab / Foodpanda settlement statement (CSV or zip).
+  'channel_settlement_file',
 ] as const;
 export type LimitPurpose = (typeof LIMIT_PURPOSES)[number];
 
@@ -39,6 +41,12 @@ export const PURPOSE_LIMITS: Record<LimitPurpose, { readonly types: readonly str
   // T-434. The staff ID-card photo, and the on-screen signature (PNG only, under the app-wide 1 MB image ceiling).
   staff_photo: { types: ['image/jpeg', 'image/png', 'image/webp'], maxBytes: 8 * 1024 * 1024 },
   staff_signature: { types: ['image/png'], maxBytes: 1024 * 1024 },
+  // T-511 S2a. A settlement statement: a CSV or a zip of CSVs. Windows often sends a .csv as application/vnd.ms-excel, so that type is listed
+  // (its bytes must still be text: files/magic.ts). 3 MB here; the reader enforces its own tighter caps (a zip is read only up to 1 MB compressed).
+  channel_settlement_file: {
+    types: ['text/csv', 'application/vnd.ms-excel', 'application/zip', 'application/x-zip-compressed'],
+    maxBytes: 3 * 1024 * 1024,
+  },
 };
 
 /**

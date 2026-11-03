@@ -118,6 +118,9 @@ export interface SalesChannelRow {
   wastageTypeMode: 'tracked' | 'instant';
   destinationMoneyAccountId: string | null;
   taxTreatment: string;
+  /** T-511 S2a: which delivery platform this channel is, and the store code that platform prints on its statements. Both set or both NULL. */
+  platform: 'grab' | 'foodpanda' | null;
+  platformStoreCode: string | null;
 }
 
 /**
@@ -148,6 +151,8 @@ export async function listChannels(
       wastageTypeMode: salesChannels.wastageTypeMode,
       destinationMoneyAccountId: salesChannels.destinationMoneyAccountId,
       taxTreatment: salesChannels.taxTreatment,
+      platform: salesChannels.platform,
+      platformStoreCode: salesChannels.platformStoreCode,
     })
     .from(salesChannels)
     .where(where)
@@ -198,6 +203,8 @@ export async function channelById(tx: Tx, orgId: string, channelId: string): Pro
       wastageTypeMode: salesChannels.wastageTypeMode,
       destinationMoneyAccountId: salesChannels.destinationMoneyAccountId,
       taxTreatment: salesChannels.taxTreatment,
+      platform: salesChannels.platform,
+      platformStoreCode: salesChannels.platformStoreCode,
     })
     .from(salesChannels)
     .where(and(eq(salesChannels.orgId, orgId), eq(salesChannels.id, channelId)))
@@ -287,6 +294,45 @@ export async function updateChannel(
       wastageTypeMode: patch.wastageTypeMode,
       updatedAt: new Date(),
     })
+    .where(and(eq(salesChannels.orgId, orgId), eq(salesChannels.id, channelId)));
+}
+
+/** T-511 S2b: the channel (any state, retired included) that already holds this platform code in the org, for the sentence
+ *  "That code is already used by <store> <channel>." Compared the way the unique index compares: ignoring case and
+ *  surrounding spaces. `excludeChannelId` keeps a channel from being its own rival. Only to WORD the refusal: the unique index
+ *  `sales_channels_org_platform_code_key` is the authority, including for a race this read cannot see. */
+export async function channelByPlatformCode(
+  tx: Tx,
+  orgId: string,
+  platform: 'grab' | 'foodpanda',
+  code: string,
+  excludeChannelId?: string,
+): Promise<{ id: string; name: string; storeId: string; storeName: string; isActive: boolean } | null> {
+  const rows = (await tx.execute(sql`
+    select c.id, c.name, c.store_id, c.is_active, s.name as store_name
+      from sales_channels c
+      join stores s on s.org_id = c.org_id and s.id = c.store_id
+     where c.org_id = ${orgId}
+       and c.platform = ${platform}
+       and lower(trim(c.platform_store_code)) = lower(trim(${code}))
+       ${excludeChannelId ? sql`and c.id <> ${excludeChannelId}` : sql``}
+     limit 1
+  `)) as unknown as Record<string, unknown>[];
+  const r = rows[0];
+  return r ? { id: String(r.id), name: String(r.name), storeId: String(r.store_id), storeName: String(r.store_name), isActive: Boolean(r.is_active) } : null;
+}
+
+/** T-511 S2b: the only writer of `platform` / `platform_store_code`. Both set or both null (the pair CHECK enforces it). */
+export async function setChannelPlatformCode(
+  tx: Tx,
+  orgId: string,
+  channelId: string,
+  platform: 'grab' | 'foodpanda' | null,
+  code: string | null,
+): Promise<void> {
+  await tx
+    .update(salesChannels)
+    .set({ platform, platformStoreCode: code, updatedAt: sql`now()` })
     .where(and(eq(salesChannels.orgId, orgId), eq(salesChannels.id, channelId)));
 }
 

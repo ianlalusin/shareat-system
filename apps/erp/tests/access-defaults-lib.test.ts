@@ -114,18 +114,21 @@ describe('L1 — gridCapabilityGroups: area order, exactly-91-once, and the 76/1
   // ⭐ 93 -> 99 (T-401): seven menu capabilities join, SIX of them offerable: view_menu, manage_menu, set_menu_depletion (org),
   // request_menu_item, set_menu_price, switch_usage_source (store). `add_menu_item` is super-admin-only, so it is in
   // SUPER_ADMIN_ONLY_CAPABILITIES and never offerable (asserted below).
-  it('the 107 offerable capabilities each appear exactly once across every area of every scope', () => {
+  // ⭐ 107 -> 110 (T-511 S2a, 2026-11-03): `upload_settlement_files`, `edit_platform_store_code`, `edit_loan_repayment_amount`: all three store-scoped, offerable to a position
+  // (none is role-only or super-admin-only). RED until the builder adds them.
+  it('the 110 offerable capabilities each appear exactly once across every area of every scope', () => {
     const rendered = groups.flatMap((g) => g.areas.flatMap((a) => a.capabilities.map((c) => c.capability)));
-    expect(rendered.length).toBe(107); // T-193 S3: +remit_statutory (org); T-464: +pair_pos_tablet; T-424: +approve_pos_correction; T-434: +view_staff_signature; T-436: +view_leave_document; T-190: +manage_payroll_rates (org)
-    expect(new Set(rendered).size, 'no capability appears twice').toBe(107);
+    expect(rendered.length).toBe(110); // T-511 S2a: +3 store; T-193 S3: +remit_statutory (org); T-464: +pair_pos_tablet; T-424: +approve_pos_correction; T-434: +view_staff_signature; T-436: +view_leave_document; T-190: +manage_payroll_rates (org)
+    expect(new Set(rendered).size, 'no capability appears twice').toBe(110);
     expect(rendered).not.toContain('add_menu_item');
   });
 
   // ⭐ store 76 -> 77 (T-350/DEF-477): `set_channel_payout` joins store, same as `set_cash_policy`.
-  it('store holds 85, org holds 22 (§1\'s totals)', () => {
+  // ⭐ store 85 -> 88 (T-511 S2a, 2026-11-03): the three new capabilities are all store-scoped; org stays 22.
+  it('store holds 88, org holds 22 (§1\'s totals)', () => {
     const countFor = (scope: (typeof SCOPE_ORDER)[number]) =>
       groups.find((g) => g.scope === scope)!.areas.reduce((n, a) => n + a.capabilities.length, 0);
-    expect(countFor('store')).toBe(85); // T-464: +pair_pos_tablet; T-402 S1b: +view_activity_log; T-424: +approve_pos_correction; T-434: +view_staff_signature; T-436: +view_leave_document
+    expect(countFor('store')).toBe(88); // T-511 S2a: +3; T-464: +pair_pos_tablet; T-402 S1b: +view_activity_log; T-424: +approve_pos_correction; T-434: +view_staff_signature; T-436: +view_leave_document
     expect(countFor('org')).toBe(22); // T-193 S3: +remit_statutory; T-402 S1b: +view_activity_log_restricted; T-190: +manage_payroll_rates
   });
 

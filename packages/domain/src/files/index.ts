@@ -63,6 +63,8 @@ const PURPOSE_CAPABILITY: Record<FilePurpose, Parameters<typeof authorize>[2]> =
   staff_photo: 'enrol_staff',
   // ⛔ T-434: this governs UPLOAD of a signature only. Signature READS never use it: see `./signature` (`mayViewSignature`).
   staff_signature: 'enrol_staff',
+  // T-511 S2a. Governs UPLOAD and, until slice 5 adds the review screen's own read exception, READING the stored statement too (store scope: a manager at the store).
+  channel_settlement_file: 'upload_settlement_files',
 };
 
 const EXTENSIONS: Record<string, string> = {
@@ -70,6 +72,11 @@ const EXTENSIONS: Record<string, string> = {
   'image/png': 'png',
   'image/webp': 'webp',
   'application/pdf': 'pdf',
+  // T-511 S2a: settlement statements. Windows sends a CSV as application/vnd.ms-excel; all three text types are stored as .csv.
+  'text/csv': 'csv',
+  'application/vnd.ms-excel': 'csv',
+  'application/zip': 'zip',
+  'application/x-zip-compressed': 'zip',
 };
 
 export interface UploadInput {

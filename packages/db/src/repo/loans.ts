@@ -52,6 +52,8 @@ export interface LoanRow {
   closedOn: string | null;
   closeReason: string | null;
   notes: string | null;
+  /** T-511 S2a: the expected daily repayment (numeric(14,2) as text); NULL = not recorded. Edited only by `edit_loan_repayment_amount` (a later slice). */
+  repaymentAmount: string | null;
   createdAt: Date;
 }
 
@@ -102,6 +104,14 @@ export async function listLoans(
     .where(and(...conditions))
     .orderBy(desc(loans.startDate));
   return rows as LoanRow[];
+}
+
+/** T-511 S2b: the only writer of `repayment_amount`. NULL clears it. Moves `updated_at`; the caller skips a same-value no-op. */
+export async function setRepaymentAmount(tx: Tx, orgId: string, id: string, amount: Money | null): Promise<void> {
+  await tx
+    .update(loans)
+    .set({ repaymentAmount: amount, updatedAt: sql`now()` })
+    .where(and(eq(loans.id, id), eq(loans.orgId, orgId)));
 }
 
 export async function setStatus(

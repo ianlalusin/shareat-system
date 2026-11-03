@@ -6,7 +6,7 @@
  */
 import { and, asc, count, eq, gt, inArray, isNull, lt, sql } from 'drizzle-orm';
 import type { Tx } from '../client';
-import { FILE_PURPOSES, storedFiles, type FilePurpose } from '../../schema/stored-files';
+import { storedFiles, type FilePurpose } from '../../schema/stored-files';
 import { recordGone } from './record-gone';
 
 export interface StoredFileRow {
@@ -228,9 +228,14 @@ export const FILE_REFERENCES: readonly FileReference[] = [
   ref('supplier_invoices', 'receipt_file_id', ['receipt_photo']),
   ref('ar_collections', 'receipt_file_id', ['receipt_photo', 'ar_collection_proof']),
   ref('deliveries', 'proof_file_id', ['receipt_photo']),
-  ref('channel_settlements', 'withholding_certificate_file_id', FILE_PURPOSES.filter((p) => !GUARDED_PURPOSES.includes(p))),
+  // T-511 S2a (BOSS ruling 4): an EXPLICIT list, the five purposes this column accepted when it was derived as "FILE_PURPOSES minus GUARDED_PURPOSES".
+  // Deliberately not derived any more: every new purpose (channel_settlement_file, 2026-11-03) would otherwise become a valid withholding certificate by default.
+  ref('channel_settlements', 'withholding_certificate_file_id', ['receipt_photo', 'ar_collection_proof', 'memo_document', 'wastage_dispute', 'onboarding_document']),
   ref('employments', 'photo_file_id', ['staff_photo']),
   ref('persons', 'signature_file_id', ['staff_signature']),
+  // T-511 S2a (migration 0228): the uploaded statement (the CSV or zip) and, for Foodpanda, its PDF. Only the settlement purpose.
+  ref('settlement_uploads', 'file_id', ['channel_settlement_file']),
+  ref('settlement_uploads', 'pdf_file_id', ['channel_settlement_file']),
 ];
 
 export interface ReferenceRow {

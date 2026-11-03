@@ -1483,6 +1483,24 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     class: 'keep',
     reason: 'Configuration history: which source each store reads, kept so the cut-over is traceable.',
   },
+  // ---- T-511 S2a: the settlement upload staging tables (migration 0228). Purge, same reasoning as channel_settlements: they describe uploads and
+  // decisions over channel receivables the cutover opening balance replaces, and the day lines point at channel_settlements (purged) and sales channels.
+  settlement_uploads: {
+    class: 'purge',
+    reason: 'Describes an uploaded platform statement and who uploaded it, over channel receivables the cutover opening balance replaces. Not carried forward, like channel_settlements.',
+  },
+  settlement_day_lines: {
+    class: 'purge',
+    reason: 'A staged day and its approve or reject decision over a channel receivable the opening balance replaces; points at channel_settlements, itself purged.',
+  },
+  settlement_loan_lines: {
+    class: 'purge',
+    reason: 'Child of settlement_day_lines (the loan rows of a staged day); purges with it for the same reason.',
+  },
+  settlement_other_lines: {
+    class: 'purge',
+    reason: 'Child of settlement_uploads and settlement_day_lines (adjustments and charges read from a statement); purges with them.',
+  },
 };
 
 /** Tables the purge must never touch even if classified — belt and braces around views. */

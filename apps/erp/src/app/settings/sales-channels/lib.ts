@@ -9,7 +9,7 @@
  */
 import { moneyAccountsRepo } from '@shareat/db';
 import { listSalesChannelsForAdmin, receivableAccountOptions } from '@shareat/domain';
-import type { Actor } from '@shareat/auth';
+import { can, type Actor } from '@shareat/auth';
 import { withOrgPrincipal } from '../../expenses/lib';
 
 export { withOrgPrincipal };
@@ -36,4 +36,13 @@ export async function moneyAccountNames(actor: Actor): Promise<Map<string, strin
     moneyAccountsRepo.listMoneyAccounts(tx, actor.orgId, {}),
   );
   return new Map(rows.map((a) => [a.id, a.name]));
+}
+
+/**
+ * T-511 S2b: may this person set a channel's platform and store code at this store? Decides only whether the separate form is
+ * DRAWN (presentation); `setSalesChannelPlatformCode` authorizes again and is the real gate. The page and the shared update
+ * form stay open to a manager; this one is admin only.
+ */
+export async function canEditPlatformCode(actor: Actor, storeId: string): Promise<boolean> {
+  return withOrgPrincipal(actor.orgId, (tx) => can(tx, actor, 'edit_platform_store_code', { storeId }));
 }

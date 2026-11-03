@@ -12,6 +12,7 @@ import {
   disburseLoan,
   recordLoanPayment,
   reverseLoanEntry,
+  updateLoanRepaymentAmount,
 } from '@shareat/domain';
 import type { InterestMethod, PaymentFrequency, RatePeriod } from '@shareat/db';
 import { withOrgPrincipal } from './lib';
@@ -126,4 +127,25 @@ export async function reverseEntryAction(formData: FormData): Promise<void> {
     return await redirectWithFlash(`/loans/${id}`, {}, { error: errorMessage(err) });
   }
   return await redirectWithFlash(`/loans/${id}`, {}, { stamp: 'REVERSED', ok: 'Reversed. The debt is back to what it was.' });
+}
+
+/**
+ * T-511 S2b: an admin records the amount this loan is expected to repay each day (empty clears it). An edit of a figure, not a
+ * destructive act, so no administrator PIN: the domain function holds the gate (`edit_loan_repayment_amount`) and judges the box.
+ */
+export async function updateLoanRepaymentAmountAction(formData: FormData): Promise<void> {
+  const actor = await requireActor();
+  const id = str(formData, 'loanId');
+  let wrote = false;
+  try {
+    const result = await withOrgPrincipal(actor.orgId, (tx) =>
+      updateLoanRepaymentAmount(tx, actor, { loanId: id, repaymentAmount: str(formData, 'repaymentAmount') || null }),
+    );
+    wrote = result.wrote;
+  } catch (err) {
+    return await redirectWithFlash(`/loans/${id}`, {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash(`/loans/${id}`, {}, {
+    ok: wrote ? 'Repayment amount saved.' : 'Nothing changed: that is already the saved repayment amount.',
+  });
 }
