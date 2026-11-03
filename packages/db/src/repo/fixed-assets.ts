@@ -447,6 +447,38 @@ export async function accumulatedFromLedger(
   return row?.total ?? '0';
 }
 
+/**
+ * T-513 (audit CR-3): the date of this asset's latest LIVE depreciation entry, or `null` when it
+ * has none. Same attribution and non-draft filter as `accumulatedFromLedger`, narrowed to live
+ * entries: an original that has been reversed (`status = 'reversed'`) and the reversal entry
+ * itself (`reversal_of_entry_id` set, same source) both net to zero in the sum, so neither may
+ * count as "depreciation posted up to" a date - `reverseEntry` dates the reversal on the
+ * original's own date by default, which would otherwise keep the latest date pinned.
+ */
+export async function latestDepreciationDate(
+  tx: Tx,
+  orgId: string,
+  assetId: string,
+): Promise<string | null> {
+  const [row] = await tx
+    .select({ latest: sql<string | null>`max(${journalEntries.entryDate})::text` })
+    .from(journalLines)
+    .innerJoin(journalEntries, eq(journalLines.entryId, journalEntries.id))
+    .innerJoin(accounts, eq(journalLines.accountId, accounts.id))
+    .where(
+      and(
+        eq(journalEntries.orgId, orgId),
+        eq(journalEntries.sourceType, 'depreciation'),
+        eq(journalEntries.sourceId, assetId),
+        eq(accounts.code, ACCUMULATED_DEPRECIATION_CODE),
+        ne(journalEntries.status, 'draft'),
+        ne(journalEntries.status, 'reversed'),
+        isNull(journalEntries.reversalOfEntryId),
+      ),
+    );
+  return row?.latest ?? null;
+}
+
 /** The same figure for every asset in the org at once, as a map keyed by asset id.
  *  ⚠️ The register screen lists hundreds of assets; calling `accumulatedFromLedger` per row is
  *  the N+1 that makes a derived figure look expensive and tempts someone to store it again. */

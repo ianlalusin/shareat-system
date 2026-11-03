@@ -100,6 +100,15 @@ async function runDispose(
       `disposeAsset: disposal date ${input.disposedOn} is before the asset was acquired (${asset.acquiredOn}).`,
     );
   }
+  // T-513 (audit CR-3): never date a disposal before depreciation that is still live in the
+  // ledger - the entry would clear charges that had not yet happened on its own date. Same day is
+  // allowed. Checked before any write.
+  const latestDepreciation = await fixedAssetsRepo.latestDepreciationDate(tx, actor.orgId, asset.id);
+  if (latestDepreciation && input.disposedOn < latestDepreciation) {
+    throw new Error(
+      `disposeAsset: disposal date ${input.disposedOn} is before depreciation already posted up to ${latestDepreciation}. Reverse the later depreciation first, or dispose on or after ${latestDepreciation}.`,
+    );
+  }
 
   const cost = money(asset.cost);
   const accumulated = money(await fixedAssetsRepo.accumulatedFromLedger(tx, actor.orgId, asset.id));

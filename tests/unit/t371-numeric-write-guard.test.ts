@@ -156,6 +156,7 @@ const EXEMPT: Record<string, (typeof EXEMPT_REASONS)[number]> = {
   'packages/domain/src/stock/layers.ts::sortForFifo::a.id > b.id': 'not-a-column-value',
   'packages/domain/src/fixed-assets/schedule.ts::periodsThrough::p.period <= asOfPeriod': 'not-a-column-value',
   'packages/domain/src/fixed-assets/dispose.ts::runDispose::input.disposedOn < asset.acquiredOn': 'not-a-column-value',
+  'packages/domain/src/fixed-assets/dispose.ts::runDispose::input.disposedOn < latestDepreciation': 'not-a-column-value',
   'packages/domain/src/fixed-assets/in-service.ts::resolveMode::openingDate > asset.acquiredOn!': 'not-a-column-value',
   // T-316 S2: ISO 'YYYY-MM-DD' business-date ordering in tillFloorPosition (latest verified day vs a report's day) — string-vs-string, never a money value
   'packages/db/src/repo/remittance.ts::tillFloorPosition::r.businessDate > latestVerified': 'not-a-column-value',
