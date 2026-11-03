@@ -149,8 +149,7 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
   fiscal_periods: {
     class: 'date_scoped',
     reason:
-      'Splits by date rather than by kind: 2026 pilot periods go, 2027 stays. The only table ' +
-      'in the schema that needs this class.',
+      'Splits by date rather than by kind: 2026 pilot periods go, 2027 stays.',
     dateColumn: 'starts_on',
     keepFrom: '2027-01-01',
   },

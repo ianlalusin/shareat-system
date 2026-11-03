@@ -4,7 +4,7 @@
 
 ### QI-1 — What may the commissary see of Padre Garcia's receipt? (blocks S5e's credit note; S5b needs a default)
 
-Today's answer (Q8 a, 10 Oct): per shipment, "Padre Garcia recorded ₱X", nothing else.
+Today's answer (Q8 a, 10 Oct): per shipment, "Padre Garcia recorded ₱X", nothing else. **Superseded 25 Oct: QI-1 = (a)** (per-item received counts plus one "PG owes us" balance; row 388; see below).
 Example: you send 10 kg; PG records ₱2,480. You know ₱620 is missing, but not **which item** was short.
 - **(a) Also show, per item on that shipment, how many PG received; plus one total "PG owes us ₱Y" figure.**
   The credit note is then exact (we know which goods went missing and what they cost us), and a payment one side
@@ -19,7 +19,7 @@ Example: you send 10 kg; PG records ₱2,480. You know ₱620 is missing, but no
 
 No change: S5 builds without VAT. Lines that would change are marked FENCED in the posting draft.
 
-### QI-2 — Delivery fee to Padre Garcia (does not block; S5 builds the default)
+### QI-2 — Delivery fee to Padre Garcia (does not block; S5 builds the default) (this is the DELIVERY-FEE QI-2; row 389 does NOT answer it. The bill-verification QI-2 is further down, under "## QI-2 (ANSWERED A ...")
 
 Trade orders can carry a delivery fee. Should an order to PG?
 - **(a) No separate fee; freight is priced into PG's price list.** (Default S5 builds.)
@@ -108,7 +108,7 @@ Checked clean: RLS shape, definers (search_path, REVOKE/GRANT, app_current_org s
   the seller read is built (S5e). (d) The rest of the tester's pinned contract (call shapes, entry source types,
   RefusalError) is accepted.
 
-## QI-2 (ANSWERED A by Ian, 26 Oct: "a") - who "verifies" the bill PG's receipt creates?
+## QI-2 (ANSWERED A by Ian, 26 Oct: "a") - who "verifies" the bill PG's receipt creates? (this is the BILL-VERIFICATION QI-2, answered by row 389; it is not the delivery-fee QI-2 near the top of this file)
 PG's AP open item needs a VERIFIED supplier invoice, and the two-person rule (0046/0217) needs a second person or an
 admin self-verify. The receiver is usually a PG manager, so today the receipt is refused for non-admins.
 Options: (A, recommended) a system-made bill flag: a bill created by the receive flow, whose amount is computed
