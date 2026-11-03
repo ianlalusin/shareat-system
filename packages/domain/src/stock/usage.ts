@@ -18,7 +18,7 @@
  * interchangeable inside a transaction.*
  */
 import { add, ZERO, type Money } from '@shareat/core/money';
-import { journalRepo, type Tx } from '@shareat/db';
+import { itemsRepo, journalRepo, type Tx } from '@shareat/db';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { consume, reverseConsumption } from './consume';
 import { postConsumption, postWastage } from './consumption-posting';
@@ -66,6 +66,29 @@ export type PostUsageOutcome = PostUsageResult | { readonly ok: false; readonly 
 /** Phase 5's salary-advance module. Absent today, and the post says so rather than dropping it. */
 const SALARY_ADVANCE_AVAILABLE = false;
 
+/**
+ * T-512 (audit CR-1): a document lists each item once. Two lines for one item would write two movements with the same
+ * (source_type, source_id, item_id, location_id) and hit the unique index `stock_movements_source_pair_key` (a raw 23505).
+ * Returns the plain-words refusal for the first repeated key, or null. `keys` is one string per line (the item id, plus the
+ * room when the document spans rooms); `itemIds[i]` is that line's item. Read-only; the caller refuses before any write.
+ */
+export async function repeatedItemSentence(
+  tx: Tx,
+  orgId: string,
+  lines: readonly { readonly key: string; readonly itemId: string }[],
+): Promise<string | null> {
+  const seen = new Set<string>();
+  for (const l of lines) {
+    if (!seen.has(l.key)) {
+      seen.add(l.key);
+      continue;
+    }
+    const name = (await itemsRepo.getItemById(tx, orgId, l.itemId))?.name ?? l.itemId;
+    return `Item ${name} is on this record twice. Put it on one line with the total quantity.`;
+  }
+  return null;
+}
+
 export async function postUsageRecord(tx: Tx, input: PostUsageInput): Promise<PostUsageOutcome> {
   // T-369 S4a (DEF-528): a closed month's stock stays as it was - said in words, before the first write.
   const closed = await closedStockPeriodSentence(tx, input.orgId, input.usedOn, input.kind === 'wastage' ? 'wasted' : 'used');
@@ -73,6 +96,9 @@ export async function postUsageRecord(tx: Tx, input: PostUsageInput): Promise<Po
   if (input.lines.length === 0) {
     return { ok: false, reason: 'a usage record with no lines posts nothing' };
   }
+  // T-512: the same item twice would collide on the movement's unique source pair; refuse in words, before any write.
+  const repeated = await repeatedItemSentence(tx, input.orgId, input.lines.map((l) => ({ key: l.itemId, itemId: l.itemId })));
+  if (repeated) return { ok: false, reason: repeated };
 
   // ⭐ Every precondition BEFORE the first write — T-166 §7.2's lesson, applied rather than
   // rediscovered. A refusal found after a movement is written commits a half-post.

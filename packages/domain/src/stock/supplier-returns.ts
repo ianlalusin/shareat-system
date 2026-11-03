@@ -34,6 +34,7 @@ import { INVENTORY_REFUND_RULES } from '../field-rules/inventory';
 import { refuse } from '../shared/refusal';
 import { authorize, type Actor } from '@shareat/auth';
 import { consume, reverseConsumption } from './consume';
+import { repeatedItemSentence } from './usage';
 import { postEntry } from '../ledger/post-entry';
 import { postEntryOnce, requireRequestId } from '../ledger/replay';
 import { reverseEntry } from '../ledger/reverse-entry';
@@ -114,6 +115,11 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
       return { ok: false, reason: `item kind "${line.itemKind}" has no inventory account in COA-ALIGNMENT §4.1` };
     }
   }
+
+  // T-512 (CR-1): one return id is the source of every line, so the same item in the same room twice would collide on the
+  // movement's unique source pair. Refused in words, before any write.
+  const repeated = await repeatedItemSentence(tx, orgId, lines.map((l) => ({ key: `${l.itemId}|${l.locationId}`, itemId: l.itemId })));
+  if (repeated) return { ok: false, reason: repeated };
 
   // ⭐ `stock_movements` carries no composite FK tying `location_id` to `store_id` (unlike
   // T-167's `stock_transfers`, which added one) — so this is checked explicitly rather than
