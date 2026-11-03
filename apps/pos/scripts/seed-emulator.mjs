@@ -3,19 +3,22 @@ const projectId = 'demo-shareat-pos2';
 const email = 'manager@pos.test';
 const password = 'Test-only-2048!';
 const storeId = 'demo-store';
+// The practice copy moves the local ports; the defaults are unchanged.
+const authPort = process.env.POS_EMULATOR_AUTH_PORT || '9099';
+const fsPort = process.env.POS_EMULATOR_FIRESTORE_PORT || '8080';
 if (!process.argv.includes('--confirm')) {
   console.log(`Synthetic fixture: ${projectId}, ${email}, store ${storeId}. Add --confirm to seed local emulators.`);
   process.exit(0);
 }
 async function request(url, body, method = 'POST', headers = {}) {
   const parsed = new URL(url);
-  if (parsed.hostname !== '127.0.0.1' || !['8080', '9099'].includes(parsed.port)) throw new Error('Only local emulator endpoints are allowed.');
+  if (parsed.hostname !== '127.0.0.1' || ![fsPort, authPort].includes(parsed.port)) throw new Error('Only local emulator endpoints are allowed.');
   const response = await fetch(url, { method, headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error?.message || 'Emulator fixture request failed.');
   return data;
 }
-const authBase = 'http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:';
+const authBase = `http://127.0.0.1:${authPort}/identitytoolkit.googleapis.com/v1/accounts:`;
 let account;
 try { account = await request(authBase + 'signUp?key=emulator-only-not-a-real-key', { email, password, returnSecureToken: true }); }
 catch (error) {
@@ -31,7 +34,7 @@ function field(value) {
   return { mapValue: { fields: Object.fromEntries(Object.entries(value).map(([key, val]) => [key, field(val)])) } };
 }
 async function doc(path, data) {
-  return request(`http://127.0.0.1:8080/v1/projects/${projectId}/databases/(default)/documents/${path}`,
+  return request(`http://127.0.0.1:${fsPort}/v1/projects/${projectId}/databases/(default)/documents/${path}`,
     { fields: Object.fromEntries(Object.entries(data).map(([key, val]) => [key, field(val)])) }, 'PATCH', { authorization: 'Bearer owner' });
 }
 await doc(`staff/${account.localId}`, { username: 'Test Manager', displayName: 'Test Manager', name: 'Test Manager', role: 'manager', status: 'active', assignedStoreIds: [storeId] });

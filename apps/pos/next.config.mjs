@@ -20,7 +20,12 @@ const nextConfig = {
   // Publish only this scalar, never the dependency manifest, into the client bundle.
   env: { NEXT_PUBLIC_APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION || packageVersion || 'dev',
     NEXT_PUBLIC_POS_EMULATOR_MODE: emulator ? '1' : '0',
-    NEXT_PUBLIC_POS_EMULATOR_HOST: emulator?.host ?? '10.0.2.2' },
+    NEXT_PUBLIC_POS_EMULATOR_HOST: emulator?.host ?? '10.0.2.2',
+    // Practice copy: carry any moved local ports into the browser bundle (empty = the defaults).
+    POS_EMULATOR_API_PORT: emulator ? new URL(emulator.apiBase).port : '',
+    POS_EMULATOR_AUTH_PORT: emulator ? String(emulator.authPort) : '',
+    POS_EMULATOR_FIRESTORE_PORT: emulator ? String(emulator.firestorePort) : '',
+    POS_EMULATOR_STORAGE_PORT: emulator ? String(emulator.storagePort) : '' },
   reactStrictMode: true,
   trailingSlash: cap,
   images: cap

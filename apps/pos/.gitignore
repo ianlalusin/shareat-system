@@ -5,3 +5,6 @@ android/app/src/main/assets/public/
 android/.gradle/
 *.jks
 .cap-stash/
+
+# practice copy: generated local state (org id, throwaway key)
+/emulator/.practice/

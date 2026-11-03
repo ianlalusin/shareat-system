@@ -7,6 +7,7 @@
     "build": "next build",
     "build:cap": "node scripts/build-cap.mjs",
     "build:emulator": "node scripts/build-emulator.mjs",
+    "practice": "node scripts/practice-start.mjs",
     "start": "next start -p 9009 -H 127.0.0.1",
     "test": "vitest run --config vitest.config.mts"
   },
