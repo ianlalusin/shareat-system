@@ -447,6 +447,53 @@ export async function accumulatedFromLedger(
   return row?.total ?? '0';
 }
 
+/**
+ * T-513 (audit CR-3): the date of this asset's latest LIVE depreciation, or `null` when it has
+ * none. Chain-aware: every depreciation entry is walked up `reversal_of_entry_id` to its ROOT (the
+ * entry with no parent), the signed 1590 amounts (credit - debit, as `accumulatedFromLedger` does)
+ * are summed per root, and a root is live when that net is non-zero. Answers:
+ * - plain void: original + reversal net to 0, so the root is dropped;
+ * - reversal of a reversal: original + R1 + R2 net to the original's amount, so the root is live;
+ * - rebook: the new entries are their own roots.
+ * Same attribution and non-draft filter as `accumulatedFromLedger`. Returns max(root entry_date).
+ */
+export async function latestDepreciationDate(
+  tx: Tx,
+  orgId: string,
+  assetId: string,
+): Promise<string | null> {
+  const rows = await tx.execute(sql`
+    with recursive anc(entry_id, anc_id, parent_id) as (
+      select je.id, je.id, je.reversal_of_entry_id
+      from journal_entries je
+      where je.org_id = ${orgId}
+        and je.source_type = 'depreciation'
+        and je.source_id = ${assetId}
+        and je.status <> 'draft'
+      union all
+      select a.entry_id, p.id, p.reversal_of_entry_id
+      from anc a
+      join journal_entries p on p.id = a.parent_id and p.org_id = ${orgId}
+    ),
+    roots as (
+      select entry_id, anc_id as root_id from anc where parent_id is null
+    ),
+    nets as (
+      select r.root_id, sum(jl.credit - jl.debit) as net
+      from roots r
+      join journal_lines jl on jl.entry_id = r.entry_id
+      join accounts ac on ac.id = jl.account_id and ac.code = ${ACCUMULATED_DEPRECIATION_CODE}
+      group by r.root_id
+    )
+    select max(root.entry_date)::text as latest
+    from nets n
+    join journal_entries root on root.id = n.root_id
+    where n.net <> 0
+  `);
+  const first = (rows as unknown as Array<{ latest: string | null }>)[0];
+  return first?.latest ?? null;
+}
+
 /** The same figure for every asset in the org at once, as a map keyed by asset id.
  *  ⚠️ The register screen lists hundreds of assets; calling `accumulatedFromLedger` per row is
  *  the N+1 that makes a derived figure look expensive and tempts someone to store it again. */
