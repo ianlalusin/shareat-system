@@ -72,6 +72,8 @@ let seq = 0;
 const uid = (p: string) => `${p}-${Date.now()}-${++seq}`;
 const actor = (orgId: string, personId: string): Actor => ({ personId, orgId });
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
+/** The URL minus its random parts (record ids and the ?f= token), so a figure check cannot trip on random hex. */
+const scrubbed = (url: string): string => url.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>').replace(/([?&]f=)[\w-]+/, '$1<token>');
 
 afterAll(async () => {
   await closeDb();
@@ -195,9 +197,10 @@ describe('M1 (I2, R10) - a prepaid write-off with a refund posts the same lines,
       expect(await prepaidStatus(f.itemId)).toBe('written_off');
 
       // The address: only the page and the one-time token.
+      // Scrubbed first: the record id and the ?f= token are random and can contain any digits (CI flake 3 Nov 2026).
       expect(signal.url, `redirect URL was: ${signal.url}`).toMatch(new RegExp(`^/prepaid/${f.itemId}\\?f=[\\w-]+$`));
       for (const forbidden of [UNICODE_PESO, '1,000', '1000', '100050', '7999', '9000', 'Cancelled', 'Written']) {
-        expect(signal.url, `URL leaked ${forbidden}`).not.toContain(forbidden);
+        expect(scrubbed(signal.url), `URL leaked ${forbidden}`).not.toContain(forbidden);
       }
 
       // The banner: the same words, on the same page, now from the flash.
@@ -244,7 +247,7 @@ describe('M2 (R8) - a refused write-off writes nothing and the form comes back b
 
       expect(signal.url).toMatch(new RegExp(`^/prepaid/${f.itemId}\\?f=[\\w-]+$`));
       for (const forbidden of ['1,000', '1000', 'Cancelled', 'Reyes', '1110', '2026-04-10', 'not a valid']) {
-        expect(signal.url, `URL leaked ${forbidden}`).not.toContain(forbidden);
+        expect(scrubbed(signal.url), `URL leaked ${forbidden}`).not.toContain(forbidden);
       }
 
       const out = outcomeOf(signal);
@@ -290,7 +293,7 @@ describe('M2 (R8) - a refused write-off writes nothing and the form comes back b
       expect(await writeOffEntryCount(f.itemId)).toBe(0);
       expect(await prepaidStatus(f.itemId)).toBe('active');
       expect(signal.url).toMatch(new RegExp(`^/prepaid/${f.itemId}\\?f=[\\w-]+$`));
-      expect(signal.url).not.toContain('1000.50');
+      expect(scrubbed(signal.url)).not.toContain('1000.50');
       const out = outcomeOf(signal);
       expect(out.flash.error, 'a refusal, not the success banner').toBeTruthy();
       expect(out.flash.ok).toBeUndefined();
@@ -361,7 +364,7 @@ describe('M3 (A2) - the in-service confirm step keeps the reason and the plan ou
 
       const first = await captureRedirect(() => submit());
       for (const forbidden of ['Typo', 'October', UNICODE_PESO, '7,000', 'reverses', 'confirm', 'plan=', '2026-10-01', 'mode=']) {
-        expect(first.url, `URL leaked ${forbidden}`).not.toContain(forbidden);
+        expect(scrubbed(first.url), `URL leaked ${forbidden}`).not.toContain(forbidden);
       }
       const o1 = outcomeOf(first);
       expect(o1.path).toBe(`/fixed-assets/${f.assetId}`);
@@ -434,7 +437,7 @@ describe('M4 / M4b (A3, B1, REV-8) - an invalid opening date is refused before a
       fd.set('openingDate', '2026-13-40');
       const signal = await captureRedirect(() => setStoreOpeningDateAction(fd));
 
-      expect(signal.url).not.toContain('2026-13-40');
+      expect(scrubbed(signal.url)).not.toContain('2026-13-40');
       expect(signal.url).toMatch(new RegExp(`^/admin/stores/${f.storeId}\\?f=[\\w-]+$`));
       const out = outcomeOf(signal);
       expect(out.flash.error).toBe('"2026-13-40" is not a valid date. Use the date picker, or type it as YYYY-MM-DD.');
@@ -552,9 +555,9 @@ describe('W-S2 (B2) - posting a pay run keeps the net total out of the URL; the 
         { code: '6100', debit: '1080.00', credit: '0.00' },
       ]);
 
-      expect(signal.url, `redirect URL was: ${signal.url}`).not.toContain('1,080');
-      expect(signal.url).not.toContain('1080');
-      expect(signal.url).not.toContain('Posted');
+      expect(scrubbed(signal.url), `redirect URL was: ${signal.url}`).not.toContain('1,080');
+      expect(scrubbed(signal.url)).not.toContain('1080');
+      expect(scrubbed(signal.url)).not.toContain('Posted');
       const out = outcomeOf(signal);
       expect(out.path).toBe('/payroll');
       expect(out.nav.get('store'), 'the store is navigation').toBe(storeId);
