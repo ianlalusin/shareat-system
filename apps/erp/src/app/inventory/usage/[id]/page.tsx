@@ -129,11 +129,11 @@ export default async function UsageRecordPage({
 
       {(record.status === 'posted' || record.status === 'void') && (
         <dl className="grid gap-x-6 gap-y-1 text-xs text-neutral-600 sm:grid-cols-2 dark:text-neutral-400">
-          <dt className="text-neutral-500">Posted</dt>
+          <dt className="text-neutral-500 dark:text-neutral-400">Posted</dt>
           <dd>{when(record.postedAt)}</dd>
           {record.status === 'void' && (
             <>
-              <dt className="text-neutral-500">Voided</dt>
+              <dt className="text-neutral-500 dark:text-neutral-400">Voided</dt>
               <dd>
                 {when(record.voidedAt)} — {record.voidReason}
               </dd>

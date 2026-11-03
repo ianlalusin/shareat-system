@@ -142,7 +142,7 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
               span="wide"
               label={
                 <span className="text-neutral-600 dark:text-neutral-400">
-                  Disposition <span className="text-neutral-500">— only for a decided-on-the-spot channel</span>
+                  Disposition <span className="text-neutral-500 dark:text-neutral-400">— only for a decided-on-the-spot channel</span>
                 </span>
               }
             >

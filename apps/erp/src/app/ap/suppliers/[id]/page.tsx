@@ -369,7 +369,7 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
   return (
     <div>
       <dt className="text-xs text-neutral-500 dark:text-neutral-400">{label}</dt>
-      <dd className={empty ? 'text-neutral-500 dark:text-neutral-500' : ''}>{empty ? 'Not recorded' : children}</dd>
+      <dd className={empty ? 'text-neutral-500 dark:text-neutral-500 dark:dark:text-neutral-400' : ''}>{empty ? 'Not recorded' : children}</dd>
     </div>
   );
 }

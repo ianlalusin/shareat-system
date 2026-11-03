@@ -187,7 +187,7 @@ export default async function PayrollPage({
                 ? `, paid ${cfg.payoutLagDays}d after`
                 : ''}
           </span>
-          <span className="text-neutral-500">
+          <span className="text-neutral-500 dark:text-neutral-400">
             ⭐ Hours count in half-hour steps; anything under is not paid. Late is exact.
           </span>
         </p>

@@ -228,11 +228,11 @@ export default async function DeliveryPage({
 
       {(doc.status === 'received' || doc.status === 'void') && (
         <dl className="grid gap-x-6 gap-y-1 text-xs text-neutral-600 sm:grid-cols-2 dark:text-neutral-400">
-          <dt className="text-neutral-500">Received</dt>
+          <dt className="text-neutral-500 dark:text-neutral-400">Received</dt>
           <dd>{when(doc.receivedAt)}</dd>
           {doc.status === 'void' && (
             <>
-              <dt className="text-neutral-500">Voided</dt>
+              <dt className="text-neutral-500 dark:text-neutral-400">Voided</dt>
               <dd>
                 {when(doc.voidedAt)} — {doc.voidReason}
               </dd>

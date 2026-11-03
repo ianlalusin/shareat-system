@@ -389,7 +389,7 @@ function ChannelFields({
         <Field
           label={
             <span className="text-neutral-600 dark:text-neutral-400">
-              Receivable account <span className="text-neutral-500">— required when it settles later</span>
+              Receivable account <span className="text-neutral-500 dark:text-neutral-400">— required when it settles later</span>
             </span>
           }
         >

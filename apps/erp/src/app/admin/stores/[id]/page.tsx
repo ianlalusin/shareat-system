@@ -158,7 +158,7 @@ export default async function StoreDetailPage({
                 <Field
                   label={
                     <span className="text-neutral-600 dark:text-neutral-400">
-                      TIN branch code <span className="text-neutral-500">— digits, e.g. 00001</span>
+                      TIN branch code <span className="text-neutral-500 dark:text-neutral-400">— digits, e.g. 00001</span>
                     </span>
                   }
                   rule={ADMIN_STORE_DETAILS_RULES.tinBranchCode}

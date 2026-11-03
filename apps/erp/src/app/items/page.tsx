@@ -253,7 +253,7 @@ export default async function ItemsPage({
                 {rows.map(({ item: i, indented }) => (
                   <LinkRow key={i.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className={indented ? 'py-2 pl-8 pr-3' : 'px-3 py-2'}>
-                      {indented && <span aria-hidden="true" className="mr-1 text-neutral-500">↳</span>}
+                      {indented && <span aria-hidden="true" className="mr-1 text-neutral-500 dark:text-neutral-400">↳</span>}
                       <RowLink href={`/items/${i.id}`}>{i.name}</RowLink>
                       {i.status !== 'active' && (
                         <span className="ml-2 text-xs text-neutral-500">({i.status})</span>
@@ -303,7 +303,7 @@ export default async function ItemsPage({
                 <div className="mb-2">
                   <a href={`/items/${d.aId}`} className="underline hover:no-underline">{d.aName}</a>
                   <span className="text-neutral-500"> ({d.aUnit})</span>
-                  <span className="mx-2 text-neutral-500">vs</span>
+                  <span className="mx-2 text-neutral-500 dark:text-neutral-400">vs</span>
                   <a href={`/items/${d.bId}`} className="underline hover:no-underline">{d.bName}</a>
                   <span className="text-neutral-500"> ({d.bUnit})</span>
                   <span className="ml-2 text-xs text-neutral-500">
@@ -357,7 +357,7 @@ export default async function ItemsPage({
             {dismissed.map((d) => (
               <li key={d.id} className="flex flex-wrap items-center gap-2">
                 <a href={`/items/${d.itemAId}`} className="inline-block py-0.5 underline hover:no-underline">{d.itemAName}</a>
-                <span className="text-neutral-500">and</span>
+                <span className="text-neutral-500 dark:text-neutral-400">and</span>
                 <a href={`/items/${d.itemBId}`} className="inline-block py-0.5 underline hover:no-underline">{d.itemBName}</a>
                 {d.note ? <span className="text-xs text-neutral-500 dark:text-neutral-400">— {d.note}</span> : null}
                 <form action={undoDuplicateDismissalAction}>
