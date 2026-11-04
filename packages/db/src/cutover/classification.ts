@@ -1501,6 +1501,14 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     class: 'purge',
     reason: 'Child of settlement_uploads and settlement_day_lines (adjustments and charges read from a statement); purges with them.',
   },
+  kitchen_stations: {
+    class: 'keep',
+    reason: 'A store’s kitchen stations are standing configuration (T-508), kept like the menu they serve.',
+  },
+  kitchen_routes: {
+    class: 'keep',
+    reason: 'Which station cooks which item at a store is standing configuration (T-508), kept with the menu.',
+  },
 };
 
 /** Tables the purge must never touch even if classified — belt and braces around views. */

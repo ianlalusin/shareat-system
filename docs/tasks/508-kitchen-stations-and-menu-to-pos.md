@@ -1,6 +1,6 @@
 # T-508 — Kitchen stations in the ERP, and the ERP menu feeds the POS
 
-**Status:** SPEC (Opus, 3 Nov 2026). **Owner:** orchestrator. **Migration:** one (0226, hand-authored, ADR-012).
+**Status:** SPEC (Opus, 3 Nov 2026). **Owner:** orchestrator. **Migration:** one (0232, hand-authored, ADR-012).
 **Lanes:** Sonnet tester → builder → auditor per slice (auditor Sonnet: schema + auth code). Discovery slices Haiku.
 
 ## Why (Ian, 3 Nov)
@@ -33,7 +33,7 @@ v1 POS (`POS/src/components/manager/store-settings/kitchen-locations-settings.ts
   lower(name)) where active). `kitchen_routes` (id, org_id, store_id, menu_item_id, station_id, created_by,
   timestamps; unique (store_id, menu_item_id)). Same-org composite FKs like menu.ts; station's store_id must equal
   route's store_id (composite FK on (store_id, station_id)). Classify both in `cutover/classification.ts` and
-  `rls/registry.ts`. Migration 0226, hand-authored, ADR-012 §5 checklist.
+  `rls/registry.ts`. Migration 0232, hand-authored, ADR-012 §5 checklist.
 - **R2 — Route per item, not per variant.** All variants of a dish go to one station (a kids' package is cooked where
   the adult one is). T-401 :60 suggested variant keys; overruled for simplicity — a variant split, if ever needed, is
   an additive override table later. Packages, refills, à la carte and add-ons all route the same way.
@@ -66,6 +66,11 @@ v1 POS (`POS/src/components/manager/store-settings/kitchen-locations-settings.ts
 - **R9 — Source switch, default OFF.** `POS_MENU_SOURCE=erp|firestore`, server env, read once, default `firestore`.
   Live stores stay `firestore` until P2 (sales events) is planned: with `erp`, sessions carry ERP variant UUIDs as
   `packageId`, and the v1 day-feed bridge (T-375) / `menu_pos_v1_links` expect v1 keys. The practice copy runs `erp`.
+  **Second gate — dayparts (SETTINGS live check, 3 Nov):** Lipa has Lunch 08:00-17:00 / Dinner 17:00-08:00 and 10 of
+  12 packages exist as LT/DT pairs at different per-head prices (e.g. 338 vs 358). v2 offers are effective-dated only,
+  with no repeating daily window, so with `erp` every pair would show all day and the wrong price could be started.
+  No live store flips to `erp` until a daypart spec (name, start, end, days, overnight; packages gated by it) is built.
+  This does not affect 7 Dec: Lipa launches POS v2 on the `firestore` source, whose schedules keep working.
 - **R10 — Who may edit.** Stations and routes use the existing `manage_store_settings` capability (store-scoped;
   CAPABILITY-MATRIX :163 — admin ✅, owner ✅, manager ✅, cashier ✗). Every ✅ has a test proving the ✗ fires
   (cashier, and a manager of another store). The menu endpoint needs a valid linked terminal, nothing more.
@@ -77,7 +82,7 @@ v1 POS (`POS/src/components/manager/store-settings/kitchen-locations-settings.ts
 - **S0 (Haiku, read-only):** confirm flavor modelling in T-401 data and seed (R8); list every POS consumer of
   `storeConfig.packages`, `storePackages`, `storeRefills`, `storeFlavors`, add-on inventory and `kitchenLocations`
   with file:line (agent report of 3 Nov is the start); confirm the pos2 auth helper that yields the store.
-- **S1 schema:** migration 0226 (R1), classification + RLS registry rows, repo in `packages/db/src/repo/kitchen.ts`
+- **S1 schema:** migration 0232 (R1), classification + RLS registry rows, repo in `packages/db/src/repo/kitchen.ts`
   (list/create/rename/retire station, set/clear route, list routes for store). Tests: R3 refusal, cross-store route
   refused by FK, unique active name, RLS store scope. **Full suite on a fresh gate DB** (migration rule).
 - **S2 domain + ERP screens:** `packages/domain/src/kitchen/` (authorize `manage_store_settings`, audit log rows).
@@ -96,8 +101,25 @@ v1 POS (`POS/src/components/manager/store-settings/kitchen-locations-settings.ts
   `POS_MENU_SOURCE=erp`; demo: rename a station in the ERP → POS ticket shows the new name after refresh; remove a
   route → item disappears from the POS and appears in the red panel; open a table → ticket lands on Grill. Screenshots.
 
+## S0 findings (Haiku, 3 Nov) — binding on S4/S5
+- Flavours ARE option values (menu.ts:208, domain/menu/options.ts:5); R8's stop branch does not fire. **No seed or
+  fixture creates flavours** — S3/S5/S6 tests must build their own flavour group linked to a refill item.
+- `authenticate` (apps/pos/src/server/pos2/identity.ts:22) takes `storeId` **from the request body** and checks staff
+  assignment; it does not check the device. S4 therefore must NOT reuse it alone: after the token check, resolve the
+  store with `resolvePosTerminalLink(tx, { orgId, posStoreId, deviceId })` (packages/auth/src/pos-terminal-link.ts:23)
+  as the lobby route does (server/pos2/lobby.ts, deps.ts:127-135), and serve the link's `erpStoreId` only. A request
+  whose staff store and linked store differ is refused (403).
+- DB access from the POS server: `withOrgPrincipal(orgId, tx => …)` via deps (deps.ts:101-112).
+- Consumers to switch in S5 (all v1 Firestore today): `useStoreConfigDoc` packages/flavors (session-list-view.tsx:223-240
+  → StartSessionForm); `storePackages` (ServerPageClient.tsx:123, request-change-dialog.tsx:95, RefillPOSModal.tsx:118);
+  `storeRefills`/`storeFlavors`/global `refills` (RefillPOSModal.tsx:84-186); global `flavors` (kitchen/page.tsx:264);
+  add-ons (store-context.tsx:307); `kitchenLocations` (kitchen/page.tsx:248 tabs; printOnOutage reads at
+  RefillPOSModal.tsx:233, session-detail-view.tsx:377, AddonsPOSModal.tsx:435, cashier/firestore.ts:358;
+  HistoryPageClient.tsx:87; SyncKdsTicketsTool.tsx:53). Option groups via legacy `/api/products/{id}/option-groups`
+  (AddonsPOSModal.tsx:245, family-order-modal.tsx:104) are out of S5 — note only.
+
 ## Out of scope (each a later spec)
-Daypart menus (`menuSchedules`) · sold-out overlay (stays a POS action, row 307) · discounts, charges, tenders, loyalty
+sold-out overlay (stays a POS action, row 307) · discounts, charges, tenders, loyalty
 on the same carrier (next spec, same R6 pattern) · Customer app menu (online channel) · `store_menu_versions` history
 table (T-401 K4; add when receipts must cite the menu version, P2) · sales events carrying ERP variant ids (P2) ·
 retiring the POS's Firestore menu path (after every store runs `erp`) · per-variant routing (R2).

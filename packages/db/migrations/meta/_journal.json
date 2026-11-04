@@ -1450,6 +1450,13 @@
       "when": 1805772707084,
       "tag": "0228_t511_settlement_intake",
       "breakpoints": true
+    },
+    {
+      "idx": 232,
+      "version": "7",
+      "when": 1806118307084,
+      "tag": "0232_t508_kitchen_stations",
+      "breakpoints": true
     }
   ]
 }
