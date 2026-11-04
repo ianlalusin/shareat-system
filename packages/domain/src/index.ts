@@ -146,6 +146,7 @@ export * from './organizations';
 // row 180). ⚠️ Separate from `stores/service` on purpose: that module is `manage_stores`
 // (admin-only), this one is `manage_store_settings` (manager ✅).
 export * from './sales-channels';
+export * from './kitchen';
 export * from './dual-run';
 // T-392 S5 - the disposition writer is exported HERE and never from dual-run/index.ts (the CLI has no classify subcommand, R10).
 export { recordDualRunDisposition, isDispositionableLine, mayRecordDualRunDisposition } from './dual-run/dispositions';

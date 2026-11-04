@@ -89,6 +89,22 @@ function actionShapedExports(): Map<string, string> {
  * off the same day** by T-226, and the stale-exemption rule below is what forced their rows out.
  */
 const EXEMPT: Record<string, string> = {
+  createKitchenStation:
+    'UNWIRED — T-508 S2b (the Kitchen stations and Kitchen routing panels on admin/stores/[id]) is its caller; S2a built the domain layer first (4 Nov). Remove this row when S2b lands.',
+  renameKitchenStation:
+    'UNWIRED — T-508 S2b (the Kitchen stations and Kitchen routing panels on admin/stores/[id]) is its caller; S2a built the domain layer first (4 Nov). Remove this row when S2b lands.',
+  updateKitchenStation:
+    'UNWIRED — T-508 S2b (the Kitchen stations and Kitchen routing panels on admin/stores/[id]) is its caller; S2a built the domain layer first (4 Nov). Remove this row when S2b lands.',
+  retireKitchenStation:
+    'UNWIRED — T-508 S2b (the Kitchen stations and Kitchen routing panels on admin/stores/[id]) is its caller; S2a built the domain layer first (4 Nov). Remove this row when S2b lands.',
+  setKitchenRoute:
+    'UNWIRED — T-508 S2b (the Kitchen stations and Kitchen routing panels on admin/stores/[id]) is its caller; S2a built the domain layer first (4 Nov). Remove this row when S2b lands.',
+  clearKitchenRoute:
+    'UNWIRED — T-508 S2b (the Kitchen stations and Kitchen routing panels on admin/stores/[id]) is its caller; S2a built the domain layer first (4 Nov). Remove this row when S2b lands.',
+  setKitchenRoutesForCategory:
+    'UNWIRED — T-508 S2b (the Kitchen stations and Kitchen routing panels on admin/stores/[id]) is its caller; S2a built the domain layer first (4 Nov). Remove this row when S2b lands.',
+  listKitchenSetup:
+    'UNWIRED — T-508 S2b (the Kitchen stations and Kitchen routing panels on admin/stores/[id]) is its caller; S2a built the domain layer first (4 Nov). Remove this row when S2b lands.',
   callEntry:
     'UNWIRED — T-455 S5 (POS lobby card) is its caller; S2 built the domain layer first (25 Oct). Remove this row when S5 lands.',
   listLobbyEntries:
