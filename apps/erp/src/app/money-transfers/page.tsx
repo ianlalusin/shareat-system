@@ -167,7 +167,7 @@ export default async function MoneyTransfersPage({
           </div>
           {/* ⭐ Every figure above is summed from the journal on this request. There is no balance
               column anywhere in this feature — v1 kept one and it drifted. */}
-          <p className="text-xs text-neutral-400 dark:text-neutral-600">
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
             Each figure is summed from the ledger on load, not stored — so it cannot drift from
             the books it is meant to describe.
           </p>
@@ -257,7 +257,7 @@ export default async function MoneyTransfersPage({
                         <Badge tone="closed" label="Reversed" className="ml-2" />
                       )}
                       {t.reference && (
-                        <div className="text-xs text-neutral-400 dark:text-neutral-600">
+                        <div className="text-xs text-neutral-500 dark:text-neutral-400">
                           {t.reference}
                         </div>
                       )}
@@ -272,7 +272,7 @@ export default async function MoneyTransfersPage({
                       {compare(money(t.fee), ZERO) > 0 ? (
                         <span className="text-warning-ink">{peso(t.fee)}</span>
                       ) : (
-                        <span className="text-neutral-300 dark:text-neutral-700">—</span>
+                        <span className="text-neutral-500 dark:text-neutral-400">—</span>
                       )}
                     </td>
                     <td className="px-3 py-2 text-right">
@@ -297,7 +297,7 @@ export default async function MoneyTransfersPage({
               </tbody>
             </table>
           </div>
-          <p className="text-xs text-neutral-400 dark:text-neutral-600">
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
             Reversing writes an opposite entry — it never deletes the original. Both stay in the
             ledger, which is what makes the correction auditable.
           </p>

@@ -161,13 +161,13 @@ export default async function RecurringExpensesPage({
                       <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
                         <span className="font-medium">
                           {t.name}
-                          <span className="ml-2 text-xs font-normal text-neutral-400">
+                          <span className="ml-2 text-xs font-normal text-neutral-500 dark:text-neutral-400">
                             {INTERVAL_LABEL[t.interval] ?? t.interval} · {anchorLabel(t.interval, t.anchorDay)}
                           </span>
                         </span>
                         <span className="tabular-nums">
                           {peso(t.defaultAmount)}{' '}
-                          <span className="text-xs text-neutral-400">default</span>
+                          <span className="text-xs text-neutral-500 dark:text-neutral-400">default</span>
                         </span>
                       </div>
                       <p className="text-xs text-neutral-500 dark:text-neutral-400">

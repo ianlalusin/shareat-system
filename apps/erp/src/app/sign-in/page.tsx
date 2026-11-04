@@ -84,7 +84,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />
-            <span className="text-xs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+            <span className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-500 dark:dark:text-neutral-400">
               or
             </span>
             <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />

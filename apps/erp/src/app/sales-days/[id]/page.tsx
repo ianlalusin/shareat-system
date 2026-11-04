@@ -590,7 +590,7 @@ function LedgerTable({ lines }: { lines: EntryLine[] }) {
         <tbody>
           {lines.map((l) => (
             <tr key={l.lineNo} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-              <td className="px-3 py-2 text-neutral-400">{l.lineNo}</td>
+              <td className="px-3 py-2 text-neutral-500 dark:text-neutral-400">{l.lineNo}</td>
               <td className="px-3 py-2">{accountCodeAndName(l.accountCode)}</td>
               <td className="px-3 py-2 text-xs text-neutral-500 dark:text-neutral-400">
                 {l.partyType ? `${l.partyType}:${l.partyId}` : '—'}

@@ -70,7 +70,7 @@ export default async function UsersPage() {
               <LinkRow key={u.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                 <td className="px-4 py-2">
                   {u.displayName}
-                  {!u.isActive && <span className="ml-2 text-xs text-neutral-400">(inactive)</span>}
+                  {!u.isActive && <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">(inactive)</span>}
                 </td>
                 <td className="px-4 py-2">
                   {u.role ? (

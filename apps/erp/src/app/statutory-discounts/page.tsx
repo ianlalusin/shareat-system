@@ -264,7 +264,7 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
                 {rows.map((r) => (
                   <tr
                     key={r.id}
-                    className={`border-b border-neutral-200 dark:border-neutral-800 ${r.voidedAt ? 'text-neutral-400 line-through dark:text-neutral-600' : ''}`}
+                    className={`border-b border-neutral-200 dark:border-neutral-800 ${r.voidedAt ? 'text-neutral-500 line-through dark:text-neutral-400' : ''}`}
                   >
                     <td className="p-2 tabular-nums">{r.businessDate}</td>
                     <td className="p-2">{r.invoiceNumber}</td>

@@ -451,7 +451,7 @@ export default async function CustomerDetailPage({
                     <td className="px-3 py-3 text-right font-mono tabular-nums">{peso(c.platformFee)}</td>
                     <td className="px-3 py-3 text-xs">
                       {c.moneyAccountName ?? '—'}
-                      {c.referenceNo && <div className="text-neutral-400">{c.referenceNo}</div>}
+                      {c.referenceNo && <div className="text-neutral-500 dark:text-neutral-400">{c.referenceNo}</div>}
                       {c.receiptFileId && viewableReceipts.has(c.receiptFileId) && (
                         <RowAction>
                           <PhotoThumb purpose="receipt_photo" label="Receipt photo" existing={{ fileId: c.receiptFileId, kind: receiptKinds.get(c.receiptFileId) ?? 'image' }} size="sm" />
@@ -462,7 +462,7 @@ export default async function CustomerDetailPage({
                         answer the only question a disputed payment ever raises. */}
                     <td className="px-3 py-3 text-xs">
                       {c.allocations.length === 0 ? (
-                        <span className="text-neutral-400">—</span>
+                        <span className="text-neutral-500 dark:text-neutral-400">—</span>
                       ) : (
                         c.allocations.map((a) => (
                           <div key={`${c.collectionId}-${a.chargeId}`}>

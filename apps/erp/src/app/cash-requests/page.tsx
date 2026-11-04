@@ -164,7 +164,7 @@ export default async function CashRequestsPage({
                       <RowLink href={`/cash-requests/${r.id}`}>
                         {r.purpose}
                       </RowLink>
-                      <div className="text-xs text-neutral-400 dark:text-neutral-600">
+                      <div className="text-xs text-neutral-500 dark:text-neutral-400">
                         {r.requestedOn}
                       </div>
                     </td>
@@ -178,7 +178,7 @@ export default async function CashRequestsPage({
                           common case and approving more is allowed. Hiding the difference would
                           make the approval look decorative. */}
                       {r.approvedAmount && r.approvedAmount !== r.requestedAmount && (
-                        <div className="text-neutral-400 dark:text-neutral-600">
+                        <div className="text-neutral-500 dark:text-neutral-400">
                           approved {peso(r.approvedAmount)}
                         </div>
                       )}

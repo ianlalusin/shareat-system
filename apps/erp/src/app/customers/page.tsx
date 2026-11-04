@@ -92,7 +92,7 @@ export default async function CustomersPage({
                     <RowLink href={`/customers/${c.id}`} className="hover:no-underline">
                       {c.name}
                     </RowLink>
-                    <div className="text-xs text-neutral-400 dark:text-neutral-600">
+                    <div className="text-xs text-neutral-500 dark:text-neutral-400">
                       {GROUP_LABEL[c.customerGroup] ?? c.customerGroup}
                       {c.contactNo && ` · ${c.contactNo}`}
                       {c.creditTermsDays !== null && ` · ${c.creditTermsDays} days to pay`}
@@ -102,12 +102,12 @@ export default async function CustomersPage({
                     {TREATMENT_LABEL[c.treatment]}
                     {/* ⭐ Show WHICH counterparty, because "internal" without a name is unverifiable. */}
                     {c.counterpartyStoreId && (
-                      <div className="text-neutral-400 dark:text-neutral-600">
+                      <div className="text-neutral-500 dark:text-neutral-400">
                         {storeById.get(c.counterpartyStoreId)?.name ?? '—'}
                       </div>
                     )}
                     {c.counterpartyOrgId && (
-                      <div className="text-neutral-400 dark:text-neutral-600">
+                      <div className="text-neutral-500 dark:text-neutral-400">
                         {orgById.get(c.counterpartyOrgId)?.name ?? '—'}
                       </div>
                     )}

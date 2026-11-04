@@ -13,9 +13,12 @@
  *   2. Every other step keeps stock neutral's lightness (contrast against white within 3%), so no
  *      existing text pair silently loses contrast.
  *   3. The ramp gets darker at every step.
- *   4. Captions clear AA where they are used: 500 on the light canvas, 400 on the dark surface.
+ *   4. Captions clear AA where they are used: 500 on the light canvas, 400 on the dark surface. T-514
+ *      extends this to usage: no bare `text-neutral-300|400` (light mode) and no `dark:text-neutral-600|700`
+ *      anywhere in apps/erp/src, except the named DARK_FILL_ALLOWED sites (text on a genuinely dark fill).
  */
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
@@ -104,5 +107,54 @@ describe('T-387 S1 — the warm neutral ramp', () => {
   it('tailwind.config re-values `neutral` with this ramp', () => {
     expect(tailwindConfig).toMatch(/import \{ WARM_NEUTRAL \} from '\.\/warm-neutral'/);
     expect(tailwindConfig).toMatch(/\bneutral:\s*WARM_NEUTRAL\b/);
+  });
+});
+
+/**
+ * T-514: text on a genuinely dark fill in light mode may keep the light grey (it is legible there).
+ * Each entry names the file (relative to src/), the exact snippet, and why. An entry that no longer
+ * matches its file fails the stale check below. Judged against the Impeccable craft floor: only a
+ * truly dark filled element or ancestor qualifies, never a guess from the class string.
+ */
+const DARK_FILL_ALLOWED: ReadonlyArray<{ file: string; snippet: string; reason: string }> = [];
+
+const srcDir = `${here}../src`;
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = join(dir, e.name);
+    return e.isDirectory() ? sourceFiles(p) : /\.tsx?$/.test(e.name) ? [p] : [];
+  });
+}
+/** A class token (with its variant chain) that is a faint grey: light 300/400, or dark-mode 600/700. */
+const FAINT = /(?<![\w:[\]-])((?:[a-z0-9[\]_&>*-]+:)*)text-neutral-(300|400|600|700)(?![\w/-])/g;
+const rel = (f: string): string => f.slice(srcDir.length + 1).split(sep).join('/');
+
+function faintUses(): string[] {
+  const out: string[] = [];
+  for (const f of sourceFiles(srcDir)) {
+    readFileSync(f, 'utf8').split('\n').forEach((line, i) => {
+      for (const m of line.matchAll(FAINT)) {
+        const dark = /(^|:)dark:/.test(m[0]);
+        const faint = dark ? m[2] === '600' || m[2] === '700' : m[2] === '300' || m[2] === '400';
+        if (!faint) continue;
+        const allowed = DARK_FILL_ALLOWED.some((a) => a.file === rel(f) && line.includes(a.snippet));
+        if (!allowed) out.push(`${rel(f)}:${i + 1}  ${m[0]}`);
+      }
+    });
+  }
+  return out;
+}
+
+describe('T-514 — faint grey text clears AA everywhere it is used', () => {
+  it('no bare text-neutral-300|400 and no dark:text-neutral-600|700 in apps/erp/src', () => {
+    const uses = faintUses();
+    expect(uses, `${uses.length} faint uses:\n${uses.join('\n')}`).toEqual([]);
+  });
+
+  it('every DARK_FILL_ALLOWED entry still matches its file (no stale entries)', () => {
+    for (const a of DARK_FILL_ALLOWED) {
+      expect(a.reason.length, `${a.file}: needs a reason`).toBeGreaterThan(0);
+      expect(readFileSync(`${srcDir}/${a.file}`, 'utf8'), `${a.file} no longer has: ${a.snippet}`).toContain(a.snippet);
+    }
   });
 });

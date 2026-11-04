@@ -217,7 +217,7 @@ export default async function LiabilityPage({
                     <td className="px-3 py-2">
                       {SOURCE_LABEL[e.sourceType] ?? e.sourceType}
                       {e.memo && (
-                        <div className="text-xs text-neutral-400 dark:text-neutral-600">
+                        <div className="text-xs text-neutral-500 dark:text-neutral-400">
                           {e.memo}
                         </div>
                       )}

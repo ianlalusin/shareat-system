@@ -197,7 +197,7 @@ export default async function LoansPage({
                     <RowLink href={`/loans/${l.id}`}>
                       {l.name}
                     </RowLink>
-                    <div className="text-xs text-neutral-400 dark:text-neutral-600">
+                    <div className="text-xs text-neutral-500 dark:text-neutral-400">
                       {l.lenderName}
                     </div>
                   </td>

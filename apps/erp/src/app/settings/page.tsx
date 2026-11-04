@@ -171,7 +171,7 @@ function SettingsCard({
       <p className="font-medium">
         {title}
         {elsewhere && (
-          <span className="ml-2 align-middle text-[11px] font-normal text-neutral-400 dark:text-neutral-500">
+          <span className="ml-2 align-middle text-[11px] font-normal text-neutral-500 dark:text-neutral-500 dark:dark:text-neutral-400">
             {href}
           </span>
         )}

@@ -385,7 +385,7 @@ export function MoneyLines({
             {line.method === 'online' && (
               <label className="mt-3 flex flex-col gap-1">
                 <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                  Reference <span className="text-neutral-400 dark:text-neutral-600">— what reconciles this against the statement</span>
+                  Reference <span className="text-neutral-500 dark:text-neutral-400">— what reconciles this against the statement</span>
                 </span>
                 <Input
                   id={`${name}-ref-${i}`}

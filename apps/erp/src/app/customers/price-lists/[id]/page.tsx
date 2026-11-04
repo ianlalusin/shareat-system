@@ -70,7 +70,7 @@ export default async function PriceListPage({
                   <td className="px-3 py-2">
                     <span className="font-mono text-xs">{i.itemCode}</span>
                     {i.itemName && (
-                      <div className="text-xs text-neutral-400 dark:text-neutral-600">
+                      <div className="text-xs text-neutral-500 dark:text-neutral-400">
                         {i.itemName}
                       </div>
                     )}

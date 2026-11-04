@@ -195,7 +195,7 @@ export default async function OwnersPage({
                     <RowLink href={`/owners/${o.id}`}>
                       {personById.get(o.personId)?.displayName ?? 'Unknown'}
                     </RowLink>
-                    <div className="text-xs text-neutral-400 dark:text-neutral-600">
+                    <div className="text-xs text-neutral-500 dark:text-neutral-400">
                       {o.role ?? '—'}
                       {o.ownershipPercentage && (
                         // ⚠️ Labelled advisory on purpose: nothing validates that these sum to 100,

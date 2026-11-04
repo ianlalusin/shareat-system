@@ -205,7 +205,7 @@ function Tile({ label, value, hint }: { label: string; value: string; hint: stri
     <div className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
       <div className="text-xs uppercase tracking-wide text-neutral-500">{label}</div>
       <div className="font-mono text-2xl tabular-nums">{value}</div>
-      <div className="text-xs text-neutral-400 dark:text-neutral-600">{hint}</div>
+      <div className="text-xs text-neutral-500 dark:text-neutral-400">{hint}</div>
     </div>
   );
 }

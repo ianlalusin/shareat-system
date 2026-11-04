@@ -397,7 +397,7 @@ export default async function RemittancePage({
             )}
           </p>
         )}
-        <p className="text-xs text-neutral-400 dark:text-neutral-600">
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
           Every figure is summed from the ledger on load, not stored — so a document type nobody
           has invented yet is already counted.
         </p>
@@ -531,7 +531,7 @@ export default async function RemittancePage({
               </tbody>
             </table>
           </div>
-          <p className="text-xs text-neutral-400 dark:text-neutral-600">
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
             Reversing writes opposite entries and un-settles the days — nothing is deleted, and the
             days simply become owed again.
           </p>
@@ -587,7 +587,7 @@ export default async function RemittancePage({
             </Field>
 </FormGrid>
           </EditableRecord>
-          <p className="text-xs text-neutral-400 dark:text-neutral-600">
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
             Crossing the ceiling never blocks a sale or a handover — it raises a finding at the top
             of this page. The peso figure is business policy and belongs to whoever carries the
             risk.
@@ -602,7 +602,7 @@ function Field({ label, hint, rule, className, children }: { label: React.ReactN
   const body = (
     <>      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{label}</span>
       {children}
-      {hint && <span className="text-xs text-neutral-400 dark:text-neutral-600">{hint}</span>}
+      {hint && <span className="text-xs text-neutral-500 dark:text-neutral-400">{hint}</span>}
     
     </>
   );

@@ -113,7 +113,7 @@ export default async function ScorecardPage() {
                 <td className="p-3 text-right tabular-nums font-medium">
                   {/* ⚠️ Null, never 0. Zero says "responded badly"; a dash says "nothing to judge". */}
                   {s.score == null ? (
-                    <span className="text-neutral-400" title="Nothing cleared or raised — nothing to judge">
+                    <span className="text-neutral-500 dark:text-neutral-400" title="Nothing cleared or raised — nothing to judge">
                       —
                     </span>
                   ) : (

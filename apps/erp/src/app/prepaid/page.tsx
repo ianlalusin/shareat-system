@@ -174,7 +174,7 @@ export default async function PrepaidPage({
           </div>
         </Banner>
       ) : (
-        <p className="text-xs text-neutral-400 dark:text-neutral-600">
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
           Nothing is waiting for review.
         </p>
       )}
@@ -218,7 +218,7 @@ export default async function PrepaidPage({
                     {i.needsReview && i.status === 'active' && (
                       <Badge tone="warning" label="Term unconfirmed" className="ml-2" />
                     )}
-                    <div className="text-xs text-neutral-400 dark:text-neutral-600">
+                    <div className="text-xs text-neutral-500 dark:text-neutral-400">
                       {CATEGORY_LABEL[i.category] ?? i.category}
                     </div>
                   </td>

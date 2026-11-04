@@ -388,23 +388,23 @@ export default async function BranchOrderPage({
       {/* ---- The facts ------------------------------------------------------------------------ */}
       {(stage === 'dispatched' || stage === 'received' || stage === 'rejected' || stage === 'cancelled' || order.acceptedAt) && (
         <dl className="grid gap-x-6 gap-y-1 text-xs text-neutral-600 sm:grid-cols-2 dark:text-neutral-400">
-          <dt className="text-neutral-400">Accepted</dt>
+          <dt className="text-neutral-500 dark:text-neutral-400">Accepted</dt>
           <dd>{when(order.acceptedAt)}</dd>
-          <dt className="text-neutral-400">Ready</dt>
+          <dt className="text-neutral-500 dark:text-neutral-400">Ready</dt>
           <dd>{when(order.readyAt)}</dd>
-          <dt className="text-neutral-400">Dispatched</dt>
+          <dt className="text-neutral-500 dark:text-neutral-400">Dispatched</dt>
           <dd>{when(order.dispatchedAt)}</dd>
-          <dt className="text-neutral-400">Received</dt>
+          <dt className="text-neutral-500 dark:text-neutral-400">Received</dt>
           <dd>{when(order.receivedAt)}</dd>
           {order.journalEntryId && (
             <>
-              <dt className="text-neutral-400">Dispatch entry</dt>
+              <dt className="text-neutral-500 dark:text-neutral-400">Dispatch entry</dt>
               <dd className="font-mono">{order.journalEntryId}</dd>
             </>
           )}
           {stage === 'rejected' && (
             <>
-              <dt className="text-neutral-400">Rejected</dt>
+              <dt className="text-neutral-500 dark:text-neutral-400">Rejected</dt>
               <dd>
                 {when(order.rejectedAt)} — {order.rejectReason}
               </dd>
@@ -412,7 +412,7 @@ export default async function BranchOrderPage({
           )}
           {stage === 'cancelled' && (
             <>
-              <dt className="text-neutral-400">Cancelled</dt>
+              <dt className="text-neutral-500 dark:text-neutral-400">Cancelled</dt>
               <dd>
                 {when(order.voidedAt)} — {order.voidReason}
               </dd>
@@ -527,21 +527,21 @@ function LineCard({
 
       {/* THREE quantities, and collapsing any two loses the story. */}
       <dl className="mt-2 grid grid-cols-3 gap-x-4 gap-y-1 text-xs sm:grid-cols-6">
-        <dt className="text-neutral-400">Asked</dt>
+        <dt className="text-neutral-500 dark:text-neutral-400">Asked</dt>
         <dd className="tabular-nums">{l.requestedQuantity ? `${l.requestedQuantity} ${l.unit}` : '—'}</dd>
-        <dt className="text-neutral-400">Packed</dt>
+        <dt className="text-neutral-500 dark:text-neutral-400">Packed</dt>
         <dd className="tabular-nums">{packed !== null ? `${packed} ${l.unit}` : '—'}</dd>
-        <dt className="text-neutral-400">Signed for</dt>
+        <dt className="text-neutral-500 dark:text-neutral-400">Signed for</dt>
         <dd className="tabular-nums">{l.receivedQuantity ? `${l.receivedQuantity} ${l.unit}` : '—'}</dd>
-        <dt className="text-neutral-400">Rate</dt>
+        <dt className="text-neutral-500 dark:text-neutral-400">Rate</dt>
         <dd className="font-mono tabular-nums">{peso(l.rate)}</dd>
-        <dt className="text-neutral-400">Room</dt>
+        <dt className="text-neutral-500 dark:text-neutral-400">Room</dt>
         <dd>{l.roomName ?? (l.sourceLocationId ? l.sourceLocationId : 'default')}</dd>
-        <dt className="text-neutral-400">Total</dt>
+        <dt className="text-neutral-500 dark:text-neutral-400">Total</dt>
         <dd className="font-mono tabular-nums">{peso(l.lineTotal)}</dd>
         {l.dispatchCost && (
           <>
-            <dt className="text-neutral-400">At cost</dt>
+            <dt className="text-neutral-500 dark:text-neutral-400">At cost</dt>
             <dd className="font-mono tabular-nums text-neutral-500">{peso(l.dispatchCost)}</dd>
           </>
         )}

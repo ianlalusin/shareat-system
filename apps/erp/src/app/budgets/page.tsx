@@ -154,7 +154,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
                       <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
                         <span className="font-medium">
                           {b.categoryLabel}
-                          <span className="ml-2 text-xs font-normal text-neutral-400">
+                          <span className="ml-2 text-xs font-normal text-neutral-500 dark:text-neutral-400">
                             {b.categoryGroup}
                             {b.accountCode ? ` · ${accountLabel(b.accountCode)}` : ' · unmapped'}
                           </span>
@@ -241,7 +241,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
                   <details key={c.id} className="rounded border border-neutral-200 p-2 dark:border-neutral-800">
                     <summary className="cursor-pointer text-sm">
                       {c.label}
-                      <span className="ml-2 text-xs text-neutral-400">{c.group}</span>
+                      <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">{c.group}</span>
                     </summary>
                     <div className="mt-2">
                       <CapForm storeId={storeId} periodKey={periodKey} categoryId={c.id} />

@@ -16,7 +16,7 @@ function LineRows({ lines }: { lines: CashFlowTableLine[] }) {
   if (lines.length === 0) {
     return (
       <tr>
-        <td className="px-3 py-1.5 pl-8 text-neutral-400 dark:text-neutral-600" colSpan={2}>
+        <td className="px-3 py-1.5 pl-8 text-neutral-500 dark:text-neutral-400" colSpan={2}>
           (none)
         </td>
       </tr>
@@ -27,7 +27,7 @@ function LineRows({ lines }: { lines: CashFlowTableLine[] }) {
       {lines.map((line) => (
         <tr key={line.accountId}>
           <td className="px-3 py-1.5 pl-8 text-neutral-600 dark:text-neutral-400">
-            <span className="mr-2 font-mono text-xs text-neutral-400 dark:text-neutral-600">{line.accountCode}</span>
+            <span className="mr-2 font-mono text-xs text-neutral-500 dark:text-neutral-400">{line.accountCode}</span>
             {line.accountName}
           </td>
           <td className="px-3 py-1.5 text-right tabular-nums text-neutral-600 dark:text-neutral-400">
