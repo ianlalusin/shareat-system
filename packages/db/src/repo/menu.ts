@@ -582,6 +582,31 @@ export async function optionOffersInForce(tx: Tx, storeId: string, at: Date): Pr
   }));
 }
 
+/** effective_from of every offer and option-offer row of a store later than `at`, both channels (the projection's `upcoming`). */
+export async function upcomingOfferDates(tx: Tx, storeId: string, at: Date): Promise<Date[]> {
+  const when = at.toISOString();
+  const rows = (await tx.execute(sql`
+    select effective_from from menu_offers where store_id = ${storeId} and effective_from > ${when}::timestamptz
+    union all
+    select effective_from from menu_option_offers where store_id = ${storeId} and effective_from > ${when}::timestamptz
+  `)) as unknown as { effective_from: string | Date }[];
+  return rows.map((r) => new Date(r.effective_from));
+}
+
+/** The whole catalog of an org (all statuses; the projection decides what appears). Plain reads for the projection's snapshot. */
+export async function catalogOfOrg(tx: Tx, orgId: string) {
+  const [categories, items, variants, optionGroups, optionValues, optionGroupLinks, packageRefills] = await Promise.all([
+    tx.select().from(menuCategories).where(eq(menuCategories.orgId, orgId)),
+    tx.select().from(menuItems).where(eq(menuItems.orgId, orgId)),
+    tx.select().from(menuItemVariants).where(eq(menuItemVariants.orgId, orgId)),
+    tx.select().from(menuOptionGroups).where(eq(menuOptionGroups.orgId, orgId)),
+    tx.select().from(menuOptionValues).where(eq(menuOptionValues.orgId, orgId)),
+    tx.select().from(menuOptionGroupLinks).where(eq(menuOptionGroupLinks.orgId, orgId)),
+    tx.select().from(menuPackageRefills).where(eq(menuPackageRefills.orgId, orgId)),
+  ]);
+  return { categories, items, variants, optionGroups, optionValues, optionGroupLinks, packageRefills };
+}
+
 /** Every offer row for one variant at one store (both channels, withdrawals and scheduled changes included), newest first. */
 export async function offerHistory(tx: Tx, storeId: string, variantId: string): Promise<MenuOfferRow[]> {
   return tx

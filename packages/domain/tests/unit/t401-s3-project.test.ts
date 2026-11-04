@@ -53,6 +53,9 @@ function base(over: Record<string, unknown> = {}): any {
       ],
       upcoming: [],
     }],
+    // T-508 R11: every default item is routed to one live station, so the T-401 expectations below stay about what they were about.
+    stations: [{ id: 'st1', storeId: S, name: 'Grill', slaMinutes: 15, printOnOutage: false, sortOrder: 1, status: 'active' }],
+    routes: ['i1', 'ip', 'r1', 'r2'].map((menuItemId) => ({ storeId: S, menuItemId, stationId: 'st1' })),
     ...over,
   };
 }
@@ -134,13 +137,13 @@ const shuffleKeys = (v: any): any => {
 };
 
 describe('I14 - projection is pure, deterministic, carrier-neutral', () => {
-  it('same snapshot twice gives the same hash and equal output; schemaVersion is 1', () => {
+  it('same snapshot twice gives the same hash and equal output; schemaVersion is 2', () => {
     const snap = base();
     const a = proj(snap);
     const b = proj(snap);
     expect(a.contentHash).toBe(b.contentHash);
     expect(a).toEqual(b);
-    expect(a.menu.schemaVersion).toBe(1);
+    expect(a.menu.schemaVersion).toBe(2);
     expect(a.menu.storeId).toBe(S);
   });
   it('shuffled key order and row order give the same hash (mutant: hash over non-canonical JSON)', () => {

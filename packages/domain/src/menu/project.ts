@@ -24,6 +24,10 @@ export interface MenuSnapshot {
   readonly optionGroupLinks: readonly { id: string; optionGroupId: string; menuItemId: string | null; variantId: string | null; sortOrder: number; status: Status }[];
   readonly packageRefills: readonly { packageVariantId: string; refillItemId: string; status: Status }[];
   readonly stores: readonly StoreOffersAt[];
+  /** T-508 R4/R11: live station rows of every store in `stores` (names and SLA are read here, never copied onto an item). */
+  readonly stations: readonly { id: string; storeId: string; name: string; slaMinutes: number; printOnOutage: boolean; sortOrder: number; status: Status }[];
+  /** T-508 R2/R5: one route per menu item per store. */
+  readonly routes: readonly { storeId: string; menuItemId: string; stationId: string }[];
 }
 
 type OfferRow = ResolvableOffer & { variantId: string; channel: Channel; effectiveFrom: Date };
@@ -44,11 +48,18 @@ export type ChannelOffer =
   | { orderable: false; notOffered: MenuNotOfferedReason };
 export type ChannelDelta = { orderable: true; priceDelta: string } | { orderable: false; notOffered: 'no_offer' };
 
-export interface StoreMenuV1 { schemaVersion: 1; storeId: string; categories: ProjectedCategory[]; items: ProjectedItem[] }
+export interface ProjectedStation { id: string; name: string; slaMinutes: number; printOnOutage: boolean }
+/** R5: an item offered in the store channel here but routed to no station: left out of `items`, listed so the ERP can show it. */
+export interface NotOnPosItem { itemId: string; name: string; reason: 'no_station' }
+export interface StoreMenuV2 {
+  schemaVersion: 2; storeId: string; stations: ProjectedStation[]; categories: ProjectedCategory[]; items: ProjectedItem[]; notOnPos: NotOnPosItem[];
+}
 export interface ProjectedCategory { id: string; name: string; parentId: string | null; sortOrder: number }
 export interface ProjectedItem {
   id: string; categoryId: string; name: string; description: string | null; itemType: ItemType;
   soldALaCarte: boolean; soldInPackageSession: boolean; dinerOrderable: boolean; sortOrder: number; variants: ProjectedVariant[];
+  /** The station that cooks it (R2). Null only for an item with no store-channel offer (online only), which R5 does not touch. */
+  stationId: string | null;
 }
 export interface ProjectedVariant {
   id: string; label: string | null; isDefault: boolean; sortOrder: number;
@@ -58,7 +69,7 @@ export interface ProjectedOptionGroup {
   id: string; name: string; selectionMode: 'single' | 'multi'; minSelections: number; maxSelections: number;
   values: { id: string; name: string; sortOrder: number; channels: { store: ChannelDelta; online: ChannelDelta } }[];
 }
-export interface ProjectedStoreMenu { menu: StoreMenuV1; contentHash: string; nextChangeAt: string | null }
+export interface ProjectedStoreMenu { menu: StoreMenuV2; contentHash: string; nextChangeAt: string | null }
 
 /** UTF-16 code unit comparison, never localeCompare. */
 const cmp = (a: string, b: string): number => (a === b ? 0 : [a, b].sort()[0] === a ? -1 : 1); // default sort = UTF-16 code units, no relational operator
@@ -114,7 +125,29 @@ export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Da
     appearing.set(v.id, { variant: v, channels });
   }
   const appearingItemIds = new Set<string>();
-  for (const { variant } of appearing.values()) appearingItemIds.add(variant.menuItemId);
+  const storeOfferedItemIds = new Set<string>();
+  for (const { variant, channels } of appearing.values()) {
+    appearingItemIds.add(variant.menuItemId);
+    if (channels.store.orderable) storeOfferedItemIds.add(variant.menuItemId);
+  }
+
+  // R4: station rows are read live, active only. R5: a store-offered item with no route to one of them is not on the POS.
+  const stationRows = snapshot.stations.filter((s) => s.storeId === storeId && s.status === 'active');
+  const stations: ProjectedStation[] = [...stationRows]
+    .sort((a, b) => cmpNum(a.sortOrder, b.sortOrder) || cmp(a.name, b.name) || cmp(a.id, b.id))
+    .map((s) => ({ id: s.id, name: s.name, slaMinutes: s.slaMinutes, printOnOutage: s.printOnOutage }));
+  const activeStationIds = new Set(stationRows.map((s) => s.id));
+  const stationOf = new Map<string, string>();
+  for (const r of snapshot.routes) if (r.storeId === storeId && activeStationIds.has(r.stationId)) stationOf.set(r.menuItemId, r.stationId);
+  const activeCategoryIds = new Set(snapshot.categories.filter((c) => c.status === 'active').map((c) => c.id));
+  const notOnPos: NotOnPosItem[] = [];
+  for (const id of storeOfferedItemIds) {
+    if (stationOf.has(id)) continue;
+    appearingItemIds.delete(id);
+    const item = itemById.get(id)!;
+    if (activeCategoryIds.has(item.categoryId)) notOnPos.push({ itemId: id, name: item.name, reason: 'no_station' });
+  }
+  notOnPos.sort((a, b) => cmp(a.name, b.name) || cmp(a.itemId, b.itemId));
 
   // Package -> refill rows (I10): only refill items that appear; empty never means all.
   const refillsOf = new Map<string, string[]>();
@@ -183,6 +216,7 @@ export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Da
         dinerOrderable: i.dinerOrderable,
         sortOrder: i.sortOrder,
         variants,
+        stationId: stationOf.get(i.id) ?? null,
       };
     })
     .sort((a, b) => cmpNum(a.sortOrder, b.sortOrder) || cmp(a.name, b.name) || cmp(a.id, b.id));
@@ -225,7 +259,7 @@ export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Da
   walk(null);
   for (const c of flat) if (!placed.has(c.id)) categories.push(c); // cycle guard
 
-  const menu: StoreMenuV1 = { schemaVersion: 1, storeId, categories, items };
+  const menu: StoreMenuV2 = { schemaVersion: 2, storeId, stations, categories, items, notOnPos };
   const contentHash = createHash('sha256').update(canonicalJson(menu), 'utf8').digest('hex');
 
   let next: number | null = null;
