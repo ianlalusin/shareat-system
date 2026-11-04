@@ -88,4 +88,36 @@ describe('T-508 S3 projection v2', () => {
     expect(p.menu.items.find((i) => i.id === 'ip')!.variants[0]!.refillItemIds).toEqual([]);
     expect(p.menu.notOnPos.map((n) => n.itemId)).toEqual(['r1']);
   });
+
+  it('a foreign store station and route never reach this store menu or its hash', () => {
+    const foreign = { id: 'stB', storeId: 'store-b', name: 'Bar', slaMinutes: 5, printOnOutage: false, sortOrder: 3, status: 'active' };
+    const withForeign = base({
+      stations: [station('st1', 'Grill', 1), station('st2', 'Fryer', 2), foreign],
+      routes: [{ storeId: S, menuItemId: 'i1', stationId: 'st1' }, { storeId: S, menuItemId: 'i2', stationId: 'st2' }, { storeId: 'store-b', menuItemId: 'i1', stationId: 'stB' }],
+    });
+    const p = proj(withForeign);
+    expect(p.menu.stations.map((s) => s.id)).toEqual(['st1', 'st2']);
+    expect(p.menu.items.map((i) => [i.id, i.stationId])).toEqual([['i1', 'st1'], ['i2', 'st2']]);
+    expect(p.contentHash).toBe(proj(base()).contentHash);
+  });
+
+  it('two unrouted items in reverse variant order give the same notOnPos and the same hash', () => {
+    const ids = ['i1', 'i2', 'i3', 'i4'];
+    const items = [item('i1', 'Burger', 1), item('i2', 'Fries', 2), item('i3', 'Salad', 3), item('i4', 'Soup', 4)];
+    const variants = ids.map((m) => ({ id: `v-${m}`, menuItemId: m, label: null, isDefault: true, sortOrder: 1, status: 'active' }));
+    const offers = ids.map((m) => fixed(`v-${m}`, 'store'));
+    const build = (rev: boolean) => base({
+      items: rev ? [...items].reverse() : items,
+      variants: rev ? [...variants].reverse() : variants,
+      stores: [{ storeId: S, at: AT, offers: rev ? [...offers].reverse() : offers, optionOffers: [], upcoming: [] }],
+    });
+    const fwd = proj(build(false));
+    const rev = proj(build(true));
+    expect(fwd.menu.notOnPos).toEqual([
+      { itemId: 'i3', name: 'Salad', reason: 'no_station' },
+      { itemId: 'i4', name: 'Soup', reason: 'no_station' },
+    ]);
+    expect(rev.menu.notOnPos).toEqual(fwd.menu.notOnPos);
+    expect(rev.contentHash).toBe(fwd.contentHash);
+  });
 });
