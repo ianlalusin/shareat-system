@@ -20,9 +20,13 @@
  */
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { Worker } from 'node:worker_threads';
+import type { Worker as WorkerThread } from 'node:worker_threads';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { intakeRefusal } from './refusal';
+
+// Not `import { Worker }`: Turbopack panics ("there must be a path to a root", Next 16.3) on `new Worker(<path built at run time>)` while it prints the
+// issue for it, so plain `next build` died. The constructor comes from the built-in instead, which the bundler does not follow; `resolveWorkerPath` builds the path.
+const Worker = process.getBuiltinModule('node:worker_threads').Worker;
 
 export const XLSX_WORKER_TIMEOUT_MS = 5000;
 export const XLSX_WORKER_LIMITS = { maxOldGenerationSizeMb: 128, maxYoungGenerationSizeMb: 32, stackSizeMb: 4 } as const;
@@ -92,7 +96,7 @@ function runWorker(workbook: Buffer, options: { workerUrl?: URL; timeoutMs?: num
     let settled = false;
     let gone = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let worker: Worker | undefined;
+    let worker: WorkerThread | undefined;
     const markGone = (): void => {
       if (gone) return;
       gone = true;

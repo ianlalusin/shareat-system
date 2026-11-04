@@ -153,3 +153,13 @@ describe('T-511 S4 deploy artifact (d)', () => {
     expect(WORKER.split(sep).slice(-4)).toEqual(['domain', 'src', 'settlement-intake', 'xlsx-worker.mjs']);
   });
 });
+
+describe('T-511 S4 plain `next build` (Turbopack) [kills: the build-time panic "there must be a path to a root"]', () => {
+  // Found 2026-11-04: with `import { Worker } from 'node:worker_threads'` and `new Worker(<run-time path>)`, Turbopack (Next 16.3) panics while printing
+  // the issue for that call and `next build` dies; `--webpack` passed. Bisected by stubbing: only the Worker construction triggers it.
+  const hostSrc = readFileSync(join(REPO, 'packages', 'domain', 'src', 'settlement-intake', 'xlsx-worker-host.ts'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  it('the host takes the Worker constructor from process.getBuiltinModule, never a value import of node:worker_threads', () => {
+    expect(hostSrc).not.toMatch(/import\s*\{[^}]*\bWorker\b[^}]*\}\s*from\s*'node:worker_threads'/);
+    expect(hostSrc).toMatch(/process\.getBuiltinModule\('node:worker_threads'\)/);
+  });
+});

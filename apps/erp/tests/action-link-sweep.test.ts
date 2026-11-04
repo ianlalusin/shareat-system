@@ -502,7 +502,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1473 -> 1478, T-511 S2b, 3 Nov, BOSS approved: +5 compliant controls (all pass the 44 px rule; FAIL/UNRESOLVED baselines unchanged): sales-channels select, code input and submit Button; loans repayment amount input and submit Button.
     // 1478 -> 1490, T-508 S2b, 4 Nov 2026, BOSS approved: +12 compliant controls (kitchen stations and routing).
     // 1490 -> 1494, T-508 S2b design fixes, 4 Nov 2026, BOSS approved.
-    expect(results.length).toBe(1494);
+    // 1494 -> 1495, T-511 S4, 5 Nov 2026, BOSS approved: +1 control on /channel-settlements/upload (the upload form), re-measured by runCensus() after the rebase on main (FAIL/UNRESOLVED baselines unchanged).
+    expect(results.length).toBe(1495);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
