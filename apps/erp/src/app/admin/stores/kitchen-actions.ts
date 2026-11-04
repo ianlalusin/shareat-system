@@ -34,8 +34,6 @@ const num = (fd: FormData, key: string): number | undefined => {
   return s === '' ? undefined : Number(s);
 };
 const PAGE = '/kitchen';
-/** The kitchen page for a store: path plus the `?store=` nav param. */
-const back = (storeId: string, flash: Parameters<typeof redirectWithFlash>[2]) => redirectWithFlash(PAGE, { store: storeId }, flash);
 
 export async function createKitchenStationAction(fd: FormData): Promise<void> {
   const actor = await requireActor(PAGE);
@@ -45,9 +43,9 @@ export async function createKitchenStationAction(fd: FormData): Promise<void> {
       createKitchenStation(tx, actor, { storeId, name: str(fd, 'name'), slaMinutes: num(fd, 'slaMinutes') }),
     );
   } catch (err) {
-    return await back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash(PAGE, { store: storeId }, { error: errorMessage(err) });
   }
-  return await back(storeId, { ok: 'Kitchen station added. Now choose which items cook there.' });
+  return await redirectWithFlash(PAGE, { store: storeId }, { ok: 'Kitchen station added. Now choose which items cook there.' });
 }
 
 export async function updateKitchenStationAction(fd: FormData): Promise<void> {
@@ -65,9 +63,9 @@ export async function updateKitchenStationAction(fd: FormData): Promise<void> {
       });
     });
   } catch (err) {
-    return await back(storeId, { error: errorMessage(err), typed: keepTyping(fd, KITCHEN_STATION_EDIT, stationId, { actorId: actor.personId }) });
+    return await redirectWithFlash(PAGE, { store: storeId }, { error: errorMessage(err), typed: keepTyping(fd, KITCHEN_STATION_EDIT, stationId, { actorId: actor.personId }) });
   }
-  return await back(storeId, { ok: 'Kitchen station saved.' });
+  return await redirectWithFlash(PAGE, { store: storeId }, { ok: 'Kitchen station saved.' });
 }
 
 export async function retireKitchenStationAction(fd: FormData): Promise<void> {
@@ -83,9 +81,9 @@ export async function retireKitchenStationAction(fd: FormData): Promise<void> {
       await retireKitchenStation(tx, actor, { stationId });
     });
   } catch (err) {
-    return await back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash(PAGE, { store: storeId }, { error: errorMessage(err) });
   }
-  return await back(storeId, { ok: 'Kitchen station retired.' });
+  return await redirectWithFlash(PAGE, { store: storeId }, { ok: 'Kitchen station retired.' });
 }
 
 /** One save for every picker: only the items whose station actually changed are written ("" = no station). */
@@ -108,9 +106,9 @@ export async function saveKitchenRoutingAction(fd: FormData): Promise<void> {
       }
     });
   } catch (err) {
-    return await back(storeId, { error: errorMessage(err), typed: keepTyping(fd, KITCHEN_ROUTING, storeId, { actorId: actor.personId }) });
+    return await redirectWithFlash(PAGE, { store: storeId }, { error: errorMessage(err), typed: keepTyping(fd, KITCHEN_ROUTING, storeId, { actorId: actor.personId }) });
   }
-  return await back(storeId, { ok: changed === 0 ? 'Nothing changed.' : `Kitchen routing saved for ${changed} item${changed === 1 ? '' : 's'}.` });
+  return await redirectWithFlash(PAGE, { store: storeId }, { ok: changed === 0 ? 'Nothing changed.' : `Kitchen routing saved for ${changed} item${changed === 1 ? '' : 's'}.` });
 }
 
 export async function setKitchenCategoryAction(fd: FormData): Promise<void> {
@@ -118,7 +116,7 @@ export async function setKitchenCategoryAction(fd: FormData): Promise<void> {
   const storeId = str(fd, 'storeId');
   const categoryId = str(fd, 'categoryId');
   const stationId = str(fd, 'stationId');
-  if (!categoryId || !stationId) return await back(storeId, { error: 'Choose a category and a station.' });
+  if (!categoryId || !stationId) return await redirectWithFlash(PAGE, { store: storeId }, { error: 'Choose a category and a station.' });
   let changed = 0;
   try {
     changed = (
@@ -127,7 +125,7 @@ export async function setKitchenCategoryAction(fd: FormData): Promise<void> {
       )
     ).changed;
   } catch (err) {
-    return await back(storeId, { error: errorMessage(err) });
+    return await redirectWithFlash(PAGE, { store: storeId }, { error: errorMessage(err) });
   }
-  return await back(storeId, { ok: changed === 0 ? 'Every item in that category already cooks there.' : `${changed} item${changed === 1 ? '' : 's'} now cook there.` });
+  return await redirectWithFlash(PAGE, { store: storeId }, { ok: changed === 0 ? 'Every item in that category already cooks there.' : `${changed} item${changed === 1 ? '' : 's'} now cook there.` });
 }
