@@ -1208,6 +1208,10 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'T-508 R1/R2: which station cooks which menu item at a store; org-scoped like the menu it points at.',
   },
+  menu_dayparts: {
+    scope: 'org_column',
+    reason: 'T-510 R1: a store’s dayparts; the store belongs to one org, the policy is the org backstop and the repo filters by store. Org-scoped like the menu offers that point at them.',
+  },
 };
 
 export function rlsScopeOf(table: string): RlsEntry | undefined {

@@ -591,7 +591,13 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     table: 'menu_offers',
     mode: 'origin',
     kind: 'validator',
-    reason: "No back-dating; refill/amount/bundle shape; a live offer needs a depletion rule in force (0196). Reads the clock and other rows.",
+    reason: "No back-dating; refill/amount/bundle shape; a live offer needs a depletion rule in force (0196); daypart active, no overlap, no all-day beside dayparted (0233). Reads the clock and other rows.",
+  },
+  menu_dayparts_update_guard: {
+    table: 'menu_dayparts',
+    mode: 'origin',
+    kind: 'validator',
+    reason: "id/org/store never change; retire refused while a live offer uses the daypart; a days/time edit may not create an overlap (0233). Reads other rows.",
   },
   menu_offers_update_guard: {
     table: 'menu_offers',

@@ -24,7 +24,9 @@ import {
   integer,
   numeric,
   pgTable,
+  smallint,
   text,
+  time,
   timestamp,
   unique,
   uuid,
@@ -436,10 +438,71 @@ export const menuDepletionRules = pgTable(
 );
 
 /**
+ * T-510 S1a (migration 0233): a DAYPART is a repeating weekly window (Lunch 08:00-17:00, Dinner 17:00-08:00) that an offer may be tied to.
+ * Store-scoped. `days` are 0 = Sunday .. 6 and name the day the window STARTS (an overnight window, `end_time` earlier than `start_time`,
+ * belongs to the day it starts). `end_time = start_time` is refused. Times are the store's own wall clock (`stores.timezone`), whole minutes.
+ * Retired, never deleted. docs/tasks/510-menu-dayparts.md R1; the pure rules are packages/domain/src/menu/daypart.ts.
+ *
+ * NOTE: hand-added in migration 0233 - UNIQUE (store_id, lower(name)) WHERE status = 'active' (menu_dayparts_store_active_name_key); the days CHECK
+ * calls the SQL function menu_daypart_days_ok; the seconds and under-24:00 CHECKs (menu_dayparts_whole_minutes_check, menu_dayparts_within_day_check);
+ * the trigger menu_dayparts_update_guard (id/org/store immutable; retire refused while a live offer uses it; a window edit may not create an overlap);
+ * RLS and the grants (column-level UPDATE: name, days, start_time, end_time, status, updated_at; no DELETE).
+ */
+export const menuDayparts = pgTable(
+  'menu_dayparts',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id, { onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    days: smallint('days').array().notNull(),
+    startTime: time('start_time').notNull(),
+    endTime: time('end_time').notNull(),
+    status: text('status', { enum: MENU_STATUSES }).notNull().default('active'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => persons.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
+  },
+  (t) => [
+    // The target of menu_offers_daypart_same_store_fk.
+    unique('menu_dayparts_store_id_id_unique').on(t.storeId, t.id),
+    // NOTE: UNIQUE (store_id, lower(name)) WHERE status = 'active' - menu_dayparts_store_active_name_key, hand-added in migration 0233.
+    index('menu_dayparts_org_store_idx').on(t.orgId, t.storeId),
+    check('menu_dayparts_name_not_blank_check', sql`length(trim(${t.name})) > 0`),
+    check('menu_dayparts_status_check', sql`${t.status} in ('active','retired')`),
+    check('menu_dayparts_days_check', sql`menu_daypart_days_ok(${t.days})`),
+    check('menu_dayparts_end_not_start_check', sql`${t.endTime} <> ${t.startTime}`),
+    check('menu_dayparts_whole_minutes_check', sql`extract(second FROM ${t.startTime}) = 0 AND extract(second FROM ${t.endTime}) = 0`),
+    check('menu_dayparts_within_day_check', sql`${t.startTime} < time '24:00' AND ${t.endTime} < time '24:00'`),
+    foreignKey({
+      columns: [t.orgId, t.storeId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'menu_dayparts_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.createdBy],
+      foreignColumns: [persons.orgId, persons.id],
+      name: 'menu_dayparts_created_by_same_org_fk',
+    }).onDelete('restrict'),
+    // NOTE: trigger menu_dayparts_update_guard, hand-added in migration 0233.
+  ],
+);
+
+/**
  * R5: the price is an OFFER. `amount` is the per-guest price on a per-head package offer, the bundle price on a bundle
  * offer (`bundle_heads` set, `extra_head_amount` charged per guest beyond), the unit price otherwise, and NULL on a
  * refill (a zero-price serving) or a withdrawn row. Triggers (0196): no back-dating, no UPDATE, future-only DELETE,
  * refill/amount/bundle shape by item type, and a LIVE offer needs a depletion rule in force at its `effective_from`.
+ *
+ * T-510 S1a (0233): `daypart_id` (nullable; NULL = all day) ties the offer to a daypart of the SAME store (composite FK). The slot is
+ * (store, variant, channel, daypart, effective_from), NULLS NOT DISTINCT. The insert guard also refuses a live offer on a retired daypart,
+ * overlapping live dayparted offers, and a live all-day offer next to a live dayparted one (for one variant, store and channel).
  */
 export const menuOffers = pgTable(
   'menu_offers',
@@ -456,6 +519,8 @@ export const menuOffers = pgTable(
       .references(() => menuItemVariants.id, { onDelete: 'restrict' }),
     channel: text('channel', { enum: MENU_CHANNELS }).notNull(),
     effectiveFrom: timestamp('effective_from', { withTimezone: true }).notNull().defaultNow(),
+    /** T-510: NULL = all day. The FK (store_id, daypart_id) below keeps the daypart in this offer's own store. */
+    daypartId: uuid('daypart_id'),
     amount: numeric('amount', { precision: 14, scale: 2 }),
     bundleHeads: integer('bundle_heads'),
     extraHeadAmount: numeric('extra_head_amount', { precision: 14, scale: 2 }),
@@ -472,9 +537,11 @@ export const menuOffers = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    unique('menu_offers_slot_unique').on(t.storeId, t.variantId, t.channel, t.effectiveFrom),
+    unique('menu_offers_slot_unique').on(t.storeId, t.variantId, t.channel, t.daypartId, t.effectiveFrom).nullsNotDistinct(),
     index('menu_offers_org_store_idx').on(t.orgId, t.storeId, t.effectiveFrom),
     index('menu_offers_variant_idx').on(t.variantId),
+    // NOTE: menu_offers_daypart_idx is a PARTIAL index (WHERE daypart_id IS NOT NULL), hand-added in migration 0233.
+    index('menu_offers_daypart_idx').on(t.daypartId),
     check('menu_offers_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric AND ${t.amount} < 'Infinity'::numeric`),
     check('menu_offers_extra_head_amount_finite_check', sql`${t.extraHeadAmount} > '-Infinity'::numeric AND ${t.extraHeadAmount} < 'Infinity'::numeric`),
     check('menu_offers_markup_percent_finite_check', sql`${t.markupPercent} > '-Infinity'::numeric AND ${t.markupPercent} < 'Infinity'::numeric`),
@@ -516,7 +583,13 @@ export const menuOffers = pgTable(
       foreignColumns: [persons.orgId, persons.id],
       name: 'menu_offers_created_by_same_org_fk',
     }).onDelete('restrict'),
-    // NOTE: triggers menu_offers_insert_guard / _update_guard / _delete_guard, hand-added in migration 0196.
+    // T-510 (0233): a daypart of another store is refused. NULL daypart_id skips the FK (MATCH SIMPLE) = all day.
+    foreignKey({
+      columns: [t.storeId, t.daypartId],
+      foreignColumns: [menuDayparts.storeId, menuDayparts.id],
+      name: 'menu_offers_daypart_same_store_fk',
+    }).onDelete('restrict'),
+    // NOTE: triggers menu_offers_insert_guard / _update_guard / _delete_guard, hand-added in migration 0196; the insert guard is replaced in 0233.
   ],
 );
 

@@ -79,7 +79,8 @@ const REGISTRY_BEFORE_S4 = 100;
 // T-498 S1 (0221): +1 (pay_rates_append_only history guard). 19 -> 20.
 // T-193 S1 (0222): +2 (statutory_payments_history_guard, statutory_payment_lines_parent_open_trg). 20 -> 22. Merge of main + T-193: re-measured (177 total).
 // T-502 S1-S3 (0224): +27 (service-item guards). 22 -> 49. Measured: registry size 204.
-const REGISTRY_ADDED_AFTER_S4 = 49;
+// T-510 S1a (0233): +1 (menu_dayparts_update_guard). 49 -> 50. Measured: registry size 205.
+const REGISTRY_ADDED_AFTER_S4 = 50;
 
 function pinMismatch(keys: readonly string[], pin: { count: number; sha256: string }): string | null {
   if (keys.length !== pin.count) return `count ${keys.length} != pinned ${pin.count}`;

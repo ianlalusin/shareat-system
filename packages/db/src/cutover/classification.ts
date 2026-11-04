@@ -1509,6 +1509,10 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     class: 'keep',
     reason: 'Which station cooks which item at a store is standing configuration (T-508), kept with the menu.',
   },
+  menu_dayparts: {
+    class: 'keep',
+    reason: 'A store’s dayparts (Lunch, Dinner) are standing menu configuration (T-510), kept with the offers that point at them.',
+  },
 };
 
 /** Tables the purge must never touch even if classified — belt and braces around views. */
