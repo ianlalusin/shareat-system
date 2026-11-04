@@ -111,7 +111,8 @@ export async function bookMissedMonth(
   let itemSchedule: SchedulePeriod[] | null = null;
 
   if (input.schedule === 'depreciation') {
-    const asset = await fixedAssetsRepo.getById(tx, actor.orgId, input.subjectId);
+    // T-517: asset lock first (shares it with depreciate/terms/dispose/retire), so status and schedule are judged on committed state.
+    const asset = await fixedAssetsRepo.getByIdForUpdate(tx, actor.orgId, input.subjectId);
     if (!asset) {
       throw new Error(`bookMissedMonth: asset ${input.subjectId} does not exist in this organisation`);
     }
