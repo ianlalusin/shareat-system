@@ -1,4 +1,4 @@
-# POS v2: add à la carte while taking the package order (task number from the orchestrator)
+# T-518 — POS v2: add à la carte while taking the package order
 
 **Status:** SPEC (Opus, POS session, 2026-11-04). Approved by Ian 4 Nov ("Yes, build it", option A).
 **Area:** `apps/pos/**` only. **No migration.** Merge before 20 Nov or after 14 Dec (T-455 R1, Lipa soak).
@@ -63,3 +63,11 @@ orders upon taking the package order. current v1 does not allow this."
 - Stock deduction: neither path does it today; changing it is a separate inventory decision.
 - Phone pre-order lines -> bill lines: needs the lobby menu (T-455 S4b) first.
 - Item source / kitchen routing: T-508 S5 owns it.
+
+## Orchestrator notes (BOSS, 4 Nov)
+- Item source in ONE place: the picker reads whatever `AddonsPOSModal` reads. T-508 S5 swaps it behind
+  `POS_MENU_SOURCE=erp|firestore` (default firestore) for both. No new reader of `storeAddons`.
+- Kitchen routing: tickets read the station from the item (`kitchenLocationId` today, T-508's `stationId` later), never
+  a hard-coded location.
+- The mixed package + à-la-carte start is all-or-nothing: one batch, one commit; a failed write saves nothing and makes
+  no tickets (tests assert a single batch and a single commit, and no write outside it).
