@@ -1200,6 +1200,14 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'Adjustments, charges and compensation read from a statement (T-511). Org-scoped like the statement they came from.',
   },
+  kitchen_stations: {
+    scope: 'org_column',
+    reason: 'T-508 R1: a store’s kitchen stations; the store belongs to one org, the policy is the org backstop and the repo filters by store.',
+  },
+  kitchen_routes: {
+    scope: 'org_column',
+    reason: 'T-508 R1/R2: which station cooks which menu item at a store; org-scoped like the menu it points at.',
+  },
 };
 
 export function rlsScopeOf(table: string): RlsEntry | undefined {
