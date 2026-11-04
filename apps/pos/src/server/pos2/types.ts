@@ -41,6 +41,8 @@ export interface Pos2Deps {
   openTillShift(posStoreId: string): Promise<{ openedAtMs: number } | null>;
   /** T-455 S5: the customer-lobby moves a tablet makes (see `Pos2LobbyPort`). */
   lobby: Pos2LobbyPort;
+  /** T-508 S4: the store menu for a tablet. The store is resolved from the device's terminal link inside the port; null = no active link. */
+  menu: { forDevice(input: { posStoreId: string; deviceId: string }): Promise<{ menu: unknown; contentHash: string; nextChangeAt: string | null } | null> };
   /** The server clock. */
   nowMs(): number;
   /** A fresh Firestore document id. */

@@ -106,6 +106,17 @@ async function buildDeps(keyFile: string, orgId: string): Promise<Pos2Deps> {
       }),
     // T-455 S5: the tablet's lobby moves. Trust chain = the route's token + staff assignment, then the tablet's ACTIVE terminal link here.
     lobby: buildLobbyPort(orgId, auth, dbPkg, async () => import('@shareat/domain')),
+    menu: {
+      forDevice: async (i) => {
+        const [d, { makeMenuForDevice }] = [await import('@shareat/domain'), await import('./menu')];
+        return makeMenuForDevice<Awaited<ReturnType<Pos2Deps['menu']['forDevice']>>>({
+          orgId,
+          withOrgPrincipal: dbPkg.withOrgPrincipal as never,
+          loadMenuForTerminal: d.loadMenuForTerminal as never,
+          isAuthError: (err) => err instanceof auth.AuthenticationError,
+        })(i);
+      },
+    },
     nowMs: () => Date.now(),
     newId: () => firestore.collection('_ids').doc().id ?? randomUUID(),
   };

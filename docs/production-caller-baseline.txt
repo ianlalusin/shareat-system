@@ -96,7 +96,6 @@ listPunchesForDay
 listRoster
 listWriteOffsForCharge
 loadMod
-loadStoreMenu
 lobbyPartiesAhead
 makeDeps
 markBirthdayPlayed
