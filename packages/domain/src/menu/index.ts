@@ -7,5 +7,5 @@ export * from './options';
 export * from './pricing';
 export * from './requests';
 export * from './resolve-price';
-export { loadStoreMenu } from './load-store-menu';
+export { loadMenuForTerminal, loadStoreMenu } from './load-store-menu';
 export type { ProjectedStoreMenu, StoreMenuV2 } from './project';
