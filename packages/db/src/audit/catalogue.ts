@@ -139,6 +139,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('kitchen_route.set', 'settings', 'high', 'store', 'kitchen_routes', 'T-508'),
   def('kitchen_route.cleared', 'settings', 'high', 'store', 'kitchen_routes', 'T-508'),
   def('kitchen_route.category_set', 'settings', 'high', 'store', 'kitchen_routes', 'T-508'),
+  // T-511 S4: one file ingested into the staging tables (nothing is booked); store-scoped to the MATCHED store.
+  def('settlement_upload.ingested', 'data', 'normal', 'store', 'settlement_uploads', 'T-511'),
   // T-455 S2: a cashier's moves on the customer lobby line (park a walk-in, call, seat, remove). Payloads carry code, size, stand and session id - never a name or phone.
   def('lobby.park', 'order', 'normal', 'store', 'lobby_entry', 'T-455'),
   def('lobby.call', 'order', 'low', 'store', 'lobby_entry', 'T-455'),

@@ -38,7 +38,6 @@ createPaymentConversionServer
 customerReturnableQuantity
 datesInWeek
 dayIdOf
-deductionFor
 deleteDocumentNonBlocking
 depreciateAsset
 depreciationDrift
@@ -110,7 +109,6 @@ newCorrelationId
 oldWholeBillSeniorDiscount
 openClaim
 openFloatsForStore
-openSettlementZip
 oracleStat
 parkWalkIn
 parseGrabDateTime
@@ -131,9 +129,6 @@ proxy
 pullHolds
 purgeComplete
 rateFor
-readFoodpandaInvoice
-readGrabTransactions
-readGrabTransfers
 realSourceTypesForSpecName
 recentRuns
 reconcileSupplier
@@ -178,7 +173,6 @@ storedAnywhere
 sumTender
 summarizeConversions
 tablesWithScope
-tieGrabPayouts
 tilesTheMonth
 totalOf
 unclosedShiftCount

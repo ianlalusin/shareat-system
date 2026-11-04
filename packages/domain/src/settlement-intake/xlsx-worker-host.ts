@@ -12,13 +12,16 @@
  * CONCURRENCY: at most WORKER_CONCURRENCY workers run at once (a hostile one costs about 200 MB); further calls wait in a FIFO queue.
  * A slot is released only when its worker is gone, however it ended. The timeout clock starts when the worker starts, not when queued.
  *
- * ASSUMPTION TO PROVE IN SLICE 4 (the ERP server bundle): the worker is started with `new Worker(new URL('./xlsx-worker.mjs',
- * import.meta.url))`. That works under vitest and under plain Node. A Next.js server build may relocate or inline files, so the worker
- * file might not sit next to this module at run time. For slice 4: resolve it at run time outside the bundler (from `process.cwd()` to
- * `packages/domain/src/settlement-intake/xlsx-worker.mjs`, falling back to the `import.meta.url` form), and list `read-excel-file` and
- * `yauzl` in `serverExternalPackages`. This is the ONLY place that resolves the path; pass `workerUrl` or change it here.
+ * WHERE THE WORKER FILE IS (slice 4): a Next.js server build may relocate or inline files, so the file may not sit next to this module at
+ * run time. `resolveWorkerPath` finds it at CALL time outside the bundler (walk up from `process.cwd()` to the folder holding
+ * `package-lock.json`, then `packages/domain/src/settlement-intake/xlsx-worker.mjs`, as `packages/storage-firebase/src/index.ts` finds the
+ * repo root), falling back to the `import.meta.url` form; neither present is XLSX_WORKER_UNAVAILABLE at once, never a hang. `read-excel-file`
+ * and `yauzl` are in `serverExternalPackages` (apps/erp/next.config.js). This is the ONLY place that resolves the path; pass `workerUrl` or change it here.
  */
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { Worker } from 'node:worker_threads';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { intakeRefusal } from './refusal';
 
 export const XLSX_WORKER_TIMEOUT_MS = 5000;
@@ -36,6 +39,24 @@ const tooHeavy = (): Error => intakeRefusal('XLSX_TOO_HEAVY', 'The workbook need
 const tooSlow = (): Error => intakeRefusal('XLSX_TOO_SLOW', 'The workbook took too long to open, so it was refused.');
 const unavailable = (): Error =>
   intakeRefusal('XLSX_WORKER_UNAVAILABLE', 'The workbook reader could not start on the server, so nothing was read. The file itself may be fine; tell an administrator.');
+
+/** The worker file, looked up when asked (never cached at load: Next may start the server with any working folder). */
+export function resolveWorkerPath(cwd: string = process.cwd(), fileExists: (path: string) => boolean = existsSync): URL {
+  let dir = cwd;
+  for (let i = 0; i < 10; i += 1) {
+    if (fileExists(join(dir, 'package-lock.json'))) {
+      const inRepo = join(dir, 'packages', 'domain', 'src', 'settlement-intake', 'xlsx-worker.mjs');
+      if (fileExists(inRepo)) return pathToFileURL(inRepo);
+      break;
+    }
+    const up = dirname(dir);
+    if (up === dir) break;
+    dir = up;
+  }
+  const besideModule = new URL('./xlsx-worker.mjs', import.meta.url);
+  if (fileExists(fileURLToPath(besideModule))) return besideModule;
+  throw unavailable();
+}
 
 /** Errors that mean the worker could not even be loaded (as opposed to the file making it fail). */
 const START_FAILURES = new Set([
@@ -85,7 +106,7 @@ function runWorker(workbook: Buffer, options: { workerUrl?: URL; timeoutMs?: num
       outcome();
     };
     try {
-      worker = new Worker(options.workerUrl ?? new URL('./xlsx-worker.mjs', import.meta.url), {
+      worker = new Worker(options.workerUrl ?? resolveWorkerPath(), {
         resourceLimits: { ...XLSX_WORKER_LIMITS },
         workerData: { workbook },
       });

@@ -53,7 +53,8 @@ const nextConfig = {
   },
   // Native/Node-only packages must not be bundled into the server build.
   // See PROJECT_BIBLE.md §12 landmine: Next.js server bundling of native deps.
-  serverExternalPackages: ['postgres', 'firebase-admin', 'pino'],
+  // T-511 S4: read-excel-file and yauzl are imported by name inside the settlement xlsx worker (a worker thread the bundler cannot see into).
+  serverExternalPackages: ['postgres', 'firebase-admin', 'pino', 'read-excel-file', 'yauzl'],
   typescript: {
     // Type errors fail the build. Never set this to true.
     ignoreBuildErrors: false,

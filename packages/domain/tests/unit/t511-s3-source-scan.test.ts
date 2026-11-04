@@ -49,7 +49,8 @@ describe('the settlement-intake folder', () => {
     for (const [f, src] of sources()) {
       expect(src, f).not.toMatch(/\b(writeFile|writeFileSync|createWriteStream|appendFile|appendFileSync|mkdtemp|mkdtempSync|copyFile|rename)\b/);
       expect(src, f).not.toMatch(/\byauzl\.(open|fromFd|fromRandomAccessReader)\b/);
-      expect(src, f).not.toMatch(/\bfrom\s*['"](node:)?fs(\/promises)?['"]/);
+      // S4: the host looks up whether the worker file exists (`resolveWorkerPath`, spec "Worker path under Next" (a)); that is the one fs import, and it reads nothing.
+      if (f !== 'xlsx-worker-host.ts') expect(src, f).not.toMatch(/\bfrom\s*['"](node:)?fs(\/promises)?['"]/);
     }
     expect(sources().get('safe-zip.ts')).toMatch(/\bfromBuffer\b/);
   });

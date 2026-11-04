@@ -36,6 +36,11 @@ export const SETTLEMENT_INTAKE_REFUSAL_CODES = [
   'XLSX_TOO_HEAVY',
   'XLSX_TOO_SLOW',
   'XLSX_WORKER_UNAVAILABLE',
+  // Slice 4 (ingest): the file's type, the store it names, and a staged figure the tables would refuse.
+  'FILE_TYPE_NOT_ALLOWED',
+  'CHANNEL_NOT_SET_UP',
+  'NOT_YOUR_STORE',
+  'STAGED_BAD_VALUE',
 ] as const;
 export type SettlementIntakeRefusalCode = (typeof SETTLEMENT_INTAKE_REFUSAL_CODES)[number];
 

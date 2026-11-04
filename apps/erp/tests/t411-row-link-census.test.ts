@@ -61,6 +61,8 @@ const ROW_LINK: readonly string[] = [
 const NO_ROW_TARGET: readonly string[] = [
   // T-502 S4: the import preview rows are findings about lines of an uploaded file; there is nothing to open
   'app/items/import/page.tsx',
+  // T-511 S4: the days still waiting for a file, per channel: a summary, nothing to open yet (the review screen is slice 5)
+  'app/channel-settlements/upload/page.tsx',
   // Reports (9)
   'components/reports/ApAgingTable.tsx',
   'components/reports/ArAgingTable.tsx',

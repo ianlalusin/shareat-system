@@ -7,7 +7,7 @@
 import { addDays, type BusinessDate } from '@shareat/core/datetime';
 import { ZERO, add, equals, subtract, type Money } from '@shareat/core/money';
 import type { GrabTransactionRow, GrabTransactionsFile } from './grab-transactions';
-import type { GrabTransfersFile } from './grab-transfers';
+import type { GrabPayoutStatus, GrabTransfersFile } from './grab-transfers';
 import { intakeRefusal } from './refusal';
 
 export type GrabPayoutState = 'tied' | 'differs' | 'waiting_for_rows';
@@ -17,6 +17,11 @@ export interface GrabPayout {
   /** the order day this payout pays: the payout date minus one day (YYYY-MM-DD) */
   storeDay: string;
   netTotal: Money;
+  /** the payout's own printed date (YYYY-MM-DD), the day after `storeDay` */
+  payoutDate: string;
+  status: GrabPayoutStatus;
+  /** when the bank transfer happened (YYYY-MM-DD); null while the payout is still processing */
+  transferDate: string | null;
   /** exact sum of the rows' Total; null while no rows are in the file */
   rowsTotal: Money | null;
   state: GrabPayoutState;
@@ -71,7 +76,15 @@ export function tieGrabPayouts(transactions: GrabTransactionsFile, transfers: Gr
   }
   const payouts: GrabPayout[] = transfers.rows.map((t) => {
     const rows = bySettlement.get(t.settlementId.toUpperCase()) ?? [];
-    const base = { settlementId: t.settlementId, storeDay: dayBefore(t.payoutDate.date, t.line), netTotal: t.netTotal, rows };
+    const base = {
+      settlementId: t.settlementId,
+      storeDay: dayBefore(t.payoutDate.date, t.line),
+      netTotal: t.netTotal,
+      payoutDate: t.payoutDate.date,
+      status: t.status,
+      transferDate: t.transferDate?.date ?? null,
+      rows,
+    };
     if (rows.length === 0) return { ...base, rowsTotal: null, state: 'waiting_for_rows', difference: null };
     const rowsTotal = sumOf(rows);
     const difference = guarded(rows, () => subtract(rowsTotal, t.netTotal));
