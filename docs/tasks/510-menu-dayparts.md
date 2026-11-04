@@ -100,7 +100,7 @@ The two options as put to Ian, kept for the record. v1 has each package twice (L
   `Asia/Manila`, day-of-week at midnight, not-offered-now result with `availableFrom`. The resolver's not-offered-now result
   also carries `availableAt` (UTC instant of the next opening) and `availableDay` (store-local weekday, 0-6); bad zone, instant,
   window or tied offers resolve to `invalid` with a reason (`daypart.ts`).
-- **S3 ERP screens (R9).**
+- **S3 ERP screens (R9).** The form must explain a monotonic refusal in plain words (the rule is per store, variant and channel and ignores dayparts: a new row of any daypart cannot be dated earlier than a stored row of another daypart).
 - **S4 projection (R6).** Needs T-508 S3 merged first.
 - **S5 cutover load (R10)** with the signed pairing table and the load report. Practice proof with Lipa's real two
   schedules and prices.

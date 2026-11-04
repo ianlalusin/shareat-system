@@ -6,6 +6,7 @@
  * The SQL overlap rule is also checked against the pure TypeScript rule (packages/domain daypartsOverlap): the two must agree.
  */
 import { afterAll, describe, expect, it } from 'vitest';
+import postgres from 'postgres';
 
 import { daypartsOverlap } from '../../../domain/src/menu/daypart';
 import { insRule, menuFixture, newItem, refusal, sql, uid, type MenuFx } from './_fixtures/t401-menu';
@@ -561,6 +562,297 @@ describe('R1 - a daypart never changes identity', () => {
     expect(await as(`update menu_dayparts set store_id = store_id where id = $1`)).toBe('42501');
     expect(await as(`update menu_dayparts set created_by = created_by where id = $1`)).toBe('42501');
     expect(await as(`delete from menu_dayparts where id = $1`)).toBe('42501');
+  });
+});
+
+// =================================================================================================
+// Audit round 1 (F1-F4). Each block names the finding it pins.
+// =================================================================================================
+describe('F1 - deleting a SCHEDULED offer must not recreate a forbidden state', () => {
+  const del = (id: string) => sql`delete from menu_offers where id = ${id}`;
+
+  it('all-day live now, all-day withdrawn +5d, Lunch live +5d: deleting the withdrawal would mix all-day and dayparted -> refused', async () => {
+    const f = await fx('f1a');
+    const lunch = await dp(f, { name: 'Lunch' });
+    await offer(f, { daypartId: null });
+    const [w] = await withdraw(f, null, { from: future(5) });
+    expect(await refusal(() => offer(f, { daypartId: lunch, from: future(5) }))).toBeUndefined();
+    const err = await refusal(() => del(w!.id));
+    expect(err?.code, 'the delete was accepted and left an all-day and a dayparted offer live together').toBe('23514');
+    expect(err?.message).toMatch(/all-day/);
+    expect(await offerCount(f)).toBe(3);
+  });
+
+  it('A live now, A withdrawn +5d, overlapping B live +5d: deleting the withdrawal would overlap A and B -> refused', async () => {
+    const f = await fx('f1b');
+    const a = await dp(f, { name: 'A', start: '08:00', end: '12:00' });
+    const b = await dp(f, { name: 'B', start: '11:00', end: '14:00' });
+    await offer(f, { daypartId: a });
+    const [w] = await withdraw(f, a, { from: future(5) });
+    expect(await refusal(() => offer(f, { daypartId: b, from: future(5) }))).toBeUndefined();
+    const err = await refusal(() => del(w!.id));
+    expect(err?.code, 'the delete was accepted and left two overlapping dayparted offers live').toBe('23514');
+    expect(err?.message).toMatch(/overlap/);
+    expect(await offerCount(f)).toBe(3);
+  });
+
+  it('a delete that recreates nothing still succeeds (cancelling a scheduled change stays possible)', async () => {
+    // all-day only
+    const f = await fx('f1c');
+    await offer(f, { daypartId: null });
+    const [w] = await withdraw(f, null, { from: future(5) });
+    expect(await refusal(() => del(w!.id))).toBeUndefined();
+    // adjacent dayparts: Lunch withdrawn +5d, Dinner live +5d does not overlap Lunch, so the withdrawal can go
+    const g = await fx('f1d');
+    const lunch = await dp(g, { name: 'Lunch', start: '08:00', end: '17:00' });
+    const dinner = await dp(g, { name: 'Dinner', start: '17:00', end: '08:00' });
+    await offer(g, { daypartId: lunch });
+    const [gw] = await withdraw(g, lunch, { from: future(5) });
+    await offer(g, { daypartId: dinner, from: future(5) });
+    expect(await refusal(() => del(gw!.id))).toBeUndefined();
+    // a scheduled live price change
+    const h = await fx('f1e');
+    const d = await dp(h);
+    await offer(h, { daypartId: d });
+    const [change] = await offer(h, { daypartId: d, amount: 120, from: future(3) });
+    expect(await refusal(() => del(change!.id))).toBeUndefined();
+    expect(await offerCount(h)).toBe(1);
+  });
+
+  it('a row already in effect is still never deleted (0196)', async () => {
+    const f = await fx('f1f');
+    const [o] = await offer(f, { daypartId: null });
+    expect((await refusal(() => del(o!.id)))?.code).toBe('23514');
+  });
+});
+
+// =================================================================================================
+describe('F2 - a daypart with a scheduled withdrawal (or a future live row) is still live', () => {
+  it('Lunch live now + withdrawal at +5d: retire is refused (it is in force right now)', async () => {
+    const f = await fx('f2a');
+    const d = await dp(f);
+    await offer(f, { daypartId: d });
+    await withdraw(f, d, { from: future(5) });
+    const err = await refusal(() => retire(d));
+    expect(err?.code, 'retired a daypart whose offer is still live now').toBe('23514');
+    expect(err?.message).toMatch(/1 live offer/);
+    expect(await status(d)).toBe('active');
+  });
+
+  it('a live row at +3d with a withdrawal at +6d: retire is refused (it will be live from +3d)', async () => {
+    const f = await fx('f2b');
+    const d = await dp(f);
+    await offer(f, { daypartId: d, from: future(3) });
+    await withdraw(f, d, { from: future(6) });
+    expect((await refusal(() => retire(d)))?.message).toMatch(/1 live offer/);
+  });
+
+  it('retire is allowed once the slot is withdrawn with no later live row; the count is per variant and channel', async () => {
+    const f = await fx('f2c');
+    const d = await dp(f);
+    await offer(f, { daypartId: d });
+    await offer(f, { daypartId: d, channel: 'online' });
+    expect((await refusal(() => retire(d)))?.message).toMatch(/2 live offer/);
+    await withdraw(f, d);
+    await withdraw(f, d, { channel: 'online' });
+    expect(await refusal(() => retire(d))).toBeUndefined();
+  });
+
+  it('withdrawn now but live again at +4d: retire is refused', async () => {
+    const f = await fx('f2d');
+    const d = await dp(f);
+    await offer(f, { daypartId: d });
+    await withdraw(f, d); // in force now
+    await offer(f, { daypartId: d, from: future(4) }); // live again at +4d: counts
+    expect((await refusal(() => retire(d)))?.message).toMatch(/1 live offer/);
+  });
+
+  it('the window-edit check uses the same moments: Lunch +3d live, Dinner +4d live, Lunch withdrawn +6d: stretching Lunch is refused', async () => {
+    const f = await fx('f2e');
+    const lunch = await dp(f, { name: 'Lunch', start: '08:00', end: '17:00' });
+    const dinner = await dp(f, { name: 'Dinner', start: '17:00', end: '08:00' });
+    await offer(f, { daypartId: lunch, from: future(3) });
+    await offer(f, { daypartId: dinner, from: future(4) });
+    await withdraw(f, lunch, { from: future(6) });
+    const err = await refusal(() => sql`update menu_dayparts set end_time = '18:00' where id = ${lunch}`);
+    expect(err?.code).toBe('23514');
+    // and a stretch that overlaps nothing at any moment is fine: Lunch live now, withdrawn +5d, Dinner live +5d
+    const g = await fx('f2f');
+    const gl = await dp(g, { name: 'Lunch', start: '08:00', end: '17:00' });
+    const gd = await dp(g, { name: 'Dinner', start: '17:00', end: '08:00' });
+    await offer(g, { daypartId: gl });
+    await withdraw(g, gl, { from: future(5) });
+    await offer(g, { daypartId: gd, from: future(5) });
+    expect(await refusal(() => sql`update menu_dayparts set end_time = '18:00' where id = ${gl}`), 'the two are never live together').toBeUndefined();
+  });
+});
+
+// =================================================================================================
+describe('F3 - one lock order: the daypart row first, then the variant keys (no deadlock, 40P01)', () => {
+  it('a live offer insert and a window edit of its daypart, interleaved, both complete', async () => {
+    const f = await fx('f3');
+    const d = await dp(f, { name: 'Lunch', start: '08:00', end: '17:00' });
+    await offer(f, { daypartId: d }); // the edit below must find a variant to lock
+
+    const url = process.env.TEST_DATABASE_URL!;
+    const conn = (app: string) => postgres(url, { max: 1, connection: { application_name: app } });
+    const c0 = conn('t510-f3-holder');
+    const c1 = conn('t510-f3-insert');
+    const c2 = conn('t510-f3-edit');
+    const blocked = async (app: string) => {
+      for (let i = 0; i < 100; i++) {
+        const [r] = await sql<{ n: number }[]>`select count(*)::int n from pg_stat_activity where application_name = ${app} and wait_event_type = 'Lock'`;
+        if (r!.n > 0) return;
+        await new Promise((res) => setTimeout(res, 50));
+      }
+      throw new Error(`${app} never blocked`);
+    };
+    try {
+      let release: () => void = () => {};
+      const gate = new Promise<void>((r) => (release = r));
+      let locked: () => void = () => {};
+      const lockedP = new Promise<void>((r) => (locked = r));
+      // The holder parks the insert guard AFTER its first locks and BEFORE it reaches the daypart row: for a live offer the guard reads menu_depletion_rules.
+      const tx0 = c0.begin(async (tx) => {
+        await tx`lock table menu_depletion_rules in access exclusive mode`;
+        locked();
+        await gate;
+      });
+      await lockedP;
+      const p1 = refusal(
+        () => c1`insert into menu_offers (org_id, store_id, variant_id, channel, daypart_id, amount, withdrawn, created_by)
+                 values (${f.orgId}, ${f.storeId}, ${f.variantId}, 'store', ${d}, 105, false, ${f.personId})`,
+      );
+      await blocked('t510-f3-insert');
+      const p2 = refusal(() => c2`update menu_dayparts set end_time = '16:00' where id = ${d}`);
+      await blocked('t510-f3-edit');
+      release();
+      await tx0;
+      const [e1, e2] = await Promise.all([p1, p2]);
+      expect(e1?.code, `the offer insert failed: ${e1?.message}`).toBeUndefined();
+      expect(e2?.code, `the window edit failed: ${e2?.message}`).toBeUndefined();
+      expect(await offerCount(f)).toBe(2);
+    } finally {
+      await Promise.all([c0.end({ timeout: 5 }), c1.end({ timeout: 5 }), c2.end({ timeout: 5 })]);
+    }
+  });
+
+  it('an offer insert and an offer delete wait for the daypart row while holding NO variant key (the order itself, not just one interleaving)', async () => {
+    const f = await fx('f3b');
+    const d = await dp(f, { name: 'Lunch', start: '08:00', end: '17:00' });
+    await offer(f, { daypartId: d });
+    const [scheduled] = await offer(f, { daypartId: d, amount: 120, from: future(3) });
+
+    const url = process.env.TEST_DATABASE_URL!;
+    const conn = (app: string) => postgres(url, { max: 1, connection: { application_name: app } });
+    const holder = conn('t510-f3b-holder');
+    const waiter = conn('t510-f3b-waiter');
+    const waitsAndHoldsNoKey = async () => {
+      for (let i = 0; i < 100; i++) {
+        const [r] = await sql<{ waiting: number; keys: number }[]>`
+          select count(*) filter (where a.wait_event_type = 'Lock')::int waiting,
+                 (select count(*) from pg_locks l where l.pid = a.pid and l.locktype = 'advisory' and l.granted)::int keys
+            from pg_stat_activity a where a.application_name = 't510-f3b-waiter' group by a.pid`;
+        if (r && r.waiting > 0) return r.keys;
+        await new Promise((res) => setTimeout(res, 50));
+      }
+      throw new Error('the waiter never blocked');
+    };
+    try {
+      for (const [label, run] of [
+        // dated after the scheduled row: the monotonic rule would refuse an earlier date
+        ['insert', () => waiter`insert into menu_offers (org_id, store_id, variant_id, channel, effective_from, daypart_id, amount, withdrawn, created_by)
+                                values (${f.orgId}, ${f.storeId}, ${f.variantId}, 'store', ${future(4)}::timestamptz, ${d}, 105, false, ${f.personId})`],
+        ['delete', () => waiter`delete from menu_offers where id = ${scheduled!.id}`],
+      ] as const) {
+        let release: () => void = () => {};
+        const gate = new Promise<void>((r) => (release = r));
+        let locked: () => void = () => {};
+        const lockedP = new Promise<void>((r) => (locked = r));
+        const tx = holder.begin(async (t) => {
+          await t`select 1 from menu_dayparts where id = ${d} for no key update`;
+          locked();
+          await gate;
+        });
+        await lockedP;
+        const pending = refusal(run);
+        const keysHeld = await waitsAndHoldsNoKey();
+        release();
+        await tx;
+        const err = await pending;
+        expect(keysHeld, `the ${label} guard held a variant key while it waited for the daypart row (lock order is variant key first)`).toBe(0);
+        expect(err, `the ${label} failed: ${err?.message}`).toBeUndefined();
+      }
+    } finally {
+      await Promise.all([holder.end({ timeout: 5 }), waiter.end({ timeout: 5 })]);
+    }
+  });
+});
+
+// =================================================================================================
+describe('F4 - menu_offer_in_force returns the live slot rows, or exactly one withdrawn row', () => {
+  const inForce = (f: MenuFx) => sql<{ id: string; daypart_id: string | null; withdrawn: boolean; amount: string | null }[]>`
+    select id, daypart_id, withdrawn, amount from menu_offer_in_force(${f.storeId}, ${f.variantId}, 'store', now())`;
+
+  it('a variant that never had a daypart returns exactly one row, live or withdrawn, as before 0233', async () => {
+    const f = await fx('f4a');
+    expect(await inForce(f)).toHaveLength(0);
+    const [o1] = await offer(f, { amount: 10 });
+    const [o2] = await offer(f, { amount: 11 });
+    const live = await inForce(f);
+    expect(live.map((r) => r.id)).toEqual([o2!.id]);
+    expect(o1!.id).not.toBe(o2!.id);
+    const [w] = await withdraw(f, null);
+    const gone = await inForce(f);
+    expect(gone.map((r) => [r.id, r.withdrawn])).toEqual([[w!.id, true]]);
+  });
+
+  it('all-day then Lunch and Dinner: exactly the two live rows, the withdrawn all-day row is not returned', async () => {
+    const f = await fx('f4b');
+    const lunch = await dp(f, { name: 'Lunch', start: '08:00', end: '17:00' });
+    const dinner = await dp(f, { name: 'Dinner', start: '17:00', end: '08:00' });
+    await offer(f, { daypartId: null });
+    await withdraw(f, null);
+    await offer(f, { daypartId: lunch, amount: 338 });
+    await offer(f, { daypartId: dinner, amount: 358 });
+    const rows = await inForce(f);
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => !r.withdrawn)).toBe(true);
+    expect(rows.map((r) => `${r.daypart_id}:${r.amount}`).sort()).toEqual([`${lunch}:338.00`, `${dinner}:358.00`].sort());
+  });
+
+  it('Lunch and Dinner then all-day (withdraw first): exactly one live row, the all-day one', async () => {
+    const f = await fx('f4c');
+    const lunch = await dp(f, { name: 'Lunch', start: '08:00', end: '17:00' });
+    const dinner = await dp(f, { name: 'Dinner', start: '17:00', end: '08:00' });
+    await offer(f, { daypartId: lunch });
+    await offer(f, { daypartId: dinner });
+    await withdraw(f, lunch);
+    await withdraw(f, dinner);
+    const [all] = await offer(f, { daypartId: null, amount: 300 });
+    expect((await inForce(f)).map((r) => r.id)).toEqual([all!.id]);
+  });
+
+  it('everything withdrawn: exactly one row, the newest withdrawal', async () => {
+    const f = await fx('f4d');
+    const lunch = await dp(f, { name: 'Lunch', start: '08:00', end: '17:00' });
+    const dinner = await dp(f, { name: 'Dinner', start: '17:00', end: '08:00' });
+    await offer(f, { daypartId: lunch });
+    await offer(f, { daypartId: dinner });
+    await withdraw(f, lunch);
+    const [last] = await withdraw(f, dinner);
+    const rows = await inForce(f);
+    expect(rows.map((r) => [r.id, r.withdrawn])).toEqual([[last!.id, true]]);
+  });
+
+  it('a live slot beside a withdrawn slot returns only the live one', async () => {
+    const f = await fx('f4e');
+    const lunch = await dp(f, { name: 'Lunch', start: '08:00', end: '17:00' });
+    const dinner = await dp(f, { name: 'Dinner', start: '17:00', end: '08:00' });
+    await offer(f, { daypartId: lunch });
+    const [dn] = await offer(f, { daypartId: dinner });
+    await withdraw(f, lunch);
+    expect((await inForce(f)).map((r) => r.id)).toEqual([dn!.id]);
   });
 });
 

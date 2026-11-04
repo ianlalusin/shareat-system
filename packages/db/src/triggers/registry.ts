@@ -611,6 +611,12 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'validator',
     reason: "Only a future offer may be deleted, a cancelled scheduled change (0196). Decides from the clock.",
   },
+  menu_offers_delete_slot_guard: {
+    table: 'menu_offers',
+    mode: 'origin',
+    kind: 'validator',
+    reason: "A scheduled offer may be deleted only if no all-day offer would end up beside a dayparted one, nor two overlapping dayparts (0233, T-510 audit F1). Reads other rows and the clock.",
+  },
   menu_option_offers_insert_guard: {
     table: 'menu_option_offers',
     mode: 'origin',

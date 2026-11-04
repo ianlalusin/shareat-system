@@ -15,14 +15,19 @@
 --   * menu_daypart_windows_overlap(): the SQL twin of daypartsOverlap in packages/domain/src/menu/daypart.ts; the integration test proves they agree. Days are
 --     placed on a Sunday-based week of minutes, an overnight window belongs to the day it starts, a spill past Saturday wraps to Sunday, adjacent windows do NOT overlap.
 --   * menu_offer_slot_conflict(): the one query for "would this variant and channel, at some moment, have a live all-day offer next to a live dayparted one, or two live
---     dayparted offers whose windows overlap". The offer insert guard calls it with the new row; the daypart update guard calls it with the new window.
+--     dayparted offers whose windows overlap". The offer insert guard calls it with the new row; the daypart update guard calls it with the new window; the offer
+--     delete guard calls it with the deleted row left out.
+--   * menu_offers_delete_slot_guard(): a SCHEDULED row may still be deleted (0196, cancelScheduledOffer) but not when the deletion would leave a forbidden state (the
+--     withdrawal that separated an all-day offer from a dayparted one, or two overlapping dayparted ones, is exactly what such a delete removes).
 --   * menu_offers_insert_guard() is REPLACED (every 0196 check kept, in the same order) and gains, at the end: (a) a live offer's daypart must be active; (b) overlap
 --     refused; (c) all-day next to dayparted refused. All three are skipped for a withdrawn row, so "withdraw each dayparted offer, then add the all-day offer" is accepted
 --     and the reverse order is refused.
 --   * menu_dayparts_update_guard(): id / org_id / store_id never change; retiring is refused while a live offer uses the daypart (count in the message); a change of
 --     days, start or end is refused when it would make two live offers of one variant and channel overlap.
---   * menu_offer_in_force() now returns the newest row per DAYPART slot (one row for an all-day variant, exactly as before). menu_variant_has_live_offer() keeps its text:
---     it reads the in-force function, so it is now true when ANY dayparted slot is live.
+--   * menu_offer_in_force() returns, per variant and channel, ONLY the live slot rows when at least one slot is live, and otherwise exactly ONE row (the newest withdrawn
+--     row of any slot, so "withdrawn = not offered" is still conveyed). A variant that never had a daypart returns the one newest row, exactly as before. So a reader
+--     that keeps "the last row" is never handed a withdrawn all-day row beside live dayparted ones. menu_variant_has_live_offer() keeps its text: it reads the in-force
+--     function, so it is true when ANY slot is live.
 --
 -- SEMANTICS (read these before changing a guard).
 --   * "Live" = the slot's newest row at or before the moment, not withdrawn. A slot is (store, variant, channel, daypart). Same rule as menu_offer_in_force (K2).
@@ -30,11 +35,17 @@
 --     changes at a row's effective_from, so those are the only moments worth testing. (0196's monotonic rule means no later row can exist today; the later-dated leg is the
 --     backstop if that rule is ever relaxed per daypart.)
 --   * A dayparted slot with a live row counts even if its window is closed right now: windows are compared for overlap, never for "open now".
---   * The retire count and the window-edit check use the same live rule; a scheduled (future) live row counts as live, like menu_variant_has_live_offer.
+--   * The retire count counts a slot as live when it is live NOW or when any non-withdrawn row of it is scheduled LATER (the same moments the conflict query tests): a
+--     live offer whose withdrawal is merely scheduled for next week is still live today. The window-edit check goes through menu_offer_slot_conflict, so it already uses
+--     the moments rule. A scheduled live row counts as live, like menu_variant_has_live_offer.
+--   * The monotonic rule (0196) stays per store, variant and channel and is daypart-BLIND: a new row of ANY daypart may not be dated earlier than a stored row of another
+--     daypart. That is safe (it can only refuse too much, never allow a bad state) and only annoying, so it is left as it is; the S3 form explains it in plain words.
 --
--- CONCURRENCY. Offer inserts already serialise per item and variant (menu_lock_keys). The new daypart guards add no new lock KIND: an offer insert takes the daypart row
--- FOR SHARE after the item and variant keys; a retire or window edit first takes the variant keys of every variant that has an offer on the daypart (ascending, the
--- 0196 order), then the daypart row FOR NO KEY UPDATE, and only then reads the offers. So a retire cannot commit over an offer insert it did not see, and no cycle forms.
+-- CONCURRENCY. Offer inserts already serialise per item and variant (menu_lock_keys). ONE GLOBAL LOCK ORDER for every guard that touches a daypart: (1) the daypart ROW
+-- (an offer insert or delete takes it FOR SHARE; a daypart update already holds it FOR NO KEY UPDATE before its BEFORE trigger runs), then (2) the item keys, then (3)
+-- the variant keys, ascending (the 0196 order). The first cut took the variant key before the daypart row in the offer insert while the daypart update held the row and
+-- then asked for the variant key: a deadlock (40P01), reproduced by an interleaving test. A retire or window edit still cannot commit over an offer insert it did not
+-- see: the insert's share lock on the daypart row makes the update wait for that insert.
 --
 -- RLS (0011 / 0196 pattern): ENABLE + FORCE, one policy through app_current_org(), never raw current_setting (DEF-077). Store scoping is the repo's filter plus the composite
 -- FKs; the policy is the org backstop, as for the other menu tables.
@@ -161,13 +172,23 @@ CREATE INDEX "menu_offers_daypart_idx" ON "menu_offers" ("daypart_id") WHERE "da
 --> statement-breakpoint
 
 -- ---------------------------------------------------------------------------------------------
--- "In force at t", per daypart slot. For a variant with only all-day rows this is the one newest row, exactly as in 0196.
+-- "In force at t", per daypart slot: each slot's newest row at or before p_at. The caller gets the LIVE slot rows only when at least one slot is live (a withdrawn slot
+-- row beside a live one would be read as "not offered" by a reader that keeps the last row); when no slot is live it gets exactly ONE row, the newest withdrawn row of
+-- any slot (ties: all-day last), so "withdrawn = not offered" is still conveyed. A variant that never had a daypart has one slot, so it returns the one newest row, live
+-- or withdrawn, exactly as in 0196.
 -- ---------------------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION "menu_offer_in_force"(p_store uuid, p_variant uuid, p_channel text, p_at timestamptz)
 RETURNS SETOF "menu_offers" LANGUAGE sql STABLE AS $$
-	SELECT DISTINCT ON ("daypart_id") * FROM "menu_offers"
-	 WHERE "store_id" = p_store AND "variant_id" = p_variant AND "channel" = p_channel AND "effective_from" <= p_at
-	 ORDER BY "daypart_id", "effective_from" DESC
+	WITH slot AS (
+		SELECT DISTINCT ON (o."daypart_id") o.* FROM "menu_offers" o
+		 WHERE o."store_id" = p_store AND o."variant_id" = p_variant AND o."channel" = p_channel AND o."effective_from" <= p_at
+		 ORDER BY o."daypart_id", o."effective_from" DESC
+	)
+	SELECT s.* FROM slot s WHERE NOT s."withdrawn"
+	UNION ALL
+	(SELECT s.* FROM slot s
+	  WHERE NOT EXISTS (SELECT 1 FROM slot l WHERE NOT l."withdrawn")
+	  ORDER BY s."effective_from" DESC, s."daypart_id" NULLS LAST LIMIT 1)
 $$;
 --> statement-breakpoint
 
@@ -175,16 +196,17 @@ $$;
 -- The one conflict query. NULL = no conflict; otherwise 'mixed_all_day_and_daypart' or 'overlapping_dayparts'.
 --   p_has_new: treat one more row (p_new_daypart, p_new_from, p_new_withdrawn) as already stored (the offer insert guard runs BEFORE INSERT).
 --   p_ov_id:   treat daypart p_ov_id as having the window (p_ov_days, p_ov_start, p_ov_end) (the daypart update guard runs BEFORE UPDATE).
+--   p_skip_offer: leave the stored offer with this id out (the offer delete guard runs BEFORE DELETE).
 -- Moments tested: now() and every effective_from later than now() among the stored rows and the new one.
 -- ---------------------------------------------------------------------------------------------
 CREATE FUNCTION "menu_offer_slot_conflict"(
 	p_store uuid, p_variant uuid, p_channel text,
 	p_has_new boolean, p_new_daypart uuid, p_new_from timestamptz, p_new_withdrawn boolean,
-	p_ov_id uuid, p_ov_days smallint[], p_ov_start time, p_ov_end time
+	p_ov_id uuid, p_ov_days smallint[], p_ov_start time, p_ov_end time, p_skip_offer uuid
 ) RETURNS text LANGUAGE sql STABLE AS $$
 	WITH rws AS (
 		SELECT o."daypart_id", o."effective_from", o."withdrawn" FROM "menu_offers" o
-		 WHERE o."store_id" = p_store AND o."variant_id" = p_variant AND o."channel" = p_channel
+		 WHERE o."store_id" = p_store AND o."variant_id" = p_variant AND o."channel" = p_channel AND o."id" IS DISTINCT FROM p_skip_offer
 		UNION ALL
 		SELECT p_new_daypart, p_new_from, p_new_withdrawn WHERE p_has_new
 	), moments AS (
@@ -221,6 +243,24 @@ $$;
 --> statement-breakpoint
 
 -- ---------------------------------------------------------------------------------------------
+-- One place for the refusal wording of menu_offer_slot_conflict's answer (NULL = nothing to refuse). p_delete only changes the tail of the message.
+-- ---------------------------------------------------------------------------------------------
+CREATE FUNCTION "menu_offer_slot_refuse"(p_conflict text, p_delete boolean) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+	IF p_conflict = 'mixed_all_day_and_daypart' THEN
+		RAISE EXCEPTION 'a variant cannot have a live all-day offer and a live dayparted offer at the same time for one store and channel (%)',
+			CASE WHEN p_delete THEN 'this scheduled row cannot be deleted: it is what keeps them apart' ELSE 'withdraw the other kind first' END
+			USING ERRCODE = '23514';
+	ELSIF p_conflict = 'overlapping_dayparts' THEN
+		RAISE EXCEPTION 'live dayparted offers of one variant, store and channel may not overlap in time (%)',
+			CASE WHEN p_delete THEN 'this scheduled row cannot be deleted: it is what keeps two overlapping dayparts apart' ELSE 'this daypart overlaps another live offer''s daypart' END
+			USING ERRCODE = '23514';
+	END IF;
+END;
+$$;
+--> statement-breakpoint
+
+-- ---------------------------------------------------------------------------------------------
 -- The offer insert guard: 0196's body unchanged up to the end of the live-offer block, then the daypart rules.
 -- ---------------------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION "menu_offers_insert_guard"() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -230,8 +270,12 @@ DECLARE
 	v_istatus text;
 	v_item uuid;
 	v_dstatus text;
-	v_conflict text;
 BEGIN
+	-- T-510 lock order (see CONCURRENCY): the daypart row FIRST, FOR SHARE, so a concurrent retire or window edit waits for this insert (and sees it), or this insert waits
+	-- for it; only then the item and variant keys. v_dstatus is NULL only when the daypart does not exist (or is not visible); the foreign key reports that.
+	IF NEW."daypart_id" IS NOT NULL THEN
+		SELECT d."status" INTO v_dstatus FROM "menu_dayparts" d WHERE d."id" = NEW."daypart_id" FOR SHARE;
+	END IF;
 	SELECT v."menu_item_id" INTO v_item FROM "menu_item_variants" v WHERE v."id" = NEW."variant_id";
 	PERFORM "menu_lock_keys"(ARRAY[v_item]);
 	PERFORM "menu_lock_key"(NEW."variant_id");
@@ -269,23 +313,12 @@ BEGIN
 		END IF;
 	END IF;
 
-	-- T-510 (0233). The daypart row is locked FOR SHARE so a concurrent retire or window edit waits for this insert (and sees it), or this insert waits for it.
-	IF NEW."daypart_id" IS NOT NULL THEN
-		SELECT d."status" INTO v_dstatus FROM "menu_dayparts" d WHERE d."id" = NEW."daypart_id" FOR SHARE;
-		-- v_dstatus is NULL only when the daypart does not exist (or is not visible); the foreign key reports that.
-		IF NOT NEW."withdrawn" AND v_dstatus = 'retired' THEN
-			RAISE EXCEPTION 'a live offer cannot use a retired daypart (choose an active daypart, or all day)' USING ERRCODE = '23514';
-		END IF;
+	-- T-510 (0233).
+	IF NOT NEW."withdrawn" AND v_dstatus = 'retired' THEN
+		RAISE EXCEPTION 'a live offer cannot use a retired daypart (choose an active daypart, or all day)' USING ERRCODE = '23514';
 	END IF;
 	IF NOT NEW."withdrawn" THEN
-		v_conflict := "menu_offer_slot_conflict"(NEW."store_id", NEW."variant_id", NEW."channel", true, NEW."daypart_id", NEW."effective_from", false, NULL, NULL, NULL, NULL);
-		IF v_conflict = 'mixed_all_day_and_daypart' THEN
-			RAISE EXCEPTION 'a variant cannot have a live all-day offer and a live dayparted offer at the same time for one store and channel (withdraw the other kind first)'
-				USING ERRCODE = '23514';
-		ELSIF v_conflict = 'overlapping_dayparts' THEN
-			RAISE EXCEPTION 'live dayparted offers of one variant, store and channel may not overlap in time (this daypart overlaps another live offer''s daypart)'
-				USING ERRCODE = '23514';
-		END IF;
+		PERFORM "menu_offer_slot_refuse"("menu_offer_slot_conflict"(NEW."store_id", NEW."variant_id", NEW."channel", true, NEW."daypart_id", NEW."effective_from", false, NULL, NULL, NULL, NULL, NULL), false);
 	END IF;
 	RETURN NEW;
 END;
@@ -308,16 +341,22 @@ BEGIN
 	   AND NEW."end_time" IS NOT DISTINCT FROM OLD."end_time" AND NEW."status" IS NOT DISTINCT FROM OLD."status" THEN
 		RETURN NEW; -- a rename or an updated_at touch: nothing to protect
 	END IF;
-	-- Variant keys first (ascending, the 0196 order), then the daypart row, then read the offers (a fresh snapshot per statement).
-	PERFORM "menu_lock_keys"(ARRAY(SELECT DISTINCT o."variant_id" FROM "menu_offers" o WHERE o."daypart_id" = OLD."id"));
+	-- Lock order (see CONCURRENCY): the daypart row first (the UPDATE already holds it; stated so the order is true on its own), then the variant keys (ascending, the 0196
+	-- order), then read the offers (a fresh snapshot per statement).
 	PERFORM 1 FROM "menu_dayparts" d WHERE d."id" = OLD."id" FOR NO KEY UPDATE;
+	PERFORM "menu_lock_keys"(ARRAY(SELECT DISTINCT o."variant_id" FROM "menu_offers" o WHERE o."daypart_id" = OLD."id"));
 
 	IF NEW."status" = 'retired' AND OLD."status" IS DISTINCT FROM 'retired' THEN
+		-- A slot (variant, channel) is live when it is live now OR a non-withdrawn row of it is scheduled later (the moments rule of menu_offer_slot_conflict).
 		SELECT count(*) INTO v_live FROM (
-			SELECT DISTINCT ON (o."variant_id", o."channel") o."withdrawn" FROM "menu_offers" o
+			SELECT o."variant_id", o."channel" FROM "menu_offers" o
 			 WHERE o."daypart_id" = OLD."id"
-			 ORDER BY o."variant_id", o."channel", o."effective_from" DESC
-		) s WHERE NOT s."withdrawn";
+			 GROUP BY o."variant_id", o."channel"
+			HAVING bool_or(NOT o."withdrawn" AND o."effective_from" > now())
+			    OR coalesce((SELECT NOT x."withdrawn" FROM "menu_offers" x
+			                  WHERE x."daypart_id" = OLD."id" AND x."variant_id" = o."variant_id" AND x."channel" = o."channel" AND x."effective_from" <= now()
+			                  ORDER BY x."effective_from" DESC LIMIT 1), false)
+		) s;
 		IF v_live > 0 THEN
 			RAISE EXCEPTION 'this daypart cannot be retired: % live offer(s) still use it (withdraw them first)', v_live USING ERRCODE = '23514';
 		END IF;
@@ -325,7 +364,7 @@ BEGIN
 
 	IF NEW."days" IS DISTINCT FROM OLD."days" OR NEW."start_time" IS DISTINCT FROM OLD."start_time" OR NEW."end_time" IS DISTINCT FROM OLD."end_time" THEN
 		FOR r IN SELECT DISTINCT o."store_id", o."variant_id", o."channel" FROM "menu_offers" o WHERE o."daypart_id" = OLD."id" LOOP
-			v_conflict := "menu_offer_slot_conflict"(r."store_id", r."variant_id", r."channel", false, NULL, NULL, NULL, OLD."id", NEW."days", NEW."start_time", NEW."end_time");
+			v_conflict := "menu_offer_slot_conflict"(r."store_id", r."variant_id", r."channel", false, NULL, NULL, NULL, OLD."id", NEW."days", NEW."start_time", NEW."end_time", NULL);
 			IF v_conflict IS NOT NULL THEN
 				RAISE EXCEPTION 'this daypart''s days or times cannot change: it would overlap another live offer''s daypart for the same variant and channel (%)', v_conflict
 					USING ERRCODE = '23514';
@@ -339,3 +378,30 @@ $$;
 
 CREATE TRIGGER "menu_dayparts_update_guard" BEFORE UPDATE ON "menu_dayparts"
 	FOR EACH ROW EXECUTE FUNCTION "menu_dayparts_update_guard"();
+
+--> statement-breakpoint
+
+-- ---------------------------------------------------------------------------------------------
+-- The offer delete guard (beside 0196's menu_offers_delete_guard, which fires first and keeps refusing a row in effect). A scheduled row may be cancelled only if the
+-- state that remains is still allowed: deleting a scheduled withdrawal can bring an all-day offer back next to a dayparted one, or two overlapping dayparts back together.
+-- Same locks as the insert guard, in the same order (daypart row, item key, variant key).
+-- ---------------------------------------------------------------------------------------------
+CREATE FUNCTION "menu_offers_delete_slot_guard"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+	v_item uuid;
+BEGIN
+	IF OLD."daypart_id" IS NOT NULL THEN
+		PERFORM 1 FROM "menu_dayparts" d WHERE d."id" = OLD."daypart_id" FOR SHARE;
+	END IF;
+	SELECT v."menu_item_id" INTO v_item FROM "menu_item_variants" v WHERE v."id" = OLD."variant_id";
+	PERFORM "menu_lock_keys"(ARRAY[v_item]);
+	PERFORM "menu_lock_key"(OLD."variant_id");
+	PERFORM "menu_offer_slot_refuse"("menu_offer_slot_conflict"(OLD."store_id", OLD."variant_id", OLD."channel", false, NULL, NULL, NULL, NULL, NULL, NULL, NULL, OLD."id"), true);
+	RETURN OLD;
+END;
+$$;
+--> statement-breakpoint
+
+-- Named after menu_offers_delete_guard so it fires second (BEFORE triggers run in name order).
+CREATE TRIGGER "menu_offers_delete_slot_guard" BEFORE DELETE ON "menu_offers"
+	FOR EACH ROW EXECUTE FUNCTION "menu_offers_delete_slot_guard"();
