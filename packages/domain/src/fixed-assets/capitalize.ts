@@ -323,7 +323,9 @@ export async function retireAssetFromVoidedExpense(
   actor: Actor,
   input: { expenseId: string; expenseBusinessDate: string; reason: string },
 ): Promise<RetireAssetFromVoidedExpenseResult> {
-  const asset = await fixedAssetsRepo.findBySourceExpense(tx, actor.orgId, input.expenseId);
+  const found = await fixedAssetsRepo.findBySourceExpense(tx, actor.orgId, input.expenseId);
+  // T-516: asset lock first, shares it with depreciate/terms/dispose
+  const asset = found ? await fixedAssetsRepo.getByIdForUpdate(tx, actor.orgId, found.id) : undefined;
   if (!asset || asset.status !== 'active') {
     // No asset, or one already retired/pending for an unrelated reason — nothing for the void
     // to do. Refusing here would block a legitimate expense correction over a register state
