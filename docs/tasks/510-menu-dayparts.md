@@ -1,7 +1,7 @@
 # T-510 — Menu dayparts: a repeating daily window on a menu offer
 
-**Status:** SPEC APPROVED by BOSS (Opus review, 3 Nov 2026) with the R3/R4 fix applied. Written by the settings session. T-510 and migration 0227 are confirmed as ours.
-**Owner:** settings session. **Migration:** one, **0227** (hand-authored, ADR-012 §5). Write it only on top of T-508's 0226: branch from `lane/t508` (worktree `wt-t508-spec`) or wait until its S1 PR merges, so the migration journal stays in order.
+**Status:** SPEC APPROVED by BOSS (Opus review, 3 Nov 2026) with the R3/R4 fix applied. Written by the settings session. T-510 is confirmed as ours. **Migration number: 0233** (BOSS renumbered it from the planned 0227; 0232 is T-508's, on main).
+**Owner:** settings session. **Migration:** one, **0233** (hand-authored, ADR-012 §5; journal idx 233). BOSS renumbered it: the spec first said 0227 and then sat on top of T-508's 0226, but T-508 shipped as 0232 on main, so ours is the next free number. It is on no database yet.
 **Housekeeping:** this draft sits in the main checkout (stale branch `t448-modal-forms-and-density`). Before committing, move it into a worktree cut from origin/main or lane/t508, with node_modules junctions. Never `git worktree remove --force`.
 **Gate:** cleared. Ian chose one package with two daypart offers (3 Nov). S0 started.
 **Lanes:** Sonnet tester → builder → auditor per slice (auditor Sonnet: schema + money). Discovery slices Haiku.
@@ -93,14 +93,20 @@ The two options as put to Ian, kept for the record. v1 has each package twice (L
   `repo/menu.ts:719-751`) is read through `domain/pos/depletion-source.ts` only. T-508 adds no offer readers. Migrations: origin/main
   highest 0225; 0226 is on `lane/t508` only; 0227 free. The board (`webapps/shareat-coord/BOARD.md`) has no claim on 0227 or T-510.
   Unverified: body of `menu_history_delete_guard` (0196:616); whether `project.ts` callers pass daypart-blind rows.
-- **S1 schema:** migration 0227 (R1–R3), classification and RLS rows, repo `packages/db/src/repo/dayparts.ts`. Tests:
+- **S1 schema (S1a: migration 0233, classification and RLS rows; the repo `packages/db/src/repo/dayparts.ts` is S1b):** migration 0233 (R1–R3). Tests:
   overnight containment, overlap refused, all-day vs dayparted clash refused, retire refused, cross-store daypart refused by FK,
   existing offers unchanged. **Full suite on a fresh gate DB** (migration rule).
+- **S1b repo and readers (after S1a merges).** Writers must handle the lock rule: **every write that touches several offers or a daypart in one transaction must retry once on SQLSTATE 40P01** (the locks are daypart row, then item key, then variant keys, enforced inside each guard but not across statements of one transaction; the integration test `known limit: ...` documents the exact interleaving). The monotonic rule is daypart-blind (a new row of any daypart may not be dated earlier than a stored row of another daypart). Readers that must learn about dayparts (found by the S1a audit, line numbers as of `lane/t510`):
+  - `repo/menu.ts` `offersInForce` (~:543-566): the online lateral join `b` (~:553-554) must match on daypart too, or an online dayparted slot reads the wrong row.
+  - `historyClash` `repo/menu.ts:95`: daypart-blind, so it over-refuses same-instant rows of different dayparts (Lunch and Dinner starting together).
+  - `apps/erp/src/app/menu/lib.ts:195` and `:464`, and `apps/erp/src/app/menu/prices/page.tsx:61`.
+  - `packages/domain/src/menu/project.ts:96` (`offerAt` keyed on variant + channel, last row wins): must pick by the daypart open now (R4), not the last row.
+  - `menuSnapshot` (every reader of `menu_offer_in_force`, which now returns one row per LIVE daypart slot, or exactly one withdrawn row when nothing is live).
 - **S2 domain:** live-offer resolution (R4), authorize (R8), audit (R12). Tests: Sunday 16:59 / 17:00 / 07:59 / 08:00 in
   `Asia/Manila`, day-of-week at midnight, not-offered-now result with `availableFrom`. The resolver's not-offered-now result
   also carries `availableAt` (UTC instant of the next opening) and `availableDay` (store-local weekday, 0-6); bad zone, instant,
   window or tied offers resolve to `invalid` with a reason (`daypart.ts`).
-- **S3 ERP screens (R9).** The form must explain a monotonic refusal in plain words (the rule is per store, variant and channel and ignores dayparts: a new row of any daypart cannot be dated earlier than a stored row of another daypart).
+- **S3 ERP screens (R9).** Any action that writes several offers or a daypart in one transaction (for example switching a package from all-day to dayparted: withdraw, then add two) retries once on SQLSTATE 40P01, as in S1b. The form must explain a monotonic refusal in plain words (the rule is per store, variant and channel and ignores dayparts: a new row of any daypart cannot be dated earlier than a stored row of another daypart).
 - **S4 projection (R6).** Needs T-508 S3 merged first.
 - **S5 cutover load (R10)** with the signed pairing table and the load report. Practice proof with Lipa's real two
   schedules and prices.
