@@ -23,6 +23,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "../ui/form";
 import type { StorePackage, StoreFlavor } from "@/lib/types";
 import { bundleExtraPax } from "@/lib/billing/bundle";
+import { AddonsPOSModal } from "@/components/shared/AddonsPOSModal";
+import type { BuiltAddonLine } from "@/lib/pos2/addon-line-builder";
+import { addChosen, changeChosenQty, removeChosen } from "@/lib/pos2/chosen-addons";
 
 // --- TYPES ---
 export type Table = {
@@ -107,6 +110,10 @@ export function StartSessionForm({ tables, packages, flavors, user, storeId, off
     // State for rice/cheese qty touched status
     const [riceTouched, setRiceTouched] = useState(false);
     const [cheeseTouched, setCheeseTouched] = useState(false);
+
+    // T-518: optional a-la-carte lines taken with the package order (saved in the same batch as the session).
+    const [chosenAddons, setChosenAddons] = useState<BuiltAddonLine[]>([]);
+    const [addonPickerOpen, setAddonPickerOpen] = useState(false);
 
     const unlimitedForm = useForm<UnlimitedFormValues>({
         resolver: zodResolver(unlimitedSchema),
@@ -241,6 +248,9 @@ export function StartSessionForm({ tables, packages, flavors, user, storeId, off
         
         if (customerData.name || customerData.tin || customerData.address) {
             sessionPayload.customer = customerData;
+        }
+        if (chosenAddons.length > 0) {
+            sessionPayload.initialAddons = chosenAddons;
         }
 
         try {
@@ -444,6 +454,43 @@ export function StartSessionForm({ tables, packages, flavors, user, storeId, off
                                         <FormMessage />
                                     </FormItem>
                                 )}
+                            />
+                            <Separator />
+                            {/* Optional: a la carte taken with the package order */}
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between gap-3">
+                                    <Label>{"\u00C0 la carte (optional)"}</Label>
+                                    <Button type="button" variant="outline" className="h-12 px-4" onClick={() => setAddonPickerOpen(true)}>
+                                        <Plus className="mr-2" /> {"Add \u00E0 la carte"}
+                                    </Button>
+                                </div>
+                                {chosenAddons.map((l) => {
+                                    const p = l.payload as any;
+                                    const qty = Number(p.qtyOrdered);
+                                    const total = (Number(p.unitPrice) + Number(p.modifiersTotal ?? 0)) * qty;
+                                    return (
+                                        <div key={l.lineId} className="flex items-center gap-3 rounded-md border p-3">
+                                            <div className="min-w-0 flex-1">
+                                                <p className="font-medium truncate">{p.itemName}</p>
+                                                {p.modifiersText && <p className="text-xs text-muted-foreground truncate">{p.modifiersText}</p>}
+                                                {p.note && <p className="text-xs text-muted-foreground truncate">Note: {p.note}</p>}
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <Button type="button" variant="outline" size="icon" className="h-11 w-11" aria-label="Less" onClick={() => setChosenAddons((c) => changeChosenQty(c, l.lineId, -1))}><Minus /></Button>
+                                                <span className="w-8 text-center tabular-nums">{qty}</span>
+                                                <Button type="button" variant="outline" size="icon" className="h-11 w-11" aria-label="More" onClick={() => setChosenAddons((c) => changeChosenQty(c, l.lineId, 1))}><Plus /></Button>
+                                            </div>
+                                            <span className="w-24 text-right tabular-nums">{"\u20B1" + total.toFixed(2)}</span>
+                                            <Button type="button" variant="ghost" size="icon" className="h-11 w-11" aria-label="Remove" onClick={() => setChosenAddons((c) => removeChosen(c, l.lineId))}><X /></Button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            <AddonsPOSModal
+                                open={addonPickerOpen}
+                                onOpenChange={setAddonPickerOpen}
+                                storeId={storeId}
+                                onCollect={(line) => setChosenAddons((c) => addChosen(c, line))}
                             />
                             <Separator />
                             {/* Step 4: Notes and Customer */}

@@ -170,3 +170,10 @@ T-457 updates the v2-only `src/lib/terminal/claim.ts`: bounded ascending range p
 ## T-474 edits (refund number release, Z fixes)
 
 - V2-only `src/lib/outbox/reconcile.ts` and `src/lib/outbox/reconcileRunner.ts`: a reserved refund number is skipped only after the server has closed it (`releaseRefundNumber` dep, `POST /api/pos2/refund-numbers/release`); absence alone leaves the row reserved. V2-only `src/server/pos2/z-readings.ts`, `src/lib/cash/z-reading.ts`, `src/lib/printing/zSlipFormatter.ts`: Z window never backward, late receipts by server arrival, "Manual adjustments" slip line. New V2-only `src/server/pos2/refund-number-release.ts` and its route. No v1 source was changed.
+
+## T-518 edits (a la carte taken with the package order)
+
+- `src/components/shared/AddonsPOSModal.tsx` (T-518): the add-on line is built by the shared `buildAddonLine` in both the online and offline paths; new optional `onCollect` prop (collect mode: hands the line back, no session, no Firestore write); `session` is optional in collect mode.
+- `src/components/cashier/start-session-form.tsx` (T-518): the package tab gets an optional "A la carte" section (picker in collect mode, chosen list with qty and remove) and passes `initialAddons` to `startSession`.
+- `src/components/cashier/firestore.ts` (T-518): `StartSessionPayload.initialAddons`; `startSession` writes the add-on bill lines, one add-on kitchen ticket per stationed line and `billingRevision` +1 per line in the same single batch as the package; ADDON_ADDED logged per line after commit; the offline backup print covers the add-on tickets.
+- New files: `src/lib/pos2/addon-line-builder.ts`, `src/lib/pos2/chosen-addons.ts` (and their tests).

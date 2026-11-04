@@ -28,6 +28,7 @@ import {
 } from 'firebase/firestore';
 
 import { db, auth } from '@/lib/firebase/client';
+import type { BuiltAddonLine } from '@/lib/pos2/addon-line-builder';
 import { selectTicketWriter } from '@/lib/offline/kitchenTicketWrites';
 import { servedQtyFields } from '@/lib/kitchen/served-qty';
 import { AppUser } from '@/context/auth-context';
@@ -107,6 +108,8 @@ export type StartSessionPayload = {
   initialFlavorIds?: string[];
   package?: StorePackage; // Optional for ala carte
   sessionMode: 'package_dinein' | 'alacarte';
+  /** T-518: a-la-carte lines taken with the package order, written in the same batch. */
+  initialAddons?: BuiltAddonLine[];
 };
 
 
@@ -198,6 +201,7 @@ export async function startSession(storeId: string, payload: StartSessionPayload
   // print without re-deriving it.
   let packageTicketPayload: Record<string, any> | null = null;
 
+  const addonTicketPayloads: Record<string, any>[] = [];
   const batch = writeBatch(db);
     // 1. Create the new session document
     batch.set(newSessionRef, sessionPayload);
@@ -344,6 +348,32 @@ export async function startSession(storeId: string, payload: StartSessionPayload
       });
     }
 
+    // 5. T-518: a-la-carte lines taken with the package order, same batch (all-or-nothing).
+    const initialAddons = payload.sessionMode === 'package_dinein' && payload.package ? (payload.initialAddons ?? []) : [];
+    if (initialAddons.length > 0) {
+      const actor = getActorStamp(user);
+      for (const a of initialAddons) {
+        const p = a.payload as any;
+        batch.set(doc(db, `stores/${storeId}/sessions/${newSessionRef.id}/sessionBillLines`, a.lineId), a.payload);
+        const t = await createKitchenTickets(
+          db,
+          storeId,
+          newSessionRef.id,
+          sessionPayload as unknown as PendingSession,
+          'addon',
+          { itemId: p.itemId, itemName: p.itemName, kitchenLocationId: p.kitchenLocationId ?? null, kitchenLocationName: p.kitchenLocationName, billLineId: a.lineId },
+          Number(p.qtyOrdered),
+          actor,
+          { batch },
+          p.note || undefined,
+          p.modifiers?.length ? { modifiers: p.modifiers, modifiersText: p.modifiersText } : undefined,
+        );
+        if (t) addonTicketPayloads.push(t);
+      }
+      // Same as the modal: one revision bump per added line.
+      batch.update(newSessionRef, { billingRevision: increment(initialAddons.length), updatedAt: serverTimestamp() });
+    }
+
   commitLocalFirst(batch, (err) => {
     console.error('[startSession] batch sync failed', err);
   });
@@ -352,8 +382,9 @@ export async function startSession(storeId: string, payload: StartSessionPayload
   // startSession has no React `isOnline` (it's a plain data-layer function),
   // so it asks the connectivity store (a probe of the POS server, T-425). Never awaited into the order
   // flow; any dep (or the kitchenLocations fetch) throwing is swallowed.
-  if (!getConnectivityStore().getState().online && packageTicketPayload) {
-    const ticketToPrint = packageTicketPayload;
+  // T-518: the package ticket and any a-la-carte tickets all print.
+  const ticketsToPrint = [packageTicketPayload, ...addonTicketPayloads].filter((t): t is Record<string, any> => !!t);
+  if (!getConnectivityStore().getState().online) for (const ticketToPrint of ticketsToPrint) {
     void (async () => {
       const klSnap = await getDocs(collection(db, 'stores', storeId, 'kitchenLocations'));
       const kitchenLocations = klSnap.docs.map((d) => ({ id: d.id, printOnOutage: (d.data() as any).printOnOutage }));
@@ -376,6 +407,21 @@ export async function startSession(storeId: string, payload: StartSessionPayload
       });
       await printKitchenTicketBackup(ticketToPrint as any, deps);
     })().catch(() => {});
+  }
+
+  // ADDON_ADDED per line after commit, as the modal logs it.
+  for (const a of payload.sessionMode === 'package_dinein' ? (payload.initialAddons ?? []) : []) {
+    const p = a.payload as any;
+    const qty = Number(p.qtyOrdered);
+    const suffix = p.modifiersText ? ` (${p.modifiersText})` : '';
+    void writeActivityLog({
+      action: 'ADDON_ADDED',
+      storeId,
+      sessionId: newSessionRef.id,
+      user,
+      meta: { itemName: p.itemName, qty, amount: (Number(p.unitPrice) + Number(p.modifiersTotal ?? 0)) * qty },
+      note: `Addon: ${p.itemName}${suffix} x${qty}`,
+    }).catch((err) => console.warn('[startSession] addon activity log failed', err));
   }
 
   const packageName = payload.package?.packageName || null;
