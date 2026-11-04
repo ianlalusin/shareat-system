@@ -314,6 +314,8 @@ export interface EditableRecordProps {
   /** Command buttons shown only in edit mode, each its own form (for example Retire). */
   extra?: ReactNode;
   saveLabel?: 'Save' | 'Save draft';
+  /** T-508 S2b: when set, the locked record's trigger is ONE text button reading this, instead of the round pencil. */
+  editText?: string;
   /**
    * T-389 / DEF-617: `typedFor(sp, DEF, record.id)`. After a refused Save the record reopens in edit mode holding what
    * the user typed, applied in the browser before paint. The page keeps drawing the STORED values as every
@@ -347,6 +349,9 @@ const PRIMARY =
 const SECONDARY =
   'erp-icon-btn inline-flex h-11 w-11 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full p-0 text-sm border border-transparent bg-ink text-canvas hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
 
+const TEXT_BTN =
+  'inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-transparent bg-ink px-4 text-sm text-canvas hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
+
 /** The presentational tree: no hooks, so the editing state is reachable in server render tests. */
 export function EditableRecordView({
   mode,
@@ -362,6 +367,7 @@ export function EditableRecordView({
   hidden,
   children,
   extra,
+  editText,
   saveLabel = 'Save',
 }: EditableRecordViewProps) {
   const editing = mode === 'editing';
@@ -376,9 +382,15 @@ export function EditableRecordView({
       <span className="inline-flex flex-wrap items-center gap-2">
         {/* While editing the modal covers the page; the Edit button returns (and takes focus back) on close. */}
         {editing ? null : (
-          <button type="button" ref={editRef} className={SECONDARY} aria-label={`Edit ${label}`} aria-haspopup="dialog" data-tip="Edit" onClick={onEdit}>
-            <ActionIcon name="edit" />
-          </button>
+          editText ? (
+            <button type="button" ref={editRef} className={TEXT_BTN} aria-haspopup="dialog" onClick={onEdit}>
+              {editText}
+            </button>
+          ) : (
+            <button type="button" ref={editRef} className={SECONDARY} aria-label={`Edit ${label}`} aria-haspopup="dialog" data-tip="Edit" onClick={onEdit}>
+              <ActionIcon name="edit" />
+            </button>
+          )
         )}
         {!editing && message ? (
           <span role="alert" className="text-sm text-danger">

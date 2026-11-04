@@ -1,5 +1,6 @@
 import { EditableRecord } from '@/components/forms';
-import { Banner, Button, Field, FormGrid, Input, Select } from '@/components/ui';
+import { ACTION_LINK } from '@/components/action-link';
+import { Banner, Button, ConfirmDestructive, Field, FormGrid, Input, Select } from '@/components/ui';
 import type { KitchenSetup } from '@shareat/domain';
 import type { TypedView } from '@/lib/keep-typing';
 import {
@@ -8,15 +9,25 @@ import {
   saveKitchenRoutingAction,
   setKitchenCategoryAction,
   updateKitchenStationAction,
-} from '../kitchen-actions';
+} from '../admin/stores/kitchen-actions';
 
 const CARD = 'space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800';
 const MUTED = 'text-neutral-600 dark:text-neutral-400';
+const NOT_ON_POS_SHOWN = 5;
+
+/** "order" is shown only when it means something: 0 is the default and says nothing. */
+const orderNote = (n: number): string => (n < 0 ? ' · shows first' : n > 0 ? ` · order ${n}` : '');
 
 /**
  * T-508 S2b: Kitchen stations and Kitchen routing. Rendered only for someone who may manage this store's settings
  * (`kitchenForStore` returns null otherwise); the domain functions enforce the same gate again on every write.
  */
+const notOnPosItem = (i: KitchenSetup['notOnPos'][number]) => (
+  <li key={i.itemId}>
+    {i.name} <span className={MUTED}>({i.categoryName})</span>
+  </li>
+);
+
 export function KitchenSections({
   storeId,
   setup,
@@ -35,17 +46,24 @@ export function KitchenSections({
   return (
     <>
       {setup.notOnPos.length > 0 && (
-        <Banner tone="error">
+        <Banner tone="warning">
           <div>
-            <strong>Not on the POS yet.</strong> These {setup.notOnPos.length} item{setup.notOnPos.length === 1 ? ' has' : 's have'} a price here
-            but no kitchen station, so the cashier cannot sell {setup.notOnPos.length === 1 ? 'it' : 'them'}. Choose a station under Kitchen routing.
+            <strong>Not on the POS yet.</strong> {setup.notOnPos.length} item{setup.notOnPos.length === 1 ? ' has' : 's have'} a price here
+            but no kitchen station, so the cashier cannot sell {setup.notOnPos.length === 1 ? 'it' : 'them'}.{' '}
+            <a href="#kitchen-routing" className={ACTION_LINK}>
+              Choose a station under Kitchen routing
+            </a>
             <ul data-testid="not-on-pos" className="mt-1 list-disc pl-5">
-              {setup.notOnPos.map((i) => (
-                <li key={i.itemId}>
-                  {i.name} <span className={MUTED}>({i.categoryName})</span>
-                </li>
-              ))}
+              {setup.notOnPos.slice(0, NOT_ON_POS_SHOWN).map(notOnPosItem)}
             </ul>
+            {setup.notOnPos.length > NOT_ON_POS_SHOWN && (
+              <details>
+                <summary className="inline-flex min-h-6 cursor-pointer items-center underline underline-offset-2">
+                  {setup.notOnPos.length} items — show all
+                </summary>
+                <ul className="list-disc pl-5">{setup.notOnPos.slice(NOT_ON_POS_SHOWN).map(notOnPosItem)}</ul>
+              </details>
+            )}
           </div>
         </Banner>
       )}
@@ -60,7 +78,8 @@ export function KitchenSections({
                 <span>
                   <span className="font-medium">{s.name}</span>
                   <span className={`ml-2 ${MUTED}`}>
-                    {s.slaMinutes} min · {s.printOnOutage ? 'prints if the screen is down' : 'no paper backup'} · order {s.sortOrder}
+                    {s.slaMinutes} min · {s.printOnOutage ? 'Prints tickets if the screen is down' : 'No printed tickets if the screen is down'}
+                    {orderNote(s.sortOrder)}
                   </span>
                 </span>
                 <EditableRecord
@@ -72,9 +91,12 @@ export function KitchenSections({
                     <form action={retireKitchenStationAction}>
                       <input type="hidden" name="storeId" value={storeId} />
                       <input type="hidden" name="stationId" value={s.id} />
-                      <Button type="submit" variant="secondary">
-                        Retire
-                      </Button>
+                      <ConfirmDestructive
+                        tier="retype"
+                        label="Retire station"
+                        consequence="This station stops taking tickets. Nothing is deleted. It is refused while any item still cooks here."
+                        expectedName={s.name}
+                      />
                     </form>
                   }
                 >
@@ -119,7 +141,7 @@ export function KitchenSections({
         </form>
       </section>
 
-      <section className={CARD}>
+      <section id="kitchen-routing" className={CARD}>
         <h2 className="text-sm font-medium">Kitchen routing</h2>
         <p className="text-xs text-neutral-500">
           Which station cooks each item sold at this store. All sizes of a dish go to the same station. An item with no station stays off the POS.
@@ -130,41 +152,40 @@ export function KitchenSections({
           <p className="text-sm text-neutral-600 dark:text-neutral-400">Add a kitchen station first.</p>
         ) : (
           <>
-            <form action={setKitchenCategoryAction} className="space-y-3 text-sm">
+            <form action={setKitchenCategoryAction} className="flex flex-wrap items-end gap-3 text-sm">
               <input type="hidden" name="storeId" value={storeId} />
-              <FormGrid>
-                <Field label="Set every item in this category to…">
-                  <Select name="categoryId" className="mt-1 w-full" defaultValue="">
-                    <option value="" disabled>
-                      Choose a category
+              <Field label="Apply to category">
+                <Select name="categoryId" aria-required="true" className="mt-1 w-full" defaultValue="">
+                  <option value="" disabled>
+                    Choose a category
+                  </option>
+                  {categories.map(([id, name]) => (
+                    <option key={id} value={id}>
+                      {name}
                     </option>
-                    {categories.map(([id, name]) => (
-                      <option key={id} value={id}>
-                        {name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="Station">
-                  <Select name="stationId" className="mt-1 w-full" defaultValue="">
-                    <option value="" disabled>
-                      Choose a station
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Station">
+                <Select name="stationId" aria-required="true" className="mt-1 w-full" defaultValue="">
+                  <option value="" disabled>
+                    Choose a station
+                  </option>
+                  {setup.stations.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
                     </option>
-                    {setup.stations.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              </FormGrid>
+                  ))}
+                </Select>
+              </Field>
               <Button type="submit" variant="secondary">
                 Save
               </Button>
             </form>
 
-            <div className="flex items-center gap-2 text-sm">
+            <div className="text-sm">
               <EditableRecord
+                editText="Change stations one by one"
                 action={saveKitchenRoutingAction}
                 label="kitchen routing"
                 hidden={{ storeId }}
@@ -193,7 +214,6 @@ export function KitchenSections({
                   ))}
                 </div>
               </EditableRecord>
-              <span className={MUTED}>Change stations one by one</span>
             </div>
 
             <ul className="text-sm" data-testid="routing-list">

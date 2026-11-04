@@ -23,7 +23,7 @@ vi.mock('../../src/lib/session', () => ({
   requireActor: vi.fn(async () => h.actor),
   requireSession: vi.fn(async () => ({ actor: h.actor, sessionId: 'session-1', credentialKind: 'pin' as const, storeId: null, expiresAt: new Date('2099-01-01') })),
 }));
-vi.mock('../../src/lib/page-access', () => ({ requirePageAccess: async () => ({ actor: h.actor!, refusal: null }) }));
+vi.mock('../../src/lib/page-access', async (orig) => ({ ...(await orig<object>()), requirePageAccess: async () => ({ actor: h.actor!, refusal: null }) }));
 vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
 
 import { closeDb } from '@shareat/db';
@@ -112,7 +112,7 @@ describe('T-508 S2b - station actions', () => {
     const f = await fixture('create');
     for (const [who, name] of [[f.admin, 'Dessert'], [f.managerA, 'Salad']] as const) {
       const o = await post(who, 'createKitchenStationAction', form({ storeId: f.storeA, name, slaMinutes: '7' }));
-      expect(o.path).toBe(`/admin/stores/${f.storeA}`);
+      expect(o.path).toBe('/kitchen');
       expect(o.flash.error).toBeUndefined();
       expect(o.flash.ok).toBeTruthy();
     }
@@ -161,25 +161,41 @@ describe('T-508 S2b - station actions', () => {
   it('admin and the store manager retire a station; staff and another store manager cannot', async () => {
     const f = await fixture('retire');
     for (const [label, who] of refused(f)) {
-      const o = await post(who, 'retireKitchenStationAction', form({ storeId: f.storeA, stationId: f.bar }));
+      const o = await post(who, 'retireKitchenStationAction', form({ storeId: f.storeA, stationId: f.bar, confirmName: 'Bar' }));
       expect(o.flash.error, label).toBeTruthy();
     }
     expect((await stations(f.storeA)).find((r) => r.id === f.bar)?.status).toBe('active');
-    expect((await post(f.managerA, 'retireKitchenStationAction', form({ storeId: f.storeA, stationId: f.bar }))).flash.ok).toBeTruthy();
-    expect((await post(f.admin, 'retireKitchenStationAction', form({ storeId: f.storeA, stationId: f.grill }))).flash.ok).toBeTruthy();
+    expect((await post(f.managerA, 'retireKitchenStationAction', form({ storeId: f.storeA, stationId: f.bar, confirmName: 'Bar' }))).flash.ok).toBeTruthy();
+    expect((await post(f.admin, 'retireKitchenStationAction', form({ storeId: f.storeA, stationId: f.grill, confirmName: 'Grill' }))).flash.ok).toBeTruthy();
     expect((await stations(f.storeA)).map((r) => r.status)).toEqual(['retired', 'retired']);
+  });
+
+  it('retire needs the station name retyped; a wrong name changes nothing', async () => {
+    const f = await fixture('retire-name');
+    const o = await post(f.admin, 'retireKitchenStationAction', form({ storeId: f.storeA, stationId: f.bar, confirmName: 'Nope' }));
+    expect(o.flash.error).toBeTruthy();
+    expect((await stations(f.storeA)).find((r) => r.id === f.bar)?.status).toBe('active');
   });
 
   it('retire is refused while an item cooks there, with the domain sentence', async () => {
     const f = await fixture('retire-routed');
     await post(f.admin, 'setKitchenCategoryAction', form({ storeId: f.storeA, categoryId: f.grillCat, stationId: f.grill }));
-    const o = await post(f.admin, 'retireKitchenStationAction', form({ storeId: f.storeA, stationId: f.grill }));
+    const o = await post(f.admin, 'retireKitchenStationAction', form({ storeId: f.storeA, stationId: f.grill, confirmName: 'Grill' }));
     expect(o.flash.error ?? '').toMatch(/route|item|cook/i);
     expect((await stations(f.storeA)).find((r) => r.id === f.grill)?.status).toBe('active');
   });
 });
 
 describe('T-508 S2b - routing actions', () => {
+  it('category save with nothing chosen says so, in words, and writes nothing', async () => {
+    const f = await fixture('cat-empty');
+    for (const fd of [form({ storeId: f.storeA }), form({ storeId: f.storeA, categoryId: f.grillCat }), form({ storeId: f.storeA, stationId: f.grill })]) {
+      const o = await post(f.admin, 'setKitchenCategoryAction', fd);
+      expect(o.flash.error).toBe('Choose a category and a station.');
+    }
+    expect((await routes(f.storeA)).size).toBe(0);
+  });
+
   it('saves only the pickers that changed; blank clears a route', async () => {
     const f = await fixture('save');
     const o = await post(f.managerA, 'saveKitchenRoutingAction', form({ storeId: f.storeA, [`route_${f.pork}`]: f.grill, [`route_${f.cola}`]: f.bar, [`route_${f.squid}`]: '' }));
@@ -215,14 +231,14 @@ describe('T-508 S2b - routing actions', () => {
   });
 });
 
-async function render(who: Who, storeId: string): Promise<string> {
+async function render(who: Who, storeId?: string): Promise<string> {
   h.actor = who;
-  const Page = (await import('../../src/app/admin/stores/[id]/page')).default;
-  return renderToStaticMarkup((await Page({ params: Promise.resolve({ id: storeId }), searchParams: Promise.resolve({}) })) as never);
+  const Page = (await import('../../src/app/kitchen/page')).default;
+  return renderToStaticMarkup((await Page({ searchParams: Promise.resolve(storeId ? { store: storeId } : {}) })) as never);
 }
 
-describe('T-508 S2b - the store page by role', () => {
-  it('admin and the store manager see the panels; the red panel lists exactly the unrouted offered items', async () => {
+describe('T-508 S2b - the /kitchen page by role', () => {
+  it('admin and the store manager see the panels; the warning panel lists exactly the unrouted offered items', async () => {
     const f = await fixture('render');
     await sql`insert into kitchen_routes (org_id, store_id, menu_item_id, station_id, created_by) values (${f.orgId}, ${f.storeA}, ${f.pork}, ${f.grill}, ${f.admin.personId})`;
     for (const who of [f.admin, f.managerA]) {
@@ -238,6 +254,14 @@ describe('T-508 S2b - the store page by role', () => {
     }
   });
 
+  it('a manager goes straight to their only store; a store they do not hold is refused', async () => {
+    const f = await fixture('render-scope');
+    expect(await render(f.managerA)).toContain('Kitchen stations');
+    expect(await render(f.managerB, f.storeA)).toContain('This store is not available to you.');
+    expect(await render(f.managerA, f.storeB)).toContain('This store is not available to you.');
+    expect(await render(f.admin, f.storeB)).toContain('Kitchen stations');
+  });
+
   it('staff and a manager of another store see no kitchen controls', async () => {
     const f = await fixture('render-no');
     for (const who of [f.staff, f.managerB]) {
@@ -248,7 +272,7 @@ describe('T-508 S2b - the store page by role', () => {
     }
   });
 
-  it('no red panel once everything offered is routed', async () => {
+  it('no warning panel once everything offered is routed', async () => {
     const f = await fixture('render-clear');
     await post(f.admin, 'setKitchenCategoryAction', form({ storeId: f.storeA, categoryId: f.grillCat, stationId: f.grill }));
     await post(f.admin, 'saveKitchenRoutingAction', form({ storeId: f.storeA, [`route_${f.cola}`]: f.bar }));

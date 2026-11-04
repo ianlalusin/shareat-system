@@ -96,6 +96,7 @@ listPunchesForDay
 listRoster
 listWriteOffsForCharge
 loadMod
+loadStoreMenu
 lobbyPartiesAhead
 makeDeps
 markBirthdayPlayed
@@ -123,7 +124,6 @@ posV1SalesBody
 posV1SoldItemsBody
 positionsBySupplier
 previewDrawingClose
-projectStoreMenu
 proxy
 pullHolds
 purgeComplete
