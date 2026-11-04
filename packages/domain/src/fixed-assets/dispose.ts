@@ -71,7 +71,8 @@ async function runDispose(
   actor: Actor,
   input: DisposeAssetInput,
 ): Promise<DisposeAssetResult> {
-  const asset = await fixedAssetsRepo.getById(tx, actor.orgId, input.assetId);
+  // T-515: FOR UPDATE - shares the asset lock with depreciate/terms, so every check below sees their committed result.
+  const asset = await fixedAssetsRepo.getByIdForUpdate(tx, actor.orgId, input.assetId);
   if (!asset) {
     throw new Error(`disposeAsset: asset ${input.assetId} does not exist in org ${actor.orgId}`);
   }
