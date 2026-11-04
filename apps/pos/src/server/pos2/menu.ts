@@ -8,8 +8,28 @@ import { fail, isUuid, jsonResponse, UNEXPECTED_ERROR } from './http';
 import { authenticate } from './identity';
 import type { Pos2Deps } from './types';
 
+type MenuForDeviceInput = { posStoreId: string; deviceId: string };
+
+/** The `deps.menu.forDevice` port. The ERP store comes ONLY from the device's terminal link (`loadMenuForTerminal`); never `loadStoreMenu`. */
+export function makeMenuForDevice<T>(d: {
+  orgId: string;
+  withOrgPrincipal: <R>(orgId: string, fn: (tx: unknown) => Promise<R>) => Promise<R>;
+  loadMenuForTerminal: (tx: unknown, orgId: string, input: MenuForDeviceInput) => Promise<T>;
+  isAuthError: (err: unknown) => boolean;
+}): (i: MenuForDeviceInput) => Promise<T | null> {
+  return async (i) => {
+    try {
+      return await d.withOrgPrincipal(d.orgId, (tx) => d.loadMenuForTerminal(tx, d.orgId, i));
+    } catch (err) {
+      if (d.isAuthError(err)) return null;
+      throw err;
+    }
+  };
+}
+
 export async function handleMenu(req: Request, deps: Pos2Deps): Promise<Response> {
   try {
+    if (!req.headers.get('x-pos-store-id')) return fail(400, 'Missing store.');
     // authenticate() reads a JSON body; a GET has none, so hand it the one field it needs, taken from the header.
     const auth = await authenticate(
       new Request(req.url, { method: 'POST', headers: req.headers, body: JSON.stringify({ storeId: req.headers.get('x-pos-store-id') ?? '' }) }),

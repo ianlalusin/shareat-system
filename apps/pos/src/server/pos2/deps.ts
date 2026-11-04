@@ -108,13 +108,13 @@ async function buildDeps(keyFile: string, orgId: string): Promise<Pos2Deps> {
     lobby: buildLobbyPort(orgId, auth, dbPkg, async () => import('@shareat/domain')),
     menu: {
       forDevice: async (i) => {
-        const d = await import('@shareat/domain');
-        try {
-          return await dbPkg.withOrgPrincipal(orgId, (tx) => d.loadMenuForTerminal(tx, orgId, i));
-        } catch (err) {
-          if (err instanceof auth.AuthenticationError) return null;
-          throw err;
-        }
+        const [d, { makeMenuForDevice }] = [await import('@shareat/domain'), await import('./menu')];
+        return makeMenuForDevice<Awaited<ReturnType<Pos2Deps['menu']['forDevice']>>>({
+          orgId,
+          withOrgPrincipal: dbPkg.withOrgPrincipal as never,
+          loadMenuForTerminal: d.loadMenuForTerminal as never,
+          isAuthError: (err) => err instanceof auth.AuthenticationError,
+        })(i);
       },
     },
     nowMs: () => Date.now(),

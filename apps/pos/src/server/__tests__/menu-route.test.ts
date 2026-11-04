@@ -67,12 +67,18 @@ describe('GET /api/pos2/menu', () => {
     const h = await handler();
     const same = await h(get({ inm: '"h1"' }), deps());
     expect(same.status).toBe(304);
+    expect(same.headers.get('cache-control')).toBe('no-store');
     expect(await same.text()).toBe('');
     current = PROJ('h2', 'Hot Line');
     const changed = await h(get({ inm: '"h1"' }), deps());
     expect(changed.status).toBe(200);
     expect(changed.headers.get('etag')).toBe('"h2"');
     expect((await json(changed)).menu.stations[0].name).toBe('Hot Line');
+  });
+  it('missing x-pos-store-id 400 "Missing store."', async () => {
+    const res = await (await handler())(get({ store: null }), deps());
+    expect(res.status).toBe(400);
+    expect((await json(res)).error).toBe('Missing store.');
   });
   it('route answers 503 when the POS server is not configured', async () => {
     const { GET } = await import('@/app/api/pos2/menu/route');
