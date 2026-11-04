@@ -26,7 +26,6 @@ cashPayment
 catalogueProblems
 checkValuesMatch
 childLogger
-clearKitchenRoute
 closeAsLateReceipt
 closeYear
 collectActorUids
@@ -35,7 +34,6 @@ convertSpecimen
 countedVariances
 createFakeFirestore
 createFakeIdb
-createKitchenStation
 createPaymentConversionServer
 customerReturnableQuantity
 datesInWeek
@@ -90,7 +88,6 @@ listAvailableCommissaries
 listBirthdayRequests
 listCategoryLives
 listClaimRequests
-listKitchenSetup
 listLiveForStore
 listLobbyEntries
 listOrderMessages
@@ -139,12 +136,10 @@ remainingFor
 remainingOf
 removeEntry
 removeUsageLine
-renameKitchenStation
 reserveNext
 resetLobbyReadLimiterForTests
 resetNonCentavoCount
 resolveFingerprintMatchToken
-retireKitchenStation
 retireMenuItem
 retireMenuVariant
 returnableQuantity
@@ -169,8 +164,6 @@ setActiveFake
 setCostBasisItem
 setDocumentNonBlocking
 setItemPricing
-setKitchenRoute
-setKitchenRoutesForCategory
 setTillFloat
 signOffPack
 signatureForPrint
@@ -187,7 +180,6 @@ undepositedFunds
 undoWriteOff
 unmappedStatuses
 updateDocumentNonBlocking
-updateKitchenStation
 updateMoneyAccount
 updateOwner
 uploadItemPhotoLocal

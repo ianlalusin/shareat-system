@@ -6,7 +6,7 @@
  * runs through `packages/domain/src/stores/service.ts`'s own `authorize()` via the actions file.
  */
 import { manilaToday, storesRepo, stockLocationsRepo, type StoreRow } from '@shareat/db';
-import { storeReadiness, type ReadinessCheck } from '@shareat/domain';
+import { listKitchenSetup, storeReadiness, type KitchenSetup, type ReadinessCheck } from '@shareat/domain';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { type Actor, can } from '@shareat/auth';
 
@@ -65,5 +65,13 @@ export async function storeDetail(actor: Actor, storeId: string): Promise<StoreD
     // hide a broken query behind "you lack access".
     if (!(await can(tx, actor, 'manage_stores', {}))) return { store, readiness: null };
     return { store, readiness: await storeReadiness(tx, actor, store) };
+  });
+}
+
+/** T-508 S2b: the kitchen panels' read. `null` = this viewer may not manage this store's settings, so the page draws no kitchen controls. */
+export async function kitchenForStore(actor: Actor, storeId: string): Promise<KitchenSetup | null> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    if (!(await can(tx, actor, 'manage_store_settings', { storeId }))) return null;
+    return listKitchenSetup(tx, actor, { storeId });
   });
 }

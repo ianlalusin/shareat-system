@@ -500,7 +500,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1468 -> 1469, T-507: the Due-from-delivery-platforms section's unverified-days link (+1, 44px; the channel row link is a RowLink, not a census candidate); merged with main, re-measured by runCensus().
     // 1469 -> 1473, merged with main after t502-s5 (re-measured by runCensus()).
     // 1473 -> 1478, T-511 S2b, 3 Nov, BOSS approved: +5 compliant controls (all pass the 44 px rule; FAIL/UNRESOLVED baselines unchanged): sales-channels select, code input and submit Button; loans repayment amount input and submit Button.
-    expect(results.length).toBe(1478);
+    // 1478 -> 1490, T-508 S2b, 4 Nov 2026, BOSS approved: +12 compliant controls (kitchen stations and routing).
+    expect(results.length).toBe(1490);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requirePageAccess } from '../../../../lib/page-access';
-import { storeDetail } from '../lib';
+import { kitchenForStore, storeDetail } from '../lib';
+import { KitchenSections } from './KitchenSections';
 import {
   deactivateStoreAction,
   reactivateStoreAction,
@@ -16,7 +17,7 @@ import { ADMIN_STORE_DETAILS_RULES, ADMIN_STORE_OPENING_DATE_RULES, nativeAttrs 
 import { Banner, Button, ConfirmDestructive, FlashBanner, FormGrid, Field, Input, Textarea } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
-import { STORE_DETAILS, STORE_OPENING_DATE, STORE_STOCK_MODEL } from '../typed-forms';
+import { KITCHEN_ROUTING, KITCHEN_STATION_EDIT, STORE_DETAILS, STORE_OPENING_DATE, STORE_STOCK_MODEL } from '../typed-forms';
 
 export const metadata = { title: 'Store — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -46,6 +47,13 @@ export default async function StoreDetailPage({
   if (!detail) notFound();
 
   const { store, readiness } = detail;
+  const kitchen = await kitchenForStore(actor, id);
+  const kitchenProps = kitchen && {
+    storeId: id,
+    setup: kitchen,
+    typedStations: Object.fromEntries(kitchen.stations.map((s) => [s.id, typedFor(sp, KITCHEN_STATION_EDIT, s.id, actor.personId)])),
+    typedRouting: typedFor(sp, KITCHEN_ROUTING, id, actor.personId),
+  };
 
   // ⭐ A manager can reach this URL — the nav link is not gated per-role and the list page is a
   // plain read. Before this, `storeReadiness`'s `authorize()` threw and they got an HTTP 500; the
@@ -63,6 +71,7 @@ export default async function StoreDetailPage({
           Only an admin or super-admin can open or close a branch. You can see this store in the
           list, but its readiness checklist and settings are not yours to read or change.
         </p>
+        {kitchenProps && <KitchenSections {...kitchenProps} />}
       </Page>
     );
   }
@@ -95,6 +104,8 @@ export default async function StoreDetailPage({
           wearing the costume of a decision.
         </Banner>
       )}
+
+      {kitchenProps && <KitchenSections {...kitchenProps} />}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">

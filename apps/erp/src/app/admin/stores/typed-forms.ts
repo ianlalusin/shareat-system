@@ -20,3 +20,13 @@ export const STORE_STOCK_MODEL = defineTypedForm({
   form: 'store.stockModel',
   fields: ['stockModel'],
 });
+
+/** T-508 S2b: a kitchen station's edit form (record = station id) and the routing picker family (record = store id). */
+export const KITCHEN_STATION_EDIT = defineTypedForm({
+  form: 'kitchen.station',
+  fields: ['name', 'slaMinutes', 'printOnOutage', 'sortOrder'],
+});
+export const KITCHEN_ROUTING = defineTypedForm({
+  form: 'kitchen.routing',
+  fields: [/^route_[A-Za-z0-9-]+$/],
+});
