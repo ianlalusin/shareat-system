@@ -25,7 +25,7 @@ import { makeKitchenBackupDeps } from "@/lib/printing/kitchenBackupDeps";
 import { getBrowserDeviceId } from "@/lib/offline/browserDevice";
 import { ScrollArea } from "../ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { stripUndefined } from "@/lib/firebase/utils";
+import { buildAddonLine, type BuiltAddonLine } from "@/lib/pos2/addon-line-builder";
 import type { InventoryItem, OptionGroup, PendingSession, SelectedModifier, SessionBillLine } from "@/lib/types";
 import { computeSessionLabel } from "@/lib/utils/session";
 import { QuantityInput } from "../cashier/quantity-input";
@@ -41,10 +41,13 @@ interface AddonsPOSModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   storeId: string;
-  session: PendingSession;
+  /** Not needed in collect mode (onCollect). */
+  session?: PendingSession;
   sessionIsLocked?: boolean;
   onAddLine?: (line: SessionBillLine) => void;
   serverProfile?: { id: string; name: string } | null;
+  /** Collect mode (T-518): hand the built line back instead of writing it. No session, no Firestore write. */
+  onCollect?: (line: BuiltAddonLine) => void;
 }
 
 type EnrichedStoreAddon = InventoryItem & {
@@ -106,6 +109,7 @@ function POSContent({
   onClose,
   onAddLine,
   serverProfile,
+  onCollect,
   isMobile = false,
 }: {
   storeId: string;
@@ -114,6 +118,7 @@ function POSContent({
   onClose: () => void;
   onAddLine?: (line: SessionBillLine) => void;
   serverProfile?: { id: string; name: string } | null;
+  onCollect?: (line: BuiltAddonLine) => void;
   isMobile?: boolean;
 }) {
   const { appUser } = useAuthContext();
@@ -212,11 +217,11 @@ function POSContent({
    * Family items skip this entirely — FamilyOrderModal does it all in one go.
    */
   const handleAddToOrder = async () => {
-    if (sessionIsLocked) {
+    if (sessionIsLocked && !onCollect) {
       toast({ variant: "destructive", title: "Session Closed", description: "Session is closed. KDS updates are disabled." });
       return;
     }
-    if (!appUser || !storeId || !session?.id || !selectedAddon) {
+    if (!appUser || !storeId || (!onCollect && !session?.id) || !selectedAddon) {
       toast({ variant: "destructive", title: "Cannot Add Item", description: "Missing user, store, or session context." });
       return;
     }
@@ -276,7 +281,7 @@ function POSContent({
     const addon = override?.addon ?? selectedAddon;
     const qty = override?.qty ?? quantity;
     const lineNote = (override ? (override.note ?? "") : note).trim();
-    if (!appUser || !storeId || !session?.id || !addon) return;
+    if (!appUser || !storeId || (!onCollect && !session?.id) || !addon) return;
 
     const unitPriceNum = Number((addon as any).sellingPrice);
     const safeUnitPrice = Number.isFinite(unitPriceNum) ? unitPriceNum : 0;
@@ -285,14 +290,22 @@ function POSContent({
     setIsSubmitting(true);
 
     try {
-      // Same item with different modifier picks must land on separate lines.
-      const modHash = modifiers.length
-        ? modifiers.map((m) => m.valueId).sort().join("-")
-        : "";
-      let lineId = modHash
-        ? `addon_${addon.id}_${safeUnitPrice}_${modHash}`
-        : `addon_${addon.id}_${safeUnitPrice}`;
       const actor = getActorStamp(appUser);
+      const built = buildAddonLine({ addon, qty, modifiers, modifiersText, modifiersTotal, note: lineNote, keyByNote: !!onCollect }, actor);
+      let lineId = built.lineId;
+
+      // Collect mode: hand the line back; nothing is written here.
+      if (onCollect) {
+        onCollect(built);
+        toast({ title: "Added", description: `${addon.displayName}${modifiersText ? ` (${modifiersText})` : ""} x${qty} added.` });
+        if (!override) {
+          setSelectedAddon(null);
+          setQuantity(1);
+          setNote("");
+          setPendingOptionGroups([]);
+        }
+        return;
+      }
 
       if (isOnline) {
         await runTransaction(db, async (tx) => {
@@ -308,31 +321,7 @@ function POSContent({
               updatedByName: actor.username,
             });
           } else {
-            const newLinePayload = stripUndefined({
-              id: lineId,
-              type: "addon",
-              itemId: addon.id,
-              itemName: addon.displayName,
-              category: addon.subCategory ?? null,
-              barcode: addon.barcode ?? null,
-              unitPrice: safeUnitPrice,
-              qtyOrdered: qty,
-              discountType: null,
-              discountValue: 0,
-              discountQty: 0,
-              freeQty: 0,
-              voidedQty: 0,
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-              updatedByUid: actor.uid,
-              updatedByName: actor.username,
-              kitchenLocationId: addon.kitchenLocationId ?? null,
-              kitchenLocationName: addon.kitchenLocationName ?? null,
-              modifiers: modifiers.length ? modifiers : null,
-              modifiersText: modifiersText || null,
-              modifiersTotal: modifiers.length ? modifiersTotal : null,
-              note: lineNote || null,
-            });
+            const newLinePayload = built.payload;
             tx.set(lineRef, newLinePayload);
           }
 
@@ -367,31 +356,7 @@ function POSContent({
       } else {
         // Each offline add is a fresh line: an uncached document read cannot prove absence.
         const sessionRef = doc(db, "stores", storeId, "sessions", session.id);
-        const newLinePayload = stripUndefined({
-            id: lineId,
-            type: "addon",
-            itemId: addon.id,
-            itemName: addon.displayName,
-            category: addon.subCategory ?? null,
-            barcode: addon.barcode ?? null,
-            unitPrice: safeUnitPrice,
-            qtyOrdered: qty,
-            discountType: null,
-            discountValue: 0,
-            discountQty: 0,
-            freeQty: 0,
-            voidedQty: 0,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-            updatedByUid: actor.uid,
-            updatedByName: actor.username,
-            kitchenLocationId: addon.kitchenLocationId ?? null,
-            kitchenLocationName: addon.kitchenLocationName ?? null,
-            modifiers: modifiers.length ? modifiers : null,
-            modifiersText: modifiersText || null,
-            modifiersTotal: modifiers.length ? modifiersTotal : null,
-            note: lineNote || null,
-          });
+        const newLinePayload = built.payload;
         const staged = stageOfflineAddonLine(db, storeId, session.id, newLinePayload);
         lineId = staged.lineId;
         const batch = staged.batch;
@@ -646,17 +611,18 @@ function POSContent({
   );
 }
 
-export function AddonsPOSModal({ open, onOpenChange, storeId, session, sessionIsLocked, onAddLine, serverProfile }: AddonsPOSModalProps) {
+export function AddonsPOSModal({ open, onOpenChange, storeId, session, sessionIsLocked, onAddLine, serverProfile, onCollect }: AddonsPOSModalProps) {
   const isMobile = useIsMobile();
 
   const content = (
     <POSContent
       storeId={storeId}
-      session={session}
+      session={session ?? ({} as PendingSession)} // collect mode has no session; never read there
       sessionIsLocked={sessionIsLocked}
       onClose={() => onOpenChange(false)}
       onAddLine={onAddLine}
       serverProfile={serverProfile}
+      onCollect={onCollect}
       isMobile={isMobile}
     />
   );
