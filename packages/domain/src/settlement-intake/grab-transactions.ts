@@ -36,13 +36,14 @@ export type GrabKind = (typeof GRAB_KINDS)[number];
 export const GRAB_STATUSES = ['Transferred', 'Completed', 'Cancelled'] as const;
 export type GrabStatus = (typeof GRAB_STATUSES)[number];
 
-const KIND_OF_CATEGORY: Readonly<Record<string, GrabKind>> = {
-  Payment: 'payment',
-  Loans: 'loan',
-  Adjustment: 'adjustment',
-  Advertisement: 'advertisement',
-  Cancelled: 'cancelled',
-};
+// A Map, not an object: file text such as `constructor` or `__proto__` must never find an inherited member.
+const KIND_OF_CATEGORY: ReadonlyMap<string, GrabKind> = new Map<string, GrabKind>([
+  ['Payment', 'payment'],
+  ['Loans', 'loan'],
+  ['Adjustment', 'adjustment'],
+  ['Advertisement', 'advertisement'],
+  ['Cancelled', 'cancelled'],
+]);
 
 /** The subcategories seen on real files. A category with an empty list carries no subcategory. */
 export const GRAB_SUBCATEGORIES: Readonly<Record<GrabKind, readonly string[]>> = {
@@ -83,7 +84,7 @@ export interface GrabTransactionsFile {
 }
 
 function kindOf(category: string, status: string, line: number): GrabKind {
-  const mapped = KIND_OF_CATEGORY[category];
+  const mapped = KIND_OF_CATEGORY.get(category);
   if (mapped) return mapped;
   // Cancelled orders carry no category at all.
   if (category === '' && status === 'Cancelled') return 'cancelled';
