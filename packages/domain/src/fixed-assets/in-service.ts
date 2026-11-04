@@ -281,7 +281,8 @@ export async function setAssetInService(
     throw new Error('setAssetInService: a reason is required.');
   }
 
-  const asset = await fixedAssetsRepo.getById(tx, actor.orgId, assetId);
+  // T-516: asset lock first, shares it with depreciate/terms/dispose
+  const asset = await fixedAssetsRepo.getByIdForUpdate(tx, actor.orgId, assetId);
   if (!asset) {
     throw new Error(`setAssetInService: asset ${assetId} does not exist in this organisation.`);
   }

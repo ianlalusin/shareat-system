@@ -341,9 +341,15 @@ export async function setStoreOpeningDate(
   // surface a phantom reversal against history that no longer matters. The
   // propagation trigger's own `WHERE` carries the identical `status = 'active'` condition, so a
   // disposed follower is frozen on BOTH sides, never just one.
-  const followers = (await fixedAssetsRepo.listAssets(tx, actor.orgId, { storeId, status: 'active' })).filter(
-    (a) => a.inServiceSource === 'store_opening',
-  );
+  const listed = (await fixedAssetsRepo.listAssets(tx, actor.orgId, { storeId, status: 'active' }))
+    .filter((a) => a.inServiceSource === 'store_opening')
+    .sort((a, b) => a.id.localeCompare(b.id));
+  // T-516: lock each follower first (ascending id, so two cascades cannot deadlock), then judge the re-read row.
+  const followers: typeof listed = [];
+  for (const { id } of listed) {
+    const locked = await fixedAssetsRepo.getByIdForUpdate(tx, actor.orgId, id);
+    if (locked && locked.status === 'active' && locked.inServiceSource === 'store_opening') followers.push(locked);
+  }
 
   const plans = await Promise.all(
     followers.map(async (asset) => {
