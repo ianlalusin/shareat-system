@@ -231,3 +231,59 @@ export async function clearRoute(tx: Tx, orgId: string, storeId: string, menuIte
     .delete(kitchenRoutes)
     .where(and(eq(kitchenRoutes.orgId, orgId), eq(kitchenRoutes.storeId, storeId), eq(kitchenRoutes.menuItemId, menuItemId)));
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-508 S2a reads for the domain (still no authorisation here)
+// ---------------------------------------------------------------------------------------------------------------------
+/** A station by id alone, so the domain can read the row's OWN store before it authorizes. Org-scoped; RLS is the backstop. */
+export async function stationById(tx: Tx, orgId: string, stationId: string): Promise<KitchenStationRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(kitchenStations)
+    .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.orgId, orgId)));
+  return row;
+}
+
+/** Ids of the ACTIVE items directly in one category (the "set every item in this category" action). */
+export async function activeItemIdsInCategory(tx: Tx, orgId: string, categoryId: string): Promise<string[]> {
+  const rows = (await tx.execute(sql`
+    select id from menu_items where org_id = ${orgId} and category_id = ${categoryId} and status = 'active' order by id
+  `)) as unknown as { id: string }[];
+  return rows.map((r) => r.id);
+}
+
+export interface OfferedItemRow {
+  itemId: string;
+  name: string;
+  categoryId: string;
+  categoryName: string;
+  /** The item's route at this store, null when it has none (R5: it is then not on the POS). */
+  stationId: string | null;
+}
+
+/**
+ * R5: every ACTIVE item with a store-channel offer in force NOW at this store (any active variant, not withdrawn), with its
+ * route or null. The routing screen lists these; the null ones are the red "Not on the POS yet" panel.
+ */
+export async function offeredItemsWithRoute(tx: Tx, orgId: string, storeId: string): Promise<OfferedItemRow[]> {
+  const rows = (await tx.execute(sql`
+    select i.id as item_id, i.name, c.id as category_id, c.name as category_name, r.station_id
+      from menu_items i
+      join menu_categories c on c.id = i.category_id
+      left join kitchen_routes r on r.store_id = ${storeId} and r.menu_item_id = i.id
+     where i.org_id = ${orgId} and i.status = 'active'
+       and exists (
+         select 1 from menu_item_variants v
+          cross join lateral menu_offer_in_force(${storeId}, v.id, 'store', now()) f
+          where v.menu_item_id = i.id and v.status = 'active' and not f.withdrawn
+       )
+     order by lower(c.name), c.id, i.sort_order, lower(i.name), i.id
+  `)) as unknown as { item_id: string; name: string; category_id: string; category_name: string; station_id: string | null }[];
+  return rows.map((r) => ({
+    itemId: r.item_id,
+    name: r.name,
+    categoryId: r.category_id,
+    categoryName: r.category_name,
+    stationId: r.station_id,
+  }));
+}

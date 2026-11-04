@@ -211,6 +211,8 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       { href: '/attendance/terminals', label: 'Clock terminals' },
       // T-505: register a POS tablet so it can ask a manager for a refund approval; clear its lock.
       { href: '/admin/pos-tablets', label: 'POS tablets' },
+      // T-508 S2b: which kitchen station cooks each item; a store manager's screen (manage_store_settings).
+      { href: '/kitchen', label: 'Kitchen setup' },
       // ⭐ DEF-197 — the screen that exists so a dead letter is VISIBLE was itself invisible. This
       // is landmine #14's whole structural fix (bible §12 row 14: v1's recovery path is a banner
       // saying "tell a manager", and there is nothing for the manager to open), and it was in no

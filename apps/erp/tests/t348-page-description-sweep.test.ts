@@ -169,7 +169,8 @@ describe('T-348 S2 — the population lands exactly, nothing dropped or doubled 
     // 129 -> 130, T-505: /admin/pos-tablets carries its <PageDescription>.
     // merged with main after #121, re-measured
     // merge with main, re-measured: 131 -> 132 (SW4).
-    expect(count).toBe(132);
+    // 132 -> 133, T-508 S2b: /kitchen carries its <PageDescription>.
+    expect(count).toBe(133);
   });
 });
 

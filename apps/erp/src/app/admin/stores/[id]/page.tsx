@@ -96,6 +96,13 @@ export default async function StoreDetailPage({
         </Banner>
       )}
 
+      <p>
+        <Link href={`/kitchen?store=${id}`} className={ACTION_LINK}>
+          Kitchen setup →
+        </Link>
+      </p>
+
+
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="text-sm font-medium">Readiness</h2>

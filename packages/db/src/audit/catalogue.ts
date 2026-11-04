@@ -131,6 +131,14 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-511 S2b: an admin names a sales channel's delivery platform and statement store code, and records a loan's expected daily repayment (dotted: new).
   def('sales_channel.platform_code_edited', 'settings', 'high', 'store', 'sales_channels', 'T-511'),
   def('loan.repayment_amount_edited', 'money', 'high', 'store', 'loans', 'T-511'),
+  // T-508 S2a: kitchen stations and the item-to-station routes (dotted: new). Payloads are station settings and item/station ids, no personal data.
+  def('kitchen_station.created', 'settings', 'high', 'store', 'kitchen_stations', 'T-508'),
+  def('kitchen_station.renamed', 'settings', 'high', 'store', 'kitchen_stations', 'T-508'),
+  def('kitchen_station.updated', 'settings', 'high', 'store', 'kitchen_stations', 'T-508'),
+  def('kitchen_station.retired', 'settings', 'high', 'store', 'kitchen_stations', 'T-508'),
+  def('kitchen_route.set', 'settings', 'high', 'store', 'kitchen_routes', 'T-508'),
+  def('kitchen_route.cleared', 'settings', 'high', 'store', 'kitchen_routes', 'T-508'),
+  def('kitchen_route.category_set', 'settings', 'high', 'store', 'kitchen_routes', 'T-508'),
   // T-455 S2: a cashier's moves on the customer lobby line (park a walk-in, call, seat, remove). Payloads carry code, size, stand and session id - never a name or phone.
   def('lobby.park', 'order', 'normal', 'store', 'lobby_entry', 'T-455'),
   def('lobby.call', 'order', 'low', 'store', 'lobby_entry', 'T-455'),

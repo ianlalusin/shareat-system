@@ -26,7 +26,6 @@ cashPayment
 catalogueProblems
 checkValuesMatch
 childLogger
-clearRoute
 closeAsLateReceipt
 closeYear
 collectActorUids
@@ -36,7 +35,6 @@ countedVariances
 createFakeFirestore
 createFakeIdb
 createPaymentConversionServer
-createStation
 customerReturnableQuantity
 datesInWeek
 dayIdOf
@@ -96,10 +94,9 @@ listOrderMessages
 listPayRates
 listPunchesForDay
 listRoster
-listRoutes
-listStations
 listWriteOffsForCharge
 loadMod
+loadStoreMenu
 lobbyPartiesAhead
 makeDeps
 markBirthdayPlayed
@@ -127,7 +124,6 @@ posV1SalesBody
 posV1SoldItemsBody
 positionsBySupplier
 previewDrawingClose
-projectStoreMenu
 proxy
 pullHolds
 purgeComplete
@@ -140,14 +136,12 @@ remainingFor
 remainingOf
 removeEntry
 removeUsageLine
-renameStation
 reserveNext
 resetLobbyReadLimiterForTests
 resetNonCentavoCount
 resolveFingerprintMatchToken
 retireMenuItem
 retireMenuVariant
-retireStation
 returnableQuantity
 reverseOwnerEntry
 revokeRoleById
@@ -170,7 +164,6 @@ setActiveFake
 setCostBasisItem
 setDocumentNonBlocking
 setItemPricing
-setRoute
 setTillFloat
 signOffPack
 signatureForPrint
@@ -189,7 +182,6 @@ unmappedStatuses
 updateDocumentNonBlocking
 updateMoneyAccount
 updateOwner
-updateStation
 uploadItemPhotoLocal
 uploadProductImage
 uploadReceiptLogo
