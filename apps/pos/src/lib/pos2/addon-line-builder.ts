@@ -17,6 +17,8 @@ export type AddonLineInput = {
   modifiersText: string;
   modifiersTotal: number;
   note?: string;
+  /** Start-form collect mode: different notes stay separate lines. The modal leaves this off (its increment behaviour is unchanged). */
+  keyByNote?: boolean;
 };
 
 export type BuiltAddonLine = { lineId: string; payload: Record<string, unknown> };
@@ -29,7 +31,9 @@ export function buildAddonLine(input: AddonLineInput, actor: { uid: string; user
   const safeUnitPrice = Number.isFinite(priceNum) ? priceNum : 0;
   // Same item with different modifier picks must land on separate lines.
   const modHash = modifiers.length ? modifiers.map((m) => m.valueId).sort().join('-') : '';
-  const lineId = modHash ? `addon_${addon.id}_${safeUnitPrice}_${modHash}` : `addon_${addon.id}_${safeUnitPrice}`;
+  const noteHash = input.keyByNote && lineNote ? [...lineNote].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7).toString(36) : '';
+  const baseId = modHash ? `addon_${addon.id}_${safeUnitPrice}_${modHash}` : `addon_${addon.id}_${safeUnitPrice}`;
+  const lineId = noteHash ? `${baseId}_n${noteHash}` : baseId;
   const payload = stripUndefined({
     id: lineId,
     type: 'addon',

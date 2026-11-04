@@ -63,6 +63,14 @@ describe('modal wiring (source guards)', () => {
     expect(performAdd).toContain('buildAddonLine(');
     expect(src).toContain('onCollect');
   });
+  it('collect path returns before runTransaction / stageOfflineAddonLine / createKitchenTickets / session.id', () => {
+    const block = performAdd.slice(performAdd.indexOf('if (onCollect)'));
+    const ret = block.indexOf('return;');
+    expect(ret).toBeGreaterThan(-1);
+    const head = block.slice(0, ret);
+    for (const w of ['runTransaction', 'stageOfflineAddonLine', 'createKitchenTickets', 'session.id']) expect(head).not.toContain(w);
+    expect(head).toContain('"Added"');
+  });
   it('collect mode hands the line back BEFORE any Firestore write', () => {
     const c = performAdd.indexOf('onCollect');
     expect(c).toBeGreaterThan(-1);

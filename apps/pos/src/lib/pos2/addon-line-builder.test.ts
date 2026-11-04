@@ -66,3 +66,19 @@ describe('mergeAddonLine', () => {
     expect(first[0].payload.qtyOrdered).toBe(2);
   });
 });
+
+describe('keyByNote (start-form collect mode: notes must not be lost)', () => {
+  const mk = (note: string, keyByNote = true) => buildAddonLine({ addon: wings, qty: 1, modifiers: [], modifiersText: '', modifiersTotal: 0, note, keyByNote }, actor);
+  it('different notes = different keys, each keeps its note; same note = one line, qty 2', () => {
+    const a = mk('no onion'); const b = mk('extra spicy'); const c = mk(' no onion ');
+    expect(a.lineId).not.toBe(b.lineId);
+    expect(a.payload.note).toBe('no onion'); expect(b.payload.note).toBe('extra spicy');
+    const merged = mergeAddonLine(mergeAddonLine([a], b), c);
+    expect(merged).toHaveLength(2);
+    expect(merged[0].payload.qtyOrdered).toBe(2);
+  });
+  it('no note, or flag off (the modal): key unchanged', () => {
+    expect(mk('').lineId).toBe('addon_it1_150');
+    expect(mk('no onion', false).lineId).toBe('addon_it1_150');
+  });
+});

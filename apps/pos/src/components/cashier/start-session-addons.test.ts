@@ -101,4 +101,11 @@ describe('startSession with initialAddons', () => {
     expect(fs.commits).toHaveLength(0);
     expect(fs.docs.size).toBe(before);
   });
+  it('same item, different notes: two lines, two tickets, both notes kept', async () => {
+    const mk = (note: string) => buildAddonLine({ addon: { id: 'w', displayName: 'w', sellingPrice: 100, kitchenLocationId: 'kl-fry' }, qty: 1, modifiers: [], modifiersText: '', modifiersTotal: 0, note, keyByNote: true }, actor);
+    const sid = await run([mk('no onion'), mk('extra spicy')]);
+    const lines = fs.list(`stores/${STORE_ID}/sessions/${sid}/sessionBillLines`).filter((l: any) => l.data.type === 'addon');
+    expect(lines.map((l: any) => l.data.note).sort()).toEqual(['extra spicy', 'no onion']);
+    expect(tickets(sid).filter((t: any) => t.type === 'addon').map((t: any) => t.notes).sort()).toEqual(['extra spicy', 'no onion']);
+  });
 });

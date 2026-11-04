@@ -469,18 +469,18 @@ export function StartSessionForm({ tables, packages, flavors, user, storeId, off
                                     const qty = Number(p.qtyOrdered);
                                     const total = (Number(p.unitPrice) + Number(p.modifiersTotal ?? 0)) * qty;
                                     return (
-                                        <div key={l.lineId} className="flex items-center gap-3 rounded-md border p-3">
-                                            <div className="min-w-0 flex-1">
-                                                <p className="font-medium truncate">{p.itemName}</p>
-                                                {p.modifiersText && <p className="text-xs text-muted-foreground truncate">{p.modifiersText}</p>}
-                                                {p.note && <p className="text-xs text-muted-foreground truncate">Note: {p.note}</p>}
+                                        <div key={l.lineId} className="rounded-md border p-3 space-y-2">
+                                            <div className="w-full">
+                                                <p className="font-medium break-words line-clamp-2">{p.itemName}</p>
+                                                {p.modifiersText && <p className="text-xs text-muted-foreground break-words line-clamp-2">{p.modifiersText}</p>}
+                                                {p.note && <p className="text-xs text-muted-foreground break-words line-clamp-2">Note: {p.note}</p>}
                                             </div>
                                             <div className="flex items-center gap-1">
                                                 <Button type="button" variant="outline" size="icon" className="h-11 w-11" aria-label="Less" onClick={() => setChosenAddons((c) => changeChosenQty(c, l.lineId, -1))}><Minus /></Button>
                                                 <span className="w-8 text-center tabular-nums">{qty}</span>
                                                 <Button type="button" variant="outline" size="icon" className="h-11 w-11" aria-label="More" onClick={() => setChosenAddons((c) => changeChosenQty(c, l.lineId, 1))}><Plus /></Button>
                                             </div>
-                                            <span className="w-24 text-right tabular-nums">{"\u20B1" + total.toFixed(2)}</span>
+                                            <span className="ml-auto pr-2 text-right tabular-nums">{"\u20B1" + total.toFixed(2)}</span>
                                             <Button type="button" variant="ghost" size="icon" className="h-11 w-11" aria-label="Remove" onClick={() => setChosenAddons((c) => removeChosen(c, l.lineId))}><X /></Button>
                                         </div>
                                     );

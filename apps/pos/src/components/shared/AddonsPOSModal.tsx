@@ -291,12 +291,13 @@ function POSContent({
 
     try {
       const actor = getActorStamp(appUser);
-      const built = buildAddonLine({ addon, qty, modifiers, modifiersText, modifiersTotal, note: lineNote }, actor);
+      const built = buildAddonLine({ addon, qty, modifiers, modifiersText, modifiersTotal, note: lineNote, keyByNote: !!onCollect }, actor);
       let lineId = built.lineId;
 
       // Collect mode: hand the line back; nothing is written here.
       if (onCollect) {
         onCollect(built);
+        toast({ title: "Added", description: `${addon.displayName}${modifiersText ? ` (${modifiersText})` : ""} x${qty} added.` });
         if (!override) {
           setSelectedAddon(null);
           setQuantity(1);
