@@ -32,7 +32,7 @@ describe('T-517: fixed-asset writers read the asset with its row lock', () => {
   });
 
   it('bookMissedMonth, dispose, in-service and retire take the lock', () => {
-    for (const f of ['missed-months/index.ts', 'fixed-assets/dispose.ts', 'fixed-assets/in-service.ts', 'fixed-assets/capitalize.ts']) {
+    for (const f of ['missed-months/index.ts', 'fixed-assets/dispose.ts', 'fixed-assets/in-service.ts', 'fixed-assets/capitalize.ts', 'fixed-assets/terms.ts']) {
       expect(readFileSync(path.join(ROOT, f), 'utf8'), f).toMatch(/getByIdForUpdate\(/);
     }
   });
