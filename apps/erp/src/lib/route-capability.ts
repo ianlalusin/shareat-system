@@ -49,6 +49,8 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/admin/pos-tablets': 'provision_clock_terminal',
   // T-508 S2b (spec R10): kitchen setup is the store manager's job, store-scoped; the page picks only stores where this is held.
   '/kitchen': 'manage_store_settings',
+  // T-510 S3: lunch and dinner hours are a store manager's job too; the longer prefix wins over '/menu' (view_menu). The page lists only stores where this is held.
+  '/menu/hours': 'manage_store_settings',
   // T-497 S1 (Ian, 2026-10-28, bible row 403): the prerequisite-walls report is admins only, same word as Stores.
   '/admin/prerequisite-refusals': 'manage_stores',
   // T-290 — position access defaults. `grant_capability` is org-scoped and is the capability the

@@ -1,6 +1,8 @@
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 import { can, type Actor } from '@shareat/auth';
 import type { Tx } from '@shareat/db';
+import type { LiveOfferFault } from '@shareat/domain';
 import { resolveOfferPrice } from '@shareat/domain';
 import type { OfferInForce } from '@shareat/db';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
@@ -19,7 +21,8 @@ import {
   setPriceAction,
   withdrawPriceAction,
 } from './actions';
-import { loadPricesPage, storesInScope, withOrgPrincipal, type PricesPageData, type ScheduledOffer } from '../lib';
+import { loadPricesPage, storesInScope, withOrgPrincipal, type DaypartView, type PricesPageData, type ScheduledOffer } from '../lib';
+import { dayName, windowText } from '../daypart-text';
 
 export const metadata = { title: 'Menu prices - Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -56,6 +59,17 @@ function figureText(r: PriceShape): string {
   return r.amount;
 }
 
+/** The price fields an online rule follows: the store row live now. */
+const basisOf = (r: OfferInForce): NonNullable<OfferInForce['basis']> => ({
+  withdrawn: r.withdrawn,
+  pricingMode: r.pricingMode,
+  amount: r.amount,
+  bundleHeads: r.bundleHeads,
+  extraHeadAmount: r.extraHeadAmount,
+  markupPercent: r.markupPercent,
+  fixedMarkupAmount: r.fixedMarkupAmount,
+});
+
 function resolvedText(row: OfferInForce): string | null {
   if (row.pricingMode === 'fixed' || row.withdrawn) return null;
   const r = resolveOfferPrice(row);
@@ -82,12 +96,15 @@ export default async function MenuPricesPage({ searchParams }: { searchParams: P
     const stores = await storesInScope(tx, actor);
     // A store outside the person's scope is never drawn: an unknown or foreign ?store= falls back to their first store.
     const store = stores.find((s) => s.id === sp.store) ?? stores[0] ?? null;
-    if (!store) return { stores, store: null, data: null, canPrice: false };
+    if (!store) return { stores, store: null, data: null, canPrice: false, canPair: false, canHours: false };
     const data = await loadPricesPage(tx, actor.orgId, store.id);
     const canPrice = await mayPrice(tx, actor, store.id);
-    return { stores, store, data, canPrice };
+    // T-510 R8, presentation only: the pairing controls (which price belongs to lunch, dinner or all day). The domain gates every write.
+    const canPair = canPrice && (await can(tx, actor, 'pair_menu_dayparts', {}));
+    const canHours = await can(tx, actor, 'manage_store_settings', { storeId: store.id });
+    return { stores, store, data, canPrice, canPair, canHours };
   });
-  const { stores, store, data, canPrice } = loaded;
+  const { stores, store, data, canPrice, canPair, canHours } = loaded;
 
   return (
     <Page density="table" className="space-y-6">
@@ -124,7 +141,15 @@ export default async function MenuPricesPage({ searchParams }: { searchParams: P
             </label>
           </FilterRow>
           {!canPrice && <p className="text-sm text-muted">You can read these prices but not change them at this store.</p>}
-          <Grid data={data} storeId={store.id} canPrice={canPrice} />
+          {canPrice && !canPair && data.slots.some((r) => r.daypartId !== null) && (
+            <p className="text-sm text-muted">Only a super admin can change which prices belong to lunch or dinner. You can still change a price.</p>
+          )}
+          {canHours && (
+            <Link href={`/menu/hours?store=${store.id}`} className="inline-flex min-h-6 items-center text-sm underline underline-offset-4">
+              Change the lunch and dinner hours
+            </Link>
+          )}
+          <Grid data={data} storeId={store.id} canPrice={canPrice} canPair={canPair} />
           <OptionPrices data={data} storeId={store.id} canPrice={canPrice} />
         </>
       )}
@@ -132,7 +157,7 @@ export default async function MenuPricesPage({ searchParams }: { searchParams: P
   );
 }
 
-function Grid({ data, storeId, canPrice }: { data: PricesPageData; storeId: string; canPrice: boolean }) {
+function Grid({ data, storeId, canPrice, canPair }: { data: PricesPageData; storeId: string; canPrice: boolean; canPair: boolean }) {
   const byCategory = data.categories
     .map((c) => ({ c, items: data.items.filter((i) => i.categoryId === c.id && i.variants.length > 0) }))
     .filter((x) => x.items.length > 0);
@@ -152,7 +177,7 @@ function Grid({ data, storeId, canPrice }: { data: PricesPageData; storeId: stri
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   {CHANNELS.map((ch) => (
-                    <Panel key={ch} data={data} storeId={storeId} canPrice={canPrice} variantId={v.id} channel={ch} itemType={i.itemType} />
+                    <Panel key={ch} data={data} storeId={storeId} canPrice={canPrice} canPair={canPair} variantId={v.id} channel={ch} itemType={i.itemType} />
                   ))}
                 </div>
               </div>
@@ -165,10 +190,128 @@ function Grid({ data, storeId, canPrice }: { data: PricesPageData; storeId: stri
   );
 }
 
+const FAULT_SENTENCE: Record<LiveOfferFault['reason'], string> = {
+  mixed_all_day_and_daypart: 'This package has an all-day price and prices by time of day at the same time, so no price can be shown. A super admin needs to withdraw one of them.',
+  overlapping_dayparts: 'Two time-of-day prices for this package cover the same hours, so no price can be shown. A super admin needs to withdraw one of them.',
+  tied_offers: 'Two prices for this package were saved at the exact same moment, so no price can be shown. A super admin needs to set the price again.',
+  unknown_daypart: 'A price here points to hours that are missing or retired, so no price can be shown. Check this store’s lunch and dinner hours.',
+  invalid_daypart: 'A price here points to hours that are not valid, so no price can be shown. Check this store’s lunch and dinner hours.',
+  invalid_time_zone: 'This store’s time zone cannot be read, so no price can be shown. Ask an administrator to correct it on the store page.',
+  invalid_instant: 'The time could not be read, so no price can be shown. Reload the page; if it stays, tell an administrator.',
+};
+
+/** "Not offered now, from 17:00"; "from Monday 11:00" when the next opening is more than a day away. */
+function notOfferedText(n: { availableFrom: string | null; availableAt: Date | null; availableDay: number | null }, now: Date): string {
+  if (n.availableFrom === null) return 'Not offered now.';
+  const far = n.availableAt !== null && n.availableDay !== null && n.availableAt.getTime() - now.getTime() > 24 * 3600 * 1000;
+  return `Not offered now, from ${far ? `${dayName(n.availableDay as number)} ` : ''}${n.availableFrom}`;
+}
+
+/** The "When" box of the price form: All day, or one of the store's windows. */
+function WhenSelect({ choices, initial }: { choices: DaypartView[]; initial: string }) {
+  return (
+    <Field label="When" className="text-sm" hint="All day, or only the hours of Lunch or Dinner.">
+      <Select name="daypartId" defaultValue={initial} className="w-full">
+        <option value="">All day</option>
+        {choices.map((d) => (
+          <option key={d.id} value={d.id}>
+            {`${d.name} (${windowText(d.start, d.end)})`}
+          </option>
+        ))}
+      </Select>
+    </Field>
+  );
+}
+
+/** The price form. `fixedDaypartId` (a slot's own "Change price") posts that daypart; `whenChoices` (super admin only) draws the When select. */
+function PriceForm({
+  channel,
+  itemType,
+  hidden,
+  trigger,
+  triggerLabel,
+  title,
+  fixedDaypartId,
+  whenChoices,
+  defaultWhen,
+}: {
+  channel: Channel;
+  itemType: 'a_la_carte' | 'package' | 'refill';
+  hidden: ReactNode;
+  trigger: string;
+  /** The accessible name when it says more than the visible words. */
+  triggerLabel?: string;
+  title: string;
+  fixedDaypartId?: string;
+  whenChoices?: DaypartView[];
+  /** The When select starts on this daypart id ('' = all day). */
+  defaultWhen?: string;
+}) {
+  return (
+    <FormModal trigger={trigger} triggerIcon={null} triggerVariant="secondary" triggerLabel={triggerLabel ?? trigger} title={title} size="md">
+      <CheckedForm rules={MENU_PRICE_RULES} action={setPriceAction} className="space-y-3">
+        {hidden}
+        {fixedDaypartId !== undefined && <input type="hidden" name="daypartId" value={fixedDaypartId} />}
+        <FormGrid>
+          {whenChoices && whenChoices.length > 0 && <WhenSelect choices={whenChoices} initial={defaultWhen ?? ''} />}
+          {channel === 'online' && (
+            <Field label="Online price is" className="text-sm">
+              <Select name="pricingMode" defaultValue="fixed" className="w-full">
+                <option value="fixed">A fixed price</option>
+                <option value="percent_markup">% over the store price</option>
+                <option value="fixed_markup">Pesos over the store price</option>
+              </Select>
+            </Field>
+          )}
+          {itemType !== 'refill' && (
+            <Field label={channel === 'online' ? 'Fixed price' : 'New price'} className="text-sm" rule={MENU_PRICE_RULES.amount}>
+              <Input {...nativeAttrs(MENU_PRICE_RULES.amount)} className="w-full" />
+            </Field>
+          )}
+          {channel === 'online' && (
+            <>
+              <Field label="Percent over" className="text-sm" rule={MENU_PRICE_RULES.markupPercent}>
+                <Input {...nativeAttrs(MENU_PRICE_RULES.markupPercent)} className="w-full" />
+              </Field>
+              <Field label="Pesos over" className="text-sm" rule={MENU_PRICE_RULES.fixedMarkupAmount}>
+                <Input {...nativeAttrs(MENU_PRICE_RULES.fixedMarkupAmount)} className="w-full" />
+              </Field>
+            </>
+          )}
+          {itemType === 'package' && channel === 'store' && (
+            <>
+              <Field label="Bundle covers (guests)" className="text-sm" rule={MENU_PRICE_RULES.bundleHeads}>
+                <Input {...nativeAttrs(MENU_PRICE_RULES.bundleHeads)} className="w-full" />
+              </Field>
+              <Field label="Each extra guest" className="text-sm" rule={MENU_PRICE_RULES.extraHeadAmount}>
+                <Input {...nativeAttrs(MENU_PRICE_RULES.extraHeadAmount)} className="w-full" />
+              </Field>
+            </>
+          )}
+          <Field label="From (Manila time, empty = now)" className="text-sm">
+            <Input type="datetime-local" name="effectiveFrom" className="w-full" />
+          </Field>
+        </FormGrid>
+        {(whenChoices || fixedDaypartId !== undefined) && (
+          <p className="text-xs text-muted">
+            A new price cannot start earlier than a change already saved or scheduled for this package, store and channel. Lunch, Dinner and all day count together.
+            If you see &ldquo;a later change is already scheduled&rdquo;, clear the scheduled change or pick a later time.
+            {whenChoices && ' To move a package from an all-day price to Lunch and Dinner prices, withdraw the all-day price first.'}
+          </p>
+        )}
+        <Button type="submit" variant="secondary">
+          Save
+        </Button>
+      </CheckedForm>
+    </FormModal>
+  );
+}
+
 function Panel({
   data,
   storeId,
   canPrice,
+  canPair,
   variantId,
   channel,
   itemType,
@@ -176,6 +319,7 @@ function Panel({
   data: PricesPageData;
   storeId: string;
   canPrice: boolean;
+  canPair: boolean;
   variantId: string;
   channel: Channel;
   itemType: 'a_la_carte' | 'package' | 'refill';
@@ -183,6 +327,23 @@ function Panel({
   const row = data.inForce.find((r) => r.variantId === variantId && r.channel === channel);
   const later = data.scheduled.filter((r: ScheduledOffer) => r.variantId === variantId && r.channel === channel);
   const resolved = row ? resolvedText(row) : null;
+  // T-510: the raw live rows of this variant and channel. A variant with any dayparted row is drawn slot by slot; otherwise exactly as before.
+  const dayOf = new Map(data.dayparts.map((d, i) => [d.id, { d, i }]));
+  const slots = data.slots
+    .filter((r) => r.variantId === variantId && r.channel === channel && r.daypartId !== null)
+    .sort((a, b) => (dayOf.get(a.daypartId as string)?.i ?? 0) - (dayOf.get(b.daypartId as string)?.i ?? 0));
+  const dayparted = slots.length > 0;
+  const storeLive = channel === 'online' ? data.inForce.find((r) => r.variantId === variantId && r.channel === 'store') : undefined;
+  const fault = data.faults.find((f) => f.variantId === variantId && f.channel === channel);
+  const notNow = data.notOfferedNow.find((n) => n.variantId === variantId && n.channel === channel);
+  const activeDayparts = data.dayparts.filter((d) => d.status === 'active');
+  // Windows with no live price yet: the only ones an "Add price" can still fill (a window that has one is changed, not added).
+  const freeWindows = activeDayparts.filter((d) => !slots.some((x) => x.daypartId === d.id && !x.withdrawn));
+  // Slots exist but every one belongs to retired hours: only an all-day price can be set (anyone who may price can).
+  const noActiveHours = dayparted && activeDayparts.length === 0;
+  const canAdd = canPrice && (!dayparted ? true : noActiveHours || (canPair && freeWindows.length > 0));
+  const whenChoices = canPair && activeDayparts.length > 0 ? (dayparted ? freeWindows : activeDayparts) : [];
+  const scheduledLabel = (s: ScheduledOffer): string => (s.daypartId === null ? '' : `${dayOf.get(s.daypartId)?.d.name ?? 'Hours'}: `);
   const hidden = (
     <>
       <input type="hidden" name="storeId" value={storeId} />
@@ -193,22 +354,99 @@ function Panel({
   return (
     <div className="space-y-3 rounded-[10px] bg-canvas p-3">
       <h3 className="text-sm font-semibold">{CHANNEL_LABEL[channel]}</h3>
-      <div>
-        {row ? (
-          <>
-            <span className="font-medium tabular-nums">{figureText(row)}</span>
-            {resolved && <span className="block text-sm">{resolved}</span>}
-          </>
-        ) : (
-          <span className="text-muted">Not set</span>
-        )}
-      </div>
+      {fault ? (
+        <div className="space-y-2">
+          <Badge tone="danger" label="Check this price" />
+          <p role="alert" className="text-sm text-danger">
+            {FAULT_SENTENCE[fault.reason]}
+          </p>
+          {canPrice && canPair && (
+            <ul className="space-y-1 text-sm">
+              {data.slots
+                .filter((r) => r.variantId === variantId && r.channel === channel && !r.withdrawn)
+                .map((r) => {
+                  const label = r.daypartId === null ? 'All day' : (dayOf.get(r.daypartId)?.d.name ?? 'Hours');
+                  return (
+                    <li key={r.id} className="flex flex-wrap items-center justify-between gap-2">
+                      <span>{label}</span>
+                      <form action={withdrawPriceAction}>
+                        {hidden}
+                        {r.daypartId !== null && <input type="hidden" name="daypartId" value={r.daypartId} />}
+                        <Button type="submit" variant="ghost" aria-label={`Withdraw the ${label} price`}>
+                          Withdraw
+                        </Button>
+                      </form>
+                    </li>
+                  );
+                })}
+            </ul>
+          )}
+        </div>
+      ) : dayparted ? (
+        <ul className="divide-y divide-surface-border">
+          {slots.map((slot) => {
+            const info = dayOf.get(slot.daypartId as string)?.d;
+            // An online rule follows the STORE price live now, not the raw per-window join: the on-now slot uses the domain-resolved row, a
+            // closed window re-links to the store row live now (resolveStoreOffers' rule), and with no store row there is no line, never a wrong one.
+            const slotResolved =
+              channel !== 'online' ? null : row?.id === slot.id ? resolvedText(row) : storeLive ? resolvedText({ ...slot, basis: basisOf(storeLive) }) : null;
+            return (
+              <li key={slot.id} className="space-y-2 py-2 first:pt-0 last:pb-0">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <span className="min-w-0">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{info ? `${info.name}${info.status === 'retired' ? ' (retired)' : ''}` : 'Hours'}</span>
+                      {row?.id === slot.id && <Badge tone="success" label="On now" />}
+                    </span>
+                    {info && <span className="block text-xs text-muted tabular-nums">{windowText(info.start, info.end)}</span>}
+                  </span>
+                  <span className={`tabular-nums ${slot.withdrawn ? 'text-muted' : 'font-medium'}`}>{figureText(slot)}</span>
+                </div>
+                {slotResolved && <p className="text-sm">{slotResolved}</p>}
+                {canPrice && !slot.withdrawn && info?.status !== 'retired' && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <PriceForm
+                      channel={channel}
+                      itemType={itemType}
+                      hidden={hidden}
+                      trigger="Change price"
+                      title={`Change ${info?.name ?? 'price'} price — ${CHANNEL_LABEL[channel]}`}
+                      fixedDaypartId={slot.daypartId as string}
+                    />
+                    {canPair && (
+                      <form action={withdrawPriceAction}>
+                        {hidden}
+                        <input type="hidden" name="daypartId" value={slot.daypartId as string} />
+                        <Button type="submit" variant="ghost" aria-label={`Withdraw the ${info?.name ?? ''} price`}>
+                          Withdraw
+                        </Button>
+                      </form>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <div>
+          {row ? (
+            <>
+              <span className="font-medium tabular-nums">{figureText(row)}</span>
+              {resolved && <span className="block text-sm">{resolved}</span>}
+            </>
+          ) : (
+            <span className="text-muted">Not set</span>
+          )}
+        </div>
+      )}
+      {!fault && notNow && <p className="text-sm text-muted">{notOfferedText(notNow, data.now)}</p>}
 
       {later.map((s) => (
         <div key={s.id} className="flex flex-wrap items-center gap-2 text-sm">
           <Badge tone="info" label="Scheduled" />
-          <span>{`${formatBusinessDateTime(s.effectiveFrom)}: ${figureText(s)}`}</span>
-          {canPrice && (
+          <span>{`${formatBusinessDateTime(s.effectiveFrom)}: ${scheduledLabel(s)}${figureText(s)}`}</span>
+          {canPrice && (s.daypartId === null ? !dayparted || canPair : canPair) && (
             <form action={cancelScheduledPriceAction}>
               <input type="hidden" name="storeId" value={storeId} />
               <input type="hidden" name="offerId" value={s.id} />
@@ -220,63 +458,36 @@ function Panel({
         </div>
       ))}
 
-      {canPrice && (
-        <FormModal trigger="Set price" title={`Set price — ${CHANNEL_LABEL[channel]}`} size="md">
-        <CheckedForm rules={MENU_PRICE_RULES} action={setPriceAction} className="space-y-3">
-          {hidden}
-          <FormGrid>
-            {channel === 'online' && (
-              <Field label="Online price is" className="text-sm">
-                <Select name="pricingMode" defaultValue="fixed" className="w-full">
-                  <option value="fixed">A fixed price</option>
-                  <option value="percent_markup">% over the store price</option>
-                  <option value="fixed_markup">Pesos over the store price</option>
-                </Select>
-              </Field>
-            )}
-            {itemType !== 'refill' && (
-              <Field label={channel === 'online' ? 'Fixed price' : 'New price'} className="text-sm" rule={MENU_PRICE_RULES.amount}>
-                <Input {...nativeAttrs(MENU_PRICE_RULES.amount)} className="w-full" />
-              </Field>
-            )}
-            {channel === 'online' && (
-              <>
-                <Field label="Percent over" className="text-sm" rule={MENU_PRICE_RULES.markupPercent}>
-                  <Input {...nativeAttrs(MENU_PRICE_RULES.markupPercent)} className="w-full" />
-                </Field>
-                <Field label="Pesos over" className="text-sm" rule={MENU_PRICE_RULES.fixedMarkupAmount}>
-                  <Input {...nativeAttrs(MENU_PRICE_RULES.fixedMarkupAmount)} className="w-full" />
-                </Field>
-              </>
-            )}
-            {itemType === 'package' && channel === 'store' && (
-              <>
-                <Field label="Bundle covers (guests)" className="text-sm" rule={MENU_PRICE_RULES.bundleHeads}>
-                  <Input {...nativeAttrs(MENU_PRICE_RULES.bundleHeads)} className="w-full" />
-                </Field>
-                <Field label="Each extra guest" className="text-sm" rule={MENU_PRICE_RULES.extraHeadAmount}>
-                  <Input {...nativeAttrs(MENU_PRICE_RULES.extraHeadAmount)} className="w-full" />
-                </Field>
-              </>
-            )}
-            <Field label="From (Manila time, empty = now)" className="text-sm">
-              <Input type="datetime-local" name="effectiveFrom" className="w-full" />
-            </Field>
-          </FormGrid>
-          <Button type="submit" variant="secondary">
-            Save
-          </Button>
-        </CheckedForm>
-        </FormModal>
+      {canPrice && noActiveHours && (
+        <p className="text-sm text-muted">This store has no active lunch and dinner hours, so only an all-day price can be set here. Add hours first to price by time of day.</p>
       )}
-
-      {canPrice && row && !row.withdrawn && (
-        <form action={withdrawPriceAction}>
-          {hidden}
-          <Button type="submit" variant="ghost">
-            Withdraw
-          </Button>
-        </form>
+      {canPrice && canPair && dayparted && !noActiveHours && freeWindows.length === 0 && (
+        <p className="text-sm text-muted">Every set of hours already has a price. Change a price above, or withdraw one first.</p>
+      )}
+      {canPrice && (canAdd || (!dayparted && row && !row.withdrawn)) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {canAdd && (
+            <PriceForm
+              channel={channel}
+              itemType={itemType}
+              hidden={hidden}
+              trigger={dayparted && !noActiveHours ? 'Add price' : 'Set price'}
+              {...(dayparted && !noActiveHours ? { triggerLabel: 'Add price for another time' } : {})}
+              title={dayparted && !noActiveHours ? `Add a price — ${CHANNEL_LABEL[channel]}` : `Set price — ${CHANNEL_LABEL[channel]}`}
+              {...(whenChoices.length > 0 ? { whenChoices } : {})}
+              // On a variant that already has time-of-day prices, "all day" would be refused: start on the first window with no price yet.
+              {...(dayparted ? { defaultWhen: freeWindows[0]?.id ?? '' } : {})}
+            />
+          )}
+          {!dayparted && row && !row.withdrawn && (
+            <form action={withdrawPriceAction}>
+              {hidden}
+              <Button type="submit" variant="ghost">
+                Withdraw
+              </Button>
+            </form>
+          )}
+        </div>
       )}
     </div>
   );

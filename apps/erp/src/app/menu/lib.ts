@@ -9,8 +9,8 @@
  */
 import { createHash } from 'node:crypto';
 import { and, asc, desc, eq, gt, inArray } from 'drizzle-orm';
-import { accessRepo, menuRepo, refuse, schema, type Tx } from '@shareat/db';
-import { loadLiveStoreOffers } from '@shareat/domain';
+import { accessRepo, daypartsRepo, menuRepo, refuse, schema, type Tx } from '@shareat/db';
+import { loadLiveStoreOffers, type LiveOfferFault, type NotOfferedNow } from '@shareat/domain';
 import type { Actor } from '@shareat/auth';
 import { businessDayRange, parseBusinessDate } from '@shareat/core/datetime';
 import { logger } from '@shareat/core/logger';
@@ -421,6 +421,8 @@ export interface ScheduledOffer {
   id: string;
   variantId: string;
   channel: 'store' | 'online';
+  /** T-510: the daypart this scheduled row belongs to; null = all day. */
+  daypartId: string | null;
   effectiveFrom: Date;
   amount: string | null;
   withdrawn: boolean;
@@ -438,8 +440,26 @@ export interface ScheduledOptionOffer {
   withdrawn: boolean;
 }
 
+/** T-510: a store's lunch-or-dinner window as the screens need it ('HH:MM', days 0 = Sunday). */
+export interface DaypartView {
+  id: string;
+  name: string;
+  days: number[];
+  start: string;
+  end: string;
+  status: 'active' | 'retired';
+}
+
 export interface PricesPageData {
   now: Date;
+  /** T-510: this store's dayparts, active and retired (a withdrawn slot of a retired one still has a name). */
+  dayparts: DaypartView[];
+  /** T-510: every LIVE slot row per variant and channel (one per daypart), raw. `inForce` below is the resolved "live right now" row. */
+  slots: menuRepo.OfferInForce[];
+  /** T-510: dayparted variants with nothing on sale right now, and when they next open. */
+  notOfferedNow: NotOfferedNow[];
+  /** T-510: variants whose rows cannot be resolved (shown as a flag, never a price). */
+  faults: LiveOfferFault[];
   categories: CategoryRow[];
   items: { id: string; categoryId: string; name: string; itemType: 'a_la_carte' | 'package' | 'refill'; variants: { id: string; label: string | null }[] }[];
   inForce: menuRepo.OfferInForce[];
@@ -464,13 +484,24 @@ export async function loadPricesPage(tx: Tx, orgId: string, storeId: string): Pr
     .where(and(eq(schema.menuItemVariants.orgId, orgId), eq(schema.menuItemVariants.status, 'active')))
     .orderBy(asc(schema.menuItemVariants.sortOrder), asc(schema.menuItemVariants.createdAt));
   const items = itemRows.map((i) => ({ ...i, variants: variantRows.filter((v) => v.menuItemId === i.id).map((v) => ({ id: v.id, label: v.label })) }));
-  // T-510: the offer live RIGHT NOW per variant and channel (a variant may hold one live offer per daypart); the grid is redesigned in S3.
-  const { offers: inForce } = await loadLiveStoreOffers(tx, orgId, storeId, now);
+  // T-510: the offer live RIGHT NOW per variant and channel (a variant may hold one live offer per daypart); the grid also shows every slot (below).
+  const { offers: inForce, notOfferedNow, faults } = await loadLiveStoreOffers(tx, orgId, storeId, now);
+  const slots = await menuRepo.offersInForce(tx, storeId, now);
+  const daypartRows = await daypartsRepo.listDaypartsOfStore(tx, orgId, storeId);
+  const dayparts: DaypartView[] = daypartRows.map((d) => ({
+    id: d.id,
+    name: d.name,
+    days: [...d.days],
+    start: d.startTime.slice(0, 5),
+    end: d.endTime.slice(0, 5),
+    status: d.status,
+  }));
   const scheduled = await tx
     .select({
       id: schema.menuOffers.id,
       variantId: schema.menuOffers.variantId,
       channel: schema.menuOffers.channel,
+      daypartId: schema.menuOffers.daypartId,
       effectiveFrom: schema.menuOffers.effectiveFrom,
       amount: schema.menuOffers.amount,
       withdrawn: schema.menuOffers.withdrawn,
@@ -502,6 +533,10 @@ export async function loadPricesPage(tx: Tx, orgId: string, storeId: string): Pr
     .orderBy(asc(schema.menuOptionOffers.effectiveFrom), asc(schema.menuOptionOffers.id));
   return {
     now,
+    dayparts,
+    slots,
+    notOfferedNow,
+    faults,
     categories,
     items,
     inForce,

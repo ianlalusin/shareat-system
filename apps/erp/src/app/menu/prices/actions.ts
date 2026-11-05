@@ -45,6 +45,8 @@ export async function setPriceAction(fd: FormData): Promise<void> {
     const bundleHeads = wholeNumber(fd, 'bundleHeads', 'The number of guests in a bundle');
     const extraHeadAmount = opt(fd, 'extraHeadAmount');
     const effectiveFrom = manilaInstant(opt(fd, 'effectiveFrom'));
+    // T-510: a blank "When" (or no such field: a store without dayparts) is all day. The pairing gate is the domain's, never this form's.
+    const daypartId = opt(fd, 'daypartId');
     await withOrgPrincipal(actor.orgId, async (tx) => {
       // T-440 S9 (iii): the field check stays here, and runs only for a caller `setMenuOffer`'s first authorize()
       // ('set_menu_price' at this store) would let in; anyone else is refused by that gate before any field sentence.
@@ -55,6 +57,7 @@ export async function setPriceAction(fd: FormData): Promise<void> {
           storeId,
           variantId,
           channel: str(fd, 'channel') as MenuChannel,
+          ...(daypartId !== undefined ? { daypartId } : {}),
           ...(pricingMode !== undefined ? { pricingMode: pricingMode as MenuPricingMode } : {}),
           ...(amount !== undefined ? { amount } : {}),
           ...(markupPercent !== undefined ? { markupPercent } : {}),
@@ -79,8 +82,13 @@ export async function withdrawPriceAction(fd: FormData): Promise<void> {
   try {
     const variantId = requireId(fd, 'variantId', 'Choose a variant.');
     const effectiveFrom = manilaInstant(opt(fd, 'effectiveFrom'));
+    const daypartId = opt(fd, 'daypartId');
     await withOrgPrincipal(actor.orgId, (tx) =>
-      withdrawMenuOffer(actor, { storeId, variantId, channel: str(fd, 'channel') as MenuChannel, ...(effectiveFrom !== undefined ? { effectiveFrom } : {}) }, tx),
+      withdrawMenuOffer(
+        actor,
+        { storeId, variantId, channel: str(fd, 'channel') as MenuChannel, ...(daypartId !== undefined ? { daypartId } : {}), ...(effectiveFrom !== undefined ? { effectiveFrom } : {}) },
+        tx,
+      ),
     );
   } catch (err) {
     return await redirectWithFlash(PATH, { store: storeId }, { error: menuErrorMessage(err) });
