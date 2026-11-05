@@ -15,6 +15,7 @@ import { HistoryView } from "@/components/kitchen/history-view";
 import { useAuthContext } from "@/context/auth-context";
 import { useStoreContext } from "@/context/store-context";
 import { useErpAdapted } from "@/lib/menu/useErpMenu";
+import { flavorNamesOf, kitchenFlavorMap } from "@/lib/kitchen/flavor-names";
 import { useLocalProfile } from "@/context/local-profile-context";
 import { db } from "@/lib/firebase/client";
 import { Loader, Send, History } from "lucide-react";
@@ -291,7 +292,6 @@ export default function KitchenPage() {
     const list = erp.kitchenLocations.map((k) => ({ ...k, key: k.id })) as KitchenStation[];
     setStations(list);
     if (list.length > 0) setActiveTab((prev) => prev || list[0].id);
-    setFlavorsMap(new Map(erp.flavors.map((f) => [f.flavorId, f.flavorName])));
   }, [erp]);
   
   useEffect(() => {
@@ -462,7 +462,7 @@ export default function KitchenPage() {
     return sortedTickets.map((ticket: KitchenTicket) => {
         const session = ticket.sessionId ? sessionsMap.get(ticket.sessionId) : undefined;
         const flavorNames = ticket.type === 'package' 
-            ? session?.initialFlavorIds?.map((id: string) => flavorsMap.get(id) || 'Unknown').filter(Boolean)
+            ? flavorNamesOf(session?.initialFlavorIds, kitchenFlavorMap(erp, flavorsMap))
             : [];
         const finalGuestCount = session?.guestCountFinal ?? session?.guestCountCashierInitial ?? ticket.guestCount;
         // Live session is the source of truth for the table display name —
@@ -483,7 +483,7 @@ export default function KitchenPage() {
             }),
         };
     });
-  }, [stationDoc, sessionsMap, flavorsMap]);
+  }, [stationDoc, sessionsMap, flavorsMap, erp]);
   
   // `opts.overrideAtMs` lets a caller stamp the served/cancelled moment with a
   // client timestamp other than "now" (used by the printedOffline auto-ack
