@@ -9,7 +9,7 @@
  *     UNAUTHENTICATED, no Firestore, no database, no firebase-admin, no `@/server/pos2/deps`, no token check: it must answer when everything behind it is down.
  *     (CORS for https://localhost is already handled for every /api/pos2/* by the T-424 middleware; this route adds nothing to it.)
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -27,7 +27,7 @@ describe('health route', () => {
     expect(res.headers.get('content-type')).toMatch(/application\/json/);
     expect(res.headers.get('cache-control')).toMatch(/no-store/);
     const body = await res.json();
-    expect(Object.keys(body).sort()).toEqual(['ok', 'version']);
+    expect(Object.keys(body).sort()).toEqual(['menuSource', 'ok', 'version']);
     expect(body.ok).toBe(true);
     expect(typeof body.version).toBe('string');
     expect(body.version.length).toBeGreaterThan(0);
@@ -48,6 +48,25 @@ describe('health route', () => {
       expect((await (await GET(new Request('http://localhost/api/pos2/health'))).json()).version).toBe('7.8.9-test');
     } finally {
       if (prev === undefined) delete process.env.NEXT_PUBLIC_APP_VERSION; else process.env.NEXT_PUBLIC_APP_VERSION = prev;
+    }
+  });
+
+  it('T-508 R9: menuSource defaults to firestore and is erp only when POS_MENU_SOURCE=erp (read once per process)', async () => {
+    const prev = process.env.POS_MENU_SOURCE;
+    const fresh = async () => { vi.resetModules(); return (await import('@/app/api/pos2/health/route')).GET; };
+    try {
+      delete process.env.POS_MENU_SOURCE;
+      let GET = await fresh();
+      expect((await (await GET()).json()).menuSource).toBe('firestore');
+      process.env.POS_MENU_SOURCE = 'erp';
+      expect((await (await GET()).json()).menuSource).toBe('firestore'); // read once: the change is not seen by this process
+      GET = await fresh();
+      expect((await (await GET()).json()).menuSource).toBe('erp');
+      process.env.POS_MENU_SOURCE = 'bogus';
+      GET = await fresh();
+      expect((await (await GET()).json()).menuSource).toBe('firestore');
+    } finally {
+      if (prev === undefined) delete process.env.POS_MENU_SOURCE; else process.env.POS_MENU_SOURCE = prev;
     }
   });
 

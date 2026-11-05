@@ -14,6 +14,7 @@ import { DEFAULT_SLA_MINUTES } from "@/components/kitchen/kds-item-card";
 import { HistoryView } from "@/components/kitchen/history-view";
 import { useAuthContext } from "@/context/auth-context";
 import { useStoreContext } from "@/context/store-context";
+import { useErpAdapted } from "@/lib/menu/useErpMenu";
 import { useLocalProfile } from "@/context/local-profile-context";
 import { db } from "@/lib/firebase/client";
 import { Loader, Send, History } from "lucide-react";
@@ -90,6 +91,8 @@ import { AssistanceAlerts } from "@/components/kitchen/AssistanceAlerts";
 export default function KitchenPage() {
   const { appUser, user, isSigningOut } = useAuthContext();
   const { activeStore } = useStoreContext();
+  const erp = useErpAdapted(); // T-508 R9: null unless POS_MENU_SOURCE=erp
+  const erpOn = erp !== null;
   const { currentProfile } = useLocalProfile();
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -246,7 +249,7 @@ export default function KitchenPage() {
     const unsubs: (() => void)[] = [];
 
     const stationsRef = collection(db, "stores", activeStore.id, "kitchenLocations");
-    unsubs.push(onSnapshot(query(stationsRef, where("isActive", "==", true)), (snapshot: QuerySnapshot<DocumentData>) => {
+    if (!erpOn) unsubs.push(onSnapshot(query(stationsRef, where("isActive", "==", true)), (snapshot: QuerySnapshot<DocumentData>) => {
         const stationsData = snapshot.docs.map((docSnap: QueryDocumentSnapshot<DocumentData>) => ({ id: docSnap.id, key: docSnap.id, ...docSnap.data() } as KitchenStation));
         stationsData.sort((a: KitchenStation, b: KitchenStation) => (a.sortOrder ?? 1000) - (b.sortOrder ?? 1000));
         setStations(stationsData);
@@ -259,7 +262,7 @@ export default function KitchenPage() {
     // twice a year. A live subscription on every kitchen device is overkill —
     // do a single fetch at session start instead. If admin renames a flavor
     // mid-shift, devices pick it up on the next reload.
-    void (async () => {
+    if (!erpOn) void (async () => {
         try {
             const flavorsRef = collection(db, "flavors");
             const snap = await getDocs(query(flavorsRef, where("isActive", "==", true)));
@@ -280,7 +283,16 @@ export default function KitchenPage() {
     }));
 
     return () => unsubs.forEach(unsub => unsub());
-  }, [activeStore, appUser, activeTab]);
+  }, [activeStore, appUser, activeTab, erpOn]);
+
+  // T-508 S5 (R9): with POS_MENU_SOURCE=erp the station tabs and the flavour names come from the cached ERP menu, not Firestore.
+  useEffect(() => {
+    if (!erp) return;
+    const list = erp.kitchenLocations.map((k) => ({ ...k, key: k.id })) as KitchenStation[];
+    setStations(list);
+    if (list.length > 0) setActiveTab((prev) => prev || list[0].id);
+    setFlavorsMap(new Map(erp.flavors.map((f) => [f.flavorId, f.flavorName])));
+  }, [erp]);
   
   useEffect(() => {
     if (!activeStore) {

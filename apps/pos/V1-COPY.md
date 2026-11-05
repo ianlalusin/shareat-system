@@ -23,6 +23,9 @@ copy (T-422 Ruling 6). Re-running the copy script brings the originals back; re-
 - `src/components/layout/store-switcher.tsx` (6d): removed the admin "Create Store" item, which pushed to the dropped `/admin/stores` (store master data is ERP, row 307).
 - `src/app/layout.tsx` (6e): application name, title and title template are "Shareat POS v2".
 - `public/manifest.webmanifest` (6e): `name` and `short_name` are "Shareat POS v2"; `start_url` unchanged.
+- T-508 S5 (R9): with `POS_MENU_SOURCE=erp` these read the ERP menu adapter (`src/lib/menu/*`) instead of Firestore; source `firestore` is unchanged:
+  `src/context/store-context.tsx` (add-ons, the single source), `src/hooks/useStoreConfigDoc.ts` (packages, flavours), `src/components/server/RefillPOSModal.tsx`,
+  `src/components/server/ServerPageClient.tsx`, `src/app/kitchen/page.tsx` (station tabs, flavour names), `src/components/kitchen/history/HistoryPageClient.tsx` (station name).
 
 ## Files deleted after the copy (orphaned by the edits above; Acceptance 3)
 

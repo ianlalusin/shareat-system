@@ -1,9 +1,10 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { doc, onSnapshot, DocumentData } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
+import { useErpAdapted } from '@/lib/menu/useErpMenu';
 import type { StoreTable, StorePackage, StoreFlavor, MenuSchedule, Discount, Charge, ModeOfPayment } from '@/lib/types';
 
 export interface StoreConfig {
@@ -24,6 +25,7 @@ export function useStoreConfigDoc(storeId?: string | null) {
   const [config, setConfig] = useState<StoreConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const erp = useErpAdapted();
 
   useEffect(() => {
     if (!storeId) {
@@ -66,5 +68,12 @@ export function useStoreConfigDoc(storeId?: string | null) {
     return () => unsubscribe();
   }, [storeId]);
 
-  return { config, isLoading, error };
+  // T-508 S5 (R9): with POS_MENU_SOURCE=erp the packages and flavours come from the ERP menu adapter (no dayparts: schedules empty);
+  // tables, discounts, charges and tenders stay on the Firestore doc. Source `firestore` returns the doc untouched.
+  const merged = useMemo<StoreConfig | null>(() => {
+    if (!erp) return null;
+    const base: StoreConfig = config ?? { tables: [], packages: [], flavors: [], schedules: [], discounts: [], charges: [], modesOfPayment: [] };
+    return { ...base, packages: erp.packages, flavors: erp.flavors, schedules: [] };
+  }, [erp, config]);
+  return { config: merged ?? config, isLoading, error };
 }

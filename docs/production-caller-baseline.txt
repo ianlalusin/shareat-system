@@ -152,6 +152,7 @@ runCapture
 runLoad
 saleOps
 sampleCandidates
+sampleMenu
 seatEntry
 seedCanonicalPositions
 seedRefundRecord

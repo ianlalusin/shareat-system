@@ -8,6 +8,7 @@ import { RoleGuard } from "@/components/guards/RoleGuard";
 import { PageHeader } from "@/components/page-header";
 import { useAuthContext } from "@/context/auth-context";
 import { useStoreContext } from "@/context/store-context";
+import { useErpAdapted } from "@/lib/menu/useErpMenu";
 import { collection, query, where, onSnapshot, orderBy, limit, Timestamp, getDocs, getDoc, doc, startAfter, QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { Loader2, Search, ArrowLeft, Clock } from "lucide-react";
@@ -29,6 +30,7 @@ function formatDuration(ms: number) { return formatDurationHuman(ms, "-"); }
 function HistoryPageContent() {
   const { appUser } = useAuthContext();
   const { activeStore } = useStoreContext();
+  const erp = useErpAdapted();
   const searchParams = useSearchParams();
   const kitchenLocationId = searchParams.get('kitchenLocationId');
 
@@ -84,11 +86,12 @@ function HistoryPageContent() {
   
   useEffect(() => {
       if (!activeStore || !kitchenLocationId) return;
+      if (erp) { const k = erp.kitchenLocations.find((x) => x.id === kitchenLocationId); if (k) setStationName(k.name); return; } // T-508 R9
       getDoc(doc(db, 'stores', activeStore.id, 'kitchenLocations', kitchenLocationId))
         .then(snap => {
             if(snap.exists()) setStationName(snap.data().name);
         });
-  }, [activeStore, kitchenLocationId])
+  }, [activeStore, kitchenLocationId, erp])
 
   const filteredAndGroupedTickets = useMemo(() => {
     let filtered = tickets;

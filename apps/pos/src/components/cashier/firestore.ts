@@ -2,6 +2,7 @@
 
 'use client';
 
+import { loadPrintLocations } from "@/lib/menu/printLocations";
 import {
   collection,
   doc,
@@ -386,8 +387,7 @@ export async function startSession(storeId: string, payload: StartSessionPayload
   const ticketsToPrint = [packageTicketPayload, ...addonTicketPayloads].filter((t): t is Record<string, any> => !!t);
   if (!getConnectivityStore().getState().online) for (const ticketToPrint of ticketsToPrint) {
     void (async () => {
-      const klSnap = await getDocs(collection(db, 'stores', storeId, 'kitchenLocations'));
-      const kitchenLocations = klSnap.docs.map((d) => ({ id: d.id, printOnOutage: (d.data() as any).printOnOutage }));
+      const kitchenLocations = await loadPrintLocations(storeId);
       const deps = makeKitchenBackupDeps({
         kitchenLocations,
         stampTicket: (ticketId) => {
