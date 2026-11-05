@@ -1,12 +1,14 @@
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { createDaypart, setMenuOffer } from '@shareat/domain';
-import { asOrg, cast, expectSentenceError, fd, plain, rawItem, rawRule, render, run, sql, type Cast } from './t401-s4-common';
+import { asOrg, cast, expectAccessRefused, expectSentenceError, fd, plain, rawItem, rawRule, render, run, sql, type Cast } from './t401-s4-common';
 
 /**
  * T-510 S3 - the ERP screens for menu dayparts: /menu/prices (When, Lunch and Dinner side by side, not offered now, fault flag, who sees
  * pairing controls) and /admin/stores/[id] (lunch and dinner hours). docs/tasks/510-menu-dayparts.md R8, R9.
- * Windows are built around the CURRENT Manila hour (Lunch = H-1..H+1 holds now, Dinner = H+1..H+3 opens next) so "on now" and "from HH:00" are real.
+ * No test depends on which hour it runs in: Lunch is the 12 hours around the current Manila hour and Dinner the other 12, so exactly one holds now
+ * and the other opens six hours from now, whatever the clock says (crossing the top of the hour mid-test moves neither). A window on a weekday two days
+ * ahead is never open and always more than a day away, which is the "from Monday 10:00" case.
  */
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 vi.mock('next/navigation', async () => (await import('../helpers/flash-jar-core')).nextNavigationMock());
@@ -23,11 +25,15 @@ const PRICES = () => import('../../src/app/menu/prices/actions');
 const STORES = () => import('../../src/app/admin/stores/actions');
 const PRICES_PAGE = () => import('../../src/app/menu/prices/page');
 const STORE_PAGE = () => import('../../src/app/admin/stores/[id]/page');
+const HOURS_PAGE = () => import('../../src/app/menu/hours/page');
+const STORES_LIB = () => import('../../src/app/admin/stores/lib');
 
 const p2 = (n: number) => String(((n % 24) + 24) % 24).padStart(2, '0');
 const manilaHour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Manila', hour: '2-digit', hourCycle: 'h23' }).format(new Date()));
-const LUNCH = { start: `${p2(manilaHour - 1)}:00`, end: `${p2(manilaHour + 1)}:00` };
-const DINNER = { start: `${p2(manilaHour + 1)}:00`, end: `${p2(manilaHour + 3)}:00` };
+const LUNCH = { start: `${p2(manilaHour - 6)}:00`, end: `${p2(manilaHour + 6)}:00` };
+const DINNER = { start: `${p2(manilaHour + 6)}:00`, end: `${p2(manilaHour - 6)}:00` };
+const manilaDow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', weekday: 'short' }).format(new Date()));
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
 async function world(hint: string) {
@@ -72,6 +78,11 @@ describe('Lunch and Dinner side by side', () => {
     await price(w.c, both, w.dinner, '358.00');
     const dinnerOnly = await pkg(w.c, 'Dinner Special');
     await price(w.c, dinnerOnly, w.dinner, '258.00');
+    // a window on a weekday two days ahead: closed now and more than a day away, so the line names the weekday
+    const aheadDow = (manilaDow + 2) % 7;
+    const brunch = (await asOrg(w.c.orgId, (tx) => createDaypart(w.c.admin, { storeId: w.c.storeA, name: 'Brunch', days: [aheadDow], start: '10:00', end: '12:00' }, tx))).id;
+    const brunchOnly = await pkg(w.c, 'Brunch Special');
+    await price(w.c, brunchOnly, brunch, '228.00');
 
     const sa = await render(PRICES_PAGE, w.c.superAdmin, { search: { store: w.c.storeA } });
     const t = plain(sa);
@@ -80,6 +91,7 @@ describe('Lunch and Dinner side by side', () => {
     expect(t).toContain(`${LUNCH.start} to ${LUNCH.end}`);
     expect(t).toContain('On now');
     expect(t).toContain(`Not offered now, from ${DINNER.start}`);
+    expect(t).toContain(`Not offered now, from ${DAY_NAMES[aheadDow]} 10:00`);
     // super admin: the When select (All day + both windows) and the slot Withdraw controls
     expect(sa).toMatch(/<select[^>]*name="daypartId"/);
     expect(t).toContain('All day');
@@ -182,5 +194,48 @@ describe('/admin/stores/[id]: lunch and dinner hours', () => {
     const other = await run(STORES, 'createDaypartAction', c.managerA, f('Nope2', c.storeB));
     expectSentenceError(other.flash.error, 'manager of another store');
     expect(await count()).toBe(1);
+  });
+});
+
+describe("/menu/hours: a store manager's door to the hours", () => {
+  it('a manager of store A opens A with controls, never B; a manager of both picks either; a cashier is refused', async () => {
+    const c = await cast('s3-door');
+    await asOrg(c.orgId, (tx) => createDaypart(c.admin, { storeId: c.storeA, name: 'Lunch', days: ALL_DAYS, start: '08:00', end: '17:00' }, tx));
+    await asOrg(c.orgId, (tx) => createDaypart(c.admin, { storeId: c.storeB, name: 'Supper', days: ALL_DAYS, start: '18:00', end: '23:00' }, tx));
+
+    const a = await render(HOURS_PAGE, c.managerA, {});
+    expect(plain(a)).toContain('Lunch 08:00 to 17:00');
+    expect(a).toContain('>Add hours<');
+    expect(a).toContain(`name="storeId" value="${c.storeA}"`);
+    expect(a).toContain('name="from" value="hours"');
+    expect(plain(a)).not.toContain('Supper');
+
+    const forged = await render(HOURS_PAGE, c.managerA, { search: { store: c.storeB } });
+    expect(plain(forged)).toContain('This store is not available to you');
+    expect(forged).not.toContain('Supper');
+    expect(forged).not.toContain('Add hours');
+
+    const both = await render(HOURS_PAGE, c.manager, { search: { store: c.storeB } });
+    expect(plain(both)).toContain('Supper 18:00 to 23:00');
+    expect(both).toContain('>Add hours<');
+    expect(both).toContain(`name="storeId" value="${c.storeB}"`);
+
+    expectAccessRefused(await render(HOURS_PAGE, c.staff, {}), 'manage_store_settings');
+  });
+
+  it('someone without manage_store_settings gets the list and no controls; the actions come back to /menu/hours', async () => {
+    const c = await cast('s3-door2');
+    await asOrg(c.orgId, (tx) => createDaypart(c.admin, { storeId: c.storeA, name: 'Lunch', days: ALL_DAYS, start: '08:00', end: '17:00' }, tx));
+    const { daypartsForStore } = await STORES_LIB();
+    const staff = await daypartsForStore(c.staff, c.storeA);
+    expect(staff.canManage).toBe(false);
+    expect(staff.dayparts.map((d) => d.name)).toEqual(['Lunch']);
+    expect((await daypartsForStore(c.managerA, c.storeA)).canManage).toBe(true);
+    expect((await daypartsForStore(c.managerA, c.storeB)).canManage).toBe(false);
+
+    const back = await run(STORES, 'createDaypartAction', c.managerA, fd({ storeId: c.storeA, from: 'hours', name: 'Dinner', days: ['1'], start: '17:00', end: '23:00' }));
+    expect(back.flash.error).toBeUndefined();
+    expect(back.path).toBe('/menu/hours');
+    expect(back.nav.get('store')).toBe(c.storeA);
   });
 });

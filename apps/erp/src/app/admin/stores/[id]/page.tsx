@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requirePageAccess } from '../../../../lib/page-access';
 import { daypartsForStore, storeDetail } from '../lib';
-import { DaypartsSection } from './DaypartsSection';
+import { DaypartsSection } from '../../../menu/DaypartsSection';
 import {
   deactivateStoreAction,
   reactivateStoreAction,
@@ -101,6 +101,10 @@ export default async function StoreDetailPage({
       <p>
         <Link href={`/kitchen?store=${id}`} className={ACTION_LINK}>
           Kitchen setup →
+        </Link>
+        {' '}
+        <Link href={`/menu/hours?store=${id}`} className={ACTION_LINK}>
+          Lunch and dinner hours →
         </Link>
       </p>
 

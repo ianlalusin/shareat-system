@@ -170,7 +170,8 @@ describe('T-348 S2 — the population lands exactly, nothing dropped or doubled 
     // merged with main after #121, re-measured
     // merge with main, re-measured: 131 -> 132 (SW4).
     // 132 -> 133, T-508 S2b: /kitchen carries its <PageDescription>.
-    expect(count).toBe(133);
+    // 133 -> 134, T-510 S3: /menu/hours carries its <PageDescription>.
+    expect(count).toBe(134);
   });
 });
 

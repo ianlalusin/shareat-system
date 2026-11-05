@@ -13,7 +13,7 @@ vi.mock('../src/app/admin/stores/actions', () => ({
 }));
 
 import { daysText, windowText } from '../src/app/menu/daypart-text';
-import { DaypartsSection } from '../src/app/admin/stores/[id]/DaypartsSection';
+import { DaypartsSection } from '../src/app/menu/DaypartsSection';
 
 const plain = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;|&#39;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
 const LUNCH = { id: 'd1', name: 'Lunch', days: [0, 1, 2, 3, 4, 5, 6], start: '08:00', end: '17:00', status: 'active' as const };
@@ -57,7 +57,7 @@ describe('DaypartsSection', () => {
 
   it('a manager of the store gets add, edit, retire (each a form with the store and the daypart)', () => {
     const html = draw(true);
-    expect(html).toMatch(/aria-label="Add hours"/);
+    expect(html).toContain('>Add hours<');
     expect(html.match(/name="daypartId"/g)?.length).toBe(4); // edit + retire for each of the two active rows
     expect(html).toContain('name="storeId" value="s1"');
     expect(html.match(/aria-label="Retire (Lunch|Dinner)"/g)?.length).toBe(2);

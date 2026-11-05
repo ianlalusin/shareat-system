@@ -12,7 +12,7 @@
  */
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Button, type ButtonVariant } from './Button';
+import { Button, type ButtonProps, type ButtonVariant } from './Button';
 
 const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
@@ -95,6 +95,8 @@ export interface FormModalProps {
   readonly triggerClassName?: string;
   /** Accessible name for an icon-only or terse trigger. */
   readonly triggerLabel?: string;
+  /** `null` keeps the trigger's own words instead of the icon the words imply ("Change price" would otherwise be a bare pencil). */
+  readonly triggerIcon?: ButtonProps['icon'];
   readonly title: ReactNode;
   readonly description?: ReactNode;
   readonly size?: DialogSize;
@@ -116,6 +118,7 @@ export function FormModal({
   triggerVariant = 'primary',
   triggerClassName,
   triggerLabel,
+  triggerIcon,
   title,
   description,
   size,
@@ -140,6 +143,7 @@ export function FormModal({
         variant={triggerVariant}
         className={triggerClassName}
         aria-label={triggerLabel}
+        {...(triggerIcon !== undefined ? { icon: triggerIcon } : {})}
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
       >

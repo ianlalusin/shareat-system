@@ -1,7 +1,7 @@
 import { Badge, Button, Checkbox, Field, FormGrid, FormModal, Input } from '@/components/ui';
-import { daysText, WEEK_ORDER, dayShort, windowText } from '../../../menu/daypart-text';
-import type { DaypartView } from '../../../menu/lib';
-import { createDaypartAction, retireDaypartAction, updateDaypartAction } from '../actions';
+import { daysText, WEEK_ORDER, dayShort, windowText } from './daypart-text';
+import type { DaypartView } from './lib';
+import { createDaypartAction, retireDaypartAction, updateDaypartAction } from '../admin/stores/actions';
 
 const CARD = 'space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800';
 const MUTED = 'text-neutral-600 dark:text-neutral-400';
@@ -41,7 +41,8 @@ function DaypartFields({ d }: { d?: DaypartView }) {
  * T-510 S3 (R9): a store's lunch and dinner hours (menu dayparts). Everyone who can open the store page sees the list; the controls
  * are drawn only when `canManage` (`manage_store_settings` at this store), which is presentation: the domain gates every write again.
  */
-export function DaypartsSection({ storeId, dayparts, canManage }: { storeId: string; dayparts: DaypartView[]; canManage: boolean }) {
+export function DaypartsSection({ storeId, dayparts, canManage, from }: { storeId: string; dayparts: DaypartView[]; canManage: boolean; from?: 'hours' }) {
+  const back = from ? <input type="hidden" name="from" value={from} /> : null;
   const active = dayparts.filter((d) => d.status === 'active');
   const retired = dayparts.filter((d) => d.status === 'retired');
   return (
@@ -64,9 +65,10 @@ export function DaypartsSection({ storeId, dayparts, canManage }: { storeId: str
               </div>
               {canManage && (
                 <div className="flex flex-wrap items-center gap-2">
-                  <FormModal trigger="Edit" triggerVariant="secondary" triggerLabel={`Edit ${d.name} hours`} title={`Edit ${d.name}`} size="md">
+                  <FormModal trigger="Edit" triggerIcon={null} triggerVariant="secondary" triggerLabel={`Edit ${d.name} hours`} title={`Edit ${d.name}`} size="md">
                     <form action={updateDaypartAction} className="space-y-3">
                       <input type="hidden" name="storeId" value={storeId} />
+                      {back}
                       <input type="hidden" name="daypartId" value={d.id} />
                       <DaypartFields d={d} />
                       <Button type="submit" variant="secondary">
@@ -76,6 +78,7 @@ export function DaypartsSection({ storeId, dayparts, canManage }: { storeId: str
                   </FormModal>
                   <form action={retireDaypartAction}>
                     <input type="hidden" name="storeId" value={storeId} />
+                    {back}
                     <input type="hidden" name="daypartId" value={d.id} />
                     <Button type="submit" variant="ghost" aria-label={`Retire ${d.name}`}>
                       Retire
@@ -103,9 +106,10 @@ export function DaypartsSection({ storeId, dayparts, canManage }: { storeId: str
         </details>
       )}
       {canManage ? (
-        <FormModal trigger="Add hours" triggerVariant="secondary" title="Add lunch or dinner hours" size="md">
+        <FormModal trigger="Add hours" triggerIcon={null} triggerVariant="secondary" title="Add lunch or dinner hours" size="md">
           <form action={createDaypartAction} className="space-y-3">
             <input type="hidden" name="storeId" value={storeId} />
+            {back}
             <DaypartFields />
             <Button type="submit" variant="secondary">
               Save

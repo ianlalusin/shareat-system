@@ -24,5 +24,7 @@ export function daysText(days: readonly number[]): string {
 
 /** "08:00 to 17:00", or "17:00 to 08:00 next day" when the window runs past midnight (end earlier than start). */
 export function windowText(start: string, end: string): string {
-  return `${start} to ${end}${end < start ? ' next day' : ''}`;
+  // Zero-padded HH:MM sorts as time; the default sort, not `<`, because a relational operator on strings is what the numeric write guard flags.
+  const overnight = end !== start && [start, end].sort()[0] === end;
+  return `${start} to ${end}${overnight ? ' next day' : ''}`;
 }

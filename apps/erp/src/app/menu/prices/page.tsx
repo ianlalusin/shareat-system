@@ -85,14 +85,15 @@ export default async function MenuPricesPage({ searchParams }: { searchParams: P
     const stores = await storesInScope(tx, actor);
     // A store outside the person's scope is never drawn: an unknown or foreign ?store= falls back to their first store.
     const store = stores.find((s) => s.id === sp.store) ?? stores[0] ?? null;
-    if (!store) return { stores, store: null, data: null, canPrice: false, canPair: false };
+    if (!store) return { stores, store: null, data: null, canPrice: false, canPair: false, canHours: false };
     const data = await loadPricesPage(tx, actor.orgId, store.id);
     const canPrice = await mayPrice(tx, actor, store.id);
     // T-510 R8, presentation only: the pairing controls (which price belongs to lunch, dinner or all day). The domain gates every write.
     const canPair = canPrice && (await can(tx, actor, 'pair_menu_dayparts', {}));
-    return { stores, store, data, canPrice, canPair };
+    const canHours = await can(tx, actor, 'manage_store_settings', { storeId: store.id });
+    return { stores, store, data, canPrice, canPair, canHours };
   });
-  const { stores, store, data, canPrice, canPair } = loaded;
+  const { stores, store, data, canPrice, canPair, canHours } = loaded;
 
   return (
     <Page density="table" className="space-y-6">
@@ -131,6 +132,11 @@ export default async function MenuPricesPage({ searchParams }: { searchParams: P
           {!canPrice && <p className="text-sm text-muted">You can read these prices but not change them at this store.</p>}
           {canPrice && !canPair && data.slots.some((r) => r.daypartId !== null) && (
             <p className="text-sm text-muted">Only a super admin can change which prices belong to lunch or dinner. You can still change a price.</p>
+          )}
+          {canHours && (
+            <Link href={`/menu/hours?store=${store.id}`} className="inline-flex min-h-6 items-center text-sm underline underline-offset-4">
+              Change the lunch and dinner hours
+            </Link>
           )}
           <Grid data={data} storeId={store.id} canPrice={canPrice} canPair={canPair} />
           <OptionPrices data={data} storeId={store.id} canPrice={canPrice} />
@@ -212,6 +218,7 @@ function PriceForm({
   itemType,
   hidden,
   trigger,
+  triggerLabel,
   title,
   fixedDaypartId,
   whenChoices,
@@ -221,6 +228,8 @@ function PriceForm({
   itemType: 'a_la_carte' | 'package' | 'refill';
   hidden: ReactNode;
   trigger: string;
+  /** The accessible name when it says more than the visible words. */
+  triggerLabel?: string;
   title: string;
   fixedDaypartId?: string;
   whenChoices?: DaypartView[];
@@ -228,7 +237,7 @@ function PriceForm({
   defaultWhen?: string;
 }) {
   return (
-    <FormModal trigger={trigger} title={title} size="md">
+    <FormModal trigger={trigger} triggerIcon={null} triggerVariant="secondary" triggerLabel={triggerLabel ?? trigger} title={title} size="md">
       <CheckedForm rules={MENU_PRICE_RULES} action={setPriceAction} className="space-y-3">
         {hidden}
         {fixedDaypartId !== undefined && <input type="hidden" name="daypartId" value={fixedDaypartId} />}
@@ -428,26 +437,30 @@ function Panel({
         </div>
       ))}
 
-      {canPrice && (!dayparted || canPair) && (
-        <PriceForm
-          channel={channel}
-          itemType={itemType}
-          hidden={hidden}
-          trigger={dayparted ? 'Add price for another time' : 'Set price'}
-          title={dayparted ? `Add a price — ${CHANNEL_LABEL[channel]}` : `Set price — ${CHANNEL_LABEL[channel]}`}
-          {...(canPair && activeDayparts.length > 0 ? { whenChoices: activeDayparts } : {})}
-          // On a variant that already has time-of-day prices, "all day" would be refused: start on the first window with no price yet.
-          {...(dayparted ? { defaultWhen: activeDayparts.find((d) => !slots.some((x) => x.daypartId === d.id && !x.withdrawn))?.id ?? '' } : {})}
-        />
-      )}
-
-      {canPrice && !dayparted && row && !row.withdrawn && (
-        <form action={withdrawPriceAction}>
-          {hidden}
-          <Button type="submit" variant="ghost">
-            Withdraw
-          </Button>
-        </form>
+      {canPrice && ((!dayparted || canPair) || (!dayparted && row && !row.withdrawn)) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {canPrice && (!dayparted || canPair) && (
+            <PriceForm
+              channel={channel}
+              itemType={itemType}
+              hidden={hidden}
+              trigger={dayparted ? 'Add price' : 'Set price'}
+              {...(dayparted ? { triggerLabel: 'Add price for another time' } : {})}
+              title={dayparted ? `Add a price — ${CHANNEL_LABEL[channel]}` : `Set price — ${CHANNEL_LABEL[channel]}`}
+              {...(canPair && activeDayparts.length > 0 ? { whenChoices: activeDayparts } : {})}
+              // On a variant that already has time-of-day prices, "all day" would be refused: start on the first window with no price yet.
+              {...(dayparted ? { defaultWhen: activeDayparts.find((d) => !slots.some((x) => x.daypartId === d.id && !x.withdrawn))?.id ?? '' } : {})}
+            />
+          )}
+          {canPrice && !dayparted && row && !row.withdrawn && (
+            <form action={withdrawPriceAction}>
+              {hidden}
+              <Button type="submit" variant="ghost">
+                Withdraw
+              </Button>
+            </form>
+          )}
+        </div>
       )}
     </div>
   );

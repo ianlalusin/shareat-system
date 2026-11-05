@@ -296,38 +296,45 @@ export async function reactivateStoreAction(fd: FormData): Promise<void> {
 /** Ticked day boxes as numbers (0 = Sunday). A value that is not a whole number goes through as NaN so the domain's own sentence refuses it. */
 const daysOf = (fd: FormData): number[] => fd.getAll('days').map((v) => (typeof v === 'string' && /^\d$/.test(v) ? Number(v) : Number.NaN));
 
+/** Where the person came from: the store page (default) or /menu/hours (a store manager's screen), which keeps the store in the flash nav. */
+const back = (fd: FormData, storeId: string): { path: string; nav: { store?: string } } =>
+  str(fd, 'from') === 'hours' ? { path: '/menu/hours', nav: { store: storeId } } : { path: `/admin/stores/${storeId}`, nav: {} };
+
 export async function createDaypartAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/admin/stores');
   const storeId = str(fd, 'storeId');
+  const to = back(fd, storeId);
   try {
     await withOrgPrincipal(actor.orgId, (tx) => createDaypart(actor, { storeId, name: str(fd, 'name'), days: daysOf(fd), start: str(fd, 'start'), end: str(fd, 'end') }, tx));
   } catch (err) {
-    return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { error: errorMessage(err) });
+    return await redirectWithFlash(to.path, to.nav, { error: errorMessage(err) });
   }
-  return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { ok: 'Hours added. Now choose which prices follow them, under Menu prices.' });
+  return await redirectWithFlash(to.path, to.nav, { ok: 'Hours added. Now choose which prices follow them, under Menu prices.' });
 }
 
 export async function updateDaypartAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/admin/stores');
   const storeId = str(fd, 'storeId');
+  const to = back(fd, storeId);
   let wrote = false;
   try {
     ({ wrote } = await withOrgPrincipal(actor.orgId, (tx) =>
       updateDaypart(actor, { id: str(fd, 'daypartId'), name: str(fd, 'name'), days: daysOf(fd), start: str(fd, 'start'), end: str(fd, 'end') }, tx),
     ));
   } catch (err) {
-    return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { error: errorMessage(err) });
+    return await redirectWithFlash(to.path, to.nav, { error: errorMessage(err) });
   }
-  return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { ok: wrote ? 'Hours saved.' : 'Nothing changed.' });
+  return await redirectWithFlash(to.path, to.nav, { ok: wrote ? 'Hours saved.' : 'Nothing changed.' });
 }
 
 export async function retireDaypartAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/admin/stores');
   const storeId = str(fd, 'storeId');
+  const to = back(fd, storeId);
   try {
     await withOrgPrincipal(actor.orgId, (tx) => retireDaypart(actor, { id: str(fd, 'daypartId') }, tx));
   } catch (err) {
-    return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { error: errorMessage(err) });
+    return await redirectWithFlash(to.path, to.nav, { error: errorMessage(err) });
   }
-  return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { ok: 'Hours retired.' });
+  return await redirectWithFlash(to.path, to.nav, { ok: 'Hours retired.' });
 }
