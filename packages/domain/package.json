@@ -19,8 +19,13 @@
     "./service-charge": "./src/service-charge/index.ts"
   },
   "dependencies": {
-    "@shareat/db": "*",
     "@shareat/auth": "*",
-    "@shareat/core": "*"
+    "@shareat/core": "*",
+    "@shareat/db": "*",
+    "read-excel-file": "9.3.14",
+    "yauzl": "3.4.0"
+  },
+  "devDependencies": {
+    "@types/yauzl": "3.4.0"
   }
 }

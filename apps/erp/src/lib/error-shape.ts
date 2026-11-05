@@ -61,6 +61,9 @@ export function containsIdentifier(s: string): boolean {
   return UUID_SHAPE.test(s);
 }
 
+/** Set only by `RefusalError` (packages/db/src/refusal.ts); `Symbol.for` keeps this file import-free. */
+const REFUSAL_BRAND = Symbol.for('shareat.refusal');
+
 /**
  * T-343 S1 — an `Error` carrying its own, ready-to-show sentence. Producers: `AuthorizationError`
  * (S2), `RecordGoneError` (S3), `RefusalError` (S5+). `errorMessage()` in `./constraint-messages`
@@ -78,6 +81,7 @@ export function isPresentable(err: unknown): err is Error & { userMessage: strin
   if (typeof userMessage !== 'string') return false;
   if (userMessage.trim() === '') return false;
   if (looksLikeADump(userMessage)) return false;
-  if (hasStringCode(err)) return false;
+  // A string `code` marks a database or driver error, unless the error is a real refusal (the brand is set only in `RefusalError`, packages/db/src/refusal.ts).
+  if (hasStringCode(err) && Reflect.get(err, REFUSAL_BRAND) !== true) return false;
   return true;
 }

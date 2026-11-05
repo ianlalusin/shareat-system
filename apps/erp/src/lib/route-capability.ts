@@ -94,6 +94,8 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/money-accounts': 'view_financial_reports',
   '/money-transfers': 'view_financial_reports',
   '/prepaid': 'view_financial_reports',
+  // T-511 S4: uploading a Grab / Foodpanda statement. `ingestSettlementFile` checks the same word at the store the file belongs to. The longer prefix wins over the open /channel-settlements.
+  '/channel-settlements/upload': 'upload_settlement_files',
   // T-390 S5: the opening count (costs), the opening figures (party names, balances) and the count sheet. The domain's writes check
   // the same word; this is the read layer. The prefix covers /cutover/count/sheet.
   '/cutover/opening': 'run_cutover',

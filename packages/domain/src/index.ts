@@ -174,3 +174,8 @@ export { LobbyRefusal, LOBBY_REFUSAL_CODES } from './lobby/refusal';
 export type { LobbyRefusalCode } from './lobby/refusal';
 // T-398 S6 - the franchisor view of a franchisee: sales per day, stock on hand, and the franchisee-side access log. Callers arrive with the S6d screens.
 export * from './franchise';
+// T-511 S3 - settlement file readers (pure)
+export * from './settlement-intake';
+// T-511 S4 - ingest one settlement file into the staging tables (the upload screen's action calls this; the stage and match steps stay internal).
+export { ingestSettlementFile } from './settlement-intake/ingest';
+export type { IngestInput, IngestResult } from './settlement-intake/ingest';

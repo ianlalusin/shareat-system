@@ -23,7 +23,13 @@
 export { UUID_SHAPE } from '@shareat/core/sentence';
 import { screenSentence } from '@shareat/core/sentence';
 
+/** `Symbol.for`, so apps/erp/src/lib/error-shape.ts (a leaf that imports nothing) can read the same key. */
+const REFUSAL_BRAND: unique symbol = Symbol.for('shareat.refusal');
+
 export class RefusalError extends Error {
+  /** The brand `isPresentable` (apps/erp/src/lib/error-shape.ts) reads, so a refusal that also carries a machine `code` still shows its own sentence.
+   *  Set here and nowhere else: a database or driver error never has it. */
+  readonly [REFUSAL_BRAND] = true;
   readonly userMessage: string;
 
   constructor(message: string, userMessage: string) {

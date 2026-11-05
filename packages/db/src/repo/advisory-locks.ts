@@ -17,7 +17,8 @@
  *     (reimbursement payee, keyed on the employee id rather than a store id), 369002 (supplier
  *     return credit, keyed on the supplier id), 369003 (inter-store pair settlement, keyed on the
  *     UNORDERED pair of store ids), 392001 (dual-run store-week, keyed on org:store:week), 436001 (a
- *     person's leave: caps, SIL balance, one-leave-day-per-date, keyed on the person id).
+ *     person's leave: caps, SIL balance, one-leave-day-per-date, keyed on the person id), 511001
+ *     (settlement upload, keyed on the channel id).
  *   - Migration 0211: namespace 443001 (item family structure, keyed on org id).
  *   - A `hashtext(storeId)` collision only serialises two stores for a moment; it never gives a
  *     wrong answer (the same reasoning as `access.ts` `lockOrgAccess`).
@@ -117,5 +118,17 @@ const PERSON_LEAVE_LOCK_NAMESPACE = 436001;
 export async function lockPersonLeave(tx: Tx, personId: string): Promise<void> {
   await tx.execute(
     sql`select pg_advisory_xact_lock(${PERSON_LEAVE_LOCK_NAMESPACE}::int4, hashtext(${personId}))`,
+  );
+}
+
+/** Namespace (first int4) for the per-channel settlement upload lock. T-511 S4. */
+const SETTLEMENT_CHANNEL_LOCK_NAMESPACE = 511001;
+
+/** Serialises every settlement file ingested for ONE channel, taken AFTER the store gate and BEFORE the repeat-fingerprint lookup: two
+ *  uploads of the same bytes then queue (the second finds the first and reports "already uploaded"), and two files for the same days
+ *  cannot race for the one current line. Keyed on the channel; a `hashtext` collision only makes two channels wait a moment. */
+export async function lockSettlementChannel(tx: Tx, channelId: string): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(${SETTLEMENT_CHANNEL_LOCK_NAMESPACE}::int4, hashtext(${channelId}::text))`,
   );
 }
