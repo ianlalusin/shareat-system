@@ -67,6 +67,16 @@ const ROWS: Record<string, Row> = {
   // ---- payroll ----
   'payroll.setPayRate.amount': { ok: '350.00', bad: [['-7', 'The pay rate must be an amount of 0.01 or more.']] },
   'payroll.setPayRate.effectiveFrom': { ok: DATE, bad: [['soon', EFFECTIVE]], blank: EFFECTIVE },
+  // T-519 S2: the signed-agreement record
+  'payroll.recordDeductionAgreement.amount': { ok: '500.00', bad: [['-7', 'The agreed amount must be an amount of 0.01 or more.']] },
+  'payroll.recordDeductionAgreement.perPayrollLimit': { ok: '250.00', bad: [['-7', 'The limit per payroll must be an amount of 0.01 or more.']] },
+  'payroll.recordDeductionAgreement.noticeGivenAt': { ok: DATE, bad: [['soon', 'The notice date must be a real date.']], blank: 'The notice date is required.' },
+  'payroll.recordDeductionAgreement.employeeExplanation': {
+    ok: 'none given',
+    bad: [['  ', 'Write down what the employee said when they were given the chance to explain (or "none given").']],
+    blank: 'Write down what the employee said when they were given the chance to explain (or "none given").',
+  },
+  'payroll.recordDeductionAgreement.signedOn': { ok: DATE, bad: [['soon', 'The signing date must be a real date.']], blank: 'The signing date is required.' },
   'payroll.addStatutoryRate.effectiveFrom': { ok: DATE, bad: [['soon', EFFECTIVE]], blank: EFFECTIVE },
   'payroll.addStatutoryRate.eeRate': { ok: '0.05', bad: [['abc', 'The employee rate must be a number from 0 to 1.'], ['-0.5', RATE_SAYS]] },
   'payroll.addStatutoryRate.erRate': { ok: '0.10', bad: [['abc', 'The employer rate must be a number from 0 to 1.']] },

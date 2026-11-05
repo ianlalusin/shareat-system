@@ -3,6 +3,7 @@ import { compare, money, ZERO } from '@shareat/core/money';
 import { postPayRunAction, setPayRateAction, voidPayRunAction } from './actions';
 import {
   cashAccountsFor,
+  chargeRepaymentsFor,
   currentPeriod,
   payrollStoresFor,
   payoutDateFor,
@@ -21,6 +22,7 @@ import { withFlash } from '@/lib/flash';
 import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { PAYROLL_PAY_RATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { chargeRepaymentLabel } from '../staff/deduction-labels';
 
 export const metadata = { title: 'Payroll — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -85,6 +87,7 @@ export default async function PayrollPage({
 
   const latest = runs[0];
   const latestSlips = latest ? await slipsFor(actor, latest.id) : [];
+  const repayments = latest ? await chargeRepaymentsFor(actor, latest.id) : {};
 
   return (
     <Page density="table">
@@ -475,7 +478,9 @@ export default async function PayrollPage({
                       {s.personName} — {s.daysWorked} day(s), net{' '}
                       <span className="font-mono">{peso(Number(s.netPay))}</span>
                       {compare(money(s.advanceRecovered), ZERO) > 0 &&
-                        ` (advance −${peso(Number(s.advanceRecovered))})`}
+                        (repayments[s.journalEntryId ?? ''] ?? [{ amount: s.advanceRecovered, signedOn: '' }])
+                          .map((r) => ` (${chargeRepaymentLabel(r.signedOn)} −${peso(Number(r.amount))})`)
+                          .join('')}
                       {` · SSS ${peso(Number(s.sssEe))}, PhilHealth ${peso(Number(s.philhealthEe))}, Pag-IBIG ${peso(Number(s.pagibigEe))}, tax ${peso(Number(s.withholding))}`}
                       {s.skippedAgencies.length > 0 &&
                         ` · not deducted: no ${s.skippedAgencies.map((x) => (x === 'sss' ? 'SSS' : x === 'philhealth' ? 'PhilHealth' : 'Pag-IBIG')).join(', ')} no.`}

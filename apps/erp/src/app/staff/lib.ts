@@ -8,9 +8,10 @@
  * reads (a by-id reader checks the ROW's store). Mutations still run through `packages/domain/src/people/index.ts`'s own
  * `authorize()` via `withOrgPrincipal`. `searchPersonsFor` carries `enrol_staff` and is scoped in the domain function.
  */
-import { accessRepo, employmentRepo, personsRepo, sessionsRepo, statutoryRepo, type EmploymentPositionRow, type EmploymentRow, type PersonRow, type PositionRow, type RosterRow, type Tx } from '@shareat/db';
+import { toBusinessDate } from '@shareat/core/datetime';
+import { accessRepo, deductionAgreementsRepo, employmentRepo, personsRepo, sessionsRepo, statutoryRepo, type EmploymentPositionRow, type EmploymentRow, type PersonRow, type PositionRow, type RosterRow, type Tx } from '@shareat/db';
 import { authorize, can, type Actor, type Capability } from '@shareat/auth';
-import { searchPersons, staffMediaView } from '@shareat/domain';
+import { deductionCapPercent, searchPersons, staffMediaView } from '@shareat/domain';
 import { listStores, withOrgPrincipal, type StoreOption } from '../expenses/lib';
 import { heldStoresFor } from '../../lib/held-stores';
 
@@ -193,4 +194,37 @@ export async function mediaFor(
   } catch {
     return { hasSignature: false, canViewSignature: false, signatureFileId: null, photoFileId: null };
   }
+}
+
+export interface DeductionAgreementsView {
+  /** Record / cancel are offered only to a payroll user who is not the charged person (the domain refuses the rest too). */
+  canAct: boolean;
+  capPercent: number;
+  /** Charges no agreement covers yet; `left` is what the charge still has unrecovered. */
+  waiting: { entryId: string; sourceType: string; entryDate: string; amount: string; left: string }[];
+  agreements: { id: string; sourceType: string; amount: string; perPayrollLimit: string; recovered: string; left: string; signedOn: string; noticeGivenAt: string; status: string }[];
+}
+
+/**
+ * T-519 R7 - the "Charges and repayment agreements" section. `null` (the section is not drawn) unless the actor holds `run_payroll` at the
+ * employment's store: charges owed by a person are pay information.
+ */
+export async function deductionAgreementsFor(actor: Actor, personId: string, storeId: string): Promise<DeductionAgreementsView | null> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    if (!(await can(tx, actor, 'run_payroll', { storeId }))) return null;
+    const waiting = await deductionAgreementsRepo.chargesWaitingForAgreement(tx, actor.orgId, personId);
+    const rows = await deductionAgreementsRepo.listForPerson(tx, actor.orgId, personId);
+    const left = (a: string, b: string) => (Number(a) - Number(b)).toFixed(2);
+    return {
+      canAct: actor.personId !== personId,
+      capPercent: await deductionCapPercent(tx, actor.orgId, toBusinessDate()),
+      waiting: await Promise.all(
+        waiting.map(async (w) => ({ ...w, left: left(w.amount, await deductionAgreementsRepo.recoveredOnCharge(tx, actor.orgId, w.entryId)) })),
+      ),
+      agreements: rows
+        .slice()
+        .reverse()
+        .map((a) => ({ id: a.id, sourceType: a.sourceType, amount: a.amount, perPayrollLimit: a.perPayrollLimit, recovered: a.recovered, left: left(a.amount, a.recovered), signedOn: a.signedOn, noticeGivenAt: a.noticeGivenAt, status: a.status })),
+    };
+  });
 }

@@ -25,9 +25,12 @@ import {
   setStaffSignature,
   upsertStorePosition,
   assertFieldRules,
+  cancelDeductionAgreement,
+  recordDeductionAgreement,
   type CreateEmploymentInput,
 } from '@shareat/domain';
 import {
+  PAYROLL_DEDUCTION_AGREEMENT_RULES,
   STAFF_END_RULES,
   STAFF_HIRE_RULES,
   STAFF_PIN_RULES,
@@ -454,4 +457,48 @@ export async function removeStaffSignatureAction(formData: FormData): Promise<vo
     return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
   }
   return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Signature removed.' });
+}
+
+/**
+ * T-519 R7: record that the employee signed an agreement to repay a charge from pay. The person and store are the EMPLOYMENT's, read
+ * from the database (never from the form); the domain re-checks the right, the recorder, the charge and the scan.
+ */
+export async function recordDeductionAgreementAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/staff');
+  const employmentId = str(formData, 'employmentId');
+  try {
+    const fileId = str(formData, 'scanFileId');
+    if (!fileId) throw new Error('Upload the scan of the signed paper first.');
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      const emp = await employmentRepo.getEmployment(tx, employmentId);
+      if (!emp || emp.orgId !== actor.orgId) throw new Error('That employment could not be found.');
+      if (await can(tx, actor, 'run_payroll', { storeId: emp.storeId })) assertFieldRules(PAYROLL_DEDUCTION_AGREEMENT_RULES, formData);
+      await recordDeductionAgreement(tx, actor, {
+        personId: emp.personId,
+        storeId: emp.storeId,
+        sourceEntryId: str(formData, 'sourceEntryId'),
+        amount: str(formData, 'amount'),
+        perPayrollLimit: str(formData, 'perPayrollLimit'),
+        noticeGivenAt: str(formData, 'noticeGivenAt'),
+        employeeExplanation: str(formData, 'employeeExplanation'),
+        signedOn: str(formData, 'signedOn'),
+        evidenceFileId: fileId,
+      });
+    });
+  } catch (err) {
+    return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Agreement recorded. Payroll can now recover this charge, within the limits set here.' });
+}
+
+/** T-519 R7: cancels an active agreement. The charge goes back to "waiting for a signed agreement"; what was already repaid stays repaid. */
+export async function cancelDeductionAgreementAction(formData: FormData): Promise<void> {
+  const actor = await requireActor('/staff');
+  const employmentId = str(formData, 'employmentId');
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => cancelDeductionAgreement(tx, actor, { agreementId: str(formData, 'agreementId'), reason: str(formData, 'reason') }));
+  } catch (err) {
+    return await redirectWithFlash(`/staff/${employmentId}`, {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash(`/staff/${employmentId}`, {}, { ok: 'Agreement cancelled. The charge is waiting for a signed agreement again.' });
 }

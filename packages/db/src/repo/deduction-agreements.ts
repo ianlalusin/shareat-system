@@ -204,6 +204,22 @@ export async function insertRecovery(
   await tx.insert(staffDeductionRecoveries).values(input);
 }
 
+/** What each given payroll entry recovered under which agreement (R7: the payslip's "Charge repayment (agreement of <date>)" lines). */
+export async function recoveriesForEntries(
+  tx: Tx,
+  orgId: string,
+  entryIds: string[],
+): Promise<{ journalEntryId: string; amount: string; signedOn: string }[]> {
+  if (entryIds.length === 0) return [];
+  return (await tx.execute(
+    sql`select r.journal_entry_id as "journalEntryId", r.amount::text as amount, a.signed_on::text as "signedOn"
+        from staff_deduction_recoveries r
+        join staff_deduction_agreements a on a.org_id = r.org_id and a.id = r.agreement_id
+        where r.org_id = ${orgId} and r.journal_entry_id in (${sql.join(entryIds.map((e) => sql`${e}`), sql`, `)})
+        order by a.signed_on, a.id`,
+  )) as unknown as { journalEntryId: string; amount: string; signedOn: string }[];
+}
+
 /** Active -> cancelled. Returns false when the row was not active (nothing is written). */
 export async function cancel(
   tx: Tx,
