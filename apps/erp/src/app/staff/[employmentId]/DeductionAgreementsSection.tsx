@@ -45,7 +45,7 @@ export function DeductionAgreementsSection({ view, employmentId, storeId }: { vi
           <CheckedForm rules={PAYROLL_DEDUCTION_AGREEMENT_RULES} action={recordDeductionAgreementAction} className="space-y-3">
             <input type="hidden" name="employmentId" value={employmentId} />
             <FormGrid layout="fields">
-              <Field label="Charge" width="full">
+              <Field label="Charge" width="full" span="full">
                 <Select name="sourceEntryId" className="w-full">
                   {view.waiting.map((w) => (
                     <option key={w.entryId} value={w.entryId}>
@@ -71,7 +71,7 @@ export function DeductionAgreementsSection({ view, employmentId, storeId }: { vi
               <Input {...nativeAttrs(PAYROLL_DEDUCTION_AGREEMENT_RULES.employeeExplanation)} className="w-full" />
             </Field>
             <PhotoUpload name="scan" purpose="staff_deduction_agreement" label="Scan of the signed agreement" storeId={storeId} />
-            <Button type="submit" variant="primary">Record agreement</Button>
+            <Button type="submit" variant="primary" icon={null}>Record agreement</Button>
           </CheckedForm>
         </div>
       )}
