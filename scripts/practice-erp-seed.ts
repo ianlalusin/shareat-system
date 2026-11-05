@@ -24,6 +24,9 @@ import { createPerson } from '../packages/domain/src/people';
 import { createSalesChannel } from '../packages/domain/src/sales-channels';
 import { linkStoreToPos } from '../packages/domain/src/pos/store-link';
 import { provisionPosTerminalLink } from '../packages/domain/src/pos/terminal-link';
+import { createKitchenStation, listKitchenSetup, setKitchenRoute } from '../packages/domain/src/kitchen';
+import { addOptionValue, createMenuCategory, createMenuItem, createOptionGroup, linkOptionGroup, setDepletionRule, setMenuOffer, setOptionOffer, setPackageRefills } from '../packages/domain/src/menu';
+import * as menuRepo from '../packages/db/src/repo/menu';
 
 const PIN = { admin: '135790', manager: '246801', cashier: '112358' } as const;
 const POS_STORE_ID = 'practice-store'; // the Firestore store id in apps/pos/scripts/seed-practice.mjs
@@ -163,6 +166,50 @@ async function main() {
     if (cur[0]?.device_id === device) return false;
     await provisionPosTerminalLink(tx, adminActor, { storeId: ids.storeId, terminalNo: 1, deviceId: device, terminalPersonId: terminalId });
     return true;
+  });
+
+  // 6. T-508 S6: a small menu, two kitchen stations and routes, so the ERP menu has something to feed the practice POS.
+  //    Every step skips what exists. Items with a store offer but no route are meant to appear in "Not on the POS yet" (a demo step removes one route).
+  await as(async (tx) => {
+    const cat = (await menuRepo.findCategoryByName(tx, orgId, 'Practice Menu')) ?? { id: (await createMenuCategory(adminActor, { name: 'Practice Menu' }, tx)).id };
+    const setup0 = await listKitchenSetup(tx, adminActor, { storeId: ids.storeId });
+    const stationId: Record<string, string> = {};
+    for (const name of ['Grill', 'Drinks']) {
+      stationId[name] = setup0.stations.find((s) => s.name === name)?.id ?? (await createKitchenStation(tx, adminActor, { storeId: ids.storeId, name })).stationId;
+    }
+    const items: { name: string; type: 'package' | 'a_la_carte' | 'refill'; amount: string | null; station: string }[] = [
+      { name: 'Classic Unlimited', type: 'package', amount: '399.00', station: 'Grill' },
+      { name: 'Premium Unlimited', type: 'package', amount: '599.00', station: 'Grill' },
+      { name: 'Pork Belly Plate', type: 'a_la_carte', amount: '220.00', station: 'Grill' },
+      { name: 'Iced Tea', type: 'a_la_carte', amount: '60.00', station: 'Drinks' },
+      { name: 'Pork Belly Refill', type: 'refill', amount: null, station: 'Grill' },
+    ];
+    let flavourGroupDone = false;
+    for (const it of items) {
+      let item = await menuRepo.findItemByTypeAndName(tx, orgId, it.type, it.name);
+      if (!item) {
+        const made = await createMenuItem(adminActor, { categoryId: cat.id, name: it.name, itemType: it.type }, tx);
+        await setDepletionRule(adminActor, { variantId: made.defaultVariantId, mode: 'no_stock' }, tx);
+        await setMenuOffer(adminActor, { storeId: ids.storeId, variantId: made.defaultVariantId, channel: 'store', amount: it.amount }, tx);
+        item = { id: made.id } as NonNullable<typeof item>;
+        // Flavours are option values (T-508 S0): a group linked to the refill, one free store offer per value; both packages allow that refill.
+        if (it.type === 'refill' && !flavourGroupDone) {
+          flavourGroupDone = true;
+          const group = await createOptionGroup(adminActor, { name: 'Flavours', selectionMode: 'multi', minSelections: 1, maxSelections: 3 }, tx);
+          for (const name of ['Spicy', 'Garlic Butter', 'Original']) {
+            const v = await addOptionValue(adminActor, { optionGroupId: group.id, name }, tx);
+            await setOptionOffer(adminActor, { storeId: ids.storeId, optionValueId: v.id, channel: 'store', priceDelta: '0.00' }, tx);
+          }
+          await linkOptionGroup(adminActor, { optionGroupId: group.id, menuItemId: made.id }, tx);
+          for (const pkg of items.filter((x) => x.type === 'package')) {
+            const p = await menuRepo.findItemByTypeAndName(tx, orgId, 'package', pkg.name);
+            const pv = p && (await menuRepo.variantsOfItem(tx, orgId, p.id)).find((v) => v.isDefault);
+            if (pv) await setPackageRefills(adminActor, { packageVariantId: pv.id, refillItemIds: [made.id] }, tx);
+          }
+        }
+      }
+      await setKitchenRoute(tx, adminActor, { storeId: ids.storeId, menuItemId: item!.id, stationId: stationId[it.station]! });
+    }
   });
 
   mkdirSync(OUT_DIR, { recursive: true });
