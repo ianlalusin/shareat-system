@@ -4,22 +4,26 @@
  * station rows at this instant, so a rename changes the projected name and the content hash.
  */
 import { resolvePosTerminalLink } from '@shareat/auth';
+import { logger } from '@shareat/core/logger';
 import { kitchenRepo, menuRepo, type Tx } from '@shareat/db';
+import { loadLiveStoreOffers } from './live-offers';
 import { projectStoreMenu, type MenuSnapshot, type ProjectedStoreMenu } from './project';
 
 export async function loadStoreMenu(tx: Tx, orgId: string, storeId: string, at?: Date): Promise<ProjectedStoreMenu> {
   const when = at ?? (await menuRepo.dbNow(tx));
-  const [catalog, offers, optionOffers, upcoming, stations, routes] = await Promise.all([
+  const [catalog, live, optionOffers, upcoming, stations, routes] = await Promise.all([
     menuRepo.catalogOfOrg(tx, orgId),
-    menuRepo.offersInForce(tx, storeId, when),
+    loadLiveStoreOffers(tx, orgId, storeId, when), // T-510 S1b: at most one offer per variant and channel, chosen by the daypart open now
     menuRepo.optionOffersInForce(tx, storeId, when),
-    menuRepo.upcomingOfferDates(tx, storeId, when),
+    menuRepo.upcomingOfferDates(tx, storeId, when), // S4: nextChangeAt must also include daypart boundaries (nextDaypartBoundary)
     kitchenRepo.listStations(tx, orgId, storeId),
     kitchenRepo.listRoutes(tx, orgId, storeId),
   ]);
+  // Fail closed: a variant whose offers cannot be resolved is simply not offered; say so, never fall back to another price.
+  if (live.faults.length > 0) logger.warn({ storeId, faults: live.faults }, 'loadStoreMenu: offers that cannot be resolved are left out');
   const snapshot: MenuSnapshot = {
     ...catalog,
-    stores: [{ storeId, at: when, offers, optionOffers, upcoming }],
+    stores: [{ storeId, at: when, offers: live.offers, optionOffers, upcoming }],
     stations,
     routes,
   };

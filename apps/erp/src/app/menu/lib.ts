@@ -10,6 +10,7 @@
 import { createHash } from 'node:crypto';
 import { and, asc, desc, eq, gt, inArray } from 'drizzle-orm';
 import { accessRepo, menuRepo, refuse, schema, type Tx } from '@shareat/db';
+import { loadLiveStoreOffers } from '@shareat/domain';
 import type { Actor } from '@shareat/auth';
 import { businessDayRange, parseBusinessDate } from '@shareat/core/datetime';
 import { logger } from '@shareat/core/logger';
@@ -192,6 +193,8 @@ export async function listOverviewItems(tx: Tx, orgId: string, storeId: string |
   );
   let offered: Set<string> | null = null;
   if (storeId) {
+    // T-510: RAW rows on purpose. "Offered at this store" means some daypart slot is live, even when its window is closed right now
+    // (the resolved view would drop a lunch-only package at 20:00 and the overview would call it not offered).
     const rows = await menuRepo.offersInForce(tx, storeId, await menuRepo.dbNow(tx));
     offered = new Set(rows.filter((r) => !r.withdrawn).map((r) => r.variantId));
   }
@@ -461,7 +464,8 @@ export async function loadPricesPage(tx: Tx, orgId: string, storeId: string): Pr
     .where(and(eq(schema.menuItemVariants.orgId, orgId), eq(schema.menuItemVariants.status, 'active')))
     .orderBy(asc(schema.menuItemVariants.sortOrder), asc(schema.menuItemVariants.createdAt));
   const items = itemRows.map((i) => ({ ...i, variants: variantRows.filter((v) => v.menuItemId === i.id).map((v) => ({ id: v.id, label: v.label })) }));
-  const inForce = await menuRepo.offersInForce(tx, storeId, now);
+  // T-510: the offer live RIGHT NOW per variant and channel (a variant may hold one live offer per daypart); the grid is redesigned in S3.
+  const { offers: inForce } = await loadLiveStoreOffers(tx, orgId, storeId, now);
   const scheduled = await tx
     .select({
       id: schema.menuOffers.id,

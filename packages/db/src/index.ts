@@ -335,6 +335,9 @@ export type {
 export * as posMappingRepo from './repo/pos-mapping';
 // T-401 S2 - the ERP menu and catalog master (offers, depletion rules, categories, items, variants, option groups).
 export * as menuRepo from './repo/menu';
+// T-510 S1b - menu dayparts (migration 0233).
+export * as daypartsRepo from './repo/dayparts';
+export type { MenuDaypartRow } from './repo/dayparts';
 export type {
   MenuCategoryRow,
   MenuItemRow,
