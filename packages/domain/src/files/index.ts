@@ -65,6 +65,8 @@ const PURPOSE_CAPABILITY: Record<FilePurpose, Parameters<typeof authorize>[2]> =
   staff_signature: 'enrol_staff',
   // T-511 S2a. Governs UPLOAD and, until slice 5 adds the review screen's own read exception, READING the stored statement too (store scope: a manager at the store).
   channel_settlement_file: 'upload_settlement_files',
+  // T-519 S1. Governs UPLOAD of the scan of a signed deduction agreement (the payroll capability that records the agreement).
+  staff_deduction_agreement: 'run_payroll',
 };
 
 const EXTENSIONS: Record<string, string> = {

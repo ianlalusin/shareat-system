@@ -36,6 +36,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, transaction, APP_ROLE, RefusalError, type Tx } from '@shareat/db';
+import { agree } from './_fixtures/t519-agreements';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import {
   addMinimumWage,
@@ -231,20 +232,26 @@ async function approveOt(f: Fixture, shiftDay: string, minutes: number) {
     values (${f.orgId}, ${f.storeId}, ${f.employmentId}, ${shiftDay}, 'overtime_approved', ${minutes}, ${sess!.id}, ${f.adminId})`;
 }
 
-async function advance(f: Fixture, amount: string) {
+async function advance(f: Fixture, amount: string): Promise<string> {
   const [period] = await sql<{ id: string }[]>`select id from fiscal_periods where org_id = ${f.orgId} and starts_on = '2026-01-01'`;
   const [adv] = await sql<{ id: string }[]>`select id from accounts where org_id = ${f.orgId} and code = '1230'`;
   const [cash] = await sql<{ id: string }[]>`select id from accounts where org_id = ${f.orgId} and code = '1130'`;
-  await sql.begin(async (tx) => {
+  return sql.begin(async (tx) => {
     const [e] = await tx<{ id: string }[]>`
       insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, status)
-      values (${f.orgId}, '2026-01-02', ${period!.id}, 'cashrequest', ${uid('adv')}, 'draft') returning id`;
+      values (${f.orgId}, '2026-01-02', ${period!.id}, 'tillcountshortage', ${uid('adv')}, 'draft') returning id`;
     await tx`insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit, party_type, party_id)
              values (${e!.id}, 1, ${adv!.id}, ${f.storeId}, ${amount}, '0', 'employee', ${f.workerId})`;
     await tx`insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)
              values (${e!.id}, 2, ${cash!.id}, ${f.storeId}, '0', ${amount})`;
     await tx`update journal_entries set status = 'posted' where id = ${e!.id}`;
+    return e!.id;
   });
+}
+/** T-519: a charge plus the signed agreement that lets payroll recover it (the whole amount, the same as the limit per payroll). */
+async function agreedAdvance(f: Fixture, amount: string) {
+  const charge = await advance(f, amount);
+  await agree(sql, f, f.admin, f.workerId, charge, { amount, perPayrollLimit: amount });
 }
 
 type Period = { periodStart: string; periodEnd: string };
@@ -418,18 +425,18 @@ describe('T-190 - minimum wage earners (cases 6 and 7)', () => {
 });
 
 describe('T-190 - advance, low pay, shortfall (cases 8, 9, 18)', () => {
-  it('case 8: statutory BEFORE the advance - 1,600 pay, 2,000 owed -> 532 withheld, 1,068.00 recovered, net 0.00, 932.00 still on 1230  [mutant: advance first]', async () => {
+  it('case 8: statutory BEFORE the advance - 1,600 pay, 2,000 agreed -> 532 withheld, 320.00 recovered (T-519: the 20% wage cap; was 1,068.00), net 748.00 (was 0.00), 1,680.00 still on 1230 (was 932.00)  [mutant: advance first]', async () => {
     const f = await ready('c8');
     await addDays(f, ['2026-01-05', '2026-01-06']);
-    await advance(f, '2000.00');
+    await agreedAdvance(f, '2000.00');
     const out = await post(f, H1);
     const [r] = await slips(out.runId);
-    expect(r).toMatchObject({ sss_ee: '250.00', philhealth_ee: '250.00', pagibig_ee: '32.00', advance_recovered: '1068.00', net_pay: '0.00' });
+    expect(r).toMatchObject({ sss_ee: '250.00', philhealth_ee: '250.00', pagibig_ee: '32.00', advance_recovered: '320.00', net_pay: '748.00' });
     const [bal] = await sql<{ b: string }[]>`
       select coalesce(sum(l.debit - l.credit), 0)::text as b from journal_lines l join journal_entries e on e.id = l.entry_id
       join accounts a on a.id = l.account_id
       where e.org_id = ${f.orgId} and a.code = '1230' and l.party_id = ${f.workerId} and e.status <> 'draft'`;
-    expect(bal!.b).toBe('932.00');
+    expect(bal!.b).toBe('1680.00');
   });
 
   it('case 9: one day at 700 in the month -> Pag-IBIG low band: ee 1% = 7.00, er 2% = 14.00  [mutant: er at 1%]', async () => {

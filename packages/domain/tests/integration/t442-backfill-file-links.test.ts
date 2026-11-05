@@ -291,7 +291,7 @@ describe('M1 the registry is exactly the set of foreign keys into stored_files',
     const declared = registry().map((r) => `${r.table}.${r.column}`).sort();
     expect(declared).toEqual(actual);
     // T-511 S2a (2026-11-03): 6 -> 8 (settlement_uploads.file_id and settlement_uploads.pdf_file_id). RED until migration 0228 + the two ref() lines land.
-    expect(actual.length).toBe(8);
+    expect(actual.length).toBe(9); // T-519: 8 -> 9 (staff_deduction_agreements.evidence_file_id)
   });
 
   it('A1: every uuid column named *file_id in public is in the registry (a file column added WITHOUT an FK is caught too)', async () => {

@@ -1204,6 +1204,14 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'T-508 R1: a store’s kitchen stations; the store belongs to one org, the policy is the org backstop and the repo filters by store.',
   },
+  staff_deduction_agreements: {
+    scope: 'org_column',
+    reason: 'T-519: a named employee own signed agreement to repay a charge from pay, with their explanation. HR data like payslips; org isolation is the point.',
+  },
+  staff_deduction_recoveries: {
+    scope: 'org_column',
+    reason: 'T-519: how much of a payroll entry 1230 recovery each agreement covered. Org-scoped like the payslips it mirrors.',
+  },
   kitchen_routes: {
     scope: 'org_column',
     reason: 'T-508 R1/R2: which station cooks which menu item at a store; org-scoped like the menu it points at.',

@@ -20,6 +20,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { seedStatutoryRates } from './_fixtures/statutory-rates';
+import { agree } from './_fixtures/t519-agreements';
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, payrollRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
@@ -111,20 +112,21 @@ async function addDay(
   return d!.id;
 }
 
-/** Puts an advance on 1230 against the worker, the way a cash request would. */
-async function advance(f: Fixture, amount: string) {
+/** Puts a staff charge on 1230 against the worker (T-519: a real charge source type) and returns its entry id. */
+async function advance(f: Fixture, amount: string): Promise<string> {
   const [period] = await sql<{ id: string }[]>`select id from fiscal_periods where org_id = ${f.orgId} limit 1`;
   const [adv] = await sql<{ id: string }[]>`select id from accounts where org_id = ${f.orgId} and code = '1230'`;
   const [cash] = await sql<{ id: string }[]>`select id from accounts where org_id = ${f.orgId} and code = '1130'`;
-  await sql.begin(async (tx) => {
+  return sql.begin(async (tx) => {
     const [e] = await tx<{ id: string }[]>`
       insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, status)
-      values (${f.orgId}, '2026-01-02', ${period!.id}, 'cashrequest', ${uid('adv')}, 'draft') returning id`;
+      values (${f.orgId}, '2026-01-02', ${period!.id}, 'tillcountshortage', ${uid('adv')}, 'draft') returning id`;
     await tx`insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit, party_type, party_id)
              values (${e!.id}, 1, ${adv!.id}, ${f.storeId}, ${amount}, '0', 'employee', ${f.workerId})`;
     await tx`insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)
              values (${e!.id}, 2, ${cash!.id}, ${f.storeId}, '0', ${amount})`;
     await tx`update journal_entries set status = 'posted' where id = ${e!.id}`;
+    return e!.id;
   });
 }
 
@@ -350,11 +352,13 @@ describe('T-189 — the advance, netted from 1230', () => {
       setPayRate(tx, f.admin, { employmentId: f.employmentId, storeId: f.storeId, basis: 'daily', amount: '540.00', effectiveFrom: '2026-01-01' }));
     await addDay(f, '2026-01-05');
     await addDay(f, '2026-01-06');
-    await advance(f, amount);
+    // T-519: recovery needs a signed agreement. It covers the whole charge, so the 20% wage cap (216.00 of this 1,080.00 gross) is what binds.
+    const charge = await advance(f, amount);
+    await agree(sql, f, f.admin, f.workerId, charge, { amount, perPayrollLimit: amount });
     return f;
   }
 
-  it('⭐ nets what the person drew, and 1230 goes to zero', async () => {
+  it('⭐ nets under the agreement, held to 20% of gross (T-519: was the whole 400.00 balance)', async () => {
     const f = await withAdvance('advance', '400.00');
     await asOrg(f.orgId, (tx) =>
       postPayRun(tx, f.admin, { storeId: f.storeId, ...period, moneyAccountId: f.officeAccountId }));
@@ -364,30 +368,30 @@ describe('T-189 — the advance, netted from 1230', () => {
       from journal_lines l join journal_entries e on e.id = l.entry_id
       join accounts a on a.id = l.account_id
       where e.org_id = ${f.orgId} and a.code = '1230' and l.party_id = ${f.workerId} and e.status <> 'draft'`;
-    expect(row!.bal).toBe('0.00');
+    expect(row!.bal).toBe('184.00'); // 400.00 - 216.00 (T-519: was 0.00)
 
     const [slip] = await sql<{ advance_recovered: string; net_pay: string }[]>`
       select advance_recovered, net_pay from payslips where org_id = ${f.orgId}`;
-    expect(slip!.advance_recovered).toBe('400.00');
-    expect(slip!.net_pay).toBe('680.00');
+    expect(slip!.advance_recovered).toBe('216.00'); // 20% of the 1,080.00 gross (T-519: was 400.00)
+    expect(slip!.net_pay).toBe('864.00'); // T-519: was 680.00
   });
 
-  it('⛔ an advance BIGGER than the pay leaves net at zero and the rest still owed', async () => {
+  it('⛔ an agreed charge BIGGER than the pay recovers only 20% of gross; the rest is still owed (T-519: was 100% of gross)', async () => {
     const f = await withAdvance('bigadvance', '5000.00');
     await asOrg(f.orgId, (tx) =>
       postPayRun(tx, f.admin, { storeId: f.storeId, ...period, moneyAccountId: f.officeAccountId }));
 
     const [slip] = await sql<{ advance_recovered: string; net_pay: string }[]>`
       select advance_recovered, net_pay from payslips where org_id = ${f.orgId}`;
-    expect(slip!.advance_recovered).toBe('1080.00');
-    expect(slip!.net_pay).toBe('0.00'); // ⛔ never below zero — a payslip is not a bill
+    expect(slip!.advance_recovered).toBe('216.00'); // T-519: was 1080.00 (the whole gross)
+    expect(slip!.net_pay).toBe('864.00'); // T-519: was 0.00. A payslip is still never a bill
 
     const [row] = await sql<{ bal: string }[]>`
       select coalesce(sum(l.debit - l.credit), 0)::text as bal
       from journal_lines l join journal_entries e on e.id = l.entry_id
       join accounts a on a.id = l.account_id
       where e.org_id = ${f.orgId} and a.code = '1230' and l.party_id = ${f.workerId} and e.status <> 'draft'`;
-    expect(row!.bal).toBe('3920.00'); // still owed
+    expect(row!.bal).toBe('4784.00'); // still owed (T-519: was 3920.00)
   });
 });
 

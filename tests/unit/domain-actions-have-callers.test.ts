@@ -173,6 +173,12 @@ const EXEMPT: Record<string, string> = {
   // `recordCollection` and `voidCharge` were DEF-190's unreachable half; T-226 gave them
   // `/customers/[customerId]` and this test failed until the rows were deleted — which is the
   // stale-exemption rule doing its whole job, on the very next task after the guard shipped.
+  recordDeductionAgreement:
+    'UNWIRED — T-519 S2 (docs/tasks/519-staff-deduction-agreements.md R7): the "Record signed agreement" form under the person payroll page is slice 2. S1 is domain + tests only.',
+  cancelDeductionAgreement:
+    'UNWIRED — T-519 S2 (R7): the active-agreements list under the person payroll page carries the cancel action. S1 is domain + tests only.',
+  recordOwnerSelfAgreement:
+    'INTERNAL — T-519 R5. Called only by `recoverFromPay` in owners/index.ts, in the same transaction; it is not a screen action and never authorizes a human of its own.',
   reconcileSupplier:
     'UNWIRED — DEF-198. Its mirror `reconcileCustomer` IS wired; the supplier side of the same ' +
     'attestation is not, so `/ap/suppliers/[id]` cannot stamp a reconciliation anchor.',

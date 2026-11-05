@@ -33,6 +33,7 @@ export const EMPLOYEE_ADVANCE_CODE = '1230';
 // ⚠️ ONE definition, in routing.ts. Declaring a second here compiled fine and then collided at the
 // package barrel — two constants named for the same account is how they drift apart.
 import { DUE_FROM_OWNER_CODE } from '../expenses/routing';
+import { recordOwnerSelfAgreement } from '../payroll/deduction-agreements';
 export { DUE_FROM_OWNER_CODE };
 
 // -------------------------------------------------------------------------------------
@@ -520,6 +521,14 @@ export async function recoverFromPay(
           partyId: owner.id,
         },
       ],
+    });
+    // T-519 R5: when the owner does this to their OWN pay, that act is their agreement; anyone else needs a signed one recorded.
+    await recordOwnerSelfAgreement(trx, actor, {
+      personId: owner.personId,
+      storeId: owner.storeId,
+      sourceEntryId: result.entryId,
+      amount: parsed,
+      on: input.on,
     });
     return {
       entryId: result.entryId,
