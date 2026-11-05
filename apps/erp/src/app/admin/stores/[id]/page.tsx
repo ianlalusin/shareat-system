@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requirePageAccess } from '../../../../lib/page-access';
-import { storeDetail } from '../lib';
+import { daypartsForStore, storeDetail } from '../lib';
+import { DaypartsSection } from './DaypartsSection';
 import {
   deactivateStoreAction,
   reactivateStoreAction,
@@ -68,6 +69,7 @@ export default async function StoreDetailPage({
   }
 
   const blocking = readiness.filter((c) => !c.ok && c.blocking);
+  const hours = await daypartsForStore(actor, id);
 
   return (
     <Page view="detail" sectioned density="table">
@@ -333,6 +335,8 @@ export default async function StoreDetailPage({
             </div>
             </EditableRecord>
           </section>
+
+          <DaypartsSection storeId={store.id} dayparts={hours.dayparts} canManage={hours.canManage} />
 
           {store.isActive ? (
             <form

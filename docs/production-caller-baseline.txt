@@ -32,7 +32,6 @@ collectActorUids
 confirmTradeOrder
 convertSpecimen
 countedVariances
-createDaypart
 createFakeFirestore
 createFakeIdb
 createPaymentConversionServer
@@ -143,7 +142,6 @@ reserveNext
 resetLobbyReadLimiterForTests
 resetNonCentavoCount
 resolveFingerprintMatchToken
-retireDaypart
 retireMenuItem
 retireMenuVariant
 returnableQuantity

@@ -14,11 +14,14 @@ import { can } from '@shareat/auth';
 import {
   assertFieldRules,
   CANONICAL_POSITION_DEFAULTS,
+  createDaypart,
   createStore,
   deactivateStore,
   reactivateStore,
+  retireDaypart,
   setStoreOpeningDate,
   setStoreStockModel,
+  updateDaypart,
   updateStoreDetails,
 } from '@shareat/domain';
 import { ADMIN_STORE_CREATE_RULES } from '@shareat/domain/field-rules';
@@ -286,4 +289,45 @@ export async function reactivateStoreAction(fd: FormData): Promise<void> {
     {},
     { ok: `Store reactivated, and store scope re-granted to ${result!.scopedAdminIds.length} admin(s).` },
   );
+}
+
+// ---- T-510 S3: lunch and dinner hours (menu dayparts). The gate (`manage_store_settings` at the store) is the domain's. ----
+
+/** Ticked day boxes as numbers (0 = Sunday). A value that is not a whole number goes through as NaN so the domain's own sentence refuses it. */
+const daysOf = (fd: FormData): number[] => fd.getAll('days').map((v) => (typeof v === 'string' && /^\d$/.test(v) ? Number(v) : Number.NaN));
+
+export async function createDaypartAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/admin/stores');
+  const storeId = str(fd, 'storeId');
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => createDaypart(actor, { storeId, name: str(fd, 'name'), days: daysOf(fd), start: str(fd, 'start'), end: str(fd, 'end') }, tx));
+  } catch (err) {
+    return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { ok: 'Hours added. Now choose which prices follow them, under Menu prices.' });
+}
+
+export async function updateDaypartAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/admin/stores');
+  const storeId = str(fd, 'storeId');
+  let wrote = false;
+  try {
+    ({ wrote } = await withOrgPrincipal(actor.orgId, (tx) =>
+      updateDaypart(actor, { id: str(fd, 'daypartId'), name: str(fd, 'name'), days: daysOf(fd), start: str(fd, 'start'), end: str(fd, 'end') }, tx),
+    ));
+  } catch (err) {
+    return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { ok: wrote ? 'Hours saved.' : 'Nothing changed.' });
+}
+
+export async function retireDaypartAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/admin/stores');
+  const storeId = str(fd, 'storeId');
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => retireDaypart(actor, { id: str(fd, 'daypartId') }, tx));
+  } catch (err) {
+    return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { error: errorMessage(err) });
+  }
+  return await redirectWithFlash(`/admin/stores/${storeId}`, {}, { ok: 'Hours retired.' });
 }

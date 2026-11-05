@@ -5,10 +5,11 @@
  * capability gate — the gate belongs to the WRITE, not to looking at a list — and every mutation
  * runs through `packages/domain/src/stores/service.ts`'s own `authorize()` via the actions file.
  */
-import { manilaToday, storesRepo, stockLocationsRepo, type StoreRow } from '@shareat/db';
+import { daypartsRepo, manilaToday, storesRepo, stockLocationsRepo, type StoreRow } from '@shareat/db';
 import { listKitchenSetup, storeReadiness, type KitchenSetup, type ReadinessCheck } from '@shareat/domain';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { type Actor, can } from '@shareat/auth';
+import type { DaypartView } from '../../menu/lib';
 
 export { withOrgPrincipal };
 export type { StoreRow, ReadinessCheck };
@@ -73,5 +74,20 @@ export async function kitchenForStore(actor: Actor, storeId: string): Promise<Ki
   return withOrgPrincipal(actor.orgId, async (tx) => {
     if (!(await can(tx, actor, 'manage_store_settings', { storeId }))) return null;
     return listKitchenSetup(tx, actor, { storeId });
+  });
+}
+
+/**
+ * T-510 S3: a store's lunch and dinner hours, for anyone who can see the page. `canManage` only decides whether the controls are drawn
+ * (presentation); every write is gated again in the domain.
+ */
+export async function daypartsForStore(actor: Actor, storeId: string): Promise<{ dayparts: DaypartView[]; canManage: boolean }> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    const rows = await daypartsRepo.listDaypartsOfStore(tx, actor.orgId, storeId);
+    const canManage = await can(tx, actor, 'manage_store_settings', { storeId });
+    return {
+      canManage,
+      dayparts: rows.map((d) => ({ id: d.id, name: d.name, days: [...d.days], start: d.startTime.slice(0, 5), end: d.endTime.slice(0, 5), status: d.status })),
+    };
   });
 }

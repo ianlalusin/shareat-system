@@ -503,7 +503,9 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1478 -> 1490, T-508 S2b, 4 Nov 2026, BOSS approved: +12 compliant controls (kitchen stations and routing).
     // 1490 -> 1494, T-508 S2b design fixes, 4 Nov 2026, BOSS approved.
     // 1494 -> 1495, T-511 S4, 5 Nov 2026, BOSS approved: +1 control on /channel-settlements/upload (the upload form), re-measured by runCensus() after the rebase on main (FAIL/UNRESOLVED baselines unchanged).
-    expect(results.length).toBe(1495);
+    // 1495 -> 1506, T-510 S3, 5 Nov 2026 (NEEDS BOSS APPROVAL): +11 controls, all passing the size rule (FAIL/UNRESOLVED baselines unchanged), re-measured by runCensus() (not itemised):
+    // the store page's lunch-and-dinner hours section and /menu/prices' per-slot controls and When select.
+    expect(results.length).toBe(1506);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
