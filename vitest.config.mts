@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('.', import.meta.url));
 
 // T-400: >1 runs integration files in parallel, one cloned database per worker.
+const ISOLATED_FILE = 'packages/domain/tests/unit/t511-s3-worker-containment.test.ts';
 const integrationWorkers = Number(process.env.INTEGRATION_WORKERS ?? 1);
 
 // Workspace packages are resolved from source, matching tsconfig paths and
@@ -89,6 +90,19 @@ export default defineConfig({
     disableConsoleIntercept: true,
     projects: [
       {
+        // T-511 S3: this file feeds hostile xlsx files to memory-limited worker threads (~200 MB RSS each). It runs ALONE, after `unit`
+        // (`npm run test`), so a hostile worker never shares the runner's RAM with the other unit forks (CI crashed with "heap out of memory").
+        extends: true,
+        test: {
+          name: 'unit-isolated',
+          include: [ISOLATED_FILE],
+          environment: 'node',
+          setupFiles: ['apps/erp/tests/helpers/flash-jar-setup.ts', 'apps/erp/tests/helpers/form-status-setup.ts'],
+          maxWorkers: 1,
+          execArgv: ['--max-old-space-size=512'],
+        },
+      },
+      {
         extends: true,
         test: {
           name: 'unit',
@@ -113,7 +127,7 @@ export default defineConfig({
           // `tests/integration/` directory, anywhere, is an integration test.
           // T-422: apps/pos has its own vitest config (`@` -> apps/pos/src); the ERP alias must never resolve its files.
           // T-437: apps/customer has its own vitest config too (same reason).
-          exclude: ['**/node_modules/**', '**/.next/**', '**/tests/integration/**', 'apps/pos/**', 'apps/customer/**'],
+          exclude: ['**/node_modules/**', '**/.next/**', '**/tests/integration/**', 'apps/pos/**', 'apps/customer/**', ISOLATED_FILE],
           environment: 'node',
           // T-380 S1a / REV-2: an empty `next/headers` jar for any test that renders a page which
           // calls `withFlash` without mocking cookies itself (a test's own vi.mock still wins).

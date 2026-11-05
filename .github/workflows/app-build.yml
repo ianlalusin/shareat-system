@@ -57,6 +57,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          # Caches ~/.gradle (incl. the wrapper distribution): services.gradle.org timed out twice on 5 Nov.
+          cache: gradle
 
       - name: Decode keystore
         if: steps.gate.outputs.signing == 'release'

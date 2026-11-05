@@ -18,7 +18,7 @@
     "dev:pos": "npm run dev -w @shareat/pos",
     "dev:customer": "npm run dev -w @shareat/customer",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --project unit",
+    "test": "vitest run --project unit && vitest run --project unit-isolated",
     "test:watch": "vitest --project unit",
     "test:integration": "vitest run --project integration --reporter=verbose",
     "test:all": "vitest run",
