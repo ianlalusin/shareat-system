@@ -13,25 +13,23 @@
  */
 import { createHash } from 'node:crypto';
 import { authorize, AuthorizationError, heldCapabilities, type Actor } from '@shareat/auth';
-import { advisoryLocksRepo, auditLogRepo, filesRepo, settlementIntakeRepo, type SettlementDayLineRow, type SettlementUploadRow, type Tx } from '@shareat/db';
+import { advisoryLocksRepo, auditLogRepo, settlementIntakeRepo, type SettlementDayLineRow, type SettlementUploadRow, type Tx } from '@shareat/db';
 import { parseCsv } from '@shareat/core/csv';
 import { ZERO, subtract, type Money } from '@shareat/core/money';
 import { uploadFile } from '../files';
-import { resolveStorageDriver } from '../files/driver';
 import { PURPOSE_LIMITS } from '../files/limits';
 import { fileBytesMatchType } from '../files/magic';
 import { decodeGrabText, csvFailure } from './grab-csv';
 import { tieGrabPayouts } from './grab-payouts';
-import { GRAB_TRANSACTION_HEADERS, readGrabTransactions, type GrabTransactionsFile } from './grab-transactions';
-import { GRAB_TRANSFER_HEADERS, readGrabTransfers, type GrabTransferRow, type GrabTransfersFile } from './grab-transfers';
-import { readFoodpandaInvoice } from './foodpanda-workbook';
+import { GRAB_TRANSACTION_HEADERS, type GrabTransactionsFile } from './grab-transactions';
+import { GRAB_TRANSFER_HEADERS, type GrabTransferRow, type GrabTransfersFile } from './grab-transfers';
 import { intakeRefusal, megabytes, shown } from './refusal';
-import { openSettlementZip } from './safe-zip';
 import { checkStagedDay, checkStagedPeriodLines, stageFoodpandaDays, stageGrabDays, type StagedDay, type StagedFile } from './stage';
 import { matchChannel, refuseIfInactive, type MatchedChannel } from './store-match';
+import { readSettlementBytes, readStoredUpload, type SettlementFileKind, type StoredUpload } from './stored-upload';
 import { READER_VERSION } from './version';
 
-export type SettlementFileKind = 'foodpanda_invoice' | 'grab_transactions' | 'grab_transfers';
+export type { SettlementFileKind };
 
 export interface IngestInput {
   bytes: Buffer | Uint8Array;
@@ -97,49 +95,6 @@ export async function detectSettlementKind(bytes: Buffer): Promise<SettlementFil
   throw intakeRefusal('GRAB_MISSING_COLUMN', `The column "${missing ?? ''}" is missing from the header.`);
 }
 
-/** What a file said, whatever its kind: the code that finds its channel and the numbers an upload row records. */
-interface Parsed {
-  kind: SettlementFileKind;
-  platform: 'grab' | 'foodpanda';
-  code: string;
-  periodFrom: string | null;
-  periodTo: string | null;
-  invoiceNumber: string | null;
-  ordersRead: number;
-  loanRowsRead: number;
-  otherRowsRead: number;
-  transactions?: GrabTransactionsFile;
-  transfers?: GrabTransfersFile;
-  foodpanda?: Awaited<ReturnType<typeof readFoodpandaInvoice>>;
-}
-
-const extent = (dates: string[]): { from: string | null; to: string | null } => {
-  const sorted = [...dates].sort();
-  return { from: sorted[0] ?? null, to: sorted[sorted.length - 1] ?? null };
-};
-
-async function readFile(kind: SettlementFileKind, bytes: Buffer): Promise<Parsed> {
-  if (kind === 'foodpanda_invoice') {
-    const invoice = await readFoodpandaInvoice((await openSettlementZip(bytes)).workbook);
-    const { from, to } = extent(invoice.orders.length > 0 ? invoice.orders.map((o) => o.orderDate) : invoice.charges.flatMap((c) => (c.date ? [c.date] : [])));
-    return {
-      kind, platform: 'foodpanda', code: invoice.vendorCode, periodFrom: from, periodTo: to, invoiceNumber: invoice.invoiceNumber,
-      ordersRead: invoice.orders.length, loanRowsRead: 0, otherRowsRead: invoice.charges.length, foodpanda: invoice,
-    };
-  }
-  if (kind === 'grab_transactions') {
-    const file = readGrabTransactions(bytes);
-    const count = (k: string): number => file.rows.filter((r) => r.kind === k).length;
-    return {
-      kind, platform: 'grab', code: file.storeId, periodFrom: file.periodFrom, periodTo: file.periodTo, invoiceNumber: null,
-      ordersRead: count('payment'), loanRowsRead: count('loan'), otherRowsRead: count('adjustment') + count('advertisement'), transactions: file,
-    };
-  }
-  const file = readGrabTransfers(bytes);
-  const { from, to } = extent(file.rows.map((r) => r.payoutDate.date));
-  return { kind, platform: 'grab', code: file.storeId, periodFrom: from, periodTo: to, invoiceNumber: null, ordersRead: 0, loanRowsRead: 0, otherRowsRead: 0, transfers: file };
-}
-
 /**
  * Every current upload of the other Grab file kind, newest first, each read back from storage with the same reader. One that cannot be read
  * (its stored object is gone, or the current reader refuses an old file) is left out and a plain sentence names its upload date (never an id):
@@ -151,21 +106,18 @@ async function counterpartsOf(
   channelId: string,
   kind: 'grab_transactions' | 'grab_transfers',
   warnings: string[],
-): Promise<{ upload: SettlementUploadRow; parsed: Parsed }[]> {
-  const found: { upload: SettlementUploadRow; parsed: Parsed }[] = [];
+): Promise<{ upload: SettlementUploadRow; parsed: StoredUpload }[]> {
+  const found: { upload: SettlementUploadRow; parsed: StoredUpload }[] = [];
   for (const upload of await settlementIntakeRepo.findCurrentUploads(tx, orgId, channelId, kind)) {
     const skipped = (): void => {
       warnings.push(
         `The ${kind === 'grab_transfers' ? 'Transfers' : 'Transactions'} file uploaded on ${upload.uploadedOn} could not be read back, so it was left out. Upload it again to match it with this file.`,
       );
     };
-    const file = await filesRepo.getById(tx, orgId, upload.fileId);
-    if (!file) {
-      skipped();
-      continue;
-    }
     try {
-      found.push({ upload, parsed: await readFile(kind, Buffer.from(await resolveStorageDriver().get(file.storagePath))) });
+      const parsed = await readStoredUpload(tx, orgId, upload.id);
+      if (parsed) found.push({ upload, parsed });
+      else skipped();
     } catch {
       skipped();
     }
@@ -233,7 +185,7 @@ export async function ingestSettlementFile(tx: Tx, actor: Actor, input: IngestIn
 
   // (4) the kind comes from the content; (5) read the file and match its channel by the code it carries.
   const kind = await detectSettlementKind(bytes);
-  const parsed = await readFile(kind, bytes);
+  const parsed = await readSettlementBytes(kind, bytes);
   const matched = await matchChannel(tx, orgId, parsed.platform, parsed.code);
 
   // (6) fine gate: the actor must be able to upload for the MATCHED store; the sentence never names it.

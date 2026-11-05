@@ -40,6 +40,8 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       { href: '/channel-settlements', label: 'Channel settlements' },
       // T-511 S4: Grab and Foodpanda statements, read into staged lines (nothing is booked from here). Gated by `upload_settlement_files` in ROUTE_CAPABILITY.
       { href: '/channel-settlements/upload', label: 'Upload settlement files' },
+      // T-511 S5b: read the staged days against what staff recorded, and reject one with a reason. Gated by `record_ar_collection` in ROUTE_CAPABILITY; nothing is booked from it.
+      { href: '/channel-settlements/review', label: 'Review settlement days' },
       // T-178. Beside Channel settlements on purpose: that screen clears 1220 for a channel-day
       // as a whole; this one disposes of one refunded or remade order within it.
       { href: '/wastage', label: 'Order wastage' },

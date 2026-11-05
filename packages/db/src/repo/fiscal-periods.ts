@@ -591,14 +591,30 @@ export async function firstOpenDateOnOrAfter(
   date: string,
   today: string,
 ): Promise<{ date: string; shutBy: { status: 'closed' | 'locked'; startsOn: string; endsOn: string } | null } | null> {
+  return firstOpenFromSpans(await periodSpans(tx, orgId), date, today);
+}
+
+export interface PeriodSpan {
+  status: string;
+  startsOn: string;
+  endsOn: string;
+}
+
+/** Every fiscal period of the org (a handful of rows a year), so a list of dates can be answered with one read. */
+export async function periodSpans(tx: Tx, orgId: string): Promise<PeriodSpan[]> {
+  return tx.select({ status: fiscalPeriods.status, startsOn: fiscalPeriods.startsOn, endsOn: fiscalPeriods.endsOn }).from(fiscalPeriods).where(eq(fiscalPeriods.orgId, orgId));
+}
+
+/** The pure walk behind `firstOpenDateOnOrAfter`: the same answer for the same periods, with no read per step. */
+export function firstOpenFromSpans(
+  spans: readonly PeriodSpan[],
+  date: string,
+  today: string,
+): { date: string; shutBy: { status: 'closed' | 'locked'; startsOn: string; endsOn: string } | null } | null {
   let d = date;
   let shutBy: { status: 'closed' | 'locked'; startsOn: string; endsOn: string } | null = null;
   for (let i = 0; i < 1200; i++) {
-    const [row] = await tx
-      .select({ status: fiscalPeriods.status, startsOn: fiscalPeriods.startsOn, endsOn: fiscalPeriods.endsOn })
-      .from(fiscalPeriods)
-      .where(and(eq(fiscalPeriods.orgId, orgId), lte(fiscalPeriods.startsOn, d), gte(fiscalPeriods.endsOn, d)))
-      .limit(1);
+    const row = spans.find((s) => s.startsOn.localeCompare(d) <= 0 && s.endsOn.localeCompare(d) >= 0);
     if (!row || row.status === 'open') return d.localeCompare(today) > 0 ? null : { date: d, shutBy };
     shutBy ??= { status: row.status as 'closed' | 'locked', startsOn: row.startsOn, endsOn: row.endsOn };
     const next = new Date(`${row.endsOn}T00:00:00Z`);

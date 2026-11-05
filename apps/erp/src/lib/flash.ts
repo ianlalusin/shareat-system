@@ -120,6 +120,9 @@ const NAV_SHAPES = {
   view: /^(cards|roster|positions)$/,
   // T-193 S5: which agency the statutory-payment form reopens on after a refusal.
   agency: /^(sss|philhealth|pagibig|bir)$/,
+  // T-511 S5b: the review page's platform filter (a closed word) and its "needs attention" flag, so a refused action returns to the same list.
+  platform: /^(grab|foodpanda)$/,
+  needs: /^1$/,
 } as const satisfies Record<string, RegExp>;
 
 export type NavKey = keyof typeof NAV_SHAPES;

@@ -29,6 +29,7 @@ const ROW_LINK: readonly string[] = [
   'app/attendance/page.tsx',
   'app/cash-requests/page.tsx',
   'app/channel-settlements/page.tsx',
+  'app/channel-settlements/review/page.tsx', // T-511 S5b, 5 Nov 2026 (BOSS pre-approved): each day row opens its detail
   'app/commissary/catalogue/page.tsx',
   'app/commissary/orders/page.tsx',
   'app/customers/[customerId]/page.tsx',
@@ -63,6 +64,7 @@ const NO_ROW_TARGET: readonly string[] = [
   'app/items/import/page.tsx',
   // T-511 S4: the days still waiting for a file, per channel: a summary, nothing to open yet (the review screen is slice 5)
   'app/channel-settlements/upload/page.tsx',
+  // T-511 S5b, 6 Nov 2026: app/channel-settlements/review/DayDetail.tsx left this list; its orders, charges, loan lines and other lines are lists now (a phone card cut their labels), so it renders no table.
   // Reports (9)
   'components/reports/ApAgingTable.tsx',
   'components/reports/ArAgingTable.tsx',

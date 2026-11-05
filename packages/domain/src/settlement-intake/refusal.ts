@@ -41,6 +41,12 @@ export const SETTLEMENT_INTAKE_REFUSAL_CODES = [
   'CHANNEL_NOT_SET_UP',
   'NOT_YOUR_STORE',
   'STAGED_BAD_VALUE',
+  // Slice 5b (review): a day that is gone, replaced, already decided, not decided yet, or an override that does not add up.
+  'LINE_NOT_FOUND',
+  'LINE_NOT_CURRENT',
+  'LINE_ALREADY_DECIDED',
+  'LINE_NOT_REJECTED',
+  'LOAN_OVERRIDE_REFUSED',
 ] as const;
 export type SettlementIntakeRefusalCode = (typeof SETTLEMENT_INTAKE_REFUSAL_CODES)[number];
 

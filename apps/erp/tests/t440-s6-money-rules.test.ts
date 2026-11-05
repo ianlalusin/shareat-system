@@ -87,6 +87,11 @@ const ROWS: Record<string, Row> = {
   'channel-settlements.record.reference': TX('The payout reference', 120),
   'channel-settlements.record.settledOn': D('The settlement date'),
   'channel-settlements.void.reason': R(`Say why this settlement is being voided ${DASH} a reversal with no reason is a gap.`),
+  // 5 Nov 2026, T-511 S5b: the rule of rejecting a staged settlement day (a reason is required, at most 500 characters; too long gives the same one sentence); the fixture row the new rule needed.
+  'channel-settlements.rejectDay.reason': (() => {
+    const sentence = 'A rejection needs a reason. Say what is wrong with this day.';
+    return { bad: [['  ', sentence], ['x'.repeat(501), sentence]], blank: sentence } as Row;
+  })(),
   'channel-settlements.payoutDestination.moneyAccountId': R('Choose the account this channel pays into.'),
 
   // ---- expenses ----

@@ -39,6 +39,7 @@ Guards that must stay green: t398-s2 tx non-nullable, throw ratchet 0, domain-ac
 - **Slice 6 rule (BOSS 5 Nov):** slice 6 books a period charge together with its own VAT (`vatRate` x `netTotal` of that row, from the stored file), to `platformFee`, per owner decision 3. S5a only warns about it (an ad or weekly fee on a day with no orders: its VAT is in no day).
 - Known limits accepted in S5a (5 Nov): the VAT share allocation couples the days of a re-issued invoice (it can move a centavo between days); the weekly-fee relocation check compares the NET fee to a day's room, so a day can go slightly negative after VAT without the "larger than any day" warning.
 - Known limits accepted in S4: zero-scope admin uploads nothing; a revert needs a changed file; unchanged days keep source ids pointing at superseded uploads.
+- Known limit accepted in S5b (5 Nov): a non-Grab active loan with a repayment amount can absorb Grab deductions; loans.lender_name is free text, lender_id nullable; fix with the slice-6 loan-leg design (0229).
 
 ## Decisions for BOSS
 1. **Split S5 into S5a (staging tie, small) and S5b (review)**, S5a first. Recommend yes.
