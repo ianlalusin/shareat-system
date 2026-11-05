@@ -52,6 +52,19 @@ describe('resolveStoreOffers - no dayparts in the data behaves as before', () =>
     expect(r.notOfferedNow).toEqual([]);
     expect(r.faults).toEqual([]);
   });
+
+  it.each(['', 'Asia/Manilla'])('a bad store timezone (%j) does not touch all-day offers', (zone) => {
+    const a = row({ variantId: 'A', channel: 'store', amount: '50.00' });
+    const r = resolveStoreOffers([a], [], at(SUN, '12:00'), zone);
+    expect(r.offers).toEqual([a]);
+    expect(r.faults).toEqual([]);
+  });
+
+  it('a bad store timezone still fails a dayparted variant closed', () => {
+    const r = resolveStoreOffers([lunchRow('50.00')], [LUNCH], at(SUN, '12:00'), 'Asia/Manilla');
+    expect(r.offers).toEqual([]);
+    expect(r.faults.map((f) => f.reason)).toEqual(['invalid_time_zone']);
+  });
 });
 
 describe('resolveStoreOffers - Pork and Beef, lunch 08:00-17:00 at 338 and dinner 17:00-08:00 at 358', () => {

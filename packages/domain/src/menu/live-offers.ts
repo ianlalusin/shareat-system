@@ -77,7 +77,8 @@ export function resolveStoreOffers(rows: readonly Row[], dayparts: readonly Dayp
   const faults: LiveOfferFault[] = [];
   const ordered = [...groups.values()].sort((a, b) => byStr(a.variantId, b.variantId) || byStr(a.channel, b.channel));
   for (const g of ordered) {
-    const res = resolveLiveOffer(g.rows, dayparts, at, timeZone);
+    // The zone only matters to a daypart window; a variant with no dayparted row must not depend on `stores.timezone` (free text).
+    const res = resolveLiveOffer(g.rows, dayparts, at, g.rows.some((r) => r.daypartId !== null) ? timeZone : 'UTC');
     if (res.kind === 'offer') offers.push(res.offer);
     else if (res.kind === 'invalid') faults.push({ variantId: g.variantId, channel: g.channel, reason: res.reason });
     else if (res.availableFrom !== null) {
