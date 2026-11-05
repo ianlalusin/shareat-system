@@ -22,6 +22,7 @@ import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { advanceToRecover } from './compute';
 import { assertPayrollMoneyAccount, outstandingAdvance, PAYROLL_ADVANCE_ACCOUNT, payrollMoneyParty } from './index';
+import { agreedRecoverable, applyDeductionRecovery, reopenAfterVoid } from './deduction-agreements';
 import { THIRTEENTH_MONTH_ACCOUNT } from './thirteenth-month';
 // T-436: unused Service Incentive Leave is paid in final pay when this is the person's last job (spec D12).
 import { releaseSilOfSeparation, settleSilAtSeparation } from '../leave/payroll';
@@ -35,7 +36,10 @@ export interface SeparationPreview {
   personId: string;
   thirteenthMonthBasicPayEarned: Money;
   thirteenthMonthGross: Money;
+  /** The person's whole 1230 balance (what they owe), for display. */
   outstandingAdvance: Money;
+  /** T-519: what signed agreements let this final pay recover (the agreed unpaid amount; no 20% wage cap). */
+  agreedRecoverable: Money;
 }
 
 /** ⭐ Read-only. Prices only the pro-rated 13th month — `separationPayAmount` is a decision made
@@ -71,6 +75,7 @@ export async function previewSeparation(
     thirteenthMonthBasicPayEarned: basicPayEarned,
     thirteenthMonthGross: gross,
     outstandingAdvance: outstanding,
+    agreedRecoverable: await agreedRecoverable(tx, actor.orgId, employment.personId, null, input.separationDate),
   };
 }
 
@@ -146,7 +151,7 @@ export async function postSeparation(
       throw new Error('postSeparation: separation pay cannot be negative.');
     }
     const grossTotal = add(preview.thirteenthMonthGross, separationPay);
-    const advanceRecovered = advanceToRecover(grossTotal, preview.outstandingAdvance);
+    const advanceRecovered = advanceToRecover(grossTotal, preview.agreedRecoverable);
     const netPay = subtract(grossTotal, advanceRecovered);
 
     const account = await moneyAccountsRepo.getById(trx, actor.orgId, input.moneyAccountId);
@@ -213,6 +218,7 @@ export async function postSeparation(
         lines,
       });
       await separationsRepo.setSeparationEntry(trx, separationId, posted.entryId);
+      await applyDeductionRecovery(trx, actor.orgId, employment.personId, posted.entryId, advanceRecovered);
     }
 
     // ⭐ T-436 (D12): a person whose LAST job this is leaves with their unused SIL days paid in cash, in the same transaction, instead
@@ -261,6 +267,7 @@ export async function voidSeparation(
         reversalDate: input.on ?? separation.separationDate,
       } as never);
       reversed = true;
+      await reopenAfterVoid(trx, actor.orgId, [separation.journalEntryId]);
     }
 
     const ok = await separationsRepo.markSeparationVoided(trx, actor.orgId, input.id, {

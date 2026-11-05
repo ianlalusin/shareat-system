@@ -19,11 +19,13 @@ buildCoverageReport
 byMethodOf
 calculateBillTotalsCentavosT423
 callEntry
+cancelDeductionAgreement
 cancelScheduledDepletionRule
 canonicalAnalytics
 capitalizeFromExpense
 cashPayment
 catalogueProblems
+chargesWaitingForAgreement
 checkValuesMatch
 childLogger
 closeAsLateReceipt
@@ -136,6 +138,7 @@ realSourceTypesForSpecName
 recentRuns
 reconcileSupplier
 recordClientEvents
+recordDeductionAgreement
 remainingFor
 remainingOf
 removeEntry

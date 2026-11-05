@@ -52,6 +52,8 @@ export const FILE_PURPOSES = [
   'staff_signature',
   // T-511 S2a (migration 0228): a Grab / Foodpanda settlement statement (CSV or zip). Read through the shared rule (upload_settlement_files).
   'channel_settlement_file',
+  // T-519 S1 (migration 0236): the scan of a signed staff deduction agreement. Read through the shared rule (run_payroll).
+  'staff_deduction_agreement',
 ] as const;
 export type FilePurpose = (typeof FILE_PURPOSES)[number];
 

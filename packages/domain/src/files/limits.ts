@@ -22,6 +22,8 @@ export const LIMIT_PURPOSES = [
   'staff_signature',
   // T-511 S2a (migration 0228): a Grab / Foodpanda settlement statement (CSV or zip).
   'channel_settlement_file',
+  // T-519 S1 (migration 0236): the scan of a signed staff deduction agreement.
+  'staff_deduction_agreement',
 ] as const;
 export type LimitPurpose = (typeof LIMIT_PURPOSES)[number];
 
@@ -47,6 +49,8 @@ export const PURPOSE_LIMITS: Record<LimitPurpose, { readonly types: readonly str
     types: ['text/csv', 'application/vnd.ms-excel', 'application/zip', 'application/x-zip-compressed'],
     maxBytes: 3 * 1024 * 1024,
   },
+  // T-519 S1. A phone photo or PDF scan of the signed paper.
+  staff_deduction_agreement: { types: ['application/pdf', 'image/jpeg', 'image/png'], maxBytes: 8 * 1024 * 1024 },
 };
 
 /**

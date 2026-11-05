@@ -19,6 +19,7 @@ import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { advanceToRecover, computePay, type DayInput } from './compute';
 import { refuse } from '../shared/refusal';
+import { agreedRecoverable, applyDeductionRecovery, reopenAfterVoid } from './deduction-agreements';
 import { EXPENSE_FUNDING_ACCOUNTS } from '../expenses/routing';
 import {
   AGENCIES,
@@ -36,6 +37,8 @@ export * from './periods';
 // T-190 - the pure statutory engine and the rate-table management functions.
 export * from './statutory';
 export * from './rates';
+// T-519 - a staff charge is recovered only under a signed deduction agreement.
+export * from './deduction-agreements';
 // ⚠️ `./thirteenth-month` imports `outstandingAdvance` / `PAYROLL_ADVANCE_ACCOUNT` FROM this file
 // (they are only defined here, not in a sibling module) — a deliberate circular import, safe only
 // because both are used inside thirteenth-month.ts's function BODIES, never at its module top
@@ -372,8 +375,6 @@ async function buildPreview(
       const leavePay = leaveLine?.leavePay ?? ZERO;
       const silConversionPay = sumMoney(silPayouts.map((p) => p.amount));
       const grossPay = add(pay.grossPay, leavePay, silConversionPay);
-      const outstanding = await outstandingAdvance(trx, actor.orgId, personId);
-
       bases.push({
         employmentId,
         personId,
@@ -389,7 +390,7 @@ async function buildPreview(
         // T-436 leave + SIL are compensation: they are in the gross BEFORE the statutory pass reads it.
         grossPay,
         // Placeholders: the statutory pass below sets the advance and the net AFTER the contributions and the withholding.
-        advanceRecovered: outstanding,
+        advanceRecovered: ZERO,
         netPay: grossPay,
         dailyRate: dailyRateAtEnd,
       });
@@ -503,6 +504,11 @@ async function applyStatutory(
   const slips: PayslipDraft[] = [];
   // DEF-670: advance already recovered by this person's EARLIER slips in this run (a second employment must not recover it again).
   const advanceTakenOf = new Map<string, Money>();
+  // T-519: what a person's signed agreements let this run recover, capped at 20% of the person's WHOLE gross in the run (a second
+  // employment is the same wages for Art. 113), asked once per person.
+  const grossOfPerson = new Map<string, Money>();
+  for (const b of bases) grossOfPerson.set(b.personId, add(grossOfPerson.get(b.personId) ?? ZERO, b.grossPay));
+  const agreedOfPerson = new Map<string, Money>();
   for (const b of bases) {
     const gid = ids.get(b.personId);
     const skipped: Agency[] = [];
@@ -516,8 +522,13 @@ async function applyStatutory(
     const { dailyRate: _dailyRate, ...draft } = b;
     void _dailyRate;
     const alreadyTaken = advanceTakenOf.get(b.personId) ?? ZERO;
-    // the placeholder carried the outstanding advance; less what this person's earlier slips in the run already took
-    const outstanding = compare(draft.advanceRecovered, alreadyTaken) > 0 ? subtract(draft.advanceRecovered, alreadyTaken) : ZERO;
+    let agreed = agreedOfPerson.get(b.personId);
+    if (agreed === undefined) {
+      agreed = await agreedRecoverable(trx, actor.orgId, b.personId, grossOfPerson.get(b.personId)!, input.periodEnd);
+      agreedOfPerson.set(b.personId, agreed);
+    }
+    // less what this person's earlier slips in the run already took
+    const outstanding = compare(agreed, alreadyTaken) > 0 ? subtract(agreed, alreadyTaken) : ZERO;
     const r = computeStatutory({
       basicPay: b.basicPay,
       grossPay: b.grossPay,
@@ -779,6 +790,8 @@ export async function postPayRun(
         lines,
       });
       await payrollRepo.setPayslipEntry(trx, payslipId, posted.entryId);
+      // T-519 R6: spend the recovery against the person's agreements and complete any that are now paid, in this transaction.
+      await applyDeductionRecovery(trx, actor.orgId, slip.personId, posted.entryId, slip.advanceRecovered, true);
 
       // ⭐ The freeze. `attendance_days.frozen_by_pay_run_id` has waited for this since T-157, and
       // the guard that reads it is already live in `adjudicate.ts` and `adjustments.ts`.
@@ -837,8 +850,10 @@ export async function voidPayRun(
     // ⛔ T-190: lock every affected person (id order) BEFORE the status changes, so a concurrent post's month-to-date sees this void.
     await statutoryRepo.lockPersons(trx, actor.orgId, slips.map((x) => x.personId));
     let reversed = 0;
+    const reversedEntryIds: string[] = [];
     for (const slip of slips) {
       if (!slip.journalEntryId) continue;
+      reversedEntryIds.push(slip.journalEntryId);
       await reverseEntry(trx, {
         orgId: actor.orgId,
         entryId: slip.journalEntryId,
@@ -849,6 +864,8 @@ export async function voidPayRun(
       reversed++;
     }
 
+    // T-519 R6: the recoveries these entries took no longer count; reopen any agreement they had completed.
+    await reopenAfterVoid(trx, actor.orgId, reversedEntryIds);
     const unfrozenDays = await payrollRepo.unfreezeDaysOfRun(trx, input.runId);
     // ⭐ T-436: a voided run did not pay its leave days or its year-end payout, so both are payable again.
     await releaseLeaveOfRun(trx, input.runId);
