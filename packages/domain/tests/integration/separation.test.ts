@@ -21,9 +21,9 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
-import { agree, chargeEntry } from './_fixtures/t519-agreements';
+import { agree, chargeEntry, creditEntry } from './_fixtures/t519-agreements';
 import { AuthorizationError, type Actor } from '@shareat/auth';
-import { postSeparation, preview13thMonthRun, previewSeparation, voidSeparation } from '@shareat/domain';
+import { postSeparation, preview13thMonthRun, previewSeparation, reverseEntry, voidSeparation } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -290,5 +290,31 @@ describe('T-192 — separation, final pay, clearance', () => {
       }),
     );
     expect(second.id).not.toBe(first.id);
+  });
+});
+
+describe('T-519 audit fixes - the agreement needs a live charge and a live 1230 balance', () => {
+  it('probe: charge 600, agreed 600, charge reversed -> final pay recovers 0 and 1230 is not driven negative', async () => {
+    const f = await fixture('t519rev');
+    await postedPeriod(f, { periodStart: '2026-01-01', periodEnd: '2026-01-15', basicPay: '12000.00' });
+    const charge = await chargeEntry(sql, f, f.workerId, '600.00');
+    await agree(sql, f, f.admin, f.workerId, charge, { amount: '600.00' });
+    await asOrg(f.orgId, (tx) => reverseEntry(tx, { entryId: charge, reason: 'test', reversedBy: f.adminId }));
+    const pv = await asOrg(f.orgId, (tx) =>
+      previewSeparation(tx, f.admin, { storeId: f.storeId, employmentId: f.employmentId, separationDate: '2026-06-30' }));
+    expect(pv.agreedRecoverable).toBe('0.00');
+    const result = await asOrg(f.orgId, (tx) =>
+      postSeparation(tx, f.admin, { storeId: f.storeId, employmentId: f.employmentId, separationDate: '2026-06-30', cause: 'resignation', separationPayAmount: '0', moneyAccountId: f.officeAccountId, clearanceConfirmedBy: f.adminId }));
+    expect(result.netPay).toBe('1000.00');
+  });
+
+  it('the live 1230 balance caps final-pay recovery: agreed 600, 550 paid back outside payroll -> recovers 50', async () => {
+    const f = await fixture('t519bal');
+    await postedPeriod(f, { periodStart: '2026-01-01', periodEnd: '2026-01-15', basicPay: '12000.00' });
+    await agree(sql, f, f.admin, f.workerId, await chargeEntry(sql, f, f.workerId, '600.00'), { amount: '600.00' });
+    await creditEntry(sql, f, f.workerId, '550.00');
+    const result = await asOrg(f.orgId, (tx) =>
+      postSeparation(tx, f.admin, { storeId: f.storeId, employmentId: f.employmentId, separationDate: '2026-06-30', cause: 'resignation', separationPayAmount: '0', moneyAccountId: f.officeAccountId, clearanceConfirmedBy: f.adminId }));
+    expect(result.netPay).toBe('950.00');
   });
 });

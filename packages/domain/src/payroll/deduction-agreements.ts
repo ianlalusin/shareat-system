@@ -8,7 +8,8 @@
  * This file is a LEAF on purpose: `./index`, `./thirteenth-month`, `./separation` and `../owners` all import it, so it imports none of them.
  *
  * ## R3 - how much a run may recover
- * min( 20% (`deductionCapPercent`) of that run's gross , the sum of the active agreements' per-payroll limits , the agreed amount still unpaid ).
+ * min( 20% (`deductionCapPercent`) of that run's gross , the sum of the active agreements' per-payroll limits , the agreed amount still unpaid ,
+ * the person's live 1230 balance ). An agreement whose charge entry was reversed recovers nothing.
  * 13th month and separation pass no gross: the 20% weekly cap is for wages, so they recover the agreed unpaid amount only
  * (and `advanceToRecover` still caps it at that payout's gross).
  */
@@ -48,13 +49,17 @@ export async function agreedRecoverable(tx: Tx, orgId: string, personId: string,
   let unpaid = ZERO;
   let limits = ZERO;
   for (const a of active) {
+    if (!a.chargeLive) continue; // the charge was reversed: it is no longer owed
     const left = subtract(money(a.amount), money(a.recovered));
     if (compare(left, ZERO) <= 0) continue;
     unpaid = add(unpaid, left);
     limits = add(limits, minMoney(money(a.perPayrollLimit), left));
   }
-  if (runGross === null) return unpaid;
-  return minMoney(minMoney(wageCap(runGross, await deductionCapPercent(tx, orgId, on)), limits), unpaid);
+  // never more than the person still owes on 1230 (money paid back outside payroll, or a correction, lowers it)
+  const owed = money(await deductionAgreementsRepo.balanceOn1230(tx, orgId, personId));
+  const room = compare(owed, ZERO) > 0 ? owed : ZERO;
+  if (runGross === null) return minMoney(unpaid, room);
+  return minMoney(minMoney(minMoney(wageCap(runGross, await deductionCapPercent(tx, orgId, on)), limits), unpaid), room);
 }
 
 /**
@@ -69,6 +74,7 @@ export async function applyDeductionRecovery(tx: Tx, orgId: string, personId: st
   let left = recovered;
   for (const a of active) {
     if (compare(left, ZERO) <= 0) break;
+    if (!a.chargeLive) continue;
     const room = subtract(money(a.amount), money(a.recovered));
     if (compare(room, ZERO) <= 0) continue;
     const take = minMoney(perRunLimit ? minMoney(room, money(a.perPayrollLimit)) : room, left);
@@ -149,7 +155,7 @@ export async function recordDeductionAgreement(tx: Tx, actor: Actor, input: Reco
   }
 
   const charge = await deductionAgreementsRepo.chargeOfEntry(tx, actor.orgId, input.sourceEntryId, input.personId);
-  if (!charge || charge.entryStatus !== 'posted' || compare(money(charge.amount), ZERO) <= 0) {
+  if (!charge || charge.entryStatus === 'draft' || !charge.live || compare(money(charge.amount), ZERO) <= 0) {
     throw refuse('recordDeductionAgreement: no posted charge for this person on that entry', 'That charge could not be found against this employee. Pick one from their list of charges.');
   }
   if (!(DEDUCTION_SOURCE_TYPES as readonly string[]).includes(charge.sourceType)) {
@@ -236,7 +242,8 @@ export async function cancelDeductionAgreement(tx: Tx, actor: Actor, input: { ag
 /**
  * R5: an owner moving their own drawing onto their own pay IS their agreement. Writes the agreement row for `owner_pay_recovery`
  * (explanation "own request", no scan, notice and signing on the day) so payroll may recover it. Idempotent per charge entry.
- * Only the owners module calls this, and only when the actor and the person are the same.
+ * Only the owners module calls this (NOT re-exported from the payroll barrel), and only when the actor and the person are the same.
+ * It still checks the entry is that person's live 1230 charge and the amount fits what the charge has left.
  */
 export async function recordOwnerSelfAgreement(
   tx: Tx,
@@ -248,6 +255,14 @@ export async function recordOwnerSelfAgreement(
     (a) => a.sourceEntryId === input.sourceEntryId && a.status !== 'cancelled',
   );
   if (already) return;
+  const charge = await deductionAgreementsRepo.chargeOfEntry(tx, actor.orgId, input.sourceEntryId, input.personId);
+  if (!charge || !charge.live || charge.sourceType !== 'owner_pay_recovery' || compare(money(charge.amount), ZERO) <= 0) {
+    throw refuse('recordOwnerSelfAgreement: no live owner-pay charge for this person on that entry', 'That entry is not a charge against you that can be recovered from your pay.');
+  }
+  const remaining = subtract(money(charge.amount), money(await deductionAgreementsRepo.recoveredOnCharge(tx, actor.orgId, input.sourceEntryId)));
+  if (compare(input.amount, remaining) > 0) {
+    throw refuse('recordOwnerSelfAgreement: amount above what the charge still has unrecovered', `The amount cannot be more than the charge still has to recover, which is ${remaining}.`);
+  }
   const { id } = await deductionAgreementsRepo.insertAgreement(tx, {
     orgId: actor.orgId,
     personId: input.personId,

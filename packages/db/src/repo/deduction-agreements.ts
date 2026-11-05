@@ -4,13 +4,29 @@
  * ## What "recovered" means
  *
  * An agreement never stores how much it has recovered (the app role may not UPDATE a money column). What it recovered is the sum of its
- * `staff_deduction_recoveries` rows whose journal entry is still 'posted': a voided pay run reverses the payslip entry, the entry stops being
- * 'posted', and the agreement's remaining amount comes back by itself. `syncStatuses` then moves the stored status to match.
+ * `staff_deduction_recoveries` rows whose journal entry is still LIVE (see `entryLive`): a voided pay run reverses the payslip entry, the
+ * entry stops being live, and the agreement's remaining amount comes back by itself. `syncStatuses` then moves the stored status to match.
  */
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, sql, type SQL } from 'drizzle-orm';
 import type { Tx } from '../client';
 import type { Money } from '@shareat/core/money';
 import { staffDeductionAgreements, staffDeductionRecoveries, type DeductionAgreementStatus, type DeductionSourceType } from '../../schema/staff-deduction-agreements';
+
+/**
+ * SQL: is the journal entry whose id is the column `col` LIVE? An entry is live when its reversal chain
+ * (E -> R1 -> R2 ...; one reversal per entry) has an even length: no reversal (0) is live, R1 cancels it, a reversal of R1 re-states it.
+ * A draft is never live. Same parity rule as `interStoreLineUnmatched` (findings.ts, T-374 S3), read from the root's side.
+ */
+export const entryLive = (col: SQL) => sql`(
+  (select x.status from journal_entries x where x.id = ${col}) <> 'draft'
+  and coalesce((
+    with recursive down(id, depth) as (
+      select ${col}, 0
+      union all
+      select c.id, d.depth + 1 from down d join journal_entries c on c.reversal_of_entry_id = d.id
+    ) select max(depth) from down
+  ), 0) % 2 = 0
+)`;
 
 export interface AgreementRow {
   id: string;
@@ -28,8 +44,10 @@ export interface AgreementRow {
   recordedBy: string;
   recordedAt: Date;
   status: DeductionAgreementStatus;
-  /** Sum of this agreement's recoveries whose journal entry is still 'posted'. */
+  /** Sum of this agreement's recoveries whose journal entry is still live. */
   recovered: string;
+  /** Whether the charge entry (`sourceEntryId`) is still live; a reversed charge is no longer owed, so nothing may be recovered on it. */
+  chargeLive: boolean;
 }
 
 /** The agreement columns plus `recovered`, as one select list. `a` is the agreements alias. */
@@ -40,9 +58,9 @@ const SELECT_ROW = sql`
   a.evidence_file_id as "evidenceFileId", a.recorded_by as "recordedBy", a.recorded_at as "recordedAt", a.status,
   coalesce((
     select sum(r.amount) from staff_deduction_recoveries r
-    join journal_entries je on je.org_id = r.org_id and je.id = r.journal_entry_id
-    where r.org_id = a.org_id and r.agreement_id = a.id and je.status = 'posted'
-  ), 0)::text as recovered
+    where r.org_id = a.org_id and r.agreement_id = a.id and ${entryLive(sql`r.journal_entry_id`)}
+  ), 0)::text as recovered,
+  ${entryLive(sql`a.source_entry_id`)} as "chargeLive"
 `;
 
 export async function insertAgreement(
@@ -101,9 +119,25 @@ export async function listActiveForPerson(tx: Tx, orgId: string, personId: strin
   )) as unknown as AgreementRow[];
 }
 
+/** What the person owes on 1230 right now, from the ledger (every non-draft entry). Same figure as payroll's `outstandingAdvance`. */
+export async function balanceOn1230(tx: Tx, orgId: string, personId: string): Promise<string> {
+  const rows = (await tx.execute(
+    sql`
+      select coalesce(sum(jl.debit - jl.credit), 0)::text as total
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id
+      join accounts a on a.id = jl.account_id
+      where je.org_id = ${orgId} and je.status <> 'draft' and a.code = '1230' and jl.party_type = 'employee' and jl.party_id = ${personId}
+    `,
+  )) as unknown as { total: string }[];
+  return rows[0]?.total ?? '0';
+}
+
 export interface ChargeRow {
   sourceType: string;
   entryStatus: string;
+  /** The entry is still live (not reversed, or its reversal was itself reversed). */
+  live: boolean;
   /** Debits less credits to 1230 against the person in this entry, as numeric text. Above 0 for a charge. */
   amount: string;
   /** The store of the 1230 line(s); null when the lines name different stores or none. */
@@ -114,7 +148,7 @@ export interface ChargeRow {
 export async function chargeOfEntry(tx: Tx, orgId: string, entryId: string, personId: string): Promise<ChargeRow | null> {
   const rows = (await tx.execute(
     sql`
-      select je.source_type as "sourceType", je.status as "entryStatus",
+      select je.source_type as "sourceType", je.status as "entryStatus", ${entryLive(sql`je.id`)} as live,
              coalesce(sum(jl.debit - jl.credit) filter (where a.code = '1230' and jl.party_type = 'employee' and jl.party_id = ${personId}), 0)::text as amount,
              case when count(distinct jl.store_id) filter (where a.code = '1230' and jl.party_type = 'employee' and jl.party_id = ${personId}) = 1
                   then (array_agg(jl.store_id) filter (where a.code = '1230' and jl.party_type = 'employee' and jl.party_id = ${personId}))[1] end as "storeId"
@@ -128,15 +162,14 @@ export async function chargeOfEntry(tx: Tx, orgId: string, entryId: string, pers
   return rows[0] ?? null;
 }
 
-/** How much of this charge entry earlier agreements (any status) already recovered from pay, counting only entries still posted. */
+/** How much of this charge entry earlier agreements (any status) already recovered from pay, counting only entries still live. */
 export async function recoveredOnCharge(tx: Tx, orgId: string, entryId: string): Promise<string> {
   const rows = (await tx.execute(
     sql`
       select coalesce(sum(r.amount), 0)::text as total
       from staff_deduction_agreements a
       join staff_deduction_recoveries r on r.org_id = a.org_id and r.agreement_id = a.id
-      join journal_entries je on je.org_id = r.org_id and je.id = r.journal_entry_id
-      where a.org_id = ${orgId} and a.source_entry_id = ${entryId} and je.status = 'posted'
+      where a.org_id = ${orgId} and a.source_entry_id = ${entryId} and ${entryLive(sql`r.journal_entry_id`)}
     `,
   )) as unknown as { total: string }[];
   return rows[0]?.total ?? '0';
@@ -154,7 +187,7 @@ export async function chargesWaitingForAgreement(
       from journal_entries je
       join journal_lines jl on jl.entry_id = je.id
       join accounts a on a.id = jl.account_id
-      where je.org_id = ${orgId} and je.status = 'posted' and a.code = '1230' and jl.party_type = 'employee' and jl.party_id = ${personId}
+      where je.org_id = ${orgId} and ${entryLive(sql`je.id`)} and je.status <> 'draft' and a.code = '1230' and jl.party_type = 'employee' and jl.party_id = ${personId}
         and je.source_type in ('cash_request_shortage', 'tillcountshortage', 'remittance_variance', 'trade_discrepancy', 'order_wastage', 'owner_pay_recovery')
         and not exists (select 1 from staff_deduction_agreements d where d.org_id = je.org_id and d.source_entry_id = je.id and d.status <> 'cancelled')
       group by je.id
@@ -194,8 +227,7 @@ export async function syncStatuses(tx: Tx, orgId: string, personId: string): Pro
   const t = staffDeductionAgreements;
   const recovered = sql`coalesce((
     select sum(r.amount) from staff_deduction_recoveries r
-    join journal_entries je on je.org_id = r.org_id and je.id = r.journal_entry_id
-    where r.org_id = staff_deduction_agreements.org_id and r.agreement_id = staff_deduction_agreements.id and je.status = 'posted'
+    where r.org_id = staff_deduction_agreements.org_id and r.agreement_id = staff_deduction_agreements.id and ${entryLive(sql`r.journal_entry_id`)}
   ), 0)`;
   await tx
     .update(staffDeductionAgreements)

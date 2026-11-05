@@ -24,9 +24,9 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
-import { agree, chargeEntry } from './_fixtures/t519-agreements';
+import { agree, chargeEntry, creditEntry } from './_fixtures/t519-agreements';
 import { AuthorizationError, type Actor } from '@shareat/auth';
-import { post13thMonthRun, postSeparation, preview13thMonthRun, void13thMonthRun } from '@shareat/domain';
+import { post13thMonthRun, postSeparation, preview13thMonthRun, reverseEntry, void13thMonthRun } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -318,5 +318,27 @@ describe('T-191 — the sum, the year boundary, and the posting pattern', () => 
     );
     const annual = await asOrg(f.orgId, (tx) => preview13thMonthRun(tx, f.admin, { storeId: f.storeId, year: 2026 }));
     expect(annual.payouts.find((p) => p.employmentId === f.employmentId)).toBeUndefined();
+  });
+});
+
+describe('T-519 audit fixes - the agreement needs a live charge and a live 1230 balance', () => {
+  it('probe: charge 600, agreed 600, charge reversed -> the 13th month recovers 0', async () => {
+    const f = await fixture('t519rev');
+    await postedPeriod(f, { periodStart: '2026-01-01', periodEnd: '2026-01-15', basicPay: '12000.00' });
+    const charge = await chargeEntry(sql, f, f.workerId, '600.00');
+    await agree(sql, f, f.admin, f.workerId, charge, { amount: '600.00' });
+    await asOrg(f.orgId, (tx) => reverseEntry(tx, { entryId: charge, reason: 'test', reversedBy: f.adminId }));
+    const pv = await asOrg(f.orgId, (tx) => preview13thMonthRun(tx, f.admin, { storeId: f.storeId, year: 2026 }));
+    expect(pv.payouts[0]!.advanceRecovered).toBe('0.00');
+    expect(pv.payouts[0]!.netPay).toBe('1000.00');
+  });
+
+  it('the live 1230 balance caps the recovery: agreed 600, 550 paid back outside payroll -> recovers 50', async () => {
+    const f = await fixture('t519bal');
+    await postedPeriod(f, { periodStart: '2026-01-01', periodEnd: '2026-01-15', basicPay: '12000.00' });
+    await agree(sql, f, f.admin, f.workerId, await chargeEntry(sql, f, f.workerId, '600.00'), { amount: '600.00' });
+    await creditEntry(sql, f, f.workerId, '550.00');
+    const pv = await asOrg(f.orgId, (tx) => preview13thMonthRun(tx, f.admin, { storeId: f.storeId, year: 2026 }));
+    expect(pv.payouts[0]!.advanceRecovered).toBe('50.00');
   });
 });

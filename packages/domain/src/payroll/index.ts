@@ -38,7 +38,17 @@ export * from './periods';
 export * from './statutory';
 export * from './rates';
 // T-519 - a staff charge is recovered only under a signed deduction agreement.
-export * from './deduction-agreements';
+export {
+  agreedRecoverable,
+  applyDeductionRecovery,
+  cancelDeductionAgreement,
+  deductionCapPercent,
+  recordDeductionAgreement,
+  reopenAfterVoid,
+  wageCap,
+  type RecordDeductionAgreementInput,
+} from './deduction-agreements';
+// `recordOwnerSelfAgreement` is deliberately NOT exported here: only `../owners` imports it, from the file directly (T-519 audit).
 // ⚠️ `./thirteenth-month` imports `outstandingAdvance` / `PAYROLL_ADVANCE_ACCOUNT` FROM this file
 // (they are only defined here, not in a sibling module) — a deliberate circular import, safe only
 // because both are used inside thirteenth-month.ts's function BODIES, never at its module top
