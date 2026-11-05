@@ -2,7 +2,7 @@
 
 Status: spec (Opus, 6 Nov 2026). Builders write nothing before this file is committed.
 Owner rule (Ian, 5 Nov, STANDING): no business setting in the ERP may be hard-coded; each needs a UI door.
-BOSS rulings (5 Nov): ship S5b, then S5c before slice 6; migration **0235**; ONE generic table `business_rule_values`
+BOSS rulings (5 Nov): ship S5b, then S5c before slice 6; migration **0237** (0235 was reserved, but 0236 is already on main and the journal test requires idx to increase in array order, so the file takes 0237; ruled 6 Nov); ONE generic table `business_rule_values`
 (T-519 adds `payroll.deduction_cap_percent` to it later); closed key registry in code; capability
 `manage_business_rules` (admin); screen Settings -> "Business rules"; snapshot semantics (a staged line keeps the figure
 computed at upload; a change applies to files uploaded after it); intake flags EVERY difference and uses the limit only to
@@ -21,20 +21,20 @@ describe a file format); values the files carry (per-charge VAT percent, commiss
 Out of S5c: account codes, `payroll.deduction_cap_percent` (T-519), `organizations.usage_tolerance` migration onto the table
 (later, own task).
 
-## Table `business_rule_values` (migration `0235_t511_business_rule_values.sql`)
+## Table `business_rule_values` (migration `0237_t511_business_rule_values.sql`)
 
 Hand-authored, ADR-012 s5 checklist. Columns: `id`, `org_id`, `key text`, `value numeric(18,6)`, `effective_from date`,
 `set_by` (person; null only for the seed), `reason text` (non-empty CHECK), `created_at`.
 Append-only, copy precedent `pay_rates` (schema `packages/db/schema/payroll.ts:60-100`, migrations 0105 and 0221): RLS
 `app_current_org()` ENABLE and FORCE; BEFORE UPDATE OR DELETE refuse trigger ENABLE ALWAYS; grants SELECT and INSERT only.
 Registry entries: `triggers/registry.ts` (history_guard), `rls/registry.ts` (org_column), `cutover/classification.ts`
-(keep, reason required). Schema file carries `// NOTE: ... hand-added in migration 0235` for hand-added items.
+(keep, reason required). Schema file carries `// NOTE: ... hand-added in migration 0237` for hand-added items.
 Rule in force on a date = row with the greatest `(effective_from, created_at, id)` where `effective_from <= date`.
 No unique index: a same-day correction is a newer row.
-Seed: one row per existing org per key, `effective_from 2000-01-01`, reason "starting value (migration 0235)". The reader
+Seed: one row per existing org per key, `effective_from 2000-01-01`, reason "starting value (migration 0237)". The reader
 still falls back to the registry default when a row is absent (new org, tests). A test pins that the seed values in the SQL
 equal the registry defaults.
-Journal: idx 235, `when` = previous `when` + 86,400,000 x (235 - previous idx) (never wall clock). Builder verifies the
+Journal: idx 237, `when` = previous `when` (0236) + 86,400,000 x (237 - 236) = 1806550307084 (builder re-verifies against the journal head after the rebase) (never wall clock). Builder verifies the
 journal head and ordering against 0229-0231 (reserved for slice 6) and 0233/0234 (other lanes). Prove on a scratch DB.
 
 ## Closed registry `packages/domain/src/business-rules/registry.ts`
