@@ -42,7 +42,7 @@ vi.mock('@/components/shell/DetailLayout', () => ({
 
 vi.mock('../../src/app/ap/lib', async (orig) => {
   const actual = await orig<typeof import('../../src/app/ap/lib')>();
-  return { ...actual, listSuppliersWithPosition: async () => [], listInvoices: async () => [], listStores: async () => [] };
+  return { ...actual, listSuppliersWithPosition: async () => [], listInvoices: async () => [], listInvoicesWithStanding: async () => [], listStores: async () => [] };
 });
 vi.mock('../../src/app/prepaid/lib', async (orig) => {
   const actual = await orig<typeof import('../../src/app/prepaid/lib')>();

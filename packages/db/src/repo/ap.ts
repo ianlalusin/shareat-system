@@ -435,6 +435,46 @@ export async function capacityOf(
   };
 }
 
+/**
+ * T-520 - `recorded` and `remaining` for MANY invoices in one grouped query, the SAME sums as
+ * `capacityOf` (live expenses, `status <> 'voided'`), so the /ap list agrees with each invoice's page.
+ * An invoice with no expenses reads 0.00 recorded. Keyed by invoice id.
+ */
+export async function capacityOfMany(
+  tx: Tx,
+  orgId: string,
+  invoiceIds: readonly string[],
+): Promise<Map<string, { recorded: string; remaining: string }>> {
+  const out = new Map<string, { recorded: string; remaining: string }>();
+  if (invoiceIds.length === 0) return out;
+  const rows = (await tx.execute(sql`
+    select
+      si.id,
+      coalesce(sum(e.total_amount), 0)::text as recorded,
+      (si.total_amount - coalesce(sum(e.total_amount), 0))::text as remaining
+    from supplier_invoices si
+    left join expenses e on e.supplier_invoice_id = si.id and e.status <> 'voided'
+    where si.org_id = ${orgId} and si.id in (${sql.join(invoiceIds.map((id) => sql`${id}`), sql`, `)})
+    group by si.id, si.total_amount
+  `)) as unknown as Record<string, string>[];
+  for (const r of rows) out.set(String(r.id), { recorded: Number(r.recorded).toFixed(2), remaining: Number(r.remaining).toFixed(2) });
+  return out;
+}
+
+/**
+ * T-520 - what is still owed per invoice: the open items (`openItemsForStores`, the one definition of
+ * "open") summed by `supplierInvoiceId`. One query for the whole org; invoices owing nothing are absent.
+ */
+export async function owedByInvoice(tx: Tx, orgId: string): Promise<Map<string, string>> {
+  const items = await openItemsForStores(tx, orgId);
+  const cents = new Map<string, bigint>();
+  for (const i of items) {
+    const [w, f = ''] = i.outstanding.split('.');
+    cents.set(i.supplierInvoiceId, (cents.get(i.supplierInvoiceId) ?? 0n) + BigInt(w! + f.padEnd(2, '0').slice(0, 2)));
+  }
+  return new Map([...cents].map(([id, c]) => [id, `${c / 100n}.${String(c % 100n).padStart(2, '0')}`]));
+}
+
 /** R4.6 — `${inv}`/`${Inv}`: the invoice named by number when one exists, else the no-number
  *  fallback, both from `rule 2`. `formatBusinessDateTime`/`businessDayRange` are the exact pair
  *  `@shareat/domain`'s `humanDate` calls (no second date formatter) — inlined here, not imported,
