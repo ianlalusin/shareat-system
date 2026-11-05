@@ -253,7 +253,7 @@ export async function ingestSettlementFile(tx: Tx, actor: Actor, input: IngestIn
 
   // (8) stage: Foodpanda from the invoice alone; Grab from the pair, once both files are in.
   const warnings: string[] = [];
-  let staged: StagedFile = { days: [], periodLines: [], waitingForRows: [], warnings: [] };
+  let staged: StagedFile = { days: [], periodLines: [], waitingForRows: [], warnings: [], pandagoNetTotal: null, pandagoReceivable: null };
   let waitingFor: IngestResult['waitingFor'] = null;
   // which upload each Grab payout came from: index into the ids of its side (null is THIS upload, whose id is not known yet)
   const sideIds: { transfers: (string | null)[]; transactions: (string | null)[] } = { transfers: [], transactions: [] };

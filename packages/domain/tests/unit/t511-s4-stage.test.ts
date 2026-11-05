@@ -281,23 +281,25 @@ describe('T-511 S4 stage - Foodpanda days from the five real invoices', () => {
         const got = byDate(staged).get(date) as StagedDay;
         expect(got, date).toBeDefined();
         const cpc = sum(want.cpc);
-        const fee = date === weeklyDay ? o.weeklyFee : 0n;
+        // T-511 S5a EDIT (tester, 5 Nov): platformFee and netPayout no longer equal order fees + weekly fee / balance - CPC - fee: they now also carry the VAT on
+        // Appendix B and the withholding rounding line (decision 19). Their exact values are pinned in t511-s5a-pdf-tie.test.ts; here only the identity that survives.
         expect({
           platform: got.platform, orderValue: got.orderValue, grossInfo: got.grossInfo, commission: got.commission, vendorDiscount: got.vendorDiscount,
-          marketing: got.marketing, platformFee: got.platformFee, netPayout: got.netPayout, unexplained: got.unexplained,
+          marketing: got.marketing, netPayout: got.netPayout, unexplained: got.unexplained,
           payoutReference: got.payoutReference, feeMonthNote: got.feeMonthNote,
         }, `${f.name} ${date}`).toEqual({
           platform: 'foodpanda', orderValue: fmt(want.orderValue), grossInfo: fmt(want.grossInfo), commission: fmt(want.commission),
-          vendorDiscount: fmt(want.vendorDiscount), marketing: fmt(cpc), platformFee: fmt(want.platformFeeOrders + fee),
-          netPayout: fmt(want.balance - cpc - fee), unexplained: '0.00', payoutReference: inv.invoiceNumber,
+          vendorDiscount: fmt(want.vendorDiscount), marketing: fmt(cpc),
+          netPayout: fmt(want.balance - cpc - (cents(got.platformFee) - want.platformFeeOrders)), unexplained: '0.00', payoutReference: inv.invoiceNumber,
           feeMonthNote: date === weeklyDay ? o.weeklyNote : null,
         });
       }
-      // slice-1 anchor: the five Balance sums, recovered from the staged columns alone
+      // slice-1 anchor: the five Balance sums, recovered from the staged columns alone (S5a EDIT: fees now include VAT and the rounding line, so they are taken off both sides)
       const t = (pick: (d: StagedDay) => string): bigint => sum(staged.days.map((d) => cents(pick(d))));
-      const ordersFees = t((d) => d.platformFee) - o.weeklyFee;
+      const ordersFees = sum([...o.days.values()].map((d) => d.platformFeeOrders));
+      const extraFees = t((d) => d.platformFee) - ordersFees; // weekly fee + VAT on Appendix B + rounding line
       expect(fmt(t((d) => d.orderValue) - t((d) => d.commission) - ordersFees)).toBe(f.balance);
-      expect(fmt(t((d) => d.netPayout) + t((d) => d.marketing) + o.weeklyFee)).toBe(f.balance);
+      expect(fmt(t((d) => d.netPayout) + t((d) => d.marketing) + extraFees)).toBe(f.balance);
       expect(t((d) => d.orderValue)).toBe(sum([...o.days.values()].map((d) => d.orderValue)));
     });
   }
@@ -329,7 +331,7 @@ describe('T-511 S4 stage - Foodpanda days from the five real invoices', () => {
 
 describe('T-511 S4 stage - the weekly Platform Fee relocation (synthetic invoices)', () => {
   const big = (code: string, orderDate: string): (string | number | Date | null)[] =>
-    fp34Order(code, { 7: isoDay(orderDate), 10: 1000, 17: 1000, 33: 974.5 }); // gross = R = 1000.00, balance 974.50 (identities hold)
+    fp34Order(code, { 7: isoDay(orderDate), 10: 1000, 17: 1000, 19: 5, 33: 970 }); // gross = R = 1000.00, T 5.00 (0.5% of R, S5a EDIT: was 0.50), balance 970.00 (identities hold)
   const small = (code: string, orderDate: string): (string | number | Date | null)[] => fp34Order(code, { 7: isoDay(orderDate) }); // R 100.00, balance 74.50
 
   async function stageSynthetic(orderRows: (string | number | Date | null)[][]): Promise<StagedFile> {
@@ -352,8 +354,9 @@ describe('T-511 S4 stage - the weekly Platform Fee relocation (synthetic invoice
     expect(last.feeMonthNote).toBeNull();
     expect(early.otherLines.filter((l) => l.kind === 'platform_fee_weekly').map((l) => l.amount)).toEqual(['223.21']);
     expect(last.otherLines.filter((l) => l.kind === 'platform_fee_weekly')).toEqual([]);
-    // orders cost 0.50 + 2.68 each: two orders 6.36, plus the weekly 223.21; the CPC ad of 10 Oct is marketing 10.00
-    expect(early.platformFee).toBe('229.57');
+    // S5a EDIT: orders cost 5.00 + 2.68 each (was 0.50 + 2.68): two orders 15.36, plus the weekly 223.21 and the VAT on Appendix B (12% of 233.21 = 27.99:
+    // 26.79 on the fee, 1.20 on the 10 Oct CPC ad); the CPC ad of 10 Oct is marketing 10.00, net of VAT. Was '229.57'.
+    expect(early.platformFee).toBe('266.56');
     expect(early.marketing).toBe('10.00');
     expect(last.platformFee).toBe('3.18');
     expect(early.unexplained).toBe('0.00');
@@ -365,7 +368,7 @@ describe('T-511 S4 stage - the weekly Platform Fee relocation (synthetic invoice
     const days = byDate(staged);
     expect((days.get('2026-10-15') as StagedDay).feeMonthNote).toMatch(/September 2026/);
     expect((days.get('2026-10-10') as StagedDay).feeMonthNote).toBeNull();
-    expect((days.get('2026-10-15') as StagedDay).platformFee).toBe('226.39'); // 0.50 + 2.68 + 223.21
+    expect((days.get('2026-10-15') as StagedDay).platformFee).toBe('257.68'); // S5a EDIT (was '226.39'): 5.00 + 2.68 + 223.21 + 26.79 VAT on the fee
   });
 
   it('an invoice with no Appendix B charges stages the order columns only: net payout = balance, nothing unexplained [kills: phantom fee on a chargeless invoice]', async () => {

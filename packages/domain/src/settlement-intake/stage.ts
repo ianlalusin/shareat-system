@@ -8,7 +8,7 @@
  * Signs: a cost is positive, a credit negative (a Grab row's Total is minus the cost; a Foodpanda charge is its printed Net Total).
  * `unexplained` is the payout less what the rows add up to; a day that does not add up is marked, never refused.
  */
-import { ZERO, add, compare, money, negate, subtract, type Money } from '@shareat/core/money';
+import { ZERO, add, compare, fromCentavos, money, negate, subtract, toCentavos, type Money } from '@shareat/core/money';
 import { deductionFor, type DeductionKind } from './deduction-mapping';
 import type { FoodpandaCharge, FoodpandaInvoice, FoodpandaOrder } from './foodpanda-workbook';
 import type { GrabPayout, GrabPayoutTie } from './grab-payouts';
@@ -74,6 +74,10 @@ export interface StagedFile {
   waitingForRows: { settlementId: string; salesDate: string }[];
   /** plain sentences about the file as a whole (a weekly fee no day can pay); shown with the upload result, never a refusal */
   warnings: string[];
+  /** PandaGO rows as printed, summed (a credit, so negative: the cash PandaGO riders collected for the partner outweighs the fees); null when the invoice has none. For the screen note only, never booked. */
+  pandagoNetTotal: Money | null;
+  /** what Foodpanda PAYS the partner for PandaGO: the printed total after the VAT on its rows, as a positive magnitude; null when the invoice has none. For the screen note only, never booked. */
+  pandagoReceivable: Money | null;
 }
 
 const STAGED_MONEY_FIELDS = [
@@ -221,7 +225,7 @@ export function stageGrabDays(tied: GrabPayoutTie, _transactions: GrabTransactio
     else days.push(grabDay(p));
   }
   days.sort((a, b) => a.salesDate.localeCompare(b.salesDate));
-  return { days, periodLines: [], waitingForRows, warnings: [] };
+  return { days, periodLines: [], waitingForRows, warnings: [], pandagoNetTotal: null, pandagoReceivable: null };
 }
 
 /* ------------------------------------------------------------------ Foodpanda */
@@ -250,6 +254,10 @@ interface FoodpandaAcc {
   vendorDiscount: Money;
   balance: Money;
   buckets: Buckets;
+  /** platform fee taken by the order columns alone, before any Appendix B charge, VAT or rounding line */
+  orderFees: Money;
+  /** sum of (Appendix B net in centavos x VAT percent) on this day: x100 of the exact VAT in centavos */
+  vatNumerator: bigint;
   otherLines: StagedOtherLine[];
   feeMonthNote: string | null;
 }
@@ -267,6 +275,59 @@ function addOrder(day: FoodpandaAcc, o: FoodpandaOrder): void {
   }
 }
 
+/* Exact centavo arithmetic (bigint, never a float). Rounding is half away from zero, as the Money type's own multiply does. */
+const abs = (n: bigint): bigint => (n < 0n ? -n : n);
+const roundedDiv = (num: bigint, den: bigint): bigint => {
+  const q = (2n * abs(num) + den) / (2n * den);
+  return num < 0n ? -q : q;
+};
+const floorDiv = (num: bigint, den: bigint): bigint => (num >= 0n ? num / den : -((-num + den - 1n) / den));
+
+/**
+ * The 12% VAT the PDF adds on Appendix B is rounded ONCE on the invoice, then handed to the days so the shares add up to it exactly:
+ * each day gets the centavos below its exact share, the leftover centavos go one each to the days with the largest remainder (ties: the earlier day).
+ */
+function applyVat(ordered: FoodpandaAcc[]): void {
+  const total = roundedDiv(ordered.reduce((t, d) => t + d.vatNumerator, 0n), 100n);
+  const floors = ordered.map((d) => floorDiv(d.vatNumerator, 100n));
+  let leftover = total - floors.reduce((t, n) => t + n, 0n);
+  const byRemainder = ordered.map((d, i) => ({ i, rem: d.vatNumerator - floors[i]! * 100n })).sort((a, b) => (a.rem === b.rem ? a.i - b.i : a.rem > b.rem ? -1 : 1));
+  for (const { i } of byRemainder) {
+    if (leftover <= 0n) break;
+    floors[i] = floors[i]! + 1n;
+    leftover -= 1n;
+  }
+  ordered.forEach((d, i) => figured(d.salesDate, () => put(d.buckets, 'platformFee', fromCentavos(floors[i]!))));
+}
+
+const NOT_USUAL_RULE = 'The withholding on this invoice does not match the usual rule, so the net can differ from the PDF by the withholding of the odd orders.';
+
+/** The VAT percent of an additional charge as a whole number; a fraction, a negative or an enormous rate is refused by name, never turned into a crash. */
+function vatPercentOf(c: FoodpandaCharge): bigint {
+  if (!Number.isInteger(c.vatRate) || c.vatRate < 0) throw intakeRefusal('STAGED_BAD_VALUE', `The VAT rate ${c.vatRate} on an additional charge is not one this screen can read. Ask for help.`);
+  return BigInt(c.vatRate);
+}
+
+/** A charge with no day to carry it: its VAT is not in any day, and no VAT is invented on the period line. */
+const vatLostWarning = (c: FoodpandaCharge): string =>
+  `This invoice has an ad charge (or platform fee) of ${c.netTotal} on a day with no orders, so its ${c.vatRate}% VAT of ${fromCentavos(roundedDiv(toCentavos(c.netTotal) * vatPercentOf(c), 100n))} is not included in any day. It needs review.`;
+
+/**
+ * The PDF takes 0.5% withholding once on the invoice; the workbook rounds it per order. The remainder is (sum of the workbook's per-order withholding) less
+ * 0.5% of the summed base, rounded once. The base is column R, or R / 1.12 for the Lipa invoices: the one under which 0.5% reproduces EVERY order's withholding.
+ * When neither does, nothing is guessed: no remainder and a warning.
+ */
+function withholdingRounding(orders: readonly FoodpandaOrder[]): { remainder: bigint; warning: string | null } {
+  const withheld = orders.reduce((t, o) => t + toCentavos(o.withholdingTax), 0n);
+  const bases: bigint[][] = [orders.map((o) => toCentavos(o.revenueAfterDiscounts)), orders.map((o) => roundedDiv(toCentavos(o.revenueAfterDiscounts) * 100n, 112n))];
+  for (const base of bases) {
+    if (orders.every((o, i) => roundedDiv(base[i]! * 5n, 1000n) === toCentavos(o.withholdingTax))) {
+      return { remainder: withheld - roundedDiv(base.reduce((t, n) => t + n, 0n) * 5n, 1000n), warning: null };
+    }
+  }
+  return { remainder: 0n, warning: orders.length === 0 ? null : NOT_USUAL_RULE };
+}
+
 /** What a day can still pay: its order value less its commission, marketing and fees so far. */
 const room = (d: FoodpandaAcc): Money => subtract(subtract(subtract(d.orderValue, d.buckets.commission), d.buckets.marketing), d.buckets.platformFee);
 
@@ -275,11 +336,12 @@ export function stageFoodpandaDays(invoice: FoodpandaInvoice, _matched: Omit<Mat
   for (const o of invoice.orders) {
     let day = byDate.get(o.orderDate);
     if (!day) {
-      day = { salesDate: o.orderDate, orderValue: ZERO, grossInfo: ZERO, vendorDiscount: ZERO, balance: ZERO, buckets: emptyBuckets(), otherLines: [], feeMonthNote: null };
+      day = { salesDate: o.orderDate, orderValue: ZERO, grossInfo: ZERO, vendorDiscount: ZERO, balance: ZERO, buckets: emptyBuckets(), orderFees: ZERO, vatNumerator: 0n, otherLines: [], feeMonthNote: null };
       byDate.set(o.orderDate, day);
     }
     figured(o.orderDate, () => addOrder(day, o));
   }
+  for (const d of byDate.values()) d.orderFees = d.buckets.platformFee;
   const periodLines: StagedOtherLine[] = [];
   const warnings: string[] = [];
   const weekly: FoodpandaCharge[] = [];
@@ -294,7 +356,9 @@ export function stageFoodpandaDays(invoice: FoodpandaInvoice, _matched: Omit<Mat
     } else if (c.kind === 'cpc_ad') {
       const kind = deductionFor('foodpanda', 'cpc_ad').kind;
       const day = c.date ? byDate.get(c.date) : undefined;
-      if (day) figured(day.salesDate, () => put(day.buckets, kind, c.netTotal));
+      const pct = vatPercentOf(c);
+      if (day) figured(day.salesDate, () => { put(day.buckets, kind, c.netTotal); day.vatNumerator += toCentavos(c.netTotal) * pct; });
+      else warnings.push(vatLostWarning(c));
       charge(c, { kind: 'advertisement', bookedAs: bookedAsOf(kind, 'CPC ad'), description: null }, day);
     } else if (c.kind === 'pandago') {
       charge(c, { kind: 'pandago', bookedAs: bookedAsOf(deductionFor('foodpanda', 'pandago').kind, 'PandaGO'), description: null }, undefined);
@@ -311,9 +375,13 @@ export function stageFoodpandaDays(invoice: FoodpandaInvoice, _matched: Omit<Mat
     const covering = [...ordered].reverse().find((d) => compare(subtract(room(d), c.netTotal), ZERO) >= 0);
     const day = covering ?? ordered[ordered.length - 1];
     if (day && !covering) warnings.push(`The weekly platform fee on this invoice is larger than any single sales day: it was placed on ${day.salesDate}, please check.`);
-    if (!day) warnings.push('This invoice has a platform fee but no sales days: it is kept as a period charge and needs review.');
+    if (!day) {
+      warnings.push('This invoice has a platform fee but no sales days: it is kept as a period charge and needs review.');
+      warnings.push(vatLostWarning(c));
+    }
     if (day) {
-      figured(day.salesDate, () => put(day.buckets, feeKind, c.netTotal));
+      const pct = vatPercentOf(c);
+      figured(day.salesDate, () => { put(day.buckets, feeKind, c.netTotal); day.vatNumerator += toCentavos(c.netTotal) * pct; });
       day.feeMonthNote = c.feeMonthNote;
     }
     const note = c.feeMonthNote ? c.feeMonthNote.slice(0, DESCRIPTION_MAX) : null;
@@ -322,10 +390,20 @@ export function stageFoodpandaDays(invoice: FoodpandaInvoice, _matched: Omit<Mat
     else charge(c, { kind: 'period_charge', bookedAs: 'none', description: note ?? 'Platform Fee' }, undefined);
   }
 
+  applyVat(ordered);
+  const rounding = withholdingRounding(invoice.orders);
+  if (rounding.warning) warnings.push(rounding.warning);
+  const lastDay = ordered[ordered.length - 1];
+  if (lastDay && rounding.remainder !== 0n) {
+    const amount = fromCentavos(-rounding.remainder);
+    figured(lastDay.salesDate, () => put(lastDay.buckets, 'platformFee', amount));
+    lastDay.otherLines.push({ kind: 'adjustment', bookedAs: 'platformFee', amount, lineDate: null, description: 'withholding rounding to the PDF total' });
+  }
+
   const days = ordered.map((d) => {
     const date = d.salesDate;
-    // The invoice's balance already has the order-column fees taken off; the ads and the weekly fee come off the payout separately.
-    const netPayout = figured(date, () => subtract(subtract(d.balance, d.buckets.marketing), d.otherLines.filter((l) => l.kind === 'platform_fee_weekly').reduce((t, l) => add(t, l.amount), ZERO)));
+    // The invoice's balance already has the order-column fees taken off; the ads, the weekly fee, the VAT on them and the rounding line come off the payout separately.
+    const netPayout = figured(date, () => subtract(subtract(d.balance, d.buckets.marketing), subtract(d.buckets.platformFee, d.orderFees)));
     return finishDay({
       salesDate: date,
       platform: 'foodpanda',
@@ -347,7 +425,11 @@ export function stageFoodpandaDays(invoice: FoodpandaInvoice, _matched: Omit<Mat
       otherLines: d.otherLines,
     });
   });
-  return { days, periodLines, waitingForRows: [], warnings };
+  const pandago = invoice.charges.filter((c) => c.kind === 'pandago');
+  const pandagoNetTotal = pandago.length === 0 ? null : add(...pandago.map((c) => c.netTotal));
+  const pandagoVat = pandago.reduce((t, c) => t + toCentavos(c.netTotal) * vatPercentOf(c), 0n);
+  const pandagoReceivable = pandagoNetTotal === null ? null : fromCentavos(abs(toCentavos(pandagoNetTotal) + roundedDiv(pandagoVat, 100n)));
+  return { days, periodLines, waitingForRows: [], warnings, pandagoNetTotal, pandagoReceivable };
 }
 
 /* ------------------------------------------------------------------ the table CHECKs, in code first */
