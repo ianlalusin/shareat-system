@@ -179,3 +179,28 @@ export const insRuleOffer = (
   sql`insert into menu_offers (org_id, store_id, variant_id, channel, amount, bundle_heads, extra_head_amount, pricing_mode, markup_percent, fixed_markup_amount, withdrawn, created_by)
       values (${f.orgId}, ${f.storeId}, ${variantId}, ${r.channel ?? 'online'}, ${r.amount ?? null}, ${r.heads ?? null}, ${r.extra ?? null},
               ${r.mode}, ${r.pct ?? null}, ${r.fixed ?? null}, ${r.withdrawn ?? false}, ${f.personId}) returning id`;
+
+/** T-510: a store daypart (default every day, 08:00-17:00 store-local). Raw SQL as the owner. */
+export const insDaypart = (
+  f: Who & { storeId: string },
+  o: { storeId?: string; name?: string; days?: readonly number[]; start?: string; end?: string } = {},
+) =>
+  sql<{ id: string }[]>`
+    insert into menu_dayparts (org_id, store_id, name, days, start_time, end_time, created_by)
+    values (${f.orgId}, ${o.storeId ?? f.storeId}, ${o.name ?? uid('DP')}, ${`{${(o.days ?? [0, 1, 2, 3, 4, 5, 6]).join(',')}}`}::smallint[],
+            ${o.start ?? '08:00'}::time, ${o.end ?? '17:00'}::time, ${f.personId})
+    returning id`;
+
+/** T-510: a fixed-price offer tied to a daypart (null = all day); `at` as insRule (an interval offset from now(), null = now()). */
+export const insDaypartOffer = (
+  f: Who & { storeId: string },
+  variantId: string,
+  daypartId: string | null,
+  amount: string | number | null,
+  at: string | null = null,
+  channel = 'store',
+) =>
+  sql<{ id: string }[]>`
+    insert into menu_offers (org_id, store_id, variant_id, channel, effective_from, daypart_id, amount, withdrawn, created_by)
+    values (${f.orgId}, ${f.storeId}, ${variantId}, ${channel}, now() + ${at ?? '0 seconds'}::interval, ${daypartId}, ${amount}, ${amount === null}, ${f.personId})
+    returning id`;

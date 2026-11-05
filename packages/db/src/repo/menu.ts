@@ -80,13 +80,18 @@ export async function lockKey(tx: Tx, id: string): Promise<void> {
 }
 
 export type HistoryKey =
-  | { kind: 'offer'; storeId: string; variantId: string; channel: MenuChannel }
+  | { kind: 'offer'; storeId: string; variantId: string; channel: MenuChannel; daypartId?: string | null }
   | { kind: 'option'; storeId: string; optionValueId: string; channel: MenuChannel }
   | { kind: 'rule'; variantId: string };
 
 /**
  * Would a new row at `at` (omitted = "from now") break the history of its key? `same`: a row already sits at that exact instant;
  * `later`: a row is already scheduled after it (history is monotonic: it would never take effect). Call under `lockKey`.
+ *
+ * T-510 S1b: the database's monotonic guard is daypart-BLIND (a new row may not be earlier than ANY stored row of the same store,
+ * variant and channel), so `later` looks at every daypart. `same` follows the UNIQUE slot key (store, variant, channel, daypart,
+ * effective_from): only a row of the SAME daypart (`daypartId` omitted or null = all day) at that exact instant counts, so Lunch and
+ * Dinner may start together.
  */
 export async function historyClash(tx: Tx, key: HistoryKey, at?: Date): Promise<'same' | 'later' | null> {
   const x = at ? sql`${at.toISOString()}::timestamptz` : NOW_MS;
@@ -96,8 +101,9 @@ export async function historyClash(tx: Tx, key: HistoryKey, at?: Date): Promise<
       : key.kind === 'option'
         ? sql`from menu_option_offers where store_id = ${key.storeId} and option_value_id = ${key.optionValueId} and channel = ${key.channel}`
         : sql`from menu_depletion_rules where variant_id = ${key.variantId}`;
+  const sameSlot = key.kind === 'offer' ? sql` and daypart_id is not distinct from ${key.daypartId ?? null}` : sql``;
   const rows = (await tx.execute(
-    sql`select count(*) filter (where effective_from = ${x})::int as same, count(*) filter (where effective_from > ${x})::int as later ${where}`,
+    sql`select count(*) filter (where effective_from = ${x}${sameSlot})::int as same, count(*) filter (where effective_from > ${x})::int as later ${where}`,
   )) as unknown as { same: number; later: number }[];
   const r = rows[0]!;
   return r.same > 0 ? 'same' : r.later > 0 ? 'later' : null;
@@ -402,6 +408,8 @@ export interface InsertOfferInput {
   storeId: string;
   variantId: string;
   channel: MenuChannel;
+  /** T-510: the daypart this offer is tied to (same store); null or omitted = all day. */
+  daypartId?: string | null;
   /** Omitted = "from now" (rounded up to the millisecond, see NOW_MS). */
   effectiveFrom?: Date;
   /** `numeric(14,2)` as text; null on a withdrawn row or a refill. */
@@ -426,6 +434,7 @@ export async function insertOffer(tx: Tx, input: InsertOfferInput): Promise<Menu
       storeId: input.storeId,
       variantId: input.variantId,
       channel: input.channel,
+      daypartId: input.daypartId ?? null,
       effectiveFrom: input.effectiveFrom ?? NOW_MS,
       amount: input.amount,
       bundleHeads: input.bundleHeads,
@@ -505,11 +514,16 @@ export interface OfferPriceFields {
 /**
  * The row in force for one variant and channel, withdrawn rows INCLUDED (`withdrawn` says so). An ONLINE row carries `basis`: the
  * STORE-channel row in force at the SAME `at` (null when the store has none), which a rule is computed from (R15).
+ *
+ * T-510 S1b: a variant and channel may now have several live rows at once, one per daypart (`daypartId`, null = all day), so these
+ * are RAW rows. `basis` is matched on the same daypart only to keep the join from fanning out; it is not "the store price right now".
+ * Production code asks the domain (`loadLiveStoreOffers`) which row is live right now; it never reads these raw.
  */
 export interface OfferInForce extends OfferPriceFields {
   readonly id: string;
   readonly variantId: string;
   readonly channel: MenuChannel;
+  readonly daypartId: string | null;
   readonly effectiveFrom: Date;
   readonly basis: OfferPriceFields | null;
 }
@@ -536,14 +550,15 @@ const priceFields = (r: Raw, p: string): OfferPriceFields => ({
 });
 
 /**
- * The newest row at or before `at` for each variant and channel of a store (via `menu_offer_in_force`), withdrawals included;
- * a variant with no row at all is absent. An online row comes with its store basis from the same function at the same `at`.
+ * The RAW rows in force at `at` for each variant and channel of a store (via `menu_offer_in_force`): per daypart slot the newest row at or
+ * before `at` (several live rows when a variant has dayparts), or one withdrawn row; a variant with no row at all is absent.
+ * Production readers use the domain's `loadLiveStoreOffers` instead, which picks the slot whose window is open. An online row comes with its store basis from the same function at the same `at`.
  * Whether a row means "offered", and at what price, is `resolveOfferPrice`'s decision in the domain.
  */
 export async function offersInForce(tx: Tx, storeId: string, at: Date): Promise<OfferInForce[]> {
   const when = at.toISOString();
   const rows = (await tx.execute(sql`
-    select f.id, f.variant_id, f.channel, f.effective_from, f.withdrawn, f.pricing_mode, f.amount::text as amount, f.bundle_heads,
+    select f.id, f.variant_id, f.channel, f.daypart_id, f.effective_from, f.withdrawn, f.pricing_mode, f.amount::text as amount, f.bundle_heads,
            f.extra_head_amount::text as extra_head_amount, f.markup_percent::text as markup_percent,
            f.fixed_markup_amount::text as fixed_markup_amount,
            b.id as b_id, b.withdrawn as b_withdrawn, b.pricing_mode as b_pricing_mode, b.amount::text as b_amount,
@@ -551,13 +566,15 @@ export async function offersInForce(tx: Tx, storeId: string, at: Date): Promise<
            b.markup_percent::text as b_markup_percent, b.fixed_markup_amount::text as b_fixed_markup_amount
       from (select distinct variant_id, channel from menu_offers where store_id = ${storeId} and effective_from <= ${when}::timestamptz) k
      cross join lateral menu_offer_in_force(${storeId}, k.variant_id, k.channel, ${when}::timestamptz) f
-      left join lateral menu_offer_in_force(${storeId}, k.variant_id, 'store', ${when}::timestamptz) b on k.channel = 'online'
-     order by f.variant_id, f.channel
+      left join lateral menu_offer_in_force(${storeId}, k.variant_id, 'store', ${when}::timestamptz) b
+        on k.channel = 'online' and b.daypart_id is not distinct from f.daypart_id
+     order by f.variant_id, f.channel, f.daypart_id nulls first, f.id
   `)) as unknown as Raw[];
   return rows.map((r) => ({
     id: String(r.id),
     variantId: String(r.variant_id),
     channel: r.channel as MenuChannel,
+    daypartId: r.daypart_id == null ? null : String(r.daypart_id),
     effectiveFrom: new Date(r.effective_from as string),
     ...priceFields(r, ''),
     basis: r.b_id == null ? null : priceFields(r, 'b_'),

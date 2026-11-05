@@ -9,4 +9,6 @@ export * from './pricing';
 export * from './requests';
 export * from './resolve-price';
 export { loadMenuForTerminal, loadStoreMenu } from './load-store-menu';
+export { loadLiveStoreOffers, resolveStoreOffers } from './live-offers';
+export type { LiveOfferFault, LiveStoreOffers, NotOfferedNow } from './live-offers';
 export type { ProjectedStoreMenu, StoreMenuV2 } from './project';

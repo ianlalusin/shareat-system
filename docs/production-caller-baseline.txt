@@ -64,6 +64,7 @@ formatLogAmount
 formatLogDescription
 getActiveFake
 getCalendarWeatherIcon
+getDaypart
 getGroupKey
 getKitchenTicketContribution
 getNonCentavoCount
@@ -74,6 +75,7 @@ hasUnroutedFloatsForStore
 initiateAnonymousSignIn
 initiateEmailSignIn
 initiateEmailSignUp
+insertDaypart
 installFakeClock
 isConvertibleUnit
 isHeaderCode
@@ -142,7 +144,6 @@ reserveNext
 resetLobbyReadLimiterForTests
 resetNonCentavoCount
 resolveFingerprintMatchToken
-resolveLiveOffer
 retireMenuItem
 retireMenuVariant
 returnableQuantity
@@ -183,6 +184,7 @@ undeclareSupplierItem
 undepositedFunds
 undoWriteOff
 unmappedStatuses
+updateDaypart
 updateDocumentNonBlocking
 updateMoneyAccount
 updateOwner
