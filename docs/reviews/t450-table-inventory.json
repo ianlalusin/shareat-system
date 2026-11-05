@@ -31,8 +31,8 @@
   },
   {
     "file": "apps/erp/src/app/ap/page.tsx",
-    "tables": 1,
-    "sharedTables": 0,
+    "tables": 0,
+    "sharedTables": 1,
     "headerless": 0
   },
   {

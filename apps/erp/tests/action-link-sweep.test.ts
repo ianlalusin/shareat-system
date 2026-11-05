@@ -205,7 +205,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
   //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
   //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 116 FAIL / 51 UNRESOLVED', () => {
+  it('accepted-baseline totals: 115 FAIL / 51 UNRESOLVED', () => {
     // 62 -> 63 UNRESOLVED, T-386 S4 2026-10-09: the rename "use the suggested code" checkbox on app/items/ItemCodeField.tsx
     // (an intrinsic checkbox box; baselined in touch-target-baseline.json per Ian's §6.1 ruling).
     // 63 -> 66 UNRESOLVED, T-387 S3 2026-10-10. +3: the kit's new native `<select>` (Select.tsx) and `<textarea>` (Textarea.tsx)
@@ -235,7 +235,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // T-448 x main (05ada44) merge: re-measured
     // 50 -> 51 UNRESOLVED, T-502 section 12: components/expenses/InvoiceBatchRecord.tsx gained intrinsic include checkboxes (baseline entry added); FAIL unmoved at 116.
     // 49 -> 50 UNRESOLVED, merge of main + T-193: re-measured; src/app/page.tsx gov-tile 'Set it under Employer numbers' inline Link (font size unresolvable), baseline entry added.
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 116, unresolved: 51 });
+    // 116 -> 115 FAIL, T-520 (5 Nov, BOSS approved): /ap's invoice table replaced the amber banner's 20px inline link; baseline entry app/ap/page.tsx removed. UNRESOLVED unmoved at 51.
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 115, unresolved: 51 });
   });
 
   // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only

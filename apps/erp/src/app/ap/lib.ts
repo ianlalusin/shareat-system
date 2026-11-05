@@ -13,7 +13,8 @@ import {
 import { withOrgPrincipal, listStores } from '../expenses/lib';
 import { compare, money } from '@shareat/core/money';
 
-export { peso } from '../../lib/format';
+import { peso } from '../../lib/format';
+export { peso };
 export { listStores, withOrgPrincipal, listCategoriesGrouped } from '../expenses/lib';
 export type { StoreOption } from '../expenses/lib';
 
@@ -46,6 +47,55 @@ export async function listInvoices(
   filter: { supplierId?: string; status?: SupplierInvoiceRow['status']; selfVerified?: true } = {},
 ): Promise<SupplierInvoiceRow[]> {
   return withOrgPrincipal(orgId, (tx) => apRepo.listSupplierInvoices(tx, orgId, filter));
+}
+
+/** T-520: one row of the /ap list. `recorded`/`remaining` = the invoice page's Recorded/Remaining; `owed` = what its open items still owe. */
+export interface InvoiceListRow extends SupplierInvoiceRow {
+  recorded: string;
+  remaining: string;
+  owed: string;
+}
+
+/**
+ * T-520: every invoice (newest first, as the repo orders them) with its recorded / remaining / owed, in THREE queries
+ * for any number of rows: the list, one grouped capacity query, one open-items query. No per-row query.
+ */
+export async function listInvoicesWithStanding(
+  orgId: string,
+  filter: { supplierId?: string; status?: SupplierInvoiceRow['status']; selfVerified?: true } = {},
+): Promise<InvoiceListRow[]> {
+  return withOrgPrincipal(orgId, async (tx) => {
+    const rows = await apRepo.listSupplierInvoices(tx, orgId, filter);
+    const [capacity, owed] = await Promise.all([
+      apRepo.capacityOfMany(tx, orgId, rows.map((r) => r.id)),
+      apRepo.owedByInvoice(tx, orgId),
+    ]);
+    return rows.map((r) => ({
+      ...r,
+      recorded: capacity.get(r.id)?.recorded ?? '0.00',
+      remaining: capacity.get(r.id)?.remaining ?? r.totalAmount,
+      owed: owed.get(r.id) ?? '0.00',
+    }));
+  });
+}
+
+export type StandingPill = { tone: 'warning' | 'success' | 'progress'; label: string } | null;
+
+/** T-520: the Recorded and Paid pills of a row (null = a muted dash). Pure; the page only draws what this says. */
+export function standingPills(inv: Pick<InvoiceListRow, 'status' | 'recorded' | 'remaining' | 'owed'>): { recorded: StandingPill; paid: StandingPill } {
+  if (inv.status === 'voided') return { recorded: null, paid: null };
+  const zero = money('0');
+  const none = compare(money(inv.recorded), zero) <= 0;
+  const full = compare(money(inv.remaining), zero) <= 0;
+  const owes = compare(money(inv.owed), zero) > 0;
+  const recorded: StandingPill = none
+    ? { tone: 'warning', label: 'Not recorded' }
+    : full
+      ? { tone: 'success', label: 'Fully recorded' }
+      : { tone: 'progress', label: `Open · ${peso(inv.remaining)} left` };
+  // shortcut: part-recorded with nothing owed reads a dash (the recorded part is settled, more is still to record); revisit if Ian wants "Paid so far".
+  const paid: StandingPill = none ? null : owes ? { tone: 'warning', label: `${peso(inv.owed)} owed` } : full ? { tone: 'success', label: 'Paid' } : null;
+  return { recorded, paid };
 }
 
 export async function getInvoice(orgId: string, id: string): Promise<SupplierInvoiceRow | undefined> {
