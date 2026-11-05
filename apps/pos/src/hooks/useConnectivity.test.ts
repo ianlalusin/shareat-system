@@ -163,4 +163,14 @@ describe('the connectivity store (Acceptance 10)', () => {
     await s.probe();
     expect(l.mock.calls.length).toBe(n);
   });
+
+  it('a health answer without menuSource means firestore, even after erp was reported', async () => {
+    let body: any = { ok: true, menuSource: 'erp' };
+    const s = make(async () => json(body));
+    await s.probe();
+    expect(s.getState().menuSource).toBe('erp');
+    body = { ok: true };
+    await s.probe();
+    expect(s.getState().menuSource).toBe('firestore');
+  });
 });

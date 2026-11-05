@@ -79,7 +79,7 @@ export function createConnectivityStore(d: { fetch: typeof fetch; apiBase?: stri
     inFlight = (async () => {
       const r = await probeHealth(d.fetch, apiBase);
       const lastCheckedMs = Date.now();
-      if (r.ok) set({ online: true, consecutiveFailures: 0, lastCheckedMs, version: r.version ?? state.version, ...(r.menuSource ? { menuSource: r.menuSource } : state.menuSource ? { menuSource: state.menuSource } : {}) });
+      if (r.ok) set({ online: true, consecutiveFailures: 0, lastCheckedMs, version: r.version ?? state.version, menuSource: r.menuSource ?? 'firestore' }); // no field = an older server: the safe default, never a remembered erp
       else {
         const failures = state.consecutiveFailures + 1;
         set({ ...state, consecutiveFailures: failures, online: failures >= FAILURES_TO_OFFLINE ? false : state.online, lastCheckedMs });

@@ -42,6 +42,8 @@ export function createMenuStore(d: MenuStoreDeps) {
     refresh,
     /** Starts the triggers for one POS store; returns stop(). */
     start(storeId: string): () => void {
+      // A cache for another store must never be served: drop it now; the load below brings in this store's own.
+      if (state.cached && state.cached.storeId !== storeId) set({ ...state, cached: null });
       let stopped = false, wasOnline = d.connectivity.getState().online, timer: ReturnType<typeof setTimeout> | undefined;
       const go = () => { if (!stopped) void refresh(storeId); };
       const arm = () => {

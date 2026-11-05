@@ -138,6 +138,40 @@ describe('menu store: the switch and the triggers', () => {
   });
 });
 
+describe('menu store: re-linking to another store', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+  const forStore = (storeId: string, hash: string): CachedMenu => ({ ...cached(hash), storeId });
+  function relinkStore(caches: Record<string, CachedMenu>) {
+    return createMenuStore({
+      connectivity: { getState: () => ({ online: true, menuSource: 'erp' as const }), subscribe: () => () => {} },
+      fetchMenu: async () => { throw new Error('net'); },
+      load: async (id: string) => caches[id] ?? null, save: async () => {}, loadSource: async () => null, saveSource: async () => {},
+    });
+  }
+  it("never serves store A's menu under store B when B has no cache and the fetch fails", async () => {
+    const store = relinkStore({ A: forStore('A', 'hA') });
+    const stopA = store.start('A');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.getState().cached!.storeId).toBe('A');
+    stopA();
+    const stopB = store.start('B');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.getState().cached).toBeNull();
+    stopB();
+  });
+  it("serves B's own cache after the switch", async () => {
+    const store = relinkStore({ A: forStore('A', 'hA'), B: forStore('B', 'hB') });
+    const stopA = store.start('A');
+    await vi.advanceTimersByTimeAsync(0);
+    stopA();
+    const stopB = store.start('B');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.getState().cached).toMatchObject({ storeId: 'B', contentHash: 'hB' });
+    stopB();
+  });
+});
+
 describe('print locations follow the switch', () => {
   const fs = vi.fn(async (_id: string) => [{ id: 'fs-1', printOnOutage: true }]);
   it('firestore: calls the Firestore source, not the adapter', async () => {
