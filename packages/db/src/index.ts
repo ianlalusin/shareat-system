@@ -140,6 +140,9 @@ export * as schedulerRepo from './repo/scheduler';
 export * as remittanceRepo from './repo/remittance';
 export * as advisoryLocksRepo from './repo/advisory-locks';
 export * as payrollRepo from './repo/payroll';
+// T-519 S1 - staff deduction agreements.
+export * as deductionAgreementsRepo from './repo/deduction-agreements';
+export type { AgreementRow } from './repo/deduction-agreements';
 // T-436 - leave and absence tracking (migration 0205).
 export * as leaveRepo from './repo/leave';
 export type { OwnRequestRow as LeaveOwnRequestRow, OpenEmploymentRow as LeaveOpenEmploymentRow, LeaveTypeRow, CapRow, CapListRow, RequestRow as LeaveRequestRow, DayRow as LeaveDayRow, LeaveDayReadRow, PayableLeaveDay, CommutationRow, EmploymentSpan } from './repo/leave';

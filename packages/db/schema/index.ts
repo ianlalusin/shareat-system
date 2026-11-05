@@ -162,6 +162,8 @@ export * from './inter-entity';
 
 // T-511 S2a - the staging tables of the Grab / Foodpanda settlement upload (migration 0228).
 export * from './settlement-intake';
+// T-519 S1 - staff deduction agreements and the recoveries taken under them (migration 0236).
+export * from './staff-deduction-agreements';
 
 // T-398 S6 - the franchisor view of a franchisee: agreements and the append-only access log (migration 0220).
 export * from './franchise';

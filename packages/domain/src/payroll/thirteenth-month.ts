@@ -20,7 +20,8 @@ import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { refuse } from '../shared/refusal';
 import { advanceToRecover } from './compute';
-import { assertPayrollMoneyAccount, outstandingAdvance, PAYROLL_ADVANCE_ACCOUNT, payrollMoneyParty } from './index';
+import { assertPayrollMoneyAccount, PAYROLL_ADVANCE_ACCOUNT, payrollMoneyParty } from './index';
+import { agreedRecoverable, applyDeductionRecovery, reopenAfterVoid } from './deduction-agreements';
 
 /** `6140 13th month pay` — provisioned in Phase 1, unused until now. */
 export const THIRTEENTH_MONTH_ACCOUNT = '6140';
@@ -107,7 +108,11 @@ export async function preview13thMonthRun(
         `${emp.personName}'s 13th month for ${input.year} would be over the PHP 90,000 tax-exempt limit. Ask the accountant how to treat the excess before this run is posted.`,
       );
     }
-    const outstanding = await outstandingAdvance(tx, actor.orgId, emp.personId);
+    // T-519: only the agreed unpaid amount (the 20% weekly wage cap does not apply to a 13th-month payout).
+    const agreed = await agreedRecoverable(tx, actor.orgId, emp.personId, null, `${input.year}-12-31`);
+    // A second employment of the same person in this run must not spend the same agreed amount again.
+    const takenSoFar = payouts.filter((p) => p.personId === emp.personId).reduce((n, p) => add(n, p.advanceRecovered), ZERO);
+    const outstanding = compare(agreed, takenSoFar) > 0 ? subtract(agreed, takenSoFar) : ZERO;
     const advanceRecovered = advanceToRecover(gross, outstanding);
     const netPay = subtract(gross, advanceRecovered);
 
@@ -245,6 +250,7 @@ export async function post13thMonthRun(
         lines,
       });
       await thirteenthMonthRepo.setThirteenthMonthPayoutEntry(trx, payoutId, posted.entryId);
+      await applyDeductionRecovery(trx, actor.orgId, payout.personId, posted.entryId, payout.advanceRecovered);
     }
 
     const ok = await thirteenthMonthRepo.markThirteenthMonthRunPosted(trx, actor.orgId, runId, actor.personId);
@@ -279,8 +285,10 @@ export async function void13thMonthRun(
 
     const payouts = await thirteenthMonthRepo.listThirteenthMonthPayouts(trx, input.runId);
     let reversed = 0;
+    const reversedEntryIds: string[] = [];
     for (const payout of payouts) {
       if (!payout.journalEntryId) continue;
+      reversedEntryIds.push(payout.journalEntryId);
       await reverseEntry(trx, {
         orgId: actor.orgId,
         entryId: payout.journalEntryId,
@@ -291,6 +299,7 @@ export async function void13thMonthRun(
       reversed++;
     }
 
+    await reopenAfterVoid(trx, actor.orgId, reversedEntryIds);
     const ok = await thirteenthMonthRepo.markThirteenthMonthRunVoided(trx, actor.orgId, input.runId, {
       voidedBy: actor.personId,
       reason,

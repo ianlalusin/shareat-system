@@ -33,6 +33,7 @@ import { seedStatutoryRates } from './_fixtures/statutory-rates';
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, ownersRepo, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
+import { agree } from './_fixtures/t519-agreements';
 import { createOwner, recoverFromPay, repayFromOwner, recordDrawing, closeDrawingMonth, postPayRun, voidPayRun, setPayRate } from '@shareat/domain';
 import { postEntry } from '../../src/ledger/post-entry';
 
@@ -150,8 +151,14 @@ async function owesUs(f: Fixture, ownerId: string, amount: string, on: string) {
 /** A staff (non-owner-origin) advance — Dr 1230 (party employee) / Cr 1110, random source_id.
  * `owners.test.ts:279-308`'s shape, verbatim. */
 async function staffShortage(f: Fixture, amount: string, on: string) {
+  const entryId = await staffShortageEntry(f, amount, on);
+  // T-519: payroll recovers it only under a signed agreement.
+  await agree(sql, f, f.admin, f.anaId, entryId, { amount, perPayrollLimit: amount });
+}
+
+async function staffShortageEntry(f: Fixture, amount: string, on: string): Promise<string> {
   const [period] = await sql<{ id: string }[]>`select id from fiscal_periods where org_id = ${f.orgId} order by starts_on limit 1`;
-  await sql.begin(async (tx) => {
+  return sql.begin(async (tx) => {
     const [e] = await tx<{ id: string }[]>`
       insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, status)
       values (${f.orgId}, ${on}, ${period!.id}, 'cash_request_shortage', ${uid('cr')}, 'draft') returning id`;
@@ -160,7 +167,15 @@ async function staffShortage(f: Fixture, amount: string, on: string) {
     await tx`insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit, party_type, party_id) values (${e!.id}, 1, ${by.get('1230')!}, ${f.storeId}, ${amount}, '0', 'employee', ${f.anaId})`;
     await tx`insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit) values (${e!.id}, 2, ${by.get('1110')!}, ${f.storeId}, '0', ${amount})`;
     await tx`update journal_entries set status = 'posted' where id = ${e!.id}`;
+    return e!.id;
   });
+}
+
+/** recoverFromPay by the admin (not the owner, so no R5 self-agreement), then the signed agreement T-519 payroll needs to recover it. */
+async function recoverAgreed(f: Fixture, ownerId: string, amount: string, on: string) {
+  const r = await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId, amount, on }));
+  const [o] = await sql<{ person_id: string; store_id: string }[]>`select person_id, store_id from owners where id = ${ownerId}`;
+  await agree(sql, { orgId: f.orgId, storeId: o!.store_id }, f.admin, o!.person_id, r.entryId, { amount, perPayrollLimit: amount });
 }
 
 async function addDay(f: Fixture, shiftDay: string) {
@@ -173,7 +188,7 @@ async function addDay(f: Fixture, shiftDay: string) {
  * 540-minute day = exactly `requiredHoursPerShift`, no OT — so gross === the rate, and
  * `advanceToRecover = min(gross, outstanding)` is controlled by the rate alone). */
 async function payrollRecovers(f: Fixture, recoverAmount: string, workDay: string, entryDate: string) {
-  await asOrg(f.orgId, (tx) => setPayRate(tx, f.admin, { employmentId: f.employmentId, storeId: f.storeId, basis: 'daily', amount: recoverAmount, effectiveFrom: '2026-01-01' }));
+  await asOrg(f.orgId, (tx) => setPayRate(tx, f.admin, { employmentId: f.employmentId, storeId: f.storeId, basis: 'daily', amount: (Number(recoverAmount) * 5).toFixed(2), effectiveFrom: '2026-01-01' }));
   await addDay(f, workDay);
   return asOrg(f.orgId, (tx) =>
     postPayRun(tx, f.admin, { storeId: f.storeId, periodStart: '2026-01-01', periodEnd: '2026-01-31', moneyAccountId: f.officeAccountId, entryDate }),
@@ -188,7 +203,7 @@ describe('O1 — a payroll recovery frees the cap exactly as a cash repayment wo
   it('total 0.00, Jan 2000.00, Feb 0.00 (monthly floor) — Mutant: restore the source_id-only scope, red; drop the monthly floor, Feb -2000.00, red', async () => {
     const f = await fixture('o1', { drawingLimit: '5000.00', drawingLimitPeriod: 'monthly' });
     await owesUs(f, f.ownerId, '2000.00', '2026-01-10');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '2000.00', on: '2026-01-20' }));
+    await recoverAgreed(f, f.ownerId, '2000.00', '2026-01-20');
     await payrollRecovers(f, '2000.00', '2026-01-05', '2026-02-05');
 
     expect(await drawn(f, f.ownerId)).toBe('0.00');
@@ -219,7 +234,7 @@ describe('M-floor — a payroll recovery larger than the month\'s drawings never
   it('M-close: closeDrawingMonth with no acknowledgedAmount agrees 0.00 and posts no adjustment — Mutant: no monthly floor, "The agreed amount cannot be negative", red', async () => {
     const f = await fixture('mclose', { drawingLimit: '5000.00', drawingLimitPeriod: 'monthly' });
     await owesUs(f, f.ownerId, '2000.00', '2026-01-10');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '2000.00', on: '2026-01-20' }));
+    await recoverAgreed(f, f.ownerId, '2000.00', '2026-01-20');
     await payrollRecovers(f, '2000.00', '2026-01-05', '2026-02-05'); // Feb: no drawings, 2000 recovered
 
     const result = await asOrg(f.orgId, (tx) => closeDrawingMonth(tx, f.admin, { ownerId: f.ownerId, month: '2026-02-01', on: '2026-03-01' }));
@@ -232,7 +247,7 @@ describe('M-floor — a payroll recovery larger than the month\'s drawings never
   it('M-headroom: cap 10000/month, 5000 prior-month debt recovered by payroll this month — a 15000 drawing is REFUSED, 10000 passes — Mutant: no monthly floor (already = -5000), 15000 passes, red', async () => {
     const f = await fixture('mhead', { drawingLimit: '10000.00', drawingLimitPeriod: 'monthly' });
     await owesUs(f, f.ownerId, '5000.00', '2026-01-10');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '5000.00', on: '2026-01-20' }));
+    await recoverAgreed(f, f.ownerId, '5000.00', '2026-01-20');
     await payrollRecovers(f, '5000.00', '2026-01-05', '2026-02-05');
 
     await expect(asOrg(f.orgId, drawOp(f, '15000.00', '2026-02-10'))).rejects.toThrow(/over the ₱10000\.00 monthly limit/);
@@ -243,7 +258,7 @@ describe('M-floor — a payroll recovery larger than the month\'s drawings never
   it('positive control (green now and after): drawings above the recovery leave the plain positive net — Feb 1000.00, total 3000.00', async () => {
     const f = await fixture('mpos', { drawingLimit: '10000.00', drawingLimitPeriod: 'monthly' });
     await owesUs(f, f.ownerId, '2000.00', '2026-01-10');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '2000.00', on: '2026-01-20' }));
+    await recoverAgreed(f, f.ownerId, '2000.00', '2026-01-20');
     await asOrg(f.orgId, drawOp(f, '3000.00', '2026-02-02'));
     await payrollRecovers(f, '2000.00', '2026-01-05', '2026-02-05');
 
@@ -256,7 +271,7 @@ describe('O2 — voidPayRun restores the cap it freed', () => {
   it('total back to 2000.00 — Mutant: ignore reversal_of_entry_id, red', async () => {
     const f = await fixture('o2', { drawingLimit: '5000.00', drawingLimitPeriod: 'monthly' });
     await owesUs(f, f.ownerId, '2000.00', '2026-01-10');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '2000.00', on: '2026-01-20' }));
+    await recoverAgreed(f, f.ownerId, '2000.00', '2026-01-20');
     const run = await payrollRecovers(f, '2000.00', '2026-01-05', '2026-02-05');
     expect(await drawn(f, f.ownerId)).toBe('0.00');
 
@@ -269,7 +284,7 @@ describe('O3 — FIFO: the older owner-origin charge is consumed first', () => {
   it('reclass 1000 (01-10) older than a staff shortage 600 (01-15); recovery 1000 -> owner 0.00 — Mutant: staff-first min(ownerOrigin,balance) gives 600.00, red', async () => {
     const f = await fixture('o3', { drawingLimit: '5000.00', drawingLimitPeriod: 'monthly' });
     await owesUs(f, f.ownerId, '1000.00', '2026-01-10');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '1000.00', on: '2026-01-10' }));
+    await recoverAgreed(f, f.ownerId, '1000.00', '2026-01-10');
     await staffShortage(f, '600.00', '2026-01-15');
     await payrollRecovers(f, '1000.00', '2026-01-20', '2026-02-05');
 
@@ -282,7 +297,7 @@ describe('O4 — FIFO in the other order: the older non-owner charge is consumed
     const f = await fixture('o4', { drawingLimit: '5000.00', drawingLimitPeriod: 'monthly' });
     await staffShortage(f, '600.00', '2026-01-05');
     await owesUs(f, f.ownerId, '1000.00', '2026-01-10');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '1000.00', on: '2026-01-10' }));
+    await recoverAgreed(f, f.ownerId, '1000.00', '2026-01-10');
     await payrollRecovers(f, '1000.00', '2026-01-20', '2026-02-05');
 
     expect(await drawn(f, f.ownerId)).toBe('600.00');
@@ -293,7 +308,7 @@ describe('O5 — a partial recovery leaves the remainder outstanding', () => {
   it('500 of a 2000 reclass -> 1500.00 — Mutant: pool applied all-or-nothing, red', async () => {
     const f = await fixture('o5', { drawingLimit: '5000.00', drawingLimitPeriod: 'monthly' });
     await owesUs(f, f.ownerId, '2000.00', '2026-01-10');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '2000.00', on: '2026-01-10' }));
+    await recoverAgreed(f, f.ownerId, '2000.00', '2026-01-10');
     await payrollRecovers(f, '500.00', '2026-01-20', '2026-02-05');
 
     expect(await drawn(f, f.ownerId)).toBe('1500.00');
@@ -305,9 +320,9 @@ describe('O6 — one person owns two stores; each owner row sees only its own re
     const f = await fixture('o6', { drawingLimit: '5000.00', drawingLimitPeriod: 'monthly' });
     const ownerB = await secondOwner(f, { drawingLimit: '5000.00', drawingLimitPeriod: 'monthly' });
     await owesUs(f, f.ownerId, '1000.00', '2026-01-10');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '1000.00', on: '2026-01-10' }));
+    await recoverAgreed(f, f.ownerId, '1000.00', '2026-01-10');
     await owesUs(f, ownerB, '700.00', '2026-01-12');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: ownerB, amount: '700.00', on: '2026-01-12' }));
+    await recoverAgreed(f, ownerB, '700.00', '2026-01-12');
     await payrollRecovers(f, '1200.00', '2026-01-20', '2026-02-05');
 
     const a = await drawn(f, f.ownerId);
@@ -333,7 +348,7 @@ describe('O8 (control, green now and after) — recoverFromPay alone still frees
   it('still 2000.00, not freed', async () => {
     const f = await fixture('o8', { drawingLimit: '5000.00', drawingLimitPeriod: 'monthly' });
     await owesUs(f, f.ownerId, '2000.00', '2026-01-10');
-    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '2000.00', on: '2026-01-20' }));
+    await recoverAgreed(f, f.ownerId, '2000.00', '2026-01-20');
     expect(await drawn(f, f.ownerId)).toBe('2000.00');
   });
 });
@@ -467,5 +482,33 @@ describe('L — a drawing that lands EXACTLY on the cap is accepted (money compa
     await asOrg(f.orgId, drawOp(f, '1016.07', '2026-01-05'));
     await expect(asOrg(f.orgId, drawOp(f, '0.08', '2026-01-10'))).rejects.toThrow(/over the ₱1016\.14 monthly limit/);
     expect(await drawn(f, f.ownerId)).toBe('1016.07');
+  });
+});
+
+// -----------------------------------------------------------------------------------------------
+// T-519 R5 - an owner moving their OWN drawing onto their OWN pay is their agreement
+// -----------------------------------------------------------------------------------------------
+
+describe('T-519 R5 - owner self-agreement', () => {
+  it('actor === person writes the agreement row ("own request", no scan); a different actor writes none', async () => {
+    const f = await fixture('r5');
+    // The admin is also an owner (a second owner row for the admin's own person).
+    const { id: adminOwnerId } = await asOrg(f.orgId, (tx) => createOwner(tx, f.admin, { storeId: f.storeId, personId: f.adminId, drawingLimit: null, drawingLimitPeriod: null }));
+    await owesUs(f, adminOwnerId, '700.00', '2026-01-10');
+    const own = await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: adminOwnerId, amount: '300.00', on: '2026-01-20' }));
+    const rows = await sql<{ person_id: string; amount: string; per_payroll_limit: string; employee_explanation: string; evidence_file_id: string | null; status: string; source_type: string; source_entry_id: string }[]>`
+      select person_id, amount, per_payroll_limit, employee_explanation, evidence_file_id, status, source_type, source_entry_id from staff_deduction_agreements where org_id = ${f.orgId}`;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ person_id: f.adminId, amount: '300.00', per_payroll_limit: '300.00', employee_explanation: 'own request', evidence_file_id: null, status: 'active', source_type: 'owner_pay_recovery', source_entry_id: own.entryId });
+
+    // Ana's owner row, recovered by the ADMIN: no agreement is written for Ana.
+    await owesUs(f, f.ownerId, '500.00', '2026-01-10');
+    await asOrg(f.orgId, (tx) => recoverFromPay(tx, f.admin, { requestId: crypto.randomUUID(), ownerId: f.ownerId, amount: '500.00', on: '2026-01-20' }));
+    const [n] = await sql<{ n: string }[]>`select count(*)::text n from staff_deduction_agreements where org_id = ${f.orgId} and person_id = ${f.anaId}`;
+    expect(n!.n).toBe('0');
+    await addDay(f, '2026-01-05');
+    await asOrg(f.orgId, (tx) => setPayRate(tx, f.admin, { employmentId: f.employmentId, storeId: f.storeId, basis: 'daily', amount: '2500.00', effectiveFrom: '2026-01-01' }));
+    await asOrg(f.orgId, (tx) => postPayRun(tx, f.admin, { storeId: f.storeId, periodStart: '2026-01-01', periodEnd: '2026-01-31', moneyAccountId: f.officeAccountId, entryDate: '2026-02-05' }));
+    expect(await outstandingAdvance(f)).toBe('500.00'); // nothing recovered without an agreement
   });
 });

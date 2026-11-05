@@ -21,6 +21,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
+import { agree, chargeEntry } from './_fixtures/t519-agreements';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import { postSeparation, preview13thMonthRun, previewSeparation, voidSeparation } from '@shareat/domain';
 
@@ -143,19 +144,8 @@ describe('T-192 — separation, final pay, clearance', () => {
   it('advance netting: capped at gross total, net = gross - advanceRecovered', async () => {
     const f = await fixture('advance');
     await postedPeriod(f, { periodStart: '2026-01-01', periodEnd: '2026-01-15', basicPay: '12000.00' });
-    const [period] = await sql<{ id: string }[]>`select id from fiscal_periods where org_id = ${f.orgId} limit 1`;
-    const [adv] = await sql<{ id: string }[]>`select id from accounts where org_id = ${f.orgId} and code = '1230'`;
-    const [cash] = await sql<{ id: string }[]>`select id from accounts where org_id = ${f.orgId} and code = '1130'`;
-    await sql.begin(async (tx) => {
-      const [e] = await tx<{ id: string }[]>`
-        insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, status)
-        values (${f.orgId}, '2026-01-02', ${period!.id}, 'cashrequest', ${uid('adv')}, 'draft') returning id`;
-      await tx`insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit, party_type, party_id)
-               values (${e!.id}, 1, ${adv!.id}, ${f.storeId}, '600.00', '0', 'employee', ${f.workerId})`;
-      await tx`insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)
-               values (${e!.id}, 2, ${cash!.id}, ${f.storeId}, '0', '600.00')`;
-      await tx`update journal_entries set status = 'posted' where id = ${e!.id}`;
-    });
+    // T-519: recovery needs a signed agreement over a real charge entry.
+    await agree(sql, f, f.admin, f.workerId, await chargeEntry(sql, f, f.workerId, '600.00'), { amount: '600.00' });
     const result = await asOrg(f.orgId, (tx) =>
       postSeparation(tx, f.admin, {
         storeId: f.storeId,
@@ -169,6 +159,32 @@ describe('T-192 — separation, final pay, clearance', () => {
     );
     // gross = 1000.00 (12000/12), advance 600 recovered, net 400.
     expect(result.netPay).toBe('400.00');
+  });
+
+  it('T-519 gate: a charge with NO agreement recovers 0 in final pay and stays on 1230', async () => {
+    const f = await fixture('t519gate');
+    await postedPeriod(f, { periodStart: '2026-01-01', periodEnd: '2026-01-15', basicPay: '12000.00' });
+    await chargeEntry(sql, f, f.workerId, '600.00');
+    const pv = await asOrg(f.orgId, (tx) =>
+      previewSeparation(tx, f.admin, { storeId: f.storeId, employmentId: f.employmentId, separationDate: '2026-06-30' }));
+    expect(pv.outstandingAdvance).toBe('600.00'); // still owed
+    expect(pv.agreedRecoverable).toBe('0.00');
+    const result = await asOrg(f.orgId, (tx) =>
+      postSeparation(tx, f.admin, { storeId: f.storeId, employmentId: f.employmentId, separationDate: '2026-06-30', cause: 'resignation', separationPayAmount: '0', moneyAccountId: f.officeAccountId, clearanceConfirmedBy: f.adminId }));
+    expect(result.netPay).toBe('1000.00');
+  });
+
+  it('T-519: an agreed 250.00 recovers exactly 250.00 in final pay (no 20% cap), completes, and voiding the separation reopens it', async () => {
+    const f = await fixture('t519agreed');
+    await postedPeriod(f, { periodStart: '2026-01-01', periodEnd: '2026-01-15', basicPay: '12000.00' });
+    const a = await agree(sql, f, f.admin, f.workerId, await chargeEntry(sql, f, f.workerId, '600.00'), { amount: '250.00', perPayrollLimit: '10.00' });
+    const result = await asOrg(f.orgId, (tx) =>
+      postSeparation(tx, f.admin, { storeId: f.storeId, employmentId: f.employmentId, separationDate: '2026-06-30', cause: 'resignation', separationPayAmount: '0', moneyAccountId: f.officeAccountId, clearanceConfirmedBy: f.adminId }));
+    expect(result.netPay).toBe('750.00');
+    const st = async () => (await sql<{ status: string }[]>`select status from staff_deduction_agreements where id = ${a.id}`)[0]!.status;
+    expect(await st()).toBe('completed');
+    await asOrg(f.orgId, (tx) => voidSeparation(tx, f.admin, { id: result.id, reason: 'test' }));
+    expect(await st()).toBe('active');
   });
 
   it('separationPayAmount defaults to 0 and is NOT auto-computed from cause — redundancy at ₱0 succeeds', async () => {
