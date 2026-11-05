@@ -30,12 +30,19 @@ const orgFile = join(dir, 'org-id.txt');
 const orgId = existsSync(orgFile) ? readFileSync(orgFile, 'utf8').trim() : '00000000-0000-4000-8000-000000000455';
 
 // F43: the child NEVER inherits a database address from the shell; buildPracticeEnv forces DATABASE_URL, drops every other *DATABASE_URL, and refuses a non-local / non-_test one.
+// T-508: the ERP domain code the menu route calls needs SESSION_SECRET; same throwaway secret the practice ERP uses (made by practice-erp-start.mjs).
+const secretFile = join(dir, 'erp-session-secret.txt');
+const sessionSecret = existsSync(secretFile) ? readFileSync(secretFile, 'utf8').trim() : '';
+if (!sessionSecret) console.warn('No erp-session-secret.txt yet: run scripts/practice-erp-start.mjs seed first, or /api/pos2/menu will fail.');
 const env = buildPracticeEnv(process.env, databaseUrl, {
   POS_EMULATOR_MODE: '1', POS_EMULATOR_HOST: '127.0.0.1',
   POS_EMULATOR_API_PORT: ports.pos, POS_EMULATOR_AUTH_PORT: ports.auth, POS_EMULATOR_FIRESTORE_PORT: ports.firestore, POS_EMULATOR_STORAGE_PORT: ports.storage,
   // Server side (firebase-admin) talks to the same local emulators.
   FIRESTORE_EMULATOR_HOST: `127.0.0.1:${ports.firestore}`, FIREBASE_AUTH_EMULATOR_HOST: `127.0.0.1:${ports.auth}`, GCLOUD_PROJECT: 'demo-shareat-pos2',
   POS_FIREBASE_SA_KEY_FILE: keyFile, POS_ORG_ID: orgId,
+  NODE_OPTIONS: '--no-experimental-strip-types', // Node 24 loads tailwind.config.ts as ESM and its require() breaks
+  ...(sessionSecret ? { SESSION_SECRET: sessionSecret } : {}),
+  POS_MENU_SOURCE: 'erp', // T-508: the practice copy reads its menu from the practice ERP (production default stays firestore)
 });
 delete env.NEXT_PUBLIC_API_BASE; delete env.NEXT_PUBLIC_POS2_API_BASE; delete env.POS_LOBBY_JOIN_ORIGIN;
 

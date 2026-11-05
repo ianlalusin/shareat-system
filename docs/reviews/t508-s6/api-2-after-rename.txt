@@ -1,0 +1,16 @@
+HTTP/1.1 200 OK
+{
+ "contentHash": "0dd368734f8e",
+ "stations": [
+  "Charcoal Grill",
+  "Drinks"
+ ],
+ "items": [
+  "Classic Unlimited [package] -> Charcoal Grill",
+  "Iced Tea [a_la_carte] -> Drinks",
+  "Pork Belly Plate [a_la_carte] -> Charcoal Grill",
+  "Pork Belly Refill [refill] -> Charcoal Grill",
+  "Premium Unlimited [package] -> Charcoal Grill"
+ ],
+ "notOnPos": []
+}
