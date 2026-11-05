@@ -17,6 +17,30 @@ export async function inTx<T>(tx: Tx | undefined, orgId: string, run: (trx: Tx) 
   return tx ? run(tx) : withOrgPrincipal(orgId, run);
 }
 
+/** The SQLSTATE of a database error, looking through the ORM's wrapper (`cause`). */
+export function pgCode(err: unknown): string | undefined {
+  for (let e: unknown = err, i = 0; e && i < 4; i++, e = (e as { cause?: unknown }).cause) {
+    const code = (e as { code?: unknown }).code;
+    if (typeof code === 'string') return code;
+  }
+  return undefined;
+}
+
+/**
+ * `inTx` plus ONE retry of the whole transaction on a deadlock (40P01), T-510 (the 0233 guards order their locks, but two statements of one
+ * transaction can still meet another transaction crosswise). The aborted transaction belongs to the caller when one is handed in, so a retry
+ * is only possible, and only done, when this function owns the transaction. `run` must be safe to run twice (the first run rolled back).
+ */
+export async function inTxRetry<T>(tx: Tx | undefined, orgId: string, run: (trx: Tx) => Promise<T>): Promise<T> {
+  if (tx) return run(tx);
+  try {
+    return await withOrgPrincipal(orgId, run);
+  } catch (e) {
+    if (pgCode(e) !== '40P01') throw e;
+    return withOrgPrincipal(orgId, run);
+  }
+}
+
 /**
  * Exactly one audit row per write, in the write's own transaction. `before`/`after` are the rows as stored.
  * T-402 R1/R14: `storeId` is the store the write belongs to (`null` for an org-level menu change); the entity,

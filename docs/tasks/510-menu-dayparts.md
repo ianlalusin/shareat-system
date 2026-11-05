@@ -20,6 +20,7 @@ packages are gated. Each of 5 packages exists twice, an LT and a DT variant, at 
 | Seafood Cruise | 378 | 398 |
 
 Davao and Malvar have the same two schedules. Bundles and the Valentine promos are not gated.
+**CORRECTED 5 Nov (live scan):** the windows differ by store. Lipa 08:00-17:00 / 17:00-08:00; Malvar 01:00-17:00 / 17:00-01:00; Davao 11:00-17:00 / 17:00-23:00. Package ids are the same in every store, so the pairs are the same everywhere; prices differ by store (see `settings-audit/T510-PAIRING-TABLE-FOR-IAN.md`).
 T-508 R9 already blocks any store from moving its menu to ERP (`POS_MENU_SOURCE=erp`) until this exists. **It does not
 affect 7 Dec:** Lipa launches POS v2 on its v1 Firestore menu, where the schedules keep working.
 
@@ -38,7 +39,7 @@ v1 (`POS/src/lib/schedule/isScheduleActiveNow.ts:12-43`; gates at `session-list-
   start_time, end_time, status `active|retired`, created_by, timestamps). `end_time < start_time` means overnight;
   `end_time = start_time` is refused. Times are in the store's own timezone (`stores.timezone`, `stores.ts:61`).
   Unique (store_id, lower(name)) where active. Same-org composite FKs like `menu.ts`. Classify in
-  `cutover/classification.ts` and `rls/registry.ts`. A "copy dayparts from another store" action (Lipa, Davao and Malvar are identical).
+  `cutover/classification.ts` and `rls/registry.ts`. A "copy dayparts from another store" action is a convenience only: the three stores' windows are NOT identical (corrected 5 Nov, see Why), so the cutover loads each store's own.
 - **R2 — A daypart belongs to an offer, not an item.** `menu_offers` gains `daypart_id` (nullable, composite FK on
   (store_id, daypart_id)). `null` = all day. Existing rows stay null, so nothing changes until a daypart is chosen. The
   slot unique key becomes (store_id, variant_id, channel, daypart_id NULLS NOT DISTINCT, effective_from). Offers stay
@@ -61,7 +62,7 @@ v1 (`POS/src/lib/schedule/isScheduleActiveNow.ts:12-43`; gates at `session-list-
   if T-508 has merged; otherwise it extends V2 before release (no production reader yet, so no shim).
 - **R7 — Daypart is about price, the business day is about reporting.** Dinner ends 08:00, the business day starts 05:00
   (ruled C-009). A 06:00 sale is a dinner-price sale and belongs to the next business day. No conflict, and a test pins it.
-- **R8 — Who may edit.** Dayparts: `manage_store_settings` (T-508 R10). Offers keep the capability that edits prices today:
+- **R8 — Who may edit.** Dayparts (windows): `manage_store_settings` (T-508 R10). **The pairing structure (which offer belongs to which daypart or all-day: creating a pairing, re-linking, switching to all-day, withdrawing a slot of a dayparted variant) is super admin only: new capability `pair_menu_dayparts` (org, super_admin ✅, admin/manager/staff ✗; Ian, 5 Nov).** A plain price change on an existing slot stays `set_menu_price` (managers, own store; rows 316 and 428). Offers keep the capability that edits prices today:
   `set_menu_price` (store scope; checked at `domain/menu/pricing.ts:138,218,243,272,299`; the `/menu` route needs `view_menu`). Every ✅ has a test proving the ✗ fires (cashier, and a manager of another store).
 - **R9 — Screens.** Store page `admin/stores/[id]` gains **Dayparts** (list, add, rename, edit days and times, retire, copy
   from another store). The offer form on `/menu/prices` gains **When**: All day, or one of the store's dayparts. Plain labels,
@@ -73,6 +74,14 @@ v1 (`POS/src/lib/schedule/isScheduleActiveNow.ts:12-43`; gates at `session-list-
 - **R11 — Website menu.** The Website bakes the schedules into its own menu (discovery 11:97) and reads v1 Firestore. Out of
   scope here, listed so it is not forgotten when the Website moves.
 - **R12 — Audit.** Create, edit and retire of a daypart write `audit_log` rows. Money offers already do.
+
+## DECIDED (Ian, 5 Nov, answers to the pairing table; S5 loads from these)
+1. The 5 pairs are right (Pork and Chicken, Pork and Beef, Chicken and Beef, Triple Feast, Seafood Cruise; v1 `DT_Pork and Beef` is the typo of `DT-Pork and Beef`). **A super admin must be able to modify the pairing afterwards in the ERP:** re-link an offer to a different daypart or to all-day, and edit a package's lunch and dinner prices (S2 domain + S3 screens; capability `pair_menu_dayparts`, R8).
+2. (a) Where lunch = dinner, ONE all-day offer: Pork and Chicken at Lipa and Malvar, and all 5 pairs at Davao.
+3. (a) Davao "Pork Premium" (258): one package in the lunch window only (11:00-17:00), no dinner offer.
+4. The 4 disabled packages (Valentine Promo and Valentine Promo 2 at Lipa and Malvar; Davao "Beef" and "Pork Regular") are NOT loaded.
+5. Who edits a store's lunch and dinner hours: admins and the store's own managers (`manage_store_settings`, "a"). Only the pairing structure is super admin.
+6. Per-store windows as in Why. Bundles (Barkada, Squad, VIP, VIP 2, VIP PARTY) have no window in v1 and load all-day.
 
 ## DECIDED (Ian, 3 Nov): one package, two daypart offers
 Pork and Chicken (298 at lunch and dinner) becomes one all-day offer. The LT/DT pairing table comes to Ian to sign before the load (S5). Davao also has an unpaired gated package, "Pork Premium", which the table must place.

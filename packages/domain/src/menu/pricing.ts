@@ -13,8 +13,9 @@ import { menuRepo, type Tx } from '@shareat/db';
 import { MENU_CHANNELS, MENU_DEPLETION_MODES, MENU_PRICING_MODES, type MenuChannel, type MenuDepletionMode, type MenuPricingMode } from '@shareat/db/schema';
 import type { Decimal } from '@shareat/core/money';
 import { gone, refuse } from '../shared/refusal';
+import { daypartGuardRefusal, requireNoSlotConflict, requireOfferDaypart, requirePairingAuthority } from './dayparts';
 import { assertNoPlannedPullAtLinkedSwitchedStores } from '../pos/depletion-source';
-import { audit, inTx, parseMarkupPercent, requireUsableRuleTarget, requireHistorySlot, parseMenuAmount, parseMenuQuantity, requireNotBackdated, requireScheduled } from './shared';
+import { audit, inTx, inTxRetry, parseMarkupPercent, requireUsableRuleTarget, requireHistorySlot, parseMenuAmount, parseMenuQuantity, requireNotBackdated, requireScheduled } from './shared';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { MENU_DEPLETION_RULES } from '../field-rules/menu';
 
@@ -129,12 +130,15 @@ export interface SetMenuOfferInput {
   bundleHeads?: number;
   /** Text, at most two decimals: the price per guest beyond `bundleHeads`. */
   extraHeadAmount?: string;
+  /** T-510: tie the offer to one of the store's active dayparts; omitted or null = all day (exactly as before). */
+  daypartId?: string | null;
   effectiveFrom?: Date;
 }
 
 /** Appends a LIVE offer (the price from `effectiveFrom`). Needs a depletion rule in force for the variant (database rule R6). */
 export async function setMenuOffer(actor: Actor, input: SetMenuOfferInput, tx?: Tx): Promise<{ id: string }> {
-  return inTx(tx, actor.orgId, async (trx) => {
+  // A daypart can meet a retire or window edit crosswise (40P01): retry the whole transaction once (only when this call owns it).
+  return (input.daypartId ? inTxRetry : inTx)(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'set_menu_price', { storeId: input.storeId });
     const channel = requireChannel(input.channel, 'setMenuOffer');
     const pricingMode = input.pricingMode ?? 'fixed';
@@ -187,22 +191,37 @@ export async function setMenuOffer(actor: Actor, input: SetMenuOfferInput, tx?: 
     if (item?.itemType === 'refill' && (amount !== null || isRule || hasHeads)) {
       throw refuse('setMenuOffer: a refill carries no price or price rule.', 'A refill is a free serving a package entitles. It has no price, so it cannot take one.');
     }
-    await requireHistorySlot(trx, input.variantId, { kind: 'offer', storeId: input.storeId, variantId: input.variantId, channel }, input.effectiveFrom, 'setMenuOffer');
-    const row = await menuRepo.insertOffer(trx, {
-      orgId: actor.orgId,
-      storeId: input.storeId,
-      variantId: input.variantId,
-      channel,
-      effectiveFrom: input.effectiveFrom,
-      amount,
-      bundleHeads: hasHeads ? (input.bundleHeads as number) : null,
-      extraHeadAmount: extra,
-      withdrawn: false,
-      pricingMode,
-      markupPercent,
-      fixedMarkupAmount,
-      createdBy: actor.personId,
-    });
+    await requireOfferDaypart(actor, trx, input.storeId, input.daypartId, 'setMenuOffer', true);
+    await requirePairingAuthority(actor, trx, { storeId: input.storeId, variantId: input.variantId, channel, daypartId: input.daypartId ?? null }, 'set');
+    await requireHistorySlot(
+      trx,
+      input.variantId,
+      { kind: 'offer', storeId: input.storeId, variantId: input.variantId, channel, daypartId: input.daypartId ?? null },
+      input.effectiveFrom,
+      'setMenuOffer',
+    );
+    await requireNoSlotConflict(trx, { storeId: input.storeId, variantId: input.variantId, channel, daypartId: input.daypartId ?? null }, input.effectiveFrom, 'setMenuOffer');
+    let row: Awaited<ReturnType<typeof menuRepo.insertOffer>>;
+    try {
+      row = await menuRepo.insertOffer(trx, {
+        orgId: actor.orgId,
+        storeId: input.storeId,
+        variantId: input.variantId,
+        channel,
+        daypartId: input.daypartId ?? null,
+        effectiveFrom: input.effectiveFrom,
+        amount,
+        bundleHeads: hasHeads ? (input.bundleHeads as number) : null,
+        extraHeadAmount: extra,
+        withdrawn: false,
+        pricingMode,
+        markupPercent,
+        fixedMarkupAmount,
+        createdBy: actor.personId,
+      });
+    } catch (err) {
+      throw daypartGuardRefusal(err) ?? err;
+    }
     await audit(trx, actor, 'menu_offer_set', input.storeId, row.id, null, row);
     return { id: row.id };
   });
@@ -211,20 +230,29 @@ export async function setMenuOffer(actor: Actor, input: SetMenuOfferInput, tx?: 
 /** Appends a withdrawal: from `effectiveFrom` the variant is not sold at that store on that channel. */
 export async function withdrawMenuOffer(
   actor: Actor,
-  input: { storeId: string; variantId: string; channel: MenuChannel; effectiveFrom?: Date },
+  input: { storeId: string; variantId: string; channel: MenuChannel; daypartId?: string | null; effectiveFrom?: Date },
   tx?: Tx,
 ): Promise<{ id: string }> {
-  return inTx(tx, actor.orgId, async (trx) => {
+  return (input.daypartId ? inTxRetry : inTx)(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'set_menu_price', { storeId: input.storeId });
     const channel = requireChannel(input.channel, 'withdrawMenuOffer');
     await requireNotBackdated(trx, input.effectiveFrom, 'withdrawMenuOffer', 'withdrawals');
     await requireVariant(trx, actor, input.variantId, 'withdrawMenuOffer');
-    await requireHistorySlot(trx, input.variantId, { kind: 'offer', storeId: input.storeId, variantId: input.variantId, channel }, input.effectiveFrom, 'withdrawMenuOffer');
+    await requireOfferDaypart(actor, trx, input.storeId, input.daypartId, 'withdrawMenuOffer', false);
+    await requirePairingAuthority(actor, trx, { storeId: input.storeId, variantId: input.variantId, channel, daypartId: input.daypartId ?? null }, 'withdraw');
+    await requireHistorySlot(
+      trx,
+      input.variantId,
+      { kind: 'offer', storeId: input.storeId, variantId: input.variantId, channel, daypartId: input.daypartId ?? null },
+      input.effectiveFrom,
+      'withdrawMenuOffer',
+    );
     const row = await menuRepo.insertOffer(trx, {
       orgId: actor.orgId,
       storeId: input.storeId,
       variantId: input.variantId,
       channel,
+      daypartId: input.daypartId ?? null,
       effectiveFrom: input.effectiveFrom,
       amount: null,
       bundleHeads: null,
@@ -244,7 +272,11 @@ export async function cancelScheduledOffer(actor: Actor, input: { id: string; st
     const row = await menuRepo.getOffer(trx, actor.orgId, input.id);
     if (!row || row.storeId !== input.storeId) throw gone(`cancelScheduledOffer: offer ${input.id} does not exist at this store.`, 'scheduled price');
     await requireScheduled(trx, row.effectiveFrom, 'cancelScheduledOffer', 'price');
-    await menuRepo.deleteOffer(trx, row.id);
+    try {
+      await menuRepo.deleteOffer(trx, row.id);
+    } catch (err) {
+      throw daypartGuardRefusal(err) ?? err;
+    }
     await audit(trx, actor, 'menu_offer_cancel', input.storeId, row.id, row, null);
     return { id: row.id };
   });
