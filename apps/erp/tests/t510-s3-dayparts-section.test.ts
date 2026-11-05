@@ -60,7 +60,7 @@ describe('DaypartsSection', () => {
     expect(html).toContain('>Add hours<');
     expect(html.match(/name="daypartId"/g)?.length).toBe(4); // edit + retire for each of the two active rows
     expect(html).toContain('name="storeId" value="s1"');
-    expect(html.match(/aria-label="Retire (Lunch|Dinner)"/g)?.length).toBe(2);
+    expect(html.match(/>Retire hours</g)?.length).toBe(2); // retiring is for good: a retype-the-name button, one per active row
     expect(html.match(/name="days"/g)?.length).toBe(7 * 3); // two edit forms and the add form, seven day boxes each
   });
 

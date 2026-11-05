@@ -10,7 +10,7 @@
  * second caller cannot skip it — a rule in one route file is a rule the next route file misses,
  * which is how DEF-180 happened.
  */
-import { can } from '@shareat/auth';
+import { authorize, can } from '@shareat/auth';
 import {
   assertFieldRules,
   CANONICAL_POSITION_DEFAULTS,
@@ -42,7 +42,8 @@ import { loadDestructiveTarget, retypeRefusalError } from '@/lib/destructive';
 import { retypeMatches } from '@/lib/retype';
 import { STORE_DETAILS, STORE_OPENING_DATE, STORE_STOCK_MODEL } from './typed-forms';
 // T-346 Amendment R3.1 — the one date-validity check, never re-derived per call site.
-import { storesRepo } from '@shareat/db';
+import { daypartsRepo, refuse, storesRepo } from '@shareat/db';
+import { isUuid } from '../../menu/lib';
 
 function invalidDateMessage(raw: string): string {
   return `"${raw}" is not a valid date. Use the date picker, or type it as YYYY-MM-DD.`;
@@ -296,30 +297,50 @@ export async function reactivateStoreAction(fd: FormData): Promise<void> {
 /** Ticked day boxes as numbers (0 = Sunday). A value that is not a whole number goes through as NaN so the domain's own sentence refuses it. */
 const daysOf = (fd: FormData): number[] => fd.getAll('days').map((v) => (typeof v === 'string' && /^\d$/.test(v) ? Number(v) : Number.NaN));
 
-/** Where the person came from: the store page (default) or /menu/hours (a store manager's screen), which keeps the store in the flash nav. */
+/**
+ * Where the person came from: the store page (default) or /menu/hours (a store manager's screen), which keeps the store in the flash nav.
+ * A store id that is not a UUID (a forged or broken form) goes back with a sentence and no store, never a thrown error.
+ */
 const back = (fd: FormData, storeId: string): { path: string; nav: { store?: string } } =>
-  str(fd, 'from') === 'hours' ? { path: '/menu/hours', nav: { store: storeId } } : { path: `/admin/stores/${storeId}`, nav: {} };
+  !isUuid(storeId)
+    ? { path: str(fd, 'from') === 'hours' ? '/menu/hours' : '/admin/stores', nav: {} }
+    : str(fd, 'from') === 'hours'
+      ? { path: '/menu/hours', nav: { store: storeId } }
+      : { path: `/admin/stores/${storeId}`, nav: {} };
+const NO_STORE = 'Choose a store.';
+const NO_HOURS = 'Choose which hours.';
 
 export async function createDaypartAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/admin/stores');
   const storeId = str(fd, 'storeId');
   const to = back(fd, storeId);
+  if (!isUuid(storeId)) return await redirectWithFlash(to.path, to.nav, { error: NO_STORE });
+  let canPair = false;
   try {
-    await withOrgPrincipal(actor.orgId, (tx) => createDaypart(actor, { storeId, name: str(fd, 'name'), days: daysOf(fd), start: str(fd, 'start'), end: str(fd, 'end') }, tx));
+    canPair = await withOrgPrincipal(actor.orgId, async (tx) => {
+      await createDaypart(actor, { storeId, name: str(fd, 'name'), days: daysOf(fd), start: str(fd, 'start'), end: str(fd, 'end') }, tx);
+      // Only someone who can pair prices to hours is told to do it (a manager cannot).
+      return can(tx, actor, 'pair_menu_dayparts', {});
+    });
   } catch (err) {
     return await redirectWithFlash(to.path, to.nav, { error: errorMessage(err) });
   }
-  return await redirectWithFlash(to.path, to.nav, { ok: 'Hours added. Now choose which prices follow them, under Menu prices.' });
+  return await redirectWithFlash(to.path, to.nav, {
+    ok: canPair ? 'Hours added. Now choose which prices follow them, under Menu prices.' : 'Hours added. A super admin chooses which prices follow them.',
+  });
 }
 
 export async function updateDaypartAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/admin/stores');
   const storeId = str(fd, 'storeId');
   const to = back(fd, storeId);
+  if (!isUuid(storeId)) return await redirectWithFlash(to.path, to.nav, { error: NO_STORE });
+  const daypartId = str(fd, 'daypartId');
+  if (!isUuid(daypartId)) return await redirectWithFlash(to.path, to.nav, { error: NO_HOURS });
   let wrote = false;
   try {
     ({ wrote } = await withOrgPrincipal(actor.orgId, (tx) =>
-      updateDaypart(actor, { id: str(fd, 'daypartId'), name: str(fd, 'name'), days: daysOf(fd), start: str(fd, 'start'), end: str(fd, 'end') }, tx),
+      updateDaypart(actor, { id: daypartId, name: str(fd, 'name'), days: daysOf(fd), start: str(fd, 'start'), end: str(fd, 'end') }, tx),
     ));
   } catch (err) {
     return await redirectWithFlash(to.path, to.nav, { error: errorMessage(err) });
@@ -327,12 +348,23 @@ export async function updateDaypartAction(fd: FormData): Promise<void> {
   return await redirectWithFlash(to.path, to.nav, { ok: wrote ? 'Hours saved.' : 'Nothing changed.' });
 }
 
+/** Retiring is for good (a retired daypart cannot be edited), so the person types its name first, as for a kitchen station. */
 export async function retireDaypartAction(fd: FormData): Promise<void> {
   const actor = await requireActor('/admin/stores');
   const storeId = str(fd, 'storeId');
   const to = back(fd, storeId);
+  if (!isUuid(storeId)) return await redirectWithFlash(to.path, to.nav, { error: NO_STORE });
+  const daypartId = str(fd, 'daypartId');
+  if (!isUuid(daypartId)) return await redirectWithFlash(to.path, to.nav, { error: NO_HOURS });
   try {
-    await withOrgPrincipal(actor.orgId, (tx) => retireDaypart(actor, { id: str(fd, 'daypartId') }, tx));
+    await withOrgPrincipal(actor.orgId, async (tx) => {
+      // The name to retype is the one the SERVER loads, never one from the form. Authorise at the daypart's own store before it is named.
+      const daypart = await daypartsRepo.getDaypart(tx, actor.orgId, daypartId);
+      if (!daypart) throw refuse(`retireDaypartAction: daypart ${daypartId} does not exist.`, 'Those hours do not exist any more.');
+      await authorize(tx, actor, 'manage_store_settings', { storeId: daypart.storeId });
+      if (!retypeMatches(str(fd, 'confirmName'), daypart.name)) throw retypeRefusalError(daypart.name);
+      await retireDaypart(actor, { id: daypartId }, tx);
+    });
   } catch (err) {
     return await redirectWithFlash(to.path, to.nav, { error: errorMessage(err) });
   }

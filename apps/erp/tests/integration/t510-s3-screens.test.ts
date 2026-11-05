@@ -61,11 +61,14 @@ describe('a store with no dayparts looks exactly as before', () => {
     expect(out.flash.ok).toBe('Price saved.');
     for (const who of [c.manager, c.superAdmin]) {
       const html = await render(PRICES_PAGE, who, { search: { store: c.storeB } });
-      const t = plain(html);
-      expect(t).toContain('85.50');
+      expect(plain(html)).toContain('85.50');
       expect(html).not.toContain('name="daypartId"');
-      expect(t).not.toMatch(/When|Lunch|Dinner|Not offered now|Only a super admin/);
-      expect(html).toContain('Withdraw');
+      expect(html).not.toMatch(/>When</i);
+      expect(html).toContain('>Withdraw<');
+      // The ONE allowed difference from before T-510: a person who may manage store settings gets a link to the hours page.
+      expect(html).toContain(`/menu/hours?store=${c.storeB}`);
+      const rest = plain(html).replace('Change the lunch and dinner hours', '');
+      expect(rest).not.toMatch(/lunch|dinner|not offered now|super admin|hours/i);
     }
   });
 });
@@ -171,14 +174,17 @@ describe('/admin/stores/[id]: lunch and dinner hours', () => {
 
     const v = await pkg(c, 'Pork and Chicken');
     await asOrg(c.orgId, (tx) => setMenuOffer(c.superAdmin, { storeId: c.storeA, variantId: v, channel: 'store', amount: '298.00', daypartId: d!.id }, tx));
-    const blocked = await run(STORES, 'retireDaypartAction', c.admin, f({ daypartId: d!.id }));
+    const blocked = await run(STORES, 'retireDaypartAction', c.admin, f({ daypartId: d!.id, confirmName: 'Late dinner' }));
     expectSentenceError(blocked.flash.error, 'retire with a live price');
     expect(blocked.flash.error).toMatch(/still has 1 live price/);
 
     const [e] = await sql<{ id: string }[]>`
       insert into menu_dayparts (org_id, store_id, name, days, start_time, end_time, created_by)
       values (${c.orgId}, ${c.storeA}, 'Spare', '{1}', '01:00', '02:00', ${c.admin.personId}) returning id`;
-    const ok = await run(STORES, 'retireDaypartAction', c.admin, f({ daypartId: e!.id }));
+    const wrong = await run(STORES, 'retireDaypartAction', c.admin, f({ daypartId: e!.id, confirmName: 'Spar' }));
+    expectSentenceError(wrong.flash.error, 'retire with the wrong name');
+    expect((await sql<{ status: string }[]>`select status from menu_dayparts where id = ${e!.id}`)[0]!.status, 'a wrong name retires nothing').toBe('active');
+    const ok = await run(STORES, 'retireDaypartAction', c.admin, f({ daypartId: e!.id, confirmName: 'spare ' }));
     expect(ok.flash.ok).toBe('Hours retired.');
     expect(plain(await render(STORE_PAGE, c.admin, { params: { id: c.storeA } }))).toContain('Retired hours (1)');
   });
@@ -237,5 +243,87 @@ describe("/menu/hours: a store manager's door to the hours", () => {
     expect(back.flash.error).toBeUndefined();
     expect(back.path).toBe('/menu/hours');
     expect(back.nav.get('store')).toBe(c.storeA);
+  });
+});
+
+describe('T-510 S3 audit fixes', () => {
+  it('an online rule on a Lunch/Dinner slot follows the store all-day price live now, in the open window and the closed one; with no store price the closed slot shows no line', async () => {
+    const w = await world('online');
+    const v = await pkg(w.c, 'Pork and Beef');
+    await price(w.c, v, null, '300.00'); // store, all day
+    for (const d of [w.lunch, w.dinner]) {
+      await asOrg(w.c.orgId, (tx) => setMenuOffer(w.c.superAdmin, { storeId: w.c.storeA, variantId: v, channel: 'online', pricingMode: 'percent_markup', markupPercent: '10', daypartId: d }, tx));
+    }
+    const t = plain(await render(PRICES_PAGE, w.c.superAdmin, { search: { store: w.c.storeA } }));
+    expect(t).not.toContain('no counter price');
+    expect((t.match(/Online price: 330\.00/g) ?? []).length, 'both online slots resolve to store price + 10 percent').toBe(2);
+
+    const w2 = await world('online-nostore');
+    const v2 = await pkg(w2.c, 'Triple Feast');
+    for (const d of [w2.lunch, w2.dinner]) {
+      await asOrg(w2.c.orgId, (tx) => setMenuOffer(w2.c.superAdmin, { storeId: w2.c.storeA, variantId: v2, channel: 'online', pricingMode: 'percent_markup', markupPercent: '10', daypartId: d }, tx));
+    }
+    const t2 = plain(await render(PRICES_PAGE, w2.c.superAdmin, { search: { store: w2.c.storeA } }));
+    // the window open now has no store price to follow and says so; the closed one shows no resolved line rather than a wrong one
+    expect((t2.match(/no counter price/g) ?? []).length).toBe(1);
+  });
+
+  it('cross: a cashier, and a manager of A using the daypart id of store B, are refused by updateDaypartAction and retireDaypartAction; nothing changes', async () => {
+    const c = await cast('s3-cross');
+    const b = (await asOrg(c.orgId, (tx) => createDaypart(c.admin, { storeId: c.storeB, name: 'Supper', days: ALL_DAYS, start: '18:00', end: '23:00' }, tx))).id;
+    const unchanged = async () => (await sql<{ name: string; status: string }[]>`select name, status from menu_dayparts where id = ${b}`)[0]!;
+    for (const [who, label] of [[c.staff, 'cashier'], [c.managerA, 'manager of A']] as const) {
+      const upd = await run(STORES, 'updateDaypartAction', who, fd({ storeId: c.storeB, daypartId: b, name: 'Hacked', days: ['1'], start: '01:00', end: '02:00' }));
+      expectSentenceError(upd.flash.error, `${label} updating`);
+      const ret = await run(STORES, 'retireDaypartAction', who, fd({ storeId: c.storeB, daypartId: b, confirmName: 'Supper' }));
+      expectSentenceError(ret.flash.error, `${label} retiring`);
+      expect(await unchanged(), `${label}: nothing changed`).toEqual({ name: 'Supper', status: 'active' });
+    }
+    // the forged form that names A as the store but B's daypart: still refused at the daypart's own store
+    const forged = await run(STORES, 'retireDaypartAction', c.managerA, fd({ storeId: c.storeA, daypartId: b, confirmName: 'Supper' }));
+    expectSentenceError(forged.flash.error, 'forged store');
+    expect(await unchanged()).toEqual({ name: 'Supper', status: 'active' });
+  });
+
+  it('only someone who can pair prices is told to choose which prices follow new hours; a bad store id is a sentence, not a crash', async () => {
+    const c = await cast('s3-flash');
+    const mk = (who: typeof c.managerA, name: string) => run(STORES, 'createDaypartAction', who, fd({ storeId: c.storeA, name, days: ['1'], start: '08:00', end: '17:00' }));
+    const m = await mk(c.managerA, 'Lunch');
+    expect(m.flash.ok).toBeTruthy();
+    expect(m.flash.ok).not.toMatch(/choose which prices/i);
+    const sa = await mk(c.superAdmin, 'Dinner');
+    expect(sa.flash.ok).toMatch(/choose which prices follow them/i);
+    for (const name of ['createDaypartAction', 'updateDaypartAction', 'retireDaypartAction']) {
+      const out = await run(STORES, name, c.admin, fd({ storeId: 'not-a-uuid', daypartId: 'x', name: 'X', start: '01:00', end: '02:00' }));
+      expect(out.flash.error, name).toBe('Choose a store.');
+    }
+    const noHours = await run(STORES, 'retireDaypartAction', c.admin, fd({ storeId: c.storeA, daypartId: 'x' }));
+    expect(noHours.flash.error).toBe('Choose which hours.');
+  });
+
+  it('no Add price form where the domain always refuses: all windows priced gives a note; no active hours gives a sentence and an all-day Set price', async () => {
+    const w = await world('deadend');
+    const both = await pkg(w.c, 'Pork and Beef');
+    await price(w.c, both, w.lunch, '338.00');
+    await price(w.c, both, w.dinner, '358.00');
+    const sa = await render(PRICES_PAGE, w.c.superAdmin, { search: { store: w.c.storeA } });
+    expect(plain(sa)).toContain('Every set of hours already has a price');
+    expect(sa).not.toContain('aria-label="Add price for another time"');
+    const one = await pkg(w.c, 'Dinner Special');
+    await price(w.c, one, w.dinner, '258.00');
+    expect(await render(PRICES_PAGE, w.c.superAdmin, { search: { store: w.c.storeA } })).toContain('aria-label="Add price for another time"');
+
+    const c = await cast('s3-nohours');
+    const l = (await asOrg(c.orgId, (tx) => createDaypart(c.admin, { storeId: c.storeA, name: 'Lunch', days: ALL_DAYS, ...LUNCH }, tx))).id;
+    const v = await pkg(c, 'Seafood Cruise');
+    await price(c, v, l, '378.00');
+    await run(PRICES, 'withdrawPriceAction', c.superAdmin, fd({ storeId: c.storeA, variantId: v, channel: 'store', daypartId: l }));
+    await run(STORES, 'retireDaypartAction', c.admin, fd({ storeId: c.storeA, daypartId: l, confirmName: 'Lunch' }));
+    for (const who of [c.superAdmin, c.managerA]) {
+      const html = await render(PRICES_PAGE, who, { search: { store: c.storeA } });
+      expect(plain(html)).toContain('no active lunch and dinner hours, so only an all-day price can be set here');
+      expect(html).toContain('>Set price<');
+      expect(html).not.toContain('aria-label="Add price for another time"');
+    }
   });
 });

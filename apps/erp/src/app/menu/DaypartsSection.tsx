@@ -1,4 +1,4 @@
-import { Badge, Button, Checkbox, Field, FormGrid, FormModal, Input } from '@/components/ui';
+import { Badge, Button, Checkbox, ConfirmDestructive, Field, FormGrid, FormModal, Input } from '@/components/ui';
 import { daysText, WEEK_ORDER, dayShort, windowText } from './daypart-text';
 import type { DaypartView } from './lib';
 import { createDaypartAction, retireDaypartAction, updateDaypartAction } from '../admin/stores/actions';
@@ -50,7 +50,7 @@ export function DaypartsSection({ storeId, dayparts, canManage, from }: { storeI
       <h2 className="text-sm font-medium">Lunch and dinner hours</h2>
       <p className="text-xs text-neutral-500">
         Hours a price can follow, like Lunch from 08:00 to 17:00. A price tied to Lunch is only on sale in those hours; the cashier sees when it opens next.
-        Choose which prices follow which hours under Menu prices.
+        A super admin chooses which prices follow which hours, under Menu prices.
       </p>
       {active.length === 0 ? (
         <p className={`text-sm ${MUTED}`}>No hours yet. Every price here applies all day.</p>
@@ -80,9 +80,12 @@ export function DaypartsSection({ storeId, dayparts, canManage, from }: { storeI
                     <input type="hidden" name="storeId" value={storeId} />
                     {back}
                     <input type="hidden" name="daypartId" value={d.id} />
-                    <Button type="submit" variant="ghost" aria-label={`Retire ${d.name}`}>
-                      Retire
-                    </Button>
+                    <ConfirmDestructive
+                      tier="retype"
+                      label="Retire hours"
+                      consequence="These hours stop being used and cannot be edited again. Nothing is deleted. It is refused while a price still follows them."
+                      expectedName={d.name}
+                    />
                   </form>
                 </div>
               )}

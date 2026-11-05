@@ -59,6 +59,17 @@ function figureText(r: PriceShape): string {
   return r.amount;
 }
 
+/** The price fields an online rule follows: the store row live now. */
+const basisOf = (r: OfferInForce): NonNullable<OfferInForce['basis']> => ({
+  withdrawn: r.withdrawn,
+  pricingMode: r.pricingMode,
+  amount: r.amount,
+  bundleHeads: r.bundleHeads,
+  extraHeadAmount: r.extraHeadAmount,
+  markupPercent: r.markupPercent,
+  fixedMarkupAmount: r.fixedMarkupAmount,
+});
+
 function resolvedText(row: OfferInForce): string | null {
   if (row.pricingMode === 'fixed' || row.withdrawn) return null;
   const r = resolveOfferPrice(row);
@@ -322,9 +333,16 @@ function Panel({
     .filter((r) => r.variantId === variantId && r.channel === channel && r.daypartId !== null)
     .sort((a, b) => (dayOf.get(a.daypartId as string)?.i ?? 0) - (dayOf.get(b.daypartId as string)?.i ?? 0));
   const dayparted = slots.length > 0;
+  const storeLive = channel === 'online' ? data.inForce.find((r) => r.variantId === variantId && r.channel === 'store') : undefined;
   const fault = data.faults.find((f) => f.variantId === variantId && f.channel === channel);
   const notNow = data.notOfferedNow.find((n) => n.variantId === variantId && n.channel === channel);
   const activeDayparts = data.dayparts.filter((d) => d.status === 'active');
+  // Windows with no live price yet: the only ones an "Add price" can still fill (a window that has one is changed, not added).
+  const freeWindows = activeDayparts.filter((d) => !slots.some((x) => x.daypartId === d.id && !x.withdrawn));
+  // Slots exist but every one belongs to retired hours: only an all-day price can be set (anyone who may price can).
+  const noActiveHours = dayparted && activeDayparts.length === 0;
+  const canAdd = canPrice && (!dayparted ? true : noActiveHours || (canPair && freeWindows.length > 0));
+  const whenChoices = canPair && activeDayparts.length > 0 ? (dayparted ? freeWindows : activeDayparts) : [];
   const scheduledLabel = (s: ScheduledOffer): string => (s.daypartId === null ? '' : `${dayOf.get(s.daypartId)?.d.name ?? 'Hours'}: `);
   const hidden = (
     <>
@@ -368,7 +386,10 @@ function Panel({
         <ul className="divide-y divide-surface-border">
           {slots.map((slot) => {
             const info = dayOf.get(slot.daypartId as string)?.d;
-            const slotResolved = resolvedText(slot);
+            // An online rule follows the STORE price live now, not the raw per-window join: the on-now slot uses the domain-resolved row, a
+            // closed window re-links to the store row live now (resolveStoreOffers' rule), and with no store row there is no line, never a wrong one.
+            const slotResolved =
+              channel !== 'online' ? null : row?.id === slot.id ? resolvedText(row) : storeLive ? resolvedText({ ...slot, basis: basisOf(storeLive) }) : null;
             return (
               <li key={slot.id} className="space-y-2 py-2 first:pt-0 last:pb-0">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -382,7 +403,7 @@ function Panel({
                   <span className={`tabular-nums ${slot.withdrawn ? 'text-muted' : 'font-medium'}`}>{figureText(slot)}</span>
                 </div>
                 {slotResolved && <p className="text-sm">{slotResolved}</p>}
-                {canPrice && !slot.withdrawn && (
+                {canPrice && !slot.withdrawn && info?.status !== 'retired' && (
                   <div className="flex flex-wrap items-center gap-2">
                     <PriceForm
                       channel={channel}
@@ -437,22 +458,28 @@ function Panel({
         </div>
       ))}
 
-      {canPrice && ((!dayparted || canPair) || (!dayparted && row && !row.withdrawn)) && (
+      {canPrice && noActiveHours && (
+        <p className="text-sm text-muted">This store has no active lunch and dinner hours, so only an all-day price can be set here. Add hours first to price by time of day.</p>
+      )}
+      {canPrice && canPair && dayparted && !noActiveHours && freeWindows.length === 0 && (
+        <p className="text-sm text-muted">Every set of hours already has a price. Change a price above, or withdraw one first.</p>
+      )}
+      {canPrice && (canAdd || (!dayparted && row && !row.withdrawn)) && (
         <div className="flex flex-wrap items-center gap-2">
-          {canPrice && (!dayparted || canPair) && (
+          {canAdd && (
             <PriceForm
               channel={channel}
               itemType={itemType}
               hidden={hidden}
-              trigger={dayparted ? 'Add price' : 'Set price'}
-              {...(dayparted ? { triggerLabel: 'Add price for another time' } : {})}
-              title={dayparted ? `Add a price — ${CHANNEL_LABEL[channel]}` : `Set price — ${CHANNEL_LABEL[channel]}`}
-              {...(canPair && activeDayparts.length > 0 ? { whenChoices: activeDayparts } : {})}
+              trigger={dayparted && !noActiveHours ? 'Add price' : 'Set price'}
+              {...(dayparted && !noActiveHours ? { triggerLabel: 'Add price for another time' } : {})}
+              title={dayparted && !noActiveHours ? `Add a price — ${CHANNEL_LABEL[channel]}` : `Set price — ${CHANNEL_LABEL[channel]}`}
+              {...(whenChoices.length > 0 ? { whenChoices } : {})}
               // On a variant that already has time-of-day prices, "all day" would be refused: start on the first window with no price yet.
-              {...(dayparted ? { defaultWhen: activeDayparts.find((d) => !slots.some((x) => x.daypartId === d.id && !x.withdrawn))?.id ?? '' } : {})}
+              {...(dayparted ? { defaultWhen: freeWindows[0]?.id ?? '' } : {})}
             />
           )}
-          {canPrice && !dayparted && row && !row.withdrawn && (
+          {!dayparted && row && !row.withdrawn && (
             <form action={withdrawPriceAction}>
               {hidden}
               <Button type="submit" variant="ghost">

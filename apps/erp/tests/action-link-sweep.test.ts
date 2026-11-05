@@ -506,7 +506,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1495 -> 1506, T-510 S3, 5 Nov 2026 (NEEDS BOSS APPROVAL): +11 controls, all passing the size rule (FAIL/UNRESOLVED baselines unchanged), re-measured by runCensus() (not itemised):
     // the store page's lunch-and-dinner hours section and /menu/prices' per-slot controls and When select.
     // 1506 -> 1510, T-510 S3 follow-up, 5 Nov 2026 (BOSS approved /menu/hours): +4 compliant controls, re-measured by runCensus(): the /menu/hours page and its links.
-    expect(results.length).toBe(1510);
+    // 1510 -> 1509, T-510 S3 audit fixes (NEEDS BOSS APPROVAL): the hours Retire button became a ConfirmDestructive (not a census candidate), net -1, re-measured by runCensus().
+    expect(results.length).toBe(1509);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

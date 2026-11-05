@@ -103,6 +103,7 @@ const rows: Row[] = [
   { file: 'app/admin/users/[personId]/page.tsx', tier: 'R', label: 'Revoke grant', danger: true, visible: 'Revoke grant', action: 'setCapabilityGrantAction', actionFile: 'app/admin/users/actions.ts', mutation: 'revokeGrantById' },
   { file: 'app/admin/users/[personId]/page.tsx', tier: 'R', label: 'Unlink credential', danger: true, visible: 'Unlink sign-in', action: 'unlinkCredentialAction', actionFile: 'app/admin/users/actions.ts', mutation: 'unlinkCredential' },
   { file: 'app/kitchen/KitchenSections.tsx', tier: 'R', label: 'Retire kitchen station', danger: true, visible: 'Retire station', action: 'retireKitchenStationAction', actionFile: 'app/admin/stores/kitchen-actions.ts', mutation: 'retireKitchenStation' }, // T-508 S2b
+  { file: 'app/menu/DaypartsSection.tsx', tier: 'R', label: 'Retire lunch or dinner hours', danger: true, visible: 'Retire hours', action: 'retireDaypartAction', actionFile: 'app/admin/stores/actions.ts', mutation: 'retireDaypart' }, // T-510 S3 (retiring is for good)
   { file: 'app/admin/pos-tablets/page.tsx', tier: 'R', label: 'Revoke tablet link', danger: true, visible: 'Revoke tablet link', action: 'revokeTabletAction', actionFile: 'app/admin/pos-tablets/actions.ts', mutation: 'revokePosTerminalLink' }, // T-505
   { file: 'app/attendance/terminals/page.tsx', tier: 'R', label: 'Revoke terminal', danger: true, visible: 'Revoke terminal', action: 'revokeTerminalAction', actionFile: 'app/attendance/terminals/actions.ts', mutation: 'revokeTerminal' },
   { file: 'app/budgets/page.tsx', tier: 'R', label: 'Remove cap', danger: true, visible: 'Remove cap', action: 'removeBudgetAction', actionFile: 'app/budgets/actions.ts', mutation: 'removeExpenseBudget' },
@@ -218,11 +219,11 @@ const FORM_READ = /formData|\bfd\b|str\(|opt\(|requireId\(|\.get\(/;
 describe('the census arithmetic (green today: the literal map matches the spec + the audit-round conditionals)', () => {
   it('69 controls: P 33 (36 - the 3 T-418 draft deletes), R 19 (18 + T-464 Un-pair tablet), W 13 (10 + the 3 T-418 draft deletes), X 4; 64 are danger (2 conditional), in 50 files', () => {
     const by = (t: Tier) => rows.filter((r) => r.tier === t).length;
-    expect([by('P'), by('R'), by('W'), by('X')]).toEqual([34, 21, 13, 4]); // T-508 S2b: +1 R (Retire station); T-418: three draft deletes moved P -> W; T-464: +1 R; T-505: +1 R (Revoke tablet link)
-    expect(rows).toHaveLength(72); // T-505: +Revoke tablet link; T-464: +Un-pair tablet; T-193 S5: +Void statutory payment (P)
-    expect(rows.filter((r) => r.danger)).toHaveLength(67);
+    expect([by('P'), by('R'), by('W'), by('X')]).toEqual([34, 22, 13, 4]); // T-510 S3: +1 R (Retire hours, NEEDS BOSS APPROVAL 21 -> 22); T-508 S2b: +1 R (Retire station); T-418: three draft deletes moved P -> W; T-464: +1 R; T-505: +1 R (Revoke tablet link)
+    expect(rows).toHaveLength(73); // T-510 S3: +Retire hours (72 -> 73); T-505: +Revoke tablet link; T-464: +Un-pair tablet; T-193 S5: +Void statutory payment (P)
+    expect(rows.filter((r) => r.danger)).toHaveLength(68); // T-510 S3: 67 -> 68
     expect(rows.filter((r) => r.conditional)).toHaveLength(2);
-    expect(new Set(rows.filter((r) => r.danger).map((r) => r.file)).size).toBe(53);
+    expect(new Set(rows.filter((r) => r.danger).map((r) => r.file)).size).toBe(54); // T-510 S3: 53 -> 54 (menu/DaypartsSection.tsx)
   });
   it('every P / R row names its visible label (audit L8), and no two rows in one file share an action AND a label by accident', () => {
     for (const r of rows.filter((x) => x.tier === 'P' || x.tier === 'R')) {
@@ -304,7 +305,7 @@ describe('every file: ConfirmDestructive count by tier, and what is left bare (V
       const src = readFileSync(abs, 'utf8');
       total += count(src, DANGER) + confirmWindows(src).length;
     }
-    expect(total).toBe(72); // T-193 S5: +Void payment (statutory payments); T-505: +Revoke tablet link
+    expect(total).toBe(73); // T-510 S3: 72 -> 73 (Retire hours); T-193 S5: +Void payment (statutory payments); T-505: +Revoke tablet link
   });
 });
 
