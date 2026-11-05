@@ -60,9 +60,9 @@ describe('U1 — CAPABILITY_AREA is keyed on exactly the 112 capabilities; every
     // ⭐ 99 -> 100 (T-382 S1, A4): `unlink_store_from_pos` joins CAPABILITY_AREA.
     // ⭐ 100 -> 101 (T-385 S3): `verify_own_sales_day` joins CAPABILITY_AREA.
     // ⭐ T-511 S2a (2026-11-03): 120 -> 123 (+ upload_settlement_files in sales, edit_platform_store_code and edit_loan_repayment_amount in admin). RED until built.
-    expect(Object.keys(_control).length, 'positive control: unmutated form has all 123 keys').toBe(123);
-    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(122);
-    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(124);
+    expect(Object.keys(_control).length, 'positive control: unmutated form has all 124 keys').toBe(124); // T-510 S2: 123 -> 124 (pair_menu_dayparts, sales)
+    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(123); // T-510 S2: 122 -> 123 (re-measured: 124 keys minus the one removed)
+    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(125); // T-510 S2: 124 -> 125 (re-measured: 124 keys plus the bogus one)
   });
 });
 
@@ -85,6 +85,8 @@ const ORACLE: Readonly<Record<CapabilityArea, readonly string[]>> = {
     'approve_pos_correction',
     // T-401 S2: the seven menu capabilities sit in sales.
     'view_menu', 'add_menu_item', 'manage_menu', 'request_menu_item', 'set_menu_price', 'set_menu_depletion', 'switch_usage_source',
+    // T-510 S2 (Ian, 2026-11-05): tying a price to a daypart is super-admin only; it sits with the other menu capabilities.
+    'pair_menu_dayparts',
     // ⭐ T-511 S2a (2026-11-03): uploading a Grab / Foodpanda settlement statement sits in sales ("Sales & cash", where the store's channel takings live).
     'upload_settlement_files',
   ],
@@ -155,7 +157,7 @@ const ORACLE: Readonly<Record<CapabilityArea, readonly string[]>> = {
 };
 
 describe('U2 — the literal per-area table matches CAPABILITY_AREA exactly', () => {
-  it('every capability inverts to the oracle\'s area, and the counts match §1 (123 total)', () => {
+  it('every capability inverts to the oracle\'s area, and the counts match §1 (124 total)', () => {
     const inverted: Record<string, string[]> = {};
     for (const [cap, area] of Object.entries(CAPABILITY_AREA)) (inverted[area] ??= []).push(cap);
     const sortedInverted = Object.fromEntries(Object.entries(inverted).map(([k, v]) => [k, [...v].sort()]));
@@ -169,7 +171,7 @@ describe('U2 — the literal per-area table matches CAPABILITY_AREA exactly', ()
     // ⭐ 101 -> 108 (T-401 S2): the seven menu capabilities, area sales.
     // T-193 S3: `remit_statutory` joins staff. Merge of main + T-193: re-measured.
     // ⭐ T-511 S2a (2026-11-03): 120 -> 123.
-    expect(total).toBe(123);
+    expect(total).toBe(124); // T-510 S2: 123 -> 124 (pair_menu_dayparts in sales)
     // ⭐ 108 -> 109 (T-403): `manage_recipes` joins production.
   });
 

@@ -449,6 +449,59 @@ export async function insertOffer(tx: Tx, input: InsertOfferInput): Promise<Menu
   return row!;
 }
 
+export interface OfferStructure {
+  /** The exact slot (store, variant, channel, daypart; null = all day) is live: live now, or a non-withdrawn row is scheduled later. */
+  slotLive: boolean;
+  /** Some dayparted slot of the variant and channel is live (same meaning). */
+  daypartedLive: boolean;
+  /** Some row of the variant and channel names a daypart, live or not. */
+  hasDayparted: boolean;
+}
+
+/** T-510 S2: the facts `pair_menu_dayparts` turns on (does this write create, switch or remove a pairing?). Call under `lockKey` of the variant. */
+export async function offerStructure(
+  tx: Tx,
+  key: { storeId: string; variantId: string; channel: MenuChannel; daypartId?: string | null },
+): Promise<OfferStructure> {
+  const rows = (await tx.execute(sql`
+    with s as (
+      select o.daypart_id,
+             (bool_or(not o.withdrawn and o.effective_from > now())
+              or coalesce((select not x.withdrawn from menu_offers x
+                            where x.store_id = o.store_id and x.variant_id = o.variant_id and x.channel = o.channel
+                              and x.daypart_id is not distinct from o.daypart_id and x.effective_from <= now()
+                            order by x.effective_from desc limit 1), false)) as live
+        from menu_offers o
+       where o.store_id = ${key.storeId}::uuid and o.variant_id = ${key.variantId}::uuid and o.channel = ${key.channel}
+       group by o.store_id, o.variant_id, o.channel, o.daypart_id)
+    select coalesce(bool_or(live) filter (where daypart_id is not distinct from ${key.daypartId ?? null}::uuid), false) as "slotLive",
+           coalesce(bool_or(live) filter (where daypart_id is not null), false) as "daypartedLive",
+           coalesce(bool_or(true) filter (where daypart_id is not null), false) as "hasDayparted"
+      from s`)) as unknown as OfferStructure[];
+  return rows[0]!;
+}
+
+export type OfferSlotConflict = 'mixed_all_day_and_daypart' | 'overlapping_dayparts';
+
+/**
+ * T-510 S2: would storing a LIVE offer for (store, variant, channel, daypart) at `at` (omitted = "from now") leave a live all-day offer next to a
+ * live dayparted one, or two live dayparted offers whose windows overlap? The SAME SQL function the 0233 insert guard calls with the same
+ * arguments (`menu_offer_slot_conflict`), so the domain can say it in a sentence before the guard raises. Call under `lockKey`; the guard stays
+ * the authority.
+ */
+export async function offerSlotConflict(
+  tx: Tx,
+  key: { storeId: string; variantId: string; channel: MenuChannel; daypartId?: string | null },
+  at?: Date,
+): Promise<OfferSlotConflict | null> {
+  const from = at ? sql`${at.toISOString()}::timestamptz` : NOW_MS;
+  const rows = (await tx.execute(
+    sql`select menu_offer_slot_conflict(${key.storeId}::uuid, ${key.variantId}::uuid, ${key.channel}, true, ${key.daypartId ?? null}::uuid, ${from}, false,
+        null::uuid, null::smallint[], null::time, null::time, null::uuid) as c`,
+  )) as unknown as { c: OfferSlotConflict | null }[];
+  return rows[0]!.c;
+}
+
 export async function getOffer(tx: Tx, orgId: string, id: string): Promise<MenuOfferRow | undefined> {
   const [row] = await tx.select().from(menuOffers).where(and(eq(menuOffers.id, id), eq(menuOffers.orgId, orgId)));
   return row;

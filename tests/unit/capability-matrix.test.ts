@@ -197,7 +197,7 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
   // `bypass_count_freeze` and `can_adjust_inventory`: the first three are NOT added (no caller —
   // the same debt as `import_commissary_catalogue`), and the last two already exist as
   // `charge_staff_for_discrepancy` / `adjust_inventory`.
-  it('finds exactly 123 capability rows — NOT the "36" the task documents say in prose', () => {
+  it('finds exactly 124 capability rows — NOT the "36" the task documents say in prose', () => {
     // docs/tasks/121-roles-and-access.md and CAPABILITY-MATRIX.md's own Contract section
     // both say "36 rows" / "36 capabilities". The table itself had 38: the two
     // ⚠️-flagged open cells (set_credit_limit, close_period) plus the two platform-only
@@ -246,7 +246,8 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // T-502 S2: 119 -> 120 (`approve_item_request`, org, super/admin yes, manager/staff no; ROLE ONLY). Re-measured.
     // T-511 S2a (2026-11-03): 120 -> 123 (`upload_settlement_files` store, super/admin/manager yes, staff no; `edit_platform_store_code` and
     // `edit_loan_repayment_amount` both store, super/admin yes, manager/staff no). RED until the builder adds the rows + the capabilities.
-    expect(rows.length).toBe(123);
+    // T-510 S2 (2026-11-05): 123 -> 124 (`pair_menu_dayparts`, org, super_admin only). Re-measured: the parsed matrix has 124 rows.
+    expect(rows.length).toBe(124);
     // ⭐ 109 -> 111 (T-402 S1b): `view_activity_log` (store) and `view_activity_log_restricted` (org).
     // ⭐ 108 -> 109 (T-403): `manage_recipes` (org, admin-only).
   });
@@ -319,15 +320,16 @@ describe('invariant 1 — every capability has an explicit decision for all four
     expect(problems).toEqual([]);
   });
 
-  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 123 capabilities', () => {
+  it('CAPABILITIES, CAPABILITY_MATRIX and CAPABILITY_SCOPE all enumerate the same 124 capabilities', () => {
     // ⭐ 99 -> 100 (T-382 S1, A3): `unlink_store_from_pos`. ⛔ RED until the builder adds it to capabilities.ts.
     // ⭐ 100 -> 101 (T-385 S3, A3): `verify_own_sales_day`. ⛔ RED until the builder adds it to capabilities.ts.
     // ⭐ 101 -> 108 (T-401 S2): the seven menu capabilities.
     // T-398 S6: `view_franchise_access_log`. T-193 S3: `remit_statutory`. Merge of main + T-193: re-measured.
     // T-511 S2a: 120 -> 123 (upload_settlement_files, edit_platform_store_code, edit_loan_repayment_amount).
-    expect(CAPABILITIES.length).toBe(123);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(123);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(123);
+    // T-510 S2: 123 -> 124 (pair_menu_dayparts).
+    expect(CAPABILITIES.length).toBe(124);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(124);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(124);
     // ⭐ 108 -> 109 (T-403): `manage_recipes`.
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));

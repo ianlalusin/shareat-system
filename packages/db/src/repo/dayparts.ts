@@ -47,6 +47,20 @@ export async function getDaypart(tx: Tx, orgId: string, id: string): Promise<Men
   return row;
 }
 
+/**
+ * The daypart row, locked FOR NO KEY UPDATE (the FIRST lock of the 0233 order), and read fresh once the lock is won: two concurrent edits or
+ * retires of one daypart run one after the other, and the second one's `before` is the row the first left. It does not block the FOR SHARE
+ * and KEY SHARE locks of offer writes beyond what a real update would.
+ */
+export async function lockDaypartForUpdate(tx: Tx, orgId: string, id: string): Promise<MenuDaypartRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(menuDayparts)
+    .where(and(eq(menuDayparts.id, id), eq(menuDayparts.orgId, orgId)))
+    .for('no key update');
+  return row;
+}
+
 export async function insertDaypart(tx: Tx, input: InsertDaypartInput): Promise<MenuDaypartRow> {
   const [row] = await tx.insert(menuDayparts).values(input).returning();
   return row!;
@@ -65,4 +79,42 @@ export async function updateDaypart(tx: Tx, id: string, patch: UpdateDaypartPatc
 export async function storeTimezone(tx: Tx, storeId: string): Promise<string | undefined> {
   const [row] = await tx.select({ timezone: stores.timezone }).from(stores).where(eq(stores.id, storeId));
   return row?.timezone;
+}
+
+/** Takes the daypart row FOR SHARE: the FIRST lock of the 0233 lock order (daypart row, item key, variant key), so an offer write that follows cannot deadlock a retire or window edit. */
+export async function lockDaypartShare(tx: Tx, id: string): Promise<void> {
+  await tx.execute(sql`select 1 from menu_dayparts where id = ${id}::uuid for share`);
+}
+
+/**
+ * How many (variant, channel) slots of this daypart are live: live now, or with a non-withdrawn row scheduled later. The text of the 0233
+ * update guard's retire count, so the domain refuses in a sentence first; the guard stays the authority.
+ */
+export async function countLiveOfferSlots(tx: Tx, id: string): Promise<number> {
+  const rows = (await tx.execute(sql`
+    select count(*)::int as n from (
+      select o.variant_id, o.channel from menu_offers o
+       where o.daypart_id = ${id}::uuid
+       group by o.variant_id, o.channel
+      having bool_or(not o.withdrawn and o.effective_from > now())
+          or coalesce((select not x.withdrawn from menu_offers x
+                        where x.daypart_id = ${id}::uuid and x.variant_id = o.variant_id and x.channel = o.channel and x.effective_from <= now()
+                        order by x.effective_from desc limit 1), false)
+    ) s`)) as unknown as { n: number }[];
+  return rows[0]!.n;
+}
+
+/** Would giving this daypart the window (days, start, end) make two live offers of one variant and channel overlap? The same function the 0233 update guard calls. null = fine. */
+export async function windowConflict(
+  tx: Tx,
+  id: string,
+  w: { days: number[]; startTime: string; endTime: string },
+): Promise<'mixed_all_day_and_daypart' | 'overlapping_dayparts' | null> {
+  const rows = (await tx.execute(sql`
+    select menu_offer_slot_conflict(r.store_id, r.variant_id, r.channel, false, null, null, null, ${id}::uuid,
+           ${`{${w.days.join(',')}}`}::smallint[], ${w.startTime}::time, ${w.endTime}::time, null) as c
+      from (select distinct store_id, variant_id, channel from menu_offers where daypart_id = ${id}::uuid) r`)) as unknown as {
+    c: 'mixed_all_day_and_daypart' | 'overlapping_dayparts' | null;
+  }[];
+  return rows.find((r) => r.c !== null)?.c ?? null;
 }
