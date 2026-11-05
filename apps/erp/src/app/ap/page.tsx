@@ -172,7 +172,7 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
           </span>
         </div>
         {invoices.length > 0 ? (
-          <Table card={{ title: 'Supplier', subtitle: 'Date', keys: ['Verified', 'Recorded', 'Paid', 'Total'] }}>
+          <Table card={{ title: 'Supplier', subtitle: 'Date', keys: ['Verified'] }}>
             <caption className="sr-only">Supplier invoices</caption>
             <thead>
               <tr>
@@ -189,10 +189,17 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
               {invoices.map((inv) => {
                 const { recorded, paid } = standingPills(inv);
                 const dash = <span className="text-muted" aria-label="Not applicable">—</span>;
+                const pill = 'whitespace-nowrap';
+                // Phone card (T-520): the one next state beside the verification pill: what is owed, else Recorded, unless fully recorded and paid.
+                const next = paid && (paid.tone === 'warning' || recorded?.label === 'Fully recorded') ? paid : recorded;
+                const selfVerified = inv.selfVerified && inv.status !== 'voided';
                 return (
                   <LinkRow key={inv.id}>
-                    <Td className="tabular-nums">{inv.invoiceDate}</Td>
-                    <Td>
+                    <Td className="whitespace-nowrap tabular-nums">
+                      {inv.invoiceDate}
+                      <span className="md:hidden"> · {peso(inv.totalAmount)}</span>
+                    </Td>
+                    <Td className="min-w-0 break-words max-md:[&[data-card-slot][data-card-label]]:!whitespace-normal">
                       <RowLink
                         href={`/ap/invoices/${inv.id}`}
                         aria-label={`Open invoice ${inv.invoiceNo ?? 'with no number'} of ${inv.invoiceDate}`}
@@ -200,21 +207,25 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
                         {supplierName.get(inv.supplierId) ?? inv.supplierId}
                       </RowLink>
                     </Td>
-                    <Td>{inv.invoiceNo ?? 'No number'}</Td>
-                    <Td>
+                    <Td className="break-words">
+                      {inv.invoiceNo ?? 'No number'}
+                      {selfVerified && <span className="mt-1 block md:hidden"><Badge tone="warning" label="Self-verified" className={pill} /></span>}
+                    </Td>
+                    <Td className="max-md:![grid-column:2] max-md:![grid-row:3] max-md:!mt-1.5 max-md:!max-w-none max-md:!text-left">
                       <span className="inline-flex flex-wrap items-center gap-1.5">
                         {inv.status === 'voided' ? (
-                          <Badge tone="closed" label="Voided" />
+                          <Badge tone="closed" label="Voided" className={pill} />
                         ) : inv.status === 'pending' ? (
-                          <Badge tone="warning" label="Not verified" />
+                          <Badge tone="warning" label="Not verified" className={pill} />
                         ) : (
-                          <Badge tone="success" label="Verified" />
+                          <Badge tone="success" label="Verified" className={pill} />
                         )}
-                        {inv.selfVerified && inv.status !== 'voided' && <Badge tone="warning" label="Self-verified" />}
+                        {selfVerified && <Badge tone="warning" label="Self-verified" className={`${pill} max-md:hidden`} />}
+                        {next && <Badge tone={next.tone} label={next.label} className={`${pill} md:hidden`} />}
                       </span>
                     </Td>
-                    <Td>{recorded ? <Badge tone={recorded.tone} label={recorded.label} /> : dash}</Td>
-                    <Td>{paid ? <Badge tone={paid.tone} label={paid.label} /> : dash}</Td>
+                    <Td>{recorded ? <Badge tone={recorded.tone} label={recorded.label} className={pill} /> : dash}</Td>
+                    <Td>{paid ? <Badge tone={paid.tone} label={paid.label} className={pill} /> : dash}</Td>
                     <NumTd>{peso(inv.totalAmount)}</NumTd>
                   </LinkRow>
                 );

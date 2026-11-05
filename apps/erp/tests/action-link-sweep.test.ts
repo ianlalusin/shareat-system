@@ -235,7 +235,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // T-448 x main (05ada44) merge: re-measured
     // 50 -> 51 UNRESOLVED, T-502 section 12: components/expenses/InvoiceBatchRecord.tsx gained intrinsic include checkboxes (baseline entry added); FAIL unmoved at 116.
     // 49 -> 50 UNRESOLVED, merge of main + T-193: re-measured; src/app/page.tsx gov-tile 'Set it under Employer numbers' inline Link (font size unresolvable), baseline entry added.
-    // 116 -> 115 FAIL, T-520: /ap's invoice table replaced the amber banner's 20px inline link; baseline entry app/ap/page.tsx removed. UNRESOLVED unmoved at 51.
+    // 116 -> 115 FAIL, T-520 (5 Nov, BOSS approved): /ap's invoice table replaced the amber banner's 20px inline link; baseline entry app/ap/page.tsx removed. UNRESOLVED unmoved at 51.
     expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 115, unresolved: 51 });
   });
 
