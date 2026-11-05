@@ -236,6 +236,8 @@ export const FILE_REFERENCES: readonly FileReference[] = [
   // T-511 S2a (migration 0228): the uploaded statement (the CSV or zip) and, for Foodpanda, its PDF. Only the settlement purpose.
   ref('settlement_uploads', 'file_id', ['channel_settlement_file']),
   ref('settlement_uploads', 'pdf_file_id', ['channel_settlement_file']),
+  // T-519 S1 (migration 0236): the scan of the signed agreement. Only its own purpose.
+  ref('staff_deduction_agreements', 'evidence_file_id', ['staff_deduction_agreement']),
 ];
 
 export interface ReferenceRow {

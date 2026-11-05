@@ -1505,6 +1505,14 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     class: 'keep',
     reason: 'A store’s kitchen stations are standing configuration (T-508), kept like the menu they serve.',
   },
+  staff_deduction_agreements: {
+    class: 'purge',
+    reason: 'T-519: an agreement points at a 2026 pilot charge entry (journal_entries RESTRICT) that is itself purged, and names a person owing against purged books. v2 opens on a zero 1230; a real agreement in 2027 is real data from day one. Purged AFTER its recoveries (children first).',
+  },
+  staff_deduction_recoveries: {
+    class: 'purge',
+    reason: 'T-519: child of staff_deduction_agreements and of the pilot payroll journal entries (both purged); purges before them (PURGE_ORDER_HINT).',
+  },
   kitchen_routes: {
     class: 'keep',
     reason: 'Which station cooks which item at a store is standing configuration (T-508), kept with the menu.',

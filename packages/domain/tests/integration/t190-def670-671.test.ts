@@ -25,6 +25,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedStatutoryRates } from './_fixtures/statutory-rates';
+import { agree } from './_fixtures/t519-agreements';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { postPayRun, previewPayRun, recordLeave, seedAttendanceConfig, seedCanonicalPositions } from '@shareat/domain';
@@ -86,20 +87,26 @@ async function workedDay(f: F, employmentId: string, shiftDay: string) {
     values (${f.orgId}, ${f.storeId}, ${f.workerId}, ${employmentId}, ${shiftDay}, ${cfg!.id}, 'exact', 'verified', 540)`;
 }
 
-async function advance(f: F, amount: string) {
+async function advance(f: F, amount: string): Promise<string> {
   const [period] = await sql<{ id: string }[]>`select id from fiscal_periods where org_id = ${f.orgId} and starts_on = '2026-01-01'`;
   const [adv] = await sql<{ id: string }[]>`select id from accounts where org_id = ${f.orgId} and code = '1230'`;
   const [cash] = await sql<{ id: string }[]>`select id from accounts where org_id = ${f.orgId} and code = '1130'`;
-  await sql.begin(async (tx) => {
+  return sql.begin(async (tx) => {
     const [e] = await tx<{ id: string }[]>`
       insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, status)
-      values (${f.orgId}, '2026-01-02', ${period!.id}, 'cashrequest', ${uid('adv')}, 'draft') returning id`;
+      values (${f.orgId}, '2026-01-02', ${period!.id}, 'tillcountshortage', ${uid('adv')}, 'draft') returning id`;
     await tx`insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit, party_type, party_id)
              values (${e!.id}, 1, ${adv!.id}, ${f.storeId}, ${amount}, '0', 'employee', ${f.workerId})`;
     await tx`insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)
              values (${e!.id}, 2, ${cash!.id}, ${f.storeId}, '0', ${amount})`;
     await tx`update journal_entries set status = 'posted' where id = ${e!.id}`;
+    return e!.id;
   });
+}
+/** T-519: a charge plus the signed agreement that lets payroll recover it (the whole amount, the same as the limit per payroll). */
+async function agreedAdvance(f: F, amount: string) {
+  const charge = await advance(f, amount);
+  await agree(sql, f, f.admin, f.workerId, charge, { amount, perPayrollLimit: amount });
 }
 const advanceBalance = async (f: F) =>
   (await sql<{ b: string }[]>`
@@ -121,37 +128,37 @@ afterAll(async () => {
 });
 
 describe('DEF-670 - an advance is recovered once per PERSON, not once per employment', () => {
-  it('two employments of one person in one run, 1,000 outstanding: total recovered is 1,000 and 1230 ends at 0.00', async () => {
+  it('two employments of one person in one run, 1,000 agreed: total recovered is 960.00 (20% of the 4,800.00 combined gross, once) and 1230 ends at 40.00 (T-519: was 1,000 / 0.00)', async () => {
     const f = await fixture('two');
     const e1 = await f.emp('2025-01-01', '600.00', '2026-01-10');
     const e2 = await f.emp('2026-01-11', '600.00');
     for (const d of ['2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08', '2026-01-09']) await workedDay(f, e1, d);
     for (const d of ['2026-01-12', '2026-01-13', '2026-01-14']) await workedDay(f, e2, d);
-    await advance(f, '1000.00');
+    await agreedAdvance(f, '1000.00');
     const out = await post(f, '2026-01-01', '2026-01-15');
     const rows = await recovered(out.runId);
     expect(rows).toHaveLength(2);
-    expect(total(rows), 'total advance recovered across both slips').toBe(1000);
-    expect(await advanceBalance(f)).toBe('0.00');
+    expect(total(rows), 'total advance recovered across both slips').toBe(960); // T-519: was 1000 - the 20% wage cap of the person's whole gross
+    expect(await advanceBalance(f)).toBe('40.00'); // T-519: was 0.00
   });
 
-  it('preview agrees: totalAdvanceRecovered is 1,000.00, not 2,000.00', async () => {
+  it('preview agrees: totalAdvanceRecovered is 240.00 (20% of the 1,200.00 combined gross), not double (T-519: was 1,000.00)', async () => {
     const f = await fixture('prev');
     const e1 = await f.emp('2025-01-01', '600.00', '2026-01-10');
     const e2 = await f.emp('2026-01-11', '600.00');
     await workedDay(f, e1, '2026-01-05');
     await workedDay(f, e2, '2026-01-12');
-    await advance(f, '1000.00');
+    await agreedAdvance(f, '1000.00');
     const pv = await preview(f, '2026-01-01', '2026-01-15');
     expect(pv.slips).toHaveLength(2);
-    expect(pv.totalAdvanceRecovered).toBe('1000.00');
+    expect(pv.totalAdvanceRecovered).toBe('240.00'); // T-519: was 1000.00
   });
 
   it('control: one job, 1,000 outstanding, gross 5,000 -> recovers 1,000 and 1230 ends at 0.00', async () => {
     const f = await fixture('one');
     const e = await f.emp('2025-01-01', '1000.00');
     for (const d of ['2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08', '2026-01-09']) await workedDay(f, e, d);
-    await advance(f, '1000.00');
+    await agreedAdvance(f, '1000.00');
     const out = await post(f, '2026-01-01', '2026-01-15');
     const rows = await recovered(out.runId);
     expect(total(rows)).toBe(1000);

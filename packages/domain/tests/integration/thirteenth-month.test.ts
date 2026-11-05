@@ -24,8 +24,9 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, transaction, APP_ROLE, type Tx } from '@shareat/db';
+import { agree, chargeEntry, creditEntry } from './_fixtures/t519-agreements';
 import { AuthorizationError, type Actor } from '@shareat/auth';
-import { post13thMonthRun, postSeparation, preview13thMonthRun, void13thMonthRun } from '@shareat/domain';
+import { post13thMonthRun, postSeparation, preview13thMonthRun, reverseEntry, void13thMonthRun } from '@shareat/domain';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -185,10 +186,34 @@ describe('T-191 — the sum, the year boundary, and the posting pattern', () => 
     expect(pv.payouts).toHaveLength(0);
   });
 
+  it('T-519 gate: a charge with NO agreement recovers 0 in the 13th month and stays on 1230', async () => {
+    const f = await fixture('t519gate');
+    await postedPeriod(f, { periodStart: '2026-01-01', periodEnd: '2026-01-15', basicPay: '12000.00' });
+    await chargeEntry(sql, f, f.workerId, '600.00');
+    const pv = await asOrg(f.orgId, (tx) => preview13thMonthRun(tx, f.admin, { storeId: f.storeId, year: 2026 }));
+    expect(pv.payouts[0]!.advanceRecovered).toBe('0.00');
+    expect(pv.payouts[0]!.netPay).toBe('1000.00');
+  });
+
+  it('T-519: an agreed 400.00 of a 600.00 charge recovers 400.00 (no 20% wage cap, no per-payroll limit here), completes on post, and a void reopens it', async () => {
+    const f = await fixture('t519agreed');
+    await postedPeriod(f, { periodStart: '2026-01-01', periodEnd: '2026-01-15', basicPay: '12000.00' });
+    const charge = await chargeEntry(sql, f, f.workerId, '600.00');
+    const a = await agree(sql, f, f.admin, f.workerId, charge, { amount: '400.00', perPayrollLimit: '50.00' });
+    const out = await asOrg(f.orgId, (tx) => post13thMonthRun(tx, f.admin, { storeId: f.storeId, year: 2026, moneyAccountId: f.officeAccountId }));
+    const [p] = await sql<{ advance_recovered: string; net_pay: string }[]>`select advance_recovered, net_pay from thirteenth_month_payouts where org_id = ${f.orgId}`;
+    expect([p!.advance_recovered, p!.net_pay]).toEqual(['400.00', '600.00']);
+    const st = async () => (await sql<{ status: string }[]>`select status from staff_deduction_agreements where id = ${a.id}`)[0]!.status;
+    expect(await st()).toBe('completed');
+    await asOrg(f.orgId, (tx) => void13thMonthRun(tx, f.admin, { runId: out.runId, reason: 'test' }));
+    expect(await st()).toBe('active');
+  });
+
   it('advance netting: capped at gross, net = gross - advanceRecovered', async () => {
     const f = await fixture('advance');
     await postedPeriod(f, { periodStart: '2026-01-01', periodEnd: '2026-01-15', basicPay: '12000.00' });
-    await advance(f, '600.00');
+    // T-519: recovery needs an agreement over a real charge entry.
+    await agree(sql, f, f.admin, f.workerId, await chargeEntry(sql, f, f.workerId, '600.00'), { amount: '600.00' });
     const pv = await asOrg(f.orgId, (tx) => preview13thMonthRun(tx, f.admin, { storeId: f.storeId, year: 2026 }));
     expect(pv.payouts[0]!.grossPay).toBe('1000.00');
     expect(pv.payouts[0]!.advanceRecovered).toBe('600.00');
@@ -293,5 +318,27 @@ describe('T-191 — the sum, the year boundary, and the posting pattern', () => 
     );
     const annual = await asOrg(f.orgId, (tx) => preview13thMonthRun(tx, f.admin, { storeId: f.storeId, year: 2026 }));
     expect(annual.payouts.find((p) => p.employmentId === f.employmentId)).toBeUndefined();
+  });
+});
+
+describe('T-519 audit fixes - the agreement needs a live charge and a live 1230 balance', () => {
+  it('probe: charge 600, agreed 600, charge reversed -> the 13th month recovers 0', async () => {
+    const f = await fixture('t519rev');
+    await postedPeriod(f, { periodStart: '2026-01-01', periodEnd: '2026-01-15', basicPay: '12000.00' });
+    const charge = await chargeEntry(sql, f, f.workerId, '600.00');
+    await agree(sql, f, f.admin, f.workerId, charge, { amount: '600.00' });
+    await asOrg(f.orgId, (tx) => reverseEntry(tx, { entryId: charge, reason: 'test', reversedBy: f.adminId }));
+    const pv = await asOrg(f.orgId, (tx) => preview13thMonthRun(tx, f.admin, { storeId: f.storeId, year: 2026 }));
+    expect(pv.payouts[0]!.advanceRecovered).toBe('0.00');
+    expect(pv.payouts[0]!.netPay).toBe('1000.00');
+  });
+
+  it('the live 1230 balance caps the recovery: agreed 600, 550 paid back outside payroll -> recovers 50', async () => {
+    const f = await fixture('t519bal');
+    await postedPeriod(f, { periodStart: '2026-01-01', periodEnd: '2026-01-15', basicPay: '12000.00' });
+    await agree(sql, f, f.admin, f.workerId, await chargeEntry(sql, f, f.workerId, '600.00'), { amount: '600.00' });
+    await creditEntry(sql, f, f.workerId, '550.00');
+    const pv = await asOrg(f.orgId, (tx) => preview13thMonthRun(tx, f.admin, { storeId: f.storeId, year: 2026 }));
+    expect(pv.payouts[0]!.advanceRecovered).toBe('50.00');
   });
 });
