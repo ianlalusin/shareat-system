@@ -7,7 +7,8 @@
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { AuthorizationError, type Actor } from '@shareat/auth';
-import { createDaypart, retireDaypart, setMenuOffer, updateDaypart, withdrawMenuOffer } from '@shareat/domain';
+import { menuRepo } from '@shareat/db';
+import { cancelScheduledOffer, createDaypart, retireDaypart, setMenuOffer, updateDaypart, withdrawMenuOffer } from '@shareat/domain';
 import { inTxRetry } from '../../src/menu/shared';
 
 import { asOrg, attempt, auditCount, cast, expectSentence, rawItem, rawRule, sql, type Cast } from './_fixtures/t401-s2-menu';
@@ -333,6 +334,108 @@ describe('pair_menu_dayparts: the pairing structure is super admin only; a plain
   });
 });
 
+const LATER = () => new Date(Date.now() + 30 * 24 * 3600 * 1000);
+const later = (f: Fx, a: Actor, o: { variantId?: string; daypartId?: string | null; amount?: string }) =>
+  asOrg(f.c.orgId, (tx) =>
+    setMenuOffer(a, { storeId: f.c.storeA, variantId: o.variantId ?? f.variantId, channel: 'store', amount: o.amount ?? '100.00', daypartId: o.daypartId, effectiveFrom: LATER() }, tx),
+  );
+const laterWithdraw = (f: Fx, a: Actor, o: { variantId?: string; daypartId?: string | null }) =>
+  asOrg(f.c.orgId, (tx) => withdrawMenuOffer(a, { storeId: f.c.storeA, variantId: o.variantId ?? f.variantId, channel: 'store', daypartId: o.daypartId, effectiveFrom: LATER() }, tx));
+const cancel = (f: Fx, a: Actor, id: string) => asOrg(f.c.orgId, (tx) => cancelScheduledOffer(a, { id, storeId: f.c.storeA }, tx));
+const structure = (f: Fx, variantId: string, daypartId: string | null) =>
+  asOrg(f.c.orgId, (tx) => menuRepo.offerStructure(tx, { storeId: f.c.storeA, variantId, channel: 'store', daypartId }));
+
+describe('cancelScheduledOffer: a scheduled change of the pairing structure is super admin only (pair_menu_dayparts)', () => {
+  it('a manager is refused cancelling a scheduled DAYPARTED row (it would remove a pairing); super admin may', async () => {
+    const f = await fx('cancel-dp');
+    const { lunch } = await lunchDinner(f);
+    const { id } = await later(f, f.c.superAdmin, { daypartId: lunch, amount: '338.00' });
+    await expectCapabilityRefused(f, () => cancel(f, f.c.manager, id), 'pair_menu_dayparts', 'manager cancelling a scheduled dayparted row');
+    await cancel(f, f.c.superAdmin, id);
+    expect(await offerCount(f)).toBe(0);
+  });
+
+  it('a manager is refused cancelling a scheduled WITHDRAWAL of a dayparted slot (it would re-activate a withdrawn pairing); super admin may', async () => {
+    const f = await fx('cancel-wd');
+    const { lunch } = await lunchDinner(f);
+    await price(f, f.c.superAdmin, { daypartId: lunch, amount: '338.00' });
+    const { id } = await laterWithdraw(f, f.c.superAdmin, { daypartId: lunch });
+    await expectCapabilityRefused(f, () => cancel(f, f.c.manager, id), 'pair_menu_dayparts', 'manager cancelling a scheduled dayparted withdrawal');
+    await cancel(f, f.c.superAdmin, id);
+    expect(await offerCount(f)).toBe(1);
+  });
+
+  it('a scheduled ALL-DAY row of a variant that has dayparts is structure too (part of a switch): manager refused, super admin may', async () => {
+    const f = await fx('cancel-allday');
+    const { lunch } = await lunchDinner(f);
+    await price(f, f.c.superAdmin, { daypartId: lunch, amount: '338.00' });
+    const { id } = await laterWithdraw(f, f.c.superAdmin, { daypartId: null });
+    await expectCapabilityRefused(f, () => cancel(f, f.c.manager, id), 'pair_menu_dayparts', 'manager cancelling a scheduled all-day row of a dayparted variant');
+    await cancel(f, f.c.superAdmin, id);
+  });
+
+  it('a manager may still cancel a scheduled price of a variant with no dayparts (set_menu_price only, unchanged)', async () => {
+    const f = await fx('cancel-plain');
+    const { id } = await later(f, f.c.manager, { amount: '120.00' });
+    await cancel(f, f.c.manager, id);
+    expect(await offerCount(f)).toBe(0);
+  });
+
+  it('a scheduled-LATER, non-withdrawn dayparted row counts as "slot live" (same rule as the 0233 guard); a scheduled withdrawal alone does not', async () => {
+    const f = await fx('future-structure');
+    const { lunch } = await lunchDinner(f);
+    await later(f, f.c.superAdmin, { daypartId: lunch, amount: '338.00' });
+    expect(await structure(f, f.variantId, lunch)).toEqual({ slotLive: true, daypartedLive: true, hasDayparted: true });
+    // so a manager's now-dated re-price needs no pairing authority: the history rule stops it, in a sentence, not pair_menu_dayparts
+    const r = await attempt(() => price(f, f.c.manager, { daypartId: lunch, amount: '1.00' }));
+    expect(r.error, 'refused by authorize(): the future row was not counted as a live slot').not.toBeInstanceOf(AuthorizationError);
+    expectSentence(r, 'later row already scheduled');
+    const v2 = await spareVariant(f);
+    await laterWithdraw(f, f.c.superAdmin, { variantId: v2, daypartId: lunch });
+    expect(await structure(f, v2, lunch)).toEqual({ slotLive: false, daypartedLive: false, hasDayparted: true });
+  });
+});
+
+describe('dayparts: concurrent retires, one sentence for a missing or foreign daypart, a blank daypart id', () => {
+  it('a second retire of one daypart waits for the first (row lock) and then sees it retired: one writes, one is the no-op, exactly ONE audit row', async () => {
+    const f = await fx('retire-race');
+    const id = await mk(f, f.c.admin, f.c.storeA, 'Lunch', '08:00', '17:00');
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    // The first retire holds its transaction open (row locked, uncommitted) while the second one starts.
+    const first = asOrg(f.c.orgId, async (tx) => {
+      const r = await retireDaypart(f.c.admin, { id }, tx);
+      await wait(1500);
+      return r;
+    });
+    await wait(500);
+    const second = retireDaypart(f.c.admin, { id });
+    const out = await Promise.all([first, second]);
+    expect(out.map((o) => o.wrote)).toEqual([true, false]);
+    expect((await audits(f)).filter((a) => a.action === 'menu_daypart.retired')).toHaveLength(1);
+  });
+
+  it('a missing daypart and a daypart of another store are the same refusal on the offer side (nothing about the other store leaks)', async () => {
+    const f = await fx('same-sentence');
+    const other = await mk(f, f.c.admin, f.c.storeB, 'Secret Brunch', '08:00', '17:00');
+    const a = await attempt(() => price(f, f.c.superAdmin, { daypartId: other }));
+    const b = await attempt(() => price(f, f.c.superAdmin, { daypartId: '00000000-0000-7000-8000-000000000000' }));
+    expectSentence(a, 'other store');
+    expectSentence(b, 'missing');
+    const msg = (r: { error?: unknown }) => (r.error as { userMessage: string }).userMessage;
+    expect(msg(a)).toBe(msg(b));
+    expect(msg(a)).not.toMatch(/Secret Brunch/);
+  });
+
+  it("a blank daypartId ('' from a form) is all day: a plain row, no uuid cast error, for set and withdraw", async () => {
+    const f = await fx('blank-daypart');
+    await price(f, f.c.manager, { daypartId: '', amount: '120.00' });
+    await withdraw(f, f.c.manager, { daypartId: '' });
+    const rows = await sql<{ daypart_id: string | null; withdrawn: boolean }[]>`select daypart_id, withdrawn from menu_offers where variant_id = ${f.variantId} order by effective_from, id`;
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.daypart_id === null)).toBe(true);
+  });
+});
+
 describe('deadlock retry (40P01)', () => {
   const deadlock = () => Object.assign(new Error('deadlock detected'), { code: '40P01' });
 
@@ -368,6 +471,20 @@ describe('deadlock retry (40P01)', () => {
         throw Object.assign(new Error('x'), { code: '23505' });
       }),
     ).rejects.toMatchObject({ code: '23505' });
+    expect(runs).toBe(1);
+  });
+
+  it('an outer tx handed in is never retried: a 40P01 inside it runs the work exactly once and propagates', async () => {
+    const f = await fx('retry-outer');
+    let runs = 0;
+    await asOrg(f.c.orgId, async (tx) => {
+      await expect(
+        inTxRetry(tx, f.c.orgId, async () => {
+          runs++;
+          throw deadlock();
+        }),
+      ).rejects.toMatchObject({ code: '40P01' });
+    });
     expect(runs).toBe(1);
   });
 

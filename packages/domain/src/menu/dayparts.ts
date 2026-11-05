@@ -82,8 +82,16 @@ const conflictSentence = (c: 'mixed_all_day_and_daypart' | 'overlapping_dayparts
         'This package has an all-day price and prices by time of day at the same time, so the cashier would not know which applies. Withdraw one kind first.',
       );
 
+/**
+ * The daypart to edit or retire. The store comes from the row (an unlocked peek), `manage_store_settings` is checked AT THAT STORE, and only an
+ * authorised caller then takes the row FOR NO KEY UPDATE and reads it fresh: a concurrent retire or edit waits, so two cannot both audit and
+ * `before` is never stale. Daypart row first: the 0233 lock order.
+ */
 async function daypartOf(tx: Tx, actor: Actor, id: string, label: string): Promise<daypartsRepo.MenuDaypartRow> {
-  const d = await daypartsRepo.getDaypart(tx, actor.orgId, id);
+  const peek = await daypartsRepo.getDaypart(tx, actor.orgId, id);
+  if (!peek) throw gone(`${label}: daypart ${id} does not exist.`, 'daypart');
+  await authorize(tx, actor, CAPABILITY, { storeId: peek.storeId });
+  const d = await daypartsRepo.lockDaypartForUpdate(tx, actor.orgId, id);
   if (!d) throw gone(`${label}: daypart ${id} does not exist.`, 'daypart');
   return d;
 }
@@ -114,7 +122,6 @@ export async function updateDaypart(
 ): Promise<{ id: string; wrote: boolean }> {
   return inTxRetry(tx, actor.orgId, async (trx) => {
     const before = await daypartOf(trx, actor, input.id, 'updateDaypart');
-    await authorize(trx, actor, CAPABILITY, { storeId: before.storeId });
     if (before.status === 'retired') {
       throw refuse(`updateDaypart: daypart ${before.id} is retired.`, `${before.name} is retired, so it can't be changed. Add a new daypart instead.`);
     }
@@ -143,7 +150,6 @@ export async function updateDaypart(
 export async function retireDaypart(actor: Actor, input: { id: string }, tx?: Tx): Promise<{ id: string; wrote: boolean }> {
   return inTxRetry(tx, actor.orgId, async (trx) => {
     const before = await daypartOf(trx, actor, input.id, 'retireDaypart');
-    await authorize(trx, actor, CAPABILITY, { storeId: before.storeId });
     if (before.status === 'retired') return { id: before.id, wrote: false };
     const live = await daypartsRepo.countLiveOfferSlots(trx, before.id);
     if (live > 0) {
@@ -172,9 +178,9 @@ export async function retireDaypart(actor: Actor, input: { id: string }, tx?: Tx
 export async function requireOfferDaypart(actor: Actor, trx: Tx, storeId: string, daypartId: string | null | undefined, label: string, live: boolean): Promise<void> {
   if (daypartId == null) return;
   const d = await daypartsRepo.getDaypart(trx, actor.orgId, daypartId);
-  if (!d) throw gone(`${label}: daypart ${daypartId} does not exist.`, 'daypart');
-  if (d.storeId !== storeId) {
-    throw refuse(`${label}: daypart ${daypartId} belongs to another store.`, `${d.name} is a daypart of a different store. Choose one of this store's dayparts, or all day.`);
+  // One sentence for "no such daypart" and "a daypart of another store": the caller is authorised for `storeId` only, and must not learn what exists elsewhere.
+  if (!d || d.storeId !== storeId) {
+    throw gone(`${label}: daypart ${daypartId} does not exist at store ${storeId}.`, 'daypart');
   }
   if (live && d.status !== 'active') {
     throw refuse(`${label}: daypart ${daypartId} is retired.`, `${d.name} is retired, so a price can't use it. Choose an active daypart, or all day.`);

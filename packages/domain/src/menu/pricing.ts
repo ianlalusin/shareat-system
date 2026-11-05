@@ -9,7 +9,7 @@
  * option offers. Money is text, at most two decimals (I13b); an offer amount is never negative, an option delta may be.
  */
 import { authorize, type Actor } from '@shareat/auth';
-import { menuRepo, type Tx } from '@shareat/db';
+import { daypartsRepo, menuRepo, type Tx } from '@shareat/db';
 import { MENU_CHANNELS, MENU_DEPLETION_MODES, MENU_PRICING_MODES, type MenuChannel, type MenuDepletionMode, type MenuPricingMode } from '@shareat/db/schema';
 import type { Decimal } from '@shareat/core/money';
 import { gone, refuse } from '../shared/refusal';
@@ -99,6 +99,11 @@ export async function cancelScheduledDepletionRule(actor: Actor, input: { id: st
 // -------------------------------------------------------------------------------------------------------------------
 // Offers (R5)
 // -------------------------------------------------------------------------------------------------------------------
+/** A blank daypart id (a form's empty select) means all day, never a raw uuid cast error. */
+function normaliseDaypartId(raw: string | null | undefined): string | null {
+  return typeof raw === 'string' && raw.trim() !== '' ? raw.trim() : null;
+}
+
 function requireChannel(raw: unknown, rawLabel: string): MenuChannel {
   if (!(MENU_CHANNELS as readonly unknown[]).includes(raw)) {
     throw refuse(`${rawLabel}: channel must be store or online.`, 'Choose the store (counter and tables) or online.');
@@ -138,7 +143,8 @@ export interface SetMenuOfferInput {
 /** Appends a LIVE offer (the price from `effectiveFrom`). Needs a depletion rule in force for the variant (database rule R6). */
 export async function setMenuOffer(actor: Actor, input: SetMenuOfferInput, tx?: Tx): Promise<{ id: string }> {
   // A daypart can meet a retire or window edit crosswise (40P01): retry the whole transaction once (only when this call owns it).
-  return (input.daypartId ? inTxRetry : inTx)(tx, actor.orgId, async (trx) => {
+  const daypartId = normaliseDaypartId(input.daypartId);
+  return (daypartId ? inTxRetry : inTx)(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'set_menu_price', { storeId: input.storeId });
     const channel = requireChannel(input.channel, 'setMenuOffer');
     const pricingMode = input.pricingMode ?? 'fixed';
@@ -191,16 +197,16 @@ export async function setMenuOffer(actor: Actor, input: SetMenuOfferInput, tx?: 
     if (item?.itemType === 'refill' && (amount !== null || isRule || hasHeads)) {
       throw refuse('setMenuOffer: a refill carries no price or price rule.', 'A refill is a free serving a package entitles. It has no price, so it cannot take one.');
     }
-    await requireOfferDaypart(actor, trx, input.storeId, input.daypartId, 'setMenuOffer', true);
-    await requirePairingAuthority(actor, trx, { storeId: input.storeId, variantId: input.variantId, channel, daypartId: input.daypartId ?? null }, 'set');
+    await requireOfferDaypart(actor, trx, input.storeId, daypartId, 'setMenuOffer', true);
+    await requirePairingAuthority(actor, trx, { storeId: input.storeId, variantId: input.variantId, channel, daypartId }, 'set');
     await requireHistorySlot(
       trx,
       input.variantId,
-      { kind: 'offer', storeId: input.storeId, variantId: input.variantId, channel, daypartId: input.daypartId ?? null },
+      { kind: 'offer', storeId: input.storeId, variantId: input.variantId, channel, daypartId },
       input.effectiveFrom,
       'setMenuOffer',
     );
-    await requireNoSlotConflict(trx, { storeId: input.storeId, variantId: input.variantId, channel, daypartId: input.daypartId ?? null }, input.effectiveFrom, 'setMenuOffer');
+    await requireNoSlotConflict(trx, { storeId: input.storeId, variantId: input.variantId, channel, daypartId }, input.effectiveFrom, 'setMenuOffer');
     let row: Awaited<ReturnType<typeof menuRepo.insertOffer>>;
     try {
       row = await menuRepo.insertOffer(trx, {
@@ -208,7 +214,7 @@ export async function setMenuOffer(actor: Actor, input: SetMenuOfferInput, tx?: 
         storeId: input.storeId,
         variantId: input.variantId,
         channel,
-        daypartId: input.daypartId ?? null,
+        daypartId,
         effectiveFrom: input.effectiveFrom,
         amount,
         bundleHeads: hasHeads ? (input.bundleHeads as number) : null,
@@ -233,17 +239,18 @@ export async function withdrawMenuOffer(
   input: { storeId: string; variantId: string; channel: MenuChannel; daypartId?: string | null; effectiveFrom?: Date },
   tx?: Tx,
 ): Promise<{ id: string }> {
-  return (input.daypartId ? inTxRetry : inTx)(tx, actor.orgId, async (trx) => {
+  const daypartId = normaliseDaypartId(input.daypartId);
+  return (daypartId ? inTxRetry : inTx)(tx, actor.orgId, async (trx) => {
     await authorize(trx, actor, 'set_menu_price', { storeId: input.storeId });
     const channel = requireChannel(input.channel, 'withdrawMenuOffer');
     await requireNotBackdated(trx, input.effectiveFrom, 'withdrawMenuOffer', 'withdrawals');
     await requireVariant(trx, actor, input.variantId, 'withdrawMenuOffer');
-    await requireOfferDaypart(actor, trx, input.storeId, input.daypartId, 'withdrawMenuOffer', false);
-    await requirePairingAuthority(actor, trx, { storeId: input.storeId, variantId: input.variantId, channel, daypartId: input.daypartId ?? null }, 'withdraw');
+    await requireOfferDaypart(actor, trx, input.storeId, daypartId, 'withdrawMenuOffer', false);
+    await requirePairingAuthority(actor, trx, { storeId: input.storeId, variantId: input.variantId, channel, daypartId }, 'withdraw');
     await requireHistorySlot(
       trx,
       input.variantId,
-      { kind: 'offer', storeId: input.storeId, variantId: input.variantId, channel, daypartId: input.daypartId ?? null },
+      { kind: 'offer', storeId: input.storeId, variantId: input.variantId, channel, daypartId },
       input.effectiveFrom,
       'withdrawMenuOffer',
     );
@@ -252,7 +259,7 @@ export async function withdrawMenuOffer(
       storeId: input.storeId,
       variantId: input.variantId,
       channel,
-      daypartId: input.daypartId ?? null,
+      daypartId,
       effectiveFrom: input.effectiveFrom,
       amount: null,
       bundleHeads: null,
@@ -271,6 +278,12 @@ export async function cancelScheduledOffer(actor: Actor, input: { id: string; st
     await authorize(trx, actor, 'set_menu_price', { storeId: input.storeId });
     const row = await menuRepo.getOffer(trx, actor.orgId, input.id);
     if (!row || row.storeId !== input.storeId) throw gone(`cancelScheduledOffer: offer ${input.id} does not exist at this store.`, 'scheduled price');
+    // R8: deleting a dayparted row, or any scheduled row of a variant that has dayparts, removes a pairing or re-activates a withdrawn one
+    // (a scheduled withdrawal of a dayparted slot): the structure, so super admin only. Lock order: daypart row, then the variant key.
+    if (row.daypartId != null) await daypartsRepo.lockDaypartShare(trx, row.daypartId);
+    await menuRepo.lockKey(trx, row.variantId);
+    const st = await menuRepo.offerStructure(trx, { storeId: row.storeId, variantId: row.variantId, channel: row.channel });
+    if (row.daypartId != null || st.hasDayparted) await authorize(trx, actor, 'pair_menu_dayparts', {});
     await requireScheduled(trx, row.effectiveFrom, 'cancelScheduledOffer', 'price');
     try {
       await menuRepo.deleteOffer(trx, row.id);

@@ -47,6 +47,20 @@ export async function getDaypart(tx: Tx, orgId: string, id: string): Promise<Men
   return row;
 }
 
+/**
+ * The daypart row, locked FOR NO KEY UPDATE (the FIRST lock of the 0233 order), and read fresh once the lock is won: two concurrent edits or
+ * retires of one daypart run one after the other, and the second one's `before` is the row the first left. It does not block the FOR SHARE
+ * and KEY SHARE locks of offer writes beyond what a real update would.
+ */
+export async function lockDaypartForUpdate(tx: Tx, orgId: string, id: string): Promise<MenuDaypartRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(menuDayparts)
+    .where(and(eq(menuDayparts.id, id), eq(menuDayparts.orgId, orgId)))
+    .for('no key update');
+  return row;
+}
+
 export async function insertDaypart(tx: Tx, input: InsertDaypartInput): Promise<MenuDaypartRow> {
   const [row] = await tx.insert(menuDayparts).values(input).returning();
   return row!;
