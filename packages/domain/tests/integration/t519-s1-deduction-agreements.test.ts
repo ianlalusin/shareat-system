@@ -19,21 +19,24 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { seedStatutoryRates } from './_fixtures/statutory-rates';
-import { agree, asOrgT519, chargeEntry, scanFor } from './_fixtures/t519-agreements';
+import { agree, asOrgT519, chargeEntry, creditEntry, scanFor } from './_fixtures/t519-agreements';
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { closeDb, deductionAgreementsRepo } from '@shareat/db';
 import { AuthorizationError, type Actor } from '@shareat/auth';
 import {
   agreedRecoverable,
+  applyDeductionRecovery,
   deductionCapPercent,
   wageCap,
   cancelDeductionAgreement,
   postPayRun,
+  reverseEntry,
   recordDeductionAgreement,
   setPayRate,
   voidPayRun,
 } from '@shareat/domain';
 import { RefusalError } from '../../src/shared/refusal';
+import { recordOwnerSelfAgreement } from '../../src/payroll/deduction-agreements';
 import { money } from '@shareat/core/money';
 
 const sql = postgres(url, { max: 5 });
@@ -325,5 +328,96 @@ describe('T-519 R4 - who may record, and what must hold', () => {
     expect(rows.map((r) => r.action)).toEqual(['staff_deduction_agreement.recorded']);
     const [file] = await sql<{ linked_to: string | null }[]>`select s.linked_to from stored_files s join staff_deduction_agreements d on d.evidence_file_id = s.id where d.id = ${a.id}`;
     expect(file!.linked_to).toBe(a.id);
+  });
+});
+
+describe('T-519 audit fixes - live balance, live charge, reversal chains', () => {
+  const reverse = (f: Fixture, entryId: string) =>
+    asOrgT519(f.orgId, (tx) => reverseEntry(tx, { entryId, reason: 'test', reversedBy: f.adminId }));
+  const recoveryTotal = async (f: Fixture) =>
+    (await sql<{ t: string }[]>`select coalesce(sum(r.amount), 0)::text as t from staff_deduction_recoveries r where r.org_id = ${f.orgId}`)[0]!.t;
+
+  it('probe: charge 500, agreed 500, charge reversed -> the next payroll recovers 0 and 1230 stays at 0', async () => {
+    const f = await fixture('revcharge');
+    const charge = await chargeEntry(sql, f, f.workerId, '500.00');
+    await agree(sql, f, f.admin, f.workerId, charge, { amount: '500.00', perPayrollLimit: '500.00' });
+    await reverse(f, charge);
+    expect(await balance1230(f)).toBe('0.00');
+    await post(f);
+    expect((await slipRecovered(f)).advance_recovered).toBe('0.00');
+    expect(await balance1230(f)).toBe('0.00');
+  });
+
+  it('the live 1230 balance caps the recovery: agreed 500, but 450 was paid back outside payroll -> recovers 50, balance 0', async () => {
+    const f = await fixture('balcap');
+    const charge = await chargeEntry(sql, f, f.workerId, '500.00');
+    await agree(sql, f, f.admin, f.workerId, charge, { amount: '500.00', perPayrollLimit: '500.00' });
+    await creditEntry(sql, f, f.workerId, '450.00');
+    await post(f);
+    expect((await slipRecovered(f)).advance_recovered).toBe('50.00');
+    expect(await balance1230(f)).toBe('0.00');
+  });
+
+  it('a charge reversed and then re-stated (reversal of the reversal) is live again', async () => {
+    const f = await fixture('revrev-charge');
+    const charge = await chargeEntry(sql, f, f.workerId, '500.00');
+    await agree(sql, f, f.admin, f.workerId, charge, { amount: '100.00', perPayrollLimit: '100.00' });
+    const r1 = (await reverse(f, charge)).reversalEntryId;
+    await reverse(f, r1);
+    await post(f);
+    expect((await slipRecovered(f)).advance_recovered).toBe('100.00');
+  });
+
+  it("probe: charge 1000, agreement 150, payroll void, then the void's own reversal reversed -> a second payroll takes nothing more (150 in all, not 300)", async () => {
+    const f = await fixture('revvoid');
+    const charge = await chargeEntry(sql, f, f.workerId, '1000.00');
+    await agree(sql, f, f.admin, f.workerId, charge, { amount: '150.00', perPayrollLimit: '150.00' });
+    const { runId } = await post(f);
+    const [rec] = await sql<{ journal_entry_id: string }[]>`select journal_entry_id from staff_deduction_recoveries where org_id = ${f.orgId}`;
+    await asOrgT519(f.orgId, (tx) => voidPayRun(tx, f.admin, { runId, reason: 'test void' }));
+    const [rv] = await sql<{ id: string }[]>`select id from journal_entries where reversal_of_entry_id = ${rec!.journal_entry_id}`;
+    await reverse(f, rv!.id); // the void is undone at the ledger: the payslip entry is live again, 1230 is credited again
+    expect(await balance1230(f)).toBe('850.00');
+    await post(f);
+    expect(await recoveryTotal(f)).toBe('150.00'); // the second run recovered nothing more
+    expect(await balance1230(f)).toBe('850.00');
+  });
+
+  it("recordOwnerSelfAgreement refuses a charge that is not the person's 1230 charge, and an amount above what the charge has left", async () => {
+    const f = await fixture('ownerself');
+    const mine = await chargeEntry(sql, f, f.workerId, '300.00', 'owner_pay_recovery');
+    const someoneElses = await chargeEntry(sql, f, f.managerId, '300.00', 'owner_pay_recovery');
+    const w = actor(f.orgId, f.workerId);
+    const call = (entry: string, amount: string) =>
+      asOrgT519(f.orgId, (tx) =>
+        recordOwnerSelfAgreement(tx, w, { personId: f.workerId, storeId: f.storeId, sourceEntryId: entry, amount: money(amount), on: '2026-01-04' }));
+    await expect(call(someoneElses, '100.00')).rejects.toBeInstanceOf(RefusalError);
+    await expect(call(mine, '300.01')).rejects.toBeInstanceOf(RefusalError);
+    await expect(call(mine, '300.00')).resolves.toBeUndefined();
+  });
+
+  it('two posts (payroll and separation both end in applyDeductionRecovery) cannot both spend one agreement: the second waits on the lock, then finds nothing left', async () => {
+    const f = await fixture('lock');
+    const charge = await chargeEntry(sql, f, f.workerId, '1000.00');
+    const payoutA = await chargeEntry(sql, f, f.managerId, '1.00'); // stand-ins for the two posted payout entries
+    const payoutB = await chargeEntry(sql, f, f.managerId, '1.00');
+    await agree(sql, f, f.admin, f.workerId, charge, { amount: '60.00', perPayrollLimit: '60.00' });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    let firstApplied!: () => void;
+    const applied = new Promise<void>((r) => { firstApplied = r; });
+    const first = asOrgT519(f.orgId, async (tx) => {
+      await applyDeductionRecovery(tx, f.orgId, f.workerId, payoutA, money('60.00'));
+      firstApplied();
+      await gate; // hold the first post open (uncommitted)
+    });
+    await applied;
+    const second = Promise.allSettled([asOrgT519(f.orgId, (tx) => applyDeductionRecovery(tx, f.orgId, f.workerId, payoutB, money('60.00')))]);
+    await new Promise((r) => setTimeout(r, 800)); // the second is parked on the lock; with no lock it would finish inside this wait
+    release();
+    await first;
+    const [r2] = await second;
+    expect(r2!.status).toBe('rejected');
+    expect(await recoveryTotal(f)).toBe('60.00');
   });
 });

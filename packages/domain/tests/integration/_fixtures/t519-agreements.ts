@@ -79,3 +79,26 @@ export async function agree(
     }),
   );
 }
+
+/** A posted credit to 1230 against the person (money paid back outside payroll): Dr 1130 / Cr 1230 (party = the person). Returns the entry id. */
+export async function creditEntry(
+  sql: postgres.Sql,
+  f: { orgId: string; storeId: string },
+  personId: string,
+  amount: string,
+): Promise<string> {
+  const [period] = await sql<{ id: string }[]>`select id from fiscal_periods where org_id = ${f.orgId} limit 1`;
+  const [adv] = await sql<{ id: string }[]>`select id from accounts where org_id = ${f.orgId} and code = '1230'`;
+  const [cash] = await sql<{ id: string }[]>`select id from accounts where org_id = ${f.orgId} and code = '1130'`;
+  return sql.begin(async (tx) => {
+    const [e] = await tx<{ id: string }[]>`
+      insert into journal_entries (org_id, entry_date, period_id, source_type, source_id, status)
+      values (${f.orgId}, '2026-01-03', ${period!.id}, 'tillcountshortage', ${uid('crd')}, 'draft') returning id`;
+    await tx`insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit)
+             values (${e!.id}, 1, ${cash!.id}, ${f.storeId}, ${amount}, '0')`;
+    await tx`insert into journal_lines (entry_id, line_no, account_id, store_id, debit, credit, party_type, party_id)
+             values (${e!.id}, 2, ${adv!.id}, ${f.storeId}, '0', ${amount}, 'employee', ${personId})`;
+    await tx`update journal_entries set status = 'posted' where id = ${e!.id}`;
+    return e!.id;
+  });
+}
