@@ -75,6 +75,7 @@ import {
 } from '@shareat/domain';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import { seedStatutoryRates } from './_fixtures/statutory-rates';
+import { agree, chargeEntry } from './_fixtures/t519-agreements';
 
 const sql = postgres(url, { max: 5 });
 let seq = 0;
@@ -697,11 +698,9 @@ describe('kind 5 - wages worked, not yet paid', () => {
       setPayRate(tx, f.admin, { employmentId: f.workerEmpId, storeId: f.stores.A, basis: 'daily', amount: '500.00', effectiveFrom: '2026-01-01' }));
     await addDay(f, '2026-01-05');
     await addDay(f, '2026-01-06');
-    // An advance on 1230 so net differs from gross.
-    await post(f.orgId, '2026-01-02', 'cashrequest', [
-      { code: '1230', storeId: f.stores.A, debit: '200.00', partyType: 'employee', partyId: f.workerId },
-      { code: '1130', storeId: f.stores.A, credit: '200.00' },
-    ]);
+    // An advance on 1230 so net differs from gross. Recovered only under a signed agreement (T-519): without it nothing is deducted.
+    const charge = await chargeEntry(sql, { orgId: f.orgId, storeId: f.stores.A }, f.workerId, '200.00');
+    await agree(sql, { orgId: f.orgId, storeId: f.stores.A }, f.admin, f.workerId, charge, { amount: '200.00', perPayrollLimit: '200.00' });
     return f;
   }
   const preview = (f: Fixture) =>
