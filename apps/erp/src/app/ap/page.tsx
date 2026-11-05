@@ -2,11 +2,11 @@ import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import Link from 'next/link';
 import { requireSession } from '../../lib/session';
 import { recordInvoiceAction } from './actions';
-import { listSuppliersWithPosition, listInvoices, listStores, peso, today } from './lib';
+import { listSuppliersWithPosition, listInvoicesWithStanding, standingPills, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Badge, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, NumTd, RowLink, Select, Table, Td, Th } from '@/components/ui';
 import { CheckedForm, RuleCheck } from '@/components/forms';
 import { buildSupplierFacts } from '@shareat/domain/business-rules';
 import { InvoiceNumberCheck } from './InvoiceNumberCheck';
@@ -22,6 +22,8 @@ interface SearchParams {
   warning?: string;
   /** T-475 S3: `1` lists only invoices verified by the person who logged them. A flag; nothing typed in the URL. */
   selfVerified?: string;
+  /** T-520: `pending` lists only invoices not verified yet. A flag; nothing typed in the URL. */
+  status?: string;
 }
 
 export default async function ApPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -29,17 +31,19 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
   const { actor } = await requireSession('/ap');
 
   const onlySelfVerified = sp.selfVerified === '1';
-  const [suppliers, invoiceRows, stores] = await Promise.all([
+  const onlyPending = sp.status === 'pending';
+  const [suppliers, allInvoices, stores] = await Promise.all([
     listSuppliersWithPosition(actor.orgId),
-    listInvoices(actor.orgId, onlySelfVerified ? { selfVerified: true } : {}),
+    listInvoicesWithStanding(actor.orgId),
     listStores(actor.orgId),
   ]);
   const supplierName = new Map(suppliers.map((s) => [s.id, s.name]));
   // T-475: the facts the live business-rule lines read (each supplier's status and vatStatus), built by the SAME function the domain uses; no status or VAT rule is derived here.
   const supplierFacts = buildSupplierFacts(suppliers);
   const supplierNames = Object.fromEntries(supplierName);
-  const pending = invoiceRows.filter((i) => i.status === 'pending');
-  const invoices = [...invoiceRows].sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate));
+  // One load; both filters and the Not verified count read these same rows (newest first, as the repo orders them).
+  const pendingCount = allInvoices.filter((i) => i.status === 'pending').length;
+  const invoices = allInvoices.filter((i) => (onlySelfVerified ? i.selfVerified : onlyPending ? i.status === 'pending' : true));
 
   return (
     <Page density="table">
@@ -152,73 +156,73 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
         <Link href="/ap/vat" className={ACTION_LINK}>Invoices by VAT type and OR (monthly list)</Link>
       </p>
 
-      {pending.length > 0 && (
-        <section className="space-y-2 rounded-lg border border-warning bg-warning-soft p-4 text-sm">
-          <h2 className="font-medium text-warning-ink">
-            {pending.length === 1 ? 'One invoice needs' : `${pending.length} invoices need`} verification
-          </h2>
-          <ul className="space-y-1">
-            {pending.map((inv) => (
-              <li key={inv.id}>
-                <Link href={`/ap/invoices/${inv.id}`} className="underline underline-offset-2">
-                  {supplierName.get(inv.supplierId) ?? inv.supplierId} — {inv.invoiceNo ?? inv.id.slice(0, 8)}
-                </Link>{' '}
-                — <span className="font-mono tabular-nums">{peso(inv.totalAmount)}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-medium">Invoices</h2>
-          {/* T-475 S3: the review list - a plain GET link, so the filter is a flag and no typing is read from the URL. */}
-          {onlySelfVerified ? (
-            <Link href="/ap" className={ACTION_LINK}>Showing: verified by its own creator. Show all invoices →</Link>
-          ) : (
-            <Link href="/ap?selfVerified=1" className={ACTION_LINK}>Verified by its own creator →</Link>
-          )}
+          {/* Plain GET links: each filter is a flag, so no typing is read from the URL. */}
+          <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            {onlySelfVerified || onlyPending ? (
+              <Link href="/ap" className={ACTION_LINK}>Show all invoices →</Link>
+            ) : (
+              <>
+                {pendingCount > 0 && <Link href="/ap?status=pending" className={ACTION_LINK}>Not verified ({pendingCount}) →</Link>}
+                <Link href="/ap?selfVerified=1" className={ACTION_LINK}>Self-verified only →</Link>
+              </>
+            )}
+          </span>
         </div>
         {invoices.length > 0 ? (
-          <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <table className="w-full min-w-[600px] border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
-                  <th className="px-3 py-2 font-medium">Supplier</th>
-                  <th className="px-3 py-2 font-medium">Invoice no.</th>
-                  <th className="px-3 py-2 font-medium">Date</th>
-                  <th className="px-3 py-2 font-medium">Status</th>
-                  <th className="px-3 py-2 text-right font-medium">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoices.map((inv) => (
-                  <LinkRow key={inv.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                    <td className="px-3 py-2">
+          <Table card={{ title: 'Supplier', subtitle: 'Date', keys: ['Verified', 'Recorded', 'Paid', 'Total'] }}>
+            <caption className="sr-only">Supplier invoices</caption>
+            <thead>
+              <tr>
+                <Th>Date</Th>
+                <Th>Supplier</Th>
+                <Th>Invoice no.</Th>
+                <Th>Verified</Th>
+                <Th>Recorded</Th>
+                <Th>Paid</Th>
+                <Th numeric>Total</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.map((inv) => {
+                const { recorded, paid } = standingPills(inv);
+                const dash = <span className="text-muted" aria-label="Not applicable">—</span>;
+                return (
+                  <LinkRow key={inv.id}>
+                    <Td className="tabular-nums">{inv.invoiceDate}</Td>
+                    <Td>
                       <RowLink
                         href={`/ap/invoices/${inv.id}`}
                         aria-label={`Open invoice ${inv.invoiceNo ?? 'with no number'} of ${inv.invoiceDate}`}
                       >
                         {supplierName.get(inv.supplierId) ?? inv.supplierId}
                       </RowLink>
-                    </td>
-                    <td className="px-3 py-2">{inv.invoiceNo ?? 'No number'}</td>
-                    <td className="px-3 py-2">{inv.invoiceDate}</td>
-                    <td className="px-3 py-2">
+                    </Td>
+                    <Td>{inv.invoiceNo ?? 'No number'}</Td>
+                    <Td>
                       <span className="inline-flex flex-wrap items-center gap-1.5">
-                        <Badge status={inv.status} />
-                        {inv.selfVerified && <Badge tone="warning" label="Verified by its own creator" />}
+                        {inv.status === 'voided' ? (
+                          <Badge tone="closed" label="Voided" />
+                        ) : inv.status === 'pending' ? (
+                          <Badge tone="warning" label="Not verified" />
+                        ) : (
+                          <Badge tone="success" label="Verified" />
+                        )}
+                        {inv.selfVerified && inv.status !== 'voided' && <Badge tone="warning" label="Self-verified" />}
                       </span>
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(inv.totalAmount)}</td>
+                    </Td>
+                    <Td>{recorded ? <Badge tone={recorded.tone} label={recorded.label} /> : dash}</Td>
+                    <Td>{paid ? <Badge tone={paid.tone} label={paid.label} /> : dash}</Td>
+                    <NumTd>{peso(inv.totalAmount)}</NumTd>
                   </LinkRow>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                );
+              })}
+            </tbody>
+          </Table>
         ) : (
-          <p className="text-sm text-neutral-500 dark:text-neutral-400">{onlySelfVerified ? 'No invoice has been verified by its own creator.' : 'No invoices logged yet.'}</p>
+          <p className="text-sm text-muted">{onlySelfVerified ? 'No invoice has been self-verified.' : onlyPending ? 'Every invoice has been verified.' : 'No invoices logged yet.'}</p>
         )}
       </section>
     </Page>
