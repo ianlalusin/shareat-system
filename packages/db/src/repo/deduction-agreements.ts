@@ -41,6 +41,8 @@ export interface AgreementRow {
   employeeExplanation: string;
   signedOn: string;
   evidenceFileId: string | null;
+  /** Date of the charge entry (`sourceEntryId`). */
+  chargeDate: string | null;
   recordedBy: string;
   recordedAt: Date;
   status: DeductionAgreementStatus;
@@ -55,7 +57,8 @@ const SELECT_ROW = sql`
   a.id, a.org_id as "orgId", a.person_id as "personId", a.store_id as "storeId", a.source_type as "sourceType",
   a.source_entry_id as "sourceEntryId", a.amount::text as amount, a.per_payroll_limit::text as "perPayrollLimit",
   a.notice_given_at::text as "noticeGivenAt", a.employee_explanation as "employeeExplanation", a.signed_on::text as "signedOn",
-  a.evidence_file_id as "evidenceFileId", a.recorded_by as "recordedBy", a.recorded_at as "recordedAt", a.status,
+  a.evidence_file_id as "evidenceFileId",
+  (select je.entry_date::text from journal_entries je where je.org_id = a.org_id and je.id = a.source_entry_id) as "chargeDate", a.recorded_by as "recordedBy", a.recorded_at as "recordedAt", a.status,
   coalesce((
     select sum(r.amount) from staff_deduction_recoveries r
     where r.org_id = a.org_id and r.agreement_id = a.id and ${entryLive(sql`r.journal_entry_id`)}

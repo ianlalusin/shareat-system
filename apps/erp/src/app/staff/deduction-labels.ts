@@ -12,4 +12,4 @@ const SOURCE_WORDS: Record<string, string> = {
 export const chargeSourceLabel = (sourceType: string): string => SOURCE_WORDS[sourceType] ?? sourceType;
 
 /** The payslip line for one recovery. `signedOn` is the agreement's signing date (blank only for a figure with no agreement row). */
-export const chargeRepaymentLabel = (signedOn: string): string => (signedOn ? `Charge repayment (agreement of ${signedOn})` : 'Charge repayment');
+export const chargeRepaymentLabel = (signedOn: string): string => (signedOn ? `Charge repayment, agreement of ${signedOn}` : 'Charge repayment');

@@ -27,4 +27,4 @@ export function shapeFor(purpose: UploadPurpose): 'circle' | 'square' {
  * Purposes whose stored files keep their own read rule (bible row 353): the control never draws a thumbnail for a stored
  * one, and opening it is one audited fetch per open.
  */
-export const GUARDED_PURPOSES: readonly UploadPurpose[] = ['leave_document', 'staff_signature'];
+export const GUARDED_PURPOSES: readonly UploadPurpose[] = ['leave_document', 'staff_signature', 'staff_deduction_agreement'];

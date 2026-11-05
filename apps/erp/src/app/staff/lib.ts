@@ -202,7 +202,7 @@ export interface DeductionAgreementsView {
   capPercent: number;
   /** Charges no agreement covers yet; `left` is what the charge still has unrecovered. */
   waiting: { entryId: string; sourceType: string; entryDate: string; amount: string; left: string }[];
-  agreements: { id: string; sourceType: string; amount: string; perPayrollLimit: string; recovered: string; left: string; signedOn: string; noticeGivenAt: string; status: string }[];
+  agreements: { id: string; sourceType: string; amount: string; perPayrollLimit: string; recovered: string; left: string; signedOn: string; noticeGivenAt: string; status: string; chargeDate: string; explanation: string; evidenceFileId: string | null }[];
 }
 
 /**
@@ -224,7 +224,7 @@ export async function deductionAgreementsFor(actor: Actor, personId: string, sto
       agreements: rows
         .slice()
         .reverse()
-        .map((a) => ({ id: a.id, sourceType: a.sourceType, amount: a.amount, perPayrollLimit: a.perPayrollLimit, recovered: a.recovered, left: left(a.amount, a.recovered), signedOn: a.signedOn, noticeGivenAt: a.noticeGivenAt, status: a.status })),
+        .map((a) => ({ id: a.id, sourceType: a.sourceType, amount: a.amount, perPayrollLimit: a.perPayrollLimit, recovered: a.recovered, left: left(a.amount, a.recovered), signedOn: a.signedOn, noticeGivenAt: a.noticeGivenAt, status: a.status, chargeDate: a.chargeDate ?? '', explanation: a.employeeExplanation, evidenceFileId: a.evidenceFileId })),
     };
   });
 }

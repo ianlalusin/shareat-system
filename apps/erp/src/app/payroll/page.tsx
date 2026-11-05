@@ -95,8 +95,7 @@ export default async function PayrollPage({
         <div>
           <h1 className="text-2xl font-semibold">Payroll</h1>
           <PageDescription>
-            Pay computed from attendance, with what each person already drew netted against{' '}
-            advances to employees. ⭐ Posting <strong>freezes</strong> the days it paid — after that a
+            Pay computed from attendance: gross, minus advances and agreed charge repayments already drawn. ⭐ Posting <strong>freezes</strong> the days it paid — after that a
             correction goes through payroll, not by restating the day.
           </PageDescription>
         </div>
@@ -300,7 +299,7 @@ export default async function PayrollPage({
                     <th className="py-1 pr-3 text-right font-medium">Gross</th>
                     <th className="py-1 pr-3 text-right font-medium">SSS / PhilHealth / Pag-IBIG</th>
                     <th className="py-1 pr-3 text-right font-medium">Tax</th>
-                    <th className="py-1 pr-3 text-right font-medium">Advance</th>
+                    <th className="py-1 pr-3 text-right font-medium">Repayments</th>
                     <th className="py-1 text-right font-medium">Net</th>
                   </tr>
                 </thead>
@@ -479,7 +478,7 @@ export default async function PayrollPage({
                       <span className="font-mono">{peso(Number(s.netPay))}</span>
                       {compare(money(s.advanceRecovered), ZERO) > 0 &&
                         (repayments[s.journalEntryId ?? ''] ?? [{ amount: s.advanceRecovered, signedOn: '' }])
-                          .map((r) => ` (${chargeRepaymentLabel(r.signedOn)} −${peso(Number(r.amount))})`)
+                          .map((r) => ` · ${chargeRepaymentLabel(r.signedOn)} −${peso(Number(r.amount))}`)
                           .join('')}
                       {` · SSS ${peso(Number(s.sssEe))}, PhilHealth ${peso(Number(s.philhealthEe))}, Pag-IBIG ${peso(Number(s.pagibigEe))}, tax ${peso(Number(s.withholding))}`}
                       {s.skippedAgencies.length > 0 &&

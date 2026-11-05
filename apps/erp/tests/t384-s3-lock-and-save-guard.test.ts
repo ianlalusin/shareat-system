@@ -57,6 +57,8 @@ const COMMANDS: Record<string, string> = {
   'Look at sales': 'T-398 S6d: a read that writes an access-log row, like "View certificate"',
   'Look at stock': 'T-398 S6d: a read that writes an access-log row, like "View certificate"',
   'Cancel': 'T-436: withdraws a pending leave request',
+  'Record agreement': 'T-519 S2 review fixes, 6 Nov 2026, NEEDS BOSS APPROVAL: records a signed charge-repayment agreement (lets payroll take pay); audited',
+  'Cancel agreement': 'T-519 S2 review fixes, 6 Nov 2026, NEEDS BOSS APPROVAL: ends a charge-repayment agreement, inside a reveal that also asks for a reason; audited',
   'Request leave': 'T-436: files a pending leave request for approval',
   'Record absence': 'T-436: records a leave or absence day that already happened',
   'Attach certificate': 'T-436: attaches a medical certificate to a leave request',

@@ -45,11 +45,11 @@ export function DeductionAgreementsSection({ view, employmentId, storeId }: { vi
           <CheckedForm rules={PAYROLL_DEDUCTION_AGREEMENT_RULES} action={recordDeductionAgreementAction} className="space-y-3">
             <input type="hidden" name="employmentId" value={employmentId} />
             <FormGrid layout="fields">
-              <Field label="Charge" width="name">
+              <Field label="Charge" width="full">
                 <Select name="sourceEntryId" className="w-full">
                   {view.waiting.map((w) => (
                     <option key={w.entryId} value={w.entryId}>
-                      {chargeSourceLabel(w.sourceType)} {w.entryDate} · left {peso(Number(w.left))}
+                      {chargeSourceLabel(w.sourceType)} · {w.entryDate} · {peso(Number(w.left))} left
                     </option>
                   ))}
                 </Select>
@@ -71,7 +71,7 @@ export function DeductionAgreementsSection({ view, employmentId, storeId }: { vi
               <Input {...nativeAttrs(PAYROLL_DEDUCTION_AGREEMENT_RULES.employeeExplanation)} className="w-full" />
             </Field>
             <PhotoUpload name="scan" purpose="staff_deduction_agreement" label="Scan of the signed agreement" storeId={storeId} />
-            <Button type="submit" variant="primary">Save</Button>
+            <Button type="submit" variant="primary">Record agreement</Button>
           </CheckedForm>
         </div>
       )}
@@ -84,20 +84,27 @@ export function DeductionAgreementsSection({ view, employmentId, storeId }: { vi
         ) : (
           <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
             {active.map((a) => (
-              <li key={a.id} className="space-y-1 py-1.5">
-                <div className="flex flex-wrap justify-between gap-2">
-                  <span>{chargeSourceLabel(a.sourceType)} · signed {a.signedOn}</span>
-                  <span className="font-mono tabular-nums">
-                    agreed {peso(Number(a.amount))} · repaid {peso(Number(a.recovered))} · left {peso(Number(a.left))} · max {peso(Number(a.perPayrollLimit))} per payroll
-                  </span>
+              <li key={a.id} className="space-y-1 py-2">
+                <AgreementSummary a={a} />
+                <div className="flex flex-wrap justify-between gap-2 font-mono tabular-nums">
+                  <span>agreed {peso(Number(a.amount))} · repaid {peso(Number(a.recovered))} · {peso(Number(a.left))} left</span>
+                  <span>max {peso(Number(a.perPayrollLimit))} per payroll</span>
                 </div>
                 {view.canAct && (
-                  <form action={cancelDeductionAgreementAction} className="flex flex-wrap items-end gap-2">
-                    <input type="hidden" name="employmentId" value={employmentId} />
-                    <input type="hidden" name="agreementId" value={a.id} />
-                    <Input name="reason" placeholder="Why cancel this agreement?" className="min-w-0 flex-1 basis-48" />
-                    <Button type="submit">Cancel</Button>
-                  </form>
+                  <details>
+                    <summary className="inline-block cursor-pointer py-1 text-sm underline underline-offset-4">Cancel agreement</summary>
+                    <form action={cancelDeductionAgreementAction} className="mt-1 flex flex-wrap items-end gap-2">
+                      <input type="hidden" name="employmentId" value={employmentId} />
+                      <input type="hidden" name="agreementId" value={a.id} />
+                      <Input
+                        name="reason"
+                        aria-label={`Reason for cancelling the ${chargeSourceLabel(a.sourceType)} agreement of ${a.signedOn}`}
+                        placeholder="Why cancel this agreement?"
+                        className="min-w-0 flex-1 basis-48 placeholder:text-neutral-500 dark:placeholder:text-neutral-400"
+                      />
+                      <Button type="submit">Cancel agreement</Button>
+                    </form>
+                  </details>
                 )}
               </li>
             ))}
@@ -110,14 +117,33 @@ export function DeductionAgreementsSection({ view, employmentId, storeId }: { vi
           <h3 className="font-medium">History</h3>
           <ul className="divide-y divide-neutral-200 dark:divide-neutral-800">
             {history.map((a) => (
-              <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
-                <span>{chargeSourceLabel(a.sourceType)} · signed {a.signedOn} <Badge status={a.status} /></span>
-                <span className="font-mono tabular-nums">agreed {peso(Number(a.amount))} · repaid {peso(Number(a.recovered))}</span>
+              <li key={a.id} className="space-y-1 py-2">
+                <AgreementSummary a={a} />
+                <div className="flex flex-wrap items-center justify-between gap-2 font-mono tabular-nums">
+                  <span>agreed {peso(Number(a.amount))} · repaid {peso(Number(a.recovered))}</span>
+                  <Badge status={a.status} />
+                </div>
               </li>
             ))}
           </ul>
         </div>
       )}
     </section>
+  );
+}
+
+type AgreementRow = DeductionAgreementsView['agreements'][number];
+
+/** Who and what an agreement is: charge, charge date, signed date, what the employee said (cut short, full text on hover) and the signed scan. */
+function AgreementSummary({ a }: { a: AgreementRow }) {
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+      <span className="font-medium">{chargeSourceLabel(a.sourceType)} · {a.chargeDate}</span>
+      <span>signed {a.signedOn}</span>
+      <span className="min-w-0 max-w-full truncate text-neutral-500 dark:text-neutral-400" title={a.explanation}>&ldquo;{a.explanation}&rdquo;</span>
+      {a.evidenceFileId && (
+        <a href={`/files/${a.evidenceFileId}`} target="_blank" rel="noreferrer" className="inline-block py-1 text-sm underline underline-offset-4">View signed scan</a>
+      )}
+    </div>
   );
 }
