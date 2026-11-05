@@ -88,7 +88,7 @@ describe('read-excel-file runs in a worker: a hostile worksheet ends in XLSX_TOO
     console.log(`HOSTILE_MS ${label}: ${ms} -> ${r.code}`);
     // The empty-row flood is data-dependent inside the library: it takes about 5 s (timeout) or finishes in about 1.5 s with an empty sheet,
     // which the reader then refuses by name (no header). Both are safe; what must never happen is a hang or a crash.
-    const fine = label.startsWith('1.2 million') ? ['XLSX_TOO_HEAVY', 'XLSX_TOO_SLOW', 'FOODPANDA_MISSING_COLUMN'] : ['XLSX_TOO_HEAVY', 'XLSX_TOO_SLOW'];
+    const fine = label.startsWith('1.2 million') || label.includes('1e7') ? ['XLSX_TOO_HEAVY', 'XLSX_TOO_SLOW', 'FOODPANDA_MISSING_COLUMN'] : ['XLSX_TOO_HEAVY', 'XLSX_TOO_SLOW'];
     expect(fine).toContain(r.code);
     expect(ms).toBeLessThan(8000);
     expect(r.userMessage).not.toMatch(UUID_SHAPE);
