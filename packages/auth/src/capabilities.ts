@@ -270,6 +270,8 @@ export type Capability =
   // T-401 S2 - the ERP menu and catalog master. view_menu/manage_menu/set_menu_depletion are org; set_menu_price is store.
   | 'view_menu'
   | 'add_menu_item'
+  /** T-510 (Ian, 5 Nov 2026). Super admin only: which offer belongs to which daypart (or all day). A manager still re-prices an existing slot with set_menu_price. */
+  | 'pair_menu_dayparts'
   | 'manage_menu'
   | 'request_menu_item'
   | 'set_menu_price'
@@ -430,6 +432,7 @@ export const CAPABILITIES: readonly Capability[] = [
   'manage_price_lists',
   'view_menu',
   'add_menu_item',
+  'pair_menu_dayparts',
   'manage_menu',
   'request_menu_item',
   'set_menu_price',
@@ -628,6 +631,7 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   // T-401. The menu is org master data; a price is per store (position-grantable per store, T-318).
   view_menu: 'org',
   add_menu_item: 'org',
+  pair_menu_dayparts: 'org',
   manage_menu: 'org',
   request_menu_item: 'store',
   set_menu_price: 'store',
@@ -847,6 +851,7 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   manage_price_lists: 'admin',
   view_menu: 'sales',
   add_menu_item: 'sales',
+  pair_menu_dayparts: 'sales',
   manage_menu: 'sales',
   request_menu_item: 'sales',
   set_menu_price: 'sales',
@@ -1086,6 +1091,8 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   // may request an item. A depletion rule is a stock recipe: "only admin can edit recipe" (manager is a cross here).
   view_menu: { super_admin: true, admin: true, manager: true, staff: false },
   add_menu_item: { super_admin: true, admin: false, manager: false, staff: false },
+  // T-510 (Ian, 5 Nov 2026): the pairing structure (offer <-> daypart, all-day <-> dayparted) is super admin only, like adding an item.
+  pair_menu_dayparts: { super_admin: true, admin: false, manager: false, staff: false },
   manage_menu: { super_admin: true, admin: true, manager: false, staff: false },
   request_menu_item: { super_admin: true, admin: true, manager: true, staff: false },
   set_menu_price: { super_admin: true, admin: true, manager: true, staff: false },
@@ -1342,6 +1349,7 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   manage_price_lists: 'manage price lists',
   view_menu: 'view the menu and its prices',
   add_menu_item: 'add items and variants to the menu',
+  pair_menu_dayparts: 'tie a menu price to a time of day, or change which prices belong together',
   manage_menu: 'edit the menu',
   request_menu_item: 'ask for a new menu item',
   set_menu_price: 'set menu prices',
