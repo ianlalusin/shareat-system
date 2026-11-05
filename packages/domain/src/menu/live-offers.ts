@@ -49,7 +49,8 @@ const priceFieldsOf = (o: Row): menuRepo.OfferPriceFields => ({
   fixedMarkupAmount: o.fixedMarkupAmount,
 });
 
-const byStr = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+// UTF-16 code-unit order by the default sort, no relational operator (same as project.ts `cmp`; the numeric write guard).
+const byStr = (a: string, b: string): number => (a === b ? 0 : [a, b].sort()[0] === a ? -1 : 1);
 
 /** The newest withdrawn row, ties: dayparted before all-day, then id (the same pick the SQL function makes). Deterministic for any input order. */
 function pickWithdrawn(rows: readonly Row[]): Row {
