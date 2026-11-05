@@ -38,6 +38,7 @@ createPaymentConversionServer
 customerReturnableQuantity
 datesInWeek
 dayIdOf
+daypartsOverlap
 deleteDocumentNonBlocking
 depreciateAsset
 depreciationDrift
@@ -105,6 +106,7 @@ middleware
 mintUniqueToken
 nameMatches
 newCorrelationId
+nextDaypartBoundary
 oldWholeBillSeniorDiscount
 openClaim
 openFloatsForStore
@@ -139,6 +141,7 @@ reserveNext
 resetLobbyReadLimiterForTests
 resetNonCentavoCount
 resolveFingerprintMatchToken
+resolveLiveOffer
 retireMenuItem
 retireMenuVariant
 returnableQuantity
