@@ -7,6 +7,7 @@ import { RoleGuard } from "@/components/guards/RoleGuard";
 import { PageHeader } from "@/components/page-header";
 import { useAuthContext } from "@/context/auth-context";
 import { useStoreContext } from "@/context/store-context";
+import { useErpAdapted } from "@/lib/menu/useErpMenu";
 import { collection, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDocs, collectionGroup, orderBy, limit, runTransaction, increment, writeBatch } from "firebase/firestore";
 import { auth } from "@/lib/firebase/client";
 import { db } from "@/lib/firebase/client";
@@ -42,6 +43,8 @@ function normalizeGuestCountChange(raw: any): GCC {
 export function ServerPageClient() {
   const { appUser } = useAuthContext();
   const { activeStore, loading: storeLoading } = useStoreContext();
+  const erp = useErpAdapted();
+  const erpOn = erp !== null;
   const { toast } = useToast();
   const { currentProfile, signOut, isReady: profileReady } = useLocalProfile();
 
@@ -120,7 +123,7 @@ export function ServerPageClient() {
     }));
     
     // Fetch data needed for dialogs
-    unsubs.push(onSnapshot(collection(db, "stores", activeStore.id, "storePackages"), s => setStorePackages(s.docs.map(d => d.data() as StorePackage))));
+    if (!erpOn) unsubs.push(onSnapshot(collection(db, "stores", activeStore.id, "storePackages"), s => setStorePackages(s.docs.map(d => d.data() as StorePackage))));
     const schedulesRef = collection(db, "stores", activeStore.id, "menuSchedules");
     const schedulesQuery = query(schedulesRef, where("isActive", "==", true));
     unsubs.push(onSnapshot(schedulesQuery, (snapshot) => {
@@ -133,7 +136,10 @@ export function ServerPageClient() {
     setIsLoading(false);
     return () => unsubs.forEach(unsub => unsub());
 
-  }, [activeStore]);
+  }, [activeStore, erpOn]);
+
+  // T-508 S5 (R9): with POS_MENU_SOURCE=erp the dialogs' packages come from the ERP menu adapter instead of the Firestore listener above.
+  useEffect(() => { if (erp) setStorePackages(erp.packages); }, [erp]);
   
   const handleOpenRequestDialog = (session: PendingSession) => {
     setSessionForRequest(session);

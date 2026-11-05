@@ -2,6 +2,8 @@
 
 "use client";
 
+import { loadPrintLocations } from "@/lib/menu/printLocations";
+import { useErpMenu } from "@/lib/menu/useErpMenu";
 import { useState, useMemo, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
@@ -126,7 +128,12 @@ function POSContent({
   const isOnline = useOnlineStatus();
 
   const { storeAddons, storeAddonsLoading, refreshStoreAddons, enableStoreAddons } = useStoreContext();
-  const addons = storeAddons as unknown as EnrichedStoreAddon[];
+  // T-508 (R8): with POS_MENU_SOURCE=erp the one list carries both kinds; the a-la-carte picker (collect mode) wants soldALaCarte,
+  // the in-session add-on modal wants soldInPackageSession. Firestore rows have neither flag and are never filtered.
+  const erpOn = useErpMenu().erp;
+  const addons = (erpOn
+    ? (storeAddons as any[]).filter((a) => (onCollect ? a.soldALaCarte : a.soldInPackageSession))
+    : storeAddons) as unknown as EnrichedStoreAddon[];
   const isLoading = storeAddonsLoading;
 
   // Opt the session into the addons subscription on first mount of the picker.
@@ -397,8 +404,7 @@ function POSContent({
         // fetch) throwing is swallowed by the trailing .catch.
         if (ticketPayload) {
           void (async () => {
-            const klSnap = await getDocs(collection(db, "stores", storeId, "kitchenLocations"));
-            const kitchenLocations = klSnap.docs.map((d) => ({ id: d.id, printOnOutage: (d.data() as any).printOnOutage }));
+            const kitchenLocations = await loadPrintLocations(storeId);
             const deps = makeKitchenBackupDeps({
               kitchenLocations,
               stampTicket: (ticketId) => {

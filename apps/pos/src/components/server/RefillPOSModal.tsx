@@ -2,6 +2,8 @@
 
 "use client";
 
+import { loadPrintLocations } from "@/lib/menu/printLocations";
+import { useErpAdapted } from "@/lib/menu/useErpMenu";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { applyRefillTap } from "@/lib/refill-selection";
 import { globalInactiveIds } from "@/lib/refill-visibility";
@@ -67,6 +69,7 @@ function POSContent({
   const [storeFlavors, setStoreFlavors] = useState<StoreFlavor[]>([]);
   const [currentPackage, setCurrentPackage] = useState<StorePackage | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const erp = useErpAdapted(); // T-508 R9: null unless POS_MENU_SOURCE=erp
   
   const [cart, setCart] = useState<Map<string, CartItem>>(new Map());
   const [activeRefillId, setActiveRefillId] = useState<string | null>(null);
@@ -78,6 +81,16 @@ function POSContent({
         setIsLoading(false);
         return;
     };
+
+    // T-508 S5 (R9): refills, flavours and the session's package come from the ERP menu adapter; no Firestore subscriptions.
+    if (erp) {
+        setStoreRefills(erp.refills);
+        setAllGlobalRefills(erp.globalRefills as unknown as Refill[]);
+        setStoreFlavors(erp.flavors);
+        setCurrentPackage(erp.packages.find((p) => p.packageId === session.packageOfferingId) ?? null);
+        setIsLoading(false);
+        return;
+    }
     
     const unsubs: (() => void)[] = [];
 
@@ -126,7 +139,7 @@ function POSContent({
     Promise.all([getDocs(storeRefillsQuery), getDocs(flavorsQuery)]).finally(() => setIsLoading(false));
     
     return () => unsubs.forEach(unsub => unsub());
-  }, [storeId, session.packageOfferingId]);
+  }, [storeId, session.packageOfferingId, erp]);
   
   // Only ACTIVE globals carry the flavor rules; retired ids are hidden outright.
   const globalRefills = useMemo(
@@ -230,8 +243,7 @@ function POSContent({
   const printOfflineKitchenTickets = (tickets: Array<Record<string, any>>) => {
     if (!tickets.length) return;
     void (async () => {
-      const klSnap = await getDocs(collection(db, "stores", storeId, "kitchenLocations"));
-      const kitchenLocations = klSnap.docs.map((d) => ({ id: d.id, printOnOutage: (d.data() as any).printOnOutage }));
+      const kitchenLocations = await loadPrintLocations(storeId);
       // `deps` (and its stampTicket closure) is built once for the whole batch,
       // but each ticket in the loop can belong to a different station. Map
       // ticketId -> kitchenLocationId up front so the shared closure can still

@@ -1,6 +1,7 @@
 
 "use client";
 
+import { loadPrintLocations } from "@/lib/menu/printLocations";
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
@@ -374,8 +375,7 @@ export function SessionDetailView({ sessionId }: { sessionId: string }) {
             // fetch) throwing is swallowed by the trailing .catch.
             if (ticketPayload) {
               void (async () => {
-                const klSnap = await getDocs(collection(db, "stores", storeId, "kitchenLocations"));
-                const kitchenLocations = klSnap.docs.map((d) => ({ id: d.id, printOnOutage: (d.data() as any).printOnOutage }));
+                const kitchenLocations = await loadPrintLocations(storeId);
                 const deps = makeKitchenBackupDeps({
                   kitchenLocations,
                   stampTicket: (ticketId) => {

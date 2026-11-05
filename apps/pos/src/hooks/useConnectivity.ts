@@ -19,7 +19,7 @@ export const OFFLINE_INTERVAL_MS = 10_000;
 export const FAILURES_TO_OFFLINE = 2;
 
 /** One probe. Never throws. ok === true ONLY for a 2xx answer whose JSON body has `ok` exactly `true`. */
-export async function probeHealth(fetchFn: typeof fetch, apiBase: string, timeoutMs: number = PROBE_TIMEOUT_MS): Promise<{ ok: boolean; version?: string }> {
+export async function probeHealth(fetchFn: typeof fetch, apiBase: string, timeoutMs: number = PROBE_TIMEOUT_MS): Promise<{ ok: boolean; version?: string; menuSource?: "erp" | "firestore" }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -27,7 +27,12 @@ export async function probeHealth(fetchFn: typeof fetch, apiBase: string, timeou
     if (!res.ok) return { ok: false };
     const body = (await res.json()) as { ok?: unknown; version?: unknown } | null;
     if (!body || body.ok !== true) return { ok: false };
-    return typeof body.version === "string" ? { ok: true, version: body.version } : { ok: true };
+    const out: { ok: boolean; version?: string; menuSource?: "erp" | "firestore" } = { ok: true };
+    if (typeof body.version === "string") out.version = body.version;
+    // T-508 R9: the server tells the tablet which menu source is on.
+    const ms = (body as { menuSource?: unknown }).menuSource;
+    if (ms === "erp" || ms === "firestore") out.menuSource = ms;
+    return out;
   } catch {
     return { ok: false };
   } finally {
@@ -40,6 +45,8 @@ export interface ConnectivityState {
   consecutiveFailures: number;
   lastCheckedMs: number | null;
   version: string | null;
+  /** T-508 R9: last menu source the server reported; null until the first answer. */
+  menuSource?: "erp" | "firestore" | null;
 }
 
 export interface ConnectivityStore {
@@ -62,7 +69,7 @@ export function createConnectivityStore(d: { fetch: typeof fetch; apiBase?: stri
   let inFlight: Promise<void> | null = null;
 
   const set = (next: ConnectivityState) => {
-    const changed = next.online !== state.online || next.version !== state.version || next.consecutiveFailures !== state.consecutiveFailures;
+    const changed = next.online !== state.online || next.version !== state.version || next.menuSource !== state.menuSource || next.consecutiveFailures !== state.consecutiveFailures;
     state = next;
     if (changed) for (const l of [...listeners]) l();
   };
@@ -72,7 +79,7 @@ export function createConnectivityStore(d: { fetch: typeof fetch; apiBase?: stri
     inFlight = (async () => {
       const r = await probeHealth(d.fetch, apiBase);
       const lastCheckedMs = Date.now();
-      if (r.ok) set({ online: true, consecutiveFailures: 0, lastCheckedMs, version: r.version ?? state.version });
+      if (r.ok) set({ online: true, consecutiveFailures: 0, lastCheckedMs, version: r.version ?? state.version, menuSource: r.menuSource ?? 'firestore' }); // no field = an older server: the safe default, never a remembered erp
       else {
         const failures = state.consecutiveFailures + 1;
         set({ ...state, consecutiveFailures: failures, online: failures >= FAILURES_TO_OFFLINE ? false : state.online, lastCheckedMs });

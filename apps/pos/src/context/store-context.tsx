@@ -7,6 +7,7 @@ import { db } from "@/lib/firebase/client";
 import { useAuthContext } from "@/context/auth-context";
 import type { Store } from "@/lib/types";
 import { getDisplayName } from "@/lib/products/variants";
+import { useErpAdapted, useMenuSync } from "@/lib/menu/useErpMenu";
 
 // ---------------------------------------------------------------------------
 // Inherited add-on photos (local-overrides-global fallback, cashier side)
@@ -196,6 +197,17 @@ export function StoreContextProvider({ children }: { children: React.ReactNode }
   const [storeAddonsLoading, setStoreAddonsLoading] = useState(false);
   const [addonsEnabled, setAddonsEnabled] = useState(false);
 
+  // T-508 S5 (R9): with POS_MENU_SOURCE=erp the add-ons (and the a-la-carte picker, which reads this same list) come from the ERP menu
+  // adapter and the Firestore inventory subscription below stays off. Default source is firestore: nothing here changes then.
+  useMenuSync(activeStore?.id);
+  const erpAdapted = useErpAdapted();
+  const erpOn = erpAdapted !== null;
+  useEffect(() => {
+    if (!erpAdapted) return;
+    setStoreAddons(erpAdapted.addons);
+    setStoreAddonsLoading(!erpAdapted.loaded);
+  }, [erpAdapted]);
+
   // Global catalog photos, keyed by productId — see the module header above.
   //
   // A ref, not state: it must survive every onSnapshot re-fire (which happens
@@ -295,6 +307,7 @@ export function StoreContextProvider({ children }: { children: React.ReactNode }
 
 
   const fetchStoreAddons = useCallback(() => {
+    if (erpOn) return () => {};
     if (!activeStore?.id || !appUser) {
         setStoreAddons([]);
         setStoreAddonsLoading(false);
@@ -358,11 +371,11 @@ export function StoreContextProvider({ children }: { children: React.ReactNode }
       cancelled = true;
       unsubscribe();
     };
-  }, [activeStore?.id, appUser]);
+  }, [activeStore?.id, appUser, erpOn]);
 
 
   useEffect(() => {
-      if (!addonsEnabled) return;
+      if (!addonsEnabled || erpOn) return;
       const unsub = fetchStoreAddons();
       return () => { unsub(); }
   }, [addonsEnabled, fetchStoreAddons])
