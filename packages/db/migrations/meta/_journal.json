@@ -1457,6 +1457,13 @@
       "when": 1806118307084,
       "tag": "0232_t508_kitchen_stations",
       "breakpoints": true
+    },
+    {
+      "idx": 233,
+      "version": "7",
+      "when": 1806204707084,
+      "tag": "0233_t510_menu_dayparts",
+      "breakpoints": true
     }
   ]
 }

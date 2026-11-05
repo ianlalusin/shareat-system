@@ -83,6 +83,13 @@ const EXEMPT: Record<string, (typeof EXEMPT_REASONS)[number]> = {
   // T-502 S5 (expense items report): ISO business-date ordering (lexicographic by design), never a money comparison
   'packages/domain/src/reports/expense-items.ts::attribute::r.businessDate > p.businessDate': 'not-a-column-value',
   'apps/erp/src/app/reports/expense-items/range.ts::resolveRange::from > to': 'not-a-column-value',
+  // T-510 S1a (daypart resolver): minutes-since-midnight / minutes-in-week integers parsed from 'HH:MM' strings, never a numeric(p,s) column value
+  'packages/domain/src/menu/daypart.ts::daypartContains::s < e': 'not-a-column-value',
+  'packages/domain/src/menu/daypart.ts::daypartContains::m >= s': 'not-a-column-value',
+  'packages/domain/src/menu/daypart.ts::daypartContains::m < e': 'not-a-column-value',
+  'packages/domain/src/menu/daypart.ts::weeklyIntervals::e > s': 'not-a-column-value',
+  'packages/domain/src/menu/daypart.ts::weeklyIntervals::to <= MINUTES_PER_WEEK': 'not-a-column-value',
+  'packages/domain/src/menu/daypart.ts::nextBoundary::e < s': 'not-a-column-value',
   // string-vs-string ORDERING of fiscal-period keys / ids / dates ('2026-01' <= '2026-02'): lexicographic by design, never a money comparison
   'packages/domain/src/shared/straight-line.ts::periodsThroughOf::p.period <= asOfPeriod': 'not-a-column-value',
   'packages/domain/src/shared/allocate-oldest-first.ts::compareItems::dateA < dateB': 'not-a-column-value',

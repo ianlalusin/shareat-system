@@ -3,6 +3,7 @@
  * `project.ts` (the carrier-neutral store-menu projection) is S3 and is exported when it lands.
  */
 export * from './catalog';
+export * from './daypart';
 export * from './options';
 export * from './pricing';
 export * from './requests';

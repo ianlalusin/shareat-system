@@ -591,7 +591,13 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     table: 'menu_offers',
     mode: 'origin',
     kind: 'validator',
-    reason: "No back-dating; refill/amount/bundle shape; a live offer needs a depletion rule in force (0196). Reads the clock and other rows.",
+    reason: "No back-dating; refill/amount/bundle shape; a live offer needs a depletion rule in force (0196); daypart active, no overlap, no all-day beside dayparted (0233). Reads the clock and other rows.",
+  },
+  menu_dayparts_update_guard: {
+    table: 'menu_dayparts',
+    mode: 'origin',
+    kind: 'validator',
+    reason: "id/org/store never change; retire refused while a live offer uses the daypart; a days/time edit may not create an overlap (0233). Reads other rows.",
   },
   menu_offers_update_guard: {
     table: 'menu_offers',
@@ -604,6 +610,12 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     mode: 'origin',
     kind: 'validator',
     reason: "Only a future offer may be deleted, a cancelled scheduled change (0196). Decides from the clock.",
+  },
+  menu_offers_delete_slot_guard: {
+    table: 'menu_offers',
+    mode: 'origin',
+    kind: 'validator',
+    reason: "A scheduled offer may be deleted only if no all-day offer would end up beside a dayparted one, nor two overlapping dayparts (0233, T-510 audit F1). Reads other rows and the clock.",
   },
   menu_option_offers_insert_guard: {
     table: 'menu_option_offers',
