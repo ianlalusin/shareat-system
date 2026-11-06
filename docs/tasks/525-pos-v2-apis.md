@@ -300,3 +300,33 @@ build the test DB URL inside the command. The full integration suite runs in CI.
    and the catalogue's client list has no `'erp'`.
 7. **Kinds:** a well-formed kind that is not in R3's list is quarantined (`POS_EVENT_UNKNOWN_KIND`). A kind that fails
    the table's pattern `^[a-z]+(\.[a-z_]+)+$` is a malformed envelope → **400**, nothing processed.
+
+## Rulings after the build and the audits (planner, 7 Nov 2026)
+
+1. **Codes.** A refusal's code is the leading `UPPER_SNAKE:` of its raw message. T-524's `RULES_NOT_WIRED` and
+   `RECORDED_DIFFERENTLY` gained that prefix. An unknown person's sentence may name the uuid that was sent.
+2. **Retry.** These are `retry` and are logged at warn: `RETRYABLE_POS_CODES`, any `AUDIT_*` or `UNKNOWN_AUDIT_*`
+   refusal (a server fault), SQLSTATE 40001, 40P01 and classes 08, 25, 53 and 57, and unknown errors.
+3. **The event's fault.** SQLSTATE classes 22 and 23 are quarantined as `POS_EVENT_INVALID`. A collision race in class
+   23 is recovered by a manager replay. That is accepted, because it is rare.
+4. **The tablet's queue never wedges.**
+   - NUL characters and unpaired surrogates in keys or values are replaced with U+FFFD, and the event is quarantined
+     `POS_EVENT_INVALID`.
+   - Nesting deeper than 64 levels, and an `occurredAtDevice` outside the years 0001–9999, are quarantined the same way.
+     The out-of-range time is stored as the received time.
+   - If the quarantine insert itself fails with class 22, it is tried once more with payload `{"unstorable": true}`.
+5. **PINs.** Any key matching `/pin/i`, at any depth and on any kind, is stored as `pinGiven: true`. A wrong manager PIN
+   is charged once, in the quarantine transaction (`recordPosApprovalMiss`, server-only), so the 5-miss cap trips.
+   ⚠ **Follow-up for T-527/T-528:** a direct Server Action calling T-524's `voidUnpaidSession` rolls back its own miss
+   charge on a wrong PIN, so its caller must charge the miss the same way.
+6. **Replay.**
+   - A replay of `sale.completed` rethrows on any refusal, so no half-written sale commits.
+   - A replayed event's clock skew is measured against `received_at`.
+   - A `POS_EVENT_INVALID` row cannot be replayed, only discarded.
+   - A replay of an online void is refused.
+7. **Kept as built.**
+   - Snapshot stands are `{id, number}`.
+   - `employeeId` is the 3-digit string.
+   - The audit source of the review actions is `'web'`.
+   - Senior and PWD holder names and IDs stay in the `pos_events` payload. The table is purge-class, and the same data
+     sits in `statutory_discount_records`.
