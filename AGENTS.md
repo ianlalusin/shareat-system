@@ -149,6 +149,52 @@ docs/       decisions/ · discovery/ · plans/ · tasks/
 
 Ports are reserved and never shared. Never pass a different `-p`.
 
+## ⭐ Building from a work order (apps outside Claude Code)
+
+If you were pointed at a **work order** (Ian, 2026-11-06), you are a **builder**. The work order is
+your whole brief, written so you need no memory of this project. The format is
+[`docs/tasks/WORK-ORDER-TEMPLATE.md`](./docs/tasks/WORK-ORDER-TEMPLATE.md), and the builder's
+standing prompt is `C:\Users\ianla\webapps\shareat-coord\work-orders\FREEBUFF-PROMPT.md`.
+
+**Work orders live outside git, in one folder per status:**
+`C:\Users\ianla\webapps\shareat-coord\work-orders\` → `open\` (waiting) · `current\` (being built) ·
+`done\` (PR opened). A work order is in exactly one folder and is **moved, never copied**.
+
+1. Take the lowest T-number in `open\` whose risk class is low or medium.
+2. **Claim it by moving it to `current\`.** The move is the lock: if it fails, another builder has
+   it, so pick again. Write "Claimed by <app> <model>, <date time>" at its top.
+3. Create your worktree and `wo/` branch from `origin/main`, exactly as the work order names them,
+   and run a real `npm ci` there.
+4. Copy the work order into the worktree as `docs/tasks/NNN-short-name.md`, so the PR keeps it.
+5. Build, run every listed check, and paste the real output under **Builder notes**.
+6. Push and open **one** PR with the T-number in its title, ending "Built by <app> <model> from a
+   work order".
+7. Move the work order to `done\` with the PR link at its top.
+
+| Step | Who |
+|---|---|
+| Writes the work order into `open\`, reserves its numbers on the board | Opus planner (BOSS or a spec lane) |
+| Claims it, builds it in its own worktree and `wo/` branch, opens one PR, moves it to `done\` | **You** (today: Freebuff with DeepSeek or Nemotron) |
+| Runs CI on the PR | GitHub |
+| Audits open PRs' diffs every 12 hours, **before** they are queued | Codex |
+| Fixes the audit findings on the same branch, then verifies | a Claude Sonnet fixer, verified by Opus |
+| Merges, one at a time, then deploys | BOSS's merge queue only |
+
+**Your hard limits** (the work order's §7 has the full list):
+- Work **only** in your own worktree on your own `wo/` branch. Never work in the shared checkout
+  `C:\Users\ianla\webapps\shareat-system`.
+- Touch only the files the work order lists.
+- Your job ends at **one opened PR**. Never merge, rebase or push anyone else's branch, deploy, or
+  enable auto-merge.
+- Never invent a migration, DEF, task or bible row number, and never edit `PROJECT_BIBLE.md` or
+  `knowledge/`.
+- Never `git worktree remove --force` or `rm -rf` a worktree. It has deleted real source files.
+- Money, permissions and database-schema work stay with Claude builders until Ian says otherwise.
+
+Stuck? Write the step, the exact error and what you tried under **Builder notes**, in both the
+`current\` file and the repo copy. Push, open the PR as a **draft**, move the work order to `done\`
+with "BLOCKED" at its top, and go on to the next one. A blocked report beats a silent workaround.
+
 
 ## ⭐ Ian's closing line — "wrap up today's work"
 
