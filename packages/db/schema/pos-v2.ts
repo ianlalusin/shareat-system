@@ -454,7 +454,7 @@ export const posSalesReceipts = pgTable(
     /** Composite FK (store_id, terminal_id) -> pos_terminals, hand-added in migration 0238. */
     terminalId: uuid('terminal_id').notNull(),
     /** Continuous per terminal, never reset (DEF-001/002/587). The printed number is <store code>-<terminal_no 2 digits>-<receipt_seq 6 digits>, formatted by the app, never stored. */
-    receiptSeq: integer('receipt_seq').notNull(),
+    terminalSeq: integer('receipt_seq').notNull(),
     /** Composite FK (store_id, table_session_id) -> table_sessions, hand-added in migration 0238. One sales receipt per session. */
     tableSessionId: uuid('table_session_id').notNull(),
     cashierId: personCol('cashier_id').notNull(),
@@ -476,11 +476,11 @@ export const posSalesReceipts = pgTable(
     check('pos_sales_receipts_total_finite_check', sql`${t.total} > '-Infinity'::numeric and ${t.total} < 'Infinity'::numeric`),
     check('pos_sales_receipts_device_total_finite_check', sql`${t.deviceTotal} > '-Infinity'::numeric and ${t.deviceTotal} < 'Infinity'::numeric`),
     unique('pos_sales_receipts_org_id_id_unique').on(t.orgId, t.id),
-    unique('pos_sales_receipts_terminal_seq_unique').on(t.terminalId, t.receiptSeq),
+    unique('pos_sales_receipts_terminal_seq_unique').on(t.terminalId, t.terminalSeq),
     unique('pos_sales_receipts_table_session_unique').on(t.tableSessionId),
     // NOTE: the trigger pos_sales_receipts_session_guard (INSERT for a voided session refused, 23001) is hand-added in migration 0238, ENABLE ALWAYS.
     // NOTE: the trigger pos_sales_receipts_frozen (every column frozen, day_close_id set once; DELETE refused; 23001) is hand-added in migration 0238, ENABLE ALWAYS.
-    check('pos_sales_receipts_receipt_seq_check', sql`${t.receiptSeq} > 0`),
+    check('pos_sales_receipts_receipt_seq_check', sql`${t.terminalSeq} > 0`),
     check('pos_sales_receipts_discount_total_check', sql`${t.discountTotal} >= 0`),
     check('pos_sales_receipts_total_check', sql`${t.total} >= 0`),
     check('pos_sales_receipts_total_identity_check', sql`${t.total} = ${t.subtotal} - ${t.discountTotal}`),
