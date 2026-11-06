@@ -31,7 +31,7 @@ export function createMenuStore(d: MenuStoreDeps) {
       storeId, online: d.connectivity.getState().online, read: () => load(storeId), write: save,
       fetchMenu: (inm) => d.fetchMenu(storeId, inm), now,
     });
-    if (r.cache && (r.changed || !state.cached || state.cached.storeId !== storeId)) set({ ...state, cached: r.cache });
+    if (r.cache && (r.changed || r.rescheduled || !state.cached || state.cached.storeId !== storeId)) set({ ...state, cached: r.cache });
   }
 
   const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
