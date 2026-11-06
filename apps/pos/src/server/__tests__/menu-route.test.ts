@@ -75,6 +75,24 @@ describe('GET /api/pos2/menu', () => {
     expect(changed.headers.get('etag')).toBe('"h2"');
     expect((await json(changed)).menu.stations[0].name).toBe('Hot Line');
   });
+  it('x-next-change-at: the ISO time on 200 and on 304; absent when there is none; ETag and body untouched', async () => {
+    const h = await handler();
+    const AT = '2026-11-01T09:00:00.000Z';
+    current = { ...PROJ('h1'), nextChangeAt: AT };
+    const ok = await h(get(), deps());
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get('x-next-change-at')).toBe(AT);
+    expect(ok.headers.get('etag')).toBe('"h1"');
+    expect((await json(ok)).nextChangeAt).toBe(AT);
+    const same = await h(get({ inm: '"h1"' }), deps());
+    expect(same.status).toBe(304);
+    expect(same.headers.get('x-next-change-at')).toBe(AT);
+    expect(same.headers.get('etag')).toBe('"h1"');
+    expect(await same.text()).toBe('');
+    current = PROJ('h1'); // nextChangeAt null
+    expect((await h(get(), deps())).headers.has('x-next-change-at')).toBe(false);
+    expect((await h(get({ inm: '"h1"' }), deps())).headers.has('x-next-change-at')).toBe(false);
+  });
   it('missing x-pos-store-id 400 "Missing store."', async () => {
     const res = await (await handler())(get({ store: null }), deps());
     expect(res.status).toBe(400);
