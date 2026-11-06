@@ -282,3 +282,21 @@ build the test DB URL inside the command. The full integration suite runs in CI.
 
 - **O1.** R4's 7-day window and ±3-day skew are proposals. They are safe against Lipa's data: 0 offline receipts in 91
   days, 1 ever. Change them only on a measured need.
+
+## Rulings on the tester's questions (planner, 7 Nov 2026)
+
+1. **Quarantine code:** `<CODE>` is the refusal's own code when it carries one (T-524 `refuse()` codes such as
+   `RECORDED_DIFFERENTLY`). An `AuthorizationError` is stored as `POS_EVENT_NOT_ALLOWED`. Any other refusal with no code
+   is stored as `POS_EVENT_REFUSED`.
+2. **A wrong manager PIN** (`AuthenticationError` from `verifyPosManagerApproval`) is the event's fault. Quarantine it as
+   `POS_EVENT_PIN_REFUSED`; never `retry`. Test it.
+3. **State:** sign-in and store scope are checked **before** the 304 shortcut. 403 beats 304.
+4. **R4 clause 3:** the PIN session must have been issued **at or before** `occurredAtDevice + 10 minutes`. The 10
+   minutes absorb a tablet clock a little behind the server's. A session issued only later does not count. Test both
+   sides of the edge.
+5. **R4 clause 1:** an unknown person's quarantined row stores `person_id = NULL` (the column has an FK). The error
+   sentence names the id that was sent.
+6. **Audit `clientSources`:** omit it for `pos.event_replayed` and `pos.event_discarded`. They are server-only actions,
+   and the catalogue's client list has no `'erp'`.
+7. **Kinds:** a well-formed kind that is not in R3's list is quarantined (`POS_EVENT_UNKNOWN_KIND`). A kind that fails
+   the table's pattern `^[a-z]+(\.[a-z_]+)+$` is a malformed envelope → **400**, nothing processed.
