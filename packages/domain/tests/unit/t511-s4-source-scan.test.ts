@@ -108,10 +108,12 @@ describe('T-511 S4 store-match.ts and ingest.ts', () => {
 
 describe('T-511 S4 the seven slice-3 reader exports each get a real production caller (the baseline shrinks by these names (6; parseGrabDateTime stays))', () => {
   const stage = src('stage.ts');
-  const ingest = src('ingest.ts');
+  // test edit (builder 1, 5 Nov 2026, T-511 S5b): the file readers' call sites MOVED from ingest.ts to stored-upload.ts (spec: readFile moves there, ingest imports it); the ingest's reach is both files
+  const ingest = `${src('ingest.ts')}
+${src('stored-upload.ts')}`;
   const calls = (code: string, name: string): boolean => new RegExp(`(?<![.\\w$])${name}\\(`).test(code.replace(/^\s*import[^;]*;/gm, ''));
 
-  it('ingest.ts calls openSettlementZip, readFoodpandaInvoice, readGrabTransactions, readGrabTransfers and tieGrabPayouts', () => {
+  it('ingest.ts (with stored-upload.ts, where the file readers moved) calls openSettlementZip, readFoodpandaInvoice, readGrabTransactions, readGrabTransfers and tieGrabPayouts', () => {
     for (const name of ['openSettlementZip', 'readFoodpandaInvoice', 'readGrabTransactions', 'readGrabTransfers', 'tieGrabPayouts']) expect(calls(ingest, name), name).toBe(true);
   });
 

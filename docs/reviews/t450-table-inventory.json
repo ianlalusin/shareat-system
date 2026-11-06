@@ -84,6 +84,12 @@
     "headerless": 0
   },
   {
+    "file": "apps/erp/src/app/channel-settlements/review/page.tsx",
+    "tables": 0,
+    "sharedTables": 2,
+    "headerless": 0
+  },
+  {
     "file": "apps/erp/src/app/channel-settlements/upload/page.tsx",
     "tables": 0,
     "sharedTables": 1,

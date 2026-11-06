@@ -148,6 +148,10 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('menu_daypart.retired', 'settings', 'high', 'store', 'menu_dayparts', 'T-510'),
   // T-511 S4: one file ingested into the staging tables (nothing is booked); store-scoped to the MATCHED store.
   def('settlement_upload.ingested', 'data', 'normal', 'store', 'settlement_uploads', 'T-511'),
+  // T-511 S5b: the review stage. A day rejected / reopened and an admin's loan re-allocation; entity = the staged day line. Nothing here posts.
+  def('settlement_day.rejected', 'data', 'normal', 'store', 'settlement_day_lines', 'T-511'),
+  def('settlement_day.reopened', 'data', 'normal', 'store', 'settlement_day_lines', 'T-511'),
+  def('settlement_loan.allocation_overridden', 'data', 'normal', 'store', 'settlement_day_lines', 'T-511'),
   // T-455 S2: a cashier's moves on the customer lobby line (park a walk-in, call, seat, remove). Payloads carry code, size, stand and session id - never a name or phone.
   def('lobby.park', 'order', 'normal', 'store', 'lobby_entry', 'T-455'),
   def('lobby.call', 'order', 'low', 'store', 'lobby_entry', 'T-455'),

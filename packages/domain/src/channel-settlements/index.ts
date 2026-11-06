@@ -330,10 +330,7 @@ function computeSettlement(
   const blockers: string[] = [];
 
   if (netDeposited < 0n) {
-    blockers.push(
-      'fees exceeding the payout is a refusal, not a negative deposit. ' +
-        'Check the figures against the platform statement.',
-    );
+    blockers.push(NEGATIVE_DEPOSIT_BLOCKER);
   }
   if (owed <= 0n) {
     blockers.push(
@@ -383,6 +380,44 @@ function computeSettlement(
 }
 
 /**
+ * The channel-level refusals, in the order they are listed: wrong store, no destination account, a posted settlement already. Pure, so the preview and the
+ * T-511 review list (which asks about many days at once) say the same words. `alreadyPosted` is what `postedSettlementFor` found.
+ */
+export function settlementConfigBlockers(
+  config: { name: string; storeId: string; destinationMoneyAccountId: string | null },
+  input: { storeId: string; businessDate: string },
+  alreadyPosted: boolean,
+): string[] {
+  const configBlockers: string[] = [];
+  // ⚠️ The channel names its own store, and the caller names one too. They must agree, or the
+  // 1220 leg lands on a store that never made the sale — a cross-store misposting that nothing
+  // downstream would flag, because both stores are legitimate rows in the same books.
+  if (config.storeId !== input.storeId) {
+    configBlockers.push(
+      `${config.name} belongs to another store. A settlement is recorded by the store whose ` +
+        'sales day raised the receivable.',
+    );
+  }
+  if (!config.destinationMoneyAccountId) {
+    configBlockers.push(
+      `${config.name} has no destination account set, so there is nowhere to bank this. Set the ` +
+        'channel’s destination money account first.',
+    );
+  }
+  if (alreadyPosted) {
+    configBlockers.push(
+      `${config.name} already has a posted settlement for ${input.businessDate}. Void that one ` +
+        'first — a correction is void and re-post, never a second row.',
+    );
+  }
+  return configBlockers;
+}
+
+/** The refusal for a payout the fees overrun; exported with `settlementConfigBlockers` for the same reason. */
+export const NEGATIVE_DEPOSIT_BLOCKER =
+  'fees exceeding the payout is a refusal, not a negative deposit. ' + 'Check the figures against the platform statement.';
+
+/**
  * Everything a settlement needs to know before the arithmetic: the channel's configuration, what
  * the ledger says it is owed, and whether this day is already settled.
  *
@@ -405,30 +440,8 @@ async function gatherSettlementContext(
   const config = await R.channelConfig(trx, actor.orgId, input.channelId);
   if (!config) throw new Error(`channel ${input.channelId} does not exist.`);
 
-  const configBlockers: string[] = [];
-  // ⚠️ The channel names its own store, and the caller names one too. They must agree, or the
-  // 1220 leg lands on a store that never made the sale — a cross-store misposting that nothing
-  // downstream would flag, because both stores are legitimate rows in the same books.
-  if (config.storeId !== input.storeId) {
-    configBlockers.push(
-      `${config.name} belongs to another store. A settlement is recorded by the store whose ` +
-        'sales day raised the receivable.',
-    );
-  }
-  if (!config.destinationMoneyAccountId) {
-    configBlockers.push(
-      `${config.name} has no destination account set, so there is nowhere to bank this. Set the ` +
-        'channel’s destination money account first.',
-    );
-  }
-
   const already = await R.postedSettlementFor(trx, actor.orgId, input.channelId, input.businessDate);
-  if (already) {
-    configBlockers.push(
-      `${config.name} already has a posted settlement for ${input.businessDate}. Void that one ` +
-        'first — a correction is void and re-post, never a second row.',
-    );
-  }
+  const configBlockers = settlementConfigBlockers(config, input, Boolean(already));
 
   let destinationName: string | null = null;
   if (config.destinationMoneyAccountId) {
