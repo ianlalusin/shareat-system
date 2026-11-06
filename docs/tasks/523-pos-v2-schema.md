@@ -228,10 +228,9 @@ for them is units of that dish's line. So **one per-line discount model carries 
    discount_total` refused; a discount added to a paid session's line refused (23001); `removed → active` refused
    (23514); the registry unit tests list the three new tables (`pos_discount_presets` keep, the other two purge).
 
-**Open for Ian (T-524 rules, not schema):** (Q-a) who may give a discount: v1 lets any cashier add a line discount with no
-check (its whole-bill discount was manager-only). Recommended: a **preset** by the cashier, a **custom** amount or % only
-with a manager PIN. (Q-b) whole-bill discount: recommended **none in release 1**; a promo for the whole table is the same
-preset applied to every line with one "apply to all lines" tap.
+**Ruled (row 440, Ian 6 Nov):** any cashier may apply any line discount, preset or typed, with no PIN; `applied_by` and
+`removed_by` are the audit; `approved_by` stays NULL-able and unused (a PIN can be switched on later without a
+migration). No whole-bill discount in release 1; "apply to all lines" applies one preset to every line.
 
 ## Not in this slice (and where it goes)
 
