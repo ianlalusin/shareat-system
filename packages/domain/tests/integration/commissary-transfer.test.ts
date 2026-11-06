@@ -663,3 +663,27 @@ describe('T-172 — the order document’s own rules', () => {
     ).rejects.toThrow(/awaiting the branch decision/);
   });
 });
+
+describe('T-536 (audit CR-9) - dispatch refuses one item on two lines of the same room, in words, before any write', () => {
+  it('two lines for the same item and room: refused, nothing moved, no entry posted', async () => {
+    await stockCommissary();
+    const before = await onHand(itemA, comKitchen);
+    const res = await withOrgPrincipal(orgA, (tx) =>
+      dispatchOrder(tx, {
+        orgId: orgA, commissaryStoreId: commissary, orderId: crypto.randomUUID(),
+        dispatchedOn: '2026-08-20', dispatchedBy: personA,
+        onHandByItem: { [itemA]: quantity('100') },
+        lines: [
+          { lineId: '1', itemId: itemA, itemKind: 'raw_material', sourceLocationId: comKitchen, fulfilledQuantity: quantity('10') },
+          { lineId: '2', itemId: itemA, itemKind: 'raw_material', sourceLocationId: comKitchen, fulfilledQuantity: quantity('5') },
+        ],
+      }),
+    );
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.reason).toMatch(/Pork is on this record twice/);
+    expect(await onHand(itemA, comKitchen)).toBe(before);
+    const [e] = await sql<{ n: string }[]>`select count(*)::text as n from journal_entries where source_type = 'trade_order_dispatch'`;
+    expect(e!.n).toBe('0');
+  });
+});
