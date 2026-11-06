@@ -529,6 +529,12 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'what carries across as an opening balance. It must be settled or written off before ' +
       'cutover, not silently inherited.',
   },
+  business_rule_values: {
+    class: 'keep',
+    reason:
+      'T-512. A business rule in force at cutover is CONFIGURATION and is still in force in January until an admin changes it; purging the rows would silently ' +
+      'fall every rule back to its registry default and drop the history of who changed what and why.',
+  },
   pay_rates: {
     class: 'keep',
     reason:

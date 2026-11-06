@@ -152,6 +152,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('settlement_day.rejected', 'data', 'normal', 'store', 'settlement_day_lines', 'T-511'),
   def('settlement_day.reopened', 'data', 'normal', 'store', 'settlement_day_lines', 'T-511'),
   def('settlement_loan.allocation_overridden', 'data', 'normal', 'store', 'settlement_day_lines', 'T-511'),
+  // T-512 (T-511 S5c): an admin changed a business rule (value, from-date, reason). Org scope: a rule is the organisation's, never a store's (dotted: new).
+  def('business_rule.changed', 'settings', 'high', 'org', 'business_rule_values', 'T-512', ADMIN),
   // T-455 S2: a cashier's moves on the customer lobby line (park a walk-in, call, seat, remove). Payloads carry code, size, stand and session id - never a name or phone.
   def('lobby.park', 'order', 'normal', 'store', 'lobby_entry', 'T-455'),
   def('lobby.call', 'order', 'low', 'store', 'lobby_entry', 'T-455'),

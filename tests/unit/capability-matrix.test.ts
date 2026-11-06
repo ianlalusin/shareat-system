@@ -247,7 +247,8 @@ describe('CAPABILITY-MATRIX.md parses to the expected shape', () => {
     // T-511 S2a (2026-11-03): 120 -> 123 (`upload_settlement_files` store, super/admin/manager yes, staff no; `edit_platform_store_code` and
     // `edit_loan_repayment_amount` both store, super/admin yes, manager/staff no). RED until the builder adds the rows + the capabilities.
     // T-510 S2 (2026-11-05): 123 -> 124 (`pair_menu_dayparts`, org, super_admin only). Re-measured: the parsed matrix has 124 rows.
-    expect(rows.length).toBe(124);
+    // T-512 (T-511 S5c), 7 Nov 2026, re-measured after rebase on main (T-523 0238 present), BOSS approved: 124 -> 125 (`manage_business_rules`).
+    expect(rows.length).toBe(125);
     // ⭐ 109 -> 111 (T-402 S1b): `view_activity_log` (store) and `view_activity_log_restricted` (org).
     // ⭐ 108 -> 109 (T-403): `manage_recipes` (org, admin-only).
   });
@@ -327,9 +328,10 @@ describe('invariant 1 — every capability has an explicit decision for all four
     // T-398 S6: `view_franchise_access_log`. T-193 S3: `remit_statutory`. Merge of main + T-193: re-measured.
     // T-511 S2a: 120 -> 123 (upload_settlement_files, edit_platform_store_code, edit_loan_repayment_amount).
     // T-510 S2: 123 -> 124 (pair_menu_dayparts).
-    expect(CAPABILITIES.length).toBe(124);
-    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(124);
-    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(124);
+    // T-512 (T-511 S5c), 7 Nov 2026, re-measured after rebase on main (T-523 0238 present), BOSS approved: 124 -> 125 (`manage_business_rules`).
+    expect(CAPABILITIES.length).toBe(125);
+    expect(Object.keys(CAPABILITY_MATRIX).length).toBe(125);
+    expect(Object.keys(CAPABILITY_SCOPE).length).toBe(125);
     // ⭐ 108 -> 109 (T-403): `manage_recipes`.
     expect(new Set(Object.keys(CAPABILITY_MATRIX))).toEqual(new Set(CAPABILITIES));
     expect(new Set(Object.keys(CAPABILITY_SCOPE))).toEqual(new Set(CAPABILITIES));
@@ -487,6 +489,8 @@ describe('ELEVATED_GRANTS_FOR_ADMINLESS_MANAGER — derived, not hand-listed', (
         // `upload_settlement_files` is manager-yes and so does NOT join. RED until the builder adds the capabilities.
         'edit_platform_store_code',
         'edit_loan_repayment_amount',
+        // T-512 (T-511 S5c, 6 Nov 2026): `manage_business_rules` is admin-yes / manager-no (org), so the derived set gains it.
+        'manage_business_rules',
       ].sort(),
     );
   });

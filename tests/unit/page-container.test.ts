@@ -259,6 +259,7 @@ describe('T-234 — every route uses the Page container', () => {
     const withProseMeasure = pageFiles().filter((f) =>
       /<p className="[^"]*\bmax-w-/.test(readFileSync(join(repoRoot, f), 'utf8')),
     );
-    expect(withProseMeasure.length).toBe(4);
+    // 4 -> 5, T-512 (T-511 S5c), 6 Nov 2026: /settings/business-rules caps each rule's help sentence at a prose measure; re-measured 5.
+    expect(withProseMeasure.length).toBe(5);
   });
 });

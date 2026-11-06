@@ -525,6 +525,10 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       "Money that did not arrive, and who is being asked for it. A franchise seeing another " +
       "org\u2019s open variances would learn who it suspects of a shortage.",
   },
+  business_rule_values: {
+    scope: 'org_column',
+    reason: 'T-512. An org’s own business rules (settlement variance, loan tolerance, withholding and VAT rates); a franchise reading another org’s would learn how it checks platform money.',
+  },
   pay_rates: {
     scope: 'org_column',
     reason: 'What a job pays. A franchise reading another org’s rates would learn its labour cost.',

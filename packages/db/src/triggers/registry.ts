@@ -188,6 +188,12 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'history_guard',
     reason: 'A pay rate is never changed or removed; a wrong rate is superseded by a new row (0221, T-498 S1, DEF-799). Decides only from TG_OP.',
   },
+  business_rule_values_append_only: {
+    table: 'business_rule_values',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A business rule row is never changed or removed; a change is a newer row with its own date and reason (0239, T-512). Decides only from TG_OP.',
+  },
   trade_orders_ready_is_final_trg: {
     table: 'trade_orders',
     mode: 'always',

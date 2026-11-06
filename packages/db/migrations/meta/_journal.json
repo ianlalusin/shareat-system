@@ -1485,6 +1485,13 @@
       "when": 1806636707084,
       "tag": "0238_t523_pos_v2_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 239,
+      "version": "7",
+      "when": 1806723107084,
+      "tag": "0239_t511_business_rule_values",
+      "breakpoints": true
     }
   ]
 }
