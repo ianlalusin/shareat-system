@@ -223,7 +223,7 @@ The bible's "Postgres owns the truth; Firebase owns the edge" line (§1 line 203
 **Seat a party.** Stands are tapped, never typed, and used stands are greyed out (row 371). Heads use a stepper. The first order can hold a package and à la carte together (row 358). Sold-out items show but cannot be tapped (row 307's sold-out flag).
 ![New order](pos-v2-design/new-order.png)
 
-**Payment, as approved in PC-7, redrawn.** The whole bill stays on the left, tender buttons are big, the cash keypad and quick amounts sit on the right, and change is shown only for cash. Offline, Card and QR Ph grey out and GCash/Maya say "to check".
+**Payment, as approved in PC-7, redrawn, with split payment (row 438).** The whole bill stays on the left. On the right, "Payments on this bill" lists each tender: here GCash ₱500 with its reference, then Cash ₱1,500 being entered, with the balance shown. "Split: add another payment" adds the next tender with the rest pre-filled, as v1 does. Change comes only from cash. Offline, Card and QR Ph grey out and GCash/Maya say "to check".
 ![Payment offline](pos-v2-design/payment-offline.png)
 
 **Kitchen, Grill Night theme.** One card per stand, oldest first, a station filter, and late tickets in red. "All out" is the tap. Dark because kitchens are hot, bright and read from a distance; the light version is also rendered (`kitchen.png`).
@@ -315,7 +315,7 @@ the switch, so it cannot add increments to the same document; (3) the writer ref
 | **T-525** | APIs: `/api/pos/events` (idempotent, quarantine, mismatch finding), `/api/pos/snapshot` (ETag, closed list per §5.3 / row 430), `/api/pos/state` (version, 304) | W2 · 16–19 Nov | M | Sonnet | T-524 |
 | **T-526** | `/pos` kiosk shell in `apps/erp`: tabs, status pills, T-464 sign-in wired, offline PIN verifier, route capabilities, census guards, Grill Night default on Kitchen (row 433) | W2 · 16–20 Nov | M | Sonnet | T-525 (stubs from 16 Nov) |
 | **T-527** | Screens: Orders (stands) + Seat a party + add items | W2–W3 · 18–24 Nov | M | Sonnet | T-526 |
-| **T-528** | Screens: Payment (cash, GCash/Maya "to check", **senior/PWD per diner with name and ID**; share = own head + dishes ordered only for them, row 437) + receipt print and reprint (Bluetooth plugin, browser fallback) | W3 · 23–26 Nov | M | Sonnet (money lane) | T-527 |
+| **T-528** | Screens: Payment (**split payment: several tenders on one bill, row 438**; cash, GCash/Maya "to check", **senior/PWD per diner with name and ID**; share = own head + dishes ordered only for them, row 437) + receipt print and reprint (Bluetooth plugin, browser fallback) | W3 · 23–26 Nov | M | Sonnet (money lane) | T-527 |
 | **T-529** | Screens: Kitchen + Refills (polling, T-508 station routing, printed tickets offline) | W3 · 23–26 Nov | M | Sonnet | T-526 |
 | **T-530** | Offline: port `lib/terminal` + outbox to typed events, service-worker app-shell cache, offline printing, X-slip every 4 h, ₱50k warning, update gate | W2–W3 · 16–26 Nov | L | Sonnet | T-525 |
 | **T-531** | Day close: Z on the POS (row 390) → ERP sales day `source = pos_receipts` for the store; Lipa leaves the bridge and the v1 day feed from the switch date. **Plus the December day-total writer to v1's Firestore document, up to 31 Dec only, with its three guards (row 436)**. Till opening and counting use the **existing ERP till screen** (row 319), no new tab | W3 · 23–27 Nov | M | Sonnet (money lane) | T-524 |
