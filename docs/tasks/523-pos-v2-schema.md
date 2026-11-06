@@ -222,6 +222,29 @@ DB); the full integration suite passes; CI is green on the PR; the auditor's fin
 applies to production **before** T-524 merges (it is inert: nothing reads these tables until the switch is on, row
 435). Report the real test output.
 
+## Rulings on the tester's questions (Opus planner, 6 Nov; the builder follows these and tightens the tests to them)
+
+1. **Error codes.** A status transition a forward-only trigger refuses raises `check_violation` (23514). A change to
+   a frozen column (`opened_by`, `qty`, `for_diner`, any sales receipt figure, an event's payload, and so on), a
+   second write to a once-only column, an UPDATE or DELETE of an append-only row, and a line inserted into a paid or
+   voided session all raise `restrict_violation` (23001), as `pay_rates_append_only` does. The tests' loose
+   `FROZEN_OR_FORWARD` (23514 or 23001) is narrowed to these exact codes.
+2. **Name of the new `sales_days` CHECK:** `sales_days_pos_day_close_link_check`.
+3. **Nullability and defaults the spec left unstated:**
+   - `table_session_lines.menu_item_id` is NOT NULL for every kind (refills are menu items too); `menu_item_variant_id`
+     stays NULL-able.
+   - `table_sessions.opened_on_pairing_id` is NOT NULL: a stand is opened only on the till (design A9).
+   - `pos_stores.changed_by` and `changed_at` are NOT NULL (the row is created by an admin at store set-up).
+   - `updated_at` is NULL-able with no default, set by the app (repo convention).
+   - Child tables (`pos_sales_receipt_lines`, `pos_sales_receipt_payments`, `pos_day_close_tenders`,
+     `pos_sales_receipt_discounts`) carry `org_id` but **no `store_id`**; their store follows from the parent. Each has
+     the `(org_id, parent_id)` same-org composite FK, so each parent gets `UNIQUE (org_id, id)`.
+4. **`pos_tablet_pairings` references** get the same-org twin as well, if `pos_tablet_pairings` has an `(org_id, id)`
+   unique. If it does not, the builder adds one in 0238, or lists an exemption with its reason (census rule).
+5. **Not covered by the tester, so the builder adds them:** a `pos_v1_day_feed` row still satisfies the new
+   `sales_days` CHECKs (reuse the T-375 fixture), and the 0185 and 0188 triggers are unchanged (assert by name from
+   `pg_trigger`).
+
 ## Ruled since the first draft (6 Nov)
 
 - **Cutover class:** `purge` for R4–R10 and R12 (row 436). v1 receives Lipa's December day totals through T-531's
