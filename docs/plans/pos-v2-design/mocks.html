@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>POS v2 Mocks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<style>
+:root{color-scheme:light;--canvas:#fbf4e4;--surface:#fffdf8;--surface-border:#eadfc6;--workspace:#fff;--workspace-border:#e5e5e5;--field:#fff;--field-border:#94866f;--ink:#2b2620;--muted:#6b5f4f;--brand:#d40909;--brand-hover:#b00707;--brand-ink:#d40909;--danger:#a00606;--danger-surface:#fde7e7;--warning:#f4b942;--warning-soft:#fce8b8;--warning-ink:#7a4f00;--success:#0e6b45;--success-soft:#e2f1e8;--info:#1e4fb8;--info-soft:#e7eefb;--progress:#6427c9;--progress-soft:#eee7fb;--closed:#55606e;--closed-soft:#efece4}
+:root[data-theme=dark]{color-scheme:dark;--canvas:#121110;--surface:#1c1a18;--surface-border:#34302b;--workspace:#121110;--workspace-border:#34302b;--field:#151412;--field-border:#746b5f;--ink:#f5efe4;--muted:#a89f92;--brand-ink:#ff7a70;--danger:#f87171;--danger-surface:#2a0f0f;--warning:#2b2210;--warning-soft:#2b2210;--warning-ink:#f4b942;--success:#4ade80;--success-soft:#0f2a1c;--info:#93b4ff;--info-soft:#142038;--progress:#c4b5fd;--progress-soft:#241b3d;--closed:#aab4c2;--closed-soft:#23262b}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:"Plus Jakarta Sans",system-ui,sans-serif;color:var(--ink);background:var(--canvas);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+::selection{background:var(--brand);color:#fff}
+.num{font-variant-numeric:tabular-nums}
+.app{width:1280px;height:800px;display:flex;flex-direction:column;overflow:hidden;background:var(--canvas)}
+svg.lucide{width:20px;height:20px;stroke-width:2;flex:none}
+/* top bar */
+.top{height:60px;display:flex;align-items:center;gap:14px;padding:0 18px;background:var(--surface);border-bottom:1px solid var(--surface-border)}
+.word{font-family:"Baloo 2";font-weight:800;font-size:24px;letter-spacing:-.01em;line-height:1}
+.word b{color:var(--brand-ink)}
+.word small{font-family:"Plus Jakarta Sans";font-size:12px;font-weight:700;color:var(--muted);margin-left:6px;letter-spacing:.02em}
+.sp{flex:1}
+.pill{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:600;background:var(--closed-soft);color:var(--ink)}
+.pill .d{width:8px;height:8px;border-radius:50%;background:currentColor}
+.pill.ok{background:var(--success-soft);color:var(--success)}
+.pill.warn{background:var(--warning-soft);color:var(--warning-ink)}
+.pill.info{background:var(--info-soft);color:var(--info)}
+.pill.danger{background:var(--danger-surface);color:var(--danger)}
+.who{display:flex;align-items:center;gap:10px;font-size:14px}
+.av{width:36px;height:36px;border-radius:50%;background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 20px;border-radius:999px;border:1px solid var(--field-border);background:var(--surface);color:var(--ink);font:600 15px "Plus Jakarta Sans";cursor:pointer;white-space:nowrap}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.ghost{border-color:transparent;background:transparent}
+.btn.danger{border-color:var(--danger);color:var(--danger);background:transparent}
+.btn.big{min-height:60px;font-size:17px;padding:0 26px}
+.btn.sm{min-height:40px;padding:0 14px;font-size:14px}
+/* module tabs */
+.tabs{display:flex;gap:4px;padding:0 12px;height:56px;align-items:center;background:var(--surface);border-bottom:1px solid var(--surface-border)}
+.tab{display:flex;align-items:center;gap:8px;height:44px;padding:0 16px;border-radius:999px;font-weight:600;color:var(--muted);font-size:15px}
+.tab.on{background:var(--ink);color:var(--surface)}
+.tab .c{min-width:22px;height:22px;border-radius:999px;background:var(--brand);color:#fff;font-size:12px;display:grid;place-items:center;padding:0 6px}
+.tab.on .c{background:var(--brand)}
+.body{flex:1;display:flex;min-height:0}
+.main{flex:1;padding:18px;overflow:hidden;display:flex;flex-direction:column;gap:14px;min-width:0}
+h1{font-family:"Baloo 2";font-weight:700;font-size:28px;margin:0;line-height:1.1}
+h2{font-family:"Baloo 2";font-weight:700;font-size:21px;margin:0;line-height:1.15}
+h3{font-size:15px;margin:0;font-weight:700}
+.muted{color:var(--muted)}
+.row{display:flex;align-items:center;gap:10px}
+.card{background:var(--surface);border:1px solid var(--surface-border);border-radius:20px}
+/* stands grid */
+.stands{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;align-content:start}
+.st{background:var(--workspace);border:1.5px solid var(--workspace-border);border-radius:20px;padding:14px 16px;display:grid;gap:6px;min-height:132px;align-content:start;position:relative}
+.st .no{font-family:"Baloo 2";font-weight:800;font-size:34px;line-height:.9}
+.st .no small{font-family:"Plus Jakarta Sans";font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-right:4px}
+.st .l{font-size:13.5px;color:var(--muted)}
+.st svg.lucide,.ln svg.lucide{width:15px;height:15px;vertical-align:-2px}
+.st .tag{position:absolute;top:14px;right:14px}
+.st.bill{border-color:var(--warning);background:var(--warning-soft)}
+.st.bill .l{color:var(--warning-ink)}
+.st.sel{box-shadow:0 0 0 3px var(--ink)}
+.st.new{border-style:dashed;border-color:var(--field-border);background:transparent;place-content:center;justify-items:center;text-align:center;color:var(--ink)}
+.st .bar{height:6px;border-radius:999px;background:var(--closed-soft);overflow:hidden}
+.st .bar i{display:block;height:100%;background:var(--success);border-radius:999px}
+.st.late .bar i{background:var(--brand)}
+/* side panel */
+.side{width:400px;background:var(--surface);border-left:1px solid var(--surface-border);display:flex;flex-direction:column;min-height:0}
+.side .hd{padding:16px 18px;border-bottom:1px solid var(--surface-border);display:grid;gap:4px}
+.lines{flex:1;overflow:hidden;padding:10px 18px;display:grid;gap:12px;align-content:start}
+.gh{display:flex;justify-content:space-between;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;border-bottom:1px dashed var(--surface-border);padding-bottom:4px}
+.ln{display:grid;grid-template-columns:1fr auto;gap:2px 10px;font-size:14.5px}
+.ln .s{grid-column:1/-1;font-size:12.5px;color:var(--muted);display:flex;gap:6px;align-items:center}
+.k{font-size:11.5px;font-weight:700;border-radius:999px;padding:1px 8px}
+.k.cook{background:var(--warning-soft);color:var(--warning-ink)}
+.k.done{background:var(--success-soft);color:var(--success)}
+.k.new{background:var(--info-soft);color:var(--info)}
+.tot{padding:12px 18px;border-top:1px solid var(--surface-border);display:grid;gap:4px;font-size:14.5px}
+.tot .r{display:flex;justify-content:space-between}
+.tot .due{font-weight:800;font-size:22px;font-family:"Baloo 2"}
+.acts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px 18px 16px}
+.acts .full{grid-column:1/-1}
+/* banners */
+.offline{display:flex;align-items:center;gap:12px;padding:10px 18px;background:var(--warning-soft);color:var(--warning-ink);font-size:14px;font-weight:600;border-bottom:1px solid var(--warning)}
+/* menu */
+.cats{display:flex;gap:8px;flex-wrap:wrap}
+.chip{height:44px;padding:0 18px;border-radius:999px;border:1px solid var(--field-border);background:var(--surface);display:inline-flex;align-items:center;font-weight:600;font-size:14.5px}
+.chip.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.menu{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;align-content:start}
+.mi{background:var(--workspace);border:1px solid var(--workspace-border);border-radius:18px;padding:12px 14px;min-height:96px;display:grid;align-content:space-between;gap:6px}
+.mi b{font-size:15px;font-weight:700;line-height:1.25}
+.mi .p{display:flex;justify-content:space-between;align-items:end;font-size:14px;color:var(--muted)}
+.mi .q{min-width:30px;height:30px;border-radius:999px;background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:800;font-size:14px}
+.mi.out{opacity:.5}
+.mi.pkg{border-color:var(--ink);border-width:1.5px}
+.stepper{display:inline-flex;align-items:center;gap:0;border:1px solid var(--field-border);border-radius:999px;height:48px}
+.stepper span{width:48px;display:grid;place-items:center}
+.stepper b{min-width:44px;text-align:center;font-family:"Baloo 2";font-size:24px}
+.standpick{display:grid;grid-template-columns:repeat(10,1fr);gap:6px}
+.sp1{height:48px;border-radius:14px;border:1px solid var(--field-border);display:grid;place-items:center;font-weight:700;font-size:16px;background:var(--surface)}
+.sp1.used{opacity:.25;border-style:dashed}
+.sp1.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+/* payment */
+.pay{display:grid;grid-template-columns:1fr 1.15fr;flex:1;min-height:0}
+.bill{background:var(--surface);border-right:1px solid var(--surface-border);padding:20px 22px;display:grid;gap:10px;align-content:start}
+.bill .r{display:flex;justify-content:space-between;font-size:15px}
+.bill .r.minus{color:var(--success)}
+.bill .r.big{font-family:"Baloo 2";font-size:30px;font-weight:800;border-top:2px solid var(--ink);padding-top:10px}
+.tender{padding:20px 22px;display:grid;gap:14px;align-content:start}
+.methods{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.m{height:72px;border-radius:18px;border:1px solid var(--field-border);background:var(--surface);display:grid;place-content:center;justify-items:center;gap:2px;font-weight:700}
+.m small{font-weight:500;font-size:12px;color:var(--muted)}
+.m.on{border:2px solid var(--brand);color:var(--brand-ink)}
+.m.off{opacity:.4}
+.read{border:1.5px solid var(--ink);border-radius:16px;padding:10px 16px;display:flex;justify-content:space-between;align-items:center}
+.read b{font-family:"Baloo 2";font-size:32px}
+.pad{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.pad div{height:58px;border-radius:16px;background:var(--surface);border:1px solid var(--surface-border);display:grid;place-items:center;font-size:22px;font-weight:700}
+.pad .add{background:var(--ink);color:var(--surface);font-size:16px}
+.bal{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-radius:16px;font-weight:800;font-size:20px;background:var(--success-soft);color:var(--success)}
+/* kitchen */
+.kds{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;flex:1;align-content:start}
+.tk{background:var(--surface);border:1px solid var(--surface-border);border-radius:20px;overflow:hidden;display:flex;flex-direction:column}
+.tk .th{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:var(--closed-soft)}
+.tk .th .no{font-family:"Baloo 2";font-size:26px;font-weight:800;line-height:1}
+.tk.late .th{background:var(--danger-surface);color:var(--danger)}
+.tk.ref .th{background:var(--info-soft);color:var(--info)}
+.tk ul{list-style:none;margin:0;padding:10px 14px;display:grid;gap:8px;font-size:16px;flex:1;align-content:start}
+.tk li{display:flex;gap:10px;align-items:baseline}
+.tk li b{font-family:"Baloo 2";font-size:20px;min-width:28px}
+.tk li.x{color:var(--muted);text-decoration:line-through}
+.tk .note{font-size:13px;color:var(--warning-ink);background:var(--warning-soft);border-radius:10px;padding:4px 8px;margin-top:2px}
+.tk .ft{padding:10px 14px 14px}
+/* lists */
+table{width:100%;border-collapse:collapse;background:var(--workspace);border-radius:20px;overflow:hidden;font-size:14.5px}
+th{text-align:left;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:12px 14px;border-bottom:1px solid var(--workspace-border);font-weight:700}
+td{padding:0 14px;height:56px;border-bottom:1px solid var(--workspace-border)}
+td.r,th.r{text-align:right}
+tr.sel td{background:var(--info-soft)}
+.paper{font-family:ui-monospace,Consolas,monospace;font-size:13px;background:#fff;color:#222;border-radius:6px;padding:16px 18px;width:300px;box-shadow:0 8px 24px rgb(0 0 0/.12);display:grid;gap:2px}
+.paper .r{display:flex;justify-content:space-between}
+.paper hr{border:0;border-top:1px dashed #999;width:100%;margin:6px 0}
+/* erp shell variant */
+.rail{width:72px;background:var(--surface);border-right:1px solid var(--surface-border);display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 0}
+.rail .ri{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;color:var(--muted)}
+.rail .ri.on{background:var(--danger-surface);color:var(--brand-ink)}
+.rail .logo{font-family:"Baloo 2";font-weight:800;font-size:22px;color:var(--brand-ink);margin-bottom:10px}
+</style></head>
+<body>
+<div id="root"></div>
+<script>
+const S=new URLSearchParams(location.search).get('s')||'orders';
+const theme=new URLSearchParams(location.search).get('t'); if(theme)document.documentElement.dataset.theme=theme;
+const off=new URLSearchParams(location.search).get('off')==='1';
+const ic=n=>`<i data-lucide="${n}"></i>`;
+const topBar=(extra="",who=["JM","Joy M.","Cashier"])=>`<div class="top"><span class="word">shar<b>E</b>at<small>POS · LIPA</small></span>${extra}<span class="sp"></span>
+${off?`<span class="pill warn">${ic('wifi-off')} Offline 1h 12m · 14 waiting to send</span>`:`<span class="pill ok"><span class="d"></span> Online · all sent</span>`}
+<span class="pill">${ic('banknote')} Till open · 4:02 PM</span>
+<span class="who"><span class="av">${who[0]}</span><span><b>${who[1]}</b><br><span class="muted" style="font-size:12.5px">${who[2]}</span></span></span>
+<span class="btn ghost sm">${ic('layout-grid')} ERP</span></div>`;
+const tabs=on=>`<div class="tabs">${[['orders','Orders','utensils',0],['kitchen','Kitchen','chef-hat',6],['refill','Refills','refresh-cw',3],['online','Online','smartphone',2],['receipts','Receipts','receipt',0],['till','Till','banknote',0]].map(([k,l,i,c])=>`<span class="tab ${k===on?'on':''}">${ic(i)} ${l}${c?`<span class="c">${c}</span>`:''}</span>`).join('')}<span class="sp"></span><span class="btn sm">${ic('printer')} Printer ready</span></div>`;
+const banner=()=>off?`<div class="offline">${ic('wifi-off')} No internet since 3:51 PM. Keep selling: cash, and GCash / Maya with the reference number (checked later). Card, refunds and online orders wait for the internet. Every sale prints.</div>`:'';
+const stands=[
+ {n:3,l:'2 pax · Unli Samgyup',t:'38 min',p:40},{n:5,l:'3 pax · Samgyup + Cheese',t:'1 h 05',p:70},
+ {n:7,l:'4 pax · asked for the bill',t:'1 h 22',p:90,bill:1,sel:1},{n:9,l:'5 pax · Unli Samgyup',t:'12 min',p:15,tag:'<span class="pill info" style="height:26px">Heads?</span>'},
+ {n:12,l:'6 pax · Barkada bundle',t:'1 h 41',p:100,late:1,tag:'<span class="pill danger" style="height:26px">Over 1 h 30</span>'},{n:14,l:'2 pax · à la carte only',t:'24 min',p:30},
+ {n:18,l:'4 pax · Samgyup + Cheese',t:'51 min',p:55},{n:21,l:'Take-out · 3 items',t:'6 min',p:10,tag:'<span class="pill" style="height:26px">Take-out</span>'}];
+const standGrid=()=>`<div class="stands"><div class="st new">${ic('plus')}<b style="font-size:17px">Seat a party</b><span class="muted" style="font-size:13px">Pick a free stand</span></div>${stands.map(s=>`<div class="st ${s.bill?'bill':''} ${s.sel?'sel':''} ${s.late?'late':''}">${s.tag?`<span class="tag">${s.tag}</span>`:''}<span class="no"><small>STAND</small>${s.n}</span><span class="l">${s.l}</span><span class="row" style="justify-content:space-between;font-size:13px"><span class="muted num">${ic('clock')} ${s.t}</span></span><span class="bar"><i style="width:${s.p}%"></i></span></div>`).join('')}</div>`;
+const billPanel=()=>`<aside class="side"><div class="hd"><div class="row" style="justify-content:space-between"><h2>Stand 7</h2><span class="pill warn">Bill asked</span></div><span class="muted" style="font-size:13.5px">4 diners · 1 senior · seated 6:19 PM by Joy</span></div>
+<div class="lines"><div class="gh"><span>Package</span><span>per head</span></div>
+<div class="ln"><span>Unli Samgyup + Cheese</span><span class="num">1,796.00</span><span class="s num">4 heads × ₱449.00 · 11 refills served</span></div>
+<div class="gh"><span>À la carte</span><span>3 items</span></div>
+<div class="ln"><span>1 × Iced tea pitcher</span><span class="num">120.00</span><span class="s"><span class="k done">Served</span></span></div>
+<div class="ln"><span>2 × Cheese corn</span><span class="num">198.00</span><span class="s"><span class="k cook">Cooking</span> 8 min</span></div></div>
+<div class="tot"><div class="r muted"><span>Subtotal</span><span class="num">2,114.00</span></div><div class="r" style="color:var(--success)"><span>Senior · 1 of 4</span><span class="num">−151.00</span></div><div class="r due"><span>Due</span><span class="num">₱1,963.00</span></div></div>
+<div class="acts"><span class="btn sm">${ic('plus')} Add</span><span class="btn sm">${ic('badge-percent')} Discount</span><span class="btn sm">${ic('users')} Heads</span><span class="btn sm">${ic('printer')} Bill</span><span class="btn sm">${ic('arrow-right-left')} Move</span><span class="btn sm danger">${ic('ban')} Void</span><span class="btn primary big full">Pay ₱1,963.00</span></div></aside>`;
+const V={
+orders:()=>topBar()+banner()+tabs('orders')+`<div class="body"><div class="main"><div class="row" style="justify-content:space-between"><div><h1>Open orders</h1><span class="muted">8 stands in use of 30 · 26 diners</span></div><div class="row"><span class="btn">${ic('shopping-bag')} Take-out</span><span class="btn primary">${ic('plus')} Seat a party</span></div></div>${standGrid()}</div>${billPanel()}</div>`,
+ordersErp:()=>`<div class="body" style="height:800px"><nav class="rail"><span class="logo">sE</span>${['layout-dashboard','utensils','wallet','package','users','bar-chart-3','settings'].map((i,k)=>`<span class="ri ${k===1?'on':''}">${ic(i)}</span>`).join('')}</nav><div style="flex:1;display:flex;flex-direction:column;min-width:0"><div class="top"><span class="muted">ERP</span>${ic('chevron-right')}<b>POS · Lipa</b><span class="sp"></span><span class="pill ok"><span class="d"></span> Online</span><span class="who"><span class="av">JM</span></span></div><div class="body"><div class="main" style="background:var(--workspace)"><div class="row" style="justify-content:space-between"><h1>Open orders</h1><span class="btn primary">${ic('plus')} Seat a party</span></div><div class="stands" style="grid-template-columns:repeat(3,1fr)">${stands.slice(0,6).map(s=>`<div class="st ${s.bill?'bill':''} ${s.sel?'sel':''}"><span class="no"><small>STAND</small>${s.n}</span><span class="l">${s.l}</span><span class="muted num" style="font-size:13px">${s.t}</span></div>`).join('')}</div></div>${billPanel()}</div></div></div>`,
+neworder:()=>topBar()+tabs('orders')+`<div class="body"><div class="main"><div class="row" style="justify-content:space-between"><h1>Seat a party</h1><span class="btn ghost">${ic('x')} Cancel</span></div>
+<div class="card" style="padding:14px 16px;display:grid;gap:10px"><div class="row" style="justify-content:space-between"><h3>Stand</h3><span class="muted" style="font-size:13px">Used stands are hidden from the pick list</span></div><div class="standpick">${Array.from({length:20},(_,i)=>{const n=i+1;const u=[3,5,7,9,12,14,18].includes(n);return `<span class="sp1 ${u?'used':''} ${n===10?'on':''}">${n}</span>`}).join('')}</div>
+<div class="row" style="gap:28px"><div class="row"><h3>Heads</h3><span class="stepper"><span>${ic('minus')}</span><b>3</b><span>${ic('plus')}</span></span></div><span class="muted" style="font-size:13.5px">The server confirms the count at the stand; the higher number is billed.</span></div></div>
+<div class="cats">${['Packages','Add-ons','Rice & noodles','Drinks','Desserts','Take-home'].map((c,i)=>`<span class="chip ${i===0?'on':''}">${c}</span>`).join('')}</div>
+<div class="menu">${[['Unli Samgyup','399',1,1],['Unli Samgyup + Cheese','449',0,1],['Unli Beef & Pork','549',0,1],['Barkada bundle','2,499',0,1,0,'flat · up to 6'],['Unli Pork only','349',0,1],['Seafood add-on','199',0,0],['Premium beef','Sold out',0,0,1],['Cheese corn','99',0,0]].map(([n,p,q,pk,o,u])=>`<div class="mi ${pk?'pkg':''} ${o?'out':''}"><b>${n}</b><span class="p"><span class="num">${p==='Free'||p==='Sold out'?p:'₱'+p}${u?' · '+u:(pk?' / head':'')}</span>${q?`<span class="q">3</span>`:''}</span></div>`).join('')}</div></div>
+<aside class="side"><div class="hd"><h2>Stand 10 · new</h2><span class="muted" style="font-size:13.5px">3 diners · package and à la carte in one first order</span></div>
+<div class="lines"><div class="gh"><span>Package</span><span>per head</span></div><div class="ln"><span>Unli Samgyup</span><span class="num">1,197.00</span><span class="s">3 × ₱399.00 · Original, Spicy, Garlic</span></div>
+<div class="gh"><span>À la carte</span><span>2 items</span></div><div class="ln"><span>1 × Iced tea pitcher</span><span class="num">120.00</span></div><div class="ln"><span>1 × Kimchi fried rice</span><span class="num">150.00</span><span class="s">Note: no egg</span></div></div>
+<div class="tot"><div class="r due"><span>Total</span><span class="num">₱1,467.00</span></div></div><div class="acts"><span class="btn primary big full">${ic('send')} Start order · send to kitchen</span></div></aside></div>`,
+payment:()=>topBar('<span class="pill" style="margin-left:10px">Stand 7 · 4 diners</span>')+banner()+`<div class="pay"><div class="bill"><div class="row" style="justify-content:space-between"><h2>Bill · Stand 7</h2><span class="btn ghost sm">${ic('arrow-left')} Back</span></div>
+<div class="r"><span>Unli Samgyup + Cheese · 4 × ₱449.00</span><span class="num">1,796.00</span></div><div class="r"><span>À la carte · 3 items</span><span class="num">318.00</span></div><div class="r" style="font-weight:700"><span>Subtotal</span><span class="num">2,114.00</span></div>
+<div class="card" style="background:var(--info-soft);border:0;padding:10px 14px;font-size:14px;color:var(--info)"><b>Senior · 1 of 4 diners</b><br>Lolita R. · OSCA 04-1187 · her share ₱528.50</div>
+<div class="r minus"><span>Senior 20% on her share</span><span class="num">−94.38</span></div><div class="r minus"><span>VAT off her share</span><span class="num">−56.62</span></div><div class="r big"><span>Due</span><span class="num">₱1,963.00</span></div>
+<div class="muted" style="font-size:13px">VATable 1,415.63 · VAT 169.87 · VAT-exempt 377.50 · VAT is a label only</div></div>
+<div class="tender"><div class="methods">${[['Cash','gives change',1],['GCash',off?'"to check"':'ref no.'],['Maya',off?'"to check"':'ref no.'],['Card',off?'needs internet':'ref no.',0,off],['QR Ph',off?'needs internet':'auto',0,off]].map(([n,s,on,o])=>`<div class="m ${on?'on':''} ${o?'off':''}">${n}<small>${s}</small></div>`).join('')}</div>
+<div class="row" style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px"><div class="read"><span class="muted">Cash received</span><b class="num">₱2,000.00</b></div><span class="btn">Exact</span><span class="btn">₱1,000</span><span class="btn">₱2,000</span></div>
+<div class="pad">${['7','8','9','⌫','4','5','6','C','1','2','3','00','0','.','',''].map((k,i)=>i===14?`<div class="add" style="grid-column:span 2">Add cash</div>`:i===15?'':`<div>${k}</div>`).join('')}</div>
+<div class="bal"><span>Change to give</span><span class="num">₱37.00</span></div><span class="btn primary big">${ic('printer')} Finish · CASH ₱2,000.00 · print</span></div></div>`,
+kitchen:()=>topBar('<span class="pill" style="margin-left:10px">Kitchen · Grill station</span>',['RB','Rico B.','Kitchen staff'])+tabs('kitchen')+`<div class="main"><div class="row" style="justify-content:space-between"><div class="cats">${['All','Grill','Hot kitchen','Drinks','Refills'].map((c,i)=>`<span class="chip ${i===1?'on':''}">${c}</span>`).join('')}</div><span class="muted">Oldest first · tap a line when it goes out</span></div>
+<div class="kds">${[{n:12,t:'14 min',late:1,it:[['2','Pork belly (refill)'],['1','Beef brisket'],['x1','Kimchi']]},{n:5,t:'8 min',it:[['2','Cheese corn'],['1','Kimchi fried rice']],note:'No egg on the rice'},{n:9,t:'3 min',ref:1,it:[['3','Pork belly'],['2','Chicken bulgogi']],label:'Refill'},{n:10,t:'1 min',it:[['1','Iced tea pitcher'],['1','Kimchi fried rice'],['3','Starter set']]}].map(t=>`<div class="tk ${t.late?'late':''} ${t.ref?'ref':''}"><div class="th"><span class="no">Stand ${t.n}</span><span class="row" style="font-weight:700;font-size:14px">${t.label?t.label+' · ':''}${ic('clock')} ${t.t}</span></div><ul>${t.it.map(([q,n])=>`<li class="${q.startsWith('x')?'x':''}"><b>${q.replace('x','')}</b><span>${n}</span></li>`).join('')}${t.note?`<li><span class="note">${t.note}</span></li>`:''}</ul><div class="ft"><span class="btn ${t.late?'primary':''}" style="width:100%">${ic('check')} All out</span></div></div>`).join('')}</div></div>`,
+refill:()=>topBar()+banner()+tabs('refill')+`<div class="body"><div class="main"><div class="row" style="justify-content:space-between"><div><h1>Refills</h1><span class="muted">Servers ask here; the grill sees them at once. Refills carry no price.</span></div></div>
+<table><thead><tr><th>Stand</th><th>Asked</th><th>Items</th><th>From</th><th>Status</th><th class="r"></th></tr></thead><tbody>
+${[['9','3 min','3 × Pork belly · 2 × Chicken bulgogi','Server · Ana','new'],['12','6 min','2 × Pork belly','Diner app','cook'],['3','11 min','1 × Lettuce · 1 × Kimchi','Server · Ben','cook'],['18','14 min','2 × Beef brisket','Diner app','done']].map(r=>`<tr><td><b style="font-family:'Baloo 2';font-size:22px">${r[0]}</b></td><td class="num">${r[1]}</td><td>${r[2]}</td><td class="muted">${r[3]}</td><td><span class="k ${r[4]}">${{new:'New',cook:'On the grill',done:'Served'}[r[4]]}</span></td><td class="r">${r[4]!=='done'?`<span class="btn sm">${ic('check')} Served</span>`:''}</td></tr>`).join('')}</tbody></table></div>
+<aside class="side"><div class="hd"><h2>Ask for a refill</h2><span class="muted" style="font-size:13.5px">Pick the stand, then the meats</span></div><div class="lines"><div class="standpick" style="grid-template-columns:repeat(5,1fr)">${[3,5,7,9,10,12,14,18].map(n=>`<span class="sp1 ${n===5?'on':''}">${n}</span>`).join('')}</div>
+${[['Pork belly',2],['Beef brisket',0],['Chicken bulgogi',1],['Lettuce',0],['Kimchi',1]].map(([n,q])=>`<div class="row" style="justify-content:space-between"><span style="font-weight:600">${n}</span><span class="stepper" style="height:44px"><span>${ic('minus')}</span><b style="font-size:20px">${q}</b><span>${ic('plus')}</span></span></div>`).join('')}</div><div class="acts"><span class="btn primary big full">${ic('send')} Send refill · Stand 5</span></div></aside></div>`,
+online:()=>topBar()+tabs('online')+`<div class="body"><div class="main"><div class="row" style="justify-content:space-between"><div><h1>Online orders</h1><span class="muted">From the diner app, Grab and Foodpanda · accept within 5 minutes</span></div><div class="cats"><span class="chip on">Waiting 2</span><span class="chip">Preparing 3</span><span class="chip">Ready 1</span></div></div>
+<div class="stands" style="grid-template-columns:repeat(3,1fr)">${[['#A-1042','Diner app · pick-up 7:30 PM','2 × Bulgogi bowl · 1 × Iced tea','₱498.00','Paid online','ok'],['#GF-88213','Grab · rider in 12 min','1 × Samgyup take-home set','₱899.00','Paid via Grab','info'],['#FP-5530','Foodpanda · rider in 20 min','3 × Kimchi fried rice','₱450.00','Paid via Foodpanda','info']].map((o,i)=>`<div class="st" style="min-height:190px;gap:8px"><div class="row" style="justify-content:space-between"><b style="font-size:17px">${o[0]}</b><span class="pill ${o[5]}" style="height:26px">${o[4]}</span></div><span class="muted" style="font-size:13.5px">${o[1]}</span><span style="font-size:14.5px">${o[2]}</span><b class="num" style="font-family:'Baloo 2';font-size:22px">${o[3]}</b><div class="row">${i<2?`<span class="btn ${i===0?"primary":""} sm">${ic('check')} Accept</span><span class="btn sm danger">${ic('x')} Decline</span>`:`<span class="pill warn">Preparing · 9 min</span>`}</div></div>`).join('')}</div></div></div>`,
+receipts:()=>topBar()+tabs('receipts')+`<div class="body"><div class="main"><div class="row" style="justify-content:space-between"><div><h1>Receipts · today</h1><span class="muted">Business day since Z at 4:00 AM · 41 receipts · ₱48,210.00</span></div><div class="cats"><span class="chip on">All</span><span class="chip">Refunds</span><span class="chip">To check 2</span></div></div>
+<table><thead><tr><th>No.</th><th>Time</th><th>Stand</th><th>Paid by</th><th class="r">Total</th><th>Sent</th></tr></thead><tbody>${[['LIP-01-004231','7:52 PM','7','Cash',' 1,963.00','ok',1],['LIP-01-004230','7:44 PM','5','GCash · to check','1,347.00','warn'],['LIP-01-004229','7:31 PM','Take-out','Cash','450.00','ok'],['LIP-01-R00012','7:20 PM','3','Refund · cash','−120.00','ok'],['LIP-01-004228','7:02 PM','14','Maya','896.00','ok'],['LIP-01-004227','6:48 PM','18','Cash + GCash','2,210.00','ok']].map(r=>`<tr class="${r[6]?'sel':''}"><td class="num"><b>${r[0]}</b></td><td class="num">${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td class="r num">${r[4]}</td><td><span class="pill ${r[5]}" style="height:26px">${r[5]==='ok'?'Sent':'To check'}</span></td></tr>`).join('')}</tbody></table></div>
+<aside class="side" style="align-items:center;padding:18px;gap:14px"><div class="paper"><div style="text-align:center;font-weight:700">SHAREAT LIPA</div><div style="text-align:center">LIP-01-004231 · 6 Nov 7:52 PM</div><div style="text-align:center">Stand 7 · Cashier Joy</div><hr><div class="r"><span>Samgyup+Cheese 4×449</span><span>1,796.00</span></div><div class="r"><span>Iced tea pitcher</span><span>120.00</span></div><div class="r"><span>Cheese corn 2×99</span><span>198.00</span></div><div class="r"><span>Senior (1/4) Lolita R.</span><span>-151.00</span></div><hr><div class="r" style="font-weight:700"><span>TOTAL</span><span>1,963.00</span></div><div class="r"><span>CASH</span><span>2,000.00</span></div><div class="r"><span>CHANGE</span><span>37.00</span></div><hr><div style="text-align:center;font-size:11px">This is not an official receipt</div></div>
+<div class="row" style="flex-wrap:wrap;justify-content:center"><span class="btn sm">${ic('printer')} Reprint</span><span class="btn sm">${ic('arrow-right-left')} Wrong tender</span><span class="btn sm danger">${ic('undo-2')} Refund</span></div></aside></div>`
+};
+document.getElementById('root').innerHTML=`<div class="app">${(V[S]||V.orders)()}</div>`;
+if(window.lucide)lucide.createIcons();
+</script></body></html>
