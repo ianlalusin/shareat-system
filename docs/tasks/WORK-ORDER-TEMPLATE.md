@@ -5,10 +5,24 @@
 > **Who checks it:** CI on the PR; a Codex audit of the open PRs' diffs every 12 hours; Claude fixes
 > the findings (a Sonnet fixer, verified by Opus); then BOSS's merge queue. Ian, 2026-11-06.
 >
-> A work order is a task spec (`docs/tasks/NNN-*.md`) written so that a builder with **no memory of
-> this project** can finish it from the file alone. Copy everything below the line into
-> `docs/tasks/NNN-short-name.md`, using the number BOSS reserved, and fill every field. A field you
-> cannot fill means the work order is not ready to hand out.
+> A work order is a task spec written so that a builder with **no memory of this project** can finish
+> it from the file alone. A field you cannot fill means the work order is not ready to hand out.
+>
+> **Where work orders live — outside git, sorted by status** (Ian, 2026-11-06):
+> `C:\Users\ianla\webapps\shareat-coord\work-orders\` → `open\` (waiting) · `current\` (being built) ·
+> `done\` (PR opened). A work order is in exactly **one** folder and is **moved, never copied**.
+>
+> 1. The planner copies everything below the line into `open\T-NNN-short-name.md`, using the number
+>    BOSS reserved on the board, and fills every field.
+> 2. The builder **claims** it by moving it to `current\`. The move is the lock: if it fails, another
+>    builder has it. The builder writes "Claimed by <app> <model>, <date time>" at the top.
+> 3. The builder copies it into its worktree as `docs/tasks/NNN-short-name.md`, so the PR carries it
+>    as history.
+> 4. When the PR is open, the builder moves it to `done\` with the PR link at the top (or "BLOCKED"
+>    and a draft PR link).
+>
+> The builder's standing prompt is `C:\Users\ianla\webapps\shareat-coord\work-orders\FREEBUFF-PROMPT.md`.
+> If this template and that prompt disagree, fix whichever is wrong; do not build on the conflict.
 
 ---
 
@@ -16,7 +30,6 @@
 
 | Field | Value |
 |---|---|
-| Status | ready for builder · in build · in audit · merged |
 | Planner | <session name> |
 | Builder | <app and model, e.g. Freebuff / DeepSeek> |
 | Branch | `wo/tNNN-short-name` (the builder creates it from `origin/main`) |
@@ -47,6 +60,8 @@ props and return shapes where they are already decided. Say plainly what is **no
 |---|---|
 | `path/to/file.ts` | new / edit — what |
 
+The repo copy of this work order (`docs/tasks/NNN-short-name.md`) is always allowed.
+
 ⛔ **Any file not in this table is off limits.** If the task cannot be done inside this list, stop
 and report why. Do not widen the scope yourself.
 
@@ -71,7 +86,9 @@ Integration tests run against a **real** Postgres test database, never a mock (b
 - [ ] Every §5 test written and passing; typecheck clean
 - [ ] Smoketested in the running app (`npm run dev` in `apps/erp`, port 9008), with what you saw written in the PR
 - [ ] One commit per logical step; messages say what and why
-- [ ] Branch pushed; **one PR opened** against `main`, its body listing the §5 command output
+- [ ] This work order copied into the worktree as `docs/tasks/NNN-short-name.md`, with the real check output under **Builder notes**
+- [ ] Branch pushed; **one PR opened** against `main`, the T-number in its title, its body listing the §5 command output and ending "Built by <app> <model> from a work order"
+- [ ] The work order moved from `current\` to `done\` with the PR link at its top
 - [ ] **Stop there.** You do not merge, deploy or close anything
 
 ## 7. Forbidden — every work order, no exceptions
@@ -79,8 +96,9 @@ Integration tests run against a **real** Postgres test database, never a mock (b
 1. ⛔ **Never merge, rebase onto, force-push or delete any branch except your own `wo/` branch.**
    Never push to `main`. Never enable auto-merge.
 2. ⛔ **Never work in `C:\Users\ianla\webapps\shareat-system` itself.** That checkout is shared by
-   other sessions and holds the owner's uncommitted files. Do not switch its branch, stash, reset,
-   clean or commit there. Work only in your own worktree (header table).
+   other sessions and holds the owner's uncommitted files. Only run `git fetch` and `git worktree add`
+   from it. Do not switch its branch, stash, reset, clean, edit or commit there. Work only in your
+   own worktree (header table), with a real `npm ci` install there, never links.
 3. ⛔ **Never run `git worktree remove --force` or `rm -rf` on a worktree.** Worktree links reach the
    main checkout and have deleted real source files three times. When finished, leave the
    worktree in place; Claude cleans it up.
@@ -96,9 +114,10 @@ Integration tests run against a **real** Postgres test database, never a mock (b
 
 ## 8. If you get stuck
 
-Stop and write the problem at the end of this file under **Builder notes**: the step, the exact
-error output, and what you tried. Push that and open the PR as a draft. Do not guess around a spec
-defect. A blocked report is better than a silent workaround.
+Write the problem under **Builder notes**, in both the `current\` file and the repo copy: the step,
+the exact error output, and what you tried. Push, open the PR as a **draft**, move the work order to
+`done\` with "BLOCKED" at the top, and go on to the next one. Do not guess around a spec defect. A
+blocked report is better than a silent workaround.
 
 ## 9. Audit checklist (for the Codex 12-hour audit and the Claude fixer, not the builder)
 
