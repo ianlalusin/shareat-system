@@ -40,12 +40,17 @@ export interface StoreOffersAt {
   readonly optionOffers: readonly { optionValueId: string; channel: Channel; priceDelta: string }[];
   /** effective_from of every offer and option-offer row of this store later than `at`, both channels. */
   readonly upcoming: readonly Date[];
+  /** T-510 S4: variants with live dayparted offers whose window is closed now. `availableFrom` is the store-local 'HH:MM' it opens (no date, so the hash stays stable). */
+  readonly notOfferedNow?: readonly { variantId: string; channel: Channel; availableFrom: string | null }[];
+  /** T-510 S4: the next daypart opening or closing (only windows live offers use); folded into `nextChangeAt`. */
+  readonly nextDaypartBoundary?: Date | null;
 }
 
-export type MenuNotOfferedReason = 'no_offer' | 'withdrawn' | 'no_basis' | 'rule_below_zero';
+export type MenuNotOfferedReason = 'no_offer' | 'withdrawn' | 'no_basis' | 'rule_below_zero' | 'outside_hours';
 export type ChannelOffer =
   | { orderable: true; amount: string | null; bundleHeads: number | null; extraHeadAmount: string | null }
-  | { orderable: false; notOffered: MenuNotOfferedReason };
+  | { orderable: false; notOffered: Exclude<MenuNotOfferedReason, 'outside_hours'> }
+  | { orderable: false; notOffered: 'outside_hours'; availableFrom: string | null };
 export type ChannelDelta = { orderable: true; priceDelta: string } | { orderable: false; notOffered: 'no_offer' };
 
 export interface ProjectedStation { id: string; name: string; slaMinutes: number; printOnOutage: boolean }
@@ -108,6 +113,16 @@ export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Da
   const optAt = new Map<string, string>();
   for (const o of entry.optionOffers) optAt.set(key(o.optionValueId, o.channel), o.priceDelta);
 
+  // T-510 S4: a variant whose daypart window is closed now has no offer row but still appears, saying when it opens.
+  const closedFrom = new Map<string, string | null>();
+  for (const n of entry.notOfferedNow ?? []) closedFrom.set(key(n.variantId, n.channel), n.availableFrom);
+  const channelFor = (variantId: string, channel: Channel): ChannelOffer => {
+    const k = key(variantId, channel);
+    const row = offerAt.get(k);
+    return !row && closedFrom.has(k) ? { orderable: false, notOffered: 'outside_hours', availableFrom: closedFrom.get(k)! } : channelOffer(row);
+  };
+  const shows = (c: ChannelOffer): boolean => c.orderable || c.notOffered === 'outside_hours';
+
   const itemById = new Map(snapshot.items.map((i) => [i.id, i]));
   const groupById = new Map(snapshot.optionGroups.map((g) => [g.id, g]));
   const activeLinks = snapshot.optionGroupLinks.filter((l) => l.status === 'active');
@@ -118,17 +133,17 @@ export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Da
     const item = itemById.get(v.menuItemId);
     if (v.status !== 'active' || !item || item.status !== 'active') continue;
     const channels = {
-      store: channelOffer(offerAt.get(key(v.id, 'store'))),
-      online: channelOffer(offerAt.get(key(v.id, 'online'))),
+      store: channelFor(v.id, 'store'),
+      online: channelFor(v.id, 'online'),
     };
-    if (!channels.store.orderable && !channels.online.orderable) continue;
+    if (!shows(channels.store) && !shows(channels.online)) continue;
     appearing.set(v.id, { variant: v, channels });
   }
   const appearingItemIds = new Set<string>();
   const storeOfferedItemIds = new Set<string>();
   for (const { variant, channels } of appearing.values()) {
     appearingItemIds.add(variant.menuItemId);
-    if (channels.store.orderable) storeOfferedItemIds.add(variant.menuItemId);
+    if (shows(channels.store)) storeOfferedItemIds.add(variant.menuItemId);
   }
 
   // R4: station rows are read live, active only. R5: a store-offered item with no route to one of them is not on the POS.
@@ -263,7 +278,7 @@ export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Da
   const contentHash = createHash('sha256').update(canonicalJson(menu), 'utf8').digest('hex');
 
   let next: number | null = null;
-  for (const d of entry.upcoming) {
+  for (const d of [...entry.upcoming, ...(entry.nextDaypartBoundary ? [entry.nextDaypartBoundary] : [])]) {
     const t = d.getTime();
     if (t > at.getTime() && (next === null || t < next)) next = t;
   }

@@ -106,7 +106,6 @@ middleware
 mintUniqueToken
 nameMatches
 newCorrelationId
-nextDaypartBoundary
 oldWholeBillSeniorDiscount
 openClaim
 openFloatsForStore
