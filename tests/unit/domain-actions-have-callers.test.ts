@@ -277,6 +277,41 @@ const EXEMPT: Record<string, string> = {
   dayBlockersForLines:
     'INTERNAL — `listReviewDays` (`settlement-intake/review.ts`) calls it to work out the blockers of the whole day table in a fixed number of reads; the screen calls ' +
     '`listReviewDays` (T-511 S5b FIX 1, builder 3, 5 Nov 2026). BOSS approved 6 Nov',
+  // ---- T-524 — the POS v2 domain, built before its API (T-525) and screens (T-526 on) ----
+  addLineDiscount:
+    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
+  addLines:
+    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
+  applyPresetToAllLines:
+    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
+  cancelLine:
+    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
+  completeSale:
+    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
+  confirmHeads:
+    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
+  getSessionBill:
+    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
+  listKitchenQueue:
+    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
+  listOpenStands:
+    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
+  listRefillQueue:
+    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
+  listTodaysSalesReceipts:
+    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
+  openStand:
+    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
+  removeLineDiscount:
+    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
+  requestRefill:
+    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
+  serveLine:
+    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
+  setHeadsCashier:
+    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
+  voidUnpaidSession:
+    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
 };
 
 describe('T-227 — every action-shaped domain export is reachable from a screen', () => {

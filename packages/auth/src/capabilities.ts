@@ -82,6 +82,12 @@ export type Capability =
   | 'void_statutory_discount'
   /** T-424. Approving a POS v2 refund, tender correction or unpaid-session void with an ERP PIN. Admin yes, manager NO by role: held by grant (store-manager position defaults / a hand grant). */
   | 'approve_pos_correction'
+  /** T-524. Ask the kitchen for a refill of an item in the table's package. Manager and up by role; staff by position (Server, Cashier, Kitchen Staff). */
+  | 'request_pos_refill'
+  /** T-524. Mark a queued kitchen line served. Manager and up by role; staff by position (Kitchen Staff, Server). */
+  | 'serve_pos_ticket'
+  /** T-524. A server's head count for a table (the bill follows the higher of it and the cashier's count). Manager and up by role; staff by position (Server). */
+  | 'confirm_pos_heads'
   | 'accept_remittance'
   /** T-186. Staff-OPEN: the person holding the drawer is the cashier. */
   | 'record_till_count'
@@ -352,6 +358,9 @@ export const CAPABILITIES: readonly Capability[] = [
   'record_statutory_discount',
   'void_statutory_discount',
   'approve_pos_correction',
+  'request_pos_refill',
+  'serve_pos_ticket',
+  'confirm_pos_heads',
   'accept_remittance',
   'record_till_count',
   'resolve_till_variance',
@@ -489,6 +498,9 @@ export const CAPABILITY_SCOPE: Readonly<Record<Capability, CapabilityScope>> = {
   record_statutory_discount: 'store',
   void_statutory_discount: 'store',
   approve_pos_correction: 'store',
+  request_pos_refill: 'store',
+  serve_pos_ticket: 'store',
+  confirm_pos_heads: 'store',
   accept_remittance: 'store',
   record_till_count: 'store',
   resolve_till_variance: 'store',
@@ -738,6 +750,9 @@ export const CAPABILITY_AREA: Readonly<Record<Capability, CapabilityArea>> = {
   record_statutory_discount: 'sales',
   void_statutory_discount: 'sales',
   approve_pos_correction: 'sales',
+  request_pos_refill: 'sales',
+  serve_pos_ticket: 'sales',
+  confirm_pos_heads: 'sales',
   accept_remittance: 'sales',
   record_till_count: 'sales',
   resolve_till_variance: 'sales',
@@ -896,6 +911,10 @@ export const CAPABILITY_MATRIX: Readonly<Record<Capability, Readonly<Record<Role
   // T-424. ⭐ Manager is FALSE on purpose: approving a refund / tender correction / void with a PIN is held by GRANT (the store-manager
   // positions' access defaults, or a hand grant at the store) - a franchise-owner role alone does not approve. Admins hold it implicitly.
   approve_pos_correction: { super_admin: true, admin: true, manager: false, staff: false },
+  // T-524 (docs/tasks/524-pos-v2-domain.md R2): the floor's three everyday acts. Manager and up by role; staff only by position grant (row 211).
+  request_pos_refill: { super_admin: true, admin: true, manager: true, staff: false },
+  serve_pos_ticket: { super_admin: true, admin: true, manager: true, staff: false },
+  confirm_pos_heads: { super_admin: true, admin: true, manager: true, staff: false },
   accept_remittance: { super_admin: true, admin: true, manager: true, staff: false },
   record_till_count: { super_admin: true, admin: true, manager: true, staff: false },
   resolve_till_variance: { super_admin: true, admin: true, manager: true, staff: false },
@@ -1273,6 +1292,9 @@ export const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   record_statutory_discount: 'record a statutory discount',
   void_statutory_discount: 'void a statutory discount',
   approve_pos_correction: 'approve a POS refund or correction',
+  request_pos_refill: 'ask the kitchen for a refill',
+  serve_pos_ticket: 'mark a kitchen ticket served',
+  confirm_pos_heads: "confirm a table's head count",
   accept_remittance: 'accept a remittance',
   record_till_count: 'record a till count',
   resolve_till_variance: 'resolve a till variance',

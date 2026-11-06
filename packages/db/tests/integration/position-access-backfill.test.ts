@@ -88,6 +88,9 @@ const REAL_MIGRATIONS_FOLDER = join(fileURLToPath(new URL('.', import.meta.url))
 const TARGET_TAG_PREFIX = '0152_';
 
 /** The 21 — packages/auth/src/capabilities.ts's `staff: true` cells, T-318 moves them. */
+/** The scratch chain runs every later migration too: 0240 (T-524, BOSS 6 Nov 2026) seeds three more POS floor acts for Cashier, Kitchen Staff and Server, so "exactly the 21" is judged on the 21. */
+const POS_FLOOR_ACTS = ['request_pos_refill', 'serve_pos_ticket', 'confirm_pos_heads'];
+const twentyOne = (names: string[]) => names.filter((c) => !POS_FLOOR_ACTS.includes(c));
 const THE_21 = [
   'record_sale',
   'submit_sales_day',
@@ -411,7 +414,7 @@ describe('T-318 slice B / migration 0152 — the two-tier attribution rule', () 
       const grantedByRows = await sql<{ granted_by: string }[]>`select distinct granted_by from person_grants`;
       expect(grantedByRows.map((r) => r.granted_by)).toEqual([admin!.id]);
       const names = await activeGrantNames(sql, person!.id);
-      expect(names).toEqual(THE_21);
+      expect(twentyOne(names)).toEqual(THE_21);
     } finally {
       await sql.end();
       await dropScratchDatabase(dbName);
@@ -525,7 +528,7 @@ describe('T-318 slice B / migration 0152 — the two-tier attribution rule', () 
       await expect(apply152(sql)).resolves.toBeUndefined();
 
       const names = await activeGrantNames(sql, person!.id);
-      expect(names).toEqual(THE_21);
+      expect(twentyOne(names)).toEqual(THE_21);
     } finally {
       await sql.end();
       await dropScratchDatabase(dbName);
@@ -605,7 +608,7 @@ describe('T-318 slice B / migration 0152 — backfills position_capability_defau
 
   it('⭐ CONTRACT 4: a single-position holder receives exactly the 21, via grant_source=position', async () => {
     const names = await activeGrantNames(sql, singlePersonId);
-    expect(names).toEqual(THE_21);
+    expect(twentyOne(names)).toEqual(THE_21);
     const sources = await sql<{ grant_source: string }[]>`
       select distinct grant_source from person_grants where person_id = ${singlePersonId}
     `;
@@ -614,12 +617,12 @@ describe('T-318 slice B / migration 0152 — backfills position_capability_defau
 
   it('⭐ a multi-position holder receives the UNION — exactly 21, never 42, is_primary irrelevant', async () => {
     const names = await activeGrantNames(sql, multiPersonId);
-    expect(names).toEqual(THE_21);
+    expect(twentyOne(names)).toEqual(THE_21);
   });
 
   it('an open employment at an INACTIVE store still receives the 21 — Contract 4 does not stop at store.is_active', async () => {
     const names = await activeGrantNames(sql, inactiveStorePersonId);
-    expect(names).toEqual(THE_21);
+    expect(twentyOne(names)).toEqual(THE_21);
   });
 
   it('a person with no employment at all receives nothing — the migration backfills existing data, not people', async () => {

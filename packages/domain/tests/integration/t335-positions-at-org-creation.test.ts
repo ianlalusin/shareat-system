@@ -203,11 +203,12 @@ describe('T5 — seeding grants nothing', () => {
     // blank Server hire is never granted record_sale) still holds; only the raw counts changed.
     const [defaultsRow] = await sql<{ n: number }[]>`
       select count(*)::int n from position_capability_defaults where org_id = ${boot.orgId}`;
-    expect(defaultsRow!.n).toBe(38);
+    expect(defaultsRow!.n).toBe(44);
 
     const positionGrants = await sql<{ grant_name: string }[]>`
       select grant_name from person_grants where person_id = ${worker!.id} and grant_source = 'position' order by grant_name`;
-    expect(positionGrants.map((r) => r.grant_name)).toEqual(['record_stock_movement', 'record_wastage']);
+    // T-524 (BOSS, 6 Nov 2026): a Server also defaults request_pos_refill and confirm_pos_heads (never serve_pos_ticket).
+    expect(positionGrants.map((r) => r.grant_name)).toEqual(['confirm_pos_heads', 'record_stock_movement', 'record_wastage', 'request_pos_refill']);
 
     // T-336 auto-role/scope delta: createEmployment now auto-assigns 'staff' and grants store
     // scope for the hired store, so the manual inserts this test used to need here would 23505.
