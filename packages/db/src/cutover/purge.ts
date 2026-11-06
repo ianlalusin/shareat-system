@@ -53,6 +53,7 @@ import { createHash } from 'node:crypto';
 import { chmodSync, createReadStream, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import postgres from 'postgres';
+import { BUSINESS_TIMEZONE } from '@shareat/core/datetime';
 import { refuse } from '../refusal';
 import * as auditLogRepo from '../repo/audit-log';
 import {
@@ -489,6 +490,36 @@ export interface ApplyPurgeOptions {
 }
 
 /**
+ * Deletes the rows of one date-scoped table that were created before `keepFrom` (a calendar date).
+ * Exported so a test runs the same statement the operator's run does.
+ *
+ * T-536 (audit CR-5): on a `timestamptz` column the cutoff is midnight of `keepFrom` in the BUSINESS time zone. The date is
+ * sent as text and cast in SQL: handed to the driver as a bare `$1` for a timestamptz column, it turned the date into UTC
+ * midnight (08:00 Manila), so rows made 00:00-08:00 Manila on the cutoff day were purged. A column that is neither `date` nor
+ * `timestamptz` is refused before any delete rather than guessed at.
+ */
+export async function deleteBeforeCutoff(tx: Tx, table: string, column: string, keepFrom: string): Promise<void> {
+  const [col] = await tx.unsafe<{ type: string }[]>(
+    `select format_type(a.atttypid, a.atttypmod) as type from pg_attribute a
+      where a.attrelid = to_regclass($1) and a.attname = $2 and not a.attisdropped`,
+    [quoteIdent(table), column],
+  );
+  const where =
+    col?.type === 'timestamp with time zone'
+      ? `${quoteIdent(column)} < ($1::text)::timestamp at time zone '${BUSINESS_TIMEZONE}'`
+      : col?.type === 'date'
+        ? `${quoteIdent(column)} < ($1::text)::date`
+        : null;
+  if (!where) {
+    throw refuse(
+      `cutover purge: ${table}.${column} is ${col?.type ?? 'missing'}, not date or timestamptz`,
+      `REFUSED. ${table}.${column} is not a date or timestamptz column, so its cutover cutoff has no defined meaning`,
+    );
+  }
+  await tx.unsafe(`delete from ${quoteIdent(table)} where ${where}`, [keepFrom]);
+}
+
+/**
  * The transaction body (§3.3). Order is load-bearing — see this file's header for the two reasons
  * TRUNCATE must precede the shell step, and the one reason the `fixed_assets` shell UPDATE must
  * name `status` in the same statement as everything else.
@@ -591,9 +622,7 @@ export async function applyPurge(tx: Tx, plan: PurgePlan, opts: ApplyPurgeOption
     await tx.unsafe(`truncate table ${plan.purgeOrder.map(quoteIdent).join(', ')}`);
   }
   for (const p of plan.datePlans) {
-    await tx.unsafe(`delete from ${quoteIdent(p.table)} where ${quoteIdent(p.entry.dateColumn)} < $1`, [
-      p.entry.keepFrom,
-    ]);
+    await deleteBeforeCutoff(tx, p.table, p.entry.dateColumn, p.entry.keepFrom);
   }
 
   // Step 4 — the shell step, per table: drop rows that no longer exist, then ONE combined UPDATE
