@@ -264,7 +264,7 @@ Customer v2 sends **no push**: on-page notices only (A6).
    secret held by Ian, CI builds only) still hold. Port 9009 is no longer needed by the POS once `apps/pos` retires.
 2. **The carrier (§5 → row 430).** The device outbox posts typed, append-only events keyed `(device_id, seq)` to
    authenticated `/api/pos/events`. Reads come from a versioned snapshot (`/api/pos/snapshot`, a closed list: menu
-   with dayparts, stands, tenders, discounts, store POS settings, staff PIN verifiers). Other devices poll
+   with dayparts, stands, tenders, discounts, store POS settings, the active staff list; PIN verifiers are made on the device at online sign-in, §5 O5). Other devices poll
    `/api/pos/state`. The server recomputes every bill and is the only writer of truth. §5's offline scope, the 24 h
    promise and the soak gate are unchanged.
 3. **Firebase exit timing (A2, POS part).** The POS leaves Firebase **in one switch per store, at a business-day

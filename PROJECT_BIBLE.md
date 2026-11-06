@@ -44,56 +44,56 @@
 - ` 828–832  ` 5. Architecture — the edge lane (device snapshot and outbox)
   - ` 833–872  ` 5.1 The two-lane contract
   - ` 873–905  ` 5.2 What v1 actually does offline — and why v2 changes it
-  - ` 906–964  ` 5.3 The hot set — closed list
-  - ` 965–966  ` 5.4 Offline write-back rules
-  - ` 967–977  ` 5.3 Offline write-back rules
-- ` 978–979  ` 6. Data conventions
-  - ` 980–987  ` Money
-  - ` 988–998  ` Dates & time
-  - ` 999–1004 ` Identifiers
-  - `1005–1009 ` Naming
-  - `1010–1015 ` Nulls
-- `1016–1061 ` 7. Security model
-  - `1062–1092 ` 7.1 Identity — the v1 mess, and the v2 rule
-- `1093–1094 ` 8. Repo & environment
-  - `1095–1129` Layout
-  - `1130–1140` Ports — reserved, never shared
-  - `1141–1185` Build discipline — two rules, both absolute
-  - `1186–1196` Git
-- `1197–1222` 9. Definition of done
-  - `1223–1230` Parity gate
-- `1231–1265` 10. Phase plan
-- `1266–1282` 11. Migration & ETL rules
-- `1283–1347` 12. Inherited landmines — do not repeat these
-- `1348–1765` 13. Decision log
-- `1766–1785` 14. Amendment protocol
-- `1786–1790` 15. Engineering standards — the industry practices this project follows
-  - `1791–1796` 15.1 Build order: walking skeleton first
-  - `1797–1808` 15.2 Golden-master testing — the most important practice here
-  - `1809–1817` 15.3 Strangler Fig, not big-bang cutover
-  - `1818–1822` 15.4 No dual-write
-  - `1823–1831` 15.5 Expand/contract migrations
-  - `1832–1840` 15.6 Observability from day zero, not later
-  - `1841–1845` 15.7 CI gates
-  - `1846–1850` 15.8 Backups and a tested restore
-  - `1851–1855` 15.9 Twelve-Factor config
-  - `1856–1863` 15.10 Append-only ledgers — but not event sourcing
-  - `1864–1868` 15.11 Defence in depth
-  - `1869–1897` 15.12 Skills are lenses, not assurance
-  - `1898–1904` 15.13 Reconciliation is a permanent feature
-- `1905–1909` 16. The accounting spine
-  - `1910–1941` 16.0 What we are actually fixing — the diagnosis
-  - `1942–1985` 16.1 The ten invariants — non-negotiable
-  - `1986–2000` 16.2 The oracle: how "correct" is tested
-  - `2001–2022` 16.3 The model — header + lines, not legs
-  - `2023–2042` 16.4 Deliberately simpler than ERPNext
-  - `2043–2112` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2113–2137` 16.6 What v1 already gets right — preserve the intent
-  - `2138–2159` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2160–2174` 16.8 What v1's accounting already gets right
-  - `2175–2218` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2219–2269` 16.10 Posting patterns — one canonical pattern per business event
-  - `2270–2302` 16.11 Inventory's accounting integration
+  - ` 906–966  ` 5.3 The hot set — closed list
+  - ` 967–968  ` 5.4 Offline write-back rules
+  - ` 969–979  ` 5.3 Offline write-back rules
+- ` 980–981  ` 6. Data conventions
+  - ` 982–989  ` Money
+  - ` 990–1000 ` Dates & time
+  - `1001–1006 ` Identifiers
+  - `1007–1011 ` Naming
+  - `1012–1017 ` Nulls
+- `1018–1063 ` 7. Security model
+  - `1064–1094 ` 7.1 Identity — the v1 mess, and the v2 rule
+- `1095–1096 ` 8. Repo & environment
+  - `1097–1131` Layout
+  - `1132–1142` Ports — reserved, never shared
+  - `1143–1187` Build discipline — two rules, both absolute
+  - `1188–1198` Git
+- `1199–1224` 9. Definition of done
+  - `1225–1232` Parity gate
+- `1233–1267` 10. Phase plan
+- `1268–1284` 11. Migration & ETL rules
+- `1285–1349` 12. Inherited landmines — do not repeat these
+- `1350–1768` 13. Decision log
+- `1769–1788` 14. Amendment protocol
+- `1789–1793` 15. Engineering standards — the industry practices this project follows
+  - `1794–1799` 15.1 Build order: walking skeleton first
+  - `1800–1811` 15.2 Golden-master testing — the most important practice here
+  - `1812–1820` 15.3 Strangler Fig, not big-bang cutover
+  - `1821–1825` 15.4 No dual-write
+  - `1826–1834` 15.5 Expand/contract migrations
+  - `1835–1843` 15.6 Observability from day zero, not later
+  - `1844–1848` 15.7 CI gates
+  - `1849–1853` 15.8 Backups and a tested restore
+  - `1854–1858` 15.9 Twelve-Factor config
+  - `1859–1866` 15.10 Append-only ledgers — but not event sourcing
+  - `1867–1871` 15.11 Defence in depth
+  - `1872–1900` 15.12 Skills are lenses, not assurance
+  - `1901–1907` 15.13 Reconciliation is a permanent feature
+- `1908–1912` 16. The accounting spine
+  - `1913–1944` 16.0 What we are actually fixing — the diagnosis
+  - `1945–1988` 16.1 The ten invariants — non-negotiable
+  - `1989–2003` 16.2 The oracle: how "correct" is tested
+  - `2004–2025` 16.3 The model — header + lines, not legs
+  - `2026–2045` 16.4 Deliberately simpler than ERPNext
+  - `2046–2115` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2116–2140` 16.6 What v1 already gets right — preserve the intent
+  - `2141–2162` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2163–2177` 16.8 What v1's accounting already gets right
+  - `2178–2221` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2222–2272` 16.10 Posting patterns — one canonical pattern per business event
+  - `2273–2305` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -909,8 +909,10 @@ The hot set is **closed**. Adding to it requires a bible amendment (§14): every
 addition widens the offline attack surface and the staleness blast radius.
 
 ⭐ **Row 430 (2026-11-06): the POS snapshot is a CLOSED list:** menu with dayparts, stands,
-tenders, discounts, store POS settings, and staff PIN verifiers (a slow hash, never a PIN;
-expiring 24 h after the last online refresh). No financial history, no other store's data,
+tenders, discounts, store POS settings, and the list of the store's active staff (ids and
+display names only). **No PIN material ever leaves the server:** a device-only PIN verifier is
+made ON the tablet when a person signs in online there (ADR-015 §5 O5), dropped when the person
+leaves the active list, and refused 24 h after the last online refresh. No financial history, no other store's data,
 no personal data beyond a display name. The POS outbox carries the till's events. The carrier
 is the tablet, not Firestore.
 
@@ -1737,7 +1739,7 @@ just a patch.**
 | 383 | 2026-10-23 | ⭐ **ONE SOURCE OF TRUTH FOR MENU ITEMS AND STORE PRICES: ON V1 IT IS POS V1; FROM V2 IT IS ERP V2 (THE V2 DATABASE, EDITED IN ERP — ROW 307, ROW 316). EVERY OTHER PLACE THAT SHOWS MENU ITEMS OR PRICES — POS V2, THE CUSTOMER APP, THE WEBSITE, THE `knowledge/` BASE AND ANY FUTURE AI — READS THEM FROM THAT SOURCE AND NEVER KEEPS ITS OWN EDITABLE COPY.** Ian, 2026-10-23 (knowledge-base session) | Extends row 307 to the website and the knowledge base. v1 keeps menu data in POS and copies it out one way (CUSTOMER `catalogCache`, ERP pulls); every hand-kept copy is a price that can go stale. The knowledge base already refuses to type prices (`.claude/skills/knowledge-intake/`) | Yes — a read path, not data; one table either way |
 | 384 | 2026-10-24 | **BANAY-BANAY CLOSES AT THE END OF 2026 AND LIPA BUYS IT BACK.** Extends row 377 (dropped from v2). Its closing stock, cash and equipment pass to Lipa in v1 before cutover; nothing of Banay-Banay is opened in v2. Whether its staff move to Lipa is still open (T-454). | Ian, 2026-10-24, chat with the orchestrator ("end of year will be bought back by lipa") | Yes, before the cutover |
 | 385 | 2026-10-24 | **MAIN'S REQUIRED CHECK APPLIES TO ADMINS TOO.** GitHub branch protection on `main` enforces "typecheck, test, build" for admins; nothing reaches main untested, including merges by agents using Ian's admin login, and direct pushes to main are refused for everyone. Cause: an `--auto` merge landed PR #59 before its CI finished (24 Oct). | Ian, 2026-10-24 ("yes"), set by the orchestrator | Yes |
-| 386 | 2026-10-24 | **CUSTOMER LOBBY (T-455): order.shareat.net; ID read on the phone only; build now.** The lobby lives at order.shareat.net (row 349 stands). A senior/PWD card is read on the diner's own phone only, never by an outside AI service (rows 251/330/353); the cashier still sees the physical card. No photo of the card is kept. Until spring the phone hands over to today's customer app after seating. Switch on at Lipa as soon as it is built and tested; POS slices still avoid merging 20 Nov-14 Dec. | Ian, 2026-10-24 ("1 yes, 2 yes, 3 start now"; "customer lobby - no; phone hand over yes; switch on date at lipa build now") | Yes |
+| 386 | 2026-10-24 | *(Narrowed by row 435: POS v2 work may merge 20 Nov – 14 Dec while the new POS stays off for every store.)*  **CUSTOMER LOBBY (T-455): order.shareat.net; ID read on the phone only; build now.** The lobby lives at order.shareat.net (row 349 stands). A senior/PWD card is read on the diner's own phone only, never by an outside AI service (rows 251/330/353); the cashier still sees the physical card. No photo of the card is kept. Until spring the phone hands over to today's customer app after seating. Switch on at Lipa as soon as it is built and tested; POS slices still avoid merging 20 Nov-14 Dec. | Ian, 2026-10-24 ("1 yes, 2 yes, 3 start now"; "customer lobby - no; phone hand over yes; switch on date at lipa build now") | Yes |
 | 387 | 2026-10-24 | **AP/EXPENSE ERRORS SHOW WHILE TYPING; ADMIN MAY VERIFY THEIR OWN SUPPLIER INVOICE (T-475).** Business-rule errors on the invoice and expense forms appear live with Save off; the server re-checks with the same rule functions. A new capability `verify_own_supplier_invoice` (org level, admin and super admin only, NOT grantable, not given to stand-in managers) lifts only the creator-is-not-verifier rule: the invoice is flagged "verified by its own creator" and audited, and it may include invoices the recurring job logged in the admin's name (amends row 183 for this capability). It never bypasses locked/closed periods, ledger invariants or stock rules. Then the invoice/supplier/expense linkage fixes. App-wide live checks follow as T-485. | Ian, 2026-10-24 ("1A, 2A, 3 yes"; "1b 2a 3a"; "implement the same show error while typing all through the app") | Yes |
 | 388 | 2026-10-25 | **THE COMMISSARY SEES PADRE GARCIA'S PER-ITEM RECEIPT COUNTS PLUS ONE BALANCE (T-398 S5, QI-1 = a).** For each shipment the commissary sees how many of each of ITS OWN items Padre Garcia counted at the door, and one "PG owes us ₱Y" balance; nothing else of PG's (prices, costs, other suppliers, staff). The franchise credit note is computed from the per-item shortfall, and the daily reconciliation catches a payment one side forgot. Amends Q8 (a) ("PG recorded ₱X" per shipment only). | Ian, in chat: "QI-1 is a". Recommended by the planner: the goods are the commissary's own, so it reveals nothing of PG's business and removes a manual, error-prone step. Recorded in docs/tasks/398-s5/QUESTIONS.md on lane/t398-s5. | Yes, before PG goes live on v2 |
 | 389 | 2026-10-26 | **A BILL THE SYSTEM MAKES WHEN PADRE GARCIA RECEIVES A LIPA SHIPMENT NEEDS NO SECOND CHECKER (T-398 S5d, QI-2 = A).** When PG counts in a Lipa (commissary) shipment, the receive step creates PG's supplier bill to Lipa and marks it system-made. A system-made bill is exempt from the two-person verification rule (0046/0217) only while its total equals the shipment's received total and it is linked to that shipment; only the receive path can set the mark, the app role can neither set nor clear it, and its amount cannot be edited. Every other supplier bill keeps the two-person rule. Lipa is the commissary; Malvar is a Lipa branch supplied by stock transfer inside the same org; PG buys from Lipa as a franchise (Ian, 26 Oct). | Ian, in chat: "a". Nobody types the amount (counted quantity x Lipa's rate), the 06:30 reconciliation compares both books daily, and the receiver is usually a PG manager, so a second checker would add a daily manual step and delay what PG owes. A made-up system verifier (B) was rejected: it puts a person who does not exist in the audit trail. | Yes, before PG goes live on v2 |
@@ -1762,6 +1764,7 @@ just a patch.**
 | 432 | 2026-11-06 | **LOYALTY IS NOT IN THE FIRST POS v2 RELEASE.** Ian, 2026-11-06, Q4 (a). Earn and redeem are added after Lipa is stable (129 members today); they need the `diner` principal and the inter-org liability of row 273. Offline, loyalty is refused anyway (design §5.4). | Keeps the 7 Dec scope small (row 431) | Yes |
 | 433 | 2026-11-06 | **POS v2 SCREEN THEMES: THE KITCHEN SCREEN DEFAULTS TO GRILL NIGHT (DARK); THE TILL AND THE OTHER TABS DEFAULT TO LIGHT. A DEFAULT, CHANGEABLE PER DEVICE.** Q5 was not answered; the recommended (a) is taken as the default (orchestrator, 2026-11-06). Uses the ADR-013 dark theme unchanged: light stays the ERP default, and the OS never decides. | A hot, bright kitchen read from a distance; mock `docs/plans/pos-v2-design/kitchen-dark.png` | Yes — any time |
 | 434 | 2026-11-06 | **ADR-015 A8's FOUR "STILL OPEN" QUESTIONS ARE CLOSED BY LATER ROWS:** Q1 business-day end → rows 348 and 390 (Z to Z); Q2 first-store date → rows 378, 408 and now 431 (7 Dec on the new POS); Q3 POS v1 feature freeze → row 348 (from 9 Nov, fixes allowed); Q4 the unsafe v1 void → row 348 (yes, DEF-651). Recorded so A8 does not read as open. | A decision that lived only in later rows | Yes |
+| 435 | 2026-11-06 | **POS v2 WORK MAY MERGE DURING 20 NOV – 14 DEC (NARROWS ROW 386), ON ONE CONDITION: THE NEW POS STAYS OFF FOR EVERY STORE, BEHIND THE PER-STORE POS SWITCH (T-523), UNTIL LIPA'S GO-LIVE (ROW 431).** Ian, 2026-11-06, relayed by the orchestrator. Every merge to `main` is a production deploy (row 278), so `/pos` reaches erp2 inert: no store sees or writes through it until its switch is turned on, and turning it on is the go-live step itself (design §8). A TEST store may be switched on for the soak and the emulator. Three parallel Sonnet builder lanes are approved for weeks 2–3, each in its own worktree with its own `_test` database (no lane-DB-pinned tests) and no shared files. | Row 386's pause protected the Firebase P0 rollout; a dark switch keeps that protection while the 7 Dec build lands | Yes |
 
 ## 14. Amendment protocol
 

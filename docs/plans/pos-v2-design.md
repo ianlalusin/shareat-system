@@ -102,8 +102,8 @@ This is a smaller change than it sounds:
  ┌───────────────────────────────────┐            ┌──────────────────────────────────────────────────────┐
  │ /pos  (full-screen, no ERP shell) │  online    │ /pos pages (client components)                       │
  │  ├ local store (IndexedDB)        │──────────► │ /api/pos/events    POST  typed events → domain        │
- │  │   menu · stands · tenders ·    │            │ /api/pos/snapshot  GET   menu/stands/tenders/verifiers│
- │  │   staff PIN verifiers          │ ◄──────────│ /api/pos/state     GET   open stands, tickets (poll)  │
+ │  │   menu · stands · tenders ·    │            │ /api/pos/snapshot  GET   menu/stands/tenders/staff    │
+ │  │   staff list, PIN verifiers*   │ ◄──────────│ /api/pos/state     GET   open stands, tickets (poll)  │
  │  ├ outbox (typed events, seq)     │            │        │                                              │
  │  ├ service worker (app shell)     │            │ packages/domain/src/pos  ← authorize() + RLS          │
  │  └ Bluetooth printer plugin       │            │        │                                              │
@@ -121,7 +121,7 @@ This is a smaller change than it sounds:
 | A3 | **Typed events, not document writes.** Kinds include `stand.opened`, `lines.added`, `heads.confirmed`, `refill.requested`, `ticket.served`, `sale.completed`, `session.voided`, `xslip.printed`. Each event carries `(device_id, seq)`, the person, the client time and raw facts only | Bible §5.1 Lane B rules. `UNIQUE (device_id, seq)` makes a replay silently harmless (§5.4 rule 4). The server **recomputes every bill from its lines and compares**; a mismatch becomes a finding (row 276, §5.4 rule-1 carve-out) |
 | A4 | **The server is the only writer of truth.** `/api/pos/events` runs `authorize()` and the domain function in one transaction per event. Refunds, wrong-tender corrections and Z readings are **online-only requests**, not events | Row 351's server-side manager PIN rule, with no separate POS server. A failed event is **quarantined and shown** to the manager, never dropped (§5.4 rule 5) |
 | A5 | **Sync to other devices is polling.** Each screen asks `/api/pos/state?since=<version>` every 3 s while online. The server keeps one version counter per store and answers 304 when nothing changed | Lipa peaks at 12 receipts an hour; three devices polling cost nothing. No WebSocket, no LISTEN/NOTIFY, no Firestore listener. SSE is added only on a measured need |
-| A6 | **Snapshot with ETag.** Menu (with dayparts), stands, tenders, discounts, store POS settings, and **offline PIN verifiers** for the store's active staff (a slow hash, never the PIN) are fetched on sign-in and every 5 min. The tablet never blanks a good snapshot on a failed refresh (T-508's rule) | The device can sell and switch cashier offline (row 276's O5). Verifiers expire after 24 h offline, and a staffer who is revoked disappears at the next refresh |
+| A6 | **Snapshot with ETag.** Menu (with dayparts), stands, tenders, discounts, store POS settings, and the store's **active staff list** (ids, display names). *Corrected 6 Nov while specifying T-523: the server holds only one-way PIN hashes, so it cannot make per-tablet verifiers, and shipping its hashes would let a copied tablet guess a 6-digit PIN quickly. Instead a **device-only verifier** is made on the tablet when a person signs in online there (ADR-015 §5 O5), dropped when the person leaves the staff list* are fetched on sign-in and every 5 min. The tablet never blanks a good snapshot on a failed refresh (T-508's rule) | The device can sell and switch cashier offline (row 276's O5). Verifiers expire after 24 h offline, and a staffer who is revoked disappears at the next refresh |
 | A7 | **Sign-in = T-464:** a paired tablet (httpOnly cookie, stored as a hash), then Employee ID (3-digit badge number) + PIN, with 5 wrong tries pausing that ID for 5 minutes. A person with two positions picks one, and the pick only narrows (row 323) | Already built and smoke-tested in the ERP. No Firebase Auth, no store email account |
 | A8 | **The APK is a thin Capacitor shell** that opens `https://erp2.shareat.net/pos`. A service worker pre-caches the `/pos` app shell and its code so a **cold start with no internet** still opens the till. The Bluetooth printer plugin is native. New app id (A1.3 rule: never install over a store's roll-back app) | One build of the screens serves the tablet and any browser. Updates are a normal ERP deploy. The update gate blocks loading new code while the outbox is not empty (T-425). **Risk R1:** if the soak shows the service worker failing a cold start, fall back to bundling the same `/pos` client build inside the APK (Capacitor `webDir`). The cost is a second build target, with no change to the design |
 | A9 | **One tablet per store bills** (row 313). Server phones and a kitchen screen are ordinary signed-in ERP browsers. They are **online-only**: Refills, Kitchen and the waiter's "add item" | Row 313 removes the two-tablets-one-table problem. If store Wi-Fi is down, phones are down too, and the kitchen gets printed tickets from the till (§5.4) |
@@ -184,7 +184,7 @@ The bible's "Postgres owns the truth; Firebase owns the edge" line (§1 line 203
 | §2 rule 4 | "Firestore is one-way except the inbox lane." | "**Device storage is one-way except the outbox.** A snapshot is read-only to the device; an outbox event is append-only and never read as truth. (Firestore, while the clock still uses it, follows the same rule.)" |
 | §5 title and §5.1 intro | "the Firebase hot lane"; "Every Firestore document…" | "**the edge lane**"; "Every piece of device-held data is one of two kinds", with Lane A = snapshot (server-written, versioned, tombstones) and Lane B = outbox (append-only, idempotent, raw facts, quarantine never drop). Carrier: device IndexedDB + `/api/pos/*` for POS; Firestore for the clock until it moves |
 | §5.2 "binding consequence" | "the clock terminal reads and writes Firestore via the client SDK, never via Server Actions" | Add: "**The POS till writes to its outbox and sends via `/api/pos/events`, never via Server Actions on the offline path.**" |
-| §5.3 hot set | POS entries "added at P1 per ADR-015", carrier provisional | The POS snapshot is a **closed list**: menu + dayparts, stands, tenders, discounts, store POS settings, staff PIN verifiers (24 h expiry). No financial history, no other store's data, no personal data beyond a display name |
+| §5.3 hot set | POS entries "added at P1 per ADR-015", carrier provisional | The POS snapshot is a **closed list**: menu + dayparts, stands, tenders, discounts, store POS settings, active staff list; PIN verifiers are made on the device at online sign-in (24 h expiry). No financial history, no other store's data, no personal data beyond a display name |
 | `docs/RULES.md` rows 4–5 | Firestore wording | Follow the bible |
 
 ---
@@ -308,9 +308,11 @@ Nothing historical moves: pre-2027 POS data is test data (row 379). Loyalty bala
 - **Screens:** T-526 to T-529.
 - **Device:** T-530, T-532.
 
-**⚠️ Two collisions for BOSS:**
-1. **Row 386 says POS slices avoid merging 20 Nov – 14 Dec.** This plan merges in that window. Every merge is a production deploy (row 278), so `/pos` ships behind the per-store POS switch (T-523): off everywhere except a TEST store until the 7 Dec switch. Confirm with Ian that row 386's pause does not apply to this.
-2. **The first spec (T-523) must be written in plan mode on Opus by Mon 9 Nov.** Every later slice waits on it.
+**Resolved with BOSS and Ian (6 Nov):**
+1. **Merging 20 Nov – 14 Dec is allowed** while the new POS stays off for every store behind the per-store switch (row 435, narrows row 386).
+2. **Three parallel Sonnet builder lanes** in W2–W3, each in its own worktree with its own `_test` database and no shared files (row 435).
+3. **Convert (T-534) moves into W3 only if T-528 lands on time**; otherwise it follows go-live.
+4. **The T-523 schema spec is due Mon 9 Nov** (Opus), migration **0238** (0237 = T-511 S5c).
 
 ## 10. Deliberately OUT (each with its reason)
 
