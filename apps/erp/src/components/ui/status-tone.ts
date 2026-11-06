@@ -14,11 +14,11 @@ const group = (tone: Tone, values: readonly string[]): ReadonlyArray<readonly [s
   values.map((v) => [v, tone] as const);
 
 export const STATUS_TONE: Readonly<Record<string, Tone>> = Object.fromEntries([
-  ...group('info', ['draft', 'open', 'planned', 'reserved']),
-  ...group('warning', ['duplicate', 'submitted', 'requested', 'pending', 'waiting', 'needs_review', 'deferred', 'pending_valuation', 'paused', 'disputed']),
+  ...group('info', ['draft', 'open', 'planned', 'reserved', 'queued']),
+  ...group('warning', ['duplicate', 'submitted', 'requested', 'pending', 'waiting', 'needs_review', 'deferred', 'pending_valuation', 'paused', 'disputed', 'quarantined']),
   ...group('success', [
     'approved', 'posted', 'confirmed', 'accepted', 'seated', 'played', 'released', 'received', 'verified', 'computed', 'finalized',
-    'resolved', 'succeeded', 'completed', 'active', 'liquidated', 'fully_amortised', 'paid_off', 'final',
+    'resolved', 'succeeded', 'completed', 'active', 'liquidated', 'fully_amortised', 'paid_off', 'final', 'paid', 'applied', 'served',
   ]),
   ...group('progress', ['counting', 'reviewing', 'preparing', 'running', 'in_transit', 'dispatched', 'ready', 'called']),
   ...group('danger', ['void', 'voided', 'overdue', 'rejected', 'declined', 'failed', 'aborted', 'defaulted', 'written_off']),

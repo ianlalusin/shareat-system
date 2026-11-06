@@ -22,6 +22,7 @@ import { QuantityInput } from "./quantity-input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "../ui/form";
 import type { StorePackage, StoreFlavor } from "@/lib/types";
+import { closedPackagesText, packageGone, type ClosedPackage } from "@/lib/menu/from-erp";
 import { bundleExtraPax } from "@/lib/billing/bundle";
 import { AddonsPOSModal } from "@/components/shared/AddonsPOSModal";
 import type { BuiltAddonLine } from "@/lib/pos2/addon-line-builder";
@@ -86,6 +87,8 @@ export interface PendingSeat {
 interface StartSessionFormProps {
     tables: Table[];
     packages: StorePackage[];
+    /** T-510 S4b (ERP menu only): packages whose daypart window is closed now. One muted line under the picker. */
+    closedPackages?: ClosedPackage[];
     flavors: StoreFlavor[];
     user: AppUser | null;
     storeId: string;
@@ -97,7 +100,7 @@ interface StartSessionFormProps {
     onSeatCleared?: () => void;
 }
 
-export function StartSessionForm({ tables, packages, flavors, user, storeId, offersUnlimited, offersAlaCarte, pendingSeat, onSeatCompleted, onSeatCleared }: StartSessionFormProps) {
+export function StartSessionForm({ tables, packages, closedPackages, flavors, user, storeId, offersUnlimited, offersAlaCarte, pendingSeat, onSeatCompleted, onSeatCleared }: StartSessionFormProps) {
     const { toast } = useToast();
     const router = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -147,6 +150,13 @@ export function StartSessionForm({ tables, packages, flavors, user, storeId, off
     // `bundleExtraHeadPrice` (0 = included at no charge).
     const selectedPackageId = unlimitedForm.watch("packageId");
     const selectedPackage = packages.find(p => p.packageId === selectedPackageId);
+    // T-510 S4b (ERP menu only): the clock can close the selected package's window while the form is open. Clear it and say so; never submit it.
+    const [packageDropped, setPackageDropped] = useState(false);
+    useEffect(() => {
+        if (closedPackages === undefined) return;
+        if (packageGone(selectedPackageId, packages)) { unlimitedForm.resetField("packageId"); setPackageDropped(true); }
+        else if (selectedPackageId) setPackageDropped(false);
+    }, [selectedPackageId, packages, closedPackages, unlimitedForm]);
     const isBundle = !!selectedPackage?.isBundle;
     const bundleCap = Number(selectedPackage?.bundleMaxCap ?? 0);
     const bundleExtraPrice = Number(selectedPackage?.bundleExtraHeadPrice ?? 0);
@@ -403,7 +413,7 @@ export function StartSessionForm({ tables, packages, flavors, user, storeId, off
                                 render={({ field }) => (
                                     <FormItem>
                                         <Label>Package</Label>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                        <Select onValueChange={field.onChange} value={field.value ?? ""}>
                                             <FormControl>
                                                 <SelectTrigger><SelectValue placeholder="Select a package..." /></SelectTrigger>
                                             </FormControl>
@@ -417,6 +427,8 @@ export function StartSessionForm({ tables, packages, flavors, user, storeId, off
                                                 ))}
                                             </SelectContent>
                                         </Select>
+                                        {closedPackagesText(closedPackages) && <p className="text-xs text-muted-foreground">{closedPackagesText(closedPackages)}</p>}
+                                        {packageDropped && !selectedPackageId && <p className="text-xs text-destructive">That package is no longer available, pick another.</p>}
                                         <FormMessage />
                                     </FormItem>
                                 )}

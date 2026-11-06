@@ -296,6 +296,7 @@ export function SessionListView() {
                                             <StartSessionForm
                                                 tables={sortedTables}
                                                 packages={availablePackages}
+                                                closedPackages={storeConfig?.closedPackages}
                                                 flavors={enabledFlavors}
                                                 user={appUser}
                                                 storeId={activeStore.id}

@@ -23,7 +23,7 @@ export async function loadStoreMenu(tx: Tx, orgId: string, storeId: string, at?:
   if (live.faults.length > 0) logger.warn({ storeId, faults: live.faults }, 'loadStoreMenu: offers that cannot be resolved are left out');
   const snapshot: MenuSnapshot = {
     ...catalog,
-    stores: [{ storeId, at: when, offers: live.offers, optionOffers, upcoming, notOfferedNow: live.notOfferedNow, nextDaypartBoundary: live.nextBoundaryAt }],
+    stores: [{ storeId, at: when, offers: live.offers, optionOffers, upcoming, notOfferedNow: live.notOfferedNow, nextDaypartBoundary: live.nextBoundaryAt, hours: live.hours ?? undefined, slots: live.slots }],
     stations,
     routes,
   };

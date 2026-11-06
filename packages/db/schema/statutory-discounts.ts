@@ -43,10 +43,11 @@
  * rows into this same table — no migration, and the report can then show which period is
  * machine-captured and which was typed at the till.
  *
- * ## One discount only, by construction
+ * ## One discount per card per bill, by construction
  *
  * A PWD who is also a senior claims one 20%, not both. `kind` is a column and the unique index
- * allows one live row per invoice, so the rule cannot be broken by a second insert rather than
+ * allows one live row per invoice AND ID number (T-523, row 437: two seniors at one table are two
+ * rows, one per card), so the rule cannot be broken by a second insert rather than
  * being re-checked in TypeScript (bible §6.3 — the database enforces the rules).
  */
 import { sql } from 'drizzle-orm';
@@ -121,12 +122,16 @@ export const statutoryDiscountRecords = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
   (t) => [
-    /** ⭐ **One LIVE record per invoice — this is the "one discount only" rule** (a PWD who is also
-     *  a senior claims one 20%, not both). Partial on `voided_at is null` so a mistyped row can be
-     *  voided and re-entered against the same invoice, which a total unique index would block
-     *  forever. Same pattern as `trade_orders_ar_charge_key`. */
+    /** ⭐ **One LIVE record per CARD per invoice — this is the "one discount only" rule** (a PWD who is
+     *  also a senior presents one card and claims one 20%, not both). T-523 (migration 0238, R12, row 437)
+     *  added the card (`lower(btrim(id_number))`): it was one live row per invoice, built for v1's whole-bill discount, but the
+     *  per-diner payment screen needs two rows when two seniors share a bill. Partial on `voided_at is null`
+     *  so a mistyped row can be voided and re-entered against the same invoice, which a total unique index
+     *  would block forever. Same pattern as `trade_orders_ar_charge_key`.
+     *  // NOTE: statutory_discount_records_org_id_id_unique UNIQUE (org_id, id) is hand-added in migration 0238 (T-523): the twin target of pos_sales_receipt_discounts.statutory_record_id. */
     uniqueIndex('statutory_discount_records_live_invoice_key')
-      .on(t.orgId, t.storeId, t.businessDate, t.invoiceNumber)
+      // NOTE: the last key part is lower(btrim(id_number)), so 'OSCA-1', 'osca-1' and 'OSCA-1 ' are one card (migration 0238).
+      .on(t.orgId, t.storeId, t.businessDate, t.invoiceNumber, sql`lower(btrim(${t.idNumber}))`)
       .where(sql`${t.voidedAt} is null`),
     /** The logbook report's own query: one store, a date range, in date order. */
     index('statutory_discount_records_org_id_store_id_business_date_idx').on(t.orgId, t.storeId, t.businessDate),

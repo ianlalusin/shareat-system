@@ -150,6 +150,8 @@ export * from './dual-run';
 export * from './menu';
 // T-508 S1 - kitchen stations and per-item kitchen routes (migration 0232).
 export * from './kitchen';
+// T-523 - POS v2: the per-store switch, stands, terminals, table sessions and lines, sales receipts, the Z, the event inbox (migration 0238).
+export * from './pos-v2';
 
 // T-436 - leave and absence tracking: kinds, caps, requests, per-date days, the year-end SIL payout.
 export * from './leave';

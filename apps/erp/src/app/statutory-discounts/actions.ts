@@ -30,7 +30,7 @@ function errorMessage(err: unknown): string {
   // ⭐ Constraint names are the truth but they are not English. Translate the three a person can
   // actually hit; everything else surfaces verbatim rather than being swallowed.
   if (raw.includes('statutory_discount_records_live_invoice_key')) {
-    return 'That invoice already has a live record for this store and date. One discount only — a PWD who is also a senior claims one 20%, not both. Void the existing record if it is wrong.';
+    return 'This ID card already has a live record on this invoice. One discount per card — a PWD who is also a senior claims one 20%, not both. Void the existing record if it is wrong.';
   }
   if (raw.includes('statutory_discount_records_discount_within_gross_check')) {
     return 'The discount cannot be more than the gross amount.';

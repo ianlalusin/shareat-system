@@ -42,6 +42,13 @@ export interface LiveStoreOffers {
    * Null when no live offer is dayparted, or the zone is unusable. Windows no live offer uses are ignored, so they cause no refetch.
    */
   readonly nextBoundaryAt: Date | null;
+  /**
+   * T-510 S4b: every STANDING dayparted offer row (not withdrawn) of a variant and channel that resolved without a fault, at any time of day, sorted by
+   * variant, channel, daypart. The tablet prices from these when offline across a boundary. A faulted variant and channel contributes none (fail closed).
+   */
+  readonly slots: Array<Row & { daypartId: string }>;
+  /** T-510 S4b: the store zone and the windows the `slots` use, sorted by id. Null when there are no slots. */
+  readonly hours: { timeZone: string; dayparts: DaypartWindow[] } | null;
 }
 
 const priceFieldsOf = (o: Row): menuRepo.OfferPriceFields => ({
@@ -99,6 +106,14 @@ export function resolveStoreOffers(rows: readonly Row[], dayparts: readonly Dayp
   const usedWindowIds = new Set(rows.filter((r) => r.daypartId !== null && !r.withdrawn).map((r) => r.daypartId));
   const nextBoundaryAt = nextDaypartBoundary(dayparts.filter((d) => usedWindowIds.has(d.id)), at, timeZone);
 
+  // T-510 S4b: the standing slots, for the tablet. A (variant, channel) that faulted shows none.
+  const faulted = new Set(faults.map((f) => `${f.variantId}|${f.channel}`));
+  const slots = rows
+    .filter((r): r is Row & { daypartId: string } => r.daypartId !== null && !r.withdrawn && !faulted.has(`${r.variantId}|${r.channel}`))
+    .sort((a, b) => byStr(a.variantId, b.variantId) || byStr(a.channel, b.channel) || byStr(a.daypartId, b.daypartId));
+  const slotWindowIds = new Set(slots.map((s) => s.daypartId));
+  const hoursWindows = dayparts.filter((d) => slotWindowIds.has(d.id)).sort((a, b) => byStr(a.id, b.id));
+
   // An online rule follows the STORE offer live at this same moment, not the repo's slot-matched join.
   const storeOf = new Map(offers.filter((o) => o.channel === 'store').map((o) => [o.variantId, o]));
   return {
@@ -110,6 +125,8 @@ export function resolveStoreOffers(rows: readonly Row[], dayparts: readonly Dayp
     notOfferedNow,
     faults,
     nextBoundaryAt,
+    slots,
+    hours: slots.length > 0 ? { timeZone, dayparts: hoursWindows } : null,
   };
 }
 
