@@ -1220,6 +1220,62 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'T-510 R1: a store’s dayparts; the store belongs to one org, the policy is the org backstop and the repo filters by store. Org-scoped like the menu offers that point at them.',
   },
+  pos_stores: {
+    scope: 'org_column',
+    reason: 'T-523 R1: the per-store POS switch (off | test | live) and polling counter; the store belongs to one org, the policy is the org backstop and the repo filters by store.',
+  },
+  pos_stands: {
+    scope: 'org_column',
+    reason: 'T-523 R2: a store’s fixed stand set; org-scoped, repo filters by store.',
+  },
+  pos_terminals: {
+    scope: 'org_column',
+    reason: 'T-523 R3: a store’s receipt-number identity (terminal); org-scoped, repo filters by store.',
+  },
+  table_sessions: {
+    scope: 'org_column',
+    reason: 'T-523 R4: a seated party or take-out order at an org’s own store; one franchisee must not see another’s floor.',
+  },
+  table_session_lines: {
+    scope: 'org_column',
+    reason: 'T-523 R5: what an org’s own table session ordered, with kitchen state; org-scoped through the session’s store.',
+  },
+  pos_sales_receipts: {
+    scope: 'org_column',
+    reason: 'T-523 R6: an org’s own sales receipts; org isolation is the point.',
+  },
+  pos_sales_receipt_lines: {
+    scope: 'org_column',
+    reason: 'T-523 R7: the frozen lines of an org’s own sales receipt; carries its own org_id (no store_id), the store follows from the parent.',
+  },
+  pos_sales_receipt_payments: {
+    scope: 'org_column',
+    reason: 'T-523 R8: the tender lines of an org’s own sales receipt; carries its own org_id.',
+  },
+  pos_day_closes: {
+    scope: 'org_column',
+    reason: 'T-523 R9: an org’s own Z readings; org isolation is the point.',
+  },
+  pos_day_close_tenders: {
+    scope: 'org_column',
+    reason: 'T-523 R9: the tender totals of an org’s own Z; carries its own org_id.',
+  },
+  pos_events: {
+    scope: 'org_column',
+    reason: 'T-523 R10: the event inbox of an org’s own tablets; payloads may carry a senior/PWD holder’s name and ID, so org isolation is load-bearing.',
+  },
+  pos_discount_presets: {
+    scope: 'org_column',
+    reason: 'T-523 R13: a store’s named discounts (master data); the store belongs to one org, the policy is the org backstop and the repo filters by store.',
+  },
+  table_session_line_discounts: {
+    scope: 'org_column',
+    reason: 'T-523 R13: a discount on one line of an org’s own table session; org-scoped through the session’s store.',
+  },
+  pos_sales_receipt_line_discounts: {
+    scope: 'org_column',
+    reason: 'T-523 R13: a discount on a frozen line of an org’s own sales receipt; carries its own org_id, never the holder’s name or ID.',
+  },
 };
 
 export function rlsScopeOf(table: string): RlsEntry | undefined {
