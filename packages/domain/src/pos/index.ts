@@ -8,3 +8,18 @@ export { addLineDiscount, removeLineDiscount, applyPresetToAllLines } from './di
 export type { AddLineDiscountInput } from './discounts';
 export { voidUnpaidSession, completeSale, currentBusinessDate, getSessionBill, listOpenStands, listKitchenQueue, listRefillQueue, listTodaysSalesReceipts } from './sale';
 export type { CompleteSaleInput, VoidInput } from './sale';
+export {
+  applyPosEvents,
+  parsePosEvents,
+  listPosQuarantine,
+  replayQuarantinedEvent,
+  discardQuarantinedEvent,
+  refusalCode,
+  POS_NOT_SWITCHED_ON,
+  RETRYABLE_POS_CODES,
+  isRetryableRefusal,
+  MAX_EVENTS_PER_BATCH,
+} from './inbox';
+export type { PosEventIn, PosEventResult, PosPairing } from './inbox';
+export { buildPosSnapshot, loadPosSnapshot, readPosState, NO_TILL_NUMBER } from './snapshot';
+export type { PosSnapshot, PosStateAnswer } from './snapshot';

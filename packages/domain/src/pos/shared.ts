@@ -30,7 +30,7 @@ export interface PosDeps {
 export const RULES_NOT_WIRED = 'The POS business rules are not connected yet. Ask an admin.';
 
 export async function readRules(tx: Tx, orgId: string, businessDate: string, deps: PosDeps | undefined): Promise<PosRules> {
-  if (!deps?.readRules) throw refuse('pos: no business-rule reader wired', RULES_NOT_WIRED);
+  if (!deps?.readRules) throw refuse('RULES_NOT_WIRED: pos: no business-rule reader wired', RULES_NOT_WIRED);
   return deps.readRules(tx, orgId, businessDate);
 }
 
@@ -60,7 +60,7 @@ export async function businessDateAndRules(tx: Tx, orgId: string, storeId: strin
 // ---------------------------------------------------------------------------------------------------------------------
 export const NOT_ON = 'The new POS is not switched on for this store yet.';
 export const RECORDED_DIFFERENTLY = 'This change was already recorded differently on the till.';
-export const recordedDifferently = () => refuse('pos: same device id, different content', RECORDED_DIFFERENTLY);
+export const recordedDifferently = () => refuse('RECORDED_DIFFERENTLY: pos: same device id, different content', RECORDED_DIFFERENTLY);
 
 /**
  * R1, after `authorize`: the store's POS switch must be test or live, and the tablet a live pairing of this store. `pairingId: null` is a
