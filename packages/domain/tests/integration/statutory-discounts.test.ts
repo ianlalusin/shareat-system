@@ -149,20 +149,21 @@ describe('T-137 statutory discount records', () => {
     expect(listed[0]!.netAmount).toBe('896.00');
   });
 
-  it('invariant 2 — ONE LIVE RECORD PER INVOICE: the "one discount only" rule is a constraint, not a check in code', async () => {
+  it('invariant 2 — ONE LIVE RECORD PER CARD PER INVOICE: the "one discount only" rule is a constraint, not a check in code', async () => {
     const { orgId, storeId } = await newOrg('inv2');
     const cashier = await staffPerson(orgId, storeId, 'Cashier');
     const a = actor(orgId, cashier);
 
     await asOrg(orgId, (tx) => recordStatutoryDiscount(tx, a, goodInput(storeId)));
 
-    // A PWD who is also a senior claims one 20%, not both. Same invoice, other kind.
+    // A PWD who is also a senior presents ONE card and claims one 20%, not both. Same invoice, same card (id number), other kind.
+    // (T-523, 0238: the index is per card, so two seniors with different cards on one invoice are two rows - covered in t523-pos-v2-schema.test.ts.)
     // ⚠️ Asserting the CONSTRAINT NAME, not merely "it threw". A bare rejects.toThrow() is
     // satisfied by any error at all — including the TypeError you get before the function
     // exists — which is how a test comes into the world already green and proving nothing.
     await expect(
       asOrg(orgId, (tx) =>
-        recordStatutoryDiscount(tx, a, { ...goodInput(storeId), kind: 'pwd', idNumber: 'PWD-99', holderName: 'Same Person' }),
+        recordStatutoryDiscount(tx, a, { ...goodInput(storeId), kind: 'pwd', holderName: 'Same Person' }),
       ),
     ).rejects.toThrow(/statutory_discount_records_live_invoice_key/);
   });

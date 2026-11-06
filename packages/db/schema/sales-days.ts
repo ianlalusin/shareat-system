@@ -51,6 +51,7 @@ import { persons } from './persons';
 import { stores } from './stores';
 import { moneyAccounts } from './money-accounts';
 import { posV1DayFeeds } from './pos-v1';
+import { posDayCloses } from './pos-v2';
 
 // -------------------------------------------------------------------------------------
 // sales_channels — per-store configuration. v1's Store.salesChannels[], as rows.
@@ -231,7 +232,11 @@ export const salesDays = pgTable(
 
     /** T-375 S1 (migration 0183, R1): where the figures came from. `legacy_typed` is today's typed path (a store
      *  not yet linked to POS); `pos_v1_day_feed` is a day DERIVED from a stored POS response. Kept by 0184. */
+    // NOTE: the DATABASE list also allows 'pos_receipts' since migration 0238 (T-523, R11), but this TS enum is deliberately NOT widened yet: SalesDayRow in repo/sales-days.ts is the
+    // hand-written twin of this type and no code reads or writes a pos_receipts day until T-531 derives one. T-531 widens both in the same change.
     source: text('source', { enum: ['legacy_typed', 'pos_v1_day_feed'] as const }).notNull().default('legacy_typed'),
+    /** T-523 (migration 0238, R11): the Z this day was derived from; non-null iff `source = 'pos_receipts'`. T-531 makes the derivation; 0238 only lets the row exist. */
+    posDayCloseId: uuid('pos_day_close_id').references(() => posDayCloses.id, { onDelete: 'restrict' }),
     /** The `sales` feed the day was derived from; non-null iff `source = 'pos_v1_day_feed'`. */
     posV1DayFeedId: uuid('pos_v1_day_feed_id').references(() => posV1DayFeeds.id, { onDelete: 'restrict' }),
     /** T-375 (W11): POS refunds of the day, contra-revenue 4950 - never comps. Feed days only. */
@@ -341,7 +346,9 @@ export const salesDays = pgTable(
       or (${t.posSourced} = true and ${t.posSourcedAt} is not null)
     `),
     // T-375 S1 (migration 0183, R6): the shapes of a feed-sourced day.
-    check('sales_days_source_check', sql`${t.source} in ('legacy_typed', 'pos_v1_day_feed')`),
+    // T-523 (0238, R11): the list gained 'pos_receipts' (drop/re-add, the 0209 pattern) and the link CHECK below pairs it with pos_day_close_id.
+    check('sales_days_source_check', sql`${t.source} in ('legacy_typed', 'pos_v1_day_feed', 'pos_receipts')`),
+    check('sales_days_pos_day_close_link_check', sql`(${t.source} = 'pos_receipts') = (${t.posDayCloseId} is not null)`),
     check('sales_days_source_feed_id_check', sql`(${t.source} = 'pos_v1_day_feed') = (${t.posV1DayFeedId} is not null)`),
     check('sales_days_feed_source_pos_sourced_check', sql`${t.source} <> 'pos_v1_day_feed' or ${t.posSourced}`),
     check('sales_days_refunds_only_on_feed_days_check', sql`${t.source} = 'pos_v1_day_feed' or ${t.refunds} = 0`),
@@ -401,6 +408,12 @@ export const salesDays = pgTable(
       columns: [t.orgId, t.posV1DayFeedId],
       foreignColumns: [posV1DayFeeds.orgId, posV1DayFeeds.id],
       name: 'sales_days_pos_v1_day_feed_id_same_org_fk',
+    }).onDelete('restrict'),
+    // T-523 (0238, R11): same-org twin of the single-column `pos_day_close_id` FK; references `pos_day_closes_org_id_id_unique`.
+    foreignKey({
+      columns: [t.orgId, t.posDayCloseId],
+      foreignColumns: [posDayCloses.orgId, posDayCloses.id],
+      name: 'sales_days_pos_day_close_id_same_org_fk',
     }).onDelete('restrict'),
     // NOTE: sales_days_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0213 (T-398 S3 / DEF-491), no Drizzle mirror here.
     // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES sales_days (org_id, id)`

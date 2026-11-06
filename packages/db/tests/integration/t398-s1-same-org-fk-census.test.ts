@@ -73,7 +73,8 @@ const ORG_LESS_PIN: readonly string[] = ['etl_quarantine', 'etl_reconciliation',
 // T-472 S1 (0216): +5 pos_bridge external keys (pos_store_id x2, firestore_doc_id, parent_doc_id, pos_item_id). 25 -> 30; +pos_bridge_receipts.raw jsonb. 9 -> 10.
 // T-398 S6 (K12): +franchise_access_log.session_id (kind snapshot: sessions is purged, so a kept log row must not point at it by FK). 30 -> 31.
 const NO_FK_PIN = { count: 31, sha256: '2854c8820ad2d1a22a3966071429731cf2bad9e2293a6e6103fbafd576071a5c' } as const;
-const JSONB_PIN = { count: 10, sha256: '027c304d61ed276c5e70c4411a8defa397063a7720db0eddcf8fb2c6a13f4bc2' } as const;
+// T-523 (0238): +pos_events.payload (snapshot). 10 -> 11.
+const JSONB_PIN = { count: 11, sha256: '0f3c5edf61b692c8c9675c71c7d3f6879df392fd9c8b1f26a7a010f5403ca8e5' } as const;
 
 const openKeys = (l: readonly OpenFkEntry[]) => l.map((e) => e.fk);
 const noFkKeys = (l: readonly { column: string; kind: string }[]) => l.map((e) => `${e.column}|${e.kind}`);
