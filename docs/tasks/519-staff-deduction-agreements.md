@@ -54,7 +54,7 @@
 - **S2:** the screens (R7), using the impeccable skill, plus a rendered check.
 
 ## Out
-Requested cash advances (1120, choice b). Changing how charges are created. Notice by SMS or email. E-signature (the scan of a paper signature is the evidence in release 1).
+Requested cash advances (1120, choice b). Changing how charges are created. Notice by SMS or email. E-signature (the scan of a paper signature is the evidence in release 1). Charged staff member's own read-only view of agreements: deferred, the payslip line is their record in release 1 (BOSS 6 Nov).
 
 ## Open for Ian (not blocking S1)
 None. The 20% cap is set by the regulation, not chosen.

@@ -13,7 +13,8 @@ import {
   setStaffPhotoAction,
   setStaffSignatureAction,
 } from '../actions';
-import { employmentDetail, governmentIdsFor, livePinFor, mediaFor, otherOpenBranchesFor, positionsForStore } from '../lib';
+import { DeductionAgreementsSection } from './DeductionAgreementsSection';
+import { deductionAgreementsFor, employmentDetail, governmentIdsFor, livePinFor, mediaFor, otherOpenBranchesFor, positionsForStore } from '../lib';
 import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import { SignaturePad } from '@/components/SignaturePad';
 import { Page } from '@/components/shell/Page';
@@ -48,7 +49,7 @@ export default async function EmploymentDetailPage({
 
   const isEnded = detail.employment.endedOn !== null;
   const roleOnly = detail.role === 'manager' || detail.role === 'admin' || detail.role === 'super_admin';
-  const [positions, livePin, otherBranches, govIds, media] = await Promise.all([
+  const [positions, livePin, otherBranches, govIds, media, agreements] = await Promise.all([
     positionsForStore(actor.orgId, detail.employment.storeId),
     livePinFor(actor, detail.employment.personId),
     // ⭐ T-302 — read BEFORE the form renders, because the warning it feeds has to be on screen
@@ -57,6 +58,7 @@ export default async function EmploymentDetailPage({
     // T-190 - personal data, shown only to someone holding enrol_staff at this store (null hides the section).
     governmentIdsFor(actor, detail.employment.personId, detail.employment.storeId),
     mediaFor(actor, employmentId),
+    deductionAgreementsFor(actor, detail.employment.personId, detail.employment.storeId),
   ]);
   const assignedIds = new Set(detail.positions.map((p) => p.positionId));
   const primaryId = detail.positions.find((p) => p.isPrimary)?.positionId;
@@ -240,6 +242,8 @@ export default async function EmploymentDetailPage({
           </EditableRecord>
         </section>
       )}
+
+      <DeductionAgreementsSection view={agreements} employmentId={employmentId} storeId={detail.employment.storeId} />
 
       <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <h2 className="font-medium">Role and access</h2>

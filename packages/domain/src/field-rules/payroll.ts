@@ -56,3 +56,12 @@ export const PAYROLL_STATUTORY_PAYMENT_RULES = defineFieldRules('payroll.recordS
   penalty: { label: 'The penalty', optional: true, kind: 'money', min: 0 },
   notes: { label: 'The notes', optional: true, kind: 'text' },
 });
+
+/** Record a signed staff deduction agreement (T-519 R7). The explanation may be "none given" but never blank. */
+export const PAYROLL_DEDUCTION_AGREEMENT_RULES = defineFieldRules('payroll.recordDeductionAgreement', {
+  amount: { label: 'The agreed amount', kind: 'money', min: 0.01 },
+  perPayrollLimit: { label: 'The limit per payroll', kind: 'money', min: 0.01 },
+  noticeGivenAt: { label: 'The notice date', kind: 'date' },
+  employeeExplanation: { label: 'The explanation', kind: 'text', requires: 'Write down what the employee said when they were given the chance to explain (or "none given").' },
+  signedOn: { label: 'The signing date', kind: 'date' },
+});

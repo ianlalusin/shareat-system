@@ -32,7 +32,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /** Purposes that have a screen which claims them. A dormant purpose joins when its screen ships; a signature never does. */
-const CONTROL_PURPOSES: readonly FilePurpose[] = ['receipt_photo', 'staff_photo', 'leave_document'];
+const CONTROL_PURPOSES: readonly FilePurpose[] = ['receipt_photo', 'staff_photo', 'leave_document', 'staff_deduction_agreement'];
 
 const NO_STORE = 'private, no-store';
 function reply(status: number, body: Record<string, unknown>): Response {
