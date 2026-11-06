@@ -262,6 +262,33 @@ Nothing historical moves: pre-2027 POS data is test data (row 379). Loyalty bala
 
 ---
 
+### 8a. ⚠️ OPEN — Lipa's December sales and the 2026 books (BOSS, 6 Nov; for Ian)
+
+**The hole.** The 2026 books close on v1 (row 379, ADR-005). v1's ERP gets a store's sales by an HTTP pull,
+`GET {POS_API_URL}/api/external/sales?storeId&date` (`ERP-rebuild/src/lib/server/pos-api.ts:143-168`). POS v1 answers
+from **one Firestore document per day**, `stores/{posStoreId}/analytics/{yyyymmdd}`
+(`POS/src/app/api/external/sales/route.ts:21-35`). It reads **day totals only**: `payments.totalGross`,
+`payments.txCount`, `payments.byMethod` (amount per method name; must sum to the gross within ₱1), `payments.discountsTotal`,
+`payments.chargesTotal`, and optionally `payments.voidCashRetainedTotal`. Stock usage is a second pull,
+`/api/external/sold-items`, which reads the **receipt** documents. From 7 Dec the new POS writes neither, so v1's pull
+returns `found:false`. The form then silently stays typeable (`SalesReportForm.tsx:569, 697-717`), and December
+sales reach v1 only if someone types them.
+
+| Option | What happens | Effort | Risk |
+|---|---|---|---|
+| **(a) Day-total bridge to v1, until 31 Dec** | After each Z, the ERP server writes Lipa's day totals into that one Firestore document, in v1's field names (a full overwrite per day, never increments). v1's pull then works unchanged. Stock usage for December is entered by hand in v1 (the sold-items pull needs receipt documents, which are out of scope). Switched off on 1 Jan | **S, about 2 days**, inside T-531. Uses the write key the POS v2 server already has on the droplet (`POS_FIREBASE_SA_KEY_FILE`) and `firebase-admin`, which `apps/erp` already depends on | Needs Ian's exception to row 430's "no Firebase": a write-only, one-document-a-day, 25-day bridge. Method names must match v1's names (checked against v1's payment-methods route before go-live) |
+| **(b) The manager types December day totals into v1** | Each morning the manager copies the printed Z slip into v1's sales form, and enters usage by hand | **None to build.** About 25 days × 5–10 minutes | Typing errors in the 2026 books, the problem row 270 was written to remove. v1's own check (₱1 tender sum) still catches some |
+| **(c) Lipa goes live after 1 Jan** (Mon 11 Jan, the planned fallback) | December stays on the trial app, which still writes v1's format | **None.** Frees the 21 Dec – 10 Jan freeze for testing and gives 5 more weeks, which could pull refunds and Convert into the first release | Gives up Ian's 7 Dec choice (row 431). The purge question disappears: POS rows in Postgres would start in 2027 and are kept |
+
+**Recommendation: (a).** Ian chose 7 Dec knowing the cost. (a) keeps that date and keeps the 2026 books
+machine-fed, for two days of work, and the bridge dies on 31 Dec. Then the cutover class question answers itself: v1
+holds December's day totals, so purging the December rows in Postgres loses no booked figure (row 379 stands). If Ian
+will not allow any Firebase write, choose **(c)**, not (b): typed figures in a closing year are worse than a later go-live.
+
+**Guards if (a) is chosen:** (1) the v2 06:00 import (T-396) must skip Lipa from its switch date, because Lipa's v2
+sales day comes from `pos_receipts`, so the bridge doc is never imported twice; (2) the trial app must be signed out at
+the switch, so it cannot add increments to the same document; (3) the writer refuses any date after 2026-12-31.
+
 ## 9. Slices, re-planned for Lipa on Mon 7 Dec 2026 (rows 431, 432)
 
 **The rule (BOSS's ruling inside Ian's "rush"):** cut scope, not proof. The 24-hour two-tablet soak (0 lost, 0 doubled) is the go-live gate and runs before 7 Dec.
@@ -284,11 +311,11 @@ Nothing historical moves: pre-2027 POS data is test data (row 379). Loyalty bala
 |---|---|---|---|---|---|
 | **T-522** | Docs: bible rows 430–434 and ADR-015 Amendment 2 (**done 6 Nov**); this plan kept true | 6 Nov | S | Opus | — |
 | **T-523** | Schema: stands master, `table_sessions`, session lines with kitchen states and price-0 refills, receipts + lines + payments, day-close (Z) record, POS event inbox `UNIQUE (device_id, seq)`, the per-store POS switch. Classification + RLS registry. Migrations from 0238. **Own PR** | W1 · 9–12 Nov | M | Opus spec (plan mode) → Sonnet | T-522 |
-| **T-524** | Domain `packages/domain/src/pos`: open stand, add lines (package + à la carte), confirm heads (`max(cashier, server)`), refill, ticket served, void unpaid stand (manager/admin), pay with server recompute-and-compare (cash, e-wallet "to check"). Integration tests on real Postgres, including two voids at once and a replayed event | W1–W2 · 10–18 Nov | L | Sonnet (money lane) + Sonnet auditor | T-523 |
+| **T-524** | Domain `packages/domain/src/pos`: open stand, add lines (package + à la carte), confirm heads (`max(cashier, server)`), refill, ticket served, void unpaid stand (manager/admin), pay with server recompute-and-compare (cash, e-wallet "to check", senior/PWD per diner writing `statutory_discount_records` with `source = pos`). Integration tests on real Postgres, including two voids at once and a replayed event | W1–W2 · 10–18 Nov | L | Sonnet (money lane) + Sonnet auditor | T-523 |
 | **T-525** | APIs: `/api/pos/events` (idempotent, quarantine, mismatch finding), `/api/pos/snapshot` (ETag, closed list per §5.3 / row 430), `/api/pos/state` (version, 304) | W2 · 16–19 Nov | M | Sonnet | T-524 |
 | **T-526** | `/pos` kiosk shell in `apps/erp`: tabs, status pills, T-464 sign-in wired, offline PIN verifier, route capabilities, census guards, Grill Night default on Kitchen (row 433) | W2 · 16–20 Nov | M | Sonnet | T-525 (stubs from 16 Nov) |
 | **T-527** | Screens: Orders (stands) + Seat a party + add items | W2–W3 · 18–24 Nov | M | Sonnet | T-526 |
-| **T-528** | Screens: Payment (cash, GCash/Maya "to check") + receipt print and reprint (Bluetooth plugin, browser fallback) | W3 · 23–26 Nov | M | Sonnet (money lane) | T-527 |
+| **T-528** | Screens: Payment (cash, GCash/Maya "to check", **senior/PWD per diner with name and ID**, BOSS 6 Nov: legal, daily) + receipt print and reprint (Bluetooth plugin, browser fallback) | W3 · 23–26 Nov | M | Sonnet (money lane) | T-527 |
 | **T-529** | Screens: Kitchen + Refills (polling, T-508 station routing, printed tickets offline) | W3 · 23–26 Nov | M | Sonnet | T-526 |
 | **T-530** | Offline: port `lib/terminal` + outbox to typed events, service-worker app-shell cache, offline printing, X-slip every 4 h, ₱50k warning, update gate | W2–W3 · 16–26 Nov | L | Sonnet | T-525 |
 | **T-531** | Day close: Z on the POS (row 390) → ERP sales day `source = pos_receipts` for the store; Lipa leaves the bridge and the v1 day feed from the switch date. Till opening and counting use the **existing ERP till screen** (row 319), no new tab | W3 · 23–27 Nov | M | Sonnet (money lane) | T-524 |
@@ -300,7 +327,7 @@ Nothing historical moves: pre-2027 POS data is test data (row 379). Loyalty bala
 | Task | Slice | When | Size |
 |---|---|---|---|
 | **T-534** | Money follow-ups: **Convert** (row 359), wrong-tender correction (A4.2), refund online with manager PIN (rows 351, 356). ⭐ **Recommend pulling Convert into W3 if T-528 lands on time:** Lipa does about 3 conversions a day (308 in 91 days), so its absence is felt on day one. Refunds after payment are rare (7 ever); until T-534 a mistake is handled by voiding before payment | from 8 Dec (Convert possibly W3) | M |
-| **T-535** | Senior/PWD per diner (PC-6, 0 recorded in 91 days), stock-usage drafts from receipts (rows 341–342; until then Lipa's usage is entered by hand as row 282 Q-D allows), Online tab (3 orders ever), a waiter's add-item on a phone | Dec – Jan, after the freeze | L |
+| **T-535** | Preset (non-statutory) discounts (2 uses in 91 days across all stores, 0 at Lipa), stock-usage drafts from receipts (rows 341–342; until then Lipa's usage is entered by hand as row 282 Q-D allows), Online tab (3 orders ever), a waiter's add-item on a phone | Dec – Jan, after the freeze | L |
 | — | Loyalty (row 432), the extras of A4.6, Malvar/Davao/Padre Garcia switches (from 11 Jan, one a week), the clock's move off Firestore (§5.5) | 2027 | — |
 
 **Lanes.** One lane cannot do W2–W3 alone. The plan needs **three Sonnet builder lanes in parallel**, each with its own test database (§3.4: no shared state):

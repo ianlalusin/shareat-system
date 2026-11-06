@@ -103,8 +103,9 @@ Conventions for every table below (discovery 6 Nov, `packages/db/migrations/0232
   `pos_bridge_receipts`, which stays the read-only v1 copy). `store_id`, `terminal_id` (composite FK `(store_id,
   terminal_id)` → `pos_terminals`), `receipt_seq integer NOT NULL CHECK (> 0)`, `UNIQUE (terminal_id, receipt_seq)`,
   `table_session_id` UNIQUE (composite same-store FK), `cashier_id` person, `issued_at_device`, `received_at`,
-  `subtotal`, `discount_total numeric(14,2) NOT NULL DEFAULT 0 CHECK (= 0)` (**release 1 has no discounts**; T-535
-  drops this CHECK in its own migration), `total numeric(14,2) NOT NULL CHECK (total >= 0)`,
+  `subtotal`, `discount_total numeric(14,2) NOT NULL DEFAULT 0 CHECK (>= 0)` (in release 1 only senior/PWD, R12; that
+  it equals the sum of R12's rows is a T-524 rule and test, since a CHECK cannot sum child rows), `total numeric(14,2)
+  NOT NULL CHECK (total >= 0)`,
   `CHECK (total = subtotal - discount_total)`, `device_total numeric(14,2) NOT NULL` (as the tablet computed it),
   `offline boolean NOT NULL`, `day_close_id uuid NULL` → R9. **Immutable** (`history_guard` trigger): every column is
   frozen at insert, except `day_close_id`, which may go from NULL to a value **once**. Column UPDATE grant on
@@ -144,7 +145,7 @@ Conventions for every table below (discovery 6 Nov, `packages/db/migrations/0232
   AND (resolved_at IS NULL) = (resolution IS NULL))`, `CHECK (resolved_at IS NULL OR status='quarantined')`. Trigger:
   every column frozen except the three resolution columns, NULL → value once. Column UPDATE grant on (`resolved_by`,
   `resolved_at`, `resolution`). Index `(store_id, status) WHERE status='quarantined'` (the manager's list).
-  **purge**. *Payload rule:* raw facts only (§5.1). No computed business outcome is trusted from a payload; T-524
+  **purge** (OPEN, see the end). *Payload rule:* raw facts only (§5.1). No computed business outcome is trusted from a payload; T-524
   recomputes.
 - **R11 — `sales_days` learns its third source.** Drop and re-add `sales_days_source_check` as `source in
   ('legacy_typed','pos_v1_day_feed','pos_receipts')` (the 0209 drop/re-add pattern). Add `pos_day_close_id uuid NULL`
@@ -154,10 +155,31 @@ Conventions for every table below (discovery 6 Nov, `packages/db/migrations/0232
   (row 313), so one Z per sales day. T-531 refuses a second Z for the same store and business date until a
   multi-terminal rule is written (flagged, not designed here).
 
+- **R12 — Senior/PWD is in release 1 (BOSS ruling, 6 Nov: a legal requirement; ADR-015 §5 lists it as working
+  offline).** New `pos_sales_receipt_discounts`: `receipt_id`, `kind text NOT NULL CHECK in ('senior','pwd')`,
+  `share_amount numeric(14,2) NOT NULL CHECK (> 0)` (the qualifying diner's share before discount, VAT included),
+  `vat_removed numeric(14,2) NOT NULL CHECK (>= 0)`, `discount_amount numeric(14,2) NOT NULL CHECK (> 0)`,
+  `CHECK (vat_removed + discount_amount <= share_amount)`, `statutory_record_id uuid NOT NULL` →
+  `statutory_discount_records(id)` (+ same-org twin), `UNIQUE (statutory_record_id)`. Append-only (`history_guard`).
+  **purge** (OPEN). ⛔ **The holder's name and ID number are NOT stored here** (row 353): they live only in
+  `statutory_discount_records` (T-137), written by T-524 with `source = 'pos'` and `invoice_number` = the printed
+  sales receipt number, in the same transaction as the sale. Offline, the tablet carries name and ID inside the
+  `sale.completed` event payload; T-525 must keep payloads out of logs, and the payload of a quarantined event is
+  shown only to people with the statutory-record capability.
+  **Changes an existing index:** `statutory_discount_records_live_invoice_key` is `(org_id, store_id, business_date,
+  invoice_number) WHERE voided_at IS NULL`, so it allows ONE senior/PWD per bill, built for v1's whole-bill discount.
+  The approved PC-7 payment screen (Ian, 17 Oct) discounts per qualifying diner, so two seniors at one table need two
+  rows. Replace it with `(org_id, store_id, business_date, invoice_number, id_number) WHERE voided_at IS NULL`: still
+  one discount per card per bill (a PWD who is also a senior presents one card and claims one 20%). Update the schema
+  comment in `statutory-discounts.ts` that says "one live row per invoice".
+  *Not decided here (a T-524 rule, flagged for Ian):* how a diner's share is measured when dishes are shared. PC-7's
+  recommendation was "their own package head plus dishes marked as theirs" (2024 DOJ opinion); the schema stores the
+  share as an amount, so either answer fits it.
+
 ## Not in this slice (and where it goes)
 
-Refunds and `parent_receipt_id`, tender corrections, Convert → **T-534** (own migration) · discounts and SC/PWD per
-diner, stock-usage drafts from sales receipts → **T-535** · the offline thresholds (₱50,000 warning, X-slip every
+Refunds and `parent_receipt_id`, tender corrections, Convert → **T-534** (own migration) · preset (non-statutory)
+discounts → **T-535** (2 bill discounts in 91 days across all four stores, 0 at Lipa: discovery 42 §4) · stock-usage drafts from sales receipts → **T-535** · the offline thresholds (₱50,000 warning, X-slip every
 4 h, verifier expiry 24 h) → `business_rule_values` (0237, T-511 S5c) read by T-530, so **no column here** (Ian's
 no-hard-coded-values rule, 5 Nov) · X-slips (printed locally; their `xslip.printed` event lands in R10) · loyalty
 (row 432) · PIN verifiers (made on the device; no server table, design §5.2 A6) · a stand-editing ERP screen.
@@ -165,7 +187,7 @@ no-hard-coded-values rule, 5 Nov) · X-slips (printed locally; their `xslip.prin
 ## Files (the only ones the builder may touch)
 
 - `packages/db/migrations/0238_t523_pos_v2_schema.sql` (new) and `packages/db/migrations/meta/_journal.json`
-- `packages/db/schema/pos-v2.ts` (new) · `packages/db/schema/sales-days.ts` (R11 only) · `packages/db/schema/index.ts`
+- `packages/db/schema/pos-v2.ts` (new) · `packages/db/schema/sales-days.ts` (R11 only) · `packages/db/schema/statutory-discounts.ts` (R12's index and comment only) · `packages/db/schema/index.ts`
 - `packages/db/src/rls/registry.ts` · `packages/db/src/cutover/classification.ts` · `packages/db/src/triggers/registry.ts`
 - `packages/db/src/rls/same-org-fk-exemptions.ts` only if the census demands an exemption (say why in the report)
 - `packages/db/src/repo/pos-v2.ts` (new): **typed read helpers only** (by id; open sessions of a store; lines of a
@@ -189,6 +211,9 @@ no-hard-coded-values rule, 5 Nov) · X-slips (printed locally; their `xslip.prin
 8. RLS: a second org sees none of these rows; a cross-org composite FK is refused (same-org census passes).
 9. Grants: `shareat_app` cannot DELETE from any new table, and cannot UPDATE a column outside the named lists.
 10. `pos_stores.mode` defaults to `off`; `live` needs `live_from`.
+10a. Two seniors on one sales receipt: two `statutory_discount_records` rows (different id numbers) are accepted; the same
+    id number twice on one invoice is refused; a `pos_sales_receipt_discounts` row whose `vat_removed + discount_amount`
+    exceeds its share is refused; existing `manual` statutory rows still satisfy the new index.
 11. Journal guard (`tests/migration-journal.test.ts`), the trigger registry tests (t354), the cutover-classification
     and RLS-registry unit tests, and the same-org FK census all pass.
 
@@ -199,9 +224,8 @@ applies to production **before** T-524 merges (it is inert: nothing reads these 
 
 ## Open for BOSS (not blocking the build)
 
-1. **Cutover class `purge`** for the transactional tables follows row 379 (pre-2027 POS data is test data). Lipa
-   sells on these tables from 7 Dec, so the December sales receipts are wiped at the 1 Jan cutover, together with the
-   ERP's other December test data. Confirm that is what Ian expects.
-2. **Release 1 has no discounts at all** (R6's `discount_total = 0`). Lipa has 6 discount definitions in v1; usage
-   was not counted (discovery 42 counted only SC/PWD: 0). If Lipa uses a preset discount daily, it must move from
-   T-535 into release 1. Needs a count or Ian's word before T-524 starts.
+1. **Cutover class of the transactional tables (R4–R10, R12): OPEN** (BOSS, 6 Nov). Write them as `purge` with the
+   reason `"OPEN: pending the December-sales decision (BOSS/Ian), see docs/plans/pos-v2-design.md §8a"` so the guard
+   passes; the class is changed to the ruled value before the 1 Jan cutover. The hole: v1's ERP books 2026 and reads
+   Lipa's sales from POS Firebase; once Lipa leaves Firebase, its December sales exist only in these tables.
+2. **The senior/PWD share rule** (R12) is needed by T-524, not by this schema.
