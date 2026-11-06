@@ -6,7 +6,7 @@
 | **Asked by** | Ian, 2026-11-06: *"lets pivot design the POS now that its backend is the same as erp like pos is a piece of erp"* and *"no firebase db now"* |
 | **Method** | `/research-evaluate-propose` (bible row 283) and `/impeccable` (standing rule, 3 Nov). The mocks were rendered and the choices made from the screenshots |
 | **Builds on** | ADR-015 and its 15 Oct amendment · bible rows 269–283, 307, 313, 319, 348, 351, 356–359, 371, 378–383, 390–393, 408 · T-422/423/424/425, T-462/463/464, T-505, T-508, T-510, T-518 · discovery 39 (v1 study), 42 (usage counts) |
-| **Amends** | The bible, applied on Ian's Q1 yes (rows 430–434, §6). ADR-015 A1.1, A1.6 and A2's POS timing are superseded by row 430; the ADR's own amendment note is slice T-522 |
+| **Amends** | The bible, applied on Ian's Q1 yes (rows 430–434, §6). ADR-015 Amendment 2 (6 Nov) records A1.1, A1.6 and A2's POS timing as superseded, and A8 as closed |
 | **Mocks** | `docs/plans/pos-v2-design/*.png` (1280×800, the tablet's landscape size), source `docs/plans/pos-v2-design/mocks.html` |
 
 ---
@@ -246,6 +246,8 @@ The bible's "Postgres owns the truth; Firebase owns the edge" line (§1 line 203
 
 A store switches **at a business-day boundary, never mid-day**. No open stand crosses systems.
 
+**Default (orchestrator, 6 Nov; Ian told):** everything switches at once (sign-in, sales and tables together), not in ADR-015 A2's three steps. Step by step would run a store half on Firebase and half on Postgres for weeks (§15.4). Recorded in ADR-015 Amendment 2 and row 430.
+
 | When | Step | Who |
 |---|---|---|
 | A week before | Menu, packages, refills, flavours, stands, tenders, discounts and kitchen routes checked in the ERP (they are ERP-owned already, row 383). Staff have badge codes and ERP PINs | Manager + orchestrator |
@@ -280,7 +282,7 @@ Nothing historical moves: pre-2027 POS data is test data (row 379). Loyalty bala
 
 | Task | Slice | Week | Size | Model | Depends on |
 |---|---|---|---|---|---|
-| **T-522** | Docs: ADR-015 amendment note (rows 430–434), this plan kept true | 6 Nov | S | Opus | — |
+| **T-522** | Docs: bible rows 430–434 and ADR-015 Amendment 2 (**done 6 Nov**); this plan kept true | 6 Nov | S | Opus | — |
 | **T-523** | Schema: stands master, `table_sessions`, session lines with kitchen states and price-0 refills, receipts + lines + payments, day-close (Z) record, POS event inbox `UNIQUE (device_id, seq)`, the per-store POS switch. Classification + RLS registry. Migrations from 0238. **Own PR** | W1 · 9–12 Nov | M | Opus spec (plan mode) → Sonnet | T-522 |
 | **T-524** | Domain `packages/domain/src/pos`: open stand, add lines (package + à la carte), confirm heads (`max(cashier, server)`), refill, ticket served, void unpaid stand (manager/admin), pay with server recompute-and-compare (cash, e-wallet "to check"). Integration tests on real Postgres, including two voids at once and a replayed event | W1–W2 · 10–18 Nov | L | Sonnet (money lane) + Sonnet auditor | T-523 |
 | **T-525** | APIs: `/api/pos/events` (idempotent, quarantine, mismatch finding), `/api/pos/snapshot` (ETag, closed list per §5.3 / row 430), `/api/pos/state` (version, 304) | W2 · 16–19 Nov | M | Sonnet | T-524 |
