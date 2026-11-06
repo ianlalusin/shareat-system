@@ -90,8 +90,11 @@ function navHrefs(): string[] {
  * `redirect(...)` or a `router.push(...)`. ⚠️ A bare string that happens to look like a path is not
  * a link — `requireActor('/staff/hire')` names a return-to path and `revalidatePath('/expenses')`
  * refreshes a cache; neither puts a control on a screen.
+ *
+ * T-544: `href: '/x'` (a tab list in a data file, `channel-settlements/tabs.ts`) is a link too. `nav.tsx` is excluded from the graph, so this
+ * adds edges only from section data that really renders as links.
  */
-const LINK = /(?:href=\{?['"`]|redirect\(\s*['"`]|push\(\s*['"`])(\/[A-Za-z0-9_/-]*)/g;
+const LINK = /(?:href=\{?['"`]|href:\s*'|redirect\(\s*['"`]|push\(\s*['"`])(\/[A-Za-z0-9_/-]*)/g;
 
 function linksIn(repoRelative: string): string[] {
   return [...read(repoRelative).matchAll(LINK)]

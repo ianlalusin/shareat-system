@@ -37,11 +37,9 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       // so the `1220` receivable every verified Foodpanda/Grab day raises had nothing that ever
       // cleared it. Beside Sales days on purpose: that screen creates the receivable, this one
       // ends it.
+      // T-544: ONE entry for the whole family. Upload files, Review days and Record a settlement are tabs/pages under it (`channel-settlements/layout.tsx`);
+      // the sidebar marks this entry current on every /channel-settlements/* route by prefix, and each route is still gated at its own door in ROUTE_CAPABILITY.
       { href: '/channel-settlements', label: 'Channel settlements' },
-      // T-511 S4: Grab and Foodpanda statements, read into staged lines (nothing is booked from here). Gated by `upload_settlement_files` in ROUTE_CAPABILITY.
-      { href: '/channel-settlements/upload', label: 'Upload settlement files' },
-      // T-511 S5b: read the staged days against what staff recorded, and reject one with a reason. Gated by `record_ar_collection` in ROUTE_CAPABILITY; nothing is booked from it.
-      { href: '/channel-settlements/review', label: 'Review settlement days' },
       // T-178. Beside Channel settlements on purpose: that screen clears 1220 for a channel-day
       // as a whole; this one disposes of one refunded or remade order within it.
       { href: '/wastage', label: 'Order wastage' },
