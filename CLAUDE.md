@@ -126,9 +126,10 @@ on a branch, and never touches `main`. This one is a closer.
 
 ## The 60-second version
 
-- **Postgres owns the truth. Firebase owns the edge.** Every entity's authoritative
-  state lives in PostgreSQL. Firestore holds only a narrow, read-mostly mirror plus an
-  append-only inbox, so clock terminals keep working offline.
+- **Postgres owns the truth. A device keeps only a short offline queue and a snapshot.**
+  Every entity's authoritative state lives in PostgreSQL. The POS is a `/pos` module of the
+  ERP; offline it sells from the tablet's own outbox and posts to the server (bible row 430).
+  No Firebase in v2 (row 280); the clock terminal still uses Firestore until its own move.
 - **Shareat System is a re-platform of `C:\Users\ianla\webapps\ERP-rebuild`, not a rewrite.**
   Same product, same business rules, new persistence layer.
 - **`ERP-rebuild` is READ-ONLY.** Never edit it, branch it, or run git in it.

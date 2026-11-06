@@ -2,11 +2,11 @@
 
 | | |
 |---|---|
-| **Status** | ⏳ **DRAFT for Ian's approval** (POS design lane, 2026-11-06). Nothing is built from this until Ian says yes. |
+| **Status** | ✅ **APPROVED by Ian, 2026-11-06** (answers in §11; bible rows 430–434). Lipa goes live on it **Mon 7 Dec 2026**, gated on the 24 h soak (§9). Each slice still gets its own spec, written in plan mode, before code. |
 | **Asked by** | Ian, 2026-11-06: *"lets pivot design the POS now that its backend is the same as erp like pos is a piece of erp"* and *"no firebase db now"* |
 | **Method** | `/research-evaluate-propose` (bible row 283) and `/impeccable` (standing rule, 3 Nov). The mocks were rendered and the choices made from the screenshots |
 | **Builds on** | ADR-015 and its 15 Oct amendment · bible rows 269–283, 307, 313, 319, 348, 351, 356–359, 371, 378–383, 390–393, 408 · T-422/423/424/425, T-462/463/464, T-505, T-508, T-510, T-518 · discovery 39 (v1 study), 42 (usage counts) |
-| **Does NOT** | amend the bible or ADR-015. §6 holds the proposed wording, which needs Ian's yes · write task specs (§9 lists the slices; specs are written one at a time, in plan mode) |
+| **Amends** | The bible, applied on Ian's Q1 yes (rows 430–434, §6). ADR-015 A1.1, A1.6 and A2's POS timing are superseded by row 430; the ADR's own amendment note is slice T-522 |
 | **Mocks** | `docs/plans/pos-v2-design/*.png` (1280×800, the tablet's landscape size), source `docs/plans/pos-v2-design/mocks.html` |
 
 ---
@@ -16,8 +16,8 @@
 - **The POS becomes a set of screens inside the ERP app** (the website at erp2.shareat.net, opened on the store tablet). It uses the same database, the same sign-in and the same staff PINs. There is no separate POS server and no Firebase.
 - **When the store's internet drops, the tablet keeps selling.** It saves each sale on the tablet and sends it when the internet comes back. That works for 24 hours, the same promise you set on 4 Oct (row 276). Cash and GCash/Maya with a reference number keep working, and every sale prints. Card payments, refunds and online orders wait for the internet.
 - **The screens keep what you already approved** (stand numbers, package and à la carte on one first order, the payment screen). They are redrawn in the ERP's red-and-cream look and made for fingers.
-- **This changes the date for Lipa.** Today Lipa is trying POS v2 on Firebase (row 408). Moving straight to the new design means about 7–9 weeks of building. My recommendation is that Lipa keeps today's trial app until the new one passes its 24-hour test, then switches in mid-to-late January (after the 21 Dec – 10 Jan freeze).
-- **Five things need your answer** (§11). The most important are: yes to the rule change in §6, and what Lipa does in the meantime.
+- **Your answers (6 Nov):** Lipa goes live on the new POS on **Monday 7 December**. To make that date we cut what the first release does, not the testing: the 24-hour test on two tablets still has to pass first, and it must start by **Wednesday 2 December**. Refunds, Convert, wrong-tender fixes, senior/PWD per diner, online orders and loyalty come after go-live (§9).
+- **What Lipa staff will miss for the first weeks:** Convert (GCash cash-in/out, about 3 a day at Lipa) and refunds after payment (7 ever). §9 recommends pulling Convert in before go-live if the lanes keep pace.
 
 ---
 
@@ -168,11 +168,11 @@ Receipt numbering `(store, terminal_no, seq)`, continuous and never reset (DEF-5
 
 ---
 
-## 6. ⛔ Proposed bible amendment — needs Ian's yes (not applied)
+## 6. Bible amendment — ✅ APPLIED on Ian's Q1 yes (rows 430–434, version 3.23)
 
-The bible's "Postgres owns the truth; Firebase owns the edge" line (§1 line 203, CLAUDE.md "60-second version", §5's title) predates row 280. Row 280 already removed Firebase; the text was never brought in line. This design also changes ADR-015's step plan and row 378's Firebase P0. **The Opus planner applies this only after Ian's yes** (§14).
+The bible's "Postgres owns the truth; Firebase owns the edge" line (§1 line 203, CLAUDE.md "60-second version", §5's title) predates row 280. Row 280 already removed Firebase; the text was never brought in line. This design also changes ADR-015's step plan and row 378's Firebase P0. **Applied 2026-11-06 by the Opus planner (POS design lane) on Ian's Q1 = (a).** The row below went in as **row 430**, with rows 431–434 recording the other answers. `docs/RULES.md` rows 4–5 follow. ⚠️ **Not edited by this lane:** `CLAUDE.md` and `AGENTS.md` (the "60-second version" line). They are agent instruction files, so BOSS or Ian applies the one-line change shown in the table.
 
-**New §13 row (number assigned by BOSS at apply time; the last row seen was 410):**
+**The §13 row as proposed (applied as row 430; the applied text adds Ian's answers):**
 
 > **POS v2 IS A FULL-SCREEN MODULE OF THE ERP APP (`/pos` in `apps/erp`), ON THE ONE POSTGRES, WITH THE ERP'S SIGN-IN (T-464 pairing + Employee ID + PIN) AND `authorize()`. NO FIREBASE DATABASE, AUTH OR SERVER FOR ANY NEW POS RELEASE. OFFLINE SELLING USES THE TABLET'S OWN OUTBOX (TYPED, APPEND-ONLY EVENTS KEYED `(device_id, seq)`) AND A VERSIONED SNAPSHOT; THE SERVER RECOMPUTES AND IS THE ONLY WRITER OF TRUTH.** Ian, 2026-11-06: *"pos is a piece of erp"*, *"no firebase db now"*. **Supersedes:** ADR-015 A2's step timing for the POS (P1–P3 collapse into one switch per store); A1.6's separate POS server service; row 378's "P0 ships on v1's Firebase" for any release after the Lipa trial; row 275's "carrier is Firestore during P0–P1". **Keeps:** rows 270, 272, 276, 313, 319, 351, 356, 371, 390, 391 and the §5.1 Lane A/B **rules**. Row 379's bridge keeps running for stores still on v1 until each switches. **Clock terminals unchanged** until their own task (row 280's direction stands). Design: `docs/plans/pos-v2-design.md`.
 
@@ -260,29 +260,55 @@ Nothing historical moves: pre-2027 POS data is test data (row 379). Loyalty bala
 
 ---
 
-## 9. Slices, in order, with sizes
+## 9. Slices, re-planned for Lipa on Mon 7 Dec 2026 (rows 431, 432)
 
-Sizes for one lane: **S** ≈ 1–2 days, **M** ≈ 3–5 days, **L** ≈ 1–2 weeks. Task numbers come from BOSS (next free T-522; first migration 0238). Each slice gets its own spec, written in plan mode, before code.
+**The rule (BOSS's ruling inside Ian's "rush"):** cut scope, not proof. The 24-hour two-tablet soak (0 lost, 0 doubled) is the go-live gate and runs before 7 Dec.
 
-| # | Slice | Size | Model | Depends on |
-|---|---|---|---|---|
-| S0 | Ian's rulings (§11). Bible row + text edits (§6). ADR-015 amendment 3 | S | Opus (docs) | Ian |
-| S1 | Schema: stands master, `table_sessions`, session lines + kitchen states + refills, receipts/lines/payments, refunds, tender corrections, X/Z readings, POS event inbox `UNIQUE (device_id, seq)`. Classification + RLS registry. Migrations 0238+ | L | Opus spec → Sonnet build | S0 |
-| S2 | Domain `packages/domain/src/pos`: open stand, add lines, confirm heads, refill, ticket served, pay (recompute + compare), void unpaid, refund, wrong-tender correction, Convert, X/Z. Rules ported from `apps/pos/src/server/pos2` and the v1 requirements. Integration tests on real Postgres, including two voids at once (A4.1) | L | Sonnet (money lane), Sonnet auditor | S1 |
-| S3 | `/api/pos/events` (idempotent, quarantine, mismatch finding), `/api/pos/snapshot` (ETag, PIN verifiers), `/api/pos/state` (version + 304) | M | Sonnet | S2 |
-| S4 | `/pos` kiosk shell in `apps/erp`: tabs, status pills, T-464 sign-in wired, position pick, offline PIN verifier, route capabilities, census guards | M | Sonnet | S3 |
-| S5 | Orders + Seat a party + add items (online path first) | M | Sonnet | S4 |
-| S6 | Payment + Receipts + printing (Bluetooth plugin, browser fallback), SC/PWD per diner (PC-6), wrong tender, refund | L | Sonnet (money lane) | S5 |
-| S7 | Kitchen + Refills screens (polling), station routing from T-508 | M | Sonnet | S5 |
-| S8 | Offline: port `lib/terminal` + outbox to typed events, service-worker app-shell cache, offline printing of tickets/slips, X-slip every 4 h, ₱50k warning, update gate | L | Sonnet | S6, S7 |
-| S9 | Till tab over ERP till rows; Z = day close; sales-day source `pos_receipts`; usage drafts from receipts | M | Sonnet | S6 |
-| S10 | APK shell (new app id, printer plugin) + CI job + emulator run (T-463 harness, no Firebase) + **24 h soak on two real tablets: 0 lost, 0 doubled** | M | Sonnet + orchestrator | S8, S9 |
-| S11 | Switch tooling (source flip, bridge exit, roll-back) + Lipa runbook + staff training sheet | S | Sonnet | S10 |
-| S12 | Online tab (diner-app orders) | M | Sonnet | S11 (after Lipa is stable) |
+**Key dates**
 
-**Total:** about 7–9 weeks of one lane, with Ian's review at S0 and once at the soak. With the 21 Dec – 10 Jan freeze, **Lipa on the new POS ≈ mid-to-late January 2027**, then one store a week (Malvar, Davao; Padre Garcia last, A7).
+| Date | Gate |
+|---|---|
+| Thu 12 Nov | Schema migration merged on its own PR (migration rule), applied to production behind the switch |
+| Fri 20 Nov | End-to-end online on the emulator: seat → order → kitchen → refill → pay cash → print → ERP sales day |
+| Wed 25 Nov | Offline path complete; APK installs on a real Lipa tablet with the printer |
+| **Sat 28 Nov** | **Soak #1 starts** (24 h, two tablets, ~150 sales and ~2k events offline, then reconnect) |
+| **Wed 2 Dec** | ⛔ **Latest soak start.** A soak starting later cannot finish, be fixed and be re-run before go/no-go |
+| Fri 4 Dec 18:00 | Go/no-go (BOSS + Ian). Staff training on the soak build runs Thu 3 – Sat 5 Dec |
+| **Mon 7 Dec** | **Lipa opens on the new POS** (§8 switch at the business-day boundary). Fallback: Mon 14 Dec, then after the freeze (from 11 Jan) |
 
----
+**The first Lipa release (must ship by 7 Dec)**
+
+| Task | Slice | Week | Size | Model | Depends on |
+|---|---|---|---|---|---|
+| **T-522** | Docs: ADR-015 amendment note (rows 430–434), this plan kept true | 6 Nov | S | Opus | — |
+| **T-523** | Schema: stands master, `table_sessions`, session lines with kitchen states and price-0 refills, receipts + lines + payments, day-close (Z) record, POS event inbox `UNIQUE (device_id, seq)`, the per-store POS switch. Classification + RLS registry. Migrations from 0238. **Own PR** | W1 · 9–12 Nov | M | Opus spec (plan mode) → Sonnet | T-522 |
+| **T-524** | Domain `packages/domain/src/pos`: open stand, add lines (package + à la carte), confirm heads (`max(cashier, server)`), refill, ticket served, void unpaid stand (manager/admin), pay with server recompute-and-compare (cash, e-wallet "to check"). Integration tests on real Postgres, including two voids at once and a replayed event | W1–W2 · 10–18 Nov | L | Sonnet (money lane) + Sonnet auditor | T-523 |
+| **T-525** | APIs: `/api/pos/events` (idempotent, quarantine, mismatch finding), `/api/pos/snapshot` (ETag, closed list per §5.3 / row 430), `/api/pos/state` (version, 304) | W2 · 16–19 Nov | M | Sonnet | T-524 |
+| **T-526** | `/pos` kiosk shell in `apps/erp`: tabs, status pills, T-464 sign-in wired, offline PIN verifier, route capabilities, census guards, Grill Night default on Kitchen (row 433) | W2 · 16–20 Nov | M | Sonnet | T-525 (stubs from 16 Nov) |
+| **T-527** | Screens: Orders (stands) + Seat a party + add items | W2–W3 · 18–24 Nov | M | Sonnet | T-526 |
+| **T-528** | Screens: Payment (cash, GCash/Maya "to check") + receipt print and reprint (Bluetooth plugin, browser fallback) | W3 · 23–26 Nov | M | Sonnet (money lane) | T-527 |
+| **T-529** | Screens: Kitchen + Refills (polling, T-508 station routing, printed tickets offline) | W3 · 23–26 Nov | M | Sonnet | T-526 |
+| **T-530** | Offline: port `lib/terminal` + outbox to typed events, service-worker app-shell cache, offline printing, X-slip every 4 h, ₱50k warning, update gate | W2–W3 · 16–26 Nov | L | Sonnet | T-525 |
+| **T-531** | Day close: Z on the POS (row 390) → ERP sales day `source = pos_receipts` for the store; Lipa leaves the bridge and the v1 day feed from the switch date. Till opening and counting use the **existing ERP till screen** (row 319), no new tab | W3 · 23–27 Nov | M | Sonnet (money lane) | T-524 |
+| **T-532** | APK shell (new app id, printer plugin, `server.url` + service worker) + CI job + emulator run (T-463 harness, no Firebase) + real Lipa tablet and printer check | W3 · 24–27 Nov | M | Sonnet + orchestrator | T-530 |
+| **T-533** | Soak #1 (Sat 28 Nov) and fixes, soak #2 if needed (latest start Wed 2 Dec), Lipa switch runbook, staff training sheet, go/no-go pack | W4 · 28 Nov – 4 Dec | M | Orchestrator + Sonnet | T-527 to T-532 |
+
+**After go-live (in this order)**
+
+| Task | Slice | When | Size |
+|---|---|---|---|
+| **T-534** | Money follow-ups: **Convert** (row 359), wrong-tender correction (A4.2), refund online with manager PIN (rows 351, 356). ⭐ **Recommend pulling Convert into W3 if T-528 lands on time:** Lipa does about 3 conversions a day (308 in 91 days), so its absence is felt on day one. Refunds after payment are rare (7 ever); until T-534 a mistake is handled by voiding before payment | from 8 Dec (Convert possibly W3) | M |
+| **T-535** | Senior/PWD per diner (PC-6, 0 recorded in 91 days), stock-usage drafts from receipts (rows 341–342; until then Lipa's usage is entered by hand as row 282 Q-D allows), Online tab (3 orders ever), a waiter's add-item on a phone | Dec – Jan, after the freeze | L |
+| — | Loyalty (row 432), the extras of A4.6, Malvar/Davao/Padre Garcia switches (from 11 Jan, one a week), the clock's move off Firestore (§5.5) | 2027 | — |
+
+**Lanes.** One lane cannot do W2–W3 alone. The plan needs **three Sonnet builder lanes in parallel**, each with its own test database (§3.4: no shared state):
+- **Backend:** T-523, T-524, T-525, T-531.
+- **Screens:** T-526 to T-529.
+- **Device:** T-530, T-532.
+
+**⚠️ Two collisions for BOSS:**
+1. **Row 386 says POS slices avoid merging 20 Nov – 14 Dec.** This plan merges in that window. Every merge is a production deploy (row 278), so `/pos` ships behind the per-store POS switch (T-523): off everywhere except a TEST store until the 7 Dec switch. Confirm with Ian that row 386's pause does not apply to this.
+2. **The first spec (T-523) must be written in plan mode on Opus by Mon 9 Nov.** Every later slice waits on it.
 
 ## 10. Deliberately OUT (each with its reason)
 
@@ -303,28 +329,19 @@ Sizes for one lane: **S** ≈ 1–2 days, **M** ≈ 3–5 days, **L** ≈ 1–2 
 
 ---
 
-## 11. Questions for Ian (through BOSS)
+## 11. Ian's answers (6 Nov 2026)
 
-**Q1 — Approve the rule change in §6?** The bible still says "Firebase owns the edge", though you took us off Firebase on 5 Oct.
-- (a) **Recommended:** yes, apply §6. The POS is an ERP module and offline uses the tablet's own queue.
-- (b) No: keep the step plan (sign-in, then sales, then tables), with Firebase in between.
+| Q | Question | Answer | Recorded |
+|---|---|---|---|
+| Q1 | Apply the rule change in §6? | **(a) Yes** | Row 430 + text edits (§6) |
+| Q2 | What does Lipa do until the new POS is ready? | **(c) Rush: Lipa on the new POS by 7 Dec**, chosen against the recommendation after reading the warning. BOSS's ruling: the soak stays the gate; cut scope, not proof | Row 431, §9 |
+| Q3 | POS inside the ERP app, or separate? | **(a) Inside the ERP** | Row 430 |
+| Q4 | Loyalty in the first release? | **(a) No** | Row 432 |
+| Q5 | Kitchen dark, till light? | **Not answered.** The recommended (a) is the **default, changeable per device** | Row 433 |
 
-**Q2 — What does Lipa do until the new POS is ready (about mid-to-late January)?**
-- (a) **Recommended:** keep today's trial POS v2 (on Firebase) at Lipa, bug fixes only, then switch. Staff keep a working till, and no money path is rushed.
-- (b) Stop the trial now and go back to POS v1 until the new POS is ready.
-- (c) Push the new POS for 7 Dec. Not recommended: it would skip the 24-hour soak, and the soak is the only proof that no sale is lost.
+Also closed: ADR-015 A8's four open questions were already answered by later rows (row 434).
 
-**Q3 — POS inside the ERP app (one website), or a separate POS app sharing the database?**
-- (a) **Recommended:** inside the ERP (§5.2 A1). One sign-in, one deploy, and one less server on the 4 GB machine.
-- (b) Separate app. It works the same offline, but means two apps to build and deploy.
-
-**Q4 — Loyalty points in the first release?**
-- (a) **Recommended:** no. Add it right after Lipa switches (129 members today).
-- (b) Yes. That adds about 1–2 weeks before Lipa can switch.
-
-**Q5 — Kitchen screen look:** dark (Grill Night) for the kitchen and light for the till?
-- (a) **Recommended:** yes. It is easier to read in a hot, bright kitchen from a distance.
-- (b) Light everywhere.
+**Still open, for BOSS to take to Ian:** row 386's merge pause vs this plan (§9), and whether Convert moves into the first release (T-534).
 
 ---
 
@@ -337,6 +354,7 @@ Sizes for one lane: **S** ≈ 1–2 days, **M** ≈ 3–5 days, **L** ≈ 1–2 
 | R3 | The ERP is down while the store is online | The till treats a server error like offline (the outbox holds). It is the same path, so it is already tested |
 | R4 | A priced line from a phone reaches a stand the till already billed offline | The server records it as an "after-bill line" finding for the manager. Rare (phones are offline too when the Wi-Fi drops) |
 | R5 | The Lipa trial on Firebase runs longer than planned | Bridge (T-472) already copies its receipts; fixes only (Q2) |
+| R7 | The soak fails twice before 4 Dec | Go-live moves to Mon 14 Dec, then to after the freeze (from 11 Jan). Lipa stays on the trial app meanwhile (row 431) |
 | R6 | Firebase cannot close while the clock still uses it | Stated in §5.5; the clock move is queued after S8 |
 
 ---

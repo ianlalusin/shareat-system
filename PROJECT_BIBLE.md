@@ -12,88 +12,88 @@
   - ` 151–158   ` 0.3 Side with the project
   - ` 159–174   ` 0.4 Push back — including hard
   - ` 175–183   ` 0.5 What this does not license
-- ` 184–204  ` 1. Prime directive
-  - ` 205–230  ` 1.1 The real goal: CORRECT and SIMPLE accounting
-  - ` 231–255  ` 1.2 The four verbs — the editorial doctrine
-  - ` 256–267  ` 1.2a Reference repos — hands off, ALL of them
-  - ` 268–313  ` 1.2b How to read the reference repos — intent is authoritative, implementation is not
-  - ` 314–352  ` 1.2c UI/UX — one family, upgraded, not reinvented
-  - ` 353–412  ` 1.2d The discovery method — synthesize the goal, weigh the live data, then build it better
-  - ` 413–443  ` 1.3 The parity contract — what is fixed, what is free
-  - ` 444–458  ` 1.4 The migration is the audit
-  - ` 459–479  ` 1.5 The three tests for data-layer decisions
-  - ` 480–488  ` Why re-platform at all
-  - ` 489–497  ` What is explicitly NOT in scope
-- ` 498–537  ` 2. Non-negotiables
-- ` 538–539  ` 3. Execution model — how work gets done
-  - ` 540–549  ` 3.1 The division of labour
-  - ` 550–585  ` 3.1a Which model, and why — Ian, 2026-08-23
-  - ` 586–597  ` 3.2 The work loop
-  - ` 598–610  ` 3.3 Task spec format (docs/tasks/NNN-<slug>.md)
-  - ` 611–628  ` 3.4 Subagent rules
-  - ` 629–650  ` 3.4a Report a spec defect; never work around it silently
-  - ` 651–666  ` 3.5 Reporting to Ian
-  - ` 667–684  ` 3.6 Research before planning — Ian, 2026-08-23
-  - ` 685–692  ` When it applies
-  - ` 693–711  ` Four guards, or this degrades into delay
-- ` 712–713  ` 4. Architecture — the relational core
-  - ` 714–730  ` 4.1 Stack
-  - ` 731–772  ` 4.2 Schema principles
-  - ` 773–793  ` 4.3 Application layering
-  - ` 794–823  ` 4.4 Reference data and seeds — how the duplicate-Rent problem dies
-- ` 824–828  ` 5. Architecture — the Firebase hot lane
-  - ` 829–861  ` 5.1 The two-lane contract
-  - ` 862–892  ` 5.2 What v1 actually does offline — and why v2 changes it
-  - ` 893–945  ` 5.3 The hot set — closed list
-  - ` 946–947  ` 5.4 Offline write-back rules
-  - ` 948–958  ` 5.3 Offline write-back rules
-- ` 959–960  ` 6. Data conventions
-  - ` 961–968  ` Money
-  - ` 969–979  ` Dates & time
-  - ` 980–985  ` Identifiers
-  - ` 986–990  ` Naming
-  - ` 991–996  ` Nulls
-- ` 997–1042 ` 7. Security model
-  - `1043–1073 ` 7.1 Identity — the v1 mess, and the v2 rule
-- `1074–1075 ` 8. Repo & environment
-  - `1076–1110` Layout
-  - `1111–1121` Ports — reserved, never shared
-  - `1122–1166` Build discipline — two rules, both absolute
-  - `1167–1177` Git
-- `1178–1203` 9. Definition of done
-  - `1204–1211` Parity gate
-- `1212–1246` 10. Phase plan
-- `1247–1263` 11. Migration & ETL rules
-- `1264–1328` 12. Inherited landmines — do not repeat these
-- `1329–1741` 13. Decision log
-- `1742–1761` 14. Amendment protocol
-- `1762–1766` 15. Engineering standards — the industry practices this project follows
-  - `1767–1772` 15.1 Build order: walking skeleton first
-  - `1773–1784` 15.2 Golden-master testing — the most important practice here
-  - `1785–1793` 15.3 Strangler Fig, not big-bang cutover
-  - `1794–1798` 15.4 No dual-write
-  - `1799–1807` 15.5 Expand/contract migrations
-  - `1808–1816` 15.6 Observability from day zero, not later
-  - `1817–1821` 15.7 CI gates
-  - `1822–1826` 15.8 Backups and a tested restore
-  - `1827–1831` 15.9 Twelve-Factor config
-  - `1832–1839` 15.10 Append-only ledgers — but not event sourcing
-  - `1840–1844` 15.11 Defence in depth
-  - `1845–1873` 15.12 Skills are lenses, not assurance
-  - `1874–1880` 15.13 Reconciliation is a permanent feature
-- `1881–1885` 16. The accounting spine
-  - `1886–1917` 16.0 What we are actually fixing — the diagnosis
-  - `1918–1961` 16.1 The ten invariants — non-negotiable
-  - `1962–1976` 16.2 The oracle: how "correct" is tested
-  - `1977–1998` 16.3 The model — header + lines, not legs
-  - `1999–2018` 16.4 Deliberately simpler than ERPNext
-  - `2019–2088` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2089–2113` 16.6 What v1 already gets right — preserve the intent
-  - `2114–2135` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2136–2150` 16.8 What v1's accounting already gets right
-  - `2151–2194` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2195–2245` 16.10 Posting patterns — one canonical pattern per business event
-  - `2246–2278` 16.11 Inventory's accounting integration
+- ` 184–205  ` 1. Prime directive
+  - ` 206–231  ` 1.1 The real goal: CORRECT and SIMPLE accounting
+  - ` 232–256  ` 1.2 The four verbs — the editorial doctrine
+  - ` 257–268  ` 1.2a Reference repos — hands off, ALL of them
+  - ` 269–314  ` 1.2b How to read the reference repos — intent is authoritative, implementation is not
+  - ` 315–353  ` 1.2c UI/UX — one family, upgraded, not reinvented
+  - ` 354–413  ` 1.2d The discovery method — synthesize the goal, weigh the live data, then build it better
+  - ` 414–444  ` 1.3 The parity contract — what is fixed, what is free
+  - ` 445–459  ` 1.4 The migration is the audit
+  - ` 460–480  ` 1.5 The three tests for data-layer decisions
+  - ` 481–489  ` Why re-platform at all
+  - ` 490–498  ` What is explicitly NOT in scope
+- ` 499–541  ` 2. Non-negotiables
+- ` 542–543  ` 3. Execution model — how work gets done
+  - ` 544–553  ` 3.1 The division of labour
+  - ` 554–589  ` 3.1a Which model, and why — Ian, 2026-08-23
+  - ` 590–601  ` 3.2 The work loop
+  - ` 602–614  ` 3.3 Task spec format (docs/tasks/NNN-<slug>.md)
+  - ` 615–632  ` 3.4 Subagent rules
+  - ` 633–654  ` 3.4a Report a spec defect; never work around it silently
+  - ` 655–670  ` 3.5 Reporting to Ian
+  - ` 671–688  ` 3.6 Research before planning — Ian, 2026-08-23
+  - ` 689–696  ` When it applies
+  - ` 697–715  ` Four guards, or this degrades into delay
+- ` 716–717  ` 4. Architecture — the relational core
+  - ` 718–734  ` 4.1 Stack
+  - ` 735–776  ` 4.2 Schema principles
+  - ` 777–797  ` 4.3 Application layering
+  - ` 798–827  ` 4.4 Reference data and seeds — how the duplicate-Rent problem dies
+- ` 828–832  ` 5. Architecture — the edge lane (device snapshot and outbox)
+  - ` 833–872  ` 5.1 The two-lane contract
+  - ` 873–905  ` 5.2 What v1 actually does offline — and why v2 changes it
+  - ` 906–964  ` 5.3 The hot set — closed list
+  - ` 965–966  ` 5.4 Offline write-back rules
+  - ` 967–977  ` 5.3 Offline write-back rules
+- ` 978–979  ` 6. Data conventions
+  - ` 980–987  ` Money
+  - ` 988–998  ` Dates & time
+  - ` 999–1004 ` Identifiers
+  - `1005–1009 ` Naming
+  - `1010–1015 ` Nulls
+- `1016–1061 ` 7. Security model
+  - `1062–1092 ` 7.1 Identity — the v1 mess, and the v2 rule
+- `1093–1094 ` 8. Repo & environment
+  - `1095–1129` Layout
+  - `1130–1140` Ports — reserved, never shared
+  - `1141–1185` Build discipline — two rules, both absolute
+  - `1186–1196` Git
+- `1197–1222` 9. Definition of done
+  - `1223–1230` Parity gate
+- `1231–1265` 10. Phase plan
+- `1266–1282` 11. Migration & ETL rules
+- `1283–1347` 12. Inherited landmines — do not repeat these
+- `1348–1765` 13. Decision log
+- `1766–1785` 14. Amendment protocol
+- `1786–1790` 15. Engineering standards — the industry practices this project follows
+  - `1791–1796` 15.1 Build order: walking skeleton first
+  - `1797–1808` 15.2 Golden-master testing — the most important practice here
+  - `1809–1817` 15.3 Strangler Fig, not big-bang cutover
+  - `1818–1822` 15.4 No dual-write
+  - `1823–1831` 15.5 Expand/contract migrations
+  - `1832–1840` 15.6 Observability from day zero, not later
+  - `1841–1845` 15.7 CI gates
+  - `1846–1850` 15.8 Backups and a tested restore
+  - `1851–1855` 15.9 Twelve-Factor config
+  - `1856–1863` 15.10 Append-only ledgers — but not event sourcing
+  - `1864–1868` 15.11 Defence in depth
+  - `1869–1897` 15.12 Skills are lenses, not assurance
+  - `1898–1904` 15.13 Reconciliation is a permanent feature
+- `1905–1909` 16. The accounting spine
+  - `1910–1941` 16.0 What we are actually fixing — the diagnosis
+  - `1942–1985` 16.1 The ten invariants — non-negotiable
+  - `1986–2000` 16.2 The oracle: how "correct" is tested
+  - `2001–2022` 16.3 The model — header + lines, not legs
+  - `2023–2042` 16.4 Deliberately simpler than ERPNext
+  - `2043–2112` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2113–2137` 16.6 What v1 already gets right — preserve the intent
+  - `2138–2159` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2160–2174` 16.8 What v1's accounting already gets right
+  - `2175–2218` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2219–2269` 16.10 Posting patterns — one canonical pattern per business event
+  - `2270–2302` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -104,9 +104,9 @@
 
 | | |
 |---|---|
-| **Version** | 3.22 — **Ian's 2026-10-14 answers: one person one id, the clock stays fingerprint/card; a narrowing-only position pick (part of row 198); a true per-category receipt exemption with its detector (reverses T-196 decision 2); a local OCR engine allowed (narrows row 251); settlement files parsed; liabilities = one unpaid view (§13 rows 319–331).** Carries 3.21 — **POS and CUSTOMER v1 are copied into this monorepo and moved onto the one Postgres and one auth; sales figures are never typed or edited in the ERP; one Postgres, no hot/cold; POS sells offline 24 h per device; Firebase exit scope PROVISIONAL; `other` retired as an expense method; a push to main is a deploy (§13 rows 269–278, ADR-015).** Carries 3.20 — **push only at wrap-up; every visible refusal names things in words, and only records visible at THIS store; hand grants close-and-replace rather than re-label, staying at that store (supersedes row 188's re-label and T-291 decision 5's mechanism); tests assert the target; number boxes are text with inputMode; blank means not decided; payout account admin-only; descriptions clamp at 3 lines (§13 rows 228–237).** Carries 3.19 (**a POSITION, not a role, decides what a person may do — the `staff` baseline is shrunk to nothing and all 21 everyday capabilities become position grants (§13 row 210); a capability REMOVAL ships backfill-first then flip, never the flip alone, and the backfill is the task rather than a precaution (§13 row 211); and a static census only NOMINATES candidates — running them is what settles it, because three passes of careful reading said 19, 20, and the real number was 22 (§13 row 212).** Carries 3.18 (**prefer a guard to `!` on a regex match; where `!` is used, a comment names what makes it safe, because `!` is the one remedy that silently switches off the `noUncheckedIndexedAccess` this repo turned on deliberately (§13 row 206).** Carries 3.17 (**a remedy is as perishable as a diagnosis: any comment or register row naming a specific token — an identifier, a line number, a secret, a file — and asserting a present-tense fact about it goes stale with nobody editing it, so record the RULING and prefer a NAME to a POSITION (§13 row 204); and production publishes the commit it is running at `/api/health`, the disclosure accepted and named rather than discovered (§13 row 205).** Carries 3.16 (**position access defaults are materialised `person_grants` rows with provenance `'position'`, reconciled at the five moments a human is present and never consulted at check time; a position can only ADD to the role matrix, never subtract; the screen is gated on `grant_capability`, not the `super_admin` literal (§13 row 198).** Carries 3.15 (**the fiscal-period override reaches an elevated manager in an organisation with NO administrator, and that enrolment is intended rather than a leak in row 193 — the adminless fallback is DERIVED from the matrix, so an admin-only capability joins it with no edit to any list (§13 row 196).** Carries 3.14 (**the bootstrap question *“has this system been set up at all?”* joins the closed cross-org caller list at all three sites that ask it, using bootstrap’s own door rather than widening the auth door (§13 row 195); the guard enforcing that list scanned two of nine source roots and now scans all of them (DEF-295).** Carries 3.13 (**an elevated manager's grants are revoked when the organisation gains an active administrator; the elevation ends when the administrator arrives, and is never re-derived at check time (§13 row 188).** Carries 3.12 (a recurring expense drafts itself and never auto-pays; the job acts as its author through the ordinary gates — §13 row 183), 3.11 (§12 gains the sweep-control landmine: a sweep that reports a total must first report a known non-zero control — §13 row 181), 3.10 (the cutover wipes transactional data, not stores and store settings — the Wastage Monitor survives cutover — §13 row 182), 3.9 (the tenancy id never comes from the client, and RLS is the second layer behind the repository filter — never the only one, never absent — §13 row 181), 3.8 (order-wastage tracked-vs-instant is a per-CHANNEL policy, not a per-record choice — §13 row 180), 3.7 (every v1 feature is accounted for in v2 — carried, folded or evolved, never silently dropped — and where v1's data shape drifted over time the most recent shape outweighs the old — §1.2d, §13 row 179), 3.6 (§4.2 rule 7 covers every dashboard tile, not only accounting statements: a separately-accumulated counter is forbidden even when it is called a cache — §13 row 173), 3.5 (discovery has a stated method, §1.2d: synthesize v1's goal in writing, weigh whether the live data is in good shape, then design v2 to beat that goal — v1 is the flawed version, v2 is the improved one), 3.4 (UI/UX is a third authority: familiar-but-upgraded screens, one visual family across ERP/POS/CUSTOMER), 3.3 (an unverified supplier invoice may carry a DRAFT expense), 3.2 (inventory is PERPETUAL from v2's first posting; a return is a credit in both directions), 3.1 (no SC/PWD statutory record is kept) and 3.0 (the card id joins the hot set) — §13 rows 164–173))))))) |
+| **Version** | 3.23 — **POS v2 is a full-screen module of the ERP app on the one Postgres, with no Firebase database, sign-in or server; offline selling uses the tablet's own outbox and a snapshot; Lipa on it by 7 Dec 2026 with the 24 h soak as the go-live gate; loyalty not in the first release; the edge-lane wording follows row 280 (§13 rows 430–434, `docs/plans/pos-v2-design.md`).** Carries 3.22 — **Ian's 2026-10-14 answers: one person one id, the clock stays fingerprint/card; a narrowing-only position pick (part of row 198); a true per-category receipt exemption with its detector (reverses T-196 decision 2); a local OCR engine allowed (narrows row 251); settlement files parsed; liabilities = one unpaid view (§13 rows 319–331).** Carries 3.21 — **POS and CUSTOMER v1 are copied into this monorepo and moved onto the one Postgres and one auth; sales figures are never typed or edited in the ERP; one Postgres, no hot/cold; POS sells offline 24 h per device; Firebase exit scope PROVISIONAL; `other` retired as an expense method; a push to main is a deploy (§13 rows 269–278, ADR-015).** Carries 3.20 — **push only at wrap-up; every visible refusal names things in words, and only records visible at THIS store; hand grants close-and-replace rather than re-label, staying at that store (supersedes row 188's re-label and T-291 decision 5's mechanism); tests assert the target; number boxes are text with inputMode; blank means not decided; payout account admin-only; descriptions clamp at 3 lines (§13 rows 228–237).** Carries 3.19 (**a POSITION, not a role, decides what a person may do — the `staff` baseline is shrunk to nothing and all 21 everyday capabilities become position grants (§13 row 210); a capability REMOVAL ships backfill-first then flip, never the flip alone, and the backfill is the task rather than a precaution (§13 row 211); and a static census only NOMINATES candidates — running them is what settles it, because three passes of careful reading said 19, 20, and the real number was 22 (§13 row 212).** Carries 3.18 (**prefer a guard to `!` on a regex match; where `!` is used, a comment names what makes it safe, because `!` is the one remedy that silently switches off the `noUncheckedIndexedAccess` this repo turned on deliberately (§13 row 206).** Carries 3.17 (**a remedy is as perishable as a diagnosis: any comment or register row naming a specific token — an identifier, a line number, a secret, a file — and asserting a present-tense fact about it goes stale with nobody editing it, so record the RULING and prefer a NAME to a POSITION (§13 row 204); and production publishes the commit it is running at `/api/health`, the disclosure accepted and named rather than discovered (§13 row 205).** Carries 3.16 (**position access defaults are materialised `person_grants` rows with provenance `'position'`, reconciled at the five moments a human is present and never consulted at check time; a position can only ADD to the role matrix, never subtract; the screen is gated on `grant_capability`, not the `super_admin` literal (§13 row 198).** Carries 3.15 (**the fiscal-period override reaches an elevated manager in an organisation with NO administrator, and that enrolment is intended rather than a leak in row 193 — the adminless fallback is DERIVED from the matrix, so an admin-only capability joins it with no edit to any list (§13 row 196).** Carries 3.14 (**the bootstrap question *“has this system been set up at all?”* joins the closed cross-org caller list at all three sites that ask it, using bootstrap’s own door rather than widening the auth door (§13 row 195); the guard enforcing that list scanned two of nine source roots and now scans all of them (DEF-295).** Carries 3.13 (**an elevated manager's grants are revoked when the organisation gains an active administrator; the elevation ends when the administrator arrives, and is never re-derived at check time (§13 row 188).** Carries 3.12 (a recurring expense drafts itself and never auto-pays; the job acts as its author through the ordinary gates — §13 row 183), 3.11 (§12 gains the sweep-control landmine: a sweep that reports a total must first report a known non-zero control — §13 row 181), 3.10 (the cutover wipes transactional data, not stores and store settings — the Wastage Monitor survives cutover — §13 row 182), 3.9 (the tenancy id never comes from the client, and RLS is the second layer behind the repository filter — never the only one, never absent — §13 row 181), 3.8 (order-wastage tracked-vs-instant is a per-CHANNEL policy, not a per-record choice — §13 row 180), 3.7 (every v1 feature is accounted for in v2 — carried, folded or evolved, never silently dropped — and where v1's data shape drifted over time the most recent shape outweighs the old — §1.2d, §13 row 179), 3.6 (§4.2 rule 7 covers every dashboard tile, not only accounting statements: a separately-accumulated counter is forbidden even when it is called a cache — §13 row 173), 3.5 (discovery has a stated method, §1.2d: synthesize v1's goal in writing, weigh whether the live data is in good shape, then design v2 to beat that goal — v1 is the flawed version, v2 is the improved one), 3.4 (UI/UX is a third authority: familiar-but-upgraded screens, one visual family across ERP/POS/CUSTOMER), 3.3 (an unverified supplier invoice may carry a DRAFT expense), 3.2 (inventory is PERPETUAL from v2's first posting; a return is a credit in both directions), 3.1 (no SC/PWD statutory record is kept) and 3.0 (the card id joins the hot set) — §13 rows 164–173))))))) |
 | **Created** | 2026-08-22 |
-| **Last amended** | 2026-10-14 | <!-- ⚠️ This field read 2026-09-12 while rows 201, 202 and 203 had already landed on 2026-09-13: §14 step 3 says bump it and the bump was missed. The hand-maintained half of any pair is the half that rots (DEF-240), and this field is the hand-maintained half of §13. -->
+| **Last amended** | 2026-11-06 | <!-- ⚠️ This field read 2026-09-12 while rows 201, 202 and 203 had already landed on 2026-09-13: §14 step 3 says bump it and the bump was missed. The hand-maintained half of any pair is the half that rots (DEF-240), and this field is the hand-maintained half of §13. -->
 | **Status** | Accounting-correctness project (§1.1). All discovery complete. Root cause identified (§16.0). **Chart of accounts aligned and signed off.** Ready to write Phase 0/1 task specs. |
 | **Scale being replatformed** | 149 page routes (~53,700 LOC of pages), 20 API routes, 9 cron jobs, ~90 Firestore collection paths, 144 server-action modules / 578 exported functions |
 | **Source project** | `C:\Users\ianla\webapps\ERP-rebuild` (branch `upgrade-next16`) — **READ-ONLY, NEVER MODIFY** |
@@ -195,12 +195,13 @@ is rebuilt.
   intact so nobody retrains.
 - **Replace:** the persistence layer. Firestore stops being the system of record; a
   **relational database (PostgreSQL)** becomes the single source of truth.
-- **Retain, narrowly:** Firebase — as an **offline edge cache** for a small, explicitly
-  enumerated hot set (biometrics, attendance clock, store config) so clock terminals
-  keep working with zero network.
+- **Retain, narrowly:** an **offline edge** for a small, explicitly enumerated set, so a
+  device keeps working with zero network. ⭐ *Since rows 280 and 430:* the POS edge is the
+  tablet's own outbox and snapshot; the clock terminal still uses Firestore until its own
+  move (row 280).
 
 Two sentences to remember: **Correct books, simply modelled.**
-**Postgres owns the truth; Firebase owns the edge.**
+**Postgres owns the truth; a device keeps only a short offline queue and a snapshot.** *(Read "Firebase owns the edge" until row 430; the clock still uses Firestore until its move, row 280.)*
 
 ### 1.1 The real goal: CORRECT and SIMPLE accounting
 
@@ -514,9 +515,12 @@ These are absolute. Violating one is a defect regardless of whether tests pass.
    grep, or resolve a name into it.
 3. **Postgres is the sole system of record.** No entity's authoritative state
    lives in Firestore. Ever.
-4. **Firestore is one-way except the inbox lane.** See §5. Any code that reads a
-   Firestore mirror doc as truth, or writes business state to Firestore outside
-   the inbox lane, is a defect.
+4. **Device-held data is one-way except the outbox (the inbox lane).** See §5. A snapshot
+   (mirror) is written only by the server and never read as truth for a money or payroll
+   decision; an outbox event is append-only, idempotent and never edited. Any code that
+   reads a snapshot or mirror as truth, or writes business state to a device store outside
+   the outbox, is a defect. *(Row 430: the POS carrier is the tablet's IndexedDB plus
+   `/api/pos/*`; Firestore, while the clock still uses it, follows the same rule.)*
 5. **No money in floats.** `numeric` in the DB, integer-safe helpers in code. See §6.
 6. **No client-side-only authorization.** Every gate exists server-side. Client
    gates are cosmetic only. See §7.
@@ -821,14 +825,21 @@ positions, units:
 This is the general shape of the whole project in miniature — a rule maintained *by
 construction* rather than *by remembering* (§16.7).
 
-## 5. Architecture — the Firebase hot lane
+## 5. Architecture — the edge lane (device snapshot and outbox)
 
 This is Shareat System's defining feature, and its most dangerous surface. The contract below
 is not negotiable at implementation time.
 
 ### 5.1 The two-lane contract
 
-Every Firestore document in Shareat System is exactly one of two kinds. There is no third kind.
+Every piece of device-held data in Shareat System is exactly one of two kinds. There is no third kind.
+
+⭐ **The carrier (row 430).** For the POS, Lane A is the tablet's **snapshot** (fetched from
+`/api/pos/snapshot`, versioned, kept in IndexedDB) and Lane B is the tablet's **outbox**
+(typed events posted to `/api/pos/events`, `UNIQUE (device_id, seq)`). For the clock terminal,
+until its own move (row 280), the carrier is still Firestore. The rules below bind every
+carrier; where they say "Firestore document", "publisher" or "security rules", read the
+POS's snapshot route, the server, and `authorize()` + RLS.
 
 #### Lane A — **MIRROR** (Postgres -> Firestore, read-only to clients)
 
@@ -887,6 +898,8 @@ partly wrong (see the gaps in §12 rows 14–16).
 **Binding consequence:** the clock terminal reads and writes Firestore via the
 **client SDK**, never via Server Actions. A Server Action cannot function offline.
 Any v2 code putting a Server Action on the offline clock path is a defect.
+⭐ **Row 430, the same rule for the POS:** the till writes to its outbox first and sends
+through `/api/pos/events`; no Server Action sits on the till's offline path.
 
 ⚠️ **Provisionally superseded by §13 row 275 (pending Ian):** if the Firebase exit is confirmed, the clock moves to the same on-device outbox as POS (ADR-015); the §5.1 lane rules and the no-Server-Action rule still bind.
 
@@ -894,6 +907,12 @@ Any v2 code putting a Server Action on the offline clock path is a defect.
 
 The hot set is **closed**. Adding to it requires a bible amendment (§14): every
 addition widens the offline attack surface and the staleness blast radius.
+
+⭐ **Row 430 (2026-11-06): the POS snapshot is a CLOSED list:** menu with dayparts, stands,
+tenders, discounts, store POS settings, and staff PIN verifiers (a slow hash, never a PIN;
+expiring 24 h after the last online refresh). No financial history, no other store's data,
+no personal data beyond a display name. The POS outbox carries the till's events. The carrier
+is the tablet, not Firestore.
 
 ⛔ **Superseded in part by §13 rows 275–276 and ADR-015:** POS adds, at P1, menu, prices, tenders, discounts, store POS config and a device-only PIN verifier (mirror), plus POS sale and table events (inbox). The carrier may leave Firestore (row 275, provisional).
 
@@ -1738,6 +1757,11 @@ just a patch.**
 | 408 | 2026-10-31 | **LIPA TRIES POS V2 AND ERP V2 IN NOVEMBER, WITH TODAY'S SIGN-IN AND TODAY'S SCREENS.** The minimum a store can use: Lipa only; store email + PIN sign-in (tablet pairing T-464 is not wired yet); one tablet first, then the whole store. POS v2 writes v1's Firestore format, so the ERP's 06:00 day import keeps working; the receipt bridge to Postgres starts 1 Jan. The POS v2 server is switched on with Ian on Sun 1 Nov (`docs/ops/pos2-switchon-2026-11-01.md`); the tablet installs `pos-v2-933.apk` (includes the PR #108 refund fix). | Ian, 2026-10-31 ("ship minimum deliverable... i want to try both this coming month", "yes lipa, go", "tomorrow morning") | Yes. The trial can stop and Lipa returns to POS v1 (checklist section 7). |
 | 409 | 2026-10-31 | **ONE ITEM LIST FOR EVERYTHING BOUGHT; ANY ADMIN APPROVES NEW ITEMS; SERVICES ARE ITEMS; SUB-CATEGORY LIVES ON THE ITEM (T-502).** 1A: expenses use the existing `items` master, never a second list. 2A: any org admin (capability `approve_item_request`, never a manager, not the requester unless super-admin authority) approves an item request, **superseding the 2026-08-28 super-admin-only rule for requests** (creating, merging, renaming items stays super-admin). 3A: rent, power, water, internet are `service` items, never stocked. Sub-category (Ian, 1 Nov): an admin-managed list under each category, set once on the item; the cashier picks only the item; no "Please Specify"/"Other". Meat stays slab vs sliced, with dine-in/panda/retail as variations; butane is a supply. The v1 item list (258 items from 4,078 spellings) enters through an admin import screen, never a script. | Ian, 2026-10-31 ("1a 2a 3a") and 2026-11-01 ("yes" to sub-category on the item); `docs/tasks/502-expense-item-catalog.md` | Yes, before data accumulates; after, removing a level means re-filing items. |
 | 410 | 2026-11-01 | **THE ERP SIDEBAR'S "DAILY" GROUP IS FOR EVERYDAY STORE WORK ONLY.** Daily: Dashboard, Sales days, Channel settlements, Order wastage, Remittance, Till custody, Supplier invoices (recorded every day, as in v1), Expenses, Reimbursements, Cash requests. Staff, Attendance, Leave, Payroll and Government payments form a People group; set-once screens (Clock terminals, Clock lane, Payroll rates) sit in Setup; Budgets and Recurring bills in Money. A new screen joins Daily only if a store uses it every day. | Ian, 2026-11-01 ("yes go put invoices to daily too"); PR #110 | Yes. Navigation only; every route and permission is unchanged. |
+| 430 | 2026-11-06 | ⭐ **POS v2 IS A FULL-SCREEN MODULE OF THE ERP APP (`/pos` IN `apps/erp`), ON THE ONE POSTGRES, WITH THE ERP'S SIGN-IN (T-464 PAIRING + EMPLOYEE ID + PIN) AND `authorize()`. NO FIREBASE DATABASE, SIGN-IN OR SEPARATE POS SERVER FOR ANY NEW POS RELEASE. OFFLINE SELLING USES THE TABLET'S OWN OUTBOX (TYPED, APPEND-ONLY EVENTS KEYED `(device_id, seq)`, POSTED TO `/api/pos/events`) AND A VERSIONED SNAPSHOT (`/api/pos/snapshot`); OTHER DEVICES POLL `/api/pos/state`; THE SERVER RECOMPUTES EVERY BILL AND IS THE ONLY WRITER OF TRUTH.** Ian, 2026-11-06: *"lets pivot design the POS now that its backend is the same as erp like pos is a piece of erp"*, *"no firebase db now"*; then Q1 (a) "apply the rule change" and Q3 (a) "inside the ERP" on `docs/plans/pos-v2-design.md`. The §1, §2 rule 4 and §5 wording is brought in line with row 280 the same day. **Supersedes:** ADR-015 A1.1 (POS v2 in `apps/pos`) and A1.6 (POS server routes as a second service): `apps/pos`, `pos2.shareat.net` and the POS's `app.shareat.net` calls retire store by store; A2's step timing for the POS (sign-in, sales and tables become one switch per store at a business-day boundary); row 378's "P0 ships on v1's Firebase" for any release after the Lipa trial; row 275's "carrier is Firestore during P0–P1". **Keeps:** rows 270, 272, 276, 280, 313, 319, 351, 356, 371, 390, 391 and the §5.1 Lane A/B **rules**. Row 379's bridge keeps reading stores still on v1 until each switches. **Clock terminals unchanged** until their own task (row 280's direction stands), so the Firebase project cannot close before the clock has moved. | One app = one deploy, one sign-in, one design kit, one less service on the 4 GB host (phase plan R6). Industry: Toast, Square and Odoo all use per-device store-and-forward; a sync engine (PowerSync, Electric) was weighed and refused as a second always-on service for about 64 receipts a day (design §4) | Yes, until the first store switches |
+| 431 | 2026-11-06 | ⭐ **LIPA GOES LIVE ON THE NEW POS (ROW 430) ON MONDAY 7 DECEMBER 2026. THE 24-HOUR TWO-TABLET SOAK (0 LOST, 0 DOUBLED) STAYS THE GO-LIVE GATE AND RUNS BEFORE 7 DEC; IT MUST START BY WEDNESDAY 2 DEC AT THE LATEST. TO HIT THE DATE, SCOPE IS CUT, NOT PROOF. THE FIRST LIPA RELEASE IS: OPEN A STAND, ORDER (PACKAGE + À LA CARTE), REFILLS AND KITCHEN TICKETS, BILL, CASH + E-WALLET "TO CHECK", PRINT, THE OFFLINE OUTBOX AND THE SERVER RECOMPUTE, PLUS WHAT A STORE CANNOT OPEN WITHOUT (SIGN-IN, VOID OF AN UNPAID STAND, DAY CLOSE FEEDING THE ERP SALES DAY). EVERYTHING ELSE FOLLOWS AFTER GO-LIVE.** Ian, 2026-11-06, Q2 (c) "rush, Lipa on the new POS by 7 Dec", chosen **against the recommendation** (a: keep the Firebase trial until a mid-to-late January switch) after reading the warning. The orchestrator's ruling within (c): rushing does not skip the soak, which takes one day. Lipa keeps today's trial POS v2 (row 408) until the switch, with no new features. **Amends** row 378 (the 7 Dec target stands, now on the new POS). ⚠️ **Collides with row 386's "POS slices avoid merging 20 Nov–14 Dec":** the build needs merges in that window. The plan merges behind a per-store switch that is off everywhere except a test store; BOSS confirms this with Ian (design §9). Slices T-522 to T-535 (design §9). | Discovery 42: Lipa averages 26.8 receipts a day and had 0 offline receipts in 91 days, so a small first release covers the real work; the soak is the only proof that no sale is lost or doubled | Yes — the date can move; the soak gate cannot be skipped |
+| 432 | 2026-11-06 | **LOYALTY IS NOT IN THE FIRST POS v2 RELEASE.** Ian, 2026-11-06, Q4 (a). Earn and redeem are added after Lipa is stable (129 members today); they need the `diner` principal and the inter-org liability of row 273. Offline, loyalty is refused anyway (design §5.4). | Keeps the 7 Dec scope small (row 431) | Yes |
+| 433 | 2026-11-06 | **POS v2 SCREEN THEMES: THE KITCHEN SCREEN DEFAULTS TO GRILL NIGHT (DARK); THE TILL AND THE OTHER TABS DEFAULT TO LIGHT. A DEFAULT, CHANGEABLE PER DEVICE.** Q5 was not answered; the recommended (a) is taken as the default (orchestrator, 2026-11-06). Uses the ADR-013 dark theme unchanged: light stays the ERP default, and the OS never decides. | A hot, bright kitchen read from a distance; mock `docs/plans/pos-v2-design/kitchen-dark.png` | Yes — any time |
+| 434 | 2026-11-06 | **ADR-015 A8's FOUR "STILL OPEN" QUESTIONS ARE CLOSED BY LATER ROWS:** Q1 business-day end → rows 348 and 390 (Z to Z); Q2 first-store date → rows 378, 408 and now 431 (7 Dec on the new POS); Q3 POS v1 feature freeze → row 348 (from 9 Nov, fixes allowed); Q4 the unsafe v1 void → row 348 (yes, DEF-651). Recorded so A8 does not read as open. | A decision that lived only in later rows | Yes |
 
 ## 14. Amendment protocol
 
