@@ -176,10 +176,66 @@ Conventions for every table below (discovery 6 Nov, `packages/db/migrations/0232
   not discounted. Add `for_diner smallint NULL CHECK (between 1 and 200)` to `table_session_lines` (R5): the diner
   number a dish was ordered for, NULL = shared. T-524 computes `share_amount` from it.
 
+## R13 — Itemized bill with per-line discounts (bible row 439; supersedes R12's per-diner table, R5's `for_diner`, R7's `amount`)
+
+Ian, 6 Nov: *"wont ala carte be itemized in billing? i suggest per item line with discount like v1 does"*. v1 attaches a
+discount to one bill line and covers part of its quantity (`POS/src/lib/types.ts:705-748`, `lib/tax.ts:95-108`). Row
+437's senior/PWD share maps onto it exactly: the senior's own head is 1 unit of the package line, and a dish ordered only
+for them is units of that dish's line. So **one per-line discount model carries both presets and SC/PWD**.
+
+1. **Drop `table_session_lines.for_diner`** (R5). The diner is named on the discount instead (item 3).
+2. **New `pos_discount_presets`** (store master data; v2 has no discount table today). `store_id`, `name text NOT NULL
+   CHECK (length(trim(name)) between 1 and 40)`, `value_type text NOT NULL CHECK in ('percent','fixed')`, `value
+   numeric(14,2) NOT NULL CHECK (value > 0)`, `CHECK (value_type <> 'percent' OR value <= 100)`, `status text NOT NULL
+   DEFAULT 'active' CHECK in ('active','retired')`, `created_by`, `created_at`, `updated_at`. Partial unique
+   `(store_id, lower(name)) WHERE status='active'`; `UNIQUE (store_id, id)`. Column UPDATE grant on (`name`,
+   `value_type`, `value`, `status`, `updated_at`). **keep**. Senior and PWD are **not** presets: they are built-in
+   kinds whose 20% and VAT removal come from the statute (rate read from `business_rule_values`, never typed into code).
+   Lipa's presets are loaded by the T-533 ops script from v1 (like the stands); the ERP editing screen is T-535.
+   Added to the snapshot's closed list (bible §5.3) as "discount presets".
+3. **New `table_session_line_discounts`** (the discount while the table is open; v1 lets it be added and removed
+   before payment). `store_id`, `session_line_id` (composite `(store_id, session_line_id)` FK → R5), `kind text NOT NULL
+   CHECK in ('senior','pwd','preset','custom')`, `preset_id uuid NULL` (composite `(store_id, preset_id)` FK),
+   `CHECK ((kind='preset') = (preset_id IS NOT NULL))`, `value_type` and `value` as in item 2 (for senior/pwd:
+   `percent`, the statutory rate), `qty integer NOT NULL CHECK (qty > 0)` (units of the line it covers), `diner_no
+   smallint NULL CHECK (between 1 and 200)`, `CHECK ((kind IN ('senior','pwd')) = (diner_no IS NOT NULL))`,
+   `applied_by` person, `applied_at_device`, `approved_by` person NULL (manager PIN where required; who must approve is
+   a T-524 rule, see Open), `status text NOT NULL DEFAULT 'active' CHECK in ('active','removed')`, `removed_by` person
+   NULL, `removed_at_device` NULL, `CHECK ((status='removed') = (removed_by IS NOT NULL))`. Forward-only trigger
+   (`active → removed`, final; other columns frozen; INSERT refused on a line whose session is paid or voided).
+   Column UPDATE grant on (`status`, `removed_by`, `removed_at_device`). **purge**. T-524 rules (not CHECKs): the active
+   discounts' `qty` on a line never exceeds its billable qty, oldest first (v1 rule); **a unit covered by senior/PWD
+   carries no other discount** (statute: the senior gets the 20%, not 20% plus a promo; this beats v1, which stacked
+   them).
+4. **R7 `pos_sales_receipt_lines` is itemized:** replace `amount` with `gross numeric(14,2) NOT NULL`,
+   `discount_total numeric(14,2) NOT NULL DEFAULT 0 CHECK (discount_total >= 0)`, `net numeric(14,2) NOT NULL`;
+   `CHECK (gross = qty * unit_price)`, `CHECK (discount_total <= gross)`, `CHECK (net = gross - discount_total)`. One
+   receipt line per session line (package head line, à la carte line, refill line at 0).
+5. **Replace R12's `pos_sales_receipt_discounts` with `pos_sales_receipt_line_discounts`** (the frozen copy at
+   payment). `receipt_line_id` → R7 (+ same-org twin; R7 gets `UNIQUE (org_id, id)`), `kind`, `preset_id NULL`, `label
+   text NOT NULL` (the printed name: "Senior", "PWD", or the preset's name, frozen), `value_type`, `value`, `qty`,
+   `diner_no NULL`, `vat_removed numeric(14,2) NOT NULL DEFAULT 0 CHECK (>= 0)`, `CHECK (kind IN ('senior','pwd') OR
+   vat_removed = 0)`, `discount_amount numeric(14,2) NOT NULL CHECK (> 0)`, `statutory_record_id uuid NULL` →
+   `statutory_discount_records(id)` (+ twin), `CHECK ((kind IN ('senior','pwd')) = (statutory_record_id IS NOT
+   NULL))`. Append-only (`history_guard`). **purge**. T-524 rules: a receipt line's `discount_total` = the sum of its
+   rows' `vat_removed + discount_amount`; the sales receipt's `discount_total` = the sum over its lines.
+   **One `statutory_discount_records` row per qualifying diner per sales receipt** (`gross_amount` = that diner's
+   covered gross, `discount_amount` = their 20% + VAT removed), and every line discount of that diner points to it.
+   R12's index swap on `statutory_discount_records` (`… invoice_number, id_number`) stays.
+6. **Tests to change or add (builder):** drop the `for_diner` tests; add: a line discount covering 1 of 3 units is
+   accepted, `qty = 0` refused; a preset discount without `preset_id` refused; a senior discount without `diner_no` or
+   without a statutory record refused; a `vat_removed` on a preset discount refused; receipt line `net ≠ gross −
+   discount_total` refused; a discount added to a paid session's line refused (23001); `removed → active` refused
+   (23514); the registry unit tests list the three new tables (`pos_discount_presets` keep, the other two purge).
+
+**Open for Ian (T-524 rules, not schema):** (Q-a) who may give a discount: v1 lets any cashier add a line discount with no
+check (its whole-bill discount was manager-only). Recommended: a **preset** by the cashier, a **custom** amount or % only
+with a manager PIN. (Q-b) whole-bill discount: recommended **none in release 1**; a promo for the whole table is the same
+preset applied to every line with one "apply to all lines" tap.
+
 ## Not in this slice (and where it goes)
 
-Refunds and `parent_receipt_id`, tender corrections, Convert → **T-534** (own migration) · preset (non-statutory)
-discounts → **T-535** (2 bill discounts in 91 days across all four stores, 0 at Lipa: discovery 42 §4) · stock-usage drafts from sales receipts → **T-535** · the offline thresholds (₱50,000 warning, X-slip every
+Refunds and `parent_receipt_id`, tender corrections, Convert → **T-534** (own migration) · the ERP screen to edit discount presets and any whole-bill discount → **T-535** (presets themselves are in release 1, R13) · stock-usage drafts from sales receipts → **T-535** · the offline thresholds (₱50,000 warning, X-slip every
 4 h, verifier expiry 24 h) → `business_rule_values` (0237, T-511 S5c) read by T-530, so **no column here** (Ian's
 no-hard-coded-values rule, 5 Nov) · X-slips (printed locally; their `xslip.printed` event lands in R10) · loyalty
 (row 432) · PIN verifiers (made on the device; no server table, design §5.2 A6) · a stand-editing ERP screen.
