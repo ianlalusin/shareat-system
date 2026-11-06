@@ -9,7 +9,7 @@
  * The time logic is `resolveLiveOffer` in ./daypart; this file only groups rows, calls it and re-links the online basis.
  */
 import { daypartsRepo, menuRepo, type Tx } from '@shareat/db';
-import { resolveLiveOffer, type DaypartWindow, type LiveOfferInvalidReason } from './daypart';
+import { nextDaypartBoundary, resolveLiveOffer, type DaypartWindow, type LiveOfferInvalidReason } from './daypart';
 
 type Row = menuRepo.OfferInForce;
 type Channel = Row['channel'];
@@ -37,6 +37,11 @@ export interface LiveStoreOffers {
   readonly notOfferedNow: NotOfferedNow[];
   /** Rows that cannot be resolved (mixed all-day and dayparted, overlap, unknown daypart, bad zone). They show no price. */
   readonly faults: LiveOfferFault[];
+  /**
+   * T-510 S4: the next instant a window used by this store's live dayparted offers opens or closes (the menu must be re-read then).
+   * Null when no live offer is dayparted, or the zone is unusable. Windows no live offer uses are ignored, so they cause no refetch.
+   */
+  readonly nextBoundaryAt: Date | null;
 }
 
 const priceFieldsOf = (o: Row): menuRepo.OfferPriceFields => ({
@@ -90,6 +95,10 @@ export function resolveStoreOffers(rows: readonly Row[], dayparts: readonly Dayp
     }
   }
 
+  // `offersInForce` already keeps one row per daypart slot, so a non-withdrawn dayparted row in `rows` is a standing one.
+  const usedWindowIds = new Set(rows.filter((r) => r.daypartId !== null && !r.withdrawn).map((r) => r.daypartId));
+  const nextBoundaryAt = nextDaypartBoundary(dayparts.filter((d) => usedWindowIds.has(d.id)), at, timeZone);
+
   // An online rule follows the STORE offer live at this same moment, not the repo's slot-matched join.
   const storeOf = new Map(offers.filter((o) => o.channel === 'store').map((o) => [o.variantId, o]));
   return {
@@ -100,6 +109,7 @@ export function resolveStoreOffers(rows: readonly Row[], dayparts: readonly Dayp
     }),
     notOfferedNow,
     faults,
+    nextBoundaryAt,
   };
 }
 
