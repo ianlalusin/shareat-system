@@ -24,8 +24,8 @@ describe('T-446 plain white content, existing sidebar', () => {
     expect(workspace['background-color']).toBe('var(--workspace)');
     expect(workspace['background-image']).toBe('none');
     const shell = readFileSync('apps/erp/src/components/shell/AppShell.tsx', 'utf8');
-    expect(shell).toContain('<main className="erp-workspace min-w-0 flex-1">');
-    expect(shell.indexOf('<Sidebar allowedHrefs')).toBeLessThan(shell.indexOf('<main className="erp-workspace'));
+    expect(shell).toContain('<main id="erp-main" tabIndex={-1} className="erp-workspace min-w-0 flex-1">');
+    expect(shell.indexOf('<Sidebar allowedHrefs')).toBeLessThan(shell.indexOf('<main id="erp-main"'));
   });
   it('makes content surfaces white without overriding semantic warning/error colors', () => {
     const page = declarations(":root:not([data-theme='dark']) .erp-page");

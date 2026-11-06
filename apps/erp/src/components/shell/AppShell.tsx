@@ -65,11 +65,14 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider initialState={initialState}>
+      {/* T-537 — the FIRST Tab press lands here instead of walking ~40 sidebar links before the
+          page (WCAG 2.4.1). Hidden until focused; see `.erp-skip-link` in globals.css. */}
+      <a href="#erp-main" className="erp-skip-link">Skip to content</a>
       <div className="flex min-h-dvh">
         <Sidebar allowedHrefs={allowedHrefs} />
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar />
-          <main className="erp-workspace min-w-0 flex-1"><PhoneTableCards><Suspense fallback={null}><ScreenState scope={`${session.actor.orgId}:${session.actor.personId}`} /></Suspense>{children}</PhoneTableCards></main>
+          <main id="erp-main" tabIndex={-1} className="erp-workspace min-w-0 flex-1"><PhoneTableCards><Suspense fallback={null}><ScreenState scope={`${session.actor.orgId}:${session.actor.personId}`} /></Suspense>{children}</PhoneTableCards></main>
         </div>
       </div>
     </SidebarProvider>
