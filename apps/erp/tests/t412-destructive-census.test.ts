@@ -351,6 +351,8 @@ describe('DEF-654: no destructive SERVER ACTION hides behind a non-danger button
     'app/staff/actions.ts#reopenPinSignInAction': 'lifts a staff sign-in lock; not a money record',
     'app/attendance/leave/actions.ts#cancelLeaveAction': 'T-436: withdraws a pending leave request; nothing is paid or posted yet',
     'app/attendance/leave/actions.ts#voidLeaveAction': 'T-436: voids a leave day; a day frozen to a pay run is refused (LEAVE_DAY_PAID), so no posted money moves',
+    // 5 Nov 2026 (BOSS pre-approved census entry, T-511 S5b): puts a rejected settlement day back to waiting for a decision; administrator only, audited, posts nothing.
+    'app/channel-settlements/review/actions.ts#reopenDayAction': 'T-511 S5b: moves a rejected staged day back to waiting for a decision; nothing is posted, nothing is paid',
   };
   // Tier P by BRANCH: a select-driven form (no danger button, no ConfirmDestructive) whose action only forgives money on one
   // branch. It cannot be a row in `rows` (those are controls with a ConfirmDestructive); it is classified here and asserted below.

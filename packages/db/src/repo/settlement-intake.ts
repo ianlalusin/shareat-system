@@ -5,7 +5,7 @@
  * and no money column is ever updated (the app role has UPDATE only on `superseded_by`, `is_current` and the review columns).
  * Every function takes the org and filters by it; RLS backstops (bible section 15.11). Nothing here posts to the books.
  */
-import { and, desc, eq, getTableColumns, gte, isNull, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import { money, type Money } from '@shareat/core/money';
 import type { Tx } from '../client';
 import {
@@ -31,6 +31,8 @@ const UPLOAD_COLUMNS = {
 };
 export type UploadRow = typeof settlementUploads.$inferSelect & { uploadedOn: string };
 export type DayLineRow = typeof settlementDayLines.$inferSelect;
+export type LoanLineRow = typeof settlementLoanLines.$inferSelect;
+export type OtherLineRow = typeof settlementOtherLines.$inferSelect;
 
 export interface InsertUploadInput {
   channelId: string;
@@ -239,21 +241,56 @@ export async function salesDayFigure(
   return { recorded: verified && !r.no_sales ? money(r.amount) : null, verified, noSales: r.no_sales };
 }
 
-/** The "no file yet" list: verified days with sales on a channel that hold no current staged line, oldest first. */
-export async function daysWithRecordedSalesAndNoLine(tx: Tx, orgId: string, channelId: string): Promise<string[]> {
+/** The sales-day figures of many (channel, date) pairs in one read, keyed `${channelId}|${date}`; a pair with no row is missing from the map (read it as `salesDayFigure` of no day). */
+export async function salesDayFiguresMany(
+  tx: Tx,
+  orgId: string,
+  pairs: readonly { channelId: string; salesDate: string }[],
+): Promise<Map<string, { recorded: Money | null; verified: boolean; noSales: boolean }>> {
+  const out = new Map<string, { recorded: Money | null; verified: boolean; noSales: boolean }>();
+  if (pairs.length === 0) return out;
+  const channels = [...new Set(pairs.map((p) => p.channelId))];
+  const dates = pairs.map((p) => p.salesDate).sort();
   const rows = (await tx.execute(sql`
-    select sd.business_date::text as business_date
+    select sdc.channel_id::text as channel_id, sd.business_date::text as business_date, sd.status, sdc.no_sales, sdc.amount::text as amount
       from sales_day_channels sdc
       join sales_days sd on sd.id = sdc.sales_day_id
-     where sd.org_id = ${orgId} and sdc.channel_id = ${channelId}
-       and sd.status = 'verified' and sdc.no_sales = false and sdc.amount > 0
+     where sd.org_id = ${orgId} and sdc.channel_id in (${sql.join(channels.map((id) => sql`${id}`), sql`, `)})
+       and sd.business_date >= ${dates[0]!} and sd.business_date <= ${dates[dates.length - 1]!}
+  `)) as unknown as { channel_id: string; business_date: string; status: string; no_sales: boolean; amount: string }[];
+  for (const r of rows) {
+    const key = `${r.channel_id}|${r.business_date}`;
+    if (out.has(key)) continue; // salesDayFigure takes the first row it finds; so does this
+    const verified = r.status === 'verified';
+    out.set(key, { recorded: verified && !r.no_sales ? money(r.amount) : null, verified, noSales: r.no_sales });
+  }
+  return out;
+}
+
+/** The one rule of "staff recorded sales that day": a VERIFIED sales day, not no-sales, channel amount above zero. The "no file yet" list and the loan check's "who is waited on" both use it. */
+const RECORDED_SALES = sql`sd.status = 'verified' and sdc.no_sales = false and sdc.amount > 0`;
+
+/** The "no file yet" list of several channels at once: verified days with sales that hold no current staged line, oldest first. */
+export async function daysWithRecordedSalesAndNoLineMany(tx: Tx, orgId: string, channelIds: readonly string[]): Promise<{ channelId: string; date: string }[]> {
+  if (channelIds.length === 0) return [];
+  const rows = (await tx.execute(sql`
+    select sdc.channel_id::text as channel_id, sd.business_date::text as business_date
+      from sales_day_channels sdc
+      join sales_days sd on sd.id = sdc.sales_day_id
+     where sd.org_id = ${orgId} and sdc.channel_id in (${sql.join(channelIds.map((id) => sql`${id}`), sql`, `)})
+       and ${RECORDED_SALES}
        and not exists (
          select 1 from settlement_day_lines l
           where l.org_id = sd.org_id and l.channel_id = sdc.channel_id and l.sales_date = sd.business_date and l.is_current
        )
      order by sd.business_date
-  `)) as unknown as { business_date: string }[];
-  return rows.map((r) => r.business_date);
+  `)) as unknown as { channel_id: string; business_date: string }[];
+  return rows.map((r) => ({ channelId: r.channel_id, date: r.business_date }));
+}
+
+/** The "no file yet" list: verified days with sales on a channel that hold no current staged line, oldest first. */
+export async function daysWithRecordedSalesAndNoLine(tx: Tx, orgId: string, channelId: string): Promise<string[]> {
+  return (await daysWithRecordedSalesAndNoLineMany(tx, orgId, [channelId])).map((r) => r.date);
 }
 
 export interface PlatformChannelRow {
@@ -274,4 +311,291 @@ export async function listPlatformChannels(tx: Tx, orgId: string): Promise<Platf
      order by s.name, c.name
   `)) as unknown as { id: string; name: string; store_id: string; store_name: string; platform: SettlementPlatform }[];
   return rows.map((r) => ({ id: r.id, name: r.name, storeId: r.store_id, storeName: r.store_name, platform: r.platform }));
+}
+
+/* ------------------------------------------------------------------ T-511 S5b: the review stage (reads, the decision writes, the loan check's inputs) */
+
+/** One upload by id, or null (another org's id is null too). */
+export async function findUploadById(tx: Tx, orgId: string, id: string): Promise<UploadRow | null> {
+  const [row] = await tx
+    .select(UPLOAD_COLUMNS)
+    .from(settlementUploads)
+    .where(and(eq(settlementUploads.orgId, orgId), eq(settlementUploads.id, id)))
+    .limit(1);
+  return row ?? null;
+}
+
+/** One day line by id (current or not), or null. `forUpdate` takes the row lock so a second writer waits and re-reads. */
+export async function dayLineById(tx: Tx, orgId: string, id: string, opts: { forUpdate?: boolean } = {}): Promise<DayLineRow | null> {
+  const q = tx
+    .select()
+    .from(settlementDayLines)
+    .where(and(eq(settlementDayLines.orgId, orgId), eq(settlementDayLines.id, id)))
+    .limit(1);
+  const [row] = opts.forUpdate ? await q.for('update') : await q;
+  return row ?? null;
+}
+
+export interface ReviewListFilter {
+  storeIds: readonly string[];
+  platform?: SettlementPlatform;
+  /** YYYY-MM, the month of the sales date */
+  period?: string;
+}
+
+/** The current line of every day in the given stores, oldest sales date first. Superseded versions are never returned. */
+export async function currentLinesForReview(tx: Tx, orgId: string, filter: ReviewListFilter): Promise<DayLineRow[]> {
+  if (filter.storeIds.length === 0) return [];
+  const conditions = [
+    eq(settlementDayLines.orgId, orgId),
+    eq(settlementDayLines.isCurrent, true),
+    inArray(settlementDayLines.storeId, [...filter.storeIds]),
+  ];
+  if (filter.platform) conditions.push(eq(settlementDayLines.platform, filter.platform));
+  if (filter.period) conditions.push(sql`to_char(${settlementDayLines.salesDate}, 'YYYY-MM') = ${filter.period}`);
+  return tx
+    .select()
+    .from(settlementDayLines)
+    .where(and(...conditions))
+    .orderBy(asc(settlementDayLines.salesDate), asc(settlementDayLines.id));
+}
+
+export async function loanLinesOf(tx: Tx, orgId: string, dayLineId: string, opts: { activeOnly?: boolean } = {}): Promise<LoanLineRow[]> {
+  const conditions = [eq(settlementLoanLines.orgId, orgId), eq(settlementLoanLines.dayLineId, dayLineId)];
+  if (opts.activeOnly) conditions.push(eq(settlementLoanLines.isActive, true));
+  return tx.select().from(settlementLoanLines).where(and(...conditions)).orderBy(asc(settlementLoanLines.rowOrdinal), asc(settlementLoanLines.id));
+}
+
+export async function otherLinesOf(tx: Tx, orgId: string, dayLineId: string): Promise<OtherLineRow[]> {
+  return tx
+    .select()
+    .from(settlementOtherLines)
+    .where(and(eq(settlementOtherLines.orgId, orgId), eq(settlementOtherLines.dayLineId, dayLineId)))
+    .orderBy(asc(settlementOtherLines.id));
+}
+
+export interface DeductionRowRecord {
+  /** the loan line's id: unique per row, the key the loan check allocates */
+  key: string;
+  dayLineId: string;
+  storeId: string;
+  salesDate: string;
+  reviewState: 'pending' | 'booked' | 'rejected';
+  amount: Money;
+  /** set only by an admin override; an automatic line has no loan yet */
+  loanId: string | null;
+}
+
+/** Every ACTIVE deduction loan line of every CURRENT Grab day line of the org with a sales date up to `throughDate`: the loan check's rows, all stores. */
+export async function activeDeductionRows(tx: Tx, orgId: string, throughDate: string): Promise<DeductionRowRecord[]> {
+  const rows = (await tx.execute(sql`
+    select ll.id::text as key, l.id::text as day_line_id, l.store_id::text as store_id, l.sales_date::text as sales_date, l.review_state,
+           ll.amount::text as amount, ll.loan_id::text as loan_id, ll.allocation_source
+      from settlement_loan_lines ll
+      join settlement_day_lines l on l.org_id = ll.org_id and l.id = ll.day_line_id
+     where ll.org_id = ${orgId} and ll.is_active and ll.kind = 'deduction'
+       and l.is_current and l.platform = 'grab' and l.sales_date <= ${throughDate}
+     order by l.sales_date, l.store_id, ll.row_ordinal, ll.id
+  `)) as unknown as { key: string; day_line_id: string; store_id: string; sales_date: string; review_state: DeductionRowRecord['reviewState']; amount: string; loan_id: string | null; allocation_source: string }[];
+  return rows.map((r) => ({
+    key: r.key, dayLineId: r.day_line_id, storeId: r.store_id, salesDate: r.sales_date, reviewState: r.review_state, amount: money(r.amount),
+    loanId: r.allocation_source === 'admin' ? r.loan_id : null,
+  }));
+}
+
+export interface GrabStoreCoverage {
+  storeId: string;
+  storeName: string;
+  /** a current Grab upload of this store covers the date */
+  covered: boolean;
+  /** the store holds a current day line for the date */
+  hasLine: boolean;
+  /** staff recorded Grab sales that day (the rule of the "no file yet" list). A store with none was closed or not open yet, and is never waited on. */
+  hasSales: boolean;
+}
+
+/** For each store with an active Grab channel and each date: does a current Grab file cover it, is there a current day line, did staff record sales. One read for all the dates. */
+export async function grabStoreCoverageForDates(tx: Tx, orgId: string, salesDates: readonly string[]): Promise<Map<string, GrabStoreCoverage[]>> {
+  const out = new Map<string, GrabStoreCoverage[]>();
+  const dates = [...new Set(salesDates)];
+  if (dates.length === 0) return out;
+  const rows = (await tx.execute(sql`
+    select v.d::text as sales_date, c.store_id::text as store_id, s.name as store_name,
+           exists (select 1 from settlement_uploads u
+                    where u.org_id = c.org_id and u.channel_id = c.id and u.superseded_by is null
+                      and u.file_kind in ('grab_transactions', 'grab_transfers')
+                      and u.period_from <= v.d and u.period_to >= v.d) as covered,
+           exists (select 1 from settlement_day_lines l
+                    where l.org_id = c.org_id and l.channel_id = c.id and l.sales_date = v.d and l.is_current) as has_line,
+           exists (select 1 from sales_day_channels sdc join sales_days sd on sd.id = sdc.sales_day_id
+                    where sd.org_id = c.org_id and sdc.channel_id = c.id and sd.business_date = v.d and ${RECORDED_SALES}) as has_sales
+      from (values ${sql.join(dates.map((d) => sql`(${d}::date)`), sql`, `)}) as v(d)
+      cross join sales_channels c
+      join stores s on s.org_id = c.org_id and s.id = c.store_id
+     where c.org_id = ${orgId} and c.is_active and c.platform = 'grab'
+     order by v.d, s.name, c.id
+  `)) as unknown as { sales_date: string; store_id: string; store_name: string; covered: boolean; has_line: boolean; has_sales: boolean }[];
+  for (const r of rows) {
+    const list = out.get(r.sales_date) ?? [];
+    list.push({ storeId: r.store_id, storeName: r.store_name, covered: r.covered, hasLine: r.has_line, hasSales: r.has_sales });
+    out.set(r.sales_date, list);
+  }
+  return out;
+}
+
+/** For each store with an active Grab channel: does a current Grab file cover the date, is there a current day line for it, did staff record sales. */
+export async function grabStoreCoverage(tx: Tx, orgId: string, salesDate: string): Promise<GrabStoreCoverage[]> {
+  return (await grabStoreCoverageForDates(tx, orgId, [salesDate])).get(salesDate) ?? [];
+}
+
+/** Several uploads by id in one read (an id of another org is simply missing). */
+export async function findUploadsByIds(tx: Tx, orgId: string, ids: readonly string[]): Promise<Map<string, UploadRow>> {
+  if (ids.length === 0) return new Map();
+  const rows = await tx
+    .select(UPLOAD_COLUMNS)
+    .from(settlementUploads)
+    .where(and(eq(settlementUploads.orgId, orgId), inArray(settlementUploads.id, [...ids])));
+  return new Map(rows.map((r) => [r.id, r]));
+}
+
+/** The (channel, date) pairs among these channels and dates that hold a POSTED channel settlement, keyed `${channelId}|${date}` (what `postedSettlementFor` asks, for many days at once). */
+export async function postedSettlementKeys(tx: Tx, orgId: string, channelIds: readonly string[], dates: readonly string[]): Promise<Set<string>> {
+  if (channelIds.length === 0 || dates.length === 0) return new Set();
+  const sorted = [...dates].sort();
+  const rows = (await tx.execute(sql`
+    select channel_id::text as channel_id, business_date::text as business_date from channel_settlements
+     where org_id = ${orgId} and status = 'posted' and channel_id in (${sql.join(channelIds.map((id) => sql`${id}`), sql`, `)})
+       and business_date >= ${sorted[0]!} and business_date <= ${sorted[sorted.length - 1]!}
+  `)) as unknown as { channel_id: string; business_date: string }[];
+  return new Set(rows.map((r) => `${r.channel_id}|${r.business_date}`));
+}
+
+export interface ChannelFacts {
+  storeId: string;
+  name: string;
+  platform: SettlementPlatform | null;
+  platformStoreCode: string | null;
+}
+
+/** A channel's store and CURRENT platform code (what the "store matched" check compares the file's code to), or null. */
+export async function channelFacts(tx: Tx, orgId: string, channelId: string): Promise<ChannelFacts | null> {
+  const rows = (await tx.execute(sql`
+    select store_id::text as store_id, name, platform, platform_store_code from sales_channels where org_id = ${orgId} and id = ${channelId} limit 1
+  `)) as unknown as { store_id: string; name: string; platform: SettlementPlatform | null; platform_store_code: string | null }[];
+  const r = rows[0];
+  return r ? { storeId: r.store_id, name: r.name, platform: r.platform, platformStoreCode: r.platform_store_code } : null;
+}
+
+/** `channelFacts` of many channels in one read, plus each channel's destination account (null = none set). */
+export async function channelFactsMany(tx: Tx, orgId: string, channelIds: readonly string[]): Promise<Map<string, ChannelFacts & { destinationMoneyAccountId: string | null }>> {
+  if (channelIds.length === 0) return new Map();
+  const rows = (await tx.execute(sql`
+    select id::text as id, store_id::text as store_id, name, platform, platform_store_code, destination_money_account_id::text as destination_money_account_id
+      from sales_channels where org_id = ${orgId} and id in (${sql.join(channelIds.map((id) => sql`${id}`), sql`, `)})
+  `)) as unknown as { id: string; store_id: string; name: string; platform: SettlementPlatform | null; platform_store_code: string | null; destination_money_account_id: string | null }[];
+  return new Map(
+    rows.map((r) => [r.id, { storeId: r.store_id, name: r.name, platform: r.platform, platformStoreCode: r.platform_store_code, destinationMoneyAccountId: r.destination_money_account_id }]),
+  );
+}
+
+/** What the "earlier day open" rule needs of one channel: its first staged day, its pending current lines, and the dates staff recorded sales that no current line covers. */
+export interface EarlierOpenInputs {
+  firstStaged: string | null;
+  pendingDates: string[];
+  gapDates: string[];
+}
+
+/** The inputs of the "earlier day open" rule for several channels, in two reads. */
+export async function earlierOpenInputs(tx: Tx, orgId: string, channelIds: readonly string[]): Promise<Map<string, EarlierOpenInputs>> {
+  const out = new Map<string, EarlierOpenInputs>(channelIds.map((id) => [id, { firstStaged: null, pendingDates: [], gapDates: [] }]));
+  if (channelIds.length === 0) return out;
+  const lines = await tx
+    .select({ channelId: settlementDayLines.channelId, salesDate: sql<string>`${settlementDayLines.salesDate}::text`, reviewState: settlementDayLines.reviewState })
+    .from(settlementDayLines)
+    .where(and(eq(settlementDayLines.orgId, orgId), eq(settlementDayLines.isCurrent, true), inArray(settlementDayLines.channelId, [...channelIds])));
+  for (const l of lines) {
+    const i = out.get(l.channelId)!;
+    if (i.firstStaged === null || l.salesDate.localeCompare(i.firstStaged) < 0) i.firstStaged = l.salesDate;
+    if (l.reviewState === 'pending') i.pendingDates.push(l.salesDate);
+  }
+  for (const g of await daysWithRecordedSalesAndNoLineMany(tx, orgId, channelIds)) out.get(g.channelId)?.gapDates.push(g.date);
+  return out;
+}
+
+/** The pure rule: pending current lines before the date, plus recorded-sales dates no file covers, counted from the channel's FIRST staged day (a day before any file is not a gap). */
+export function countEarlierOpen(i: EarlierOpenInputs, beforeDate: string): number {
+  if (i.firstStaged === null || i.firstStaged.localeCompare(beforeDate) >= 0) return 0;
+  const first = i.firstStaged;
+  return i.pendingDates.filter((d) => d.localeCompare(beforeDate) < 0).length + i.gapDates.filter((d) => d.localeCompare(first) >= 0 && d.localeCompare(beforeDate) < 0).length;
+}
+
+/**
+ * Earlier days of a channel that are neither booked nor rejected: pending current lines before the date, plus dates staff recorded sales on that no file
+ * covers, counted from the channel's FIRST staged day (a day before any file is not a gap).
+ */
+export async function countEarlierOpenDays(tx: Tx, orgId: string, channelId: string, beforeDate: string): Promise<number> {
+  return countEarlierOpen((await earlierOpenInputs(tx, orgId, [channelId])).get(channelId)!, beforeDate);
+}
+
+/** Compare-and-set: only a CURRENT line that is still pending is rejected. false = someone else decided or replaced it first. */
+export async function markRejected(tx: Tx, orgId: string, lineId: string, o: { reason: string; decidedBy: string }): Promise<boolean> {
+  const rows = await tx
+    .update(settlementDayLines)
+    .set({ reviewState: 'rejected', decisionReason: o.reason, decidedBy: o.decidedBy, decidedAt: sql`now()` })
+    .where(and(eq(settlementDayLines.orgId, orgId), eq(settlementDayLines.id, lineId), eq(settlementDayLines.isCurrent, true), eq(settlementDayLines.reviewState, 'pending')))
+    .returning({ id: settlementDayLines.id });
+  return rows.length === 1;
+}
+
+/** Compare-and-set: only a CURRENT rejected line goes back to pending, its decision columns cleared (the review-shape CHECK). */
+export async function markReopened(tx: Tx, orgId: string, lineId: string): Promise<boolean> {
+  const rows = await tx
+    .update(settlementDayLines)
+    .set({ reviewState: 'pending', decisionReason: null, decidedBy: null, decidedAt: null })
+    .where(and(eq(settlementDayLines.orgId, orgId), eq(settlementDayLines.id, lineId), eq(settlementDayLines.isCurrent, true), eq(settlementDayLines.reviewState, 'rejected')))
+    .returning({ id: settlementDayLines.id });
+  return rows.length === 1;
+}
+
+/** An override flips the day's active DEDUCTION lines inactive (`is_active` is the only updatable column); disbursals are never touched. */
+export async function deactivateDeductionLines(tx: Tx, orgId: string, dayLineId: string): Promise<void> {
+  await tx
+    .update(settlementLoanLines)
+    .set({ isActive: false })
+    .where(
+      and(eq(settlementLoanLines.orgId, orgId), eq(settlementLoanLines.dayLineId, dayLineId), eq(settlementLoanLines.kind, 'deduction'), eq(settlementLoanLines.isActive, true)),
+    );
+}
+
+/** The new active deduction lines of an override: loan set, source `admin`, row ordinals after every existing line of the day. */
+export async function insertAdminDeductionLines(tx: Tx, orgId: string, dayLineId: string, lines: readonly { loanId: string; amount: Money }[]): Promise<void> {
+  if (lines.length === 0) return;
+  const [max] = await tx
+    .select({ n: sql<number>`coalesce(max(${settlementLoanLines.rowOrdinal}), 0)::int` })
+    .from(settlementLoanLines)
+    .where(and(eq(settlementLoanLines.orgId, orgId), eq(settlementLoanLines.dayLineId, dayLineId)));
+  const start = (max?.n ?? 0) + 1;
+  await tx
+    .insert(settlementLoanLines)
+    .values(lines.map((l, i) => ({ orgId, dayLineId, kind: 'deduction' as const, amount: l.amount, rowOrdinal: start + i, loanId: l.loanId, allocationSource: 'admin' as const })));
+}
+
+export interface PandagoOnlyUpload {
+  uploadId: string;
+  storeId: string;
+  storeName: string;
+}
+
+/** Current Foodpanda invoices that read no order at all (Appendix B only): no sales day and no row, listed apart. Limited to the given stores. */
+export async function pandagoOnlyUploads(tx: Tx, orgId: string, storeIds: readonly string[]): Promise<PandagoOnlyUpload[]> {
+  if (storeIds.length === 0) return [];
+  const rows = (await tx.execute(sql`
+    select u.id::text as upload_id, u.store_id::text as store_id, s.name as store_name
+      from settlement_uploads u
+      join stores s on s.org_id = u.org_id and s.id = u.store_id
+     where u.org_id = ${orgId} and u.platform = 'foodpanda' and u.file_kind = 'foodpanda_invoice' and u.orders_read = 0 and u.superseded_by is null
+       and u.store_id in (${sql.join(storeIds.map((id) => sql`${id}`), sql`, `)})
+     order by u.uploaded_at, u.id
+  `)) as unknown as { upload_id: string; store_id: string; store_name: string }[];
+  return rows.map((r) => ({ uploadId: r.upload_id, storeId: r.store_id, storeName: r.store_name }));
 }

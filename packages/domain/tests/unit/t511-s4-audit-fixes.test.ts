@@ -42,7 +42,9 @@ describe('F5 the weekly platform fee that cannot be placed says so', () => {
     const staged = await stage([], 223.21);
     expect(staged.days).toEqual([]);
     expect(staged.periodLines.map((l) => `${l.kind}:${l.bookedAs}:${l.amount}`)).toEqual(['period_charge:none:223.21']);
-    expect(staged.warnings).toEqual(['This invoice has a platform fee but no sales days: it is kept as a period charge and needs review.']);
+    // S5a audit fix EDIT (5 Nov): a second sentence now names the VAT that no day carries (pinned in t511-s5a-pdf-tie.test.ts).
+    expect(staged.warnings[0]).toBe('This invoice has a platform fee but no sales days: it is kept as a period charge and needs review.');
+    expect(staged.warnings.length).toBe(2);
   });
 });
 

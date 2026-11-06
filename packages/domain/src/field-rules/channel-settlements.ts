@@ -19,3 +19,9 @@ export const CHANNEL_SETTLEMENT_VOID_RULES = defineFieldRules('channel-settlemen
 export const CHANNEL_PAYOUT_DESTINATION_RULES = defineFieldRules('channel-settlements.payoutDestination', {
   moneyAccountId: { label: 'The payout account', kind: 'text', requires: 'Choose the account this channel pays into.' },
 });
+
+/** T-511 S5b: rejecting one staged settlement day. The reason is kept with the decision. */
+export const SETTLEMENT_DAY_REJECT_REASON_MAX = 500;
+export const SETTLEMENT_DAY_REJECT_RULES = defineFieldRules('channel-settlements.rejectDay', {
+  reason: { label: 'The reason', kind: 'text', max: SETTLEMENT_DAY_REJECT_REASON_MAX, requires: 'A rejection needs a reason. Say what is wrong with this day.' },
+});

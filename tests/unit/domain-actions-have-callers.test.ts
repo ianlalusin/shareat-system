@@ -269,6 +269,14 @@ const EXEMPT: Record<string, string> = {
     'on a brand-new store; there is no human boundary because there is nothing yet for a human to ' +
     'act on. `tests/unit/t336-canonical-position-defaults.test.ts`\'s U3 is the closed-caller-list ' +
     'guard that keeps it that way; it also owns the one required barrel re-export (§7:135).',
+
+  // ---- T-511 S5b — the settlement review stage ---------------------------------------------
+  loanCheckForDay:
+    'INTERNAL — `dayBlockers`, `dayBlockersForLines` and `getReviewDayDetail` / `listReviewDays` (`settlement-intake/review.ts`) call it; the screens read the loan check through ' +
+    'them, never directly (BOSS approved this row, 5 Nov 2026).',
+  dayBlockersForLines:
+    'INTERNAL — `listReviewDays` (`settlement-intake/review.ts`) calls it to work out the blockers of the whole day table in a fixed number of reads; the screen calls ' +
+    '`listReviewDays` (T-511 S5b FIX 1, builder 3, 5 Nov 2026). BOSS approved 6 Nov',
 };
 
 describe('T-227 — every action-shaped domain export is reachable from a screen', () => {

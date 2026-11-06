@@ -109,6 +109,8 @@ const COMMANDS: Record<string, string> = {
   'Accept': 'moves a status',
   'Accept for now': 'moves a status',
   'Reject': 'moves a status',
+  // 5 Nov 2026 (BOSS-approved, T-511 S5b): puts a rejected settlement day back to waiting for a decision (administrator only, audited); books nothing.
+  'Reopen day': 'moves a status',
   'Decline': 'moves a status',
   'Refuse': 'moves a status',
   'Decide': 'moves a status',
