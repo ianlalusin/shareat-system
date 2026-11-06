@@ -615,12 +615,15 @@
     padding: 0; border: 0; text-align: left !important;
     white-space: normal !important; overflow-wrap: anywhere;
   }
-  /* T-538: two lines, then "…". One line clipped "Chili flakes" and "Chili powder" to the same
-     "Chili …" at ~140px on a phone, so a manager could not tell the two apart. */
+  /* T-538: two lines, then the rest is hidden. One line clipped "Chili flakes" and "Chili powder"
+     to the same "Chili …" at ~140px on a phone, so a manager could not tell the two apart.
+     `-webkit-line-clamp` cannot do this here: the cell is a grid item, and Blink blockifies a grid
+     item's `display: -webkit-box` to `flow-root`, which makes the clamp inert. A max-height of N
+     line-heights cuts at a line boundary instead — 2 × 1.4em for two lines. */
   [data-phone-table-root] [data-card-slot="title"] {
     grid-column: 2; grid-row: 1; font-size: 1rem; font-weight: 600; line-height: 1.4;
-    white-space: normal !important; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere;
+    max-height: calc(2 * 1.4em);
+    white-space: normal !important; overflow: hidden; overflow-wrap: anywhere;
   }
   [data-phone-table-root] [data-card-slot="subtitle"] {
     grid-column: 2; grid-row: 2; color: var(--muted); font-size: 0.75rem; line-height: 1.4;

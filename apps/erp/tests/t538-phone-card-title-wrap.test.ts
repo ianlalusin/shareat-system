@@ -1,14 +1,21 @@
 /**
  * T-538 — phone card titles wrap to two lines instead of being cut off.
- * (impeccable audit 2026-11-03, finding P2 #12.)
+ * (impeccable audit 2026-11-03, finding P2 #12, revision 2.)
  *
  * On a phone each table row becomes a card whose title is the item, supplier or staff name. That
  * title was `white-space: nowrap` + `text-overflow: ellipsis`, so at ~140px "Chili flakes" and
  * "Chili powder" both rendered as "Chili …" and a manager could not tell them apart.
  *
- * The fix is a two-line clamp on the title ONLY — the subtitle below it is deliberately still one
- * line, and that is asserted here too, because the obvious mistake with a `-webkit-box` display is
- * to inherit it into the sibling rule and silently grow every card.
+ * Revision 1 tried `display: -webkit-box` + `-webkit-line-clamp: 2`, which never renders here: the
+ * title cell is an item of the card grid, and Blink blockifies a grid item's `-webkit-box` to
+ * `flow-root`, leaving the clamp inert (measured: 5 lines). Revision 2 cuts at a line boundary with
+ * `max-height: calc(2 * 1.4em)` on the untouched 1.4 line-height, so exactly two lines show and the
+ * third is hidden. The assertions below pin BOTH halves of that: the cut is there, and the
+ * line-clamp of revision 1 is gone rather than left behind as a second, dead mechanism.
+ *
+ * The subtitle below the title is deliberately still one line, and that is asserted too, because the
+ * obvious mistake when growing the title rule is to carry `overflow: hidden` semantics into the
+ * sibling and silently grow every card.
  *
  * `postcss` reads the REAL declarations rather than substring-matching the file: half a dozen other
  * selectors in globals.css name `[data-card-slot="title"]` (image offset, the `:has()` override, the
@@ -40,27 +47,37 @@ function declarationsOf(selector: string): Record<string, { value: string; impor
   return found;
 }
 
+/** `calc(2 * 1.4em)` and `calc(2*1.4em)` are the same declaration; compare without spacing noise. */
+const compact = (value: string | undefined): string | undefined => value?.replace(/\s+/g, '');
+
 describe('T-538 — phone card title wraps to two lines', () => {
   it('the card title clamps at two lines', () => {
     const title = declarationsOf(TITLE);
     // A selector typo would make every assertion below vacuously true, so prove the rule was found.
     expect(Object.keys(title).length, `no rule with selector exactly ${TITLE}`).toBeGreaterThan(0);
 
-    // Two lines, never more: the clamp truncates and draws its own ellipsis.
-    expect(title['-webkit-line-clamp']).toEqual({ value: '2', important: false });
-    expect(title['line-clamp']).toEqual({ value: '2', important: false });
-    expect(title['display']).toEqual({ value: '-webkit-box', important: false });
-    expect(title['-webkit-box-orient']).toEqual({ value: 'vertical', important: false });
+    // Two lines, never more. `line-height` is 1.4, so 2 × 1.4em is exactly two lines and the cut
+    // falls between line 2 and line 3 — if line-height ever changes, this multiplier has to follow.
+    expect(compact(title['max-height']?.value)).toBe('calc(2*1.4em)');
+    expect(title['line-height']?.value).toBe('1.4');
 
     // Wrapping is the whole point, and it must out-rank the card's own cell reset (which sets
-    // `white-space: normal` without `!important` and `nowrap` on nothing at all).
+    // `white-space: normal` without `!important`).
     expect(title['white-space']).toEqual({ value: 'normal', important: true });
-    // A long unbroken name still has to be breakable, or it overflows instead of clamping.
+    // A long unbroken name still has to be breakable, or it overflows instead of being cut.
     expect(title['overflow-wrap']).toEqual({ value: 'anywhere', important: false });
+    // The cut itself: `max-height` only hides anything when the overflow is clipped.
     expect(title['overflow']).toEqual({ value: 'hidden', important: false });
 
-    // The old one-line truncation is GONE — `text-overflow: ellipsis` on a clamped box is dead
-    // weight at best and misleading at worst.
+    // Revision 1's `-webkit-line-clamp` is GONE, and must stay gone — it is inert on a grid item,
+    // so leaving it in would look like a clamp while doing nothing, and the next reader would
+    // trust it over the `max-height` that actually works.
+    expect(title['-webkit-line-clamp']).toBeUndefined();
+    expect(title['line-clamp']).toBeUndefined();
+    expect(title['display']).toBeUndefined();
+    expect(title['-webkit-box-orient']).toBeUndefined();
+
+    // The old one-line truncation is gone too.
     expect(title['text-overflow']).toBeUndefined();
     expect(JSON.stringify(title)).not.toContain('nowrap');
 
@@ -69,7 +86,6 @@ describe('T-538 — phone card title wraps to two lines', () => {
     expect(title['grid-row']?.value).toBe('1');
     expect(title['font-size']?.value).toBe('1rem');
     expect(title['font-weight']?.value).toBe('600');
-    expect(title['line-height']?.value).toBe('1.4');
   });
 
   it('the subtitle still stays on one line', () => {
@@ -80,7 +96,8 @@ describe('T-538 — phone card title wraps to two lines', () => {
     // the extra height.
     expect(subtitle['white-space']).toEqual({ value: 'nowrap', important: true });
     expect(subtitle['text-overflow']).toEqual({ value: 'ellipsis', important: false });
-    // The clamp must NOT have leaked into the sibling rule.
+    // Neither the clamp of revision 1 nor the height cut of revision 2 may have leaked next door.
+    expect(subtitle['max-height']).toBeUndefined();
     expect(subtitle['display']).toBeUndefined();
     expect(subtitle['-webkit-line-clamp']).toBeUndefined();
   });

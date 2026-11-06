@@ -1,20 +1,15 @@
-Claimed by Freebuff Buffy (Codebuff), 2026-11-06 23:03
-
-# ⛔ BLOCKED — T-538 builds as written, but the CSS does not clamp in a real browser
-
-The change is implemented exactly as §3 specifies, and every §5 check is green. **But a browser
-measurement at 390px shows a long card title still rendering 5 lines, not 2** — the goal is not
-achieved. Evidence and a named cause are in Builder notes §3; the asked-for "…" never appears.
-
----
-
 # T-538 — Phone card titles wrap to two lines instead of being cut off
+
+> **Revision 2 (BOSS, 7 Nov).** Revision 1's `-webkit-line-clamp` was built and measured as inert on
+> this cell — it is a grid item, so Blink blockifies `display: -webkit-box` to `flow-root`. Planner
+> ruling: **option 2**, `max-height: calc(2 * 1.4em)` + `overflow: hidden` — two lines, no ellipsis.
+> Continued on the same branch and the same PR #172. See **Builder notes**.
 
 | Field | Value |
 |---|---|
 | Planner | BOSS |
-| Builder | Freebuff / Buffy (Codebuff) |
-| Branch | `wo/t538-phone-card-title-wrap` (created from `origin/main`) |
+| Builder | Freebuff Buffy (Codebuff) |
+| Branch | `wo/t538-phone-card-title-wrap` (created from `origin/main` `78ec1a7`) |
 | Worktree | `C:\Users\ianla\webapps\wt-t538` |
 | Risk class | **low** (one CSS rule) |
 | Numbers reserved | migration: none · DEF: none · bible row: none |
@@ -23,7 +18,7 @@ achieved. Evidence and a named cause are in Builder notes §3; the asked-for "�
 
 On a phone, ERP tables turn into cards. Each card's title (an item, supplier or staff name) is forced
 onto one line and cut off with "…" at about 140px, so a manager cannot tell "Chili flakes" from
-"Chili powder". Let the title wrap to **at most two lines**, then end with "…". Source:
+"Chili powder". Let the title wrap to **at most two lines**, then end. Source:
 `docs/reviews/impeccable-audit-2026-11-03.md` finding P2 #12.
 
 ## 2. Read first (and nothing else is required)
@@ -31,16 +26,17 @@ onto one line and cut off with "…" at about 140px, so a manager cannot tell "C
 - `AGENTS.md` (section "Building from a work order")
 - `docs/RULES.md`
 - `docs/reviews/impeccable-audit-2026-11-03.md` (finding 12)
-- `apps/erp/src/app/globals.css` lines ~610-635 (the `[data-phone-table-root] [data-card-slot=...]` rules)
-- `apps/erp/tests/t450-phone-table-cards.test.ts` and `apps/erp/tests/t450-phone-table-coverage.test.ts` (existing tests for these cards)
+- `apps/erp/src/app/globals.css` (~lines 610-635, the `[data-phone-table-root] [data-card-slot=...]` rules)
+- `apps/erp/tests/t450-phone-table-cards.test.ts` and `apps/erp/tests/t450-phone-table-coverage.test.ts`
 
 ## 3. What to build
 
 1. In `globals.css`, change ONLY the `[data-phone-table-root] [data-card-slot="title"]` rule:
-   remove `overflow: hidden; text-overflow: ellipsis; white-space: nowrap !important;` and replace
-   them with a two-line clamp:
-   `white-space: normal !important; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere;`
-   Keep `grid-column`, `grid-row`, `font-size`, `font-weight` and `line-height` exactly as they are.
+   remove `display: -webkit-box`, `-webkit-box-orient`, `-webkit-line-clamp`, `line-clamp` and
+   `text-overflow`. Keep `white-space: normal !important; overflow: hidden; overflow-wrap: anywhere;`
+   and add `max-height: calc(2 * 1.4em);` (line-height stays 1.4, so the cut falls exactly between
+   lines 2 and 3). Keep `grid-column`, `grid-row`, `font-size`, `font-weight` and `line-height`
+   exactly as they are.
 2. Leave the `subtitle` rule unchanged (one line is fine there).
 3. Not to build: no TSX changes, no other CSS rules.
 
@@ -60,7 +56,7 @@ NOT edit it. Write the test name and output under **Builder notes**, open the PR
 
 | Test | Proves |
 |---|---|
-| `apps/erp/tests/t538-phone-card-title-wrap.test.ts` — "the card title clamps at two lines" | Reading `globals.css`: the `[data-card-slot="title"]` rule contains `-webkit-line-clamp: 2` and `white-space: normal`, and does NOT contain `nowrap` |
+| `apps/erp/tests/t538-phone-card-title-wrap.test.ts` — "the card title clamps at two lines" | Reading `globals.css`: the `[data-card-slot="title"]` rule has `max-height: calc(2 * 1.4em)`, `overflow: hidden` and `white-space: normal`, and no `nowrap` |
 | same file — "the subtitle still stays on one line" | the `[data-card-slot="subtitle"]` rule still contains `white-space: nowrap` |
 
 Plus, every time:
@@ -75,11 +71,11 @@ npx vitest run apps/erp/tests/t538-phone-card-title-wrap.test.ts apps/erp/tests/
 
 - [x] §3 built, inside the §4 file list only
 - [x] §5 tests written and passing; typecheck clean
-- [ ] Smoketested: `npm run dev` in `apps/erp` (port 9008), browser at 390px wide, open a list page with long names (e.g. `/ap/suppliers`); long titles wrap to two lines then "…". Write what you saw in the PR — **☠️ THIS IS THE FAILURE. Measured in a browser: the long title renders 5 lines, not 2. See Builder notes §3.**
-- [x] This work order copied as `docs/tasks/538-phone-card-title-wrap.md` with real check output under **Builder notes**
-- [x] One PR against `main`, title starting "T-538:", body ending "Built by <app> <model> from a work order" — **opened as a DRAFT, per §8**
-- [ ] Work order moved from `current\` to `done\` with the PR link at its top — **moved with "BLOCKED"**
-- [x] **Stop there.**
+- [~] Smoketested at 390px — see Builder notes: a DOM/CSS harness (not the signed-in app), because the
+      session forge is outside §4
+- [x] This work order copied as `docs/tasks/538-phone-card-title-wrap.md` with real check output
+- [x] One PR against `main`, title starting "T-538:"
+- [x] Work order moved from `current\` to `done\` with the PR link at its top
 
 ## 7. Forbidden
 
@@ -91,104 +87,80 @@ Builder notes (both copies) → push → draft PR → move to `done\` with "BLOC
 
 ## Builder notes
 
-### 1. What was built — exactly §3, nothing else
+⏱ Revision 2 built 2026-11-07 02:40-03:05 in `C:\Users\ianla\webapps\wt-t538` on
+`wo/t538-phone-card-title-wrap`, on top of revision 1's commit `9ce0dcb`.
+PR **#172** — https://github.com/ianlalusin/shareat-system/pull/172 (ready for review, not draft).
 
-| File | Change |
-|---|---|
-| `apps/erp/src/app/globals.css` | only the `[data-phone-table-root] [data-card-slot="title"]` rule: the old `overflow: hidden; text-overflow: ellipsis; white-space: nowrap !important;` replaced by `white-space: normal !important; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere;`. `grid-column: 2; grid-row: 1; font-size: 1rem; font-weight: 600; line-height: 1.4` untouched. The `subtitle` rule untouched. |
-| `apps/erp/tests/t538-phone-card-title-wrap.test.ts` | new — the two §5 tests, `postcss`-parsed so a comment or a different selector naming `[data-card-slot="title"]` cannot satisfy them |
+### What changed (revision 2)
 
-No TSX change, no other CSS rule. A temporary harness (`apps/erp/public/t538-*.{html,css}`) and its
-throwaway static server were created for §3 below and **deleted**; `git status` shows only the two
-files above.
+One rule, §4 files only. The title rule kept its `grid-column`, `grid-row`, `font-size`,
+`font-weight` and `line-height: 1.4`; `display: -webkit-box`, `-webkit-box-orient`,
+`-webkit-line-clamp`, `line-clamp` and `text-overflow` are gone; `white-space: normal !important`,
+`overflow: hidden` and `overflow-wrap: anywhere` stayed; `max-height: calc(2 * 1.4em)` is new. The
+subtitle rule is untouched. No TSX.
 
-### 2. The checks — all green
-
-`npm run typecheck`:
+### Checks (real output)
 
 ```
+$ npm run typecheck
 > shareat-system@0.1.0 typecheck
 > tsc --noEmit
+typecheck exit=0
 
-TYPECHECK_EXIT=0
-```
+$ npx vitest run apps/erp/tests/t538-phone-card-title-wrap.test.ts \
+    apps/erp/tests/t450-phone-table-cards.test.ts \
+    apps/erp/tests/t450-phone-table-coverage.test.ts
 
-`npx vitest run apps/erp/tests/t538-phone-card-title-wrap.test.ts apps/erp/tests/t450-phone-table-cards.test.ts apps/erp/tests/t450-phone-table-coverage.test.ts`:
-
-```
- ✓  unit  apps/erp/tests/t538-phone-card-title-wrap.test.ts (2 tests) 52ms
- ✓  unit  apps/erp/tests/t450-phone-table-cards.test.ts (13 tests) 400ms
- ✓  unit  apps/erp/tests/t450-phone-table-coverage.test.ts (6 tests) 5143ms
+ ✓  unit  apps/erp/tests/t538-phone-card-title-wrap.test.ts (2 tests) 76ms
+ ✓  unit  apps/erp/tests/t450-phone-table-cards.test.ts (13 tests) 410ms
+ ✓  unit  apps/erp/tests/t450-phone-table-coverage.test.ts (6 tests) 3268ms
 
  Test Files  3 passed (3)
       Tests  21 passed (21)
 ```
 
-No existing guard moved: `t450-phone-table-cards` asserts rendered card DOM (not the CSS), and
-`action-link-sweep` counts TSX controls, of which this change adds none.
+No existing guard moved: this change adds no TSX control, so the touch-target census and
+`action-link-sweep` are untouched (unlike T-537).
 
-### 3. ☠️ The reason this is BLOCKED — measured in a browser, not argued
+### 390px measurement — the point of revision 2
 
-**The two §5 tests cannot catch this, and that is the finding.** Both assert *declarations in the
-file*. The declarations are exactly what §3 asked for, so they pass — on CSS that never renders.
-The test is a drift guard, not a behaviour guard.
+Byte copy of the real `apps/erp/src/app/globals.css`, with the card DOM the enhancer really builds
+(`phone-table-cards.ts`: `table[data-phone-cards] > tbody > tr[data-card-kind="summary"]`, a
+`data-card-slot` per cell, `data-card-has-keys` when a key cell exists). Viewport **390px**, fresh
+load, no inline styles, `Chrome/130.0.6723.191 Electron/33.4.11`. Title column measured **237.4px**
+(narrower than revision 1's harness, which had no key cell — a harsher width, and it still cuts):
 
-**How it was measured.** This work order's smoketest needs a signed-in session, which a builder does
-not have (see §4). So: a throwaway page loading a **byte copy of the real `globals.css`**, carrying
-the cell shape the phone-card enhancer really produces (`apps/erp/src/components/ui/phone-table-cards.ts:69-86`:
-`tr[data-card-kind="summary"]`, `data-card-has-keys` when the row has key cells, `data-card-slot` on
-each cell), at a **390px** viewport, in **the packaged browser** —
-`Chrome/130.0.6723.191 Electron/33.4.11`.
+| Title | Width | Height | Rendered lines | `max-height` | Cut? |
+|---|---|---|---|---|---|
+| "Chili flakes" | 237.4px | **22.4px** | 1 ✓ | 44.8px | no — fits |
+| "Turmeric powder, ground, organic, 250g bag from Kerala" | 237.4px | **44.8px** | 2 ✓ | 44.8px | no — exactly 2 |
+| an unbroken 50-char word | 237.4px | **44.8px** | 2 ✓ | 44.8px | no — exactly 2 |
+| "Chili flakes, dried, crushed, harvested from the highlands of Kashmir" | 237.4px | **44.8px** | **2 ✓** (was **112px / 5 lines** in revision 1) | 44.8px | **yes** — 3 line boxes laid out, `scrollHeight` 67 vs 44.8 box, clipped at the line boundary |
+| card with an image + a 3-line title | 237.4px | 44.8px box | 3 painted ✗ | 44.8px | **no** — `overflow: visible` |
 
-**What it measured, on a freshly loaded page with no inline styles:**
+`line-height` is 22.4px (1.4 × 16px), so 2 × 1.4em = 44.8px cuts exactly between line 2 and line 3:
+no half-line, no clipped glyphs. **Two lines max, no "…"** — the missing ellipsis is the planner's
+ruling for option 2, not an oversight.
 
-| Card | Title | Cell width | Rendered height | Lines |
-|---|---|---|---|---|
-| short | "Chili flakes" | 268px | 22px | **1** ✓ |
-| medium | "Turmeric powder, ground, organic, 250g…" | 268px | 67px | **3** ✗ |
-| unbroken | "Supercalifragilistic…" | 268px | 45px | **2** ✓ |
-| long | "Chili flakes, dried, crushed, harvested from the highlands…" | 268px | **112px** | **5** ✗ |
+### Two things the planner should know
 
-The row really is the card grid — `display: grid`, `grid-template-columns: 44px 267.9px 16.9px` — so
-the cell is a **grid item**, and the title cell computes **`display: flow-root`**, not
-`-webkit-box`, even with `display: -webkit-box !important` forced inline. **Blink blockifies a grid
-item's `display: -webkit-box` to `flow-root`**, and `-webkit-line-clamp` is inert without the legacy
-box layout. The standard `line-clamp: 2` in the rule is no help either: in this engine
-**`CSS.supports('line-clamp','2')` returns `false`** (only the `-webkit-` prefix exists), so that
-declaration is dropped.
+1. **Cards with an image are not cut.** `[data-card-slot="title"]:has([data-card-image])` (a separate
+   rule, ~line 645) sets `overflow: visible`, so the `max-height` clips the box but the third line
+   **paints outside it** — measured `scrollHeight` 67 vs a 44.8px box, and the text runs into the
+   subtitle at the same y. That rule exists so the absolutely positioned 44px image is not clipped by
+   the cell, so the fix is not "add `overflow: hidden` there" without re-checking the image. Not
+   changed: §3 names one rule only. Affects only tables whose title cell carries a photo.
+2. **The §5 guards assert declarations, so they cannot prove the cut renders.** Revision 1 shipped
+   with every check green and did nothing. That is why the harness table is the evidence here, and
+   why it is in this work order. The declarations match the measurement by a measured `max-height`,
+   but a CSS-only guard is a drift alarm, not a behaviour test.
 
-**The control that proves it is the context and not the declarations:** the *same rule*, matched by
-the *same selector* on a `div`, a `span` and a `td` that are **not** grid items inside a card row,
-clamps correctly — 268px wide, **45px = 2 lines**, `overflow: hidden`. So the five declarations are
-right; the DOM they land on defeats them.
+### Not covered
 
-**Tried, and does NOT fix it — so nobody repeats these:**
+The signed-in real app pages (`/ap/suppliers` etc.) — forging a session needs the orchestrator
+skill's `forge-session.ts` + throwaway `_test` database, outside §4. Also: `npm run dev` normally
+uses port 9008, which **another lane's `next start` (worktree `wt-t511`) was holding** at the time of
+this run, so the harness ran on 127.0.0.1:9139 and nothing was started on 9008. Harness deleted
+afterwards; `git status` shows only the two §4 files.
 
-| Attempt | Result |
-|---|---|
-| `display: -webkit-box !important` inline on the cell | computed `flow-root`, 5 lines |
-| `-webkit-box-orient` + `-webkit-line-clamp` as `!important` | 5 lines |
-| forcing `width: 268px !important` / `max-width: none !important` | 5 lines |
-| taking the grid off the row (`tr { display: block }`) | 4 lines — still no clamp |
-| clamping the inner `<a>` instead of the cell | the anchor computes `inline-flex` (a stronger existing rule, `globals.css:667`) and still renders 5 lines |
-
-**Verified in the harness, not the app.** I did not build a session: the only sanctioned route
-(`docs/SMOKETEST.md` §3) needs `forge-session.ts` / `make-test-dbs.mjs` / `run-with-db.mjs` from the
-orchestrator skill plus a throwaway `_test` database — outside §4. **What this evidence does NOT
-cover: a signed-in real page.** It is a byte-identical stylesheet against the real card DOM; if a
-signed-in run disagreed, the run wins.
-
-### 4. What the planner needs to decide — options, not built
-
-1. **Clamp an inner wrapper, not the grid item.** Have the enhancer put the title text in its own
-   element (`phone-table-cards.ts` is TSX-adjacent code outside §4) and clamp that; it is then not a
-   grid item and the same five declarations work — the control above shows 2 lines.
-2. **Two lines without the ellipsis**, on the cell as it is: `max-height: calc(2 * 1.4em)` +
-   `overflow: hidden`. Deterministic, but it cuts mid-glyph instead of "…".
-3. **Wait for the standard property.** `line-clamp` is in the rule already; when the engine supports
-   it, this may start working with no further change — but that is not today's browser.
-
-### 5. Housekeeping
-
-`.env.local` was not needed (no `next dev` run for this task), so nothing was copied, and
-`apps/erp/next-env.d.ts` was not touched.
+Built by Freebuff Buffy (Codebuff) from a work order.
