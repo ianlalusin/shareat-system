@@ -4,15 +4,15 @@ import { RLS_REGISTRY } from '../../packages/db/src/rls/registry';
 import { TRIGGER_REGISTRY } from '../../packages/db/src/triggers/registry';
 
 /**
- * T-523 (docs/tasks/523-pos-v2-schema.md, bible rows 436-437): the twelve POS v2 tables are classified the
+ * T-523 (docs/tasks/523-pos-v2-schema.md, bible rows 436-437): the fourteen POS v2 tables are classified the
  * day they land. The generic guards (cutover-classification, rls-registry, t354) already fail on an
  * UNLISTED table; this pins the CLASS each one was ruled to have, so a lane cannot satisfy them with
  * the wrong answer. No database needed.
  *
- * R1-R3 are configuration -> keep. R4-R10 and R12 -> purge (row 436: v1 receives Lipa's December day
+ * R1-R3 and R13 pos_discount_presets are configuration -> keep. R4-R10 and the two R13 discount tables -> purge (row 436: v1 receives Lipa's December day
  * totals through T-531's bridge, so no booked figure lives only in these tables).
  */
-const KEEP = ['pos_stores', 'pos_stands', 'pos_terminals'];
+const KEEP = ['pos_stores', 'pos_stands', 'pos_terminals', 'pos_discount_presets'];
 const PURGE = [
   'table_sessions',
   'table_session_lines',
@@ -22,9 +22,10 @@ const PURGE = [
   'pos_day_closes',
   'pos_day_close_tenders',
   'pos_events',
-  'pos_sales_receipt_discounts',
+  'table_session_line_discounts',
+  'pos_sales_receipt_line_discounts',
 ];
-/** Every table that carries a history guard (R4-R10, R12); R1-R3 have none. */
+/** Every table that carries a history guard (R4-R10, R13 discounts); R1-R3 and the presets have none. */
 const GUARDED = PURGE;
 
 describe('T-523 - cutover class of the POS v2 tables', () => {

@@ -2,7 +2,7 @@
  * T-523 (migration 0238) - POS v2 schema: stands, terminals, table sessions, sales receipts, day close,
  * the event inbox, the per-store switch, the SC/PWD discount rows. Tests written FIRST (TESTER).
  * docs/tasks/523-pos-v2-schema.md rulings R1-R12 and its "Tests" list (1-11, 10a); bible rows 436-437
- * (purge class, `table_session_lines.for_diner`).
+ * (purge class) and the planner's R13 ruling (6 Nov: a discount per item line, as v1; replaces row 437's `for_diner` and the per-diner receipt discounts).
  *
  * Raw SQL against the DATABASE, so what is proven is the schema, not a repo. Real Postgres via
  * TEST_DATABASE_URL (any `_test` database; no database name is assumed anywhere in this file).
@@ -14,10 +14,9 @@
  * forward-only triggers) - 23503 FK - 42501 privilege / RLS - 23001 restrict_violation (the frozen and
  * append-only triggers).
  *
- * SPEC GAPS (asserted loosely on purpose, never invented): the spec names the errcode of the status
- * transitions (check_violation) but not of (a) a column the forward-only trigger freezes (opened_by,
- * stand_id, mode, qty...), nor (b) a line inserted into a paid/voided session. Those accept 23514 OR
- * 23001 via `FROZEN_OR_FORWARD`; tighten them once the builder's trigger functions exist.
+ * ERRCODES, as ruled by the planner (task spec "Rulings on the tester's questions", 1): a status transition a forward-only trigger refuses is
+ * 23514 check_violation; a frozen column, a second write to a once-only column, an UPDATE/DELETE of an append-only row and a line inserted into a
+ * paid or voided session are 23001 restrict_violation (as pay_rates_append_only does).
  */
 import { randomUUID } from 'node:crypto';
 import type postgres from 'postgres';
@@ -31,7 +30,7 @@ afterAll(async () => {
 });
 
 // ---------------------------------------------------------------------------------------------
-// the twelve new tables, and what each is allowed to UPDATE (R1-R12 "Column UPDATE grant")
+// the fourteen new tables, and what each is allowed to UPDATE (R1-R13 "Column UPDATE grant")
 // ---------------------------------------------------------------------------------------------
 const UPDATABLE: Readonly<Record<string, readonly string[]>> = {
   pos_stores: ['mode', 'live_from', 'state_version', 'changed_by', 'changed_at'],
@@ -45,7 +44,9 @@ const UPDATABLE: Readonly<Record<string, readonly string[]>> = {
   pos_day_closes: [],
   pos_day_close_tenders: [],
   pos_events: ['resolved_by', 'resolved_at', 'resolution'],
-  pos_sales_receipt_discounts: [],
+  pos_discount_presets: ['name', 'value_type', 'value', 'status', 'updated_at'],
+  table_session_line_discounts: ['status', 'removed_by', 'removed_at_device'],
+  pos_sales_receipt_line_discounts: [],
 };
 const TABLES = Object.keys(UPDATABLE);
 /** Tables whose rows are history: a trigger (ENABLE ALWAYS) guards them (R4-R10, R12). */
@@ -58,7 +59,8 @@ const GUARDED = [
   'pos_day_closes',
   'pos_day_close_tenders',
   'pos_events',
-  'pos_sales_receipt_discounts',
+  'table_session_line_discounts',
+  'pos_sales_receipt_line_discounts',
 ];
 /** Person columns: each needs the single FK AND the (org_id, x) -> persons(org_id, id) twin. */
 const PERSON_COLS: Readonly<Record<string, readonly string[]>> = {
@@ -71,10 +73,11 @@ const PERSON_COLS: Readonly<Record<string, readonly string[]>> = {
   pos_sales_receipt_payments: ['checked_by'],
   pos_day_closes: ['closed_by', 'approved_by'],
   pos_events: ['person_id', 'resolved_by'],
+  pos_discount_presets: ['created_by'],
+  table_session_line_discounts: ['applied_by', 'approved_by', 'removed_by'],
 };
-const STORE_TABLES = ['pos_stores', 'pos_stands', 'pos_terminals', 'table_sessions', 'table_session_lines', 'pos_sales_receipts', 'pos_day_closes', 'pos_events'];
+const STORE_TABLES = ['pos_stores', 'pos_stands', 'pos_terminals', 'table_sessions', 'table_session_lines', 'pos_sales_receipts', 'pos_day_closes', 'pos_events', 'pos_discount_presets', 'table_session_line_discounts'];
 
-const FROZEN_OR_FORWARD = ['23514', '23001'] as const;
 const code = (e: PgErr | undefined) => e?.code;
 const expectCode = (e: PgErr | undefined, ...codes: string[]) => {
   expect(e, `statement was ACCEPTED, expected ${codes.join('/')}`).toBeDefined();
@@ -191,7 +194,9 @@ const rLineRow = (w: W, receiptId: string, o: Record<string, unknown> = {}) => (
   name: 'Pork belly',
   qty: 2,
   unit_price: '120.00',
-  amount: '240.00',
+  gross: '240.00',
+  discount_total: '0.00',
+  net: '240.00',
   ...o,
 });
 const paymentRow = (w: W, receiptId: string, o: Record<string, unknown> = {}) => ({
@@ -250,16 +255,44 @@ const statutory = (w: B, o: Record<string, unknown> = {}) =>
     recorded_by: w.personId,
     ...o,
   });
-const discountRow = (w: W, receiptId: string, statutoryRecordId: string, o: Record<string, unknown> = {}) => ({
+const presetRow = (w: B, o: Record<string, unknown> = {}) => ({
   org_id: w.orgId,
-  receipt_id: receiptId,
-  kind: 'senior',
-  share_amount: '300.00',
-  vat_removed: '32.14',
-  discount_amount: '53.57',
-  statutory_record_id: statutoryRecordId,
+  store_id: w.storeId,
+  name: uid('Promo'),
+  value_type: 'percent',
+  value: '10.00',
+  created_by: w.personId,
+  created_at: T(),
   ...o,
 });
+const preset = (w: B, o: Record<string, unknown> = {}) => ins('pos_discount_presets', presetRow(w, o));
+/** A custom (manager-typed) discount on one session line: 1 unit, 10 percent. */
+const lineDiscountRow = (w: W, sessionLineId: string, o: Record<string, unknown> = {}) => ({
+  org_id: w.orgId,
+  store_id: w.storeId,
+  session_line_id: sessionLineId,
+  kind: 'custom',
+  value_type: 'percent',
+  value: '10.00',
+  qty: 1,
+  applied_by: w.personId,
+  applied_at_device: T(),
+  ...o,
+});
+const lineDiscount = (w: W, sessionLineId: string, o: Record<string, unknown> = {}) => ins('table_session_line_discounts', lineDiscountRow(w, sessionLineId, o));
+/** A discount on a frozen receipt line: custom, 1 unit, 24.00. A statutory one needs a statutory record. */
+const rLineDiscountRow = (w: W, receiptLineId: string, o: Record<string, unknown> = {}) => ({
+  org_id: w.orgId,
+  receipt_line_id: receiptLineId,
+  kind: 'custom',
+  label: 'Manager discount',
+  value_type: 'percent',
+  value: '10.00',
+  qty: 1,
+  discount_amount: '24.00',
+  ...o,
+});
+const rLineDiscount = (w: W, receiptLineId: string, o: Record<string, unknown> = {}) => ins('pos_sales_receipt_line_discounts', rLineDiscountRow(w, receiptLineId, o));
 let dayN = 0;
 const salesDayRow = (w: B, o: Record<string, unknown> = {}) => ({
   org_id: w.orgId,
@@ -272,21 +305,23 @@ const salesDayRow = (w: B, o: Record<string, unknown> = {}) => ({
   ...o,
 });
 
-/** A row in every one of the twelve tables for this org (for the RLS test). */
+/** A row in every one of the fourteen tables for this org (for the RLS test). */
 async function fillAll(w: W) {
   await ins('pos_stores', { org_id: w.orgId, store_id: w.storeId, changed_by: w.personId, changed_at: T() });
   const { sessionId, receiptId } = await sale(w);
   const lineId = await line(w, sessionId);
-  await ins('pos_sales_receipt_lines', rLineRow(w, receiptId, { session_line_id: lineId }));
+  const rLineId = await ins('pos_sales_receipt_lines', rLineRow(w, receiptId, { session_line_id: lineId }));
   await ins('pos_sales_receipt_payments', paymentRow(w, receiptId));
   const dc = await dayClose(w);
   await ins('pos_day_close_tenders', { org_id: w.orgId, day_close_id: dc, tender_id: w.tenderId, amount: '500.00' });
   await event(w);
-  await ins('pos_sales_receipt_discounts', discountRow(w, receiptId, await statutory(w)));
+  await preset(w);
+  await lineDiscount(w, lineId);
+  await rLineDiscount(w, rLineId);
 }
 
 // =================================================================================================
-describe('catalog - the twelve tables exist, forced RLS, same-org twins, no DELETE, ENABLE ALWAYS guards (tests 8, 9, 11)', () => {
+describe('catalog - the fourteen tables exist, forced RLS, same-org twins, no DELETE, ENABLE ALWAYS guards (tests 8, 9, 11)', () => {
   it.each(TABLES)('%s exists with RLS enabled + forced and a <t>_org_isolation policy', async (t) => {
     const rel = await sql<{ relrowsecurity: boolean; relforcerowsecurity: boolean }[]>`
       select relrowsecurity, relforcerowsecurity from pg_class where oid = to_regclass(${`public.${t}`})`;
@@ -511,7 +546,7 @@ describe('R4 table_sessions (tests 1, 2)', () => {
     ]) {
       expect(await refusal(() => upd('table_sessions', a, set)), `accepted ${JSON.stringify(Object.keys(set))}`).toBeDefined();
     }
-    expectCode(await refusal(() => upd('table_sessions', a, { opened_by: w.person2 })), ...FROZEN_OR_FORWARD);
+    expectCode(await refusal(() => upd('table_sessions', a, { opened_by: w.person2 })), '23001');
     const [r] = await sql<{ opened_by: string }[]>`select opened_by from table_sessions where id = ${a}`;
     expect(r!.opened_by).toBe(w.personId);
   });
@@ -526,17 +561,17 @@ describe('R4 table_sessions (tests 1, 2)', () => {
 });
 
 // =================================================================================================
-describe('R5 table_session_lines (test 3, for_diner)', () => {
+describe('R5 table_session_lines (test 3)', () => {
   it('3: a line cannot be added to a paid or a voided session; an open one takes it', async () => {
     const w = await world('l3a');
     const open = await session(w);
     expect(await refusal(() => line(w, open))).toBeUndefined();
     const paid = await session(w, { stand_id: w.stand2 });
     await upd('table_sessions', paid, { status: 'paid' });
-    expectCode(await refusal(() => line(w, paid)), ...FROZEN_OR_FORWARD);
+    expectCode(await refusal(() => line(w, paid)), '23001');
     const voided = await takeOut(w);
     await upd('table_sessions', voided, { status: 'voided', voided_by: w.person2, voided_at_device: T(), void_reason: 'test' });
-    expectCode(await refusal(() => line(w, voided)), ...FROZEN_OR_FORWARD);
+    expectCode(await refusal(() => line(w, voided)), '23001');
     expect(await count('table_session_lines', `session_id in ('${paid}','${voided}')`)).toBe(0);
   });
 
@@ -561,18 +596,6 @@ describe('R5 table_session_lines (test 3, for_diner)', () => {
     expectCode(await refusal(() => line(w, s, { served_at_device: T() })), '23514'); // a time while still queued
   });
 
-  it('for_diner (row 437): NULL = shared dish, 1..200 = the diner it was ordered for; 0 and 201 are refused', async () => {
-    const w = await world('l3d');
-    const s = await session(w);
-    expectCode(await refusal(() => line(w, s, { for_diner: 0 })), '23514');
-    expectCode(await refusal(() => line(w, s, { for_diner: 201 })), '23514');
-    const shared = await line(w, s);
-    expect(await refusal(() => line(w, s, { for_diner: 1 }))).toBeUndefined();
-    expect(await refusal(() => line(w, s, { for_diner: 200 }))).toBeUndefined();
-    const [r] = await sql<{ for_diner: number | null }[]>`select for_diner from table_session_lines where id = ${shared}`;
-    expect(r!.for_diner).toBeNull();
-  });
-
   it('3: kitchen_status is forward-only - queued -> served|cancelled once; served -> queued, served -> cancelled, cancelled -> served refused (23514)', async () => {
     const w = await world('l3e');
     const s = await session(w);
@@ -592,8 +615,8 @@ describe('R5 table_session_lines (test 3, for_diner)', () => {
     const w = await world('l3f');
     const s = await session(w);
     const l = await line(w, s);
-    for (const set of [{ qty: 3 }, { unit_price: '1.00' }, { name: 'Renamed' }, { kind: 'package' }, { for_diner: 2 }, { added_by: w.person2 }]) {
-      expectCode(await refusal(() => upd('table_session_lines', l, set)), ...FROZEN_OR_FORWARD);
+    for (const set of [{ qty: 3 }, { unit_price: '1.00' }, { name: 'Renamed' }, { kind: 'package' }, { added_by: w.person2 }]) {
+      expectCode(await refusal(() => upd('table_session_lines', l, set)), '23001');
     }
     const [r] = await sql<{ qty: number }[]>`select qty from table_session_lines where id = ${l}`;
     expect(r!.qty).toBe(2);
@@ -689,13 +712,13 @@ describe('R6 pos_sales_receipts (test 4)', () => {
 
 // =================================================================================================
 describe('R7 pos_sales_receipt_lines - append-only', () => {
-  it('amount = qty * unit_price (23514); a refill appears at amount 0; (receipt_id, line_no) is unique (23505)', async () => {
+  it('gross = qty * unit_price, net = gross - discount_total, discount_total within gross (23514); a refill appears at amount 0; (receipt_id, line_no) is unique (23505)', async () => {
     const w = await world('rl1');
     const { receiptId } = await sale(w);
-    expectCode(await refusal(() => ins('pos_sales_receipt_lines', rLineRow(w, receiptId, { amount: '239.00' }))), '23514');
+    expectCode(await refusal(() => ins('pos_sales_receipt_lines', rLineRow(w, receiptId, { gross: '239.00', net: '239.00' }))), '23514');
     expect(await refusal(() => ins('pos_sales_receipt_lines', rLineRow(w, receiptId)))).toBeUndefined();
     expectCode(await refusal(() => ins('pos_sales_receipt_lines', rLineRow(w, receiptId))), '23505');
-    expect(await refusal(() => ins('pos_sales_receipt_lines', rLineRow(w, receiptId, { line_no: 2, kind: 'refill', qty: 3, unit_price: '0.00', amount: '0.00' })))).toBeUndefined();
+    expect(await refusal(() => ins('pos_sales_receipt_lines', rLineRow(w, receiptId, { line_no: 2, kind: 'refill', qty: 3, unit_price: '0.00', gross: '0.00', net: '0.00' })))).toBeUndefined();
   });
 
   it('UPDATE and DELETE are refused even for the owner and in replica mode (23001)', async () => {
@@ -893,6 +916,44 @@ describe('R11 sales_days learns its third source (test 7)', () => {
     expect(r).toEqual({ source: 'legacy_typed', pos_day_close_id: null });
   });
 
+  it('7: a pos_v1_day_feed row (linked store, derivation flag on) still satisfies every CHECK after 0238, has no day close, and cannot carry one', async () => {
+    const w = await baseWorld('sd7e');
+    const [ch] = await sql<{ id: string }[]>`insert into sales_channels (org_id, store_id, name, is_remitted_daily) values (${w.orgId}, ${w.storeId}, 'Walk-in', true) returning id`;
+    await sql`insert into pos_v1_store_links (org_id, store_id, pos_store_id, pos_store_name, sales_channel_id, pos_tax_type, created_by)
+      values (${w.orgId}, ${w.storeId}, ${uid('pos')}, 'POS store', ${ch!.id}, 'vat_inclusive', ${w.personId})`;
+    const hashOf = (date: string) => 'b'.repeat(63) + date.slice(-1);
+    const feed = async (date: string) =>
+      (await sql<{ id: string }[]>`
+        insert into pos_v1_day_feeds (org_id, store_id, business_date, kind, purpose, batch_id, pos_store_id, body, payload, content_hash, fetched_at, fetched_by)
+        values (${w.orgId}, ${w.storeId}, ${date}, 'sales', 'import', ${randomUUID()}, 'pos-abc', '{"found":true}', '{"found":true}'::jsonb, ${hashOf(date)}, now(), ${w.personId}) returning id`)[0]!.id;
+    const feedDay = (date: string, extra: Record<string, unknown> = {}) =>
+      sql.begin(async (t) => {
+        await t`select set_config('app.sales_day_derivation', 'on', true)`;
+        await t`insert into sales_days ${t({ ...salesDayRow(w, { business_date: date }), source: 'pos_v1_day_feed', pos_v1_day_feed_id: await feed(date), pos_sourced: true, pos_sourced_at: new Date(), refunds: '10.00', ...extra } as never)} returning id`;
+      });
+    expect(await refusal(() => feedDay('2027-02-01'))).toBeUndefined();
+    const [r] = await sql<{ source: string; pos_day_close_id: string | null }[]>`select source, pos_day_close_id from sales_days where store_id = ${w.storeId} and source = 'pos_v1_day_feed'`;
+    expect(r).toEqual({ source: 'pos_v1_day_feed', pos_day_close_id: null });
+    const z = await dayClose(await world('sd7e-z'));
+    const carrying = await refusal(() => feedDay('2027-02-02', { pos_day_close_id: z }));
+    expect(carrying, 'a feed day carrying a day close was ACCEPTED').toBeDefined();
+    expect(carrying!.code, carrying!.message).toBe('23514'); // the new link CHECK (a cross-org twin would also refuse, as 23503, but the CHECK runs first)
+  });
+
+  it('7: the 0185 figure-lock and 0188 verify triggers on sales_days are unchanged: same two names, same definitions, still enabled', async () => {
+    const trg = await sql<{ tgname: string; tgenabled: string; def: string }[]>`
+      select tgname, tgenabled, pg_get_triggerdef(oid) def from pg_trigger where tgrelid = 'public.sales_days'::regclass and not tgisinternal order by tgname`;
+    expect(trg.map((t) => t.tgname)).toEqual(['sales_days_figure_lock', 'sales_days_verify_requires_submitted']);
+    expect(trg.map((t) => t.tgenabled)).toEqual(['O', 'O']);
+    expect(trg[0]!.def).toBe('CREATE TRIGGER sales_days_figure_lock BEFORE INSERT OR UPDATE ON public.sales_days FOR EACH ROW EXECUTE FUNCTION sales_days_check_figure_lock()');
+    expect(trg[1]!.def).toContain('BEFORE UPDATE ON public.sales_days');
+    expect(trg[1]!.def).toContain('sales_days_check_verify_requires_submitted()');
+    // the functions behind them name no source other than the feed (0238 added 'pos_receipts' to the CHECK, not to the lock)
+    const fn = await sql<{ src: string }[]>`select prosrc src from pg_proc where proname = 'sales_days_check_figure_lock'`;
+    expect(fn[0]!.src).toContain("NEW.source <> 'pos_v1_day_feed'");
+    expect(fn[0]!.src).not.toContain('pos_receipts');
+  });
+
   it('7: pos_day_close_id names a day close of the same organisation (same-org twin, 23503)', async () => {
     const w = await world('sd7d');
     const other = await world('sd7d-other');
@@ -902,7 +963,7 @@ describe('R11 sales_days learns its third source (test 7)', () => {
 });
 
 // =================================================================================================
-describe('R12 + test 10a - senior/PWD per diner (pos_sales_receipt_discounts, statutory_discount_records index)', () => {
+describe('R12 + test 10a - senior/PWD: one live statutory record per CARD per bill (statutory_discount_records index)', () => {
   it('10a: the live-invoice unique index is now keyed on id_number as well (catalog)', async () => {
     const [i] = await sql<{ indexdef: string }[]>`select indexdef from pg_indexes where schemaname = 'public' and indexname = 'statutory_discount_records_live_invoice_key'`;
     expect(i, 'index missing').toBeDefined();
@@ -938,52 +999,280 @@ describe('R12 + test 10a - senior/PWD per diner (pos_sales_receipt_discounts, st
     expect(await refusal(() => statutory(w, { source: 'manual', invoice_number: 'T-1', id_number: 'OSCA-3' }))).toBeUndefined();
   });
 
-  it('10a: two seniors on ONE sales receipt: two discount rows, each tied to its own statutory record', async () => {
+  it('10a: two seniors on ONE bill: two statutory records, and two receipt-line discounts that share one record per diner (no UNIQUE on statutory_record_id)', async () => {
     const w = await world('x10d');
     const { receiptId } = await sale(w);
+    const l1 = await ins('pos_sales_receipt_lines', rLineRow(w, receiptId, { line_no: 1 }));
+    const l2 = await ins('pos_sales_receipt_lines', rLineRow(w, receiptId, { line_no: 2, name: 'Pork belly 2' }));
     const a = await statutory(w, { invoice_number: 'LIPA-01-000903', id_number: 'OSCA-2001' });
     const b = await statutory(w, { invoice_number: 'LIPA-01-000903', id_number: 'OSCA-2002' });
-    expect(await refusal(() => ins('pos_sales_receipt_discounts', discountRow(w, receiptId, a)))).toBeUndefined();
-    expect(await refusal(() => ins('pos_sales_receipt_discounts', discountRow(w, receiptId, b)))).toBeUndefined();
-    expect(await count('pos_sales_receipt_discounts', `receipt_id = '${receiptId}'`)).toBe(2);
-    expectCode(await refusal(() => ins('pos_sales_receipt_discounts', discountRow(w, receiptId, a))), '23505'); // one statutory record, one discount row
+    const sen = (rec: string, o: Record<string, unknown> = {}) => ({ kind: 'senior', label: 'Senior citizen', diner_no: 1, statutory_record_id: rec, vat_removed: '12.86', discount_amount: '21.43', ...o });
+    expect(await refusal(() => rLineDiscount(w, l1, sen(a)))).toBeUndefined();
+    expect(await refusal(() => rLineDiscount(w, l2, sen(a)))).toBeUndefined(); // the same diner's record on a second line
+    expect(await refusal(() => rLineDiscount(w, l1, sen(b, { diner_no: 2 })))).toBeUndefined();
+    expect(await count('pos_sales_receipt_line_discounts', `receipt_line_id in ('${l1}','${l2}')`)).toBe(3);
+  });
+});
+
+// =================================================================================================
+describe('R13 per-line discounts - pos_discount_presets, table_session_line_discounts, pos_sales_receipt_line_discounts', () => {
+  it('presets: name 1..40 trimmed, percent <= 100, value > 0, status list; one ACTIVE name per store (case-insensitive), a retired name frees it', async () => {
+    const w = await world('r13a');
+    expectCode(await refusal(() => preset(w, { name: '   ' })), '23514');
+    expectCode(await refusal(() => preset(w, { name: 'x'.repeat(41) })), '23514');
+    expectCode(await refusal(() => preset(w, { value: '0.00' })), '23514');
+    expectCode(await refusal(() => preset(w, { value: '100.01' })), '23514');
+    expectCode(await refusal(() => preset(w, { value_type: 'amount' })), '23514');
+    expectCode(await refusal(() => preset(w, { status: 'gone' })), '23514');
+    expect(await refusal(() => preset(w, { value: '100.00' }))).toBeUndefined();
+    expect(await refusal(() => preset(w, { value_type: 'fixed', value: '250.00' }))).toBeUndefined(); // a fixed amount may exceed 100
+    const id = await preset(w, { name: 'Employee Meal' });
+    expectCode(await refusal(() => preset(w, { name: 'employee meal' })), '23505');
+    expect(await refusal(() => preset(w, { name: 'employee meal', store_id: w.store2Id }))).toBeUndefined(); // another store
+    await upd('pos_discount_presets', id, { status: 'retired' });
+    expect(await refusal(() => preset(w, { name: 'EMPLOYEE MEAL' }))).toBeUndefined();
   });
 
-  it('10a: vat_removed + discount_amount over the share is refused (23514); equal to the share is accepted', async () => {
-    const w = await world('x10e');
-    const { receiptId } = await sale(w);
-    const r1 = await statutory(w);
-    expectCode(await refusal(() => ins('pos_sales_receipt_discounts', discountRow(w, receiptId, r1, { vat_removed: '100.00', discount_amount: '200.01' }))), '23514');
-    expect(await refusal(() => ins('pos_sales_receipt_discounts', discountRow(w, receiptId, r1, { vat_removed: '100.00', discount_amount: '200.00' })))).toBeUndefined();
+  it('shareat_app may edit a preset (granted columns) and never its store (42501); no DELETE', async () => {
+    const w = await world('r13b');
+    const id = await preset(w);
+    const ok = await asApp(w.orgId, (tx) => tx`update pos_discount_presets set name = 'Renamed', value = 15, status = 'retired', updated_at = now() where id = ${id} returning id`);
+    expect(ok.err, ok.err?.message).toBeUndefined();
+    expectCode((await asApp(w.orgId, (tx) => tx`update pos_discount_presets set store_id = ${w.store2Id} where id = ${id}`)).err, '42501');
   });
 
-  it('amount shape: share > 0, vat_removed >= 0, discount > 0, kind senior|pwd (23514)', async () => {
-    const w = await world('x10f');
-    const { receiptId } = await sale(w);
-    expectCode(await refusal(async () => ins('pos_sales_receipt_discounts', discountRow(w, receiptId, await statutory(w), { share_amount: '0.00', vat_removed: '0.00', discount_amount: '0.00' }))), '23514');
-    expectCode(await refusal(async () => ins('pos_sales_receipt_discounts', discountRow(w, receiptId, await statutory(w), { vat_removed: '-0.01' }))), '23514');
-    expectCode(await refusal(async () => ins('pos_sales_receipt_discounts', discountRow(w, receiptId, await statutory(w), { discount_amount: '0.00' }))), '23514');
-    expectCode(await refusal(async () => ins('pos_sales_receipt_discounts', discountRow(w, receiptId, await statutory(w), { kind: 'student' }))), '23514');
+  it('a discount covering 1 of 3 units of a line is accepted; qty 0 and a negative qty are refused (23514)', async () => {
+    const w = await world('r13c');
+    const s = await session(w);
+    const l = await line(w, s, { qty: 3 });
+    expect(await refusal(() => lineDiscount(w, l, { qty: 1 }))).toBeUndefined();
+    expectCode(await refusal(() => lineDiscount(w, l, { qty: 0 })), '23514');
+    expectCode(await refusal(() => lineDiscount(w, l, { qty: -1 })), '23514');
+    expectCode(await refusal(() => lineDiscount(w, l, { value: '0.00' })), '23514');
+    expectCode(await refusal(() => lineDiscount(w, l, { value: '101.00' })), '23514'); // percent over 100
+    expect(await refusal(() => lineDiscount(w, l, { value_type: 'fixed', value: '101.00' }))).toBeUndefined();
+    expectCode(await refusal(() => lineDiscount(w, l, { kind: 'coupon' })), '23514');
   });
 
-  it('append-only (UPDATE/DELETE refused, 23001), and it stores NO holder name or id number (row 353)', async () => {
-    const w = await world('x10g');
+  it('kind preset needs a preset_id (and only preset takes one); senior and pwd need a diner_no (and only they take one)', async () => {
+    const w = await world('r13d');
+    const s = await session(w);
+    const l = await line(w, s);
+    const p = await preset(w);
+    expectCode(await refusal(() => lineDiscount(w, l, { kind: 'preset' })), '23514');
+    expectCode(await refusal(() => lineDiscount(w, l, { kind: 'custom', preset_id: p })), '23514');
+    expect(await refusal(() => lineDiscount(w, l, { kind: 'preset', preset_id: p }))).toBeUndefined();
+    expectCode(await refusal(() => lineDiscount(w, l, { kind: 'senior' })), '23514');
+    expectCode(await refusal(() => lineDiscount(w, l, { kind: 'pwd' })), '23514');
+    expectCode(await refusal(() => lineDiscount(w, l, { kind: 'custom', diner_no: 1 })), '23514');
+    expectCode(await refusal(() => lineDiscount(w, l, { kind: 'senior', diner_no: 0 })), '23514');
+    expectCode(await refusal(() => lineDiscount(w, l, { kind: 'senior', diner_no: 201 })), '23514');
+    expect(await refusal(() => lineDiscount(w, l, { kind: 'senior', diner_no: 1, value: '20.00', approved_by: w.person2 }))).toBeUndefined();
+  });
+
+  it('the preset and the line must be of the discount\'s own store (composite FKs, 23503)', async () => {
+    const w = await world('r13e');
+    const s = await session(w);
+    const l = await line(w, s);
+    const otherStorePreset = await preset(w, { store_id: w.store2Id });
+    expectCode(await refusal(() => lineDiscount(w, l, { kind: 'preset', preset_id: otherStorePreset })), '23503');
+    expectCode(await refusal(() => lineDiscount(w, l, { store_id: w.store2Id })), '23503');
+  });
+
+  it('removal: active -> removed once (needs removed_by); removed -> active is refused (23514); every other column is frozen (23001)', async () => {
+    const w = await world('r13f');
+    const s = await session(w);
+    const l = await line(w, s);
+    const d = await lineDiscount(w, l);
+    expectCode(await refusal(() => upd('table_session_line_discounts', d, { status: 'removed' })), '23514'); // no removed_by: the shape CHECK
+    for (const set of [{ qty: 2 }, { value: '50.00' }, { kind: 'pwd' }, { applied_by: w.person2 }, { diner_no: 3 }]) {
+      expect(await refusal(() => upd('table_session_line_discounts', d, set)), JSON.stringify(set)).toBeDefined();
+    }
+    expectCode(await refusal(() => upd('table_session_line_discounts', d, { qty: 2 })), '23001');
+    await upd('table_session_line_discounts', d, { status: 'removed', removed_by: w.person2, removed_at_device: T() });
+    expectCode(await refusal(() => upd('table_session_line_discounts', d, { status: 'active', removed_by: null, removed_at_device: null })), '23514');
+    expectCode(await updReplica('table_session_line_discounts', d, { status: 'active', removed_by: null }), '23514');
+    expectCode(await refusal(() => upd('table_session_line_discounts', d, { removed_by: w.personId })), '23001'); // removal is once
+    expect((await sql<{ status: string }[]>`select status from table_session_line_discounts where id = ${d}`)[0]!.status).toBe('removed');
+  });
+
+  it('a discount cannot be added to a line of a paid or voided session (23001); an open one takes it', async () => {
+    const w = await world('r13g');
+    const open = await session(w);
+    const lOpen = await line(w, open);
+    expect(await refusal(() => lineDiscount(w, lOpen))).toBeUndefined();
+    const paid = await session(w, { stand_id: w.stand2 });
+    const lPaid = await line(w, paid);
+    await upd('table_sessions', paid, { status: 'paid' });
+    expectCode(await refusal(() => lineDiscount(w, lPaid)), '23001');
+    const voided = await takeOut(w);
+    const lVoid = await line(w, voided);
+    await upd('table_sessions', voided, { status: 'voided', voided_by: w.person2, voided_at_device: T(), void_reason: 'test' });
+    expectCode(await refusal(() => lineDiscount(w, lVoid)), '23001');
+    expect(await count('table_session_line_discounts', `session_line_id in ('${lPaid}','${lVoid}')`)).toBe(0);
+  });
+
+  it('grants: shareat_app may remove a discount (granted columns) and may not change its qty (42501)', async () => {
+    const w = await world('r13h');
+    const s = await session(w);
+    const d = await lineDiscount(w, await line(w, s));
+    const ok = await asApp(w.orgId, (tx) => tx`update table_session_line_discounts set status = 'removed', removed_by = ${w.person2}, removed_at_device = now() where id = ${d} returning id`);
+    expect(ok.err, ok.err?.message).toBeUndefined();
+    expectCode((await asApp(w.orgId, (tx) => tx`update table_session_line_discounts set qty = 5 where id = ${d}`)).err, '42501');
+  });
+
+  it('receipt line: net must equal gross - discount_total, discount_total within gross and >= 0, gross = qty * unit_price (23514)', async () => {
+    const w = await world('r13i');
     const { receiptId } = await sale(w);
-    const id = await ins('pos_sales_receipt_discounts', discountRow(w, receiptId, await statutory(w)));
-    expectCode(await refusal(() => upd('pos_sales_receipt_discounts', id, { discount_amount: '1.00' })), '23001');
-    expectCode(await updReplica('pos_sales_receipt_discounts', id, { discount_amount: '1.00' }), '23001');
-    expectCode(await refusal(() => sql`delete from pos_sales_receipt_discounts where id = ${id}`), '23001');
-    const cols = await sql<{ column_name: string }[]>`select column_name from information_schema.columns where table_schema = 'public' and table_name = 'pos_sales_receipt_discounts'`;
-    expect(cols.length, 'table missing').toBeGreaterThan(0);
+    expectCode(await refusal(() => ins('pos_sales_receipt_lines', rLineRow(w, receiptId, { discount_total: '24.00', net: '240.00' }))), '23514'); // net not reduced
+    expectCode(await refusal(() => ins('pos_sales_receipt_lines', rLineRow(w, receiptId, { discount_total: '240.01', net: '-0.01' }))), '23514');
+    expectCode(await refusal(() => ins('pos_sales_receipt_lines', rLineRow(w, receiptId, { discount_total: '-1.00', net: '241.00' }))), '23514');
+    expectCode(await refusal(() => ins('pos_sales_receipt_lines', rLineRow(w, receiptId, { gross: '239.00', net: '239.00' }))), '23514');
+    expect(await refusal(() => ins('pos_sales_receipt_lines', rLineRow(w, receiptId, { discount_total: '24.00', net: '216.00' })))).toBeUndefined();
+    expect(await refusal(() => ins('pos_sales_receipt_lines', rLineRow(w, receiptId, { line_no: 2, discount_total: '240.00', net: '0.00' })))).toBeUndefined();
+  });
+
+  it('receipt line discount: preset needs preset_id; senior needs a statutory record and a statutory record only comes with senior/pwd; vat_removed only on senior/pwd; qty > 0; discount_amount > 0 (23514)', async () => {
+    const w = await world('r13j');
+    const { receiptId } = await sale(w);
+    const rl = await ins('pos_sales_receipt_lines', rLineRow(w, receiptId));
+    const rec = await statutory(w);
+    const p = await preset(w);
+    expectCode(await refusal(() => rLineDiscount(w, rl, { kind: 'preset' })), '23514');
+    expect(await refusal(() => rLineDiscount(w, rl, { kind: 'preset', preset_id: p, label: 'Employee meal' }))).toBeUndefined();
+    expectCode(await refusal(() => rLineDiscount(w, rl, { kind: 'senior', diner_no: 1, vat_removed: '10.00' })), '23514'); // senior without a statutory record
+    expectCode(await refusal(() => rLineDiscount(w, rl, { kind: 'custom', statutory_record_id: rec })), '23514'); // record without senior/pwd
+    expectCode(await refusal(() => rLineDiscount(w, rl, { kind: 'preset', preset_id: p, vat_removed: '5.00' })), '23514'); // vat_removed on a preset
+    expectCode(await refusal(() => rLineDiscount(w, rl, { vat_removed: '5.00' })), '23514'); // ... or a custom discount
+    expectCode(await refusal(() => rLineDiscount(w, rl, { qty: 0 })), '23514');
+    expectCode(await refusal(() => rLineDiscount(w, rl, { discount_amount: '0.00' })), '23514');
+    expectCode(await refusal(() => rLineDiscount(w, rl, { vat_removed: '-0.01', kind: 'senior', statutory_record_id: rec, diner_no: 1 })), '23514');
+    expect(await refusal(() => rLineDiscount(w, rl, { kind: 'senior', diner_no: 1, statutory_record_id: rec, vat_removed: '12.86' }))).toBeUndefined();
+  });
+
+  it('receipt line discount: append-only (UPDATE/DELETE refused, 23001, even in replica mode), and it stores NO holder name or id number (row 353)', async () => {
+    const w = await world('r13k');
+    const { receiptId } = await sale(w);
+    const rl = await ins('pos_sales_receipt_lines', rLineRow(w, receiptId));
+    const id = await rLineDiscount(w, rl);
+    expectCode(await refusal(() => upd('pos_sales_receipt_line_discounts', id, { discount_amount: '1.00' })), '23001');
+    expectCode(await updReplica('pos_sales_receipt_line_discounts', id, { discount_amount: '1.00' }), '23001');
+    expectCode(await refusal(() => sql`delete from pos_sales_receipt_line_discounts where id = ${id}`), '23001');
+    const cols = await sql<{ column_name: string }[]>`select column_name from information_schema.columns where table_schema = 'public' and table_name in ('pos_sales_receipt_line_discounts', 'table_session_line_discounts')`;
+    expect(cols.length, 'tables missing').toBeGreaterThan(0);
     const names = cols.map((c) => c.column_name);
-    for (const banned of ['holder_name', 'id_number', 'name', 'card_number']) expect(names).not.toContain(banned);
+    for (const banned of ['holder_name', 'id_number', 'card_number']) expect(names).not.toContain(banned);
   });
 
-  it('the statutory record is a same-org FK (23503)', async () => {
-    const w = await world('x10h');
-    const other = await world('x10h-other');
+  it('receipt line discount: the receipt line, the preset and the statutory record are same-org FKs (23503)', async () => {
+    const w = await world('r13l');
+    const other = await world('r13l-other');
     const { receiptId } = await sale(w);
-    expectCode(await refusal(async () => ins('pos_sales_receipt_discounts', discountRow(w, receiptId, await statutory(other)))), '23503');
+    const rl = await ins('pos_sales_receipt_lines', rLineRow(w, receiptId));
+    expectCode(await refusal(async () => rLineDiscount(w, rl, { kind: 'senior', diner_no: 1, statutory_record_id: await statutory(other) })), '23503');
+    expectCode(await refusal(async () => rLineDiscount(w, rl, { kind: 'preset', preset_id: await preset(other) })), '23503');
+    expectCode(await refusal(() => rLineDiscount(w, randomUUID())), '23503');
+  });
+});
+
+// =================================================================================================
+describe('audit fixes (planner rulings, 6 Nov): closed sessions, dine-in heads, card index, same-store integrity', () => {
+  it('a closed session is closed: after void, the reason / person / offline flag cannot be rewritten; on a paid session the head counts cannot change (23001); on an open one they still can', async () => {
+    const w = await world('f2a');
+    const v = await session(w);
+    await upd('table_sessions', v, { status: 'voided', voided_by: w.person2, voided_at_device: T(), void_reason: 'wrong table' });
+    expectCode(await refusal(() => upd('table_sessions', v, { void_reason: 'rewritten' })), '23001');
+    expectCode(await refusal(() => upd('table_sessions', v, { voided_by: w.personId })), '23001');
+    expectCode(await refusal(() => upd('table_sessions', v, { voided_offline: true })), '23001');
+    expectCode(await refusal(() => upd('table_sessions', v, { voided_at_device: later(5) })), '23001');
+    expectCode(await updReplica('table_sessions', v, { void_reason: 'rewritten' }), '23001');
+    expect((await sql<{ r: string }[]>`select void_reason r from table_sessions where id = ${v}`)[0]!.r).toBe('wrong table');
+    const p = await session(w, { stand_id: w.stand2 });
+    await upd('table_sessions', p, { heads_cashier: 5 }); // open: still moves
+    await upd('table_sessions', p, { status: 'paid' });
+    expectCode(await refusal(() => upd('table_sessions', p, { heads_cashier: 6 })), '23001');
+    expectCode(await refusal(() => upd('table_sessions', p, { heads_server: 6 })), '23001');
+    expectCode(await updReplica('table_sessions', p, { heads_cashier: 6 }), '23001');
+  });
+
+  it('dine-in needs at least 1 head (table_sessions_dine_in_heads_check, 23514); take-out may be 0', async () => {
+    const w = await world('f3a');
+    const err = await refusal(() => session(w, { heads_cashier: 0 }));
+    expectCode(err, '23514');
+    expect((err as PgErr & { constraint_name?: string }).constraint_name).toBe('table_sessions_dine_in_heads_check');
+    expect(await refusal(() => session(w, { heads_cashier: 1 }))).toBeUndefined();
+    expect(await refusal(() => takeOut(w, { heads_cashier: 0 }))).toBeUndefined();
+  });
+
+  it('closed session: a line cannot be CANCELLED and a line discount cannot be REMOVED (23001), but a line can still be marked served late; an open session cancels and removes fine', async () => {
+    const w = await world('f4a');
+    const open = await session(w);
+    const lOpen = await line(w, open);
+    const dOpen = await lineDiscount(w, lOpen);
+    await upd('table_session_lines', lOpen, { kitchen_status: 'cancelled' });
+    await upd('table_session_line_discounts', dOpen, { status: 'removed', removed_by: w.person2, removed_at_device: T() });
+
+    const s2 = await session(w, { stand_id: w.stand2 });
+    const lServe = await line(w, s2);
+    const lCancel = await line(w, s2);
+    const d = await lineDiscount(w, lServe);
+    await upd('table_sessions', s2, { status: 'paid' });
+    expectCode(await refusal(() => upd('table_session_lines', lCancel, { kitchen_status: 'cancelled' })), '23001');
+    expectCode(await refusal(() => upd('table_session_line_discounts', d, { status: 'removed', removed_by: w.person2, removed_at_device: T() })), '23001');
+    expect(await refusal(() => upd('table_session_lines', lServe, { kitchen_status: 'served', served_at_device: T(), served_by: w.person2 }))).toBeUndefined(); // late 'served' is allowed
+    expect((await sql<{ k: string }[]>`select kitchen_status k from table_session_lines where id = ${lCancel}`)[0]!.k).toBe('queued');
+    const s3 = await takeOut(w);
+    const lVoid = await line(w, s3);
+    await upd('table_sessions', s3, { status: 'voided', voided_by: w.person2, voided_at_device: T(), void_reason: 'test' });
+    expectCode(await refusal(() => upd('table_session_lines', lVoid, { kitchen_status: 'cancelled' })), '23001');
+  });
+
+  it("statutory index: 'OSCA-1', 'osca-1' and 'OSCA-1 ' on one invoice are ONE card - the second and third cannot go live (23505); a different card can", async () => {
+    const w = await baseWorld('f5a');
+    const invoice = 'LIPA-01-000950';
+    await statutory(w, { invoice_number: invoice, id_number: 'OSCA-1' });
+    expectCode(await refusal(() => statutory(w, { invoice_number: invoice, id_number: 'osca-1' })), '23505');
+    expectCode(await refusal(() => statutory(w, { invoice_number: invoice, id_number: 'OSCA-1 ' })), '23505');
+    expectCode(await refusal(() => statutory(w, { invoice_number: invoice, id_number: '  Osca-1' })), '23505');
+    expect(await refusal(() => statutory(w, { invoice_number: invoice, id_number: 'OSCA-2' }))).toBeUndefined();
+  });
+
+  it('same-store integrity: a pairing of ANOTHER store is refused (23503) as a terminal pairing, a session opener, a line adder and an event pairing; a pairing of its own store is fine', async () => {
+    const w = await world('f6a');
+    expectCode(await refusal(() => ins('pos_terminals', { org_id: w.orgId, store_id: w.storeId, terminal_no: 7, pairing_id: w.pairing2Id, created_by: w.personId, created_at: T() })), '23503');
+    expectCode(await refusal(() => session(w, { opened_on_pairing_id: w.pairing2Id })), '23503');
+    const s = await session(w);
+    expectCode(await refusal(() => line(w, s, { added_on_pairing_id: w.pairing2Id })), '23503');
+    expect(await refusal(() => line(w, s, { added_on_pairing_id: w.pairingId }))).toBeUndefined();
+    expect(await refusal(() => line(w, s, { added_on_pairing_id: null }))).toBeUndefined();
+    expectCode(await refusal(() => event(w, { pairing_id: w.pairing2Id })), '23503');
+    expect(await refusal(() => event(w))).toBeUndefined();
+  });
+
+  it("same-store integrity: a sales receipt's day close must be of its own store (23503, also on UPDATE)", async () => {
+    const w = await world('f6b');
+    const other = await world('f6b-other');
+    const foreignZ = await dayClose(other);
+    expectCode(await refusal(async () => receipt(w, await takeOut(w), { day_close_id: foreignZ })), '23503');
+    const store2Terminal = await ins('pos_terminals', { org_id: w.orgId, store_id: w.store2Id, terminal_no: 1, created_by: w.personId, created_at: T() });
+    const z2 = await dayClose(w, { store_id: w.store2Id, terminal_id: store2Terminal });
+    const { receiptId } = await sale(w);
+    expectCode(await refusal(() => upd('pos_sales_receipts', receiptId, { day_close_id: z2 })), '23503'); // same org, other store
+    const z = await dayClose(w);
+    await upd('pos_sales_receipts', receiptId, { day_close_id: z });
+  });
+
+  it('a sales receipt cannot be inserted for a VOIDED session (23001); open and paid sessions take it', async () => {
+    const w = await world('f6c');
+    const voided = await takeOut(w);
+    await upd('table_sessions', voided, { status: 'voided', voided_by: w.person2, voided_at_device: T(), void_reason: 'test' });
+    expectCode(await refusal(() => receipt(w, voided)), '23001');
+    expect(await count('pos_sales_receipts', `table_session_id = '${voided}'`)).toBe(0);
+    const paid = await takeOut(w);
+    await upd('table_sessions', paid, { status: 'paid' });
+    expect(await refusal(() => receipt(w, paid))).toBeUndefined();
+    const open = await takeOut(w);
+    expect(await refusal(() => receipt(w, open))).toBeUndefined();
   });
 });
 
@@ -991,7 +1280,7 @@ describe('R12 + test 10a - senior/PWD per diner (pos_sales_receipt_discounts, st
 describe('test 8 - RLS and the same-org FKs', () => {
   it('a second organisation sees none of these rows; the owning organisation sees every one', async () => {
     const a = await world('rls-a');
-    const b = await world('rls-b');
+    const b = await baseWorld('rls-b'); // baseWorld, not world(): world() itself inserts two stands and a terminal, which b would then rightly see
     await fillAll(a);
     for (const t of TABLES) {
       const own = await asApp(a.orgId, (tx) => tx.unsafe(`select count(*)::int n from ${t}`));

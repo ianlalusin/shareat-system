@@ -67,6 +67,9 @@ getCalendarWeatherIcon
 getGroupKey
 getKitchenTicketContribution
 getNonCentavoCount
+getPosStore
+getSalesReceipt
+getTableSession
 groupIntoFamilies
 hasFingerprint
 hasOtherActiveAdmin
@@ -91,10 +94,13 @@ listCategoryLives
 listClaimRequests
 listLiveForStore
 listLobbyEntries
+listOpenSessions
 listOrderMessages
 listPayRates
 listPunchesForDay
+listQuarantinedEvents
 listRoster
+listSessionLines
 listWriteOffsForCharge
 loadMod
 lobbyPartiesAhead
