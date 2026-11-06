@@ -262,7 +262,7 @@ Nothing historical moves: pre-2027 POS data is test data (row 379). Loyalty bala
 
 ---
 
-### 8a. ⚠️ OPEN — Lipa's December sales and the 2026 books (BOSS, 6 Nov; for Ian)
+### 8a. ✅ RULED (a) — Lipa's December sales and the 2026 books (Ian, 6 Nov; row 436)
 
 **The hole.** The 2026 books close on v1 (row 379, ADR-005). v1's ERP gets a store's sales by an HTTP pull,
 `GET {POS_API_URL}/api/external/sales?storeId&date` (`ERP-rebuild/src/lib/server/pos-api.ts:143-168`). POS v1 answers
@@ -280,7 +280,7 @@ sales reach v1 only if someone types them.
 | **(b) The manager types December day totals into v1** | Each morning the manager copies the printed Z slip into v1's sales form, and enters usage by hand | **None to build.** About 25 days × 5–10 minutes | Typing errors in the 2026 books, the problem row 270 was written to remove. v1's own check (₱1 tender sum) still catches some |
 | **(c) Lipa goes live after 1 Jan** (Mon 11 Jan, the planned fallback) | December stays on the trial app, which still writes v1's format | **None.** Frees the 21 Dec – 10 Jan freeze for testing and gives 5 more weeks, which could pull refunds and Convert into the first release | Gives up Ian's 7 Dec choice (row 431). The purge question disappears: POS rows in Postgres would start in 2027 and are kept |
 
-**Recommendation: (a).** Ian chose 7 Dec knowing the cost. (a) keeps that date and keeps the 2026 books
+**Ian chose (a), 6 Nov (row 436);** December stock usage is typed into v1; pre-2027 POS rows in Postgres are purged. **The recommendation was (a).** Ian chose 7 Dec knowing the cost. (a) keeps that date and keeps the 2026 books
 machine-fed, for two days of work, and the bridge dies on 31 Dec. Then the cutover class question answers itself: v1
 holds December's day totals, so purging the December rows in Postgres loses no booked figure (row 379 stands). If Ian
 will not allow any Firebase write, choose **(c)**, not (b): typed figures in a closing year are worse than a later go-live.
@@ -315,10 +315,10 @@ the switch, so it cannot add increments to the same document; (3) the writer ref
 | **T-525** | APIs: `/api/pos/events` (idempotent, quarantine, mismatch finding), `/api/pos/snapshot` (ETag, closed list per §5.3 / row 430), `/api/pos/state` (version, 304) | W2 · 16–19 Nov | M | Sonnet | T-524 |
 | **T-526** | `/pos` kiosk shell in `apps/erp`: tabs, status pills, T-464 sign-in wired, offline PIN verifier, route capabilities, census guards, Grill Night default on Kitchen (row 433) | W2 · 16–20 Nov | M | Sonnet | T-525 (stubs from 16 Nov) |
 | **T-527** | Screens: Orders (stands) + Seat a party + add items | W2–W3 · 18–24 Nov | M | Sonnet | T-526 |
-| **T-528** | Screens: Payment (cash, GCash/Maya "to check", **senior/PWD per diner with name and ID**, BOSS 6 Nov: legal, daily) + receipt print and reprint (Bluetooth plugin, browser fallback) | W3 · 23–26 Nov | M | Sonnet (money lane) | T-527 |
+| **T-528** | Screens: Payment (cash, GCash/Maya "to check", **senior/PWD per diner with name and ID**; share = own head + dishes ordered only for them, row 437) + receipt print and reprint (Bluetooth plugin, browser fallback) | W3 · 23–26 Nov | M | Sonnet (money lane) | T-527 |
 | **T-529** | Screens: Kitchen + Refills (polling, T-508 station routing, printed tickets offline) | W3 · 23–26 Nov | M | Sonnet | T-526 |
 | **T-530** | Offline: port `lib/terminal` + outbox to typed events, service-worker app-shell cache, offline printing, X-slip every 4 h, ₱50k warning, update gate | W2–W3 · 16–26 Nov | L | Sonnet | T-525 |
-| **T-531** | Day close: Z on the POS (row 390) → ERP sales day `source = pos_receipts` for the store; Lipa leaves the bridge and the v1 day feed from the switch date. Till opening and counting use the **existing ERP till screen** (row 319), no new tab | W3 · 23–27 Nov | M | Sonnet (money lane) | T-524 |
+| **T-531** | Day close: Z on the POS (row 390) → ERP sales day `source = pos_receipts` for the store; Lipa leaves the bridge and the v1 day feed from the switch date. **Plus the December day-total writer to v1's Firestore document, up to 31 Dec only, with its three guards (row 436)**. Till opening and counting use the **existing ERP till screen** (row 319), no new tab | W3 · 23–27 Nov | M | Sonnet (money lane) | T-524 |
 | **T-532** | APK shell (new app id, printer plugin, `server.url` + service worker) + CI job + emulator run (T-463 harness, no Firebase) + real Lipa tablet and printer check | W3 · 24–27 Nov | M | Sonnet + orchestrator | T-530 |
 | **T-533** | Soak #1 (Sat 28 Nov) and fixes, soak #2 if needed (latest start Wed 2 Dec), Lipa switch runbook, staff training sheet, go/no-go pack | W4 · 28 Nov – 4 Dec | M | Orchestrator + Sonnet | T-527 to T-532 |
 

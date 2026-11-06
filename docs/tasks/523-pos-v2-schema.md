@@ -145,7 +145,7 @@ Conventions for every table below (discovery 6 Nov, `packages/db/migrations/0232
   AND (resolved_at IS NULL) = (resolution IS NULL))`, `CHECK (resolved_at IS NULL OR status='quarantined')`. Trigger:
   every column frozen except the three resolution columns, NULL → value once. Column UPDATE grant on (`resolved_by`,
   `resolved_at`, `resolution`). Index `(store_id, status) WHERE status='quarantined'` (the manager's list).
-  **purge** (OPEN, see the end). *Payload rule:* raw facts only (§5.1). No computed business outcome is trusted from a payload; T-524
+  **purge** (row 436). *Payload rule:* raw facts only (§5.1). No computed business outcome is trusted from a payload; T-524
   recomputes.
 - **R11 — `sales_days` learns its third source.** Drop and re-add `sales_days_source_check` as `source in
   ('legacy_typed','pos_v1_day_feed','pos_receipts')` (the 0209 drop/re-add pattern). Add `pos_day_close_id uuid NULL`
@@ -161,7 +161,7 @@ Conventions for every table below (discovery 6 Nov, `packages/db/migrations/0232
   `vat_removed numeric(14,2) NOT NULL CHECK (>= 0)`, `discount_amount numeric(14,2) NOT NULL CHECK (> 0)`,
   `CHECK (vat_removed + discount_amount <= share_amount)`, `statutory_record_id uuid NOT NULL` →
   `statutory_discount_records(id)` (+ same-org twin), `UNIQUE (statutory_record_id)`. Append-only (`history_guard`).
-  **purge** (OPEN). ⛔ **The holder's name and ID number are NOT stored here** (row 353): they live only in
+  **purge** (row 436). ⛔ **The holder's name and ID number are NOT stored here** (row 353): they live only in
   `statutory_discount_records` (T-137), written by T-524 with `source = 'pos'` and `invoice_number` = the printed
   sales receipt number, in the same transaction as the sale. Offline, the tablet carries name and ID inside the
   `sale.completed` event payload; T-525 must keep payloads out of logs, and the payload of a quarantined event is
@@ -172,9 +172,9 @@ Conventions for every table below (discovery 6 Nov, `packages/db/migrations/0232
   rows. Replace it with `(org_id, store_id, business_date, invoice_number, id_number) WHERE voided_at IS NULL`: still
   one discount per card per bill (a PWD who is also a senior presents one card and claims one 20%). Update the schema
   comment in `statutory-discounts.ts` that says "one live row per invoice".
-  *Not decided here (a T-524 rule, flagged for Ian):* how a diner's share is measured when dishes are shared. PC-7's
-  recommendation was "their own package head plus dishes marked as theirs" (2024 DOJ opinion); the schema stores the
-  share as an amount, so either answer fits it.
+  *Share rule (row 437, Ian 6 Nov):* the diner's own package head plus dishes ordered only for them; shared dishes are
+  not discounted. Add `for_diner smallint NULL CHECK (between 1 and 200)` to `table_session_lines` (R5): the diner
+  number a dish was ordered for, NULL = shared. T-524 computes `share_amount` from it.
 
 ## Not in this slice (and where it goes)
 
@@ -222,10 +222,8 @@ DB); the full integration suite passes; CI is green on the PR; the auditor's fin
 applies to production **before** T-524 merges (it is inert: nothing reads these tables until the switch is on, row
 435). Report the real test output.
 
-## Open for BOSS (not blocking the build)
+## Ruled since the first draft (6 Nov)
 
-1. **Cutover class of the transactional tables (R4–R10, R12): OPEN** (BOSS, 6 Nov). Write them as `purge` with the
-   reason `"OPEN: pending the December-sales decision (BOSS/Ian), see docs/plans/pos-v2-design.md §8a"` so the guard
-   passes; the class is changed to the ruled value before the 1 Jan cutover. The hole: v1's ERP books 2026 and reads
-   Lipa's sales from POS Firebase; once Lipa leaves Firebase, its December sales exist only in these tables.
-2. **The senior/PWD share rule** (R12) is needed by T-524, not by this schema.
+- **Cutover class:** `purge` for R4–R10 and R12 (row 436). v1 receives Lipa's December day totals through T-531's
+  bridge, so no booked figure lives only in these tables. R1–R3 stay `keep`.
+- **Senior/PWD share:** row 437 (R12, and `for_diner` on R5).
