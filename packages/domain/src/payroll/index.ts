@@ -701,6 +701,8 @@ export async function postPayRun(
       })
     ).id;
 
+    // T-521: what this run has already recovered from each agreement, so its per-payroll limit holds across one person's payslips.
+    const agreementTakenInRun = new Map<string, Money>();
     for (const slip of preview.slips) {
       const payslipId = (
         await payrollRepo.insertPayslip(trx, {
@@ -801,7 +803,7 @@ export async function postPayRun(
       });
       await payrollRepo.setPayslipEntry(trx, payslipId, posted.entryId);
       // T-519 R6: spend the recovery against the person's agreements and complete any that are now paid, in this transaction.
-      await applyDeductionRecovery(trx, actor.orgId, slip.personId, posted.entryId, slip.advanceRecovered, true);
+      await applyDeductionRecovery(trx, actor.orgId, slip.personId, posted.entryId, slip.advanceRecovered, agreementTakenInRun);
 
       // ⭐ The freeze. `attendance_days.frozen_by_pay_run_id` has waited for this since T-157, and
       // the guard that reads it is already live in `adjudicate.ts` and `adjustments.ts`.

@@ -65,10 +65,11 @@ export async function agreedRecoverable(tx: Tx, orgId: string, personId: string,
 /**
  * R6: after a payout's journal entry is posted, spend `recovered` against the person's active agreements (oldest first), record how much each
  * covered, and complete any that are now paid in full. Same transaction as the posting.
- * `perRunLimit`: a PAYROLL run gives each agreement at most min(its room, its per-payroll limit); 13th month and separation pass false (agreed unpaid only). Refuses if the agreements no longer cover the figure
- * (another post got there first): the whole posting rolls back.
+ * `runTaken`: a PAYROLL run passes ONE map for the whole run (T-521). Each agreement then gets at most min(its room, its per-payroll limit minus what the run
+ * already took from it, the figure left), however many payslips the person has in the run; the map is updated. 13th month and separation omit it (agreed unpaid only).
+ * Refuses if the agreements no longer cover the figure (another post got there first): the whole posting rolls back.
  */
-export async function applyDeductionRecovery(tx: Tx, orgId: string, personId: string, entryId: string, recovered: Money, perRunLimit = false): Promise<void> {
+export async function applyDeductionRecovery(tx: Tx, orgId: string, personId: string, entryId: string, recovered: Money, runTaken?: Map<string, Money>): Promise<void> {
   if (compare(recovered, ZERO) <= 0) return;
   const active = await deductionAgreementsRepo.listActiveForPerson(tx, orgId, personId, true);
   let left = recovered;
@@ -77,9 +78,11 @@ export async function applyDeductionRecovery(tx: Tx, orgId: string, personId: st
     if (!a.chargeLive) continue;
     const room = subtract(money(a.amount), money(a.recovered));
     if (compare(room, ZERO) <= 0) continue;
-    const take = minMoney(perRunLimit ? minMoney(room, money(a.perPayrollLimit)) : room, left);
+    const limitLeft = runTaken ? subtract(money(a.perPayrollLimit), runTaken.get(a.id) ?? ZERO) : room;
+    const take = minMoney(minMoney(room, compare(limitLeft, ZERO) > 0 ? limitLeft : ZERO), left);
     if (compare(take, ZERO) <= 0) continue;
     await deductionAgreementsRepo.insertRecovery(tx, { orgId, agreementId: a.id, journalEntryId: entryId, amount: take });
+    runTaken?.set(a.id, add(runTaken.get(a.id) ?? ZERO, take));
     left = subtract(left, take);
   }
   if (compare(left, ZERO) > 0) {
