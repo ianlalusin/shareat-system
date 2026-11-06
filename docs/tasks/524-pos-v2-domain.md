@@ -214,3 +214,34 @@ in CI on the PR; the auditor's findings are closed. Report the real output.
    inside the senior/PWD share, because the statute requires it on the receipt; it posts nothing and computes no output
    VAT (row 279). If Ian wants the VATable / VAT / VAT-exempt block on the receipt (the mock shows it), T-528 derives it
    from these same figures for display only.
+
+## Rulings on the tester's questions (Opus planner, 6 Nov; append to docs/tasks/524-pos-v2-domain.md; the builder follows these)
+
+1. **Heads after a package line is served (R5).** A heads **increase** adds a new package line for the difference (the
+   served line stays). A heads **decrease** is refused while any package line of the session is served ("The package
+   was already served. Void the stand or keep the heads."). While nothing is served, the line is re-made as R5 says.
+2. **Bundle extra heads (R4):** the second line is `qty = heads − N` at `unit_price = extraHeadAmount` (typo in R4).
+3. **Package input qty = heads.** The bundle's second line id is derived, not sent: uuidv5(namespace = the first line's
+   id, name = 'extra-heads'), so a replay makes the same id.
+4. **Who is `voided_by` (R8):** the approver (the manager, or the actor when the actor holds `approve_pos_correction`).
+   The audit row's actor is the cashier who asked; `after.approvedBy` names the approver.
+5. **Tenders (R9):** v2's `tenders.kind` is only `cash` or `wallet` (T-375). There is no card tender in release 1; QR Ph
+   and bank transfer are `wallet`-kind tenders at Lipa (row 284). So: every `wallet` tender needs a reference, online
+   and offline; offline a `wallet` tender is `toCheck = true`; online it is `false`. Drop the card case (no `it.todo`).
+6. **`applyPresetToAllLines`** takes `applyId` (one device uuid). Each discount's id = uuidv5(namespace = applyId,
+   name = lineId). Replays are idempotent.
+7. **`removeLineDiscount`** takes `removedAtDevice`.
+8. **`currentBusinessDate` with no Z yet:** the Manila date of (the given time − 4 hours), i.e. a business day that
+   starts at 04:00 (row 390's first-day rule, generalised). Test it.
+9. **Option price deltas:** each added line may carry `optionValueIds: uuid[]`; `unit_price` = the variant's store
+   `amount` + Σ the chosen values' store `priceDelta`, each value checked against the item's option groups.
+10. **Senior/PWD on a dish line:** allowed on any `item` line for the units the cashier marks with a `dinerNo` (the
+    cashier attests the dish is only for that diner; it is audited). On package lines, at most **one** senior/PWD unit
+    per `dinerNo`, and the senior/PWD units on package lines never exceed the billed heads.
+11. **Rates while S5c is not merged:** keep the injectable `deps.readRates`. The default reader reads
+    `business_rule_values` through S5c's repo, coded against S5c's spec and branch; T-524 merges only after 0239 (BOSS),
+    so the default is live when it ships. The null-result refusal stays.
+
+**BOSS amendment to ruling 8 (6 Nov, Ian's standing rule of 5 Nov: no hard-coded business values):** the 04:00
+day start is a business value, not a constant. Read it from `business_rule_values` key `pos.business_day_start_hour`
+(seeded 4 for Lipa's org) through the same injectable rule reader as the VAT and SC/PWD rates; the test injects 4.
