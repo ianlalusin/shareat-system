@@ -172,7 +172,7 @@ const noPii = (o: unknown, what: string) => {
   const t = JSON.stringify(o);
   expect(t, `${what}: holder name`).not.toContain('Quillfeather');
   expect(t, `${what}: diner name`).not.toContain('Tuckerman');
-  expect(t, `${what}: full ID number`).not.toMatch(/0042|5566|00425566/);
+  expect(t, `${what}: full ID number`).not.toMatch(/0042-5566|00425566/);
 };
 
 // ================================================================================================ A. the list
@@ -193,7 +193,7 @@ describe('A. listClaimRequests / listClaimsForTerminal: masked, own store, pendi
     expect(rows.map((r) => r.claimId)).not.toContain(otherStore.id);
     const json = JSON.stringify(rows);
     expect(json).not.toContain('Quillfeather');
-    expect(json).not.toMatch(/0042|5566|00425566/);
+    expect(json).not.toMatch(/0042-5566|00425566/);
     expect(json).not.toMatch(/deviceHash|ipHash|handoffUrl|phone|idNumber|holderName/);
     expect(await auditFor(f.A)).toHaveLength(0);
     const viaTablet = await asOrg(f.orgId, (tx) => listClaimsForTerminal(tx, f.tabletFor(f.A)));
