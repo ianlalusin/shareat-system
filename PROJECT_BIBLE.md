@@ -65,35 +65,35 @@
 - `1233–1267` 10. Phase plan
 - `1268–1284` 11. Migration & ETL rules
 - `1285–1349` 12. Inherited landmines — do not repeat these
-- `1350–1773` 13. Decision log
-- `1774–1793` 14. Amendment protocol
-- `1794–1798` 15. Engineering standards — the industry practices this project follows
-  - `1799–1804` 15.1 Build order: walking skeleton first
-  - `1805–1816` 15.2 Golden-master testing — the most important practice here
-  - `1817–1825` 15.3 Strangler Fig, not big-bang cutover
-  - `1826–1830` 15.4 No dual-write
-  - `1831–1839` 15.5 Expand/contract migrations
-  - `1840–1848` 15.6 Observability from day zero, not later
-  - `1849–1853` 15.7 CI gates
-  - `1854–1858` 15.8 Backups and a tested restore
-  - `1859–1863` 15.9 Twelve-Factor config
-  - `1864–1871` 15.10 Append-only ledgers — but not event sourcing
-  - `1872–1876` 15.11 Defence in depth
-  - `1877–1905` 15.12 Skills are lenses, not assurance
-  - `1906–1912` 15.13 Reconciliation is a permanent feature
-- `1913–1917` 16. The accounting spine
-  - `1918–1949` 16.0 What we are actually fixing — the diagnosis
-  - `1950–1993` 16.1 The ten invariants — non-negotiable
-  - `1994–2008` 16.2 The oracle: how "correct" is tested
-  - `2009–2030` 16.3 The model — header + lines, not legs
-  - `2031–2050` 16.4 Deliberately simpler than ERPNext
-  - `2051–2120` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2121–2145` 16.6 What v1 already gets right — preserve the intent
-  - `2146–2167` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2168–2182` 16.8 What v1's accounting already gets right
-  - `2183–2226` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2227–2277` 16.10 Posting patterns — one canonical pattern per business event
-  - `2278–2310` 16.11 Inventory's accounting integration
+- `1350–1778` 13. Decision log
+- `1779–1798` 14. Amendment protocol
+- `1799–1803` 15. Engineering standards — the industry practices this project follows
+  - `1804–1809` 15.1 Build order: walking skeleton first
+  - `1810–1821` 15.2 Golden-master testing — the most important practice here
+  - `1822–1830` 15.3 Strangler Fig, not big-bang cutover
+  - `1831–1835` 15.4 No dual-write
+  - `1836–1844` 15.5 Expand/contract migrations
+  - `1845–1853` 15.6 Observability from day zero, not later
+  - `1854–1858` 15.7 CI gates
+  - `1859–1863` 15.8 Backups and a tested restore
+  - `1864–1868` 15.9 Twelve-Factor config
+  - `1869–1876` 15.10 Append-only ledgers — but not event sourcing
+  - `1877–1881` 15.11 Defence in depth
+  - `1882–1910` 15.12 Skills are lenses, not assurance
+  - `1911–1917` 15.13 Reconciliation is a permanent feature
+- `1918–1922` 16. The accounting spine
+  - `1923–1954` 16.0 What we are actually fixing — the diagnosis
+  - `1955–1998` 16.1 The ten invariants — non-negotiable
+  - `1999–2013` 16.2 The oracle: how "correct" is tested
+  - `2014–2035` 16.3 The model — header + lines, not legs
+  - `2036–2055` 16.4 Deliberately simpler than ERPNext
+  - `2056–2125` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2126–2150` 16.6 What v1 already gets right — preserve the intent
+  - `2151–2172` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2173–2187` 16.8 What v1's accounting already gets right
+  - `2188–2231` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2232–2282` 16.10 Posting patterns — one canonical pattern per business event
+  - `2283–2315` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1770,6 +1770,11 @@ just a patch.**
 | 438 | 2026-11-06 | ⭐ **THE POS v2 CASHIER TAKES A SPLIT PAYMENT LIKE v1: SEVERAL TENDERS ON ONE BILL (E.G. GCASH + CASH), IN RELEASE 1. ONE TABLE = ONE SALES RECEIPT; v1 HAS NO PER-PERSON SPLIT INTO SEPARATE RECEIPTS AND NO PAY-LATER, SO NEITHER IS BUILT.** Ian, 2026-11-06: *"cashier payment screen must process split payment like v1"*. **v1's goal (§1.2d):** the diner pays with whatever mix they carry, the cashier sees the balance shrink with each tender, change comes only from cash, and the drawer and wallet totals stay right. **v1's method** (`POS/src/components/cashier/payment-modal.tsx:271-279, 720-737`; `lib/checkout/receipt-math.ts:59-75`; `lib/server/pos-commands/checkout.ts:111`): a "Split Payment" button adds a row with the remaining balance pre-filled; a reference is required where the method has one; overpaying is allowed only if cash covers the change; at most 20 tenders; the receipt stores a map keyed by method NAME (same names merged) and prints one line per tender, then CHANGE; references are not printed. **v2 keeps the behaviour and beats the method:** one `pos_sales_receipt_payments` row per tender keyed by `tender_id` (T-523 R8), never by name; exact centavos (no 1-centavo tolerance needed); each tender's reference is stored on its row and **printed** on the receipt so the wallet can be matched; offline, an e-wallet tender is "to check" (A3); at most 20 tenders per sales receipt (T-524 rule). Mock: `docs/plans/pos-v2-design/payment.png`. | A split was the one part of v1's payment screen release 1 would otherwise lose; the T-523 schema already supports it, so it costs screen work only (T-528) | Yes |
 | 439 | 2026-11-06 | ⭐ **THE POS v2 BILL AND SALES RECEIPT ARE ITEMIZED, ONE LINE PER PACKAGE AND PER À LA CARTE ITEM (QTY × UNIT PRICE = GROSS, ITS DISCOUNTS, LINE NET), AND A DISCOUNT ATTACHES TO A LINE AND COVERS SOME OR ALL OF ITS UNITS, AS IN v1. SENIOR/PWD USES THE SAME PER-LINE MODEL: THE DINER'S OWN HEAD IS ONE UNIT OF THE PACKAGE LINE AND A DISH ORDERED ONLY FOR THEM IS UNITS OF ITS LINE (ROW 437). IN RELEASE 1.** Ian, 2026-11-06: *"wont ala carte be itemized in billing? i suggest per item line with discount like v1 does"*. **v1's goal (§1.2d):** a discount, a free item or a senior's share is visible on the exact dish it applies to. **v1's method** (`POS/src/lib/types.ts:705-748`, `lib/tax.ts:95-160`, `components/cashier/edit-billable-item-dialog.tsx:409-427`): a `lineAdjustments` map per bill line (preset or custom, % or ₱ per unit, qty covered, oldest first); SC/PWD only as a whole-bill discount; no role check on a line discount; the print shows qty, item, gross and an unnamed "Discount (Nx)". **v2 keeps the behaviour and beats the method:** discount presets become ERP master data (`pos_discount_presets`, T-523 R13; Lipa's six are loaded from v1, the editing screen is T-535); senior/PWD is per line and per diner, with one statutory record per diner; a unit covered by senior/PWD carries no other discount (the statute gives the 20%, not 20% plus a promo; v1 stacked them); the receipt prints the unit price, each discount's name, and the line net. **Open for Ian:** who may give a discount (recommended: a preset by the cashier, a custom amount only with a manager PIN) and whether a whole-bill discount is needed in release 1 (recommended: no, a table promo is one preset applied to every line). Mock: `docs/plans/pos-v2-design/payment.png`. | Release 1 had cut preset discounts (row 431's scope); Ian's request restores them in v1's per-line form, which also carries row 437 with no second mechanism | Yes |
 | 440 | 2026-11-06 | **ANY CASHIER MAY GIVE ANY LINE DISCOUNT, A PRESET OR A TYPED ₱ OR %, WITH NO MANAGER PIN (AS v1); EVERY LINE DISCOUNT RECORDS WHO APPLIED IT, WHEN, AND (IF REMOVED) WHO REMOVED IT. NO WHOLE-BILL DISCOUNT IN RELEASE 1: A TABLE PROMO IS ONE PRESET APPLIED TO EVERY LINE WITH AN "APPLY TO ALL" TAP.** Ian, 2026-11-06, answering the two open items of row 439; (1) is **against the recommendation** (a manager PIN for a typed discount). Audit is the control: `table_session_line_discounts.applied_by` / `removed_by` and the frozen receipt copy (T-523 R13); a report of typed discounts by cashier is a later slice. `approved_by` stays in the schema, unused, so a PIN can be switched on later without a migration. | Matches how Lipa works today; the audit trail replaces the PIN | Yes — a PIN can be required later |
+| 441 | 2026-11-03 | **MENU DAYPARTS ARE BUILT NOW, AND A PACKAGE SOLD AT DIFFERENT PRICES AT LUNCH AND DINNER IS ONE PACKAGE WITH TWO DAYPART OFFERS, NOT TWO PACKAGES (v1'S "LT-" AND "DT-" COPIES).** Ian, 2026-11-03: *"yes add daypart NOW"*, then chose one package with two daypart offers. **v1's goal (§1.2d):** a cashier can only start or change to a package whose time window is open, at the price of that window. **Design:** `menu_dayparts` (store, name, days, start, end in the store's own timezone; overnight windows belong to the day they start; start inclusive, end exclusive) and `menu_offers.daypart_id` (null = all day); a variant may not hold an all-day and a dayparted live offer together, and windows may not overlap; an invalid state means NOT OFFERED, never a fallback price (migration 0233, T-510 S1a, PR #148). A table started at 16:55 keeps its lunch price (R5). The business day (starts 05:00) and the dayparts (price) are separate things (R7). Spec `docs/tasks/510-menu-dayparts.md`. | One item, one recipe, one report line, and a price change is one new offer; v1's two copies drifted apart | Yes, offers are append-only rows; a daypart can be retired |
+| 442 | 2026-11-05 | **THE FIVE LUNCH/DINNER PACKAGE PAIRS ARE CONFIRMED, WHERE LUNCH AND DINNER COST THE SAME THE PACKAGE IS ONE ALL-DAY OFFER, DAVAO "PORK PREMIUM" IS LUNCH-ONLY, THE FOUR DISABLED PACKAGES ARE NOT LOADED, AND A SUPER ADMIN CAN CHANGE ANY PAIRING AFTERWARDS IN THE ERP.** Ian, 2026-11-05, answering the pairing table: *"1 yes but i want to have the ability to modify it as super admin / 2 a / 3 a / 4 yes"*. (1) Pairs: Pork and Chicken, Pork and Beef, Chicken and Beef, Triple Feast, Seafood Cruise (v1's `DT_Pork and Beef` is a typo of `DT-Pork and Beef`). (2) One all-day offer where lunch = dinner: Pork and Chicken at Lipa and Malvar, all five pairs at Davao. (3) Davao Pork Premium (258): one package in the lunch window (11:00-17:00), no dinner offer. (4) Valentine Promo, Valentine Promo 2 (Lipa, Malvar), Davao "Beef" and "Pork Regular" are not loaded. Bundles (Barkada, Squad, VIP, VIP 2, VIP PARTY) have no window in v1 and load all-day. **The loading itself (S5) is deferred, see row 445.** | A price that is the same twice is one number to change later; the signed table avoids guessing from inconsistent v1 names | Yes, the ERP screens re-link and re-price without a migration |
+| 443 | 2026-11-05 | **A STORE'S LUNCH AND DINNER HOURS ARE EDITED BY ADMINS AND BY THAT STORE'S OWN MANAGERS (`manage_store_settings`); ONLY THE PAIRING OF AN OFFER TO A DAYPART IS SUPER ADMIN (`pair_menu_dayparts`); MANAGERS STILL RE-PRICE AN EXISTING WINDOW (`set_menu_price`, row 316). THE HOURS DIFFER PER STORE.** Ian, 2026-11-05, answering who edits a store's hours: *"a"*. Windows: Lipa 08:00-17:00 / 17:00-08:00; Malvar 01:00-17:00 / 17:00-01:00; Davao 11:00-17:00 / 17:00-23:00; all seven days. `pair_menu_dayparts` covers creating a pairing, re-linking an offer, switching to all-day, and withdrawing a daypart slot; it is granted to the owner (migration 0234, T-510 S2, PR #153). Screens: `/admin/stores/[id]` (admins) and `/menu/hours` (managers), plus the When select and per-window prices on `/menu/prices` (S3, PR #158). | Hours are a store-level business setting a manager knows best; pairing changes the menu's structure and is the owner's | Yes, a capability grant |
+| 444 | 2026-11-05 | ⭐ **NO BUSINESS SETTING IS HARD-CODED ANYWHERE IN THE ERP: EVERY BUSINESS VALUE (A PRICE PAIRING, A TIME WINDOW, A RATE, A LIMIT, A TOLERANCE) LIVES IN THE DATABASE WITH AN ERP SCREEN TO CHANGE IT, THE RIGHT CAPABILITY, AND AN AUDIT TRAIL. CODE CONSTANTS ARE ONLY FILE-FORMAT FACTS AND VALUES FIXED BY LAW, AND EVEN A LEGAL RATE GOES IN A SETTINGS TABLE WITH AN EFFECTIVE DATE IF IT CAN CHANGE.** Ian, 2026-11-05: *"again nothing in this erp system like this business settings must not be hard coded, must always have a ui door to manage them"* ("again": 2026-11-03, about kitchen stations, *"there must be a ui door on erp for this"*). Every spec review asks which values are business settings; a spec or PR that hard-codes one is rejected. Structure is super admin, a store's own prices and hours are its manager (rows 316, 443). The generic settings table is T-511 S5c. | The owner runs the business from the ERP; a value only a developer can change blocks him and drifts from reality | Yes, but it is a standing rule, not a feature |
+| 445 | 2026-11-06 | **THE TABLET RESOLVES THE LUNCH OR DINNER PRICE ITSELF, EVEN OFFLINE; REFILLS ARE NOT TIED TO HOURS; AND THE v1 MENU IMPORT AND T-510 S5 (LOADING THE HOURS AND PAIRINGS) COME AFTER THE OPEN WORKTREES ARE CLEAN, AS THEIR OWN TASK.** Ian's standing order (2026-11-05, via BOSS): finish every open worktree, new task only when all is clean. (1) **Projection:** `StoreMenuV2` is extended additively (no V3): `nextChangeAt` includes the next hours boundary and a closed package shows `outside_hours` with the time it opens (S4, PR #163); the menu carries `hours` and per-variant `slots` and the tablet picks the open window from its cached menu with a pure copy of the window logic, kept honest by a parity test, so it flips at 17:00 with no network (S4b, PR #167). (2) **Refills and flavours are not window-gated** (v1 never read refill windows, and a running table keeps refilling after its window closes). (3) **Defect found:** the APK's menu GET was blocked by CORS (T-508 S5); fixed in S4b. (4) **Deferred:** no v1 menu loader exists (spec 401 defers the import), so the menu import is its own task after cleanup, and T-510 S5 only attaches dayparts and pairings to it (rows 441-443 stay valid). The tablet test at Lipa is still owed; Lipa's 7 December launch stays on the v1 menu (T-508 R9 blocks any store from the ERP menu until then). | A phone or tablet with a bad signal must still charge the right price; importing the whole v1 menu is a larger decision than attaching hours | Yes |
 
 ## 14. Amendment protocol
 
