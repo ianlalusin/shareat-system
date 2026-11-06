@@ -10,6 +10,8 @@
 | **Does not decide** | Receipt, order and menu table columns (a P1/P2 task spec, written in plan mode) · the LAN hub (reconsidered at P3 only, §5) · POS BIR registration (open, §8) |
 | **Amends** | ADR-003 "never two at once" (POS + CUSTOMER flip together) · ADR-005's sales bridge ("POSv2 is far out") · bible row 77 (24 h), §5.3, §5.4 rule 1, §8 ports, §1.2b (narrow). ⚠️ ADR-003 and ADR-005 are not edited in place by this ADR; the bible rows carry the supersession |
 
+> **Amended 2026-11-06** (end of file, Amendment 2): POS v2 moves inside `apps/erp` at `/pos`, with no Firebase and no separate POS server; Lipa goes live on it 7 Dec 2026; A8 is closed. Bible rows 430–434.
+>
 > **Amended 2026-10-15** (end of file): Ian's 13 Oct posv2 rulings and 15 Oct rulings. Where the amendment and the
 > sections above disagree, the amendment wins. The accepted text above is kept as it was.
 
@@ -244,3 +246,33 @@ Customer v2 sends **no push**: on-page notices only (A6).
 | Q2 | **First-store go-live date** | **(a) Monday 11 January 2027**: one clean ERP week after the 1 Jan cutover; Lipa staff trained 4-8 Jan. Moves to 1 Feb 2027 if the soak fails twice or the mock-ups are not approved by 27 Nov. (b) 1 Jan | The 9 Nov - 18 Dec build window is unaffected |
 | Q3 | **Freeze new features in POS v1 from early November?** (bug fixes allowed) | **(a) yes**: v2 copies v1 once at `e26d0c1`; every later v1 fix is listed and ported | Each later v1 feature is built twice |
 | Q4 | **Fix the unsafe void in live POS v1 now?** | **(a) yes**: connect v1's already-written transactional void. Needs Ian's exception (this project never edits v1) and whoever builds the v1 APK | The double-void risk stays until each store switches (Lipa to Davao) |
+
+---
+
+## Amendment 2 — 2026-11-06: the POS is a module of the ERP app (bible rows 430–434)
+
+| | |
+|---|---|
+| **Status** | ✅ ACCEPTED: Ian's answers of 2026-11-06 to `docs/plans/pos-v2-design.md` §11 |
+| **Design** | `docs/plans/pos-v2-design.md` (architecture §5, offline §5.4, screens §7, switch-over §8, slices §9) |
+| **Supersedes in this ADR** | A1.1 (POS v2 lives in `apps/pos`) · A1.6 (POS server routes as a second service) · A2's step timing *for the POS* · §5's "carrier: Firestore during P0–P1" · A8 (closed) |
+
+1. **Where the POS lives (A1.1, A1.6 → row 430).** POS v2 is a full-screen mode inside `apps/erp`, route `/pos` (the
+   `/clock` kiosk mechanism). There is no `apps/pos` release beyond the Lipa trial, and no `shareat-pos.service` or
+   `pos2.shareat.net` once each store switches. The APK is a thin Capacitor shell that opens `/pos`, with a service
+   worker for cold starts offline and the Bluetooth printer plugin. A1.2–A1.5 (Android APK, new app id, keystore
+   secret held by Ian, CI builds only) still hold. Port 9009 is no longer needed by the POS once `apps/pos` retires.
+2. **The carrier (§5 → row 430).** The device outbox posts typed, append-only events keyed `(device_id, seq)` to
+   authenticated `/api/pos/events`. Reads come from a versioned snapshot (`/api/pos/snapshot`, a closed list: menu
+   with dayparts, stands, tenders, discounts, store POS settings, the active staff list; PIN verifiers are made on the device at online sign-in, §5 O5). Other devices poll
+   `/api/pos/state`. The server recomputes every bill and is the only writer of truth. §5's offline scope, the 24 h
+   promise and the soak gate are unchanged.
+3. **Firebase exit timing (A2, POS part).** The POS leaves Firebase **in one switch per store, at a business-day
+   boundary** (design §8). Sign-in, sales and tables move together. This is the default the orchestrator took from the
+   design's recommendation; Ian is told. The Firebase project still closes 90 days after the last store, and **not
+   before the attendance clock has also moved off Firestore** (row 280's direction; its own task).
+4. **Lipa (A7 → row 431).** Lipa goes live on the new POS on **Mon 7 Dec 2026**. The 24 h two-tablet soak is the
+   go-live gate and must start by Wed 2 Dec. The first release is scoped down (design §9); refunds, Convert, the
+   wrong-tender correction, senior/PWD per diner, online orders and loyalty (row 432) follow.
+5. **A8 is closed (row 434).** Q1 → rows 348 and 390 · Q2 → rows 378, 408, 431 · Q3 → row 348 · Q4 → row 348.
+

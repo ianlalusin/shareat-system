@@ -17,8 +17,8 @@
 | 1 | **All four reference repos are READ-ONLY** — `ERP-rebuild`, `POS`, `CUSTOMER`, `Shareat Website`. No edits, no branches, no `git`. **A defect found there is logged and fixed *here*, never patched at the source** | §2.1 · row 80 |
 | 2 | **`ERP-rebuild` is the OLD system despite its name.** This project is `webapps/shareat-system` | §2.1 |
 | 3 | **Never touch `webapps/inactive projects`** — exclude it from every recursive search | §2.2 |
-| 4 | **Postgres is the sole system of record.** No entity's authoritative state lives in Firestore | §2.3 |
-| 5 | **Firestore is one-way except the inbox lane** | §2.4 · §5 |
+| 4 | **Postgres is the sole system of record.** No entity's authoritative state lives on a device or in Firestore | §2.3 |
+| 5 | **Device-held data is one-way except the outbox.** The POS tablet keeps a server-written snapshot and an append-only outbox posted to `/api/pos/events`; the clock still uses Firestore under the same rule until its move | §2.4 · §5 · rows 280, 430 |
 | 6 | **No money in floats.** `numeric` in the DB, integer centavos in code | §2.5 · §6 |
 | 7 | **No client-side-only authorization.** Every gate exists server-side | §2.6 · §7 |
 | 8 | **No implementation without a written task spec** in `docs/tasks/` | §2.7 · §3 |
