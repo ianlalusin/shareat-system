@@ -511,7 +511,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1509 -> 1518, T-519 S2, 6 Nov 2026, BOSS approved: +9 controls on the staff page deduction-agreements section (record form, scan upload, cancel with reason, history), re-measured after the rebase on e3d048c.
     // 1518 -> 1520, T-519 S2 review fixes, 6 Nov 2026, NEEDS BOSS APPROVAL: +2 controls in the agreements section (the View signed scan link, the Cancel agreement reveal), both size-compliant, re-measured by runCensus().
     // 1520 -> 1532, T-511 S5b rebased on 79966e8, 6 Nov 2026, BOSS approved: +12 controls on /channel-settlements/review (filters, buttons, forms, Previous/Next page), measured 1495 -> 1507 on its own base.
-    expect(results.length).toBe(1532);
+    // 1532 -> 1533, T-537 (Freebuff work order), 7 Nov 2026, BOSS approved: +1 compliant control, the "Skip to content" link in AppShell.
+    expect(results.length).toBe(1533);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
