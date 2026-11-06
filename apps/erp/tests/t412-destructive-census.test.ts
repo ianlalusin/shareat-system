@@ -347,6 +347,7 @@ describe('DEF-654: no destructive SERVER ACTION hides behind a non-danger button
   const EXEMPT: Record<string, string> = {
     'app/menu/prices/actions.ts#cancelScheduledPriceAction': 'clears a FUTURE menu price offer; no ledger, no stock',
     'app/menu/prices/actions.ts#cancelScheduledOptionPriceAction': 'clears a FUTURE option price offer; no ledger, no stock',
+    'app/staff/actions.ts#cancelDeductionAgreementAction': 'T-519: stops FUTURE payroll recovery of a charge (the charge stays owed on 1230); nothing already posted is reversed, and it is re-recordable',
     'app/staff/actions.ts#reopenPinSignInAction': 'lifts a staff sign-in lock; not a money record',
     'app/attendance/leave/actions.ts#cancelLeaveAction': 'T-436: withdraws a pending leave request; nothing is paid or posted yet',
     'app/attendance/leave/actions.ts#voidLeaveAction': 'T-436: voids a leave day; a day frozen to a pay run is refused (LEAVE_DAY_PAID), so no posted money moves',

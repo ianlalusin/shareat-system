@@ -8,7 +8,7 @@
  * reads per page load. **Postgres does not have that problem, so the landmine is not ported.**
  */
 import { toBusinessDate } from '@shareat/core/datetime';
-import { payrollRepo, type PayRunRow, type PayslipRow } from '@shareat/db';
+import { deductionAgreementsRepo, payrollRepo, type PayRunRow, type PayslipRow } from '@shareat/db';
 import { derivePeriods, previewPayRun, type PayPeriod, type PayRunPreview } from '@shareat/domain';
 import { authorize, type Actor } from '@shareat/auth';
 import { withOrgPrincipal } from '../expenses/lib';
@@ -58,6 +58,22 @@ export async function slipsFor(actor: Actor, runId: string): Promise<PayslipRow[
     if (!run) return [];
     await authorize(tx, actor, 'run_payroll', { storeId: run.storeId });
     return payrollRepo.listPayslips(tx, runId);
+  });
+}
+
+/**
+ * T-519 R7: what each payslip of a run repaid under a signed agreement, keyed by the slip's journal entry, so the payslip can say
+ * "Charge repayment (agreement of <date>)". Authorizes `run_payroll` at the run's own store.
+ */
+export async function chargeRepaymentsFor(actor: Actor, runId: string): Promise<Record<string, { amount: string; signedOn: string }[]>> {
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    const run = await payrollRepo.getPayRun(tx, actor.orgId, runId);
+    if (!run) return {};
+    await authorize(tx, actor, 'run_payroll', { storeId: run.storeId });
+    const ids = (await payrollRepo.listPayslips(tx, runId)).flatMap((s) => (s.journalEntryId ? [s.journalEntryId] : []));
+    const out: Record<string, { amount: string; signedOn: string }[]> = {};
+    for (const r of await deductionAgreementsRepo.recoveriesForEntries(tx, actor.orgId, ids)) (out[r.journalEntryId] ??= []).push({ amount: r.amount, signedOn: r.signedOn });
+    return out;
   });
 }
 

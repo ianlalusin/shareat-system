@@ -345,6 +345,18 @@ describe('M16 - the capability that governs the purpose, at the store', () => {
   });
 });
 
+describe('T-519 S2 review - staff_deduction_agreement (the signed-agreement scan) takes the run_payroll gate', () => {
+  it('an authorised admin may upload the scan (PDF), and staff without run_payroll get 403 with nothing stored', async () => {
+    const f = await fixture('agreement');
+    const ok = await post(f, f.superAdmin, { purpose: 'staff_deduction_agreement', type: 'application/pdf', body: pdf() });
+    expect(ok.status).toBe(200);
+    expect(await rowsFor(f.orgId)).toBe(1);
+    const no = await post(f, f.staff, { purpose: 'staff_deduction_agreement', type: 'application/pdf', body: pdf() });
+    expect(no.status).toBe(403);
+    expect(await rowsFor(f.orgId)).toBe(1);
+  });
+});
+
 describe('A5/M17/M29 - type and size are decided BEFORE the body is read', () => {
   it.each([
     ['text/plain', 'a type not in PURPOSE_LIMITS'],

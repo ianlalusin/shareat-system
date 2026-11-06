@@ -106,7 +106,7 @@ describe('M6 - the shape', () => {
 describe('M7 - GUARDED_PURPOSES', () => {
   it('is exactly leave_document and staff_signature (row 353)', async () => {
     const { GUARDED_PURPOSES } = await loadRules();
-    expect([...GUARDED_PURPOSES].sort()).toEqual(['leave_document', 'staff_signature']);
+    expect([...GUARDED_PURPOSES].sort()).toEqual(['leave_document', 'staff_deduction_agreement', 'staff_signature']); // T-519 S2 review: the signed scan is guarded
   });
 });
 
