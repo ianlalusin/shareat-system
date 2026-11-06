@@ -38,3 +38,35 @@ export function sampleMenu(): StoreMenuV2 {
     notOnPos: [{ itemId: 'x-unrouted', name: 'Unrouted thing', reason: 'no_station' }],
   } as StoreMenuV2;
 }
+
+// ---- T-510 S4b: a dayparted menu. `channels` says what the SERVER thought was live at its own clock; the device must price from the slots + ITS clock. ----
+const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
+export const DAYPART_HOURS = {
+  timeZone: 'Asia/Manila',
+  dayparts: [
+    { id: 'D', days: ALL_DAYS, start: '17:00', end: '08:00' },
+    { id: 'L', days: ALL_DAYS, start: '08:00', end: '17:00' },
+    { id: 'X', days: ALL_DAYS, start: '10:00', end: '14:00' }, // overlaps L: two slots hold at noon (a data fault the device must not guess through)
+  ],
+};
+const orderable = (amount: string | null, over: Record<string, unknown> = {}) => ({ orderable: true as const, amount, bundleHeads: null, extraHeadAmount: null, ...over });
+const slot = (daypartId: string, store: ReturnType<typeof orderable> | typeof noOnline) => ({ daypartId, store, online: noOnline });
+const closedNow = { orderable: false as const, notOffered: 'outside_hours' as const, availableFrom: '17:00' };
+
+export function daypartedMenu(): StoreMenuV2 {
+  const base = sampleMenu();
+  const slotted = (id: string, name: string, itemType: 'package' | 'refill' | 'a_la_carte', slots: unknown[], store: unknown, over: Record<string, unknown> = {}, vover: Record<string, unknown> = {}) =>
+    item(id, name, itemType, { variants: [{ ...v(`${id}-v`, '1.00', vover), channels: { store, online: noOnline }, slots }], ...over });
+  return {
+    ...base,
+    hours: DAYPART_HOURS,
+    items: [
+      ...base.items,
+      slotted('dp-pb', 'Pork and Beef', 'package', [slot('D', orderable('358.00')), slot('L', orderable('338.00'))], orderable('338.00'), { sortOrder: 10 }, { refillItemIds: ['dp-rf'] }),
+      slotted('dp-lo', 'Lunch only', 'package', [slot('L', orderable('300.00', { bundleHeads: 4, extraHeadAmount: '60.00' }))], closedNow, { sortOrder: 11 }),
+      slotted('dp-ov', 'Overlapping', 'package', [slot('L', orderable('100.00')), slot('X', orderable('999.00'))], orderable('100.00'), { sortOrder: 12 }),
+      slotted('dp-rf', 'Pork refill (lunch)', 'refill', [slot('L', orderable('0.00'))], closedNow, { sortOrder: 13 }, { optionGroups: [flavourGroup] }),
+      slotted('dp-al', 'House wine', 'a_la_carte', [slot('D', orderable('110.00')), slot('L', orderable('90.00'))], orderable('90.00'), { sortOrder: 14, soldALaCarte: true }),
+    ],
+  } as StoreMenuV2;
+}

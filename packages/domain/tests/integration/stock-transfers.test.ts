@@ -504,3 +504,28 @@ describe('T-231 / DEF-210 — a stock transfer is stamped with the actor’s org
     expect(row!.org_id, 'the draft landed in the org the CALLER named').toBe(f.orgId);
   });
 });
+
+describe('T-536 (audit CR-9) - an item on two lines is refused in words, never a raw unique violation', () => {
+  it('transferNow and saveDraft refuse the repeated item and write nothing', async () => {
+    const f = await fixture();
+    await seedOnHand(f, f.roomA, '10.000');
+    const input = {
+      storeId: f.storeId,
+      fromLocationId: f.roomA,
+      toLocationId: f.roomB,
+      lines: [
+        { itemId: f.itemA, quantity: quantity('2.000') },
+        { itemId: f.itemA, quantity: quantity('3.000') },
+      ],
+      actor: f.staff,
+    };
+    for (const run of [transferNow, saveDraft]) {
+      const res = await asOrg(f.orgId, (tx) => run(tx, input));
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.reason).toMatch(/more than one line/);
+    }
+    expect(await onHand(f.itemA, f.roomA)).toBe('10.000');
+    const [n] = await sql<{ n: string }[]>`select count(*)::text as n from stock_transfers`;
+    expect(n!.n).toBe('0');
+  });
+});

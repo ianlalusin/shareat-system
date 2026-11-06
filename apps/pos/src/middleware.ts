@@ -25,8 +25,10 @@ export function middleware(req: NextRequest): NextResponse {
 
 function applyCors(res: NextResponse): void {
   res.headers.set('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
-  res.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+  // T-510 S4b: GET /api/pos2/menu is a cross-origin GET with custom request headers (preflighted) and the APK must read two response headers.
+  res.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, If-None-Match, x-pos-store-id, x-device-id');
+  res.headers.set('Access-Control-Expose-Headers', 'ETag, x-next-change-at');
   res.headers.set('Access-Control-Max-Age', '600');
   res.headers.append('Vary', 'Origin');
 }

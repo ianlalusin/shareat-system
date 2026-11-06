@@ -93,7 +93,7 @@ v1 POS (`POS/src/components/manager/store-settings/kitchen-locations-settings.ts
   changes hash and name; unrouted item absent and listed; retired route target impossible by S1.
 - **S4 POS endpoint (R6):** `apps/pos/src/app/api/pos2/menu/route.ts`. Tests: unlinked/unknown device 401, store from
   link only (spoofed query param ignored), ETag/304, projection for the linked store only.
-  Later (T-510 S4, 6 Nov): `StoreMenuV2` gained `outside_hours` and a daypart-aware `nextChangeAt`; see `docs/tasks/510-menu-dayparts.md` R6 (device offline resolution is S4b).
+  Later (T-510 S4, 6 Nov): `StoreMenuV2` gained `outside_hours` and a daypart-aware `nextChangeAt`; see `docs/tasks/510-menu-dayparts.md` R6 (device offline resolution is S4b, built: `hours` + per-variant `slots` on the projection, resolved on the tablet; see the S4b line there).
 - **S5 POS device (R7, R8, R9):** IndexedDB cache, refresh triggers, `from-erp.ts` adapter, data-source switch in the
   consumers listed by S0, kitchen station tabs from projected stations. `startSession` unchanged except its package
   now comes from the adapter. Tests: adapter mapping table; offline keeps cache; failed fetch keeps cache; switch off

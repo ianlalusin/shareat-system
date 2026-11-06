@@ -38,6 +38,7 @@ createPaymentConversionServer
 customerReturnableQuantity
 datesInWeek
 dayIdOf
+daypartedMenu
 daypartsOverlap
 deleteDocumentNonBlocking
 depreciateAsset
@@ -159,7 +160,6 @@ runCapture
 runLoad
 saleOps
 sampleCandidates
-sampleMenu
 seatEntry
 seedCanonicalPositions
 seedRefundRecord

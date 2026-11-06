@@ -5,6 +5,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { doc, onSnapshot, DocumentData } from 'firebase/firestore';
 import { db } from '@/lib/firebase/client';
 import { useErpAdapted } from '@/lib/menu/useErpMenu';
+import type { ClosedPackage } from '@/lib/menu/from-erp';
 import type { StoreTable, StorePackage, StoreFlavor, MenuSchedule, Discount, Charge, ModeOfPayment } from '@/lib/types';
 
 export interface StoreConfig {
@@ -15,6 +16,8 @@ export interface StoreConfig {
   discounts: Discount[];
   charges: Charge[];
   modesOfPayment: ModeOfPayment[];
+  /** T-510 S4b, ERP menu only: packages whose daypart window is closed now (the cashier sees one muted line). Absent on the Firestore doc. */
+  closedPackages?: ClosedPackage[];
   meta?: {
     updatedAt?: any;
     version?: number;
@@ -68,12 +71,12 @@ export function useStoreConfigDoc(storeId?: string | null) {
     return () => unsubscribe();
   }, [storeId]);
 
-  // T-508 S5 (R9): with POS_MENU_SOURCE=erp the packages and flavours come from the ERP menu adapter (no dayparts: schedules empty);
+  // T-508 S5 (R9): with POS_MENU_SOURCE=erp the packages and flavours come from the ERP menu adapter (dayparts are resolved by the adapter from the menu's own slots, so `schedules` stays empty);
   // tables, discounts, charges and tenders stay on the Firestore doc. Source `firestore` returns the doc untouched.
   const merged = useMemo<StoreConfig | null>(() => {
     if (!erp) return null;
     const base: StoreConfig = config ?? { tables: [], packages: [], flavors: [], schedules: [], discounts: [], charges: [], modesOfPayment: [] };
-    return { ...base, packages: erp.packages, flavors: erp.flavors, schedules: [] };
+    return { ...base, packages: erp.packages, flavors: erp.flavors, schedules: [], closedPackages: erp.closedPackages };
   }, [erp, config]);
   return { config: merged ?? config, isLoading, error };
 }

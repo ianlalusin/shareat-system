@@ -44,6 +44,13 @@ export interface StoreOffersAt {
   readonly notOfferedNow?: readonly { variantId: string; channel: Channel; availableFrom: string | null }[];
   /** T-510 S4: the next daypart opening or closing (only windows live offers use); folded into `nextChangeAt`. */
   readonly nextDaypartBoundary?: Date | null;
+  /**
+   * T-510 S4b: the store zone and the windows `slots` use (only these go on the wire). The two fields below are present only when the store has
+   * live dayparted offers; without them the menu and its hash are exactly what they were before S4b.
+   */
+  readonly hours?: { readonly timeZone: string; readonly dayparts: readonly { id: string; days: readonly number[]; start: string; end: string }[] };
+  /** T-510 S4b: the standing (not withdrawn) dayparted rows, any channel, at any time of day. Online rows carry the slot-matched `basis`. */
+  readonly slots?: readonly (OfferRow & { daypartId: string })[];
 }
 
 export type MenuNotOfferedReason = 'no_offer' | 'withdrawn' | 'no_basis' | 'rule_below_zero' | 'outside_hours';
@@ -56,8 +63,13 @@ export type ChannelDelta = { orderable: true; priceDelta: string } | { orderable
 export interface ProjectedStation { id: string; name: string; slaMinutes: number; printOnOutage: boolean }
 /** R5: an item offered in the store channel here but routed to no station: left out of `items`, listed so the ERP can show it. */
 export interface NotOnPosItem { itemId: string; name: string; reason: 'no_station' }
+export interface ProjectedDaypart { id: string; days: number[]; start: string; end: string }
+/** T-510 S4b: one daypart's priced offer of a variant, whatever the time. The tablet picks the slot whose window holds its own clock. */
+export interface ProjectedSlot { daypartId: string; store: ChannelOffer; online: ChannelOffer }
 export interface StoreMenuV2 {
   schemaVersion: 2; storeId: string; stations: ProjectedStation[]; categories: ProjectedCategory[]; items: ProjectedItem[]; notOnPos: NotOnPosItem[];
+  /** T-510 S4b: only when some variant here has `slots`. Windows are store-local wall clock in `timeZone`. */
+  hours?: { timeZone: string; dayparts: ProjectedDaypart[] };
 }
 export interface ProjectedCategory { id: string; name: string; parentId: string | null; sortOrder: number }
 export interface ProjectedItem {
@@ -69,6 +81,8 @@ export interface ProjectedItem {
 export interface ProjectedVariant {
   id: string; label: string | null; isDefault: boolean; sortOrder: number;
   channels: { store: ChannelOffer; online: ChannelOffer }; optionGroups: ProjectedOptionGroup[]; refillItemIds: string[];
+  /** T-510 S4b: present only for a variant with standing dayparted offers. `channels` is still "live now". */
+  slots?: ProjectedSlot[];
 }
 export interface ProjectedOptionGroup {
   id: string; name: string; selectionMode: 'single' | 'multi'; minSelections: number; maxSelections: number;
@@ -121,6 +135,24 @@ export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Da
     const row = offerAt.get(k);
     return !row && closedFrom.has(k) ? { orderable: false, notOffered: 'outside_hours', availableFrom: closedFrom.get(k)! } : channelOffer(row);
   };
+  // T-510 S4b: standing dayparted rows per variant and daypart.
+  const slotRows = new Map<string, Map<string, { store?: OfferRow; online?: OfferRow }>>();
+  for (const r of entry.slots ?? []) {
+    const byDaypart = slotRows.get(r.variantId) ?? new Map<string, { store?: OfferRow; online?: OfferRow }>();
+    byDaypart.set(r.daypartId, { ...byDaypart.get(r.daypartId), [r.channel]: r });
+    slotRows.set(r.variantId, byDaypart);
+  }
+  const usedDaypartIds = new Set<string>();
+  const slotsOf = (variantId: string): ProjectedSlot[] | undefined => {
+    const byDaypart = slotRows.get(variantId);
+    if (!byDaypart) return undefined;
+    return [...byDaypart.keys()].sort(cmp).map((daypartId) => {
+      usedDaypartIds.add(daypartId);
+      const s = byDaypart.get(daypartId)!;
+      return { daypartId, store: channelOffer(s.store), online: channelOffer(s.online) };
+    });
+  };
+
   const shows = (c: ChannelOffer): boolean => c.orderable || c.notOffered === 'outside_hours';
 
   const itemById = new Map(snapshot.items.map((i) => [i.id, i]));
@@ -210,15 +242,19 @@ export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Da
     .map((i) => {
       const variants: ProjectedVariant[] = [...appearing.values()]
         .filter(({ variant }) => variant.menuItemId === i.id)
-        .map(({ variant: v, channels }) => ({
-          id: v.id,
-          label: v.label,
-          isDefault: v.isDefault,
-          sortOrder: v.sortOrder,
-          channels,
-          optionGroups: groupsFor(v.id, i.id),
-          refillItemIds: i.itemType === 'package' ? [...(refillsOf.get(v.id) ?? [])].sort(cmp) : [],
-        }))
+        .map(({ variant: v, channels }) => {
+          const slots = slotsOf(v.id);
+          return {
+            id: v.id,
+            label: v.label,
+            isDefault: v.isDefault,
+            sortOrder: v.sortOrder,
+            channels,
+            optionGroups: groupsFor(v.id, i.id),
+            refillItemIds: i.itemType === 'package' ? [...(refillsOf.get(v.id) ?? [])].sort(cmp) : [],
+            ...(slots ? { slots } : {}),
+          };
+        })
         .sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || cmpNum(a.sortOrder, b.sortOrder) || cmp(a.label ?? '', b.label ?? '') || cmp(a.id, b.id));
       return {
         id: i.id,
@@ -274,7 +310,15 @@ export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Da
   walk(null);
   for (const c of flat) if (!placed.has(c.id)) categories.push(c); // cycle guard
 
-  const menu: StoreMenuV2 = { schemaVersion: 2, storeId, stations, categories, items, notOnPos };
+  // S4b: `slotsOf` ran for every variant that survived into `items`, so `usedDaypartIds` is exactly the windows the wire slots name.
+  const hoursWindows: ProjectedDaypart[] = (entry.hours?.dayparts ?? [])
+    .filter((d) => usedDaypartIds.has(d.id))
+    .map((d) => ({ id: d.id, days: [...d.days].sort(cmpNum), start: d.start, end: d.end }))
+    .sort((a, b) => cmp(a.id, b.id));
+  const menu: StoreMenuV2 = {
+    schemaVersion: 2, storeId, stations, categories, items, notOnPos,
+    ...(entry.hours && hoursWindows.length > 0 ? { hours: { timeZone: entry.hours.timeZone, dayparts: hoursWindows } } : {}),
+  };
   const contentHash = createHash('sha256').update(canonicalJson(menu), 'utf8').digest('hex');
 
   let next: number | null = null;
