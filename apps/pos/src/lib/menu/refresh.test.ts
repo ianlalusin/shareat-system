@@ -46,6 +46,60 @@ describe('refreshMenuCache', () => {
     expect(r).toMatchObject({ changed: false, cache: { contentHash: 'h1' } });
     expect(t.write).not.toHaveBeenCalled();
   });
+  describe('304 and the x-next-change-at header (T-510 S4b)', () => {
+    const withNext = (hash: string, nextChangeAt: string | null): CachedMenu => ({ ...cached(hash), nextChangeAt });
+    it('a 304 with a different header keeps the menu and the hash, and stores the new nextChangeAt', async () => {
+      const start = withNext('h1', '2030-01-01T00:02:00.000Z');
+      const t = deps(start, async () => ({ status: 304, nextChangeAt: '2030-01-01T10:00:00.000Z' }));
+      const r = await refreshMenuCache(t.d);
+      expect(r.rescheduled).toBe(true);
+      expect(r.changed).toBe(false);
+      expect(r.cache).toMatchObject({ contentHash: 'h1', nextChangeAt: '2030-01-01T10:00:00.000Z', fetchedAt: 1 });
+      expect(r.cache!.menu).toBe(start.menu);
+      expect(r.cache).not.toBe(start);
+      expect(t.write).toHaveBeenCalledTimes(1);
+      expect(t.row()!.nextChangeAt).toBe('2030-01-01T10:00:00.000Z');
+    });
+    it('a 304 whose header equals the stored value, is absent, empty or unreadable changes nothing', async () => {
+      for (const header of ['2030-01-01T00:02:00.000Z', undefined, null, '', 'not-a-date']) {
+        const t = deps(withNext('h1', '2030-01-01T00:02:00.000Z'), async () => ({ status: 304, nextChangeAt: header }));
+        const r = await refreshMenuCache(t.d);
+        expect(r.rescheduled).toBeFalsy();
+        expect(r.cache!.nextChangeAt).toBe('2030-01-01T00:02:00.000Z');
+        expect(t.write).not.toHaveBeenCalled();
+      }
+    });
+    it('a 304 header fills in a nextChangeAt the cache did not have', async () => {
+      const t = deps(withNext('h1', null), async () => ({ status: 304, nextChangeAt: '2030-01-01T10:00:00.000Z' }));
+      expect((await refreshMenuCache(t.d)).cache!.nextChangeAt).toBe('2030-01-01T10:00:00.000Z');
+    });
+    it('an overlapping refresh: the 304 never writes the old menu back over a newer cache', async () => {
+      const old = withNext('h1', '2030-01-01T00:02:00.000Z');
+      const newer = withNext('h2', '2030-01-01T00:30:00.000Z');
+      let reads = 0;
+      const write = vi.fn(async () => {});
+      const r = await refreshMenuCache({
+        storeId: 's1', online: true, read: async () => (++reads === 1 ? old : newer), write,
+        fetchMenu: async () => ({ status: 304, nextChangeAt: '2030-01-01T10:00:00.000Z' }), now: () => 99,
+      });
+      expect(write).not.toHaveBeenCalled();
+      expect(r.cache).toBe(newer);
+      expect(r.rescheduled).toBeFalsy();
+    });
+    it('a 304 whose cache is unchanged on the re-read still writes (the normal case)', async () => {
+      const old = withNext('h1', '2030-01-01T00:02:00.000Z');
+      const write = vi.fn(async () => {});
+      const r = await refreshMenuCache({ storeId: 's1', online: true, read: async () => old, write, fetchMenu: async () => ({ status: 304, nextChangeAt: '2030-01-01T10:00:00.000Z' }), now: () => 99 });
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(r.rescheduled).toBe(true);
+    });
+    it('a 304 with no cache stores nothing (nothing invented)', async () => {
+      const t = deps(null, async () => ({ status: 304, nextChangeAt: '2030-01-01T10:00:00.000Z' }));
+      const r = await refreshMenuCache(t.d);
+      expect(r.cache).toBeNull();
+      expect(t.write).not.toHaveBeenCalled();
+    });
+  });
   it('a new hash replaces the cache (hash, menu, fetchedAt, nextChangeAt)', async () => {
     const t = deps(cached('h1'), async () => ({ status: 200, body: { menu: sampleMenu(), contentHash: 'h2', nextChangeAt: '2030-01-01T00:00:00.000Z' } }));
     const r = await refreshMenuCache(t.d);
@@ -123,6 +177,23 @@ describe('menu store: the switch and the triggers', () => {
     expect(h.store.getState().cached!.contentHash).toBe('h1');
     h.setConn({ online: true, menuSource: 'erp' });
     await vi.advanceTimersByTimeAsync(0);
+    expect(h.fetchMenu).toHaveBeenCalledTimes(1);
+    stop();
+  });
+  it('a 304 that carries a later x-next-change-at re-arms the timer: no refetch at the old time, one at the new time (T-510 S4b)', async () => {
+    vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+    const h = harness('erp', { ...cached('h1'), nextChangeAt: '2030-01-01T00:02:00.000Z' });
+    h.fetchMenu.mockImplementation(async () => ({ status: 304, nextChangeAt: '2030-01-01T00:04:00.000Z' }) as any); // before the 5-minute poll, so only the timer can fire
+    const seen: Array<string | null> = [];
+    h.store.subscribe(() => seen.push(h.store.getState().cached?.nextChangeAt ?? null));
+    const stop = h.store.start('s1');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.store.getState().cached!.nextChangeAt).toBe('2030-01-01T00:04:00.000Z');
+    expect(seen).toContain('2030-01-01T00:04:00.000Z'); // a new cache object notified the listeners
+    h.fetchMenu.mockClear();
+    await vi.advanceTimersByTimeAsync(2 * 60_000 + 1000); // the OLD time passes: nothing
+    expect(h.fetchMenu).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(2 * 60_000); // past the new time (00:04:00)
     expect(h.fetchMenu).toHaveBeenCalledTimes(1);
     stop();
   });

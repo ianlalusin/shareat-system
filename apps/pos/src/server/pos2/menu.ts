@@ -40,9 +40,12 @@ export async function handleMenu(req: Request, deps: Pos2Deps): Promise<Response
     const out = isUuid(deviceId) ? await deps.menu.forDevice({ posStoreId: auth.caller.storeId, deviceId }) : null;
     if (!out) return fail(401, 'This tablet is not registered. Ask an administrator to register it.');
     const etag = `"${out.contentHash}"`;
-    if (req.headers.get('if-none-match') === etag) return new Response(null, { status: 304, headers: { etag, 'cache-control': 'no-store' } });
+    // T-510 S4b: also on a 304, so a tablet whose menu did not change still learns the next daypart boundary. Omitted when there is none.
+    const next: Record<string, string> = out.nextChangeAt ? { 'x-next-change-at': out.nextChangeAt } : {};
+    if (req.headers.get('if-none-match') === etag) return new Response(null, { status: 304, headers: { etag, 'cache-control': 'no-store', ...next } });
     const res = jsonResponse(200, { menu: out.menu, contentHash: out.contentHash, nextChangeAt: out.nextChangeAt });
     res.headers.set('etag', etag);
+    for (const [k, v] of Object.entries(next)) res.headers.set(k, v);
     return res;
   } catch (err) {
     console.error('[pos2] menu error', err instanceof Error ? err.name : 'non-error thrown');
