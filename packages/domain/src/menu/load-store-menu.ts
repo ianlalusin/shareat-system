@@ -15,7 +15,7 @@ export async function loadStoreMenu(tx: Tx, orgId: string, storeId: string, at?:
     menuRepo.catalogOfOrg(tx, orgId),
     loadLiveStoreOffers(tx, orgId, storeId, when), // T-510 S1b: at most one offer per variant and channel, chosen by the daypart open now
     menuRepo.optionOffersInForce(tx, storeId, when),
-    menuRepo.upcomingOfferDates(tx, storeId, when), // S4: nextChangeAt must also include daypart boundaries (nextDaypartBoundary)
+    menuRepo.upcomingOfferDates(tx, storeId, when),
     kitchenRepo.listStations(tx, orgId, storeId),
     kitchenRepo.listRoutes(tx, orgId, storeId),
   ]);
@@ -23,7 +23,7 @@ export async function loadStoreMenu(tx: Tx, orgId: string, storeId: string, at?:
   if (live.faults.length > 0) logger.warn({ storeId, faults: live.faults }, 'loadStoreMenu: offers that cannot be resolved are left out');
   const snapshot: MenuSnapshot = {
     ...catalog,
-    stores: [{ storeId, at: when, offers: live.offers, optionOffers, upcoming }],
+    stores: [{ storeId, at: when, offers: live.offers, optionOffers, upcoming, notOfferedNow: live.notOfferedNow, nextDaypartBoundary: live.nextBoundaryAt }],
     stations,
     routes,
   };
