@@ -9,6 +9,7 @@
  * `unexplained` is the payout less what the rows add up to; a day that does not add up is marked, never refused.
  */
 import { ZERO, add, compare, fromCentavos, money, negate, subtract, toCentavos, type Money } from '@shareat/core/money';
+import { buildRuleBook, type RuleBook } from '../business-rules/book';
 import { deductionFor, type DeductionKind } from './deduction-mapping';
 import type { FoodpandaCharge, FoodpandaInvoice, FoodpandaOrder } from './foodpanda-workbook';
 import type { GrabPayout, GrabPayoutTie } from './grab-payouts';
@@ -313,16 +314,41 @@ const vatLostWarning = (c: FoodpandaCharge): string =>
   `This invoice has an ad charge (or platform fee) of ${c.netTotal} on a day with no orders, so its ${c.vatRate}% VAT of ${fromCentavos(roundedDiv(toCentavos(c.netTotal) * vatPercentOf(c), 100n))} is not included in any day. It needs review.`;
 
 /**
- * The PDF takes 0.5% withholding once on the invoice; the workbook rounds it per order. The remainder is (sum of the workbook's per-order withholding) less
- * 0.5% of the summed base, rounded once. The base is column R, or R / 1.12 for the Lipa invoices: the one under which 0.5% reproduces EVERY order's withholding.
- * When neither does, nothing is guessed: no remainder and a warning.
+ * T-512 (T-511 S5c) - the two business rules staging reads, as plain numbers so this file stays pure: the withholding rate and the VAT percent, each in
+ * basis points (percent x 100). The caller resolves them from the rule book on the invoice's last sales day (`stageRulesOn`) and passes them in; a call
+ * with no rules uses the registry defaults (0.5% and 12%), which is what every staged file was computed with before the rules were a table.
  */
-function withholdingRounding(orders: readonly FoodpandaOrder[]): { remainder: bigint; warning: string | null } {
+export interface StageRules {
+  withholdingBp: bigint;
+  vatBp: bigint;
+}
+
+export const STAGE_RULE_KEYS = ['tax.withholding_rate_percent', 'tax.vat_percent'] as const;
+
+/** The staging rules in force on one date, from a rule book loaded for `STAGE_RULE_KEYS`. */
+export function stageRulesOn(book: RuleBook, date: string): StageRules {
+  return { withholdingBp: book.valueOn('tax.withholding_rate_percent', date).basisPoints(), vatBp: book.valueOn('tax.vat_percent', date).basisPoints() };
+}
+
+/** The day whose rules apply to a whole invoice: its last sales day (the invoice date when it has no orders). */
+export function foodpandaRuleDate(invoice: FoodpandaInvoice): string {
+  return invoice.orders.reduce((last, o) => (o.orderDate.localeCompare(last) > 0 ? o.orderDate : last), invoice.orders[0]?.orderDate ?? invoice.invoiceDate);
+}
+
+// The registry defaults, read from the registry itself (an empty book answers every key with its default): no second copy of 0.5 and 12.
+const DEFAULT_STAGE_RULES: StageRules = stageRulesOn(buildRuleBook([]), '1970-01-01');
+
+/**
+ * The PDF takes the withholding once on the invoice; the workbook rounds it per order. The remainder is (sum of the workbook's per-order withholding) less
+ * the rate applied to the summed base, rounded once. The base is column R, or R / (1 + VAT) for the Lipa invoices: the one under which the rate reproduces EVERY
+ * order's withholding. When neither does, nothing is guessed: no remainder and a warning.
+ */
+function withholdingRounding(orders: readonly FoodpandaOrder[], rules: StageRules): { remainder: bigint; warning: string | null } {
   const withheld = orders.reduce((t, o) => t + toCentavos(o.withholdingTax), 0n);
-  const bases: bigint[][] = [orders.map((o) => toCentavos(o.revenueAfterDiscounts)), orders.map((o) => roundedDiv(toCentavos(o.revenueAfterDiscounts) * 100n, 112n))];
+  const bases: bigint[][] = [orders.map((o) => toCentavos(o.revenueAfterDiscounts)), orders.map((o) => roundedDiv(toCentavos(o.revenueAfterDiscounts) * 10000n, 10000n + rules.vatBp))];
   for (const base of bases) {
-    if (orders.every((o, i) => roundedDiv(base[i]! * 5n, 1000n) === toCentavos(o.withholdingTax))) {
-      return { remainder: withheld - roundedDiv(base.reduce((t, n) => t + n, 0n) * 5n, 1000n), warning: null };
+    if (orders.every((o, i) => roundedDiv(base[i]! * rules.withholdingBp, 10000n) === toCentavos(o.withholdingTax))) {
+      return { remainder: withheld - roundedDiv(base.reduce((t, n) => t + n, 0n) * rules.withholdingBp, 10000n), warning: null };
     }
   }
   return { remainder: 0n, warning: orders.length === 0 ? null : NOT_USUAL_RULE };
@@ -331,7 +357,7 @@ function withholdingRounding(orders: readonly FoodpandaOrder[]): { remainder: bi
 /** What a day can still pay: its order value less its commission, marketing and fees so far. */
 const room = (d: FoodpandaAcc): Money => subtract(subtract(subtract(d.orderValue, d.buckets.commission), d.buckets.marketing), d.buckets.platformFee);
 
-export function stageFoodpandaDays(invoice: FoodpandaInvoice, _matched: Omit<MatchedChannel, 'isActive'>): StagedFile {
+export function stageFoodpandaDays(invoice: FoodpandaInvoice, _matched: Omit<MatchedChannel, 'isActive'>, rules: StageRules = DEFAULT_STAGE_RULES): StagedFile {
   const byDate = new Map<string, FoodpandaAcc>();
   for (const o of invoice.orders) {
     let day = byDate.get(o.orderDate);
@@ -391,7 +417,7 @@ export function stageFoodpandaDays(invoice: FoodpandaInvoice, _matched: Omit<Mat
   }
 
   applyVat(ordered);
-  const rounding = withholdingRounding(invoice.orders);
+  const rounding = withholdingRounding(invoice.orders, rules);
   if (rounding.warning) warnings.push(rounding.warning);
   const lastDay = ordered[ordered.length - 1];
   if (lastDay && rounding.remainder !== 0n) {

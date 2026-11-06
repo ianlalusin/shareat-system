@@ -36,12 +36,17 @@ export function FilterFields({ filters }: { readonly filters: ReviewFilterValues
   );
 }
 
-function Figure({ label, value, note }: { readonly label: string; readonly value: string; readonly note?: string }) {
+function Figure({ label, value, note, large = false }: { readonly label: string; readonly value: string; readonly note?: string; readonly large?: boolean }) {
   return (
     <div className="min-w-0">
       <dt className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</dt>
       <dd className="mt-0.5 text-lg font-semibold tabular-nums">{value}</dd>
       {note ? <dd className="text-sm">{note}</dd> : null}
+      {large ? (
+        <dd className="mt-1">
+          <Badge tone="warning" label="Large difference" />
+        </dd>
+      ) : null}
     </div>
   );
 }
@@ -127,7 +132,7 @@ export function DayDetail({
         <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Figure label="Figure in the file" value={peso(detail.fileFigure)} />
           <Figure label="Staff recorded" value={detail.staffFigure === null ? 'Not recorded yet' : peso(detail.staffFigure)} />
-          <Figure label="Difference" value={detail.difference === null ? 'Not known yet' : peso(detail.difference)} note={detail.difference === null ? undefined : differenceWords(detail.difference)} />
+          <Figure label="Difference" value={detail.difference === null ? 'Not known yet' : peso(detail.difference)} note={detail.difference === null ? undefined : differenceWords(detail.difference)} large={detail.differenceLarge} />
         </dl>
         {differs ? (
           detail.orders.length > 0 ? (

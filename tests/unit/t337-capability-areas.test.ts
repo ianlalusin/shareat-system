@@ -60,9 +60,10 @@ describe('U1 — CAPABILITY_AREA is keyed on exactly the 112 capabilities; every
     // ⭐ 99 -> 100 (T-382 S1, A4): `unlink_store_from_pos` joins CAPABILITY_AREA.
     // ⭐ 100 -> 101 (T-385 S3): `verify_own_sales_day` joins CAPABILITY_AREA.
     // ⭐ T-511 S2a (2026-11-03): 120 -> 123 (+ upload_settlement_files in sales, edit_platform_store_code and edit_loan_repayment_amount in admin). RED until built.
-    expect(Object.keys(_control).length, 'positive control: unmutated form has all 124 keys').toBe(124); // T-510 S2: 123 -> 124 (pair_menu_dayparts, sales)
-    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(123); // T-510 S2: 122 -> 123 (re-measured: 124 keys minus the one removed)
-    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(125); // T-510 S2: 124 -> 125 (re-measured: 124 keys plus the bogus one)
+    // T-512 (T-511 S5c), 7 Nov 2026, re-measured after rebase on main (T-523 0238 present), BOSS approved: 124 -> 125 (manage_business_rules in admin).
+    expect(Object.keys(_control).length, 'positive control: unmutated form has all 125 keys').toBe(125);
+    expect(Object.keys(_missingOne).length, 'exactly one key removed').toBe(124);
+    expect(Object.keys(_bogusKey).length, 'one excess key added').toBe(126);
   });
 });
 
@@ -152,6 +153,8 @@ const ORACLE: Readonly<Record<CapabilityArea, readonly string[]>> = {
     // ⭐ T-511 S2a (2026-11-03): the two admin edits of the settlement-upload feature (area admin; 120 -> 123 with the upload capability in sales).
     // Same reasoning as `set_channel_payout` directly above: an admin-only edit of an existing resource's routing/config.
     'edit_platform_store_code', 'edit_loan_repayment_amount',
+    // T-512 (T-511 S5c, 6 Nov 2026): the admin-only rules screen, same reasoning as the two edits above.
+    'manage_business_rules',
   ],
   franchise: ['cross_org_access', 'view_franchise_sales', 'view_franchise_access_log'], // T-398 S6: + view_franchise_access_log (117 -> 118)
 };
@@ -170,8 +173,8 @@ describe('U2 — the literal per-area table matches CAPABILITY_AREA exactly', ()
     // ⭐ 100 -> 101 (T-385 S3): `verify_own_sales_day`.
     // ⭐ 101 -> 108 (T-401 S2): the seven menu capabilities, area sales.
     // T-193 S3: `remit_statutory` joins staff. Merge of main + T-193: re-measured.
-    // ⭐ T-511 S2a (2026-11-03): 120 -> 123.
-    expect(total).toBe(124); // T-510 S2: 123 -> 124 (pair_menu_dayparts in sales)
+    // ⭐ T-511 S2a (2026-11-03): 120 -> 123. T-510 S2: 123 -> 124. T-512 (T-511 S5c), 7 Nov 2026, re-measured after rebase on main (T-523 0238 present), BOSS approved: 124 -> 125 (manage_business_rules in admin).
+    expect(total).toBe(125);
     // ⭐ 108 -> 109 (T-403): `manage_recipes` joins production.
   });
 

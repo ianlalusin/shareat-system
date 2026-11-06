@@ -46,6 +46,8 @@ const POS_CHANNEL = "Choose the sales channel POS's sales land in.";
 const POS_TAX = "Choose the tax type shown in the POS store's settings.";
 const PCODE = 'A store code is a UUID for Grab, or 3 to 12 letters or digits for Foodpanda.';
 const BLANK = '   ';
+const BRULE = 'A value is a plain number with at most two decimals, for example 50 or 12.5.';
+const BRULE_WHY = 'Say why the rule is changing, in under 500 characters.';
 
 const ROWS: Record<string, Row> = {
   'settings.setOrganizationIdentity.tin': { ok: '123-456-789', stored: '123456789', bad: [['1234', TIN], ['abcdefghijk', TIN], ['1234567890123', TIN]] },
@@ -67,6 +69,10 @@ const ROWS: Record<string, Row> = {
   'settings.setSalesChannelPlatformCode.code': { ok: 'AB12', bad: [['--', PCODE], ['not a code!', PCODE]] },
   'settings.tender.name': { ok: 'GCash', bad: [[BLANK, 'Give the tender a name.']], blank: 'Give the tender a name.' },
   'settings.tender.kind': { ok: 'wallet', bad: [[BLANK, 'Choose whether this tender is cash or a wallet.']], blank: 'Choose whether this tender is cash or a wallet.' },
+  // T-512 (T-511 S5c, 6 Nov 2026): the business-rule change form. The value's bounds are per rule (the registry) and are judged by setBusinessRule, not here.
+  'settings.setBusinessRule.value': { ok: '12.5', bad: [['abc', BRULE], ['1.234', BRULE], ['-1', BRULE]], blank: BRULE },
+  'settings.setBusinessRule.effectiveFrom': { ok: '2999-12-31', bad: [['soon', 'The start day must be a real date.'], ['2000-01-01', "The start day can't be before today."]] },
+  'settings.setBusinessRule.reason': { ok: 'The platform changed its fee', bad: [[BLANK, BRULE_WHY], ['q'.repeat(501), BRULE_WHY]], blank: BRULE_WHY },
   'findings.createMissingClosedPeriod.reason': { ok: 'Books were never opened', bad: [[BLANK, 'Say why this month is being created now.']], blank: 'Say why this month is being created now.' },
   'findings.bookMissedMonth.reason': { ok: 'Charge was missed', bad: [[BLANK, 'Say why this month is being booked now.']], blank: 'Say why this month is being booked now.' },
   'reports.recordDualRunDisposition.ref': { ok: 'DEF-123', bad: [['def-1', REF], ['BUG-9', REF], ['321', REF], ['DEF-12x', REF]], blank: REF },

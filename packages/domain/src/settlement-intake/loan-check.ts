@@ -16,6 +16,8 @@
 import { can, type Actor } from '@shareat/auth';
 import { accessRepo, loansRepo, settlementIntakeRepo, storesRepo, type Tx } from '@shareat/db';
 import { ZERO, compare, fromCentavos, money, toCentavos, type Money } from '@shareat/core/money';
+import { buildRuleBook, type RuleBook } from '../business-rules/book';
+import { loadRuleBook } from '../business-rules/rules';
 import { groupedMoney } from './text';
 
 export type LoanCheckStatus = 'ok' | 'mismatch' | 'waiting_for_other_stores' | 'no_matching_loan';
@@ -45,6 +47,8 @@ export interface LoanCheckInput {
   rows: readonly DeductionRow[];
   storesNeedingFile: readonly { storeId: string; storeName: string }[];
   storesWithFile: ReadonlySet<string>;
+  /** T-512: the most a FINAL loan may be short and still match, in centavos (rule `settlement.loan_final_tolerance`, resolved on `salesDate`); omitted = the registry default */
+  finalTolerance?: bigint;
 }
 
 export interface LoanAllocation {
@@ -80,8 +84,11 @@ export interface LoanCheckResult {
   rowStoreIds: Record<string, string>;
 }
 
-/** Grab shortens a loan's last payment by a centavo at times. */
-const FINAL_TOLERANCE = 1n;
+/** Grab shortens a loan's last payment by a centavo at times: the business rule `settlement.loan_final_tolerance` (default 0.01). */
+export const LOAN_RULE_KEYS = ['settlement.loan_final_tolerance'] as const;
+
+// The registry default, read from the registry itself (an empty book answers with the default), for a pure caller that passes no tolerance.
+const DEFAULT_LOAN_TOLERANCE: bigint = buildRuleBook([]).valueOn('settlement.loan_final_tolerance', '1970-01-01').centavos();
 
 const sumOf = (xs: bigint[]): bigint => xs.reduce((t, n) => t + n, 0n);
 
@@ -99,13 +106,13 @@ interface PlanItem {
  * Hands the rows to the open loans, oldest start date first. `tolerant` is the second try, used only when the files fall short and a loan is final: each final
  * loan then asks for its minimum first, and what is left over tops its last centavo up afterwards, so a missing centavo lands on a FINAL loan, never an ordinary one.
  */
-function allocate(open: readonly OpenLoan[], rows: readonly DeductionRow[], tolerant: boolean): { plan: PlanItem[]; allocations: LoanAllocation[]; leftover: bigint } {
+function allocate(open: readonly OpenLoan[], rows: readonly DeductionRow[], tolerant: boolean, finalTolerance: bigint): { plan: PlanItem[]; allocations: LoanAllocation[]; leftover: bigint } {
   const plan: PlanItem[] = open.map((l) => {
     const repayment = l.repaymentAmount === null ? null : toCentavos(l.repaymentAmount);
     const outstanding = toCentavos(l.outstandingBefore);
-    const final = repayment !== null && outstanding <= repayment + FINAL_TOLERANCE;
+    const final = repayment !== null && outstanding <= repayment + finalTolerance;
     const expected = repayment === null ? 0n : final ? outstanding : repayment;
-    const min = final && expected > FINAL_TOLERANCE ? expected - FINAL_TOLERANCE : expected;
+    const min = final && expected > finalTolerance ? expected - finalTolerance : expected;
     return { loan: l, final, expected, min, room: tolerant ? min : expected, allocated: 0n };
   });
   const planOf = new Map(plan.map((p) => [p.loan.loanId, p]));
@@ -167,9 +174,10 @@ export function checkLoanDay(input: LoanCheckInput): LoanCheckResult {
     .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.loanId.localeCompare(b.loanId));
 
   const total = sumOf(input.rows.map((r) => toCentavos(r.amount)));
-  let run = allocate(open, input.rows, false);
+  const finalTolerance = input.finalTolerance ?? DEFAULT_LOAN_TOLERANCE;
+  let run = allocate(open, input.rows, false, finalTolerance);
   const expectedSum = sumOf(run.plan.map((p) => p.expected));
-  if (total < expectedSum && run.plan.some((p) => p.final)) run = allocate(open, input.rows, true);
+  if (total < expectedSum && run.plan.some((p) => p.final)) run = allocate(open, input.rows, true, finalTolerance);
   const { plan, allocations, leftover } = run;
 
   const waitingOn = input.storesNeedingFile.filter((s) => !input.storesWithFile.has(s.storeId)).map((s) => ({ storeId: s.storeId, storeName: s.storeName }));
@@ -267,6 +275,8 @@ export interface LoanCheckContext {
   outstanding: Map<string, Money>;
   storeNames: Map<string, string>;
   rows: settlementIntakeRepo.DeductionRowRecord[];
+  /** T-512: the rule book (loaded for `LOAN_RULE_KEYS`, ONE query per context); a context built without one uses the registry default */
+  rules?: RuleBook;
   /** the answers already worked out, by sales date (a list asks for the same day more than once) */
   answers: Map<string, LoanCheckResult>;
   /** who has a file and who recorded sales, by sales date, read ahead for a whole list (see `primeLoanCheckCoverage`); a date not in it is read when asked */
@@ -284,14 +294,17 @@ export async function primeLoanCheckCoverage(tx: Tx, ctx: LoanCheckContext, sale
   ctx.coverage = have;
 }
 
-export async function loadLoanCheckContext(tx: Tx, orgId: string, throughDate: string): Promise<LoanCheckContext> {
+export async function loadLoanCheckContext(tx: Tx, orgId: string, throughDate: string, rules?: RuleBook): Promise<LoanCheckContext> {
   const loans = await loansRepo.listLoans(tx, orgId, { status: 'active' });
   const positions = await loansRepo.positionsByLoan(tx, orgId);
   const outstanding = new Map(loans.map((l) => [l.id, money(positions.get(l.id)?.outstanding ?? '0')]));
   const storeNames = new Map((await storesRepo.listForOrg(tx, orgId)).map((s) => [s.id, s.name]));
   const rows = await settlementIntakeRepo.activeDeductionRows(tx, orgId, throughDate);
-  return { orgId, throughDate, loans, outstanding, storeNames, rows, answers: new Map() };
+  return { orgId, throughDate, loans, outstanding, storeNames, rows, rules: rules ?? (await loadRuleBook(tx, orgId, LOAN_RULE_KEYS)), answers: new Map() };
 }
+
+/** The final-payment tolerance in force on a sales date, in centavos. */
+const finalToleranceOn = (ctx: LoanCheckContext, salesDate: string): bigint | undefined => ctx.rules?.valueOn('settlement.loan_final_tolerance', salesDate).centavos();
 
 function openLoansOn(ctx: LoanCheckContext, pending: ReadonlyMap<string, bigint>): OpenLoan[] {
   return ctx.loans.map((l) => {
@@ -322,7 +335,7 @@ function timelineOf(ctx: LoanCheckContext): Timeline {
   for (const d of dates) {
     pendingBefore.push(pending);
     const rows = rowsByDate.get(d)!;
-    const r = checkLoanDay({ salesDate: d, loans: openLoansOn(ctx, pending), rows: rows.map(toRow), storesNeedingFile: [], storesWithFile: new Set() });
+    const r = checkLoanDay({ salesDate: d, loans: openLoansOn(ctx, pending), rows: rows.map(toRow), storesNeedingFile: [], storesWithFile: new Set(), finalTolerance: finalToleranceOn(ctx, d) });
     const pendingKeys = new Set(rows.filter((x) => x.reviewState === 'pending').map((x) => x.key));
     const next = new Map(pending);
     for (const a of r.allocations) if (pendingKeys.has(a.rowKey)) next.set(a.loanId, (next.get(a.loanId) ?? 0n) + toCentavos(a.amount));
@@ -343,7 +356,7 @@ export function loanCheckFromContext(ctx: LoanCheckContext, salesDate: string, n
   let before = 0;
   while (before < t.dates.length && t.dates[before]!.localeCompare(salesDate) < 0) before++;
   const rows = (t.rowsByDate.get(salesDate) ?? []).map(toRow);
-  return checkLoanDay({ salesDate, loans: openLoansOn(ctx, t.pendingBefore[before]!), rows, storesNeedingFile: needing.storeIds, storesWithFile: needing.withFile });
+  return checkLoanDay({ salesDate, loans: openLoansOn(ctx, t.pendingBefore[before]!), rows, storesNeedingFile: needing.storeIds, storesWithFile: needing.withFile, finalTolerance: finalToleranceOn(ctx, salesDate) });
 }
 
 const toRow = (r: settlementIntakeRepo.DeductionRowRecord): DeductionRow => ({ key: r.key, storeId: r.storeId, amount: r.amount, loanId: r.loanId });

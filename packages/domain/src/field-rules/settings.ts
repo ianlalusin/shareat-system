@@ -99,3 +99,14 @@ export const SETTINGS_TENDER_RULES = defineFieldRules('settings.tender', {
   name: { label: 'The tender name', kind: 'text', requires: 'Give the tender a name.' },
   kind: { label: 'The tender kind', kind: 'text', requires: 'Choose whether this tender is cash or a wallet.' },
 });
+
+const BUSINESS_RULE_VALUE_SAYS = 'A value is a plain number with at most two decimals, for example 50 or 12.5.';
+/**
+ * /settings/business-rules (T-512): the shape of a new value, its start day and its reason, for the live line only. The bounds differ per rule
+ * and belong to the registry, so `setBusinessRule` judges them (and refuses a start day before today and an enormous reason in its own words).
+ */
+export const SETTINGS_BUSINESS_RULE_RULES = defineFieldRules('settings.setBusinessRule', {
+  value: { label: 'The new value', kind: 'pattern', pattern: '^\\d+(\\.\\d{1,2})?$', patternSays: 'a plain number with at most two decimals', requires: BUSINESS_RULE_VALUE_SAYS },
+  effectiveFrom: { label: 'The start day', kind: 'date', notBeforeToday: true },
+  reason: { label: 'The reason', kind: 'text', max: 500, requires: 'Say why the rule is changing, in under 500 characters.' },
+});

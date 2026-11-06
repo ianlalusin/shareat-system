@@ -16,6 +16,7 @@ import { authorize, AuthorizationError, heldCapabilities, type Actor } from '@sh
 import { advisoryLocksRepo, auditLogRepo, settlementIntakeRepo, type SettlementDayLineRow, type SettlementUploadRow, type Tx } from '@shareat/db';
 import { parseCsv } from '@shareat/core/csv';
 import { ZERO, subtract, type Money } from '@shareat/core/money';
+import { loadRuleBook } from '../business-rules/rules';
 import { uploadFile } from '../files';
 import { PURPOSE_LIMITS } from '../files/limits';
 import { fileBytesMatchType } from '../files/magic';
@@ -24,7 +25,7 @@ import { tieGrabPayouts } from './grab-payouts';
 import { GRAB_TRANSACTION_HEADERS, type GrabTransactionsFile } from './grab-transactions';
 import { GRAB_TRANSFER_HEADERS, type GrabTransferRow, type GrabTransfersFile } from './grab-transfers';
 import { intakeRefusal, megabytes, shown } from './refusal';
-import { checkStagedDay, checkStagedPeriodLines, stageFoodpandaDays, stageGrabDays, type StagedDay, type StagedFile } from './stage';
+import { checkStagedDay, checkStagedPeriodLines, foodpandaRuleDate, stageFoodpandaDays, stageGrabDays, stageRulesOn, STAGE_RULE_KEYS, type StagedDay, type StagedFile } from './stage';
 import { matchChannel, refuseIfInactive, type MatchedChannel } from './store-match';
 import { readSettlementBytes, readStoredUpload, type SettlementFileKind, type StoredUpload } from './stored-upload';
 import { READER_VERSION } from './version';
@@ -211,7 +212,9 @@ export async function ingestSettlementFile(tx: Tx, actor: Actor, input: IngestIn
   const sideIds: { transfers: (string | null)[]; transactions: (string | null)[] } = { transfers: [], transactions: [] };
   let owners: { transfers: Map<string, number>; transactions: Map<string, number> } = { transfers: new Map(), transactions: new Map() };
   if (parsed.foodpanda) {
-    staged = stageFoodpandaDays(parsed.foodpanda, matched);
+    // T-512: the withholding rate and VAT in force on the invoice's last sales day, for the whole invoice (the figure computed now is the snapshot kept)
+    const rules = stageRulesOn(await loadRuleBook(tx, orgId, STAGE_RULE_KEYS), foodpandaRuleDate(parsed.foodpanda));
+    staged = stageFoodpandaDays(parsed.foodpanda, matched, rules);
   } else {
     const other = kind === 'grab_transactions' ? 'grab_transfers' : 'grab_transactions';
     const found = await counterpartsOf(tx, orgId, matched.channelId, other, warnings);

@@ -5,14 +5,15 @@
  * MATCHED store); nothing here decides who may upload what. One database transaction per file, so a refused file rolls back alone and the
  * answer is a line per file: staged, already uploaded, or a plain sentence saying why not.
  */
-import { ingestSettlementFile, type IngestResult } from '@shareat/domain';
+import { ingestSettlementFile, PURPOSE_LIMITS, type IngestResult } from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '@/lib/constraint-messages';
 import { withOrgPrincipal } from '../lib';
 
 /** A bigger batch is split by the person, not by the server. */
 const MAX_FILES = 10;
-const MAX_FILE_BYTES = 3 * 1024 * 1024;
+// the one place the cap lives: files/limits.ts (ingestSettlementFile enforces the same figure)
+const MAX_MB = PURPOSE_LIMITS.channel_settlement_file.maxBytes / (1024 * 1024);
 
 export interface UploadLine {
   name: string;
@@ -47,8 +48,8 @@ export async function uploadSettlementFilesAction(formData: FormData): Promise<U
   if (files.length > MAX_FILES) return { ok: false, error: `Upload at most ${MAX_FILES} files at a time.` };
   const lines: UploadLine[] = [];
   for (const file of files) {
-    if (file.size > MAX_FILE_BYTES) {
-      lines.push({ name: file.name, ok: false, message: 'This file is larger than 3 MB, the most one settlement file can be.', warnings: [] });
+    if (file.size > PURPOSE_LIMITS.channel_settlement_file.maxBytes) {
+      lines.push({ name: file.name, ok: false, message: `This file is larger than ${MAX_MB} MB, the most one settlement file can be.`, warnings: [] });
       continue;
     }
     try {

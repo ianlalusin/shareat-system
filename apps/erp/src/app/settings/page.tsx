@@ -96,6 +96,11 @@ export default async function SettingsPage() {
           description="How far the usage staff record may stray from what POS sales say was used before a manager needs a reason to post it. One organisation-wide band, and an optional band per item. Admin only."
         />
         <SettingsCard
+          href="/settings/business-rules"
+          title="Business rules"
+          description="The figures the system checks money against: how far a platform payout may differ before it is looked into, the small rounding gap allowed on the last payment of a loan, and the withholding and VAT rates. Each change starts on a date you choose and keeps who changed it and why. Admin only."
+        />
+        <SettingsCard
           href="/settings/wastage-monitor"
           title="Wastage Monitor"
           description="Who answers for a wasted or refunded order at each branch. With nobody named, a reviewed wastage is created ownerless and the store absorbs it after 15 days — silently, and nothing is recovered."

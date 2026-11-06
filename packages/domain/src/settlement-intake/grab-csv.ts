@@ -5,10 +5,11 @@
  */
 import type { CsvRecord } from '@shareat/core/csv';
 import type { Money } from '@shareat/core/money';
+import { PURPOSE_LIMITS } from '../files/limits';
 import { parseDecimalInput } from '../shared/money-input';
 import { intakeRefusal, megabytes, shown, type SettlementIntakeRefusal } from './refusal';
 
-export const GRAB_MAX_BYTES = 3 * 1024 * 1024;
+export const GRAB_MAX_BYTES = PURPOSE_LIMITS.channel_settlement_file.maxBytes;
 export const GRAB_MAX_ROWS = 10_000;
 
 /** Manila wall clock exactly as printed: `date` is the business day, `time` is HH:MM on a 24-hour clock. */
