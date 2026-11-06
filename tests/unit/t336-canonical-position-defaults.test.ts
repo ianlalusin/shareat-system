@@ -49,9 +49,12 @@ const ORACLE: Readonly<Record<(typeof CANONICAL_POSITIONS)[number], readonly Cap
     'record_stock_movement',
     'transfer_stock',
     'record_wastage',
+    'request_pos_refill', // T-524 (BOSS, 6 Nov 2026): Cashier holds all three POS floor acts
+    'serve_pos_ticket',
+    'confirm_pos_heads',
   ],
-  'Kitchen Staff': ['record_stock_movement', 'record_wastage'],
-  Server: ['record_stock_movement', 'record_wastage'],
+  'Kitchen Staff': ['record_stock_movement', 'record_wastage', 'serve_pos_ticket'], // T-524: + serve only
+  Server: ['record_stock_movement', 'record_wastage', 'request_pos_refill', 'confirm_pos_heads'], // T-524: + refill and heads, NOT serve
   Dishwasher: ['record_stock_movement', 'record_wastage'],
   Slicer: ['record_stock_movement', 'record_wastage', 'request_pos_map'],
   'Inventory Staff': [
@@ -72,26 +75,28 @@ const ORACLE: Readonly<Record<(typeof CANONICAL_POSITIONS)[number], readonly Cap
 const sortedEntries = (rec: Readonly<Record<string, readonly Capability[]>>) =>
   Object.fromEntries(Object.entries(rec).map(([k, v]) => [k, [...v].sort()]));
 
-describe('U1 — CANONICAL_POSITION_DEFAULTS is exactly the ruling (38 rows total)', () => {
+describe('U1 — CANONICAL_POSITION_DEFAULTS is exactly the ruling (44 rows total)', () => {
   it('matches the independent oracle exactly, values sorted, keys the six canonical names', () => {
     expect(Object.keys(CANONICAL_POSITION_DEFAULTS).sort()).toEqual([...CANONICAL_POSITIONS].sort());
     expect(sortedEntries(CANONICAL_POSITION_DEFAULTS)).toEqual(sortedEntries(ORACLE));
   });
 
-  it('the total is 38 (Amendment: Server and Dishwasher each gained F1, 36 -> 38)', () => {
+  it('the total is 44 (Amendment: Server and Dishwasher each gained F1, 36 -> 38; T-524: +3 Cashier, +1 Kitchen Staff, +2 Server -> 44)', () => {
     const total = Object.values(ORACLE).reduce((sum, caps) => sum + caps.length, 0);
-    expect(total).toBe(38);
+    expect(total).toBe(44);
   });
 
-  it('Server and Dishwasher are exactly {record_stock_movement, record_wastage} — the Amendment, not the original proposal', () => {
-    expect([...CANONICAL_POSITION_DEFAULTS.Server].sort()).toEqual(['record_stock_movement', 'record_wastage'].sort());
+  it('Dishwasher is exactly {record_stock_movement, record_wastage} — the Amendment, not the original proposal; Server adds only refill and heads (T-524), never serve', () => {
     expect([...CANONICAL_POSITION_DEFAULTS.Dishwasher].sort()).toEqual(['record_stock_movement', 'record_wastage'].sort());
+    expect([...CANONICAL_POSITION_DEFAULTS.Server].sort()).toEqual(['confirm_pos_heads', 'record_stock_movement', 'record_wastage', 'request_pos_refill']);
+    expect([...CANONICAL_POSITION_DEFAULTS['Kitchen Staff']].sort()).toEqual(['record_stock_movement', 'record_wastage', 'serve_pos_ticket']);
   });
 
-  it('every value is a subset of EVERYDAY_CAPABILITIES (the 21 T-318 moved off the matrix)', () => {
+  it('every value is a subset of EVERYDAY_CAPABILITIES (the 21 T-318 moved off the matrix) plus the three T-524 POS floor acts', () => {
+    const allowed: readonly Capability[] = [...EVERYDAY_CAPABILITIES, 'request_pos_refill', 'serve_pos_ticket', 'confirm_pos_heads'];
     for (const [name, caps] of Object.entries(CANONICAL_POSITION_DEFAULTS)) {
       for (const c of caps) {
-        expect(EVERYDAY_CAPABILITIES, `${name}: "${c}" is not one of the 21 everyday capabilities`).toContain(c);
+        expect(allowed, `${name}: "${c}" is not one of the 21 everyday capabilities nor a T-524 floor act`).toContain(c);
       }
     }
   });

@@ -252,6 +252,8 @@ export const tableSessionLines = pgTable(
     /** A `package` line's qty is the billed head count at payment: T-524 replaces the line (cancelled + new), never edits it. */
     qty: integer('qty').notNull(),
     unitPrice: numeric('unit_price', { precision: 14, scale: 2 }).notNull(),
+    /** The heads a "(up to N)" bundle line covers (N > 1), written from the menu at order time; NULL for every other line. Added in migration 0240 (T-524 audit F1); frozen by the line guard like every non-kitchen column. */
+    bundleHeads: smallint('bundle_heads'),
     /** Composite FK (store_id, kitchen_station_id) -> kitchen_stations (store_id, id), hand-added in migration 0238 (no single-column FK). */
     kitchenStationId: uuid('kitchen_station_id'),
     kitchenStatus: text('kitchen_status', { enum: KITCHEN_LINE_STATUSES }).notNull().default('queued'),
@@ -280,6 +282,8 @@ export const tableSessionLines = pgTable(
     check('table_session_lines_kitchen_status_check', sql`${t.kitchenStatus} in ('queued','served','cancelled')`),
     check('table_session_lines_served_shape_check', sql`(${t.kitchenStatus} = 'served') = (${t.servedAtDevice} is not null)`),
     check('table_session_lines_note_check', sql`length(${t.note}) <= 200`),
+    // NOTE: table_session_lines_bundle_heads_check is added in migration 0240 (T-524 F1).
+    check('table_session_lines_bundle_heads_check', sql`${t.bundleHeads} between 1 and 200`),
     foreignKey({ columns: [t.orgId, t.storeId], foreignColumns: [stores.orgId, stores.id], name: 'table_session_lines_store_id_same_org_fk' }).onDelete('restrict'),
     foreignKey({ columns: [t.storeId, t.sessionId], foreignColumns: [tableSessions.storeId, tableSessions.id], name: 'table_session_lines_session_same_store_fk' }).onDelete('restrict'),
     foreignKey({ columns: [t.storeId, t.kitchenStationId], foreignColumns: [kitchenStations.storeId, kitchenStations.id], name: 'table_session_lines_kitchen_station_same_store_fk' }).onDelete('restrict'),

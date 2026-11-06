@@ -1492,6 +1492,13 @@
       "when": 1806723107084,
       "tag": "0239_t511_business_rule_values",
       "breakpoints": true
+    },
+    {
+      "idx": 240,
+      "version": "7",
+      "when": 1806809507084,
+      "tag": "0240_t524_receipt_append_guard",
+      "breakpoints": true
     }
   ]
 }
