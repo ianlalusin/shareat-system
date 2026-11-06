@@ -149,6 +149,35 @@ docs/       decisions/ · discovery/ · plans/ · tasks/
 
 Ports are reserved and never shared. Never pass a different `-p`.
 
+## ⭐ Building from a work order (apps outside Claude Code)
+
+If you were pointed at a `docs/tasks/NNN-*.md` **work order** (Ian, 2026-11-06), you are a
+**builder**. The work order is your whole brief, written so you need no memory of this project.
+The format is [`docs/tasks/WORK-ORDER-TEMPLATE.md`](./docs/tasks/WORK-ORDER-TEMPLATE.md).
+
+| Step | Who |
+|---|---|
+| Writes the work order, reserves its numbers | Opus planner (BOSS or a spec lane) |
+| Builds it in its own worktree and `wo/` branch, opens one PR | **You** (today: Freebuff with DeepSeek or Nemotron) |
+| Runs CI on the PR | GitHub |
+| Audits open PRs' diffs every 12 hours, **before** they are queued | Codex |
+| Fixes the audit findings on the same branch, then verifies | a Claude Sonnet fixer, verified by Opus |
+| Merges, one at a time, then deploys | BOSS's merge queue only |
+
+**Your hard limits** (the work order's §7 has the full list):
+- Work **only** in your own worktree on your own `wo/` branch. Never work in the shared checkout
+  `C:\Users\ianla\webapps\shareat-system`.
+- Touch only the files the work order lists.
+- Your job ends at **one opened PR**. Never merge, rebase or push anyone else's branch, deploy, or
+  enable auto-merge.
+- Never invent a migration, DEF, task or bible row number, and never edit `PROJECT_BIBLE.md` or
+  `knowledge/`.
+- Never `git worktree remove --force` or `rm -rf` a worktree. It has deleted real source files.
+- Money, permissions and database-schema work stay with Claude builders until Ian says otherwise.
+
+Stuck? Write the exact error under **Builder notes** in the work order, push, and open the PR as a
+draft. A blocked report beats a silent workaround.
+
 
 ## ⭐ Ian's closing line — "wrap up today's work"
 
