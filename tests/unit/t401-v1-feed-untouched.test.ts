@@ -100,8 +100,8 @@ const FEED_FILES_ALLOWED_TO_NAME_MENU: readonly string[] = ['packages/domain/src
 const SEAM_IMPORT = /from\s+['"]\.\.\/pos\/depletion-source['"]/g;
 const withoutSeamImport = (src: string): string => src.replace(SEAM_IMPORT, '');
 
-/** T-524: the POS v2 domain lives beside the v1 feed under packages/domain/src/pos (the spec's home for it) but is NOT the feed; it prices lines from the store menu by design. Listed by FILE so any new file there is still scanned as feed. */
-const POS_V2_FILES: readonly string[] = ['index', 'price', 'shared', 'order', 'discounts', 'sale'].map((n) => `packages/domain/src/pos/${n}.ts`);
+/** T-524 (T-525 added inbox and snapshot): the POS v2 domain lives beside the v1 feed under packages/domain/src/pos (the spec's home for it) but is NOT the feed; it prices lines from the store menu by design. Listed by FILE so any new file there is still scanned as feed. */
+const POS_V2_FILES: readonly string[] = ['index', 'price', 'shared', 'order', 'discounts', 'sale', 'inbox', 'snapshot'].map((n) => `packages/domain/src/pos/${n}.ts`);
 const feedFiles = [...V1_FEED_DIRS.flatMap((d) => files(join(root, d))), ...V1_FEED_FILES.map((f) => join(root, f)).filter(existsSync)].filter((f) => !POS_V2_FILES.includes(rel(f)));
 const menuFiles = [...files(join(root, 'packages/domain/src/menu')), ...['packages/db/src/repo/menu.ts'].map((f) => join(root, f)).filter(existsSync)];
 
