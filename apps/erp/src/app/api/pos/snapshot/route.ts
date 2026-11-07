@@ -1,5 +1,5 @@
 import { loadPosSnapshot } from '@shareat/domain';
-import { fail, guarded, json, notModified, POS_UNPAIRED, posDeps, tabletPairing } from '@/lib/pos-api';
+import { fail, guarded, json, notModified, POS_UNPAIRED, tabletPairing } from '@/lib/pos-api';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +16,7 @@ export async function GET(req: Request): Promise<Response> {
   return guarded('snapshot', async () => {
     const pairing = await tabletPairing();
     if (!pairing) return fail(401, POS_UNPAIRED);
-    const snap = await loadPosSnapshot({ pairingId: pairing.pairingId, orgId: pairing.orgId, storeId: pairing.storeId }, posDeps);
+    const snap = await loadPosSnapshot({ pairingId: pairing.pairingId, orgId: pairing.orgId, storeId: pairing.storeId });
     const headers = { 'cache-control': 'private, no-cache', etag: snap.etag, ...(snap.nextChangeAt ? { 'x-next-change-at': snap.nextChangeAt } : {}) };
     if (matches(req.headers.get('if-none-match'), snap.etag)) return notModified(headers);
     return json(200, { ok: true, ...snap.body }, headers);
