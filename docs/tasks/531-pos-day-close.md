@@ -264,12 +264,50 @@ not an outbox event (A4). Inside **one top-level transaction**:
 Typecheck, the unit project, the integration files above, the 0185, 0188 and sales-day suites, and t524 through t528,
 all on the lane's own `_test` DB with its **own `npm ci`** (no junction). **Never print any `.env.local` value.**
 
-## Open (for Ian, via BOSS)
+## Ian's rulings (7 Nov 2026; bible rows 449, 450)
 
-- **O1.** Who verifies the POS-derived sales day? The proposal is to keep today's rule: any person with
-  `verify_sales_day` other than the closer. It is a second pair of eyes on the cash. If Ian wants the Z approval to
-  count as the verification, the sales day could post at once instead. That is a policy change to row 270's control,
-  so it is not proposed.
-- **O2.** If a Z is forgotten for several days, one Z covers them all under the first date (row 390). Proposal: the
-  close is refused with "This Z would cover more than 2 business days. Ask a manager." Allowing it would book several
-  days of sales on one date.
+### R10 — Who verifies a POS-derived sales day (row 449)
+
+`verifySalesDay` gains one branch, and **only for `source = 'pos_receipts'`**. v1-fed and typed days keep today's
+rule. For a POS-derived day, the verifier must meet **all** of these:
+1. They hold `verify_sales_day` at that store (`authorize`, as today).
+2. Their **role** at that store is **store manager or above**: store manager, area manager, or admin/owner, using the
+   same role ranking `requirePageAccess` and access defaults use. Do not invent a new ranking. A cashier or supervisor
+   who has been hand-granted `verify_sales_day` is still refused.
+3. They are **not** the person who closed the Z (`pos_day_closes.closed_by` for the day's `pos_day_close_id`, or any
+   Z of that date if there are several).
+4. `verify_own_sales_day` does **not** exempt them on a POS-derived day.
+
+The refusal sentence names the rule: "A sales day from the POS is verified by a store manager or above who did not
+close the day." Tests cover each clause's ✗ (a cashier holding the grant, the closer, a manager from another store),
+plus the ✅ for a manager who did not close the Z, and a test that a v1-fed day still follows today's rule.
+
+### R11 — A Z that would span more than 2 business days (row 450)
+
+- `closeDay` refuses when the open window covers **more than 2 business dates**. That is, the business date of the
+  oldest unclosed receipt, measured to today's business date, takes in more than two dates. The sentence is
+  "This close would cover more than 2 days. Call a manager." The Till tab shows the sentence and a **Close day by day**
+  button that only a manager can use.
+- **Close day by day** is `closeBacklog(tx, actor, {storeId, terminalId, closeRunId, approval:{pin}})`. It needs a
+  manager's PIN (`approve_pos_correction`; a miss is counted as in R3) and the actor's role must be store manager or
+  above (the same check as R10). In one transaction it closes the backlog **one business day at a time**, oldest
+  first, up to and including yesterday's business date:
+  - each Z's window runs from the previous end to that business day's end, which is the next day at
+    `businessDayStartHour`;
+  - each Z takes the unclosed receipts whose business date (from `issued_at_device` and the start hour) is that day;
+  - a business day with no receipts gets no Z;
+  - each Z derives its own sales day (R4), with `submitted` status;
+  - `z_no` keeps counting up.
+  The current business day is left open, to be closed normally.
+- **Idempotency:** each Z id is uuidv5(closeRunId, businessDate), so a replay writes nothing new.
+- **Audit:** `pos.day_closed_backlog`, recording the days, Z numbers and totals, and who approved it. Each Z also writes
+  its own `pos.day_closed`.
+- **The December bridge (R5)** runs after the commit for every closed date up to 31 Dec, in date order.
+- **Tests:**
+  - a 4-day backlog gives 3 Zs (one per past day with sales), 3 sales days, and today left open;
+  - a day with no sales is skipped;
+  - a non-manager is refused;
+  - a wrong PIN is counted;
+  - a replay writes nothing;
+  - `closeDay` refuses at 3 days with the exact sentence;
+  - a 2-day window still closes normally (row 390's forgotten-Z case).
