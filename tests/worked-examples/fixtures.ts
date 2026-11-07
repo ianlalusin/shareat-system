@@ -1158,6 +1158,55 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
       'nothing is stored. The receivable clears exactly either way: gross - commission - banked is swept in one line, not left on 1220.',
   },
 
+  // T-511 S6c (migration 0244): a platform charge with no sales day (the weekly fee, or an uncategorised Appendix B charge) is booked once, on the charge date, against the
+  // channel's receivable; the payout that later settles a day must NOT expense it again. storeRef: 'branch1' is the store of the uploaded invoice's channel.
+  {
+    id: 'channel_charge.period_fee',
+    sourceType: 'channel_charge',
+    title: 'A platform charge with no sales day — fee and VAT as one expense, the channel credited (T-511 S6c)',
+    narrative:
+      'v2-only. A Foodpanda invoice carries a ₱100 weekly platform fee that no sales day can pay, and ₱12 of VAT on it: ₱112 in all. ' +
+      'Once a manager approves the file the charge is booked on the date printed on it (or the first open date after it): Dr 6400 ₱112 (the fee and its VAT, one line), ' +
+      'Cr 1220 ₱112 with the channel as party. Foodpanda will take the ₱112 off a later payout, so the receivable already shows it as a credit.',
+    input: { channel: 'Foodpanda', chargeDate: '2026-01-10', description: 'Platform Fee', netTotal: '100.00', vatAmount: '12.00' },
+    expect: [
+      D('6400', '112.00', null, { storeRef: 'branch1', lineMemo: 'Foodpanda platform fee, VAT included' }),
+      C('1220', '112.00', { type: 'channel', id: 'CH-FOODPANDA' }, { storeRef: 'branch1', lineMemo: 'Foodpanda platform fee, VAT included' }),
+    ],
+    entryDate: '2026-01-15',
+    trap:
+      'The VAT is part of the cost (no VAT engine, no input-VAT account: bible row 75), so ONE 6400 line carries fee plus VAT. The credit goes to 1220 with the channel as party, ' +
+      'or the platform aging and the settlement cannot see it. A platform credit note is the same two accounts on the opposite sides, never a negative amount. ' +
+      'The staged line is not the document: the posting is recorded once per staged line, so approving the same invoice twice books it once.',
+  },
+  {
+    id: 'channel_settlement.nets_period_charge',
+    sourceType: 'channel_settlement',
+    title: 'Channel settlement — the payout already netted a booked period charge, so it is not expensed again (T-511 S6c)',
+    narrative:
+      'The weekly charge above (₱100 fee + ₱12 VAT = ₱112) is booked. Foodpanda pays a ₱10,000 day, takes ₱2,000 of day fees (VAT included) and the ₱112 charge: ' +
+      '₱7,888 is banked. The settlement names the charge it nets: Dr 1140 ₱7,888, Dr 6400 ₱2,000 (the day fees only), Cr 1220 ₱9,888 (the day less the charge already ' +
+      'credited). Nothing is left over: there is no 6420 shortfall. 6400 holds ₱2,112 in all, the charge once.',
+    input: {
+      channel: 'Foodpanda',
+      businessDate: '2026-01-10',
+      grossAmount: '10000.00',
+      platformFee: '2000.00',
+      settleChargeIds: ['CHARGE-WEEKLY-FEE'],
+      netDeposited: '7888.00',
+    },
+    expect: [
+      D('1140', '7888.00', { type: 'money_account', id: 'MA-PAYOUT' }, { storeRef: 'branch1', lineMemo: 'Foodpanda settlement' }),
+      D('6400', '2000.00', null, { storeRef: 'branch1', lineMemo: 'Platform fee' }),
+      C('1220', '9888.00', { type: 'channel', id: 'CH-FOODPANDA' }, { storeRef: 'branch1', lineMemo: 'Foodpanda settlement' }),
+    ],
+    entryDate: '2026-01-20',
+    trap:
+      'The platform deducts a charge you already booked, so the payout is SHORT of the day by exactly that charge. Settled the plain way, that gap (112) is swept to 6420 and the charge ' +
+      'is expensed twice (6400 112 and 6420 112). Naming the charge (settleChargeIds) credits 1220 by the day less the charge, so the difference is zero. A charge counts as ' +
+      'netted only while its settlement stands: a void frees it. The difference tolerance never decides this; the link does.',
+  },
+
   // =========================================================================================
   // amortization — 38 legs. Always both legs (leg-mapping.ts: "always both", same shape as
   // depreciation). One of ADR-005's five January-required capabilities.

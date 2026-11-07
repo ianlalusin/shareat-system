@@ -27,7 +27,7 @@ import type { RuleBook } from '../business-rules/book';
 import { dayBlockers, dayBlockersForLines, type DayBlocker } from './day-checks';
 import { LOAN_RULE_KEYS, loadLoanCheckContext, loanCheckViewerOf, loanCheckForDay, primeLoanCheckCoverage, type LoanCheckContext, type LoanCheckViewer, type LoanCheckViewerView } from './loan-check';
 import { intakeRefusal } from './refusal';
-import { foodpandaRuleDate, stageFoodpandaDays, stageRulesOn, STAGE_RULE_KEYS } from './stage';
+import { foodpandaRuleDate, stageFoodpandaDays, stageRulesOn, STAGE_RULE_KEYS, vatCentavosOf } from './stage';
 import { readStoredUpload, type StoredUpload } from './stored-upload';
 import { groupedMoney, plainDate } from './text';
 
@@ -293,9 +293,7 @@ async function vatOnFeesOf(tx: Tx, orgId: string, line: SettlementDayLineRow): P
   const numerator = invoice.charges
     .filter((c) => c.kind === 'cpc_ad' || c.kind === 'platform_fee')
     .reduce((t, c) => t + centsOf(c.netTotal) * BigInt(c.vatRate), 0n);
-  const abs = numerator < 0n ? -numerator : numerator;
-  const rounded = (2n * abs + 100n) / 200n;
-  return fromCentavos(numerator < 0n ? -rounded : rounded);
+  return fromCentavos(vatCentavosOf(numerator));
 }
 
 /** One day for the review screen, or null for an unknown line, another org's line or a line the actor may not see (the same answer for all three). */
