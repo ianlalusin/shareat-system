@@ -5,13 +5,14 @@
  * `1220` by party, exactly as AP and AR do it — the same discipline that found v1's 13.3% drift in
  * a maintained `outstandingAmount`.
  */
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 // ⛔ T-218 — Manila, never bare current_date (DEF-172).
 import { MANILA_TODAY } from './sql-time';
 import type { Tx } from '../client';
 import type { Money } from '@shareat/core/money';
 import type { SafeInsert } from './numeric-input';
 import {
+  channelSettlementLoanLegs,
   channelSettlements,
   type ChannelSettlementStatus,
 } from '../../schema/channel-settlements';
@@ -27,6 +28,16 @@ export const LOANS_PAYABLE_CODE = '2400';
 export const DUE_FROM_STORE_CODE = '1250';
 export const DUE_TO_STORE_CODE = '2150';
 export const PARTY_TYPE = 'channel';
+
+/**
+ * T-511 S6a: one loan a settlement docked. `ownerStoreId` is never null: a same-store leg carries the paying store's own id.
+ * The legs add up to the settlement's `loanDeduction` (a deferred trigger holds that at commit).
+ */
+export interface SettlementLoanLegRow {
+  loanId: string;
+  ownerStoreId: string;
+  amount: string;
+}
 
 export interface ChannelSettlementRow {
   id: string;
@@ -46,8 +57,10 @@ export interface ChannelSettlementRow {
   variance: string;
   settlementGain: string;
   loanDeduction: string;
-  loanId: string | null;
-  loanOwnerStoreId: string | null;
+  /** The loans this payout repaid, oldest first as written; empty when it deducted none. They add up to `loanDeduction`. */
+  loanLegs: SettlementLoanLegRow[];
+  /** Why a person accepted a difference past tolerance (either sign); null when none was needed. */
+  differenceReason: string | null;
   netDeposited: string;
   destinationMoneyAccountId: string;
   reference: string | null;
@@ -76,8 +89,7 @@ export type InsertSettlementInput = Pick<
   | 'channelId'
   | 'salesDayId'
   | 'businessDate'
-  | 'loanId'
-  | 'loanOwnerStoreId'
+  | 'differenceReason'
   | 'destinationMoneyAccountId'
   | 'reference'
   | 'settledOn'
@@ -110,6 +122,39 @@ export async function insertSettlement(
   return { id: row!.id };
 }
 
+export type NewLoanLeg = { loanId: string; ownerStoreId: string; amount: Money };
+
+/** Writes a settlement's legs, one per (loan, owner store), in one statement. Called in the same transaction as the header: a deferred trigger checks the sum at commit. */
+export async function insertLoanLegs(tx: Tx, orgId: string, settlementId: string, legs: readonly NewLoanLeg[]): Promise<void> {
+  if (legs.length === 0) return;
+  // One statement, so the id order is the order of `legs`.
+  await tx
+    .insert(channelSettlementLoanLegs)
+    .values(legs.map((l) => ({ orgId, settlementId, loanId: l.loanId, ownerStoreId: l.ownerStoreId, amount: l.amount })));
+}
+
+/** The legs of these settlements, in the order they were written. ⚠️ `id` is uuidv7, so ordering by it is the order of insertion; a leg is never updated. */
+async function legsOf(tx: Tx, orgId: string, settlementIds: readonly string[]): Promise<Map<string, SettlementLoanLegRow[]>> {
+  const out = new Map<string, SettlementLoanLegRow[]>();
+  if (settlementIds.length === 0) return out;
+  const rows = await tx
+    .select({
+      settlementId: channelSettlementLoanLegs.settlementId,
+      loanId: channelSettlementLoanLegs.loanId,
+      ownerStoreId: channelSettlementLoanLegs.ownerStoreId,
+      amount: channelSettlementLoanLegs.amount,
+    })
+    .from(channelSettlementLoanLegs)
+    .where(and(eq(channelSettlementLoanLegs.orgId, orgId), inArray(channelSettlementLoanLegs.settlementId, [...settlementIds])))
+    .orderBy(asc(channelSettlementLoanLegs.id));
+  for (const r of rows) {
+    const list = out.get(r.settlementId) ?? [];
+    list.push({ loanId: r.loanId, ownerStoreId: r.ownerStoreId, amount: r.amount });
+    out.set(r.settlementId, list);
+  }
+  return out;
+}
+
 export async function getById(
   tx: Tx,
   orgId: string,
@@ -120,7 +165,9 @@ export async function getById(
     .from(channelSettlements)
     .where(and(eq(channelSettlements.orgId, orgId), eq(channelSettlements.id, id)))
     .limit(1);
-  return row as ChannelSettlementRow | undefined;
+  if (!row) return undefined;
+  const legs = await legsOf(tx, orgId, [id]);
+  return { ...row, loanLegs: legs.get(id) ?? [] } as ChannelSettlementRow;
 }
 
 export async function markPosted(
@@ -368,6 +415,8 @@ export interface SettlementListRow {
   outstandingCleared: string;
   feesTotal: string;
   loanDeduction: string;
+  /** The loans this payout repaid (same shape as `ChannelSettlementRow.loanLegs`); empty when it deducted none. */
+  loanLegs: SettlementLoanLegRow[];
   variance: string;
   settlementGain: string;
   netDeposited: string;
@@ -403,6 +452,7 @@ export async function listSettlements(
     limit ${filter.limit ?? 50}
   `)) as unknown as Record<string, unknown>[];
 
+  const legs = await legsOf(tx, orgId, rows.map((r) => String(r.id)));
   return rows.map((r) => ({
     id: String(r.id),
     businessDate: String(r.business_date),
@@ -413,6 +463,7 @@ export async function listSettlements(
     outstandingCleared: String(r.outstanding_cleared),
     feesTotal: String(r.fees_total),
     loanDeduction: String(r.loan_deduction),
+    loanLegs: legs.get(String(r.id)) ?? [],
     variance: String(r.variance),
     settlementGain: String(r.settlement_gain),
     netDeposited: String(r.net_deposited),

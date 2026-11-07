@@ -158,7 +158,7 @@ export default async function ScorecardPage() {
           cleared in 14 days or more scores 0.
         </p>
         <p>
-          ⭐ <strong>Pending findings are not judged.</strong> A finding raised in the last 14 days
+          <strong>Pending findings are not judged.</strong> A finding raised in the last 14 days
           has not been ignored — it has not had a chance yet — so it counts neither for nor against.
           The clear rate answers &ldquo;of the findings that have had a fair chance, how many were
           cleared?&rdquo;, and a store whose findings are all still pending scores a dash, not a

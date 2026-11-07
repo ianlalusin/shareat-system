@@ -88,7 +88,8 @@ describe('the list is short, the detail keeps the sentence', () => {
 describe('the split-payout note', () => {
   it('is worded in plain words by the domain, not an internal step [kills: "slice 6 change" shown to a manager]', () => {
     const src = readFileSync(resolve(__dirname, '..', '..', '..', 'packages', 'domain', 'src', 'settlement-intake', 'day-checks.ts'), 'utf8');
-    expect(src).toContain("const SPLIT_NOTE = 'This payout covers two loans. It cannot be approved yet.';");
+    // T-511 S6a: a payout that docks two loans is now one settlement with a leg per loan, so the note (and the pin of its wording) is gone; t511-s6a-source-scan pins the absence.
+    expect(src).not.toMatch(/SPLIT_NOTE|covers two loans/);
     expect(src).not.toMatch(/slice 6 change/);
   });
 });

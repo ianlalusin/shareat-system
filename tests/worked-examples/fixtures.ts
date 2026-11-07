@@ -377,6 +377,46 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
       'ledger, not from re-deriving the old feed with current tenders, or a platform day, a refund day ' +
       'or a remapped tender produces phantom lines.',
   },
+  // T-511 S6b (migration 0243): the platform file figure replaces the staff figure. Both directions, one fixture each (a fixture has one `expect`).
+  // storeRef: 'branch1' is the sales day's store. The party is the channel on 1220.
+  {
+    id: 'sale.platform-correction',
+    sourceType: 'sale',
+    title: 'The platform file is higher than staff typed — a correcting entry (T-511 S6b)',
+    narrative:
+      'v2-only. Staff typed a ₱9,000 Foodpanda day and it was verified and posted (Dr 1220 ₱9,000, Cr 4150 ₱9,000). The Foodpanda ' +
+      'statement for the same day says ₱10,000. The staff figure stays as typed; the file figure is the truth for sales and the receivable, ' +
+      'so a manager approving the file posts the difference: Dr 1220 ₱1,000 (party the channel), Cr 4150 ₱1,000, dated on the sales day ' +
+      'if its month is open, otherwise on the first open date after it.',
+    input: { channel: 'Foodpanda', businessDate: '2026-01-10', staffFigure: '9000.00', fileFigure: '10000.00' },
+    expect: [
+      D('1220', '1000.00', { type: 'channel', id: 'CH-FOODPANDA' }, { storeRef: 'branch1', lineMemo: 'Foodpanda file correction' }),
+      C('4150', '1000.00', null, { storeRef: 'branch1', lineMemo: 'Foodpanda file correction' }),
+    ],
+    entryDate: '2026-01-10',
+    trap:
+      'delta = file figure - what the LEDGER holds for that channel and day (the staff entry plus earlier corrections), never ' +
+      '`sales_day_channels.amount`, which is never overwritten. The party on 1220 is the channel, or the platform aging and the settlement ' +
+      'cannot see the receivable. A zero delta posts nothing at all.',
+  },
+  {
+    id: 'sale.platform-correction-lower',
+    sourceType: 'sale',
+    title: 'The platform file is lower than staff typed — the correcting entry reversed (T-511 S6b, DEF-810)',
+    narrative:
+      'v2-only. Staff typed an ₱11,000 Foodpanda day; the Foodpanda statement says ₱10,000. Without a correction the settlement ' +
+      'clears ₱10,000 and ₱1,000 stays stuck on 1220 with no sweep (DEF-810). The correcting entry is the same pair the other way round: ' +
+      'Dr 4150 ₱1,000, Cr 1220 ₱1,000 (party the channel). The settlement then clears the receivable to exactly zero.',
+    input: { channel: 'Foodpanda', businessDate: '2026-01-10', staffFigure: '11000.00', fileFigure: '10000.00' },
+    expect: [
+      D('4150', '1000.00', null, { storeRef: 'branch1', lineMemo: 'Foodpanda file correction' }),
+      C('1220', '1000.00', { type: 'channel', id: 'CH-FOODPANDA' }, { storeRef: 'branch1', lineMemo: 'Foodpanda file correction' }),
+    ],
+    entryDate: '2026-01-10',
+    trap:
+      'A negative delta is the SAME two accounts on the opposite sides, not a different pair and not a negative amount: ' +
+      'debit and credit are never negative. The revenue account is the one the original sales-day posting used (4150), never a new one.',
+  },
 
   // =========================================================================================
   // salary_advance — 1,488 legs. leg-mapping.ts FINDING: disbursement and repayment (the
@@ -1049,6 +1089,73 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
     trap:
       'A deduction is SIGNED and nothing may clamp it to zero. A promo-heavy day genuinely returns ' +
       'money, and v1 shipped a bug by assuming a deduction is always positive.',
+  },
+  // T-511 S6a (the loan-legs migration): a payout can dock several loans, one leg each; and a difference past tolerance, either sign, is accepted by a person with a reason.
+  // storeRef: 'branch1' is the PAYING store, 'commissary' the store that OWNS the second loan.
+  {
+    id: 'channel_settlement.loan_two_legs',
+    sourceType: 'channel_settlement',
+    title: "Channel settlement — two loans docked from one payout, one of them another store's",
+    narrative:
+      'A \u20b110,000 Grab day settles for the Lipa branch: \u20b12,500 commission, and Grab docks two loans out of the payout: ' +
+      'a \u20b1590 repayment on a Lipa loan and a \u20b11,770 repayment on a loan that belongs to the commissary. \u20b15,140 is banked. ' +
+      'Each loan is its own leg, posted in the order given: the Lipa loan is a plain 2400 debit; the commissary loan is the ' +
+      'three-line reciprocal triple, so the two stores owe each other exactly what moved.',
+    input: {
+      channel: 'Grab',
+      businessDate: '2026-01-10',
+      grossAmount: '10000.00',
+      commission: '2500.00',
+      loanLegs: [
+        { loan: 'Lipa loan', amount: '590.00' },
+        { loan: 'Commissary loan', amount: '1770.00', ownerStore: 'commissary' },
+      ],
+      netDeposited: '5140.00',
+    },
+    expect: [
+      D('1140', '5140.00', { type: 'money_account', id: 'MA-PAYOUT' }, { storeRef: 'branch1', lineMemo: 'Grab settlement' }),
+      D('6400', '2500.00', null, { storeRef: 'branch1', lineMemo: 'Commission' }),
+      D('2400', '590.00', { type: 'loan', id: 'LOAN-LIPA' }, { storeRef: 'branch1', lineMemo: 'Loan repayment' }),
+      D('1250', '1770.00', { type: 'store', id: 'STORE-COMMISSARY' }, { storeRef: 'branch1', lineMemo: 'due from commissary, their loan repaid out of this payout' }),
+      D('2400', '1770.00', { type: 'loan', id: 'LOAN-COMMISSARY' }, { storeRef: 'commissary', lineMemo: 'Loan repayment' }),
+      C('2150', '1770.00', { type: 'store', id: 'STORE-BRANCH1' }, { storeRef: 'commissary', lineMemo: 'due to branch, they paid our loan' }),
+      C('1220', '10000.00', { type: 'channel', id: 'CH-GRAB' }, { storeRef: 'branch1', lineMemo: 'Grab settlement' }),
+    ],
+    entryDate: '2026-01-15',
+    trap:
+      'The loan deduction is the SUM of the legs and the database holds the two equal at commit, so a leg is never ' +
+      'a lump. A leg whose loan belongs to ANOTHER store is the 1250 / 2400 / 2150 triple, not a bare 2400: the paying store gave up cash ' +
+      "that was not its debt, so it is owed (1250), the owning store's loan falls (2400) and it now owes the paying store (2150). " +
+      "Net debit across the triple is exactly one leg, which is what the settlement identity needs; invariant 6's reciprocal check " +
+      'proves 1250 = 2150 across stores. Two legs of the same loan and owner store are refused: put the amounts together.',
+  },
+  {
+    id: 'channel_settlement.shortfall_acknowledged',
+    sourceType: 'channel_settlement',
+    title: 'Channel settlement — a shortfall past tolerance, accepted by a person with a reason',
+    narrative:
+      'A \u20b110,000 Grab day settles with \u20b12,500 commission and only \u20b14,000 banked: \u20b13,500 short of what the day should have ' +
+      'paid, far past the \u20b11,000 tolerance. A manager checks the platform statement, agrees the day was over-reported and types why. ' +
+      'The shortfall books to 6420 and the receivable clears to EXACTLY zero. The reason is stored on the settlement.',
+    input: {
+      channel: 'Grab',
+      businessDate: '2026-01-10',
+      grossAmount: '10000.00',
+      commission: '2500.00',
+      netDeposited: '4000.00',
+      acknowledgeDifference: { reason: 'Platform short-paid this payout; statement line attached.' },
+    },
+    expect: [
+      D('1140', '4000.00', { type: 'money_account', id: 'MA-PAYOUT' }, { storeRef: 'branch1', lineMemo: 'Grab settlement' }),
+      D('6400', '2500.00', null, { storeRef: 'branch1', lineMemo: 'Commission' }),
+      D('6420', '3500.00', null, { storeRef: 'branch1', lineMemo: 'Settlement variance' }),
+      C('1220', '10000.00', { type: 'channel', id: 'CH-GRAB' }, { storeRef: 'branch1', lineMemo: 'Grab settlement' }),
+    ],
+    entryDate: '2026-01-15',
+    trap:
+      "Past tolerance, a difference of EITHER sign needs a person's acknowledgement with a reason (acknowledgeDifference): a shortfall books " +
+      'to 6420 (expense), a gain to 7100 (income), never the other way round, and never silently. Within tolerance nothing is asked and ' +
+      'nothing is stored. The receivable clears exactly either way: gross - commission - banked is swept in one line, not left on 1220.',
   },
 
   // =========================================================================================

@@ -16,8 +16,6 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
  *   The state route reads `since` and `storeId` from the query string, `stationId` for the kitchen queue; its 200 is `{ ok:true, stateVersion, openStands, kitchenQueue, refillQueue }`
  *   where a read the person may not do is `null`. The three reads are gated by record_sale (openStands), serve_pos_ticket (kitchenQueue), request_pos_refill (refillQueue).
  *   403 beats 304 on the state route: store scope is checked BEFORE the cheap state_version comparison (so a 304 never confirms another store's version).
- *   NOT covered here (the default rule reader is T-539's and not injectable at a route): the snapshot's 503 "business rules are not connected" mapping. The domain file
- *   covers the refusal itself; the builder should map it to 503 and add a test when T-539 lands.
  *
  * RED NOW FOR THE RIGHT REASON: the three route files do not exist. They are loaded lazily, so each case fails "MISSING MODULE ... not built" AFTER its
  * fixture ran. The "fixture sanity" cases run for real.
@@ -45,18 +43,11 @@ vi.mock('next/navigation', () => ({
   },
 }));
 
-// The default rule reader is T-539's and is not wired yet: `posDeps` (lib/pos-api) is empty in production. The routes read it at call time, so this file
-// swaps in the T-524-style reader (12% VAT, 20% senior/PWD, day starts 04:00) and one case takes it away again to see the 503.
-const posDeps = vi.hoisted(() => ({
-  readRules: (async () => ({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4 })) as unknown,
-}));
-vi.mock('@/lib/pos-api', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/pos-api')>()), posDeps }));
-
 import { posV2Repo } from '@shareat/db';
 import { POS_TABLET_COOKIE } from '@shareat/auth';
 import { openStand, addLines } from '../../../../packages/domain/src/pos';
 import {
-  asOrg, closeAll, counts, ev, eventsOf, fixture, newStand, nowIso, pinSession, plainDay, receiptOfSession, sql, standOpenedPayload, stateVersionOf, uuid,
+  asOrg, closeAll, counts, ev, eventsOf, fixture, newStand, nowIso, pinSession, plainDay, receiptOfSession, seniorDay, sql, standOpenedPayload, stateVersionOf, uuid,
   type Ev, type Fx,
 } from '../../../../packages/domain/tests/integration/_fixtures/t525-pos';
 import { insOffer } from '../../../../packages/db/tests/integration/_fixtures/t401-menu';
@@ -278,6 +269,23 @@ describe('POST /api/pos/events - the envelope (R2)', () => {
     expect((await counts(f)).receipts).toBe(1);
   });
 
+  it('T-539 S2 end to end: a senior sale.completed through the real route with NO injected reader is priced from the database rules (12% VAT, 20%): receipt, statutory row, no mismatch row', async () => {
+    const f = await fixture();
+    await pinSession(f, f.counterId);
+    const day = seniorDay(f);
+    // The tablet's own figures for pork 250.00 x 2 with one senior on one: VAT 26.79 + 20% of 223.21 (44.64) = 71.43 off (the statutory row keeps the whole 71.43).
+    const sale = day.events[3]!;
+    sale.payload = { ...sale.payload, device: { subtotal: '500.00', discountTotal: '71.43', total: '428.57', lines: [{ lineId: day.porkLineId, gross: '500.00', discountTotal: '71.43', net: '428.57' }] } };
+    const res = await post(f, day.events);
+    expect(res.status).toBe(200);
+    const j = (await res.json()) as { results: { seq: number; status: string }[] };
+    expect(j.results.map((r) => r.status)).toEqual(['applied', 'applied', 'applied', 'applied']);
+    expect(await receiptOfSession(day.sessionId)).toMatchObject({ id: day.receiptId, total: '428.57' });
+    const rec = await sql`select kind, source, gross_amount::text, discount_amount::text from statutory_discount_records where org_id = ${f.orgId}`;
+    expect(rec).toEqual([{ kind: 'senior', source: 'pos', gross_amount: '250.00', discount_amount: '71.43' }]);
+    expect(await sql`select 1 from audit_log where org_id = ${f.orgId} and action = 'pos.sale_recompute_mismatch'`).toHaveLength(0);
+  });
+
   it('the pairing is the only source of store and pairing: a payload that names another store is quarantined and writes nothing anywhere', async () => {
     const f = await fixture();
     await pinSession(f, f.counterId);
@@ -361,15 +369,12 @@ describe('GET /api/pos/snapshot (R7)', () => {
     expect(changed.headers.get('etag')).not.toBe(etag);
   });
 
-  it('503 "The POS business rules are not connected yet." when no rule reader is wired (the production default until T-539)', async () => {
+  it('rules: with no reader injected (the production path) the snapshot carries the real rule values: registry defaults on a fresh org (T-539 S2)', async () => {
     const f = await fixture();
-    const wired = posDeps.readRules;
-    posDeps.readRules = undefined;
-    try {
-      await expectFailure(await get(f), 503, 'The POS business rules are not connected yet. Ask an admin.');
-    } finally {
-      posDeps.readRules = wired;
-    }
+    const res = await get(f);
+    expect(res.status).toBe(200);
+    const j = (await res.json()) as { rules: { vatPercentBasisPoints: number | string; scPwdPercentBasisPoints: number | string; businessDayStartHour: number } };
+    expect([Number(j.rules.vatPercentBasisPoints), Number(j.rules.scPwdPercentBasisPoints), j.rules.businessDayStartHour]).toEqual([1200, 2000, 4]);
   });
 
   it('no terminal row for this pairing is 409 "This tablet has no till number yet. Ask a manager."', async () => {

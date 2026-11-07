@@ -71,7 +71,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
       <div>
         <h1 className="text-2xl font-semibold">Budgets</h1>
         <PageDescription>
-          What a store may spend per category, per period. ⛔ <strong>A cap warns; it never
+          What a store may spend per category, per period. <strong>A cap warns; it never
           blocks</strong> — the figure shows on{' '}
           <Link href="/expenses/new" className="underline underline-offset-2">
             new expense
