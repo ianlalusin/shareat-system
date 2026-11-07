@@ -3,8 +3,8 @@
 /**
  * T-526 R3 - the POS frame: top bar (store, status pill, who is signed in, Switch cashier, ERP), the tab strip, and the page body.
  * The server layout decides what this person may see and passes it in; everything here is presentation plus the schedulers in
- * `use-pos-state.ts` and `use-device-sync.ts`. The tab bodies are placeholders until T-527; the slice that first needs this state (the
- * state body, `drainNow`, the offline actor) adds the context that hands it down, so nothing here is exported before it has a caller.
+ * `use-pos-state.ts` and `use-device-sync.ts`. T-527 hands that state down to the tabs through `PosContext` (`pos-context.tsx`): the Orders tab is
+ * built on it; the other tab bodies are still placeholders.
  * Touch size is `min-h-12` (3rem) on every control. No state library: React state only.
  */
 import Link from 'next/link';
@@ -15,6 +15,9 @@ import { signOutAction } from '@/app/sign-in/actions';
 import { POS_CONFLICT_MESSAGE, POS_NEEDS_INTERNET_ONCE, POS_STORE_ACCESS_LOST, POS_TABLET_UNPAIRED_MESSAGE, posHttpErrorMessage } from './messages';
 import { SwitchCashierDialog } from './SwitchCashierDialog';
 import { posOfflineBandText } from './offline-band';
+import type { MenuLike } from '../_orders/menu-filter';
+import { projectOrders, refusalNotices, type SessionBody, type ServerStand } from '../_orders/project';
+import { PosContext } from './pos-context';
 import { statusPillLabel, statusPillShort } from './status-pill';
 import { tabCount, visibleTabs } from './tabs';
 import { useDeviceSync } from './use-device-sync';
@@ -54,6 +57,8 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
   const avatarRef = useRef<HTMLButtonElement>(null);
   const menuId = useId();
   const signingOut = useRef(false);
+  const bodiesRef = useRef<Record<string, SessionBody | undefined>>({});
+  const [notices, setNotices] = useState<string[]>([]);
 
   const offline = !state.online;
   const actor = sync.offlineActor;
@@ -108,6 +113,35 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
   const switchCashier = () => (offline ? setSwitching(true) : startTransition(() => void signOutAction()));
   const signInAgain = () => startTransition(() => void signOutAction());
   const showErp = erpHref && !offline;
+  // T-527: a refusal is told on EVERY tab, not only Orders. The drain's send wrapper hands the results over before the outbox drops those events, so the
+  // view (which still holds them) can name the stand. Read through a ref: the handler is registered once and must see the latest lists.
+  const latest = useRef({ openStands: state.body?.openStands ?? null, pending: sync.pendingEvents ?? [], snapshot: sync.ordersSnapshot ?? null });
+  latest.current = { openStands: state.body?.openStands ?? null, pending: sync.pendingEvents ?? [], snapshot: sync.ordersSnapshot ?? null };
+  const setResultsHandler = sync.setResultsHandler;
+  useEffect(() => {
+    setResultsHandler?.((sent, results) => {
+      const { openStands, pending, snapshot } = latest.current;
+      const view = projectOrders({ openStands: openStands as ServerStand[] | null, sessions: bodiesRef.current }, pending, snapshot ? { stands: snapshot.stands, menu: snapshot.menu as MenuLike } : null);
+      const found = refusalNotices(sent, results, view);
+      if (found.length > 0) setNotices((n) => [...n, ...found]);
+    });
+    return () => setResultsHandler?.(null);
+  }, [setResultsHandler]);
+
+  const pos = {
+    bodiesRef,
+    storeId,
+    paired: pairedStoreId !== null,
+    personId: person.personId,
+    offlineActorPersonId: actor?.personId ?? null,
+    online: state.online,
+    openStands: state.body?.openStands ?? null,
+    stateVersion: state.body?.stateVersion ?? null,
+    pendingEvents: sync.pendingEvents,
+    ordersSnapshot: sync.ordersSnapshot,
+    requestDrain: sync.requestDrain,
+    setResultsHandler: sync.setResultsHandler,
+  };
 
   return (
     <>
@@ -213,6 +247,14 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
           {state.httpError ? <Banner tone="error">{posHttpErrorMessage(state.httpError)}</Banner> : null}
           {sync.unpaired ? <Banner tone="error">{POS_TABLET_UNPAIRED_MESSAGE}</Banner> : null}
           {sync.needsInternet ? <Banner tone="warning">{POS_NEEDS_INTERNET_ONCE}</Banner> : null}
+          {notices.map((n, i) => (
+            <Banner key={`${i}-${n}`} tone="warning">
+              {n}{' '}
+              <Button icon={null} className="min-h-12" data-erp-size="free" onClick={() => setNotices((all) => all.filter((_, j) => j !== i))}>
+                OK
+              </Button>
+            </Banner>
+          ))}
           {sync.conflicts > 0 ? (
             <Banner tone="warning">
               {POS_CONFLICT_MESSAGE}{' '}
@@ -223,7 +265,7 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
           ) : null}
           {storeId || stores.length === 0 ? (
             // No store at all: the page below shows its own refusal card for this person, not a sentence from the shell.
-            children
+            <PosContext.Provider value={pos}>{children}</PosContext.Provider>
           ) : (
             <section aria-labelledby="pos-pick-store" className="mx-auto max-w-md rounded-2xl border border-surface-border bg-surface p-5">
               <h1 id="pos-pick-store" className="text-lg font-semibold">

@@ -73,7 +73,6 @@ getCalendarWeatherIcon
 getGroupKey
 getKitchenTicketContribution
 getNonCentavoCount
-getSessionBill
 groupIntoFamilies
 hasFingerprint
 hasOtherActiveAdmin

@@ -8,6 +8,9 @@ import { useEffect, useRef, useState } from 'react';
 import { POS_POLL_INTERVAL_MS } from './constants';
 import { initialPosState, pollPosState, type PosState } from './pos-state';
 
+/** T-527: the drain dispatches this on `document` after it removed events; the poll answers at once instead of waiting for its next beat. */
+export const POS_STATE_REFRESH_EVENT = 'pos-state-refresh';
+
 export function usePosState(storeId: string | null): PosState {
   const [state, setState] = useState<PosState>(initialPosState);
   const latest = useRef(state);
@@ -30,6 +33,8 @@ export function usePosState(storeId: string | null): PosState {
         inFlight = false;
       }
     };
+    const onRefresh = (e: Event) => (e as CustomEvent<{ waits: Promise<unknown>[] }>).detail.waits.push(tick());
+    document.addEventListener(POS_STATE_REFRESH_EVENT, onRefresh);
     void tick();
     const timer = setInterval(tick, POS_POLL_INTERVAL_MS);
     // Coming back to a visible tab refreshes at once instead of waiting for the next beat.
@@ -39,6 +44,7 @@ export function usePosState(storeId: string | null): PosState {
       stopped = true;
       clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisible);
+      document.removeEventListener(POS_STATE_REFRESH_EVENT, onRefresh);
     };
   }, [storeId]);
 

@@ -80,7 +80,7 @@ export function SwitchCashierDialog({ open, onClose, onSwitched }: { open: boole
         </div>
         {message ? <Banner tone="error">{message}</Banner> : null}
         <Keypad onDigit={onDigit} onBack={onBack} onClear={onClear} disabled={busy} />
-        <Button variant="primary" className={POS_SIGN_IN_BUTTON} data-erp-size="free" icon={null} disabled={!ready || busy} onClick={submit}>
+        <Button variant="primary" className={POS_SIGN_IN_BUTTON} data-erp-size="free" icon={null} disabled={!ready || busy} aria-disabled={!ready || busy} onClick={submit}>
           Sign in
         </Button>
         {ready ? null : <p className="text-center text-sm text-muted">Enter your Employee ID and PIN first.</p>}

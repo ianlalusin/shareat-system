@@ -6,9 +6,10 @@
  * The logic lives in the plain modules next to this file (and is tested there); this hook only schedules it.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { countPending, drain, isSnapshotUsable, listVerifiers, readSnapshot, type CachedSnapshot } from '@/lib/pos-device';
+import { countPending, drain, isSnapshotUsable, listPending, listVerifiers, readSnapshot, type CachedSnapshot, type PosEvent, type PosEventResult } from '@/lib/pos-device';
 import { POS_DRAIN_INTERVAL_MS, POS_OFFLINE_ACTOR_KEY, POS_OFFLINE_SNAPSHOT_MAX_AGE_MS, POS_POLL_INTERVAL_MS, POS_SNAPSHOT_REFRESH_MS } from './constants';
 import { makePosSend } from './drain-send';
+import { POS_STATE_REFRESH_EVENT } from './use-pos-state';
 import { browserPromoteJar, promoteAfterTabletSignIn } from './pending-verifier';
 import { showNeedsInternetOnce } from './offline-band';
 import { refreshSnapshot, type SnapshotBody } from './snapshot-sync';
@@ -17,9 +18,23 @@ import type { SnapshotStaff } from './verifier-expiry';
 
 export type { OfflineActor };
 
+/** What the Orders tab reads from the cached snapshot (T-527): the stand list and the menu. */
+export interface SnapshotOrdersPart {
+  stands: { id: string; number: number }[];
+  menu: unknown;
+}
+
 export interface DeviceSync {
   /** The cached snapshot's staff list (empty until one exists). */
   staff: SnapshotStaff[];
+  /** The cached snapshot's stands and menu; null until one exists. */
+  ordersSnapshot: SnapshotOrdersPart | null;
+  /** The outbox as it stands (the events not yet sent), oldest first: the Orders tab applies them on top of the server's list (T-527). */
+  pendingEvents: PosEvent[];
+  /** Asks for a send now; a request made while one is running is sent right after it (T-527). */
+  requestDrain: () => void;
+  /** The Orders tab hears every result list from the drain's send wrapper, BEFORE the outbox drops those events (T-527 refusal notice). */
+  setResultsHandler: (handler: ((sent: PosEvent[], results: PosEventResult[]) => void) | null) => void;
   /** True once the first refresh finished and there is still no usable snapshot: the tablet has never been online here. */
   needsInternet: boolean;
   unpaired: boolean;
@@ -37,6 +52,13 @@ function staffOf(s: CachedSnapshot | null): SnapshotStaff[] {
   return (s?.body as Partial<SnapshotBody> | undefined)?.staff ?? [];
 }
 
+function ordersPartOf(s: CachedSnapshot | null): SnapshotOrdersPart | null {
+  const b = s?.body as Partial<SnapshotOrdersPart> | undefined;
+  return b && Array.isArray(b.stands) && b.menu ? { stands: b.stands, menu: b.menu } : null;
+}
+
+const sameEvents = (a: PosEvent[], b: PosEvent[]): boolean => a.length === b.length && a.every((e, i) => e.seq === b[i]!.seq);
+
 export function useDeviceSync(input: { paired: boolean; personId: string; online: boolean }): DeviceSync {
   const { paired, personId, online } = input;
   const [snapshot, setSnapshot] = useState<CachedSnapshot | null>(null);
@@ -44,10 +66,13 @@ export function useDeviceSync(input: { paired: boolean; personId: string; online
   const [usable, setUsable] = useState<boolean | null>(null);
   const [unpaired, setUnpaired] = useState(false);
   const [pending, setPending] = useState(0);
+  const [pendingEvents, setPendingEvents] = useState<PosEvent[]>([]);
   const [sending, setSending] = useState(false);
   const [conflicts, setConflicts] = useState(0);
   const [actor, setActor] = useState<OfflineActor | null>(null);
   const draining = useRef(false);
+  const again = useRef(false);
+  const onResults = useRef<((sent: PosEvent[], results: PosEventResult[]) => void) | null>(null);
 
   const setOfflineActor = useCallback((next: OfflineActor | null) => {
     setActor(next);
@@ -60,22 +85,48 @@ export function useDeviceSync(input: { paired: boolean; personId: string; online
     }
   }, []);
 
-  const refreshPending = useCallback(async () => setPending(await countPending()), []);
+  const refreshPending = useCallback(async () => {
+    setPending(await countPending());
+    const list = await listPending(500);
+    setPendingEvents((prev) => (sameEvents(prev, list) ? prev : list));
+  }, []);
 
   const drainNow = useCallback(async () => {
-    if (draining.current) return;
+    if (draining.current) {
+      again.current = true; // something was added while a send was running: send again right after it
+      return;
+    }
     draining.current = true;
     setSending(true);
     try {
-      const report = await drain(makePosSend((...a) => fetch(...a)));
+      const send = makePosSend((...a) => fetch(...a));
+      const report = await drain(async (batch) => {
+        const outcome = await send(batch);
+        if (outcome.kind === 'ok') onResults.current?.(batch, outcome.results);
+        return outcome;
+      });
       if (report.stopped === 'http' && report.status === 401) setUnpaired(true);
       if (report.conflicts.length > 0) setConflicts((n) => n + report.conflicts.length);
+      // Ask the poll to answer at once. The Orders tab keeps a dropped event on screen until that answer and the table's body have both landed (settle.ts).
+      if (report.removed > 0) document.dispatchEvent(new CustomEvent(POS_STATE_REFRESH_EVENT, { detail: { waits: [] } }));
     } finally {
       draining.current = false;
       setSending(false);
       await refreshPending();
+      if (again.current) {
+        again.current = false;
+        void drainNow();
+      }
     }
   }, [refreshPending]);
+
+  const requestDrain = useCallback(() => {
+    void refreshPending();
+    void drainNow();
+  }, [refreshPending, drainNow]);
+  const setResultsHandler = useCallback((handler: ((sent: PosEvent[], results: PosEventResult[]) => void) | null) => {
+    onResults.current = handler;
+  }, []);
 
   // Snapshot: on mount and every 5 minutes. The first pass also promotes the pending verifier, which is ALWAYS consumed (R4).
   useEffect(() => {
@@ -155,6 +206,10 @@ export function useDeviceSync(input: { paired: boolean; personId: string; online
 
   return {
     staff: staffOf(snapshot),
+    ordersSnapshot: ordersPartOf(snapshot),
+    pendingEvents,
+    requestDrain,
+    setResultsHandler,
     needsInternet: showNeedsInternetOnce({ paired, snapshotUsable: usable, unpaired }),
     unpaired,
     pending,

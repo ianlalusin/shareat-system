@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { requirePageAccess, StoreNotAvailable } from '@/lib/page-access';
 import { Page } from '@/components/shell/Page';
-import { SlicePlaceholder } from './_shell/SlicePlaceholder';
+import { Orders } from './_orders/Orders';
 import { firstOtherPosTab, storeRefused } from './lib';
 
 export const metadata = { title: 'Orders — Shareat POS' };
@@ -21,7 +21,7 @@ export default async function PosOrdersPage({ searchParams }: { searchParams: Pr
   if (await storeRefused(actor, storeId, 'record_sale')) return <StoreNotAvailable />;
   return (
     <Page density="table">
-      <SlicePlaceholder title="Orders" message="Orders are coming in the next update." />
+      <Orders />
     </Page>
   );
 }

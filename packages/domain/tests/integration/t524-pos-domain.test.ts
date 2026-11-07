@@ -74,7 +74,7 @@ interface PosApi {
   applyPresetToAllLines: W<{ applied: number; skipped: number }>;
   voidUnpaidSession: W;
   completeSale: W<{ wrote: boolean; receiptId: string }>;
-  getSessionBill: W<{ stateVersion: number }>;
+  getSessionBill: W<{ stateVersion: number; lines: { id: string; name: string; menuItemId: string; note: string | null }[] }>;
   listOpenStands: W<{ stateVersion: number }>;
   listKitchenQueue: W<{ stateVersion: number }>;
   listRefillQueue: W<{ stateVersion: number }>;
@@ -722,6 +722,32 @@ describe('R4 / test 4 - addLines: the server\'s menu decides', () => {
     await withOpt([f.options.porkLarge]);
     const [l] = await linesOf(s.sessionId);
     expect(l).toMatchObject({ qty: 2, unit_price: '280.00' }); // 250.00 + 30.00
+  });
+
+  it('T-527 ruling 3: getSessionBill lines also carry menuItemId and note, keep the stored name (which carries the chosen option), carry no optionLabels, and still omit a cancelled line', async () => {
+    const f = await fixture();
+    const s = await open(f);
+    const [optLine, plainLine, goneLine] = [uuid(), uuid(), uuid()];
+    const at = { storeId: f.storeId, pairingId: f.pairingId, sessionId: s.sessionId };
+    await asOrg(f.orgId, (tx) =>
+      P.addLines(tx, f.counter, {
+        ...at,
+        lines: [
+          { lineId: optLine, menuItemId: f.menu.pork.itemId, variantId: f.menu.pork.variantId, qty: 1, note: 'no chili', addedAtDevice: nowIso(), optionValueIds: [f.options.porkLarge] },
+          { lineId: plainLine, menuItemId: f.menu.cola.itemId, variantId: f.menu.cola.variantId, qty: 2, addedAtDevice: nowIso() },
+          { lineId: goneLine, menuItemId: f.menu.cola.itemId, variantId: f.menu.cola.variantId, qty: 1, addedAtDevice: nowIso() },
+        ],
+      }),
+    );
+    await asOrg(f.orgId, (tx) => P.cancelLine(tx, f.counter, { storeId: f.storeId, pairingId: f.pairingId, lineId: goneLine, reason: 'Wrong item' }));
+    const optionName = (await sql<{ name: string }[]>`select name from menu_option_values where id = ${f.options.porkLarge}`)[0]!.name;
+    const bill = await asOrg(f.orgId, (tx) => P.getSessionBill(tx, f.counter, { storeId: f.storeId, sessionId: s.sessionId }, RATES));
+    expect(bill.lines.map((l) => l.id).sort()).toEqual([optLine, plainLine].sort());
+    const withOpt = bill.lines.find((l) => l.id === optLine)!;
+    expect(withOpt).toMatchObject({ menuItemId: f.menu.pork.itemId, note: 'no chili' });
+    expect(Object.keys(withOpt)).not.toContain('optionLabels');
+    expect(withOpt.name).toContain(optionName);
+    expect(bill.lines.find((l) => l.id === plainLine)).toMatchObject({ menuItemId: f.menu.cola.itemId, note: null });
   });
 
   it('bundle for 5 heads (fewer than 6): the single bundle line only', async () => {

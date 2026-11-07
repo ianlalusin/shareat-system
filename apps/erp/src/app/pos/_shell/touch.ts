@@ -7,7 +7,8 @@
 export const POS_TOUCH = 'min-h-12 min-w-12';
 
 /**
- * The switch-cashier dialog's Sign in. The kit's disabled style is `opacity-50`, which put white on pale pink (~2:1). Scoped to this button, NOT the kit:
- * disabled is a flat `muted` fill with `canvas` text, both tokens, so it is 5.68:1 in light and higher in dark (apps/erp/tests/theme-tokens.test.ts holds the pair).
+ * The switch-cashier dialog's Sign in. The kit's disabled style is `opacity-50`, which put white on pale pink (~2:1). Scoped to this button, NOT the kit.
+ * T-527 Addendum fix 1: disabled is a flat `surface-border` fill (barely off the canvas, so it reads as switched off, never as a solid button) with
+ * `muted` text, both tokens, at least 4.5:1 in light and dark; `cursor-not-allowed` plus `aria-disabled` (set by the dialog).
  */
-export const POS_SIGN_IN_BUTTON = `${POS_TOUCH} w-full justify-center disabled:!opacity-100 disabled:!bg-muted disabled:!text-canvas disabled:cursor-not-allowed`;
+export const POS_SIGN_IN_BUTTON = `${POS_TOUCH} w-full justify-center disabled:!opacity-100 disabled:!bg-surface-border disabled:!text-muted disabled:cursor-not-allowed`;

@@ -51,12 +51,13 @@ describe('T-526b item 2 - touch size and contrast', () => {
     expect(dialog).toContain('Enter your Employee ID and PIN first.');
   });
 
-  it('disabled Sign in is a flat muted fill with canvas text, both tokens: at least 4.5:1 in light AND dark (it was white on 50% red, about 2:1)', () => {
+  it('disabled Sign in is a flat surface-border fill with muted text, both tokens: at least 4.5:1 in light AND dark (it was white on 50% red, about 2:1), and the fill sits closer to the canvas than the brand fill (T-527 Addendum fix 1)', () => {
     expect(POS_SIGN_IN_BUTTON).toContain('disabled:!opacity-100');
-    expect(POS_SIGN_IN_BUTTON).toContain('disabled:!bg-muted');
-    expect(POS_SIGN_IN_BUTTON).toContain('disabled:!text-canvas');
+    expect(POS_SIGN_IN_BUTTON).toContain('disabled:!bg-surface-border');
+    expect(POS_SIGN_IN_BUTTON).toContain('disabled:!text-muted');
     for (const [name, block] of [['light', LIGHT], ['dark', DARK]] as const) {
-      expect(contrast(token(block, '--muted'), token(block, '--canvas')), name).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(token(block, '--muted'), token(block, '--surface-border')), name).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(token(block, '--surface-border'), token(block, '--canvas')), name).toBeLessThan(contrast(token(block, '--brand'), token(block, '--canvas')));
     }
     // control: the kit's own disabled style (opacity-50 on the brand fill) is the one that fails, which is why it is scoped here and not changed in the kit.
     const kit = src('components/ui/Button.tsx');
@@ -136,8 +137,8 @@ describe('T-526b item 4 - phone width (below sm)', () => {
     expect(header).not.toContain('flex-wrap');
     expect(header).toContain('label={pillShort} className="sm:hidden"');
     expect(header).toContain('label={pill} className="hidden sm:inline-flex"');
-    expect(statusPillShort({ online: false, sending: false, pending: 14 })).toBe('Offline · 14');
-    expect(statusPillShort({ online: true, sending: false, pending: 0 })).toBe('Online');
+    expect(statusPillShort({ online: false, sending: false, pending: 14, offlineForMs: 12 * 60_000 })).toBe('Offline 12m');
+    expect(statusPillShort({ online: true, sending: false, pending: 0, offlineForMs: 0 })).toBe('Online');
   });
   it('the avatar is a button below sm, and its menu holds Switch cashier and the ERP button', () => {
     const header = shell.slice(shell.indexOf('<header'), shell.indexOf('</header>'));
@@ -168,7 +169,9 @@ describe('T-526b item 5 - placeholder cards speak staff words', () => {
   });
 
   it('each page passes its own sentence and no page names a task number', () => {
-    for (const [file, msg] of [['page', 'Orders are'], ['kitchen/page', 'Kitchen is'], ['refills/page', 'Refills are'], ['receipts/page', 'Receipts are'], ['till/page', 'Till is']] as const) {
+    // T-527: the Orders page is the real screen now (no placeholder sentence); it must still name no task number.
+    expect(src('app/pos/page.tsx').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')).not.toMatch(/slice=|T-5\d\d/);
+    for (const [file, msg] of [['kitchen/page', 'Kitchen is'], ['refills/page', 'Refills are'], ['receipts/page', 'Receipts are'], ['till/page', 'Till is']] as const) {
       const page = src(`app/pos/${file}.tsx`).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
       expect(page, file).toContain(`message="${msg} coming in the next update."`);
       expect(page, file).not.toMatch(/slice=|T-5\d\d/);
