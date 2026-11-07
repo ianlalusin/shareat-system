@@ -10,6 +10,7 @@ import { countPending, drain, isSnapshotUsable, listVerifiers, readSnapshot, typ
 import { POS_DRAIN_INTERVAL_MS, POS_OFFLINE_ACTOR_KEY, POS_OFFLINE_SNAPSHOT_MAX_AGE_MS, POS_POLL_INTERVAL_MS, POS_SNAPSHOT_REFRESH_MS } from './constants';
 import { makePosSend } from './drain-send';
 import { browserPromoteJar, promoteAfterTabletSignIn } from './pending-verifier';
+import { showNeedsInternetOnce } from './offline-band';
 import { refreshSnapshot, type SnapshotBody } from './snapshot-sync';
 import { restoredOfflineActor, type OfflineActor } from './offline-actor';
 import type { SnapshotStaff } from './verifier-expiry';
@@ -154,7 +155,7 @@ export function useDeviceSync(input: { paired: boolean; personId: string; online
 
   return {
     staff: staffOf(snapshot),
-    needsInternet: paired && usable === false,
+    needsInternet: showNeedsInternetOnce({ paired, snapshotUsable: usable, unpaired }),
     unpaired,
     pending,
     sending,

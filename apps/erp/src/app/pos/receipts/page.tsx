@@ -14,7 +14,7 @@ export default async function PosReceiptsPage({ searchParams }: { searchParams: 
   if (await storeRefused(actor, storeId, 'record_sale')) return <StoreNotAvailable />;
   return (
     <Page density="table">
-      <SlicePlaceholder title="Receipts" slice="a later slice" />
+      <SlicePlaceholder title="Receipts" message="Receipts are coming in the next update." />
     </Page>
   );
 }

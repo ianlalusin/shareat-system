@@ -12,6 +12,8 @@ export interface PosState {
   body: PosStateBody | null;
   failures: number;
   online: boolean;
+  /** Clock time (ms) of the FIRST failed poll of the current streak: "No internet since HH:MM". Absent while the last poll got an answer. */
+  failingSinceMs?: number;
   /** 401: the server answered, so we are online, but the session ended. Set only while true. */
   signedOut?: true;
   /** 403: the server answered and the person no longer holds this store. The last body is kept. Set only while true. */
@@ -22,7 +24,7 @@ export interface PosState {
 export type PosStateEvent =
   | { type: 'ok'; body: PosStateBody }
   | { type: 'not_modified' }
-  | { type: 'failure' }
+  | { type: 'failure'; atMs?: number }
   | { type: 'unauthorized' }
   | { type: 'forbidden' }
   | { type: 'http_error'; status: number };
@@ -40,15 +42,17 @@ export function reducePosState(state: PosState, event: PosStateEvent): PosState 
   if (event.type === 'forbidden') return { body: state.body, failures: 0, online: true, forbidden: true };
   if (event.type === 'http_error') return { body: state.body, failures: 0, online: true, httpError: event.status };
   const failures = state.failures + 1;
-  return { body: state.body, failures, online: failures < OFFLINE_AFTER_FAILURES };
+  const since = state.failingSinceMs ?? event.atMs;
+  return { body: state.body, failures, online: failures < OFFLINE_AFTER_FAILURES, ...(since === undefined ? {} : { failingSinceMs: since }) };
 }
 
 export async function pollPosState(
-  deps: { fetch: typeof fetch; storeId: string; visibilityState: () => 'visible' | 'hidden' },
+  deps: { fetch: typeof fetch; storeId: string; visibilityState: () => 'visible' | 'hidden'; nowMs?: () => number },
   state: PosState,
 ): Promise<PosState> {
   if (deps.visibilityState() === 'hidden') return state;
   const since = state.body?.stateVersion ?? -1;
+  const failure = (): PosState => reducePosState(state, { type: 'failure', atMs: (deps.nowMs ?? Date.now)() });
   try {
     const res = await deps.fetch(`/api/pos/state?since=${since}&storeId=${encodeURIComponent(deps.storeId)}`, { credentials: 'same-origin' });
     if (res.status === 304) return reducePosState(state, { type: 'not_modified' });
@@ -56,9 +60,9 @@ export async function pollPosState(
     if (res.status === 403) return reducePosState(state, { type: 'forbidden' });
     // Only a network failure or a 5xx means the server is not usable; any other 4xx is an answer, so the state is kept and the shell says so.
     if (res.status >= 400 && res.status < 500) return reducePosState(state, { type: 'http_error', status: res.status });
-    if (!res.ok) return reducePosState(state, { type: 'failure' });
+    if (!res.ok) return failure();
     return reducePosState(state, { type: 'ok', body: (await res.json()) as PosStateBody });
   } catch {
-    return reducePosState(state, { type: 'failure' });
+    return failure();
   }
 }

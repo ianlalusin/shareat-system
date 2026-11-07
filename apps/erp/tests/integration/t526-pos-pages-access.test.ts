@@ -121,6 +121,12 @@ describe('T-526 R6 - every /pos page refuses a person without its capability', (
         `${page.route}: a person holding ONLY ${held} is ${allowed ? 'let in (positive control)' : 'refused (holding another POS word does not count)'}`,
         async () => {
           const f = await fixture();
+          // T-526b: /pos (Orders) sends a kitchen or refill person to their own tab instead of the refusal; every other page still refuses.
+          const ordersRedirect = page.route === '/pos' && !allowed && held !== 'record_sale' ? { serve_pos_ticket: '/pos/kitchen', request_pos_refill: '/pos/refills' }[held] : null;
+          if (ordersRedirect) {
+            await expect(render(page.file, f.holders[held])).rejects.toMatchObject({ url: ordersRedirect });
+            return;
+          }
           const html = await render(page.file, f.holders[held]);
           if (allowed) {
             expect(html).not.toContain(NO_ACCESS);
@@ -134,6 +140,32 @@ describe('T-526 R6 - every /pos page refuses a person without its capability', (
       );
     }
   }
+});
+
+describe('T-526b - /pos sends a person without record_sale to the first POS tab they hold', () => {
+  it('holds both kitchen and refill words -> /pos/kitchen; holds none -> the refusal, no redirect (control)', async () => {
+    const f = await fixture();
+    const both = await person(f.mgr.orgId, 'Both Bea', 'staff', f.a, 'serve_pos_ticket');
+    await sql`insert into person_grants (person_id, grant_name, granted_by, grant_source, store_id) values (${both.personId}, 'request_pos_refill', null, 'grant', ${f.a})`;
+    await expect(render('page', both)).rejects.toMatchObject({ url: '/pos/kitchen' });
+    expect(await render('page', f.none)).toContain(NO_ACCESS);
+  }, 60_000);
+  it('the redirect cannot reach another store: a kitchen-only person at Alpha opening /pos?storeId=<Bravo> is redirected, and the target page then refuses (one sentence, no store name)', async () => {
+    const f = await fixture();
+    const who = f.holders.serve_pos_ticket;
+    await expect(render('page', who, f.b)).rejects.toMatchObject({ url: `/pos/kitchen?storeId=${f.b}` });
+    const refused = await render('kitchen/page', who, f.b);
+    expect(refused).toContain(NOT_AVAILABLE);
+    expect(refused).not.toContain('Hidden Bravo');
+    expect(refused).not.toContain(f.b);
+    // control: the same person with their own store goes through to the kitchen page and is let in
+    await expect(render('page', who, f.a)).rejects.toMatchObject({ url: `/pos/kitchen?storeId=${f.a}` });
+    expect(await render('kitchen/page', who, f.a)).not.toContain(NOT_AVAILABLE);
+  }, 60_000);
+  it('keeps ?storeId on the way', async () => {
+    const f = await fixture();
+    await expect(render('page', f.holders.request_pos_refill, f.a)).rejects.toMatchObject({ url: `/pos/refills?storeId=${f.a}` });
+  }, 60_000);
 });
 
 describe('T-526 R6 - a person of one store is refused another store named in ?storeId', () => {

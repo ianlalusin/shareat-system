@@ -514,7 +514,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1532 -> 1537, T-512 (T-511 S5c), 7 Nov 2026, re-measured after rebase on main (T-523 0238 present), BOSS approved: +5 compliant controls on the new /settings/business-rules screen (breadcrumb link, folded-history summary, change form value, date and reason fields).
     // 1537 -> 1540, T-544, 7 Nov 2026, re-measured by runCensus(): +3 compliant controls (the record page's back link, the overview's + Record settlement link-button, the tab strip's links); the FormModal trigger left the overview. FAIL/UNRESOLVED baselines unchanged.
     // 1540 -> 1553, T-526 POS kiosk shell (+13 controls), re-measured on main, 7 Nov 2026, BOSS approved.
-    expect(results.length).toBe(1553);
+    // 1553 -> 1557, T-526b (+4 controls), re-measured on main, 7 Nov 2026, BOSS approved.
+    expect(results.length).toBe(1557);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

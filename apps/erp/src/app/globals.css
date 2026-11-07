@@ -466,7 +466,7 @@
    hand-tuned; they are excluded here and must not be restyled by this rule. */
 @media (min-width: 768px) and (pointer: fine) {
   :is(.erp-page:not(:has([aria-label="Right now"])), .erp-dialog) :is(
-    [data-erp-control="single"]:not([type="file"]):not([type="checkbox"]):not([type="radio"]),
+    [data-erp-control="single"]:not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([data-erp-size="free"]),
     input:is(:not([type]), [type="text"], [type="email"], [type="tel"], [type="search"], [type="password"], [type="number"], [type="date"], [type="month"], [type="time"], [type="url"]),
     select,
     button:not(.erp-help-tip):not(.erp-icon-btn):not([data-erp-size="free"])

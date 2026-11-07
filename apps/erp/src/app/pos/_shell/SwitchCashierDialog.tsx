@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { getMeta, setMeta } from '@/lib/pos-device';
 import { Banner, Button, Dialog } from '@/components/ui';
 import { Keypad } from './Keypad';
+import { POS_SIGN_IN_BUTTON } from './touch';
 import { attemptOfflineSwitch } from './offline-switch';
 import type { OfflineActor } from './use-device-sync';
 
@@ -79,9 +80,10 @@ export function SwitchCashierDialog({ open, onClose, onSwitched }: { open: boole
         </div>
         {message ? <Banner tone="error">{message}</Banner> : null}
         <Keypad onDigit={onDigit} onBack={onBack} onClear={onClear} disabled={busy} />
-        <Button variant="primary" className="min-h-12 w-full justify-center" icon={null} disabled={!ready || busy} onClick={submit}>
+        <Button variant="primary" className={POS_SIGN_IN_BUTTON} data-erp-size="free" icon={null} disabled={!ready || busy} onClick={submit}>
           Sign in
         </Button>
+        {ready ? null : <p className="text-center text-sm text-muted">Enter your Employee ID and PIN first.</p>}
       </div>
     </Dialog>
   );

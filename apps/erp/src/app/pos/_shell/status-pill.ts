@@ -10,3 +10,10 @@ export function statusPillLabel(s: { online: boolean; sending: boolean; pending:
   if (s.online) return s.sending ? 'Sending…' : 'Online';
   return `Offline ${offlineFor(s.offlineForMs)}${s.pending > 0 ? ` · ${s.pending} waiting to send` : ''}`;
 }
+
+/** The phone's short pill: the same states in a few characters, so the top bar stays one row at 390 wide. */
+export function statusPillShort(s: { online: boolean; sending: boolean; pending: number; signedOut?: boolean }): string {
+  if (s.signedOut) return 'Signed out';
+  if (s.online) return s.sending ? 'Sending…' : 'Online';
+  return s.pending > 0 ? `Offline · ${s.pending}` : 'Offline';
+}

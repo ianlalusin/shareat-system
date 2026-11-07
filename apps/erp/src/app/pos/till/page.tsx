@@ -14,7 +14,7 @@ export default async function PosTillPage({ searchParams }: { searchParams: Prom
   if (await storeRefused(actor, storeId, 'record_sale')) return <StoreNotAvailable />;
   return (
     <Page density="table">
-      <SlicePlaceholder title="Till" slice="a later slice" />
+      <SlicePlaceholder title="Till" message="Till is coming in the next update." />
     </Page>
   );
 }

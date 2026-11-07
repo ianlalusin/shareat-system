@@ -1,7 +1,7 @@
 /**
  * T-526 - the two server-side questions the /pos pages and layout ask. Reads only; the write gates stay in the domain (`authorize()`).
  */
-import { resolvePosTablet, type Actor, type Capability, type PosTabletIdentity } from '@shareat/auth';
+import { heldCapabilities, resolvePosTablet, type Actor, type Capability, type PosTabletIdentity } from '@shareat/auth';
 import { personsRepo, type Tx } from '@shareat/db';
 // ⛔ From the CHOKEPOINT, not from `@shareat/db` (T-261 B6): the org-principalled transaction.
 import { withOrgPrincipal } from '../expenses/lib';
@@ -47,4 +47,13 @@ export async function storeRefused(actor: Actor, requested: string | undefined, 
   if (refused) return true;
   // Paired: the pairing's store is the store; a lost grant there shows as the state poll's 403 banner. No `?storeId`: nothing to check.
   return !pairing && !!storeId && !stores.some((st) => st.id === storeId);
+}
+
+/**
+ * T-526b - where a person who may NOT open Orders (no `record_sale`) goes instead of seeing the refusal: their first POS tab, Kitchen before Refills
+ * (the same order as the sign-in landing). Null when they hold neither, so the refusal still shows. Reads only; each target page still gates itself.
+ */
+export async function firstOtherPosTab(actor: Actor): Promise<'/pos/kitchen' | '/pos/refills' | null> {
+  const held = await withOrgPrincipal(actor.orgId, (tx) => heldCapabilities(tx, actor));
+  return held.has('serve_pos_ticket') ? '/pos/kitchen' : held.has('request_pos_refill') ? '/pos/refills' : null;
 }

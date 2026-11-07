@@ -14,7 +14,7 @@ export default async function PosKitchenPage({ searchParams }: { searchParams: P
   if (await storeRefused(actor, storeId, 'serve_pos_ticket')) return <StoreNotAvailable />;
   return (
     <Page density="table">
-      <SlicePlaceholder title="Kitchen" slice="T-529" />
+      <SlicePlaceholder title="Kitchen" message="Kitchen is coming in the next update." />
     </Page>
   );
 }

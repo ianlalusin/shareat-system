@@ -14,7 +14,7 @@ export default async function PosRefillsPage({ searchParams }: { searchParams: P
   if (await storeRefused(actor, storeId, 'request_pos_refill')) return <StoreNotAvailable />;
   return (
     <Page density="table">
-      <SlicePlaceholder title="Refills" slice="T-529" />
+      <SlicePlaceholder title="Refills" message="Refills are coming in the next update." />
     </Page>
   );
 }

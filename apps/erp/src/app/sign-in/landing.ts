@@ -13,6 +13,7 @@ import { can, type Actor } from '@shareat/auth';
 import { actorForToken } from '../../lib/session';
 import { scopedStores } from '../reports/lib';
 import { withOrgPrincipal } from '../expenses/lib';
+import { capabilitiesForRoute } from '@/lib/route-capability';
 import { safeNext } from './lib';
 
 export const SALES_DAYS_HOME = '/sales-days';
@@ -48,9 +49,26 @@ export interface LandingOpts {
   tabletStoreId?: string | null;
 }
 
+const isPosPath = (p: string) => /^\/pos(?:[/?#]|$)/.test(p);
+
+/**
+ * T-526b P0 - a tablet that opens /pos signed out is sent to `/sign-in?next=/pos`, so EVERY kitchen or refill person arrived with an "explicit safe next"
+ * of `/pos` and was sent straight back to the screen that refuses them. On a paired tablet a POS `next` therefore counts only when the person may open
+ * it at the pairing's store (its own route requirement); otherwise their first allowed POS tab applies. Any non-POS `next` still wins untouched.
+ */
+async function nextWins(actor: Actor, explicit: string, opts?: LandingOpts): Promise<boolean> {
+  if (!opts?.tabletStoreId || !isPosPath(explicit)) return true;
+  const wanted = capabilitiesForRoute(explicit.split(/[?#]/)[0]!);
+  const storeId = opts.tabletStoreId;
+  return withOrgPrincipal(actor.orgId, async (tx) => {
+    for (const cap of wanted) if (await can(tx, actor, cap, { storeId })) return true;
+    return false;
+  });
+}
+
 export async function landingForActor(actor: Actor, raw: string, opts?: LandingOpts): Promise<string> {
   const explicit = explicitNext(raw);
-  if (explicit) return explicit;
+  if (explicit && (await nextWins(actor, explicit, opts))) return explicit;
   if (opts?.tabletStoreId) {
     const pos = await posLanding(actor, opts.tabletStoreId);
     if (pos) return pos;
@@ -68,6 +86,7 @@ export async function landingForActor(actor: Actor, raw: string, opts?: LandingO
 /** For the actions: the session cookie is not readable in the same request, so resolve the fresh token. */
 export async function landingForToken(token: string, raw: string, opts?: LandingOpts): Promise<string> {
   const explicit = explicitNext(raw);
-  if (explicit) return explicit;
+  // A POS `next` on a paired tablet needs the person's grants to be judged, so only the other nexts skip resolving the actor.
+  if (explicit && !(opts?.tabletStoreId && isPosPath(explicit))) return explicit;
   return landingForActor(await actorForToken(token), raw, opts);
 }

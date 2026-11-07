@@ -115,6 +115,23 @@ describe('T-526 R2 - an explicit safe next still wins', () => {
     }
   });
 
+  it('T-526b: on a tablet, a POS next counts only when the person may open it; otherwise their own POS tab applies', async () => {
+    grant('cook', 'serve_pos_ticket', 'S1');
+    grant('runner', 'request_pos_refill', 'S1');
+    grant('cashier', 'record_sale', 'S1');
+    expect(await landingForToken('cook', '/pos', TABLET)).toBe('/pos/kitchen');
+    expect(await landingForToken('runner', '/pos?x=1', TABLET)).toBe('/pos/refills');
+    expect(await landingForToken('runner', '/pos/kitchen', TABLET)).toBe('/pos/refills');
+    expect(await landingForToken('cook', '/pos/kitchen', TABLET)).toBe('/pos/kitchen');
+    expect(await landingForToken('cashier', '/pos/receipts', TABLET)).toBe('/pos/receipts');
+    expect(await landingForToken('cook', '/posters', TABLET)).toBe('/posters'); // not a POS path
+  });
+
+  it('T-526b control: off the tablet a /pos next is untouched', async () => {
+    grant('cook', 'serve_pos_ticket', 'S1');
+    expect(await landingForToken('cook', '/pos')).toBe('/pos');
+  });
+
   it('an unsafe next does not win: the tablet landing applies', async () => {
     grant('cashier', 'record_sale', 'S1');
     for (const bad of ['//evil.com', 'https://evil.com', '/\\evil.com']) {
