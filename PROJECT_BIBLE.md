@@ -65,35 +65,35 @@
 - `1233–1267` 10. Phase plan
 - `1268–1284` 11. Migration & ETL rules
 - `1285–1349` 12. Inherited landmines — do not repeat these
-- `1350–1778` 13. Decision log
-- `1779–1798` 14. Amendment protocol
-- `1799–1803` 15. Engineering standards — the industry practices this project follows
-  - `1804–1809` 15.1 Build order: walking skeleton first
-  - `1810–1821` 15.2 Golden-master testing — the most important practice here
-  - `1822–1830` 15.3 Strangler Fig, not big-bang cutover
-  - `1831–1835` 15.4 No dual-write
-  - `1836–1844` 15.5 Expand/contract migrations
-  - `1845–1853` 15.6 Observability from day zero, not later
-  - `1854–1858` 15.7 CI gates
-  - `1859–1863` 15.8 Backups and a tested restore
-  - `1864–1868` 15.9 Twelve-Factor config
-  - `1869–1876` 15.10 Append-only ledgers — but not event sourcing
-  - `1877–1881` 15.11 Defence in depth
-  - `1882–1910` 15.12 Skills are lenses, not assurance
-  - `1911–1917` 15.13 Reconciliation is a permanent feature
-- `1918–1922` 16. The accounting spine
-  - `1923–1954` 16.0 What we are actually fixing — the diagnosis
-  - `1955–1998` 16.1 The ten invariants — non-negotiable
-  - `1999–2013` 16.2 The oracle: how "correct" is tested
-  - `2014–2035` 16.3 The model — header + lines, not legs
-  - `2036–2055` 16.4 Deliberately simpler than ERPNext
-  - `2056–2125` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2126–2150` 16.6 What v1 already gets right — preserve the intent
-  - `2151–2172` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2173–2187` 16.8 What v1's accounting already gets right
-  - `2188–2231` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2232–2282` 16.10 Posting patterns — one canonical pattern per business event
-  - `2283–2315` 16.11 Inventory's accounting integration
+- `1350–1780` 13. Decision log
+- `1781–1800` 14. Amendment protocol
+- `1801–1805` 15. Engineering standards — the industry practices this project follows
+  - `1806–1811` 15.1 Build order: walking skeleton first
+  - `1812–1823` 15.2 Golden-master testing — the most important practice here
+  - `1824–1832` 15.3 Strangler Fig, not big-bang cutover
+  - `1833–1837` 15.4 No dual-write
+  - `1838–1846` 15.5 Expand/contract migrations
+  - `1847–1855` 15.6 Observability from day zero, not later
+  - `1856–1860` 15.7 CI gates
+  - `1861–1865` 15.8 Backups and a tested restore
+  - `1866–1870` 15.9 Twelve-Factor config
+  - `1871–1878` 15.10 Append-only ledgers — but not event sourcing
+  - `1879–1883` 15.11 Defence in depth
+  - `1884–1912` 15.12 Skills are lenses, not assurance
+  - `1913–1919` 15.13 Reconciliation is a permanent feature
+- `1920–1924` 16. The accounting spine
+  - `1925–1956` 16.0 What we are actually fixing — the diagnosis
+  - `1957–2000` 16.1 The ten invariants — non-negotiable
+  - `2001–2015` 16.2 The oracle: how "correct" is tested
+  - `2016–2037` 16.3 The model — header + lines, not legs
+  - `2038–2057` 16.4 Deliberately simpler than ERPNext
+  - `2058–2127` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2128–2152` 16.6 What v1 already gets right — preserve the intent
+  - `2153–2174` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2175–2189` 16.8 What v1's accounting already gets right
+  - `2190–2233` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2234–2284` 16.10 Posting patterns — one canonical pattern per business event
+  - `2285–2317` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1775,6 +1775,8 @@ just a patch.**
 | 443 | 2026-11-05 | **A STORE'S LUNCH AND DINNER HOURS ARE EDITED BY ADMINS AND BY THAT STORE'S OWN MANAGERS (`manage_store_settings`); ONLY THE PAIRING OF AN OFFER TO A DAYPART IS SUPER ADMIN (`pair_menu_dayparts`); MANAGERS STILL RE-PRICE AN EXISTING WINDOW (`set_menu_price`, row 316). THE HOURS DIFFER PER STORE.** Ian, 2026-11-05, answering who edits a store's hours: *"a"*. Windows: Lipa 08:00-17:00 / 17:00-08:00; Malvar 01:00-17:00 / 17:00-01:00; Davao 11:00-17:00 / 17:00-23:00; all seven days. `pair_menu_dayparts` covers creating a pairing, re-linking an offer, switching to all-day, and withdrawing a daypart slot; it is granted to the owner (migration 0234, T-510 S2, PR #153). Screens: `/admin/stores/[id]` (admins) and `/menu/hours` (managers), plus the When select and per-window prices on `/menu/prices` (S3, PR #158). | Hours are a store-level business setting a manager knows best; pairing changes the menu's structure and is the owner's | Yes, a capability grant |
 | 444 | 2026-11-05 | ⭐ **NO BUSINESS SETTING IS HARD-CODED ANYWHERE IN THE ERP: EVERY BUSINESS VALUE (A PRICE PAIRING, A TIME WINDOW, A RATE, A LIMIT, A TOLERANCE) LIVES IN THE DATABASE WITH AN ERP SCREEN TO CHANGE IT, THE RIGHT CAPABILITY, AND AN AUDIT TRAIL. CODE CONSTANTS ARE ONLY FILE-FORMAT FACTS AND VALUES FIXED BY LAW, AND EVEN A LEGAL RATE GOES IN A SETTINGS TABLE WITH AN EFFECTIVE DATE IF IT CAN CHANGE.** Ian, 2026-11-05: *"again nothing in this erp system like this business settings must not be hard coded, must always have a ui door to manage them"* ("again": 2026-11-03, about kitchen stations, *"there must be a ui door on erp for this"*). Every spec review asks which values are business settings; a spec or PR that hard-codes one is rejected. Structure is super admin, a store's own prices and hours are its manager (rows 316, 443). The generic settings table is T-511 S5c. | The owner runs the business from the ERP; a value only a developer can change blocks him and drifts from reality | Yes, but it is a standing rule, not a feature |
 | 445 | 2026-11-06 | **THE TABLET RESOLVES THE LUNCH OR DINNER PRICE ITSELF, EVEN OFFLINE; REFILLS ARE NOT TIED TO HOURS; AND THE v1 MENU IMPORT AND T-510 S5 (LOADING THE HOURS AND PAIRINGS) COME AFTER THE OPEN WORKTREES ARE CLEAN, AS THEIR OWN TASK.** Ian's standing order (2026-11-05, via BOSS): finish every open worktree, new task only when all is clean. (1) **Projection:** `StoreMenuV2` is extended additively (no V3): `nextChangeAt` includes the next hours boundary and a closed package shows `outside_hours` with the time it opens (S4, PR #163); the menu carries `hours` and per-variant `slots` and the tablet picks the open window from its cached menu with a pure copy of the window logic, kept honest by a parity test, so it flips at 17:00 with no network (S4b, PR #167). (2) **Refills and flavours are not window-gated** (v1 never read refill windows, and a running table keeps refilling after its window closes). (3) **Defect found:** the APK's menu GET was blocked by CORS (T-508 S5); fixed in S4b. (4) **Deferred:** no v1 menu loader exists (spec 401 defers the import), so the menu import is its own task after cleanup, and T-510 S5 only attaches dayparts and pairings to it (rows 441-443 stay valid). The tablet test at Lipa is still owed; Lipa's 7 December launch stays on the v1 menu (T-508 R9 blocks any store from the ERP menu until then). | A phone or tablet with a bad signal must still charge the right price; importing the whole v1 menu is a larger decision than attaching hours | Yes |
+| 446 | 2026-11-07 | **NO POSITION PICKER IN POS RELEASE 1: A PERSON WITH TWO POSITIONS ACTS WITH ALL THEIR GRANTS, AS IN THE ERP TODAY. ROW 323'S "PICK ONE AFTER THE PIN, THE PICK ONLY NARROWS" STAYS THE TARGET, AFTER RELEASE 1.** Ian, 2026-11-07, via BOSS, answering T-526 Open O1. `acting_position_id` is not implemented anywhere (`apps/`, `packages/`), and building it would delay Lipa's 7 Dec go-live (row 431). The server still checks every action with `authorize()`, and the offline tablet only greys out buttons from the snapshot's `posCapabilities` (T-526 R5). | Row 323's narrowing is a refinement; release 1 behaves exactly like the ERP a person already uses | Yes |
+| 447 | 2026-11-07 | **IN POS RELEASE 1, SERVERS DO NOT ADD DISHES FROM THEIR PHONES. THE CASHIER ENTERS EVERY ORDER ON THE STORE TABLET; A SERVER'S PHONE DOES REFILLS AND HEAD CONFIRMATION ONLY. ON A PHONE OR KITCHEN BROWSER THE ORDERS TAB IS READ-ONLY.** Ian, 2026-11-07, via BOSS, answering T-527 Open O1. Server and Kitchen positions hold no `record_sale` (0240 defaults), and phones have no outbox (T-525 is tablet-only). Adding dishes from a phone would need a new capability and a second online write path. At Lipa the cashier already enters every order on the one billing tablet (row 313). | Keeps one write path (the tablet outbox) for every order in release 1; the phone path can be added later with its own capability | Yes |
 
 ## 14. Amendment protocol
 

@@ -169,7 +169,7 @@ never print `.env.local` values.
 
 ## Open
 
-- **O1 (for Ian, via BOSS):** should waiters add dishes from their phones in release 1? It needs two things: a capability
+- ✅ **O1 RULED (Ian, 7 Nov; bible row 447): no phone ordering in release 1; the Orders tab is read-only on phones.** Original question: should waiters add dishes from their phones in release 1? It needs two things: a capability
   (give Server `record_sale`? or a narrower `add_pos_items`), and an online Server Action path for phones (no outbox).
   Proposal: not in release 1. At Lipa the cashier enters every order today (one tablet, row 313), and the waiter's phone
   does refills and heads (T-529).

@@ -219,6 +219,6 @@ junctioned worktree, so render from the main tree on a release branch, or use th
 
 ## Open
 
-- **O1 (for Ian, via BOSS):** row 323 says a person with two positions picks one after the PIN, and the pick only
+- ✅ **O1 RULED (Ian, 7 Nov; bible row 446): no picker in release 1.** Original question: row 323 says a person with two positions picks one after the PIN, and the pick only
   narrows. Nothing implements it yet. Release 1 proposal: no picker, so a person acts with all their grants, the same as
   in the ERP today. Is that acceptable for Lipa on 7 Dec?
