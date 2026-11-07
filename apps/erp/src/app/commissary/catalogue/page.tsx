@@ -75,9 +75,9 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
         <h1 className="text-2xl font-semibold">Commissary catalogue</h1>
         <PageDescription className="mt-1">
           What a commissary offers, which branches may buy from it, and which of a branch&rsquo;s own
-          items each commissary line becomes. ⭐ <strong>A line with no map cannot be submitted, and
+          items each commissary line becomes. <strong>A line with no map cannot be submitted, and
           a real internal receipt with no map throws</strong> — this screen is what makes both
-          possible (DEF-129).
+          possible.
         </PageDescription>
       </div>
 
