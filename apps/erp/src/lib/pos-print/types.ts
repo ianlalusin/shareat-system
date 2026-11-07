@@ -98,6 +98,8 @@ export interface ReceiptView {
     vatRateLabel: string;
     /** `"0.00"` when there is no senior/PWD. */
     vatRemovedForScPwd: Money;
+    /** The statutory percent only (vatRemovedForScPwd excluded), summed over the senior/PWD discounts, computed by the caller. `"0.00"` when there is none. VATable + VAT + VAT-exempt - this = TOTAL. */
+    scPwdDiscount: Money;
   };
 }
 

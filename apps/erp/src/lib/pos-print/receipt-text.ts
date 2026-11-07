@@ -80,6 +80,8 @@ export function formatReceipt(view: ReceiptView, layout: PrintLayout): string[] 
     if (!isZeroAmount(vat.vatRemovedForScPwd)) out.push(...justify('Less: VAT exemption (SC/PWD)', `-${printAmount(vat.vatRemovedForScPwd)}`, cols));
     out.push(...justify('VATABLE SALES', printAmount(vat.vatableSales), cols));
     out.push(...justify(vat.vatRegistered ? 'VAT-EXEMPT SALES' : 'SC/PWD SALES', printAmount(vat.vatExemptSales), cols));
+    // Makes VATABLE + VAT + VAT-EXEMPT - this = TOTAL add up on the paper. A non-VAT store has no such identity, so it prints none.
+    if (vat.vatRegistered && !isZeroAmount(vat.scPwdDiscount)) out.push(...justify('Less: SC/PWD discount', `-${printAmount(vat.scPwdDiscount)}`, cols));
     out.push(...justify(`VAT (${vat.vatRateLabel})`, printAmount(vat.vatAmount), cols));
   }
 

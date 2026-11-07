@@ -400,7 +400,7 @@ describe('paySale (R3): one tap, local-first', () => {
       rows: ROWS, tenders: TENDERS, seniors: SENIORS, vatRateLabel: '12%', layout: { width: 58, font: 'normal' },
       receipt: {
         header: { businessName: 'Shareat Lipa', addressLines: ['Lipa City, Batangas'], tin: '123-456-789-000', vatRegistered: true },
-        tableLabel: 'Stand 7', heads: 4, cashierName: 'Joy', issuedAtLocal: '06/11/26 19:52', footerLines: ['This is not an official receipt'], lines: RECEIPT_LINES,
+        tableLabel: 'Stand 7', heads: 4, cashierName: 'Joy', issuedAtLocal: '06/11/26 19:52', footerLines: ['This is not an official receipt'], lines: RECEIPT_LINES, scPwdDiscount: '97.86',
       },
     };
     return { result: await paySale(deps, input), deps, order };
@@ -423,6 +423,7 @@ describe('paySale (R3): one tap, local-first', () => {
     expect(lines).toContain('TOTAL                   2,092.42');
     expect(lines).toContain('VATABLE SALES           1,518.75');
     expect(lines).toContain('VAT (12%)                 182.25');
+    expect(lines, 'the SC/PWD discount (the 20% only) is printed so the VAT block adds up to the total').toContain('Less: SC/PWD discount     -97.86');
     expect(lines).toContain('  Ref: 4012 889 213');
     expect(lines.some((l: string) => l.includes('REPRINT') || l.includes('OFFLINE'))).toBe(false);
     expect(result.lines).toEqual(lines);
@@ -462,5 +463,175 @@ describe('priceBill vs the receipt VAT block feeds (R1 -> T-528b)', () => {
     const { priceBill } = await logic();
     const priced = priceBill({ lines: BILL_LINES, rules: RULES, vatRegistered: true }) as { vat: Record<string, string> };
     expect(priced.vat).toMatchObject({ vatableSales: '1518.75', vatAmount: '182.25', vatRemovedForScPwd: '58.72' });
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// T-528c: Split prepares ONE row, a tender fills it; the blocker says where to look; the SC/PWD discount feeds the receipt
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+describe('T-528c: Split and tender tap (one row, never two)', () => {
+  it('addSplitRow appends exactly one row with no tender and the balance; it stops at 20 rows', async () => {
+    const { addSplitRow, MAX_TENDERS } = await logic();
+    expect(addSplitRow([{ tenderId: T_CASH, amount: '500.00' }], '1592.42')).toEqual([{ tenderId: T_CASH, amount: '500.00' }, { tenderId: '', amount: '1592.42' }]);
+    const full = Array.from({ length: MAX_TENDERS }, () => ({ tenderId: T_CASH, amount: '1.00' }));
+    expect(addSplitRow(full, '5.00')).toHaveLength(MAX_TENDERS);
+  });
+
+  it('chooseTender fills the prepared row (keeping its amount) instead of adding another; a wallet gets an empty reference', async () => {
+    const { addSplitRow, chooseTender } = await logic();
+    const prepared = addSplitRow([{ tenderId: T_CASH, amount: '500.00' }], '1592.42');
+    const out = chooseTender(prepared, TENDERS[1], '1592.42');
+    expect(out.rows).toEqual([{ tenderId: T_CASH, amount: '500.00' }, { tenderId: T_GCASH, amount: '1592.42', referenceNo: '' }]);
+    expect(out.index).toBe(1);
+  });
+
+  it('control: with no prepared row chooseTender adds one row with the balance, as addPaymentRow does; at 20 rows it adds none', async () => {
+    const { chooseTender, addPaymentRow, MAX_TENDERS } = await logic();
+    const one = [{ tenderId: T_CASH, amount: '500.00' }];
+    const out = chooseTender(one, TENDERS[0], '1592.42');
+    expect(out.rows).toEqual(addPaymentRow(one, TENDERS[0], '1592.42'));
+    expect(out.index).toBe(1);
+    const full = Array.from({ length: MAX_TENDERS }, () => ({ tenderId: T_CASH, amount: '1.00' }));
+    expect(chooseTender(full, TENDERS[0], '5.00').rows).toHaveLength(MAX_TENDERS);
+  });
+
+  it('a prepared row with no tender blocks Pay with its own sentence, before the amounts are judged', async () => {
+    const { payBlocker, addSplitRow, SENTENCES } = await logic();
+    const rows = addSplitRow([{ tenderId: T_CASH, amount: '500.00' }], '1592.42');
+    expect(payBlocker({ total: TOTAL, rows, tenders: TENDERS, diners: [], holders: {} })).toBe(SENTENCES.pickTender);
+    expect(SENTENCES.pickTender).toMatch(/pick a way to pay/i);
+  });
+});
+
+describe('T-528c: payBlockerDetail names the field that needs fixing', () => {
+  const base = { total: TOTAL, tenders: TENDERS, diners: [{ dinerNo: 1, kind: 'senior' }, { dinerNo: 2, kind: 'pwd' }], holders: {} as Record<number, { holderName: string; idNumber: string }> };
+
+  it('no name -> the name field of the first diner missing; a name but no ID -> the ID field', async () => {
+    const { payBlockerDetail } = await logic();
+    expect(payBlockerDetail({ ...base, rows: [] })).toEqual({ message: 'Add the name and ID for Senior #1.', target: { kind: 'holder', dinerNo: 1, field: 'holderName' } });
+    expect(payBlockerDetail({ ...base, rows: [], holders: { 1: { holderName: 'Lolita R.', idNumber: '' } } })).toMatchObject({ target: { kind: 'holder', dinerNo: 1, field: 'idNumber' } });
+    expect(payBlockerDetail({ ...base, rows: [], holders: { 1: { holderName: 'A', idNumber: 'B' } } })).toMatchObject({ message: 'Add the name and ID for PWD #2.', target: { kind: 'holder', dinerNo: 2, field: 'holderName' } });
+  });
+
+  it('the payment problems point at the tenders, the row tender, the row amount or its reference', async () => {
+    const { payBlockerDetail, SENTENCES } = await logic();
+    const none = { ...base, diners: [] };
+    expect(payBlockerDetail({ ...none, rows: [] })).toEqual({ message: SENTENCES.noPayment, target: { kind: 'tenders' } });
+    expect(payBlockerDetail({ ...none, rows: [{ tenderId: '', amount: '2092.42' }] })).toMatchObject({ target: { kind: 'row', index: 0, field: 'tender' } });
+    expect(payBlockerDetail({ ...none, rows: [{ tenderId: T_CASH, amount: '0.00' }] })).toMatchObject({ message: SENTENCES.notPositive, target: { kind: 'row', index: 0, field: 'amount' } });
+    expect(payBlockerDetail({ ...none, rows: [{ tenderId: T_CASH, amount: '10.00' }] })).toMatchObject({ message: SENTENCES.underpaid, target: { kind: 'row', index: 0, field: 'amount' } });
+    expect(payBlockerDetail({ ...none, rows: [{ tenderId: T_CASH, amount: '100.00' }, { tenderId: T_GCASH, amount: '2000.00', referenceNo: '' }] })).toMatchObject({ target: { kind: 'row', index: 1, field: 'reference' } });
+    expect(payBlockerDetail({ ...none, rows: [{ tenderId: T_GCASH, amount: '2200.00', referenceNo: REF }] })).toMatchObject({ message: SENTENCES.onlyCash, target: { kind: 'tenders' } });
+  });
+
+  it('control: when nothing blocks Pay it is null, and payBlocker is always the detail sentence', async () => {
+    const { payBlockerDetail, payBlocker } = await logic();
+    const ok = { total: TOTAL, tenders: TENDERS, diners: [], holders: {}, rows: [{ tenderId: T_CASH, amount: '2092.42' }] };
+    expect(payBlockerDetail(ok)).toBeNull();
+    expect(payBlocker(ok)).toBeNull();
+    const bad = { ...ok, rows: [] };
+    expect(payBlocker(bad)).toBe(payBlockerDetail(bad).message);
+  });
+});
+
+describe('T-528c: scPwdDiscountOf feeds the receipt and the on-screen bill', () => {
+  it('the payment.png bill: the 20% statutory amounts only, 80.18 + 17.68 = 97.86 (the VAT removed 58.72 is NOT in it)', async () => {
+    const { priceBill, scPwdDiscountOf } = await logic();
+    const priced = priceBill({ lines: BILL_LINES, rules: RULES, vatRegistered: true });
+    expect(scPwdDiscountOf(BILL_LINES, priced)).toBe('97.86');
+  });
+
+  it('the identity VATable + VAT + VAT-exempt - SC/PWD discount = Due holds on the printed figures (payment.png bill)', async () => {
+    const { priceBill, scPwdDiscountOf } = await logic();
+    const priced = priceBill({ lines: BILL_LINES, rules: RULES, vatRegistered: true });
+    const c = (m: string) => BigInt(m.replace('.', ''));
+    expect(c(priced.vat.vatableSales) + c(priced.vat.vatAmount) + c(priced.vat.vatExemptSales) - c(scPwdDiscountOf(BILL_LINES, priced))).toBe(c(priced.total));
+  });
+
+  it('a preset or custom discount is never counted; a bill with none is 0.00', async () => {
+    const { priceBill, scPwdDiscountOf } = await logic();
+    const lines = BILL_LINES.map((l) => ({ ...l, discounts: l.discounts.filter((d) => d.kind !== 'senior') }));
+    expect(scPwdDiscountOf(lines, priceBill({ lines, rules: RULES, vatRegistered: true }))).toBe('0.00');
+  });
+
+  it('the paySale receipt view carries the caller figure in vat.scPwdDiscount', async () => {
+    const { paySale, priceBill } = await logic();
+    const deps = { reserveTerminalSeq: async () => 1, newId: () => RECEIPT, enqueue: async (e: unknown) => ({ seq: 1, ...(e as object) }), requestDrain: () => undefined, print: async () => 'printed' };
+    const r = await paySale(deps, {
+      personId: id(40), sessionId: SESSION, online: true, terminalNo: 1, now: NOW, priced: priceBill({ lines: BILL_LINES, rules: RULES, vatRegistered: true }), rows: ROWS, tenders: TENDERS, seniors: SENIORS, vatRateLabel: '12%', layout: { width: 58, font: 'normal' },
+      receipt: { header: { businessName: 'Shareat Lipa', addressLines: [], tin: null, vatRegistered: true }, tableLabel: 'Stand 7', heads: 4, cashierName: 'Joy', issuedAtLocal: '06/11/26 19:52', footerLines: [], lines: RECEIPT_LINES, scPwdDiscount: '97.86' },
+    });
+    expect(r.view.vat.scPwdDiscount).toBe('97.86');
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// T-528c: the auditor's identity sweep, kept in the suite. 60 seeded bills priced by the real priceSession (through priceBill) on a VAT org:
+// VATable + VAT + VAT-exempt - SC/PWD discount = total, to the centavo, read off the same figures the receipt prints.
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+describe('T-528c: VATable + VAT + VAT-exempt - SC/PWD discount = total, over 60 seeded VAT bills', () => {
+  it('holds to the centavo on every bill, with no negative figure, and the bills really cover bundles, dishes, senior, PWD, several diners and senior + preset', async () => {
+    const { priceBill, scPwdDiscountOf } = await logic();
+    let seed = 0x528c;
+    const rnd = (n: number): number => {
+      // mulberry32: the same 60 bills on every machine
+      seed = (seed + 0x6d2b79f5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return Math.floor((((t ^ (t >>> 14)) >>> 0) / 4294967296) * n);
+    };
+    const DISH = ['449.00', '120.00', '99.00', '150.50', '37.77', '260.00', '12.34', '88.88'];
+    const BUNDLE = ['2000.00', '1799.99', '1349.00', '2999.97'];
+    const PRESET = [{ valueType: 'percent', value: '10' }, { valueType: 'percent', value: '12.5' }, { valueType: 'fixed', value: '15.00' }, { valueType: 'percent', value: '100' }];
+    const cover = { bundles: 0, dishes: 0, senior: 0, pwd: 0, severalStatutory: 0, seniorAndPreset: 0 };
+    let did = 0;
+    for (let n = 0; n < 60; n++) {
+      const lines = [];
+      const count = 1 + rnd(4);
+      let statutory = 0;
+      let seniorOnBill = false;
+      let presetOnBill = false;
+      for (let l = 0; l < count; l++) {
+        const bundle = l === 0 && rnd(2) === 0;
+        const heads = 2 + rnd(5);
+        const capacity = bundle ? heads : 1 + rnd(4);
+        if (bundle) cover.bundles++;
+        else cover.dishes++;
+        const discounts = [];
+        let left = capacity;
+        while (left > 0 && rnd(3) !== 0) {
+          const qty = 1 + rnd(left);
+          left -= qty;
+          const kind = ['senior', 'pwd', 'preset', 'custom'][rnd(4)] as string;
+          const p = PRESET[rnd(PRESET.length)]!;
+          if (kind === 'senior' || kind === 'pwd') {
+            statutory++;
+            if (kind === 'senior') seniorOnBill = true;
+            if (kind === 'pwd') cover.pwd++;
+            discounts.push({ discountId: id(5000 + did++), kind, valueType: 'percent', value: '20.00', qty });
+          } else {
+            presetOnBill = true;
+            discounts.push({ discountId: id(5000 + did++), kind, valueType: p.valueType, value: p.value, qty });
+          }
+        }
+        lines.push({ lineId: id(4000 + l), qty: bundle ? 1 : capacity, unitPrice: bundle ? BUNDLE[rnd(BUNDLE.length)]! : DISH[rnd(DISH.length)]!, bundleHeads: bundle ? heads : null, discounts });
+      }
+      if (seniorOnBill) cover.senior++;
+      if (statutory > 1) cover.severalStatutory++;
+      if (seniorOnBill && presetOnBill) cover.seniorAndPreset++;
+
+      const priced = priceBill({ lines, rules: RULES, vatRegistered: true });
+      const c = (m: string) => BigInt(m.replace('.', ''));
+      const label = `bill ${n} ${JSON.stringify(lines)}`;
+      const lhs = c(priced.vat.vatableSales) + c(priced.vat.vatAmount) + c(priced.vat.vatExemptSales) - c(scPwdDiscountOf(lines, priced));
+      expect(lhs, label).toBe(c(priced.total));
+      for (const f of [priced.vat.vatableSales, priced.vat.vatAmount, priced.vat.vatExemptSales, scPwdDiscountOf(lines, priced)]) expect(c(f) >= 0n, `${label} no negative figure`).toBe(true);
+    }
+    expect(cover.bundles, 'bundles').toBeGreaterThanOrEqual(10);
+    expect(cover.dishes, 'dishes').toBeGreaterThanOrEqual(40);
+    expect(cover.senior, 'bills with a senior').toBeGreaterThanOrEqual(15);
+    expect(cover.pwd, 'PWD discounts').toBeGreaterThanOrEqual(8);
+    expect(cover.severalStatutory, 'bills with several senior/PWD discounts (several diners)').toBeGreaterThanOrEqual(10);
+    expect(cover.seniorAndPreset, 'bills with a senior and a preset or custom discount').toBeGreaterThanOrEqual(8);
   });
 });

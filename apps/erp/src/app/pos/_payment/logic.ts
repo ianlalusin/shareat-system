@@ -73,6 +73,7 @@ export const SENTENCES = {
   moreSeniors: 'There are more senior or PWD discounts than guests at this table.',
   pickDiner: 'Pick which diner holds the card.',
   pickType: 'Choose a percent or a peso amount.',
+  pickTender: 'Pick a way to pay for the new payment.',
 } as const;
 
 /** What a typed amount is worth in centavos: blank, half-typed (".5", "500.") or invalid counts as zero, never a throw. */
@@ -116,46 +117,72 @@ export function addPaymentRow(rows: readonly PayRow[], tender: Tender, balance: 
   return [...rows, tender.kind === 'wallet' ? { tenderId: tender.id, amount: balance, referenceNo: '' } : { tenderId: tender.id, amount: balance }];
 }
 
+/** "Split: add another payment": ONE new row, no tender yet, the balance filled in. `chooseTender` gives it its tender. */
+export function addSplitRow(rows: readonly PayRow[], balance: string): PayRow[] {
+  return canAddPayment(rows) ? [...rows, { tenderId: '', amount: balance }] : [...rows];
+}
+
+/** A tender tap: it fills the row Split prepared (keeping its amount) when there is one, otherwise it adds a row with the balance. `index` is the row to make active. */
+export function chooseTender(rows: readonly PayRow[], tender: Tender, balance: string): { rows: PayRow[]; index: number } {
+  const open = rows.findIndex((r) => r.tenderId === '');
+  if (open < 0) {
+    const next = addPaymentRow(rows, tender, balance);
+    return { rows: next, index: next.length > rows.length ? next.length - 1 : rows.length - 1 };
+  }
+  return { rows: rows.map((r, i) => (i === open ? { ...r, tenderId: tender.id, ...(tender.kind === 'wallet' ? { referenceNo: r.referenceNo ?? '' } : {}) } : { ...r })), index: open };
+}
+
 /** The server's own sentence for a wallet reference, or null when it is fine. */
 export function referenceProblem(referenceNo: string | undefined): string | null {
   const c = checkAll(POS_PAYMENT_REFERENCE_RULES, { referenceNo: referenceNo ?? '' });
   return c.ok ? null : c.requirement;
 }
 
-/** null = Pay may be enabled; otherwise the one sentence under the Pay button. Senior/PWD details first (they are filled in before paying). */
-export function payBlocker(i: {
+/** Where the cashier has to look to clear a blocker: a card holder field, a payment row's tender / amount / reference, or the tender buttons. */
+export type BlockerTarget =
+  | { kind: 'holder'; dinerNo: number; field: 'holderName' | 'idNumber' }
+  | { kind: 'row'; index: number; field: 'tender' | 'amount' | 'reference' }
+  | { kind: 'tenders' };
+
+/** null = Pay may be enabled; otherwise the one sentence under the Pay button and the field it is about. Senior/PWD details first (they are filled in before paying). */
+export function payBlockerDetail(i: {
   total: string;
   rows: readonly PayRow[];
   tenders: readonly Tender[];
   diners: readonly { dinerNo: number; kind: string }[];
   holders: Readonly<Record<number, { holderName: string; idNumber: string }>>;
-}): string | null {
+}): { message: string; target: BlockerTarget } | null {
   for (const d of [...i.diners].sort((a, b) => a.dinerNo - b.dinerNo)) {
     const h = i.holders[d.dinerNo];
-    if (!h || h.holderName.trim() === '' || h.idNumber.trim() === '') return `Add the name and ID for ${d.kind === 'pwd' ? 'PWD' : 'Senior'} #${d.dinerNo}.`;
+    const nameMissing = !h || h.holderName.trim() === '';
+    if (nameMissing || (h?.idNumber ?? '').trim() === '') return { message: `Add the name and ID for ${d.kind === 'pwd' ? 'PWD' : 'Senior'} #${d.dinerNo}.`, target: { kind: 'holder', dinerNo: d.dinerNo, field: nameMissing ? 'holderName' : 'idNumber' } };
   }
-  if (i.rows.length === 0) return SENTENCES.noPayment;
-  if (i.rows.length > MAX_TENDERS) return SENTENCES.tooMany;
-  for (const r of i.rows) {
+  if (i.rows.length === 0) return { message: SENTENCES.noPayment, target: { kind: 'tenders' } };
+  if (i.rows.length > MAX_TENDERS) return { message: SENTENCES.tooMany, target: { kind: 'tenders' } };
+  for (const [index, r] of i.rows.entries()) {
+    if (r.tenderId === '') return { message: SENTENCES.pickTender, target: { kind: 'row', index, field: 'tender' } };
     const kind = kindOf(i.tenders, r.tenderId);
-    if (kind === undefined) return SENTENCES.unknownTender;
-    if (amountCents(r.amount) <= 0n) return SENTENCES.notPositive;
+    if (kind === undefined) return { message: SENTENCES.unknownTender, target: { kind: 'row', index, field: 'tender' } };
+    if (amountCents(r.amount) <= 0n) return { message: SENTENCES.notPositive, target: { kind: 'row', index, field: 'amount' } };
     if (kind === 'wallet') {
       const problem = referenceProblem(r.referenceNo);
-      if (problem) return problem;
+      if (problem) return { message: problem, target: { kind: 'row', index, field: 'reference' } };
     }
   }
   const total = toCentavos(money(i.total));
   const paid = i.rows.reduce((a, r) => a + amountCents(r.amount), 0n);
-  if (paid < total) return SENTENCES.underpaid;
+  if (paid < total) return { message: SENTENCES.underpaid, target: { kind: 'row', index: i.rows.length - 1, field: 'amount' } };
   const change = paid - total;
   if (change > 0n) {
     // completeSale compares the change with the LARGEST single cash row; the screen must refuse exactly what the server would.
     const biggestCash = i.rows.filter((r) => kindOf(i.tenders, r.tenderId) === 'cash').reduce((m, r) => (amountCents(r.amount) > m ? amountCents(r.amount) : m), 0n);
-    if (change > biggestCash) return SENTENCES.onlyCash;
+    if (change > biggestCash) return { message: SENTENCES.onlyCash, target: { kind: 'tenders' } };
   }
   return null;
 }
+
+/** null = Pay may be enabled; otherwise the one sentence under the Pay button. */
+export const payBlocker = (i: Parameters<typeof payBlockerDetail>[0]): string | null => payBlockerDetail(i)?.message ?? null;
 
 // ---------------------------------------------------------------------------------------------------------------------
 // The discount sheet: the server's checks, in the server's order (addLineDiscount)
@@ -216,6 +243,14 @@ export function priceBill(i: { lines: PriceLineInput[]; rules: { vatPercentBasis
     scPwdPercentBasisPoints: BigInt(i.rules.scPwdPercentBasisPoints),
     lines: i.lines,
   });
+}
+
+/** The statutory percent only (80.18 + 17.68 on the payment.png bill), summed over the senior/PWD discounts; the VAT removed is separate (`vat.vatRemovedForScPwd`). With VATable + VAT + VAT-exempt it makes the printed block add up to the total. */
+export function scPwdDiscountOf(lines: readonly { discounts: readonly { discountId: string; kind: string }[] }[], priced: PricedSession): Money {
+  const statutory = new Set(lines.flatMap((l) => l.discounts.filter((d) => d.kind === 'senior' || d.kind === 'pwd').map((d) => d.discountId)));
+  let cents = 0n;
+  for (const l of priced.lines) for (const d of l.discounts) if (statutory.has(d.discountId)) cents += toCentavos(d.discountAmount);
+  return fromCentavos(cents);
 }
 
 /** A rate in basis points as the receipt label, e.g. 1200 -> "12%", 750 -> "7.5%". Integer arithmetic only; the rate itself comes from the snapshot rules. */
@@ -328,7 +363,7 @@ export interface PayInput {
   seniors: readonly Senior[];
   vatRateLabel: string;
   layout: PrintLayout;
-  receipt: { header: ReceiptHeader; tableLabel: string | null; heads: number | null; cashierName: string; issuedAtLocal: string; footerLines: string[]; lines: ReceiptLine[] };
+  receipt: { header: ReceiptHeader; tableLabel: string | null; heads: number | null; cashierName: string; issuedAtLocal: string; footerLines: string[]; lines: ReceiptLine[]; scPwdDiscount: Money };
 }
 export type PayResult = { ok: true; receiptNo: string; print: PrintOutcome; lines: string[]; notice: string | null; view: ReceiptView } | { ok: false; message: string };
 
@@ -353,7 +388,7 @@ export function receiptViewOf(i: PayInput, receiptNo: string): ReceiptView {
     footerLines: i.receipt.footerLines,
     offline: !i.online,
     reprint: false,
-    vat: { vatRegistered: i.receipt.header.vatRegistered, vatableSales: i.priced.vat.vatableSales, vatExemptSales: i.priced.vat.vatExemptSales, vatAmount: i.priced.vat.vatAmount, vatRateLabel: i.vatRateLabel, vatRemovedForScPwd: i.priced.vat.vatRemovedForScPwd },
+    vat: { vatRegistered: i.receipt.header.vatRegistered, vatableSales: i.priced.vat.vatableSales, vatExemptSales: i.priced.vat.vatExemptSales, vatAmount: i.priced.vat.vatAmount, vatRateLabel: i.vatRateLabel, vatRemovedForScPwd: i.priced.vat.vatRemovedForScPwd, scPwdDiscount: i.receipt.scPwdDiscount },
   };
 }
 
