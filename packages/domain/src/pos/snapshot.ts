@@ -27,7 +27,7 @@ export interface PosSnapshot {
     stands: { id: string; number: number }[];
     tenders: { id: string; name: string; kind: string }[];
     discountPresets: { id: string; name: string; valueType: string; value: string }[];
-    rules: { vatPercentBasisPoints: number; scPwdPercentBasisPoints: number; businessDayStartHour: number };
+    rules: { vatPercentBasisPoints: number; scPwdPercentBasisPoints: number; businessDayStartHour: number; tableWarnMinutes: number };
     staff: { personId: string; displayName: string; employeeId: string; posCapabilities: string[] }[];
     device: { pairingId: string; lastSeq: number; lastTerminalSeq: number };
     businessDate: string;
@@ -68,6 +68,7 @@ export async function buildPosSnapshot(tx: Tx, input: { pairing: PosPairing }, d
       vatPercentBasisPoints: Number(rules.vatPercentBasisPoints),
       scPwdPercentBasisPoints: Number(rules.scPwdPercentBasisPoints),
       businessDayStartHour: rules.businessDayStartHour,
+      tableWarnMinutes: rules.tableWarnMinutes,
     },
     staff,
     device: {

@@ -22,6 +22,8 @@ export type { OfflineActor };
 export interface SnapshotOrdersPart {
   stands: { id: string; number: number }[];
   menu: unknown;
+  /** T-539 S3: minutes before a table tile turns red. Null when the cached snapshot is older than the rule (no tile turns red until the next refresh). */
+  tableWarnMinutes?: number | null;
   /** T-528: what the Payment screen prices and pays with. Null when the cached snapshot is older than the fields it needs (the tablet must go online once). */
   payment?: SnapshotPaymentPart | null;
 }
@@ -78,7 +80,9 @@ function paymentPartOf(b: Record<string, unknown>): SnapshotPaymentPart | null {
 
 function ordersPartOf(s: CachedSnapshot | null): SnapshotOrdersPart | null {
   const b = s?.body as (Partial<SnapshotOrdersPart> & Record<string, unknown>) | undefined;
-  return b && Array.isArray(b.stands) && b.menu ? { stands: b.stands, menu: b.menu, payment: paymentPartOf(b) } : null;
+  if (!b || !Array.isArray(b.stands) || !b.menu) return null;
+  const warn = (b.rules as { tableWarnMinutes?: unknown } | undefined)?.tableWarnMinutes;
+  return { stands: b.stands, menu: b.menu, tableWarnMinutes: typeof warn === 'number' ? warn : null, payment: paymentPartOf(b) };
 }
 
 const sameEvents = (a: PosEvent[], b: PosEvent[]): boolean => a.length === b.length && a.every((e, i) => e.seq === b[i]!.seq);

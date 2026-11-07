@@ -8,7 +8,6 @@
  */
 import { Badge } from '@/components/ui';
 import { peso } from '@/lib/format';
-import { POS_TILE_WARN_AFTER_MINUTES } from '../_shell/constants';
 import { offlineFor } from '../_shell/status-pill';
 import { POS_READ_ONLY_NOTE } from './payloads';
 import { tileClock, type ProjectedLine, type ProjectedSession, type Tile } from './project';
@@ -19,6 +18,8 @@ export interface OrdersViewProps {
   sessions: Record<string, ProjectedSession>;
   selectedSessionId: string | null;
   nowMs: number;
+  /** T-539 S3: the snapshot's table-warning minutes. Absent or null: no tile turns red. */
+  warnMinutes?: number | null;
   onSeat: () => void;
   onTakeOut: () => void;
   onSelect: (sessionId: string) => void;
@@ -44,14 +45,14 @@ const standLabel = (t: Tile): string => (t.standNumber !== null ? `Stand ${t.sta
 const headsText = (t: Tile): string =>
   t.mode === 'take_out' ? 'Take-out' : `${t.headsCashier} heads${t.headsServer !== null && t.headsServer !== t.headsCashier ? ` (server counted ${t.headsServer})` : ''}`;
 
-function TimeBar({ openedAtDevice, nowMs }: { openedAtDevice: string; nowMs: number }) {
-  const clock = tileClock(openedAtDevice, nowMs);
-  const pct = Math.min(100, Math.round((clock.minutes / POS_TILE_WARN_AFTER_MINUTES) * 100));
+function TimeBar({ openedAtDevice, nowMs, warnMinutes }: { openedAtDevice: string; nowMs: number; warnMinutes: number | null }) {
+  const clock = tileClock(openedAtDevice, nowMs, warnMinutes);
+  const pct = warnMinutes === null ? 0 : Math.min(100, Math.round((clock.minutes / warnMinutes) * 100));
   return (
     <div className="mt-auto pt-2">
       <p className={`text-sm ${clock.warn ? 'font-semibold text-danger' : 'text-muted'}`}>
         Seated {clock.label}
-        {clock.warn ? ` · over ${offlineFor(POS_TILE_WARN_AFTER_MINUTES * 60_000)}` : ''}
+        {clock.warn ? ` · over ${offlineFor((warnMinutes ?? 0) * 60_000)}` : ''}
       </p>
       <div className="mt-1 h-2 w-full rounded-full bg-closed-soft" aria-hidden="true">
         <div className={`h-2 rounded-full ${clock.warn ? 'bg-brand' : 'bg-success'}`} style={{ width: `${pct}%` }} />
@@ -60,7 +61,7 @@ function TimeBar({ openedAtDevice, nowMs }: { openedAtDevice: string; nowMs: num
   );
 }
 
-function TileCard({ tile, loaded, selected, nowMs, onSelect }: { tile: Tile; loaded: boolean; selected: boolean; nowMs: number; onSelect: () => void }) {
+function TileCard({ tile, loaded, selected, nowMs, warnMinutes, onSelect }: { tile: Tile; loaded: boolean; selected: boolean; nowMs: number; warnMinutes: number | null; onSelect: () => void }) {
   return (
     <li>
       <button type="button" data-erp-size="free" aria-pressed={selected} className={`${TILE} ${selected ? 'border-ink bg-warning-soft' : 'border-surface-border'}`} onClick={onSelect}>
@@ -82,7 +83,7 @@ function TileCard({ tile, loaded, selected, nowMs, onSelect }: { tile: Tile; loa
             </span>
           ) : null}
         </span>
-        <TimeBar openedAtDevice={tile.openedAtDevice} nowMs={nowMs} />
+        <TimeBar openedAtDevice={tile.openedAtDevice} nowMs={nowMs} warnMinutes={warnMinutes} />
       </button>
     </li>
   );
@@ -144,7 +145,7 @@ interface PanelProps {
 function Panel({ tile, session, readOnly, nowMs, onHeads, onAddItems, onCancelLine, onPay }: PanelProps) {
   const lines = session?.lines.filter((l) => !l.cancelled) ?? [];
   const canPay = onPay !== undefined && tile.paid !== true && session?.loaded === true && lines.length > 0;
-  const clock = tileClock(tile.openedAtDevice, nowMs);
+  const clock = tileClock(tile.openedAtDevice, nowMs, null); // the panel shows only the label
   return (
     <aside aria-label={`${standLabel(tile)} order`} className="flex flex-col rounded-2xl border border-surface-border bg-surface p-4 lg:w-96 lg:shrink-0">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -228,7 +229,7 @@ export function OrdersView(p: OrdersViewProps) {
         ) : (
           <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {p.tiles.map((t) => (
-              <TileCard key={t.sessionId} tile={t} loaded={p.sessions[t.sessionId]?.loaded === true} selected={t.sessionId === p.selectedSessionId} nowMs={p.nowMs} onSelect={() => p.onSelect(t.sessionId)} />
+              <TileCard key={t.sessionId} tile={t} loaded={p.sessions[t.sessionId]?.loaded === true} selected={t.sessionId === p.selectedSessionId} nowMs={p.nowMs} warnMinutes={p.warnMinutes ?? null} onSelect={() => p.onSelect(t.sessionId)} />
             ))}
           </ul>
         )}

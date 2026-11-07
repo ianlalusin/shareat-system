@@ -271,6 +271,7 @@ export function Orders() {
           sessions={view.sessions}
           selectedSessionId={selected}
           nowMs={now}
+          warnMinutes={snapshot?.tableWarnMinutes ?? null}
           onSeat={() => open({ kind: 'seat' })}
           onTakeOut={() => open({ kind: 'take_out' })}
           onSelect={(id) => setSelected((cur) => (cur === id ? null : id))}

@@ -20,8 +20,3 @@ export const POS_PIN_PAUSE_MS = 5 * 60 * 1000;
 
 /** T-526 R4: the short-lived, non-secret flag the tablet-PIN sign-in sets (path /pos, 5 minutes) so only THAT sign-in can promote a pending verifier. */
 export const POS_PROMOTE_COOKIE = 'shareat_pos_promote';
-
-/** T-527 R2: the Orders tile time bar turns to the warning colour past this many minutes seated (1 h 30, from the design). Display only: it blocks nothing.
- */
-// shortcut: hard-coded 90 min until pos.table_warn_minutes lands (T-539 S3, migration 0245) — must land before Lipa go-live
-export const POS_TILE_WARN_AFTER_MINUTES = 90;
