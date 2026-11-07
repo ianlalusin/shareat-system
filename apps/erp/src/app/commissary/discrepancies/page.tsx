@@ -107,7 +107,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
             new sales day
           </strong>
           <p className="mt-1">
-            Deciding what happened lifts the block. ⛔ Choosing <em>Audit only</em> does not — it
+            Deciding what happened lifts the block. Choosing <em>Audit only</em> does not — it
             records that somebody looked and chose to wait, which is a decision to wait, not a
             resolution.
           </p>
@@ -155,7 +155,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
 
               {row.status === 'resolved' ? (
                 <p className="mt-3 text-sm text-neutral-500">
-                  ⛔ Resolved as <strong>{row.disposition ? discrepancyDispositionLabel(row.disposition) : ''}</strong>. Correcting this is a reversal
+                  Resolved as <strong>{row.disposition ? discrepancyDispositionLabel(row.disposition) : ''}</strong>. Correcting this is a reversal
                   plus a new resolution, never an edit.
                 </p>
               ) : (
