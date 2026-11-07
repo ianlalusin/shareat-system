@@ -173,3 +173,16 @@ never print `.env.local` values.
   (give Server `record_sale`? or a narrower `add_pos_items`), and an online Server Action path for phones (no outbox).
   Proposal: not in release 1. At Lipa the cashier enters every order today (one tablet, row 313), and the waiter's phone
   does refills and heads (T-529).
+
+## Addendum (planner, 7 Nov 2026, after the T-526 renders)
+
+- **Store:** every read and write resolves the store through T-526's `effectiveStore(pairing, ?storeId)`. That includes
+  `GET /api/pos/session/[id]` and `/api/pos/state`. On a paired tablet a different `?storeId` gets 403.
+- **Phones (row 447):** Orders is read-only on any browser without a pairing.
+- **Fixes from the T-526 renders:**
+  - the disabled Sign in must look disabled: a muted fill, `aria-disabled`, and text contrast of at least 4.5:1;
+  - the offline pill shows elapsed minutes at every width.
+- **Not in T-527:**
+  - the header's Printer item (T-528) and Till item (the Till slice);
+  - `optionLabels`. The panel shows the stored line name, which already carries the chosen options.
+- **The 90-minute warning** is a marked shortcut until T-539 S3 (migration 0245) lands, which must happen before go-live.
