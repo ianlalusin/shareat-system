@@ -108,5 +108,5 @@ const BUSINESS_RULE_VALUE_SAYS = 'A value is a plain number with at most two dec
 export const SETTINGS_BUSINESS_RULE_RULES = defineFieldRules('settings.setBusinessRule', {
   value: { label: 'The new value', kind: 'pattern', pattern: '^\\d+(\\.\\d{1,2})?$', patternSays: 'a plain number with at most two decimals', requires: BUSINESS_RULE_VALUE_SAYS },
   effectiveFrom: { label: 'The start day', kind: 'date', notBeforeToday: true },
-  reason: { label: 'The reason', kind: 'text', max: 500, requires: 'Say why the rule is changing, in under 500 characters.' },
+  reason: { label: 'The reason', kind: 'text', plainText: true, max: 500, requires: 'Say why the rule is changing, in under 500 characters.' },
 });

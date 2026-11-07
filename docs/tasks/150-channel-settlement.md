@@ -55,12 +55,15 @@ credentials. Neither changes the design; both would size the WHT question below.
   understating netToBank by exactly the credit, with no tripwire because net is a plug."*
   **Any implementation that clamps a deduction at zero has reintroduced that bug.**
 - **A tolerance with two different refusals, not one.** `threshold = max(₱50, 10% of gross)`.
-  A shortfall beyond it **blocks** — reconcile first. An excess beyond it blocks *unless* an
-  explicit `recognizeGain` is passed, so a data-entry error cannot silently become income.
+  A difference of either sign beyond it **blocks** unless a person passes an explicit
+  `acknowledgeDifference { reason }` (T-511 S6a; it replaced the old gain-only `recognizeGain`), so a
+  data-entry error cannot silently become expense or income.
 - **A gain is recognised rather than back-edited into the sales day.** The sales day is immutable
   once verified; the excess the platform actually paid posts to `7100` instead.
-- **A settlement that paid down a loan cannot be voided directly** — the loan payment unwinds
-  through its own module first, so the reversal stays one comprehensible transaction.
+- **A settlement that paid down a loan CAN be voided directly.** The spec first ported v1's "void refuses while a loan
+  payment stands" guard, but here the repayment is a leg inside the settlement's own journal entry (one per loan, see §6),
+  so reversing the entry reverses every repayment in the same transaction. Nothing can outlive the settlement, and
+  `voidChannelSettlement` has no such guard.
 - **`taxTreatment: 'expense' | 'creditable'` as per-channel config.** v1 built the switch and
   never flipped it. Keep the switch; see §7.
 
@@ -175,10 +178,14 @@ same platform fee has rebuilt the confirmed v1 defect. `POSTING-PATTERNS.md:411`
 about the platform:
 
 - **`variance > 0`** — staff **over-reported** the day. The shortfall is swept to expense so the
-  receivable clears exactly. Above `max(₱50, 10% of gross)` the posting is **refused**: reconcile.
+  receivable clears exactly. Above `max(₱50, 10% of gross)` (the business rules `settlement.variance_floor_amount` and
+  `settlement.variance_percent`) the posting is **refused** unless acknowledged, see below.
 - **`variance < 0`** — staff **under-reported**. The excess posts to `7100` as income rather than
-  editing an immutable verified sales day. Above the same tolerance it is refused **unless**
-  `recognizeGain` is passed explicitly, so a typo cannot quietly become revenue.
+  editing an immutable verified sales day.
+- **Past the tolerance, either sign** (T-511 S6a, Ian): the posting is refused **unless** the person passes
+  `acknowledgeDifference { reason }`. The trimmed reason (1 to 500 characters) is stored in
+  `channel_settlements.difference_reason`; a shortfall books to `6420`, a gain to `7100`. Within tolerance an
+  acknowledgement is ignored. A typo can no more quietly become revenue than quietly become expense.
 
 ⚠️ **`6420` is a new account and T-102 gates the chart on Ian.** The alternative is folding
 below-tolerance variance into `6400`, which works but makes a channel that *systematically*
@@ -188,13 +195,17 @@ question is only whether the P&L can.
 
 ### 6. Loan deduction, including the cross-store case
 
-The platform docks a loan repayment out of the payout. Same-store: `2400` Loans payable, against
-the loan T-126 already models. **Cross-store** (Grab loan owned by Lipa, docked from Malvar's
+The platform docks loan repayments out of the payout, and it can dock **several in one payout** (T-511 S6a, migration
+0242): the settlement carries one **leg** per loan in `channel_settlement_loan_legs`, and `loan_deduction` is the sum
+of the legs, held equal by a deferred trigger at commit. Each leg posts as below, in the order given. Same-store:
+`2400` Loans payable, against the loan T-126 already models. **Cross-store** (Grab loan owned by Lipa, docked from Malvar's
 payout): the paying store books `1250` Due from related store, the owning store `2150` Due to
 related store — and **invariant 6's reciprocal elimination already checks that pair nets to zero**,
 which is exactly the safety net this case needs.
 
-**Void refuses while a loan payment stands**, ported from v1: unwind the loan first.
+**Void has no loan-payment guard, and needs none.** v1 refused a void while a loan payment stood, because there the
+repayment was a SEPARATE record that could outlive the settlement. Here every leg is part of the settlement's own journal
+entry, so `reverseEntry` reverses all of them together and the leg rows stay as history.
 
 ### 7. Withholding tax — decided, 2026-08-28
 
@@ -273,7 +284,7 @@ is no UI to enter them together, which is a real gap rather than a decision.
    promo-day fixture, because this is the bug v1 shipped.
 4. `netDeposited` is never negative; fees exceeding gross is a refusal.
 5. A posted settlement is immutable; correction is void + re-post, and void reverses every leg.
-6. Void refuses while a loan payment stands.
+6. Void reverses every loan leg with the entry (there is no standing-loan-payment guard, see §6).
 7. `1220` for a fully settled channel-day is **exactly zero**, not near zero.
 8. Σ `1220` by party reconciles to the `1220` control balance (invariant 6).
 9. Cross-store loan deductions leave Σ`1250` = Σ`2150` at entity level.
@@ -285,9 +296,10 @@ is no UI to enter them together, which is a real gap rather than a decision.
 
 Integration, against real Postgres, in the shape T-130/T-131 used. Required fixtures: the plain
 settlement; a **negative** `platformFee` promo day; a below-tolerance shortfall; an above-tolerance
-shortfall (refused); an under-report gain with and without `recognizeGain`; a same-store loan
-deduction; a **cross-store** loan deduction asserting the reciprocal; a void; a void blocked by a
-standing loan payment; a closed-period refusal; a duplicate-settlement refusal.
+shortfall (refused, and posted with `acknowledgeDifference`); an under-report gain with and without
+`acknowledgeDifference`; a same-store loan deduction; a **cross-store** loan deduction asserting the
+reciprocal; a payout with **two loan legs**; a void that reverses every leg; a closed-period refusal; a
+duplicate-settlement refusal.
 
 ⭐ **Add a `channel.settlement` specimen to `packages/etl/corpus/`** — the corpus has expense and
 sale specimens and no settlement, which is why nothing catches a settlement-shaped ETL regression.

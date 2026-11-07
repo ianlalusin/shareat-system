@@ -26,6 +26,7 @@ import { errorMessage } from '@/lib/constraint-messages';
 import { redirectWithFlash } from '@/lib/flash';
 import { keepTyping } from '@/lib/keep-typing';
 import { PAYOUT_DESTINATION_EDIT } from './typed-forms';
+import { hasLoanAmount } from './loan-amount';
 import { verifyAdminApproval } from '@shareat/auth';
 import { loadDestructiveTarget, recordApproval } from '@/lib/destructive';
 
@@ -58,7 +59,8 @@ export interface PreviewRequest {
   loanId: string;
   loanAmount: string;
   loanOwnerStoreId: string;
-  recognizeGain: boolean;
+  /** T-511 S6a: why the person accepts a difference past tolerance (either sign); blank when none was given. */
+  differenceReason: string;
 }
 
 export type PreviewResponse = { ok: true; preview: SettlementPreview } | { ok: false; error: string };
@@ -92,14 +94,11 @@ export async function previewSettlementAction(req: PreviewRequest): Promise<Prev
           penalty: req.penalty || undefined,
         },
         // T-371 R6 — a loan picked with a blank amount is a picker left open, exactly as the record path reads it.
-        loan: req.loanId && req.loanAmount
-          ? {
-              loanId: req.loanId,
-              amount: req.loanAmount,
-              ownerStoreId: req.loanOwnerStoreId || null,
-            }
-          : null,
-        recognizeGain: req.recognizeGain,
+        // T-511 S6a: the form has ONE loan picker, so the list is one leg (or none).
+        loanLegs: hasLoanAmount(req.loanAmount)
+          ? [{ loanId: req.loanId, amount: req.loanAmount, ownerStoreId: req.loanOwnerStoreId || null }]
+          : [],
+        acknowledgeDifference: req.differenceReason.trim() ? { reason: req.differenceReason } : null,
       }),
     );
     return { ok: true, preview };
@@ -128,7 +127,9 @@ export async function recordSettlementAction(formData: FormData): Promise<void> 
     // schema's own CHECK refuses the pair anyway. Treated as "no loan" rather than surfaced as a
     // constraint error, because that is what the person meant.
     const loanAmount = str(formData, 'loanAmount');
-    const hasLoan = loanAmount !== '' && Number(loanAmount) !== 0; // loanId may be blank: the domain rules see the amount, then drop the pair
+    const hasLoan = hasLoanAmount(loanAmount); // loanId may be blank: the domain rules see the amount, then drop the pair
+    // T-511 S6a: the reason travels as one hidden field (see SettlementForm); blank means no acknowledgement was given.
+    const differenceReason = str(formData, 'differenceReason');
 
     await withOrgPrincipal(actor.orgId, (tx) =>
       recordChannelSettlement(tx, actor, {
@@ -146,16 +147,12 @@ export async function recordSettlementAction(formData: FormData): Promise<void> 
           withholdingTax: optional(formData, 'withholdingTax'),
           penalty: optional(formData, 'penalty'),
         },
-        loan: hasLoan
-          ? {
-              loanId,
-              amount: loanAmount,
-              ownerStoreId: str(formData, 'loanOwnerStoreId') || null,
-            }
-          : null,
+        loanLegs: hasLoan
+          ? [{ loanId, amount: loanAmount, ownerStoreId: str(formData, 'loanOwnerStoreId') || null }]
+          : [],
         reference: str(formData, 'reference') || null,
         settledOn: str(formData, 'settledOn'),
-        recognizeGain: formData.get('recognizeGain') === 'on',
+        acknowledgeDifference: differenceReason ? { reason: differenceReason } : null,
       }),
     );
   } catch (err) {

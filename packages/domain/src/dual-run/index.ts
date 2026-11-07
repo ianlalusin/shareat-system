@@ -256,6 +256,7 @@ export async function runDualRun(tx: Tx, actor: Actor, input: RunDualRunInput): 
               amount: cents(d.amount),
               state: d.state,
               channel: d.partyType === 'channel',
+              ...(d.platformCorrection === true ? { platformCorrection: true } : {}),
               ...(norm !== '' ? { receiptId: `rn:${norm}` } : {}),
             };
           },

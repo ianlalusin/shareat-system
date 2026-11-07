@@ -5,15 +5,14 @@
  * RED today, for one reason: `packages/domain/src/settlement-intake/settlement-input.ts` does not exist (the import below cannot resolve).
  *
  * CONTRACT (tester's choices where the spec leaves a signature open; the builder must meet these or ask BOSS to change the tests):
- *  C1  `lineToSettlementInput(line, loan?)` exported from `settlement-intake/settlement-input.ts` AND reachable from `@shareat/domain`.
+ *  C1  `lineToSettlementInput(line, loanLegs?)` exported from `settlement-intake/settlement-input.ts` AND reachable from `@shareat/domain`.
  *      `line` is a `DayLineRow` (or any object with storeId, channelId, salesDate, orderValue, commission, marketing, platformFee, netPayout, loanDeduction,
  *      payoutReference). Money fields of the row are numeric(14,2) TEXT ("9928.00"), and so are the money fields of the result.
  *  C2  Result fields: storeId, channelId, businessDate = salesDate, grossAmount = orderValue (the FILE figure, net of the platform discount),
- *      netDeposited = netPayout, settledOn = salesDate, recognizeGain = false, deductions = EXACTLY { commission, marketing, platformFee } passed straight
- *      through (no sign change: commission and marketing are stored positive, platformFee is signed, a credit is negative), loan.
- *  C3  `loan` (second argument, optional): { loanId, ownerStoreId? }. When given AND the line's loanDeduction is not zero, the result's `loan` is
- *      { loanId, amount: line.loanDeduction, ownerStoreId } (the settlement's single loan leg of T-150; two-loan days need migration 0229, slice 6).
- *      With no second argument, or a zero loanDeduction, `loan` is null.
+ *      netDeposited = netPayout, settledOn = salesDate (T-511 S6a: no recognizeGain key any more), deductions = EXACTLY { commission, marketing, platformFee } passed straight
+ *      through (no sign change: commission and marketing are stored positive, platformFee is signed, a credit is negative), loanLegs.
+ *  C3  T-511 S6a CHANGED THIS (the legs of a day are pinned in t511-s6a-settlement-input.test.ts): the second argument is the legs list; when given AND the line's
+ *      loanDeduction is not zero the result's `loanLegs` is a copy of it, otherwise [] (it was one `loan` of the whole deduction, before migration 0242).
  *  C4  No `salesDayId` key in the result (a staged line has none; `previewChannelSettlement` takes the input without it). The other three deduction kinds
  *      (vatOnFees, withholdingTax, penalty) are not keys of `deductions`.
  *  C5  Pure: the module imports nothing from `@shareat/db` and never calls `recordChannelSettlement` (source scan below). It returns a new object each call.
@@ -26,6 +25,8 @@ import { lineToSettlementInput } from '../../src/settlement-intake/settlement-in
 const STORE = '00000000-0000-4000-8000-0000000000a1';
 const CHANNEL = '00000000-0000-4000-8000-0000000000c1';
 const LOAN = '00000000-0000-4000-8000-0000000000e1';
+/** the one leg of the whole 2,363.12 deduction */
+const LEGS = [{ loanId: LOAN, amount: '2363.12', ownerStoreId: STORE }];
 
 /** Lipa 20 Oct Grab, the figures of docs/discovery/t511-exit5-store-day-comparison.md (order value 9,928.00, commission 2,482.00, loan 591.24 + 1,771.88). */
 const lipa20Oct = {
@@ -42,8 +43,8 @@ const lipa20Oct = {
 };
 
 describe('T-511 S5b - lineToSettlementInput: every field', () => {
-  it('Lipa 20 Oct Grab with its loan: gross = FILE order value, net deposited = net payout, settled on the sales date, no gain recognised [kills: gross from gross_info; net from the wrong column; settledOn today; recognizeGain true]', () => {
-    const out = lineToSettlementInput(lipa20Oct as never, { loanId: LOAN, ownerStoreId: STORE });
+  it('Lipa 20 Oct Grab with its loan: gross = FILE order value, net deposited = net payout, settled on the sales date, no gain recognised [kills: gross from gross_info; net from the wrong column; settledOn today]', () => {
+    const out = lineToSettlementInput(lipa20Oct as never, LEGS);
     expect(out).toMatchObject({
       storeId: STORE,
       channelId: CHANNEL,
@@ -51,21 +52,22 @@ describe('T-511 S5b - lineToSettlementInput: every field', () => {
       grossAmount: '9928.00',
       netDeposited: '5082.88',
       settledOn: '2026-10-20',
-      recognizeGain: false,
       deductions: { commission: '2482.00', marketing: '0.00', platformFee: '0.00' },
-      loan: { loanId: LOAN, amount: '2363.12', ownerStoreId: STORE },
+      loanLegs: LEGS,
     });
+    expect('recognizeGain' in out).toBe(false);
   });
 
   it('the figures balance the way T-150 will check them: gross - commission - marketing - platform fee - loan = net deposited (9,928.00 - 2,482.00 - 2,363.12 = 5,082.88) [kills: a column swapped]', () => {
-    const out = lineToSettlementInput(lipa20Oct as never, { loanId: LOAN });
+    const out = lineToSettlementInput(lipa20Oct as never, LEGS);
     const c = (t: string): bigint => BigInt(t.replace('.', ''));
     const d = out.deductions as Record<string, string>;
-    expect(c(out.grossAmount) - c(d.commission!) - c(d.marketing!) - c(d.platformFee!) - c(out.loan!.amount)).toBe(c(out.netDeposited));
+    const legs = (out.loanLegs ?? []).reduce((t, l) => t + c(l.amount), 0n);
+    expect(c(out.grossAmount) - c(d.commission!) - c(d.marketing!) - c(d.platformFee!) - legs).toBe(c(out.netDeposited));
   });
 
   it('only the three deduction kinds of decision 3 exist; no sales day id; no tax kinds [kills: vatOnFees / withholdingTax / penalty carried over; salesDayId invented]', () => {
-    const out = lineToSettlementInput(lipa20Oct as never, { loanId: LOAN }) as unknown as Record<string, unknown>;
+    const out = lineToSettlementInput(lipa20Oct as never, LEGS) as unknown as Record<string, unknown>;
     expect(Object.keys(out.deductions as object).sort()).toEqual(['commission', 'marketing', 'platformFee']);
     expect('salesDayId' in out).toBe(false);
   });
@@ -90,17 +92,17 @@ describe('T-511 S5b - lineToSettlementInput: signs', () => {
   });
 });
 
-describe('T-511 S5b - lineToSettlementInput: the loan leg', () => {
-  it('no loan argument -> loan null; a zero loan deduction with a loan argument -> null; a loan deduction with an argument -> one leg of the whole deduction [kills: loan invented; leg of zero]', () => {
-    expect(lineToSettlementInput(lipa20Oct as never).loan ?? null).toBeNull();
-    expect(lineToSettlementInput({ ...lipa20Oct, loanDeduction: '0.00' } as never, { loanId: LOAN }).loan ?? null).toBeNull();
-    expect(lineToSettlementInput(lipa20Oct as never, { loanId: LOAN, ownerStoreId: STORE }).loan).toEqual({ loanId: LOAN, amount: '2363.12', ownerStoreId: STORE });
+describe('T-511 S5b - lineToSettlementInput: the loan legs', () => {
+  it('no legs argument -> no legs; a zero loan deduction with legs given -> none; a loan deduction with legs -> those legs [kills: legs invented; a leg of zero]', () => {
+    expect(lineToSettlementInput(lipa20Oct as never).loanLegs ?? []).toEqual([]);
+    expect(lineToSettlementInput({ ...lipa20Oct, loanDeduction: '0.00' } as never, LEGS).loanLegs ?? []).toEqual([]);
+    expect(lineToSettlementInput(lipa20Oct as never, LEGS).loanLegs).toEqual(LEGS);
   });
 
   it('a new object every call: editing one result does not change the next [kills: a shared mutable result]', () => {
-    const a = lineToSettlementInput(lipa20Oct as never, { loanId: LOAN });
+    const a = lineToSettlementInput(lipa20Oct as never, LEGS);
     (a.deductions as Record<string, string>).commission = '0.00';
-    expect(lineToSettlementInput(lipa20Oct as never, { loanId: LOAN }).deductions).toMatchObject({ commission: '2482.00' });
+    expect(lineToSettlementInput(lipa20Oct as never, LEGS).deductions).toMatchObject({ commission: '2482.00' });
   });
 });
 
