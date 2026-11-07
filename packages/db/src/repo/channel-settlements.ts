@@ -5,7 +5,7 @@
  * `1220` by party, exactly as AP and AR do it — the same discipline that found v1's 13.3% drift in
  * a maintained `outstandingAmount`.
  */
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
 // ⛔ T-218 — Manila, never bare current_date (DEF-172).
 import { MANILA_TODAY } from './sql-time';
 import type { Tx } from '../client';
@@ -16,6 +16,7 @@ import {
   channelSettlements,
   type ChannelSettlementStatus,
 } from '../../schema/channel-settlements';
+import { channelPeriodCharges, channelSettlementChargeLinks } from '../../schema/settlement-intake';
 
 export const CHANNEL_RECEIVABLE_CODE = '1220';
 export const PLATFORM_FEE_CODE = '6400';
@@ -508,4 +509,112 @@ export async function accountRequiresParty(tx: Tx, orgId: string, code: string):
     select requires_party from accounts where org_id = ${orgId} and code = ${code}
   `)) as unknown as Record<string, boolean>[];
   return Boolean(row?.requires_party);
+}
+
+// -------------------------------------------------------------------------------------
+// T-511 S6c: platform charges booked with no sales day (`postPlatformCharge`), and the payouts that net them. Both tables are append-only: insert and read, never update,
+// and NEVER `FOR UPDATE` (the guard trigger and the lock would fight): serialisation is the advisory locks.
+// -------------------------------------------------------------------------------------
+
+export type PeriodChargeRow = typeof channelPeriodCharges.$inferSelect;
+/** The three figures are `Money` brands (numeric(14,2)), spelled out so the T-371 write guard can see their shape. */
+export interface InsertPeriodChargeInput {
+  id: string;
+  orgId: string;
+  storeId: string;
+  channelId: string;
+  otherLineId: string;
+  uploadId: string;
+  chargeDate: string;
+  netAmount: Money;
+  vatAmount: Money;
+  totalAmount: Money;
+  entryDate: string;
+  journalEntryId: string;
+  description: string | null;
+  postedBy: string;
+}
+
+/** The charge already booked for this staged other line, or null. */
+export async function chargeForOtherLine(tx: Tx, orgId: string, otherLineId: string): Promise<PeriodChargeRow | null> {
+  const [row] = await tx
+    .select()
+    .from(channelPeriodCharges)
+    .where(and(eq(channelPeriodCharges.orgId, orgId), eq(channelPeriodCharges.otherLineId, otherLineId)))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * A charge already booked for a DIFFERENT staged line that looks like the same one (same store, channel, date, net amount and description): the copy a re-uploaded,
+ * changed file stages again. Ingest supersedes the old upload but never retires its period lines, so this is the only guard once the first copy is booked.
+ */
+export async function bookedCopyOfCharge(
+  tx: Tx,
+  orgId: string,
+  c: { otherLineId: string; storeId: string; channelId: string; chargeDate: string; netAmount: string; description: string | null },
+): Promise<PeriodChargeRow | null> {
+  const [row] = await tx
+    .select()
+    .from(channelPeriodCharges)
+    .where(
+      and(
+        eq(channelPeriodCharges.orgId, orgId),
+        eq(channelPeriodCharges.storeId, c.storeId),
+        eq(channelPeriodCharges.channelId, c.channelId),
+        eq(channelPeriodCharges.chargeDate, c.chargeDate),
+        eq(channelPeriodCharges.netAmount, c.netAmount),
+        sql`${channelPeriodCharges.description} is not distinct from ${c.description}`,
+        ne(channelPeriodCharges.otherLineId, c.otherLineId),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+export async function insertPeriodCharge(tx: Tx, input: InsertPeriodChargeInput): Promise<void> {
+  // `posted_at` is the statement's own clock, as every other append-only posting document here.
+  await tx.insert(channelPeriodCharges).values({ ...input, postedAt: sql`clock_timestamp()` });
+}
+
+/** A booked charge as a payout sees it: its channel, store and total, and the live settlement (not voided) that already netted it, if any. */
+export interface NettableChargeRow {
+  id: string;
+  channelId: string;
+  storeId: string;
+  totalAmount: string;
+  chargeDate: string;
+  nettedBySettlementId: string | null;
+}
+
+/** The booked charges among `ids` in this org (an unknown id, a staged line's id and another org's id are simply absent). A link counts only through a settlement that is not voided. */
+export async function chargesForNetting(tx: Tx, orgId: string, ids: readonly string[]): Promise<NettableChargeRow[]> {
+  if (ids.length === 0) return [];
+  const charges = await tx
+    .select({
+      id: channelPeriodCharges.id,
+      channelId: channelPeriodCharges.channelId,
+      storeId: channelPeriodCharges.storeId,
+      totalAmount: channelPeriodCharges.totalAmount,
+      chargeDate: channelPeriodCharges.chargeDate,
+    })
+    .from(channelPeriodCharges)
+    .where(and(eq(channelPeriodCharges.orgId, orgId), inArray(channelPeriodCharges.id, [...ids])));
+  if (charges.length === 0) return [];
+  const live = await tx
+    .select({ chargeId: channelSettlementChargeLinks.chargeId, settlementId: channelSettlementChargeLinks.settlementId })
+    .from(channelSettlementChargeLinks)
+    .innerJoin(
+      channelSettlements,
+      and(eq(channelSettlements.orgId, channelSettlementChargeLinks.orgId), eq(channelSettlements.id, channelSettlementChargeLinks.settlementId)),
+    )
+    .where(and(eq(channelSettlementChargeLinks.orgId, orgId), inArray(channelSettlementChargeLinks.chargeId, charges.map((c) => c.id)), ne(channelSettlements.status, 'voided')));
+  const by = new Map(live.map((l) => [l.chargeId, l.settlementId]));
+  return charges.map((c) => ({ ...c, nettedBySettlementId: by.get(c.id) ?? null }));
+}
+
+/** Writes the links of a settlement to the charges it netted, in one statement. Called in the same transaction as the settlement. */
+export async function insertChargeLinks(tx: Tx, orgId: string, settlementId: string, chargeIds: readonly string[]): Promise<void> {
+  if (chargeIds.length === 0) return;
+  await tx.insert(channelSettlementChargeLinks).values(chargeIds.map((chargeId) => ({ orgId, settlementId, chargeId })));
 }
