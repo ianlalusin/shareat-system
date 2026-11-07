@@ -195,6 +195,9 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('pos.session_voided', 'order', 'high', 'store', 'table_sessions', 'T-524', { clientSources: ['pos'] }),
   def('pos.sale_completed', 'money', 'normal', 'store', 'pos_sales_receipts', 'T-524'),
   def('pos.sale_recompute_mismatch', 'money', 'high', 'store', 'pos_sales_receipts', 'T-524'),
+  // T-525: a manager replayed or discarded a quarantined tablet event (entity = the pos_events row). Server-only: the tablet never sends them.
+  def('pos.event_replayed', 'order', 'normal', 'store', 'pos_events', 'T-525'),
+  def('pos.event_discarded', 'order', 'high', 'store', 'pos_events', 'T-525'),
   def('create_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('update_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('reactivate_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),

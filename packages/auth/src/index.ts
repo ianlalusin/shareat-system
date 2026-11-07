@@ -54,6 +54,9 @@ export {
   endAllForDevice,
   setPin,
   PIN_SESSION_TTL_MS,
+  POS_OFFLINE_SIGNIN_WINDOW_MS,
+  POS_DEVICE_CLOCK_SKEW_MS,
+  POS_SIGNIN_CLOCK_SLACK_MS,
   BROWSER_SESSION_TTL_MS,
   /** T-239 / DEF-229 — exported so a test asserts the sentence the code writes, not a copy. */
   PIN_SUPERSEDED_REASON,
@@ -68,7 +71,7 @@ export { pairPosTablet, unpairPosTablet, POS_TABLET_COOKIE } from './pos-tablet'
 export { verifyAdminApproval, ADMIN_PIN_REFUSED } from './admin-approval';
 export type { AdminApprovalInput } from './admin-approval';
 /** T-424 - the POS v2 manager-PIN approval (refund, tender correction, unpaid-session void) and the terminal link it resolves through. */
-export { verifyPosManagerApproval, POS_APPROVAL_REFUSED, POS_APPROVAL_PIN_CAPPED, POS_TERMINAL_NOT_REGISTERED } from './pos-approval';
+export { verifyPosManagerApproval, recordPosApprovalMiss, POS_APPROVAL_REFUSED, POS_APPROVAL_PIN_CAPPED, POS_TERMINAL_NOT_REGISTERED } from './pos-approval';
 export type { PosApprovalInput } from './pos-approval';
 export { resolvePosTerminalLink, isPosDeviceId, POS_DEVICE_ID_INVALID } from './pos-terminal-link';
 export { hashPin, verifyPin, pinLookupHash, posTabletTokenHash, isValidPinFormat, newSessionToken, sessionTokenHash } from './credentials';
