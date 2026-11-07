@@ -193,3 +193,65 @@ reused).
 
 Typecheck, the unit project, the integration files above, plus t524, t525 and `client-bundle-boundary`. Use the lane's
 own `_test` DB, and never print `.env.local` values.
+
+## Addendum (planner, 7 Nov 2026)
+
+- **Base:** lane/t528 is T-527/T-527b (`de79196`) merged with T-528a (`origin/wo/t528a-pos-print-text`, PR #176), so
+  `apps/erp/src/lib/pos-print/` is present.
+- **T-528b is absorbed into T-528.** Build the receipt VAT block here, exactly as work order
+  `C:\Users\ianla\webapps\shareat-coord\work-orders\open\T-528b-receipt-vat-block.md` §3 and §5 describe:
+  - the `vat` field on `ReceiptView`;
+  - the four lines after TOTAL;
+  - `justify` never overflowing;
+  - wrapped indented text keeping its indent;
+  - the PWD and two-diner tests.
+  T-528b's guard rules apply: T-528a's expected arrays change only by adding `vat: null` to their inputs.
+- **Two fixes from the T-527 render, round 2 (P1):**
+  1. In the seat/add panel, the "Items so far" total and the Start/Send button stay pinned in view when the list is long.
+     Use a sticky footer, so they never scroll below the fold. Test it with 10 items.
+  2. "Heads not checked" on a tile must not wrap or make the grid uneven. Shorten the visible text to "Heads: not
+     checked", and keep one line with truncation if it is still too long. The full sentence goes in the accessible
+     label. Test it.
+- **P2 and P3 render items go to What's Left (after go-live)**, unless one is a one-line change in a file T-528 already
+  touches.
+- **The header Printer item:** T-528 adds the print adapter, so the top bar may show the printer state:
+  - `Printer ready` when the plugin is present;
+  - `Browser print` when it falls back to the browser.
+  Never a fake status. This is optional; add it only if it is small.
+
+## Addendum 2 (Ian, 7 Nov 2026, via BOSS): the stand picker is one sliding row
+
+Ian: *"try stand number that is more than 12 it must not cramp all numbers at the top it must slide using 1 row only"*.
+
+- Every place a stand number is picked (the seat panel's stand chooser, and any later one) is **one horizontal row** that
+  scrolls sideways:
+  - `overflow-x: auto`, with no wrap;
+  - scroll snap (`scroll-snap-type: x mandatory`, each item `scroll-snap-align: start`);
+  - targets of at least 48 px;
+  - the selected stand scrolled into view (`scrollIntoView({inline:'nearest'})`) when the chooser opens and when the
+    selection changes;
+  - no visible scrollbar chrome that hides labels, though a scroll affordance such as an edge fade is fine;
+  - keyboard: the arrow keys move along the row.
+- It never wraps and never squeezes into a grid, whatever the number of stands.
+- Used stands stay greyed and cannot be tapped, as before.
+- **Test:** a DOM test with **30 stands** asserts a single row (every button has the same `offsetTop`, or the container
+  has `flex-wrap: nowrap`), the container has `overflow-x: auto`, and the selected stand is scrolled into view (spy on
+  `scrollIntoView`).
+
+## Rulings after the build and the audit (planner, 7 Nov 2026)
+
+- **VAT** follows R1's identity. The mock's figures were illustrative.
+- **Lines sent by the device** in `sale.completed` carry `{lineId, gross, discountTotal, net}`, because the T-525 inbox
+  requires all four.
+- **Change only from cash** mirrors the server's `completeSale` rule exactly: change is at most the **largest single**
+  cash row. Changing this to the sum of all cash rows would be a later T-524 change.
+- **The extra-heads line id** is computed on the device as uuidv5('extra-heads', the bundle line's id), the same
+  derivation as T-524 ruling 3.
+- **A heads change still pending at Pay:** the device bill mirrors the server's followHeads amounts.
+  - The package line is re-made, and its discounts are dropped, with a notice to the cashier.
+  - The bundle's extra-heads line is rebuilt.
+  - Totals stay equal. The ids differ, so a mismatch row is allowed.
+- **Order on Pay:** `requestDrain` runs before printing. Browser print removes its view on `afterprint` (with a
+  fallback).
+- **Shortcuts that remain:** `PRINT_LAYOUT` (58 mm) and `RECEIPT_COPIES` (1) stay until T-546 (migration 0246), which
+  is REQUIRED before the soak.
