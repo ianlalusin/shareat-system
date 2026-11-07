@@ -49,7 +49,8 @@ describe('T-511 S5b screen - files and navigation', () => {
     page();
     detail();
     actions();
-    expect(readFileSync(join(SRC, 'components', 'nav.tsx'), 'utf8')).toMatch(/href:\s*'\/channel-settlements\/review'/);
+    // T-544: the sidebar has one settlements entry; the review screen is a tab under it.
+    expect(readFileSync(join(SRC, 'app', 'channel-settlements', 'tabs.ts'), 'utf8')).toMatch(/href:\s*'\/channel-settlements\/review'/);
   });
 });
 

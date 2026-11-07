@@ -6,14 +6,11 @@ __setPhase5AvailableForTests
 acknowledgementHistory
 activateTerminal
 addDocumentNonBlocking
-addLineDiscount
-addLines
 addUsageLine
 adjudicateRange
 allocationsFor
 apiUrl
 applyCreditAction
-applyPresetToAllLines
 applyReceiptDeltaServerFirst
 arrivalLag
 assetsMissingCapitalisation
@@ -22,7 +19,6 @@ buildCoverageReport
 byMethodOf
 calculateBillTotalsCentavosT423
 callEntry
-cancelLine
 cancelScheduledDepletionRule
 canonicalAnalytics
 capitalizeFromExpense
@@ -33,7 +29,6 @@ childLogger
 closeAsLateReceipt
 closeYear
 collectActorUids
-completeSale
 confirmHeads
 confirmTradeOrder
 convertSpecimen
@@ -50,6 +45,7 @@ daypartsOverlap
 deleteDocumentNonBlocking
 depreciateAsset
 depreciationDrift
+discardQuarantinedEvent
 discountDateStatus
 editPostedProductionAction
 elevateManager
@@ -70,6 +66,8 @@ formatCoverageReport
 formatKitchenQty
 formatLogAmount
 formatLogDescription
+formatReceipt
+formatRefillSlip
 getActiveFake
 getCalendarWeatherIcon
 getGroupKey
@@ -98,15 +96,12 @@ listAvailableCommissaries
 listBirthdayRequests
 listCategoryLives
 listClaimRequests
-listKitchenQueue
 listLiveForStore
 listLobbyEntries
-listOpenStands
 listOrderMessages
 listPayRates
+listPosQuarantine
 listPunchesForDay
-listQuarantinedEvents
-listRefillQueue
 listRoster
 listTodaysSalesReceipts
 listWriteOffsForCharge
@@ -123,7 +118,6 @@ newCorrelationId
 oldWholeBillSeniorDiscount
 openClaim
 openFloatsForStore
-openStand
 oracleStat
 parkWalkIn
 parseGrabDateTime
@@ -151,9 +145,8 @@ recordClientEvents
 remainingFor
 remainingOf
 removeEntry
-removeLineDiscount
 removeUsageLine
-requestRefill
+replayQuarantinedEvent
 reserveNext
 resetLobbyReadLimiterForTests
 resetNonCentavoCount
@@ -182,7 +175,6 @@ serveLine
 setActiveFake
 setCostBasisItem
 setDocumentNonBlocking
-setHeadsCashier
 setItemPricing
 setTillFloat
 signOffPack
@@ -219,7 +211,6 @@ validateFingerprintTemplates
 voidOps
 voidPaymentConversionServer
 voidShift
-voidUnpaidSession
 withPrincipal
 workedCase
 writtenReceipt

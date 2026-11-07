@@ -18,6 +18,10 @@ export const dynamic = 'force-dynamic';
 /** How many past rows show before the rest fold under "earlier changes". */
 const HISTORY_SHOWN = 3;
 
+const HOUR_BOX = { type: 'number', inputMode: 'numeric', step: 1, min: 0, max: 23 } as const;
+
+const NEW_VALUE_LABEL: Record<BusinessRuleItem['unit'], string> = { money: 'New value (pesos)', percent: 'New value (percent)', hour: 'New value (hour, 0–23)' };
+
 /**
  * `/settings/business-rules`. T-512 (T-511 S5c).
  *
@@ -73,8 +77,9 @@ export default async function BusinessRulesPage({ searchParams }: { searchParams
                       typed={typedFor(sp, BUSINESS_RULE_EDIT, ruleRecordId(item.key), actor.personId)}
                     >
                       <FormGrid>
-                        <Field label={item.unit === 'money' ? 'New value (pesos)' : 'New value (percent)'} rule={SETTINGS_BUSINESS_RULE_RULES.value}>
-                          <Input {...nativeAttrs(SETTINGS_BUSINESS_RULE_RULES.value)} inputMode="decimal" defaultValue={inputValue(item.unit, item.current)} className="w-full text-right" />
+                        <Field label={NEW_VALUE_LABEL[item.unit]} rule={SETTINGS_BUSINESS_RULE_RULES.value}>
+                          {/* An hour is a whole-number box (step 1, 0 to 23): the field rule's pattern alone would let 4.5 through; the writer refuses a fraction too. */}
+                          <Input {...nativeAttrs(SETTINGS_BUSINESS_RULE_RULES.value)} {...(item.unit === 'hour' ? HOUR_BOX : { inputMode: 'decimal' as const })} defaultValue={inputValue(item.unit, item.current)} className="w-full text-right" />
                         </Field>
                         <Field label="Starts on" rule={SETTINGS_BUSINESS_RULE_RULES.effectiveFrom}>
                           <Input {...nativeAttrs(SETTINGS_BUSINESS_RULE_RULES.effectiveFrom)} type="date" min={view.today} defaultValue={view.tomorrow} className="w-full" />

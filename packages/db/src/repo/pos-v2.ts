@@ -31,6 +31,8 @@ import {
   type TableSessionLineRow,
   type TableSessionRow,
 } from '../../schema/pos-v2';
+import { employments } from '../../schema/employment';
+import { persons } from '../../schema/persons';
 import { posTabletPairings } from '../../schema/pos-tablet-pairings';
 import { tenders } from '../../schema/pos-v1';
 import type { Money } from '@shareat/core/money';
@@ -570,4 +572,176 @@ export async function listQueuedLines(tx: Tx, orgId: string, storeId: string, o:
       ),
     )
     .orderBy(asc(tableSessionLines.addedAtDevice), asc(tableSessionLines.id));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-525 - the events inbox, the snapshot and the state poll (packages/domain/src/pos/inbox.ts, snapshot.ts). No rule lives here.
+// ---------------------------------------------------------------------------------------------------------------------
+
+export interface NewPosEvent {
+  orgId: string;
+  storeId: string;
+  pairingId: string;
+  seq: number;
+  kind: string;
+  payload: Record<string, unknown>;
+  /** The person the device named. Stored NULL when that id is not a person of this organisation (the column has a same-org FK). */
+  personId: string;
+  occurredAtDevice: Date;
+  status: 'applied' | 'quarantined';
+  error: string | null;
+}
+
+/** Inserts one event row. A second `(pairing_id, seq)` raises 23505 `pos_events_pairing_seq_unique`: the caller reads that as "already received". */
+export async function insertPosEvent(tx: Tx, e: NewPosEvent): Promise<{ id: string }> {
+  const [row] = await tx
+    .insert(posEvents)
+    .values({
+      orgId: e.orgId,
+      storeId: e.storeId,
+      pairingId: e.pairingId,
+      seq: e.seq,
+      kind: e.kind,
+      payload: e.payload,
+      personId: sql`(select p.id from persons p where p.id = ${e.personId} and p.org_id = ${e.orgId})`,
+      occurredAtDevice: e.occurredAtDevice,
+      status: e.status,
+      error: e.error,
+    })
+    .returning({ id: posEvents.id });
+  return row!;
+}
+
+export async function getPosEventByPairingSeq(tx: Tx, orgId: string, storeId: string, pairingId: string, seq: number): Promise<PosEventRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(posEvents)
+    .where(and(eq(posEvents.orgId, orgId), eq(posEvents.storeId, storeId), eq(posEvents.pairingId, pairingId), eq(posEvents.seq, seq)));
+  return row;
+}
+
+/** One event by id (store-scoped). `forUpdate` locks it, so two managers resolving one row take turns. */
+export async function getPosEvent(tx: Tx, orgId: string, storeId: string, id: string, o: { forUpdate?: boolean } = {}): Promise<PosEventRow | undefined> {
+  const q = tx
+    .select()
+    .from(posEvents)
+    .where(and(eq(posEvents.id, id), eq(posEvents.orgId, orgId), eq(posEvents.storeId, storeId)));
+  const [row] = await (o.forUpdate ? q.for('update') : q);
+  return row;
+}
+
+/** Sets the three resolution columns, once (the table's frozen trigger allows nothing else). False when the row was already resolved. */
+export async function resolvePosEvent(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  id: string,
+  r: { resolvedBy: string; resolution: 'replayed' | 'discarded' },
+): Promise<boolean> {
+  const rows = await tx
+    .update(posEvents)
+    .set({ resolvedBy: r.resolvedBy, resolvedAt: sql`now()`, resolution: r.resolution })
+    .where(and(eq(posEvents.id, id), eq(posEvents.orgId, orgId), eq(posEvents.storeId, storeId), isNull(posEvents.resolvedAt)))
+    .returning({ id: posEvents.id });
+  return rows.length > 0;
+}
+
+/** The highest stored seq of the pairing, any status; 0 before the first. */
+export async function maxSeqForPairing(tx: Tx, orgId: string, storeId: string, pairingId: string): Promise<number> {
+  const [row] = await tx
+    .select({ m: sql<string>`coalesce(max(${posEvents.seq}), 0)::text` })
+    .from(posEvents)
+    .where(and(eq(posEvents.orgId, orgId), eq(posEvents.storeId, storeId), eq(posEvents.pairingId, pairingId)));
+  return Number(row?.m ?? 0);
+}
+
+/** The highest receipt number printed on this store's terminal; 0 before the first sale. */
+export async function maxTerminalSeq(tx: Tx, orgId: string, storeId: string, terminalNo: number): Promise<number> {
+  const [row] = await tx
+    .select({ m: sql<string>`coalesce(max(${posSalesReceipts.terminalSeq}), 0)::text` })
+    .from(posSalesReceipts)
+    .innerJoin(posTerminals, eq(posTerminals.id, posSalesReceipts.terminalId))
+    .where(and(eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.storeId, storeId), eq(posTerminals.terminalNo, terminalNo)));
+  return Number(row?.m ?? 0);
+}
+
+export async function listActiveStands(tx: Tx, orgId: string, storeId: string): Promise<PosStandRow[]> {
+  return tx
+    .select()
+    .from(posStands)
+    .where(and(eq(posStands.orgId, orgId), eq(posStands.storeId, storeId), eq(posStands.status, 'active')))
+    .orderBy(asc(posStands.number));
+}
+
+export async function listActivePresets(tx: Tx, orgId: string, storeId: string): Promise<PosDiscountPresetRow[]> {
+  return tx
+    .select()
+    .from(posDiscountPresets)
+    .where(and(eq(posDiscountPresets.orgId, orgId), eq(posDiscountPresets.storeId, storeId), eq(posDiscountPresets.status, 'active')))
+    .orderBy(asc(posDiscountPresets.name), asc(posDiscountPresets.id));
+}
+
+/** The till this pairing currently acts as (`pos_terminals.pairing_id`), or undefined. */
+export async function getTerminalForPairing(tx: Tx, orgId: string, storeId: string, pairingId: string): Promise<PosTerminalRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(posTerminals)
+    .where(and(eq(posTerminals.orgId, orgId), eq(posTerminals.storeId, storeId), eq(posTerminals.pairingId, pairingId)));
+  return row;
+}
+
+/** The store's polling counter (one indexed row), or undefined when the store has no switch row. */
+export async function getStateVersion(tx: Tx, orgId: string, storeId: string): Promise<number | undefined> {
+  const [row] = await tx
+    .select({ v: posStores.stateVersion })
+    .from(posStores)
+    .where(and(eq(posStores.orgId, orgId), eq(posStores.storeId, storeId)));
+  return row?.v;
+}
+
+/**
+ * R4 clause 3: did this person sign in with a PIN on THIS pairing, issued in [from, to]? An ended session counts, except one that was revoked.
+ * `sessions.device_id` is text, so the pairing id is compared as text.
+ */
+export async function hasPinSessionOnPairing(tx: Tx, orgId: string, personId: string, storeId: string, pairingId: string, from: Date, to: Date): Promise<boolean> {
+  const rows = (await tx.execute(sql`
+    select 1 as ok
+      from sessions s
+      join persons p on p.id = s.person_id
+     where p.org_id = ${orgId}
+       and s.person_id = ${personId}
+       and s.store_id = ${storeId}
+       and s.device_id = ${pairingId}::text
+       and s.credential_kind = 'pin'
+       and s.issued_at >= ${from.toISOString()}::timestamptz
+       and s.issued_at <= ${to.toISOString()}::timestamptz
+       and (s.ended_reason is null or s.ended_reason <> 'revoked')
+     limit 1
+  `)) as unknown as { ok: number }[];
+  return rows.length > 0;
+}
+
+/** R4 clause 1: the person, if they belong to this organisation (RLS hides another organisation's people too). */
+export async function getPersonOfOrg(tx: Tx, orgId: string, personId: string): Promise<{ id: string; displayName: string; isActive: boolean } | undefined> {
+  const [row] = await tx
+    .select({ id: persons.id, displayName: persons.displayName, isActive: persons.isActive })
+    .from(persons)
+    .where(and(eq(persons.orgId, orgId), eq(persons.id, personId)));
+  return row;
+}
+
+export async function listPersonNames(tx: Tx, orgId: string, personIds: string[]): Promise<Map<string, string>> {
+  if (personIds.length === 0) return new Map();
+  const rows = await tx.select({ id: persons.id, displayName: persons.displayName }).from(persons).where(and(eq(persons.orgId, orgId), inArray(persons.id, personIds)));
+  return new Map(rows.map((r) => [r.id, r.displayName]));
+}
+
+/** Active people with an OPEN employment at the store, with their staff code (`SE-007`): the candidates for the tablet's sign-in list. The caller applies `personMaySignInAtStore`. */
+export async function listOpenEmploymentsAtStore(tx: Tx, orgId: string, storeId: string): Promise<{ personId: string; displayName: string; staffCode: string }[]> {
+  return tx
+    .select({ personId: employments.personId, displayName: persons.displayName, staffCode: employments.staffCode })
+    .from(employments)
+    .innerJoin(persons, and(eq(persons.id, employments.personId), eq(persons.orgId, employments.orgId)))
+    .where(and(eq(employments.orgId, orgId), eq(employments.storeId, storeId), isNull(employments.endedOn), eq(persons.isActive, true)))
+    .orderBy(asc(employments.staffCode));
 }

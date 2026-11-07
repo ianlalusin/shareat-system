@@ -20,13 +20,13 @@ export interface RuleDefinition {
   readonly label: string;
   /** One sentence saying what the number does. */
   readonly help: string;
-  readonly unit: 'money' | 'percent';
+  readonly unit: 'money' | 'percent' | 'hour';
   readonly default: string;
   readonly min: string;
   readonly max: string;
   readonly capability: typeof RULE_ADMIN_CAPABILITY;
   /** The key's first dotted segment; the screen groups by it. */
-  readonly namespace: 'settlement' | 'tax';
+  readonly namespace: 'settlement' | 'tax' | 'pos';
 }
 
 export const RULE_REGISTRY = {
@@ -71,14 +71,34 @@ export const RULE_REGISTRY = {
     namespace: 'tax',
   },
   'tax.vat_percent': {
-    label: 'VAT included in a Foodpanda order amount (%)',
-    help: 'Foodpanda order amounts already include VAT. The system takes it out before checking the tax withheld, so 12 means an amount is divided by 1.12.',
+    label: 'VAT included in prices (%)',
+    help: 'Prices and platform order amounts already include VAT. 12 means an amount is divided by 1.12 to take the VAT out. The POS uses it for every bill and senior/PWD discount, and the settlement checks use it for Foodpanda statements.',
     unit: 'percent',
     default: '12',
     min: '0',
     max: '100',
     capability: RULE_ADMIN_CAPABILITY,
     namespace: 'tax',
+  },
+  'pos.senior_pwd_discount_percent': {
+    label: 'Senior citizen and PWD discount (%)',
+    help: 'The discount the law gives a senior citizen or a person with disability on their own share of the bill, after VAT is taken out of that share. The law sets it at 20. Change it only when the law changes.',
+    unit: 'percent',
+    default: '20',
+    min: '0',
+    max: '100',
+    capability: RULE_ADMIN_CAPABILITY,
+    namespace: 'pos',
+  },
+  'pos.business_day_start_hour': {
+    label: 'Hour a new POS business day starts (0–23)',
+    help: 'Until a store closes its first day on the POS, a sale made before this hour belongs to the day before. 4 means a sale at 3:30 in the morning counts for yesterday. After the first day close, the day runs from close to close.',
+    unit: 'hour',
+    default: '4',
+    min: '0',
+    max: '23',
+    capability: RULE_ADMIN_CAPABILITY,
+    namespace: 'pos',
   },
 } as const satisfies Record<string, RuleDefinition>;
 
