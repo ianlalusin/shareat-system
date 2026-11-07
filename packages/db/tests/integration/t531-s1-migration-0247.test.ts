@@ -297,3 +297,40 @@ describe('T9 - the channel rows of a pos_receipts day', () => {
     }, { flag: true }), 'sales_day_channels_locked', 'platform row on a verified pos_receipts day');
   });
 });
+
+// ======================================================================================================================
+// T10 - BOSS: the POS cannot take a platform tender. v2 tenders are cash | wallet only (tenders_kind_check, T-375), so no receipt can carry Foodpanda or Grab money and a
+// typed platform row on a POS day cannot overlap a receipt. Plus row 270 on an UNLINKED live store: the figures of a pos_receipts day are not typed there either.
+describe('T10 - no platform tender; no typed figure on a pos_receipts day (unlinked store too)', () => {
+  it('a tender of kind platform, foodpanda or grab (anything but cash / wallet) is refused by tenders_kind_check', async () => {
+    const w = await world('live', D1);
+    for (const kind of ['platform', 'foodpanda', 'grab', 'delivery']) {
+      let caught: PgErr = null;
+      try {
+        await sql`insert into tenders (org_id, store_id, name, kind) values (${w.orgId}, ${w.storeId}, ${`T10 ${kind}`}, ${kind})`;
+      } catch (e) {
+        caught = e as PgErr;
+      }
+      expect({ kind, code: caught?.code, constraint: caught?.constraint_name }).toEqual({ kind, code: '23514', constraint: 'tenders_kind_check' });
+    }
+    // control: cash is accepted
+    await expect(sql`insert into tenders (org_id, store_id, name, kind) values (${w.orgId}, ${w.storeId}, 'T10 cash', 'cash')`).resolves.toBeDefined();
+  });
+
+  it('on an UNLINKED live store a pos_receipts day\'s figures are locked outside the derivation flag too, and its tender rows are', async () => {
+    const w = await world('live', D1);
+    await sql`insert into pos_stores (org_id, store_id, mode, live_from, changed_by) values (${w.orgId}, ${w.store2Id}, 'live', ${D1}, ${w.adminId})`;
+    const [p] = await sql<{ id: string }[]>`select id from pos_tablet_pairings where store_id = ${w.store2Id} limit 1`;
+    const [term] = await sql<{ id: string }[]>`insert into pos_terminals (org_id, store_id, terminal_no, pairing_id, created_by) values (${w.orgId}, ${w.store2Id}, 1, ${p!.id}, ${w.adminId}) returning id`;
+    const [z] = await sql<{ id: string }[]>`
+      insert into pos_day_closes (org_id, store_id, terminal_id, z_no, business_date, window_start, window_end, receipt_count, gross_total, closed_by, approved_by)
+      values (${w.orgId}, ${w.store2Id}, ${term!.id}, 1, ${D1}, ${`${D1}T04:00:00+08:00`}, ${`${D1}T22:00:00+08:00`}, 1, 250.00, ${w.adminId}, ${w.adminId}) returning id`;
+    const err = await attempt(w.orgId, async (t) => {
+      await t`select set_config('app.sales_day_derivation', 'on', true)`;
+      const [d] = await receiptsDay(t, w, D1, z!.id, { storeId: w.store2Id });
+      await t`select set_config('app.sales_day_derivation', 'off', true)`;
+      await t`update sales_days set cash_collected = 1.00, total_sales = 1.00, unli_sales = 0, ala_carte_sales = 1.00 where id = ${d!.id}`;
+    });
+    expect({ code: err?.code, constraint: err?.constraint_name }).toEqual({ code: '23514', constraint: FIGURES_LOCKED });
+  });
+});

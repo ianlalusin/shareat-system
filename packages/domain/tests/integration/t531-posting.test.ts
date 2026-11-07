@@ -24,7 +24,7 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 
 import { RefusalError } from '@shareat/db';
 import { AuthorizationError } from '@shareat/auth';
-import { editSalesDay, submitSalesDay, verifySalesDay } from '@shareat/domain';
+import { editSalesDay, reimportSalesDay, submitSalesDay, verifySalesDay, voidSalesDay } from '@shareat/domain';
 import {
   D1, FAR, asOrg, close, closeAll, journalLines, manila, pinOf, salesDaysOf, sql, standardDay, uid, world, type World,
 } from './_fixtures/t531-day-close';
@@ -200,5 +200,132 @@ describe('ruling 2 - an active platform channel is required on a POS-derived day
       ['4150', '0.00', '1330.00'],
       ['4900', '178.29', '0.00'],
     ]);
+  });
+});
+
+// ======================================================================================================================
+// BOSS condition on the platform rows: they can never double-count. Platform sales enter a POS-derived day ONLY as typed rows on a non-remitted platform channel; the
+// POS has no platform tender (tenders.kind is cash | wallet, proven in the migration test), the till's own channel and every remitted channel refuse a typed row, and no
+// POS figure (row 270) can be typed on the day.
+describe('no double count - POS receipts + typed platform rows', () => {
+  const foodpanda = async (w: World) =>
+    (await sql<{ id: string }[]>`insert into sales_channels (org_id, store_id, name, is_remitted_daily, receivable_account_code) values (${w.orgId}, ${w.storeId}, 'Foodpanda', false, '1220') returning id`)[0]!.id;
+  const typePlatform = (w: World, dayId: string, channelId: string, amount = '500.00') =>
+    asOrg(w.orgId, (tx) => editSalesDay(tx, w.manager, { salesDayId: dayId, platform: [{ channelId, amount, noSales: false }] }));
+  const sentence = async (p: Promise<unknown>) => {
+    const err = await p.then(() => null, (e: unknown) => e);
+    expect(err, 'expected a refusal').toBeInstanceOf(RefusalError);
+    return (err as RefusalError).userMessage;
+  };
+  const cents = (s: string) => Math.round(Number(s) * 100);
+
+  it('receipts (cash + GCash) + a typed Foodpanda row: revenue = receipt subtotal + platform, tender debits only from the receipts, 1220 only from the platform; both balance checks pass', async () => {
+    const w = await world();
+    const dayId = await closedDay(w);
+    await typePlatform(w, dayId, await foodpanda(w));
+    const res = await verifyAs(w, w.manager, dayId);
+
+    // the day's OWN figures are the receipts', untouched by the platform row
+    const [d] = await salesDaysOf(w);
+    expect(d).toMatchObject({ total_sales: '3075.00', unli_sales: '2245.00', ala_carte_sales: '830.00', cash_collected: '2396.71', online_collected: '500.00' });
+    const [rec] = await sql<{ subtotal: string; net: string }[]>`
+      select sum(r.subtotal)::text subtotal,
+             (select sum(p.amount - p.change_given) from pos_sales_receipt_payments p join pos_sales_receipts r2 on r2.id = p.receipt_id where r2.org_id = ${w.orgId})::text net
+        from pos_sales_receipts r where r.org_id = ${w.orgId}`;
+    expect(d!.total_sales).toBe(Number(rec!.subtotal).toFixed(2));
+
+    const lines = await journalLines(res.journalEntryId);
+    const by = (code: string, side: 'debit' | 'credit') => lines.filter((l) => l.code === code).reduce((a, l) => a + cents(l[side]), 0);
+    // tender / debit side: the receipts' money (cash + e-wallet = collected net of change) and the platform receivable; nothing else but the discount
+    expect(by('1110', 'debit') + by('1140', 'debit')).toBe(cents(rec!.net));
+    expect(by('1220', 'debit')).toBe(50000);
+    expect(lines.filter((l) => Number(l.debit) > 0).map((l) => l.code).sort()).toEqual(['1110', '1140', '1220', '4900']);
+    // revenue side: receipt subtotal (unli + a la carte) + the platform amount, once
+    expect(by('4100', 'credit')).toBe(cents(d!.unli_sales));
+    expect(by('4150', 'credit')).toBe(cents(d!.ala_carte_sales) + 50000);
+    const debit = lines.reduce((a, l) => a + cents(l.debit), 0);
+    const credit = lines.reduce((a, l) => a + cents(l.credit), 0);
+    expect([debit, credit]).toEqual([357500, 357500]);
+    // identity 1 (tender side, platform included) and identity 2 (revenue side)
+    expect(cents(d!.cash_collected) + cents(d!.online_collected) + 50000 + cents(d!.senior_discount) + cents(d!.pwd_discount) + cents(d!.other_discount) + cents(d!.comps)).toBe(cents(d!.total_sales) + 50000);
+    expect(cents(d!.unli_sales) + cents(d!.ala_carte_sales) + 50000).toBe(cents(d!.total_sales) + 50000);
+    // the only stored tender row is the receipts' GCash; the platform money is a channel row, never a tender
+    expect((await sql<{ n: number }[]>`select count(*)::int n from sales_day_tenders where sales_day_id = ${dayId}`)[0]!.n).toBe(1);
+  });
+
+  it("a typed row on the till's own channel (remitted Walk-in), on ANOTHER remitted channel, and on the POS channel even if it were made non-remitted is refused with a sentence; nothing is stored", async () => {
+    const w = await world();
+    const dayId = await closedDay(w);
+    const [link] = await sql<{ sales_channel_id: string }[]>`select sales_channel_id from pos_v1_store_links where store_id = ${w.storeId}`;
+    expect(await sentence(typePlatform(w, dayId, link!.sales_channel_id))).toBe('Walk-in is paid at the till, so its sales come from POS, not from here.');
+    const [other] = await sql<{ id: string }[]>`insert into sales_channels (org_id, store_id, name, is_remitted_daily) values (${w.orgId}, ${w.storeId}, 'Dine-in 2', true) returning id`;
+    expect(await sentence(typePlatform(w, dayId, other!.id))).toBe('Dine-in 2 is paid at the till, so its sales come from POS, not from here.');
+    await sql`update sales_channels set is_remitted_daily = false, receivable_account_code = '1220' where id = ${link!.sales_channel_id}`;
+    expect(await sentence(typePlatform(w, dayId, link!.sales_channel_id))).toBe("Walk-in is the till's own channel, so its sales come from POS, not from here.");
+    expect((await sql<{ n: number }[]>`select count(*)::int n from sales_day_channels where sales_day_id = ${dayId}`)[0]!.n).toBe(0);
+  });
+
+  it('row 270: no POS figure can be typed on the day: editSalesDay refuses, and the derivation-flag trigger refuses every figure write and every tender row outside the derivation', async () => {
+    const w = await world();
+    const dayId = await closedDay(w);
+    expect(await sentence(asOrg(w.orgId, (tx) => editSalesDay(tx, w.manager, { salesDayId: dayId, totalSales: '1.00' } as never)))).toBe(
+      "This day's figures come from the POS close and can't be typed. Only platform sales can be entered here.",
+    );
+    const lockedBy = async (p: PromiseLike<unknown>) => {
+      const err = (await Promise.resolve(p).then(() => null, (e: unknown) => e)) as { code?: string; constraint_name?: string } | null;
+      expect(err, 'the write was ACCEPTED').not.toBeNull();
+      return { code: err!.code, constraint: err!.constraint_name };
+    };
+    const FIG = { code: '23514', constraint: 'sales_days_figures_locked' };
+    const TEN = { code: '23514', constraint: 'sales_day_tenders_locked' };
+    expect(await lockedBy(sql`update sales_days set total_sales = total_sales + 1, ala_carte_sales = ala_carte_sales + 1 where id = ${dayId}`)).toEqual(FIG);
+    expect(await lockedBy(sql`update sales_days set unli_sales = unli_sales - 10, ala_carte_sales = ala_carte_sales + 10 where id = ${dayId}`)).toEqual(FIG);
+    for (const col of ['senior_discount', 'pwd_discount', 'other_discount', 'comps', 'service_charge', 'other_charges', 'cash_collected', 'online_collected', 'credit_sales']) {
+      expect(await lockedBy(sql`update sales_days set ${sql(col)} = ${sql(col)} + 1 where id = ${dayId}`), col).toEqual(FIG);
+    }
+    const [t] = await sql<{ money_account_id: string }[]>`select money_account_id from sales_day_tenders where sales_day_id = ${dayId}`;
+    expect(await lockedBy(sql`insert into sales_day_tenders (sales_day_id, money_account_id, amount) values (${dayId}, ${t!.money_account_id}, 1.00)`)).toEqual(TEN);
+    expect(await lockedBy(sql`update sales_day_tenders set amount = amount + 1 where sales_day_id = ${dayId}`)).toEqual(TEN);
+    expect(await lockedBy(sql`delete from sales_day_tenders where sales_day_id = ${dayId}`)).toEqual(TEN);
+    expect(await salesDaysOf(w)).toMatchObject([{ total_sales: '3075.00', cash_collected: '2396.71', online_collected: '500.00' }]);
+  });
+});
+
+// ======================================================================================================================
+// Added by the BUILDER (audit fixes 1 and 2): a POS-derived day is never voided (its receipts stay frozen to the Z, so the date could never be derived again) and a manual
+// import never touches a date the POS close holds.
+describe('a POS-derived day cannot be voided or re-imported', () => {
+  const NOT_VOIDABLE = "A sales day from the POS can't be voided. Correct it with a refund or a platform correction.";
+  const refusalOf = async (p: Promise<unknown>) => {
+    const err = await p.then(() => null, (e: unknown) => e);
+    expect(err, 'expected a refusal').toBeInstanceOf(RefusalError);
+    return (err as RefusalError).userMessage;
+  };
+
+  it('voidSalesDay refuses with the sentence for a submitted day and for a verified day (the entry stands), and the day is unchanged', async () => {
+    const w = await world();
+    const dayId = await closedDay(w);
+    expect(await refusalOf(asOrg(w.orgId, (tx) => voidSalesDay(tx, w.admin, dayId, 'wrong day')))).toBe(NOT_VOIDABLE);
+    expect(await dayState(dayId)).toMatchObject({ status: 'submitted', journal_entry_id: null });
+    const res = await verifyAs(w, w.manager, dayId);
+    expect(await refusalOf(asOrg(w.orgId, (tx) => voidSalesDay(tx, w.admin, dayId, 'wrong day')))).toBe(NOT_VOIDABLE);
+    expect(await dayState(dayId)).toMatchObject({ status: 'verified', journal_entry_id: res.journalEntryId });
+    // the receipts are still frozen to the Z: nothing was freed
+    expect((await sql<{ n: number }[]>`select count(*)::int n from pos_sales_receipts where org_id = ${w.orgId} and day_close_id is null`)[0]!.n).toBe(0);
+  });
+
+  it('a manual re-import of the date is refused with a sentence (not the raw database error), for a submitted day and for a verified one', async () => {
+    const w = await world();
+    const dayId = await closedDay(w);
+    const reimport = () => asOrg(w.orgId, (tx) => reimportSalesDay(tx, w.manager, { salesDayId: dayId }));
+    const date = (await salesDaysOf(w))[0]!.business_date;
+    const wantsDate = (s: string) => {
+      expect(s).toContain('was closed on the new POS, so it can\'t be imported from v1.');
+      expect(s).not.toMatch(/23514|figures_locked/);
+    };
+    wantsDate(await refusalOf(reimport()));
+    await verifyAs(w, w.manager, dayId);
+    wantsDate(await refusalOf(reimport()));
+    expect(date).toBe(D1);
   });
 });

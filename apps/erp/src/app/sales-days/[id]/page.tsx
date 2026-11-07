@@ -531,7 +531,13 @@ export default async function SalesDayDetailPage({
         )}
       </section>
 
-      {unverified && can.void && (
+      {isPosReceiptsDay && day.status !== 'voided' && can.void && (
+        <p className="rounded-lg border border-surface-border p-4 text-sm text-neutral-700 dark:text-neutral-300">
+          A sales day from the POS can&apos;t be voided. Correct it with a refund or a platform correction.
+        </p>
+      )}
+
+      {unverified && !isPosReceiptsDay && can.void && (
         <CheckedForm rules={SALES_DAY_VOID_RULES} action={voidSalesDayAction} className="space-y-3 rounded-lg border border-danger p-4 text-sm">
           {hiddenIds}
           <h2 className="font-medium text-danger">Withdraw this unverified day</h2>
@@ -552,7 +558,7 @@ export default async function SalesDayDetailPage({
         </CheckedForm>
       )}
 
-      {day.status === 'verified' && can.void && (
+      {day.status === 'verified' && !isPosReceiptsDay && can.void && (
         <CheckedForm rules={SALES_DAY_VOID_RULES} action={voidSalesDayAction} className="space-y-3 rounded-lg border border-danger p-4 text-sm">
           {hiddenIds}
           <h2 className="font-medium text-danger">Void (reverses the posting)</h2>

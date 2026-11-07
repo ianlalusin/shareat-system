@@ -117,8 +117,12 @@ async function openWindow(tx: Tx, orgId: string, storeId: string, terminalId: st
   const terminal = await posV2Repo.getTerminal(tx, orgId, storeId, terminalId);
   if (!terminal) throw gone(`pos: terminal ${terminalId} not found`, 'till');
   const store = await posV2Repo.getPosStore(tx, orgId, storeId);
-  const open = await posV2Repo.listOpenReceipts(tx, orgId, storeId, terminalId);
   const { businessDayStartHour: hour } = await readRules(tx, orgId, toBusinessDate(at), deps);
+  // A LIVE store ignores unclosed receipts of business days BEFORE live_from: they are test-mode receipts from before the switch (the T-533 runbook purges them). They stay
+  // open and untouched; counting them would block every future Z with "more than 2 days", and a backlog Z for such a day would meet the 0247 guard (no sales day before live_from).
+  const liveFrom = store?.mode === 'live' ? store.liveFrom : null;
+  const allOpen = await posV2Repo.listOpenReceipts(tx, orgId, storeId, terminalId);
+  const open = liveFrom ? allOpen.filter((r) => startHourDate(r.issuedAtDevice, hour) >= liveFrom) : allOpen;
   const lastZ = await posV2Repo.lastDayCloseOfTerminal(tx, orgId, storeId, terminalId);
   if (lastZ) return { store, open, hour, lastZ, start: lastZ.windowEnd };
   const dates = [store?.liveFrom ?? null, open[0] ? startHourDate(open[0].issuedAtDevice, hour) : null].filter((d): d is string => d !== null).sort();

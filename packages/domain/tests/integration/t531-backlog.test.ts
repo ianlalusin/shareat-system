@@ -27,7 +27,7 @@ import { RefusalError } from '@shareat/db';
 import { AuthenticationError, AuthorizationError, POS_APPROVAL_PIN_CAPPED } from '@shareat/auth';
 import { uuidv5 } from '../../src/pos/shared';
 import {
-  D1, D2, D3, D4, FAR, auditsOf, backlog, close, closeAll, closesOf, manila, openReceiptCount, pinOf, porkSale, salesDaysOf, sell, sql, stateVersion, uuid, world, type World,
+  D1, D2, D3, D4, D5, FAR, auditsOf, backlog, close, closeAll, closesOf, manila, openReceiptCount, pinOf, porkSale, salesDaysOf, sell, sql, stateVersion, uuid, world, type World,
 } from './_fixtures/t531-day-close';
 import { insertDerivedSalesDayRow } from './_fixtures/pos-day';
 
@@ -202,5 +202,43 @@ describe('R11 - closeBacklog: one Z per past business day with sales, oldest fir
     expect((err as RefusalError).userMessage).toBe(`A sales day for ${D2} already exists (pos_v1_day_feed). Ask an accountant.`);
     expect(await counts(w)).toEqual({ ...was });
     expect(await openReceiptCount(w)).toBe(4);
+  });
+});
+
+// ======================================================================================================================
+// Added by the BUILDER (audit fix 3): a LIVE store ignores unclosed receipts of business days before live_from. They are test-mode receipts from before the switch (the
+// T-533 runbook purges them): they must neither block a Z with "more than 2 days" nor be closed into a day the 0247 guard would refuse.
+describe('live store with old test-mode receipts (before live_from)', () => {
+  it('closeDay closes normally: only the receipts on or after live_from are read and frozen; the old ones stay open and untouched; the sales day holds only the new figures', async () => {
+    const w = await world('live', D2);
+    await porkSale(w, manila(D1, '11:00'));
+    await porkSale(w, manila(D1, '12:00'));
+    await porkSale(w, manila(D2, '12:00'));
+    const res = await close(w, manila(D2, '22:00'), await pinOf(w, w.managerId));
+    expect(res).toMatchObject({ wrote: true, zNo: 1 });
+    expect(res.reading).toMatchObject({ receiptCount: 1, grossTotal: '250.00', lateCount: 0 });
+    expect((await closesOf(w))[0]).toMatchObject({ business_date: D2, receipt_count: 1, gross_total: '250.00' });
+    expect((await closesOf(w))[0]!.window_start).toEqual(manila(D2, '04:00'));
+    expect((await salesDaysOf(w)).map((d) => [d.business_date, d.total_sales])).toEqual([[D2, '250.00']]);
+    expect(await openReceiptCount(w), 'the two pre-switch receipts are untouched').toBe(2);
+  });
+
+  it('they do not count towards the 2-day limit: old receipts on D1 and a sale on D4 (live from D4) still close', async () => {
+    const w = await world('live', D4);
+    await porkSale(w, manila(D1, '12:00'));
+    await porkSale(w, manila(D4, '12:00'));
+    await expect(close(w, manila(D4, '22:00'), await pinOf(w, w.managerId))).resolves.toMatchObject({ wrote: true, zNo: 1 });
+    expect(await openReceiptCount(w)).toBe(1);
+  });
+
+  it('closeBacklog never tries a day before live_from: live from D3, receipts on D1 (old), D3 and D4, now D5 -> Zs for D3 and D4 only, the D1 receipt stays open', async () => {
+    const w = await world('live', D3);
+    await porkSale(w, manila(D1, '12:00'));
+    await porkSale(w, manila(D3, '12:00'));
+    await porkSale(w, manila(D4, '12:00'));
+    const res = await backlog(w, manila(D5, '10:00'), await pinOf(w, w.adminId));
+    expect(res.closes.map((c) => [c.businessDate, c.zNo])).toEqual([[D3, 1], [D4, 2]]);
+    expect((await salesDaysOf(w)).map((d) => d.business_date)).toEqual([D3, D4]);
+    expect(await openReceiptCount(w)).toBe(1);
   });
 });
