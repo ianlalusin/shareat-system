@@ -4,7 +4,7 @@ import { requireSession } from '../../../lib/session';
 import { saveProductionDraftAction } from './actions';
 import { listStores, productionScreenData } from './lib';
 import { Page } from '@/components/shell/Page';
-import { Badge, Banner, Button, Field, FlashBanner, FormGrid, FormModal, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Badge, Banner, Button, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { INVENTORY_PRODUCTION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FilterRow } from '@/components/FilterRow';
@@ -167,9 +167,11 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
               </>
             )}
 
-            <Button type="submit" variant="primary">
-              Save draft
-            </Button>
+            <DialogActions>
+              <Button type="submit" variant="primary">
+                Save draft
+              </Button>
+            </DialogActions>
           </CheckedForm>
           </FormModal>
           )}

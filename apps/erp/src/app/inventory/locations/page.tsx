@@ -13,7 +13,7 @@ import { listStores, locationsPageData } from './lib';
 import { Page } from '@/components/shell/Page';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { INVENTORY_LOCATION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Button, Checkbox, ConfirmDestructive, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select } from '@/components/ui';
+import { Button, Checkbox, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -153,9 +153,11 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
                   <Checkbox name="isReceiving" label="This is the Receiving room" />
                   <Checkbox name="isDefault" label="Make it the default" />
                 </div>
-                <Button type="submit" variant="primary">
-                  Save
-                </Button>
+                <DialogActions>
+                  <Button type="submit" variant="primary">
+                    Save
+                  </Button>
+                </DialogActions>
               </CheckedForm>
             </FormModal>
           </div>

@@ -23,6 +23,7 @@ import { ruleInputNames, type FieldRuleSetLike } from '@shareat/domain/field-rul
 import type { TypedView } from '@/lib/keep-typing';
 import { CheckContext } from './context';
 import { Dialog } from '@/components/ui/Dialog';
+import { DialogActions } from '@/components/ui/DialogActions';
 import { ActionIcon } from '@/components/ui/action-icons';
 import { CheckSummary } from './CheckSummary';
 import { CHECKED_FORM_INITIAL, checkContextValue, checkedFormReducer, onCheckedSubmit, watchFormReset } from './check-state';
@@ -408,7 +409,8 @@ export function EditableRecordView({
           </fieldset>
           {/* Locked renders no submit at all (a closed dialog's Save must not be reachable by an implicit submit). */}
           {editing ? (
-            <div className="mt-4 flex flex-wrap items-center gap-2">
+            <DialogActions>
+              <CheckSummary active={check?.active === true} summary={check?.summary ?? null} className="w-full text-left" />
               <button type="submit" className={PRIMARY} disabled={blocked} data-check-aware="true" aria-label={saveLabel} data-tip={saveLabel}>
                 <ActionIcon name="check" />
               </button>
@@ -420,9 +422,8 @@ export function EditableRecordView({
                   {message}
                 </span>
               ) : null}
-            </div>
+            </DialogActions>
           ) : null}
-          <CheckSummary active={editing && check?.active === true} summary={check?.summary ?? null} />
         </form>
       </Dialog>
     </>

@@ -5,7 +5,7 @@ import { getCountSessionDetail, type SheetLine } from '../lib';
 import { advanceCountAction, cancelCountAction, commitCountAction, recordCountAction } from '../actions';
 import { requireSession } from '../../../../lib/session';
 import { Page } from '@/components/shell/Page';
-import { Button, FlashBanner, FormGrid, FormModal, Field, Input, Select } from '@/components/ui';
+import { Button, DialogActions, FlashBanner, FormGrid, FormModal, Field, Input, Select } from '@/components/ui';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { INVENTORY_COUNT_LINE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -220,9 +220,11 @@ export default async function CountSessionPage({
                 <Input {...nativeAttrs(INVENTORY_COUNT_LINE_RULES.countedQuantity)} placeholder="0.000" className="mt-1 block w-full tabular-nums" />
               </Field>
             </FormGrid>
-            <Button type="submit" variant="secondary">
-              Save
-            </Button>
+            <DialogActions>
+              <Button type="submit" variant="secondary">
+                Save
+              </Button>
+            </DialogActions>
           </CheckedForm>
           </FormModal>
           </div>

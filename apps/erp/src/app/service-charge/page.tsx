@@ -7,7 +7,7 @@ import { SERVICE_CHARGE_DISTRIBUTE_RULES, nativeAttrs, type FieldRule } from '@s
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input, Select, FormModal } from '@/components/ui';
+import { Button, FlashBanner, Input, Select, FormModal, DialogActions } from '@/components/ui';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 
 export const metadata = { title: 'Service charge — Shareat System' };
@@ -127,7 +127,9 @@ export default async function ServiceChargePage({
             <Field label="Payday" rule={SERVICE_CHARGE_DISTRIBUTE_RULES.paidOn}>
               <Input {...nativeAttrs(SERVICE_CHARGE_DISTRIBUTE_RULES.paidOn)} type="date" defaultValue={today()} className="w-full" />
             </Field>
-            <SubmitButton pendingLabel="Saving…">Distribute</SubmitButton>
+            <DialogActions>
+              <SubmitButton pendingLabel="Saving…">Distribute</SubmitButton>
+            </DialogActions>
           </CheckedForm>
           </FormModal>
         )}

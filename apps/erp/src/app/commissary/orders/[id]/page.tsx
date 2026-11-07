@@ -30,7 +30,7 @@ import {
   COMMISSARY_WITHDRAW_RULES,
   nativeAttrs,
 } from '@shareat/domain/field-rules';
-import { branchOrderSteps, Button, ConfirmDestructive, exitStepFromTimestamps, Field, FlashBanner, FormGrid, FormModal, Input, isExitStage, nextLineFor, Select, StatusHero, type StatusIconKind, stepIndexFor, type Tone } from '@/components/ui';
+import { branchOrderSteps, Button, ConfirmDestructive, DialogActions, exitStepFromTimestamps, Field, FlashBanner, FormGrid, FormModal, Input, isExitStage, nextLineFor, Select, StatusHero, type StatusIconKind, stepIndexFor, type Tone } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
@@ -248,9 +248,11 @@ export default async function BranchOrderPage({
             <Field label="Rate ₱ (blank = default)" className={LABEL} rule={COMMISSARY_ORDER_LINE_RULES.rate}>
               <Input {...nativeAttrs(COMMISSARY_ORDER_LINE_RULES.rate)} className="tabular-nums" />
             </Field>
-            <Button type="submit" variant="secondary">
-              Save
-            </Button>
+            <DialogActions className="col-span-full">
+              <Button type="submit" variant="secondary">
+                Save
+              </Button>
+            </DialogActions>
           </CheckedForm>
             </FormModal>
           </div>
@@ -334,9 +336,11 @@ export default async function BranchOrderPage({
               Why (goes on the thread)
               <Input name="note" />
             </label>
-            <Button type="submit" variant="secondary" className="col-span-2 sm:col-span-1">
-              Propose
-            </Button>
+            <DialogActions className="col-span-full">
+              <Button type="submit" variant="secondary">
+                Propose
+              </Button>
+            </DialogActions>
           </CheckedForm>
           </FormModal>
         </section>

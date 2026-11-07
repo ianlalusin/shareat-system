@@ -8,7 +8,7 @@
  * starts with is created in ONE submission.
  */
 import { useState } from 'react';
-import { Banner, Button, Field, FormGrid, Input, Select } from '@/components/ui';
+import { Banner, Button, DialogActions, Field, FormGrid, Input, Select } from '@/components/ui';
 
 interface LocationOption {
   id: string;
@@ -183,9 +183,11 @@ export function NewUsageForm({
         })}
       </div>
 
-      <Button type="submit" variant="primary">
-        Save draft
-      </Button>
+      <DialogActions>
+        <Button type="submit" variant="primary">
+          Save draft
+        </Button>
+      </DialogActions>
     </form>
   );
 }
