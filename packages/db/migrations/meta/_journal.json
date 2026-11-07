@@ -1485,6 +1485,27 @@
       "when": 1806636707084,
       "tag": "0238_t523_pos_v2_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 239,
+      "version": "7",
+      "when": 1806723107084,
+      "tag": "0239_t511_business_rule_values",
+      "breakpoints": true
+    },
+    {
+      "idx": 240,
+      "version": "7",
+      "when": 1806809507084,
+      "tag": "0240_t524_receipt_append_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 241,
+      "version": "7",
+      "when": 1806895907084,
+      "tag": "0241_t539_pos_rule_keys",
+      "breakpoints": true
     }
   ]
 }

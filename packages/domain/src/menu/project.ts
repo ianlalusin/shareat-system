@@ -96,7 +96,7 @@ const cmpNum = (a: number, b: number): number => a - b;
 const key = (id: string, channel: Channel): string => `${id}|${channel}`;
 
 /** Object keys sorted by code unit at every depth, no whitespace, undefined never emitted. */
-function canonicalJson(v: unknown): string {
+export function canonicalJson(v: unknown): string {
   if (v === null || typeof v !== 'object') return JSON.stringify(v);
   if (Array.isArray(v)) return `[${v.map(canonicalJson).join(',')}]`;
   const o = v as Record<string, unknown>;

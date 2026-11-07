@@ -81,7 +81,9 @@ const REGISTRY_BEFORE_S4 = 100;
 // T-502 S1-S3 (0224): +27 (service-item guards). 22 -> 49. Measured: registry size 204.
 // T-510 S1a (0233): +2 (menu_dayparts_update_guard, menu_offers_delete_slot_guard). 49 -> 51. Measured: registry size 206.
 // T-523 (0238): +11 (the POS v2 history guards: pos_sales_receipts_session_guard, table_sessions_forward_only, table_session_lines_guard, table_session_line_discounts_guard, pos_sales_receipts_frozen, pos_sales_receipt_lines_append_only, pos_sales_receipt_payments_frozen, pos_day_closes_append_only, pos_day_close_tenders_append_only, pos_events_frozen, pos_sales_receipt_line_discounts_append_only). 51 -> 62.
-const REGISTRY_ADDED_AFTER_S4 = 62;
+// T-512 (T-511 S5c, 0239): +1 (business_rule_values_append_only history guard). 62 -> 63; re-measured after rebase on main (T-523 0238 present), 7 Nov 2026, BOSS approved.
+// T-524 (0240): +3 (pos_sales_receipt_lines_append_guard, pos_sales_receipt_payments_append_guard, pos_sales_receipt_line_discounts_append_guard). 63 -> 66; re-measured after rebase on main (0238+0239 present), 7 Nov 2026, BOSS approved.
+const REGISTRY_ADDED_AFTER_S4 = 66;
 
 function pinMismatch(keys: readonly string[], pin: { count: number; sha256: string }): string | null {
   if (keys.length !== pin.count) return `count ${keys.length} != pinned ${pin.count}`;

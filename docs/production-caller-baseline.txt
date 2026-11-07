@@ -29,12 +29,14 @@ childLogger
 closeAsLateReceipt
 closeYear
 collectActorUids
+confirmHeads
 confirmTradeOrder
 convertSpecimen
 countedVariances
 createFakeFirestore
 createFakeIdb
 createPaymentConversionServer
+currentBusinessDate
 customerReturnableQuantity
 datesInWeek
 dayIdOf
@@ -43,6 +45,7 @@ daypartsOverlap
 deleteDocumentNonBlocking
 depreciateAsset
 depreciationDrift
+discardQuarantinedEvent
 discountDateStatus
 editPostedProductionAction
 elevateManager
@@ -70,9 +73,7 @@ getCalendarWeatherIcon
 getGroupKey
 getKitchenTicketContribution
 getNonCentavoCount
-getPosStore
-getSalesReceipt
-getTableSession
+getSessionBill
 groupIntoFamilies
 hasFingerprint
 hasOtherActiveAdmin
@@ -97,13 +98,12 @@ listCategoryLives
 listClaimRequests
 listLiveForStore
 listLobbyEntries
-listOpenSessions
 listOrderMessages
 listPayRates
+listPosQuarantine
 listPunchesForDay
-listQuarantinedEvents
 listRoster
-listSessionLines
+listTodaysSalesReceipts
 listWriteOffsForCharge
 loadMod
 lobbyPartiesAhead
@@ -138,6 +138,7 @@ proxy
 pullHolds
 purgeComplete
 rateFor
+readPosRules
 realSourceTypesForSpecName
 recentRuns
 reconcileSupplier
@@ -146,6 +147,7 @@ remainingFor
 remainingOf
 removeEntry
 removeUsageLine
+replayQuarantinedEvent
 reserveNext
 resetLobbyReadLimiterForTests
 resetNonCentavoCount
@@ -170,6 +172,7 @@ seedServerSession
 seedSession
 seedStaff
 seedStore
+serveLine
 setActiveFake
 setCostBasisItem
 setDocumentNonBlocking

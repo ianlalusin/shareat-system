@@ -50,7 +50,7 @@ const INPUT = {
   pin: '135790',
 };
 
-const TOTAL_RULED = 38;
+const TOTAL_RULED = 44; // T-524 (BOSS, 6 Nov 2026): 38 + 3 (Cashier) + 1 (Kitchen Staff) + 2 (Server)
 
 const activeDefaultsByPosition = async (storeId: string) => {
   const rows = await sql<{ name: string; capability: string }[]>`
@@ -71,7 +71,7 @@ const oracleSorted = () =>
 // -------------------------------------------------------------------------------------
 
 describe('I1 — a fresh org\'s store holds exactly the ruled table', () => {
-  it('per-position active capability set matches the oracle; accessDefaultsSeeded === 38 === count(*)', async () => {
+  it('per-position active capability set matches the oracle; accessDefaultsSeeded === 44 === count(*)', async () => {
     const boot = await systemTransaction((tx) => bootstrapOrganization(tx, { ...INPUT, code: uid('I1') }));
     expect((boot as unknown as { accessDefaultsSeeded: number }).accessDefaultsSeeded).toBe(TOTAL_RULED);
 

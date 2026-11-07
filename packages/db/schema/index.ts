@@ -167,5 +167,8 @@ export * from './settlement-intake';
 // T-519 S1 - staff deduction agreements and the recoveries taken under them (migration 0236).
 export * from './staff-deduction-agreements';
 
+// T-512 (T-511 S5c) - the business rules an admin may change, as dated append-only rows (migration 0239).
+export * from './business-rules';
+
 // T-398 S6 - the franchisor view of a franchisee: agreements and the append-only access log (migration 0220).
 export * from './franchise';

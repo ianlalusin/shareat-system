@@ -169,6 +169,8 @@ const ALLOWLISTED_UNWRAPPED_NULL_TX_SITES: ReadonlySet<string> = new Set([
   // manager's session by raw token (DEF-288 shape, as above).
   'app/sign-in/actions.ts:signInOnPairedTablet',
   'app/sign-in/page.tsx:resolvePosTablet',
+  // T-525 - the three POS v2 doors (/api/pos/*) resolve the paired tablet from its cookie through the same pre-sign-in lookup: it DISCOVERS the org and store, so there is no `actor.orgId` yet.
+  'lib/pos-api.ts:resolvePosTablet',
   'app/settings/pos-tablet/actions.ts:signOut',
   'app/sign-in/lib.ts:signInWithFirebase',
   'lib/session.ts:resolveActor',

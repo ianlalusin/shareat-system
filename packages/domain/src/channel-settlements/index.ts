@@ -20,6 +20,9 @@ import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { CHANNEL_PAYOUT_DESTINATION_RULES, CHANNEL_SETTLEMENT_RECORD_RULES } from '../field-rules/channel-settlements';
 import { refuse } from '../shared/refusal';
+import { loadRuleBook } from '../business-rules/rules';
+import type { BusinessRuleKey } from '../business-rules/registry';
+import type { RuleBook } from '../business-rules/book';
 
 const R = channelSettlementsRepo;
 
@@ -27,14 +30,34 @@ const R = channelSettlementsRepo;
  * ⚠️ Above this, a variance is not a rounding difference — it is a disagreement, and the posting
  * is refused so somebody reconciles instead of sweeping it to expense.
  *
- * T-371 — max(₱50, 10% of |gross|), exact, in THOUSANDTHS of a peso (10% of a centavo figure is a
- * thousandths figure with the same digits), never a float. The old `EPSILON = 0.005` decimal-noise
- * allowance is gone with the floats it existed for: every figure here is whole centavos, so
- * "above tolerance + ₱0.005" is exactly "10 × centavos > tolerance thousandths + 5".
+ * T-371 — max(floor, percent of |gross|), exact, in THOUSANDTHS of a peso, never a float. T-512 (T-511 S5c): the floor
+ * and the percent are the business rules `settlement.variance_floor_amount` (default 50.00) and `settlement.variance_percent`
+ * (default 10), read on the business date and passed in as `{ floorCentavos, percentBp }`; percentBp is percent x 100. At the
+ * defaults this is the same figure as before: |centavos| x 1000 / 1000 is |centavos| thousandths, the floor 5,000 centavos is
+ * 50,000 thousandths. A percent that does not divide into whole thousandths is rounded half up at that scale, which is a
+ * hundred times finer than the half-centavo allowance below. The old `EPSILON = 0.005` decimal-noise allowance is gone with
+ * the floats it existed for: "above tolerance + ₱0.005" is exactly "10 × centavos > tolerance thousandths + 5".
  */
-function toleranceMillsFor(grossCentavos: bigint): bigint {
+export interface VarianceRules {
+  floorCentavos: bigint;
+  percentBp: bigint;
+}
+
+export const VARIANCE_RULE_KEYS = ['settlement.variance_floor_amount', 'settlement.variance_percent'] as const satisfies readonly BusinessRuleKey[];
+
+/** The variance rules in force on one date, from a loaded rule book (which must have been loaded for `VARIANCE_RULE_KEYS`). */
+export function varianceRulesOn(book: RuleBook, date: string): VarianceRules {
+  return {
+    floorCentavos: book.valueOn('settlement.variance_floor_amount', date).centavos(),
+    percentBp: book.valueOn('settlement.variance_percent', date).basisPoints(),
+  };
+}
+
+export function toleranceMillsFor(grossCentavos: bigint, rules: VarianceRules): bigint {
   const abs = grossCentavos < 0n ? -grossCentavos : grossCentavos;
-  return abs > 50_000n ? abs : 50_000n;
+  const byPercent = (abs * rules.percentBp + 500n) / 1000n;
+  const floor = rules.floorCentavos * 10n;
+  return byPercent > floor ? byPercent : floor;
 }
 
 /** Thousandths to the nearest centavo (half up) — the tolerance as the screen shows it. Non-negative only. */
@@ -43,7 +66,7 @@ function millsToMoney(mills: bigint): Money {
 }
 
 /** Is a centavo figure past the tolerance (thousandths), allowing the half-centavo the float version allowed? */
-function pastTolerance(centavos: bigint, toleranceMills: bigint): boolean {
+export function pastTolerance(centavos: bigint, toleranceMills: bigint): boolean {
   return centavos * 10n > toleranceMills + 5n;
 }
 
@@ -313,6 +336,7 @@ function computeSettlement(
   recognizeGain: boolean | undefined,
   outstanding: Money,
   channelName: string,
+  rules: VarianceRules,
 ): ComputedSettlement {
   // T-371 — whole centavos (bigint) throughout, never `Number()`: a figure that is not a parsed
   // `Money` cannot reach this function, and no comparison here can be NaN-blind.
@@ -324,7 +348,7 @@ function computeSettlement(
   const netDeposited = c(figures.netDeposited);
   const gross = c(figures.gross);
   const owed = c(outstanding);
-  const toleranceMills = toleranceMillsFor(gross);
+  const toleranceMills = toleranceMillsFor(gross, rules);
   const tolerance = millsToMoney(toleranceMills);
 
   const blockers: string[] = [];
@@ -434,6 +458,8 @@ async function gatherSettlementContext(
   destinationName: string | null;
   outstanding: Money;
   configBlockers: string[];
+  /** T-512 — the variance rules in force on the business date: one rule-book query, the same for the preview and the posting. */
+  variance: VarianceRules;
 }> {
   await authorize(trx, actor, 'record_ar_collection', { storeId: input.storeId });
 
@@ -451,7 +477,8 @@ async function gatherSettlementContext(
 
   // T-371 R4 — the ledger's balance is re-minted, never `Number()`-ed: a malformed figure throws here.
   const outstanding = money(await R.outstandingFor(trx, actor.orgId, input.channelId));
-  return { config, destinationName, outstanding, configBlockers };
+  const variance = varianceRulesOn(await loadRuleBook(trx, actor.orgId, VARIANCE_RULE_KEYS), input.businessDate);
+  return { config, destinationName, outstanding, configBlockers, variance };
 }
 
 /**
@@ -474,7 +501,7 @@ export async function previewChannelSettlement(
     // S5.5v Amendment A2 item 2 — a figure that failed to parse has no safe value to compute
     // with; running the arithmetic anyway is how "NaN" reaches the screen. Zero figures, blockers
     // only, until every field parses.
-    const c = figures ? computeSettlement(figures, input.recognizeGain, ctx.outstanding, ctx.config.name) : ZERO_COMPUTED_SETTLEMENT;
+    const c = figures ? computeSettlement(figures, input.recognizeGain, ctx.outstanding, ctx.config.name, ctx.variance) : ZERO_COMPUTED_SETTLEMENT;
     return {
       channelName: ctx.config.name,
       storeId: ctx.config.storeId,
@@ -532,7 +559,7 @@ export async function recordChannelSettlement(
     const ctx = await gatherSettlementContext(trx, actor, input);
     const figures = assertSettlementFigures('recordChannelSettlement', input);
     const config = ctx.config;
-    const c = computeSettlement(figures, input.recognizeGain, ctx.outstanding, config.name);
+    const c = computeSettlement(figures, input.recognizeGain, ctx.outstanding, config.name, ctx.variance);
 
     // ⚠️ Config refusals first — "no destination account" explains a settlement that cannot be
     // banked far better than the arithmetic error it would otherwise cause.

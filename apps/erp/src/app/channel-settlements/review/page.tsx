@@ -280,6 +280,15 @@ function DayRows({
         <NumTd className="whitespace-nowrap">
           {row.difference === null ? 'Unknown' : peso(row.difference)}
           {differs ? <div className="text-xs">{differenceShort(row.difference)}</div> : null}
+          {/* phone card: a zero-width box that fills the cell, so the badge wraps under the amount instead of widening the key column and squeezing the date */}
+          {row.differenceLarge ? (
+            <>
+              <div className="mt-1 w-0 min-w-full whitespace-normal text-xs font-medium leading-tight text-warning-ink md:hidden">Large difference</div>
+              <div className="mt-1 max-md:hidden">
+                <Badge tone="warning" label="Large difference" className="whitespace-nowrap" />
+              </div>
+            </>
+          ) : null}
         </NumTd>
         <Td>
           <Badge tone={state.tone} label={state.label} className="whitespace-nowrap" />
