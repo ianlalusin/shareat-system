@@ -1010,7 +1010,7 @@ describe('R7 - the snapshot (domain: buildPosSnapshot)', () => {
   it('store: id, name, mode and this pairing\'s till number', async () => {
     const f = await fixture();
     const s = await snapshot(f);
-    expect(s.body.store).toEqual({ storeId: f.storeId, name: f.storeName, mode: 'test', terminalNo: 1, vatRegistered: true }); // the fixture's organization is VAT (tax_type 'vat')
+    expect(s.body.store).toEqual({ storeId: f.storeId, name: f.storeName, mode: 'test', terminalNo: 1, vatRegistered: true, receiptPaperMm: 58, receiptCopies: 1 }); // T-546: the till's printer settings ride in store; the fixture's organization is VAT (tax_type 'vat')
   });
 
   it('T-528 R1: a non-VAT organization has store.vatRegistered false, and the ETag changes when tax_type changes (the tablet refetches)', async () => {

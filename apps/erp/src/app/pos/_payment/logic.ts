@@ -336,10 +336,13 @@ export function applyToAllEvent(i: { personId: string; now: Date; sessionId: str
 // Pay: one tap, local-first
 // ---------------------------------------------------------------------------------------------------------------------
 export type PrintOutcome = 'printed' | 'fallback' | 'failed';
-/** One customer copy. shortcut: a settings door for the copy count comes with the store print settings (What's Left). */
-export const RECEIPT_COPIES = 1;
-/** The paper in the stores' printers: a 58 mm roll, Font A. shortcut: fixed until the store/terminal print settings have their ERP screen (What's Left). */
-export const PRINT_LAYOUT: PrintLayout = { width: 58, font: 'normal' };
+/**
+ * T-546: the layout and copy count the tablet prints with come from the till's settings in the snapshot (`store.receiptPaperMm`, `store.receiptCopies`),
+ * set on Admin > POS tablets. Release 1 prints normal Font A; a font column comes when a store asks.
+ */
+export function printSettingsOf(store: { receiptPaperMm: 58 | 80; receiptCopies: number }): { layout: PrintLayout; copies: number } {
+  return { layout: { width: store.receiptPaperMm, font: 'normal' }, copies: store.receiptCopies };
+}
 
 export interface PayDeps {
   reserveTerminalSeq(): Promise<number>;
@@ -360,6 +363,8 @@ export interface PayInput {
   seniors: readonly Senior[];
   vatRateLabel: string;
   layout: PrintLayout;
+  /** Customer copies, from the till's settings (printSettingsOf). */
+  copies: number;
   receipt: { header: ReceiptHeader; tableLabel: string | null; heads: number | null; cashierName: string; issuedAtLocal: string; footerLines: string[]; lines: ReceiptLine[]; scPwdDiscount: Money };
 }
 export type PayResult = { ok: true; receiptNo: string; print: PrintOutcome; lines: string[]; notice: string | null; view: ReceiptView } | { ok: false; message: string };
@@ -410,7 +415,7 @@ export async function paySale(deps: PayDeps, input: PayInput): Promise<PayResult
   deps.requestDrain(); // the sale is safe in the outbox: send it now, whatever the printer does
   let print: PrintOutcome;
   try {
-    print = await deps.print(lines, { copies: RECEIPT_COPIES });
+    print = await deps.print(lines, { copies: input.copies });
   } catch {
     print = 'failed';
   }

@@ -22,4 +22,7 @@ export {
 } from './inbox';
 export type { PosEventIn, PosEventResult, PosPairing } from './inbox';
 export { buildPosSnapshot, loadPosSnapshot, readPosState, NO_TILL_NUMBER } from './snapshot';
+// `listTerminals` is already the clock terminals' (attendance) in this barrel, so only the list is aliased.
+export { listTerminals as listPosTerminals, createTerminal, linkTerminal, setTerminalPrinter } from './terminals';
+export type { TerminalList, TillView } from './terminals';
 export type { PosSnapshot, PosStateAnswer } from './snapshot';

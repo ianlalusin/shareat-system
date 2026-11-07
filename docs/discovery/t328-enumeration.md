@@ -38,7 +38,7 @@ spellings" below, which is explicitly unresolved for 6 of 8 domain modules.
 | repo-wide, same pattern | 57 | **59** | ❌ — see below |
 | files calling `str(formData,` / `str(fd,` | 35 / 30 | 35 / 30 | ✅ |
 | union of those two spellings | 56 | 56 | ✅ |
-| 3rd spelling: `Number(` directly on a form value | 10 sites, 6 files | 10 sites, 6 files | ✅ |
+| 3rd spelling: `Number(` directly on a form value | 10 sites, 6 files | 10 sites, 6 files (12 with T-546's two, both OUT) | ✅ |
 | 4th spelling: template-literal field names | 17 sites, 4 files | 17 sites, 4 files | ✅ |
 | app files importing `parseMoneyInput` after T-326 | 2 (1 non-test) | 2 (1 non-test) | ✅ |
 | 6th spelling: `strs`/`list` files | 10 | 10 | ✅ |
@@ -209,6 +209,8 @@ traced; "grep only" = not traced further than the pattern match.
 | `coverageMonths` L45 | apps/erp/src/app/prepaid/actions.ts | OUT | a month count, not money — grep only |
 | `coverageMonths` L90 | apps/erp/src/app/prepaid/actions.ts | OUT | a month count, not money — grep only |
 | `terminalNo` L33 | apps/erp/src/app/admin/pos-tablets/actions.ts | OUT | a terminal number (1 to 99), not money — T-505 |
+| `receiptPaperMm` | apps/erp/src/app/admin/pos-tablets/actions.ts | OUT | receipt paper width (58 or 80 mm), not money — T-546; the domain checks the closed list |
+| `receiptCopies` | apps/erp/src/app/admin/pos-tablets/actions.ts | OUT | a copy count (1 to 3), not money — T-546; the domain checks the range |
 
 ### 4th spelling — template-literal field names (17/17)
 

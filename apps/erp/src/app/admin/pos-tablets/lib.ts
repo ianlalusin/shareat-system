@@ -8,6 +8,7 @@
  */
 import { accessRepo, pinAttemptsRepo, posTerminalLinksRepo } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
+import { listPosTerminals } from '@shareat/domain';
 import { withOrgPrincipal } from '../../expenses/lib';
 
 export type PosTabletLinkView = posTerminalLinksRepo.PosTabletLinkView;
@@ -40,6 +41,17 @@ export async function loadPosTablets(actor: Actor, storeId: string): Promise<Pos
     }
     return { active, revoked, terminals };
   });
+}
+
+/** T-546: the store's tills and the live tablets still free to choose. `listPosTerminals` authorizes at the store itself (`pair_pos_tablet`). */
+export async function loadTills(actor: Actor, storeId: string) {
+  return withOrgPrincipal(actor.orgId, (tx) => listPosTerminals(tx, actor, { storeId }));
+}
+
+/** The number the Add till box starts at: the first number from 1 that no till of the store uses (1 to 99; 1 when the store is full, the domain then refuses). */
+export function nextFreeTillNo(used: readonly number[]): number {
+  for (let n = 1; n <= 99; n++) if (!used.includes(n)) return n;
+  return 1;
 }
 
 /** The last four characters of a device id, as the screen names a tablet ("...ab12"). Q1 of the spec: full id not shown. */

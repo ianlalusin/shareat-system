@@ -1534,6 +1534,13 @@
       "when": 1807241507084,
       "tag": "0245_t539_pos_table_warn_minutes",
       "breakpoints": true
+    },
+    {
+      "idx": 246,
+      "version": "7",
+      "when": 1807327907084,
+      "tag": "0246_t546_pos_terminal_printer",
+      "breakpoints": true
     }
   ]
 }

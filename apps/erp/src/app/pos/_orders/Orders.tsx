@@ -14,7 +14,7 @@ import { formatReceipt } from '@/lib/pos-print/receipt-text';
 import type { PrintLayout, ReceiptView } from '@/lib/pos-print/types';
 import { projectBill } from '../_payment/bill';
 import { extraHeadsId } from '../_payment/uuidv5';
-import { PRINT_LAYOUT, RECEIPT_COPIES, SENTENCES } from '../_payment/logic';
+import { printSettingsOf, SENTENCES } from '../_payment/logic';
 import { PaymentPanel } from '../_payment/PaymentPanel';
 import { ReceiptScreen } from '../_payment/ReceiptScreen';
 import { usePos } from '../_shell/pos-context';
@@ -204,12 +204,12 @@ export function Orders() {
   const payingTile = paying ? tileOf(paying) : undefined;
   const reprint = async () => {
     if (!lastReceipt) return;
-    const result: PrintResult = await printLines(formatReceipt({ ...lastReceipt.view, reprint: true }, lastReceipt.layout), { copies: RECEIPT_COPIES });
+    const result: PrintResult = await printLines(formatReceipt({ ...lastReceipt.view, reprint: true }, lastReceipt.layout), { copies: payment?.store.receiptCopies ?? 1 });
     setNotice(result === 'failed' ? SENTENCES.printFailed : null);
   };
   const reprintFromScreen = async () => {
     if (!receipt) return;
-    const result: PrintResult = await printLines(formatReceipt({ ...receipt.view, reprint: true }, receipt.layout), { copies: RECEIPT_COPIES });
+    const result: PrintResult = await printLines(formatReceipt({ ...receipt.view, reprint: true }, receipt.layout), { copies: payment?.store.receiptCopies ?? 1 });
     setReceipt((r) => (r ? { ...r, notice: result === 'failed' ? SENTENCES.printFailed : null } : r));
   };
   if (paying && payingTile) {
@@ -232,7 +232,8 @@ export function Orders() {
             cashierName={pos.personName ?? payment.staff.find((s) => s.personId === personId)?.displayName ?? ''}
             personId={personId}
             online={pos.online}
-            layout={PRINT_LAYOUT}
+            layout={printSettingsOf(payment.store).layout}
+            copies={printSettingsOf(payment.store).copies}
             deps={{ reserveTerminalSeq, newId: newDeviceId, enqueue, requestDrain: pos.requestDrain, print: printLines }}
             sendEvent={async (event) => (await submitPosEvent({ enqueue, requestDrain: pos.requestDrain }, event).then((r) => (r.ok ? null : r.message)))}
             newId={newDeviceId}
