@@ -390,27 +390,14 @@ describe('G2 (mock) — a failed audit_log read shows NO banner at all (fallback
   );
 });
 
-describe('G4 — `channel` alone no longer drives the banner (reserved for the settlement-form preselect)', () => {
+describe('G4 — `channel` alone no longer drives the banner (reserved for the record page preselect)', () => {
   it(
-    'wanted: `channel=<id>` with no `changedChannel` names no account in the banner — was red today: ' +
-      'the page still reads `sp.channel` directly for the banner, so the two params collide',
+    'wanted: `channel=<id>` with no `changedChannel` names no account in the banner. T-544: the overview now sends any ' +
+      '`channel`/`day` link on to /channel-settlements/record BEFORE reading the banner, so nothing can be drawn from it',
     async () => {
-      latestAuditEntryMock.mockResolvedValueOnce({
-        actorPersonId: ACTOR.personId,
-        occurredAt: new Date(),
-        before: { moneyAccountId: null, moneyAccountName: null },
-        after: { moneyAccountId: 'acct-a', moneyAccountName: 'Bank A' },
-      });
-      const html = await renderPage([wiredChannel({ destinationAccountName: 'Bank A' })], ['set_channel_payout'], {
-        searchParams: { ok: 'destination', channel: 'chan-1' },
-      });
-      expect(
-        html,
-        'wanted no account name leaked into the banner via the legacy `channel` param alone',
-      ).not.toMatch(/New settlements bank into Bank A/);
-      expect(html, 'wanted no "set" sentence either — no changedChannel at all').not.toMatch(
-        /Payout account set/,
-      );
+      // Not `renderPage`: the page redirects before it loads anything, so no mock value may be queued here.
+      const call = ChannelSettlementsPage({ searchParams: Promise.resolve({ ok: 'destination', channel: 'chan-1' }) });
+      await expect(call).rejects.toMatchObject({ message: 'NEXT_REDIRECT' });
     },
   );
 });

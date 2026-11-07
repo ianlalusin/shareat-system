@@ -511,10 +511,15 @@ describe('T-183 invariant 8 — nothing here can edit an event', () => {
     const writers = Object.keys(mod).filter((k) => /Quarantin/i.test(k) && typeof (mod as Record<string, unknown>)[k] === 'function');
     // `retryQuarantined`, `discardQuarantined`, `listQuarantine`, `quarantineSentence`.
     // ⛔ Any name suggesting an edit — updateQuarantine, editQuarantinedEvent — would fail here.
+    // T-525 (7 Nov 2026, BOSS approved): the POS inbox has its own quarantine trio - list, replay, discard - and, like
+    // the attendance lane's, none of them edits an event body.
     expect(writers.sort()).toEqual([
       'discardQuarantined',
+      'discardQuarantinedEvent',
+      'listPosQuarantine',
       'listQuarantine',
       'quarantineSentence',
+      'replayQuarantinedEvent',
       'retryQuarantined',
     ]);
   });
