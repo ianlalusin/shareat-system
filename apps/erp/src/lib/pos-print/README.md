@@ -6,3 +6,5 @@ No React, no database, no clock (`Date.now()`) and no money arithmetic — every
 formatted date arrives in the arguments, which is what makes each document testable line by line.
 Column counts (32/42 for 58 mm, 48/64 for 80 mm) are the only constants here: they are the printer's
 file format, not a business value. The ESC/POS byte encoding and the screens that call this come later.
+The VAT block under TOTAL prints from `ReceiptView.vat` (VATable, VAT-exempt, the SC/PWD discount, VAT; computed by `priceSession` and the caller); the rate arrives as a label, never typed here. VATable + VAT + VAT-exempt - SC/PWD discount = TOTAL.
+`adapter.ts` sends lines to `window.ShareatPrinter` (APK plugin) or falls back to the browser's print dialog.

@@ -175,7 +175,5 @@ export function snapshotOf(lines: readonly LoadedLine[], vatRegistered: boolean,
   };
 }
 
-export const hasStatutory = (lines: readonly LoadedLine[]): boolean => lines.some((l) => l.discounts.some((d) => d.kind === 'senior' || d.kind === 'pwd'));
-
 /** A basis-point percent as the percent text the discount row stores: 2000n -> '20.00'. */
 export const percentText = (bp: bigint): string => `${bp / 100n}.${String(bp % 100n).padStart(2, '0')}`;
