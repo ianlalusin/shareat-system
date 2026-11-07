@@ -131,7 +131,7 @@ export default async function StoresPage({
       <FlashBanner flash={sp} />
 
       <section className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-        <table className="w-full text-sm">
+        <table aria-label="Stores" className="w-full text-sm">
           <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500 dark:bg-neutral-900 dark:text-neutral-400">
             <tr>
               <th className="p-3">Code</th>

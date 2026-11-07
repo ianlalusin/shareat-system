@@ -261,7 +261,7 @@ export default async function SupplierDetailPage({
         </h2>
         {openItems.length > 0 ? (
           <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <table className="w-full min-w-[640px] border-collapse text-sm">
+            <table aria-label="Open items" className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
                   <th className="px-3 py-2 font-medium">Expense</th>
