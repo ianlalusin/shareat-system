@@ -126,7 +126,7 @@ export default async function SuppliersPage({
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[58rem] text-sm">
+          <table aria-label="Suppliers" className="w-full min-w-[58rem] text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-neutral-500">
                 <th className="py-2 pr-3 font-medium">Supplier</th>

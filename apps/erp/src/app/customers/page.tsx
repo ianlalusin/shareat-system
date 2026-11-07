@@ -68,7 +68,7 @@ export default async function CustomersPage({
 
       {customers.length > 0 ? (
         <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-          <table className="w-full min-w-[900px] border-collapse text-sm">
+          <table aria-label="Customers" className="w-full min-w-[900px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
                 <th className="px-3 py-2 font-medium">Customer</th>

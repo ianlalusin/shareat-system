@@ -135,7 +135,7 @@ export function DesktopGrid({
 }) {
   return (
     <div className="hidden overflow-x-auto rounded-lg border border-surface-border md:block">
-      <table className="w-full min-w-[640px] table-fixed border-collapse text-sm">
+      <table aria-label="Position access defaults" className="w-full min-w-[640px] table-fixed border-collapse text-sm">
         <GridColgroup positionCount={positions.length} />
         <thead className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
           <tr>
