@@ -218,6 +218,20 @@
 }
 
 /*
+ * T-545 (DEF-815) — the dialog's Close "×" stays 32px (`h-8 w-8` on the button) with a mouse and
+ * grows to 44px under a finger, the same plain-CSS shape as .shell-nav-row above (Tailwind 3.4 has
+ * no pointer-coarse variant). The selector is `.erp-dialog .erp-dialog-close` — two classes — so it
+ * beats the `h-8 w-8` utilities whatever order Tailwind emits them in; a single-class rule only
+ * ties with them. The icon inside stays 18px.
+ */
+@media (pointer: coarse) {
+  .erp-dialog .erp-dialog-close {
+    height: 44px;
+    width: 44px;
+  }
+}
+
+/*
  * T-387 S3: the animated status icons (StatusIcon) and the empty-state flame. Every keyframe and every
  * `animation` lives inside this one no-preference block, so reduced motion gets still icons.
  * Shapes and timings are copied from docs/design/t387/OrderStatus.dc.html and Feedback.dc.html.
