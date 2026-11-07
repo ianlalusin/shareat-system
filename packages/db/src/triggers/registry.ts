@@ -1512,4 +1512,23 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'history_guard',
     reason: 'No discount is inserted on a line of a paid or voided session (reads the PARENT session status, as table_session_lines_guard does); a discount moves active -> removed once and every other column is frozen (0238, T-523 R13).',
   },
+  // T-524 (0240) - the sales-receipt append guard (R11): three BEFORE INSERT history guards, ENABLE ALWAYS (ALWAYS 49 -> 52). Raise 23001 restrict_violation.
+  pos_sales_receipt_lines_append_guard: {
+    table: 'pos_sales_receipt_lines',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'No line is added to a sales receipt written by an earlier transaction (reads the PARENT receipt xmin, as table_session_lines_guard reads its parent session) (0240, T-524 R11).',
+  },
+  pos_sales_receipt_payments_append_guard: {
+    table: 'pos_sales_receipt_payments',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'No payment is added to a sales receipt written by an earlier transaction (reads the PARENT receipt xmin) (0240, T-524 R11).',
+  },
+  pos_sales_receipt_line_discounts_append_guard: {
+    table: 'pos_sales_receipt_line_discounts',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'No discount is added to a line of a sales receipt written by an earlier transaction (reads the receipt of the PARENT line, by xmin) (0240, T-524 R11).',
+  },
 } as const;
