@@ -21,7 +21,7 @@ import { fiscalPeriodsRepo, settlementIntakeRepo, type SettlementDayLineRow, typ
 import { NEGATIVE_DEPOSIT_BLOCKER, previewChannelSettlement, settlementConfigBlockers } from '../channel-settlements';
 import { loadLoanCheckContext, loanCheckForDay, loanCheckViewerOf, primeLoanCheckCoverage, type LoanCheckContext, type LoanCheckForDay, type LoanCheckViewer } from './loan-check';
 import { intakeRefusal } from './refusal';
-import { lineToSettlementInput } from './settlement-input';
+import { lineToSettlementInput, loanLegsForLine } from './settlement-input';
 import { plainDate } from './text';
 
 export const DAY_BLOCKER_CODES = [
@@ -49,7 +49,7 @@ export interface DayBlockersResult {
   blockers: DayBlocker[];
   /** the first open date on or after the sales day, only when the sales day's period is closed */
   willPostOn: string | null;
-  /** shown beside the day, never a blocker: a closed period, a payout split across two loans */
+  /** shown beside the day, never a blocker: a closed period */
   postNote: string | null;
 }
 
@@ -60,8 +60,6 @@ export interface DayBlockersOptions {
   loanContext?: LoanCheckContext;
   viewer?: LoanCheckViewer;
 }
-
-const SPLIT_NOTE = 'This payout covers two loans. It cannot be approved yet.';
 
 const norm = (s: string | null | undefined): string => (s ?? '').trim().toLowerCase();
 
@@ -127,9 +125,6 @@ function blockersFromFacts(f: DayFacts): DayBlockersResult {
     willPostOn = f.firstOpen.date;
     notes.push(`This day's period is closed, so it will post on ${plainDate(f.firstOpen.date)}.`);
   }
-  if (loan && new Set(loan.result.allocations.filter((a) => loan.result.rowStoreIds[a.rowKey] === line.storeId).map((a) => a.loanId)).size > 1) {
-    notes.push(SPLIT_NOTE);
-  }
   return { blockers, willPostOn, postNote: notes.length > 0 ? notes.join(' ') : null };
 }
 
@@ -169,7 +164,10 @@ export async function dayBlockers(
     const viewer = opts.viewer ?? (await loanCheckViewerOf(tx, actor.orgId, actor.personId));
     loan = await loanCheckForDay(tx, actor, line.salesDate, { context: opts.loanContext, viewer });
   }
-  const preview = await previewChannelSettlement(tx, actor, lineToSettlementInput(line));
+  // T-511 S6a: a payout that docks several loans is one settlement with a leg per loan; the preview reads the legs the loan check resolved (a day it cannot resolve
+  // is already held by the loan_check blocker, and its preview then carries no loan, as before).
+  const legs = loanLegsForLine(line, loan?.result ?? null);
+  const preview = await previewChannelSettlement(tx, actor, lineToSettlementInput(line, legs.legs));
   return blockersFromFacts({
     line,
     figure,

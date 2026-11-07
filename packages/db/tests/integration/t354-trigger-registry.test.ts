@@ -55,6 +55,10 @@ const ALWAYS_TRIGGERS = [
   // T-375 S1 (migration 0183): the two history guards - a day feed and a POS correction are never edited or deleted.
   { table: 'pos_v1_day_feeds', trigger: 'pos_v1_day_feeds_append_only' },
   { table: 'sales_day_pos_corrections', trigger: 'sales_day_pos_corrections_append_only' },
+  // T-511 S6a (migration 0242): a settlement loan leg is never edited or deleted.
+  { table: 'channel_settlement_loan_legs', trigger: 'channel_settlement_loan_legs_append_only' },
+  // T-511 S6b (the platform-corrections migration): a platform sales correction is never edited or deleted.
+  { table: 'sales_day_platform_corrections', trigger: 'sales_day_platform_corrections_append_only' },
   // T-401 S1 (migration 0196): three history update guards.
   { table: 'menu_offers', trigger: 'menu_offers_update_guard' },
   { table: 'menu_option_offers', trigger: 'menu_option_offers_update_guard' },
@@ -119,7 +123,8 @@ describe('T1 — registry floor', () => {
     // T-523 (0238): the eleven POS v2 history guards (table_sessions, table_session_lines, pos_sales_receipts x2 (frozen + session guard), pos_sales_receipt_lines, pos_sales_receipt_payments, pos_day_closes, pos_day_close_tenders, pos_events, table_session_line_discounts, pos_sales_receipt_line_discounts) 38 -> 49.
     // T-512 (T-511 S5c, 0239): business_rule_values_append_only 49 -> 50; re-measured after rebase on main (T-523 0238 present), 7 Nov 2026, BOSS approved.
     // T-524 (0240): three receipt-child append guards, 50 -> 53; re-measured after rebase on main (0238+0239 present), 7 Nov 2026, BOSS approved.
-    expect(always.length, 'expected exactly 53 ALWAYS triggers (R1 + 0175 + 0179 + 0183 + 0189 + 0196 + 0206 + 0215 + 0217 + 0220 + 0221 + 0222 + 0238 + 0239 + 0240)').toBe(53);
+    // T-511 S6a (0242): channel_settlement_loan_legs_append_only 53 -> 54; S6b (0243): sales_day_platform_corrections_append_only 54 -> 55; re-measured after rebase on main (0238-0241 present), 7 Nov 2026, BOSS approved.
+    expect(always.length, 'expected exactly 55 ALWAYS triggers (R1 + 0175 + 0179 + 0183 + 0189 + 0196 + 0206 + 0215 + 0217 + 0220 + 0221 + 0222 + 0238 + 0239 + 0240 + 0242 + 0243)').toBe(55);
 
     const alwaysNames = new Set(always.map(([name]) => name));
     for (const { trigger } of ALWAYS_TRIGGERS) {

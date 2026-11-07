@@ -27,10 +27,11 @@
 import { sql } from 'drizzle-orm';
 import { boolean, check, date, foreignKey, index, integer, numeric, pgTable, text, timestamp, unique, uniqueIndex, uuid, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { channelSettlements } from './channel-settlements';
+import { journalEntries } from './journal';
 import { loans } from './loans';
 import { organizations } from './organizations';
 import { persons } from './persons';
-import { salesChannels } from './sales-days';
+import { salesChannels, salesDays } from './sales-days';
 import { storedFiles } from './stored-files';
 import { stores } from './stores';
 
@@ -284,5 +285,50 @@ export const settlementOtherLines = pgTable(
     check('settlement_other_lines_amount_finite_check', finite(t.amount)),
     foreignKey({ columns: [t.orgId, t.uploadId], foreignColumns: [settlementUploads.orgId, settlementUploads.id], name: 'settlement_other_lines_upload_id_same_org_fk' }).onDelete('restrict'),
     foreignKey({ columns: [t.orgId, t.dayLineId], foreignColumns: [settlementDayLines.orgId, settlementDayLines.id], name: 'settlement_other_lines_day_line_id_same_org_fk' }).onDelete('restrict'),
+  ],
+);
+
+/**
+ * T-511 S6b (the platform-corrections migration) - the append-only record of a platform sales correction (`correctPlatformSales`): the platform's file figure replaced the staff
+ * figure for one channel and day through a correcting journal entry. One row per staged day line per sales day. `fromAmount` is what the ledger held for that channel and day
+ * (the staff entry plus earlier corrections, never `sales_day_channels.amount`, which is not overwritten); `toAmount` is the file figure; `entryDate` is where the
+ * entry was posted (the sales day if its month was open, else the first open date after it).
+ *
+ * NOTE: hand-added in the platform-corrections migration, no Drizzle mirror here: ENABLE and FORCE ROW LEVEL SECURITY, the policy sales_day_platform_corrections_org_isolation
+ * (app_current_org()), the grants (SELECT and INSERT only: corrections are history), the append-only refuse trigger sales_day_platform_corrections_append_only
+ * (ENABLE ALWAYS) and the finite checks on both amounts.
+ */
+export const salesDayPlatformCorrections = pgTable(
+  'sales_day_platform_corrections',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    storeId: uuid('store_id').notNull(),
+    salesDayId: uuid('sales_day_id').notNull(),
+    channelId: uuid('channel_id').notNull(),
+    dayLineId: uuid('day_line_id').notNull(),
+    fromAmount: numeric('from_amount', { precision: 14, scale: 2 }).notNull(),
+    toAmount: numeric('to_amount', { precision: 14, scale: 2 }).notNull(),
+    entryDate: date('entry_date').notNull(),
+    journalEntryId: uuid('journal_entry_id').notNull(),
+    reason: text('reason').notNull(),
+    postedBy: uuid('posted_by').notNull(),
+    postedAt: timestamp('posted_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('sales_day_platform_corrections_day_and_line_unique').on(t.orgId, t.salesDayId, t.dayLineId),
+    unique('sales_day_platform_corrections_journal_entry_unique').on(t.orgId, t.journalEntryId),
+    check('sales_day_platform_corrections_amounts_differ_check', sql`${t.fromAmount} <> ${t.toAmount}`),
+    check('sales_day_platform_corrections_reason_not_blank_check', sql`btrim(${t.reason}) <> ''`),
+    check('sales_day_platform_corrections_from_amount_finite_check', finite(t.fromAmount)),
+    check('sales_day_platform_corrections_to_amount_finite_check', finite(t.toAmount)),
+    foreignKey({ columns: [t.orgId, t.storeId], foreignColumns: [stores.orgId, stores.id], name: 'sales_day_platform_corrections_store_id_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.orgId, t.salesDayId], foreignColumns: [salesDays.orgId, salesDays.id], name: 'sales_day_platform_corrections_sales_day_id_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.orgId, t.channelId], foreignColumns: [salesChannels.orgId, salesChannels.id], name: 'sales_day_platform_corrections_channel_id_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.orgId, t.dayLineId], foreignColumns: [settlementDayLines.orgId, settlementDayLines.id], name: 'sales_day_platform_corrections_day_line_id_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.orgId, t.journalEntryId], foreignColumns: [journalEntries.orgId, journalEntries.id], name: 'sales_day_platform_corrections_journal_entry_id_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.orgId, t.postedBy], foreignColumns: [persons.orgId, persons.id], name: 'sales_day_platform_corrections_posted_by_same_org_fk' }).onDelete('restrict'),
   ],
 );
