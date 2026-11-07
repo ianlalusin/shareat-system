@@ -41,6 +41,11 @@ export interface FieldRule {
   /** date: judged against the Manila business date, never the browser's. */
   readonly notAfterToday?: true;
   readonly notBeforeToday?: true;
+  /**
+   * text: free typed words. Zero-width characters are dropped before the blank check and never stored (a reason of only those is blank);
+   * NUL and other control characters (tab, line break and carriage return are fine) are refused in plain words.
+   */
+  readonly plainText?: true;
   /** Existing requirement wording, except malformed money keeps the parser sentence per Ian. */
   readonly requires?: string;
   /** Existing number/money bound sentence; never replaces blank or malformed-input requirements. */
@@ -159,12 +164,25 @@ function bad(rule: FieldRule, requirement: string, progress: string, rangeSays?:
   return { ok: false, requirement: rangeSays ?? rule.requires ?? requirement, progress };
 }
 
+// A NUL (Postgres refuses it as a raw error) or any other control character except tab, line break and carriage return.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[ ---]/;
+/** Zero-width characters print as nothing. */
+const ZERO_WIDTH = /[​-‍⁠﻿]/g;
+
 /** Checks one raw value against one rule. Only money requirements may quote the input (Ian, 20 October). */
 export function checkField(rule: FieldRule, raw: string | null | undefined): FieldCheck {
   if (raw !== null && raw !== undefined && typeof raw !== 'string') {
     throw new TypeError(`field-rules: ${rule.name} was given a ${typeof raw}, not a string`);
   }
-  let v = (raw ?? '').trim();
+  let text = raw ?? '';
+  if (rule.plainText) {
+    if (CONTROL_CHARS.test(text)) {
+      return { ok: false, requirement: `${rule.label} may only hold ordinary text. Remove any unusual characters and try again.`, progress: 'Remove unusual characters' };
+    }
+    text = text.replace(ZERO_WIDTH, '');
+  }
+  let v = text.trim();
   if (rule.kind === 'digits' && rule.strip === 'spaces-dashes') v = v.replace(/[\s-]/g, '');
   if (v === '') {
     return rule.optional ? { ok: true, value: null } : { ok: false, requirement: blankSentence(rule), progress: 'Required' };

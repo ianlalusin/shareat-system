@@ -10,7 +10,7 @@
  * again as a separate expense document, and it cost **₱198,148.29** across two stores. One
  * function owns these legs, which makes the double-count impossible rather than merely forbidden.
  */
-import { auditLogRepo, channelSettlementsRepo, moneyAccountsRepo, moneyTransfersRepo, type Tx } from '@shareat/db';
+import { auditLogRepo, channelSettlementsRepo, loansRepo, moneyAccountsRepo, moneyTransfersRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { logger } from '@shareat/core/logger';
 import { compare, fromCentavos, isZero, money, negate, toCentavos, ZERO, type Money } from '@shareat/core/money';
@@ -18,7 +18,7 @@ import { postEntry } from '../ledger/post-entry';
 import { reverseEntry } from '../ledger/reverse-entry';
 import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { assertFieldRules } from '../shared/field-rules-assert';
-import { CHANNEL_PAYOUT_DESTINATION_RULES, CHANNEL_SETTLEMENT_RECORD_RULES } from '../field-rules/channel-settlements';
+import { CHANNEL_PAYOUT_DESTINATION_RULES, CHANNEL_SETTLEMENT_RECORD_RULES, SETTLEMENT_DIFFERENCE_RULES } from '../field-rules/channel-settlements';
 import { refuse } from '../shared/refusal';
 import { loadRuleBook } from '../business-rules/rules';
 import type { BusinessRuleKey } from '../business-rules/registry';
@@ -89,15 +89,27 @@ export interface RecordSettlementInput {
   /** What actually landed in the bank. */
   netDeposited: string;
   deductions?: SettlementDeductions;
-  loan?: { loanId: string; amount: string; ownerStoreId?: string | null } | null;
+  /**
+   * T-511 S6a: the loans this payout docked, one leg each. The loan deduction is the SUM of the legs; there is no separate deduction input. A leg with a blank
+   * loan id is a picker left open and is dropped; an empty or absent list is a settlement with no loan. `ownerStoreId` absent, null or the paying store is a
+   * same-store leg (a 2400 debit); another store is the 1250 / 2400 / 2150 triple. The same (loan, owner store) twice is refused.
+   */
+  loanLegs?: LoanLegInput[];
   reference?: string | null;
   settledOn: string;
   withholdingCertificateFileId?: string | null;
   /**
-   * ⚠️ Required to accept an above-tolerance GAIN. Without it a typo can quietly become revenue,
-   * which is the one direction of this error nobody notices.
+   * ⚠️ Required when the payout differs from the day by MORE than the tolerance, either sign: a shortfall books to 6420, a gain to 7100, and a person says why.
+   * Without it a typo can quietly become expense or revenue. Within tolerance it is ignored (not stored, not refused).
    */
-  recognizeGain?: boolean;
+  acknowledgeDifference?: { reason: string } | null;
+}
+
+export interface LoanLegInput {
+  loanId: string;
+  /** numeric(14,2) text; never negative, more than zero */
+  amount: string;
+  ownerStoreId?: string | null;
 }
 
 export interface SettlementResult {
@@ -141,8 +153,15 @@ export interface SettlementPreview {
    * sentence `recordChannelSettlement` would throw, because they come from the same function.
    */
   blockers: string[];
-  /** True when the ONLY thing in the way is the explicit "recognise the gain" acknowledgement. */
-  needsGainAcknowledgement: boolean;
+  /**
+   * T-511 S6a: true when the payout differs from the day by more than the tolerance and no valid acknowledgement (a non-blank reason of at most 500 characters)
+   * was given. Either sign.
+   */
+  needsAcknowledgement: boolean;
+  /** The ABSOLUTE difference between the day and the payout, 2 decimals, whatever the tolerance ('0.00' when exact). */
+  difference: string;
+  /** 'short': the payout is less than the day (staff over-reported); 'over': more (staff under-reported); 'none': exact. */
+  differenceSign: DifferenceSign;
   /**
    * T-351 / DEF-482 — false means every figure field above is a placeholder zero
    * (`ZERO_COMPUTED_SETTLEMENT`), not a real answer: at least one gross/net/deduction box failed to
@@ -154,6 +173,8 @@ export interface SettlementPreview {
   figuresComputed: boolean;
 }
 
+export type DifferenceSign = 'short' | 'over' | 'none';
+
 interface ComputedSettlement {
   outstandingCleared: Money;
   feesTotal: Money;
@@ -163,7 +184,11 @@ interface ComputedSettlement {
   settlementGain: Money;
   tolerance: Money;
   blockers: string[];
-  needsGainAcknowledgement: boolean;
+  needsAcknowledgement: boolean;
+  difference: Money;
+  differenceSign: DifferenceSign;
+  /** The trimmed reason of a VALID acknowledgement given past tolerance; null otherwise (nothing is stored when none was needed). */
+  acknowledgedReason: string | null;
 }
 
 /** S5.5v Amendment A2 item 2 — what a preview shows while a figure refusal blocks the arithmetic:
@@ -177,7 +202,10 @@ const ZERO_COMPUTED_SETTLEMENT: ComputedSettlement = {
   settlementGain: ZERO,
   tolerance: ZERO,
   blockers: [],
-  needsGainAcknowledgement: false,
+  needsAcknowledgement: false,
+  difference: ZERO,
+  differenceSign: 'none',
+  acknowledgedReason: null,
 };
 
 /**
@@ -189,10 +217,37 @@ interface SettlementFigures {
   gross: Money;
   netDeposited: Money;
   deductions: Partial<Record<keyof SettlementDeductions, Money>>;
-  loanAmount: Money | null;
+  /** The legs that survived the blank-loan drop, amounts parsed; `ownerStoreId` is the OWNER (the paying store's own id for a same-store leg, never null). */
+  loanLegs: { loanId: string; ownerStoreId: string; amount: Money }[];
 }
 
-type FigureAccumulator = Partial<SettlementFigures> & { deductions: SettlementFigures['deductions'] };
+type FigureAccumulator = Partial<SettlementFigures> & { deductions: SettlementFigures['deductions']; loanLegs: SettlementFigures['loanLegs'] };
+
+/** A leg with a blank loan id is a picker left open: it is not a leg (as the single loan was dropped). A loan id is trimmed and lower-cased, so the same loan typed twice in two cases is one loan. */
+function realLoanLegs(legs: readonly LoanLegInput[] | undefined): LoanLegInput[] {
+  return (legs ?? [])
+    .filter((l) => (l.loanId ?? '').trim() !== '')
+    .map((l) => ({ ...l, loanId: l.loanId.trim().toLowerCase(), ownerStoreId: l.ownerStoreId?.trim() || null }));
+}
+
+const UUID_TEXT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * The loans a settlement docks must be real loans of this organisation, and each leg's owner must be the store the loan belongs to: the 2400 debit is booked at the
+ * owner (as `recordLoanPayment` books it at `loan.storeId`), so a leg naming any other store would debit a store for a debt it never owed. Plain sentences, never a raw database error.
+ */
+async function loanLegBlockers(tx: Tx, orgId: string, legs: SettlementFigures['loanLegs']): Promise<string[]> {
+  const out: string[] = [];
+  for (const leg of legs) {
+    const loan = UUID_TEXT.test(leg.loanId) ? await loansRepo.getById(tx, orgId, leg.loanId) : undefined;
+    if (!loan) {
+      out.push('One of the loans docked from this payout could not be found. Pick the loan again from the list.');
+    } else if (loan.storeId !== leg.ownerStoreId) {
+      out.push(`The loan "${loan.name}" does not belong to the store named as its owner. The owner of a docked loan must be the store the loan belongs to.`);
+    }
+  }
+  return out;
+}
 
 /**
  * T-343 S5.5s / DEF-470 item 8 — every figure below reached bare `Number()` in `computeSettlement`
@@ -236,7 +291,7 @@ function figureBlank(raw: string, key: string, label: string, fn: string): void 
  */
 function figureChecks(
   fn: string,
-  input: Pick<RecordSettlementInput, 'grossAmount' | 'netDeposited' | 'deductions' | 'loan'>,
+  input: Pick<RecordSettlementInput, 'grossAmount' | 'netDeposited' | 'deductions' | 'loanLegs' | 'storeId'>,
   out: FigureAccumulator,
 ): Array<() => void> {
   const checks: Array<() => void> = [
@@ -260,37 +315,50 @@ function figureChecks(
       });
     }
   }
-  if (input.loan) {
+  const legs = realLoanLegs(input.loanLegs);
+  for (const leg of legs) {
     checks.push(() => {
-      const amount = parseMoneyInput(input.loan!.amount, `${fn}: the loan amount docked`, 'The amount docked');
+      const amount = parseMoneyInput(leg.amount, `${fn}: the loan amount docked`, 'The amount docked');
       if (compare(amount, ZERO) < 0) {
         throw refuse(`${fn}: the loan amount docked cannot be negative.`, 'The amount docked cannot be negative.');
       }
-      out.loanAmount = amount;
+      if (compare(amount, ZERO) === 0) {
+        throw refuse(`${fn}: the loan amount docked cannot be zero.`, 'The amount docked for a loan must be more than zero. Leave the loan out if nothing was docked.');
+      }
+      out.loanLegs.push({ loanId: leg.loanId, ownerStoreId: leg.ownerStoreId || input.storeId, amount });
     });
-  } else {
-    out.loanAmount = null;
   }
+  // The same (loan, owner store) twice would be one row in the database (unique), so it is said in words here: in the preview and in the posting alike.
+  checks.push(() => {
+    const seen = new Set<string>();
+    for (const leg of legs) {
+      const key = `${leg.loanId}|${leg.ownerStoreId || input.storeId}`;
+      if (seen.has(key)) {
+        throw refuse(`${fn}: the same loan is listed twice.`, 'The same loan is listed twice. Put the amounts for one loan together in one line.');
+      }
+      seen.add(key);
+    }
+  });
   return checks;
 }
 
 /** Every check passed, so every figure is present — narrowed without a cast. */
 function completeFigures(out: FigureAccumulator): SettlementFigures {
-  if (out.gross === undefined || out.netDeposited === undefined || out.loanAmount === undefined) {
+  if (out.gross === undefined || out.netDeposited === undefined) {
     throw refuse(
       'channel settlement: a figure check passed without recording its figure — that is a bug.',
       'The settlement figures could not be read. Nothing was saved; try again.',
     );
   }
-  return { gross: out.gross, netDeposited: out.netDeposited, deductions: out.deductions, loanAmount: out.loanAmount };
+  return { gross: out.gross, netDeposited: out.netDeposited, deductions: out.deductions, loanLegs: out.loanLegs };
 }
 
 /** `recordChannelSettlement`'s shape — all-or-nothing, throws on the first bad field. */
 function assertSettlementFigures(
   fn: string,
-  input: Pick<RecordSettlementInput, 'grossAmount' | 'netDeposited' | 'deductions' | 'loan'>,
+  input: Pick<RecordSettlementInput, 'grossAmount' | 'netDeposited' | 'deductions' | 'loanLegs' | 'storeId'>,
 ): SettlementFigures {
-  const out: FigureAccumulator = { deductions: {} };
+  const out: FigureAccumulator = { deductions: {}, loanLegs: [] };
   for (const check of figureChecks(fn, input, out)) check();
   return completeFigures(out);
 }
@@ -309,10 +377,10 @@ function blockerMessageFor(err: unknown): string {
  *  out of one. */
 function collectSettlementFigureBlockers(
   fn: string,
-  input: Pick<RecordSettlementInput, 'grossAmount' | 'netDeposited' | 'deductions' | 'loan'>,
+  input: Pick<RecordSettlementInput, 'grossAmount' | 'netDeposited' | 'deductions' | 'loanLegs' | 'storeId'>,
 ): { blockers: string[]; figures: SettlementFigures | null } {
   const blockers: string[] = [];
-  const out: FigureAccumulator = { deductions: {} };
+  const out: FigureAccumulator = { deductions: {}, loanLegs: [] };
   for (const check of figureChecks(fn, input, out)) {
     try {
       check();
@@ -333,7 +401,7 @@ function collectSettlementFigureBlockers(
  */
 function computeSettlement(
   figures: SettlementFigures,
-  recognizeGain: boolean | undefined,
+  acknowledge: { reason: string } | null | undefined,
   outstanding: Money,
   channelName: string,
   rules: VarianceRules,
@@ -344,7 +412,7 @@ function computeSettlement(
   const d = figures.deductions;
   const feesTotal =
     c(d.commission) + c(d.marketing) + c(d.platformFee) + c(d.vatOnFees) + c(d.withholdingTax) + c(d.penalty);
-  const loanDeduction = c(figures.loanAmount);
+  const loanDeduction = figures.loanLegs.reduce((t, l) => t + toCentavos(l.amount), 0n);
   const netDeposited = c(figures.netDeposited);
   const gross = c(figures.gross);
   const owed = c(outstanding);
@@ -374,20 +442,33 @@ function computeSettlement(
   const variance = difference > 0n ? difference : 0n;
   const settlementGain = difference < 0n ? -difference : 0n;
 
-  if (pastTolerance(variance, toleranceMills)) {
-    blockers.push(
-      `the day is short by ₱${fromCentavos(variance)}, past the ₱${tolerance} tolerance. ` +
-        'That is a disagreement, not rounding — reconcile it against the platform statement ' +
-        'rather than sweeping it to expense.',
-    );
-  }
-  const needsGainAcknowledgement = pastTolerance(settlementGain, toleranceMills) && !recognizeGain;
-  if (needsGainAcknowledgement) {
-    blockers.push(
-      `the payout exceeds the day by ₱${fromCentavos(settlementGain)}, past the ` +
-        `₱${tolerance} tolerance. Pass recognizeGain to book it as income — a typo ` +
-        'must not quietly become revenue.',
-    );
+  // T-511 S6a: ONE acknowledgement for a difference of EITHER sign past tolerance (a shortfall used to be refused outright, a gain needed a tick).
+  // Within tolerance an acknowledgement is ignored: nothing is stored and nothing is refused.
+  const absDifference = difference < 0n ? -difference : difference;
+  const differenceSign: DifferenceSign = difference > 0n ? 'short' : difference < 0n ? 'over' : 'none';
+  let needsAcknowledgement = false;
+  let acknowledgedReason: string | null = null;
+  if (pastTolerance(absDifference, toleranceMills)) {
+    if (acknowledge) {
+      // the one server call of the rule set (the preview collects the refusal as a blocker, the posting throws it)
+      try {
+        acknowledgedReason = assertFieldRules(SETTLEMENT_DIFFERENCE_RULES, { reason: acknowledge.reason }).reason ?? null;
+      } catch (e) {
+        blockers.push(blockerMessageFor(e));
+      }
+    }
+    if (acknowledgedReason === null) {
+      needsAcknowledgement = true;
+      if (!acknowledge) {
+        blockers.push(
+          differenceSign === 'short'
+            ? `the day is short by ₱${fromCentavos(absDifference)}, past the ₱${tolerance} tolerance. A person has to accept that difference with a reason ` +
+                '(acknowledgeDifference) before it books to expense; otherwise reconcile it against the platform statement.'
+            : `the payout exceeds the day by ₱${fromCentavos(absDifference)}, past the ₱${tolerance} tolerance. A person has to accept that difference with a reason ` +
+                '(acknowledgeDifference) before it books as income — a typo must not quietly become revenue.',
+        );
+      }
+    }
   }
 
   return {
@@ -399,7 +480,10 @@ function computeSettlement(
     settlementGain: fromCentavos(settlementGain),
     tolerance,
     blockers,
-    needsGainAcknowledgement,
+    needsAcknowledgement,
+    difference: fromCentavos(absDifference),
+    differenceSign,
+    acknowledgedReason,
   };
 }
 
@@ -498,10 +582,11 @@ export async function previewChannelSettlement(
     // EVERY bad figure is COLLECTED alongside the config blockers, never thrown past them.
     // `recordChannelSettlement` (below) keeps the throw — a post is all-or-nothing, a preview is not.
     const { blockers: figureBlockers, figures } = collectSettlementFigureBlockers('previewChannelSettlement', input);
+    const legBlockers = figures ? await loanLegBlockers(trx, actor.orgId, figures.loanLegs) : [];
     // S5.5v Amendment A2 item 2 — a figure that failed to parse has no safe value to compute
     // with; running the arithmetic anyway is how "NaN" reaches the screen. Zero figures, blockers
     // only, until every field parses.
-    const c = figures ? computeSettlement(figures, input.recognizeGain, ctx.outstanding, ctx.config.name, ctx.variance) : ZERO_COMPUTED_SETTLEMENT;
+    const c = figures ? computeSettlement(figures, input.acknowledgeDifference, ctx.outstanding, ctx.config.name, ctx.variance) : ZERO_COMPUTED_SETTLEMENT;
     return {
       channelName: ctx.config.name,
       storeId: ctx.config.storeId,
@@ -514,8 +599,10 @@ export async function previewChannelSettlement(
       settlementGain: c.settlementGain,
       tolerance: c.tolerance,
       destinationAccountName: ctx.destinationName,
-      blockers: [...ctx.configBlockers, ...figureBlockers, ...c.blockers],
-      needsGainAcknowledgement: c.needsGainAcknowledgement,
+      blockers: [...ctx.configBlockers, ...figureBlockers, ...legBlockers, ...c.blockers],
+      needsAcknowledgement: c.needsAcknowledgement,
+      difference: c.difference,
+      differenceSign: c.differenceSign,
       figuresComputed: figureBlockers.length === 0,
     };
   };
@@ -540,15 +627,18 @@ export async function recordChannelSettlement(
     // T-440 — authorize() first, then the typed-field rules (gross, net, loan amount, reference, date),
     // THEN the channel/day lookups: a malformed figure is named before any business check can mask it.
     await authorize(trx, actor, 'record_ar_collection', { storeId: rawInput.storeId });
-    assertFieldRules(CHANNEL_SETTLEMENT_RECORD_RULES, {
-      grossAmount: rawInput.grossAmount,
-      netDeposited: rawInput.netDeposited,
-      loanAmount: rawInput.loan?.amount,
-      reference: rawInput.reference,
-      settledOn: rawInput.settledOn,
-    });
+    // One pass per leg (the amount-docked rule is per box); no legs is one pass with a blank amount.
+    for (const loanAmount of rawInput.loanLegs?.length ? rawInput.loanLegs.map((l) => l.amount) : [undefined]) {
+      assertFieldRules(CHANNEL_SETTLEMENT_RECORD_RULES, {
+        grossAmount: rawInput.grossAmount,
+        netDeposited: rawInput.netDeposited,
+        loanAmount,
+        reference: rawInput.reference,
+        settledOn: rawInput.settledOn,
+      });
+    }
     // An amount docked with no loan picked is a picker left open: the rules above saw it, the books do not.
-    const input: RecordSettlementInput = { ...rawInput, loan: rawInput.loan?.loanId ? rawInput.loan : null };
+    const input: RecordSettlementInput = { ...rawInput, loanLegs: realLoanLegs(rawInput.loanLegs) };
     if (!rawInput.salesDayId) {
       throw refuse(
         'recordChannelSettlement: no sales day selected',
@@ -558,8 +648,10 @@ export async function recordChannelSettlement(
     }
     const ctx = await gatherSettlementContext(trx, actor, input);
     const figures = assertSettlementFigures('recordChannelSettlement', input);
+    const legBlockers = await loanLegBlockers(trx, actor.orgId, figures.loanLegs);
+    if (legBlockers.length > 0) throw refuse('recordChannelSettlement: a loan leg is not valid', legBlockers[0]!);
     const config = ctx.config;
-    const c = computeSettlement(figures, input.recognizeGain, ctx.outstanding, config.name, ctx.variance);
+    const c = computeSettlement(figures, input.acknowledgeDifference, ctx.outstanding, config.name, ctx.variance);
 
     // ⚠️ Config refusals first — "no destination account" explains a settlement that cannot be
     // banked far better than the arithmetic error it would otherwise cause.
@@ -598,8 +690,7 @@ export async function recordChannelSettlement(
       variance,
       settlementGain,
       loanDeduction,
-      loanId: input.loan?.loanId ?? null,
-      loanOwnerStoreId: input.loan?.ownerStoreId ?? null,
+      differenceReason: c.acknowledgedReason,
       netDeposited,
       destinationMoneyAccountId: config.destinationMoneyAccountId!,
       reference: input.reference?.trim() || null,
@@ -611,6 +702,8 @@ export async function recordChannelSettlement(
       withholdingCertificateFileId: input.withholdingCertificateFileId ?? null,
       createdBy: actor.personId,
     });
+    // T-511 S6a: the legs go in with the header, in this transaction. A deferred trigger checks at commit that they add up to `loanDeduction`.
+    await R.insertLoanLegs(trx, actor.orgId, settlementId, figures.loanLegs);
 
     const memo = `${config.name} settlement — ${input.businessDate}`;
     const lines: Parameters<typeof postEntry>[1]['lines'] = [];
@@ -662,15 +755,16 @@ export async function recordChannelSettlement(
       });
     }
 
-    // The loan the platform docked out of the payout.
-    if (compare(loanDeduction, ZERO) > 0) {
-      const ownerStoreId = input.loan?.ownerStoreId ?? null;
-      if (ownerStoreId && ownerStoreId !== input.storeId) {
+    // The loans the platform docked out of the payout: one block per leg, in the order given (T-511 S6a).
+    const crossStoreIds = [...new Set(figures.loanLegs.map((l) => l.ownerStoreId).filter((id) => id !== input.storeId))];
+    const codes = crossStoreIds.length > 0 ? await moneyTransfersRepo.storeCodes(trx, actor.orgId, [input.storeId, ...crossStoreIds]) : new Map<string, string>();
+    for (const leg of figures.loanLegs) {
+      const legAmount = leg.amount;
+      if (leg.ownerStoreId !== input.storeId) {
         // ⭐ Cross-store: the paying store is owed by the store that owns the loan, and invariant
         // 6's reciprocal check already proves that pair nets to zero.
-        const codes = await moneyTransfersRepo.storeCodes(trx, actor.orgId, [input.storeId, ownerStoreId]);
         const payingCode = codes.get(input.storeId);
-        const owningCode = codes.get(ownerStoreId);
+        const owningCode = codes.get(leg.ownerStoreId);
         if (!payingCode || !owningCode) {
           throw new Error('recordChannelSettlement: could not resolve both store codes for the loan deduction.');
         }
@@ -678,22 +772,22 @@ export async function recordChannelSettlement(
         //   the PAYING store gave up cash that was not its debt   -> it is owed        (DR 1250)
         //   the OWNING store's loan principal falls               -> liability down    (DR 2400)
         //   ...and it now owes the paying store instead           -> liability up      (CR 2150)
-        // Net debit is exactly one loanDeduction, which is what the settlement identity needs.
+        // Net debit is exactly one loan leg, which is what the settlement identity needs.
         // ⭐ Invariant 6's reciprocal check already proves Σ1250 = Σ2150 across stores, so this
         // case is watched by a check that already exists rather than one written for it.
         lines.push(
           {
-            accountCode: R.DUE_FROM_STORE_CODE, storeId: input.storeId, debit: loanDeduction,
+            accountCode: R.DUE_FROM_STORE_CODE, storeId: input.storeId, debit: legAmount,
             partyType: 'store' as const, partyId: owningCode,
             lineMemo: `Due from ${owningCode} — their loan repaid out of this payout`,
           },
           {
-            accountCode: R.LOANS_PAYABLE_CODE, storeId: ownerStoreId, debit: loanDeduction,
-            partyType: 'loan' as const, partyId: input.loan!.loanId,
+            accountCode: R.LOANS_PAYABLE_CODE, storeId: leg.ownerStoreId, debit: legAmount,
+            partyType: 'loan' as const, partyId: leg.loanId,
             lineMemo: `Loan repayment — ${memo}`,
           },
           {
-            accountCode: R.DUE_TO_STORE_CODE, storeId: ownerStoreId, credit: loanDeduction,
+            accountCode: R.DUE_TO_STORE_CODE, storeId: leg.ownerStoreId, credit: legAmount,
             partyType: 'store' as const, partyId: payingCode,
             lineMemo: `Due to ${payingCode} — they paid our loan`,
           },
@@ -702,9 +796,9 @@ export async function recordChannelSettlement(
         lines.push({
           accountCode: R.LOANS_PAYABLE_CODE,
           storeId: input.storeId,
-          debit: loanDeduction,
+          debit: legAmount,
           partyType: 'loan' as const,
-          partyId: input.loan!.loanId,
+          partyId: leg.loanId,
           lineMemo: `Loan repayment — ${memo}`,
         });
       }
@@ -1008,3 +1102,7 @@ export async function listPostedSettlementsForStore(
   };
   return run(tx);
 }
+
+// T-511 S6b: the platform file figure replaces the staff figure in a day's sales and receivable (no caller until slice 7 approves a day).
+export { correctPlatformSales } from './correction';
+export type { CorrectPlatformSalesInput, CorrectPlatformSalesResult } from './correction';

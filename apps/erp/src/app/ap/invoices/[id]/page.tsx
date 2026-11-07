@@ -378,7 +378,7 @@ return (
             The four checks below attest the DOCUMENT is genuine. Posting attests the CODING is
             right — cost of food vs. supplies vs. owner&rsquo;s drawings drives the tax
             treatment, and one click is about to make both assertions. These drafts post the
-            instant you verify (T-196).
+            instant you verify.
           </p>
           <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
             <table className="w-full min-w-[640px] border-collapse text-sm">

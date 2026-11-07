@@ -140,3 +140,28 @@ S2 is small. Build it as soon as T-525 merges, on its own branch, with the same 
 
 - **O1.** Should changing a POS rate also need a second approver? T-512 has none for any rule. It is unchanged here and
   can be raised with Ian if wanted.
+
+## Slice S3 — table warning minutes (REQUIRED before the Lipa go-live; BOSS, 7 Nov 2026)
+
+T-527 ships with a hard-coded 90-minute "table seated too long" warning. It is marked `shortcut:` with this slice named.
+Ian's 5 Nov rule allows no hard-coded business value at go-live, so S3 must land **before the soak (T-533)**.
+
+1. **Registry:** a new key `pos.table_warn_minutes`.
+   - label: "Minutes before a table tile turns red";
+   - help: "A table seated longer than this shows a red time bar on the POS Orders screen, so staff check on it.";
+   - unit `minutes` (new), default `90`, min `1`, max `600`, namespace `pos`.
+2. **The `minutes` unit,** everywhere `unit` is switched on:
+   - `RuleValue.minutes(): number`: a whole number;
+   - the writer's whole-number check;
+   - the display: `showValue('minutes','90')` → "90 min";
+   - the input: step 1.
+3. **Migration `0245_t539_pos_table_warn_minutes.sql`:** data only, following the 0239/0241 seed pattern. 0242–0244 belong
+   to the settlement lane.
+4. **POS:**
+   - `readPosRules` returns `tableWarnMinutes` as well;
+   - the T-525 snapshot `rules` carries it;
+   - T-527 drops `POS_TILE_WARN_AFTER_MINUTES` and reads the snapshot value.
+5. **Tests:**
+   - the registry, unit, display and seed pins (all keys);
+   - the snapshot carries it;
+   - a tile with the rule set to 30 turns red at 31 minutes.

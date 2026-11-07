@@ -1506,6 +1506,20 @@
       "when": 1806895907084,
       "tag": "0241_t539_pos_rule_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 242,
+      "version": "7",
+      "when": 1806982307084,
+      "tag": "0242_t511_settlement_loan_legs",
+      "breakpoints": true
+    },
+    {
+      "idx": 243,
+      "version": "7",
+      "when": 1807068707084,
+      "tag": "0243_t511_platform_sales_corrections",
+      "breakpoints": true
     }
   ]
 }
