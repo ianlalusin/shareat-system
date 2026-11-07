@@ -16,6 +16,7 @@ import { projectBill } from '../_payment/bill';
 import { extraHeadsId } from '../_payment/uuidv5';
 import { PRINT_LAYOUT, RECEIPT_COPIES, SENTENCES } from '../_payment/logic';
 import { PaymentPanel } from '../_payment/PaymentPanel';
+import { ReceiptScreen } from '../_payment/ReceiptScreen';
 import { usePos } from '../_shell/pos-context';
 import { newDeviceId } from './ids';
 import { OrderDialog, CancelLineDialog, type OrderDialogMode, type OrderSend } from './OrderDialogs';
@@ -41,6 +42,8 @@ export function Orders() {
   const [problem, setProblem] = useState<string | null>(null);
   const [paying, setPaying] = useState<string | null>(null);
   const [lastReceipt, setLastReceipt] = useState<{ view: ReceiptView; layout: PrintLayout; receiptNo: string } | null>(null);
+  // The receipt screen after Finish. It lives HERE, not in the Payment panel: the panel goes when the paid table leaves the open list (the poll), the receipt stays until Done.
+  const [receipt, setReceipt] = useState<{ view: ReceiptView; layout: PrintLayout; receiptNo: string; lines: string[]; notice: string | null } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [extraIds, setExtraIds] = useState<Record<string, string>>({}); // a bundle's extra-heads line id, derived like the server does (uuidv5)
   const [now, setNow] = useState(0);
@@ -204,6 +207,11 @@ export function Orders() {
     const result: PrintResult = await printLines(formatReceipt({ ...lastReceipt.view, reprint: true }, lastReceipt.layout), { copies: RECEIPT_COPIES });
     setNotice(result === 'failed' ? SENTENCES.printFailed : null);
   };
+  const reprintFromScreen = async () => {
+    if (!receipt) return;
+    const result: PrintResult = await printLines(formatReceipt({ ...receipt.view, reprint: true }, receipt.layout), { copies: RECEIPT_COPIES });
+    setReceipt((r) => (r ? { ...r, notice: result === 'failed' ? SENTENCES.printFailed : null } : r));
+  };
   if (paying && payingTile) {
     const session = view.sessions[paying];
     return (
@@ -231,7 +239,8 @@ export function Orders() {
             onBack={() => setPaying(null)}
             onPaid={(done) => {
               setLastReceipt({ view: done.view, layout: done.layout, receiptNo: done.receiptNo });
-              setNotice(done.notice);
+              setReceipt({ view: done.view, layout: done.layout, receiptNo: done.receiptNo, lines: done.lines, notice: done.notice });
+              setNotice(null);
               setPaying(null);
               setSelected(null);
             }}
@@ -250,6 +259,7 @@ export function Orders() {
 
   return (
     <div className="space-y-3">
+      {receipt ? <ReceiptScreen lines={receipt.lines} receiptNo={receipt.receiptNo} notice={receipt.notice} onReprint={() => void reprintFromScreen()} onDone={() => setReceipt(null)} /> : null}
       {problem ? <Banner tone="error">{problem}</Banner> : null}
       {notice ? <Banner tone="warning">{notice}</Banner> : null}
       {access.canWrite && stands === null ? <p className="text-sm text-muted">Waiting for the open tables…</p> : null}

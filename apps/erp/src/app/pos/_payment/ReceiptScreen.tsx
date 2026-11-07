@@ -36,7 +36,7 @@ export function ReceiptScreen({ lines, receiptNo, notice, onReprint, onDone }: {
         </div>
       }
     >
-      <pre aria-label="Receipt" className="overflow-x-auto whitespace-pre font-mono text-sm leading-snug text-ink">
+      <pre aria-label="Receipt" className="overflow-x-auto whitespace-pre pb-6 pr-3 font-mono text-sm leading-snug text-ink">
         {lines.join('\n')}
       </pre>
     </Dialog>

@@ -13,6 +13,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PaymentPanel, type PaymentPanelProps } from '@/app/pos/_payment/PaymentPanel';
 import type { BillLineRow, ProjectedBill } from '@/app/pos/_payment/bill';
+import { ReceiptScreen } from '@/app/pos/_payment/ReceiptScreen';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -277,7 +278,7 @@ describe('P2: peso formatting, the reference label, Split, Remove, the receipt',
     expect(rows()).toHaveLength(2);
     expect(button(/Split: add another payment/)!.disabled).toBe(true);
     expect(region('pay-footer')!.textContent).toMatch(/Pick a way to pay/);
-    expect(button(/^Finish/)!.disabled).toBe(true);
+    expect(([...region('pay-footer')!.querySelectorAll('button')].pop() as HTMLButtonElement).disabled, 'the last footer button is Finish').toBe(true);
     await click(tender('Cash'));
     expect(rows()).toHaveLength(2);
     await keys('100');
@@ -308,7 +309,7 @@ describe('P2: peso formatting, the reference label, Split, Remove, the receipt',
     expect(sendEvent.mock.calls[0]![0]).toMatchObject({ kind: 'discount.removed', payload: { discountId: id(23) } });
   });
 
-  describe('after Finish: an on-screen receipt with Reprint and Done', () => {
+  describe('after Finish (T-528d): the panel hands the saved sale to Orders at once; Orders owns the receipt screen', () => {
     const pay = async () => {
       await render();
       await fillSenior();
@@ -316,48 +317,19 @@ describe('P2: peso formatting, the reference label, Split, Remove, the receipt',
       await keys('2100');
       await click(button(/^Finish/));
     };
-    const shown = () => host.querySelector('[aria-label="Receipt"]') as HTMLElement | null;
 
-    it('shows the same lines that were printed, in monospace, and waits for Done (the sale is already saved)', async () => {
+    it('onPaid fires once with the receipt number, the print outcome, the view, the layout and the printed lines; the panel draws no receipt dialog of its own', async () => {
       await pay();
       expect(d.enqueue).toHaveBeenCalledTimes(1);
-      const printed = d.print.mock.calls[0]![0];
-      const view = shown()!;
-      expect(view, 'a receipt view').toBeTruthy();
-      expect(view.tagName).toBe('PRE');
-      expect(view.textContent).toBe(printed.join('\n'));
-      expect(view.textContent).toContain('T1-004231');
-      expect(tokens(view)).toContain('font-mono');
-      expect(onPaid, 'the panel stays until Done').not.toHaveBeenCalled();
-      expect(button('Reprint')).toBeTruthy();
-      expect(button('Done')).toBeTruthy();
-    });
-
-    it('Reprint prints the lines again marked REPRINT and leaves the screen up', async () => {
-      await pay();
-      await click(button('Reprint'));
-      expect(d.print).toHaveBeenCalledTimes(2);
-      expect(d.print.mock.calls[1]![0].some((l: string) => l.includes('REPRINT'))).toBe(true);
-      expect(d.enqueue, 'a reprint never sells again').toHaveBeenCalledTimes(1);
-      expect(onPaid).not.toHaveBeenCalled();
-    });
-
-    it('Done hands the receipt back and returns to Orders, once', async () => {
-      await pay();
-      await click(button('Done'));
       expect(onPaid).toHaveBeenCalledTimes(1);
-      expect(onPaid.mock.calls[0]![0]).toMatchObject({ receiptNo: 'T1-004231', print: 'printed', notice: null });
+      const done = onPaid.mock.calls[0]![0];
+      expect(done).toMatchObject({ receiptNo: 'T1-004231', print: 'printed', notice: null, layout: { width: 58, font: 'normal' } });
+      expect(done.lines).toEqual(d.print.mock.calls[0]![0]);
+      expect(done.view.receiptNo).toBe('T1-004231');
+      expect(host.querySelector('[aria-label="Receipt"]'), 'the receipt screen is Orders\' now, so it outlives this panel').toBeNull();
     });
 
-    it('a failed print says so on the receipt view and a good Reprint clears it', async () => {
-      d.print.mockResolvedValueOnce('failed' as never);
-      await pay();
-      expect(host.textContent).toContain('Receipt did not print. Tap Reprint.');
-      await click(button('Reprint'));
-      expect(host.textContent).not.toContain('Receipt did not print. Tap Reprint.');
-    });
-
-    it('Finish tapped twice in the same moment saves exactly one sale (one number reserved, one enqueue, one print)', async () => {
+    it('Finish tapped twice in the same moment saves exactly one sale (one number reserved, one enqueue, one print, one hand-back)', async () => {
       await render();
       await fillSenior();
       await click(tender('Cash'));
@@ -370,26 +342,22 @@ describe('P2: peso formatting, the reference label, Split, Remove, the receipt',
       expect(d.reserveTerminalSeq).toHaveBeenCalledTimes(1);
       expect(d.enqueue).toHaveBeenCalledTimes(1);
       expect(d.print).toHaveBeenCalledTimes(1);
-    });
-
-    it('Done tapped twice in the same moment hands the receipt back exactly once', async () => {
-      await pay();
-      const done = button('Done')!;
-      await act(async () => {
-        done.click();
-        done.click();
-      });
       expect(onPaid).toHaveBeenCalledTimes(1);
     });
 
-    it('the receipt dialog opens with focus on Done, not on the close X', async () => {
+    it('a print that failed travels in the hand-back as the notice', async () => {
+      d.print.mockResolvedValueOnce('failed' as never);
       await pay();
-      expect(document.activeElement).toBe(button('Done'));
+      expect(onPaid.mock.calls[0]![0]).toMatchObject({ print: 'failed', notice: 'Receipt did not print. Tap Reprint.' });
     });
 
-    it('control: before Finish there is no receipt view', async () => {
-      await render();
-      expect(shown()).toBeNull();
+    it('control: a refused save hands nothing back and Finish can be tried again', async () => {
+      d.enqueue.mockRejectedValueOnce(new Error('IndexedDB full') as never);
+      await pay();
+      expect(onPaid).not.toHaveBeenCalled();
+      expect(host.textContent).toContain('This tablet could not save the sale. Nothing was charged. Try again.');
+      await click(button(/^Finish/));
+      expect(onPaid).toHaveBeenCalledTimes(1);
     });
   });
 });
@@ -408,5 +376,327 @@ describe('P1-3: the on-screen bill adds up', () => {
   it('control: a bill with no senior/PWD shows no such line', async () => {
     await render(noSenior());
     expect(host.textContent).not.toContain('Less: SC/PWD discount');
+  });
+});
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-528d: the receipt screen (its own component, hosted by Orders), the rebalanced one-screen layout, Split's focus, the Finish label, the scroll position
+// ---------------------------------------------------------------------------------------------------------------------
+
+describe('T-528d: the receipt screen', () => {
+  const show = async (over: Partial<Parameters<typeof ReceiptScreen>[0]> = {}) => {
+    const onReprint = vi.fn();
+    const onDone = vi.fn();
+    await act(async () => {
+      root.render(createElement(ReceiptScreen, { lines: ['SHAREAT LIPA', 'RECEIPT:  T1-000001'], receiptNo: 'T1-000001', notice: null, onReprint, onDone, ...over }));
+    });
+    return { onReprint, onDone };
+  };
+  const view = () => host.querySelector('[aria-label="Receipt"]') as HTMLElement | null;
+
+  it('shows the printed lines in monospace, with Reprint and Done', async () => {
+    await show();
+    expect(view()!.tagName).toBe('PRE');
+    expect(view()!.textContent).toBe('SHAREAT LIPA\nRECEIPT:  T1-000001');
+    expect(tokens(view()!)).toContain('font-mono');
+    expect(button('Reprint')).toBeTruthy();
+    expect(button('Done')).toBeTruthy();
+  });
+
+  it('opens with focus on Done, not on the close X', async () => {
+    await show();
+    expect(document.activeElement).toBe(button('Done'));
+  });
+
+  it('Reprint and Done each report one tap; a failed print is shown as the notice', async () => {
+    const { onReprint, onDone } = await show({ notice: 'Receipt did not print. Tap Reprint.' });
+    expect(host.textContent).toContain('Receipt did not print. Tap Reprint.');
+    await click(button('Reprint'));
+    expect(onReprint).toHaveBeenCalledTimes(1);
+    await click(button('Done'));
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('T-528d P1: the rebalanced one-screen layout (structure; happy-dom has no layout engine)', () => {
+  it('the amount pad is two rows tall (seven columns), every key at least 3rem, Del and Clear included', async () => {
+    await render();
+    const pad = host.querySelector('[aria-label="Amount keypad"]')!;
+    expect(tokens(pad)).toContain('grid-cols-7');
+    const keysEls = [...pad.querySelectorAll('button')];
+    expect(keysEls.map((b) => b.textContent)).toEqual(expect.arrayContaining(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.', 'Del', 'Clear']));
+    const cells = keysEls.reduce((n, b) => n + (tokens(b).includes('col-span-2') ? 2 : 1), 0);
+    expect(cells / 7, 'rows = cells / columns').toBe(2);
+    for (const b of keysEls) expect(tokens(b).includes('min-h-12') && tokens(b).includes('min-w-12'), b.textContent ?? '').toBe(true);
+  });
+
+  it('the bill header is ONE row (title, Discount every line, Back) and each bill line is tight: py-1, not py-2', async () => {
+    await render();
+    const back = button('Back')!;
+    const all = button(/Discount every line/)!;
+    expect(back.parentElement, 'Back, the discount-all button and the title share one row').toBe(all.parentElement);
+    expect(back.parentElement!.parentElement!.querySelector('h2'), 'the title is on the same row').toBeTruthy();
+    const li = host.querySelector('ul[aria-label="Bill lines"] > li')!;
+    expect(tokens(li)).toContain('py-1');
+    expect(tokens(li)).not.toContain('py-2');
+  });
+
+  it('a payment row is one 3rem line with a dashed divider, not a padded card; the wallet reference sits on the same row as its label', async () => {
+    await render();
+    await click(tender('GCash'));
+    const li = rows()[0]!;
+    expect(tokens(li)).not.toContain('p-2');
+    expect(tokens(li)).toContain('border-dashed');
+    const input = li.querySelector('input')!;
+    const label = li.querySelector(`label[for="${input.id}"]`)!;
+    expect(label.parentElement, 'label and input share one flex row').toBe(input.parentElement);
+    expect(tokens(label.parentElement!)).toContain('flex');
+  });
+
+  it('the pinned footer is compact: the Finish button is 3.5rem (min-h-14), the change line has no tall padding', async () => {
+    await render();
+    const finish = button(/^Finish/)!;
+    expect(tokens(finish)).toContain('min-h-14');
+    expect(tokens(region('pay-footer')!.querySelector('[role="status"]')!)).toContain('py-1.5');
+  });
+
+  it('the panel measures itself again when what is above it changes size (a resize observer, fonts) and trims any page overflow', async () => {
+    const seen: string[] = [];
+    const RO = globalThis.ResizeObserver;
+    (globalThis as { ResizeObserver: unknown }).ResizeObserver = class {
+      constructor(_cb: unknown) {
+        seen.push('created');
+      }
+      observe() {
+        seen.push('observe');
+      }
+      disconnect() {
+        seen.push('disconnect');
+      }
+      unobserve() {}
+    };
+    try {
+      await render();
+      expect(seen).toContain('observe');
+      await act(async () => root.unmount());
+      expect(seen).toContain('disconnect');
+      root = createRoot(host);
+    } finally {
+      (globalThis as { ResizeObserver: unknown }).ResizeObserver = RO;
+    }
+  });
+});
+
+describe('T-528d P1: Split brings its row into view and puts focus on the tender choice', () => {
+  it('after Split the new row scrolls into view inside the payments box and focus is on the first tender button', async () => {
+    await render(noSenior());
+    await click(tender('Cash'));
+    await keys('500');
+    await click(button(/Split: add another payment/));
+    const fresh = rows()[1]!;
+    expect(scrollSpy.mock.contexts, 'the new row was scrolled into view').toContain(fresh);
+    expect(document.activeElement).toBe(tender('Cash'));
+  });
+
+  it('control: choosing a tender with no Split does not scroll a row or steal focus from the tender button', async () => {
+    await render(noSenior());
+    scrollSpy.mockClear();
+    await click(tender('Cash'));
+    expect(scrollSpy.mock.contexts.filter((c) => (c as Element).tagName === 'LI')).toEqual([]);
+  });
+});
+
+describe('T-528d P2: the Finish label while a row has no tender', () => {
+  it('says "Pick a way to pay", never "TENDER", and Finish is off', async () => {
+    await render(noSenior());
+    await click(tender('GCash'));
+    await keys('500');
+    await click(button(/Split: add another payment/));
+    const finish = button(/^Finish|Pick a way to pay/, region('pay-footer')!)!;
+    expect(finish.textContent).toBe('Pick a way to pay');
+    expect(finish.textContent).not.toMatch(/TENDER/i);
+    expect(finish.disabled).toBe(true);
+  });
+
+  it('control: once the row has its tender the label is Finish with the tenders again', async () => {
+    await render(noSenior());
+    await click(tender('GCash'));
+    await keys('500');
+    await click(button(/Split: add another payment/));
+    await click(tender('Cash'));
+    expect(button(/^Finish/)!.textContent).toMatch(/^Finish · GCASH ₱[\d,.]+ \+ CASH ₱[\d,.]+ · print$/);
+  });
+});
+
+describe('T-528d P2: scroll positions and the clipped label', () => {
+  it('the bill box opens scrolled to the top, whatever the browser remembers', async () => {
+    await render();
+    expect(region('bill-scroll')!.scrollTop).toBe(0);
+    expect(tokens(region('bill-scroll')!).some((t) => t.includes('overflow-anchor'))).toBe(true);
+  });
+
+  it('the wallet reference input leaves room above it when focused (scroll margin), so its label is never cut off', async () => {
+    await render();
+    await click(tender('GCash'));
+    const input = rows()[0]!.querySelector('input')!;
+    expect(tokens(input).some((t) => /^scroll-mt-/.test(t))).toBe(true);
+    expect(tokens(region('payments-scroll')!).some((t) => /^scroll-pt-|^pt-/.test(t))).toBe(true);
+  });
+
+  it('opening a reference field scrolls the whole payment row into view', async () => {
+    await render();
+    await click(tender('GCash'));
+    scrollSpy.mockClear();
+    const input = rows()[0]!.querySelector('input') as HTMLInputElement;
+    await act(async () => input.focus());
+    expect(scrollSpy.mock.contexts).toContain(rows()[0]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-528e (the second render): bill room, a fixed reason slot, scroll reset on load, the receipt's last lines, one selected style
+// ---------------------------------------------------------------------------------------------------------------------
+describe('T-528e: the bill gets the room', () => {
+  it('the lines region is the flexible one (flex-1 min-h-0) and the VAT block is no longer inside it', async () => {
+    await render();
+    const scroller = region('bill-scroll')!;
+    expect(tokens(scroller)).toContain('flex-1');
+    expect(tokens(scroller)).toContain('min-h-0');
+    expect(scroller.querySelector('[aria-label="VAT breakdown"]'), 'the VAT block does not use the lines room').toBeNull();
+  });
+
+  it('on screen the VAT breakdown is a one-line "VAT details" disclosure under Due, closed by default, holding the full block', async () => {
+    await render();
+    const totals = region('bill-totals')!;
+    const details = totals.querySelector('details')!;
+    expect(details, 'a disclosure in the pinned totals').toBeTruthy();
+    expect(details.hasAttribute('open')).toBe(false);
+    expect(details.querySelector('summary')!.textContent!.trim()).toBe('VAT details');
+    const due = [...totals.querySelectorAll('p')].find((x) => /^Due/.test(x.textContent ?? ''))!;
+    expect(due.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING, 'under Due').toBeTruthy();
+    for (const word of ['VATable', 'VAT (12%)', 'VAT-exempt', 'Less: SC/PWD discount', 'VAT removed for SC/PWD']) expect(details.textContent, word).toContain(word);
+    expect(tokens(details.querySelector('summary')!)).toContain('min-h-12');
+  });
+
+  it('control: the printed receipt still carries the full VAT block (the disclosure is screen only)', async () => {
+    await render();
+    await fillSenior();
+    await click(tender('Cash'));
+    await click(button(/^Finish/));
+    const printed = onPaid.mock.calls[0]![0].lines as string[];
+    for (const word of ['VATABLE SALES', 'VAT-EXEMPT SALES', 'Less: SC/PWD discount', 'VAT (12%)']) expect(printed.some((l) => l.includes(word)), word).toBe(true);
+  });
+});
+
+describe('T-528e: the reason line has a fixed slot', () => {
+  const slot = () => region('pay-footer')!.querySelector('[data-region="pay-reason-slot"]') as HTMLElement | null;
+
+  it('the slot is always there at the same height class, with the reason in it when blocked and empty when not', async () => {
+    await render();
+    const blocked = slot()!;
+    expect(blocked, 'a slot while blocked').toBeTruthy();
+    expect(tokens(blocked)).toContain('min-h-12');
+    expect(blocked.textContent).toMatch(/Add the name and ID for Senior #1/);
+    const blockedClass = blocked.getAttribute('class');
+    await fillSenior();
+    await click(tender('Cash'));
+    const clear = slot()!;
+    expect(clear, 'the slot is still there when nothing blocks Pay').toBeTruthy();
+    expect(clear.getAttribute('class'), 'the same classes, so nothing moves').toBe(blockedClass);
+    expect(clear.textContent).toBe('');
+    expect(clear.children).toHaveLength(0);
+  });
+
+  it('the slot sits between the change line and Finish', async () => {
+    await render();
+    const status = region('pay-footer')!.querySelector('[role="status"]')!;
+    const finish = button(/^Finish/)!;
+    expect(status.compareDocumentPosition(slot()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(slot()!.compareDocumentPosition(finish) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe('T-528e: the bill box resets to the top when the session or its lines first load', () => {
+  const spyScrollTop = () => {
+    const writes: { el: Element; v: number }[] = [];
+    const proto = HTMLElement.prototype as unknown as Record<string, unknown>;
+    const saved = Object.getOwnPropertyDescriptor(proto, 'scrollTop');
+    Object.defineProperty(proto, 'scrollTop', {
+      configurable: true,
+      get: () => 0,
+      set(this: Element, v: number) {
+        writes.push({ el: this, v });
+      },
+    });
+    const restore = () => {
+      if (saved) Object.defineProperty(proto, 'scrollTop', saved);
+      else delete proto.scrollTop;
+    };
+    return { writes, restore };
+  };
+
+  it('scrollTop = 0 is written on mount and again when the lines arrive (not only on mount); overflow-anchor is off on the scroller at every width', async () => {
+    const { writes, restore } = spyScrollTop();
+    try {
+      await render([]);
+      const scroller = region('bill-scroll')!;
+      const onMount = writes.filter((w) => w.el === scroller && w.v === 0).length;
+      expect(onMount).toBeGreaterThanOrEqual(1);
+      await render(lines());
+      expect(writes.filter((w) => w.el === scroller && w.v === 0).length, 'written again when the lines load').toBeGreaterThan(onMount);
+      const afterLoad = writes.length;
+      await render(lines()); // an ordinary re-render does not yank the cashier back to the top
+      expect(writes.length).toBe(afterLoad);
+      expect(tokens(scroller).some((t) => t.includes('overflow-anchor:none'))).toBe(true);
+      expect(tokens(scroller).some((t) => t.startsWith('lg:') && t.includes('overflow-anchor'))).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  it('a different table loading resets it too', async () => {
+    const { writes, restore } = spyScrollTop();
+    try {
+      await render(lines(), { sessionId: id(31) });
+      const n = writes.length;
+      await render(lines(), { sessionId: id(32) });
+      expect(writes.length).toBeGreaterThan(n);
+    } finally {
+      restore();
+    }
+  });
+});
+
+describe('T-528e: the receipt screen keeps its last lines clear of its scrollbar', () => {
+  it('the receipt text has bottom padding and a right gutter, so no line sits under a scrollbar', async () => {
+    await act(async () => {
+      root.render(createElement(ReceiptScreen, { lines: ['a', 'b'], receiptNo: 'T1-000001', notice: null, onReprint: () => undefined, onDone: () => undefined }));
+    });
+    const pre = host.querySelector('[aria-label="Receipt"]')!;
+    expect(tokens(pre).some((t) => /^pb-(4|5|6|8)$/.test(t))).toBe(true);
+    expect(tokens(pre).some((t) => /^pr-(2|3|4)$/.test(t))).toBe(true);
+  });
+});
+
+describe('T-528e: one selected style, with the kit focus ring as the only outline', () => {
+  it('the chosen tender and the active payment row use a fill, not a coloured border that fights the focus ring', async () => {
+    await render(noSenior());
+    await click(tender('Cash'));
+    const chosenTender = tender('Cash')!;
+    const row = host.querySelector('ul[aria-label="Payments"] button[aria-pressed="true"]')!;
+    for (const el of [chosenTender, row]) {
+      expect(tokens(el), el.textContent ?? '').toContain('bg-warning-soft');
+      expect(tokens(el).some((t) => t === 'border-brand' || t === 'border-ink')).toBe(false);
+      expect(tokens(el)).toContain('focus-visible:ring-2');
+      expect(tokens(el)).toContain('focus-visible:ring-ink');
+    }
+  });
+
+  it('control: an idle tender has the plain surface style', async () => {
+    await render(noSenior());
+    await click(tender('Cash'));
+    expect(tokens(tender('GCash')!)).toContain('bg-surface');
+    expect(tokens(tender('GCash')!)).not.toContain('bg-warning-soft');
   });
 });

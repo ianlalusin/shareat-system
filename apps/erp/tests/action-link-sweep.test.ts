@@ -519,7 +519,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1586 -> 1587, T-527b (+1 controls), re-measured on main, 7 Nov 2026, BOSS approved.
     // 1587 -> 1615, T-528 (+28 controls), re-measured on main, 7 Nov 2026, BOSS approved.
     // 1615 -> 1618, +3 T-528c controls (Pay-blocked reason, Reprint, Done); BOSS approved
-    expect(results.length).toBe(1618);
+    // 1618 -> 1619, +1 VAT details disclosure (T-528d); BOSS approved
+    expect(results.length).toBe(1619);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
