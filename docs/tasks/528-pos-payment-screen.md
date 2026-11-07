@@ -62,7 +62,7 @@ server's total is the truth.
     - `vatableSales` = restNet − vatAmount.
   - **Not VAT-registered:** every figure is `0.00` except `vatExemptSales`, which is Σ the senior/PWD covered gross (v1
     labels it "SC/PWD SALES").
-  - The figures must satisfy `vatableSales + vatAmount + vatExemptSales + Σ(senior/PWD discountAmount excluding vatRemoved) = total`
+  - The figures must satisfy `vatableSales + vatAmount + vatExemptSales − Σ(senior/PWD discountAmount) = total`, where `discountAmount` is the statutory percent only (vatRemoved is separate in `PricedDiscount`), and `restNet` = total − Σ(coveredGross − vatRemoved − discountAmount) over the senior/PWD discounts
     on a VAT org, exactly to the centavo. If one centavo is left over from rounding, put it in `vatableSales`, and add a
     one-line comment saying so.
   - Unit tests:
