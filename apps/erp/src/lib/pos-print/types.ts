@@ -120,3 +120,42 @@ export interface RefillSlipView {
   items: { name: string; qty: number }[];
   offline: boolean;
 }
+
+/**
+ * T-531: what an X-reading or a Z-reading prints (cash control, not a BIR document). Every figure is ALREADY COMPUTED (`readingFor`); times and the business date
+ * arrive already formatted by the caller, in Manila time.
+ */
+export interface ReadingSlipView {
+  header: ReceiptHeader;
+  printedBy: string;
+  windowFromLocal: string;
+  windowToLocal: string;
+  /** True: the window touches two business dates (a forgotten Z); the paper says so. */
+  spansTwoDates: boolean;
+  receiptCount: number;
+  subtotal: Money;
+  discounts: { senior: Money; pwd: Money; other: Money };
+  discountTotal: Money;
+  grossTotal: Money;
+  unliSales: Money;
+  alaCarteSales: Money;
+  heads: number;
+  packageSessions: number;
+  seniorPwdDiners: number;
+  /** One row per tender, the NET collected. */
+  tenders: { name: string; amount: Money }[];
+  /** Offline wallet payments still to check; printed only above zero. */
+  toCheckCount: number;
+  /** Receipts recorded after their window opened; printed only above zero. */
+  lateCount: number;
+}
+
+/** A Z-reading: the X's figures plus the Z's own number, its business date and who approved it. */
+export interface ZSlipView extends ReadingSlipView {
+  zNo: number;
+  /** Already formatted, e.g. `"02/11/26"`. */
+  businessDateLocal: string;
+  approvedBy: string;
+  /** True: the paper carries the line `REPRINT`. */
+  reprint: boolean;
+}

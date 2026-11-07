@@ -35,7 +35,8 @@ export async function writePlatformRows(
       'Platform sales can only be changed before the day is verified.',
     );
   }
-  if (day.source !== 'pos_v1_day_feed') {
+  // T-531: a day derived from the POS receipts takes platform sales exactly as a feed day does (its own figures are never typed; platform orders are rung outside POS).
+  if (day.source === 'legacy_typed') {
     throw refuse(
       `setPlatformSales: sales day ${day.id} is a typed day`,
       "This day's figures were typed in, so its platform sales are entered with them. Edit the day instead.",

@@ -165,6 +165,14 @@ const EXEMPT: Record<string, (typeof EXEMPT_REASONS)[number]> = {
   'packages/domain/src/fixed-assets/dispose.ts::runDispose::input.disposedOn < asset.acquiredOn': 'not-a-column-value',
   'packages/domain/src/fixed-assets/dispose.ts::runDispose::input.disposedOn < latestDepreciation': 'not-a-column-value',
   'packages/domain/src/fixed-assets/in-service.ts::resolveMode::openingDate > asset.acquiredOn!': 'not-a-column-value',
+  // T-531: ISO 'YYYY-MM-DD' business-date ordering in the POS day close (which business day a sale or a Z belongs to; the last day the v1 bridge writes) and one whole-day count: string-vs-string / a day count, never a money value
+  'packages/domain/src/pos/shared.ts::businessDateOf::afterZ > byClock': 'not-a-column-value',
+  'packages/domain/src/pos/v1-bridge-payload.ts::v1BridgeDateAllowed::businessDate <= V1_BRIDGE_LAST_DATE': 'not-a-column-value',
+  'packages/domain/src/pos/day-close.ts::closeDay::afterLast > today': 'not-a-column-value',
+  'packages/domain/src/pos/day-close.ts::closeDay::daysBetween(startHourDate(w.open[0]!.issuedAtDevice, w.hour), today) + 1 > 2': 'not-a-column-value',
+  'packages/domain/src/pos/day-close.ts::closeBacklog::afterLast > windowDay': 'not-a-column-value',
+  'packages/domain/src/pos/day-close.ts::closeBacklog::own < earliest': 'not-a-column-value',
+  'packages/domain/src/pos/day-close.ts::closeBacklog::day >= today': 'not-a-column-value',
   // T-316 S2: ISO 'YYYY-MM-DD' business-date ordering in tillFloorPosition (latest verified day vs a report's day) — string-vs-string, never a money value
   'packages/db/src/repo/remittance.ts::tillFloorPosition::r.businessDate > latestVerified': 'not-a-column-value',
   // T-374 S5: whole-number bounds, each NaN-safe. `lineCount` passed `/^\d+$/` first; `typedLife` is a `parseWholeNumberInput` result (regex ^\d+$, finite) or a typed

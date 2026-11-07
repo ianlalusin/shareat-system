@@ -106,6 +106,8 @@ export default async function SalesDayDetailPage({
   // T-375 S3: where the figures came from. A feed day is imported (and re-imported while unverified); a typed day
   // belongs to a store that was not linked to POS when it was typed, and is the only kind that is edited by hand.
   const isFeedDay = day.source === 'pos_v1_day_feed';
+  // T-531: a day derived from the POS receipts at the Z. Never typed and never re-imported: it changes only by a void and a new close.
+  const isPosReceiptsDay = day.source === 'pos_receipts';
   const storeLink = await getStoreLink(orgId, day.storeId);
   // W1: POS's package figure can exceed the day's sales; the difference is not booked. Computed from the stored
   // feed on read (no column).
@@ -120,7 +122,7 @@ export default async function SalesDayDetailPage({
   // T-375 S4 (R8): platform sales are the one thing typed on a feed day - the store's NON-remitted channels, while the
   // day is unverified. A remitted channel comes from POS and is never offered here.
   const platformChannels =
-    isFeedDay && unverified && can.edit
+    (isFeedDay || isPosReceiptsDay) && unverified && can.edit
       ? (await withOrgPrincipal(orgId, (tx) => salesDaysRepo.listChannels(tx, orgId, day.storeId, { activeOnly: true }))).filter(
           (c) => !c.isRemittedDaily,
         )
@@ -173,7 +175,9 @@ export default async function SalesDayDetailPage({
             {storeName} ·{' '}
             {isFeedDay
               ? `Imported from POS at ${day.posSourcedAt ? formatBusinessDateTime(day.posSourcedAt) : 'an unknown time'}`
-              : 'Typed — store not linked to POS'}
+              : isPosReceiptsDay
+                ? 'Closed on the POS (Z reading)'
+                : 'Typed — store not linked to POS'}
           </PageDescription>
         </div>
         <div className="text-right">
@@ -400,7 +404,7 @@ export default async function SalesDayDetailPage({
         </form>
       )}
 
-      {unverified && can.edit && !isFeedDay && !storeLink && (
+      {unverified && can.edit && !isFeedDay && !isPosReceiptsDay && !storeLink && (
         <div>
           <a
             href={`/sales-days/${day.id}/edit?${carry.toString()}`}

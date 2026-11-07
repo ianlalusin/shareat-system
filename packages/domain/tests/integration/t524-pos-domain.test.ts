@@ -1584,17 +1584,45 @@ describe('R10 - reads for the screens', () => {
     expect(await asOrg(f.orgId, (tx) => P.currentBusinessDate(tx, f.storeId, { now: () => new Date('2026-11-06T20:00:00Z') }))).toBe('2026-11-07');
   });
 
-  it('currentBusinessDate is the Manila date the open Z window started: the last Z\'s window_end', async () => {
-    const f = await fixture();
-    const z = (n: number, bd: string, start: string, end: string) =>
+  // T-531 ruling 1 (8 Nov 2026) REPLACES the old test here ("the Manila date the open Z window started: the last Z's window_end"): a Z is dated with the business day it
+  // CLOSES, so a sale carries max(lastZ.business_date + 1 day, startHourDate(the sale's time)); with no Z yet the start-hour rule alone (kept above: ruling 8, F7).
+  describe('T-531 ruling 1: the business date after a Z is max(lastZ.business_date + 1, startHourDate(time))', () => {
+    const zOn = async (f: Awaited<ReturnType<typeof fixture>>, n: number, bd: string, start: string, end: string) =>
       sql`insert into pos_day_closes (org_id, store_id, terminal_id, z_no, business_date, window_start, window_end, receipt_count, gross_total, closed_by, approved_by)
           values (${f.orgId}, ${f.storeId}, ${f.terminalRowId}, ${n}, ${bd}, ${start}, ${end}, 0, 0, ${f.counter.personId}, ${f.manager.personId})`;
-    // window ended 2026-11-05 20:00 Manila (12:00Z): the next window started on the 5th
-    await z(1, '2026-11-04', '2026-11-04T20:00:00Z', '2026-11-05T12:00:00Z');
-    expect(await asOrg(f.orgId, (tx) => P.currentBusinessDate(tx, f.storeId))).toBe('2026-11-05');
-    // a later Z closed at 01:00 Manila on the 7th (17:00Z on the 6th): the open window started on the 7th
-    await z(2, '2026-11-05', '2026-11-05T12:00:00Z', '2026-11-06T17:00:00Z');
-    expect(await asOrg(f.orgId, (tx) => P.currentBusinessDate(tx, f.storeId))).toBe('2026-11-07');
+    const bdAt = (f: Awaited<ReturnType<typeof fixture>>, iso: string) => asOrg(f.orgId, (tx) => P.currentBusinessDate(tx, f.storeId, { ...RATES, now: () => new Date(iso) }));
+
+    it('a sale at 23:00 after a 22:00 Z is dated D+1 (the Z took D)', async () => {
+      const f = await fixture();
+      await zOn(f, 1, '2026-11-05', '2026-11-05T04:00:00+08:00', '2026-11-05T22:00:00+08:00');
+      expect(await bdAt(f, '2026-11-05T23:00:00+08:00')).toBe('2026-11-06');
+    });
+
+    it('a sale at 10:00 the next morning is dated D+1', async () => {
+      const f = await fixture();
+      await zOn(f, 1, '2026-11-05', '2026-11-05T04:00:00+08:00', '2026-11-05T22:00:00+08:00');
+      expect(await bdAt(f, '2026-11-06T10:00:00+08:00')).toBe('2026-11-06');
+    });
+
+    it('a sale at 02:00 on D+2, long after a Z dated D, is dated D+1 (still the business day of 02:00 minus 4 hours), not D+2', async () => {
+      const f = await fixture();
+      await zOn(f, 1, '2026-11-05', '2026-11-05T04:00:00+08:00', '2026-11-05T22:00:00+08:00');
+      expect(await bdAt(f, '2026-11-07T02:00:00+08:00')).toBe('2026-11-06');
+      expect(await bdAt(f, '2026-11-07T05:00:00+08:00')).toBe('2026-11-07');
+    });
+
+    it('a sale before any Z uses the start-hour rule', async () => {
+      const f = await fixture();
+      expect(await bdAt(f, '2026-11-06T03:30:00+08:00')).toBe('2026-11-05');
+      expect(await bdAt(f, '2026-11-06T04:30:00+08:00')).toBe('2026-11-06');
+    });
+
+    it('the latest Z BY BUSINESS DATE decides (a later Z of another date wins)', async () => {
+      const f = await fixture();
+      await zOn(f, 1, '2026-11-05', '2026-11-05T04:00:00+08:00', '2026-11-05T22:00:00+08:00');
+      await zOn(f, 2, '2026-11-06', '2026-11-05T22:00:00+08:00', '2026-11-06T22:00:00+08:00');
+      expect(await bdAt(f, '2026-11-06T23:00:00+08:00')).toBe('2026-11-07');
+    });
   });
 });
 
