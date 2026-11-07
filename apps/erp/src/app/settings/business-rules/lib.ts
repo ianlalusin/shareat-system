@@ -13,10 +13,11 @@ import { withOrgPrincipal } from '../../expenses/lib';
 
 export { withOrgPrincipal };
 
-/** The two group headings, in the order the page shows them. */
+/** The group headings, in the order the page shows them. */
 export const RULE_GROUPS = [
   { namespace: 'settlement', heading: 'Settlement' },
   { namespace: 'tax', heading: 'Tax' },
+  { namespace: 'pos', heading: 'POS' },
 ] as const;
 
 export interface RulesView {
@@ -37,16 +38,23 @@ export async function rulesView(actor: Actor): Promise<RulesView> {
   };
 }
 
-/** '70.000000' -> '₱70.00' for money, '0.500000' -> '0.5%' for a percent. Exact: text surgery, no floats. */
-export function showValue(unit: 'money' | 'percent', text: string): string {
+type RuleUnit = BusinessRuleItem['unit'];
+
+/** '70.000000' -> '₱70.00' for money, '0.500000' -> '0.5%' for a percent, '16.000000' -> '4:00 p.m.' for an hour. Exact: text surgery, no floats. */
+export function showValue(unit: RuleUnit, text: string): string {
   if (unit === 'money') return peso(inputValue('money', text));
+  if (unit === 'hour') {
+    const h = Number(inputValue('hour', text));
+    return `${h % 12 || 12}:00 ${['a.m.', 'p.m.'][Math.floor(h / 12)]}`;
+  }
   return `${inputValue('percent', text)}%`;
 }
 
-/** What goes in the box: money at two places ('70.00'), a percent without trailing zeros ('0.5'). */
-export function inputValue(unit: 'money' | 'percent', text: string): string {
+/** What goes in the box: money at two places ('70.00'), a percent without trailing zeros ('0.5'), an hour as a whole number ('4'). */
+export function inputValue(unit: RuleUnit, text: string): string {
   const [whole = '0', frac = ''] = text.split('.');
   if (unit === 'money') return `${whole}.${frac.padEnd(2, '0').slice(0, 2)}`;
+  if (unit === 'hour') return whole;
   const trimmed = frac.replace(/0+$/, '');
   return trimmed ? `${whole}.${trimmed}` : whole;
 }
