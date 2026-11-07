@@ -23,8 +23,10 @@ const KEYS = [
 const entries = Object.entries(RULE_REGISTRY) as [string, Record<string, unknown>][];
 
 describe('T-512 registry - closed set', () => {
-  it('holds exactly the five keys, no more (T-519 adds its own entry later, on purpose) [kills: a stray or missing key]', () => {
-    expect(Object.keys(RULE_REGISTRY).sort()).toEqual([...KEYS].sort());
+  it('holds the five T-512 keys, unchanged in name (T-539 adds the two POS keys on top, pinned in t539-pos-rule-keys; T-519 adds its own later) [kills: a missing or renamed T-512 key]', () => {
+    const have = Object.keys(RULE_REGISTRY);
+    for (const k of KEYS) expect(have, k).toContain(k);
+    expect(have.filter((k) => !(KEYS as readonly string[]).includes(k)).sort()).toEqual(['pos.business_day_start_hour', 'pos.senior_pwd_discount_percent']);
   });
 
   it('every entry carries label, help, unit, default, min, max, capability and namespace', () => {
@@ -104,7 +106,10 @@ describe('T-512 registry - closed set', () => {
     for (const [key, e] of entries) {
       expect(String(e.namespace).toLowerCase(), key).toBe(key.split('.')[0]);
     }
-    expect(new Set(entries.map(([, e]) => String(e.namespace).toLowerCase()))).toEqual(new Set(['settlement', 'tax']));
+    // The five T-512 keys sit in Settlement or Tax; the POS namespace is T-539's two keys only.
+    const ns = (keys: readonly string[]) => new Set(entries.filter(([k]) => keys.includes(k)).map(([, e]) => String(e.namespace).toLowerCase()));
+    expect(ns(KEYS)).toEqual(new Set(['settlement', 'tax']));
+    expect(new Set(entries.map(([, e]) => String(e.namespace).toLowerCase()))).toEqual(new Set(['settlement', 'tax', 'pos']));
   });
 });
 

@@ -124,7 +124,7 @@ describe('T-512 reader - ruleValue and loadRuleBook on real rows', () => {
     });
     expect(out.afterLoad).toBe(1);
     expect(out.total).toBe(1);
-    expect(out.answers).toBe(28 * 5);
+    expect(out.answers).toBe(28 * KEYS.length); // T-539: KEYS is every registry key (seven since the two POS keys), not a literal five
   });
 
   it('the book agrees with ruleValue for every key and a spread of dates', async () => {

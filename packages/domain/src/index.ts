@@ -199,3 +199,4 @@ export { buildRuleBook } from './business-rules/book';
 export type { RuleBook, RuleValue } from './business-rules/book';
 export { listBusinessRules, loadRuleBook, ruleValue, setBusinessRule } from './business-rules/rules';
 export type { BusinessRuleChange, BusinessRuleItem, SetBusinessRuleInput } from './business-rules/rules';
+export { readPosRules } from './business-rules/pos-rules';
