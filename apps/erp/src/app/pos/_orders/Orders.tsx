@@ -10,11 +10,12 @@ import type { PosEvent } from '@/lib/pos-device';
 import { Banner } from '@/components/ui';
 import { enqueue } from '@/lib/pos-device';
 import { usePos } from '../_shell/pos-context';
+import { newDeviceId } from './ids';
 import { OrderDialog, CancelLineDialog, type OrderDialogMode, type OrderSend } from './OrderDialogs';
 import type { MenuLike } from './menu-filter';
 import { OrdersView } from './OrdersView';
 import { actingPersonId, addLinesEvent, cancelLineEvent, ordersAccess, seatEvent, setHeadsEvent, submitPosEvent, takeOutEvent, HEADS_MAX, HEADS_MIN } from './payloads';
-import { projectOrders, type ServerStand, type SessionBody } from './project';
+import { projectOrders, type GhostLine, type ServerStand, type SessionBody } from './project';
 import { droppedEvents, SETTLE_MAX_MS, stillSettling, type Settling } from './settle';
 
 /** How many table reads run at once when the list changes. */
@@ -32,6 +33,8 @@ export function Orders() {
   const [settling, setSettling] = useState<Settling[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
   const [now, setNow] = useState(0);
+  const opener = useRef<HTMLElement | null>(null); // the control that opened the seat/add panel: focus goes back to it on close
+  const lastSeen = useRef(new Map<string, GhostLine>()); // every line a table body ever held, so a cancelled one can stay on screen until the server confirms
   const seen = useRef<{ events: PosEvent[]; sessionOf: (e: PosEvent) => string | null }>({ events: [], sessionOf: () => null });
 
   const stands = (pos?.openStands ?? null) as ServerStand[] | null;
@@ -44,14 +47,16 @@ export function Orders() {
   // What is drawn: the dropped-but-not-yet-caught-up events (settling) first, then the outbox as it stands.
   const outbox = pos?.pendingEvents ?? EMPTY;
   const applied = useMemo(() => [...settling.map((s) => s.event), ...outbox.filter((e) => !settling.some((s) => s.event.seq === e.seq))], [settling, outbox]);
-  const view = useMemo(
-    () => projectOrders({ openStands: stands, sessions: bodies }, applied, snapshot && menu ? { stands: snapshot.stands, menu } : null),
-    [stands, bodies, applied, snapshot, menu],
-  );
+  const view = useMemo(() => {
+    const cancelling = new Set(applied.filter((e) => e.kind === 'line.cancelled').map((e) => (e.payload as { lineId?: unknown }).lineId));
+    const ghosts = [...lastSeen.current.values()].filter((g) => cancelling.has(g.line.id));
+    return projectOrders({ openStands: stands, sessions: bodies }, applied, snapshot && menu ? { stands: snapshot.stands, menu } : null, ghosts);
+  }, [stands, bodies, applied, snapshot, menu]);
   const sessionOf = (e: PosEvent): string | null => {
     const p = e.payload as { sessionId?: unknown; lineId?: unknown };
     if (typeof p.sessionId === 'string') return p.sessionId;
-    return Object.keys(view.sessions).find((id) => view.sessions[id]!.lines.some((l) => l.id === p.lineId)) ?? null;
+    // a cancelled line the server body already dropped is in no view any more: its table is where it was last seen
+    return (typeof p.lineId === 'string' ? lastSeen.current.get(p.lineId)?.sessionId : undefined) ?? Object.keys(view.sessions).find((id) => view.sessions[id]!.lines.some((l) => l.id === p.lineId)) ?? null;
   };
   seen.current.sessionOf = sessionOf;
 
@@ -76,6 +81,13 @@ export function Orders() {
     return () => clearTimeout(t);
   }, [settling, version, landed]);
 
+  useEffect(() => {
+    if (dialog === null && opener.current) {
+      opener.current.focus();
+      opener.current = null;
+    }
+  }, [dialog]);
+
   // The shell's refusal notice names a cancelled line's stand from these bodies.
   const bodiesRef = pos?.bodiesRef;
   useEffect(() => {
@@ -87,6 +99,12 @@ export function Orders() {
     const t = setInterval(() => setNow(Date.now()), CLOCK_MS);
     return () => clearInterval(t);
   }, []);
+
+  // A table that left the open list takes its last-seen lines with it.
+  useEffect(() => {
+    const open = new Set(standKey.split(','));
+    for (const [lineId, g] of lastSeen.current) if (!open.has(g.sessionId)) lastSeen.current.delete(lineId);
+  }, [standKey]);
 
   // One read per open table whenever the list changes. A failed read (offline, signed out) keeps the last body, which is what the tablet knows.
   useEffect(() => {
@@ -101,6 +119,7 @@ export function Orders() {
               const res = await fetch(`/api/pos/session/${id}?storeId=${encodeURIComponent(storeId)}`, { credentials: 'same-origin' });
               const body = res.ok ? ((await res.json()) as SessionBody) : undefined;
               if (!stopped && (body || res.status === 404)) {
+                for (const line of body?.lines ?? []) lastSeen.current.set(line.id, { sessionId: id, line });
                 setBodies((b) => ({ ...b, [id]: body }));
                 setLanded((l) => ({ ...l, [id]: version })); // this body was read for THIS state version
               }
@@ -132,6 +151,10 @@ export function Orders() {
     }
   };
 
+  const open = (mode: OrderDialogMode) => {
+    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setDialog(mode);
+  };
   const tileOf = (id: string) => view.tiles.find((t) => t.sessionId === id);
   const labelOf = (id: string) => {
     const t = tileOf(id);
@@ -139,7 +162,7 @@ export function Orders() {
   };
   const send = (o: OrderSend): Promise<string | null> => {
     if (!menu || !dialog) return Promise.resolve('The menu is not on this tablet yet.');
-    const base = { personId, menu, now: new Date(), newId: () => crypto.randomUUID(), cart: o.cart };
+    const base = { personId, menu, now: new Date(), newId: newDeviceId, cart: o.cart };
     if (dialog.kind === 'seat') return build(() => seatEvent({ ...base, standId: o.standId!, heads: o.heads }));
     if (dialog.kind === 'take_out') return build(() => takeOutEvent({ ...base, name: o.name }));
     return build(() => addLinesEvent({ ...base, sessionId: dialog.sessionId, heads: o.heads }));
@@ -149,26 +172,28 @@ export function Orders() {
     <div className="space-y-3">
       {problem ? <Banner tone="error">{problem}</Banner> : null}
       {access.canWrite && stands === null ? <p className="text-sm text-muted">Waiting for the open tables…</p> : null}
-      <OrdersView
-        readOnly={!access.canWrite}
-        tiles={view.tiles}
-        sessions={view.sessions}
-        selectedSessionId={selected}
-        nowMs={now}
-        onSeat={() => setDialog({ kind: 'seat' })}
-        onTakeOut={() => setDialog({ kind: 'take_out' })}
-        onSelect={(id) => setSelected((cur) => (cur === id ? null : id))}
-        onHeads={(id, delta) => {
-          const next = (view.sessions[id]?.headsCashier ?? 0) + delta;
-          if (next >= HEADS_MIN && next <= HEADS_MAX) void build(() => setHeadsEvent({ personId, sessionId: id, heads: next, now: new Date() }));
-        }}
-        onAddItems={(id) => setDialog({ kind: 'add', sessionId: id, label: labelOf(id), heads: view.sessions[id]?.headsCashier ?? 0, packageOpen: tileOf(id)?.packageName != null, takeOut: tileOf(id)?.mode === 'take_out' })}
-        onCancelLine={(lineId) => {
-          const line = Object.values(view.sessions).flatMap((s) => s.lines).find((l) => l.id === lineId);
-          setCancelling({ lineId, name: line ? `${line.qty} × ${line.name}` : 'This line' });
-        }}
-      />
       {dialog ? <OrderDialog mode={dialog} menu={menu} stands={snapshot?.stands ?? []} tiles={view.tiles} onClose={() => setDialog(null)} onSend={send} /> : null}
+      <div hidden={dialog !== null}>
+        <OrdersView
+          readOnly={!access.canWrite}
+          tiles={view.tiles}
+          sessions={view.sessions}
+          selectedSessionId={selected}
+          nowMs={now}
+          onSeat={() => open({ kind: 'seat' })}
+          onTakeOut={() => open({ kind: 'take_out' })}
+          onSelect={(id) => setSelected((cur) => (cur === id ? null : id))}
+          onHeads={(id, delta) => {
+            const next = (view.sessions[id]?.headsCashier ?? 0) + delta;
+            if (next >= HEADS_MIN && next <= HEADS_MAX) void build(() => setHeadsEvent({ personId, sessionId: id, heads: next, now: new Date() }));
+          }}
+          onAddItems={(id) => open({ kind: 'add', sessionId: id, label: labelOf(id), heads: view.sessions[id]?.headsCashier ?? 0, packageOpen: tileOf(id)?.packageName != null, takeOut: tileOf(id)?.mode === 'take_out' })}
+          onCancelLine={(lineId) => {
+            const line = Object.values(view.sessions).flatMap((s) => s.lines).find((l) => l.id === lineId);
+            setCancelling({ lineId, name: line ? `${line.qty} × ${line.name}` : 'This line' });
+          }}
+        />
+      </div>
       {cancelling ? (
         <CancelLineDialog
           lineName={cancelling.name}

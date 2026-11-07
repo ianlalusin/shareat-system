@@ -320,7 +320,7 @@ export async function getSessionBill(tx: Tx, actor: Actor, input: { storeId: str
     session: { id: session.id, mode: session.mode, standId: session.standId, status: session.status, headsCashier: session.headsCashier, headsServer: session.headsServer },
     lines: lines.map((l) => ({
       id: l.id, kind: l.kind, name: l.name, qty: l.qty, unitPrice: l.unitPrice, kitchenStatus: l.kitchenStatus, bundleHeads: l.bundleHeads,
-      menuItemId: l.menuItemId, note: l.note,
+      menuItemId: l.menuItemId, note: l.note, addedAtDevice: l.addedAtDevice,
       discounts: l.discounts.map((d) => ({ id: d.id, kind: d.kind, valueType: d.valueType, value: money(d.value), qty: d.qty, dinerNo: d.dinerNo, presetId: d.presetId })),
     })),
     pricing: priced,

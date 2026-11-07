@@ -268,7 +268,9 @@ describe('phone / kitchen browser: Orders is read-only (row 447)', () => {
     expect(html).toMatch(/<button\b[^>]*\bdisabled\b[^>]*>(?:(?!<\/button>)[\s\S])*Pay/);
   });
 
-  it('a package table whose server head count is still unknown carries the Heads? tag', async () => {
-    expect(await render(false)).toContain('Heads?');
+  it('a package table whose server head count is still unknown says Heads not checked, with no pill', async () => {
+    const html = await render(false);
+    expect(html).toContain('Heads not checked');
+    expect(html).not.toContain('Heads?');
   });
 });

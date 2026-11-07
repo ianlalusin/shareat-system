@@ -516,7 +516,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1540 -> 1553, T-526 POS kiosk shell (+13 controls), re-measured on main, 7 Nov 2026, BOSS approved.
     // 1553 -> 1557, T-526b (+4 controls), re-measured on main, 7 Nov 2026, BOSS approved.
     // 1557 -> 1586, T-527 (+29 controls), re-measured on main, 7 Nov 2026, BOSS approved.
-    expect(results.length).toBe(1586);
+    // 1586 -> 1587, T-527b (+1 controls), re-measured on main, 7 Nov 2026, BOSS approved.
+    expect(results.length).toBe(1587);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

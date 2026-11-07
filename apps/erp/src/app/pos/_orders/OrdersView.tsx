@@ -61,12 +61,13 @@ function TileCard({ tile, loaded, selected, nowMs, onSelect }: { tile: Tile; loa
       <button type="button" data-erp-size="free" aria-pressed={selected} className={`${TILE} ${selected ? 'border-ink bg-warning-soft' : 'border-surface-border'}`} onClick={onSelect}>
         <span className="flex flex-wrap items-center gap-2">
           <span className="font-display text-2xl font-bold">{standLabel(tile)}</span>
-          {tile.needsHeads ? <Badge tone="info" label="Heads?" /> : null}
+          {tile.headsMismatch ? <Badge tone="warning" label={`Heads ${tile.headsCashier} vs ${tile.headsServer}`} /> : null}
           {tile.pending ? <Badge tone="info" label="Sending" /> : null}
         </span>
         <span className="text-sm text-muted">
           {headsText(tile)}
           {tile.packageName ? ` · ${tile.packageName}` : tile.mode === 'dine_in' && loaded ? ' · à la carte only' : ''}
+          {tile.needsHeads ? ' · Heads not checked' : ''}
         </span>
         <TimeBar openedAtDevice={tile.openedAtDevice} nowMs={nowMs} />
       </button>
@@ -75,7 +76,7 @@ function TileCard({ tile, loaded, selected, nowMs, onSelect }: { tile: Tile; loa
 }
 
 function LineRow({ line, readOnly, onCancel }: { line: ProjectedLine; readOnly: boolean; onCancel: () => void }) {
-  const cancellable = !readOnly && !line.cancelled && line.kitchenStatus === 'queued';
+  const cancellable = !readOnly && !line.cancelled && !line.extraHeads && line.kitchenStatus === 'queued';
   return (
     <li className="flex items-start justify-between gap-3 border-b border-surface-border py-3">
       <div className="min-w-0">
@@ -85,7 +86,13 @@ function LineRow({ line, readOnly, onCancel }: { line: ProjectedLine; readOnly: 
         {line.optionNames.length > 0 ? <p className="text-xs text-muted">{line.optionNames.join(', ')}</p> : null}
         {line.note ? <p className="text-xs text-muted">Note: {line.note}</p> : null}
         <p className="mt-1 flex flex-wrap items-center gap-2">
-          {line.cancelled ? <Badge tone="closed" label="Cancelling" /> : <Badge tone={line.kitchenStatus === 'served' ? 'success' : 'warning'} label={line.kitchenStatus === 'served' ? 'Served' : 'Queued'} />}
+          {line.cancelled ? (
+            <Badge tone="closed" label="Cancelling…" />
+          ) : line.kitchenStatus === 'served' ? (
+            <Badge tone="success" label="Served" />
+          ) : line.pending ? (
+            <Badge tone="warning" label="Queued" />
+          ) : null}
           {line.pending ? (
             <span className="inline-flex items-center gap-1 text-xs text-muted">
               <span aria-hidden="true" className="h-2 w-2 rounded-full bg-info" />
@@ -126,11 +133,12 @@ function Panel({ tile, session, readOnly, nowMs, onHeads, onAddItems, onCancelLi
     <aside aria-label={`${standLabel(tile)} order`} className="flex flex-col rounded-2xl border border-surface-border bg-surface p-4 lg:w-96 lg:shrink-0">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-display text-2xl font-bold">{standLabel(tile)}</h2>
-        {tile.needsHeads ? <Badge tone="info" label="Heads?" /> : null}
+        {tile.headsMismatch ? <Badge tone="warning" label={`Heads ${tile.headsCashier} vs ${tile.headsServer}`} /> : null}
       </div>
       <div className="mt-2 flex items-center justify-between gap-3">
         <p className="text-sm text-muted">
           {headsText(tile)} · seated {clock.label}
+          {tile.needsHeads ? ' · heads not checked' : ''}
         </p>
         {!readOnly && tile.mode === 'dine_in' ? (
           <div className="flex items-center gap-2" role="group" aria-label="Heads">

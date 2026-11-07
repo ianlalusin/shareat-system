@@ -44,7 +44,7 @@ export async function buildPosSnapshot(tx: Tx, input: { pairing: PosPairing }, d
   const terminal = await posV2Repo.getTerminalForPairing(tx, orgId, storeId, pairingId);
   if (!terminal) throw refuse('pos: pairing has no terminal', NO_TILL_NUMBER);
   const storeRow = await storesRepo.getById(tx, orgId, storeId);
-  const menu = await loadStoreMenu(tx, orgId, storeId);
+  const menu = await loadStoreMenu(tx, orgId, storeId, undefined, { showWithdrawnStore: true }); // T-527b: a sold-out dish stays on the tablet, greyed (row 307)
   const businessDate = await businessDateOf(tx, orgId, storeId, deps);
   const rules = await readRules(tx, orgId, businessDate, deps);
 

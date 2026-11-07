@@ -41,7 +41,7 @@ const C = id(102); // a session that exists only as a pending stand.opened (stan
 const T_A = '2026-11-07T09:00:00.000Z';
 const T_B = '2026-11-07T09:30:00.000Z';
 const T_C = '2026-11-07T10:00:00.000Z';
-const L = { pkg: id(200), pork: id(201), cola: id(202), newPork: id(203), newPkg: id(204), c1: id(205) };
+const L = { pkg: id(200), pork: id(201), cola: id(202), newPork: id(203), newPkg: id(204), c1: id(195) }; // c1 sorts before newPork: lines of one event share a time, so lineId carries the cart order
 
 const SERVER = {
   openStands: [
@@ -93,8 +93,8 @@ describe('projectOrders - what the server told us', () => {
     const { projectOrders } = await load();
     const view = projectOrders(SERVER, [], SNAPSHOT);
     expect(view.sessions[A].lines).toEqual([
-      { id: L.pkg, name: 'Unli Grill', qty: 4, unitPrice: '449.00', kitchenStatus: 'queued', note: null, optionNames: [], pending: false, cancelled: false },
-      { id: L.pork, name: 'Pork belly', qty: 2, unitPrice: '250.00', kitchenStatus: 'served', note: null, optionNames: [], pending: false, cancelled: false },
+      { id: L.pkg, name: 'Unli Grill', qty: 4, unitPrice: '449.00', kitchenStatus: 'queued', note: null, optionNames: [], pending: false, cancelled: false, addedAtDevice: null },
+      { id: L.pork, name: 'Pork belly', qty: 2, unitPrice: '250.00', kitchenStatus: 'served', note: null, optionNames: [], pending: false, cancelled: false, addedAtDevice: null },
     ]);
   });
 
@@ -129,8 +129,8 @@ describe('projectOrders - each pending event kind', () => {
       SNAPSHOT,
     );
     expect(view.sessions[C].lines).toEqual([
-      { id: L.c1, name: 'Unli Grill', qty: 3, unitPrice: '449.00', kitchenStatus: 'queued', note: null, optionNames: [], pending: true, cancelled: false },
-      { id: L.newPork, name: 'Pork belly', qty: 1, unitPrice: '260.00', kitchenStatus: 'queued', note: 'no chili', optionNames: ['Spicy'], pending: true, cancelled: false },
+      { id: L.c1, name: 'Unli Grill', qty: 3, unitPrice: '449.00', kitchenStatus: 'queued', note: null, optionNames: [], pending: true, cancelled: false, addedAtDevice: T_C },
+      { id: L.newPork, name: 'Pork belly', qty: 1, unitPrice: '260.00', kitchenStatus: 'queued', note: 'no chili', optionNames: ['Spicy'], pending: true, cancelled: false, addedAtDevice: T_C },
     ]);
     expect(tileFields(view.tiles[0])).toMatchObject({ packageName: 'Unli Grill', needsHeads: true });
   });
@@ -165,7 +165,7 @@ describe('projectOrders - each pending event kind', () => {
     const { projectOrders } = await load();
     const view = projectOrders(SERVER, [cancelled(L.pork)], SNAPSHOT);
     expect(view.sessions[A].lines.map((l: { id: string; cancelled: boolean }) => [l.id, l.cancelled])).toEqual([[L.pkg, false], [L.pork, true]]);
-    expect(view.sessions[A].lines[1]).toMatchObject({ pending: false, qty: 2 }); // the cancel is pending, the line itself was already on the server
+    expect(view.sessions[A].lines[1]).toMatchObject({ pending: true, qty: 2 }); // T-527b: a line touched by a pending event shows the sending dot, and a cancel touches it
     expect(view.tiles.map(tileFields)).toEqual(projectOrders(SERVER, [], SNAPSHOT).tiles.map(tileFields));
   });
 

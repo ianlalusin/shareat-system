@@ -56,7 +56,7 @@ function eventLines(c: Common & { cart: readonly CartLine[]; heads: number; firs
       ...(l.variantId ? { variantId: l.variantId } : {}),
       qty: isPackage ? c.heads : l.qty, // a package is billed per head (T-524 ruling 3); the server derives the bundle's extra-heads line
       ...(note ? { note } : {}),
-      addedAtDevice: at,
+      addedAtDevice: at, // one time for the whole event; the cart order rides in the line ids (ids.ts)
       ...(l.optionValueIds && l.optionValueIds.length > 0 ? { optionValueIds: l.optionValueIds } : {}),
     };
   });

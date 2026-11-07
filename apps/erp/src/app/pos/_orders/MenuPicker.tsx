@@ -2,10 +2,10 @@
 
 /**
  * T-527 R4 - the menu picker (new-order.png): categories down the left, item tiles on the right, a choice sheet for an item with sizes or options, and the
- * order so far underneath. Used by the seat dialog and by "Add items". It only builds a cart; the container turns it into one event.
+ * (the running list of picks lives beside it: ItemsSoFar). Used by the seat dialog and by "Add items". It only builds a cart; the container turns it into one event.
  * An item that is sold out or not open yet shows greyed and cannot be tapped (row 307). Prices here are display only: the server sets the real price.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { peso } from '@/lib/format';
 import { asStoreMenu, displayUnitPrice, isOptionChoiceValid, needsChoiceSheet, orderableVariants, pickerCatalog, type MenuLike, type PickerItem, type Variant } from './menu-filter';
 import { NOTE_MAX, type CartLine } from './payloads';
@@ -46,6 +46,17 @@ function ChoiceSheet({ item, onAdd, onCancel }: { item: PickerItem; onAdd: (line
   const ids = variant.optionGroups.flatMap((g) => picked[g.id] ?? []);
   const valid = variant.optionGroups.every((g) => isOptionChoiceValid(g, picked[g.id] ?? []));
   const isPackage = item.itemType === 'package';
+  // Escape closes the innermost layer first: this sheet, before the panel behind it (the panel skips an Escape that was already handled).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      onCancel();
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bound once per open sheet
+  }, []);
   const toggle = (groupId: string, valueId: string, single: boolean) =>
     setPicked((cur) => {
       const now = cur[groupId] ?? [];
@@ -100,8 +111,8 @@ function ChoiceSheet({ item, onAdd, onCancel }: { item: PickerItem; onAdd: (line
           </button>
         </div>
       )}
-      <label className="block space-y-1 text-sm font-semibold text-muted">
-        Note (optional)
+      <label className="block space-y-2 text-sm font-semibold text-muted">
+        <span className="block">Note (optional)</span>
         <input type="text" data-erp-size="free" className={FIELD} maxLength={NOTE_MAX} value={note} onChange={(e) => setNote(e.target.value)} />
       </label>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -150,7 +161,6 @@ export function MenuPicker({ menu, packageOpen, hidePackages, heads, cart, onCha
     if (needsChoiceSheet(item)) setSheet(item);
     else add({ itemId: item.id, variantId: orderableVariants(item)[0]!.id, qty: 1 });
   };
-  const setQty = (index: number, qty: number) => onChange(qty < 1 ? cart.filter((_, i) => i !== index) : cart.map((l, i) => (i === index ? { ...l, qty } : l)));
 
   if (catalog.length === 0) return <p className="text-sm text-muted">There is nothing to order yet. The menu loads when the tablet is online.</p>;
   return (
@@ -189,46 +199,6 @@ export function MenuPicker({ menu, packageOpen, hidePackages, heads, cart, onCha
           )}
         </div>
       </div>
-      {cart.length > 0 ? (
-        <section aria-label="Order so far" className="rounded-2xl border border-surface-border bg-surface p-3">
-          <ul>
-            {cart.map((l, index) => {
-              const item = items.find((i) => i.id === l.itemId);
-              const variant = item?.variants.find((v) => v.id === l.variantId);
-              const isPackage = item?.itemType === 'package';
-              const options = variant ? variant.optionGroups.flatMap((g) => g.values.filter((v) => l.optionValueIds?.includes(v.id)).map((v) => v.name)) : [];
-              return (
-                <li key={`${l.itemId}-${index}`} className="flex items-center justify-between gap-3 border-b border-surface-border py-2 last:border-b-0">
-                  <div className="min-w-0 text-sm">
-                    <p className="font-semibold">
-                      {isPackage ? `${heads ?? 1} × ` : `${l.qty} × `}
-                      {item?.name ?? 'Item'}
-                      {variant?.label ? ` - ${variant.label}` : ''}
-                    </p>
-                    {options.length > 0 ? <p className="text-xs text-muted">{options.join(', ')}</p> : null}
-                    {l.note ? <p className="text-xs text-muted">Note: {l.note}</p> : null}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {isPackage ? null : (
-                      <button type="button" data-erp-size="free" className={STEP} aria-label={`Fewer ${item?.name ?? 'item'}`} onClick={() => setQty(index, l.qty - 1)}>
-                        −
-                      </button>
-                    )}
-                    {isPackage ? null : (
-                      <button type="button" data-erp-size="free" className={STEP} aria-label={`More ${item?.name ?? 'item'}`} onClick={() => setQty(index, l.qty + 1)}>
-                        +
-                      </button>
-                    )}
-                    <button type="button" data-erp-size="free" className={SECONDARY} aria-label={`Remove ${item?.name ?? 'item'}`} onClick={() => setQty(index, 0)}>
-                      Remove
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ) : null}
     </div>
   );
 }
