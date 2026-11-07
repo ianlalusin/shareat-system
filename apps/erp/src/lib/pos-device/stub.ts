@@ -31,13 +31,17 @@ const verifiers = new Map<string, StoredVerifier>();
 const meta = new Map<string, unknown>();
 let snapshot: CachedSnapshot | null = null;
 let nextSeq = 1;
-let nextTerminalSeq = 1; // reserveTerminalSeq() arrives with T-530a; nothing in T-526 calls it
+let nextTerminalSeq = 1;
 let running: Promise<DrainReport> | null = null;
 
 export async function enqueue(event: NewPosEvent): Promise<PosEvent> {
   const stored: PosEvent = { ...event, seq: nextSeq++ };
   outbox.set(stored.seq, stored);
   return stored;
+}
+/** T-528: the next receipt number for this till (the T-530a signature). Never returns the same number twice. */
+export async function reserveTerminalSeq(): Promise<number> {
+  return nextTerminalSeq++;
 }
 export async function resumeAbove(server: { lastSeq: number; lastTerminalSeq: number }): Promise<void> {
   nextSeq = Math.max(nextSeq, server.lastSeq + 1);

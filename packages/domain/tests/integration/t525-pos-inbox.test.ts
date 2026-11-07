@@ -1009,7 +1009,19 @@ describe('R7 - the snapshot (domain: buildPosSnapshot)', () => {
   it('store: id, name, mode and this pairing\'s till number', async () => {
     const f = await fixture();
     const s = await snapshot(f);
-    expect(s.body.store).toEqual({ storeId: f.storeId, name: f.storeName, mode: 'test', terminalNo: 1 });
+    expect(s.body.store).toEqual({ storeId: f.storeId, name: f.storeName, mode: 'test', terminalNo: 1, vatRegistered: true }); // the fixture's organization is VAT (tax_type 'vat')
+  });
+
+  it('T-528 R1: a non-VAT organization has store.vatRegistered false, and the ETag changes when tax_type changes (the tablet refetches)', async () => {
+    const f = await fixture();
+    const vat = await snapshot(f);
+    expect((vat.body.store as { vatRegistered: boolean }).vatRegistered).toBe(true);
+    await sql`update organizations set tax_type = 'non_vat' where id = ${f.orgId}`;
+    const nonVat = await snapshot(f);
+    expect((nonVat.body.store as { vatRegistered: boolean }).vatRegistered).toBe(false);
+    expect(nonVat.etag).not.toBe(vat.etag);
+    await sql`update organizations set tax_type = 'vat' where id = ${f.orgId}`;
+    expect((await snapshot(f)).etag, 'back to VAT: the same body, the same ETag').toBe(vat.etag);
   });
 
   it('menu is loadStoreMenu\'s own answer: the menu, its content hash, and the next change time', async () => {

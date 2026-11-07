@@ -4,7 +4,7 @@
  * T-527 R2 + R5 - the Orders tab as it is drawn: the tile grid and the table panel (orders.png). Presentational: everything arrives as props from the
  * container (`Orders.tsx`) and every action leaves as a callback, so this renders the same on the server (the tests) and in the browser.
  * `readOnly` (a phone or a kitchen browser, row 447) draws the tiles and the panel with NO Seat, Take-out, Add, heads or cancel control.
- * Money is shown only as qty x unit price for the eye: the bill total is T-528's. Tokens only; every control is 3rem or taller and opts out of the compact rule.
+ * Money is shown only as qty x unit price for the eye: the bill and its total are the Payment screen's (T-528). Tokens only; every control is 3rem or taller and opts out of the compact rule.
  */
 import { Badge } from '@/components/ui';
 import { peso } from '@/lib/format';
@@ -25,6 +25,11 @@ export interface OrdersViewProps {
   onHeads: (sessionId: string, delta: 1 | -1) => void;
   onAddItems: (sessionId: string) => void;
   onCancelLine: (lineId: string) => void;
+  /** T-528: opens the Payment screen for a table. Absent: the Pay button stays off. */
+  onPay?: (sessionId: string) => void;
+  /** T-528: prints the last receipt again (REPRINT). Absent or false: no button. */
+  canReprint?: boolean;
+  onReprint?: () => void;
 }
 
 // Plain literals: the touch-target census reads them. `min-h-12` is 3rem (POS_TOUCH), `min-h-16` is 4rem; both come from the spacing scale.
@@ -63,11 +68,19 @@ function TileCard({ tile, loaded, selected, nowMs, onSelect }: { tile: Tile; loa
           <span className="font-display text-2xl font-bold">{standLabel(tile)}</span>
           {tile.headsMismatch ? <Badge tone="warning" label={`Heads ${tile.headsCashier} vs ${tile.headsServer}`} /> : null}
           {tile.pending ? <Badge tone="info" label="Sending" /> : null}
+          {tile.paid ? <Badge tone="success" label="Paid, sending" /> : null}
         </span>
-        <span className="text-sm text-muted">
-          {headsText(tile)}
-          {tile.packageName ? ` · ${tile.packageName}` : tile.mode === 'dine_in' && loaded ? ' · à la carte only' : ''}
-          {tile.needsHeads ? ' · Heads not checked' : ''}
+        {/* One line, never wrapping, so the grid stays even; the full sentence is the accessible label (T-528 Addendum, P1). */}
+        <span className="flex min-w-0 items-center gap-2 whitespace-nowrap text-sm text-muted">
+          <span className="min-w-0 truncate">
+            {headsText(tile)}
+            {tile.packageName ? ` · ${tile.packageName}` : tile.mode === 'dine_in' && loaded ? ' · à la carte only' : ''}
+          </span>
+          {tile.needsHeads ? (
+            <span role="note" className="shrink-0 truncate" aria-label="Heads not checked yet. The server confirms the count at the stand." title="Heads not checked yet. The server confirms the count at the stand.">
+              Heads: not checked
+            </span>
+          ) : null}
         </span>
         <TimeBar openedAtDevice={tile.openedAtDevice} nowMs={nowMs} />
       </button>
@@ -125,9 +138,12 @@ interface PanelProps {
   onHeads: (delta: 1 | -1) => void;
   onAddItems: () => void;
   onCancelLine: (lineId: string) => void;
+  onPay?: () => void;
 }
 
-function Panel({ tile, session, readOnly, nowMs, onHeads, onAddItems, onCancelLine }: PanelProps) {
+function Panel({ tile, session, readOnly, nowMs, onHeads, onAddItems, onCancelLine, onPay }: PanelProps) {
+  const lines = session?.lines.filter((l) => !l.cancelled) ?? [];
+  const canPay = onPay !== undefined && tile.paid !== true && session?.loaded === true && lines.length > 0;
   const clock = tileClock(tile.openedAtDevice, nowMs);
   return (
     <aside aria-label={`${standLabel(tile)} order`} className="flex flex-col rounded-2xl border border-surface-border bg-surface p-4 lg:w-96 lg:shrink-0">
@@ -166,12 +182,9 @@ function Panel({ tile, session, readOnly, nowMs, onHeads, onAddItems, onCancelLi
           <button type="button" data-erp-size="free" className={SECONDARY} onClick={onAddItems}>
             Add items
           </button>
-          <button type="button" data-erp-size="free" className={PAY} disabled>
-            Pay
+          <button type="button" data-erp-size="free" className={PAY} disabled={!canPay} aria-disabled={!canPay} onClick={onPay}>
+            {tile.paid ? 'Paid, sending' : 'Pay'}
           </button>
-          <p className="text-center text-xs text-muted" title="Payment comes in the next update">
-            Payment comes in the next update
-          </p>
         </div>
       )}
     </aside>
@@ -195,6 +208,11 @@ export function OrdersView(p: OrdersViewProps) {
           </div>
           {p.readOnly ? null : (
             <div className="flex flex-wrap gap-3">
+              {p.canReprint && p.onReprint ? (
+                <button type="button" data-erp-size="free" className={TAKE_OUT} onClick={p.onReprint}>
+                  Reprint last receipt
+                </button>
+              ) : null}
               <button type="button" data-erp-size="free" className={TAKE_OUT} onClick={p.onTakeOut}>
                 Take-out
               </button>
@@ -224,6 +242,7 @@ export function OrdersView(p: OrdersViewProps) {
           onHeads={(d) => p.onHeads(selected.sessionId, d)}
           onAddItems={() => p.onAddItems(selected.sessionId)}
           onCancelLine={p.onCancelLine}
+          {...(p.onPay ? { onPay: () => p.onPay!(selected.sessionId) } : {})}
         />
       ) : null}
     </div>

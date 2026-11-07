@@ -31,6 +31,17 @@ export interface ServerLine {
   note?: string | null;
   /** T-527b: when the line was added (device time); the list is ordered by it so it never reshuffles. */
   addedAtDevice?: string;
+  /** T-528: the line's ACTIVE discounts, in creation order (getSessionBill). An older body has none. */
+  discounts?: ServerDiscount[];
+}
+export interface ServerDiscount {
+  id: string;
+  kind: 'senior' | 'pwd' | 'preset' | 'custom';
+  valueType: 'percent' | 'fixed';
+  value: string;
+  qty: number;
+  dinerNo: number | null;
+  presetId: string | null;
 }
 export interface SessionBody {
   session: { id: string; mode: string; standId: string | null; status: string; headsCashier: number; headsServer: number | null };
@@ -60,6 +71,8 @@ export interface Tile {
   headsMismatch: boolean;
   /** The tile exists ONLY because of a pending stand.opened. */
   pending: boolean;
+  /** T-528: a sale.completed for this table is still in the outbox: "Paid, sending". Present only then. */
+  paid?: true;
 }
 export interface ProjectedLine {
   id: string;
@@ -191,10 +204,12 @@ export function projectOrders(server: OrdersServer, pending: readonly PosEvent[]
     }
   };
 
+  const paidSessions = new Set<string>();
   for (const e of pending) {
     const p = e.payload as Payload;
     const sessionId = str(p.sessionId);
-    if (e.kind === 'stand.opened' && sessionId) {
+    if (e.kind === 'sale.completed' && sessionId) paidSessions.add(sessionId);
+    else if (e.kind === 'stand.opened' && sessionId) {
       if (!tiles.has(sessionId)) {
         const standId = str(p.standId);
         const heads = typeof p.headsCashier === 'number' ? p.headsCashier : 0;
@@ -271,6 +286,7 @@ export function projectOrders(server: OrdersServer, pending: readonly PosEvent[]
       packageName,
       needsHeads: dineIn && packageName !== null && t.headsServer === null,
       headsMismatch: dineIn && t.headsServer !== null && t.headsServer !== w.headsCashier,
+      ...(paidSessions.has(id) ? { paid: true as const } : {}),
     });
     sessions[id] = { headsCashier: w.headsCashier, headsServer: w.headsServer, loaded: w.loaded, lines: w.lines };
   }

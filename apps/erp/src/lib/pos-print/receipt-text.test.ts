@@ -71,6 +71,7 @@ function baseView(): ReceiptView {
     footerLines: ['This is not an official receipt'],
     offline: false,
     reprint: false,
+    vat: null,
   };
 }
 
@@ -250,5 +251,96 @@ describe('T-528a — the sales receipt', () => {
     expect(row('CHANGE')).toEqual({ text: 'CHANGE 0.00', width: 32 });
     // The real total is nowhere on the paper: the 2,092.42 came from the view, not from a sum.
     expect(lines.some((line) => line.includes('2,092.42'))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-528b section 5 (absorbed into T-528): the VAT block. ASSUMED API: ReceiptView.vat =
+//   null | { vatRegistered: boolean; vatableSales; vatExemptSales; vatAmount; vatRateLabel: string; vatRemovedForScPwd }  (work order T-528b section 3).
+// The four lines follow TOTAL and come BEFORE the tender rule; `Less: VAT exemption (SC/PWD)` only when the removed amount is not "0.00".
+// RED NOW FOR THE RIGHT REASON: formatReceipt ignores `view.vat`.
+// ---------------------------------------------------------------------------------------------------------------------
+const VAT_SENIOR = {
+  vatRegistered: true,
+  vatableSales: money('1518.75'),
+  vatExemptSales: money('489.28'),
+  vatAmount: money('182.25'),
+  vatRateLabel: '12%',
+  vatRemovedForScPwd: money('58.72'),
+};
+const withVat = (vat: unknown): ReceiptView => ({ ...baseView(), vat }) as unknown as ReceiptView;
+/** The T-528a arrays with the VAT lines spliced in right after TOTAL (the tender rule that followed TOTAL stays after them). */
+const spliceAfterTotal = (base: string[], block: string[]): string[] => {
+  const at = base.findIndex((l) => l.startsWith('TOTAL '));
+  return [...base.slice(0, at + 1), ...block, ...base.slice(at + 1)];
+};
+
+describe('T-528b - the VAT block', () => {
+  it('VAT block with a senior: the exact 32- and 48-column arrays, four lines in order, after TOTAL and before the tenders', () => {
+    expect(formatReceipt(withVat(VAT_SENIOR), { width: 58, font: 'normal' })).toEqual(
+      spliceAfterTotal(RECEIPT_32, [
+        'Less: VAT exemption',
+        '(SC/PWD)                  -58.72',
+        'VATABLE SALES           1,518.75',
+        'VAT-EXEMPT SALES          489.28',
+        'VAT (12%)                 182.25',
+      ]),
+    );
+    expect(formatReceipt(withVat(VAT_SENIOR), { width: 80, font: 'normal' })).toEqual(
+      spliceAfterTotal(RECEIPT_48, [
+        'Less: VAT exemption (SC/PWD)              -58.72',
+        'VATABLE SALES                           1,518.75',
+        'VAT-EXEMPT SALES                          489.28',
+        'VAT (12%)                                 182.25',
+      ]),
+    );
+  });
+
+  it('VAT block without senior/PWD: no "Less: VAT exemption" line when the removed amount is "0.00"', () => {
+    const view = withVat({ ...VAT_SENIOR, vatExemptSales: money('0.00'), vatRemovedForScPwd: money('0.00'), vatableSales: money('1914.52'), vatAmount: money('177.90') });
+    const lines = formatReceipt(view, { width: 58, font: 'normal' });
+    expect(lines.some((l) => l.includes('Less: VAT exemption'))).toBe(false);
+    const at = lines.findIndex((l) => l.startsWith('TOTAL '));
+    expect(lines.slice(at + 1, at + 4)).toEqual(['VATABLE SALES           1,914.52', 'VAT-EXEMPT SALES            0.00', 'VAT (12%)                 177.90']);
+    expect(lines[at + 4]).toBe('-'.repeat(32)); // the tender rule follows straight after
+  });
+
+  it('non-VAT store: vatRegistered:false prints SC/PWD SALES instead of VAT-EXEMPT SALES', () => {
+    const view = withVat({ vatRegistered: false, vatableSales: money('0.00'), vatExemptSales: money('449.00'), vatAmount: money('0.00'), vatRateLabel: '12%', vatRemovedForScPwd: money('0.00') });
+    const lines = formatReceipt(view, { width: 58, font: 'normal' });
+    expect(lines).toContain('SC/PWD SALES              449.00');
+    expect(lines.some((l) => l.includes('VAT-EXEMPT SALES'))).toBe(false);
+    expect(lines.some((l) => l.includes('Less: VAT exemption'))).toBe(false);
+  });
+
+  it('vat null prints nothing new: the T-528a arrays are unchanged', () => {
+    expect(formatReceipt(withVat(null), { width: 58, font: 'normal' })).toEqual(RECEIPT_32);
+    expect(formatReceipt(withVat(null), { width: 80, font: 'normal' })).toEqual(RECEIPT_48);
+  });
+
+  it('the rate comes only from the label the caller passes (never typed in the formatter)', () => {
+    const lines = formatReceipt(withVat({ ...VAT_SENIOR, vatRateLabel: '7.5%' }), { width: 58, font: 'normal' });
+    expect(lines).toContain('VAT (7.5%)                182.25');
+    expect(lines.some((l) => l.includes('VAT (12%)'))).toBe(false);
+  });
+
+  it('every VAT-block line fits every paper and font', () => {
+    for (const layout of [{ width: 58, font: 'normal' }, { width: 58, font: 'small' }, { width: 80, font: 'normal' }, { width: 80, font: 'small' }] as PrintLayout[]) {
+      const cols = columnsFor(layout);
+      for (const line of formatReceipt(withVat(VAT_SENIOR), layout)) expect(line.length, `"${line}" ${layout.width}/${layout.font}`).toBeLessThanOrEqual(cols);
+    }
+  });
+
+  it('a PWD diner and two diners: the diner block prints PWD #2 and both diners in order', () => {
+    const view = baseView();
+    view.diners = [
+      { dinerNo: 1, kind: 'senior', holderName: 'Lolita R.', idNumber: 'OSCA 04-1187' },
+      { dinerNo: 2, kind: 'pwd', holderName: 'Ramon C.', idNumber: 'PWD 77-3021' },
+    ];
+    const lines = formatReceipt(view, { width: 58, font: 'normal' });
+    const at = lines.indexOf('SENIOR #1');
+    expect(lines.slice(at, at + 6)).toEqual(['SENIOR #1', '  Name: Lolita R.', '  ID: OSCA 04-1187', 'PWD #2', '  Name: Ramon C.', '  ID: PWD 77-3021']);
+    expect(lines[at - 1]).toBe('-'.repeat(32));
+    expect(lines[at + 6]).toBe('This is not an official receipt');
   });
 });

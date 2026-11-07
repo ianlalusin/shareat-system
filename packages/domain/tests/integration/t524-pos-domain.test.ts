@@ -1815,3 +1815,14 @@ describe('R11 - the append guard (migration 0240): a sales receipt\'s children c
     expect(code(err)).toBe('23001');
   });
 });
+
+describe('T-528 R1: priceFromDb always passes the real rates', () => {
+  it('a bill with NO senior/PWD discount still has the right VAT split (VAT-registered org, 12%): 2 x 250.00 -> VATable 446.43 + VAT 53.57', async () => {
+    const f = await fixture();
+    const s = await open(f, { heads: 2 });
+    await add(f, s.sessionId, [{ item: f.menu.pork, qty: 2 }]);
+    const bill = (await asOrg(f.orgId, (tx) => P.getSessionBill(tx, f.counter, { storeId: f.storeId, sessionId: s.sessionId }, RATES))) as unknown as { pricing: { total: string; vat: Record<string, string> } };
+    expect(bill.pricing.total).toBe('500.00');
+    expect(bill.pricing.vat).toEqual({ vatableSales: '446.43', vatExemptSales: '0.00', vatAmount: '53.57', vatRemovedForScPwd: '0.00' });
+  });
+});

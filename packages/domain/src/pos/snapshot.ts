@@ -22,7 +22,7 @@ export const NO_TILL_NUMBER = 'This tablet has no till number yet. Ask a manager
 
 export interface PosSnapshot {
   body: {
-    store: { storeId: string; name: string; mode: string; terminalNo: number };
+    store: { storeId: string; name: string; mode: string; terminalNo: number; vatRegistered: boolean };
     menu: Awaited<ReturnType<typeof loadStoreMenu>>;
     stands: { id: string; number: number }[];
     tenders: { id: string; name: string; kind: string }[];
@@ -59,7 +59,7 @@ export async function buildPosSnapshot(tx: Tx, input: { pairing: PosPairing }, d
   }
 
   const body: PosSnapshot['body'] = {
-    store: { storeId, name: storeRow?.name ?? '', mode: store.mode, terminalNo: terminal.terminalNo },
+    store: { storeId, name: storeRow?.name ?? '', mode: store.mode, terminalNo: terminal.terminalNo, vatRegistered: (await posV2Repo.getOrgTaxType(tx, orgId)) === 'vat' }, // T-528 R1: the tablet prices with the org's own VAT status
     menu,
     stands: (await posV2Repo.listActiveStands(tx, orgId, storeId)).map((s) => ({ id: s.id, number: s.number })),
     tenders: (await posV1Repo.listTendersByStore(tx, orgId, storeId)).filter((t) => t.isActive).map((t) => ({ id: t.id, name: t.name, kind: t.kind })),

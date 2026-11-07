@@ -22,6 +22,15 @@ export type { OfflineActor };
 export interface SnapshotOrdersPart {
   stands: { id: string; number: number }[];
   menu: unknown;
+  /** T-528: what the Payment screen prices and pays with. Null when the cached snapshot is older than the fields it needs (the tablet must go online once). */
+  payment?: SnapshotPaymentPart | null;
+}
+export interface SnapshotPaymentPart {
+  store: { storeId: string; name: string; terminalNo: number; vatRegistered: boolean };
+  tenders: { id: string; name: string; kind: string }[];
+  discountPresets: { id: string; name: string; valueType: string; value: string }[];
+  rules: { vatPercentBasisPoints: number; scPwdPercentBasisPoints: number };
+  staff: { personId: string; displayName: string }[];
 }
 
 export interface DeviceSync {
@@ -52,9 +61,24 @@ function staffOf(s: CachedSnapshot | null): SnapshotStaff[] {
   return (s?.body as Partial<SnapshotBody> | undefined)?.staff ?? [];
 }
 
+function paymentPartOf(b: Record<string, unknown>): SnapshotPaymentPart | null {
+  const store = b.store as Partial<SnapshotPaymentPart['store']> | undefined;
+  const rules = b.rules as Partial<SnapshotPaymentPart['rules']> | undefined;
+  if (!store || typeof store.terminalNo !== 'number' || typeof store.vatRegistered !== 'boolean' || typeof store.name !== 'string') return null;
+  if (!rules || typeof rules.vatPercentBasisPoints !== 'number' || typeof rules.scPwdPercentBasisPoints !== 'number') return null;
+  if (!Array.isArray(b.tenders) || !Array.isArray(b.discountPresets)) return null;
+  return {
+    store: { storeId: String(store.storeId ?? ''), name: store.name, terminalNo: store.terminalNo, vatRegistered: store.vatRegistered },
+    tenders: b.tenders as SnapshotPaymentPart['tenders'],
+    discountPresets: b.discountPresets as SnapshotPaymentPart['discountPresets'],
+    rules: { vatPercentBasisPoints: rules.vatPercentBasisPoints, scPwdPercentBasisPoints: rules.scPwdPercentBasisPoints },
+    staff: Array.isArray(b.staff) ? (b.staff as SnapshotPaymentPart['staff']) : [],
+  };
+}
+
 function ordersPartOf(s: CachedSnapshot | null): SnapshotOrdersPart | null {
-  const b = s?.body as Partial<SnapshotOrdersPart> | undefined;
-  return b && Array.isArray(b.stands) && b.menu ? { stands: b.stands, menu: b.menu } : null;
+  const b = s?.body as (Partial<SnapshotOrdersPart> & Record<string, unknown>) | undefined;
+  return b && Array.isArray(b.stands) && b.menu ? { stands: b.stands, menu: b.menu, payment: paymentPartOf(b) } : null;
 }
 
 const sameEvents = (a: PosEvent[], b: PosEvent[]): boolean => a.length === b.length && a.every((e, i) => e.seq === b[i]!.seq);

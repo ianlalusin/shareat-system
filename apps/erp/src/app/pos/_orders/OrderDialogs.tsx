@@ -5,9 +5,9 @@
  * Each one only collects choices; the container turns them into ONE outbox event and closes the dialog when the save worked. Tap, never type (row 371):
  * the one typed field is the optional note, or the optional take-out name, or the reason when the cashier picks "Other".
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Dialog } from '@/components/ui';
-import { ItemsSoFar } from './ItemsSoFar';
+import { ItemsSoFar, ItemsSoFarTotal } from './ItemsSoFar';
 import { MenuPicker } from './MenuPicker';
 import type { MenuLike } from './menu-filter';
 import { CANCEL_REASONS, CANCEL_REASON_MAX, CANCEL_REASON_MIN, HEADS_MAX, HEADS_MIN, TAKE_OUT_NAME_MAX, type CartLine } from './payloads';
@@ -17,7 +17,7 @@ import { seatStandChoices, type Tile } from './project';
 const START_HEADS = 2;
 
 // Plain literals: the touch-target census reads them.
-const STAND = 'min-h-12 min-w-12 rounded-2xl border px-3 text-lg font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:cursor-not-allowed';
+const STAND = 'min-h-12 min-w-12 shrink-0 snap-start rounded-2xl border px-3 text-lg font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:cursor-not-allowed';
 const STEP = 'min-h-12 min-w-12 inline-flex items-center justify-center rounded-full border border-surface-border bg-surface text-xl font-semibold text-ink hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:opacity-50';
 const SEND = 'min-h-16 w-full inline-flex items-center justify-center rounded-full border border-transparent bg-brand px-6 text-base font-semibold text-white hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:bg-surface-border disabled:text-muted disabled:cursor-not-allowed';
 const CLOSE = 'min-h-12 inline-flex items-center justify-center rounded-full border border-surface-border bg-surface px-6 text-base font-semibold text-ink hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
@@ -43,6 +43,11 @@ export function OrderDialog({ mode, menu, stands, tiles, onClose, onSend }: { mo
   const [error, setError] = useState<string | null>(null);
   const seat = mode.kind === 'seat';
   const heading = useRef<HTMLHeadingElement>(null);
+  const standButtons = useRef(new Map<string, HTMLButtonElement>());
+  // Addendum 2: the stand row slides sideways, so the chosen stand is brought into view whenever the choice changes (never on open: nothing is chosen yet).
+  useEffect(() => {
+    if (standId !== null) standButtons.current.get(standId)?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  }, [standId]);
   // Not a Dialog, so it keeps a Dialog's keyboard manners (T-527b): focus starts inside it, and Escape closes it like Cancel, but only when that loses
   // nothing: not while saving, and not with items picked (Cancel is the explicit way out). An open choice sheet takes Escape first (it calls preventDefault).
   const guard = useRef({ busy: false, items: 0, close: onClose });
@@ -71,6 +76,21 @@ export function OrderDialog({ mode, menu, stands, tiles, onClose, onSend }: { mo
   const sendLabel = seat ? 'Start order · send to kitchen' : mode.kind === 'take_out' ? 'Send take-out order' : 'Send to kitchen';
   const pickedStand = stands.find((s) => s.id === standId);
   const asideTitle = seat ? (pickedStand ? `Stand ${pickedStand.number} · new` : 'New order') : mode.kind === 'take_out' ? 'Take-out · new' : mode.label;
+  // The arrow keys walk the row from the stand that has focus, skipping stands in use and stopping at both ends.
+  const walkStands = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    const choices = seatStandChoices(stands, tiles);
+    const from = choices.findIndex((c) => standButtons.current.get(c.id) === e.target);
+    const base = from >= 0 ? from : choices.findIndex((c) => c.id === standId);
+    const step = e.key === 'ArrowRight' ? 1 : -1;
+    for (let i = base + step; i >= 0 && i < choices.length; i += step) {
+      if (choices[i]!.inUse) continue;
+      e.preventDefault();
+      setStandId(choices[i]!.id);
+      standButtons.current.get(choices[i]!.id)?.focus();
+      return;
+    }
+  };
   const pickerHeads = mode.kind === 'add' ? mode.heads : mode.kind === 'take_out' ? null : heads;
   // A panel under the shell's header, not a full-screen cover: the status pill and the tabs stay in view the whole time (T-527b).
   return (
@@ -85,10 +105,14 @@ export function OrderDialog({ mode, menu, stands, tiles, onClose, onSend }: { mo
         {seat ? (
           <section aria-label="Stand" className="space-y-3">
             <h3 className="text-sm font-semibold text-muted">Stand</h3>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-nowrap gap-2 overflow-x-auto snap-x snap-mandatory pb-2 [scrollbar-width:thin]" onKeyDown={walkStands}>
               {seatStandChoices(stands, tiles).map((s) => (
                 <button
                   key={s.id}
+                  ref={(el) => {
+                    if (el) standButtons.current.set(s.id, el);
+                    else standButtons.current.delete(s.id);
+                  }}
                   type="button"
                   data-erp-size="free"
                   disabled={s.inUse}
@@ -130,8 +154,10 @@ export function OrderDialog({ mode, menu, stands, tiles, onClose, onSend }: { mo
       </div>
       <aside aria-label="New order summary" className="flex flex-col gap-4 rounded-2xl border border-surface-border bg-surface p-4 lg:w-96 lg:shrink-0">
         <h2 className="font-display text-2xl font-bold">{asideTitle}</h2>
-        {menu ? <ItemsSoFar cart={cart} menu={menu} heads={pickerHeads} onChange={setCart} /> : null}
-        <div className="space-y-2">
+        {menu ? <ItemsSoFar cart={cart} menu={menu} heads={pickerHeads} onChange={setCart} pinTotal /> : null}
+        {/* Pinned: the running total and the Send button stay in view however long the list grows (T-528 Addendum, P1). */}
+        <div className="sticky bottom-0 -mx-4 -mb-4 space-y-3 rounded-b-2xl bg-surface px-4 pb-4">
+          {menu ? <ItemsSoFarTotal cart={cart} menu={menu} heads={pickerHeads} /> : null}
           {error ? <p role="alert" className="text-sm font-semibold text-danger">{error}</p> : null}
           <button type="button" data-erp-size="free" className={SEND} disabled={!ready || busy} aria-disabled={!ready || busy} onClick={send}>
             {busy ? 'Saving…' : sendLabel}

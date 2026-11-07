@@ -13,7 +13,8 @@ import type { CartLine } from './payloads';
 const STEP = 'min-h-12 min-w-12 inline-flex items-center justify-center rounded-full border border-surface-border bg-surface text-xl font-semibold text-ink hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:opacity-50';
 const REMOVE = 'min-h-12 inline-flex items-center justify-center rounded-full border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
 
-export function ItemsSoFar({ cart, menu, heads, onChange }: { cart: CartLine[]; menu: MenuLike; heads: number | null; onChange: (cart: CartLine[]) => void }) {
+/** `pinTotal`: the caller shows the sum itself, pinned (ItemsSoFarTotal), so the list does not repeat it. */
+export function ItemsSoFar({ cart, menu, heads, onChange, pinTotal = false }: { cart: CartLine[]; menu: MenuLike; heads: number | null; onChange: (cart: CartLine[]) => void; pinTotal?: boolean }) {
   const rows = cartRows(cart, menu, heads);
   const setQty = (index: number, qty: number) => onChange(qty < 1 ? cart.filter((_, i) => i !== index) : cart.map((l, i) => (i === index ? { ...l, qty } : l)));
   return (
@@ -58,13 +59,21 @@ export function ItemsSoFar({ cart, menu, heads, onChange }: { cart: CartLine[]; 
           ))}
         </ul>
       )}
-      <div className="border-t border-surface-border pt-3">
-        <p className="flex items-baseline justify-between gap-3">
-          <span className="text-sm font-semibold text-muted">Items so far</span>
-          <span className="font-display text-2xl font-bold tabular-nums">{peso(itemsSoFarSum(rows))}</span>
-        </p>
-        <p className="mt-1 text-xs text-muted">Not the bill. VAT and discounts are added when the table pays.</p>
-      </div>
+      {pinTotal ? null : <ItemsSoFarTotal cart={cart} menu={menu} heads={heads} />}
     </section>
+  );
+}
+
+/** The running sum and its caveat; the panel pins it above the Send button (T-528 Addendum). */
+export function ItemsSoFarTotal({ cart, menu, heads }: { cart: CartLine[]; menu: MenuLike; heads: number | null }) {
+  const rows = cartRows(cart, menu, heads);
+  return (
+    <div className="border-t border-surface-border pt-3">
+      <p className="flex items-baseline justify-between gap-3">
+        <span className="text-sm font-semibold text-muted">Items so far</span>
+        <span className="font-display text-2xl font-bold tabular-nums">{peso(itemsSoFarSum(rows))}</span>
+      </p>
+      <p className="mt-1 text-xs text-muted">Not the bill. VAT and discounts are added when the table pays.</p>
+    </div>
   );
 }

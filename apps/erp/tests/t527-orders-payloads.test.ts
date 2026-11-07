@@ -255,7 +255,7 @@ describe('phone / kitchen browser: Orders is read-only (row 447)', () => {
     }
   });
 
-  it('the tablet has Seat a party and Take-out (60 px or taller), Add items, and a disabled Pay with the plain tooltip; it does not show the phone note', async () => {
+  it('the tablet has Seat a party and Take-out (60 px or taller), Add items, and a Pay button that is off until the table has lines (the T-527 placeholder is gone); it does not show the phone note', async () => {
     const html = await render(false);
     expect(html).not.toContain('Orders are taken on the store tablet.');
     for (const label of ['Seat a party', 'Take-out']) {
@@ -264,7 +264,7 @@ describe('phone / kitchen browser: Orders is read-only (row 447)', () => {
       expect(b!.attrs, `${label} must be at least 60 px tall`).toMatch(/min-h-(1[5-9]|2\d)\b|min-h-\[(6\d|[7-9]\d)px\]|min-h-\[(3\.75|[4-9](\.\d+)?)rem\]/);
     }
     expect(html).toContain('Add items');
-    expect(html).toContain('Payment comes in the next update');
+    expect(html).not.toContain('Payment comes in the next update');
     expect(html).toMatch(/<button\b[^>]*\bdisabled\b[^>]*>(?:(?!<\/button>)[\s\S])*Pay/);
   });
 

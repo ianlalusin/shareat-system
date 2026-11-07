@@ -16,6 +16,8 @@ export interface PosContextValue {
   /** The signed-in person; offline, `offlineActorPersonId` takes over (T-526 R5). */
   personId: string;
   offlineActorPersonId: string | null;
+  /** The name of whoever is selling now (the offline cashier when there is one): the receipt's CASHIER line. */
+  personName?: string;
   online: boolean;
   /** The state poll's open stands (T-524 `listOpenStands` rows); null until the first answer, or when this person may not read them. */
   openStands: unknown[] | null;

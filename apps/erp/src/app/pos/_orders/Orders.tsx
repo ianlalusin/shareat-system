@@ -8,7 +8,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PosEvent } from '@/lib/pos-device';
 import { Banner } from '@/components/ui';
-import { enqueue } from '@/lib/pos-device';
+import { enqueue, reserveTerminalSeq } from '@/lib/pos-device';
+import { printLines, type PrintResult } from '@/lib/pos-print/adapter';
+import { formatReceipt } from '@/lib/pos-print/receipt-text';
+import type { PrintLayout, ReceiptView } from '@/lib/pos-print/types';
+import { projectBill } from '../_payment/bill';
+import { extraHeadsId } from '../_payment/uuidv5';
+import { PRINT_LAYOUT, RECEIPT_COPIES, SENTENCES } from '../_payment/logic';
+import { PaymentPanel } from '../_payment/PaymentPanel';
 import { usePos } from '../_shell/pos-context';
 import { newDeviceId } from './ids';
 import { OrderDialog, CancelLineDialog, type OrderDialogMode, type OrderSend } from './OrderDialogs';
@@ -32,6 +39,10 @@ export function Orders() {
   const [landed, setLanded] = useState<Record<string, number | null>>({});
   const [settling, setSettling] = useState<Settling[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
+  const [paying, setPaying] = useState<string | null>(null);
+  const [lastReceipt, setLastReceipt] = useState<{ view: ReceiptView; layout: PrintLayout; receiptNo: string } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [extraIds, setExtraIds] = useState<Record<string, string>>({}); // a bundle's extra-heads line id, derived like the server does (uuidv5)
   const [now, setNow] = useState(0);
   const opener = useRef<HTMLElement | null>(null); // the control that opened the seat/add panel: focus goes back to it on close
   const lastSeen = useRef(new Map<string, GhostLine>()); // every line a table body ever held, so a cancelled one can stay on screen until the server confirms
@@ -135,6 +146,24 @@ export function Orders() {
     };
   }, [storeId, standKey, version]);
 
+  // The bill of the table being paid. A pending bundle with extra heads needs the server's derived line id first (async), so the bill is built here, in
+  // front of the early return, and an effect fills the ids in.
+  const draftBill = useMemo(
+    () => (paying && snapshot?.payment ? projectBill({ sessionId: paying, view: view.sessions[paying], body: bodies[paying], pending: applied, menu, presets: snapshot.payment.discountPresets, extraIds }) : null),
+    [paying, snapshot, view, bodies, applied, menu, extraIds],
+  );
+  const missingExtra = draftBill?.needsExtraFor.join(',') ?? '';
+  useEffect(() => {
+    if (!missingExtra) return;
+    let stopped = false;
+    void Promise.all(missingExtra.split(',').map(async (id) => [id, await extraHeadsId(id)] as const)).then((pairs) => {
+      if (!stopped) setExtraIds((cur) => ({ ...cur, ...Object.fromEntries(pairs) }));
+    });
+    return () => {
+      stopped = true;
+    };
+  }, [missingExtra]);
+
   if (!pos) return null;
   const access = ordersAccess({ paired: pos.paired });
   const personId = actingPersonId(pos.offlineActorPersonId ? { personId: pos.offlineActorPersonId } : null, pos.personId);
@@ -168,9 +197,61 @@ export function Orders() {
     return build(() => addLinesEvent({ ...base, sessionId: dialog.sessionId, heads: o.heads }));
   };
 
+  const payment = snapshot?.payment ?? null;
+  const payingTile = paying ? tileOf(paying) : undefined;
+  const reprint = async () => {
+    if (!lastReceipt) return;
+    const result: PrintResult = await printLines(formatReceipt({ ...lastReceipt.view, reprint: true }, lastReceipt.layout), { copies: RECEIPT_COPIES });
+    setNotice(result === 'failed' ? SENTENCES.printFailed : null);
+  };
+  if (paying && payingTile) {
+    const session = view.sessions[paying];
+    return (
+      <div className="space-y-3">
+        {payment && draftBill ? (
+          <PaymentPanel
+            sessionId={paying}
+            label={labelOf(paying)}
+            heads={Math.max(session?.headsCashier ?? 0, session?.headsServer ?? 0)}
+            isTakeOut={payingTile.mode === 'take_out'}
+            bill={draftBill}
+            presets={payment.discountPresets}
+            tenders={payment.tenders}
+            rules={payment.rules}
+            vatRegistered={payment.store.vatRegistered}
+            terminalNo={payment.store.terminalNo}
+            storeName={payment.store.name}
+            cashierName={pos.personName ?? payment.staff.find((s) => s.personId === personId)?.displayName ?? ''}
+            personId={personId}
+            online={pos.online}
+            layout={PRINT_LAYOUT}
+            deps={{ reserveTerminalSeq, newId: newDeviceId, enqueue, requestDrain: pos.requestDrain, print: printLines }}
+            sendEvent={async (event) => (await submitPosEvent({ enqueue, requestDrain: pos.requestDrain }, event).then((r) => (r.ok ? null : r.message)))}
+            newId={newDeviceId}
+            onBack={() => setPaying(null)}
+            onPaid={(done) => {
+              setLastReceipt({ view: done.view, layout: done.layout, receiptNo: done.receiptNo });
+              setNotice(done.notice);
+              setPaying(null);
+              setSelected(null);
+            }}
+          />
+        ) : (
+          <Banner tone="warning">This tablet has not loaded its price list yet. Connect it to the internet once, then try again.</Banner>
+        )}
+        {payment && draftBill ? null : (
+          <button type="button" data-erp-size="free" className="min-h-12 inline-flex items-center rounded-full border border-surface-border bg-surface px-6 text-sm font-semibold hover:bg-canvas" onClick={() => setPaying(null)}>
+            Back
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       {problem ? <Banner tone="error">{problem}</Banner> : null}
+      {notice ? <Banner tone="warning">{notice}</Banner> : null}
       {access.canWrite && stands === null ? <p className="text-sm text-muted">Waiting for the open tables…</p> : null}
       {dialog ? <OrderDialog mode={dialog} menu={menu} stands={snapshot?.stands ?? []} tiles={view.tiles} onClose={() => setDialog(null)} onSend={send} /> : null}
       <div hidden={dialog !== null}>
@@ -188,6 +269,9 @@ export function Orders() {
             if (next >= HEADS_MIN && next <= HEADS_MAX) void build(() => setHeadsEvent({ personId, sessionId: id, heads: next, now: new Date() }));
           }}
           onAddItems={(id) => open({ kind: 'add', sessionId: id, label: labelOf(id), heads: view.sessions[id]?.headsCashier ?? 0, packageOpen: tileOf(id)?.packageName != null, takeOut: tileOf(id)?.mode === 'take_out' })}
+          onPay={(id) => setPaying(id)}
+          canReprint={lastReceipt !== null}
+          onReprint={() => void reprint()}
           onCancelLine={(lineId) => {
             const line = Object.values(view.sessions).flatMap((s) => s.lines).find((l) => l.id === lineId);
             setCancelling({ lineId, name: line ? `${line.qty} × ${line.name}` : 'This line' });
