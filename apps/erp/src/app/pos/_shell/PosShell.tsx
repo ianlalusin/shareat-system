@@ -23,6 +23,7 @@ import { statusPillLabel, statusPillShort } from './status-pill';
 import { tabCount, visibleTabs } from './tabs';
 import { useDeviceSync } from './use-device-sync';
 import { usePosState } from './use-pos-state';
+import { useOutageReplay } from '../_kitchen/use-outage-replay';
 
 export interface PosShellProps {
   person: { personId: string; displayName: string };
@@ -50,6 +51,8 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
   const store = stores.find((s) => s.id === storeId);
   const state = usePosState(storeId);
   const sync = useDeviceSync({ paired: pairedStoreId !== null, personId: person.personId, online: state.online });
+  // T-529 R3: orders saved in the ~6 s before the poll says Offline still print, once.
+  useOutageReplay({ paired: pairedStoreId !== null, online: state.online, snapshot: sync.ordersSnapshot, pending: sync.pendingEvents, loaded: sync.pendingLoaded, openStands: state.body?.openStands ?? null });
   const [switching, setSwitching] = useState(false);
   const [offlineSince, setOfflineSince] = useState<number | null>(null);
   const [now, setNow] = useState(0);
@@ -141,6 +144,10 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
     personName: name,
     online: state.online,
     openStands: state.body?.openStands ?? null,
+    kitchenQueue: state.body?.kitchenQueue ?? null,
+    refillQueue: state.body?.refillQueue ?? null,
+    refillTables: state.body?.refillTables ?? null,
+    held: caps,
     stateVersion: state.body?.stateVersion ?? null,
     pendingEvents: sync.pendingEvents,
     ordersSnapshot: sync.ordersSnapshot,

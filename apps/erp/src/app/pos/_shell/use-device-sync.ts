@@ -35,6 +35,8 @@ export interface DeviceSync {
   ordersSnapshot: SnapshotOrdersPart | null;
   /** The outbox as it stands (the events not yet sent), oldest first: the Orders tab applies them on top of the server's list (T-527). */
   pendingEvents: PosEvent[];
+  /** True once the outbox has been read at least once (T-529: the outage print must not judge a list that is still empty because it was not loaded). */
+  pendingLoaded: boolean;
   /** Asks for a send now; a request made while one is running is sent right after it (T-527). */
   requestDrain: () => void;
   /** The Orders tab hears every result list from the drain's send wrapper, BEFORE the outbox drops those events (T-527 refusal notice). */
@@ -73,6 +75,7 @@ export function useDeviceSync(input: { paired: boolean; personId: string; online
   const [unpaired, setUnpaired] = useState(false);
   const [pending, setPending] = useState(0);
   const [pendingEvents, setPendingEvents] = useState<PosEvent[]>([]);
+  const [pendingLoaded, setPendingLoaded] = useState(false);
   const [sending, setSending] = useState(false);
   const [conflicts, setConflicts] = useState(0);
   const [actor, setActor] = useState<OfflineActor | null>(null);
@@ -93,8 +96,10 @@ export function useDeviceSync(input: { paired: boolean; personId: string; online
 
   const refreshPending = useCallback(async () => {
     setPending(await countPending());
-    const list = await listPending(500);
+    // The whole outbox in one read (T-530a: `listPending` takes a count and has no cap): the Orders projection, the outage print and its printed-set must see EVERY pending event.
+    const list = await listPending(await countPending());
     setPendingEvents((prev) => (sameEvents(prev, list) ? prev : list));
+    setPendingLoaded(true);
   }, []);
 
   const drainNow = useCallback(async () => {
@@ -214,6 +219,7 @@ export function useDeviceSync(input: { paired: boolean; personId: string; online
     staff: staffOf(snapshot),
     ordersSnapshot: ordersPartOf(snapshot),
     pendingEvents,
+    pendingLoaded,
     requestDrain,
     setResultsHandler,
     needsInternet: showNeedsInternetOnce({ paired, snapshotUsable: usable, unpaired }),

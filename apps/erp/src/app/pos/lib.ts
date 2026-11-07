@@ -11,6 +11,9 @@ import { readPosTabletToken } from '@/lib/session';
 /** The three words that open a POS tab (Receipts and Till ride on `record_sale`). */
 export const POS_CAPABILITIES: readonly Capability[] = ['record_sale', 'serve_pos_ticket', 'request_pos_refill'];
 
+/** T-529: the words the shell hands to the tabs. `confirm_pos_heads` is not a tab of its own (Refills opens on `request_pos_refill`) but the Refills tab draws its Heads control by it. */
+export const POS_SHELL_CAPABILITIES: readonly Capability[] = [...POS_CAPABILITIES, 'confirm_pos_heads'];
+
 /** What the shell shows beside the tabs: the stores this person works at, and their own name (names, never ids: bible row 229). */
 export async function posShellFacts(tx: Tx, actor: Actor): Promise<{ stores: { id: string; name: string }[]; displayName: string }> {
   const stores = (await heldStoresFor(tx, actor, POS_CAPABILITIES)).map((s) => ({ id: s.id, name: s.name }));

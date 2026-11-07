@@ -9,6 +9,8 @@ export const POS_OFFLINE_SNAPSHOT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 export const POS_SNAPSHOT_REFRESH_MS = 5 * 60 * 1000;
 /** R3: the state poll that drives the tab counts and the online pill; about 6 s to notice a drop after two misses. */
 export const POS_POLL_INTERVAL_MS = 3000;
+/** T-529: how often the Kitchen and Refills tabs re-read the stations and refill lists on a browser or phone (the route answers 304 when nothing changed). */
+export const POS_MENU_META_REFRESH_MS = 60_000;
 /** R3: how often an online tablet with waiting actions tries to send them. */
 export const POS_DRAIN_INTERVAL_MS = 10_000;
 

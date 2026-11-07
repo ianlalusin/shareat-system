@@ -21,6 +21,12 @@ export interface PosContextValue {
   online: boolean;
   /** The state poll's open stands (T-524 `listOpenStands` rows); null until the first answer, or when this person may not read them. */
   openStands: unknown[] | null;
+  /** T-529: the polled kitchen and refill queues and the open package tables; each null until the first answer or when this person may not read it. */
+  kitchenQueue?: unknown[] | null;
+  refillQueue?: unknown[] | null;
+  refillTables?: unknown[] | null;
+  /** The POS words this person holds now (the offline cashier's own list while one is signed in offline). */
+  held?: ReadonlySet<string>;
   stateVersion: number | null;
   pendingEvents: PosEvent[];
   ordersSnapshot: SnapshotOrdersPart | null;

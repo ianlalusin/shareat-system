@@ -6,7 +6,7 @@ export { openStand, addLines, confirmHeads, setHeadsCashier, requestRefill, serv
 export type { LineInput, OpenStandInput } from './order';
 export { addLineDiscount, removeLineDiscount, applyPresetToAllLines } from './discounts';
 export type { AddLineDiscountInput } from './discounts';
-export { voidUnpaidSession, completeSale, currentBusinessDate, getSessionBill, listOpenStands, listKitchenQueue, listRefillQueue, listTodaysSalesReceipts } from './sale';
+export { voidUnpaidSession, completeSale, currentBusinessDate, getSessionBill, listOpenStands, listRefillableTables, listKitchenQueue, listRefillQueue, listTodaysSalesReceipts } from './sale';
 export type { CompleteSaleInput, VoidInput } from './sale';
 export {
   applyPosEvents,

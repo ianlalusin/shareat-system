@@ -528,8 +528,9 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1540 -> 1514, T-550 (row 452): -26 controls, the two retired pages (/inventory/pos-map, /inventory/pos-usage) and the one ACTION_LINK on /inventory/usage/[id] that pointed at the retired pull page (now plain text); FAIL/UNRESOLVED moved as noted above; measured by runCensus().
     // 1514 -> 1515, T-550 (Ian, 8 Nov): the Void POS pull submit <button> (ConfirmDestructive) moved onto /inventory/usage/[id]; net vs 1540 is -25; FAIL/UNRESOLVED unmoved at 113/49; measured by runCensus(); pending BOSS approval.
     // 1620 - 25 (T-550) = 1595 after merging main into #207, 8 Nov 2026, BOSS approved.
-    expect(results.length).toBe(1602);
     // 1595 -> 1602, T-546 Tills (+7 controls); re-measured after rebase on main, 8 Nov 2026, BOSS approved.
+    // 1602 -> 1614, +12 T-529 Kitchen/Refills controls; re-measured after rebase on main, 8 Nov 2026, BOSS approved.
+    expect(results.length).toBe(1614);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
