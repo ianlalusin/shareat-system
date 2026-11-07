@@ -161,7 +161,7 @@ function Evidence({ detail }: { detail: DayReviewDetail }) {
           <ul className="mt-2 space-y-1 text-sm text-warning-ink">
             {day.anomalies.map((a) => (
               <li key={a}>
-                {isBlockingAnomaly(a) ? '⛔' : '⚠️'} {ANOMALY_LABEL[a] ?? a}
+                {!isBlockingAnomaly(a) && '⚠️ '}{ANOMALY_LABEL[a] ?? a}
                 {!isBlockingAnomaly(a) && (
                   <span className="ml-1 text-xs text-warning-ink">
                     — advisory, does not block sign-off
@@ -178,7 +178,7 @@ function Evidence({ detail }: { detail: DayReviewDetail }) {
               renders only when something actually blocks. */}
           {day.anomalies.some((a) => isBlockingAnomaly(a)) && (
             <p className="mt-2 text-xs text-warning-ink">
-              ⛔ The blocking items above must be settled before this day can be verified — a
+              The blocking items above must be settled before this day can be verified — a
               sign-off that ignores them records an approval nobody actually made.
             </p>
           )}
@@ -191,7 +191,7 @@ function Evidence({ detail }: { detail: DayReviewDetail }) {
           {day.anomalies.includes('half_day_near_full') && (
             <p className="mt-3 rounded bg-warning-soft p-2 text-xs text-warning-ink">
               <strong>If the undertime was permitted, approve the pending overtime</strong> — that
-              credits the hours actually worked. ⛔ Do <strong>not</strong> override the half day to
+              credits the hours actually worked. Do <strong>not</strong> override the half day to
               a full one: permission excuses the absence, it does not pay for the missing time.
             </p>
           )}
@@ -236,8 +236,8 @@ function Overtime({ day, locked }: { day: Day; locked: boolean }) {
       </h3>
       <p className="text-xs text-neutral-500">
         {day.computedMinutes <= 0
-          ? '⛔ This day credits no basic pay at all — the whole stint is here. The pay run HOLDS it until you decide.'
-          : '⛔ Pending overtime pays nothing until decided. Approving 0 is a decision; leaving it undecided is not.'}
+          ? 'This day credits no basic pay at all — the whole stint is here. The pay run HOLDS it until you decide.'
+          : 'Pending overtime pays nothing until decided. Approving 0 is a decision; leaving it undecided is not.'}
       </p>
       <div className="flex flex-wrap items-end gap-2">
         <Field label="Minutes to pay" rule={ATTENDANCE_OVERTIME_RULES.approvedOtMinutes} className="basis-40 flex-1">
@@ -356,7 +356,7 @@ function VerifyVoid({ day, locked }: { day: Day; locked: boolean }) {
       <form action={verifyDayAction} className="space-y-1">
         <Ident day={day} />
         <p className="text-xs text-neutral-500">
-          ⭐ Verifying is the <strong>only</strong> thing that can make a flagged day payable — a
+          Verifying is the <strong>only</strong> thing that can make a flagged day payable — a
           recompute deliberately will not.
         </p>
         <Button type="submit" variant="secondary" disabled={locked || day.status === 'verified'}>
@@ -367,7 +367,7 @@ function VerifyVoid({ day, locked }: { day: Day; locked: boolean }) {
       <form action={voidDayAction} className="space-y-1 border-t border-surface-border pt-3">
         <Ident day={day} />
         <p className="text-xs text-neutral-500">
-          ⛔ A voided day contributes nothing to payroll. The punches survive — the evidence outlives
+          A voided day contributes nothing to payroll. The punches survive — the evidence outlives
           the decision.
         </p>
         <div className="flex flex-wrap items-end gap-2">

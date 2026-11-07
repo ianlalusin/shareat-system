@@ -52,7 +52,7 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
           <h1 className="text-2xl font-semibold">Accounts payable</h1>
           <PageDescription>
             No expense — cash or credit — can be recorded until its supplier invoice is verified
-            here. Verification <strong>is</strong> the approval (T-130).
+            here. Verification <strong>is</strong> the approval.
           </PageDescription>
         </div>
         <div className="flex items-center gap-3">

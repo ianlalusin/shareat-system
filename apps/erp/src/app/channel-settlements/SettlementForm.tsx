@@ -342,7 +342,7 @@ export function SettlementForm({
           ))}
         </FormGrid>
         <p className="text-xs text-neutral-500 dark:text-neutral-500">
-          ⛔ <strong>A deduction may be negative.</strong> A promo-heavy day genuinely hands money
+          <strong>A deduction may be negative.</strong> A promo-heavy day genuinely hands money
           back, and that credit must survive — the legacy system filtered it out and overstated fees
           by exactly the amount it dropped.
         </p>
@@ -495,7 +495,7 @@ export function SettlementForm({
       </div>
 
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
-        Every platform fee is booked here, once. ⛔ Do not also raise an expense document for the
+        Every platform fee is booked here, once. Do not also raise an expense document for the
         same fee — that double-count cost ₱198,148.29 across two stores in the legacy system, and
         this screen is the single place these legs are written.
       </p>
