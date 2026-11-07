@@ -171,7 +171,8 @@ describe('T-348 S2 — the population lands exactly, nothing dropped or doubled 
     // merge with main, re-measured: 131 -> 132 (SW4).
     // 132 -> 133, T-508 S2b: /kitchen carries its <PageDescription>.
     // 133 -> 134, T-510 S3: /menu/hours carries its <PageDescription>.
-    expect(count).toBe(134);
+    // 134 -> 135, T-512 (T-511 S5c): /settings/business-rules carries its <PageDescription>; re-measured after rebase on main (T-523 0238 present), 7 Nov 2026, BOSS approved.
+    expect(count).toBe(135);
   });
 });
 

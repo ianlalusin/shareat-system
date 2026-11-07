@@ -529,6 +529,12 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'what carries across as an opening balance. It must be settled or written off before ' +
       'cutover, not silently inherited.',
   },
+  business_rule_values: {
+    class: 'keep',
+    reason:
+      'T-512. A business rule in force at cutover is CONFIGURATION and is still in force in January until an admin changes it; purging the rows would silently ' +
+      'fall every rule back to its registry default and drop the history of who changed what and why.',
+  },
   pay_rates: {
     class: 'keep',
     reason:
@@ -1520,6 +1526,75 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
   menu_dayparts: {
     class: 'keep',
     reason: 'A store’s dayparts (Lunch, Dinner) are standing menu configuration (T-510), kept with the offers that point at them.',
+  },
+  pos_stores: {
+    class: 'keep',
+    reason:
+      'The per-store POS switch (T-523 R1) is standing configuration; every store stays off until its go-live (row 435), kept like the stores it belongs to.',
+  },
+  pos_stands: {
+    class: 'keep',
+    reason:
+      'A store’s fixed stand set (T-523 R2, row 371) is standing configuration, kept; Lipa’s stands are loaded once by an ops script.',
+  },
+  pos_terminals: {
+    class: 'keep',
+    reason:
+      'The terminal is the stable receipt-number identity (T-523 R3), standing configuration; the receipt series must outlive a replaced tablet, so it is kept.',
+  },
+  table_sessions: {
+    class: 'purge',
+    reason:
+      'Floor records of the pilot (T-523 R4): row 436: v1 receives Lipa’s December day totals through T-531’s bridge, so no booked figure lives only here (pre-2027 POS data is test data, row 379). Purged with its lines and receipts (one TRUNCATE).',
+  },
+  table_session_lines: {
+    class: 'purge',
+    reason:
+      'Order lines of pilot sessions (T-523 R5): row 436: v1 receives Lipa’s December day totals through T-531’s bridge, so no booked figure lives only here (pre-2027 POS data is test data, row 379).',
+  },
+  pos_sales_receipts: {
+    class: 'purge',
+    reason:
+      'Sales receipts of the pilot (T-523 R6): row 436: v1 receives Lipa’s December day totals through T-531’s bridge, so no booked figure lives only here (pre-2027 POS data is test data, row 379). Append-only; the purge TRUNCATEs, which fires no row trigger.',
+  },
+  pos_sales_receipt_lines: {
+    class: 'purge',
+    reason:
+      'Frozen lines of pilot sales receipts (T-523 R7): row 436: v1 receives Lipa’s December day totals through T-531’s bridge, so no booked figure lives only here (pre-2027 POS data is test data, row 379). Append-only.',
+  },
+  pos_sales_receipt_payments: {
+    class: 'purge',
+    reason:
+      'Tender lines of pilot sales receipts (T-523 R8): row 436: v1 receives Lipa’s December day totals through T-531’s bridge, so no booked figure lives only here (pre-2027 POS data is test data, row 379).',
+  },
+  pos_day_closes: {
+    class: 'purge',
+    reason:
+      'Z readings of the pilot (T-523 R9): row 436: v1 receives Lipa’s December day totals through T-531’s bridge, so no booked figure lives only here (pre-2027 POS data is test data, row 379). sales_days.pos_day_close_id points here, and sales_days is purged too.',
+  },
+  pos_day_close_tenders: {
+    class: 'purge',
+    reason:
+      'Tender totals of pilot Z readings (T-523 R9): row 436: v1 receives Lipa’s December day totals through T-531’s bridge, so no booked figure lives only here (pre-2027 POS data is test data, row 379).',
+  },
+  pos_events: {
+    class: 'purge',
+    reason:
+      'The pilot event inbox (T-523 R10): row 436: v1 receives Lipa’s December day totals through T-531’s bridge, so no booked figure lives only here (pre-2027 POS data is test data, row 379).',
+  },
+  pos_discount_presets: {
+    class: 'keep',
+    reason: 'A store’s named discounts (T-523 R13) are standing master data, kept like the menu; a session-line discount that cites one is purged, the preset stays.',
+  },
+  table_session_line_discounts: {
+    class: 'purge',
+    reason:
+      'Discounts on pilot session lines (T-523 R13): row 436: v1 receives Lipa’s December day totals through T-531’s bridge, so no booked figure lives only here (pre-2027 POS data is test data, row 379).',
+  },
+  pos_sales_receipt_line_discounts: {
+    class: 'purge',
+    reason:
+      'Discounts on frozen lines of pilot sales receipts (T-523 R13): row 436: v1 receives Lipa’s December day totals through T-531’s bridge, so no booked figure lives only here (pre-2027 POS data is test data, row 379); the statutory records they point at are purged the same way. Append-only.',
   },
 };
 

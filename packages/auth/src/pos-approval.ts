@@ -79,3 +79,27 @@ export async function verifyPosManagerApproval(tx: Tx | null, input: PosApproval
     throw err;
   }
 }
+
+/**
+ * T-525: charge ONE wrong-manager-PIN miss on the terminal person's bucket, in the caller's transaction. A POS event runs `verifyPosManagerApproval` inside
+ * the event's own transaction, and a refused event rolls that transaction back, charge included; the inbox calls this in the SECOND transaction, the one
+ * that stores the quarantined row, so the miss commits with it (and is charged exactly once, because the first charge was rolled back). Same bucket, cap and
+ * auto-lift as `verifyPosManagerApproval`. A capped bucket just refuses again and charges nothing more.
+ *
+ * ⛔ SERVER-ONLY, and not a door: never call it from a route or a Server Action. Its ONE caller is the events inbox (`packages/domain/src/pos/inbox.ts`); it is
+ * exported only because the domain package cannot reach this file any other way.
+ */
+export async function recordPosApprovalMiss(tx: Tx, input: { orgId: string; terminalPersonId: string }): Promise<void> {
+  try {
+    await runChargedPinLookup(
+      tx,
+      { orgId: input.orgId, bucket: { actor: input.terminalPersonId } },
+      async () => {
+        throw new AuthenticationError(POS_APPROVAL_REFUSED);
+      },
+      { dailyMissBudget: pinAttemptsRepo.APPROVAL_DAILY_MISS_CAP, stopAutoReopenMinutes: pinAttemptsRepo.APPROVAL_CAP_AUTO_LIFT_MINUTES },
+    );
+  } catch (err) {
+    if (!(err instanceof AuthenticationError)) throw err;
+  }
+}

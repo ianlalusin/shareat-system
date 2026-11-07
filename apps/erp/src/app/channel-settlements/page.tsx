@@ -4,13 +4,12 @@ import { authorize, heldCapabilities, can } from '@shareat/auth';
 import { auditLogRepo } from '@shareat/db';
 import { logger } from '@shareat/core/logger';
 import { add, compare, money, ZERO } from '@shareat/core/money';
+import Link from 'next/link';
 import { requireSession } from '../../lib/session';
 import {
-  previewSettlementAction,
   setPayoutDestinationAction,
   voidSettlementAction,
 } from './actions';
-import { SettlementForm } from './SettlementForm';
 import {
   listActiveLoans,
   listChannels,
@@ -22,12 +21,12 @@ import {
 } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { withFlash } from '@/lib/flash';
+import { redirectWithFlash, withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { PAYOUT_DESTINATION_EDIT } from './typed-forms';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { CHANNEL_PAYOUT_DESTINATION_RULES, CHANNEL_SETTLEMENT_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Button, ConfirmDestructive, Field, FlashBanner, Input, LinkRow, RowLink, Select, FormModal } from '@/components/ui';
+import { Button, ConfirmDestructive, Field, FlashBanner, Input, LinkRow, RowLink, Select } from '@/components/ui';
 
 export const metadata = { title: 'Channel settlements — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -35,8 +34,7 @@ export const dynamic = 'force-dynamic';
 interface SearchParams {
   error?: string;
   ok?: string;
-  /** The settlement form's own preselect register (`page.tsx`'s `<SettlementForm>` below) — never
-   *  read for the banner (T-350 S4 / G4: the two collided when both used `channel`). */
+  /** Only read to redirect an old link to `/record` (T-544); never for the banner (T-350 S4 / G4: the two collided when both used `channel`). */
   channel?: string;
   day?: string;
   /** T-350 S4 (G4) / S5 — which channel a payout-destination save was about. The ONLY thing the
@@ -59,6 +57,15 @@ export default async function ChannelSettlementsPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
+  // T-544: recording is its own page now. Old bookmarks and `PlatformAgingSection`'s `?channel=` land here, so send them on with the same
+  // query. Before `withFlash`, so a flash cookie waiting for this page is not spent on a redirect.
+  const raw = await searchParams;
+  if (raw.channel !== undefined || raw.day !== undefined) {
+    return await redirectWithFlash('/channel-settlements/record', {
+      ...(raw.channel !== undefined ? { channel: raw.channel } : {}),
+      ...(raw.day !== undefined ? { day: raw.day } : {}),
+    });
+  }
   const sp = await withFlash(searchParams);
   const { actor } = await requireSession('/channel-settlements');
 
@@ -358,7 +365,7 @@ export default async function ChannelSettlementsPage({
                       </td>
                       <td className="px-3 py-2 text-right">
                         <RowLink
-                          href={`/channel-settlements?channel=${d.channelId}&day=${d.salesDayId}#record`}
+                          href={`/channel-settlements/record?channel=${d.channelId}&day=${d.salesDayId}`}
                           className="inline-flex min-h-11 items-center rounded-[12px] border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas"
                         >
                           Settle
@@ -381,40 +388,13 @@ export default async function ChannelSettlementsPage({
       </section>
 
       {/* ── Record one ───────────────────────────────────────────────────────────────── */}
-      <div id="record" className="flex scroll-mt-4 justify-end">
-        <FormModal
-          trigger="+ Record settlement"
-          title="Record a settlement"
-          size="lg"
-          defaultOpen={sp.channel !== undefined || sp.day !== undefined}
-          description="One payout, one channel, one verified day. A payout covering several days is one settlement per day sharing a reference — which is what keeps each day's receivable checkable on its own."
+      <div className="flex justify-end">
+        <Link
+          href="/channel-settlements/record"
+          className="inline-flex min-h-11 items-center rounded-[12px] border border-transparent bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-hover"
         >
-        <SettlementForm
-          previewAction={previewSettlementAction}
-          channels={channels
-            .filter((c) => c.isActive)
-            .map((c) => ({
-              id: c.id,
-              name: c.name,
-              storeId: c.storeId,
-              storeName: c.storeName,
-              outstanding: c.outstanding,
-              destinationAccountName: c.destinationAccountName,
-              destinationMoneyAccountId: c.destinationMoneyAccountId,
-            }))}
-          days={waiting.map((d) => ({
-            salesDayId: d.salesDayId,
-            channelId: d.channelId,
-            businessDate: d.businessDate,
-            reportedAmount: d.reportedAmount,
-            ageDays: d.ageDays,
-          }))}
-          loans={loans}
-          today={today}
-          preselectChannelId={sp.channel}
-          preselectSalesDayId={sp.day}
-        />
-        </FormModal>
+          + Record settlement
+        </Link>
       </div>
 
       {/* ── History ──────────────────────────────────────────────────────────────────── */}

@@ -152,6 +152,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('settlement_day.rejected', 'data', 'normal', 'store', 'settlement_day_lines', 'T-511'),
   def('settlement_day.reopened', 'data', 'normal', 'store', 'settlement_day_lines', 'T-511'),
   def('settlement_loan.allocation_overridden', 'data', 'normal', 'store', 'settlement_day_lines', 'T-511'),
+  // T-512 (T-511 S5c): an admin changed a business rule (value, from-date, reason). Org scope: a rule is the organisation's, never a store's (dotted: new).
+  def('business_rule.changed', 'settings', 'high', 'org', 'business_rule_values', 'T-512', ADMIN),
   // T-455 S2: a cashier's moves on the customer lobby line (park a walk-in, call, seat, remove). Payloads carry code, size, stand and session id - never a name or phone.
   def('lobby.park', 'order', 'normal', 'store', 'lobby_entry', 'T-455'),
   def('lobby.call', 'order', 'low', 'store', 'lobby_entry', 'T-455'),
@@ -180,6 +182,22 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('statutory_payment.export', 'security', 'normal', 'org', 'statutory_payments', 'T-193', ADMIN),
   // T-193 S6: an employer number or due day was set or changed on /payroll/rates. Org-scoped, admin-readable; before/after carry the old and new number and due day.
   def('statutory_employer.change', 'money', 'high', 'org', 'statutory_employers', 'T-193', ADMIN),
+  // T-524: the POS v2 floor and till (entity = the table session, except discounts: the line discount; the sale: the sales receipt). Payloads carry ids, counts and amounts - NEVER a senior's name or card number (row 353).
+  def('pos.stand_opened', 'order', 'normal', 'store', 'table_sessions', 'T-524'),
+  def('pos.lines_added', 'order', 'low', 'store', 'table_session_lines', 'T-524'),
+  def('pos.line_cancelled', 'order', 'normal', 'store', 'table_session_lines', 'T-524'),
+  def('pos.heads_changed', 'order', 'normal', 'store', 'table_sessions', 'T-524'),
+  def('pos.refill_requested', 'order', 'low', 'store', 'table_session_lines', 'T-524'),
+  def('pos.line_served', 'order', 'low', 'store', 'table_session_lines', 'T-524'),
+  def('pos.discount_added', 'money', 'normal', 'store', 'table_session_line_discounts', 'T-524'),
+  def('pos.discount_removed', 'order', 'normal', 'store', 'table_session_line_discounts', 'T-524', { clientSources: ['pos'] }),
+  // T-524 took over two reserved T-402 entries (pos.session_voided, pos.discount_removed): same label, now written, entity moved to the v2 tables.
+  def('pos.session_voided', 'order', 'high', 'store', 'table_sessions', 'T-524', { clientSources: ['pos'] }),
+  def('pos.sale_completed', 'money', 'normal', 'store', 'pos_sales_receipts', 'T-524'),
+  def('pos.sale_recompute_mismatch', 'money', 'high', 'store', 'pos_sales_receipts', 'T-524'),
+  // T-525: a manager replayed or discarded a quarantined tablet event (entity = the pos_events row). Server-only: the tablet never sends them.
+  def('pos.event_replayed', 'order', 'normal', 'store', 'pos_events', 'T-525'),
+  def('pos.event_discarded', 'order', 'high', 'store', 'pos_events', 'T-525'),
   def('create_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('update_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('reactivate_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
@@ -348,12 +366,10 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('pos.drawer_counted', 'money', 'normal', 'store', 'cash_drawers', 'T-402', POS),
   def('pos.shift_closed', 'money', 'normal', 'store', 'pos_shifts', 'T-402', POS),
   def('pos.tender_changed_after_payment', 'money', 'high', 'store', 'pos_orders', 'T-402', POS),
-  def('pos.session_voided', 'order', 'high', 'store', 'pos_orders', 'T-402', POS),
   def('pos.tickets_voided', 'order', 'normal', 'store', 'pos_orders', 'T-402', POS),
   def('pos.item_unvoided', 'order', 'high', 'store', 'pos_orders', 'T-402', POS),
   def('pos.discount_applied', 'order', 'normal', 'store', 'pos_orders', 'T-402', POS),
   def('pos.discount_edited', 'order', 'normal', 'store', 'pos_orders', 'T-402', POS),
-  def('pos.discount_removed', 'order', 'normal', 'store', 'pos_orders', 'T-402', POS),
   def('pos.bill_discount_applied', 'order', 'normal', 'store', 'pos_orders', 'T-402', POS),
   def('pos.bill_discount_removed', 'order', 'normal', 'store', 'pos_orders', 'T-402', POS),
   def('pos.statutory_discount_applied', 'order', 'normal', 'store', 'pos_orders', 'T-402', POS),

@@ -150,6 +150,8 @@ export * from './dual-run';
 export * from './menu';
 // T-508 S1 - kitchen stations and per-item kitchen routes (migration 0232).
 export * from './kitchen';
+// T-523 - POS v2: the per-store switch, stands, terminals, table sessions and lines, sales receipts, the Z, the event inbox (migration 0238).
+export * from './pos-v2';
 
 // T-436 - leave and absence tracking: kinds, caps, requests, per-date days, the year-end SIL payout.
 export * from './leave';
@@ -164,6 +166,9 @@ export * from './inter-entity';
 export * from './settlement-intake';
 // T-519 S1 - staff deduction agreements and the recoveries taken under them (migration 0236).
 export * from './staff-deduction-agreements';
+
+// T-512 (T-511 S5c) - the business rules an admin may change, as dated append-only rows (migration 0239).
+export * from './business-rules';
 
 // T-398 S6 - the franchisor view of a franchisee: agreements and the append-only access log (migration 0220).
 export * from './franchise';

@@ -188,6 +188,12 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'history_guard',
     reason: 'A pay rate is never changed or removed; a wrong rate is superseded by a new row (0221, T-498 S1, DEF-799). Decides only from TG_OP.',
   },
+  business_rule_values_append_only: {
+    table: 'business_rule_values',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A business rule row is never changed or removed; a change is a newer row with its own date and reason (0239, T-512). Decides only from TG_OP.',
+  },
   trade_orders_ready_is_final_trg: {
     table: 'trade_orders',
     mode: 'always',
@@ -1430,5 +1436,99 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'validator',
     reason:
       'Refuses a service item on trade_order_lines (service_item_never_stocked, rule C): reads the item row current kind, ANOTHER row state (0224, T-502).',
+  },
+  // T-523 (0238) - POS v2: eleven history guards, all ENABLE ALWAYS (ALWAYS 38 -> 49). Raise 23001 restrict_violation (a frozen / once-only / append-only write) or 23514 (a refused status transition).
+  table_sessions_forward_only: {
+    table: 'table_sessions',
+    mode: 'always',
+    kind: 'history_guard',
+    reason:
+      'A table session moves only open -> paid | voided (23514); paid and voided are final; how it was opened (id, org, store, stand, mode, opened_*) never changes (0238, T-523 R4). Decides only from OLD/NEW.',
+  },
+  table_session_lines_guard: {
+    table: 'table_session_lines',
+    mode: 'always',
+    kind: 'history_guard',
+    reason:
+      'No line is inserted into a paid or voided session (reads the PARENT session status, as journal_lines does for its entry); kitchen_status moves queued -> served | cancelled once; every other column is frozen (0238, T-523 R5).',
+  },
+  pos_sales_receipts_session_guard: {
+    table: 'pos_sales_receipts',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'No sales receipt is inserted for a voided table session (reads the PARENT session status, as table_session_lines_guard does) (0238, T-523 audit fix).',
+  },
+  pos_sales_receipts_frozen: {
+    table: 'pos_sales_receipts',
+    mode: 'always',
+    kind: 'history_guard',
+    reason:
+      'A sales receipt is frozen at insert; only day_close_id may go NULL -> a value once; never deleted (0238, T-523 R6). Decides only from OLD/NEW.',
+  },
+  pos_sales_receipt_lines_append_only: {
+    table: 'pos_sales_receipt_lines',
+    mode: 'always',
+    kind: 'history_guard',
+    reason:
+      'The frozen copy of what was billed: UPDATE and DELETE refused (0238, T-523 R7). Decides only from TG_OP.',
+  },
+  pos_sales_receipt_payments_frozen: {
+    table: 'pos_sales_receipt_payments',
+    mode: 'always',
+    kind: 'history_guard',
+    reason:
+      'A payment is frozen at insert; checked_by / checked_at may go NULL -> a value once; never deleted (0238, T-523 R8). Decides only from OLD/NEW.',
+  },
+  pos_day_closes_append_only: {
+    table: 'pos_day_closes',
+    mode: 'always',
+    kind: 'history_guard',
+    reason:
+      'A Z reading is append-only: UPDATE and DELETE refused (0238, T-523 R9, row 390). Decides only from TG_OP.',
+  },
+  pos_day_close_tenders_append_only: {
+    table: 'pos_day_close_tenders',
+    mode: 'always',
+    kind: 'history_guard',
+    reason:
+      'The tender totals of a Z are append-only: UPDATE and DELETE refused (0238, T-523 R9). Decides only from TG_OP.',
+  },
+  pos_events_frozen: {
+    table: 'pos_events',
+    mode: 'always',
+    kind: 'history_guard',
+    reason:
+      'An inbox event is frozen at insert; only the three resolution columns may go NULL -> a value once; never deleted (0238, T-523 R10). Decides only from OLD/NEW.',
+  },
+  pos_sales_receipt_line_discounts_append_only: {
+    table: 'pos_sales_receipt_line_discounts',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A discount on a frozen receipt line is append-only: UPDATE and DELETE refused (0238, T-523 R13). Decides only from TG_OP.',
+  },
+  table_session_line_discounts_guard: {
+    table: 'table_session_line_discounts',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'No discount is inserted on a line of a paid or voided session (reads the PARENT session status, as table_session_lines_guard does); a discount moves active -> removed once and every other column is frozen (0238, T-523 R13).',
+  },
+  // T-524 (0240) - the sales-receipt append guard (R11): three BEFORE INSERT history guards, ENABLE ALWAYS (ALWAYS 49 -> 52). Raise 23001 restrict_violation.
+  pos_sales_receipt_lines_append_guard: {
+    table: 'pos_sales_receipt_lines',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'No line is added to a sales receipt written by an earlier transaction (reads the PARENT receipt xmin, as table_session_lines_guard reads its parent session) (0240, T-524 R11).',
+  },
+  pos_sales_receipt_payments_append_guard: {
+    table: 'pos_sales_receipt_payments',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'No payment is added to a sales receipt written by an earlier transaction (reads the PARENT receipt xmin) (0240, T-524 R11).',
+  },
+  pos_sales_receipt_line_discounts_append_guard: {
+    table: 'pos_sales_receipt_line_discounts',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'No discount is added to a line of a sales receipt written by an earlier transaction (reads the receipt of the PARENT line, by xmin) (0240, T-524 R11).',
   },
 } as const;

@@ -17,14 +17,17 @@ import { toBusinessDate } from '@shareat/core/datetime';
 import { logger } from '@shareat/core/logger';
 import { ZERO, compare, fromCentavos, isZero, money, subtract, toCentavos, type Money } from '@shareat/core/money';
 import { auditLogRepo, fiscalPeriodsRepo, loansRepo, settlementIntakeRepo, storesRepo, type SettlementDayLineRow, type Tx } from '@shareat/db';
+import { pastTolerance, toleranceMillsFor, varianceRulesOn, VARIANCE_RULE_KEYS } from '../channel-settlements';
 import { SETTLEMENT_DAY_REJECT_REASON_MAX, SETTLEMENT_DAY_REJECT_RULES } from '../field-rules/channel-settlements';
 import { capAuditText } from '../shared/audit-text';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { refuse } from '../shared/refusal';
+import { loadRuleBook } from '../business-rules/rules';
+import type { RuleBook } from '../business-rules/book';
 import { dayBlockers, dayBlockersForLines, type DayBlocker } from './day-checks';
-import { loadLoanCheckContext, loanCheckViewerOf, loanCheckForDay, primeLoanCheckCoverage, type LoanCheckContext, type LoanCheckViewer, type LoanCheckViewerView } from './loan-check';
+import { LOAN_RULE_KEYS, loadLoanCheckContext, loanCheckViewerOf, loanCheckForDay, primeLoanCheckCoverage, type LoanCheckContext, type LoanCheckViewer, type LoanCheckViewerView } from './loan-check';
 import { intakeRefusal } from './refusal';
-import { stageFoodpandaDays } from './stage';
+import { foodpandaRuleDate, stageFoodpandaDays, stageRulesOn, STAGE_RULE_KEYS } from './stage';
 import { readStoredUpload, type StoredUpload } from './stored-upload';
 import { groupedMoney, plainDate } from './text';
 
@@ -53,6 +56,8 @@ export interface SettlementReviewRow {
   staffFigure: string | null;
   /** file minus staff, read fresh */
   difference: string | null;
+  /** T-512: the difference is past the variance tolerance (the floor and percent rules, on the sales date). Marks only: every non-zero difference is flagged anyway. */
+  differenceLarge: boolean;
   reviewState: ReviewState;
   paidState: 'paid' | 'not_paid';
   changedSinceBooked: boolean;
@@ -93,6 +98,19 @@ async function visibleStoreIds(tx: Tx, actor: Actor): Promise<{ ids: string[]; n
   return { ids, names: new Map(stores.map((s) => [s.id, s.name])) };
 }
 
+/** Every rule the review reads, loaded in ONE statement per call: the variance rule (the "large" mark), the loan tolerance and the staging rules. */
+const REVIEW_RULE_KEYS = [...VARIANCE_RULE_KEYS, ...LOAN_RULE_KEYS, ...STAGE_RULE_KEYS] as const;
+
+/**
+ * T-512: a difference is "large" when it is past the T-150 variance tolerance (the larger of the floor and the percent of the FILE figure) on the sales date.
+ * It marks, it never blocks: every non-zero difference is flagged either way. No difference or no staff figure is never large.
+ */
+function isLargeDifference(book: RuleBook, salesDate: string, fileFigure: string, difference: string | null): boolean {
+  if (difference === null) return false;
+  const abs = (n: bigint): bigint => (n < 0n ? -n : n);
+  return pastTolerance(abs(toCentavos(money(difference))), toleranceMillsFor(abs(toCentavos(money(fileFigure))), varianceRulesOn(book, salesDate)));
+}
+
 const diffOf = (fileFigure: string, recorded: Money | null): { staffFigure: string | null; difference: string | null } =>
   recorded === null ? { staffFigure: null, difference: null } : { staffFigure: recorded, difference: subtract(money(fileFigure), recorded) };
 
@@ -103,8 +121,9 @@ export async function listReviewDays(tx: Tx, actor: Actor, filters: ReviewFilter
   const storeIds = filters.storeId ? ids.filter((i) => i === filters.storeId) : ids;
   const lines = await settlementIntakeRepo.currentLinesForReview(tx, orgId, { storeIds, platform: filters.platform, period: filters.period });
 
+  const book = await loadRuleBook(tx, orgId, REVIEW_RULE_KEYS);
   const grabDates = lines.filter((l) => l.platform === 'grab').map((l) => l.salesDate).sort();
-  const context: LoanCheckContext | undefined = grabDates.length > 0 ? await loadLoanCheckContext(tx, orgId, grabDates[grabDates.length - 1]!) : undefined;
+  const context: LoanCheckContext | undefined = grabDates.length > 0 ? await loadLoanCheckContext(tx, orgId, grabDates[grabDates.length - 1]!, book) : undefined;
   const viewer: LoanCheckViewer = await loanCheckViewerOf(tx, orgId, actor.personId);
   const today = toBusinessDate();
 
@@ -131,6 +150,7 @@ export async function listReviewDays(tx: Tx, actor: Actor, filters: ReviewFilter
       fileFigure: line.orderValue,
       staffFigure,
       difference,
+      differenceLarge: isLargeDifference(book, line.salesDate, line.orderValue, difference),
       reviewState: line.reviewState,
       paidState: line.paidState,
       changedSinceBooked: line.changedSinceBooked,
@@ -151,7 +171,7 @@ export async function listReviewDays(tx: Tx, actor: Actor, filters: ReviewFilter
     .sort((a, b) => groupDate.get(keyOf(a))!.localeCompare(groupDate.get(keyOf(b))!) || a.storeName.localeCompare(b.storeName) || keyOf(a).localeCompare(keyOf(b)) || a.salesDate.localeCompare(b.salesDate))
     .filter((r) => !filters.needsAttention || r.needsAttention);
 
-  const pandagoOnly = filters.platform === 'grab' || filters.needsAttention ? [] : await pandagoOnlyInvoices(tx, orgId, storeIds, filters.period);
+  const pandagoOnly = filters.platform === 'grab' || filters.needsAttention ? [] : await pandagoOnlyInvoices(tx, orgId, storeIds, book, filters.period);
   return { days, pandagoOnly };
 }
 
@@ -173,7 +193,7 @@ const UNREADABLE_PANDAGO = 'This PandaGO-only invoice could not be read again fr
 const PANDAGO_TAIL =
   'will be paid to you by Foodpanda (cash on delivery that PandaGO riders collected for you, less PandaGO fees). It is not part of the sales receivable and is not booked here; record it yourself.';
 
-async function pandagoOnlyInvoices(tx: Tx, orgId: string, storeIds: readonly string[], period?: string): Promise<PandagoOnlyInvoice[]> {
+async function pandagoOnlyInvoices(tx: Tx, orgId: string, storeIds: readonly string[], book: RuleBook, period?: string): Promise<PandagoOnlyInvoice[]> {
   const out: PandagoOnlyInvoice[] = [];
   for (const u of await settlementIntakeRepo.pandagoOnlyUploads(tx, orgId, storeIds)) {
     const invoice = (await rereadStored(tx, orgId, u.uploadId))?.foodpanda;
@@ -184,7 +204,8 @@ async function pandagoOnlyInvoices(tx: Tx, orgId: string, storeIds: readonly str
       }
       continue;
     }
-    const staged = stageFoodpandaDays(invoice, { channelId: '', channelName: '', storeId: u.storeId, storeName: u.storeName, platform: 'foodpanda', code: invoice.vendorCode });
+    const rules = stageRulesOn(book, foodpandaRuleDate(invoice));
+    const staged = stageFoodpandaDays(invoice, { channelId: '', channelName: '', storeId: u.storeId, storeName: u.storeName, platform: 'foodpanda', code: invoice.vendorCode }, rules);
     if (staged.pandagoNetTotal === null || staged.pandagoReceivable === null) continue;
     if (period && invoice.invoiceDate.slice(0, 7) !== period) continue;
     out.push({
@@ -231,6 +252,8 @@ export interface ReviewDayDetail {
   fileFigure: string;
   staffFigure: string | null;
   difference: string | null;
+  /** T-512: see `SettlementReviewRow.differenceLarge` */
+  differenceLarge: boolean;
   /** present only when the file and staff differ */
   orders: ReviewOrder[];
   salesCorrection: { to: string; on: string; sentence: string } | null;
@@ -288,7 +311,8 @@ export async function getReviewDayDetail(tx: Tx, actor: Actor, input: { lineId: 
 
   const vatOnFees = line.platform === 'foodpanda' ? await vatOnFeesOf(tx, orgId, line) : null;
   const viewer = await loanCheckViewerOf(tx, orgId, actor.personId);
-  const context = line.platform === 'grab' ? await loadLoanCheckContext(tx, orgId, line.salesDate) : undefined;
+  const book = await loadRuleBook(tx, orgId, REVIEW_RULE_KEYS);
+  const context = line.platform === 'grab' ? await loadLoanCheckContext(tx, orgId, line.salesDate, book) : undefined;
   const checks = await dayBlockers(tx, actor, line, { today, loanContext: context, viewer });
   const loan = line.platform === 'grab' ? await loanCheckForDay(tx, actor, line.salesDate, { context, viewer }) : null;
 
@@ -333,6 +357,7 @@ export async function getReviewDayDetail(tx: Tx, actor: Actor, input: { lineId: 
     fileFigure: line.orderValue,
     staffFigure,
     difference,
+    differenceLarge: isLargeDifference(book, line.salesDate, line.orderValue, difference),
     orders: differs ? await ordersOf(tx, orgId, line) : [],
     salesCorrection,
     loan: { check: loan?.view ?? null, lines },

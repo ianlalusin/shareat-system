@@ -43,6 +43,12 @@ import {
 /** A terminal is shared and physical, so its session is short. Ian: it ends on a TTL **and** at
  *  shift end — the timer is for the terminal nobody signed out of. */
 export const PIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+/** T-525 R4 clause 3: an offline POS event is believed only if its person signed in with a PIN on that tablet within this long before it happened (a week covers a long weekend without a server). */
+export const POS_OFFLINE_SIGNIN_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+/** T-525 R4 clause 4: how far a tablet's clock may differ from the server's before its events are refused; it caps a wrong or tampered clock that would pick the business day and the rate date. */
+export const POS_DEVICE_CLOCK_SKEW_MS = 3 * 24 * 60 * 60 * 1000;
+/** T-525 R4 clause 3: a tablet's clock a little behind the server's makes its event look older than the sign-in that made it; this slack absorbs that. */
+export const POS_SIGNIN_CLOCK_SLACK_MS = 10 * 60 * 1000;
 /** A browser session belongs to one person on one machine, so it can be longer. */
 export const BROWSER_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 

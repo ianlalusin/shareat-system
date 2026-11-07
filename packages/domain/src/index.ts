@@ -109,6 +109,8 @@ export * from './pos/plan';
 export * from './pos/item-map';
 export * from './pos/usage-pull';
 export * from './pos/depletion-source';
+// T-524 — the POS v2 domain (stands, orders, kitchen, per-line discounts, pay with a server recompute).
+export * from './pos';
 // T-210 — the daily sales pull, for the POS-day reconciliation report.
 export * from './pos/v1-recheck';
 export * from './pos/day-import-job';
@@ -190,3 +192,11 @@ export { dayBlockers } from './settlement-intake/day-checks';
 export type { DayBlocker, DayBlockersResult } from './settlement-intake/day-checks';
 export { getReviewDayDetail, listReviewDays, overrideLoanAllocation, rejectDay, reopenDay } from './settlement-intake/review';
 export type { PandagoOnlyInvoice, ReviewDayDetail, SettlementReviewRow, ReviewFilters, ReviewList, ReviewLoanLine, ReviewOrder } from './settlement-intake/review';
+// T-512 (T-511 S5c) - the business rules an admin may change: the closed registry, the pure rule book, and the reader / writer (server-only; the client-safe leaf stays business-rules/index.ts).
+export { RULE_REGISTRY, isBusinessRuleKey } from './business-rules/registry';
+export type { BusinessRuleKey, RuleDefinition } from './business-rules/registry';
+export { buildRuleBook } from './business-rules/book';
+export type { RuleBook, RuleValue } from './business-rules/book';
+export { listBusinessRules, loadRuleBook, ruleValue, setBusinessRule } from './business-rules/rules';
+export type { BusinessRuleChange, BusinessRuleItem, SetBusinessRuleInput } from './business-rules/rules';
+export { readPosRules } from './business-rules/pos-rules';

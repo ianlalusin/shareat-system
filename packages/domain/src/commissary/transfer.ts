@@ -96,6 +96,7 @@ import { add, compare, decimal, fromCentavos, isZero, subtract, toCentavos, ZERO
 import { deliveriesRepo, stockLayersRepo, stockLedgerRepo, tradeDiscrepanciesRepo, type Tx } from '@shareat/db';
 import type { ShortageReason } from '@shareat/db/schema';
 import { consume } from '../stock/consume';
+import { repeatedItemSentence } from '../stock/usage';
 import type { Outcome } from './outcome';
 import { INVENTORY_ACCOUNT_BY_ITEM_KIND } from '../stock/receipt-posting';
 import { lineCost } from '../stock/layers';
@@ -208,6 +209,15 @@ export async function dispatchOrder(
   costByLineId: Readonly<Record<string, Money>>;
 }>> {
   if (input.lines.length === 0) return { ok: false, reason: 'a dispatch with no lines moves nothing' };
+
+  // T-536 (audit CR-9): every line's movement shares this order as its source, so one item twice in one room would hit
+  // `stock_movements_source_pair_key` (a raw 23505). A commissary-proposed line can repeat an item on the order. Refuse in words.
+  const repeated = await repeatedItemSentence(
+    tx,
+    input.orgId,
+    input.lines.map((l) => ({ key: `${l.itemId}:${l.sourceLocationId}`, itemId: l.itemId })),
+  );
+  if (repeated) return { ok: false, reason: repeated };
 
   // ⭐ EVERY refusal is decided before the first write — the T-166 lesson. Validating inside the
   // write loop leaves stock moved and value unposted when line 2 is the bad one.

@@ -38,7 +38,9 @@ describe('T-398 S6a -- view_franchise_access_log, cell by cell', () => {
     expect(typed).toBe(LOG);
     // T-511 S2a (2026-11-03): 120 -> 123 (upload_settlement_files, edit_platform_store_code, edit_loan_repayment_amount). RED until built.
     // T-510 S2, 5 Nov 2026: +pair_menu_dayparts (BOSS approved)
-    expect(CAPABILITIES.length).toBe(124);
+    // T-512 (T-511 S5c), 7 Nov 2026, re-measured after rebase on main (T-523 0238 present), BOSS approved: 124 -> 125 (`manage_business_rules`).
+    expect(CAPABILITIES.length).toBe(128);
+    // T-524: 125 -> 128 (+request_pos_refill, serve_pos_ticket, confirm_pos_heads), re-measured after rebase on main (0238+0239 present), 7 Nov 2026, BOSS approved.
   });
 
   it('super_admin OK, admin OK, manager OK, staff NO. Mutant: staff true (a waiter would read who looked at the franchise)', () => {

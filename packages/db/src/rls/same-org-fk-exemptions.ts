@@ -133,6 +133,7 @@ export const JSONB_REFERENCES: readonly JsonbReference[] = [
   { column: 'inbox_quarantine.raw_event', kind: 'snapshot', reason: 'raw rejected inbox event kept for diagnosis' },
   { column: 'pos_usage_pull_lines.blocked', kind: 'diagnostic', reason: 'blocked-line diagnostics; not read back as a reference' },
   { column: 'dual_run_lines.per_day', kind: 'snapshot', reason: 'per-day {date, v1, v2, delta, state} comparison figures for display; holds no id and is never read back as a reference' },
+  { column: 'pos_events.payload', kind: 'snapshot', reason: 'T-523: the tablet’s raw event body (facts only, bible 5.1); T-524 recomputes every outcome and looks every id up in its own tables, so nothing in it is a trusted cross-row reference' },
   { column: 'pos_bridge_receipts.raw', kind: 'snapshot', reason: 'T-472: the copied POS receipt fields (no personal data); a faithful snapshot, never read back as a reference' },
   { column: 'pos_v1_day_feeds.payload', kind: 'snapshot', reason: 'raw v1 POS day payload' },
   { column: 'production_records.soft_warnings', kind: 'diagnostic', reason: 'warning list shown to the cook; not read back as a reference' },

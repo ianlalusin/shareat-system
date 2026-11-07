@@ -133,6 +133,7 @@ export * as expensesRepo from './repo/expenses';
 export * as salesDaysRepo from './repo/sales-days';
 export * as fixedAssetsRepo from './repo/fixed-assets';
 export * as kitchenRepo from './repo/kitchen';
+export * as posV2Repo from './repo/pos-v2';
 export * as moneyAccountsRepo from './repo/money-accounts';
 export * as moneyTransfersRepo from './repo/money-transfers';
 export * as prepaidRepo from './repo/prepaid';
@@ -199,6 +200,9 @@ export * as channelSettlementsRepo from './repo/channel-settlements';
 // T-511 S4: the staging tables of the Grab / Foodpanda settlement upload (the only place their SQL is written).
 export * as settlementIntakeRepo from './repo/settlement-intake';
 export type { UploadRow as SettlementUploadRow, DayLineRow as SettlementDayLineRow } from './repo/settlement-intake';
+// T-512 (T-511 S5c): the business rule values (the only place their SQL is written).
+export * as businessRulesRepo from './repo/business-rules';
+export type { RuleValueRow as BusinessRuleValueRow, RuleHistoryRow as BusinessRuleHistoryRow } from './repo/business-rules';
 export * as auditLogRepo from './repo/audit-log';
 // T-412: the record behind a destructive button (its store / name / status), loaded by the server action, never the form.
 export * as destructiveTargetsRepo from './repo/destructive-targets';

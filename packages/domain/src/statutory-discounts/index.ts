@@ -34,7 +34,7 @@
  * ⛔ **No ID FORMAT is enforced.** OSCA and PWD IDs are LGU-issued and their formats vary by city;
  * a regex would refuse valid cards from the next municipality.
  *
- * ⚠️ **And no rule that the database already holds is re-checked here.** One live row per invoice,
+ * ⚠️ **And no rule that the database already holds is re-checked here.** One live row per ID card per invoice,
  * positive amounts, a discount within its gross, an all-or-nothing void and a non-blank identity
  * are constraints in migration 0065. Restating them in TypeScript would be a second source of
  * truth, and the two would drift.
