@@ -12,7 +12,7 @@ import { STATUTORY_DISCOUNT_RECORD_RULES, STATUTORY_DISCOUNT_VOID_RULES, nativeA
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, ConfirmDestructive, FlashBanner, FormGrid, FormModal, Input, Select , FormSection, type FieldProps } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, FlashBanner, FormGrid, FormModal, Input, Select , FormSection, type FieldProps, DialogActions } from '@/components/ui';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 
 export const metadata = { title: 'SC/PWD register — Shareat System' };
@@ -161,12 +161,12 @@ export default async function StatutoryDiscountsPage({ searchParams }: { searchP
                     <Input name="notes" />
                   </label>
                 </div>
-                <div className="col-span-full">
-                  <SubmitButton pendingLabel="Saving…" className="w-full sm:w-auto">Save</SubmitButton>
-                </div>
               </FormGrid>
             </FormSection>
           </>
+          <DialogActions>
+            <SubmitButton pendingLabel="Saving…" className="w-full sm:w-auto">Save</SubmitButton>
+          </DialogActions>
         </CheckedForm>
         </FormModal>
       </header>

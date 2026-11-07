@@ -6,7 +6,7 @@ import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Banner, Button, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
+import { Badge, Banner, Button, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { MENU_REQUEST_REJECT_RULES, MENU_REQUEST_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import {
@@ -130,9 +130,11 @@ export default async function MenuRequestsPage({ searchParams }: { searchParams:
                   <Input name="note" defaultValue={one('note')} className="w-full" />
                 </Field>
               </FormGrid>
-              <Button type="submit" variant="primary" name={showAnyway ? 'confirmed' : undefined} value={showAnyway ? confirmTokenFor(one('name')) : undefined}>
-                {showAnyway ? 'Send request anyway' : 'Request item'}
-              </Button>
+              <DialogActions>
+                <Button type="submit" variant="primary" name={showAnyway ? 'confirmed' : undefined} value={showAnyway ? confirmTokenFor(one('name')) : undefined}>
+                  {showAnyway ? 'Send request anyway' : 'Request item'}
+                </Button>
+              </DialogActions>
               </CheckedForm>
             </FormModal>
           )}

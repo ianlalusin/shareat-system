@@ -1,4 +1,4 @@
-import { Badge, Button, Checkbox, ConfirmDestructive, Field, FormGrid, FormModal, Input } from '@/components/ui';
+import { Badge, Button, Checkbox, ConfirmDestructive, DialogActions, Field, FormGrid, FormModal, Input } from '@/components/ui';
 import { daysText, WEEK_ORDER, dayShort, windowText } from './daypart-text';
 import type { DaypartView } from './lib';
 import { createDaypartAction, retireDaypartAction, updateDaypartAction } from '../admin/stores/actions';
@@ -71,9 +71,11 @@ export function DaypartsSection({ storeId, dayparts, canManage, from }: { storeI
                       {back}
                       <input type="hidden" name="daypartId" value={d.id} />
                       <DaypartFields d={d} />
-                      <Button type="submit" variant="secondary">
-                        Save
-                      </Button>
+                      <DialogActions>
+                        <Button type="submit" variant="secondary">
+                          Save
+                        </Button>
+                      </DialogActions>
                     </form>
                   </FormModal>
                   <form action={retireDaypartAction}>
@@ -114,9 +116,11 @@ export function DaypartsSection({ storeId, dayparts, canManage, from }: { storeI
             <input type="hidden" name="storeId" value={storeId} />
             {back}
             <DaypartFields />
-            <Button type="submit" variant="secondary">
-              Save
-            </Button>
+            <DialogActions>
+              <Button type="submit" variant="secondary">
+                Save
+              </Button>
+            </DialogActions>
           </form>
         </FormModal>
       ) : (

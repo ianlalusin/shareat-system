@@ -3,7 +3,7 @@ import { countsRegister, listStores } from './lib';
 import { openCountSessionAction } from './actions';
 import { requireSession } from '../../../lib/session';
 import { Page } from '@/components/shell/Page';
-import { Badge, Button, FlashBanner, FormGrid, FormModal, Field, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
+import { Badge, Button, DialogActions, FlashBanner, FormGrid, FormModal, Field, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { INVENTORY_COUNT_OPEN_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FilterRow } from '@/components/FilterRow';
@@ -114,9 +114,11 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
                 <Input name="note" className="mt-1 block w-full" />
               </Field>
             </FormGrid>
-            <Button type="submit" variant="primary">
-              Open count
-            </Button>
+            <DialogActions>
+              <Button type="submit" variant="primary">
+                Open count
+              </Button>
+            </DialogActions>
           </CheckedForm>
           </FormModal>
           </div>

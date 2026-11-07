@@ -17,7 +17,7 @@ import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, ConfirmDestructive, FlashBanner, FormModal, Input, Select } from '@/components/ui';
+import { Button, ConfirmDestructive, FlashBanner, FormModal, Input, Select, DialogActions } from '@/components/ui';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import { LIABILITY_CHARGE_RULES, LIABILITY_PAY_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 
@@ -133,9 +133,11 @@ export default async function LiabilityPage({
               <Field label="On" rule={LIABILITY_CHARGE_RULES.on}>
                 <Input type="date" {...nativeAttrs(LIABILITY_CHARGE_RULES.on)} defaultValue={today()} className="w-full" />
               </Field>
-              <Button type="submit" variant="secondary">
-                Charge
-              </Button>
+              <DialogActions>
+                <Button type="submit" variant="secondary">
+                  Charge
+                </Button>
+              </DialogActions>
             </CheckedForm>
           </FormModal>
         </section>
@@ -183,9 +185,11 @@ export default async function LiabilityPage({
                 <Field label="On" rule={LIABILITY_PAY_RULES.on}>
                   <Input type="date" {...nativeAttrs(LIABILITY_PAY_RULES.on)} defaultValue={today()} className="w-full" />
                 </Field>
-                <Button type="submit" variant="primary">
-                  Pay
-                </Button>
+                <DialogActions>
+                  <Button type="submit" variant="primary">
+                    Pay
+                  </Button>
+                </DialogActions>
               </CheckedForm>
             </FormModal>
           )}

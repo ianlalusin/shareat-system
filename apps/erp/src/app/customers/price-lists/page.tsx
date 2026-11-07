@@ -5,7 +5,7 @@ import { listLists } from '../lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, CardGrid, Field, FlashBanner, FormGrid, FormModal, Input } from '@/components/ui';
+import { Button, CardGrid, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { PRICE_LIST_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
@@ -52,9 +52,11 @@ export default async function PriceListsPage({
                 <Input name="description" className="w-full" />
               </Field>
             </FormGrid>
-            <Button type="submit" variant="primary">
-              Save
-            </Button>
+            <DialogActions>
+              <Button type="submit" variant="primary">
+                Save
+              </Button>
+            </DialogActions>
           </CheckedForm>
         </FormModal>
       </div>

@@ -19,7 +19,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select } from '@/components/ui';
+import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, DialogActions, FormGrid, FormModal, HelpTip, Input, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { PAYROLL_PAY_RATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { chargeRepaymentLabel } from '../staff/deduction-labels';
@@ -433,12 +433,12 @@ export default async function PayrollPage({
                           <Field label="From" width="date" rule={PAYROLL_PAY_RATE_RULES.effectiveFrom}>
                             <Input type="date" {...nativeAttrs(PAYROLL_PAY_RATE_RULES.effectiveFrom)} defaultValue={periodStart} className="w-full" />
                           </Field>
-                          <div className="!flex-none self-end">
-                            <Button type="submit" variant="secondary">
-                              Save
-                            </Button>
-                          </div>
                         </FormGrid>
+                        <DialogActions>
+                          <Button type="submit" variant="secondary">
+                            Save
+                          </Button>
+                        </DialogActions>
                       </CheckedForm>
                     </FormModal>
                   </td>

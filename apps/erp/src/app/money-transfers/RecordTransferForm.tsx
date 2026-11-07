@@ -9,7 +9,7 @@
  * formatting happens in `page.tsx`, server-side, before this component ever renders.
  */
 import { TwoWayPicker, type PickerOption } from '../../components/two-way-picker';
-import { Button, Input } from '@/components/ui';
+import { Button, Input, DialogActions } from '@/components/ui';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import { TRANSFER_RECORD_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { createMoneyTransferAction } from './actions';
@@ -105,9 +105,11 @@ export function RecordTransferForm({
         own position.
       </p>
 
-      <Button type="submit" variant="primary">
-        Record transfer
-      </Button>
+      <DialogActions>
+        <Button type="submit" variant="primary">
+          Record transfer
+        </Button>
+      </DialogActions>
     </CheckedForm>
   );
 }

@@ -6,7 +6,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
 import { CheckedForm } from '@/components/forms';
-import { Button, Field, FlashBanner, FormModal, Input, Select } from '@/components/ui';
+import { Button, DialogActions, Field, FlashBanner, FormModal, Input, Select } from '@/components/ui';
 import { SETTINGS_ITEM_TOLERANCE_RULES, SETTINGS_ORG_TOLERANCE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Usage tolerance — Shareat System' };
@@ -72,28 +72,32 @@ export default async function UsageToleranceSettingsPage({ searchParams }: { sea
             description="Leave the box empty to remove an item's own setting, so the organisation-wide one applies to it again."
             size="md"
           >
-            <CheckedForm rules={SETTINGS_ITEM_TOLERANCE_RULES} action={setItemUsageToleranceAction} className="flex flex-wrap items-end gap-3">
-              <label className="text-sm">
-                <span className="block text-neutral-600 dark:text-neutral-400">Item</span>
-                <Select name="itemId" defaultValue={view.items[0]?.id}>
-                  {view.items.map((i) => (
-                    <option key={i.id} value={i.id}>
-                      {i.name} ({i.code}){i.override !== null ? ` - ${percentOf(i.override)}` : ''}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-              <Field label="Tolerance, as a fraction" rule={SETTINGS_ITEM_TOLERANCE_RULES.tolerance} className="text-sm">
-                <Input
-                  {...nativeAttrs(SETTINGS_ITEM_TOLERANCE_RULES.tolerance)}
-                  inputMode="decimal"
-                  placeholder="0.05"
-                  className="w-full sm:w-auto sm:min-w-48 sm:flex-1"
-                />
-              </Field>
-              <Button type="submit" variant="primary">
-                Save
-              </Button>
+            <CheckedForm rules={SETTINGS_ITEM_TOLERANCE_RULES} action={setItemUsageToleranceAction}>
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="text-sm">
+                  <span className="block text-neutral-600 dark:text-neutral-400">Item</span>
+                  <Select name="itemId" defaultValue={view.items[0]?.id}>
+                    {view.items.map((i) => (
+                      <option key={i.id} value={i.id}>
+                        {i.name} ({i.code}){i.override !== null ? ` - ${percentOf(i.override)}` : ''}
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+                <Field label="Tolerance, as a fraction" rule={SETTINGS_ITEM_TOLERANCE_RULES.tolerance} className="text-sm">
+                  <Input
+                    {...nativeAttrs(SETTINGS_ITEM_TOLERANCE_RULES.tolerance)}
+                    inputMode="decimal"
+                    placeholder="0.05"
+                    className="w-full sm:w-auto sm:min-w-48 sm:flex-1"
+                  />
+                </Field>
+              </div>
+              <DialogActions>
+                <Button type="submit" variant="primary">
+                  Save
+                </Button>
+              </DialogActions>
             </CheckedForm>
           </FormModal>
         </div>

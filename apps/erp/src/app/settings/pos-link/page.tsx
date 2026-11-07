@@ -11,7 +11,7 @@ import { canUnlink, posLinkRows, posStoreOptions, storeTenders, tenderMapping, t
 import { Page } from '@/components/shell/Page';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { SETTINGS_POS_LINK_RULES, SETTINGS_POS_UNLINK_RULES, SETTINGS_TENDER_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, FormModal, Input, Select, Textarea } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select, Textarea } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
 
@@ -258,9 +258,11 @@ function StoreCard({
               </Select>
             </Field>
             </FormGrid>
-            <Button type="submit" variant="secondary">
-              Save
-            </Button>
+            <DialogActions>
+              <Button type="submit" variant="secondary">
+                Save
+              </Button>
+            </DialogActions>
           </CheckedForm>
           </FormModal>
           </div>
@@ -380,9 +382,11 @@ function TendersSection({
               <Input name="posV1Alias" autoComplete="off" className="mt-1 w-full" />
             </Field>
           </FormGrid>
-          <Button type="submit" variant="secondary">
-            Save
-          </Button>
+          <DialogActions>
+            <Button type="submit" variant="secondary">
+              Save
+            </Button>
+          </DialogActions>
         </CheckedForm>
         </FormModal>
       </div>

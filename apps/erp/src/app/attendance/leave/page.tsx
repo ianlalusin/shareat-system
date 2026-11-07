@@ -33,7 +33,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import { CertificateView } from './CertificateView';
-import { Badge, Button, Field, FlashBanner, FormGrid, Input, Select, Textarea , FormSection, FormModal} from '@/components/ui';
+import { Badge, Button, Field, FlashBanner, FormGrid, Input, Select, Textarea , FormSection, FormModal, DialogActions} from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { ACTION_LINK } from '@/components/action-link';
 
@@ -222,9 +222,11 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
                   </FormGrid>
                 </FormSection>
               </>
-              <Button type="submit" variant="primary">
-                Request leave
-              </Button>
+              <DialogActions>
+                <Button type="submit" variant="primary">
+                  Request leave
+                </Button>
+              </DialogActions>
             </CheckedForm>
             </FormModal>
           </div>
@@ -418,9 +420,11 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
                     <Textarea name="note" rows={2} className="mt-1 w-full" />
                   </Field>
                 </FormGrid>
-                <Button type="submit" variant="primary">
-                  Record absence
-                </Button>
+                <DialogActions>
+                  <Button type="submit" variant="primary">
+                    Record absence
+                  </Button>
+                </DialogActions>
               </CheckedForm>
               </FormModal>
               </div>

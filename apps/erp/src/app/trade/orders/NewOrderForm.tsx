@@ -12,7 +12,7 @@ import { CheckedForm } from '@/components/forms';
  * sees "no default" before the server refuses the line.
  */
 import { useState } from 'react';
-import { Button, FormGrid, FormSection, Input, Select , Field } from '@/components/ui';
+import { Button, DialogActions, FormGrid, FormSection, Input, Select , Field } from '@/components/ui';
 import type { CustomerOption, ItemOption, StoreOption } from './lib';
 
 interface LineDraft {
@@ -233,9 +233,11 @@ export function NewOrderForm({
         </FormGrid>
       </FormSection>
 
-      <Button type="submit" variant="primary">
-        Save draft
-      </Button>
+      <DialogActions>
+        <Button type="submit" variant="primary">
+          Save draft
+        </Button>
+      </DialogActions>
     </CheckedForm>
   );
 }
