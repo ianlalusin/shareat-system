@@ -1,6 +1,0 @@
-out/
-.next/
-android/app/build/
-android/app/src/main/assets/public/
-android/.gradle/
-*.jks

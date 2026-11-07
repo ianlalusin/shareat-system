@@ -2,47 +2,24 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { listStoresForAdmin } from './lib';
 import { createStoreAction } from './actions';
 import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Button, FlashBanner, FormGrid, Field, Input, LinkRow, RowLink, Select , FormSection, FormModal} from '@/components/ui';
-import { withFlash } from '@/lib/flash';
-import { CheckedForm } from '@/components/forms';
-import { ADMIN_STORE_CREATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Stores — Shareat System' };
 export const dynamic = 'force-dynamic';
 
-/**
- * T-222 — opening and closing a branch.
- *
- * ⭐ **Until this shipped, nothing in the codebase created a store.** `scripts/dev-seed.ts` opens
- * with the tell: *"Migrations create 93 accounts and (via whatever put them there) an org and its
- * stores."* The four dev stores were inserted by hand.
- *
- * ⚠️ Store creation is a handful of lifetime uses — **7 stores across the whole business, ever** —
- * each with high consequence and a long tail. So this is not a slick high-throughput flow: it is a
- * careful one that cannot leave a store half-made, and the effort goes into making the remaining
- * gaps legible rather than into the form.
- */
-export default async function StoresPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ ok?: string; error?: string }>;
-}) {
+/** T-222 — opening and closing a branch. ⭐ Until this shipped, nothing in the codebase created a store. */
+export default async function StoresPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string }> }) {
   const sp = await withFlash(searchParams);
   const { actor, refusal } = await requirePageAccess('/admin/stores');
-  // ⭐ T-288 — the READ gate. Ian, 2026-09-12: "do both hide the menu and gate the reads."
   if (refusal) return refusal;
   const stores = await listStoresForAdmin(actor.orgId);
 
   return (
-    <Page density="table">
+    <Page density="table" title="Stores" description="Opening a branch creates its default room and grants every admin access in one transaction so a half-made store cannot exist. What is left is the business half."
+      className="erp-page mx-auto w-full px-4 py-4 md:px-6 md:py-6 xl:px-6 xl:py-4 space-y-6 xl:space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Stores</h1>
-          <PageDescription>
-            Opening a branch creates its default room and grants every admin access, in one
-            transaction — so a half-made store cannot exist. What is left is the business half.
-          </PageDescription>
+          {/* h1 removed — now rendered by PageHeader from the title prop */}
+          {/* PageDescription removed — now rendered by PageHeader from the description prop */}
         </div>
         {/* T-448: the create form lives in a dialog; the header button replaces the old "Open a branch" disclosure. */}
         <FormModal trigger="+ Add store" title="Open a branch" size="lg" defaultOpen={Boolean(sp.error)}>
@@ -59,12 +36,13 @@ export default async function StoresPage({
                     label={<span className="text-neutral-600 dark:text-neutral-400">Code</span>}
                     hint="The stable handle. Not editable afterwards."
                   >
-                    <Input {...nativeAttrs(ADMIN_STORE_CREATE_RULES.code)}    className="mt-1 w-full" />
+                    <Input {...nativeAttrs(ADMIN_STORE_CREATE_RULES.code)} className="mt-1 w-full" />
                   </Field>
                 </div>
                 <div className="min-w-0 erp-field-name">
-                  <Field rule={ADMIN_STORE_CREATE_RULES.name} label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>}>
-                    <Input {...nativeAttrs(ADMIN_STORE_CREATE_RULES.name)}   className="mt-1 w-full" />
+                  <Field rule={ADMIN_STORE_CREATE_RULES.name} label={<span className="text-neutral-600 dark:text-neutral-400">Name</span>}
+                  >
+                    <Input {...nativeAttrs(ADMIN_STORE_CREATE_RULES.name)} className="mt-1 w-full" />
                   </Field>
                 </div>
               </FormGrid>
@@ -72,7 +50,8 @@ export default async function StoresPage({
             <FormSection title="Stock and remittance">
               <FormGrid layout="fields">
                 <div className="min-w-0 erp-field-code">
-                  <Field label={<span className="text-neutral-600 dark:text-neutral-400">Stock model</span>}>
+                  <Field label={<span className="text-neutral-600 dark:text-neutral-400">Stock model</span>}
+                  >
                     <Select name="stockModel" className="mt-1 w-full">
                       <option value="single_room">single_room</option>
                       <option value="multi_room">multi_room</option>
@@ -80,7 +59,8 @@ export default async function StoresPage({
                   </Field>
                 </div>
                 <div className="min-w-0 erp-field-code">
-                  <Field label={<span className="text-neutral-600 dark:text-neutral-400">Remittance cadence</span>}>
+                  <Field label={<span className="text-neutral-600 dark:text-neutral-400">Remittance cadence</span>}
+                  >
                     <Select name="remittanceCadence" className="mt-1 w-full">
                       <option value="daily">daily</option>
                       <option value="every_2_days">every_2_days</option>
@@ -98,7 +78,7 @@ export default async function StoresPage({
                     label={<span className="text-neutral-600 dark:text-neutral-400">Opening date</span>}
                     hint="Leave blank if it has not opened. The first day this store trades."
                   >
-                    <Input {...nativeAttrs(ADMIN_STORE_CREATE_RULES.openingDate)} type="date"  className="mt-1 w-full" />
+                    <Input {...nativeAttrs(ADMIN_STORE_CREATE_RULES.openingDate)} type="date" className="mt-1 w-full" />
                   </Field>
                 </div>
                 <div className="min-w-0">
@@ -111,9 +91,7 @@ export default async function StoresPage({
                     }
                     hint="A store that pools cash must name the ceiling that bounds it. The database refuses the unsafe combination; this field is where you satisfy it."
                   >
-                    <Input {...nativeAttrs(ADMIN_STORE_CREATE_RULES.unremittedCeiling)}   placeholder="e.g. 20000.00" className="mt-1 w-full" />
-                    {/* ⚠️ The form does not enforce this pairing — the database does. Disabling a button
-                  client-side would be help, not enforcement (bible §2 rule 7). */}
+                    <Input {...nativeAttrs(ADMIN_STORE_CREATE_RULES.unremittedCeiling)} placeholder="e.g. 20000.00" className="mt-1 w-full" />
                   </Field>
                 </div>
               </FormGrid>
@@ -146,7 +124,6 @@ export default async function StoresPage({
             {stores.map((s) => (
               <LinkRow
                 key={s.id}
-                // Ian 2026-10-14 (T-404): the WHOLE row opens the store — the T-258 stretched-link technique.
                 className="border-t border-neutral-200 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900"
               >
                 <td className="p-3 font-medium">
@@ -166,8 +143,6 @@ export default async function StoresPage({
                 <td className="p-3">
                   <Badge status={s.isActive ? 'active' : 'inactive'} />
                 </td>
-                {/* T-346 S1 (DEF-428) — Amendment R3.3: three states via the shared `isPreOpening`
-                    (R1 item 11 originally specified two; superseded). */}
                 <td className="p-3">
                   {s.openingDate === null ? (
                     <span className="text-neutral-500">Not yet open</span>

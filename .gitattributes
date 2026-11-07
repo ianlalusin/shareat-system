@@ -1,3 +1,0 @@
-# Migrations are hashed byte-for-byte by drizzle; a CRLF checkout changes the hash (DEF-545 follow-up).
-*.sql text eol=lf
-packages/domain/tests/fixtures/settlement-intake/** -text
