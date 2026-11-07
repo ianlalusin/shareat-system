@@ -161,7 +161,7 @@ function Evidence({ detail }: { detail: DayReviewDetail }) {
           <ul className="mt-2 space-y-1 text-sm text-warning-ink">
             {day.anomalies.map((a) => (
               <li key={a}>
-                {!isBlockingAnomaly(a) && '⚠️ '}{ANOMALY_LABEL[a] ?? a}
+                {isBlockingAnomaly(a) ? <strong>Blocking: </strong> : '⚠️ '}{ANOMALY_LABEL[a] ?? a}
                 {!isBlockingAnomaly(a) && (
                   <span className="ml-1 text-xs text-warning-ink">
                     — advisory, does not block sign-off
