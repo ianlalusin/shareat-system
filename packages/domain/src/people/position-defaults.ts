@@ -101,9 +101,13 @@ export const CANONICAL_POSITION_DEFAULTS: Readonly<
     'record_stock_movement',
     'transfer_stock',
     'record_wastage',
+    // T-524 (BOSS, 6 Nov 2026; seeded for existing stores by migration 0240's B0240 block): the POS floor acts.
+    'request_pos_refill',
+    'serve_pos_ticket',
+    'confirm_pos_heads',
   ],
-  'Kitchen Staff': ['record_stock_movement', 'record_wastage'],
-  Server: ['record_stock_movement', 'record_wastage'],
+  'Kitchen Staff': ['record_stock_movement', 'record_wastage', 'serve_pos_ticket'],
+  Server: ['record_stock_movement', 'record_wastage', 'request_pos_refill', 'confirm_pos_heads'],
   Dishwasher: ['record_stock_movement', 'record_wastage'],
   Slicer: ['record_stock_movement', 'record_wastage', 'request_pos_map'],
   'Inventory Staff': [

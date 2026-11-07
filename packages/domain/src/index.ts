@@ -109,6 +109,8 @@ export * from './pos/plan';
 export * from './pos/item-map';
 export * from './pos/usage-pull';
 export * from './pos/depletion-source';
+// T-524 — the POS v2 domain (stands, orders, kitchen, per-line discounts, pay with a server recompute).
+export * from './pos';
 // T-210 — the daily sales pull, for the POS-day reconciliation report.
 export * from './pos/v1-recheck';
 export * from './pos/day-import-job';
@@ -197,3 +199,4 @@ export { buildRuleBook } from './business-rules/book';
 export type { RuleBook, RuleValue } from './business-rules/book';
 export { listBusinessRules, loadRuleBook, ruleValue, setBusinessRule } from './business-rules/rules';
 export type { BusinessRuleChange, BusinessRuleItem, SetBusinessRuleInput } from './business-rules/rules';
+export { readPosRules } from './business-rules/pos-rules';

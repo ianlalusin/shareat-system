@@ -1,26 +1,52 @@
 /**
  * T-523 - the only place SQL is written for the POS v2 tables (migration 0238; schema in `packages/db/schema/pos-v2.ts`).
- * docs/tasks/523-pos-v2-schema.md.
+ * docs/tasks/523-pos-v2-schema.md. T-524 (docs/tasks/524-pos-v2-domain.md) adds the write helpers: the domain decides every rule,
+ * these only write.
  *
- * READ HELPERS ONLY. T-524 (domain) owns every write: it records the sale, bumps `pos_stores.state_version`, audits mode changes.
- * Every function takes the caller's transaction first and filters by org AND store; RLS is the backstop.
+ * Every function takes the caller's transaction first and filters by org AND store; RLS is the backstop. The domain bumps
+ * `pos_stores.state_version` (`bumpStateVersion`) once per call that changes anything a screen shows.
  */
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import {
+  posDayCloses,
+  posDiscountPresets,
   posEvents,
+  posSalesReceiptLineDiscounts,
+  posSalesReceiptLines,
+  posSalesReceiptPayments,
   posSalesReceipts,
+  posStands,
   posStores,
+  posTerminals,
+  tableSessionLineDiscounts,
   tableSessionLines,
   tableSessions,
+  type PosDiscountPresetRow,
   type PosEventRow,
   type PosSalesReceiptRow,
+  type PosStandRow,
   type PosStoreRow,
+  type PosTerminalRow,
+  type TableSessionLineDiscountRow,
   type TableSessionLineRow,
   type TableSessionRow,
 } from '../../schema/pos-v2';
+import { posTabletPairings } from '../../schema/pos-tablet-pairings';
+import { tenders } from '../../schema/pos-v1';
+import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
 
-export type { PosEventRow, PosSalesReceiptRow, PosStoreRow, TableSessionLineRow, TableSessionRow };
+export type {
+  PosDiscountPresetRow,
+  PosEventRow,
+  PosSalesReceiptRow,
+  PosStandRow,
+  PosStoreRow,
+  PosTerminalRow,
+  TableSessionLineDiscountRow,
+  TableSessionLineRow,
+  TableSessionRow,
+};
 
 /** The store's POS switch row (mode, live_from, state_version), or undefined when the store has none (treated as `off`). */
 export async function getPosStore(tx: Tx, orgId: string, storeId: string): Promise<PosStoreRow | undefined> {
@@ -52,7 +78,7 @@ export async function listSessionLines(tx: Tx, orgId: string, storeId: string, s
     .select()
     .from(tableSessionLines)
     .where(and(eq(tableSessionLines.orgId, orgId), eq(tableSessionLines.storeId, storeId), eq(tableSessionLines.sessionId, sessionId)))
-    .orderBy(asc(tableSessionLines.addedAtDevice), asc(tableSessionLines.id));
+    .orderBy(asc(tableSessionLines.addedAtDevice), asc(tableSessionLines.addedAt), asc(tableSessionLines.id));
 }
 
 /** One sales receipt by id (store-scoped). */
@@ -71,4 +97,477 @@ export async function listQuarantinedEvents(tx: Tx, orgId: string, storeId: stri
     .from(posEvents)
     .where(and(eq(posEvents.orgId, orgId), eq(posEvents.storeId, storeId), eq(posEvents.status, 'quarantined'), isNull(posEvents.resolvedAt)))
     .orderBy(asc(posEvents.receivedAt), asc(posEvents.id));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-524 writes and reads for the domain (packages/domain/src/pos). No rule lives here.
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** Bumps the store's polling counter by 1 and returns the new value. The domain calls it once per call that changes anything a screen shows. */
+export async function bumpStateVersion(tx: Tx, orgId: string, storeId: string): Promise<number> {
+  const [row] = await tx
+    .update(posStores)
+    .set({ stateVersion: sql`${posStores.stateVersion} + 1` })
+    .where(and(eq(posStores.orgId, orgId), eq(posStores.storeId, storeId)))
+    .returning({ v: posStores.stateVersion });
+  return row!.v;
+}
+
+/** A live (not revoked) pairing of this store, or undefined. */
+export async function getLivePairing(tx: Tx, orgId: string, storeId: string, pairingId: string): Promise<{ id: string } | undefined> {
+  const [row] = await tx
+    .select({ id: posTabletPairings.id })
+    .from(posTabletPairings)
+    .where(
+      and(
+        eq(posTabletPairings.id, pairingId),
+        eq(posTabletPairings.orgId, orgId),
+        eq(posTabletPairings.storeId, storeId),
+        isNull(posTabletPairings.revokedAt),
+      ),
+    );
+  return row;
+}
+
+export async function getStand(tx: Tx, orgId: string, storeId: string, standId: string): Promise<PosStandRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(posStands)
+    .where(and(eq(posStands.id, standId), eq(posStands.orgId, orgId), eq(posStands.storeId, storeId)));
+  return row;
+}
+
+export async function getTerminalByNo(tx: Tx, orgId: string, storeId: string, terminalNo: number): Promise<PosTerminalRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(posTerminals)
+    .where(and(eq(posTerminals.orgId, orgId), eq(posTerminals.storeId, storeId), eq(posTerminals.terminalNo, terminalNo)));
+  return row;
+}
+
+export async function getStoreOrgId(tx: Tx, storeId: string): Promise<string | undefined> {
+  const res = await tx.execute(sql`select org_id from stores where id = ${storeId}`);
+  return (res as unknown as { org_id: string }[])[0]?.org_id;
+}
+
+/** The terminal person of the store's ACTIVE terminal link (pos_terminal_links), or undefined: whose PIN bucket a manager-PIN approval charges. */
+export async function getActiveTerminalPersonId(tx: Tx, orgId: string, storeId: string): Promise<string | undefined> {
+  const res = await tx.execute(sql`select terminal_person_id from pos_terminal_links where org_id = ${orgId} and store_id = ${storeId} and revoked_at is null limit 1`);
+  return (res as unknown as { terminal_person_id: string }[])[0]?.terminal_person_id;
+}
+
+export async function getStoreCode(tx: Tx, orgId: string, storeId: string): Promise<string | undefined> {
+  const res = await tx.execute(sql`select code from stores where id = ${storeId} and org_id = ${orgId}`);
+  return (res as unknown as { code: string }[])[0]?.code;
+}
+
+/** The organization's tax type as stored ('vat' | ...); descriptive only (bible row 75). */
+export async function getOrgTaxType(tx: Tx, orgId: string): Promise<string | undefined> {
+  const res = await tx.execute(sql`select tax_type from organizations where id = ${orgId}`);
+  return (res as unknown as { tax_type: string }[])[0]?.tax_type;
+}
+
+export async function insertSession(
+  tx: Tx,
+  row: {
+    id: string;
+    orgId: string;
+    storeId: string;
+    standId: string | null;
+    mode: 'dine_in' | 'take_out';
+    headsCashier: number;
+    openedBy: string;
+    openedAtDevice: Date;
+    openedOnPairingId: string;
+  },
+): Promise<void> {
+  await tx.insert(tableSessions).values(row);
+}
+
+/** The session row locked FOR UPDATE (serialises two tablets acting on one table). */
+export async function lockSession(tx: Tx, orgId: string, storeId: string, sessionId: string): Promise<TableSessionRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(tableSessions)
+    .where(and(eq(tableSessions.id, sessionId), eq(tableSessions.orgId, orgId), eq(tableSessions.storeId, storeId)))
+    .for('update');
+  return row;
+}
+
+export async function setSessionHeads(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  sessionId: string,
+  heads: { headsCashier?: number; headsServer?: number },
+): Promise<void> {
+  await tx
+    .update(tableSessions)
+    .set(heads)
+    .where(and(eq(tableSessions.id, sessionId), eq(tableSessions.orgId, orgId), eq(tableSessions.storeId, storeId)));
+}
+
+export async function markSessionPaid(tx: Tx, orgId: string, storeId: string, sessionId: string): Promise<void> {
+  await tx
+    .update(tableSessions)
+    .set({ status: 'paid' })
+    .where(and(eq(tableSessions.id, sessionId), eq(tableSessions.orgId, orgId), eq(tableSessions.storeId, storeId)));
+}
+
+export async function markSessionVoided(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  sessionId: string,
+  v: { voidedBy: string; voidedAtDevice: Date; voidReason: string; voidedOffline: boolean },
+): Promise<void> {
+  await tx
+    .update(tableSessions)
+    .set({ status: 'voided', ...v })
+    .where(and(eq(tableSessions.id, sessionId), eq(tableSessions.orgId, orgId), eq(tableSessions.storeId, storeId)));
+}
+
+export interface NewSessionLine {
+  id: string;
+  orgId: string;
+  storeId: string;
+  sessionId: string;
+  kind: 'package' | 'item' | 'refill';
+  menuItemId: string;
+  menuItemVariantId: string | null;
+  name: string;
+  qty: number;
+  unitPrice: Money;
+  /** N > 1 for a "(up to N)" bundle line, else null. */
+  bundleHeads: number | null;
+  kitchenStationId: string | null;
+  note: string | null;
+  addedBy: string;
+  addedOnPairingId: string | null;
+  addedAtDevice: Date;
+}
+
+export async function insertLines(tx: Tx, rows: NewSessionLine[]): Promise<void> {
+  // added_at is the server clock per ROW (clock_timestamp, not the transaction's now()): a batch keeps its order when two lines share a device time.
+  if (rows.length === 0) return;
+  await tx.insert(tableSessionLines).values(
+    rows.map((r) => ({
+      id: r.id,
+      orgId: r.orgId,
+      storeId: r.storeId,
+      sessionId: r.sessionId,
+      kind: r.kind,
+      menuItemId: r.menuItemId,
+      menuItemVariantId: r.menuItemVariantId,
+      name: r.name,
+      qty: r.qty,
+      unitPrice: r.unitPrice,
+      bundleHeads: r.bundleHeads,
+      kitchenStationId: r.kitchenStationId,
+      note: r.note,
+      addedBy: r.addedBy,
+      addedOnPairingId: r.addedOnPairingId,
+      addedAtDevice: r.addedAtDevice,
+      addedAt: sql`clock_timestamp()`,
+    })),
+  );
+}
+
+export async function getLine(tx: Tx, orgId: string, storeId: string, lineId: string): Promise<TableSessionLineRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(tableSessionLines)
+    .where(and(eq(tableSessionLines.id, lineId), eq(tableSessionLines.orgId, orgId), eq(tableSessionLines.storeId, storeId)));
+  return row;
+}
+
+export async function getLinesByIds(tx: Tx, orgId: string, storeId: string, ids: string[]): Promise<TableSessionLineRow[]> {
+  if (ids.length === 0) return [];
+  return tx
+    .select()
+    .from(tableSessionLines)
+    .where(and(inArray(tableSessionLines.id, ids), eq(tableSessionLines.orgId, orgId), eq(tableSessionLines.storeId, storeId)));
+}
+
+export async function markLineServed(tx: Tx, orgId: string, storeId: string, lineId: string, by: string, at: Date): Promise<void> {
+  await tx
+    .update(tableSessionLines)
+    .set({ kitchenStatus: 'served', servedBy: by, servedAtDevice: at })
+    .where(and(eq(tableSessionLines.id, lineId), eq(tableSessionLines.orgId, orgId), eq(tableSessionLines.storeId, storeId)));
+}
+
+export async function markLinesCancelled(tx: Tx, orgId: string, storeId: string, lineIds: string[]): Promise<void> {
+  if (lineIds.length === 0) return;
+  await tx
+    .update(tableSessionLines)
+    .set({ kitchenStatus: 'cancelled' })
+    .where(and(inArray(tableSessionLines.id, lineIds), eq(tableSessionLines.orgId, orgId), eq(tableSessionLines.storeId, storeId)));
+}
+
+export async function getPreset(tx: Tx, orgId: string, storeId: string, presetId: string): Promise<PosDiscountPresetRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(posDiscountPresets)
+    .where(and(eq(posDiscountPresets.id, presetId), eq(posDiscountPresets.orgId, orgId), eq(posDiscountPresets.storeId, storeId)));
+  return row;
+}
+
+export interface NewLineDiscount {
+  id: string;
+  orgId: string;
+  storeId: string;
+  sessionLineId: string;
+  kind: 'senior' | 'pwd' | 'preset' | 'custom';
+  presetId: string | null;
+  valueType: 'percent' | 'fixed';
+  value: Money;
+  qty: number;
+  dinerNo: number | null;
+  appliedBy: string;
+  appliedAtDevice: Date;
+}
+
+export async function insertLineDiscounts(tx: Tx, rows: NewLineDiscount[]): Promise<void> {
+  if (rows.length === 0) return;
+  await tx.insert(tableSessionLineDiscounts).values(
+    rows.map((r) => ({
+      id: r.id,
+      orgId: r.orgId,
+      storeId: r.storeId,
+      sessionLineId: r.sessionLineId,
+      kind: r.kind,
+      presetId: r.presetId,
+      valueType: r.valueType,
+      value: r.value,
+      qty: r.qty,
+      dinerNo: r.dinerNo,
+      appliedBy: r.appliedBy,
+      appliedAtDevice: r.appliedAtDevice,
+    })),
+  );
+}
+
+export async function getLineDiscount(tx: Tx, orgId: string, storeId: string, discountId: string): Promise<TableSessionLineDiscountRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(tableSessionLineDiscounts)
+    .where(and(eq(tableSessionLineDiscounts.id, discountId), eq(tableSessionLineDiscounts.orgId, orgId), eq(tableSessionLineDiscounts.storeId, storeId)));
+  return row;
+}
+
+/** Every discount (active and removed) of the given lines, in creation order: device time, then id. */
+export async function listLineDiscounts(tx: Tx, orgId: string, storeId: string, lineIds: string[]): Promise<TableSessionLineDiscountRow[]> {
+  if (lineIds.length === 0) return [];
+  return tx
+    .select()
+    .from(tableSessionLineDiscounts)
+    .where(and(inArray(tableSessionLineDiscounts.sessionLineId, lineIds), eq(tableSessionLineDiscounts.orgId, orgId), eq(tableSessionLineDiscounts.storeId, storeId)))
+    .orderBy(asc(tableSessionLineDiscounts.appliedAtDevice), asc(tableSessionLineDiscounts.id));
+}
+
+export async function removeLineDiscounts(tx: Tx, orgId: string, storeId: string, discountIds: string[], by: string, at: Date): Promise<void> {
+  if (discountIds.length === 0) return;
+  await tx
+    .update(tableSessionLineDiscounts)
+    .set({ status: 'removed', removedBy: by, removedAtDevice: at })
+    .where(and(inArray(tableSessionLineDiscounts.id, discountIds), eq(tableSessionLineDiscounts.orgId, orgId), eq(tableSessionLineDiscounts.storeId, storeId)));
+}
+
+export async function listTenders(tx: Tx, orgId: string, tenderIds: string[]): Promise<{ id: string; storeId: string; kind: 'cash' | 'wallet'; isActive: boolean }[]> {
+  if (tenderIds.length === 0) return [];
+  return tx
+    .select({ id: tenders.id, storeId: tenders.storeId, kind: tenders.kind, isActive: tenders.isActive })
+    .from(tenders)
+    .where(and(inArray(tenders.id, tenderIds), eq(tenders.orgId, orgId)));
+}
+
+export async function getReceiptBySession(tx: Tx, orgId: string, storeId: string, sessionId: string): Promise<PosSalesReceiptRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(posSalesReceipts)
+    .where(and(eq(posSalesReceipts.tableSessionId, sessionId), eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.storeId, storeId)));
+  return row;
+}
+
+export async function terminalSeqUsed(tx: Tx, orgId: string, terminalId: string, terminalSeq: number): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: posSalesReceipts.id })
+    .from(posSalesReceipts)
+    .where(and(eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.terminalId, terminalId), eq(posSalesReceipts.terminalSeq, terminalSeq)));
+  return row !== undefined;
+}
+
+export interface NewReceipt {
+  id: string;
+  orgId: string;
+  storeId: string;
+  terminalId: string;
+  terminalSeq: number;
+  tableSessionId: string;
+  cashierId: string;
+  issuedAtDevice: Date;
+  subtotal: Money;
+  discountTotal: Money;
+  total: Money;
+  deviceTotal: Money;
+  offline: boolean;
+}
+export interface NewReceiptLine {
+  id: string;
+  orgId: string;
+  receiptId: string;
+  lineNo: number;
+  sessionLineId: string;
+  kind: 'package' | 'item' | 'refill';
+  name: string;
+  qty: number;
+  unitPrice: Money;
+  gross: Money;
+  discountTotal: Money;
+  net: Money;
+}
+export interface NewReceiptPayment {
+  orgId: string;
+  receiptId: string;
+  tenderId: string;
+  amount: Money;
+  changeGiven: Money;
+  referenceNo: string | null;
+  toCheck: boolean;
+}
+export interface NewReceiptLineDiscount {
+  orgId: string;
+  receiptLineId: string;
+  kind: 'senior' | 'pwd' | 'preset' | 'custom';
+  presetId: string | null;
+  label: string;
+  valueType: 'percent' | 'fixed';
+  value: Money;
+  qty: number;
+  dinerNo: number | null;
+  vatRemoved: Money;
+  discountAmount: Money;
+  statutoryRecordId: string | null;
+}
+
+/** Parent first, then its children, in the CALLER'S one transaction (migration 0240's append guard refuses a child under an earlier transaction's receipt). */
+export async function insertReceipt(tx: Tx, r: NewReceipt): Promise<void> {
+  await tx.insert(posSalesReceipts).values({
+    id: r.id,
+    orgId: r.orgId,
+    storeId: r.storeId,
+    terminalId: r.terminalId,
+    terminalSeq: r.terminalSeq,
+    tableSessionId: r.tableSessionId,
+    cashierId: r.cashierId,
+    issuedAtDevice: r.issuedAtDevice,
+    subtotal: r.subtotal,
+    discountTotal: r.discountTotal,
+    total: r.total,
+    deviceTotal: r.deviceTotal,
+    offline: r.offline,
+  });
+}
+export async function insertReceiptLines(tx: Tx, rows: NewReceiptLine[]): Promise<void> {
+  if (rows.length === 0) return;
+  await tx.insert(posSalesReceiptLines).values(
+    rows.map((r) => ({
+      id: r.id,
+      orgId: r.orgId,
+      receiptId: r.receiptId,
+      lineNo: r.lineNo,
+      sessionLineId: r.sessionLineId,
+      kind: r.kind,
+      name: r.name,
+      qty: r.qty,
+      unitPrice: r.unitPrice,
+      gross: r.gross,
+      discountTotal: r.discountTotal,
+      net: r.net,
+    })),
+  );
+}
+export async function insertReceiptPayments(tx: Tx, rows: NewReceiptPayment[]): Promise<void> {
+  if (rows.length === 0) return;
+  await tx.insert(posSalesReceiptPayments).values(
+    rows.map((r) => ({
+      orgId: r.orgId,
+      receiptId: r.receiptId,
+      tenderId: r.tenderId,
+      amount: r.amount,
+      changeGiven: r.changeGiven,
+      referenceNo: r.referenceNo,
+      toCheck: r.toCheck,
+    })),
+  );
+}
+export async function insertReceiptLineDiscounts(tx: Tx, rows: NewReceiptLineDiscount[]): Promise<void> {
+  if (rows.length === 0) return;
+  await tx.insert(posSalesReceiptLineDiscounts).values(
+    rows.map((r) => ({
+      orgId: r.orgId,
+      receiptLineId: r.receiptLineId,
+      kind: r.kind,
+      presetId: r.presetId,
+      label: r.label,
+      valueType: r.valueType,
+      value: r.value,
+      qty: r.qty,
+      dinerNo: r.dinerNo,
+      vatRemoved: r.vatRemoved,
+      discountAmount: r.discountAmount,
+      statutoryRecordId: r.statutoryRecordId,
+    })),
+  );
+}
+
+/** The window_end of the store's latest Z (any terminal), or undefined before the first Z. */
+export async function lastDayCloseEnd(tx: Tx, orgId: string, storeId: string): Promise<Date | undefined> {
+  const [row] = await tx
+    .select({ windowEnd: posDayCloses.windowEnd })
+    .from(posDayCloses)
+    .where(and(eq(posDayCloses.orgId, orgId), eq(posDayCloses.storeId, storeId)))
+    .orderBy(desc(posDayCloses.windowEnd))
+    .limit(1);
+  return row?.windowEnd;
+}
+
+/** Sales receipts of the open Z window (issued at or after `since`; all of them before the first Z), newest first. */
+export async function listReceiptsSince(tx: Tx, orgId: string, storeId: string, since: Date | undefined): Promise<PosSalesReceiptRow[]> {
+  const where = and(
+    eq(posSalesReceipts.orgId, orgId),
+    eq(posSalesReceipts.storeId, storeId),
+    since ? sql`${posSalesReceipts.issuedAtDevice} >= ${since}` : undefined,
+  );
+  return tx.select().from(posSalesReceipts).where(where).orderBy(desc(posSalesReceipts.issuedAtDevice), desc(posSalesReceipts.id));
+}
+
+/** Open sessions with their stand number (the floor view). */
+export async function listOpenSessionsWithStand(tx: Tx, orgId: string, storeId: string) {
+  return tx
+    .select({ session: tableSessions, standNumber: posStands.number })
+    .from(tableSessions)
+    .leftJoin(posStands, and(eq(posStands.id, tableSessions.standId), eq(posStands.storeId, tableSessions.storeId)))
+    .where(and(eq(tableSessions.orgId, orgId), eq(tableSessions.storeId, storeId), eq(tableSessions.status, 'open')))
+    .orderBy(asc(tableSessions.openedAt), asc(tableSessions.id));
+}
+
+/** Session lines of a store still queued (kitchen), optionally one station, optionally only refills; voided sessions left out. */
+export async function listQueuedLines(tx: Tx, orgId: string, storeId: string, o: { stationId?: string; refillsOnly?: boolean } = {}) {
+  return tx
+    .select({ line: tableSessionLines, standNumber: posStands.number, sessionMode: tableSessions.mode })
+    .from(tableSessionLines)
+    .innerJoin(tableSessions, and(eq(tableSessions.id, tableSessionLines.sessionId), eq(tableSessions.storeId, tableSessionLines.storeId)))
+    .leftJoin(posStands, and(eq(posStands.id, tableSessions.standId), eq(posStands.storeId, tableSessions.storeId)))
+    .where(
+      and(
+        eq(tableSessionLines.orgId, orgId),
+        eq(tableSessionLines.storeId, storeId),
+        eq(tableSessionLines.kitchenStatus, 'queued'),
+        ne(tableSessions.status, 'voided'),
+        o.stationId ? eq(tableSessionLines.kitchenStationId, o.stationId) : undefined,
+        o.refillsOnly ? eq(tableSessionLines.kind, 'refill') : undefined,
+      ),
+    )
+    .orderBy(asc(tableSessionLines.addedAtDevice), asc(tableSessionLines.id));
 }

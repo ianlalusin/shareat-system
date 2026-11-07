@@ -32,10 +32,12 @@ const sql = postgres(url, { max: 3 });
 afterAll(async () => {
   await sql.end({ timeout: 5 });
 });
+// Narrowed by T-539: the registry grew by two POS keys, seeded by 0241 (pinned in t539-seed-matches-registry). 0239 still seeds exactly these five.
+const T512_KEYS = ['settlement.variance_floor_amount', 'settlement.variance_percent', 'settlement.loan_final_tolerance', 'tax.withholding_rate_percent', 'tax.vat_percent'];
 const MIGRATIONS = join(__dirname, '..', '..', '..', 'db', 'migrations');
 
 describe('T-512 seed - one row per existing org per key at 2000-01-01, equal to the registry defaults', () => {
-  it('replaying the migration seed statement(s) for a fresh org writes exactly five rows whose values ARE the registry defaults (the SQL is pinned to the code, then rolled back) [kills: a seed value that drifted from the registry]', async () => {
+  it('replaying the migration seed statement(s) for a fresh org writes exactly the five T-512 rows whose values ARE the registry defaults (0241 seeds the two POS keys; t539-seed-matches-registry pins every key) (the SQL is pinned to the code, then rolled back) [kills: a seed value that drifted from the registry]', async () => {
     const file = readdirSync(MIGRATIONS).find((n) => n.startsWith('0239_'));
     expect(file, 'no 0239 migration file').toBeDefined();
     const statements = readFileSync(join(MIGRATIONS, file!), 'utf8')
@@ -58,7 +60,7 @@ describe('T-512 seed - one row per existing org per key at 2000-01-01, equal to 
         if (e !== rollback) throw e;
       });
 
-    expect(rows.map((r) => r.key).sort()).toEqual(Object.keys(RULE_REGISTRY).sort());
+    expect(rows.map((r) => r.key).sort()).toEqual(T512_KEYS.slice().sort());
     for (const r of rows) {
       const want = (RULE_REGISTRY as Record<string, { default: unknown }>)[r.key]!.default;
       expect(Number(r.value), r.key).toBe(Number(want));
@@ -73,6 +75,6 @@ describe('T-512 seed - one row per existing org per key at 2000-01-01, equal to 
     expect(file, 'no 0239 migration file').toBeDefined();
     const text = readFileSync(join(MIGRATIONS, file!), 'utf8');
     const keys = new Set([...text.matchAll(/'((?:settlement|tax|payroll)\.[a-z_]+)'/g)].map((m) => m[1]!));
-    expect([...keys].sort()).toEqual(Object.keys(RULE_REGISTRY).sort());
+    expect([...keys].sort()).toEqual(T512_KEYS.slice().sort());
   });
 });

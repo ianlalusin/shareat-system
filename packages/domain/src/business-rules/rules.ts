@@ -45,6 +45,7 @@ function hundredths(text: string): bigint {
 
 function checkedBounds(def: RuleDefinition, key: string, value: string): void {
   const n = hundredths(value);
+  if (def.unit === 'hour' && n % 100n !== 0n) throw refuse(`business rule ${key}: not a whole hour`, `${def.label} must be a whole hour from 0 to 23.`);
   if (n < hundredths(def.min) || n > hundredths(def.max)) {
     throw refuse(`business rule ${key}: out of bounds`, `${def.label} must be between ${def.min} and ${def.max}.`);
   }
@@ -61,7 +62,7 @@ const ZERO_WIDTH = /[\u200B-\u200D\uFEFF]/g;
 
 export interface SetBusinessRuleInput {
   readonly key: string;
-  /** A plain decimal with at most two places, in the key's unit (pesos or percent). */
+  /** A plain decimal with at most two places, in the key's unit (pesos, percent or an hour 0-23). */
   readonly value: string;
   /** YYYY-MM-DD, today (Manila) or later. */
   readonly effectiveFrom: string;
@@ -118,8 +119,8 @@ export interface BusinessRuleItem {
   readonly key: BusinessRuleKey;
   readonly label: string;
   readonly help: string;
-  readonly unit: 'money' | 'percent';
-  readonly namespace: 'settlement' | 'tax';
+  readonly unit: 'money' | 'percent' | 'hour';
+  readonly namespace: 'settlement' | 'tax' | 'pos';
   readonly min: string;
   readonly max: string;
   /** The value in force today (Manila), as text. A rule with no row shows its starting value. */
