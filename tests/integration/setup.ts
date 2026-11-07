@@ -7,6 +7,7 @@
  * merely discouraged.
  */
 import { config } from 'dotenv';
+import { redactDbUrl } from '../helpers/redact-db-url';
 
 config({ path: '.env.local' });
 
@@ -52,7 +53,7 @@ if (!url) {
 
 if (!/shareat_test|_test(\?|$)/.test(url)) {
   throw new Error(
-    `Refusing to run integration tests against ${url.replace(/:\/\/[^@]*@/, '://***@')} — ` +
+    `Refusing to run integration tests against ${redactDbUrl(url)} — ` +
       'the database name must contain "_test". These tests TRUNCATE tables.',
   );
 }

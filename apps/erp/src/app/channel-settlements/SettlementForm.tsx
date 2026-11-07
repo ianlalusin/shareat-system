@@ -22,10 +22,10 @@
  */
 import { accountLabel } from '@/lib/account-label';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { Banner, Button, Field, FormGrid, Input, Select, SplitWorkspace } from '@/components/ui';
+import { Banner, Button, Field, FormGrid, Input, Select, SplitWorkspace, Textarea } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
-import { CHANNEL_SETTLEMENT_RECORD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { CHANNEL_SETTLEMENT_RECORD_RULES, SETTLEMENT_DIFFERENCE_REASON_MAX, nativeAttrs } from '@shareat/domain/field-rules';
 import { recordSettlementAction, type PreviewRequest, type PreviewResponse } from './actions';
 
 export interface ChannelChoice {
@@ -62,7 +62,11 @@ export interface PreviewShape {
   tolerance: string;
   destinationAccountName: string | null;
   blockers: string[];
-  needsGainAcknowledgement: boolean;
+  /** T-511 S6a: a difference past tolerance (either sign) with no valid reason yet. */
+  needsAcknowledgement: boolean;
+  /** The absolute difference between the day and the payout. */
+  difference: string;
+  differenceSign: 'short' | 'over' | 'none';
   /** T-351 / DEF-482 — false means every figure above is a placeholder zero, not a real answer. */
   figuresComputed: boolean;
 }
@@ -131,7 +135,7 @@ export function SettlementForm({
   const [loanAmount, setLoanAmount] = useState('');
   const [reference, setReference] = useState('');
   const [settledOn, setSettledOn] = useState(today);
-  const [recognizeGain, setRecognizeGain] = useState(false);
+  const [differenceReason, setDifferenceReason] = useState('');
   // T-440: picking a channel or day sets the gross from React state, which fires no input event; tell the checked form.
   const grossRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -161,9 +165,9 @@ export function SettlementForm({
         deductions,
         loanId,
         loanAmount,
-        recognizeGain,
+        differenceReason,
       ]),
-    [channelId, day?.businessDate, gross, net, deductions, loanId, loanAmount, recognizeGain],
+    [channelId, day?.businessDate, gross, net, deductions, loanId, loanAmount, differenceReason],
   );
   const stale = checkedKey !== null && checkedKey !== figuresKey;
   const checked = checkedKey === figuresKey && preview !== null;
@@ -206,7 +210,7 @@ export function SettlementForm({
         loanId,
         loanAmount: loanAmount || '0',
         loanOwnerStoreId: crossStoreLoan ? (loan?.storeId ?? '') : '',
-        recognizeGain,
+        differenceReason,
       });
       if (res.ok) {
         setPreview(res.preview);
@@ -236,14 +240,14 @@ export function SettlementForm({
       <input type="hidden" name="businessDate" value={day?.businessDate ?? ''} />
       <input type="hidden" name="loanOwnerStoreId" value={crossStoreLoan ? (loan?.storeId ?? '') : ''} />
       {/*
-        ⚠️ The acknowledgement travels as a HIDDEN field, not as the checkbox's own name.
-        The checkbox is only rendered while a gain past tolerance is on screen — and ticking it
-        makes the figures stale, so the next check clears the blocker and unmounts the checkbox.
-        A named checkbox would then be gone from the form at submit time and the acknowledgement
+        ⚠️ The reason travels as a HIDDEN field, mirrored from state, not as the visible box's own name.
+        The box is only rendered while a difference past tolerance is on screen, and typing in it
+        makes the figures stale, so the next check clears the blocker and unmounts the box.
+        A named box would then be gone from the form at submit time and the acknowledgement
         would silently not be sent: the posting would refuse the very thing the person just
         agreed to, with a message saying they had not agreed to it.
       */}
-      <input type="hidden" name="recognizeGain" value={recognizeGain ? 'on' : ''} />
+      <input type="hidden" name="differenceReason" value={differenceReason} />
 
       <SplitWorkspace formTitle="Payout details" detailsTitle="Payout check" form={(
       <div className="space-y-5">
@@ -454,23 +458,9 @@ export function SettlementForm({
               </div>
             )}
 
-            {/* ⭐ The gain acknowledgement is offered ONLY once a gain past tolerance is on
-                screen. A permanently visible tick is one people learn to tick. */}
-            {preview.needsGainAcknowledgement && (
-              <label className="mt-3 flex items-start gap-2 rounded border border-warning bg-warning-soft p-3 text-sm text-warning-ink">
-                <input
-                  type="checkbox"
-                  checked={recognizeGain}
-                  onChange={(e) => setRecognizeGain(e.target.checked)}
-                  className="mt-0.5"
-                />
-                <span>
-                  <strong>Recognise {money(preview.settlementGain)} as income.</strong> The platform
-                  paid more than the day reported, past the tolerance. Tick this only if the payout
-                  is right and the day under-reported — a typo must not quietly become revenue.
-                </span>
-              </label>
-            )}
+            {/* ⭐ The acknowledgement is offered ONLY once a difference past tolerance is on
+                screen. A permanently visible box is one people learn to fill in by habit. */}
+            <DifferenceAcknowledgement preview={preview} reason={differenceReason} onReasonChange={setDifferenceReason} />
 
             {stale && (
               <p className="mt-3 text-sm font-medium text-warning-ink">
@@ -502,6 +492,51 @@ export function SettlementForm({
       </div>
       )} />
     </CheckedForm>
+  );
+}
+
+/**
+ * T-511 S6a — the acknowledgement of a difference between the payout and the day, past tolerance, of EITHER sign (it replaces the old gain tick, and a shortfall
+ * can be accepted too now). Hook-free and presentational, like `SettlementPreviewFigures`: nothing when no acknowledgement is needed; otherwise the same visible
+ * reason box for both signs, the difference as money, and wording that tells the two apart. The posted value is the hidden `differenceReason` field of the form.
+ */
+export function DifferenceAcknowledgement({
+  preview,
+  reason,
+  onReasonChange,
+}: {
+  preview: PreviewShape;
+  reason: string;
+  onReasonChange: (reason: string) => void;
+}) {
+  if (!preview.needsAcknowledgement) return null;
+  const short = preview.differenceSign === 'short';
+  return (
+    <div className="mt-3 space-y-2 rounded border border-warning bg-warning-soft p-3 text-sm text-warning-ink">
+      <p>
+        {short ? (
+          <>
+            <strong>The payout is {money(preview.difference)} short of the day.</strong> That is past the tolerance. Accept it only if the platform statement is right
+            and the day was over-reported. It is booked as an expense (settlement variance).
+          </>
+        ) : (
+          <>
+            <strong>The payout is {money(preview.difference)} more than the day.</strong> That is past the tolerance. Accept it only if the payout is right and the day was
+            under-reported. It is booked as income (settlement gain) — a typo must not quietly become revenue.
+          </>
+        )}
+      </p>
+      <label className="block">
+        <span className="font-medium">Why do you accept this difference?</span>
+        <Textarea
+          value={reason}
+          onChange={(e) => onReasonChange(e.target.value)}
+          maxLength={SETTLEMENT_DIFFERENCE_REASON_MAX}
+          className="mt-1 w-full"
+        />
+      </label>
+      <p className="text-xs">Then check the numbers again: a new reason is a new check.</p>
+    </div>
   );
 }
 

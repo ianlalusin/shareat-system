@@ -44,3 +44,5 @@ export type { DialogProps, DialogSize, FormModalProps } from './Dialog';
 export { HelpTip } from './HelpTip';
 export type { HelpTipProps } from './HelpTip';
 export { DisclosureCard } from './DisclosureCard';
+export { SectionTabs } from './SectionTabs';
+export type { SectionTabsProps, SectionTabItem } from './SectionTabs';

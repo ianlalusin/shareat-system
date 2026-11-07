@@ -78,6 +78,11 @@ export const CLASS_CATALOGUE = {
     meaning: 'A v1 expense entry carries conflicting groups',
     authority: 'S1 flag',
   },
+  PLATFORM_FILE_CORRECTION: {
+    family: 'policy',
+    meaning: 'A v2 correcting entry that moves a platform day sales and receivable to the platform file figure; v1 keeps the staff figure',
+    authority: 'T-511 S6b, design decision 17',
+  },
 } as const satisfies Record<string, ClassEntry>;
 
 export type ClassCode = keyof typeof CLASS_CATALOGUE;
