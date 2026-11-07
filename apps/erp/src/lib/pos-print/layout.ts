@@ -1,4 +1,3 @@
-import type { Money } from '@shareat/core/money';
 import type { PrintLayout } from './types';
 
 /**
@@ -100,14 +99,14 @@ export function rule(cols: number): string {
 }
 
 /**
- * A `Money` as it is printed: thousands commas, no currency symbol (thermal code pages often have no
+ * A money figure (a decimal string) as it is printed: thousands commas, no currency symbol (thermal code pages often have no
  * ₱), sign preserved.
  *
  * STRING WORK ONLY. There is no `Number()`, no `parseFloat`, no arithmetic — the figure arrives exact
  * as a decimal string (bible §6) and it is printed exactly as it arrived. Anything that recomputed
  * here could contradict the amount the diner actually paid.
  */
-export function printAmount(m: Money): string {
+export function printAmount(m: string): string {
   const value = m.trim();
   const negative = value.startsWith('-');
   const body = negative ? value.slice(1) : value;

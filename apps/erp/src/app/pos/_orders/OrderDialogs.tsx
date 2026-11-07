@@ -143,7 +143,7 @@ export function OrderDialog({ mode, menu, stands, tiles, onClose, onSend }: { mo
         {mode.kind === 'take_out' ? (
           <label className="block space-y-2 text-sm font-semibold text-muted">
             <span className="block">Name (optional)</span>
-            <input type="text" data-erp-size="free" className={FIELD} maxLength={TAKE_OUT_NAME_MAX} value={name} onChange={(e) => setName(e.target.value)} />
+            <input type="text" data-erp-size="free" className={FIELD} value={name} onChange={(e) => setName(e.target.value.slice(0, TAKE_OUT_NAME_MAX))} />
           </label>
         ) : null}
         {menu ? (
@@ -210,7 +210,7 @@ export function CancelLineDialog({ lineName, onClose, onConfirm }: { lineName: s
         {pick === 'Other' ? (
           <label className="block space-y-2 text-sm font-semibold text-muted">
             <span className="block">Reason</span>
-            <input type="text" data-erp-size="free" className={FIELD} maxLength={CANCEL_REASON_MAX} value={other} onChange={(e) => setOther(e.target.value)} />
+            <input type="text" data-erp-size="free" className={FIELD} value={other} onChange={(e) => setOther(e.target.value.slice(0, CANCEL_REASON_MAX))} />
           </label>
         ) : null}
       </div>

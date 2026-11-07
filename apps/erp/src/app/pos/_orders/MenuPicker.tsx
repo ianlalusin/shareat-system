@@ -113,7 +113,7 @@ function ChoiceSheet({ item, onAdd, onCancel }: { item: PickerItem; onAdd: (line
       )}
       <label className="block space-y-2 text-sm font-semibold text-muted">
         <span className="block">Note (optional)</span>
-        <input type="text" data-erp-size="free" className={FIELD} maxLength={NOTE_MAX} value={note} onChange={(e) => setNote(e.target.value)} />
+        <input type="text" data-erp-size="free" className={FIELD} value={note} onChange={(e) => setNote(e.target.value.slice(0, NOTE_MAX))} />
       </label>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm tabular-nums text-muted">{peso(displayUnitPrice(variant, ids))}{isPackage ? ' / head' : ' each'}</p>
@@ -186,7 +186,7 @@ export function MenuPicker({ menu, packageOpen, hidePackages, heads, cart, onCha
                     <button type="button" data-erp-size="free" disabled={!item.orderable} aria-disabled={!item.orderable} className={`${ITEM} ${item.orderable ? idle : 'border-dashed border-surface-border bg-canvas text-muted'}`} onClick={() => tap(item)}>
                       <span className="flex items-start justify-between gap-2">
                         <span className="font-semibold">{item.name}</span>
-                        {n > 0 ? <span className="rounded-full bg-brand px-2 text-xs font-bold text-white">{n}</span> : null}
+                        {n !== 0 ? <span className="rounded-full bg-brand px-2 text-xs font-bold text-white">{n}</span> : null}
                       </span>
                       <span className="text-sm tabular-nums text-muted">
                         {item.label ?? (from ? `${peso(displayUnitPrice(from, []))}${item.itemType === 'package' ? ' / head' : ''}` : '')}

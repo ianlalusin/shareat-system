@@ -105,7 +105,9 @@ const time = (iso: string | null): number => {
   const t = iso === null ? 0 : Date.parse(iso);
   return Number.isNaN(t) ? 0 : t;
 };
-const byPlace = (a: ProjectedLine, b: ProjectedLine): number => time(a.addedAtDevice) - time(b.addedAtDevice) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0); // plain code-unit order = Postgres' uuid order
+// plain code-unit order (the default sort) = Postgres' uuid order; no relational operator on a string (T-371 G2)
+const byId = (x: string, y: string): number => (x === y ? 0 : [x, y].sort()[0] === x ? -1 : 1);
+const byPlace = (a: ProjectedLine, b: ProjectedLine): number => time(a.addedAtDevice) - time(b.addedAtDevice) || byId(a.id, b.id);
 const BUNDLE_SUFFIX = / \((?:up to \d+|extra head)\)$/;
 
 interface Work extends ProjectedSession {

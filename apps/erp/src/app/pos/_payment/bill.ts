@@ -232,7 +232,7 @@ export function receiptLinesOf(bill: readonly BillLineRow[], priced: PricedSessi
     return {
       name: l.name,
       qty: l.qty,
-      unitPrice: l.unitPrice as ReceiptLine['unitPrice'],
+      unitPrice: money(l.unitPrice),
       gross: pl.gross,
       discounts: l.discounts.map((d) => {
         const pd = pl.discounts.find((x) => x.discountId === d.id)!;

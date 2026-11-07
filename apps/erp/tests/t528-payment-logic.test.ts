@@ -32,7 +32,9 @@ import { priceSession } from '../../../packages/domain/src/pos/price';
 // biome-ignore lint/suspicious/noExplicitAny: the module under test does not exist yet; its types are the builder's
 async function logic(): Promise<any> {
   try {
-    return await import(/* @vite-ignore */ '../src/app/pos/_payment/logic');
+    const mod = await import(/* @vite-ignore */ '../src/app/pos/_payment/logic');
+    // payBlocker is the message of payBlockerDetail; only the tests want it alone, so it lives here, not as a caller-less export (production-caller-ratchet)
+    return { ...mod, payBlocker: (i: Parameters<typeof mod.payBlockerDetail>[0]) => mod.payBlockerDetail(i)?.message ?? null };
   } catch (e) {
     throw new Error(`MISSING MODULE: apps/erp/src/app/pos/_payment/logic.ts cannot be loaded (T-528 not built): ${String((e as Error).message).slice(0, 160)}`);
   }

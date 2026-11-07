@@ -181,9 +181,6 @@ export function payBlockerDetail(i: {
   return null;
 }
 
-/** null = Pay may be enabled; otherwise the one sentence under the Pay button. */
-export const payBlocker = (i: Parameters<typeof payBlockerDetail>[0]): string | null => payBlockerDetail(i)?.message ?? null;
-
 // ---------------------------------------------------------------------------------------------------------------------
 // The discount sheet: the server's checks, in the server's order (addLineDiscount)
 // ---------------------------------------------------------------------------------------------------------------------
@@ -305,21 +302,21 @@ export function saleCompletedEvent(i: SaleInput & { personId: string }): NewPosE
   return { kind: 'sale.completed', personId: i.personId, occurredAtDevice: i.now.toISOString(), payload: buildSalePayload(i) };
 }
 
-export function discountAddedEvent(i: { personId: string; now: Date; discountId: string; lineId: string; kind: DiscountAdd['kind']; qty: number; presetId?: string; valueType?: 'percent' | 'fixed'; value?: string; dinerNo?: number }): NewPosEvent {
-  const at = i.now.toISOString();
+export function discountAddedEvent(d: { personId: string; now: Date; discountId: string; lineId: string; kind: DiscountAdd['kind']; qty: number; presetId?: string; valueType?: 'percent' | 'fixed'; value?: string; dinerNo?: number }): NewPosEvent {
+  const at = d.now.toISOString();
   return {
     kind: 'discount.added',
-    personId: i.personId,
+    personId: d.personId,
     occurredAtDevice: at,
     payload: {
-      discountId: i.discountId,
-      lineId: i.lineId,
-      kind: i.kind,
-      ...(i.presetId !== undefined ? { presetId: i.presetId } : {}),
-      ...(i.valueType !== undefined ? { valueType: i.valueType } : {}),
-      ...(i.value !== undefined ? { value: i.value } : {}),
-      qty: i.qty,
-      ...(i.dinerNo !== undefined ? { dinerNo: i.dinerNo } : {}),
+      discountId: d.discountId,
+      lineId: d.lineId,
+      kind: d.kind,
+      ...(d.presetId !== undefined ? { presetId: d.presetId } : {}),
+      ...(d.valueType !== undefined ? { valueType: d.valueType } : {}),
+      ...(d.value !== undefined ? { value: d.value } : {}),
+      qty: d.qty,
+      ...(d.dinerNo !== undefined ? { dinerNo: d.dinerNo } : {}),
       appliedAtDevice: at,
     },
   };
@@ -382,8 +379,8 @@ export function receiptViewOf(i: PayInput, receiptNo: string): ReceiptView {
     subtotal: i.priced.subtotal,
     discountTotal: i.priced.discountTotal,
     total: i.priced.total,
-    tenders: payments.map((p) => ({ name: i.tenders.find((t) => t.id === p.tenderId)?.name ?? 'Tender', amount: p.amount as Money, reference: p.referenceNo ?? null, toCheck: p.toCheck })),
-    change: summary.change as Money,
+    tenders: payments.map((p) => ({ name: i.tenders.find((t) => t.id === p.tenderId)?.name ?? 'Tender', amount: money(p.amount), reference: p.referenceNo ?? null, toCheck: p.toCheck })),
+    change: money(summary.change),
     diners,
     footerLines: i.receipt.footerLines,
     offline: !i.online,

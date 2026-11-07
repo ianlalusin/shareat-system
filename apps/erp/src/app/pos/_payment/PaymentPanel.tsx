@@ -8,7 +8,7 @@
  */
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { formatBusinessDateTime } from '@shareat/core/datetime';
-import { fromCentavos, money, toCentavos, type Money } from '@shareat/core/money';
+import { fromCentavos, money, toCentavos } from '@shareat/core/money';
 import { nativeAttrs, POS_STATUTORY_HOLDER_RULES, rulesOf } from '@shareat/domain/field-rules';
 import type { PricedSession } from '@shareat/domain/pos/price';
 import { peso } from '@/lib/format';
@@ -66,7 +66,7 @@ export interface PaymentPanelProps {
 
 const HEADS_SENDING_NOTE = 'The head count is still sending. You can add a discount to this line once it has sent.';
 /** A row's amount: a finished figure is a peso figure (₱1,600.00); what the cashier is still typing keeps its own decimals but never loses its comma (₱1,600). */
-const rowAmount = (raw: string, typing: boolean): string => (typing ? `₱${printAmount((raw === '' ? '0' : raw) as Money)}` : peso(fromCentavos(amountCents(raw))));
+const rowAmount = (raw: string, typing: boolean): string => (typing ? `₱${printAmount(raw === '' ? '0' : raw)}` : peso(fromCentavos(amountCents(raw))));
 const FOCUS_SELECTORS = {
   holder: (t: Extract<BlockerTarget, { kind: 'holder' }>) => `[data-holder="${t.dinerNo}-${t.field}"]`,
   row: (t: Extract<BlockerTarget, { kind: 'row' }>) => (t.field === 'tender' ? '[data-tender]:not(:disabled)' : `[data-row="${t.index}"] [data-focus="${t.field}"]`),
@@ -81,7 +81,7 @@ function BillLineView({ line, priced, scLabel, holders, onOpen, onRemove }: { li
       <button type="button" data-erp-size="free" className={`${LINE_BUTTON} px-2 py-2`} aria-label={`Discount ${line.name}`} onClick={onOpen}>
         <span className="flex items-baseline justify-between gap-3">
           <span className="min-w-0 text-base font-semibold">
-            {line.qty} × {line.name} <span className="font-normal text-muted">@ {printAmount(line.unitPrice as Money)}</span>
+            {line.qty} × {line.name} <span className="font-normal text-muted">@ {printAmount(line.unitPrice)}</span>
           </span>
           <span className="shrink-0 text-base font-semibold tabular-nums">{printAmount(pl.gross)}</span>
         </span>
@@ -465,7 +465,7 @@ export function PaymentPanel(p: PaymentPanelProps) {
                         <label htmlFor={refId} className="shrink-0 text-sm font-semibold text-ink">
                           Reference no.
                         </label>
-                        <input id={refId} type="text" data-erp-size="free" data-focus="reference" className={REF_FIELD} aria-label={`${tender?.name ?? 'Wallet'} Reference no.`} value={r.referenceNo ?? ''} maxLength={40} onChange={(e) => setRow(i, { referenceNo: e.target.value })} onFocus={(e) => e.currentTarget.closest('[data-row]')?.scrollIntoView?.({ block: 'nearest' })} />
+                        <input id={refId} type="text" data-erp-size="free" data-focus="reference" className={REF_FIELD} aria-label={`${tender?.name ?? 'Wallet'} Reference no.`} value={r.referenceNo ?? ''} onChange={(e) => setRow(i, { referenceNo: e.target.value.slice(0, 40) })} onFocus={(e) => e.currentTarget.closest('[data-row]')?.scrollIntoView?.({ block: 'nearest' })} />
                       </div>
                     ) : null}
                   </li>

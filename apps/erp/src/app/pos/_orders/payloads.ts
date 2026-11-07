@@ -117,7 +117,7 @@ export async function submitPosEvent(
 }
 
 /** The person on an event: the cashier who signed in offline when there is one, else the signed-in person (T-526 R5). */
-export const actingPersonId = (offlineActor: { personId: string } | null, sessionPersonId: string): string => offlineActor?.personId ?? sessionPersonId;
+export const actingPersonId = (offlineActor: { personId: string } | null, sessionPersonId: string): string => (offlineActor ? offlineActor.personId : sessionPersonId);
 
 /** Row 447: only a paired store tablet writes orders. Any other browser reads them. */
 export const ordersAccess = (a: { paired: boolean }): { canWrite: boolean; note: string | null } => (a.paired ? { canWrite: true, note: null } : { canWrite: false, note: POS_READ_ONLY_NOTE });
