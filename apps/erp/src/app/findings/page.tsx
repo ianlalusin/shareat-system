@@ -180,7 +180,7 @@ export default async function FindingsPage({
       {hard.length > 0 && (
         <FindingGroup
           title="The books do not add up"
-          blurb="⛔ Each of these blocks the period close, and an acknowledgement does NOT lift that — accepting a risk is not the same as the books tying."
+          blurb="Each of these blocks the period close, and an acknowledgement does NOT lift that — accepting a risk is not the same as the books tying."
           rows={hard}
           period={period}
           tone="hard"
@@ -260,7 +260,7 @@ function FindingGroup({
             </form>
           ) : (
             <p className="text-xs text-neutral-500">
-              Accepted — it expires on its own, and it is still counted above. ⛔ The only way it
+              Accepted — it expires on its own, and it is still counted above. The only way it
               leaves this list is for the condition to stop being true.
             </p>
           )}

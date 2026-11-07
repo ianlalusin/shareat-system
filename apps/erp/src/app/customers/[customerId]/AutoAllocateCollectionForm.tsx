@@ -288,7 +288,7 @@ export function AutoAllocateCollectionForm({
             className="w-full"
           />
         </Field>
-        <Field label="Platform fee" hint="⛔ Booked here (platform and channel fees) and NOWHERE else. Never also as an expense." rule={COLLECTION_RECORD_RULES.platformFee}>
+        <Field label="Platform fee" hint="Booked here (platform and channel fees) and NOWHERE else. Never also as an expense." rule={COLLECTION_RECORD_RULES.platformFee}>
           <Input {...nativeAttrs(COLLECTION_RECORD_RULES.platformFee)} placeholder="0.00" className="w-full" />
         </Field>
         <Field label="Date" rule={COLLECTION_RECORD_RULES.collectionDate}>

@@ -58,7 +58,7 @@ export default async function SuppliersPage({
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold">Suppliers</h1>
           <PageDescription>
-            The register, org-wide. ⭐ One row per supplier — not one per store. v1 keyed suppliers
+            The register, org-wide. One row per supplier — not one per store. v1 keyed suppliers
             under each branch, so a fleet-wide vendor became <strong>up to twenty</strong> separate
             records that each had to be edited, reconciled and paid.
           </PageDescription>

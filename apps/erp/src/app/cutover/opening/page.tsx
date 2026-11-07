@@ -272,7 +272,7 @@ export default async function OpeningPage({
         <h2 className="text-sm font-medium">Tie-out</h2>
         <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
           Each register in the new system is compared with the opening figures. Party balances (customers, suppliers, loans, advances) are
-          checked for valid parties only; their totals are compared with v1 at the rehearsal (T-394).
+          checked for valid parties only; their totals are compared with v1 at the rehearsal.
         </p>
         {tie.lines.length === 0 ? (
           <p className="mt-3 rounded border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
