@@ -30,7 +30,6 @@ import {
   voidLeaveAction,
 } from './actions';
 import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import { CertificateView } from './CertificateView';
 import { Badge, Button, Field, FlashBanner, FormGrid, Input, Select, Textarea , FormSection, FormModal} from '@/components/ui';
@@ -111,15 +110,11 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
   const kinds = mine.types;
 
   return (
-    <Page density="table">
-      <div>
-        <h1 className="text-2xl font-semibold">Leave</h1>
-        <PageDescription>
-          Ask for a day off, and see where your request stands. Managers decide requests and record absences here. The monthly and yearly
-          limits and the 5 paid Service Incentive Leave days are checked when a manager approves.
-        </PageDescription>
-      </div>
-
+    <Page
+      density="table"
+      title="Leave"
+      description="Ask for a day off, and see where your request stands. Managers decide requests and record absences here. The monthly and yearly limits and the 5 paid Service Incentive Leave days are checked when a manager approves."
+    >
       <FlashBanner flash={sp} />
 
       {wanted && (

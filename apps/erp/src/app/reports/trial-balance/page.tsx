@@ -8,7 +8,6 @@ import { TieIndicator } from '@/components/reports/TieIndicator';
 import { TrialBalanceTable } from '@/components/reports/TrialBalanceTable';
 import { CsvExportLink } from '@/components/reports/CsvExportLink';
 import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Trial Balance — Shareat System' };
 
@@ -60,15 +59,11 @@ export default async function TrialBalancePage({
   );
 
   return (
-    <Page density="wide">
-      <div>
-        <h1 className="text-2xl font-semibold">Trial Balance</h1>
-        <PageDescription>
-          Every figure below is computed live from journal_lines — nothing here is a stored
-          total.
-        </PageDescription>
-      </div>
-
+    <Page
+      density="wide"
+      title="Trial Balance"
+      description="Every figure below is computed live from journal_lines — nothing here is a stored total."
+    >
       <ReportFilters
         basePath="/reports/trial-balance"
         orgs={[{ id: orgId, label: `${scope.orgName} (${scope.orgCode})` }]}

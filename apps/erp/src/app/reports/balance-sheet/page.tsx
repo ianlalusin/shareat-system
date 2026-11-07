@@ -8,7 +8,6 @@ import { BalanceSheetFilters } from '@/components/reports/BalanceSheetFilters';
 import { BalanceSheetTable, BalanceSheetTieIndicator } from '@/components/reports/BalanceSheetTable';
 import { CsvExportLink } from '@/components/reports/CsvExportLink';
 import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Balance Sheet — Shareat System' };
 
@@ -49,17 +48,11 @@ export default async function BalanceSheetPage({
   const hasAnyActivity = result.assetLines.length > 0 || result.liabilityLines.length > 0 || result.equityLines.length > 0;
 
   return (
-    <Page density="wide">
-      <div>
-        <h1 className="text-2xl font-semibold">Balance Sheet</h1>
-        <PageDescription>
-          Every figure below is computed live from journal_lines — nothing here is a stored
-          total. &ldquo;Current period earnings&rdquo; is the running total of unclosed
-          revenue and expense, folded into Equity so the equation ties on any date, not only
-          right after a year-close.
-        </PageDescription>
-      </div>
-
+    <Page
+      density="wide"
+      title="Balance Sheet"
+      description="Every figure below is computed live from journal_lines — nothing here is a stored total. “Current period earnings” is the running total of unclosed revenue and expense, folded into Equity so the equation ties on any date, not only right after a year-close."
+    >
       <BalanceSheetFilters
         basePath="/reports/balance-sheet"
         orgs={[{ id: orgId, label: `${scope.orgName} (${scope.orgCode})` }]}
