@@ -21,7 +21,7 @@ import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
  *         body has EXACTLY the R7 keys; etag is the quoted sha256 text ("<64 hex>"); nextChangeAt is the menu's (string | null). Percent rules are JSON-safe
  *         (a bigint cannot be JSON): numbers or numeric strings, compared here with Number().
  *   Error codes (R5 says `error = "<CODE>: <sentence>"`), as RULED by the planner (7 Nov): POS_EVENT_INVALID, POS_EVENT_UNKNOWN_KIND, POS_EVENT_PERSON_REFUSED;
- *     a T-524 RefusalError keeps its own code when its raw message starts with one (RECORDED_DIFFERENTLY, RULES_NOT_WIRED), else POS_EVENT_REFUSED; an
+ *     a T-524 RefusalError keeps its own code when its raw message starts with one (RECORDED_DIFFERENTLY), else POS_EVENT_REFUSED; an
  *     AuthorizationError is POS_EVENT_NOT_ALLOWED; a wrong manager PIN (AuthenticationError) is POS_EVENT_PIN_REFUSED. The domain's own sentence follows the code.
  *   An unknown person (R4 clause 1): pos_events.person_id has an FK to persons, so the quarantined row stores person_id NULL, and the sentence names the id that was sent (ruling 5).
  *
@@ -32,7 +32,7 @@ import { authorize, AuthorizationError, can, POS_APPROVAL_PIN_CAPPED } from '@sh
 import { accessRepo, catalogueEntry, goneSentence, posV2Repo, RefusalError } from '@shareat/db';
 import { loadStoreMenu } from '@shareat/domain';
 import { addLineDiscount, addLines, currentBusinessDate, openStand } from '../../src/pos';
-import { RULES_NOT_WIRED, uuidv5 } from '../../src/pos/shared';
+import { uuidv5 } from '../../src/pos/shared';
 import {
   asOrg, auditRows, closeAll, counts, DAY, eventsOf, ev, fixture, HOLDER, linesAddedPayload, makeServer0240, makeStaff, newStand, nowIso, pinOf, pinSession,
   plainDay, RATES, receiptOfSession, salePayload, seniorDay, seniorEntry, sessionRow, signedIn, sql, standOpenedPayload, stateVersionOf, uuid,
@@ -255,23 +255,15 @@ describe('R2 / R5 - applying a batch: applied, duplicate, conflict, quarantined,
     expect(r.stateVersion).toBe(await stateVersionOf(f));
   });
 
-  it('RULES_NOT_WIRED on a sale is a retry: the batch stops, no pos_events row exists for it or after it, and the same batch applies once the reader is there', async () => {
+  it('T-539 S2: with NO reader injected a senior sale applies from the database rules (registry defaults on a fresh org), and so does the event after it', async () => {
     const f = await fixture();
     await signedIn(f, f.counterId);
     const s = await seniorSessionDirect(f);
     const stand2 = await newStand(f);
     const r = await send(f, [seniorSaleEvent(f, 1, s), ev(2, 'stand.opened', f.counterId, standOpenedPayload(uuid(), stand2.id))], {});
-    expect(r.results, 'processing stopped at the retry: the later event gets no result').toEqual([{ seq: 1, status: 'retry' }]);
-    expect(await eventsOf(f), 'no row for the retried event or the one after it').toHaveLength(0);
-    expect(await receiptOfSession(s.sessionId)).toBeUndefined();
-    expect((await counts(f)).sessions, 'the later event was not attempted').toBe(1);
-    expect(RULES_NOT_WIRED).toBe('The POS business rules are not connected yet. Ask an admin.');
-
-    // The retry left nothing behind: the device sends it again once the rules are wired.
-    const again = await send(f, [seniorSaleEvent(f, 1, s)], RATES);
-    expect(statuses(again)).toEqual(['applied']);
+    expect(statuses(r)).toEqual(['applied', 'applied']);
     expect((await receiptOfSession(s.sessionId))?.id).toBeDefined();
-    expect((await eventsOf(f)).map((x) => [Number(x.seq), x.status])).toEqual([[1, 'applied']]);
+    expect((await eventsOf(f)).map((x) => [Number(x.seq), x.status])).toEqual([[1, 'applied'], [2, 'applied']]);
   });
 
   it('a bug or a temporary failure is a retry too, never a quarantine: a plain Error from the reader, and a serialization failure (40001)', async () => {
@@ -1044,14 +1036,15 @@ describe('R7 - the snapshot (domain: buildPosSnapshot)', () => {
     expect(Number(emp.value)).toBe(10);
   });
 
-  it('rules: the three business rules in basis points and the day-start hour; the unwired default reader is the plain refusal', async () => {
+  it('rules: the three business rules in basis points and the day-start hour; the default reader (no deps) returns the same real values', async () => {
     const f = await fixture();
     const s = await snapshot(f);
     const r = s.body.rules as Record<string, unknown>;
     expect(Number(r.vatPercentBasisPoints)).toBe(1200);
     expect(Number(r.scPwdPercentBasisPoints)).toBe(2000);
     expect(r.businessDayStartHour).toBe(4);
-    await expectRefusal(snapshot(f, {}), RULES_NOT_WIRED);
+    const d = (await snapshot(f, {})).body.rules as Record<string, unknown>;
+    expect([Number(d.vatPercentBasisPoints), Number(d.scPwdPercentBasisPoints), d.businessDayStartHour]).toEqual([1200, 2000, 4]);
   });
 
   it('staff: who may sign in now, with the 3-digit code and ONLY the POS capabilities they hold; nobody who may not; no PIN material anywhere', async () => {

@@ -67,6 +67,8 @@ formatCoverageReport
 formatKitchenQty
 formatLogAmount
 formatLogDescription
+formatReceipt
+formatRefillSlip
 getActiveFake
 getCalendarWeatherIcon
 getGroupKey
@@ -137,7 +139,6 @@ proxy
 pullHolds
 purgeComplete
 rateFor
-readPosRules
 realSourceTypesForSpecName
 recentRuns
 reconcileSupplier
