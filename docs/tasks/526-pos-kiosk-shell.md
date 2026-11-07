@@ -222,3 +222,17 @@ junctioned worktree, so render from the main tree on a release branch, or use th
 - ✅ **O1 RULED (Ian, 7 Nov; bible row 446): no picker in release 1.** Original question: row 323 says a person with two positions picks one after the PIN, and the pick only
   narrows. Nothing implements it yet. Release 1 proposal: no picker, so a person acts with all their grants, the same as
   in the ERP today. Is that acceptable for Lipa on 7 Dec?
+
+## Rulings on the tester's questions (planner, 7 Nov 2026)
+
+1. **The miss count is stored in T-530a's `meta.ts`** (the work order was amended on 7 Nov): `getMeta`/`setMeta` with an
+   `app.`-prefixed key, for example `app.offlinePinMisses`. `attemptOfflineSwitch` takes them injected, as the tests
+   assume.
+2. **`resumeAbove` takes one object**: `resumeAbove({ lastSeq, lastTerminalSeq })`, matching T-530a.
+3. **Verifier encoding:** base64 strings, a 16-byte salt and a 32-byte hash.
+4. **Pause sentence:** "Too many wrong PINs for this Employee ID. Wait 5 minutes." (the same as T-464).
+5. **Expired snapshot at the offline switch:** "Offline sign-in has expired. Connect to the internet and sign in."
+6. **The pending window is inclusive:** a pending verifier exactly 5:00 old is still promoted.
+7. **Census:** add the kitchen-layout files to the `t348` allowlist if they carry their own h1+p.
+   `route-capability-coverage` and `no-ungated-read-surface` must go green on the real pages, with no exemption.
+8. **`?storeId` check:** each page does it (a layout cannot read `searchParams`).
