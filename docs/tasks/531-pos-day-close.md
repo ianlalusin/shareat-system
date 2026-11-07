@@ -311,3 +311,62 @@ plus the ✅ for a manager who did not close the Z, and a test that a v1-fed day
   - a replay writes nothing;
   - `closeDay` refuses at 3 days with the exact sentence;
   - a 2-day window still closes normally (row 390's forgotten-Z case).
+
+## Rulings on the tester's questions (planner, 8 Nov 2026) — these override earlier text
+
+1. **Business date of a Z (replaces R3 step 4's "date the window opened").** A Z is dated with the **business day it
+   closes**:
+
+   `business_date = max(lastZ.business_date + 1 day, startHourDate(windowEnd))`
+
+   - `startHourDate(t)` is the Manila date of `t − businessDayStartHour`.
+   - With no earlier Z, only the second term applies.
+
+   Examples:
+   - A Z at 22:00 on D is dated D. The next Z at 22:00 on D+1 is dated D+1, with no clash with the
+     `UNIQUE (store, business_date, terminal)`.
+   - A late Z at 02:00 on D+2 is dated D+1.
+   - A second Z on the same evening, after the first, is dated D+1.
+   - A forgotten Z: the next Z covers two dates and takes the later one (row 390).
+
+   **T-524's `currentBusinessDate` must agree**, so receipts and statutory rows carry the date their Z will have:
+
+   `currentBusinessDate = max(lastZ.business_date + 1 day, startHourDate(now))`
+
+   With no earlier Z, it uses the existing start-hour rule. Change `businessDateOf` in `pos/shared.ts`. Add tests:
+   - a sale at 23:00 after a 22:00 Z is dated D+1;
+   - a sale at 10:00 the next morning is dated D+1;
+   - a sale before any Z uses the start-hour rule.
+
+   With this rule, "several Zs on one date" cannot happen. R5's multi-Z rebuild collapses to the single Z of that date;
+   keep the code simple.
+2. **0185 child rows and verification.**
+   - Inside the derivation flag, a `pos_receipts` day's `sales_day_tenders` rows are also allowed for a linked store.
+     Amend the 0185 child-row function in 0247 the same way.
+   - In `verifySalesDay`, a `pos_receipts` day is treated like a feed day for channel completeness. It has no remitted
+     Walk-in row, so do not require one.
+   - Update the t523 line that lists the sources so it includes `'pos_receipts'`.
+   - Name the new refusal constraint or branch `sales_days_pos_live_feed_guard`.
+   - On an unlinked live store, a `pos_receipts` insert still needs the flag. The flag is always required.
+3. **The first window, and test mode.**
+   - With no earlier Z on a live store, `windowStart` = `businessDayStartHour` on the **earlier** of `live_from` and the
+     business date of the oldest unclosed receipt.
+   - A test-mode store has `live_from` NULL. There, `windowStart` = `businessDayStartHour` on the business date of the
+     oldest unclosed receipt.
+   - A backlog Z is dated with its own business day; days with no sales get no Z.
+4. **Roles and approval.**
+   - "Store manager or above" means the roles `manager`, `admin` and `super_admin`. There is no "area manager" role.
+   - The **approver must be a different person from the closer.** Refusal: "A different manager must approve the
+     close."
+   - `verifyPosManagerApproval` resolves the person from the PIN (PINs are unique per org). The Employee ID typed with
+     it must match that person's staff code at the store. If not, refuse with the same refusal sentence as a wrong PIN,
+     and count it as a miss.
+   - The R10 sentence is the one asserted.
+5. **Bridge details.**
+   - Money values are JSON numbers with 2 decimals, made from exact centavos (`Number(centavos) / 100`). v1 stores
+     numbers.
+   - The wallet key is `tenders.pos_v1_alias` and the cash key is `'cash'`.
+   - Z ids are uuidv5(namespace = `closeRunId`, name = `businessDate`), the same namespace-first convention as T-524.
+   - Dates in sentences are ISO `YYYY-MM-DD`.
+   - The untested items the tester listed may stay untested: a store with no v1 link, the tampered `sale.mixed`
+     refusal, and a second terminal. Each gets a comment in its test file.
