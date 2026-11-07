@@ -38,3 +38,11 @@ Spec doc `docs/tasks/511-settlement-upload-s6c-spec.md` (this plan, committed by
 
 ## Known limits (accept)
 No void for a wrongly posted charge (owner reverses by hand; unique per other line blocks a re-post); a charge the platform does NOT net from a payout stays as a 1220 credit until slice 8's deferral/payment handling; manual SettlementForm has no way to name netted charges (S7 approve does); pandago stays unbooked; account codes stay constants until their own sweep; rule/rate changes never restate booked charges.
+
+## Tester findings and Opus rulings (7 Nov) — these SUPERSEDE the text above
+1. `channel_settlements_identity_check` (0057:113) forces the STORED/returned `outstanding_cleared` to be the amount actually credited to 1220: `min(owedGross, gross) − C` (9,888 in the example), not `min(owedGross, gross)`. Preview and stored value are the same number.
+2. The worked example's 112 shortfall is WITHIN the default tolerance (max(50, 10% of gross) = 1,000), so without `settleChargeIds` the double count books SILENTLY (6400 112 plus 6420 112), no acknowledgement. The negative control pins those numbers. (A single-day payout without ids happens to net through the `owed` cap; the trap appears when another day is still owed, and that day then swings to a 7100 gain 112.)
+3. `vat_amount` CHECK is finite only (NOT >= 0): a credit note has negative net and negative VAT. `total_amount = net + vat <> 0`. The builder edits the one tester test that pinned >= 0.
+4. 0244 also adds UNIQUE (org_id, id) on `settlement_other_lines` (target of the same-org FK).
+5. `line_date` NULL (or undated) -> plain refusal "this charge has no date". Duplicate ids in `settleChargeIds` are de-duplicated before summing. `preview.outstanding` stays the ledger figure; the preview's cleared/difference numbers equal the posted ones.
+6. Names accepted: `charge.ts`; result `{posted, chargeId, journalEntryId}`; triggers `<table>_append_only`; staged field `vat`; a CPC ad on a no-order day stays advertisement/marketing and is NOT booked by S6c. Charge entries are invisible to dual-run v2Figures (only source 'sale' feeds the 1220 tender); the control test stays.
