@@ -26,7 +26,9 @@ function basePreview(overrides: Partial<PreviewShape> = {}): PreviewShape {
     tolerance: '1.00',
     destinationAccountName: 'Bank A',
     blockers: [],
-    needsGainAcknowledgement: false,
+    needsAcknowledgement: false,
+    difference: '0.00',
+    differenceSign: 'none',
     figuresComputed: true,
     ...overrides,
   };

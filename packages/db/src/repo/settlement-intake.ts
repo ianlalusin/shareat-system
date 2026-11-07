@@ -9,6 +9,7 @@ import { and, asc, desc, eq, getTableColumns, gte, inArray, isNull, lte, sql } f
 import { money, type Money } from '@shareat/core/money';
 import type { Tx } from '../client';
 import {
+  salesDayPlatformCorrections,
   settlementDayLines,
   settlementLoanLines,
   settlementOtherLines,
@@ -598,4 +599,48 @@ export async function pandagoOnlyUploads(tx: Tx, orgId: string, storeIds: readon
      order by u.uploaded_at, u.id
   `)) as unknown as { upload_id: string; store_id: string; store_name: string }[];
   return rows.map((r) => ({ uploadId: r.upload_id, storeId: r.store_id, storeName: r.store_name }));
+}
+
+// ---------------------------------------------------------------------------------------------
+// T-511 S6b: platform sales corrections (`correctPlatformSales`; the platform-corrections migration). Append-only: insert and read, never update.
+// ---------------------------------------------------------------------------------------------
+export type PlatformCorrectionRow = typeof salesDayPlatformCorrections.$inferSelect;
+/** The two figures are `Money` brands (numeric(14,2)), spelled out so the T-371 write guard can see their shape. */
+export interface InsertPlatformCorrectionInput {
+  id: string;
+  orgId: string;
+  storeId: string;
+  salesDayId: string;
+  channelId: string;
+  dayLineId: string;
+  fromAmount: Money;
+  toAmount: Money;
+  entryDate: string;
+  journalEntryId: string;
+  reason: string;
+  postedBy: string;
+}
+
+/** The correction already posted for this staged day line ON THIS SALES DAY, or null (a voided day re-entered on the same date is a new sales day: the old day's row is not this one's). */
+export async function platformCorrectionForLine(tx: Tx, orgId: string, salesDayId: string, dayLineId: string): Promise<PlatformCorrectionRow | null> {
+  const [row] = await tx
+    .select()
+    .from(salesDayPlatformCorrections)
+    .where(and(eq(salesDayPlatformCorrections.orgId, orgId), eq(salesDayPlatformCorrections.salesDayId, salesDayId), eq(salesDayPlatformCorrections.dayLineId, dayLineId)))
+    .limit(1);
+  return row ?? null;
+}
+
+/** Every platform correction of a sales day, oldest first (the order they were written: `posted_at` is the statement clock). */
+export async function listPlatformCorrectionsForDay(tx: Tx, orgId: string, salesDayId: string): Promise<PlatformCorrectionRow[]> {
+  return tx
+    .select()
+    .from(salesDayPlatformCorrections)
+    .where(and(eq(salesDayPlatformCorrections.orgId, orgId), eq(salesDayPlatformCorrections.salesDayId, salesDayId)))
+    .orderBy(asc(salesDayPlatformCorrections.postedAt), asc(salesDayPlatformCorrections.id));
+}
+
+export async function insertPlatformCorrection(tx: Tx, input: InsertPlatformCorrectionInput): Promise<void> {
+  // `posted_at` is the statement's own clock (as `posV1Repo.insertCorrection`), so corrections order exactly by when they were written.
+  await tx.insert(salesDayPlatformCorrections).values({ ...input, postedAt: sql`clock_timestamp()` });
 }

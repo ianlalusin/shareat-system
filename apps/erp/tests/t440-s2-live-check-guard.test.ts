@@ -397,7 +397,7 @@ const EXEMPT: Record<string, { count: number; reason: string }> = {
   'ap/suppliers/[id]/AutoAllocatePaymentForm.tsx': { count: 1, reason: `per-invoice allocation amount: controlled input with no literal name (${REPEATED})` },
   'ap/suppliers/[id]/page.tsx': { count: 1, reason: 'local field helper: name / required arrive as props, one component for many callers' },
   'attendance/terminals/ProvisionForm.tsx': { count: 1, reason: 'controlled client-state input with no literal name (the label state, not a posted field)' },
-  'channel-settlements/SettlementForm.tsx': { count: 1, reason: `deduction rows name={d.name} from data: ${REPEATED}` },
+  'channel-settlements/SettlementForm.tsx': { count: 2, reason: `deduction rows name={d.name} from data: ${REPEATED}; and the difference-reason box, a controlled textarea with no name (its text posts in the hidden differenceReason field, judged by SETTLEMENT_DIFFERENCE_RULES in the preview and the record)` },
   'customers/[customerId]/AutoAllocateCollectionForm.tsx': { count: 1, reason: `per-invoice allocation amount: controlled input with no literal name (${REPEATED})` },
   'remittance/page.tsx': { count: 2, reason: `lineAmount_\${i} / lineOverage_\${i}: ${REPEATED}` },
   'sales-days/[id]/page.tsx': { count: 1, reason: `channel_\${c.id} per-channel amounts: ${REPEATED}` },

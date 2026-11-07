@@ -1005,7 +1005,7 @@ describe('G1-G5 (Ian, Q1) — blank/spaces-only gross/net now REFUSE, on both sa
         storeId: f.storeId, channelId: f.channelId, businessDate: '2026-01-10',
         grossAmount: '', netDeposited: '40.00',
         commission: '', marketing: '', platformFee: '', vatOnFees: '', withholdingTax: '', penalty: '',
-        loanId: '', loanAmount: '', loanOwnerStoreId: '', recognizeGain: false,
+        loanId: '', loanAmount: '', loanOwnerStoreId: '', differenceReason: '',
       });
       expect(result.ok, 'a preview always returns ok:true with blockers listed').toBe(true);
       if (result.ok) {
@@ -1025,7 +1025,7 @@ describe('G1-G5 (Ian, Q1) — blank/spaces-only gross/net now REFUSE, on both sa
         storeId: f.storeId, channelId: f.channelId, businessDate: '2026-01-10',
         grossAmount: '40.00', netDeposited: '',
         commission: '', marketing: '', platformFee: '', vatOnFees: '', withholdingTax: '', penalty: '',
-        loanId: '', loanAmount: '', loanOwnerStoreId: '', recognizeGain: false,
+        loanId: '', loanAmount: '', loanOwnerStoreId: '', differenceReason: '',
       });
       expect(result.ok, 'a preview always returns ok:true with blockers listed').toBe(true);
       if (result.ok) {
@@ -1058,7 +1058,7 @@ describe('Amendment A1 P1 — previewChannelSettlement with a comma penalty AND 
         storeId: f.storeId, channelId: f.channelId, businessDate: '2026-01-10',
         grossAmount: '40.00', netDeposited: '40.00',
         commission: '', marketing: '', platformFee: '', vatOnFees: '', withholdingTax: '', penalty: '1,5',
-        loanId: '', loanAmount: '', loanOwnerStoreId: '', recognizeGain: false,
+        loanId: '', loanAmount: '', loanOwnerStoreId: '', differenceReason: '',
       });
       expect(result.ok, 'wanted ok:true with both blockers listed').toBe(true);
       if (result.ok) {
@@ -1111,7 +1111,7 @@ describe('AZ1 (RULED FLIP, S5.5v Amendment A2 item 1 landed) — no record_ar_co
         storeId: f.storeId, channelId: f.channelId, businessDate: '2026-01-10',
         grossAmount: '', netDeposited: '40.00',
         commission: '', marketing: '', platformFee: '', vatOnFees: '', withholdingTax: '', penalty: '',
-        loanId: '', loanAmount: '', loanOwnerStoreId: '', recognizeGain: false,
+        loanId: '', loanAmount: '', loanOwnerStoreId: '', differenceReason: '',
       });
       expect(result.ok, 'wanted ok:false with an authorization sentence').toBe(false);
       if (!result.ok) {
@@ -1136,7 +1136,7 @@ describe('PV2 (S5.5v Amendment A2 item 2) — preview with a comma-typed gross r
         storeId: f.storeId, channelId: f.channelId, businessDate: '2026-01-10',
         grossAmount: '1,5', netDeposited: '40.00',
         commission: '', marketing: '', platformFee: '', vatOnFees: '', withholdingTax: '', penalty: '',
-        loanId: '', loanAmount: '', loanOwnerStoreId: '', recognizeGain: false,
+        loanId: '', loanAmount: '', loanOwnerStoreId: '', differenceReason: '',
       });
       expect(JSON.stringify(result), 'wanted: no NaN anywhere in the preview response').not.toMatch(/NaN/);
     },
@@ -1158,7 +1158,7 @@ describe('PV3 (S5.5v Amendment A2 item 3) — two bad figures produce both refus
         storeId: f.storeId, channelId: f.channelId, businessDate: '2026-01-10',
         grossAmount: '1,5', netDeposited: '40.00',
         commission: '2,5', marketing: '', platformFee: '', vatOnFees: '', withholdingTax: '', penalty: '',
-        loanId: '', loanAmount: '', loanOwnerStoreId: '', recognizeGain: false,
+        loanId: '', loanAmount: '', loanOwnerStoreId: '', differenceReason: '',
       });
       expect(result.ok, 'a preview always returns ok:true with blockers listed').toBe(true);
       if (result.ok) {

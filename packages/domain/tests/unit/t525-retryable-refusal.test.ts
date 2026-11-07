@@ -25,14 +25,14 @@ describe('T-525 - database error classes', () => {
 
 /** T-525 planner ruling 7: a refusal from the activity-log writer is a server failure, so the inbox answers `retry` (no row, batch stops), never `quarantined`. */
 describe('T-525 - which refusal codes are the server\'s fault', () => {
-  it('RULES_NOT_WIRED and any AUDIT_* / UNKNOWN_AUDIT_* code are retryable', () => {
-    for (const code of ['RULES_NOT_WIRED', 'AUDIT_SCOPE_MISMATCH', 'AUDIT_ACTION_RESERVED', 'AUDIT_ACTOR_MISMATCH', 'UNKNOWN_AUDIT_ACTION']) {
+  it('any AUDIT_* / UNKNOWN_AUDIT_* code is retryable', () => {
+    for (const code of ['AUDIT_SCOPE_MISMATCH', 'AUDIT_ACTION_RESERVED', 'AUDIT_ACTOR_MISMATCH', 'UNKNOWN_AUDIT_ACTION']) {
       expect(isRetryableRefusal(code), code).toBe(true);
     }
   });
 
   it('the event\'s own faults are not: ordinary codes and the POS_EVENT_* family', () => {
-    for (const code of ['RECORDED_DIFFERENTLY', 'POS_EVENT_REFUSED', 'POS_EVENT_INVALID', 'POS_EVENT_PERSON_REFUSED', 'POS_EVENT_NOT_ALLOWED', 'POS_EVENT_PIN_REFUSED', 'XAUDIT_NOT']) {
+    for (const code of ['RULES_NOT_WIRED', 'RECORDED_DIFFERENTLY', 'POS_EVENT_REFUSED', 'POS_EVENT_INVALID', 'POS_EVENT_PERSON_REFUSED', 'POS_EVENT_NOT_ALLOWED', 'POS_EVENT_PIN_REFUSED', 'XAUDIT_NOT']) {
       expect(isRetryableRefusal(code), code).toBe(false);
     }
   });

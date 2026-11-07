@@ -5,16 +5,8 @@
  */
 import { logger } from '@shareat/core/logger';
 import { AuthorizationError, resolvePosTablet, type PosTabletIdentity } from '@shareat/auth';
-import { refusalCode, type PosDeps } from '@shareat/domain';
 import { RefusalError } from '@shareat/db';
 import { readPosTabletToken } from '@/lib/session';
-
-/**
- * The business-rule reader the domain is handed (VAT, senior/PWD rate, day-start hour). EMPTY until T-539 lands the rule keys: with no reader a sale that
- * needs a rate, and the snapshot's `rules`, refuse with RULES_NOT_WIRED (the events route answers `retry`, the snapshot route 503). T-539 puts the real
- * reader here; the route tests replace this one object, as T-524's tests hand `deps.readRules` to the domain.
- */
-export const posDeps: PosDeps = {};
 
 export const POS_UNPAIRED = 'This tablet is not paired. Ask a manager to pair it again.';
 const MAX_BODY_BYTES = 512 * 1024;
@@ -57,13 +49,13 @@ export async function tabletPairing(): Promise<PosTabletIdentity | null> {
   return resolvePosTablet(null, await readPosTabletToken());
 }
 
-/** Runs a handler; a body that is too large is 413, a typed refusal is 503 (rules not connected) or 409 (its own sentence), anything else a logged plain 500. */
+/** Runs a handler; a body that is too large is 413, a typed refusal is 409 (its own sentence), anything else a logged plain 500. */
 export async function guarded(route: string, run: () => Promise<Response>): Promise<Response> {
   try {
     return await run();
   } catch (err) {
     if (err instanceof BodyTooLarge) return fail(413, 'That request is too large.');
-    if (err instanceof RefusalError) return fail(refusalCode(err) === 'RULES_NOT_WIRED' ? 503 : 409, err.userMessage);
+    if (err instanceof RefusalError) return fail(409, err.userMessage);
     if (err instanceof AuthorizationError && err.userMessage) return fail(403, err.userMessage);
     logger.error({ route, code: (err as { code?: string } | null)?.code }, 'pos api: unexpected failure');
     return fail(500, 'Something went wrong on the server. Try again in a moment.');
