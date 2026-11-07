@@ -108,6 +108,8 @@ const NAV_SHAPES = {
   branch: UUID,
   commissary: UUID,
   changedChannel: UUID,
+  // T-544: the channel and day a waiting-day link preselects on the record page; an old `?channel=` link on the overview is sent on with them.
+  channel: UUID,
   pos: UUID,
   start: ISO_DATE,
   end: ISO_DATE,
