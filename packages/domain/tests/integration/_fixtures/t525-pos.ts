@@ -300,7 +300,7 @@ export function plainDay(f: Fx, startSeq = 1, who = f.counterId) {
   ];
   return { sessionId, porkLineId, receiptId: payload.receiptId as string, terminalSeq: saleSeq, events };
 }
-/** The same day with ONE senior on the pork and the card details on the sale: needs the rule reader (RATES) to apply. 4 events. */
+/** The same day with ONE senior on the pork and the card details on the sale: needs the rules (the default reader since T-539 S2). 4 events. */
 export function seniorDay(f: Fx, startSeq = 1, who = f.counterId) {
   const sessionId = uuid();
   const porkLineId = uuid();

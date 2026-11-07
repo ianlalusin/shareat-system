@@ -136,7 +136,6 @@ proxy
 pullHolds
 purgeComplete
 rateFor
-readPosRules
 realSourceTypesForSpecName
 recentRuns
 reconcileSupplier

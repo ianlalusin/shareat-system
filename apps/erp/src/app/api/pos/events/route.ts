@@ -1,5 +1,5 @@
 import { applyPosEvents, parsePosEvents } from '@shareat/domain';
-import { fail, guarded, json, POS_UNPAIRED, posDeps, readCappedText, tabletPairing } from '@/lib/pos-api';
+import { fail, guarded, json, POS_UNPAIRED, readCappedText, tabletPairing } from '@/lib/pos-api';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +22,7 @@ export async function POST(req: Request): Promise<Response> {
     }
     const parsed = parsePosEvents(body);
     if (!parsed.ok) return fail(400, parsed.error);
-    const answer = await applyPosEvents({ pairing: { pairingId: pairing.pairingId, orgId: pairing.orgId, storeId: pairing.storeId }, events: parsed.events }, posDeps);
+    const answer = await applyPosEvents({ pairing: { pairingId: pairing.pairingId, orgId: pairing.orgId, storeId: pairing.storeId }, events: parsed.events });
     return json(200, { ok: true, stateVersion: answer.stateVersion, results: answer.results });
   });
 }
