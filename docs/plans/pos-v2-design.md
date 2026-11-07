@@ -320,6 +320,7 @@ the switch, so it cannot add increments to the same document; (3) the writer ref
 | **T-530** | Offline: port `lib/terminal` + outbox to typed events, service-worker app-shell cache, offline printing, X-slip every 4 h, ₱50k warning, update gate | W2–W3 · 16–26 Nov | L | Sonnet | T-525 |
 | **T-531** | Day close: Z on the POS (row 390) → ERP sales day `source = pos_receipts` for the store; Lipa leaves the bridge and the v1 day feed from the switch date. **Plus the December day-total writer to v1's Firestore document, up to 31 Dec only, with its three guards (row 436)**. Till opening and counting use the **existing ERP till screen** (row 319), no new tab | W3 · 23–27 Nov | M | Sonnet (money lane) | T-524 |
 | **T-532** | APK shell (new app id, printer plugin, `server.url` + service worker) + CI job + emulator run (T-463 harness, no Firebase) + real Lipa tablet and printer check | W3 · 24–27 Nov | M | Sonnet + orchestrator | T-530 |
+| **T-539 S3** | Business rule `pos.table_warn_minutes` (unit `minutes`, migration 0245), so the 90-minute table warning has a screen (Ian, 5 Nov: no hard-coded business value at go-live) | W3 · before the soak | S | Sonnet | T-527 |
 | **T-533** | Soak #1 (Sat 28 Nov) and fixes, soak #2 if needed (latest start Wed 2 Dec), Lipa switch runbook, staff training sheet, go/no-go pack | W4 · 28 Nov – 4 Dec | M | Orchestrator + Sonnet | T-527 to T-532 |
 
 **After go-live (in this order)**
