@@ -21,6 +21,8 @@ export interface CompareDoc {
   receiptId?: string;
   correctionOf?: string;
   channel?: boolean;
+  /** T-511 S6b: a v2 entry that moved a platform day to the platform file figure (`correctPlatformSales`). Set by the v2 reader, never guessed from a document's shape. */
+  platformCorrection?: boolean;
 }
 export interface Disposition {
   orgId: string;
@@ -144,7 +146,7 @@ function addDay(days: Record<string, number>, date: string, amount: number): voi
 }
 
 const docTuple = (d: CompareDoc): string =>
-  JSON.stringify([d.id, d.kind, d.key, d.date, d.amount, d.state, d.receiptId ?? null, d.correctionOf ?? null, d.channel === true]);
+  JSON.stringify([d.id, d.kind, d.key, d.date, d.amount, d.state, d.receiptId ?? null, d.correctionOf ?? null, d.channel === true, ...(d.platformCorrection === true ? [true] : [])]);
 const docOrder = (a: MDoc, b: MDoc): number => cmp(a.date, b.date) || a.amount - b.amount || cmp(a.id, b.id) || cmp(docTuple(a), docTuple(b));
 
 function fingerprintSide(
@@ -299,6 +301,13 @@ export function compareStoreWeek(input: CompareInput): StoreWeekResult {
     pushItem(c.kind, c.key, { class: 'V2_CORRECTION_DATED_LATER', paired: true, amount: inWeek(c.date) ? c.amount : -c.amount, v1Id: v1Side.id, v2Id: c.id });
   }
   exactPass();
+  // PLATFORM_FILE_CORRECTION (T-511 S6b): a flagged v2 correcting entry explains its own in-week contribution (the day's own document paired exact above,
+  // so only the remainder reaches here). The flag comes from the v2 reader; an unflagged document is never given this class.
+  for (const c of v2Posted) {
+    if (!free(c) || c.platformCorrection !== true) continue;
+    used.add(c);
+    pushItem(c.kind, c.key, { class: 'PLATFORM_FILE_CORRECTION', paired: false, amount: v2Contribution(c), v2Id: c.id });
+  }
   pairPass(
     (a, b) => a.kind === 'ap_supplier' && sameKey(a, b) && a.receiptId !== undefined && a.receiptId === b.receiptId && a.amount === b.amount && a.date !== b.date,
     timingPair('AP_AT_INVOICE'),

@@ -180,7 +180,7 @@ export default async function StoreDetailPage({
                 </Field>
               </FormGrid>
               <p className="mt-3 text-xs text-neutral-500">
-                ⛔ The code (<code>{store.code}</code>) is not editable. Rename freely — the code is the
+                The code (<code>{store.code}</code>) is not editable. Rename freely — the code is the
                 stable handle other records refer to. The registered name and TIN are the
                 organisation&apos;s —{' '}
                 <Link href="/settings/organization" className="underline underline-offset-2">

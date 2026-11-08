@@ -63,8 +63,8 @@ export function Dialog({ open, onClose, title, description, size = 'md', childre
         if (e.target === e.currentTarget) e.currentTarget.close();
       }}
     >
-      <div className="flex max-h-[inherit] flex-col">
-        <div className="flex items-start justify-between gap-4 border-b border-surface-border px-5 py-3">
+      <div className="flex h-full max-h-[inherit] flex-col">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-surface-border px-5 py-3">
           <div className="min-w-0">
             <h2 id={titleId} className="text-base font-semibold text-ink">{title}</h2>
             {description ? <p className="mt-0.5 text-xs text-muted">{description}</p> : null}
@@ -81,8 +81,8 @@ export function Dialog({ open, onClose, title, description, size = 'md', childre
             </svg>
           </button>
         </div>
-        <div className="erp-dialog-body min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
-        {footer ? <div className="border-t border-surface-border px-5 py-3">{footer}</div> : null}
+        <div className="erp-dialog-body min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
+        {footer ? <div className="erp-dialog-footer flex shrink-0 flex-wrap items-center justify-end gap-2">{footer}</div> : null}
       </div>
     </dialog>
   );

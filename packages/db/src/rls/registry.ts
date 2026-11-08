@@ -810,6 +810,13 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'rate is commercially sensitive and its variance column is an internal control signal.',
   },
 
+  channel_settlement_loan_legs: {
+    scope: 'org_column',
+    reason:
+      'T-511 S6a. Which loans a platform payout repaid and how much of each: the borrowing and repayment pattern of an org, ' +
+      'read off the settlement it clears. Same sensitivity as the settlement above.',
+  },
+
   // ---- T-178: order/channel wastage disposition ------------------------------------------
   order_wastages: {
     scope: 'org_column',
@@ -1116,6 +1123,18 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
   sales_day_pos_corrections: {
     scope: 'org_column',
     reason: 'A correcting posting for an org’s own sales day; org-scoped like the journal entry it names.',
+  },
+  sales_day_platform_corrections: {
+    scope: 'org_column',
+    reason: 'T-511 S6b. The correcting entry that moves one org’s platform day to the platform file figure; org-scoped like the journal entry and sales day it names.',
+  },
+  channel_period_charges: {
+    scope: 'org_column',
+    reason: 'T-511 S6c. A platform fee or charge booked with no sales day: what a delivery platform charged one org and when; org-scoped like the journal entry and channel it names.',
+  },
+  channel_settlement_charge_links: {
+    scope: 'org_column',
+    reason: 'T-511 S6c. Which booked platform charges a payout netted: part of the settlement it clears, same sensitivity as channel_settlements.',
   },
 
   // ---- T-392 S3: the dual-run comparator (migration 0195) -------------------------------------

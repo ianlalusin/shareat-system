@@ -3,7 +3,7 @@ import { listStoresForAdmin } from './lib';
 import { createStoreAction } from './actions';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Button, FlashBanner, FormGrid, Field, Input, LinkRow, RowLink, Select , FormSection, FormModal} from '@/components/ui';
+import { Badge, Button, FlashBanner, FormGrid, Field, Input, LinkRow, RowLink, Select , FormSection, FormModal, DialogActions} from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { CheckedForm } from '@/components/forms';
 import { ADMIN_STORE_CREATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
@@ -119,11 +119,11 @@ export default async function StoresPage({
               </FormGrid>
             </FormSection>
           </>
-          <div>
+          <DialogActions>
             <Button type="submit" variant="primary">
               Open branch
             </Button>
-          </div>
+          </DialogActions>
         </CheckedForm>
         </FormModal>
       </div>

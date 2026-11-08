@@ -33,7 +33,7 @@ import { typedFor } from '@/lib/keep-typing';
 import { CASH_POLICY_EDIT } from './typed-forms';
 import { CheckedForm, EditableRecord, FieldCheck } from '@/components/forms';
 import { CASH_POLICY_RULES, REMITTANCE_RECORD_RULES, REMITTANCE_REVERSE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
-import { Button, ConfirmDestructive, FlashBanner, FormGrid, Input, Select, FormModal } from '@/components/ui';
+import { Button, ConfirmDestructive, FlashBanner, FormGrid, Input, Select, FormModal, DialogActions } from '@/components/ui';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 
 export const metadata = { title: 'Remittance — Shareat System' };
@@ -477,7 +477,9 @@ export default async function RemittancePage({
               <Input name="notes" className="w-full" />
             </Field>
 
-            <SubmitButton pendingLabel="Saving…">Record handover</SubmitButton>
+            <DialogActions>
+              <SubmitButton pendingLabel="Saving…">Record handover</SubmitButton>
+            </DialogActions>
           </CheckedForm>
           </FormModal>
         </div>

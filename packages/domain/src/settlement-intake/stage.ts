@@ -42,6 +42,8 @@ export interface StagedOtherLine {
   amount: Money;
   lineDate: string | null;
   description: string | null;
+  /** T-511 S6c: the VAT of THIS line (same sign as `amount`, 2 decimals); set for `period_charge` only, whose VAT rides in no day. Elsewhere the VAT is inside the day's platformFee. */
+  vat?: Money;
 }
 
 export interface StagedDay {
@@ -285,11 +287,19 @@ const roundedDiv = (num: bigint, den: bigint): bigint => {
 const floorDiv = (num: bigint, den: bigint): bigint => (num >= 0n ? num / den : -((-num + den - 1n) / den));
 
 /**
+ * THE one copy of the VAT rounding: `numerator` is the sum of (net centavos x VAT percent) and the answer is the VAT in centavos, rounded half away from zero ONCE.
+ * Staging (per period line, and per invoice for the days), the "VAT lost" warning and the review screen's VAT on fees all call it.
+ */
+export function vatCentavosOf(numerator: bigint): bigint {
+  return roundedDiv(numerator, 100n);
+}
+
+/**
  * The 12% VAT the PDF adds on Appendix B is rounded ONCE on the invoice, then handed to the days so the shares add up to it exactly:
  * each day gets the centavos below its exact share, the leftover centavos go one each to the days with the largest remainder (ties: the earlier day).
  */
 function applyVat(ordered: FoodpandaAcc[]): void {
-  const total = roundedDiv(ordered.reduce((t, d) => t + d.vatNumerator, 0n), 100n);
+  const total = vatCentavosOf(ordered.reduce((t, d) => t + d.vatNumerator, 0n));
   const floors = ordered.map((d) => floorDiv(d.vatNumerator, 100n));
   let leftover = total - floors.reduce((t, n) => t + n, 0n);
   const byRemainder = ordered.map((d, i) => ({ i, rem: d.vatNumerator - floors[i]! * 100n })).sort((a, b) => (a.rem === b.rem ? a.i - b.i : a.rem > b.rem ? -1 : 1));
@@ -309,9 +319,12 @@ function vatPercentOf(c: FoodpandaCharge): bigint {
   return BigInt(c.vatRate);
 }
 
-/** A charge with no day to carry it: its VAT is not in any day, and no VAT is invented on the period line. */
+/** The VAT of one charge that no day carries: its net x its own printed rate, rounded half up once (never a constant rate). */
+const periodVat = (c: FoodpandaCharge): Money => fromCentavos(vatCentavosOf(toCentavos(c.netTotal) * vatPercentOf(c)));
+
+/** A charge with no day to carry it: its VAT is not in any day (it is staged on the period line, S6c, and booked from there). */
 const vatLostWarning = (c: FoodpandaCharge): string =>
-  `This invoice has an ad charge (or platform fee) of ${c.netTotal} on a day with no orders, so its ${c.vatRate}% VAT of ${fromCentavos(roundedDiv(toCentavos(c.netTotal) * vatPercentOf(c), 100n))} is not included in any day. It needs review.`;
+  `This invoice has an ad charge (or platform fee) of ${c.netTotal} on a day with no orders, so its ${c.vatRate}% VAT of ${periodVat(c)} is not included in any day. It needs review.`;
 
 /**
  * T-512 (T-511 S5c) - the two business rules staging reads, as plain numbers so this file stays pure: the withholding rate and the VAT percent, each in
@@ -372,7 +385,8 @@ export function stageFoodpandaDays(invoice: FoodpandaInvoice, _matched: Omit<Mat
   const warnings: string[] = [];
   const weekly: FoodpandaCharge[] = [];
   const charge = (c: FoodpandaCharge, line: Omit<StagedOtherLine, 'amount' | 'lineDate'>, day: FoodpandaAcc | undefined): void => {
-    const l: StagedOtherLine = { ...line, amount: c.netTotal, lineDate: c.date };
+    // a charge with no sales day and no date of its own is dated by the invoice (its date is read from the file); a date the file gives still wins
+    const l: StagedOtherLine = { ...line, amount: c.netTotal, lineDate: line.kind === 'period_charge' ? (c.date ?? invoice.invoiceDate) : c.date };
     if (day) day.otherLines.push(l);
     else periodLines.push(l);
   };
@@ -390,7 +404,7 @@ export function stageFoodpandaDays(invoice: FoodpandaInvoice, _matched: Omit<Mat
       charge(c, { kind: 'pandago', bookedAs: bookedAsOf(deductionFor('foodpanda', 'pandago').kind, 'PandaGO'), description: null }, undefined);
     } else {
       // an unrecognised appendix B category: kept for the record, never booked
-      charge(c, { kind: 'period_charge', bookedAs: 'none', description: shown(c.category).slice(0, DESCRIPTION_MAX) }, undefined);
+      charge(c, { kind: 'period_charge', bookedAs: 'none', description: shown(c.category).slice(0, DESCRIPTION_MAX), vat: periodVat(c) }, undefined);
     }
   }
 
@@ -413,7 +427,7 @@ export function stageFoodpandaDays(invoice: FoodpandaInvoice, _matched: Omit<Mat
     const note = c.feeMonthNote ? c.feeMonthNote.slice(0, DESCRIPTION_MAX) : null;
     // with no sales day there is nothing to book it against: kept for the record, booked as nothing, a person decides
     if (day) charge(c, { kind: 'platform_fee_weekly', bookedAs: bookedAsOf(feeKind, 'Platform Fee'), description: note }, day);
-    else charge(c, { kind: 'period_charge', bookedAs: 'none', description: note ?? 'Platform Fee' }, undefined);
+    else charge(c, { kind: 'period_charge', bookedAs: 'none', description: note ?? 'Platform Fee', vat: periodVat(c) }, undefined);
   }
 
   applyVat(ordered);
@@ -454,7 +468,7 @@ export function stageFoodpandaDays(invoice: FoodpandaInvoice, _matched: Omit<Mat
   const pandago = invoice.charges.filter((c) => c.kind === 'pandago');
   const pandagoNetTotal = pandago.length === 0 ? null : add(...pandago.map((c) => c.netTotal));
   const pandagoVat = pandago.reduce((t, c) => t + toCentavos(c.netTotal) * vatPercentOf(c), 0n);
-  const pandagoReceivable = pandagoNetTotal === null ? null : fromCentavos(abs(toCentavos(pandagoNetTotal) + roundedDiv(pandagoVat, 100n)));
+  const pandagoReceivable = pandagoNetTotal === null ? null : fromCentavos(abs(toCentavos(pandagoNetTotal) + vatCentavosOf(pandagoVat)));
   return { days, periodLines, waitingForRows: [], warnings, pandagoNetTotal, pandagoReceivable };
 }
 

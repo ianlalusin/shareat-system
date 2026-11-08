@@ -1157,6 +1157,10 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     reason:
       'A posting document. The receivable it cleared is replaced by the cutover opening balance.',
   },
+  channel_settlement_loan_legs: {
+    class: 'purge',
+    reason: 'Child of channel_settlements (the loans a payout repaid, T-511 S6a); purges with its parent for the same reason, legs first.',
+  },
   // ---- T-178: order/channel wastage disposition ------------------------------------------
   order_wastages: {
     // Purge, same reasoning as channel_settlements directly above: a posting document that
@@ -1416,6 +1420,22 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'A posting document: it names a journal entry (purge) and a sales day (purge). Append-only by trigger. Purged ' +
       'BEFORE sales_days (PURGE_ORDER_HINT).',
   },
+  channel_period_charges: {
+    class: 'purge',
+    reason:
+      'T-511 S6c. A posting document: it names a journal entry (purge), a staged other line and upload (purge) and a channel (purge). Append-only by trigger. ' +
+      'Purged BEFORE settlement_other_lines, settlement_uploads and journal_entries (PURGE_ORDER_HINT).',
+  },
+  channel_settlement_charge_links: {
+    class: 'purge',
+    reason: 'T-511 S6c. Child of channel_settlements and channel_period_charges (which charges a payout netted); purges with them, links first.',
+  },
+  sales_day_platform_corrections: {
+    class: 'purge',
+    reason:
+      'T-511 S6b. A posting document: it names a journal entry (purge), a sales day (purge) and a staged day line (purge). Append-only by trigger. ' +
+      'Purged BEFORE sales_days (PURGE_ORDER_HINT), like sales_day_pos_corrections.',
+  },
 
   // ---- T-392 S3: the dual-run comparator (migration 0195) -------------------------------------
   dual_run_reports: {
@@ -1634,10 +1654,17 @@ export const PURGE_ORDER_HINT: readonly string[] = [
   // the whole table has to go in one DELETE rather than in FK order — listed early for that
   // reason, and because nothing else references it at all.
   'expense_budgets',
+  // T-511 S6a: a leg cites its settlement, so the legs go first.
+  'channel_settlement_loan_legs',
+  // T-511 S6c: a link cites its settlement and its charge; a charge cites its other line, upload, channel and journal entry (all purged later in this list).
+  'channel_settlement_charge_links',
+  'channel_period_charges',
   'channel_settlements',
   'sales_day_channels',
   // T-375: corrections cite a sales day, two feeds and a journal entry; usage pulls cite a sales day and a feed.
   'sales_day_pos_corrections',
+  // T-511 S6b: a platform correction cites a sales day, a channel and a journal entry.
+  'sales_day_platform_corrections',
   // T-392 S3: lines cite their report; dispositions cite nothing purged.
   'dual_run_lines',
   'dual_run_reports',

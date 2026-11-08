@@ -20,7 +20,7 @@ import { typedFor } from '@/lib/keep-typing';
 import { MONEY_ACCOUNT_RENAME } from './typed-forms';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { MONEY_ACCOUNT_CREATE_RULES, MONEY_ACCOUNT_RENAME_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Banner, ConfirmDestructive, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
+import { Banner, ConfirmDestructive, Field, FlashBanner, FormGrid, FormModal, Input, Select, DialogActions } from '@/components/ui';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 
 export const metadata = { title: 'Money accounts — Shareat System' };
@@ -230,7 +230,9 @@ export default async function MoneyAccountsPage({
                 The books account is chosen for you from the kind and the holder.
               </p>
 
-              <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
+              <DialogActions>
+                <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
+              </DialogActions>
             </CheckedForm>
           </FormModal>
         </div>

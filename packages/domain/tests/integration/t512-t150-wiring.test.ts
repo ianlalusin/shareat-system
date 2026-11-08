@@ -90,18 +90,18 @@ const oldPastTolerance = (centavos: bigint, toleranceMills: bigint): boolean => 
 
 const fmt = (c: bigint): string => `${c / 100n}.${String(c % 100n).padStart(2, '0')}`;
 
-const preview = (f: Fx, o: { gross: bigint; net: bigint; businessDate?: string; recognizeGain?: boolean }) =>
+const preview = (f: Fx, o: { gross: bigint; net: bigint; businessDate?: string; acknowledge?: boolean }) =>
   asOrg(f.orgId, (tx) =>
     previewChannelSettlement(tx, f.manager, {
       storeId: f.storeId, channelId: f.channelId, businessDate: o.businessDate ?? '2026-01-10',
-      grossAmount: fmt(o.gross), netDeposited: fmt(o.net), ...(o.recognizeGain ? { recognizeGain: true } : {}),
+      grossAmount: fmt(o.gross), netDeposited: fmt(o.net), ...(o.acknowledge ? { acknowledgeDifference: { reason: 'checked against the statement' } } : {}),
     }),
   );
-const record = (f: Fx, o: { gross: string; net: string; businessDate?: string; recognizeGain?: boolean }) =>
+const record = (f: Fx, o: { gross: string; net: string; businessDate?: string; acknowledge?: boolean }) =>
   asOrg(f.orgId, (tx) =>
     recordChannelSettlement(tx, f.manager, {
       storeId: f.storeId, channelId: f.channelId, salesDayId: f.salesDayId, businessDate: o.businessDate ?? '2026-01-10',
-      grossAmount: o.gross, netDeposited: o.net, settledOn: '2026-01-15', ...(o.recognizeGain ? { recognizeGain: true } : {}),
+      grossAmount: o.gross, netDeposited: o.net, settledOn: '2026-01-15', ...(o.acknowledge ? { acknowledgeDifference: { reason: 'checked against the statement' } } : {}),
     }),
   );
 
@@ -130,8 +130,8 @@ describe('T-512 T-150 - DIFFERENTIAL: at the default rules the tolerance is exac
         // gain v: net = gross + v
         const g = await preview(f, { gross, net: gross + v });
         expect(String(g.tolerance), `gross ${fmt(gross)} gain ${fmt(v)}: tolerance shown`).toBe(wantTolerance);
-        expect(g.needsGainAcknowledgement, `gross ${fmt(gross)} gain ${fmt(v)}: needs acknowledgement`).toBe(oldPastTolerance(v, tm));
-        expect(g.blockers.some((b) => /recognizeGain/.test(b))).toBe(oldPastTolerance(v, tm));
+        expect(g.needsAcknowledgement, `gross ${fmt(gross)} gain ${fmt(v)}: needs acknowledgement`).toBe(oldPastTolerance(v, tm));
+        expect(g.blockers.some((b) => /acknowledgeDifference/.test(b))).toBe(oldPastTolerance(v, tm));
         checked++;
       }
     }
@@ -216,9 +216,9 @@ describe('T-512 T-150 - EFFECT: a floor or percent set from a date moves the tol
   it('the gain side follows the same rule: a gain of 150.00 on a 1,000.00 day needs acknowledgement by default and not once the floor is 200.00 [kills: only the shortfall side wired]', async () => {
     const f = await fixture('gain', '5000.00');
     const before = await preview(f, { gross: 100_000n, net: 100_000n + 15_000n });
-    expect(before.needsGainAcknowledgement).toBe(true);
+    expect(before.needsAcknowledgement).toBe(true);
     await putRule(sql, f.orgId, 'settlement.variance_floor_amount', '200.000000', '2026-01-05');
     const after = await preview(f, { gross: 100_000n, net: 100_000n + 15_000n });
-    expect(after.needsGainAcknowledgement).toBe(false);
+    expect(after.needsAcknowledgement).toBe(false);
   });
 });

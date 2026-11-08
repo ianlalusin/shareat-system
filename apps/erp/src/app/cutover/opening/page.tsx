@@ -26,7 +26,7 @@ import { Page } from '@/components/shell/Page';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { CUTOVER_ASSET_RULES, CUTOVER_FIGURE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
@@ -140,9 +140,11 @@ export default async function OpeningPage({
             </Field>
           </FormGrid>
           <Input type="text" name="memo" placeholder="What this is (optional)" className="w-full" />
-          <Button type="submit" variant="secondary" className="w-full sm:w-auto">
-            Save
-          </Button>
+          <DialogActions>
+            <Button type="submit" variant="secondary" className="w-full sm:w-auto">
+              Save
+            </Button>
+          </DialogActions>
         </CheckedForm>
         </FormModal>
       </div>
@@ -272,7 +274,7 @@ export default async function OpeningPage({
         <h2 className="text-sm font-medium">Tie-out</h2>
         <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
           Each register in the new system is compared with the opening figures. Party balances (customers, suppliers, loans, advances) are
-          checked for valid parties only; their totals are compared with v1 at the rehearsal (T-394).
+          checked for valid parties only; their totals are compared with v1 at the rehearsal.
         </p>
         {tie.lines.length === 0 ? (
           <p className="mt-3 rounded border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">

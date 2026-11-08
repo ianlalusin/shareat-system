@@ -160,6 +160,26 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'history_guard',
     reason: 'A POS correction row is never updated or deleted (0183). Decides only from TG_OP.',
   },
+  // T-511 S6b (the platform-corrections migration): a platform sales correction is never edited or deleted (ALWAYS 40 -> 41).
+  sales_day_platform_corrections_append_only: {
+    table: 'sales_day_platform_corrections',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A platform sales correction row is never updated or deleted; a wrong one is corrected by a new row (the platform-corrections migration, T-511 S6b). Decides only from TG_OP.',
+  },
+  // T-511 S6c (migration 0244): a period charge and a settlement-charge link are never edited or deleted (ALWAYS 41 -> 43).
+  channel_period_charges_append_only: {
+    table: 'channel_period_charges',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A posted platform period charge is never updated or deleted; a wrong one is reversed by hand in the books (0244, T-511 S6c). Decides only from TG_OP.',
+  },
+  channel_settlement_charge_links_append_only: {
+    table: 'channel_settlement_charge_links',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A settlement-charge link is never updated or deleted; a void of the settlement leaves it as history and it stops counting through the parent status (0244, T-511 S6c). Decides only from TG_OP.',
+  },
   missed_month_adjustments_no_update_trg: {
     table: 'missed_month_adjustments',
     mode: 'always',
@@ -1192,6 +1212,29 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'validator',
     reason:
       'Deferred constraint trigger on the lines side of the billed_total = sum(line_total) check; reads the header and sibling lines, other rows current state (0218, T-398 S5 audit).',
+  },
+  // ---------------------------------------------------------------------------------------------
+  // T-511 S6a (loan legs migration, 0242) - two deferred validators on one check (origin / validator) and one append-only history guard on the legs (ALWAYS 39 -> 40).
+  channel_settlement_loan_legs_append_only: {
+    table: 'channel_settlement_loan_legs',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A settlement loan leg is never changed or removed; a void reverses the settlement and leaves its legs as history (0242, T-511 S6a). Decides only from TG_OP.',
+  },
+  // ---------------------------------------------------------------------------------------------
+  channel_settlements_loan_legs_sum_trg: {
+    table: 'channel_settlements',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Deferred constraint trigger: loan_deduction must equal the sum of the settlement loan legs at commit, a non-zero deduction needs a leg and a zero one has none (23514); reads the sibling legs, other rows current state (T-511 S6a).',
+  },
+  channel_settlement_loan_legs_sum_trg: {
+    table: 'channel_settlement_loan_legs',
+    mode: 'origin',
+    kind: 'validator',
+    reason:
+      'Deferred constraint trigger on the legs side of the loan_deduction = sum(legs) check; reads the header and sibling legs, other rows current state (T-511 S6a).',
   },
   // ---------------------------------------------------------------------------------------------
   // T-398 S6 (0220) - the franchisor's access log. The log's two guards are history_guard / ALWAYS (ALWAYS 35 -> 36); the rest decide from the calling role or derive a row.

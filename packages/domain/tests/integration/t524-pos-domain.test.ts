@@ -31,8 +31,8 @@ import { sql as dsql } from 'drizzle-orm';
  * RULES (R7; BOSS rulings 6 Nov): `business_rule_values` (T-511 S5c) is NOT on this branch, and this file does not invent it. The rule source is
  * INJECTABLE: the last argument of completeSale / getSessionBill / addLineDiscount (a senior stores its rate) / currentBusinessDate is
  *   deps?: { readRules?: (tx, orgId, businessDate) => Promise<{ vatPercentBasisPoints: bigint; scPwdPercentBasisPoints: bigint; businessDayStartHour: number }>; now?: () => Date }
- * The default reader is NOT wired yet (the follow-up slice reads the rules through S5c): without `readRules` a call that needs a rule refuses with a
- * plain sentence. There is no "rate not set up" refusal (S5c falls back to the registry default).
+ * Since T-539 S2 the default reader is `readPosRules`: without `readRules` the rules come from the org's dated rows, and an org with none gets the
+ * registry defaults (12%, 20%, 4). There is no "rate not set up" refusal.
  *
  * RED NOW FOR THE RIGHT REASON: packages/domain/src/pos/index.ts does not exist. The module is loaded lazily, so every case that needs it
  * fails "MISSING EXPORT ... not built" AFTER its fixture ran; the raw-SQL cases (fixture sanity, R11 append guard, catalogue) run for real.
@@ -48,7 +48,8 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { APP_ROLE, catalogueEntry, closeDb, RefusalError, transaction, type Tx } from '@shareat/db';
 import { AuthenticationError, AuthorizationError, CAPABILITY_MATRIX, CAPABILITY_SCOPE, hashPin, pinLookupHash, POS_APPROVAL_REFUSED, POS_TERMINAL_NOT_REGISTERED, type Actor } from '@shareat/auth';
-import { loadStoreMenu } from '@shareat/domain';
+import { loadStoreMenu, setBusinessRule } from '@shareat/domain';
+import { addDays, toBusinessDate } from '@shareat/core/datetime';
 import { uuidv5 } from '../../src/pos/shared';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import { insDaypart, insDaypartOffer, insOptionOffer, insRule, menuFixture, newItem, newOption, sql, uid } from '../../../db/tests/integration/_fixtures/t401-menu';
@@ -1294,16 +1295,58 @@ describe('R9 / test 9 - completeSale: the server recomputes, then freezes', () =
     await expectRefusal(saleInput(f, plain.sessionId, { seniors: [seniorEntry(1)] }).then((i) => complete(f, i)));
   });
 
-  it('with no business-rule reader wired, a senior sale is refused with the plain sentence and the session stays open; an ordinary sale needs no rule', async () => {
+  it('T-539 S2: with NO reader injected the default reads the rules from the database (registry defaults on a fresh org): a senior sale completes at 12% VAT and 20%', async () => {
     const f = await fixture();
     const s = await fullSession(f, 4);
     await senior(f, s.pkgLine, 1);
     const input = await saleInput(f, s.sessionId, { seniors: [seniorEntry(1)] }, { [s.pkgLine]: '128.29' });
-    await expectRefusal(complete(f, input, { deps: {} }), 'The POS business rules are not connected yet. Ask an admin.');
-    expect((await sessionRow(s.sessionId)).status).toBe('open');
-    expect(await receiptOf(s.sessionId)).toBeUndefined();
+    expect(await complete(f, input, { deps: {} })).toMatchObject({ wrote: true });
+    expect((await sessionRow(s.sessionId)).status).not.toBe('open');
+    expect(await receiptOf(s.sessionId)).toMatchObject({ subtotal: '2296.00', discount_total: '128.29', total: '2167.71', device_total: '2167.71' });
+    const recs = await sql`select kind, gross_amount::text, discount_amount::text from statutory_discount_records where org_id = ${f.orgId} and invoice_number = ${printedNumber(f, input.terminalSeq)}`;
+    expect(recs).toEqual([{ kind: 'senior', gross_amount: '449.00', discount_amount: '128.29' }]);
+    expect((await audits(f, 'pos.sale_recompute_mismatch')).length).toBe(0);
     const plain = await porkSession(f);
     expect(await complete(f, await saleInput(f, plain.sessionId), { deps: {} })).toMatchObject({ wrote: true });
+  });
+
+  it('T-539 S2: at the day boundary with no Z, a sale at D 03:30 Manila belongs to D-1 (20%) and one at D 04:30 belongs to D (25%)', async () => {
+    const f = await fixture();
+    const d = addDays(toBusinessDate(), 1);
+    await asOrg(f.orgId, (tx) => setBusinessRule(tx, f.admin, { key: 'pos.senior_pwd_discount_percent', value: '25', effectiveFrom: d, reason: 'Law changed' } as never));
+    const sellAt = async (issuedAtDevice: string, off: string) => {
+      const s = await fullSession(f, 4);
+      await senior(f, s.pkgLine, 1);
+      const input = await saleInput(f, s.sessionId, { seniors: [seniorEntry(1)], offline: true, issuedAtDevice }, { [s.pkgLine]: off });
+      await complete(f, input, { deps: {} });
+      const [rec] = await sql<{ business_date: string; discount_amount: string }[]>`select business_date::text, discount_amount::text from statutory_discount_records where org_id = ${f.orgId} and invoice_number = ${printedNumber(f, input.terminalSeq)}`;
+      return rec!;
+    };
+    const dMinus1 = addDays(d, -1);
+    // D 03:30 Manila = (D-1) 19:30Z; D 04:30 Manila = (D-1) 20:30Z
+    expect(await sellAt(`${dMinus1}T19:30:00Z`, '128.29')).toEqual({ business_date: dMinus1, discount_amount: '128.29' });
+    expect(await sellAt(`${dMinus1}T20:30:00Z`, '148.33')).toEqual({ business_date: d, discount_amount: '148.33' });
+    expect((await audits(f, 'pos.sale_recompute_mismatch')).length, 'each sale was priced at the rate of its own business day').toBe(0);
+  });
+
+  it('T-539 S2: a rule change dated from a later day (senior/PWD 25% from tomorrow) prices a sale on THAT business date at 25%, and a sale today stays at 20%', async () => {
+    const f = await fixture();
+    const from = addDays(toBusinessDate(), 1);
+    await asOrg(f.orgId, (tx) => setBusinessRule(tx, f.admin, { key: 'pos.senior_pwd_discount_percent', value: '25', effectiveFrom: from, reason: 'Law changed' } as never));
+    const later = await fullSession(f, 4);
+    await senior(f, later.pkgLine, 1);
+    // 12:00 Manila on the start day: 449.00 / 1.12 = 400.89 -> VAT 48.11, 25% of 400.89 = 100.22
+    const input = await saleInput(f, later.sessionId, { seniors: [seniorEntry(1)], offline: true, issuedAtDevice: `${from}T04:00:00Z` }, { [later.pkgLine]: '148.33' });
+    await complete(f, input, { deps: {} });
+    expect((await audits(f, 'pos.sale_recompute_mismatch')).length, 'the server priced 25%: the tablet figures match').toBe(0);
+    expect(await receiptOf(later.sessionId)).toMatchObject({ subtotal: '2296.00', discount_total: '148.33', total: '2147.67' });
+    const recs = await sql`select business_date::text, discount_amount::text from statutory_discount_records where org_id = ${f.orgId} and invoice_number = ${printedNumber(f, input.terminalSeq)}`;
+    expect(recs).toEqual([{ business_date: from, discount_amount: '148.33' }]);
+    // today is before the change: still 20%
+    const now = await fullSession(f, 4);
+    await senior(f, now.pkgLine, 1);
+    await complete(f, await saleInput(f, now.sessionId, { seniors: [seniorEntry(1)] }, { [now.pkgLine]: '128.29' }), { deps: {} });
+    expect(await receiptOf(now.sessionId)).toMatchObject({ discount_total: '128.29', total: '2167.71' });
   });
 
   it('a senior on a DISH line (ruling 10): VAT 26.79 + 20% 44.64 on the 250.00 pork, one statutory row for that diner', async () => {
@@ -1511,8 +1554,8 @@ describe('R10 - reads for the screens', () => {
     // the hour is a business value, not a constant: a reader that says 6 moves the cut-off
     const six: Deps = { now: () => new Date('2026-11-06T20:00:00Z'), readRules: async () => ({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 6 }) };
     expect(await asOrg(f.orgId, (tx) => P.currentBusinessDate(tx, f.storeId, six))).toBe('2026-11-06');
-    // no reader wired: the plain refusal, never a guessed hour
-    await expectRefusal(asOrg(f.orgId, (tx) => P.currentBusinessDate(tx, f.storeId, { now: () => new Date('2026-11-06T20:00:00Z') })), 'The POS business rules are not connected yet. Ask an admin.');
+    // no reader injected (T-539 S2): the default reads the database, a fresh org gets the registry default hour 4, so 04:00 Manila starts the 7th
+    expect(await asOrg(f.orgId, (tx) => P.currentBusinessDate(tx, f.storeId, { now: () => new Date('2026-11-06T20:00:00Z') }))).toBe('2026-11-07');
   });
 
   it('currentBusinessDate is the Manila date the open Z window started: the last Z\'s window_end', async () => {

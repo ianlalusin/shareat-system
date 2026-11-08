@@ -279,9 +279,6 @@
     "app/attendance/terminals/RepairButton.tsx": [
       "foreign component — box decided inside the component"
     ],
-    "app/channel-settlements/SettlementForm.tsx": [
-      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
-    ],
     "app/commissary/catalogue/page.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
     ],

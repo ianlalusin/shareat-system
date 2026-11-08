@@ -18,7 +18,7 @@
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { compare, money, ZERO } from '@shareat/core/money';
 import { PhotoUpload } from '@/components/upload/PhotoUpload';
-import { Button, Input, Select } from '@/components/ui';
+import { Button, DialogActions, Input, Select } from '@/components/ui';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import { COLLECTION_RECORD_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import type { AutoAllocateCollectionRequest, AutoAllocateCollectionResponse } from '../actions';
@@ -288,7 +288,7 @@ export function AutoAllocateCollectionForm({
             className="w-full"
           />
         </Field>
-        <Field label="Platform fee" hint="⛔ Booked here (platform and channel fees) and NOWHERE else. Never also as an expense." rule={COLLECTION_RECORD_RULES.platformFee}>
+        <Field label="Platform fee" hint="Booked here (platform and channel fees) and NOWHERE else. Never also as an expense." rule={COLLECTION_RECORD_RULES.platformFee}>
           <Input {...nativeAttrs(COLLECTION_RECORD_RULES.platformFee)} placeholder="0.00" className="w-full" />
         </Field>
         <Field label="Date" rule={COLLECTION_RECORD_RULES.collectionDate}>
@@ -327,9 +327,11 @@ export function AutoAllocateCollectionForm({
         <PhotoUpload name="receiptPhoto" purpose="receipt_photo" storeId={storeId} label="Proof of payment" />
       </Field>
 
-      <Button type="submit" variant="primary">
-        Record payment
-      </Button>
+      <DialogActions>
+        <Button type="submit" variant="primary">
+          Record payment
+        </Button>
+      </DialogActions>
     </CheckedForm>
   );
 }

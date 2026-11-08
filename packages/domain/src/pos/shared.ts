@@ -7,13 +7,14 @@ import { createHash } from 'node:crypto';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { accessRepo, auditLogRepo, posV2Repo, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
+import { readPosRules } from '../business-rules/pos-rules';
 import { refuse } from '../shared/refusal';
 import type { PriceDiscountInput, PriceLineInput, PriceSnapshot } from './price';
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Business rules (BOSS ruling 6 Nov): percents travel as basis points (12% = 1200n); the day starts at an integer hour.
-// The default reader is NOT wired yet (the follow-up slice reads `tax.vat_percent`, `pos.senior_pwd_discount_percent` and
-// `pos.business_day_start_hour` through T-511 S5c's RuleBook); until then every call that needs a rule must be handed a reader.
+// The default reader is `readPosRules` (T-539): `tax.vat_percent`, `pos.senior_pwd_discount_percent` and `pos.business_day_start_hour` from the
+// dated business-rule rows (registry defaults when an org has none). A test may inject its own through `deps.readRules`.
 // ---------------------------------------------------------------------------------------------------------------------
 export interface PosRules {
   readonly vatPercentBasisPoints: bigint;
@@ -27,11 +28,8 @@ export interface PosDeps {
   readonly now?: () => Date;
 }
 
-export const RULES_NOT_WIRED = 'The POS business rules are not connected yet. Ask an admin.';
-
 export async function readRules(tx: Tx, orgId: string, businessDate: string, deps: PosDeps | undefined): Promise<PosRules> {
-  if (!deps?.readRules) throw refuse('RULES_NOT_WIRED: pos: no business-rule reader wired', RULES_NOT_WIRED);
-  return deps.readRules(tx, orgId, businessDate);
+  return (deps?.readRules ?? readPosRules)(tx, orgId, businessDate);
 }
 
 /**
@@ -45,6 +43,7 @@ export async function businessDateOf(tx: Tx, orgId: string, storeId: string, dep
   // The moment of the EVENT (a sale's issuedAtDevice) decides the day, so an offline sale replayed after the day-start hour still lands on its own day;
   // the server clock is only the answer when no device time is given.
   const now = at ?? (deps?.now ? deps.now() : new Date());
+  // The hour is read on the Manila calendar date of the sale itself, not the business date: the business date is unknown until the hour is known.
   const { businessDayStartHour } = await readRules(tx, orgId, toBusinessDate(now), deps);
   return toBusinessDate(new Date(now.getTime() - businessDayStartHour * 3_600_000));
 }

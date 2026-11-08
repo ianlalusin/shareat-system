@@ -20,8 +20,8 @@ export const POS_NOT_SWITCHED_ON = 'The POS is not switched on for this store.';
 const ALREADY_HANDLED = 'This event was already handled.';
 const REPLAY_VOID = 'Ask the manager to void this table again from the till.';
 
-/** A refusal code that means "not the event's fault": the event is NOT stored, the tablet keeps it and tries again. A missing setup must not bury good sales. */
-export const RETRYABLE_POS_CODES: readonly string[] = ['RULES_NOT_WIRED'];
+/** A refusal code that means "not the event's fault": the event is NOT stored, the tablet keeps it and tries again. A missing setup must not bury good sales. (Empty since T-539 wired the rules; the list stays as the one place to add a code.) */
+export const RETRYABLE_POS_CODES: readonly string[] = [];
 
 /** True for a refusal code that is a server-side failure, never the event's fault: the closed list above, or any AUDIT_* code (the activity-log writer refusing means a server bug, and quarantining would bury a good sale). */
 export const isRetryableRefusal = (code: string): boolean => RETRYABLE_POS_CODES.includes(code) || code.startsWith('AUDIT_') || code.startsWith('UNKNOWN_AUDIT_');

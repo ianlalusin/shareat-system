@@ -188,7 +188,7 @@ describe('channel settlement clears what nothing has ever cleared', () => {
     expect(Number(legs.find((l) => l.code === '6420')!.debit)).toBe(40);
   });
 
-  it('⛔ an above-tolerance shortfall is refused — reconcile, do not sweep', async () => {
+  it('⛔ an above-tolerance shortfall is refused unless acknowledged — reconcile, do not sweep', async () => {
     const f = await fixture('bigshort');
     await raiseReceivable(f, '10000.00');
     await expect(
@@ -202,7 +202,7 @@ describe('channel settlement clears what nothing has ever cleared', () => {
     ).rejects.toThrow(/past the/);
   });
 
-  it('⛔ an above-tolerance GAIN needs recognizeGain — a typo must not become revenue', async () => {
+  it('⛔ an above-tolerance GAIN needs acknowledgeDifference with a reason — a typo must not become revenue', async () => {
     const f = await fixture('gain');
     await raiseReceivable(f, '10000.00');
     const args = {
@@ -212,10 +212,10 @@ describe('channel settlement clears what nothing has ever cleared', () => {
     };
     await expect(
       asOrg(f.orgId, (tx) => recordChannelSettlement(tx, f.manager, args)),
-    ).rejects.toThrow(/recognizeGain/);
+    ).rejects.toThrow(/acknowledgeDifference/);
 
     const r = await asOrg(f.orgId, (tx) =>
-      recordChannelSettlement(tx, f.manager, { ...args, recognizeGain: true }),
+      recordChannelSettlement(tx, f.manager, { ...args, acknowledgeDifference: { reason: 'Staff under-reported the day.' } }),
     );
     expect(Number(r.settlementGain)).toBe(3000);
     const legs = await legsOf(r.entryId);
@@ -234,7 +234,7 @@ describe('channel settlement clears what nothing has ever cleared', () => {
       recordChannelSettlement(tx, f.manager, {
         storeId: f.storeId, channelId: f.channelId, salesDayId: f.salesDayId,
         businessDate: '2026-01-10', grossAmount: '20000.00', netDeposited: '18000.00',
-        loan: { loanId: loan!.id, amount: '2000.00' },
+        loanLegs: [{ loanId: loan!.id, amount: '2000.00' }],
         settledOn: '2026-01-15',
       }),
     );
@@ -254,7 +254,7 @@ describe('channel settlement clears what nothing has ever cleared', () => {
       recordChannelSettlement(tx, f.manager, {
         storeId: f.storeId, channelId: f.channelId, salesDayId: f.salesDayId,
         businessDate: '2026-01-10', grossAmount: '20000.00', netDeposited: '18000.00',
-        loan: { loanId: loan!.id, amount: '2000.00', ownerStoreId: f.otherStoreId },
+        loanLegs: [{ loanId: loan!.id, amount: '2000.00', ownerStoreId: f.otherStoreId }],
         settledOn: '2026-01-15',
       }),
     );
@@ -424,14 +424,14 @@ describe('DEF-137 — what the screen needed, and what wiring it found', () => {
       grossAmount: '10000.00', netDeposited: '13000.00',
     };
     const before = await asOrg(f.orgId, (tx) => previewChannelSettlement(tx, f.manager, args));
-    expect(before.needsGainAcknowledgement).toBe(true);
-    expect(before.blockers.join(' ')).toMatch(/recognizeGain/);
+    expect(before.needsAcknowledgement).toBe(true);
+    expect(before.blockers.join(' ')).toMatch(/acknowledgeDifference/);
     expect(before.settlementGain).toBe('3000.00');
 
     const after = await asOrg(f.orgId, (tx) =>
-      previewChannelSettlement(tx, f.manager, { ...args, recognizeGain: true }),
+      previewChannelSettlement(tx, f.manager, { ...args, acknowledgeDifference: { reason: 'Staff under-reported the day.' } }),
     );
-    expect(after.needsGainAcknowledgement).toBe(false);
+    expect(after.needsAcknowledgement).toBe(false);
     expect(after.blockers).toEqual([]);
   });
 
@@ -571,7 +571,7 @@ describe('DEF-137 — what the screen needed, and what wiring it found', () => {
       recordChannelSettlement(tx, f.manager, {
         storeId: f.storeId, channelId: f.channelId, salesDayId: f.salesDayId,
         businessDate: '2026-01-10', grossAmount: '20000.00', netDeposited: '18000.00',
-        loan: { loanId: loan!.id, amount: '2000.00' },
+        loanLegs: [{ loanId: loan!.id, amount: '2000.00' }],
         settledOn: '2026-01-15',
       }),
     );
@@ -610,7 +610,7 @@ describe('DEF-137 — what the screen needed, and what wiring it found', () => {
       recordChannelSettlement(tx, f.manager, {
         storeId: f.storeId, channelId: f.channelId, salesDayId: f.salesDayId,
         businessDate: '2026-01-10', grossAmount: '20000.00', netDeposited: '18000.00',
-        loan: { loanId: loan!.id, amount: '2000.00' },
+        loanLegs: [{ loanId: loan!.id, amount: '2000.00' }],
         settledOn: '2026-01-15',
       }),
     );
