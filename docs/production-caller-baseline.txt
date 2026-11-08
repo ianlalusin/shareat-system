@@ -16,6 +16,7 @@ arrivalLag
 assetsMissingCapitalisation
 branchOrderDetail
 buildCoverageReport
+buildPlan
 byMethodOf
 calculateBillTotalsCentavosT423
 callEntry
@@ -43,6 +44,7 @@ datesInWeek
 dayIdOf
 daypartedMenu
 daypartsOverlap
+decideMapRequest
 deleteDocumentNonBlocking
 depreciateAsset
 depreciationDrift
@@ -56,6 +58,7 @@ expectedAccumulated
 fakeLocks
 fetchApplicableGlobalCharges
 fetchApplicableGlobalDiscounts
+finalizeSections
 findCurrentDocument
 findLiveOfKind
 findPostedSettlementForChannelDay
@@ -95,12 +98,15 @@ listAvailableCommissaries
 listBirthdayRequests
 listCategoryLives
 listClaimRequests
+listDayIdsWithLivePull
 listLiveForStore
 listLobbyEntries
+listMapsForStore
 listOrderMessages
 listPayRates
 listPosQuarantine
 listPunchesForDay
+listRequestsForStore
 listRoster
 listTodaysSalesReceipts
 listWriteOffsForCharge
@@ -147,6 +153,7 @@ remainingOf
 removeEntry
 removeUsageLine
 replayQuarantinedEvent
+requestMap
 reserveNext
 resetLobbyReadLimiterForTests
 resetNonCentavoCount
@@ -200,6 +207,7 @@ uploadReceiptLogo
 uploadStoreLogo
 upsertCategoryLife
 upsertPolicy
+upsertPosItemMap
 useAuth
 useCollection
 useDoc
