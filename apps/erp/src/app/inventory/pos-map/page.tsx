@@ -148,7 +148,7 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
                   </div>
                   <div className="min-w-0">
                     <Field label={<span className="text-neutral-600 dark:text-neutral-400">Quantity per sale (direct)</span>} className="text-sm">
-                      <Input name="quantityPerSale" defaultValue="1" className="w-full" />
+                      <Input name="quantityPerSale" inputMode="decimal" defaultValue="1" className="w-full" />
                     </Field>
                   </div>
                   <div className="min-w-0 erp-field-long">

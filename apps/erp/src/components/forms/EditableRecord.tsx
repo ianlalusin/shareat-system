@@ -28,6 +28,7 @@ import { ActionIcon } from '@/components/ui/action-icons';
 import { CheckSummary } from './CheckSummary';
 import { CHECKED_FORM_INITIAL, checkContextValue, checkedFormReducer, onCheckedSubmit, watchFormReset } from './check-state';
 import { focusControl, readNamedValues, ruledTarget } from './check-dom';
+import { plainNumberEntry } from '@/lib/number-entry';
 import { useRuleHost } from './useRuleHost';
 
 export const OTHER_DIRTY_MESSAGE = 'Save or cancel the changes you are making first.';
@@ -155,6 +156,8 @@ export interface ChangeControl {
   defaultChecked?: boolean;
   multiple?: boolean;
   options?: ReadonlyArray<{ selected: boolean; defaultSelected: boolean }>;
+  /** T-551: a number box (`inputMode` decimal/numeric) — compared by its digits, so the app's commas are not an edit. */
+  numeric?: boolean;
 }
 
 /**
@@ -168,7 +171,9 @@ export function changedNames(controls: ReadonlyArray<ChangeControl>): string[] {
     let dirty: boolean;
     if (c.type === 'checkbox' || c.type === 'radio') dirty = c.checked !== c.defaultChecked;
     else if (c.type.startsWith('select')) dirty = selectIsDirty(c.options ?? [], c.multiple === true || c.type === 'select-multiple');
-    else dirty = c.value !== c.defaultValue;
+    // T-551 — the number boxes group what is typed, so "10,493.75" and "10493.75" are the SAME figure: a comma
+    // the app inserted is not an edit the person made. Anything else still compares byte for byte.
+    else dirty = c.numeric ? plainNumberEntry(c.value) !== plainNumberEntry(c.defaultValue ?? '') : c.value !== c.defaultValue;
     if (dirty && !out.includes(c.name)) out.push(c.name);
   }
   return out;
@@ -241,7 +246,9 @@ function changeDescriptor(el: DomControl): ChangeControl {
   if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) {
     return { name: el.name, type: el.type, value: el.value, checked: el.checked, defaultChecked: el.defaultChecked };
   }
-  return { name: el.name, type: el.type, value: el.value, defaultValue: el.defaultValue };
+  const mode = el instanceof HTMLInputElement ? (el.getAttribute('inputmode') ?? '').toLowerCase() : '';
+  const numeric = mode === 'decimal' || mode === 'numeric';
+  return { name: el.name, type: el.type, value: el.value, defaultValue: el.defaultValue, ...(numeric ? { numeric } : {}) };
 }
 
 function formChangedNames(form: HTMLFormElement | null): string[] {

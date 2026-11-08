@@ -5,6 +5,7 @@ import './globals.css';
 import { AppShell } from '../components/shell/AppShell';
 import { Toaster } from '../components/feedback/Toaster';
 import { TooltipLayer } from '@/components/ui/TooltipLayer';
+import { NumericEntryBehaviour } from '@/components/forms/NumericEntry';
 import { readToastFlash } from '../lib/flash-toast';
 import { THEME_COOKIE_NAME, parseTheme } from '../components/shell/theme-state';
 
@@ -73,6 +74,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {/* T-387 S4: outside AppShell on purpose (L13) - sign-in and the kiosk get bare children and still need toasts. */}
         <Toaster token={toast?.token} ok={toast?.ok} stamp={toast?.stamp} />
         <TooltipLayer />
+        {/* T-549 (DEF-815): every number box filters and groups as it is typed. One mount, because the rule is the
+            app's, not a per-form choice — see components/forms/NumericEntry.tsx. */}
+        <NumericEntryBehaviour />
       </body>
     </html>
   );

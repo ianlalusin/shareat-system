@@ -33,6 +33,16 @@ export function exceedsMaxMagnitude(s: string, precision: number, scale: number)
   return d > maxScaled * 10n ** -e;
 }
 
+/**
+ * ⭐ T-551 — a human's thousands grouping, read in ONE place. `"16,980"`, `"1,234,567.8"` and `"-1,200"` are numbers
+ * whose separators are presentation; they come back as plain digits and no comma ever reaches a column. Anything
+ * else (`"1,5"`, `"16,98,0"`, `"0,500"`, `"01,000"`) is NOT a grouping and comes back `null` — the caller then
+ * refuses it exactly as before. DEF-383's ruling stands: a separator is refused by name, never guessed at.
+ */
+export function ungroupThousands(text: string): string | null {
+  return /^[+-]?[1-9]\d{0,2}(,\d{3})+(\.\d*)?$/.test(text.trim()) ? text.trim().replace(/,/g, '') : null;
+}
+
 const SCALE_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six'] as const;
 
 /** `999999999999.99` for (14,2): the largest value the column holds, with thousands separators. */
@@ -107,8 +117,10 @@ export function parseDecimalInput<S extends `${number},${number}`>(
 
   // T-504 item 7 - thousands commas ("16,980", "1,234,567.8"): ONLY correct groups of three are accepted, then the commas
   // are dropped so the stored value never holds one. Anything else keeps the comma and fails decimal() as before.
+  // T-551 - the rule itself now lives in `ungroupThousands`, because the live field rule for a `number` (a quantity,
+  // a count, minutes) needs the identical reading: the box groups what is typed, so the check must accept what it shows.
   const typed = typeof raw === 'string' ? raw.trim() : raw;
-  const commaFree = typeof typed === 'string' && /^[+-]?[1-9]\d{0,2}(,\d{3})+(\.\d*)?$/.test(typed) ? typed.replace(/,/g, '') : (raw as string);
+  const commaFree = typeof typed === 'string' ? (ungroupThousands(typed) ?? (raw as string)) : (raw as string);
 
   try {
     return decimal(commaFree, shape);
