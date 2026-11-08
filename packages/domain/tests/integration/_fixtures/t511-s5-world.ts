@@ -10,7 +10,7 @@ import type postgres from 'postgres';
 import { APP_ROLE, schema, transaction, type SettlementDayLineRow, type Tx } from '@shareat/db';
 import { createLoan, disburseLoan, updateLoanRepaymentAmount } from '@shareat/domain';
 import type { Actor } from '@shareat/auth';
-import { world, grabStoreIdOf, upload, type World } from './t511-s4-world';
+import { world, grabStoreIdOf, salesDay, upload, type World } from './t511-s4-world';
 
 export * from './t511-s4-world';
 export const BANAY_GRAB_ID = grabStoreIdOf('grab-banay-oct-transfers.csv');
@@ -174,4 +174,47 @@ export async function postedSettlementRaw(sql: postgres.Sql, w: World, o: { chan
 /** Closes the fiscal month that holds `startsOn`..`endsOn` (inserts the period as closed). */
 export async function closedPeriod(sql: postgres.Sql, w: World, startsOn: string, endsOn: string, status: 'closed' | 'locked' = 'closed'): Promise<void> {
   await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${w.orgId}, ${startsOn}, ${endsOn}, ${status})`;
+}
+
+/**
+ * `salesDay`, but a verified day with sales also carries a journal entry, as a day verified through the domain does (T-511 S7a: `dayBlockers` now holds a verified day with no entry
+ * as `sales_day_not_posted`, because a platform correction has nothing to replace). The entry is an empty draft in an open period of the world (or a marker month of 1990 closed at once); nothing reads it but the
+ * day's `journal_entry_id`. An open or no-sales day is left as `salesDay` leaves it.
+ */
+export async function postedSalesDay(
+  sql: postgres.Sql,
+  w: World,
+  storeId: string,
+  channelId: string,
+  date: string,
+  amount: string,
+  o: { verified?: boolean; noSales?: boolean } = {},
+): Promise<string> {
+  const dayId = await salesDay(sql, w, storeId, channelId, date, amount, o);
+  if (o.verified === false || o.noSales === true) return dayId;
+  // any open period of the org will do; a world with none gets a marker month of 1990 (opened, used, closed at once: an open period may not start before a closed one)
+  const [existing] = await sql<{ id: string; starts_on: string }[]>`select id, starts_on::text as starts_on from fiscal_periods where org_id = ${w.orgId} and status = 'open' order by starts_on limit 1`;
+  let periodId = existing?.id;
+  let from = existing?.starts_on ?? '';
+  let markerMade = false;
+  if (!periodId) {
+    const month = new Date(Date.UTC(1990, 0, 1)); // a fixed anchor, not a clock
+    month.setUTCMonth(month.getUTCMonth() + (seq % 600));
+    from = month.toISOString().slice(0, 10);
+    const to = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
+    periodId = (await sql<{ id: string }[]>`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${w.orgId}, ${from}, ${to}, 'open') returning id`)[0]!.id;
+    markerMade = true;
+  }
+  const [bank] = await sql<{ id: string }[]>`select id from accounts where org_id = ${w.orgId} and code = '6400'`;
+  const [other] = await sql<{ id: string }[]>`select id from accounts where org_id = ${w.orgId} and code = '4150'`;
+  const entryId = await sql.begin(async (trx) => {
+    const [e] = await trx<{ id: string }[]>`
+      insert into journal_entries (org_id, period_id, entry_date, source_type, source_id, idempotency_key, memo, status)
+      values (${w.orgId}, ${periodId}, ${from}, 'manual_journal', ${uid('src')}, ${uid('idem')}, 'posted sales day marker', 'draft') returning id`;
+    await trx`insert into journal_lines (entry_id, account_id, line_no, debit, credit) values (${e!.id}, ${bank!.id}, 1, 1, 0), (${e!.id}, ${other!.id}, 2, 0, 1)`;
+    return e!.id;
+  });
+  await sql`update sales_days set journal_entry_id = ${entryId} where id = ${dayId}`;
+  if (markerMade) await sql`update fiscal_periods set status = 'closed' where id = ${periodId}`;
+  return dayId;
 }

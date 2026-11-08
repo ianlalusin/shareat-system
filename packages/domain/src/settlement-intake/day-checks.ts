@@ -12,6 +12,11 @@
  * queries; both hand the facts to `blockersFromFacts`. The list's three preview blockers are built by the same pure functions the preview uses
  * (`settlementConfigBlockers`, `NEGATIVE_DEPOSIT_BLOCKER`), not copies of their words.
  *
+ * T-511 S7a: approve calls these same functions INSIDE its transaction, so four more blockers exist: `loan_leg_problem` (the text of `loanLegsForLine().blocker`), `nothing_to_settle`
+ * (an order value of 0), `sales_day_not_posted` (verified, but no journal entry, so the file figure cannot replace anything yet) and `period_charge_unbooked` (the carrier day
+ * of a Foodpanda invoice while one of its period charges is staged but not booked). The preview is run with the carrier's charges netted, so a negative deposit is judged on
+ * what the approve would book.
+ *
  * Nothing is posted or written here.
  */
 import { authorize, type Actor } from '@shareat/auth';
@@ -21,7 +26,7 @@ import { fiscalPeriodsRepo, settlementIntakeRepo, type SettlementDayLineRow, typ
 import { NEGATIVE_DEPOSIT_BLOCKER, previewChannelSettlement, settlementConfigBlockers } from '../channel-settlements';
 import { loadLoanCheckContext, loanCheckForDay, loanCheckViewerOf, primeLoanCheckCoverage, type LoanCheckContext, type LoanCheckForDay, type LoanCheckViewer } from './loan-check';
 import { intakeRefusal } from './refusal';
-import { lineToSettlementInput, loanLegsForLine } from './settlement-input';
+import { carrierChargesFor, invoiceOf, lineToSettlementInput, loanLegsForLine, type CarrierSource } from './settlement-input';
 import { plainDate } from './text';
 
 export const DAY_BLOCKER_CODES = [
@@ -36,6 +41,11 @@ export const DAY_BLOCKER_CODES = [
   'posted_settlement_exists',
   'earlier_day_open',
   'line_not_current',
+  'loan_leg_problem',
+  'nothing_to_settle',
+  'sales_day_not_posted',
+  'period_charge_unbooked',
+  'no_open_period',
 ] as const;
 export type DayBlockerCode = (typeof DAY_BLOCKER_CODES)[number];
 
@@ -61,6 +71,9 @@ export interface DayBlockersOptions {
   viewer?: LoanCheckViewer;
 }
 
+/** A (channel, date) with no sales day at all. */
+const NO_SALES_DAY = { recorded: null, verified: false, noSales: false, unposted: false } as const;
+
 const norm = (s: string | null | undefined): string => (s ?? '').trim().toLowerCase();
 
 /** The preview's own sentences, told apart by what they say (it returns plain strings), in the order of the documented list. */
@@ -79,12 +92,17 @@ function previewBlockers(sentences: readonly string[]): DayBlocker[] {
 /** Everything the blockers of one staged day are worked out from. */
 interface DayFacts {
   line: SettlementDayLineRow;
-  figure: { recorded: Money | null; verified: boolean; noSales: boolean };
+  /** `unposted`: the sales day is verified but carries no journal entry */
+  figure: { recorded: Money | null; verified: boolean; noSales: boolean; unposted: boolean };
   channel: { platform: string | null; platformStoreCode: string | null } | null;
   /** the code the source file was matched by, when it was matched */
   matchedCode: string | null;
   /** Grab only */
   loan: LoanCheckForDay | null;
+  /** Grab only: why the loan deduction cannot be placed on loans (the text of `loanLegsForLine`), or null */
+  loanLegsBlocker: string | null;
+  /** the carrier day of a Foodpanda invoice: how many period charges of the invoice are staged and not booked yet (0 for every other day) */
+  unbookedCharges: number;
   /** the refusals of the settlement preview that matter here (see `previewBlockers`) */
   settlementSentences: readonly string[];
   earlierOpenDays: number;
@@ -109,10 +127,15 @@ function blockersFromFacts(f: DayFacts): DayBlockersResult {
 
   if (f.figure.recorded === null && !(f.figure.verified && f.figure.noSales)) add('sales_day_not_verified', 'Waiting for the sales day to be verified');
 
+  if (f.figure.unposted) add('sales_day_not_posted', 'Staff recorded no sales for this day, so the file figure cannot replace anything yet.');
+
   if (loan?.view.blocking) add('loan_check', loan.view.sentence);
+  if (f.loanLegsBlocker) add('loan_leg_problem', f.loanLegsBlocker);
+  if (isZero(money(line.orderValue))) add('nothing_to_settle', 'The file shows an order value of 0.00 for this day, so there is nothing to settle. Ask the owner to handle it by hand.');
 
   for (const b of previewBlockers(f.settlementSentences)) add(b.code, b.sentence);
 
+  if (f.unbookedCharges > 0) add('period_charge_unbooked', 'A charge on the same statement has not been booked yet. Book it first, because the platform took it out of this payout.');
   if (f.earlierOpenDays > 0) add('earlier_day_open', 'An earlier day of this channel has not been booked or rejected yet. Decide the earlier days first.');
   if (!line.isCurrent) add('line_not_current', 'A newer file has replaced this day. Open the newer line instead.');
 
@@ -121,11 +144,22 @@ function blockersFromFacts(f: DayFacts): DayBlockersResult {
   let willPostOn: string | null = null;
   if (f.firstOpen === null) {
     notes.push('The books are closed up to today, so this day cannot post until a period is opened.');
+    add('no_open_period', 'Every month up to today is closed, so this day cannot be booked yet. Ask an administrator to open a month.');
   } else if (f.firstOpen.date !== line.salesDate) {
     willPostOn = f.firstOpen.date;
     notes.push(`This day's period is closed, so it will post on ${plainDate(f.firstOpen.date)}.`);
   }
   return { blockers, willPostOn, postNote: notes.length > 0 ? notes.join(' ') : null };
+}
+
+/**
+ * The carrier facts of one staged day (Foodpanda, Ruling 6), read fresh and keyed on the INVOICE (channel + invoice number), never on the upload, so a re-uploaded invoice
+ * keeps one carrier and one set of charges. Shared by the blockers and by approve, so the screen and the booking cannot disagree.
+ */
+export async function carrierOfLine(tx: Tx, orgId: string, line: SettlementDayLineRow): Promise<ReturnType<typeof carrierChargesFor>> {
+  const inv = invoiceOf(line);
+  const facts = inv ? (await settlementIntakeRepo.invoiceCarrierFactsMany(tx, orgId, [inv])).get(settlementIntakeRepo.invoiceKey(inv.channelId, inv.invoiceNumber)) : undefined;
+  return carrierChargesFor(line, facts);
 }
 
 /** The ordered blockers of one store-day (a staged line, or `{ channelId, salesDate }` for a day with no line). Reads only. */
@@ -158,7 +192,7 @@ export async function dayBlockers(
 
   const channel = await settlementIntakeRepo.channelFacts(tx, orgId, line.channelId);
   const source = await settlementIntakeRepo.findUploadById(tx, orgId, line.sourceUploadId);
-  const figure = await settlementIntakeRepo.salesDayFigure(tx, orgId, line.channelId, line.salesDate);
+  const figure = (await settlementIntakeRepo.salesDayFiguresMany(tx, orgId, [line])).get(`${line.channelId}|${line.salesDate}`) ?? NO_SALES_DAY;
   let loan: LoanCheckForDay | null = null;
   if (line.platform === 'grab') {
     const viewer = opts.viewer ?? (await loanCheckViewerOf(tx, actor.orgId, actor.personId));
@@ -167,13 +201,16 @@ export async function dayBlockers(
   // T-511 S6a: a payout that docks several loans is one settlement with a leg per loan; the preview reads the legs the loan check resolved (a day it cannot resolve
   // is already held by the loan_check blocker, and its preview then carries no loan, as before).
   const legs = loanLegsForLine(line, loan?.result ?? null);
-  const preview = await previewChannelSettlement(tx, actor, lineToSettlementInput(line, legs.legs));
+  const carrier = await carrierOfLine(tx, orgId, line);
+  const preview = await previewChannelSettlement(tx, actor, lineToSettlementInput(line, legs.legs, { charges: carrier.charges }));
   return blockersFromFacts({
     line,
     figure,
     channel,
     matchedCode: source?.matchedCode ?? null,
     loan,
+    loanLegsBlocker: legs.blocker,
+    unbookedCharges: carrier.unbooked,
     settlementSentences: preview.blockers,
     earlierOpenDays: await settlementIntakeRepo.countEarlierOpenDays(tx, orgId, line.channelId, line.salesDate),
     firstOpen: await fiscalPeriodsRepo.firstOpenDateOnOrAfter(tx, orgId, line.salesDate, today),
@@ -210,6 +247,8 @@ export async function dayBlockersForLines(
   }
 
   const figures = await settlementIntakeRepo.salesDayFiguresMany(tx, orgId, lines);
+  const invoices = new Map(lines.flatMap((l) => { const i = invoiceOf(l); return i ? [[settlementIntakeRepo.invoiceKey(i.channelId, i.invoiceNumber), i] as const] : []; }));
+  const carrierSources: Map<string, CarrierSource> = await settlementIntakeRepo.invoiceCarrierFactsMany(tx, orgId, [...invoices.values()]);
   const channels = await settlementIntakeRepo.channelFactsMany(tx, orgId, channelIds);
   const sources = await settlementIntakeRepo.findUploadsByIds(tx, orgId, [...new Set(lines.map((l) => l.sourceUploadId))]);
   const posted = await settlementIntakeRepo.postedSettlementKeys(tx, orgId, channelIds, dates);
@@ -218,21 +257,26 @@ export async function dayBlockersForLines(
 
   for (const line of lines) {
     const channel = channels.get(line.channelId) ?? null;
+    const inv = invoiceOf(line);
+    const carrier = carrierChargesFor(line, inv ? carrierSources.get(settlementIntakeRepo.invoiceKey(inv.channelId, inv.invoiceNumber)) : undefined);
+    const loan = line.platform === 'grab' ? await loanCheckForDay(tx, actor, line.salesDate, { context, viewer }) : null;
     // the settlement preview's refusals that matter here, from the same functions it uses (a channel that is gone shows the store_not_matched blocker alone)
     const settlementSentences = channel
       ? [
           ...settlementConfigBlockers(channel, { storeId: line.storeId, businessDate: line.salesDate }, posted.has(`${line.channelId}|${line.salesDate}`)),
-          ...(compare(money(line.netPayout), ZERO) < 0 ? [NEGATIVE_DEPOSIT_BLOCKER] : []),
+          ...(compare(money(lineToSettlementInput(line, [], { charges: carrier.charges }).netDeposited), ZERO) < 0 ? [NEGATIVE_DEPOSIT_BLOCKER] : []),
         ]
       : [];
     out.set(
       line.id,
       blockersFromFacts({
         line,
-        figure: figures.get(`${line.channelId}|${line.salesDate}`) ?? { recorded: null, verified: false, noSales: false },
+        figure: figures.get(`${line.channelId}|${line.salesDate}`) ?? NO_SALES_DAY,
         channel,
         matchedCode: sources.get(line.sourceUploadId)?.matchedCode ?? null,
-        loan: line.platform === 'grab' ? await loanCheckForDay(tx, actor, line.salesDate, { context, viewer }) : null,
+        loan,
+        loanLegsBlocker: loanLegsForLine(line, loan?.result ?? null).blocker,
+        unbookedCharges: carrier.unbooked,
         settlementSentences,
         earlierOpenDays: settlementIntakeRepo.countEarlierOpen(earlier.get(line.channelId)!, line.salesDate),
         firstOpen: fiscalPeriodsRepo.firstOpenFromSpans(spans, line.salesDate, today),

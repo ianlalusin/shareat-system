@@ -4,11 +4,14 @@
  */
 import { defineFieldRules } from './check';
 
+/** The longest payout reference a settlement keeps (a Grab settlement id, a Foodpanda invoice number); the staged-day mapping cuts to it. */
+export const CHANNEL_SETTLEMENT_REFERENCE_MAX = 120;
+
 export const CHANNEL_SETTLEMENT_RECORD_RULES = defineFieldRules('channel-settlements.record', {
   grossAmount: { label: 'The gross settled', kind: 'money' },
   netDeposited: { label: 'The net deposited', kind: 'money' },
   loanAmount: { label: 'The amount docked', optional: true, kind: 'money', min: 0 },
-  reference: { label: 'The payout reference', optional: true, kind: 'text', max: 120 },
+  reference: { label: 'The payout reference', optional: true, kind: 'text', max: CHANNEL_SETTLEMENT_REFERENCE_MAX },
   settledOn: { label: 'The settlement date', kind: 'date' },
 });
 

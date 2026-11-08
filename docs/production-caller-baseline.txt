@@ -12,6 +12,7 @@ allocationsFor
 apiUrl
 applyCreditAction
 applyReceiptDeltaServerFirst
+approveDay
 arrivalLag
 assetsMissingCapitalisation
 branchOrderDetail
@@ -33,7 +34,6 @@ collectActorUids
 confirmHeads
 confirmTradeOrder
 convertSpecimen
-correctPlatformSales
 countedVariances
 createFakeFirestore
 createFakeIdb
