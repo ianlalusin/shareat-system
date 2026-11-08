@@ -16,7 +16,8 @@ import { Button, type ButtonProps, type ButtonVariant } from './Button';
 
 const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
-export type DialogSize = 'sm' | 'md' | 'lg' | 'xl';
+/** `receipt` (T-528e): a narrow, tall panel for fixed-width text, as tall as the screen allows. */
+export type DialogSize = 'sm' | 'md' | 'lg' | 'xl' | 'receipt';
 
 export interface DialogProps {
   readonly open: boolean;

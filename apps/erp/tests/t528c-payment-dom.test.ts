@@ -700,3 +700,40 @@ describe('T-528e: one selected style, with the kit focus ring as the only outlin
     expect(tokens(tender('GCash')!)).not.toContain('bg-warning-soft');
   });
 });
+
+describe('T-528e: the Payment panel leaves exactly the room below it that the page puts there (no page scroll)', () => {
+  it('--pay-h takes off the bottom padding of EVERY box around the panel, not one rem (the page ran 16px over at 1280x800)', async () => {
+    host.style.paddingBottom = '16px'; // stands in for the page wrapper (.erp-page py-4)
+    document.body.style.paddingBottom = '16px'; // stands in for <main> pb-4
+    try {
+      await render();
+      const panel = host.querySelector('section[aria-label^="Payment"]') as HTMLElement;
+      expect(panel.style.getPropertyValue('--pay-h')).toBe(`${window.innerHeight - 32}px`);
+    } finally {
+      document.body.style.paddingBottom = '';
+    }
+  });
+});
+
+describe('T-528e: the on-screen receipt uses the narrow, tall dialog size', () => {
+  it('ReceiptScreen opens the dialog at size "receipt" and keeps Reprint and Done in the pinned footer', async () => {
+    await act(async () => {
+      root.render(createElement(ReceiptScreen, { lines: ['a', 'b'], receiptNo: 'T1-000001', notice: null, onReprint: () => undefined, onDone: () => undefined }));
+    });
+    const dialog = host.querySelector('dialog')!;
+    expect(dialog.getAttribute('data-size')).toBe('receipt');
+    const footer = dialog.querySelector('.erp-dialog-footer')!;
+    expect(button('Reprint', footer)).toBeTruthy();
+    expect(button('Done', footer)).toBeTruthy();
+    expect(footer.closest('.erp-dialog-body'), 'the footer is outside the scrolling body').toBeNull();
+  });
+
+  it('the stylesheet gives "receipt" its own width, a half-rem screen margin and a snug body, and no other size changed', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const css = readFileSync(join(process.cwd(), 'apps', 'erp', 'src', 'app', 'globals.css'), 'utf8');
+    expect(css).toMatch(/\.erp-dialog\[data-size="receipt"\]\s*\{[^}]*--erp-dialog-width:\s*26rem;[^}]*max-height:\s*calc\(100dvh - 1rem\)/);
+    expect(css).toMatch(/\.erp-dialog\[data-size="receipt"\] \.erp-dialog-body\s*\{\s*padding-block:\s*0\.5rem/);
+    for (const [size, width] of [['sm', '28rem'], ['lg', '64rem'], ['xl', '80rem']]) expect(css).toContain(`.erp-dialog[data-size="${size}"] { --erp-dialog-width: ${width}; }`);
+  });
+});

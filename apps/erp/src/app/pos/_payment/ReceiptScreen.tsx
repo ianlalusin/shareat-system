@@ -21,7 +21,7 @@ export function ReceiptScreen({ lines, receiptNo, notice, onReprint, onDone }: {
       onClose={onDone}
       title={`Paid · receipt ${receiptNo}`}
       description="The sale is saved. This is what the customer's paper says."
-      size="md"
+      size="receipt"
       footer={
         <div className="space-y-2">
           {notice ? <p role="alert" className="text-base font-semibold text-danger">{notice}</p> : null}
@@ -36,7 +36,7 @@ export function ReceiptScreen({ lines, receiptNo, notice, onReprint, onDone }: {
         </div>
       }
     >
-      <pre aria-label="Receipt" className="overflow-x-auto whitespace-pre pb-6 pr-3 font-mono text-sm leading-snug text-ink">
+      <pre aria-label="Receipt" className="overflow-x-auto whitespace-pre pb-4 pr-3 font-mono text-xs leading-tight text-ink">
         {lines.join('\n')}
       </pre>
     </Dialog>
