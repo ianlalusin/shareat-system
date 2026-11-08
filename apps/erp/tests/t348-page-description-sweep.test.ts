@@ -176,7 +176,8 @@ describe('T-348 S2 — the population lands exactly, nothing dropped or doubled 
     // 134 -> 135, T-512 (T-511 S5c): /settings/business-rules carries its <PageDescription>; re-measured after rebase on main (T-523 0238 present), 7 Nov 2026, BOSS approved.
     // 135 -> 128, T-540 (DeepSeek work order): seven pages moved onto <Page title description>, which renders the prose
     // through PageHeader, so seven call sites left app/; 7 Nov 2026, BOSS approved.
-    expect(count).toBe(128);
+    // 128 -> 126, T-550 (row 452): the retired /inventory/pos-map and /inventory/pos-usage pages each carried one <PageDescription>; measured by walking app/.
+    expect(count).toBe(126);
   });
 });
 
@@ -231,8 +232,6 @@ describe('T-348 S2 — SW6: class B/C/D sites keep their exact class strings (mu
     'inventory/locations/page.tsx': ['mt-4 text-sm text-neutral-600', 'mt-4 text-sm text-neutral-600'],
     'inventory/low-stock/page.tsx': ['mt-4 text-sm text-neutral-600'],
     'inventory/page.tsx': ['mt-4 text-sm text-neutral-600'],
-    'inventory/pos-map/page.tsx': ['mt-4 text-sm text-neutral-600'],
-    'inventory/pos-usage/page.tsx': ['mt-4 text-sm text-neutral-600'],
     'inventory/production/page.tsx': ['mt-4 text-sm text-neutral-600'],
     'inventory/returns/page.tsx': ['mt-4 text-sm text-neutral-600'],
     'inventory/transfers/page.tsx': ['mt-4 text-sm text-neutral-600'],
