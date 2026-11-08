@@ -91,8 +91,113 @@ export default async function SupplierDetailPage({
           collapsed edit form below, so a supplier with nothing open read as a blank page. This is the
           read-only view; editing stays in the disclosure. The bank number is masked, as on the register. */}
       <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="sr-only">Supplier details</h2>
-        <dl className="grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-medium">Supplier details</h2>
+          {/* ---------------------------------------------------------------- T-188: the record itself.
+              ⛔ Until 2026-08-30 a supplier could be CREATED and never EDITED — `updateSupplier`
+              existed in the repo with no caller — so a typo in a name was permanent.
+              T-552: the pencil stands beside the facts it edits. It used to sit alone inside a collapsed
+              "Edit this supplier" card, so expanding that card revealed nothing but the button. */}
+          <EditableRecord rules={SUPPLIER_ADD_RULES} action={editSupplierAction} label={supplier.name} hidden={{ supplierId: supplier.id }} typed={typed}>
+            <div className="space-y-4">
+
+            <FormGrid>
+              <TextField label="Name" name="name" defaultValue={supplier.name} required />
+              <TextField label="Representative" name="representativeName" defaultValue={supplier.representativeName} />
+              <TextField label="Contact no." name="contactNo" defaultValue={supplier.contactNo} />
+              <TextField label="Email" name="email" type="email" defaultValue={supplier.email} />
+              <TextField label="Address" name="address" defaultValue={supplier.address} />
+              <TextField label="TIN" name="tin" defaultValue={supplier.tin} />
+            </FormGrid>
+
+            <FormGrid>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">VAT status</span>
+                <Select name="vatStatus" defaultValue={supplier.vatStatus ?? ''} className="w-full">
+                  <option value="">Not stated</option>
+                  {SUPPLIER_VAT_STATUSES.map((v) => (
+                    <option key={v} value={v}>{VAT_STATUS_LABEL[v] ?? v}</option>
+                  ))}
+                </Select>
+              </label>
+              <label className="flex flex-col gap-1">
+                {/* ⚠️ A LABEL, not a rule — nothing branches on it. See T-188 §4.2. */}
+                <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Classification</span>
+                <Select name="classification" defaultValue={supplier.classification ?? ''} className="w-full">
+                  <option value="">Not stated</option>
+                  {SUPPLIER_CLASSIFICATIONS.map((c) => (
+                    <option key={c} value={c}>{CLASSIFICATION_LABEL[c]}</option>
+                  ))}
+                </Select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Status</span>
+                <Select name="status" defaultValue={supplier.status} className="w-full">
+                  {SUPPLIER_STATUSES.map((v) => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </Select>
+              </label>
+            </FormGrid>
+
+            {/* ⭐ The one ported field that actually does work: it DEFAULTS the document type on a
+                new invoice. The invoice owns its own copy thereafter and may disagree. */}
+            <label className="flex items-start gap-2 text-sm">
+              <input type="hidden" name="issuesOfficialReceiptPresent" value="1" />
+              <input
+                type="checkbox"
+                name="issuesOfficialReceipt"
+                defaultChecked={supplier.issuesOfficialReceipt}
+                className="mt-1"
+              />
+              <span>
+                Issues an <strong>Official Receipt</strong> (BIR)
+                <span className="block text-xs text-neutral-500">
+                  Defaults the document type when an invoice is logged against this supplier. ⚠️
+                  Changing it does not alter invoices already recorded.
+                </span>
+              </span>
+            </label>
+
+            <fieldset className="grid gap-3 rounded border border-neutral-200 p-3 sm:grid-cols-2 dark:border-neutral-800">
+              <legend className="px-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">
+                Payment terms
+              </legend>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Terms</span>
+                <Select
+                  name="termsMode"
+                  defaultValue={supplier.creditTermsDays === null ? 'cod' : 'credit'}
+                  className="w-full"
+                >
+                  <option value="cod">Cash on delivery (no credit)</option>
+                  <option value="credit">On credit (AP)</option>
+                </Select>
+              </label>
+              <Field
+                label="Days to pay"
+                hint="Cash on delivery means Credit (AP) cannot be used. On credit means Credit is allowed, and is pre-selected when a bill is recorded against a verified invoice."
+                rule={SUPPLIER_ADD_RULES.creditTermsDays}
+              >
+                <Input {...nativeAttrs(SUPPLIER_ADD_RULES.creditTermsDays)} defaultValue={supplier.creditTermsDays ?? ''} className="w-full" />
+              </Field>
+            </fieldset>
+
+            <fieldset className="grid gap-3 rounded border border-neutral-200 p-3 sm:grid-cols-3 dark:border-neutral-800">
+              <legend className="px-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">
+                Where payment goes
+              </legend>
+              <TextField label="Bank or e-wallet" name="bankName" defaultValue={supplier.bankName} />
+              <TextField label="Account name" name="bankAccountName" defaultValue={supplier.bankAccountName} />
+              <TextField label="Account number" name="bankAccountNumber" defaultValue={supplier.bankAccountNumber} />
+            </fieldset>
+
+            <TextField label="Notes" name="notes" defaultValue={supplier.notes} />
+
+            </div>
+          </EditableRecord>
+        </div>
+        <dl className="mt-3 grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <Detail label="Status"><Badge status={supplier.status} /></Detail>
           <Detail label="VAT status">{supplier.vatStatus ? (VAT_STATUS_LABEL[supplier.vatStatus] ?? supplier.vatStatus) : null}</Detail>
           <Detail label="Receipt type">{supplier.issuesOfficialReceipt ? 'Official Receipt (BIR)' : 'Not an Official Receipt'}</Detail>
@@ -117,111 +222,6 @@ export default async function SupplierDetailPage({
           <Detail label="Notes">{supplier.notes}</Detail>
         </dl>
       </section>
-
-      {/* ---------------------------------------------------------------- T-188: the record itself.
-          ⛔ Until 2026-08-30 a supplier could be CREATED and never EDITED — `updateSupplier`
-          existed in the repo with no caller — so a typo in a name was permanent. */}
-      <details {...(typed ? { open: true } : {})} className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <summary className="cursor-pointer text-sm font-medium">Edit this supplier</summary>
-        <EditableRecord rules={SUPPLIER_ADD_RULES} action={editSupplierAction} label={supplier.name} hidden={{ supplierId: supplier.id }} typed={typed}>
-          <div className="mt-4 space-y-4">
-
-          <FormGrid>
-            <TextField label="Name" name="name" defaultValue={supplier.name} required />
-            <TextField label="Representative" name="representativeName" defaultValue={supplier.representativeName} />
-            <TextField label="Contact no." name="contactNo" defaultValue={supplier.contactNo} />
-            <TextField label="Email" name="email" type="email" defaultValue={supplier.email} />
-            <TextField label="Address" name="address" defaultValue={supplier.address} />
-            <TextField label="TIN" name="tin" defaultValue={supplier.tin} />
-          </FormGrid>
-
-          <FormGrid>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">VAT status</span>
-              <Select name="vatStatus" defaultValue={supplier.vatStatus ?? ''} className="w-full">
-                <option value="">Not stated</option>
-                {SUPPLIER_VAT_STATUSES.map((v) => (
-                  <option key={v} value={v}>{VAT_STATUS_LABEL[v] ?? v}</option>
-                ))}
-              </Select>
-            </label>
-            <label className="flex flex-col gap-1">
-              {/* ⚠️ A LABEL, not a rule — nothing branches on it. See T-188 §4.2. */}
-              <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Classification</span>
-              <Select name="classification" defaultValue={supplier.classification ?? ''} className="w-full">
-                <option value="">Not stated</option>
-                {SUPPLIER_CLASSIFICATIONS.map((c) => (
-                  <option key={c} value={c}>{CLASSIFICATION_LABEL[c]}</option>
-                ))}
-              </Select>
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Status</span>
-              <Select name="status" defaultValue={supplier.status} className="w-full">
-                {SUPPLIER_STATUSES.map((v) => (
-                  <option key={v} value={v}>{v}</option>
-                ))}
-              </Select>
-            </label>
-          </FormGrid>
-
-          {/* ⭐ The one ported field that actually does work: it DEFAULTS the document type on a
-              new invoice. The invoice owns its own copy thereafter and may disagree. */}
-          <label className="flex items-start gap-2 text-sm">
-            <input type="hidden" name="issuesOfficialReceiptPresent" value="1" />
-            <input
-              type="checkbox"
-              name="issuesOfficialReceipt"
-              defaultChecked={supplier.issuesOfficialReceipt}
-              className="mt-1"
-            />
-            <span>
-              Issues an <strong>Official Receipt</strong> (BIR)
-              <span className="block text-xs text-neutral-500">
-                Defaults the document type when an invoice is logged against this supplier. ⚠️
-                Changing it does not alter invoices already recorded.
-              </span>
-            </span>
-          </label>
-
-          <fieldset className="grid gap-3 rounded border border-neutral-200 p-3 sm:grid-cols-2 dark:border-neutral-800">
-            <legend className="px-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">
-              Payment terms
-            </legend>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Terms</span>
-              <Select
-                name="termsMode"
-                defaultValue={supplier.creditTermsDays === null ? 'cod' : 'credit'}
-                className="w-full"
-              >
-                <option value="cod">Cash on delivery (no credit)</option>
-                <option value="credit">On credit (AP)</option>
-              </Select>
-            </label>
-            <Field
-              label="Days to pay"
-              hint="Cash on delivery means Credit (AP) cannot be used. On credit means Credit is allowed, and is pre-selected when a bill is recorded against a verified invoice."
-              rule={SUPPLIER_ADD_RULES.creditTermsDays}
-            >
-              <Input {...nativeAttrs(SUPPLIER_ADD_RULES.creditTermsDays)} defaultValue={supplier.creditTermsDays ?? ''} className="w-full" />
-            </Field>
-          </fieldset>
-
-          <fieldset className="grid gap-3 rounded border border-neutral-200 p-3 sm:grid-cols-3 dark:border-neutral-800">
-            <legend className="px-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">
-              Where payment goes
-            </legend>
-            <TextField label="Bank or e-wallet" name="bankName" defaultValue={supplier.bankName} />
-            <TextField label="Account name" name="bankAccountName" defaultValue={supplier.bankAccountName} />
-            <TextField label="Account number" name="bankAccountNumber" defaultValue={supplier.bankAccountNumber} />
-          </fieldset>
-
-          <TextField label="Notes" name="notes" defaultValue={supplier.notes} />
-
-          </div>
-        </EditableRecord>
-      </details>
 
       {storeOptions.length > 1 && (
         <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
