@@ -13,7 +13,7 @@ export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   readonly variant?: ButtonVariant;
   /**
-   * T-448: the icon. Left out, it is read from the button's own words ("Save" -> check, "+ Add supplier" -> plus);
+   * T-448: the icon. Left out, it is read from the button's own words ("Save" -> save, "+ Add supplier" -> plus);
    * `null` keeps the words. With an icon the button is a round icon button: the words become its accessible name
    * and the name shown on hover (`data-tip`, drawn by `TooltipLayer`).
    */

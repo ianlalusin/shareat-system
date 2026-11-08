@@ -65,35 +65,35 @@
 - `1233–1267` 10. Phase plan
 - `1268–1284` 11. Migration & ETL rules
 - `1285–1349` 12. Inherited landmines — do not repeat these
-- `1350–1783` 13. Decision log
-- `1784–1803` 14. Amendment protocol
-- `1804–1808` 15. Engineering standards — the industry practices this project follows
-  - `1809–1814` 15.1 Build order: walking skeleton first
-  - `1815–1826` 15.2 Golden-master testing — the most important practice here
-  - `1827–1835` 15.3 Strangler Fig, not big-bang cutover
-  - `1836–1840` 15.4 No dual-write
-  - `1841–1849` 15.5 Expand/contract migrations
-  - `1850–1858` 15.6 Observability from day zero, not later
-  - `1859–1863` 15.7 CI gates
-  - `1864–1868` 15.8 Backups and a tested restore
-  - `1869–1873` 15.9 Twelve-Factor config
-  - `1874–1881` 15.10 Append-only ledgers — but not event sourcing
-  - `1882–1886` 15.11 Defence in depth
-  - `1887–1915` 15.12 Skills are lenses, not assurance
-  - `1916–1922` 15.13 Reconciliation is a permanent feature
-- `1923–1927` 16. The accounting spine
-  - `1928–1959` 16.0 What we are actually fixing — the diagnosis
-  - `1960–2003` 16.1 The ten invariants — non-negotiable
-  - `2004–2018` 16.2 The oracle: how "correct" is tested
-  - `2019–2040` 16.3 The model — header + lines, not legs
-  - `2041–2060` 16.4 Deliberately simpler than ERPNext
-  - `2061–2130` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2131–2155` 16.6 What v1 already gets right — preserve the intent
-  - `2156–2177` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2178–2192` 16.8 What v1's accounting already gets right
-  - `2193–2236` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2237–2287` 16.10 Posting patterns — one canonical pattern per business event
-  - `2288–2320` 16.11 Inventory's accounting integration
+- `1350–1784` 13. Decision log
+- `1785–1804` 14. Amendment protocol
+- `1805–1809` 15. Engineering standards — the industry practices this project follows
+  - `1810–1815` 15.1 Build order: walking skeleton first
+  - `1816–1827` 15.2 Golden-master testing — the most important practice here
+  - `1828–1836` 15.3 Strangler Fig, not big-bang cutover
+  - `1837–1841` 15.4 No dual-write
+  - `1842–1850` 15.5 Expand/contract migrations
+  - `1851–1859` 15.6 Observability from day zero, not later
+  - `1860–1864` 15.7 CI gates
+  - `1865–1869` 15.8 Backups and a tested restore
+  - `1870–1874` 15.9 Twelve-Factor config
+  - `1875–1882` 15.10 Append-only ledgers — but not event sourcing
+  - `1883–1887` 15.11 Defence in depth
+  - `1888–1916` 15.12 Skills are lenses, not assurance
+  - `1917–1923` 15.13 Reconciliation is a permanent feature
+- `1924–1928` 16. The accounting spine
+  - `1929–1960` 16.0 What we are actually fixing — the diagnosis
+  - `1961–2004` 16.1 The ten invariants — non-negotiable
+  - `2005–2019` 16.2 The oracle: how "correct" is tested
+  - `2020–2041` 16.3 The model — header + lines, not legs
+  - `2042–2061` 16.4 Deliberately simpler than ERPNext
+  - `2062–2131` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2132–2156` 16.6 What v1 already gets right — preserve the intent
+  - `2157–2178` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2179–2193` 16.8 What v1's accounting already gets right
+  - `2194–2237` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2238–2288` 16.10 Posting patterns — one canonical pattern per business event
+  - `2289–2321` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1780,6 +1780,7 @@ just a patch.**
 | 448 | 2026-11-07 | **EVERY POS STAND-NUMBER PICKER IS ONE HORIZONTAL ROW THAT SLIDES SIDEWAYS (SWIPE, SCROLL-SNAP, TARGETS OF AT LEAST 48 PX, THE SELECTED STAND SCROLLED INTO VIEW, ARROW KEYS MOVE ALONG IT). IT NEVER WRAPS OR SQUEEZES INTO A GRID, HOWEVER MANY STANDS A STORE HAS.** Ian, 2026-11-07, via BOSS: *"try stand number that is more than 12 it must not cramp all numbers at the top it must slide using 1 row only"*. Stands are tapped, never typed (row 371). A store with more than 12 stands must not lose the screen to a grid of numbers. Built in T-528 (Addendum 2), and tested with 30 stands. | Keeps the seat panel's content (heads, items, Items so far) on screen at any store size | Yes |
 | 449 | 2026-11-07 | **A SALES DAY DERIVED FROM POS v2 RECEIPTS (`source = 'pos_receipts'`) IS VERIFIED ONLY BY A STORE MANAGER OR ABOVE (BY ROLE) WHO HOLDS `verify_sales_day` AT THAT STORE AND DID NOT CLOSE THE Z. `verify_own_sales_day` DOES NOT EXEMPT. v1-FED AND TYPED DAYS KEEP TODAY'S RULE.** Ian, 2026-11-07, via BOSS, answering T-531 O1. The Z already has a cashier's close and a manager's PIN approval. The verification that posts the day to the ledger is a third, senior pair of eyes on the cash. Spec: T-531 R10. | Stricter control only where the new POS creates the figures; nothing changes for the v1 feed during the switch | Yes |
 | 450 | 2026-11-07 | **A POS v2 Z THAT WOULD COVER MORE THAN 2 BUSINESS DAYS IS REFUSED WITH "CALL A MANAGER". THE MANAGER THEN RUNS "CLOSE DAY BY DAY" WITH THEIR PIN: ONE Z AND ONE SALES DAY PER PAST BUSINESS DAY THAT HAS SALES, OLDEST FIRST, WITH TODAY LEFT OPEN. IT IS AUDITED AS ONE BACKLOG CLOSE.** Ian, 2026-11-07, via BOSS, answering T-531 O2. A forgotten Z covering 2 dates stays allowed (row 390). Longer gaps would book several days of sales on one date, so they are split by the receipts' own business dates. Spec: T-531 R11. | Keeps every day's sales on its own date even after a missed close | Yes |
+| 451 | 2026-11-08 | **SAVE IS A FLOPPY DISK. VERIFY AND CONFIRM ARE A CHECK. A PERIOD CLOSE ("CLOSE MONTH / BRANCH / SHIFT ...") IS A PADLOCK, NEVER THE CANCEL X. APPROVE IS A THUMBS-UP. POST (TO THE LEDGER) IS A BOOK. EVERY OTHER ICON IS UNCHANGED UNTIL IAN RULES AGAIN.** Ian, 2026-11-08, via BOSS, after seeing the icon-only button grid (T-549). Submit and Send keep the paper plane; a bare "Close", Cancel, Discard and Dismiss keep the X. Spec: `docs/tasks/549-save-and-verify-icons.md`. | A cancel X on a month close read as "cancel", and one paper plane for approve, post and verify hid which step you are taking | Yes |
 
 ## 14. Amendment protocol
 
