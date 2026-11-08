@@ -2,7 +2,7 @@
  * T-529 R2 - the left side of refill.png: the refill lines not yet served, one row per REQUEST (the lines of one table added at the same moment),
  * oldest first. Only `refill` tickets: a dish is never in this list. Pure; `nowMs` comes in.
  */
-import type { KitchenTicket } from '../_kitchen/cards';
+import { byId, type KitchenTicket } from '../_kitchen/cards';
 
 export interface RefillRow {
   key: string;
@@ -16,7 +16,7 @@ export interface RefillRow {
   lineIds: string[];
 }
 
-const order = (a: KitchenTicket, b: KitchenTicket) => Date.parse(a.addedAtDevice) - Date.parse(b.addedAtDevice) || (a.lineId < b.lineId ? -1 : a.lineId > b.lineId ? 1 : 0);
+const order = (a: KitchenTicket, b: KitchenTicket) => Date.parse(a.addedAtDevice) - Date.parse(b.addedAtDevice) || byId(a.lineId, b.lineId);
 
 export function buildRefillRows(tickets: readonly KitchenTicket[], nowMs: number): RefillRow[] {
   const groups = new Map<string, KitchenTicket[]>();

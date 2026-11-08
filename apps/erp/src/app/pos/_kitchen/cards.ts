@@ -37,7 +37,10 @@ export interface KitchenCard {
   lines: KitchenCardLine[];
 }
 
-const byAge = (a: KitchenTicket, b: KitchenTicket) => Date.parse(a.addedAtDevice) - Date.parse(b.addedAtDevice) || (a.lineId < b.lineId ? -1 : a.lineId > b.lineId ? 1 : 0);
+/** Same as `byId` in _orders/project.ts: string order by code unit, no relational compare (t371 G2). */
+export const byId = (x: string, y: string): number => (x === y ? 0 : [x, y].sort()[0] === x ? -1 : 1);
+
+const byAge = (a: KitchenTicket, b: KitchenTicket) => Date.parse(a.addedAtDevice) - Date.parse(b.addedAtDevice) || byId(a.lineId, b.lineId);
 
 export function buildKitchenCards(
   tickets: readonly KitchenTicket[],
