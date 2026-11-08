@@ -533,6 +533,9 @@
 .erp-dialog[data-size="sm"] { --erp-dialog-width: 28rem; }
 .erp-dialog[data-size="lg"] { --erp-dialog-width: 64rem; }
 .erp-dialog[data-size="xl"] { --erp-dialog-width: 80rem; }
+/* T-528e: the on-screen receipt. Narrow (the paper is 32 characters wide), half a rem from the top and bottom edge, and a snug body so the whole bill shows on a 1280x800 tablet. */
+.erp-dialog[data-size="receipt"] { --erp-dialog-width: 26rem; max-height: calc(100dvh - 1rem); }
+.erp-dialog[data-size="receipt"] .erp-dialog-body { padding-block: 0.5rem; }
 .erp-dialog-body { container-type: inline-size; }
 /* T-548: one scrollbar. The page behind is locked while any modal is open (pure CSS, nothing to leak), the dialog never
    scrolls itself, and only .erp-dialog-body scrolls, so the header and the action band stay put. */
