@@ -152,6 +152,9 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('settlement_day.rejected', 'data', 'normal', 'store', 'settlement_day_lines', 'T-511'),
   def('settlement_day.reopened', 'data', 'normal', 'store', 'settlement_day_lines', 'T-511'),
   def('settlement_loan.allocation_overridden', 'data', 'normal', 'store', 'settlement_day_lines', 'T-511'),
+  // T-511 S7a: a person approved a staged day and the books moved (correction + settlement in one transaction), and a void of that settlement returned the day to pending; entity = the staged day line (dotted: new).
+  def('settlement_day.approved', 'money', 'high', 'store', 'settlement_day_lines', 'T-511'),
+  def('settlement_day.unbooked', 'data', 'normal', 'store', 'settlement_day_lines', 'T-511'),
   // T-511 S6b: the platform file figure replaced the staff figure for one channel and day through a correcting entry; entity = the correction row (dotted: new).
   def('platform_sales.corrected', 'money', 'high', 'store', 'sales_day_platform_corrections', 'T-511'),
   // T-511 S6c: a platform charge with no sales day was booked (Dr 6400 fee + VAT / Cr 1220 that channel); entity = the channel_period_charges row (dotted: new).

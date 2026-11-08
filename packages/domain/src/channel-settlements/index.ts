@@ -10,7 +10,7 @@
  * again as a separate expense document, and it cost **₱198,148.29** across two stores. One
  * function owns these legs, which makes the double-count impossible rather than merely forbidden.
  */
-import { advisoryLocksRepo, auditLogRepo, channelSettlementsRepo, loansRepo, moneyAccountsRepo, moneyTransfersRepo, type Tx } from '@shareat/db';
+import { advisoryLocksRepo, auditLogRepo, channelSettlementsRepo, loansRepo, moneyAccountsRepo, moneyTransfersRepo, settlementIntakeRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { logger } from '@shareat/core/logger';
 import { compare, fromCentavos, isZero, money, negate, toCentavos, ZERO, type Money } from '@shareat/core/money';
@@ -714,6 +714,9 @@ export async function recordChannelSettlement(
           'a payout covering several days is one settlement per day, sharing a reference.',
       );
     }
+    // T-511 S7a (audit): the channel lock approve takes, taken here too (re-entrant inside approve), BEFORE the balance is read, so a hand-recorded settlement and an approve
+    // of the same channel cannot both clear the same balance.
+    await advisoryLocksRepo.lockSettlementChannel(trx, input.channelId);
     const ctx = await gatherSettlementContext(trx, actor, input, true);
     const figures = assertSettlementFigures('recordChannelSettlement', input);
     const legBlockers = await loanLegBlockers(trx, actor.orgId, figures.loanLegs);
@@ -1050,9 +1053,14 @@ export async function voidChannelSettlement(
   input: { settlementId: string; reason: string },
 ): Promise<{ reversedEntryId: string }> {
   const run = async (trx: Tx) => {
-    const s = await R.getById(trx, actor.orgId, input.settlementId);
-    if (!s) throw new Error(`voidChannelSettlement: settlement ${input.settlementId} does not exist.`);
-    await authorize(trx, actor, 'record_ar_collection', { storeId: s.storeId });
+    const seen = await R.getById(trx, actor.orgId, input.settlementId);
+    if (!seen) throw new Error(`voidChannelSettlement: settlement ${input.settlementId} does not exist.`);
+    await authorize(trx, actor, 'record_ar_collection', { storeId: seen.storeId });
+    // The channel lock approve takes first (channel, then the staged line, then the books), so a void and an approve of the same channel queue instead of crossing.
+    await advisoryLocksRepo.lockSettlementChannel(trx, seen.channelId);
+    // Read again under the lock: a second voider that queued behind the first must see it voided.
+    const s = (await R.getById(trx, actor.orgId, input.settlementId)) ?? seen;
+    if (s.status === 'voided') throw refuse(`voidChannelSettlement: settlement is ${s.status}, not posted.`, 'This settlement was already voided.');
     if (s.status !== 'posted') throw new Error(`voidChannelSettlement: settlement is ${s.status}, not posted.`);
     if (!s.journalEntryId) throw new Error('voidChannelSettlement: posted settlement carries no entry — that is a bug.');
 
@@ -1071,7 +1079,23 @@ export async function voidChannelSettlement(
       reason,
       reversedBy: actor.personId,
     });
-    await R.markVoided(trx, actor.orgId, s.id, { voidedBy: actor.personId, voidReason: reason });
+    if (!(await R.markVoided(trx, actor.orgId, s.id, { voidedBy: actor.personId, voidReason: reason }))) {
+      throw refuse(`voidChannelSettlement: settlement ${s.id} is no longer posted`, 'This settlement was already voided.');
+    }
+    // T-511 S7a: a staged day this settlement booked goes back to pending in the same transaction (a plain void is not a dead end). Only the CURRENT line returns; a line a
+    // newer file replaced stays booked as history. A hand-recorded settlement carries no line, so nothing happens.
+    const returned = await settlementIntakeRepo.markUnbooked(trx, actor.orgId, s.id);
+    if (returned) {
+      await auditLogRepo.append(trx, actor.orgId, {
+        actorPersonId: actor.personId,
+        action: 'settlement_day.unbooked',
+        storeId: returned.storeId,
+        entityId: returned.id,
+        before: { reviewState: 'booked', settlementId: s.id },
+        after: { reviewState: 'pending', voidedSettlementId: s.id },
+        source: 'web',
+      });
+    }
     return { reversedEntryId: reversal.reversalEntryId };
   };
   return run(tx);
