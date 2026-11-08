@@ -860,7 +860,7 @@ describe('T-511 S2a / 0228 - every numeric column on the new tables is numeric(1
     const perTable = (t: string) => cols.filter((x) => x.t === t).length;
     expect(perTable('settlement_day_lines'), 'settlement_day_lines numeric columns').toBeGreaterThanOrEqual(10);
     expect(perTable('settlement_loan_lines'), 'settlement_loan_lines numeric columns').toBe(1);
-    expect(perTable('settlement_other_lines'), 'settlement_other_lines numeric columns').toBe(1);
+    expect(perTable('settlement_other_lines'), 'settlement_other_lines numeric columns (amount + S6c vat_amount)').toBe(2);
     expect(perTable('loans'), 'loans.repayment_amount').toBe(1);
     for (const c of cols) expect(c.ft, `${c.t}.${c.c} type`).toBe('numeric(14,2)');
 

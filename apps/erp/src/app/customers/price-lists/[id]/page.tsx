@@ -7,7 +7,7 @@ import { listItems } from '../../../items/lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input, Select, FormModal } from '@/components/ui';
+import { Button, FlashBanner, Input, Select, FormModal, DialogActions } from '@/components/ui';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import { PRICE_SET_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 
@@ -124,9 +124,11 @@ export default async function PriceListPage({
               <Input name="unit" placeholder="kg" className="w-full" />
             </Field>
           </div>
-          <Button type="submit" variant="primary">
-            Save
-          </Button>
+          <DialogActions>
+            <Button type="submit" variant="primary">
+              Save
+            </Button>
+          </DialogActions>
         </CheckedForm>
         </FormModal>
       </div>

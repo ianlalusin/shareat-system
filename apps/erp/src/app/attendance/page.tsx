@@ -81,7 +81,7 @@ export default async function AttendanceReviewPage({
       <div>
         <h1 className="text-2xl font-semibold">Attendance review</h1>
         <PageDescription>
-          The days waiting on a decision, and every day in the period. ⭐ A correction is recorded
+          The days waiting on a decision, and every day in the period. A correction is recorded
           <strong> beside </strong>the punches, never in place of them — the original tap is a
           label, and it is never rewritten.
         </PageDescription>
@@ -119,7 +119,7 @@ export default async function AttendanceReviewPage({
 
         {queued.length === 0 ? (
           <p className="rounded border border-dashed border-surface-border p-6 text-center text-sm text-neutral-500">
-            ⭐ Nothing is waiting on a decision in this period.
+            Nothing is waiting on a decision in this period.
           </p>
         ) : (
           <ul className="space-y-2">

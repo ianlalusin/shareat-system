@@ -7,7 +7,7 @@ import { METHOD_LABEL, listRegister, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Button, FlashBanner, Input, LinkRow, RowLink, Select, FormModal, FormGrid, FormSection, type FieldProps } from '@/components/ui';
+import { Badge, Button, FlashBanner, Input, LinkRow, RowLink, Select, FormModal, FormGrid, FormSection, type FieldProps, DialogActions } from '@/components/ui';
 
 export const metadata = { title: 'Loans — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -154,9 +154,11 @@ export default async function LoansPage({
                 <Input name="notes" className="w-full" />
               </Field>
 
-              <Button type="submit" variant="primary">
-                Record loan
-              </Button>
+              <DialogActions>
+                <Button type="submit" variant="primary">
+                  Record loan
+                </Button>
+              </DialogActions>
             </CheckedForm>
         </FormModal>
       </div>

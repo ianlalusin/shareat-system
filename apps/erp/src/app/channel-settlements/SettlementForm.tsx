@@ -22,10 +22,10 @@
  */
 import { accountLabel } from '@/lib/account-label';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { Banner, Button, Field, FormGrid, Input, Select, SplitWorkspace } from '@/components/ui';
+import { Banner, Button, Field, FormGrid, FormSection, Input, Select, SplitWorkspace, Textarea } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
-import { CHANNEL_SETTLEMENT_RECORD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { CHANNEL_SETTLEMENT_RECORD_RULES, SETTLEMENT_DIFFERENCE_REASON_MAX, nativeAttrs } from '@shareat/domain/field-rules';
 import { recordSettlementAction, type PreviewRequest, type PreviewResponse } from './actions';
 
 export interface ChannelChoice {
@@ -62,7 +62,11 @@ export interface PreviewShape {
   tolerance: string;
   destinationAccountName: string | null;
   blockers: string[];
-  needsGainAcknowledgement: boolean;
+  /** T-511 S6a: a difference past tolerance (either sign) with no valid reason yet. */
+  needsAcknowledgement: boolean;
+  /** The absolute difference between the day and the payout. */
+  difference: string;
+  differenceSign: 'short' | 'over' | 'none';
   /** T-351 / DEF-482 — false means every figure above is a placeholder zero, not a real answer. */
   figuresComputed: boolean;
 }
@@ -131,7 +135,9 @@ export function SettlementForm({
   const [loanAmount, setLoanAmount] = useState('');
   const [reference, setReference] = useState('');
   const [settledOn, setSettledOn] = useState(today);
-  const [recognizeGain, setRecognizeGain] = useState(false);
+  const [differenceReason, setDifferenceReason] = useState('');
+  // The loan section's own open/closed choice; null until the person toggles it, so the default can follow the channel.
+  const [loanOpenChoice, setLoanOpenChoice] = useState<boolean | null>(null);
   // T-440: picking a channel or day sets the gross from React state, which fires no input event; tell the checked form.
   const grossRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -149,6 +155,7 @@ export function SettlementForm({
   const loan = loans.find((l) => l.id === loanId);
   /** ⭐ The cross-store case (T-150 §6): the loan belongs to a store other than the one being paid. */
   const crossStoreLoan = Boolean(loan && channel && loan.storeId !== channel.storeId);
+  const loanOpen = loanOpenChoice ?? loanSectionOpen({ loanId, loanAmount, channelStoreId: channel?.storeId, loans });
 
   /** Everything the arithmetic depends on. When this moves, the last check is stale. */
   const figuresKey = useMemo(
@@ -161,9 +168,9 @@ export function SettlementForm({
         deductions,
         loanId,
         loanAmount,
-        recognizeGain,
+        differenceReason,
       ]),
-    [channelId, day?.businessDate, gross, net, deductions, loanId, loanAmount, recognizeGain],
+    [channelId, day?.businessDate, gross, net, deductions, loanId, loanAmount, differenceReason],
   );
   const stale = checkedKey !== null && checkedKey !== figuresKey;
   const checked = checkedKey === figuresKey && preview !== null;
@@ -206,7 +213,7 @@ export function SettlementForm({
         loanId,
         loanAmount: loanAmount || '0',
         loanOwnerStoreId: crossStoreLoan ? (loan?.storeId ?? '') : '',
-        recognizeGain,
+        differenceReason,
       });
       if (res.ok) {
         setPreview(res.preview);
@@ -236,203 +243,212 @@ export function SettlementForm({
       <input type="hidden" name="businessDate" value={day?.businessDate ?? ''} />
       <input type="hidden" name="loanOwnerStoreId" value={crossStoreLoan ? (loan?.storeId ?? '') : ''} />
       {/*
-        ⚠️ The acknowledgement travels as a HIDDEN field, not as the checkbox's own name.
-        The checkbox is only rendered while a gain past tolerance is on screen — and ticking it
-        makes the figures stale, so the next check clears the blocker and unmounts the checkbox.
-        A named checkbox would then be gone from the form at submit time and the acknowledgement
+        ⚠️ The reason travels as a HIDDEN field, mirrored from state, not as the visible box's own name.
+        The box is only rendered while a difference past tolerance is on screen, and typing in it
+        makes the figures stale, so the next check clears the blocker and unmounts the box.
+        A named box would then be gone from the form at submit time and the acknowledgement
         would silently not be sent: the posting would refuse the very thing the person just
         agreed to, with a message saying they had not agreed to it.
       */}
-      <input type="hidden" name="recognizeGain" value={recognizeGain ? 'on' : ''} />
+      <input type="hidden" name="differenceReason" value={differenceReason} />
 
-      <SplitWorkspace formTitle="Payout details" detailsTitle="Payout check" form={(
-      <div className="space-y-5">
+      <SplitWorkspace formTitle="Payout details" detailsTitle="Payout check" stickyDetails form={(
+      // grid gap, not space-y: `.erp-form-section` zeroes its own margin, which would flatten space-y between sections.
+      <div className="grid gap-5">
 
-      {/* ── Which payout ─────────────────────────────────────────────────────────────── */}
-      <FormGrid layout="pairs">
-        <Field label="Channel">
-          <Select
-            name="channelId"
-            value={channelId}
-            onChange={(e) => pickChannel(e.target.value)}
-            className="w-full"
-          >
-            {channels.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.storeName} — {c.name} ({money(c.outstanding)} owed)
-              </option>
-            ))}
-          </Select>
-          {channel && !channel.destinationMoneyAccountId && (
-            <span className="text-warning-ink">
-              No payout account set — set it above before recording.
-            </span>
-          )}
-          {channel?.destinationAccountName && (
-            <span className="text-neutral-500 dark:text-neutral-400">
-              Banks into {channel.destinationAccountName}
-            </span>
-          )}
-        </Field>
-
-        <Field label="Day being settled">
-          <Select
-            name="salesDayPicker"
-            value={salesDayId}
-            onChange={(e) => pickDay(e.target.value)}
-            className="w-full"
-          >
-            <option value="">Choose a verified day…</option>
-            {channelDays.map((d) => (
-              <option key={d.salesDayId} value={d.salesDayId}>
-                {d.businessDate} — reported {money(d.reportedAmount)}
-                {d.ageDays > 0 ? ` · ${d.ageDays}d old` : ''}
-              </option>
-            ))}
-          </Select>
-          {channelDays.length === 0 && (
-            <span className="text-warning-ink">
-              Nothing waiting on this channel. Only a <strong>verified</strong> day raises a
-              receivable — an unverified one has posted nothing to clear.
-            </span>
-          )}
-        </Field>
-      </FormGrid>
-
-      {/* ── The two observable figures ───────────────────────────────────────────────── */}
-      <FormGrid layout="pairs">
-        <Field label="Gross the platform settled" hint="Prefilled from the day, editable — the statement wins" rule={CHANNEL_SETTLEMENT_RECORD_RULES.grossAmount}>
-          <input
-            {...nativeAttrs(CHANNEL_SETTLEMENT_RECORD_RULES.grossAmount)}
-            ref={grossRef}
-            value={gross}
-            onChange={(e) => setGross(e.target.value)}
-            placeholder="0.00"
-            className={INPUT}
-          />
-        </Field>
-        <Field label="Net actually deposited" hint="What landed in the account. Both figures are on the payout statement" rule={CHANNEL_SETTLEMENT_RECORD_RULES.netDeposited}>
-          <input
-            {...nativeAttrs(CHANNEL_SETTLEMENT_RECORD_RULES.netDeposited)}
-            value={net}
-            onChange={(e) => setNet(e.target.value)}
-            placeholder="0.00"
-            className={INPUT}
-          />
-        </Field>
-      </FormGrid>
-
-      {/* ── The deductions, each its own signed line ─────────────────────────────────── */}
-      <fieldset className="space-y-3 rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
-        <legend className="px-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">
-          What the platform deducted — each line to its own account
-        </legend>
-        <FormGrid layout="pairs">
-          {DEDUCTIONS.map((d) => (
-            <Field key={d.name} label={d.label} hint={<>{accountLabel(d.account)} · {d.hint}</>}>
-              <Input
-                name={d.name}
-                value={deductions[d.name]}
-                onChange={(e) => setDeductions((prev) => ({ ...prev, [d.name]: e.target.value }))}
-                inputMode="decimal"
-                placeholder="0.00"
+      {/* ── 1. Which day: each on its own row, the day option text is long ────────────── */}
+      <FormSection title="Which day">
+        <div className="space-y-3">
+          <div>
+            <Field label="Channel">
+              <Select
+                name="channelId"
+                value={channelId}
+                onChange={(e) => pickChannel(e.target.value)}
                 className="w-full"
-              />
+              >
+                {channels.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.storeName} — {c.name} ({money(c.outstanding)} owed)
+                  </option>
+                ))}
+              </Select>
             </Field>
-          ))}
-        </FormGrid>
-        <p className="text-xs text-neutral-500 dark:text-neutral-500">
-          ⛔ <strong>A deduction may be negative.</strong> A promo-heavy day genuinely hands money
-          back, and that credit must survive — the legacy system filtered it out and overstated fees
-          by exactly the amount it dropped.
-        </p>
-      </fieldset>
+            {/* Visible text, not a tooltip: where the money lands matters before posting. */}
+            {channel && !channel.destinationMoneyAccountId && (
+              <p className="mt-1 text-xs text-warning-ink">
+                No payout account is set for this channel. Set it on the Channel settlements page before recording.
+              </p>
+            )}
+            {channel?.destinationAccountName && (
+              <p className="mt-1 text-xs text-muted">Banks into {channel.destinationAccountName}</p>
+            )}
+          </div>
 
-      {/* ── The loan the platform docked ─────────────────────────────────────────────── */}
-      <fieldset className="space-y-3 rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
-        <legend className="px-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">
-          Loan repayment docked out of the payout — optional
-        </legend>
+          <div>
+            <Field label="Day being settled">
+              <Select
+                name="salesDayPicker"
+                value={salesDayId}
+                onChange={(e) => pickDay(e.target.value)}
+                className="w-full"
+              >
+                <option value="">Choose a verified day…</option>
+                {channelDays.map((d) => (
+                  <option key={d.salesDayId} value={d.salesDayId}>
+                    {d.businessDate} — reported {money(d.reportedAmount)}
+                    {d.ageDays > 0 ? ` · ${d.ageDays}d old` : ''}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            {channelDays.length === 0 && (
+              <p className="mt-1 text-xs text-warning-ink">
+                Nothing waiting on this channel. Only a <strong>verified</strong> day raises a
+                receivable — an unverified one has posted nothing to clear.
+              </p>
+            )}
+          </div>
+        </div>
+      </FormSection>
+
+      {/* ── 2. The payout: the two observable figures, then provenance ───────────────── */}
+      <FormSection title="The payout">
         <FormGrid layout="pairs">
-          <Field label="Loan">
-            <Select
-              name="loanId"
-              value={loanId}
-              onChange={(e) => setLoanId(e.target.value)}
-              className="w-full"
-            >
-              <option value="">Nothing docked</option>
-              {loans.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.label} — {money(l.outstanding)} outstanding
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Amount docked" rule={CHANNEL_SETTLEMENT_RECORD_RULES.loanAmount}>
-            <Input
-              {...nativeAttrs(CHANNEL_SETTLEMENT_RECORD_RULES.loanAmount)}
-              value={loanAmount}
-              onChange={(e) => setLoanAmount(e.target.value)}
+          <Field label="Gross the platform settled" hint="Prefilled from the day, editable — the statement wins" rule={CHANNEL_SETTLEMENT_RECORD_RULES.grossAmount}>
+            <input
+              {...nativeAttrs(CHANNEL_SETTLEMENT_RECORD_RULES.grossAmount)}
+              ref={grossRef}
+              value={gross}
+              onChange={(e) => setGross(e.target.value)}
               placeholder="0.00"
-              disabled={loanId === ''}
+              className={INPUT}
+            />
+          </Field>
+          <Field label="Net actually deposited" hint="What landed in the account. Both figures are on the payout statement" rule={CHANNEL_SETTLEMENT_RECORD_RULES.netDeposited}>
+            <input
+              {...nativeAttrs(CHANNEL_SETTLEMENT_RECORD_RULES.netDeposited)}
+              value={net}
+              onChange={(e) => setNet(e.target.value)}
+              placeholder="0.00"
+              className={INPUT}
+            />
+          </Field>
+          <Field label="Payout reference" rule={CHANNEL_SETTLEMENT_RECORD_RULES.reference}>
+            <Input
+              {...nativeAttrs(CHANNEL_SETTLEMENT_RECORD_RULES.reference)}
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+              placeholder="The platform's payout reference"
+              className="w-full"
+            />
+          </Field>
+          <Field label="Settled on" hint="The entry dates on this, not on the sales day" rule={CHANNEL_SETTLEMENT_RECORD_RULES.settledOn}>
+            <Input
+              {...nativeAttrs(CHANNEL_SETTLEMENT_RECORD_RULES.settledOn)}
+              value={settledOn}
+              onChange={(e) => setSettledOn(e.target.value)}
+              type="date"
               className="w-full"
             />
           </Field>
         </FormGrid>
-        {crossStoreLoan && (
-          <Banner tone="warning">
-            <strong>This loan belongs to another store.</strong> The paying store books{' '}
-            <span>Due from related store</span> and the owning store{' '}
-            <span>Due to related store</span>, so the pair nets to zero
-            across the group and neither store&apos;s books absorb the other&apos;s debt.
-          </Banner>
-        )}
-      </fieldset>
+      </FormSection>
 
-      {/* ── Provenance ───────────────────────────────────────────────────────────────── */}
-      <FormGrid layout="pairs">
-        <Field label="Payout reference" rule={CHANNEL_SETTLEMENT_RECORD_RULES.reference}>
-          <Input
-            {...nativeAttrs(CHANNEL_SETTLEMENT_RECORD_RULES.reference)}
-            value={reference}
-            onChange={(e) => setReference(e.target.value)}
-            placeholder="The platform's payout reference"
-            className="w-full"
-          />
-        </Field>
-        <Field label="Settled on" hint="The entry dates on this, not on the sales day" rule={CHANNEL_SETTLEMENT_RECORD_RULES.settledOn}>
-          <Input
-            {...nativeAttrs(CHANNEL_SETTLEMENT_RECORD_RULES.settledOn)}
-            value={settledOn}
-            onChange={(e) => setSettledOn(e.target.value)}
-            type="date"
-            className="w-full"
-          />
-        </Field>
-      </FormGrid>
+      {/* ── 3. The deductions, each its own signed line ──────────────────────────────── */}
+      {/*
+        Why a deduction may be negative (kept here, not on screen): a promo-heavy day genuinely hands money
+        back and that credit must survive. The legacy system filtered it out and overstated fees by exactly the
+        amount it dropped. Why the panel says fees are booked here only: raising an expense document for the
+        same fee as well double-counted ₱198,148.29 across two stores in the legacy system; this screen is the
+        single place these legs are written.
+      */}
+      <FormSection title="What the platform deducted">
+        <p className="mb-3 text-xs text-muted">
+          Each fee posts to its own account. A deduction can be negative: a promo credit stays a minus.
+        </p>
+        {/* Two columns on a phone, three once the form column itself is wide (a container query, not the viewport). */}
+        <div className="[container-type:inline-size]">
+          <div className="grid grid-cols-2 gap-x-5 gap-y-3 [@container_(min-width:36rem)]:grid-cols-3">
+            {DEDUCTIONS.map((d) => (
+              <Field key={d.name} label={d.label} width="full" hint={<>{accountLabel(d.account)} · {d.hint}</>}>
+                <Input
+                  name={d.name}
+                  value={deductions[d.name]}
+                  onChange={(e) => setDeductions((prev) => ({ ...prev, [d.name]: e.target.value }))}
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  className="w-full"
+                />
+              </Field>
+            ))}
+          </div>
+        </div>
+      </FormSection>
+
+      {/* ── 4. The loan the platform docked: optional, opens itself when it matters ──── */}
+      <details
+        className="erp-form-section"
+        open={loanOpen}
+        onToggle={(e) => {
+          // The browser also fires `toggle` when React itself flips `open`; only a change away from what is drawn is the person's.
+          if (e.currentTarget.open !== loanOpen) setLoanOpenChoice(e.currentTarget.open);
+        }}
+      >
+        <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium text-ink">
+          Loan docked from the payout (optional)
+        </summary>
+        <div className="space-y-3 pt-1">
+          <FormGrid layout="pairs">
+            <Field label="Loan">
+              <Select
+                name="loanId"
+                value={loanId}
+                onChange={(e) => setLoanId(e.target.value)}
+                className="w-full"
+              >
+                <option value="">Nothing docked</option>
+                {loans.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.label} — {money(l.outstanding)} outstanding
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Amount docked" rule={CHANNEL_SETTLEMENT_RECORD_RULES.loanAmount}>
+              <Input
+                {...nativeAttrs(CHANNEL_SETTLEMENT_RECORD_RULES.loanAmount)}
+                value={loanAmount}
+                onChange={(e) => setLoanAmount(e.target.value)}
+                placeholder="0.00"
+                disabled={loanId === ''}
+                className="w-full"
+              />
+            </Field>
+          </FormGrid>
+          {crossStoreLoan && (
+            <Banner tone="warning">
+              <strong>This loan belongs to another store.</strong> The paying store books{' '}
+              <span>Due from related store</span> and the owning store{' '}
+              <span>Due to related store</span>, so the pair nets to zero
+              across the group and neither store&apos;s books absorb the other&apos;s debt.
+            </Banner>
+          )}
+        </div>
+      </details>
 
       </div>
       )} details={(
-      <div className="space-y-4">
-      {/* ── ⭐ The preview. The reason this component exists ─────────────────────────── */}
-      <div className="space-y-3 rounded-lg border border-neutral-300 bg-neutral-50 p-4 dark:border-neutral-700 dark:bg-neutral-900">
+      // ── ⭐ The panel. The reason this component exists: the variance is on screen before Post is usable. ──
+      <div className="space-y-4 rounded-lg border border-surface-border bg-surface p-4">
         <h2 className="text-sm font-semibold">Check the payout</h2>
         {channel && (
           <dl className="space-y-2 text-xs">
             <div><dt className="text-muted">Channel</dt><dd className="break-words font-medium">{channel.storeName} · {channel.name}</dd></div>
-            <div><dt className="text-muted">Waiting balance</dt><dd className="break-words font-mono">₱{channel.outstanding}</dd></div>
+            <div><dt className="text-muted">Waiting balance</dt><dd className="break-words font-mono">{money(channel.outstanding)}</dd></div>
             <div><dt className="text-muted">Verified day</dt><dd>{day?.businessDate ?? 'Choose the day being settled.'}</dd></div>
           </dl>
         )}
-        <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" onClick={check} disabled={pending || salesDayId === ''} variant="secondary">
-            {pending ? 'Checking…' : 'Check the numbers'}
-          </Button>
-          <span className="text-xs text-neutral-500 dark:text-neutral-400">
-            Nothing is written. This is the same arithmetic the posting runs.
-          </span>
-        </div>
 
         {previewError && (
           <Banner tone="error">{previewError}</Banner>
@@ -454,23 +470,9 @@ export function SettlementForm({
               </div>
             )}
 
-            {/* ⭐ The gain acknowledgement is offered ONLY once a gain past tolerance is on
-                screen. A permanently visible tick is one people learn to tick. */}
-            {preview.needsGainAcknowledgement && (
-              <label className="mt-3 flex items-start gap-2 rounded border border-warning bg-warning-soft p-3 text-sm text-warning-ink">
-                <input
-                  type="checkbox"
-                  checked={recognizeGain}
-                  onChange={(e) => setRecognizeGain(e.target.checked)}
-                  className="mt-0.5"
-                />
-                <span>
-                  <strong>Recognise {money(preview.settlementGain)} as income.</strong> The platform
-                  paid more than the day reported, past the tolerance. Tick this only if the payout
-                  is right and the day under-reported — a typo must not quietly become revenue.
-                </span>
-              </label>
-            )}
+            {/* ⭐ The acknowledgement is offered ONLY once a difference past tolerance is on
+                screen. A permanently visible box is one people learn to fill in by habit. */}
+            <DifferenceAcknowledgement preview={preview} reason={differenceReason} onReasonChange={setDifferenceReason} />
 
             {stale && (
               <p className="mt-3 text-sm font-medium text-warning-ink">
@@ -479,29 +481,91 @@ export function SettlementForm({
             )}
           </div>
         )}
-      </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <SubmitButton disabled={!canPost}>Post this settlement</SubmitButton>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" onClick={check} disabled={pending || salesDayId === ''} variant="secondary">
+            {pending ? 'Checking…' : 'Check the numbers'}
+          </Button>
+          <SubmitButton disabled={!canPost} icon={null}>Post settlement</SubmitButton>
+        </div>
+        <p className="text-xs text-muted">Nothing is written. This is the same arithmetic the posting runs.</p>
         {!canPost && (
-          <span className="text-xs text-neutral-500 dark:text-neutral-400">
+          <p className="text-xs text-muted">
             {salesDayId === ''
               ? 'Choose the day this payout settles.'
               : checked
                 ? 'Resolve what is listed above first.'
                 : 'Check the numbers first — the variance is shown before it is posted, not after.'}
-          </span>
+          </p>
         )}
-      </div>
-
-      <p className="text-xs text-neutral-500 dark:text-neutral-400">
-        Every platform fee is booked here, once. ⛔ Do not also raise an expense document for the
-        same fee — that double-count cost ₱198,148.29 across two stores in the legacy system, and
-        this screen is the single place these legs are written.
-      </p>
+        <p className="text-xs text-muted">Book platform fees here only. Don&apos;t also log them as an expense.</p>
       </div>
       )} />
     </CheckedForm>
+  );
+}
+
+/**
+ * T-511 S6d: does the optional loan section start open? Yes when a loan or an amount is already filled in, or when any active
+ * loan belongs to the store this channel pays into (the likeliest day for one to be docked). The person's own toggle wins after that.
+ */
+export function loanSectionOpen({
+  loanId,
+  loanAmount,
+  channelStoreId,
+  loans,
+}: {
+  loanId: string;
+  loanAmount: string;
+  channelStoreId: string | undefined;
+  loans: readonly Pick<LoanChoice, 'storeId'>[];
+}): boolean {
+  if (loanId !== '' || loanAmount.trim() !== '') return true;
+  return channelStoreId !== undefined && channelStoreId !== '' && loans.some((l) => l.storeId === channelStoreId);
+}
+
+/**
+ * T-511 S6a — the acknowledgement of a difference between the payout and the day, past tolerance, of EITHER sign (it replaces the old gain tick, and a shortfall
+ * can be accepted too now). Hook-free and presentational, like `SettlementPreviewFigures`: nothing when no acknowledgement is needed; otherwise the same visible
+ * reason box for both signs, the difference as money, and wording that tells the two apart. The posted value is the hidden `differenceReason` field of the form.
+ */
+export function DifferenceAcknowledgement({
+  preview,
+  reason,
+  onReasonChange,
+}: {
+  preview: PreviewShape;
+  reason: string;
+  onReasonChange: (reason: string) => void;
+}) {
+  if (!preview.needsAcknowledgement) return null;
+  const short = preview.differenceSign === 'short';
+  return (
+    <div className="mt-3 space-y-2 rounded border border-warning bg-warning-soft p-3 text-sm text-warning-ink">
+      <p>
+        {short ? (
+          <>
+            <strong>The payout is {money(preview.difference)} short of the day.</strong> That is past the tolerance. Accept it only if the platform statement is right
+            and the day was over-reported. It is booked as an expense (settlement variance).
+          </>
+        ) : (
+          <>
+            <strong>The payout is {money(preview.difference)} more than the day.</strong> That is past the tolerance. Accept it only if the payout is right and the day was
+            under-reported. It is booked as income (settlement gain) — a typo must not quietly become revenue.
+          </>
+        )}
+      </p>
+      <label className="block">
+        <span className="font-medium">Why do you accept this difference?</span>
+        <Textarea
+          value={reason}
+          onChange={(e) => onReasonChange(e.target.value)}
+          maxLength={SETTLEMENT_DIFFERENCE_REASON_MAX}
+          className="mt-1 w-full"
+        />
+      </label>
+      <p className="text-xs">Then check the numbers again: a new reason is a new check.</p>
+    </div>
   );
 }
 

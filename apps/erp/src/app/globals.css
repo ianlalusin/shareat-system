@@ -260,6 +260,20 @@
 }
 
 /*
+ * T-545 (DEF-815) — the dialog's Close "×" stays 32px (`h-8 w-8` on the button) with a mouse and
+ * grows to 44px under a finger, the same plain-CSS shape as .shell-nav-row above (Tailwind 3.4 has
+ * no pointer-coarse variant). The selector is `.erp-dialog .erp-dialog-close` — two classes — so it
+ * beats the `h-8 w-8` utilities whatever order Tailwind emits them in; a single-class rule only
+ * ties with them. The icon inside stays 18px.
+ */
+@media (pointer: coarse) {
+  .erp-dialog .erp-dialog-close {
+    height: 44px;
+    width: 44px;
+  }
+}
+
+/*
  * T-387 S3: the animated status icons (StatusIcon) and the empty-state flame. Every keyframe and every
  * `animation` lives inside this one no-preference block, so reduced motion gets still icons.
  * Shapes and timings are copied from docs/design/t387/OrderStatus.dc.html and Feedback.dc.html.
@@ -520,8 +534,33 @@
 .erp-dialog[data-size="lg"] { --erp-dialog-width: 64rem; }
 .erp-dialog[data-size="xl"] { --erp-dialog-width: 80rem; }
 .erp-dialog-body { container-type: inline-size; }
+/* T-548: one scrollbar. The page behind is locked while any modal is open (pure CSS, nothing to leak), the dialog never
+   scrolls itself, and only .erp-dialog-body scrolls, so the header and the action band stay put. */
+html:has(.erp-dialog[open], .erp-lightbox[open]) { overflow: hidden; }
+/* T-548: keep the scrollbar's space when a modal locks the page, so nothing shifts sideways. */
+html { scrollbar-gutter: stable; }
+.erp-dialog { overflow: hidden; }
+.erp-lightbox { overscroll-behavior: contain; }
+/* The form's action row, pinned to the bottom of the scrolling body: edge to edge (the body pads 1.25rem by 1rem) and flush
+   with the bottom (the negative bottom margin eats the body's padding). Outside a dialog it stays a plain row. */
+.erp-dialog-body [data-dialog-actions] {
+  position: sticky;
+  bottom: -1rem;
+  z-index: 10;
+  margin: 1rem -1.25rem -1rem;
+}
+.erp-dialog-body [data-dialog-actions],
+.erp-dialog-footer {
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--surface-border);
+  background: var(--surface);
+}
+/* T-548: the band sits 1rem below the body's edge (bottom: -1rem), so it adds that 1rem back as padding. */
+.erp-dialog-body [data-dialog-actions] { padding-bottom: calc(0.75rem + 1rem); }
 @media (max-width: 639px) {
   .erp-dialog { width: 100vw; max-width: 100vw; max-height: 100dvh; height: 100dvh; margin: 0; border-radius: 0; }
+  .erp-dialog-footer { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
+  .erp-dialog-body [data-dialog-actions] { padding-bottom: calc(1rem + max(0.75rem, env(safe-area-inset-bottom))); }
 }
 
 /* T-448: sibling cards share a row when they fit, instead of one full-width card per row. */
@@ -558,6 +597,15 @@
   }
   .split-workspace-details {
     grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  }
+  /* T-511 S6d: the details section (the second child) follows the scroll; stacked below the form it must not. */
+  .split-workspace-sticky > :nth-child(2) {
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100dvh - 2rem); /* a tall preview scrolls inside, so Post stays reachable */
+    overflow-y: auto;
+    padding: 0.25rem; /* room inside the scroll box so a focus ring at its edge is not clipped */
+    margin: -0.25rem;
   }
 }
 

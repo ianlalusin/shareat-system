@@ -6,7 +6,7 @@ import { listSuppliersWithPosition, listInvoicesWithStanding, standingPills, lis
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, NumTd, RowLink, Select, Table, Td, Th } from '@/components/ui';
+import { Badge, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, NumTd, RowLink, Select, Table, Td, Th, DialogActions } from '@/components/ui';
 import { CheckedForm, RuleCheck } from '@/components/forms';
 import { buildSupplierFacts } from '@shareat/domain/business-rules';
 import { InvoiceNumberCheck } from './InvoiceNumberCheck';
@@ -52,7 +52,7 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
           <h1 className="text-2xl font-semibold">Accounts payable</h1>
           <PageDescription>
             No expense — cash or credit — can be recorded until its supplier invoice is verified
-            here. Verification <strong>is</strong> the approval (T-130).
+            here. Verification <strong>is</strong> the approval.
           </PageDescription>
         </div>
         <div className="flex items-center gap-3">
@@ -144,7 +144,9 @@ export default async function ApPage({ searchParams }: { searchParams: Promise<S
                   <PhotoUpload name="receiptPhoto" purpose="receipt_photo" label="Receipt photo" storeField="storeId" />
                 </Field>
               </FormSection>
-              <Button type="submit" variant="primary">Log invoice</Button>
+              <DialogActions>
+                <Button type="submit" variant="primary">Log invoice</Button>
+              </DialogActions>
             </CheckedForm>
           </FormModal>
         </div>

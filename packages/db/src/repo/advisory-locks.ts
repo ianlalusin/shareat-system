@@ -18,7 +18,7 @@
  *     return credit, keyed on the supplier id), 369003 (inter-store pair settlement, keyed on the
  *     UNORDERED pair of store ids), 392001 (dual-run store-week, keyed on org:store:week), 436001 (a
  *     person's leave: caps, SIL balance, one-leave-day-per-date, keyed on the person id), 511001
- *     (settlement upload, keyed on the channel id).
+ *     (settlement upload, keyed on the channel id), 511002 (a booked period charge being netted by a payout, keyed on the charge id).
  *   - Migration 0211: namespace 443001 (item family structure, keyed on org id).
  *   - A `hashtext(storeId)` collision only serialises two stores for a moment; it never gives a
  *     wrong answer (the same reasoning as `access.ts` `lockOrgAccess`).
@@ -131,4 +131,13 @@ export async function lockSettlementChannel(tx: Tx, channelId: string): Promise<
   await tx.execute(
     sql`select pg_advisory_xact_lock(${SETTLEMENT_CHANNEL_LOCK_NAMESPACE}::int4, hashtext(${channelId}::text))`,
   );
+}
+
+/** Namespace (first int4) for the per-charge netting lock. T-511 S6c. */
+const PERIOD_CHARGE_LOCK_NAMESPACE = 511002;
+
+/** Serialises every payout that names ONE booked period charge as netted out of it, taken after the store gate and BEFORE the "already netted" read: two payouts naming
+ *  the same charge queue, and the second reads the first's committed link and is refused. Keyed on the charge id (callers take several in sorted order). */
+export async function lockPeriodCharge(tx: Tx, chargeId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(${PERIOD_CHARGE_LOCK_NAMESPACE}::int4, hashtext(${chargeId}::text))`);
 }

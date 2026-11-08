@@ -83,7 +83,7 @@
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { compare, money, ZERO } from '@shareat/core/money';
 import type { AutoAllocateRequest, AutoAllocateResponse } from '../../actions';
-import { Button, Input, Select } from '@/components/ui';
+import { Button, Input, Select, DialogActions } from '@/components/ui';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import { SUPPLIER_PAYMENT_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 
@@ -373,9 +373,11 @@ export function AutoAllocatePaymentForm({
       <Field label="Reference no." hint="Optional.">
         <Input name="referenceNo" className="w-full" />
       </Field>
-      <Button type="submit" variant="primary">
-        Record payment
-      </Button>
+      <DialogActions>
+        <Button type="submit" variant="primary">
+          Record payment
+        </Button>
+      </DialogActions>
     </CheckedForm>
   );
 }

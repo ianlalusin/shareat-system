@@ -32,6 +32,7 @@ collectActorUids
 confirmHeads
 confirmTradeOrder
 convertSpecimen
+correctPlatformSales
 countedVariances
 createFakeFirestore
 createFakeIdb
@@ -131,6 +132,7 @@ poolKey
 posV1SalesBody
 posV1SoldItemsBody
 positionsBySupplier
+postPlatformCharge
 previewDrawingClose
 proxy
 pullHolds

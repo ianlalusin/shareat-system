@@ -7,7 +7,7 @@
  * `settlementId` is generated when the page renders, so a double click is a replay, not a second settlement.
  */
 import { useState } from 'react';
-import { Button, Input, Select } from '@/components/ui';
+import { Button, Input, Select, DialogActions } from '@/components/ui';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import { TRANSFER_SETTLE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { settleBetweenStoresAction } from './actions';
@@ -116,9 +116,11 @@ export function SettleBetweenStoresForm({
         <Input name="notes" className="w-full" />
       </Field>
 
-      <Button type="submit" variant="secondary">
-        Settle
-      </Button>
+      <DialogActions>
+        <Button type="submit" variant="secondary">
+          Settle
+        </Button>
+      </DialogActions>
     </CheckedForm>
   );
 }

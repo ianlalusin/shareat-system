@@ -205,7 +205,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
   //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
   //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 115 FAIL / 51 UNRESOLVED', () => {
+  it('accepted-baseline totals: 115 FAIL / 50 UNRESOLVED', () => {
     // 62 -> 63 UNRESOLVED, T-386 S4 2026-10-09: the rename "use the suggested code" checkbox on app/items/ItemCodeField.tsx
     // (an intrinsic checkbox box; baselined in touch-target-baseline.json per Ian's §6.1 ruling).
     // 63 -> 66 UNRESOLVED, T-387 S3 2026-10-10. +3: the kit's new native `<select>` (Select.tsx) and `<textarea>` (Textarea.tsx)
@@ -236,7 +236,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 50 -> 51 UNRESOLVED, T-502 section 12: components/expenses/InvoiceBatchRecord.tsx gained intrinsic include checkboxes (baseline entry added); FAIL unmoved at 116.
     // 49 -> 50 UNRESOLVED, merge of main + T-193: re-measured; src/app/page.tsx gov-tile 'Set it under Employer numbers' inline Link (font size unresolvable), baseline entry added.
     // 116 -> 115 FAIL, T-520 (5 Nov, BOSS approved): /ap's invoice table replaced the amber banner's 20px inline link; baseline entry app/ap/page.tsx removed. UNRESOLVED unmoved at 51.
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 115, unresolved: 51 });
+    // 51 -> 50 UNRESOLVED, T-511 S6a: app/channel-settlements/SettlementForm.tsx lost its intrinsic checkbox (baseline entry removed); FAIL unmoved at 115; re-measured after rebase on main (0238-0241 present), 7 Nov 2026, BOSS approved.
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 115, unresolved: 50 });
   });
 
   // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
@@ -520,7 +521,9 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1587 -> 1615, T-528 (+28 controls), re-measured on main, 7 Nov 2026, BOSS approved.
     // 1615 -> 1618, +3 T-528c controls (Pay-blocked reason, Reprint, Done); BOSS approved
     // 1618 -> 1619, +1 VAT details disclosure (T-528d); BOSS approved
-    expect(results.length).toBe(1619);
+    // 1540 -> 1541, T-511 S6d, 8 Nov 2026, re-measured by runCensus(): +1 compliant control (the loan section's <summary> on /channel-settlements/record, 44px). FAIL/UNRESOLVED baselines unchanged.
+    // 1619 + S6d = 1620 after merging main into #196, 8 Nov 2026, BOSS approved.
+    expect(results.length).toBe(1620);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

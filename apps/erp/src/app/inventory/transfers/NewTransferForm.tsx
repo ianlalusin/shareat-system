@@ -2,7 +2,7 @@
 
 /** The "New transfer" form. From/To exclusivity is `TwoWayPicker`'s job — shared with
  *  money-transfers rather than reimplemented here (see that component's header). */
-import { Button, Field, FormGrid, Input, Select } from '@/components/ui';
+import { Button, DialogActions, Field, FormGrid, Input, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { INVENTORY_TRANSFER_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { createTransferAction } from './actions';
@@ -55,9 +55,11 @@ export function NewTransferForm({
         <Input name="note" className="mt-1 block w-full" />
       </Field>
       </FormGrid>
-      <Button type="submit" variant="primary">
-        Transfer
-      </Button>
+      <DialogActions>
+        <Button type="submit" variant="primary">
+          Transfer
+        </Button>
+      </DialogActions>
     </CheckedForm>
   );
 }

@@ -243,9 +243,9 @@ export default async function CustomerDetailPage({
             size="lg"
             description={
               <>
-                ⛔ Name the charges this settles (bible §16.10 &mdash; a collection must never float
+                Name the charges this settles (bible §16.10 &mdash; a collection must never float
                 unallocated), or press &ldquo;Auto-allocate&rdquo; to fill the empty boxes
-                most-overdue-first (T-330) and edit from there. <strong>Total received is GROSS</strong>:
+                most-overdue-first and edit from there. <strong>Total received is GROSS</strong>:
                 the receivable is relieved by it, and the account receives it minus the fee. Paying
                 more than allocated becomes real store credit, which the next payment can draw
                 on.
@@ -348,7 +348,7 @@ export default async function CustomerDetailPage({
         <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
           <h2 className="font-medium">Write off or void a charge</h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            ⛔ <strong>A write-off takes two people.</strong> Whoever recorded the charge cannot
+            <strong>A write-off takes two people.</strong> Whoever recorded the charge cannot
             also declare it dead — the service refuses it by identity, whatever the role. A partial
             write-off is allowed and leaves the remainder outstanding. ⚠️ <strong>Void</strong> is a
             different act: it says the charge should never have existed, and reverses its entry.
@@ -506,7 +506,7 @@ export default async function CustomerDetailPage({
       </section>
 
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
-        ⭐ Every figure on this page is a query over the ledger and the AR tables&rsquo; own CTEs.
+        Every figure on this page is a query over the ledger and the AR tables&rsquo; own CTEs.
         There is no stored balance to recompute, repair or reconcile &mdash; which is why the three
         buttons v1 needed for exactly that are not here.
       </p>

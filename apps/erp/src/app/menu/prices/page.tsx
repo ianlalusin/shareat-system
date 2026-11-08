@@ -11,7 +11,7 @@ import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
-import { Badge, Banner, Button, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
+import { Badge, Banner, Button, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { MENU_OPTION_PRICE_RULES, MENU_PRICE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import {
@@ -299,9 +299,11 @@ function PriceForm({
             {whenChoices && ' To move a package from an all-day price to Lunch and Dinner prices, withdraw the all-day price first.'}
           </p>
         )}
-        <Button type="submit" variant="secondary">
-          Save
-        </Button>
+        <DialogActions>
+          <Button type="submit" variant="secondary">
+            Save
+          </Button>
+        </DialogActions>
       </CheckedForm>
     </FormModal>
   );

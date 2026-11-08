@@ -11,7 +11,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Badge, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, RowLink, Select, DialogActions } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 import { SUPPLIER_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
@@ -58,7 +58,7 @@ export default async function SuppliersPage({
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold">Suppliers</h1>
           <PageDescription>
-            The register, org-wide. ⭐ One row per supplier — not one per store. v1 keyed suppliers
+            The register, org-wide. One row per supplier — not one per store. v1 keyed suppliers
             under each branch, so a fleet-wide vendor became <strong>up to twenty</strong> separate
             records that each had to be edited, reconciled and paid.
           </PageDescription>
@@ -94,7 +94,9 @@ export default async function SuppliersPage({
                   </Field>
                 </FormGrid>
               </FormSection>
-              <SubmitButton variant="secondary">Save</SubmitButton>
+              <DialogActions>
+                <SubmitButton variant="secondary">Save</SubmitButton>
+              </DialogActions>
             </CheckedForm>
           </FormModal>
         </div>

@@ -7,7 +7,6 @@ import { ClosedMonthOverride } from '@/components/ClosedMonthOverride';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import { EXPENSE_REIMBURSEMENT_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { Button, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
@@ -51,15 +50,11 @@ export default async function ReimbursementsPage({
   const closed = store && (await canOverrideClosedMonth(actor)) ? await closedMonths(actor.orgId) : [];
 
   return (
-    <Page density="table">
-      <div>
-        <h1 className="text-2xl font-semibold">Reimbursements</h1>
-        <PageDescription>
-          What this store owes people who paid for something out of their own pocket. Paying one back
-          takes the money from a store account and clears what is owed; it never pays more than is owed.
-        </PageDescription>
-      </div>
-
+    <Page
+      density="table"
+      title="Reimbursements"
+      description="What this store owes people who paid for something out of their own pocket. Paying one back takes the money from a store account and clears what is owed; it never pays more than is owed."
+    >
       {/* A warning is not an error: the payout posted. FlashBanner draws it as a warning; the Toaster shows ok. */}
       <FlashBanner flash={sp} />
 

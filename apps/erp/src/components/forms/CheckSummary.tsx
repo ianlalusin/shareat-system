@@ -5,10 +5,10 @@
  * render), while a record is locked, or outside a checked form it renders nothing. The per-field helper lines are not live
  * regions, so one keystroke is announced once.
  */
-export function CheckSummary({ active, summary }: { active: boolean; summary: string | null }) {
+export function CheckSummary({ active, summary, className = 'mt-3' }: { active: boolean; summary: string | null; className?: string }) {
   if (!active) return null;
   return (
-    <p role="status" aria-live="polite" className="mt-3 min-h-5 text-sm text-ink/70">
+    <p role="status" aria-live="polite" className={`${className} min-h-5 text-sm text-ink/70`}>
       {summary ?? ''}
     </p>
   );

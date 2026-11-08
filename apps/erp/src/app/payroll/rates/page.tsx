@@ -18,7 +18,7 @@ import { EMPLOYER_NO_HINT, rateSummary } from './rate-fields';
 import { StatutoryRateForm } from './StatutoryRateForm';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Button, CardGrid, Field, FlashBanner, FormGrid, FormModal, FormSection, HelpTip, Input, Select } from '@/components/ui';
+import { Badge, Button, CardGrid, DialogActions, Field, FlashBanner, FormGrid, FormModal, FormSection, HelpTip, Input, Select } from '@/components/ui';
 
 export const metadata = { title: 'Payroll rates — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -133,12 +133,12 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
                 <Field label="Where it comes from" width="long" rule={PAYROLL_BRACKET_SET_RULES.sourceRef}>
                   <Input {...nativeAttrs(PAYROLL_BRACKET_SET_RULES.sourceRef)} className="w-full" />
                 </Field>
-                <div className="!flex-none self-end">
-                  <Button type="submit" variant="primary">
-                    Save
-                  </Button>
-                </div>
               </FormGrid>
+              <DialogActions>
+                <Button type="submit" variant="primary">
+                  Save
+                </Button>
+              </DialogActions>
             </CheckedForm>
           </FormModal>
         </div>
@@ -210,12 +210,12 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
                 <Field label="Wage order" width="name" rule={PAYROLL_MIN_WAGE_RULES.wageOrderRef}>
                   <Input {...nativeAttrs(PAYROLL_MIN_WAGE_RULES.wageOrderRef)} className="w-full" />
                 </Field>
-                <div className="!flex-none self-end">
-                  <Button type="submit" variant="primary">
-                    Save
-                  </Button>
-                </div>
               </FormGrid>
+              <DialogActions>
+                <Button type="submit" variant="primary">
+                  Save
+                </Button>
+              </DialogActions>
             </CheckedForm>
           </FormModal>
         </div>

@@ -129,7 +129,7 @@ export const dualRunLines = pgTable(
       sql`${t.kind} in ('cash_bank','staff_cash','sales_tender','expense_category','ap_supplier','inventory_basis','unassigned_store')`,
     ),
     check('dual_run_lines_delta_check', sql`${t.delta} = ${t.v2Amount} - ${t.v1Amount}`),
-    // NOTE: dual_run_lines_class_check lists the 23 codes of CLASS_CATALOGUE (packages/etl/src/dual-run/classes.ts); it is
+    // NOTE: dual_run_lines_class_check lists the 24 codes of CLASS_CATALOGUE (T-511 S6b, the platform-corrections migration, added PLATFORM_FILE_CORRECTION) (packages/etl/src/dual-run/classes.ts); it is
     // spelled out in migration 0195 only, so db does not import etl. The S3 test (C5) fails if the two drift.
     check('dual_run_lines_v1_amount_finite_check', sql`${t.v1Amount} > '-Infinity'::numeric and ${t.v1Amount} < 'Infinity'::numeric`),
     check('dual_run_lines_v2_amount_finite_check', sql`${t.v2Amount} > '-Infinity'::numeric and ${t.v2Amount} < 'Infinity'::numeric`),

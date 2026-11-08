@@ -30,10 +30,9 @@ import {
   voidLeaveAction,
 } from './actions';
 import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import { CertificateView } from './CertificateView';
-import { Badge, Button, Field, FlashBanner, FormGrid, Input, Select, Textarea , FormSection, FormModal} from '@/components/ui';
+import { Badge, Button, Field, FlashBanner, FormGrid, Input, Select, Textarea , FormSection, FormModal, DialogActions} from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { ACTION_LINK } from '@/components/action-link';
 
@@ -111,15 +110,11 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
   const kinds = mine.types;
 
   return (
-    <Page density="table">
-      <div>
-        <h1 className="text-2xl font-semibold">Leave</h1>
-        <PageDescription>
-          Ask for a day off, and see where your request stands. Managers decide requests and record absences here. The monthly and yearly
-          limits and the 5 paid Service Incentive Leave days are checked when a manager approves.
-        </PageDescription>
-      </div>
-
+    <Page
+      density="table"
+      title="Leave"
+      description="Ask for a day off, and see where your request stands. Managers decide requests and record absences here. The monthly and yearly limits and the 5 paid Service Incentive Leave days are checked when a manager approves."
+    >
       <FlashBanner flash={sp} />
 
       {wanted && (
@@ -222,9 +217,11 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
                   </FormGrid>
                 </FormSection>
               </>
-              <Button type="submit" variant="primary">
-                Request leave
-              </Button>
+              <DialogActions>
+                <Button type="submit" variant="primary">
+                  Request leave
+                </Button>
+              </DialogActions>
             </CheckedForm>
             </FormModal>
           </div>
@@ -418,9 +415,11 @@ export default async function LeavePage({ searchParams }: { searchParams: Promis
                     <Textarea name="note" rows={2} className="mt-1 w-full" />
                   </Field>
                 </FormGrid>
-                <Button type="submit" variant="primary">
-                  Record absence
-                </Button>
+                <DialogActions>
+                  <Button type="submit" variant="primary">
+                    Record absence
+                  </Button>
+                </DialogActions>
               </CheckedForm>
               </FormModal>
               </div>

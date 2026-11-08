@@ -54,12 +54,6 @@ function checkedBounds(def: RuleDefinition, key: string, value: string): void {
 /** '50.000000' -> '50', '0.500000' -> '0.5' */
 const plain = (text: string): string => (text.includes('.') ? text.replace(/0+$/, '').replace(/\.$/, '') : text);
 
-// A NUL (Postgres refuses it as a raw error) or any other control character except tab, line break and carriage return, which a typed reason may hold.
-// eslint-disable-next-line no-control-regex
-const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/;
-/** Zero-width characters print as nothing, so a reason made only of them is blank; they are dropped before the blank check and never stored. */
-const ZERO_WIDTH = /[\u200B-\u200D\uFEFF]/g;
-
 export interface SetBusinessRuleInput {
   readonly key: string;
   /** A plain decimal with at most two places, in the key's unit (pesos, percent or an hour 0-23). */
@@ -79,8 +73,7 @@ export async function setBusinessRule(tx: Tx, actor: Actor, input: SetBusinessRu
   const key = input.key;
   const def: RuleDefinition = RULE_REGISTRY[key];
   // The shape of the value, a real start day that is not before today (Manila), and the reason: one definition shared with the screen's live line.
-  if (CONTROL_CHARS.test(input.reason)) throw refuse('business rule: reason holds a control character', 'The reason may only hold ordinary text. Remove any unusual characters and try again.');
-  const typed = assertFieldRules(SETTINGS_BUSINESS_RULE_RULES, { value: input.value, effectiveFrom: input.effectiveFrom, reason: input.reason.replace(ZERO_WIDTH, '') });
+  const typed = assertFieldRules(SETTINGS_BUSINESS_RULE_RULES, { value: input.value, effectiveFrom: input.effectiveFrom, reason: input.reason });
   const value = typed.value!;
   const effectiveFrom = typed.effectiveFrom!;
   const reason = typed.reason!;

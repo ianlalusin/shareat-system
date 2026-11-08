@@ -14,7 +14,7 @@ import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { SETTINGS_EXPENSE_CATEGORY_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Button, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
+import { Button, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { EXPENSE_CATEGORY_ACCOUNT, EXPENSE_CATEGORY_RENAME, EXPENSE_SUBCATEGORY_RENAME } from './typed-forms';
@@ -185,7 +185,9 @@ export default async function ExpenseCategoriesSettingsPage({
                               <Input name="name" placeholder="Pork" className="w-full" />
                             </Field>
                           </FormGrid>
-                          <Button type="submit" variant="primary">Save</Button>
+                          <DialogActions>
+                            <Button type="submit" variant="primary">Save</Button>
+                          </DialogActions>
                         </form>
                       </FormModal>
                     </div>
@@ -266,9 +268,11 @@ export default async function ExpenseCategoriesSettingsPage({
                               </Select>
                             </Field>
                           </FormGrid>
-                          <Button type="submit" variant="primary">
-                            Save
-                          </Button>
+                          <DialogActions>
+                            <Button type="submit" variant="primary">
+                              Save
+                            </Button>
+                          </DialogActions>
                         </form>
                       </FormModal>
                     )}
@@ -311,9 +315,11 @@ export default async function ExpenseCategoriesSettingsPage({
                   </Select>
                 </Field>
               </FormGrid>
-              <Button type="submit" variant="primary">
-                Save
-              </Button>
+              <DialogActions>
+                <Button type="submit" variant="primary">
+                  Save
+                </Button>
+              </DialogActions>
             </CheckedForm>
           </FormModal>
         </div>

@@ -16,7 +16,7 @@ import {
   MENU_VARIANT_RULES,
   nativeAttrs,
 } from '@shareat/domain/field-rules';
-import { Badge, Banner, Button, Checkbox, Field, FlashBanner, FormGrid, FormModal, Input, Select, Table, Td, Textarea, Th } from '@/components/ui';
+import { Badge, Banner, Button, Checkbox, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select, Table, Td, Textarea, Th } from '@/components/ui';
 import {
   addOptionValueAction,
   addVariantAction,
@@ -216,9 +216,11 @@ export default async function MenuItemPage({ params, searchParams }: { params: P
                       <Input type="datetime-local" name="effectiveFrom" className="w-full" />
                     </Field>
                   </FormGrid>
-                  <Button type="submit" variant="secondary">
-                    Save
-                  </Button>
+                  <DialogActions>
+                    <Button type="submit" variant="secondary">
+                      Save
+                    </Button>
+                  </DialogActions>
                 </CheckedForm>
                 </FormModal>
               )}
@@ -459,9 +461,11 @@ function OptionGroups({ data, canManage, sp, actorId }: { data: ItemPageData; ca
                 <Textarea name="values" rows={3} className="w-full" />
               </Field>
             </FormGrid>
-            <Button type="submit" variant="primary">
-              Save
-            </Button>
+            <DialogActions>
+              <Button type="submit" variant="primary">
+                Save
+              </Button>
+            </DialogActions>
           </CheckedForm>
           </FormModal>
         </div>
