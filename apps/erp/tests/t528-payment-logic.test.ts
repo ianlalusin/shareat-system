@@ -399,7 +399,7 @@ describe('paySale (R3): one tap, local-first', () => {
     };
     const input = {
       personId: id(40), sessionId: SESSION, online: over.online ?? true, terminalNo: 1, now: NOW, priced: priceBill({ lines: BILL_LINES, rules: RULES, vatRegistered: true }),
-      rows: ROWS, tenders: TENDERS, seniors: SENIORS, vatRateLabel: '12%', layout: { width: 58, font: 'normal' },
+      rows: ROWS, tenders: TENDERS, seniors: SENIORS, vatRateLabel: '12%', layout: { width: 58, font: 'normal' }, copies: 1,
       receipt: {
         header: { businessName: 'Shareat Lipa', addressLines: ['Lipa City, Batangas'], tin: '123-456-789-000', vatRegistered: true },
         tableLabel: 'Stand 7', heads: 4, cashierName: 'Joy', issuedAtLocal: '06/11/26 19:52', footerLines: ['This is not an official receipt'], lines: RECEIPT_LINES, scPwdDiscount: '97.86',
@@ -560,7 +560,7 @@ describe('T-528c: scPwdDiscountOf feeds the receipt and the on-screen bill', () 
     const { paySale, priceBill } = await logic();
     const deps = { reserveTerminalSeq: async () => 1, newId: () => RECEIPT, enqueue: async (e: unknown) => ({ seq: 1, ...(e as object) }), requestDrain: () => undefined, print: async () => 'printed' };
     const r = await paySale(deps, {
-      personId: id(40), sessionId: SESSION, online: true, terminalNo: 1, now: NOW, priced: priceBill({ lines: BILL_LINES, rules: RULES, vatRegistered: true }), rows: ROWS, tenders: TENDERS, seniors: SENIORS, vatRateLabel: '12%', layout: { width: 58, font: 'normal' },
+      personId: id(40), sessionId: SESSION, online: true, terminalNo: 1, now: NOW, priced: priceBill({ lines: BILL_LINES, rules: RULES, vatRegistered: true }), rows: ROWS, tenders: TENDERS, seniors: SENIORS, vatRateLabel: '12%', layout: { width: 58, font: 'normal' }, copies: 1,
       receipt: { header: { businessName: 'Shareat Lipa', addressLines: [], tin: null, vatRegistered: true }, tableLabel: 'Stand 7', heads: 4, cashierName: 'Joy', issuedAtLocal: '06/11/26 19:52', footerLines: [], lines: RECEIPT_LINES, scPwdDiscount: '97.86' },
     });
     expect(r.view.vat.scPwdDiscount).toBe('97.86');

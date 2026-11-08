@@ -6,12 +6,15 @@
  * ⛔ No rule is re-implemented here. `provisionPosTerminalLink`, `revokePosTerminalLink` and `resetApprovalPinCap` call `authorize()` as
  * their own first decision and own every refusal sentence and audit row; these actions read the form, call them, and show the sentence.
  * Each action redirects AFTER its `try` (redirect() throws to signal), as the other admin actions do.
+ *
+ * T-546: `createTillAction`, `linkTillAction` and `setTillPrinterAction` (the Tills section) are the same: the form is read here as plain numbers and text,
+ * `createTerminal` / `linkTerminal` / `setTerminalPrinter` authorize first and own every rule, refusal sentence and audit row.
  */
 import { revalidatePath } from 'next/cache';
 import { posTerminalLinksRepo, refuse } from '@shareat/db';
 import { authorize, resetApprovalPinCap } from '@shareat/auth';
-import { assertFieldRules, provisionPosTerminalLink, revokePosTerminalLink } from '@shareat/domain';
-import { POS_TABLET_REGISTER_RULES } from '@shareat/domain/field-rules';
+import { assertFieldRules, createTerminal, linkTerminal, provisionPosTerminalLink, revokePosTerminalLink, setTerminalPrinter } from '@shareat/domain';
+import { POS_TABLET_REGISTER_RULES, POS_TILL_ADD_RULES } from '@shareat/domain/field-rules';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { redirectWithFlash } from '../../../lib/flash';
@@ -21,6 +24,12 @@ import { withOrgPrincipal } from '../../expenses/lib';
 import { deviceTail, normaliseDeviceId, revokeConfirmName } from './lib';
 
 const RETURN_TO = '/admin/pos-tablets';
+/** T-546: the Tills section also lives on the manager's page; the form says which page to come back to, and only these two are believed. */
+const TILL_PAGES = [RETURN_TO, '/settings/pos-tablet'] as const;
+function tillPage(fd: FormData): string {
+  const v = str(fd, 'returnTo');
+  return TILL_PAGES.find((p) => p === v) ?? RETURN_TO;
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function str(fd: FormData, key: string): string {
@@ -89,4 +98,57 @@ export async function clearLockAction(fd: FormData): Promise<void> {
   }
   revalidatePath(RETURN_TO);
   return await redirectWithFlash(RETURN_TO, { store: storeId }, { ok });
+}
+
+/** T-546: add a till (number 1 to 99). The domain refuses a used number or a bad one in words. */
+export async function createTillAction(fd: FormData): Promise<void> {
+  const actor = await requireActor(tillPage(fd));
+  const storeId = str(fd, 'storeId');
+  const terminalNo = Number(str(fd, 'terminalNo'));
+  let ok: string;
+  try {
+    // Authorize first, then the form's own rule (T-440 S9); the domain call decides again and owns the refusal sentence.
+    if (!UUID.test(storeId)) throw refuse(`createTillAction: store ${storeId} is not an id`, 'Pick a store.');
+    await withOrgPrincipal(actor.orgId, (tx) => authorize(tx, actor, 'pair_pos_tablet', { storeId }));
+    assertFieldRules(POS_TILL_ADD_RULES, fd);
+    await withOrgPrincipal(actor.orgId, (tx) => createTerminal(tx, actor, { storeId, terminalNo }));
+    ok = `Added till ${terminalNo}. Choose its tablet and printer below.`;
+  } catch (err) {
+    return await redirectWithFlash(tillPage(fd), { store: storeId }, { error: errorMessage(err) });
+  }
+  revalidatePath(tillPage(fd));
+  return await redirectWithFlash(tillPage(fd), { store: storeId }, { ok });
+}
+
+/** T-546: choose which paired tablet acts as a till; an empty `pairingId` is "No tablet" (un-link). */
+export async function linkTillAction(fd: FormData): Promise<void> {
+  const actor = await requireActor(tillPage(fd));
+  const storeId = str(fd, 'storeId');
+  const pairingId = str(fd, 'pairingId');
+  let ok: string;
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) => linkTerminal(tx, actor, { storeId, terminalId: str(fd, 'terminalId'), pairingId: pairingId === '' ? null : pairingId }));
+    ok = pairingId === '' ? 'The till has no tablet now.' : 'Tablet chosen for the till.';
+  } catch (err) {
+    return await redirectWithFlash(tillPage(fd), { store: storeId }, { error: errorMessage(err) });
+  }
+  revalidatePath(tillPage(fd));
+  return await redirectWithFlash(tillPage(fd), { store: storeId }, { ok });
+}
+
+/** T-546: the till's receipt paper (58 or 80 mm) and copies (1 to 3). The tablet picks them up with its next snapshot. */
+export async function setTillPrinterAction(fd: FormData): Promise<void> {
+  const actor = await requireActor(tillPage(fd));
+  const storeId = str(fd, 'storeId');
+  let ok: string;
+  try {
+    await withOrgPrincipal(actor.orgId, (tx) =>
+      setTerminalPrinter(tx, actor, { storeId, terminalId: str(fd, 'terminalId'), receiptPaperMm: Number(str(fd, 'receiptPaperMm')), receiptCopies: Number(str(fd, 'receiptCopies')) }),
+    );
+    ok = 'Printer settings saved. The tablet uses them after its next refresh.';
+  } catch (err) {
+    return await redirectWithFlash(tillPage(fd), { store: storeId }, { error: errorMessage(err) });
+  }
+  revalidatePath(tillPage(fd));
+  return await redirectWithFlash(tillPage(fd), { store: storeId }, { ok });
 }

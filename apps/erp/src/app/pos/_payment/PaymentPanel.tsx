@@ -55,6 +55,8 @@ export interface PaymentPanelProps {
   personId: string;
   online: boolean;
   layout: PrintLayout;
+  /** Customer copies per receipt, from the till's settings (T-546). */
+  copies: number;
   deps: PayDeps;
   /** Saves one discount event to the outbox (and asks for a send); resolves to a sentence when that failed. */
   sendEvent: (event: NewPosEvent) => Promise<string | null>;
@@ -305,6 +307,7 @@ export function PaymentPanel(p: PaymentPanelProps) {
       seniors: diners.map((d) => ({ dinerNo: d.dinerNo, kind: d.kind, holderName: holders[d.dinerNo]!.holderName, idNumber: holders[d.dinerNo]!.idNumber })),
       vatRateLabel: rateLabel(p.rules.vatPercentBasisPoints),
       layout: p.layout,
+      copies: p.copies,
       receipt: {
         header: { businessName: p.storeName, addressLines: [], tin: null, vatRegistered: p.vatRegistered },
         tableLabel: p.isTakeOut ? null : p.label,

@@ -72,7 +72,7 @@ const render = async (l: BillLineRow[] = lines(), over: Partial<PaymentPanelProp
       createElement(PaymentPanel, {
         sessionId: id(31), label: 'Stand 7', heads: 4, isTakeOut: false, bill: bill(l), presets: [], tenders: TENDERS,
         rules: { vatPercentBasisPoints: 1200, scPwdPercentBasisPoints: 2000 }, vatRegistered: true, terminalNo: 1, storeName: 'Shareat Lipa', cashierName: 'Joy', personId: id(40),
-        online: true, layout: { width: 58, font: 'normal' }, deps: d, sendEvent, newId: () => id(98), onBack: () => undefined, onPaid, ...over,
+        online: true, layout: { width: 58, font: 'normal' }, copies: 1, deps: d, sendEvent, newId: () => id(98), onBack: () => undefined, onPaid, ...over,
       } as PaymentPanelProps),
     );
   });

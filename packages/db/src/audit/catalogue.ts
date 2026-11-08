@@ -202,6 +202,10 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-525: a manager replayed or discarded a quarantined tablet event (entity = the pos_events row). Server-only: the tablet never sends them.
   def('pos.event_replayed', 'order', 'normal', 'store', 'pos_events', 'T-525'),
   def('pos.event_discarded', 'order', 'high', 'store', 'pos_events', 'T-525'),
+  // T-546: a manager or admin added a till, chose its tablet, or set its receipt printer (entity = the pos_terminals row). Written from the ERP screen only.
+  def('pos.terminal_created', 'settings', 'normal', 'store', 'pos_terminals', 'T-546'),
+  def('pos.terminal_linked', 'settings', 'normal', 'store', 'pos_terminals', 'T-546'),
+  def('pos.terminal_printer_set', 'settings', 'normal', 'store', 'pos_terminals', 'T-546'),
   def('create_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('update_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('reactivate_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),

@@ -747,3 +747,78 @@ export async function listOpenEmploymentsAtStore(tx: Tx, orgId: string, storeId:
     .where(and(eq(employments.orgId, orgId), eq(employments.storeId, storeId), isNull(employments.endedOn), eq(persons.isActive, true)))
     .orderBy(asc(employments.staffCode));
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-546: the tills of a store (pos_terminals) and their receipt printer settings. The domain (`pos/terminals.ts`) decides every rule; these only read and write.
+// ---------------------------------------------------------------------------------------------------------------------
+export interface TillRow {
+  readonly id: string;
+  readonly terminalNo: number;
+  readonly pairingId: string | null;
+  readonly pairingLabel: string | null;
+  readonly receiptPaperMm: number;
+  readonly receiptCopies: number;
+}
+
+/** The store's tills in number order, each with the label of the tablet acting as it (null when none). */
+export async function listTillsForStore(tx: Tx, orgId: string, storeId: string): Promise<TillRow[]> {
+  return tx
+    .select({
+      id: posTerminals.id,
+      terminalNo: posTerminals.terminalNo,
+      pairingId: posTerminals.pairingId,
+      pairingLabel: posTabletPairings.label,
+      receiptPaperMm: posTerminals.receiptPaperMm,
+      receiptCopies: posTerminals.receiptCopies,
+    })
+    .from(posTerminals)
+    .leftJoin(posTabletPairings, eq(posTabletPairings.id, posTerminals.pairingId))
+    .where(and(eq(posTerminals.orgId, orgId), eq(posTerminals.storeId, storeId)))
+    .orderBy(asc(posTerminals.terminalNo));
+}
+
+/** The store's live (not revoked) pairings that act as no till yet: the tablets a manager may choose. */
+export async function listFreeLivePairings(tx: Tx, orgId: string, storeId: string): Promise<{ id: string; label: string }[]> {
+  return tx
+    .select({ id: posTabletPairings.id, label: posTabletPairings.label })
+    .from(posTabletPairings)
+    .where(
+      and(
+        eq(posTabletPairings.orgId, orgId),
+        eq(posTabletPairings.storeId, storeId),
+        isNull(posTabletPairings.revokedAt),
+        sql`not exists (select 1 from ${posTerminals} where ${posTerminals.pairingId} = ${posTabletPairings.id})`,
+      ),
+    )
+    .orderBy(asc(posTabletPairings.pairedAt), asc(posTabletPairings.id));
+}
+
+/** One till of this store, locked for the change that follows (store-scoped: another store's till is never found). */
+export async function getTillForUpdate(tx: Tx, orgId: string, storeId: string, terminalId: string): Promise<PosTerminalRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(posTerminals)
+    .where(and(eq(posTerminals.id, terminalId), eq(posTerminals.orgId, orgId), eq(posTerminals.storeId, storeId)))
+    .for('update');
+  return row;
+}
+
+export async function insertTill(tx: Tx, input: { orgId: string; storeId: string; terminalNo: number; createdBy: string }): Promise<PosTerminalRow> {
+  const [row] = await tx.insert(posTerminals).values(input).returning();
+  return row!;
+}
+
+/** Points the till at a tablet, or at none (null). `pairing_id` and `updated_at` are the only columns shareat_app may change besides the printer ones. */
+export async function setTillPairing(tx: Tx, orgId: string, storeId: string, terminalId: string, pairingId: string | null): Promise<void> {
+  await tx
+    .update(posTerminals)
+    .set({ pairingId, updatedAt: sql`now()` })
+    .where(and(eq(posTerminals.id, terminalId), eq(posTerminals.orgId, orgId), eq(posTerminals.storeId, storeId)));
+}
+
+export async function setTillPrinter(tx: Tx, orgId: string, storeId: string, terminalId: string, receiptPaperMm: number, receiptCopies: number): Promise<void> {
+  await tx
+    .update(posTerminals)
+    .set({ receiptPaperMm, receiptCopies, updatedAt: sql`now()` })
+    .where(and(eq(posTerminals.id, terminalId), eq(posTerminals.orgId, orgId), eq(posTerminals.storeId, storeId)));
+}

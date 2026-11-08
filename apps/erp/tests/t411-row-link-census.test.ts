@@ -60,6 +60,8 @@ const ROW_LINK: readonly string[] = [
 
 /** Tables with no row destination: reports, editing grids, read-only detail lines. Untouched by T-411. */
 const NO_ROW_TARGET: readonly string[] = [
+  // T-546, 8 Nov 2026, BOSS approved: tills list, no row target
+  'app/admin/pos-tablets/TillsSection.tsx',
   // T-502 S4: the import preview rows are findings about lines of an uploaded file; there is nothing to open
   'app/items/import/page.tsx',
   // T-511 S4: the days still waiting for a file, per channel: a summary, nothing to open yet (the review screen is slice 5)

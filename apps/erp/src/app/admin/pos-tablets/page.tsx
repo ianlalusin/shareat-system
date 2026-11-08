@@ -3,7 +3,8 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { withFlash } from '../../../lib/flash';
 import { staffStoresFor } from '../../staff/lib';
 import { clearLockAction, registerTabletAction, revokeTabletAction } from './actions';
-import { deviceTail, loadPosTablets, revokeConfirmName, type PosTabletLinkView } from './lib';
+import { deviceTail, loadPosTablets, loadTills, revokeConfirmName, type PosTabletLinkView } from './lib';
+import { TillsSection } from './TillsSection';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
@@ -13,6 +14,8 @@ import { Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, Input
 
 export const metadata = { title: 'POS tablets — Shareat System' };
 export const dynamic = 'force-dynamic';
+
+const RETURN_TO = '/admin/pos-tablets';
 
 interface SearchParams {
   store?: string;
@@ -56,6 +59,7 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
   }
 
   const { active, revoked, terminals } = await loadPosTablets(actor, store.id);
+  const tills = await loadTills(actor, store.id);
 
   return (
     <Page density="table">
@@ -116,6 +120,8 @@ export default async function PosTabletsPage({ searchParams }: { searchParams: P
           </details>
         )}
       </section>
+
+      <TillsSection store={store} tills={tills} returnTo={RETURN_TO} />
 
       <section className="space-y-3 rounded-lg border border-surface-border p-4">
         <h2 className="font-medium">Register a tablet</h2>
