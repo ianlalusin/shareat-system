@@ -18,6 +18,8 @@ import { printSettingsOf, SENTENCES } from '../_payment/logic';
 import { PaymentPanel } from '../_payment/PaymentPanel';
 import { ReceiptScreen } from '../_payment/ReceiptScreen';
 import { usePos } from '../_shell/pos-context';
+import { OutageBanner } from '../_kitchen/outage-jobs';
+import { useOutagePrint } from '../_kitchen/use-outage-print';
 import { newDeviceId } from './ids';
 import { OrderDialog, CancelLineDialog, type OrderDialogMode, type OrderSend } from './OrderDialogs';
 import type { MenuLike } from './menu-filter';
@@ -66,6 +68,8 @@ export function Orders() {
     const ghosts = [...lastSeen.current.values()].filter((g) => cancelling.has(g.line.id));
     return projectOrders({ openStands: stands, sessions: bodies }, applied, snapshot && menu ? { stands: snapshot.stands, menu } : null, ghosts);
   }, [stands, bodies, applied, snapshot, menu]);
+  // T-529 R3: offline, a sent order also goes out on paper (one ticket per station). The tables' labels come from the view, which includes tables opened offline.
+  const printOutage = useOutagePrint(pos, () => Object.fromEntries(view.tiles.map((t) => [t.sessionId, t.standNumber !== null ? String(t.standNumber) : null])));
   const sessionOf = (e: PosEvent): string | null => {
     const p = e.payload as { sessionId?: unknown; lineId?: unknown };
     if (typeof p.sessionId === 'string') return p.sessionId;
@@ -173,6 +177,7 @@ export function Orders() {
   const submit = async (event: ReturnType<typeof seatEvent>): Promise<string | null> => {
     const result = await submitPosEvent({ enqueue, requestDrain: pos.requestDrain }, event);
     setProblem(result.ok ? null : result.message);
+    if (result.ok) void printOutage(result.event);
     return result.ok ? null : result.message;
   };
   const build = async (make: () => ReturnType<typeof seatEvent>): Promise<string | null> => {
@@ -262,6 +267,7 @@ export function Orders() {
     <div className="space-y-3">
       {receipt ? <ReceiptScreen lines={receipt.lines} receiptNo={receipt.receiptNo} notice={receipt.notice} onReprint={() => void reprintFromScreen()} onDone={() => setReceipt(null)} /> : null}
       {problem ? <Banner tone="error">{problem}</Banner> : null}
+      <OutageBanner />
       {notice ? <Banner tone="warning">{notice}</Banner> : null}
       {access.canWrite && stands === null ? <p className="text-sm text-muted">Waiting for the open tables…</p> : null}
       {dialog ? <OrderDialog mode={dialog} menu={menu} stands={snapshot?.stands ?? []} tiles={view.tiles} onClose={() => setDialog(null)} onSend={send} /> : null}

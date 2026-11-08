@@ -31,7 +31,6 @@ childLogger
 closeAsLateReceipt
 closeYear
 collectActorUids
-confirmHeads
 confirmTradeOrder
 convertSpecimen
 countedVariances
@@ -70,7 +69,6 @@ formatCoverageReport
 formatKitchenQty
 formatLogAmount
 formatLogDescription
-formatRefillSlip
 getActiveFake
 getCalendarWeatherIcon
 getGroupKey
@@ -178,7 +176,6 @@ seedServerSession
 seedSession
 seedStaff
 seedStore
-serveLine
 setActiveFake
 setCostBasisItem
 setDocumentNonBlocking

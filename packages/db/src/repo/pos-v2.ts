@@ -559,10 +559,11 @@ export async function listOpenSessionsWithStand(tx: Tx, orgId: string, storeId: 
 /** Session lines of a store still queued (kitchen), optionally one station, optionally only refills; voided sessions left out. */
 export async function listQueuedLines(tx: Tx, orgId: string, storeId: string, o: { stationId?: string; refillsOnly?: boolean } = {}) {
   return tx
-    .select({ line: tableSessionLines, standNumber: posStands.number, sessionMode: tableSessions.mode })
+    .select({ line: tableSessionLines, standNumber: posStands.number, sessionMode: tableSessions.mode, askedBy: persons.displayName })
     .from(tableSessionLines)
     .innerJoin(tableSessions, and(eq(tableSessions.id, tableSessionLines.sessionId), eq(tableSessions.storeId, tableSessionLines.storeId)))
     .leftJoin(posStands, and(eq(posStands.id, tableSessions.standId), eq(posStands.storeId, tableSessions.storeId)))
+    .leftJoin(persons, and(eq(persons.orgId, tableSessionLines.orgId), eq(persons.id, tableSessionLines.addedBy)))
     .where(
       and(
         eq(tableSessionLines.orgId, orgId),
@@ -574,6 +575,20 @@ export async function listQueuedLines(tx: Tx, orgId: string, storeId: string, o:
       ),
     )
     .orderBy(asc(tableSessionLines.addedAtDevice), asc(tableSessionLines.id));
+}
+
+/** T-529: the open dine-in tables holding a live package line (the refill picker), one row per package line, by stand number. */
+export async function listRefillableTables(tx: Tx, orgId: string, storeId: string) {
+  return tx
+    .select({ sessionId: tableSessions.id, standNumber: posStands.number, headsCashier: tableSessions.headsCashier, headsServer: tableSessions.headsServer, packageVariantId: tableSessionLines.menuItemVariantId })
+    .from(tableSessions)
+    .innerJoin(posStands, and(eq(posStands.id, tableSessions.standId), eq(posStands.storeId, tableSessions.storeId)))
+    .innerJoin(
+      tableSessionLines,
+      and(eq(tableSessionLines.sessionId, tableSessions.id), eq(tableSessionLines.storeId, tableSessions.storeId), eq(tableSessionLines.kind, 'package'), ne(tableSessionLines.kitchenStatus, 'cancelled')),
+    )
+    .where(and(eq(tableSessions.orgId, orgId), eq(tableSessions.storeId, storeId), eq(tableSessions.status, 'open'), eq(tableSessions.mode, 'dine_in')))
+    .orderBy(asc(posStands.number), asc(tableSessionLines.addedAtDevice), asc(tableSessionLines.id));
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

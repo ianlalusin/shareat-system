@@ -171,7 +171,9 @@ describe('T-526b item 5 - placeholder cards speak staff words', () => {
   it('each page passes its own sentence and no page names a task number', () => {
     // T-527: the Orders page is the real screen now (no placeholder sentence); it must still name no task number.
     expect(src('app/pos/page.tsx').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')).not.toMatch(/slice=|T-5\d\d/);
-    for (const [file, msg] of [['kitchen/page', 'Kitchen is'], ['refills/page', 'Refills are'], ['receipts/page', 'Receipts are'], ['till/page', 'Till is']] as const) {
+    // T-529: Kitchen and Refills are real screens now (no placeholder sentence); they must still name no task number.
+    for (const file of ['kitchen/page', 'refills/page']) expect(src(`app/pos/${file}.tsx`).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, ''), file).not.toMatch(/slice=|T-5\d\d/);
+    for (const [file, msg] of [['receipts/page', 'Receipts are'], ['till/page', 'Till is']] as const) {
       const page = src(`app/pos/${file}.tsx`).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
       expect(page, file).toContain(`message="${msg} coming in the next update."`);
       expect(page, file).not.toMatch(/slice=|T-5\d\d/);

@@ -320,8 +320,6 @@ const EXEMPT: Record<string, string> = {
     'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
   setHeadsCashier:
     'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
-  requestRefill:
-    'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
   cancelLine:
     'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
   addLineDiscount:
@@ -338,12 +336,10 @@ const EXEMPT: Record<string, string> = {
     'INTERNAL — T-525: `readPosState` (packages/domain/src/pos/snapshot.ts) calls it for the state poll, each read only for a person who holds its capability; the route /api/pos/state calls `readPosState`, so this is not a screen action of its own.',
   listKitchenQueue:
     'INTERNAL — T-525: `readPosState` (packages/domain/src/pos/snapshot.ts) calls it for the state poll, each read only for a person who holds its capability; the route /api/pos/state calls `readPosState`, so this is not a screen action of its own.',
+  listRefillableTables:
+    'INTERNAL — T-529: `readPosState` (packages/domain/src/pos/snapshot.ts) calls it for the state poll (`refillTables`), only for a person who holds request_pos_refill or confirm_pos_heads; the route /api/pos/state calls `readPosState`, so this is not a screen action of its own.',
   listRefillQueue:
     'INTERNAL — T-525: `readPosState` (packages/domain/src/pos/snapshot.ts) calls it for the state poll, each read only for a person who holds its capability; the route /api/pos/state calls `readPosState`, so this is not a screen action of its own.',
-  confirmHeads:
-    'UNWIRED — T-527 / T-529: the server phone is its caller (online-only, pairingId null, A9); T-525 left it out of the tablet events. Remove this row when it lands (7 Nov 2026).',
-  serveLine:
-    'UNWIRED — T-527 / T-529: the kitchen screen is its caller (online-only, pairingId null, A9); T-525 left it out of the tablet events. Remove this row when it lands (7 Nov 2026).',
   listTodaysSalesReceipts:
     'UNWIRED — T-526 on: the till screens list the day receipts through it; no T-525 door serves it. Remove this row when it lands (7 Nov 2026).',
   listPosQuarantine:
