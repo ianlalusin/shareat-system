@@ -83,6 +83,13 @@ describe('T-530a — numbering', () => {
     expect((await enqueue(event())).seq).toBe(1);
   });
 
+  it('a synchronous put failure (uncloneable payload) leaves the counter and outbox untouched', async () => {
+    await expect(enqueue(event({ payload: { fn: () => 1 } }))).rejects.toThrow();
+    expect(await countPending()).toBe(0);
+    expect(fake.rows('outbox')).toEqual([]);
+    expect((await enqueue(event())).seq).toBe(1);
+  });
+
   it('terminal numbers are never reused', async () => {
     expect(await reserveTerminalSeq()).toBe(1);
     expect(await reserveTerminalSeq()).toBe(2);

@@ -101,25 +101,36 @@ export async function enqueue(event: NewPosEvent): Promise<PosEvent> {
   try {
     const tx = db.transaction([META_STORE, OUTBOX_STORE], 'readwrite');
     const done = transactionDone(tx);
-    const meta = tx.objectStore(META_STORE);
-    const outbox = tx.objectStore(OUTBOX_STORE);
+    try {
+      const meta = tx.objectStore(META_STORE);
+      const outbox = tx.objectStore(OUTBOX_STORE);
 
-    const current = await asPromise<number | undefined>(meta.get(COUNTER_NEXT_SEQ));
-    // `nextSeq` is the number to hand out next; absent means the queue has never been used.
-    const seq = typeof current === 'number' ? current : 1;
-    meta.put(seq + 1, COUNTER_NEXT_SEQ);
+      const current = await asPromise<number | undefined>(meta.get(COUNTER_NEXT_SEQ));
+      // `nextSeq` is the number to hand out next; absent means the queue has never been used.
+      const seq = typeof current === 'number' ? current : 1;
+      meta.put(seq + 1, COUNTER_NEXT_SEQ);
 
-    const stored: PosEvent = {
-      seq,
-      kind: event.kind,
-      personId: event.personId,
-      occurredAtDevice: event.occurredAtDevice,
-      payload: event.payload,
-    };
-    outbox.put(stored);
+      const stored: PosEvent = {
+        seq,
+        kind: event.kind,
+        personId: event.personId,
+        occurredAtDevice: event.occurredAtDevice,
+        payload: event.payload,
+      };
+      outbox.put(stored); // may throw synchronously (DataCloneError) after the counter write is queued
 
-    await done;
-    return stored;
+      await done;
+      return stored;
+    } catch (err) {
+      // Roll back the queued counter write: otherwise it commits without its event and burns a seq.
+      try {
+        tx.abort();
+      } catch {
+        // already finished or aborted
+      }
+      await done.catch(() => undefined); // consume the abort rejection
+      throw err;
+    }
   } finally {
     db.close();
   }

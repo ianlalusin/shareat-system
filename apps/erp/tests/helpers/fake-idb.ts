@@ -120,18 +120,20 @@ class ObjStore {
   count() { return this.run(false, (m) => m.rows.size); }
   put(value: any, key?: unknown) {
     this.tx.requireWrite();
+    const cloned = clone(value); // sync, like the real one: an uncloneable value throws DataCloneError here
     return this.run(true, (m) => {
       const kk = this.keyFor(m, value, key);
-      m.rows.set(k(kk), { key: kk, v: clone(value) });
+      m.rows.set(k(kk), { key: kk, v: cloned });
       return kk;
     });
   }
   add(value: any, key?: unknown) {
     this.tx.requireWrite();
+    const cloned = clone(value); // sync, like the real one: an uncloneable value throws DataCloneError here
     return this.run(true, (m) => {
       const kk = this.keyFor(m, value, key);
       if (m.rows.has(k(kk))) throw domErr('ConstraintError', 'key already exists');
-      m.rows.set(k(kk), { key: kk, v: clone(value) });
+      m.rows.set(k(kk), { key: kk, v: cloned });
       return kk;
     });
   }
