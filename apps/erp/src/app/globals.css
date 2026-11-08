@@ -556,6 +556,15 @@ html { scrollbar-gutter: stable; }
   .split-workspace-details {
     grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
   }
+  /* T-511 S6d: the details section (the second child) follows the scroll; stacked below the form it must not. */
+  .split-workspace-sticky > :nth-child(2) {
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100dvh - 2rem); /* a tall preview scrolls inside, so Post stays reachable */
+    overflow-y: auto;
+    padding: 0.25rem; /* room inside the scroll box so a focus ring at its edge is not clipped */
+    margin: -0.25rem;
+  }
 }
 
 /* Operator tables keep native table semantics and alignment, with a visible grid in both themes.
