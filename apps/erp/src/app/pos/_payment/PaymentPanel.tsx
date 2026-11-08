@@ -155,8 +155,14 @@ export function PaymentPanel(p: PaymentPanelProps) {
     const fit = () => {
       const el = sectionRef.current;
       if (!el) return;
-      const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-      const room = Math.floor(window.innerHeight - (el.getBoundingClientRect().top + window.scrollY) - rem);
+      // Under the panel sit the bottom padding and border of every box around it (the page wrapper AND <main>): that is the gap, so all of it comes off the room.
+      // (T-528e: it used to take off one rem, but two 1rem paddings sit there, so the page ran one rem over.)
+      let below = 0;
+      for (let box = el.parentElement; box && box !== document.documentElement; box = box.parentElement) {
+        const css = getComputedStyle(box);
+        below += (Number.parseFloat(css.paddingBottom) || 0) + (Number.parseFloat(css.borderBottomWidth) || 0);
+      }
+      const room = Math.floor(window.innerHeight - (el.getBoundingClientRect().top + window.scrollY) - below);
       const overflow = document.documentElement.scrollHeight - window.innerHeight;
       const next = Math.max(0, overflow > 0 && fitRef.current !== null ? Math.min(room, fitRef.current - overflow) : room);
       fitRef.current = next;
