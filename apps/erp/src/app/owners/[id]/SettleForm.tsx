@@ -8,7 +8,7 @@
  */
 import { useState } from 'react';
 import { CheckedForm } from '@/components/forms';
-import { Button, Field, Input, Select } from '@/components/ui';
+import { Button, Field, Input, Select, DialogActions } from '@/components/ui';
 import { OWNERS_SETTLE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { settleAction } from '../actions';
 
@@ -77,9 +77,11 @@ export function SettleForm({
           <Input type="date" {...nativeAttrs(OWNERS_SETTLE_RULES.on)} defaultValue={today} className="w-full" />
         </Field>
       </div>
-      <Button type="submit" variant="secondary">
-        Settle
-      </Button>
+      <DialogActions>
+        <Button type="submit" variant="secondary">
+          Settle
+        </Button>
+      </DialogActions>
     </CheckedForm>
   );
 }

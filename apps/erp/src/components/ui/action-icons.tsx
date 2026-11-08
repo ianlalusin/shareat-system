@@ -10,11 +10,26 @@ import type { ReactNode } from 'react';
 
 export type ActionIconName =
   | 'plus' | 'check' | 'edit' | 'close' | 'trash' | 'eye' | 'filter' | 'download' | 'upload'
-  | 'search' | 'send' | 'star' | 'refresh' | 'print' | 'back' | 'next' | 'copy' | 'calculator';
+  | 'search' | 'send' | 'star' | 'refresh' | 'print' | 'back' | 'next' | 'copy' | 'calculator' | 'save'
+  | 'lock' | 'thumbsUp' | 'book';
 
 const PATHS: Record<ActionIconName, ReactNode> = {
   plus: <path d="M12 5v14M5 12h14" />,
   check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
+  save: <path d="M5 3h11l5 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM8 3v5h7V3M7 21v-7h10v7" />,
+  lock: (
+    <>
+      <rect x="5" y="11" width="14" height="10" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3M12 15v2.5" />
+    </>
+  ),
+  thumbsUp: (
+    <>
+      <path d="M7 10v11H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h3Z" />
+      <path d="M7 10l3.5-6.5a1.8 1.8 0 0 1 3 .8V9h5.2a2 2 0 0 1 2 2.3l-1.2 7.2a2 2 0 0 1-2 1.7H7" />
+    </>
+  ),
+  book: <path d="M12 6.5C10 5 7 4.5 3 5v13c4-.5 7 0 9 1.5 2-1.5 5-2 9-1.5V5c-4-.5-7 0-9 1.5Zm0 0v13" />,
   edit: (
     <>
       <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z" />
@@ -91,16 +106,22 @@ export function ActionIcon({ name, size = 16 }: { readonly name: ActionIconName;
 const RULES: ReadonlyArray<readonly [RegExp, ActionIconName]> = [
   [/^\+/, 'plus'],
   [/^(add|new|record|log|create|hire|open a|open new)\b/i, 'plus'],
-  [/^(save|update|keep)\b/i, 'check'],
+  [/^(save|update)\b/i, 'save'],
+  [/^keep\b/i, 'check'],
   [/^(edit|change|rename|correct|set)\b/i, 'edit'],
-  [/^(cancel|close|dismiss|discard)\b/i, 'close'],
+  [/^close\s+\S/i, 'lock'],
+  [/^(cancel|dismiss|discard)\b|^close$/i, 'close'],
   [/^(delete|remove)\b/i, 'trash'],
   [/^(show|view|preview|open)\b/i, 'eye'],
   [/^(apply|filter)\b/i, 'filter'],
   [/^(download|export)\b/i, 'download'],
   [/^(upload|attach|import)\b/i, 'upload'],
   [/^(search|find|look up)\b/i, 'search'],
-  [/^(approve|post|submit|confirm|send|verify)\b/i, 'send'],
+  [/^verify\b/i, 'check'],
+  [/^approve\b/i, 'thumbsUp'],
+  [/^post\b/i, 'book'],
+  [/^confirm\b/i, 'check'],
+  [/^(submit|send)\b/i, 'send'],
   [/^make default\b/i, 'star'],
   [/^(refresh|reload|recompute|rerun|re-run|retry)\b/i, 'refresh'],
   [/^print\b/i, 'print'],

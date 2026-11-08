@@ -59,6 +59,9 @@ const ALWAYS_TRIGGERS = [
   { table: 'channel_settlement_loan_legs', trigger: 'channel_settlement_loan_legs_append_only' },
   // T-511 S6b (the platform-corrections migration): a platform sales correction is never edited or deleted.
   { table: 'sales_day_platform_corrections', trigger: 'sales_day_platform_corrections_append_only' },
+  // T-511 S6c (migration 0244): a period charge and a settlement-charge link are never edited or deleted.
+  { table: 'channel_period_charges', trigger: 'channel_period_charges_append_only' },
+  { table: 'channel_settlement_charge_links', trigger: 'channel_settlement_charge_links_append_only' },
   // T-401 S1 (migration 0196): three history update guards.
   { table: 'menu_offers', trigger: 'menu_offers_update_guard' },
   { table: 'menu_option_offers', trigger: 'menu_option_offers_update_guard' },
@@ -124,7 +127,8 @@ describe('T1 — registry floor', () => {
     // T-512 (T-511 S5c, 0239): business_rule_values_append_only 49 -> 50; re-measured after rebase on main (T-523 0238 present), 7 Nov 2026, BOSS approved.
     // T-524 (0240): three receipt-child append guards, 50 -> 53; re-measured after rebase on main (0238+0239 present), 7 Nov 2026, BOSS approved.
     // T-511 S6a (0242): channel_settlement_loan_legs_append_only 53 -> 54; S6b (0243): sales_day_platform_corrections_append_only 54 -> 55; re-measured after rebase on main (0238-0241 present), 7 Nov 2026, BOSS approved.
-    expect(always.length, 'expected exactly 55 ALWAYS triggers (R1 + 0175 + 0179 + 0183 + 0189 + 0196 + 0206 + 0215 + 0217 + 0220 + 0221 + 0222 + 0238 + 0239 + 0240 + 0242 + 0243)').toBe(55);
+    // T-511 S6c (0244): channel_period_charges_append_only + channel_settlement_charge_links_append_only, 55 -> 57; re-measured after rebase on main (0238-0243 present), 8 Nov 2026, BOSS approved.
+    expect(always.length, 'expected exactly 57 ALWAYS triggers (R1 + 0175 + 0179 + 0183 + 0189 + 0196 + 0206 + 0215 + 0217 + 0220 + 0221 + 0222 + 0238 + 0239 + 0240 + 0242 + 0243 + 0244)').toBe(57);
 
     const alwaysNames = new Set(always.map(([name]) => name));
     for (const { trigger } of ALWAYS_TRIGGERS) {

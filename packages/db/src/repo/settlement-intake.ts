@@ -94,6 +94,8 @@ export interface InsertOtherLineInput {
   amount: Money;
   lineDate: string | null;
   description: string | null;
+  /** T-511 S6c: the staged VAT of a `period_charge` line; absent or null is stored NULL. */
+  vat?: Money | null;
 }
 
 async function uploadById(tx: Tx, orgId: string, id: string): Promise<UploadRow> {
@@ -216,7 +218,9 @@ export async function insertOtherLines(
   lines: readonly InsertOtherLineInput[],
 ): Promise<void> {
   if (lines.length === 0) return;
-  await tx.insert(settlementOtherLines).values(lines.map((l) => ({ ...l, orgId, uploadId, dayLineId })));
+  await tx.insert(settlementOtherLines).values(
+    lines.map(({ vat, ...l }) => ({ ...l, vatAmount: vat ?? null, orgId, uploadId, dayLineId })),
+  );
 }
 
 /**
@@ -643,4 +647,49 @@ export async function listPlatformCorrectionsForDay(tx: Tx, orgId: string, sales
 export async function insertPlatformCorrection(tx: Tx, input: InsertPlatformCorrectionInput): Promise<void> {
   // `posted_at` is the statement's own clock (as `posV1Repo.insertCorrection`), so corrections order exactly by when they were written.
   await tx.insert(salesDayPlatformCorrections).values({ ...input, postedAt: sql`clock_timestamp()` });
+}
+
+// ---------------------------------------------------------------------------------------------
+// T-511 S6c: one staged other line with the channel and store of its upload (`postPlatformCharge`). Read only.
+// ---------------------------------------------------------------------------------------------
+export interface OtherLineWithUpload {
+  id: string;
+  uploadId: string;
+  channelId: string;
+  storeId: string;
+  kind: string;
+  bookedAs: string;
+  dayLineId: string | null;
+  isCurrent: boolean;
+  amount: string;
+  vatAmount: string | null;
+  lineDate: string | null;
+  description: string | null;
+  /** the line's upload was replaced by a newer one (ingest sets this for the same channel, kind and period) */
+  uploadSupersededBy: string | null;
+}
+
+/** One staged other line by id, with its upload's channel and store, or null (another org's id is null too). */
+export async function otherLineWithUpload(tx: Tx, orgId: string, id: string): Promise<OtherLineWithUpload | null> {
+  const [row] = await tx
+    .select({
+      id: settlementOtherLines.id,
+      uploadId: settlementOtherLines.uploadId,
+      channelId: settlementUploads.channelId,
+      storeId: settlementUploads.storeId,
+      kind: settlementOtherLines.kind,
+      bookedAs: settlementOtherLines.bookedAs,
+      dayLineId: settlementOtherLines.dayLineId,
+      isCurrent: settlementOtherLines.isCurrent,
+      amount: settlementOtherLines.amount,
+      vatAmount: settlementOtherLines.vatAmount,
+      lineDate: settlementOtherLines.lineDate,
+      description: settlementOtherLines.description,
+      uploadSupersededBy: settlementUploads.supersededBy,
+    })
+    .from(settlementOtherLines)
+    .innerJoin(settlementUploads, and(eq(settlementUploads.orgId, settlementOtherLines.orgId), eq(settlementUploads.id, settlementOtherLines.uploadId)))
+    .where(and(eq(settlementOtherLines.orgId, orgId), eq(settlementOtherLines.id, id)))
+    .limit(1);
+  return row ?? null;
 }

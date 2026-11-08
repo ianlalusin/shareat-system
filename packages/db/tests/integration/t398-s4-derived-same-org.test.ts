@@ -84,7 +84,8 @@ const REGISTRY_BEFORE_S4 = 100;
 // T-512 (T-511 S5c, 0239): +1 (business_rule_values_append_only history guard). 62 -> 63; re-measured after rebase on main (T-523 0238 present), 7 Nov 2026, BOSS approved.
 // T-524 (0240): +3 (pos_sales_receipt_lines_append_guard, pos_sales_receipt_payments_append_guard, pos_sales_receipt_line_discounts_append_guard). 63 -> 66; re-measured after rebase on main (0238+0239 present), 7 Nov 2026, BOSS approved.
 // T-511 S6a (0242): +3 (two deferred leg-sum validators, channel_settlement_loan_legs_append_only). 66 -> 69; S6b (0243): +1 (sales_day_platform_corrections_append_only). 69 -> 70; re-measured after rebase on main (0238-0241 present), 7 Nov 2026, BOSS approved.
-const REGISTRY_ADDED_AFTER_S4 = 70;
+// T-511 S6c (0244): +2 (channel_period_charges_append_only, channel_settlement_charge_links_append_only history guards), 70 -> 72; re-measured after rebase on main (0238-0243 present), 8 Nov 2026, BOSS approved.
+const REGISTRY_ADDED_AFTER_S4 = 72;
 
 function pinMismatch(keys: readonly string[], pin: { count: number; sha256: string }): string | null {
   if (keys.length !== pin.count) return `count ${keys.length} != pinned ${pin.count}`;

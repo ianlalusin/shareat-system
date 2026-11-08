@@ -36,13 +36,20 @@ describe('proxy.ts — the matcher stays scoped to the kiosk route', () => {
     expect(proxySource).toContain('/clock');
   });
 
-  it('matches exactly ["/clock", "/clock/:path*"] — no more, no fewer', () => {
-    expect(matcher).toEqual(['/clock', '/clock/:path*']);
+  // T-526 R1: the POS v2 kiosk joins /clock, so AppShell hides the ERP chrome on /pos too. Exactness is kept: four entries, in this order.
+  it('matches exactly ["/clock", "/clock/:path*", "/pos", "/pos/:path*"] — no more, no fewer', () => {
+    expect(matcher).toEqual(['/clock', '/clock/:path*', '/pos', '/pos/:path*']);
+  });
+
+  it('T-526: the source names /pos at all (a matcher scan that finds nothing must not pass)', () => {
+    expect(proxySource).toContain('/pos');
   });
 
   it('⛔ the control: does NOT match every route', () => {
     expect(matcher).not.toContain('/');
     expect(matcher).not.toContain('/:path*');
     expect(matcher).not.toContain('/((?!api|_next).*)');
+    // T-526: /pos/:path* must not widen to the API doors the POS shares a prefix with.
+    expect(matcher.some((m) => m.startsWith('/api'))).toBe(false);
   });
 });

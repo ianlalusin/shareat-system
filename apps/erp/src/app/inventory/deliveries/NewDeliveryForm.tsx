@@ -14,7 +14,7 @@ import { CheckedForm } from '@/components/forms';
  */
 import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import { useState } from 'react';
-import { Button, FormGrid, FormSection, Field, Input, Select } from '@/components/ui';
+import { Button, DialogActions, FormGrid, FormSection, Field, Input, Select } from '@/components/ui';
 
 interface ItemOption {
   id: string;
@@ -282,9 +282,11 @@ export function NewDeliveryForm({
         ))}
       </FormSection>
 
-      <Button type="submit" variant="primary">
-        Save
-      </Button>
+      <DialogActions>
+        <Button type="submit" variant="primary">
+          Save
+        </Button>
+      </DialogActions>
     </CheckedForm>
   );
 }

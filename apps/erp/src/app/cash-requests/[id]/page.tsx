@@ -24,7 +24,7 @@ import {
 import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Button, FlashBanner, FormModal, Input, Select } from '@/components/ui';
+import { Button, FlashBanner, FormModal, Input, Select, DialogActions } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Cash request — Shareat System' };
@@ -190,9 +190,11 @@ export default async function CashRequestPage({
                   <Input {...nativeAttrs(CASH_REQUEST_RELEASE_RULES.on)} type="date" defaultValue={today()} className="w-full" />
                 </Field>
               </div>
-              <Button type="submit" variant="primary">
-                Release
-              </Button>
+              <DialogActions>
+                <Button type="submit" variant="primary">
+                  Release
+                </Button>
+              </DialogActions>
             </CheckedForm>
           </FormModal>
         </section>
@@ -244,9 +246,11 @@ export default async function CashRequestPage({
                   <Input {...nativeAttrs(CASH_REQUEST_SETTLE_RULES.on)} type="date" defaultValue={today()} className="w-full" />
                 </Field>
               </div>
-              <Button type="submit" variant="primary">
-                Record
-              </Button>
+              <DialogActions>
+                <Button type="submit" variant="primary">
+                  Record
+                </Button>
+              </DialogActions>
             </CheckedForm>
           </FormModal>
         </section>

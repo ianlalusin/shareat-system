@@ -278,6 +278,14 @@ const EXEMPT: Record<string, string> = {
     'WRAPPER — the test seam of `correctPlatformSales`, the production entry point which calls this with the Manila clock; only the integration tests pass another clock (a sales day in the fixture calendar). ' +
     'It is not on the barrel, so no app can date an entry in the future. Delete this row with the `correctPlatformSales` row in S7 if the seam is folded away.',
 
+  // ---- T-511 S6c — the platform charge with no sales day -------------------------------------
+  postPlatformCharge:
+    'UNWIRED — slice 7 (approve a settlement day) calls it: S7 approve calls it, posting the weekly fee and any uncategorised charge of the invoice once, before the payouts that net them (S6c spec, 7 Nov 2026). ' +
+    'Delete this row in S7, when `apps/` reaches it (BOSS-approved precedent: correctPlatformSales, 7 Nov 2026).',
+  postPlatformChargeOnClock:
+    'WRAPPER — the test seam of `postPlatformCharge`, the production entry point which calls this with the Manila clock; only the integration tests pass another clock (a charge in the fixture calendar). ' +
+    'It is not on the barrel, so no app can date an entry in the future. S7 approve calls the production function. Delete this row with the `postPlatformCharge` row in S7 if the seam is folded away.',
+
   // ---- T-511 S5b — the settlement review stage ---------------------------------------------
   loanCheckForDay:
     'INTERNAL — `dayBlockers`, `dayBlockersForLines` and `getReviewDayDetail` / `listReviewDays` (`settlement-intake/review.ts`) call it; the screens read the loan check through ' +
@@ -316,8 +324,6 @@ const EXEMPT: Record<string, string> = {
     'UNWIRED — T-527 / T-529: the server phone is its caller (online-only, pairingId null, A9); T-525 left it out of the tablet events. Remove this row when it lands (7 Nov 2026).',
   serveLine:
     'UNWIRED — T-527 / T-529: the kitchen screen is its caller (online-only, pairingId null, A9); T-525 left it out of the tablet events. Remove this row when it lands (7 Nov 2026).',
-  getSessionBill:
-    'UNWIRED — T-526 on: the till screens read the live bill through it; T-525 does not serve it (the tablet prices offline from its snapshot). Remove this row when it lands (7 Nov 2026).',
   listTodaysSalesReceipts:
     'UNWIRED — T-526 on: the till screens list the day receipts through it; no T-525 door serves it. Remove this row when it lands (7 Nov 2026).',
   listPosQuarantine:

@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { flashCookieName } from '@/lib/flash';
+import { POS_PROMOTE_COOKIE } from '@/app/pos/_shell/constants';
 import { transaction } from '@shareat/db';
 import {
   resolveActor,
@@ -76,6 +77,11 @@ export async function setPosTabletCookie(token: string): Promise<void> {
     path: '/',
     maxAge: POS_TABLET_MAX_AGE_SECONDS,
   });
+}
+
+export async function setPosPromoteCookie(): Promise<void> {
+  // T-526 R4: not a secret and not httpOnly on purpose - the /pos shell reads it, promotes the pending PIN verifier only if it is present, then deletes it.
+  (await cookies()).set(POS_PROMOTE_COOKIE, '1', { httpOnly: false, sameSite: 'lax' as const, secure: process.env.NODE_ENV === 'production', path: '/pos', maxAge: 300 });
 }
 
 export async function readPosTabletToken(): Promise<string | null> {

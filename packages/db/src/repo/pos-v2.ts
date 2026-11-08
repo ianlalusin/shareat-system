@@ -247,6 +247,8 @@ export interface NewSessionLine {
   addedBy: string;
   addedOnPairingId: string | null;
   addedAtDevice: Date;
+  /** Only to give a re-made line the place of the one it replaces (T-527b); normally the server clock at insert. */
+  addedAt?: Date;
 }
 
 export async function insertLines(tx: Tx, rows: NewSessionLine[]): Promise<void> {
@@ -270,7 +272,7 @@ export async function insertLines(tx: Tx, rows: NewSessionLine[]): Promise<void>
       addedBy: r.addedBy,
       addedOnPairingId: r.addedOnPairingId,
       addedAtDevice: r.addedAtDevice,
-      addedAt: sql`clock_timestamp()`,
+      addedAt: r.addedAt ?? sql`clock_timestamp()`,
     })),
   );
 }

@@ -67,14 +67,12 @@ formatCoverageReport
 formatKitchenQty
 formatLogAmount
 formatLogDescription
-formatReceipt
 formatRefillSlip
 getActiveFake
 getCalendarWeatherIcon
 getGroupKey
 getKitchenTicketContribution
 getNonCentavoCount
-getSessionBill
 groupIntoFamilies
 hasFingerprint
 hasOtherActiveAdmin
@@ -134,6 +132,7 @@ poolKey
 posV1SalesBody
 posV1SoldItemsBody
 positionsBySupplier
+postPlatformCharge
 previewDrawingClose
 proxy
 pullHolds

@@ -10,7 +10,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { ACTION_LINK } from '@/components/action-link';
-import { Banner, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Banner, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, RowLink, Select, DialogActions } from '@/components/ui';
 
 export const metadata = { title: 'Liabilities — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -106,9 +106,11 @@ export default async function LiabilitiesPage({
                 </Field>
               </FormGrid>
             </FormSection>
-            <Button type="submit" variant="primary">
-              Record obligation
-            </Button>
+            <DialogActions>
+              <Button type="submit" variant="primary">
+                Record obligation
+              </Button>
+            </DialogActions>
           </CheckedForm>
         </FormModal>
       </div>
