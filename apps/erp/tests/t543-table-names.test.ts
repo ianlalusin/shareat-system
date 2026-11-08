@@ -7,8 +7,8 @@
  *
  * 1. `Table label="…"` really renders `aria-label="…"` on the `<table>`, and **without** `label`
  *    the attribute is absent (so every existing `Table` call site is byte-identical);
- * 2. each converted page's first real `<table>` tag carries an `aria-label="…"`, and the label is
- *    a short plain-English name (≤ 4 words, no task/defect codes).
+ * 2. every real `<table>` tag in each converted page carries an `aria-label`, and the first one's
+ *    label is a short plain-English name (≤ 4 words, no task/defect codes).
  *
  * Comments are stripped before looking for the tag: `admin/access-defaults/grid.tsx` explains the
  * table split in a `//` comment that contains the literal text `` `<table>` ``, and a raw
@@ -66,6 +66,12 @@ function firstTableTag(rel: string): string {
   return m ? m[0] : '';
 }
 
+/** Every `<table …>` opening tag in the file, not just the first (Codex F1). */
+function allTableTags(rel: string): string[] {
+  const src = stripComments(readFileSync(resolve(appRoot, rel), 'utf8'));
+  return src.match(/<table\b[^>]*>/g) ?? [];
+}
+
 function ariaLabelOf(tag: string): string | undefined {
   return /\baria-label="([^"]*)"/.exec(tag)?.[1];
 }
@@ -84,12 +90,14 @@ describe('T-543 — the Table component names itself', () => {
 });
 
 describe('T-543 — the named tables carry their name', () => {
-  it('every converted page has an aria-label on its first <table>', () => {
+  it('every <table> in every converted page has an aria-label', () => {
     const problems: string[] = [];
     for (const { file } of NAMED) {
-      const tag = firstTableTag(file);
-      if (tag === '') problems.push(`${file}: no <table ...> tag found`);
-      else if (ariaLabelOf(tag) === undefined) problems.push(`${file}: first <table> has no aria-label`);
+      const tags = allTableTags(file);
+      if (tags.length === 0) problems.push(`${file}: no <table ...> tag found`);
+      tags.forEach((tag, i) => {
+        if (!/\baria-label=/.test(tag)) problems.push(`${file}: <table> #${i + 1} has no aria-label`);
+      });
     }
     expect(problems).toEqual([]);
   });

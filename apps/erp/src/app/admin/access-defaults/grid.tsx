@@ -186,7 +186,7 @@ export function DesktopGrid({
                     <span className="font-medium">{area.label}</span> · {area.capabilities.length}
                     <OnByPosition positions={positions} capabilities={area.capabilities} activeDefaults={activeDefaults} />
                   </summary>
-                  <table className="w-full min-w-[640px] table-fixed border-collapse text-sm">
+                  <table aria-label={area.label} className="w-full min-w-[640px] table-fixed border-collapse text-sm">
                     <GridColgroup positionCount={positions.length} />
                     <thead className="border-b border-surface-border bg-surface text-left text-ink">
                       <tr>
