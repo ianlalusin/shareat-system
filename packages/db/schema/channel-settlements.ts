@@ -19,7 +19,7 @@
  * same platform fee has rebuilt the confirmed v1 defect (`POSTING-PATTERNS.md:411`).
  */
 import { sql } from 'drizzle-orm';
-import { check, date, foreignKey, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { check, date, foreignKey, index, numeric, pgTable, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { journalEntries } from './journal';
 import { loans } from './loans';
 import { moneyAccounts } from './money-accounts';
@@ -76,10 +76,13 @@ export const channelSettlements = pgTable(
     /** Staff under-reported: the excess posts to `7100` rather than editing an immutable sales day. */
     settlementGain: numeric('settlement_gain', { precision: 14, scale: 2 }).notNull().default('0'),
 
+    /** The SUM of this settlement's loan legs (`channel_settlement_loan_legs`); a deferred trigger holds the two equal at commit. */
     loanDeduction: numeric('loan_deduction', { precision: 14, scale: 2 }).notNull().default('0'),
-    loanId: uuid('loan_id').references(() => loans.id, { onDelete: 'restrict' }),
-    /** Set when the loan belongs to ANOTHER store — the `1250`/`2150` reciprocal case. */
-    loanOwnerStoreId: uuid('loan_owner_store_id').references(() => stores.id, { onDelete: 'restrict' }),
+    /**
+     * T-511 S6a: why a person accepted a difference between the file and the day, past tolerance, either sign. NULL when none was needed.
+     * Never blank when present. The trimmed reason, at most 500 characters (the domain caps it).
+     */
+    differenceReason: text('difference_reason'),
 
     netDeposited: numeric('net_deposited', { precision: 14, scale: 2 }).notNull(),
     destinationMoneyAccountId: uuid('destination_money_account_id')
@@ -132,10 +135,14 @@ export const channelSettlements = pgTable(
       'channel_settlements_void_shape_check',
       sql`${t.status} <> 'voided' or (${t.voidedBy} is not null and ${t.voidedAt} is not null and ${t.voidReason} is not null)`,
     ),
+    // T-511 S6a, the loan-legs migration (packages/db/migrations, the file ending _t511_settlement_loan_legs.sql). Declared in the builder AND in the SQL: the not-blank check below.
     check(
-      'channel_settlements_loan_shape_check',
-      sql`(${t.loanDeduction} = 0 and ${t.loanId} is null) or (${t.loanDeduction} <> 0 and ${t.loanId} is not null)`,
+      'channel_settlements_difference_reason_not_blank_check',
+      sql`${t.differenceReason} is null or length(btrim(${t.differenceReason}, E' \\t\\r\\n')) > 0`,
     ),
+    // NOTE: hand-added in that same migration, no Drizzle mirror here: two DEFERRED constraint triggers (channel_settlements_loan_legs_sum_trg on this table,
+    // channel_settlement_loan_legs_sum_trg on the legs table) hold loan_deduction = sum(leg amounts) at commit; a non-zero deduction needs a leg and a zero one has none
+    // (SQLSTATE 23514, constraint channel_settlement_loan_legs_sum_check). The migration also dropped this table's single-loan columns, their twins and their shape check.
     /** ⭐ One POSTED settlement per channel-day. A voided one must not block the corrected re-post. */
     uniqueIndex('channel_settlements_channel_day_key')
       .on(t.channelId, t.businessDate)
@@ -173,11 +180,6 @@ export const channelSettlements = pgTable(
       name: 'channel_settlements_created_by_same_org_fk',
     }).onDelete('restrict'),
     foreignKey({
-      columns: [t.orgId, t.loanOwnerStoreId],
-      foreignColumns: [stores.orgId, stores.id],
-      name: 'channel_settlements_loan_owner_store_id_same_org_fk',
-    }).onDelete('restrict'),
-    foreignKey({
       columns: [t.orgId, t.postedBy],
       foreignColumns: [persons.orgId, persons.id],
       name: 'channel_settlements_posted_by_same_org_fk',
@@ -204,12 +206,6 @@ export const channelSettlements = pgTable(
       foreignColumns: [journalEntries.orgId, journalEntries.id],
       name: 'channel_settlements_journal_entry_id_same_org_fk',
     }).onDelete('restrict'),
-    // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `loan_id` FK (RLS checks only this row's org_id); references `loans_org_id_id_unique`.
-    foreignKey({
-      columns: [t.orgId, t.loanId],
-      foreignColumns: [loans.orgId, loans.id],
-      name: 'channel_settlements_loan_id_same_org_fk',
-    }).onDelete('restrict'),
     // T-398 S3 / DEF-491, migration 0213 - same-org twin of the single-column `sales_day_id` FK (RLS checks only this row's org_id); references `sales_days_org_id_id_unique`.
     foreignKey({
       columns: [t.orgId, t.salesDayId],
@@ -225,5 +221,51 @@ export const channelSettlements = pgTable(
     // NOTE: channel_settlements_org_id_id_unique UNIQUE (org_id, id) - hand-added in migration 0213 (T-398 S3 / DEF-491), no Drizzle mirror here.
     // Trivially true (id alone is already unique); it exists so the composite `(org_id, "<col>") REFERENCES channel_settlements (org_id, id)`
     // same-org FKs declared beside their own tables have a real unique target.
+  ],
+);
+
+/**
+ * T-511 S6a: one row per loan a payout docked. A settlement can deduct from several loans in one payout (the Lipa October files carry two), so the loan is not a
+ * column of the header any more. `channel_settlements.loan_deduction` is the SUM of these amounts; a deferred trigger holds the two equal at commit.
+ *
+ * `ownerStoreId` is NEVER null: a same-store leg carries the paying store's own id (a leg whose owner is another store is the 1250 / 2400 / 2150 triple).
+ * Legs are history: the app role may only SELECT and INSERT them, and a void reverses the journal entry and leaves them in place.
+ */
+export const channelSettlementLoanLegs = pgTable(
+  'channel_settlement_loan_legs',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    settlementId: uuid('settlement_id').notNull(),
+    loanId: uuid('loan_id').notNull(),
+    ownerStoreId: uuid('owner_store_id').notNull(),
+    amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+  },
+  (t) => [
+    check('channel_settlement_loan_legs_amount_positive_check', sql`${t.amount} > 0`),
+    check('channel_settlement_loan_legs_amount_finite_check', sql`${t.amount} > '-Infinity'::numeric and ${t.amount} < 'Infinity'::numeric`),
+    unique('channel_settlement_loan_legs_settlement_loan_owner_key').on(t.settlementId, t.loanId, t.ownerStoreId),
+    index('channel_settlement_loan_legs_org_loan_idx').on(t.orgId, t.loanId),
+    // Composite-only same-org twins (RLS checks only this row's org_id): they reference the (org_id, id) uniques of channel_settlements (0213), loans (0213) and stores (0194).
+    foreignKey({
+      columns: [t.orgId, t.settlementId],
+      foreignColumns: [channelSettlements.orgId, channelSettlements.id],
+      name: 'channel_settlement_loan_legs_settlement_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.loanId],
+      foreignColumns: [loans.orgId, loans.id],
+      name: 'channel_settlement_loan_legs_loan_id_same_org_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [t.orgId, t.ownerStoreId],
+      foreignColumns: [stores.orgId, stores.id],
+      name: 'channel_settlement_loan_legs_owner_store_id_same_org_fk',
+    }).onDelete('restrict'),
+    // NOTE: hand-added in the loan-legs migration, no Drizzle mirror here: ENABLE and FORCE ROW LEVEL SECURITY, the policy channel_settlement_loan_legs_org_isolation
+    // (app_current_org()), the grants (SELECT and INSERT only: legs are history) and the deferred constraint trigger channel_settlement_loan_legs_sum_trg that holds
+    // the legs equal to channel_settlements.loan_deduction at commit.
   ],
 );

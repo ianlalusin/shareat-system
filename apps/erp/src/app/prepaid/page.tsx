@@ -17,7 +17,7 @@ import { CheckedForm } from '@/components/forms';
 import { PREPAID_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Banner, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
+import { Badge, Banner, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, RowLink, Select, statusTone, DialogActions } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Prepaid expenses — Shareat System' };
@@ -132,7 +132,9 @@ export default async function PrepaidPage({
             {/* ⭐ No interval selector, deliberately (§10). A 12-month policy covers 12 months;
                 charging it quarterly would recognise cost for months not yet covered, which is the
                 error prepaid accounting exists to prevent. */}
-            <SubmitButton pendingLabel="Recording…">Record prepaid item</SubmitButton>
+            <DialogActions>
+              <SubmitButton pendingLabel="Recording…">Record prepaid item</SubmitButton>
+            </DialogActions>
           </CheckedForm>
         </FormModal>
       </div>

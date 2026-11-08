@@ -136,8 +136,9 @@ async function renderAsViewer(f: Fixture, searchParams: Record<string, string>) 
 }
 
 function bannerParams(f: Fixture) {
-  // Both spellings, so the reds do not depend on which one G4 lands on.
-  return { ok: 'destination', changed: '1', channel: f.channelId, changedChannel: f.channelId };
+  // T-544: `channel` is gone from this fixture. The overview now redirects any `?channel=` link to the record page before it reads a banner,
+  // and the real post-save redirect carries only `changedChannel` (G4 landed on that spelling).
+  return { ok: 'destination', changed: '1', changedChannel: f.channelId };
 }
 
 /**

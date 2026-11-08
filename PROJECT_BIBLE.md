@@ -65,35 +65,35 @@
 - `1233–1267` 10. Phase plan
 - `1268–1284` 11. Migration & ETL rules
 - `1285–1349` 12. Inherited landmines — do not repeat these
-- `1350–1780` 13. Decision log
-- `1781–1800` 14. Amendment protocol
-- `1801–1805` 15. Engineering standards — the industry practices this project follows
-  - `1806–1811` 15.1 Build order: walking skeleton first
-  - `1812–1823` 15.2 Golden-master testing — the most important practice here
-  - `1824–1832` 15.3 Strangler Fig, not big-bang cutover
-  - `1833–1837` 15.4 No dual-write
-  - `1838–1846` 15.5 Expand/contract migrations
-  - `1847–1855` 15.6 Observability from day zero, not later
-  - `1856–1860` 15.7 CI gates
-  - `1861–1865` 15.8 Backups and a tested restore
-  - `1866–1870` 15.9 Twelve-Factor config
-  - `1871–1878` 15.10 Append-only ledgers — but not event sourcing
-  - `1879–1883` 15.11 Defence in depth
-  - `1884–1912` 15.12 Skills are lenses, not assurance
-  - `1913–1919` 15.13 Reconciliation is a permanent feature
-- `1920–1924` 16. The accounting spine
-  - `1925–1956` 16.0 What we are actually fixing — the diagnosis
-  - `1957–2000` 16.1 The ten invariants — non-negotiable
-  - `2001–2015` 16.2 The oracle: how "correct" is tested
-  - `2016–2037` 16.3 The model — header + lines, not legs
-  - `2038–2057` 16.4 Deliberately simpler than ERPNext
-  - `2058–2127` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2128–2152` 16.6 What v1 already gets right — preserve the intent
-  - `2153–2174` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2175–2189` 16.8 What v1's accounting already gets right
-  - `2190–2233` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2234–2284` 16.10 Posting patterns — one canonical pattern per business event
-  - `2285–2317` 16.11 Inventory's accounting integration
+- `1350–1783` 13. Decision log
+- `1784–1803` 14. Amendment protocol
+- `1804–1808` 15. Engineering standards — the industry practices this project follows
+  - `1809–1814` 15.1 Build order: walking skeleton first
+  - `1815–1826` 15.2 Golden-master testing — the most important practice here
+  - `1827–1835` 15.3 Strangler Fig, not big-bang cutover
+  - `1836–1840` 15.4 No dual-write
+  - `1841–1849` 15.5 Expand/contract migrations
+  - `1850–1858` 15.6 Observability from day zero, not later
+  - `1859–1863` 15.7 CI gates
+  - `1864–1868` 15.8 Backups and a tested restore
+  - `1869–1873` 15.9 Twelve-Factor config
+  - `1874–1881` 15.10 Append-only ledgers — but not event sourcing
+  - `1882–1886` 15.11 Defence in depth
+  - `1887–1915` 15.12 Skills are lenses, not assurance
+  - `1916–1922` 15.13 Reconciliation is a permanent feature
+- `1923–1927` 16. The accounting spine
+  - `1928–1959` 16.0 What we are actually fixing — the diagnosis
+  - `1960–2003` 16.1 The ten invariants — non-negotiable
+  - `2004–2018` 16.2 The oracle: how "correct" is tested
+  - `2019–2040` 16.3 The model — header + lines, not legs
+  - `2041–2060` 16.4 Deliberately simpler than ERPNext
+  - `2061–2130` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2131–2155` 16.6 What v1 already gets right — preserve the intent
+  - `2156–2177` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2178–2192` 16.8 What v1's accounting already gets right
+  - `2193–2236` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2237–2287` 16.10 Posting patterns — one canonical pattern per business event
+  - `2288–2320` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1777,6 +1777,9 @@ just a patch.**
 | 445 | 2026-11-06 | **THE TABLET RESOLVES THE LUNCH OR DINNER PRICE ITSELF, EVEN OFFLINE; REFILLS ARE NOT TIED TO HOURS; AND THE v1 MENU IMPORT AND T-510 S5 (LOADING THE HOURS AND PAIRINGS) COME AFTER THE OPEN WORKTREES ARE CLEAN, AS THEIR OWN TASK.** Ian's standing order (2026-11-05, via BOSS): finish every open worktree, new task only when all is clean. (1) **Projection:** `StoreMenuV2` is extended additively (no V3): `nextChangeAt` includes the next hours boundary and a closed package shows `outside_hours` with the time it opens (S4, PR #163); the menu carries `hours` and per-variant `slots` and the tablet picks the open window from its cached menu with a pure copy of the window logic, kept honest by a parity test, so it flips at 17:00 with no network (S4b, PR #167). (2) **Refills and flavours are not window-gated** (v1 never read refill windows, and a running table keeps refilling after its window closes). (3) **Defect found:** the APK's menu GET was blocked by CORS (T-508 S5); fixed in S4b. (4) **Deferred:** no v1 menu loader exists (spec 401 defers the import), so the menu import is its own task after cleanup, and T-510 S5 only attaches dayparts and pairings to it (rows 441-443 stay valid). The tablet test at Lipa is still owed; Lipa's 7 December launch stays on the v1 menu (T-508 R9 blocks any store from the ERP menu until then). | A phone or tablet with a bad signal must still charge the right price; importing the whole v1 menu is a larger decision than attaching hours | Yes |
 | 446 | 2026-11-07 | **NO POSITION PICKER IN POS RELEASE 1: A PERSON WITH TWO POSITIONS ACTS WITH ALL THEIR GRANTS, AS IN THE ERP TODAY. ROW 323'S "PICK ONE AFTER THE PIN, THE PICK ONLY NARROWS" STAYS THE TARGET, AFTER RELEASE 1.** Ian, 2026-11-07, via BOSS, answering T-526 Open O1. `acting_position_id` is not implemented anywhere (`apps/`, `packages/`), and building it would delay Lipa's 7 Dec go-live (row 431). The server still checks every action with `authorize()`, and the offline tablet only greys out buttons from the snapshot's `posCapabilities` (T-526 R5). | Row 323's narrowing is a refinement; release 1 behaves exactly like the ERP a person already uses | Yes |
 | 447 | 2026-11-07 | **IN POS RELEASE 1, SERVERS DO NOT ADD DISHES FROM THEIR PHONES. THE CASHIER ENTERS EVERY ORDER ON THE STORE TABLET; A SERVER'S PHONE DOES REFILLS AND HEAD CONFIRMATION ONLY. ON A PHONE OR KITCHEN BROWSER THE ORDERS TAB IS READ-ONLY.** Ian, 2026-11-07, via BOSS, answering T-527 Open O1. Server and Kitchen positions hold no `record_sale` (0240 defaults), and phones have no outbox (T-525 is tablet-only). Adding dishes from a phone would need a new capability and a second online write path. At Lipa the cashier already enters every order on the one billing tablet (row 313). | Keeps one write path (the tablet outbox) for every order in release 1; the phone path can be added later with its own capability | Yes |
+| 448 | 2026-11-07 | **EVERY POS STAND-NUMBER PICKER IS ONE HORIZONTAL ROW THAT SLIDES SIDEWAYS (SWIPE, SCROLL-SNAP, TARGETS OF AT LEAST 48 PX, THE SELECTED STAND SCROLLED INTO VIEW, ARROW KEYS MOVE ALONG IT). IT NEVER WRAPS OR SQUEEZES INTO A GRID, HOWEVER MANY STANDS A STORE HAS.** Ian, 2026-11-07, via BOSS: *"try stand number that is more than 12 it must not cramp all numbers at the top it must slide using 1 row only"*. Stands are tapped, never typed (row 371). A store with more than 12 stands must not lose the screen to a grid of numbers. Built in T-528 (Addendum 2), and tested with 30 stands. | Keeps the seat panel's content (heads, items, Items so far) on screen at any store size | Yes |
+| 449 | 2026-11-07 | **A SALES DAY DERIVED FROM POS v2 RECEIPTS (`source = 'pos_receipts'`) IS VERIFIED ONLY BY A STORE MANAGER OR ABOVE (BY ROLE) WHO HOLDS `verify_sales_day` AT THAT STORE AND DID NOT CLOSE THE Z. `verify_own_sales_day` DOES NOT EXEMPT. v1-FED AND TYPED DAYS KEEP TODAY'S RULE.** Ian, 2026-11-07, via BOSS, answering T-531 O1. The Z already has a cashier's close and a manager's PIN approval. The verification that posts the day to the ledger is a third, senior pair of eyes on the cash. Spec: T-531 R10. | Stricter control only where the new POS creates the figures; nothing changes for the v1 feed during the switch | Yes |
+| 450 | 2026-11-07 | **A POS v2 Z THAT WOULD COVER MORE THAN 2 BUSINESS DAYS IS REFUSED WITH "CALL A MANAGER". THE MANAGER THEN RUNS "CLOSE DAY BY DAY" WITH THEIR PIN: ONE Z AND ONE SALES DAY PER PAST BUSINESS DAY THAT HAS SALES, OLDEST FIRST, WITH TODAY LEFT OPEN. IT IS AUDITED AS ONE BACKLOG CLOSE.** Ian, 2026-11-07, via BOSS, answering T-531 O2. A forgotten Z covering 2 dates stays allowed (row 390). Longer gaps would book several days of sales on one date, so they are split by the receipts' own business dates. Spec: T-531 R11. | Keeps every day's sales on its own date even after a missed close | Yes |
 
 ## 14. Amendment protocol
 

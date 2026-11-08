@@ -10,7 +10,7 @@
  *  - `cash_bank`, `staff_cash`, `ap_supplier`, `inventory_basis`, `unassigned_store` keep the entry's OWN `entry_date`.
  *  - `sales_tender` and `expense_category` re-date a correction to the day it corrects (ruling 1), in this order:
  *    (a) `reversal_of_entry_id`: the original's resolved date, recursively; (b) `source_type 'sale'` with a
- *    `source_id` found in `sales_day_pos_corrections`: that sales day's `business_date`; (c) the same source as an earlier
+ *    `source_id` found in `sales_day_pos_corrections` or (T-511 S6b) `sales_day_platform_corrections`: that sales day's `business_date`; (c) the same source as an earlier
  *    POSTED entry: the earliest one's `entry_date`. An entry none of (a)-(c) resolves keeps its own date and, when the same
  *    source also holds a DRAFT, is listed in `datedLater`.
  * The week is `weekStart..through` (Manila business dates: entry_date is already one, nothing here reads the clock).
@@ -328,8 +328,8 @@ function datedEntries(orgId: string, storeId: string) {
     root as (select entry_id, cur as root_id from chain where nxt is null),
     dated as (
       select e.id, e.entry_date, e.source_type, e.source_id, r.source_type as root_src, r.source_id as root_sid,
-        coalesce(pb.d, pc.d, r.entry_date) as eff_date,
-        (r.id = e.id and pb.d is null and pc.d is null and exists (
+        coalesce(pb.d, pp.d, pc.d, r.entry_date) as eff_date,
+        (r.id = e.id and pb.d is null and pp.d is null and pc.d is null and exists (
            select 1 from journal_entries dr
            where dr.org_id = ${orgId}::uuid and dr.source_type = r.source_type and dr.source_id = r.source_id and dr.id <> r.id
              and (dr.entry_date, dr.id) < (r.entry_date, r.id)
@@ -342,6 +342,11 @@ function datedEntries(orgId: string, storeId: string) {
         from sales_day_pos_corrections c join sales_days sd on sd.id = c.sales_day_id
         where r.source_type = 'sale' and c.org_id = ${orgId}::uuid and c.id::text = r.source_id
       ) pb on true
+      left join lateral (
+        select sd.business_date as d
+        from sales_day_platform_corrections c join sales_days sd on sd.id = c.sales_day_id
+        where r.source_type = 'sale' and c.org_id = ${orgId}::uuid and c.id::text = r.source_id
+      ) pp on true
       left join lateral (
         select min(s.entry_date) as d
         from journal_entries s
@@ -534,6 +539,8 @@ export interface V2Doc {
   state: 'posted' | 'unposted';
   /** The supplier invoice number behind the document, when it has one. */
   receiptNo: string | null;
+  /** T-511 S6b: set (true) when the document is a platform file correction (`sales_day_platform_corrections`); absent otherwise. */
+  platformCorrection?: boolean;
 }
 
 /**
@@ -565,6 +572,7 @@ export async function v2Documents(
     amount: string;
     state: 'posted' | 'unposted';
     receipt_no: string | null;
+    platform_correction: boolean;
   }>(
     await tx.execute(sql`
       with recursive
@@ -664,11 +672,12 @@ export async function v2Documents(
                when 'stock_receipt_invoice' then (select si.invoice_no from supplier_invoices si where si.org_id = ${orgId}::uuid and si.id::text = pd.rid)
                when 'expense_payment' then (select si.invoice_no from expenses x join supplier_invoices si on si.id = x.supplier_invoice_id
                                             where x.org_id = ${orgId}::uuid and x.id::text = pd.rid)
-             end as receipt_no
+             end as receipt_no,
+             (pd.rsrc = 'sale' and exists (select 1 from sales_day_platform_corrections pcr where pcr.org_id = ${orgId}::uuid and pcr.id::text = pd.rid)) as platform_correction
       from pd
       where pd.day between ${lo} and ${hi} and pd.amount <> 0
       union all
-      select un.id, un.kind, un.gl, un.ptype, un.pid, un.cat, to_char(un.day, 'YYYY-MM-DD'), un.amount::text, 'unposted', un.receipt_no
+      select un.id, un.kind, un.gl, un.ptype, un.pid, un.cat, to_char(un.day, 'YYYY-MM-DD'), un.amount::text, 'unposted', un.receipt_no, false
       from un
       where un.day between ${lo} and ${hi} and un.amount <> 0
       order by day, id
@@ -685,5 +694,6 @@ export async function v2Documents(
     amount: r.amount,
     state: r.state,
     receiptNo: r.receipt_no,
+    ...(r.platform_correction ? { platformCorrection: true } : {}),
   }));
 }

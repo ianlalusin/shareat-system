@@ -152,6 +152,10 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('settlement_day.rejected', 'data', 'normal', 'store', 'settlement_day_lines', 'T-511'),
   def('settlement_day.reopened', 'data', 'normal', 'store', 'settlement_day_lines', 'T-511'),
   def('settlement_loan.allocation_overridden', 'data', 'normal', 'store', 'settlement_day_lines', 'T-511'),
+  // T-511 S6b: the platform file figure replaced the staff figure for one channel and day through a correcting entry; entity = the correction row (dotted: new).
+  def('platform_sales.corrected', 'money', 'high', 'store', 'sales_day_platform_corrections', 'T-511'),
+  // T-511 S6c: a platform charge with no sales day was booked (Dr 6400 fee + VAT / Cr 1220 that channel); entity = the channel_period_charges row (dotted: new).
+  def('channel_charge.posted', 'money', 'high', 'store', 'channel_period_charges', 'T-511'),
   // T-512 (T-511 S5c): an admin changed a business rule (value, from-date, reason). Org scope: a rule is the organisation's, never a store's (dotted: new).
   def('business_rule.changed', 'settings', 'high', 'org', 'business_rule_values', 'T-512', ADMIN),
   // T-455 S2: a cashier's moves on the customer lobby line (park a walk-in, call, seat, remove). Payloads carry code, size, stand and session id - never a name or phone.
@@ -195,6 +199,9 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('pos.session_voided', 'order', 'high', 'store', 'table_sessions', 'T-524', { clientSources: ['pos'] }),
   def('pos.sale_completed', 'money', 'normal', 'store', 'pos_sales_receipts', 'T-524'),
   def('pos.sale_recompute_mismatch', 'money', 'high', 'store', 'pos_sales_receipts', 'T-524'),
+  // T-525: a manager replayed or discarded a quarantined tablet event (entity = the pos_events row). Server-only: the tablet never sends them.
+  def('pos.event_replayed', 'order', 'normal', 'store', 'pos_events', 'T-525'),
+  def('pos.event_discarded', 'order', 'high', 'store', 'pos_events', 'T-525'),
   def('create_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('update_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('reactivate_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),

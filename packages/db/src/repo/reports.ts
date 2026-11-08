@@ -435,11 +435,36 @@ export async function getSalesByChannelAndMode(
   `)) as unknown as { code: string; total: string }[];
   const correctionOf = (code: string) => money(corrections.find((r) => r.code === code)?.total ?? '0');
   const unliCorrection = correctionOf('4100');
-  const alaCorrection = correctionOf('4150');
+  // T-511 S6b: a platform file correction posts to 4150 under its own source id, and it belongs to its channel's OWN row (never the synthetic POS line), counted
+  // on the correction's entry date as the ledger counts it. A channel with no verified day in the range still gets a row for the correction.
+  const platform = (await ex.execute(sql`
+    select pc.channel_id::text as channel_id, ch.name as channel_name, ch.is_remitted_daily as is_remitted_daily,
+           coalesce(sum(jl.credit - jl.debit), 0)::numeric(14,2)::text as total
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    join sales_day_platform_corrections pc on pc.org_id = je.org_id and pc.id::text = je.source_id
+    join sales_channels ch on ch.id = pc.channel_id and ch.org_id = pc.org_id
+    where je.org_id = ${filter.orgId}
+      and je.source_type = 'sale'
+      and je.status in ('posted', 'reversed')
+      and je.entry_date >= ${filter.fromDate} and je.entry_date <= ${filter.toDate}
+      and a.code in ('4100', '4150')
+      ${filter.storeId ? sql`and jl.store_id = ${filter.storeId}` : sql``}
+    group by pc.channel_id, ch.name, ch.is_remitted_daily
+    order by ch.name, pc.channel_id
+  `)) as unknown as { channel_id: string; channel_name: string; is_remitted_daily: boolean; total: string }[];
+  const platformTotal = add(money('0'), ...platform.map((r) => money(r.total)));
+  const alaCorrection = add(correctionOf('4150'), platformTotal);
 
   const modeRow = modeRows[0];
   const channels = channelRows as SalesChannelRollupRow[];
-  const correctionTotal = add(unliCorrection, alaCorrection);
+  for (const p of platform) {
+    const own = channels.find((c) => c.channelId === p.channel_id);
+    if (own) own.total = String(add(money(own.total), money(p.total)));
+    else channels.push({ channelId: p.channel_id, channelName: p.channel_name, isRemittedDaily: p.is_remitted_daily, total: p.total });
+  }
+  const correctionTotal = add(unliCorrection, correctionOf('4150'));
   if (!isZero(correctionTotal)) {
     channels.push({ channelId: null, channelName: 'POS corrections', isRemittedDaily: false, total: String(correctionTotal) });
   }
@@ -505,12 +530,36 @@ export async function getSalesByDayAndChannel(
     order by je.entry_date
   `)) as unknown as { day: string; total: string }[];
 
+  // T-511 S6b: a platform file correction is its channel's own block, on the correction's entry date.
+  const platformRows = (await ex.execute(sql`
+    select je.entry_date::text as day, pc.channel_id::text as channel_id, ch.name as channel_name,
+           coalesce(sum(jl.credit - jl.debit), 0)::numeric(14,2)::text as total
+    from journal_lines jl
+    join journal_entries je on je.id = jl.entry_id
+    join accounts a on a.id = jl.account_id
+    join sales_day_platform_corrections pc on pc.org_id = je.org_id and pc.id::text = je.source_id
+    join sales_channels ch on ch.id = pc.channel_id and ch.org_id = pc.org_id
+    where je.org_id = ${filter.orgId}
+      and je.source_type = 'sale'
+      and je.status in ('posted', 'reversed')
+      and je.entry_date >= ${filter.fromDate} and je.entry_date <= ${filter.toDate}
+      and a.code in ('4100', '4150')
+      ${filter.storeId ? sql`and jl.store_id = ${filter.storeId}` : sql``}
+    group by je.entry_date, pc.channel_id, ch.name
+    order by je.entry_date, ch.name, pc.channel_id
+  `)) as unknown as { day: string; channel_id: string; channel_name: string; total: string }[];
+
   const out: SalesByDayAndChannelRow[] = channelRows.map((r) => ({
     day: String(r.day),
     channelId: r.channel_id,
     channelName: r.channel_name,
     total: r.total,
   }));
+  for (const r of platformRows) {
+    const own = out.find((b) => b.day === String(r.day) && b.channelId === r.channel_id);
+    if (own) own.total = String(add(money(own.total), money(r.total)));
+    else if (!isZero(money(r.total))) out.push({ day: String(r.day), channelId: r.channel_id, channelName: r.channel_name, total: r.total });
+  }
   for (const r of correctionRows) {
     if (Number(r.total) === 0) continue;
     out.push({ day: String(r.day), channelId: null, channelName: 'POS corrections', total: r.total });

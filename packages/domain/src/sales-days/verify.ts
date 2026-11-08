@@ -18,7 +18,7 @@
  * T-385 (Ian 2026-10-09): verify requires `submitted`. The check sits before routing and posting.
  */
 import { authorize, type Actor, can } from '@shareat/auth';
-import { auditLogRepo, journalRepo, posV1Repo, salesDaysRepo, type Tx } from '@shareat/db';
+import { auditLogRepo, journalRepo, posV1Repo, salesDaysRepo, settlementIntakeRepo, type Tx } from '@shareat/db';
 import type { PeriodOverrideReason } from '@shareat/db/schema';
 import { buildPeriodFacts, periodRefusal } from '../business-rules';
 import { postEntry } from '../ledger/post-entry';
@@ -323,6 +323,16 @@ async function runVoid(
     await reverseEntry(tx, {
       entryId: c.journalEntryId,
       reason: `Sales day ${day.businessDate} voided: ${trimmed} (POS correction)`,
+      reversedBy: actor.personId,
+    });
+  }
+
+  // T-511 S6b: the same for a platform file correction (`correctPlatformSales`): its entry is reversed, newest first, and the row stays.
+  const platformCorrections = await settlementIntakeRepo.listPlatformCorrectionsForDay(tx, actor.orgId, salesDayId);
+  for (const c of [...platformCorrections].reverse()) {
+    await reverseEntry(tx, {
+      entryId: c.journalEntryId,
+      reason: `Sales day ${day.businessDate} voided: ${trimmed} (platform file correction)`,
       reversedBy: actor.personId,
     });
   }

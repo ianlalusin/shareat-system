@@ -270,6 +270,22 @@ const EXEMPT: Record<string, string> = {
     'act on. `tests/unit/t336-canonical-position-defaults.test.ts`\'s U3 is the closed-caller-list ' +
     'guard that keeps it that way; it also owns the one required barrel re-export (§7:135).',
 
+  // ---- T-511 S6b — the platform sales correction ---------------------------------------------
+  correctPlatformSales:
+    'UNWIRED — slice 7 (approve a settlement day) calls it: the correction posts first and the settlement second, in ONE transaction (design decision 17, BOSS ruling 7). ' +
+    'Delete this row in S7, when `apps/` reaches it (BOSS-approved precedent: loanCheckForDay, 5 Nov 2026; row named in the S6 spec, 7 Nov 2026).',
+  correctPlatformSalesOnClock:
+    'WRAPPER — the test seam of `correctPlatformSales`, the production entry point which calls this with the Manila clock; only the integration tests pass another clock (a sales day in the fixture calendar). ' +
+    'It is not on the barrel, so no app can date an entry in the future. Delete this row with the `correctPlatformSales` row in S7 if the seam is folded away.',
+
+  // ---- T-511 S6c — the platform charge with no sales day -------------------------------------
+  postPlatformCharge:
+    'UNWIRED — slice 7 (approve a settlement day) calls it: S7 approve calls it, posting the weekly fee and any uncategorised charge of the invoice once, before the payouts that net them (S6c spec, 7 Nov 2026). ' +
+    'Delete this row in S7, when `apps/` reaches it (BOSS-approved precedent: correctPlatformSales, 7 Nov 2026).',
+  postPlatformChargeOnClock:
+    'WRAPPER — the test seam of `postPlatformCharge`, the production entry point which calls this with the Manila clock; only the integration tests pass another clock (a charge in the fixture calendar). ' +
+    'It is not on the barrel, so no app can date an entry in the future. S7 approve calls the production function. Delete this row with the `postPlatformCharge` row in S7 if the seam is folded away.',
+
   // ---- T-511 S5b — the settlement review stage ---------------------------------------------
   loanCheckForDay:
     'INTERNAL — `dayBlockers`, `dayBlockersForLines` and `getReviewDayDetail` / `listReviewDays` (`settlement-intake/review.ts`) call it; the screens read the loan check through ' +
@@ -277,41 +293,47 @@ const EXEMPT: Record<string, string> = {
   dayBlockersForLines:
     'INTERNAL — `listReviewDays` (`settlement-intake/review.ts`) calls it to work out the blockers of the whole day table in a fixed number of reads; the screen calls ' +
     '`listReviewDays` (T-511 S5b FIX 1, builder 3, 5 Nov 2026). BOSS approved 6 Nov',
-  // ---- T-524 — the POS v2 domain, built before its API (T-525) and screens (T-526 on) ----
-  addLineDiscount:
-    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
-  addLines:
-    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
-  applyPresetToAllLines:
-    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
-  cancelLine:
-    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
-  completeSale:
-    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
-  confirmHeads:
-    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
-  getSessionBill:
-    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
-  listKitchenQueue:
-    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
-  listOpenStands:
-    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
-  listRefillQueue:
-    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
-  listTodaysSalesReceipts:
-    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
+  // ---- T-524 / T-525 — the POS v2 domain and its three doors. The tablet events reach the T-524 writes through the inbox; the rest wait for screens ----
   openStand:
-    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
-  removeLineDiscount:
-    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
-  requestRefill:
-    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
-  serveLine:
-    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
+    'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
+  addLines:
+    'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
   setHeadsCashier:
-    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
+    'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
+  requestRefill:
+    'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
+  cancelLine:
+    'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
+  addLineDiscount:
+    'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
+  removeLineDiscount:
+    'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
+  applyPresetToAllLines:
+    'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
   voidUnpaidSession:
-    'UNWIRED — T-524 built the POS v2 domain (packages/domain/src/pos); its caller is the tablet and phone API of T-525 (routes) and the T-526+ screens. Remove this row when T-525 lands (6 Nov 2026).',
+    'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction (an offline void needs approve_pos_correction on the actor, an online one a manager PIN); the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
+  completeSale:
+    'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction (the server recomputes the bill); the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
+  listOpenStands:
+    'INTERNAL — T-525: `readPosState` (packages/domain/src/pos/snapshot.ts) calls it for the state poll, each read only for a person who holds its capability; the route /api/pos/state calls `readPosState`, so this is not a screen action of its own.',
+  listKitchenQueue:
+    'INTERNAL — T-525: `readPosState` (packages/domain/src/pos/snapshot.ts) calls it for the state poll, each read only for a person who holds its capability; the route /api/pos/state calls `readPosState`, so this is not a screen action of its own.',
+  listRefillQueue:
+    'INTERNAL — T-525: `readPosState` (packages/domain/src/pos/snapshot.ts) calls it for the state poll, each read only for a person who holds its capability; the route /api/pos/state calls `readPosState`, so this is not a screen action of its own.',
+  confirmHeads:
+    'UNWIRED — T-527 / T-529: the server phone is its caller (online-only, pairingId null, A9); T-525 left it out of the tablet events. Remove this row when it lands (7 Nov 2026).',
+  serveLine:
+    'UNWIRED — T-527 / T-529: the kitchen screen is its caller (online-only, pairingId null, A9); T-525 left it out of the tablet events. Remove this row when it lands (7 Nov 2026).',
+  getSessionBill:
+    'UNWIRED — T-526 on: the till screens read the live bill through it; T-525 does not serve it (the tablet prices offline from its snapshot). Remove this row when it lands (7 Nov 2026).',
+  listTodaysSalesReceipts:
+    'UNWIRED — T-526 on: the till screens list the day receipts through it; no T-525 door serves it. Remove this row when it lands (7 Nov 2026).',
+  listPosQuarantine:
+    'UNWIRED — T-526 / T-533: T-525 built the quarantine review (docs/tasks/525-pos-v2-apis.md R6) as domain functions only; the quarantine screen for managers is their caller. Remove this row when it lands (7 Nov 2026).',
+  replayQuarantinedEvent:
+    'UNWIRED — T-526 / T-533: T-525 built the quarantine review (docs/tasks/525-pos-v2-apis.md R6) as domain functions only; the quarantine screen for managers is their caller. Remove this row when it lands (7 Nov 2026).',
+  discardQuarantinedEvent:
+    'UNWIRED — T-526 / T-533: T-525 built the quarantine review (docs/tasks/525-pos-v2-apis.md R6) as domain functions only; the quarantine screen for managers is their caller. Remove this row when it lands (7 Nov 2026).',
 };
 
 describe('T-227 — every action-shaped domain export is reachable from a screen', () => {

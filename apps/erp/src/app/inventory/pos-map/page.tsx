@@ -6,7 +6,7 @@ import { requireSession } from '../../../lib/session';
 import { upsertPosItemMapAction, decideMapRequestAction } from './actions';
 import { listStores, posMapScreenData, withOrgPrincipal } from './lib';
 import { Page } from '@/components/shell/Page';
-import { Button, Checkbox, FlashBanner, FormGrid, Field, Input, Select , FormSection, FormModal} from '@/components/ui';
+import { Button, Checkbox, FlashBanner, FormGrid, Field, Input, Select , FormSection, FormModal, DialogActions} from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -183,9 +183,11 @@ export default async function PosMapPage({ searchParams }: { searchParams: Promi
                 </FormGrid>
               </FormSection>
             </>
-            <Button type="submit" variant="primary">
-              Save
-            </Button>
+            <DialogActions>
+              <Button type="submit" variant="primary">
+                Save
+              </Button>
+            </DialogActions>
           </CheckedForm>
         </FormModal>
       </div>

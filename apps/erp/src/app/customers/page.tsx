@@ -18,7 +18,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input, LinkRow, RowAction, RowLink, Select, FormGrid, FormSection, type FieldProps, FormModal } from '@/components/ui';
+import { Button, FlashBanner, Input, LinkRow, RowAction, RowLink, Select, FormGrid, FormSection, type FieldProps, FormModal, DialogActions } from '@/components/ui';
 
 export const metadata = { title: 'Customers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -54,7 +54,7 @@ export default async function CustomersPage({
       <div>
         <h1 className="text-2xl font-semibold">Customers</h1>
         <PageDescription>
-          Who the business sells to <strong>on terms</strong>. ⛔ A diner who pays at the counter is
+          Who the business sells to <strong>on terms</strong>. A diner who pays at the counter is
           not a customer — a row here exists because there is a balance or a credit relationship,
           and a retail sale creates neither.{' '}
           <Link href="/customers/price-lists" className="underline underline-offset-2">
@@ -160,7 +160,7 @@ export default async function CustomersPage({
           size="lg"
           description={
             <>
-              ⭐ The <strong>counterparty</strong> decides how sales to them are treated, and the two
+              The <strong>counterparty</strong> decides how sales to them are treated, and the two
               answers are not close: one of our own stores <em>eliminates</em> and is never revenue;
               another company is <em>real revenue and a real receivable</em>.
             </>
@@ -251,9 +251,11 @@ export default async function CustomersPage({
               </Field>
             </FormGrid>
           </FormSection>
-          <Button type="submit" variant="primary">
-            Save
-          </Button>
+          <DialogActions>
+            <Button type="submit" variant="primary">
+              Save
+            </Button>
+          </DialogActions>
         </CheckedForm>
         </FormModal>
       </div>

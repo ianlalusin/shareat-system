@@ -717,7 +717,7 @@ describe('Amount docked (DEF-470 item 8) — comma leg + negative range guard', 
           businessDate: '2026-01-10',
           grossAmount: '100000.00',
           netDeposited: '79500.00',
-          loan: { loanId: '00000000-0000-0000-0000-000000000000', amount: '1,00' },
+          loanLegs: [{ loanId: '00000000-0000-0000-0000-000000000000', amount: '1,00' }],
           settledOn: '2026-01-15',
         } as never),
       );
@@ -748,7 +748,7 @@ describe('Amount docked (DEF-470 item 8) — comma leg + negative range guard', 
           businessDate: '2026-01-10',
           grossAmount: '100000.00',
           netDeposited: '79500.00',
-          loan: { loanId: '00000000-0000-0000-0000-000000000000', amount: '-5' },
+          loanLegs: [{ loanId: '00000000-0000-0000-0000-000000000000', amount: '-5' }],
           settledOn: '2026-01-15',
         } as never),
       );
@@ -1001,8 +1001,9 @@ describe('loanId set, loanAmount blank — ALREADY green: actions.ts:117 hasLoan
     const { recordSettlementAction } = await import('../../src/app/channel-settlements/actions');
     const fd = await settlementFormData(f, { loanId: '00000000-0000-0000-0000-000000000000', loanAmount: '' });
     await expectRedirectTo(() => recordSettlementAction(fd));
-    const [row] = await sql<{ loan_id: string | null }[]>`
-      select loan_id from channel_settlements where org_id = ${f.orgId} and channel_id = ${f.channelId}`;
-    expect(row!.loan_id).toBeNull();
+    // T-511 S6a: the loan is a leg row now, no longer a column of the settlement.
+    const [row] = await sql<{ legs: string }[]>`
+      select count(*)::text as legs from channel_settlement_loan_legs where org_id = ${f.orgId}`;
+    expect(row!.legs).toBe('0');
   });
 });

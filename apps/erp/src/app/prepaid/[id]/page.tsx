@@ -13,7 +13,7 @@ import { CATEGORY_LABEL, STATUS_LABEL, getDetail, peso, thisPeriod } from '../li
 import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Banner, Button, ConfirmDestructive, FlashBanner, Input, Select, FormModal } from '@/components/ui';
+import { Banner, Button, ConfirmDestructive, FlashBanner, Input, Select, FormModal, DialogActions } from '@/components/ui';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import {
   PREPAID_MONTH_REVERSE_RULES,
@@ -119,8 +119,9 @@ export default async function PrepaidItemPage({
             )}
           </div>
           <FormModal trigger="Confirm term" title="Confirm the term" size="md">
-          <CheckedForm rules={PREPAID_TERM_RULES} action={confirmTermAction} className="flex flex-wrap items-end gap-3">
+          <CheckedForm rules={PREPAID_TERM_RULES} action={confirmTermAction} className="space-y-3">
             <input type="hidden" name="prepaidItemId" value={item.id} />
+            <div className="flex flex-wrap items-end gap-3">
             <Field label="Starts" rule={PREPAID_TERM_RULES.coverageStartDate} tone="warning">
               <Input
                 type="date"
@@ -138,7 +139,10 @@ export default async function PrepaidItemPage({
                 className={INPUT}
               />
             </Field>
-            <Button type="submit" variant="primary">Confirm term</Button>
+            </div>
+            <DialogActions>
+              <Button type="submit" variant="primary">Confirm term</Button>
+            </DialogActions>
           </CheckedForm>
           </FormModal>
         </section>
@@ -290,11 +294,13 @@ export default async function PrepaidItemPage({
               Only the part that did <strong>not</strong> come back reaches the P&amp;L. The refund
               moves from one balance-sheet account to another.
             </p>
-            <ConfirmDestructive
-              tier="admin-pin"
-              label="Write it off"
-              consequence="Writes off what is left of this prepaid item. An administrator must approve with their own PIN."
-            />
+            <DialogActions>
+              <ConfirmDestructive
+                tier="admin-pin"
+                label="Write it off"
+                consequence="Writes off what is left of this prepaid item. An administrator must approve with their own PIN."
+              />
+            </DialogActions>
           </CheckedForm>
           </FormModal>
         </div>
