@@ -14,6 +14,7 @@ import { quantity } from '../../src/stock/quantity';
 import type { LocationLike } from '../../src/stock-locations/rules';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import { testItemCode } from './_fixtures/item-code';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 
 /**
  * T-512 (audit CR-1) - a usage, wastage or supplier return with the same item twice is refused in plain words, before any write,
@@ -23,9 +24,9 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test/.test(url)) {
+if (!/shareat_test|_test(\?|$)/.test(url)) {
   throw new Error(
-    `Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — the database name must contain "shareat_test".`,
+    `Refusing to run against ${redactDbUrl(url)} — the database name must contain "_test".`,
   );
 }
 

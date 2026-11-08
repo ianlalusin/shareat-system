@@ -336,8 +336,6 @@ const EXEMPT: Record<string, string> = {
     'UNWIRED — T-527 / T-529: the server phone is its caller (online-only, pairingId null, A9); T-525 left it out of the tablet events. Remove this row when it lands (7 Nov 2026).',
   serveLine:
     'UNWIRED — T-527 / T-529: the kitchen screen is its caller (online-only, pairingId null, A9); T-525 left it out of the tablet events. Remove this row when it lands (7 Nov 2026).',
-  getSessionBill:
-    'UNWIRED — T-526 on: the till screens read the live bill through it; T-525 does not serve it (the tablet prices offline from its snapshot). Remove this row when it lands (7 Nov 2026).',
   listTodaysSalesReceipts:
     'UNWIRED — T-526 on: the till screens list the day receipts through it; no T-525 door serves it. Remove this row when it lands (7 Nov 2026).',
   listPosQuarantine:

@@ -412,7 +412,7 @@ export function EditableRecordView({
             <DialogActions>
               <CheckSummary active={check?.active === true} summary={check?.summary ?? null} className="w-full text-left" />
               <button type="submit" className={PRIMARY} disabled={blocked} data-check-aware="true" aria-label={saveLabel} data-tip={saveLabel}>
-                <ActionIcon name="check" />
+                <ActionIcon name="save" />
               </button>
               <button type="button" className={SECONDARY} onClick={onCancel} aria-label="Cancel" data-tip="Cancel">
                 <ActionIcon name="close" />

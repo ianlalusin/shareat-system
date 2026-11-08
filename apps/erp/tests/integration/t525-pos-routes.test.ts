@@ -512,12 +512,17 @@ describe('GET /api/pos/state?since=N (R8)', () => {
     }
   });
 
-  it('with the tablet cookie the store is the pairing\'s: a storeId in the query cannot redirect it', async () => {
+  it("with the tablet cookie the store is the pairing's: a different storeId in the query is 403 (never answered from store A or B), and its own storeId, in any letter case, is 200", async () => {
     const f = await fixture();
     const session = await pinSession(f, f.counterId);
     const t = await openTable(f);
     const res = await getState(f, session, { query: `?storeId=${f.store2Id}&since=-1` });
-    expect(res.status, 'still store A: not 403, not store B').toBe(200);
-    expect(JSON.stringify(await res.json())).toContain(t.sessionId);
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { ok: boolean }).ok).toBe(false);
+    for (const query of ['?since=-1', `?storeId=${f.storeId.toUpperCase()}&since=-1`]) {
+      const same = await getState(f, session, { query });
+      expect(same.status, query).toBe(200);
+      expect(JSON.stringify(await same.json())).toContain(t.sessionId);
+    }
   });
 });

@@ -70,14 +70,12 @@ formatCoverageReport
 formatKitchenQty
 formatLogAmount
 formatLogDescription
-formatReceipt
 formatRefillSlip
 getActiveFake
 getCalendarWeatherIcon
 getGroupKey
 getKitchenTicketContribution
 getNonCentavoCount
-getSessionBill
 groupIntoFamilies
 hasFingerprint
 hasOtherActiveAdmin

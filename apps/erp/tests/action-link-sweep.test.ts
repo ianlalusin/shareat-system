@@ -515,9 +515,19 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1520 -> 1532, T-511 S5b rebased on 79966e8, 6 Nov 2026, BOSS approved: +12 controls on /channel-settlements/review (filters, buttons, forms, Previous/Next page), measured 1495 -> 1507 on its own base.
     // 1532 -> 1537, T-512 (T-511 S5c), 7 Nov 2026, re-measured after rebase on main (T-523 0238 present), BOSS approved: +5 compliant controls on the new /settings/business-rules screen (breadcrumb link, folded-history summary, change form value, date and reason fields).
     // 1537 -> 1540, T-544, 7 Nov 2026, re-measured by runCensus(): +3 compliant controls (the record page's back link, the overview's + Record settlement link-button, the tab strip's links); the FormModal trigger left the overview. FAIL/UNRESOLVED baselines unchanged.
+    // 1540 -> 1553, T-526 POS kiosk shell (+13 controls), re-measured on main, 7 Nov 2026, BOSS approved.
+    // 1553 -> 1557, T-526b (+4 controls), re-measured on main, 7 Nov 2026, BOSS approved.
+    // 1557 -> 1586, T-527 (+29 controls), re-measured on main, 7 Nov 2026, BOSS approved.
+    // 1586 -> 1587, T-527b (+1 controls), re-measured on main, 7 Nov 2026, BOSS approved.
+    // 1587 -> 1615, T-528 (+28 controls), re-measured on main, 7 Nov 2026, BOSS approved.
+    // 1615 -> 1618, +3 T-528c controls (Pay-blocked reason, Reprint, Done); BOSS approved
+    // 1618 -> 1619, +1 VAT details disclosure (T-528d); BOSS approved
+    // 1540 -> 1541, T-511 S6d, 8 Nov 2026, re-measured by runCensus(): +1 compliant control (the loan section's <summary> on /channel-settlements/record, 44px). FAIL/UNRESOLVED baselines unchanged.
+    // 1619 + S6d = 1620 after merging main into #196, 8 Nov 2026, BOSS approved.
     // 1540 -> 1514, T-550 (row 452): -26 controls, the two retired pages (/inventory/pos-map, /inventory/pos-usage) and the one ACTION_LINK on /inventory/usage/[id] that pointed at the retired pull page (now plain text); FAIL/UNRESOLVED moved as noted above; measured by runCensus().
     // 1514 -> 1515, T-550 (Ian, 8 Nov): the Void POS pull submit <button> (ConfirmDestructive) moved onto /inventory/usage/[id]; net vs 1540 is -25; FAIL/UNRESOLVED unmoved at 113/49; measured by runCensus(); pending BOSS approval.
-    expect(results.length).toBe(1515);
+    // 1620 - 25 (T-550) = 1595 after merging main into #207, 8 Nov 2026, BOSS approved.
+    expect(results.length).toBe(1595);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
