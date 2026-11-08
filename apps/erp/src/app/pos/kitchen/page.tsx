@@ -1,12 +1,12 @@
 import { requirePageAccess, StoreNotAvailable } from '@/lib/page-access';
 import { Page } from '@/components/shell/Page';
-import { SlicePlaceholder } from '../_shell/SlicePlaceholder';
+import { Kitchen } from '../_kitchen/Kitchen';
 import { storeRefused } from '../lib';
 
 export const metadata = { title: 'Kitchen — Shareat POS' };
 export const dynamic = 'force-dynamic';
 
-/** T-526 R1: /pos/kitchen needs `serve_pos_ticket`. A requested `?storeId` must be a store this person holds it at (a layout cannot read searchParams). */
+/** T-526 R1: /pos/kitchen needs `serve_pos_ticket`. A requested `?storeId` must be a store this person holds it at (a layout cannot read searchParams). T-529: the screen itself. */
 export default async function PosKitchenPage({ searchParams }: { searchParams: Promise<{ storeId?: string }> }) {
   const { actor, refusal } = await requirePageAccess('/pos/kitchen');
   if (refusal) return refusal;
@@ -14,7 +14,7 @@ export default async function PosKitchenPage({ searchParams }: { searchParams: P
   if (await storeRefused(actor, storeId, 'serve_pos_ticket')) return <StoreNotAvailable />;
   return (
     <Page density="table">
-      <SlicePlaceholder title="Kitchen" message="Kitchen is coming in the next update." />
+      <Kitchen />
     </Page>
   );
 }

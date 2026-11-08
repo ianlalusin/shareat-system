@@ -11,7 +11,7 @@ import { currentSession, readPosTabletToken } from '@/lib/session';
 import { requirePageAccess } from '@/lib/page-access';
 import { withOrgPrincipal } from '../expenses/lib';
 import { landingForActor } from '../sign-in/landing';
-import { POS_CAPABILITIES, effectiveStore, posShellFacts } from './lib';
+import { POS_SHELL_CAPABILITIES, effectiveStore, posShellFacts } from './lib';
 import { PosShell } from './_shell/PosShell';
 import { canOpenGatedErpScreen } from './_shell/erp-access';
 
@@ -34,7 +34,7 @@ export default async function PosLayout({ children }: { children: React.ReactNod
   return (
     <PosShell
       person={{ personId: actor.personId, displayName: facts.displayName }}
-      heldPos={POS_CAPABILITIES.filter((c) => held.has(c))}
+      heldPos={POS_SHELL_CAPABILITIES.filter((c) => held.has(c))}
       stores={facts.stores}
       pairedStoreId={pairedStoreId}
       erpHref={canOpenGatedErpScreen(held as ReadonlySet<string>) ? await landingForActor(actor, '') : null}
