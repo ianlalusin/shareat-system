@@ -205,7 +205,7 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
   //   for a const's own initializer) and Button's variant lookup was an ElementAccessExpression
   //   outside `resolveExpr`'s known shapes. Both were fixed in the components; only the
   //   genuinely-structural remainder was accepted here.
-  it('accepted-baseline totals: 115 FAIL / 50 UNRESOLVED', () => {
+  it('accepted-baseline totals: 113 FAIL / 49 UNRESOLVED', () => {
     // 62 -> 63 UNRESOLVED, T-386 S4 2026-10-09: the rename "use the suggested code" checkbox on app/items/ItemCodeField.tsx
     // (an intrinsic checkbox box; baselined in touch-target-baseline.json per Ian's §6.1 ruling).
     // 63 -> 66 UNRESOLVED, T-387 S3 2026-10-10. +3: the kit's new native `<select>` (Select.tsx) and `<textarea>` (Textarea.tsx)
@@ -237,7 +237,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 49 -> 50 UNRESOLVED, merge of main + T-193: re-measured; src/app/page.tsx gov-tile 'Set it under Employer numbers' inline Link (font size unresolvable), baseline entry added.
     // 116 -> 115 FAIL, T-520 (5 Nov, BOSS approved): /ap's invoice table replaced the amber banner's 20px inline link; baseline entry app/ap/page.tsx removed. UNRESOLVED unmoved at 51.
     // 51 -> 50 UNRESOLVED, T-511 S6a: app/channel-settlements/SettlementForm.tsx lost its intrinsic checkbox (baseline entry removed); FAIL unmoved at 115; re-measured after rebase on main (0238-0241 present), 7 Nov 2026, BOSS approved.
-    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 115, unresolved: 50 });
+    // 115 -> 113 FAIL, 50 -> 49 UNRESOLVED, T-550 (row 452): the retired /inventory/pos-map and /inventory/pos-usage pages left the baseline (two 20px FAIL entries, one intrinsic-checkbox UNRESOLVED entry).
+    expect({ fail: failResults.length, unresolved: unresolvedResults.length }).toEqual({ fail: 113, unresolved: 49 });
   });
 
   // Audit finding F2 (T-334 slice 3, 2026-09-23, blocking): FAIL and UNRESOLVED are the only
@@ -514,7 +515,9 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1520 -> 1532, T-511 S5b rebased on 79966e8, 6 Nov 2026, BOSS approved: +12 controls on /channel-settlements/review (filters, buttons, forms, Previous/Next page), measured 1495 -> 1507 on its own base.
     // 1532 -> 1537, T-512 (T-511 S5c), 7 Nov 2026, re-measured after rebase on main (T-523 0238 present), BOSS approved: +5 compliant controls on the new /settings/business-rules screen (breadcrumb link, folded-history summary, change form value, date and reason fields).
     // 1537 -> 1540, T-544, 7 Nov 2026, re-measured by runCensus(): +3 compliant controls (the record page's back link, the overview's + Record settlement link-button, the tab strip's links); the FormModal trigger left the overview. FAIL/UNRESOLVED baselines unchanged.
-    expect(results.length).toBe(1540);
+    // 1540 -> 1514, T-550 (row 452): -26 controls, the two retired pages (/inventory/pos-map, /inventory/pos-usage) and the one ACTION_LINK on /inventory/usage/[id] that pointed at the retired pull page (now plain text); FAIL/UNRESOLVED moved as noted above; measured by runCensus().
+    // 1514 -> 1515, T-550 (Ian, 8 Nov): the Void POS pull submit <button> (ConfirmDestructive) moved onto /inventory/usage/[id]; net vs 1540 is -25; FAIL/UNRESOLVED unmoved at 113/49; measured by runCensus(); pending BOSS approval.
+    expect(results.length).toBe(1515);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

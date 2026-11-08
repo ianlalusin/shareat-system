@@ -59,6 +59,7 @@ const LIFE = 'The remaining life has to be a whole number of months, from 1 to 6
 
 const ROWS: Record<string, Row> = {
   // ---- inventory
+  'inventory.voidPosUsagePull.reason': req('Say why this pull is being voided.'),
   'inventory.openCountSession.countedOn': date('The count date'),
   'inventory.recordCount.itemId': req('Choose the item that was counted.'),
   'inventory.recordCount.locationId': req('Choose the room it was counted in.'),
@@ -70,9 +71,6 @@ const ROWS: Record<string, Row> = {
   'inventory.createLocation.name': req('A room needs a name.'),
   'inventory.createLocation.typeId': req('Choose a room type.'),
   'inventory.setThreshold.threshold': optNum0('Low-stock threshold'),
-  'inventory.upsertPosItemMap.posItemKey': req('A map needs the POS item key.'),
-  'inventory.upsertPosItemMap.posItemName': req('A map needs the POS item name.'),
-  'inventory.voidPosUsagePull.reason': req('Say why this pull is being voided.'),
   'inventory.createProductionDraft.producedOn': date('The production date'),
   'inventory.voidProduction.reason': req('A void needs a reason.'),
   'inventory.refundSupplierCredit.amount': {

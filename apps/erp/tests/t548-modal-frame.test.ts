@@ -32,7 +32,6 @@ export const SWEPT_FILES: readonly string[] = [
   'app/inventory/counts/page.tsx',
   'app/inventory/deliveries/NewDeliveryForm.tsx',
   'app/inventory/locations/page.tsx',
-  'app/inventory/pos-map/page.tsx',
   'app/inventory/production/page.tsx',
   'app/inventory/transfers/NewTransferForm.tsx',
   'app/inventory/usage/NewUsageForm.tsx',

@@ -167,6 +167,18 @@ const EXEMPT: Record<string, string> = {
     'INTERNAL — `createSalesDay` (`sales-days/create.ts:87`) and `editSalesDay` (`sales-days/edit.ts:45`) call it (T-375 S3, R13) ' +
     'to refuse typed figures on a store linked to POS. A gate inside those two, not a human boundary of its own.',
 
+  // ---- T-550 — the POS usage pull and POS item mapping pages are retired (row 452); the domain and the data stay ----
+  buildPlan:
+    'UNWIRED — T-550: page retired (row 452); domain kept until the cutover decision.',
+  finalizeSections:
+    'UNWIRED — T-550: page retired (row 452); domain kept until the cutover decision.',
+  upsertPosItemMap:
+    'UNWIRED — T-550: page retired (row 452); domain kept until the cutover decision.',
+  requestMap:
+    'UNWIRED — T-550: page retired (row 452); domain kept until the cutover decision.',
+  decideMapRequest:
+    'UNWIRED — T-550: page retired (row 452); domain kept until the cutover decision.',
+
   // ---- 4. unwired: nothing calls it, and that is the gap -------------------------------------
   //
   // ⭐ Four rows lived here for exactly one commit. `voidCollection`, `writeOffCharge`,

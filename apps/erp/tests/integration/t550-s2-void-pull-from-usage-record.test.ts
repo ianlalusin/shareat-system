@@ -2,20 +2,13 @@ import { config } from 'dotenv';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 /**
- * T-374 S7 (DEF-578) T12 - `voidPullAction` (apps/erp/src/app/inventory/pos-usage/actions.ts): the form's
- * door to `voidPosUsagePull`. `docs/tasks/374-money-push-follow-ups.md` section S7.
- *
- * TESTER, not BUILDER. RED on HEAD because `voidPullAction` is not exported from the actions file
- * ("voidPullAction is not a function"). The domain half (all-or-none, dating, locks, refusals) is
- * `packages/domain/tests/integration/t374-s7-void-pos-usage-pull.test.ts`.
- *
- * ## What the spec leaves open, pinned so the builder has one reading (a question to the tester, not a test edit)
- *  - the form fields are `storeId`, `salesDayId`, `pullId`, `reason` (the first three are the names every other
- *    action in this file reads; `reason` is the one new field, "a required reason");
- *  - success redirects to `/inventory/pos-usage?...&ok=Pull voided — {n} usage record(s) reversed. The day can be
- *    pulled again.` and a refusal to `...&error=<sentence>` with NO `ok`, exactly as the sibling actions do.
+ * T-550 (Ian, 8 Nov): the Void for a posted usage record that a live POS pull made now lives on the usage record page
+ * (`apps/erp/src/app/inventory/usage/[id]/page.tsx`), through `voidPullUsageAction` (inventory/usage/actions.ts), which calls the
+ * existing `voidPosUsagePull`. Same capability (`void_usage_record`), same required reason and same approval record as the retired
+ * `voidPullAction`. TESTER over real Postgres and the real domain.
  */
 config({ path: '.env.local' });
 
@@ -42,7 +35,10 @@ vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 const ACTOR_HOLDER: { actor: { orgId: string; personId: string } | null } = { actor: null };
 vi.mock('../../src/lib/session', () => ({
   requireActor: vi.fn(async () => ACTOR_HOLDER.actor!),
+  requireSession: vi.fn(async () => ({ actor: ACTOR_HOLDER.actor, sessionId: 'session-1', credentialKind: 'pin' as const, storeId: null, expiresAt: new Date('2099-01-01') })),
 }));
+vi.mock('../../src/lib/page-access', () => ({ requirePageAccess: async () => ({ actor: ACTOR_HOLDER.actor, refusal: null }) }));
+vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
 // the actions file imports the bare `@/lib/constraint-messages` specifier the root vitest config does not resolve
 vi.mock('@/lib/constraint-messages', async () => await import('../../src/lib/constraint-messages'));
 
@@ -153,13 +149,16 @@ async function fixture(hint: string, opts: { legacy?: boolean } = {}) {
   }
   // T-412: voiding a pull is Tier P: the manager acts, the org's administrator approves with their own PIN.
   const pin = await givePin(sql, { orgId, storeId, personId: adminId });
-  return { orgId, storeId, dayId, pullId: built.pullId, manager, nobody: actor(orgId, nobodyId), managerId, pin };
+  const [line] = await sql<{ rid: string }[]>`select usage_record_id as rid from pos_usage_pull_lines where pull_id = ${built.pullId} and usage_record_id is not null limit 1`;
+  const [anyRec] = await sql<{ rid: string }[]>`select id as rid from stock_usage_records where org_id = ${orgId} limit 1`;
+  const recordId = (line ?? anyRec)!.rid;
+  return { orgId, storeId, dayId, recordId, pullId: built.pullId, manager, nobody: actor(orgId, nobodyId), managerId, pin };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 
 function form(f: Fixture, over: Record<string, string | undefined> = {}): FormData {
   const fd = new FormData();
-  const fields: Record<string, string | undefined> = { storeId: f.storeId, salesDayId: f.dayId, pullId: f.pullId, reason: 'POS corrected two receipts', adminPin: f.pin, ...over };
+  const fields: Record<string, string | undefined> = { recordId: f.recordId, reason: 'POS corrected two receipts', adminPin: f.pin, ...over };
   for (const [k, v] of Object.entries(fields)) if (v !== undefined) fd.set(k, v);
   return fd;
 }
@@ -167,9 +166,9 @@ function form(f: Fixture, over: Record<string, string | undefined> = {}): FormDa
 /** Runs the action; returns where it redirected, as a path and its query. */
 async function run(f: Fixture, who: Actor, fd: FormData): Promise<{ path: string; q: URLSearchParams }> {
   ACTOR_HOLDER.actor = who;
-  const actions = (await import('../../src/app/inventory/pos-usage/actions')) as unknown as Record<string, unknown>;
-  const fn = actions.voidPullAction;
-  if (typeof fn !== 'function') throw new Error('voidPullAction is not exported from inventory/pos-usage/actions.ts');
+  const actions = (await import('../../src/app/inventory/usage/actions')) as unknown as Record<string, unknown>;
+  const fn = actions.voidPullUsageAction;
+  if (typeof fn !== 'function') throw new Error('voidPullUsageAction is not exported from inventory/usage/actions.ts');
   try {
     await (fn as (fd: FormData) => Promise<void>)(fd);
   } catch (err) {
@@ -179,73 +178,84 @@ async function run(f: Fixture, who: Actor, fd: FormData): Promise<{ path: string
     }
     throw err;
   }
-  throw new Error('voidPullAction returned without redirecting');
+  throw new Error('voidPullUsageAction returned without redirecting');
 }
-const pullStatus = async (id: string) => (await sql<{ status: string }[]>`select status from pos_usage_pulls where id = ${id}`)[0]!.status;
+const pullRow = async (id: string) =>
+  (await sql<{ status: string; void_reason: string | null; voided_by: string | null }[]>`select status, void_reason, voided_by from pos_usage_pulls where id = ${id}`)[0]!;
 const postedRecords = async (f: Fixture) =>
   Number((await sql<{ n: string }[]>`select count(*)::text as n from stock_usage_records where org_id = ${f.orgId} and status = 'posted'`)[0]!.n);
+const text = (html: string): string => html.replace(/&#x27;/g, "'").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&');
 
-const draftsOfDay = async (f: Fixture) =>
-  Number((await sql<{ n: string }[]>`select count(*)::text as n from stock_usage_records where org_id = ${f.orgId} and status = 'draft'`)[0]!.n);
+async function detailHtml(f: Fixture, who: Actor): Promise<string> {
+  ACTOR_HOLDER.actor = who;
+  const Page = (await import('../../src/app/inventory/usage/[id]/page')).default as (p: unknown) => Promise<unknown>;
+  return text(renderToStaticMarkup((await Page({ params: Promise.resolve({ id: f.recordId }), searchParams: Promise.resolve({}) })) as never));
+}
 
-describe('T12 - voidPullAction', () => {
-  it('(T-401 S6) a pull whose draft is still UNPOSTED: voiding it succeeds (an ok banner, no error), removes the draft, and stock stays untouched', async () => {
-    const f = await fixture('draftonly', { legacy: false });
-    expect(await draftsOfDay(f), 'control: finalize made one draft').toBe(1);
-    expect(await postedRecords(f), 'control: nothing posted').toBe(0);
-    const r = await run(f, f.manager, form(f));
-    expect(r.q.get('error')).toBeNull();
-    expect(r.q.get('ok')).toBeTruthy();
-    expect(await pullStatus(f.pullId)).toBe('void');
-    expect(await draftsOfDay(f), 'the draft goes with the pull').toBe(0);
-    const [m] = await sql<{ n: string }[]>`select count(*)::text as n from stock_movements where org_id = ${f.orgId} and quantity < 0`;
-    expect(Number(m!.n)).toBe(0);
-  });
-
-  it('ok banner with the count; the pull is void; the loader shows no live pull for the day', async () => {
+describe('T-550 - void a POS pull from the posted usage record page', () => {
+  it('a person with the capability voids a posted pull usage: ok banner, whole pull reversed, reason + voider on the pull, approval audit row', async () => {
     const f = await fixture('ok');
-    expect(await postedRecords(f), 'control: the (legacy) finalized pull has one posted usage record').toBe(1);
-    const { findLivePull } = await import('../../src/app/inventory/pos-usage/lib');
-    expect(await findLivePull(f.orgId, f.storeId, f.dayId), 'control: before the void the day has a live pull').not.toBeNull();
+    expect(await postedRecords(f), 'control: the pull made one posted usage record').toBe(1);
+    expect(await detailHtml(f, f.manager), 'control: the page offers the Void').toContain('Void POS pull');
 
     const r = await run(f, f.manager, form(f));
-    expect(r.path).toBe('/inventory/pos-usage');
+    expect(r.path).toBe(`/inventory/usage/${f.recordId}`);
     expect(r.q.get('error')).toBeNull();
-    expect(r.q.get('store')).toBe(f.storeId);
     expect(r.q.get('ok')).toBe('Pull voided — 1 usage record(s) reversed. The day can be pulled again.');
 
-    expect(await pullStatus(f.pullId)).toBe('void');
+    const pull = await pullRow(f.pullId);
+    expect(pull.status).toBe('void');
+    expect(pull.void_reason).toBe('POS corrected two receipts');
+    expect(pull.voided_by).toBe(f.managerId);
     expect(await postedRecords(f)).toBe(0);
-    expect(await findLivePull(f.orgId, f.storeId, f.dayId), 'the loader no longer offers the voided pull as live').toBeNull();
+    const audit = await sql<{ actor_person_id: string; after: { capability: string; entityType: string } }[]>`
+      select actor_person_id, after from audit_log where org_id = ${f.orgId} and action = 'destructive.approved' and entity_id = ${f.pullId}`;
+    expect(audit).toHaveLength(1);
+    expect(audit[0]!.actor_person_id).toBe(f.managerId);
+    expect(audit[0]!.after).toMatchObject({ capability: 'void_usage_record', entityType: 'pos_usage_pull' });
   });
 
-  it('a blank reason -> ?error= with the sentence (no ok, no uuid); the pull is untouched', async () => {
-    const f = await fixture('blank');
-    const r = await run(f, f.manager, form(f, { reason: '   ' }));
-    expect(r.q.get('ok')).toBeNull();
-    expect(r.q.get('error')).toBe('Say why this pull is being voided.');
-    expect(r.q.get('error')).not.toMatch(UUID);
-    expect(await pullStatus(f.pullId)).toBe('finalized');
-    expect(await postedRecords(f)).toBe(1);
-    // control: the same form with a reason works
-    const ok = await run(f, f.manager, form(f));
-    expect(ok.q.get('ok')).not.toBeNull();
-  });
-
-  it('a person without void_usage_record -> ?error= (no ok); nothing reversed', async () => {
+  it('a person without void_usage_record is refused (an error, no ok); the pull and its usage stay', async () => {
     const f = await fixture('denied');
     const r = await run(f, f.nobody, form(f));
     expect(r.q.get('ok')).toBeNull();
     expect(r.q.get('error')).toBeTruthy();
-    expect(await pullStatus(f.pullId)).toBe('finalized');
+    expect((await pullRow(f.pullId)).status).toBe('finalized');
     expect(await postedRecords(f)).toBe(1);
   });
 
-  it('a second void -> ?error= "already voided" (no ok)', async () => {
-    const f = await fixture('twice');
+  it('a missing or blank reason is refused with the sentence; nothing reversed; with a reason the same form works', async () => {
+    const f = await fixture('blank');
+    for (const reason of [undefined, '   ']) {
+      const r = await run(f, f.manager, form(f, { reason }));
+      expect(r.q.get('ok')).toBeNull();
+      expect(r.q.get('error')).toBe('Say why this pull is being voided.');
+      expect(r.q.get('error')).not.toMatch(UUID);
+    }
+    expect((await pullRow(f.pullId)).status).toBe('finalized');
+    expect(await postedRecords(f)).toBe(1);
     expect((await run(f, f.manager, form(f))).q.get('ok')).not.toBeNull();
-    const r = await run(f, f.manager, form(f, { reason: 'again' }));
+  });
+
+  it('a usage record that is not from a live pull is refused: no pull is voided', async () => {
+    const f = await fixture('nonpull');
+    await sql`update pos_usage_pulls set status = 'void', voided_at = now(), voided_by = ${f.managerId}, void_reason = 'test setup' where id = ${f.pullId}`;
+    const r = await run(f, f.manager, form(f));
     expect(r.q.get('ok')).toBeNull();
-    expect(r.q.get('error')).toBe('This POS usage pull was already voided.');
+    expect(r.q.get('error')).toBeTruthy();
+  });
+
+  it('the page shows Void POS pull only for a POSTED usage from a LIVE pull', async () => {
+    const posted = await fixture('showposted');
+    expect(await detailHtml(posted, posted.manager)).toContain('Void POS pull');
+
+    const draftOnly = await fixture('showdraft', { legacy: false });
+    expect(await detailHtml(draftOnly, draftOnly.manager), 'a draft (not posted) offers no pull void').not.toContain('Void POS pull');
+
+    const nonPull = await fixture('shownonpull');
+    await sql`update pos_usage_pulls set status = 'void', voided_at = now(), voided_by = ${nonPull.managerId}, void_reason = 'test setup' where id = ${nonPull.pullId}`;
+    const nonPullHtml = await detailHtml(nonPull, nonPull.manager);
+    expect(nonPullHtml, 'not from a live pull: no pull void').not.toContain('Void POS pull');
+    expect(nonPullHtml, 'it is an ordinary posted usage, so the ordinary Void shows').toContain('Void usage');
   });
 });

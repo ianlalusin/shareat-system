@@ -73,12 +73,12 @@ const rows: Row[] = [
   { file: 'app/expenses/[id]/page.tsx', tier: 'P', label: 'Void expense', danger: true, visible: 'Void expense', action: 'voidExpenseAction', actionFile: 'app/expenses/actions.ts', mutation: 'voidExpense' },
   { file: 'app/expenses/recurring/page.tsx', tier: 'W', label: 'Delete template', danger: true, action: 'deleteTemplateAction', actionFile: 'app/expenses/recurring/actions.ts' }, // T-418: a draft delete is a Tier W step (Ian row 348)
   { file: 'app/fixed-assets/[id]/page.tsx', tier: 'P', label: 'Dispose', danger: true, visible: 'Dispose this asset', action: 'disposeAssetAction', actionFile: 'app/fixed-assets/actions.ts', mutation: 'disposeAsset' },
-  { file: 'app/inventory/pos-usage/page.tsx', tier: 'P', label: 'Void this pull', danger: true, visible: 'Void this pull', action: 'voidPullAction', actionFile: 'app/inventory/pos-usage/actions.ts', mutation: 'voidPosUsagePull' },
   { file: 'app/inventory/production/[id]/page.tsx', tier: 'P', label: 'Void production', danger: true, visible: 'Void production', action: 'voidProductionAction', actionFile: 'app/inventory/production/actions.ts', mutation: 'voidProduction' },
   { file: 'app/inventory/returns/page.tsx', tier: 'P', label: 'Void supplier return', danger: true, visible: 'Void supplier return', action: 'voidReturnAction', actionFile: 'app/inventory/returns/actions.ts', mutation: 'voidReturn' },
   { file: 'app/inventory/transfers/page.tsx', tier: 'P', label: 'Void transfer', danger: true, visible: 'Void transfer', action: 'voidTransferAction', actionFile: 'app/inventory/transfers/actions.ts', mutation: 'voidTransfer' },
   { file: 'app/inventory/usage/[id]/page.tsx', tier: 'W', label: 'Delete usage draft', danger: true, action: 'deleteUsageDraftAction', actionFile: 'app/inventory/usage/actions.ts' }, // T-418: a draft delete is a Tier W step (Ian row 348)
   { file: 'app/inventory/usage/[id]/page.tsx', tier: 'P', label: 'Void usage', danger: true, visible: 'Void usage', action: 'voidUsageAction', actionFile: 'app/inventory/usage/actions.ts', mutation: 'voidUsage' },
+  { file: 'app/inventory/usage/[id]/page.tsx', tier: 'P', label: 'Void POS pull', danger: true, visible: 'Void POS pull', action: 'voidPullUsageAction', actionFile: 'app/inventory/usage/actions.ts', mutation: 'voidPosUsagePull' }, // T-550: moved here from the retired /inventory/pos-usage page (Ian, 8 Nov)
   { file: 'app/liabilities/[id]/page.tsx', tier: 'P', label: 'Reverse liability entry', danger: true, visible: 'Reverse liability entry', action: 'reverseAction', actionFile: 'app/liabilities/actions.ts', mutation: 'reverseLiabilityEntry' },
   { file: 'app/loans/[id]/page.tsx', tier: 'P', label: 'Reverse loan entry', danger: true, visible: 'Reverse loan entry', action: 'reverseEntryAction', actionFile: 'app/loans/actions.ts', mutation: 'reverseLoanEntry' },
   { file: 'app/money-transfers/page.tsx', tier: 'P', label: 'Reverse money transfer', danger: true, visible: 'Reverse money transfer', action: 'voidMoneyTransferAction', actionFile: 'app/money-transfers/actions.ts', mutation: 'voidMoneyTransfer' },
@@ -219,11 +219,11 @@ const FORM_READ = /formData|\bfd\b|str\(|opt\(|requireId\(|\.get\(/;
 describe('the census arithmetic (green today: the literal map matches the spec + the audit-round conditionals)', () => {
   it('69 controls: P 33 (36 - the 3 T-418 draft deletes), R 19 (18 + T-464 Un-pair tablet), W 13 (10 + the 3 T-418 draft deletes), X 4; 64 are danger (2 conditional), in 50 files', () => {
     const by = (t: Tier) => rows.filter((r) => r.tier === t).length;
-    expect([by('P'), by('R'), by('W'), by('X')]).toEqual([34, 22, 13, 4]); // T-510 S3: +1 R (Retire hours, NEEDS BOSS APPROVAL 21 -> 22); T-508 S2b: +1 R (Retire station); T-418: three draft deletes moved P -> W; T-464: +1 R; T-505: +1 R (Revoke tablet link)
-    expect(rows).toHaveLength(73); // T-510 S3: +Retire hours (72 -> 73); T-505: +Revoke tablet link; T-464: +Un-pair tablet; T-193 S5: +Void statutory payment (P)
-    expect(rows.filter((r) => r.danger)).toHaveLength(68); // T-510 S3: 67 -> 68
+    expect([by('P'), by('R'), by('W'), by('X')]).toEqual([34, 22, 13, 4]); // T-550: P 34 -> 33 (the retired POS usage pull page's Void this pull; BOSS approved), then +1 (Void POS pull moved to usage/[id], net 34, pending BOSS approval); T-510 S3: +1 R (Retire hours, NEEDS BOSS APPROVAL 21 -> 22); T-508 S2b: +1 R (Retire station); T-418: three draft deletes moved P -> W; T-464: +1 R; T-505: +1 R (Revoke tablet link)
+    expect(rows).toHaveLength(73); // T-550: 73 -> 72 (BOSS approved), then +1 Void POS pull on usage/[id] (net 73, pending BOSS approval); T-510 S3: +Retire hours (72 -> 73); T-505: +Revoke tablet link; T-464: +Un-pair tablet; T-193 S5: +Void statutory payment (P)
+    expect(rows.filter((r) => r.danger)).toHaveLength(68); // T-550: 68 -> 67 (BOSS approved), then +1 Void POS pull (net 68, pending BOSS approval); T-510 S3: 67 -> 68
     expect(rows.filter((r) => r.conditional)).toHaveLength(2);
-    expect(new Set(rows.filter((r) => r.danger).map((r) => r.file)).size).toBe(54); // T-510 S3: 53 -> 54 (menu/DaypartsSection.tsx)
+    expect(new Set(rows.filter((r) => r.danger).map((r) => r.file)).size).toBe(53); // T-550: 54 -> 53 (app/inventory/pos-usage/page.tsx is gone; BOSS approved); T-510 S3: 53 -> 54 (menu/DaypartsSection.tsx)
   });
   it('every P / R row names its visible label (audit L8), and no two rows in one file share an action AND a label by accident', () => {
     for (const r of rows.filter((x) => x.tier === 'P' || x.tier === 'R')) {
@@ -305,7 +305,7 @@ describe('every file: ConfirmDestructive count by tier, and what is left bare (V
       const src = readFileSync(abs, 'utf8');
       total += count(src, DANGER) + confirmWindows(src).length;
     }
-    expect(total).toBe(73); // T-510 S3: 72 -> 73 (Retire hours); T-193 S5: +Void payment (statutory payments); T-505: +Revoke tablet link
+    expect(total).toBe(73); // T-550: 73 -> 72 (the retired POS usage pull page's Void this pull, BOSS approved), then +1 Void POS pull on usage/[id] (net 73, pending BOSS approval); T-510 S3: 72 -> 73 (Retire hours); T-193 S5: +Void payment (statutory payments); T-505: +Revoke tablet link
   });
 });
 
