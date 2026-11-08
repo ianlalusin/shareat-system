@@ -87,6 +87,20 @@ export interface ReceiptView {
   offline: boolean;
   /** True → the receipt carries the line `REPRINT`. */
   reprint: boolean;
+  /** The VAT split under TOTAL, computed by the caller (`priceSession`). `null` prints no VAT block. */
+  vat: null | {
+    /** False → the exempt line is labelled `SC/PWD SALES` (v1 rule). */
+    vatRegistered: boolean;
+    vatableSales: Money;
+    vatExemptSales: Money;
+    vatAmount: Money;
+    /** Already formatted by the caller from the database rate, e.g. `"12%"`. */
+    vatRateLabel: string;
+    /** `"0.00"` when there is no senior/PWD. */
+    vatRemovedForScPwd: Money;
+    /** The statutory percent only (vatRemovedForScPwd excluded), summed over the senior/PWD discounts, computed by the caller. `"0.00"` when there is none. VATable + VAT + VAT-exempt - this = TOTAL. */
+    scPwdDiscount: Money;
+  };
 }
 
 /** A kitchen ticket: one station's prep list for a sent round. */

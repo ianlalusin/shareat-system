@@ -9,7 +9,7 @@ import { kitchenRepo, menuRepo, type Tx } from '@shareat/db';
 import { loadLiveStoreOffers } from './live-offers';
 import { projectStoreMenu, type MenuSnapshot, type ProjectedStoreMenu } from './project';
 
-export async function loadStoreMenu(tx: Tx, orgId: string, storeId: string, at?: Date): Promise<ProjectedStoreMenu> {
+export async function loadStoreMenu(tx: Tx, orgId: string, storeId: string, at?: Date, opts?: { showWithdrawnStore?: boolean }): Promise<ProjectedStoreMenu> {
   const when = at ?? (await menuRepo.dbNow(tx));
   const [catalog, live, optionOffers, upcoming, stations, routes] = await Promise.all([
     menuRepo.catalogOfOrg(tx, orgId),
@@ -27,7 +27,7 @@ export async function loadStoreMenu(tx: Tx, orgId: string, storeId: string, at?:
     stations,
     routes,
   };
-  return projectStoreMenu(snapshot, storeId, when);
+  return projectStoreMenu(snapshot, storeId, when, opts);
 }
 
 /**

@@ -124,6 +124,48 @@
 }
 
 /*
+ * T-526 R1 (bible row 433) - the POS Kitchen screen is dark unless the viewer chose light. `/pos/kitchen/layout.tsx` decides on the server
+ * and puts `.pos-theme[data-theme]` on its wrapper; when that says dark, the SAME tokens as the block above apply to the whole page (top
+ * bar and body included), so the first paint is right with no script. ⛔ A copy of that block: `tests/t526-kitchen-token-sync.test.ts`
+ * fails when the two drift. (The block above cannot take a second selector: three suites match its selector text exactly.)
+ */
+:root:has(.pos-theme[data-theme='dark']) {
+  color-scheme: dark;
+
+  --canvas: #121110;
+  --surface: #1c1a18;
+  --surface-border: #34302b;
+  --workspace: var(--canvas);
+  --workspace-border: var(--surface-border);
+  --workspace-stripe: var(--canvas);
+  --field: #151412;
+  --field-border: #746b5f;
+  --ink: #f5efe4;
+  --muted: #a89f92;
+
+  --brand: #d40909; /* fill only, text uses --brand-ink */
+  --brand-ink: #ff7a70;
+
+  /* ADR-013 Amendment 5: #f87171 on #1c1a18 clears 4.5:1. Components keep using text-danger,
+     border-danger and bg-danger-surface; the theme swaps the value underneath them. */
+  --danger: #f87171;
+  --danger-surface: #2a0f0f;
+
+  --warning: #2b2210;
+  --warning-soft: #2b2210;
+  --warning-ink: #f4b942;
+
+  --success: #4ade80;
+  --success-soft: #0f2a1c;
+  --info: #93b4ff;
+  --info-soft: #142038;
+  --progress: #c4b5fd;
+  --progress-soft: #241b3d;
+  --closed: #aab4c2;
+  --closed-soft: #23262b;
+}
+
+/*
  * T-387 S1 — the logo is black ink on a transparent PNG, so on Grill Night's charcoal only the red
  * "S" survived (seen in the §9.4 screenshots). The dark board (docs/design/t387/brand-dark-grill-
  * night.dc.html) sits it on a cream disc; this does the same with the dark --ink, which is that
@@ -438,7 +480,7 @@
    hand-tuned; they are excluded here and must not be restyled by this rule. */
 @media (min-width: 768px) and (pointer: fine) {
   :is(.erp-page:not(:has([aria-label="Right now"])), .erp-dialog) :is(
-    [data-erp-control="single"]:not([type="file"]):not([type="checkbox"]):not([type="radio"]),
+    [data-erp-control="single"]:not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([data-erp-size="free"]),
     input:is(:not([type]), [type="text"], [type="email"], [type="tel"], [type="search"], [type="password"], [type="number"], [type="date"], [type="month"], [type="time"], [type="url"]),
     select,
     button:not(.erp-help-tip):not(.erp-icon-btn):not([data-erp-size="free"])

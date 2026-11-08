@@ -68,3 +68,39 @@ describe('T-528a — layout primitives', () => {
     expect(wrap('', 32)).toEqual(['']);
   });
 });
+
+// T-528b section 5 (absorbed into T-528). RED NOW FOR THE RIGHT REASON: justify overflows when the RIGHT value is long, and wrap drops leading spaces.
+describe('T-528b - justify and wrap never overflow, and keep an indent', () => {
+  it('justify never overflows: a 40-character right value at 32 columns puts the label on its own line, then the value, every line <= 32', () => {
+    const right = 'x'.repeat(40);
+    const lines = justify('TOTAL', right, 32);
+    expect(lines[0]).toBe('TOTAL');
+    for (const line of lines) expect(line.length).toBeLessThanOrEqual(32);
+    expect(lines[1]).toBe('x'.repeat(32)); // the value is cut with wrap, right-aligned (a full line is flush right)
+    expect(lines.slice(1).join('').replace(/\s/g, '')).toBe(right); // nothing lost
+    expect(lines[lines.length - 1]!.endsWith('x'.repeat(8))).toBe(true);
+  });
+
+  it('justify never overflows at any width with a long right value of several words', () => {
+    for (const cols of [32, 42, 48, 64]) {
+      for (const line of justify('Ref', 'GCASH 4012 889 213 4012 889 213 4012 889 213 4012 889 213', cols)) expect(line.length).toBeLessThanOrEqual(cols);
+    }
+  });
+
+  it('wrapped indented text keeps its indent: a long "  10% promo for regular guests (1)" at 32 columns, every continuation line starts with two spaces', () => {
+    const lines = justify('  10% promo for regular guests (1)', '-15.00', 32);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe('  10% promo for regular');
+    expect(lines[1]!.startsWith('  guests (1)')).toBe(true);
+    expect(lines[1]!.endsWith(' -15.00')).toBe(true);
+    for (const line of lines) expect(line.length).toBeLessThanOrEqual(32);
+  });
+
+  it('wrap itself keeps the leading spaces on every continuation line', () => {
+    const lines = wrap('  10% promo for regular guests (1)', 20);
+    expect(lines.length).toBeGreaterThan(1);
+    for (const line of lines.slice(1)) expect(line.startsWith('  ')).toBe(true);
+    for (const line of lines) expect(line.length).toBeLessThanOrEqual(20);
+    expect(lines.map((l) => l.trim()).join(' ')).toBe('10% promo for regular guests (1)');
+  });
+});
