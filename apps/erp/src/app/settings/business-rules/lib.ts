@@ -40,21 +40,22 @@ export async function rulesView(actor: Actor): Promise<RulesView> {
 
 type RuleUnit = BusinessRuleItem['unit'];
 
-/** '70.000000' -> '₱70.00' for money, '0.500000' -> '0.5%' for a percent, '16.000000' -> '4:00 p.m.' for an hour. Exact: text surgery, no floats. */
+/** '70.000000' -> '₱70.00' for money, '0.500000' -> '0.5%' for a percent, '16.000000' -> '4:00 p.m.' for an hour, '90.000000' -> '90 min' for minutes. Exact: text surgery, no floats. */
 export function showValue(unit: RuleUnit, text: string): string {
   if (unit === 'money') return peso(inputValue('money', text));
   if (unit === 'hour') {
     const h = Number(inputValue('hour', text));
     return `${h % 12 || 12}:00 ${['a.m.', 'p.m.'][Math.floor(h / 12)]}`;
   }
+  if (unit === 'minutes') return `${inputValue('minutes', text)} min`;
   return `${inputValue('percent', text)}%`;
 }
 
-/** What goes in the box: money at two places ('70.00'), a percent without trailing zeros ('0.5'), an hour as a whole number ('4'). */
+/** What goes in the box: money at two places ('70.00'), a percent without trailing zeros ('0.5'), an hour or minutes as a whole number ('4', '90'). */
 export function inputValue(unit: RuleUnit, text: string): string {
   const [whole = '0', frac = ''] = text.split('.');
   if (unit === 'money') return `${whole}.${frac.padEnd(2, '0').slice(0, 2)}`;
-  if (unit === 'hour') return whole;
+  if (unit === 'hour' || unit === 'minutes') return whole;
   const trimmed = frac.replace(/0+$/, '');
   return trimmed ? `${whole}.${trimmed}` : whole;
 }

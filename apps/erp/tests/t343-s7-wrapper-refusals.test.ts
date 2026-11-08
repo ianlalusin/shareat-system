@@ -58,18 +58,7 @@ vi.mock('@/lib/destructive', async () => (await import('./helpers/destructive-mo
 vi.mock('@shareat/auth', async (orig) => ({ ...(await import('./helpers/destructive-mocks')).withApprovalStub(await orig<object>()), can: vi.fn(async () => true) }));
 
 // Each file's own `./lib` (or, for credentials, `../../../expenses/lib`) — a minimal replacement,
-// never `importOriginal`: every one of these 11 files imports only `withOrgPrincipal` from it,
-// except pos-usage (`buildPlanForDay` too).
-vi.mock('../src/app/inventory/pos-map/lib', () => ({
-  withOrgPrincipal: async (_orgId: string, fn: (tx: unknown) => unknown) => fn({}),
-}));
-
-const buildPlanForDay = vi.fn<(...args: unknown[]) => Promise<unknown>>();
-vi.mock('../src/app/inventory/pos-usage/lib', () => ({
-  buildPlanForDay: (...args: unknown[]) => buildPlanForDay(...args),
-  withOrgPrincipal: async (_orgId: string, fn: (tx: unknown) => unknown) => fn({}),
-}));
-
+// never `importOriginal`: every one of these files imports only `withOrgPrincipal` from it.
 vi.mock('../src/app/inventory/production/lib', () => ({
   withOrgPrincipal: async (_orgId: string, fn: (tx: unknown) => unknown) => fn({}),
 }));
@@ -113,10 +102,6 @@ vi.mock('../src/app/attendance/terminals/lib', () => ({
 // One `@shareat/domain` mock, module-wide — exactly the functions these 11 files' exercised call
 // sites use. Untyped `vi.fn()` + spread wrapping throughout (S6b/S5.5m precedent: an inline typed
 // implementation pins a zero-arg signature and TS2556s on the spread).
-const upsertPosItemMap = vi.fn();
-const decideMapRequest = vi.fn();
-const requestMap = vi.fn();
-const finalizeSections = vi.fn();
 const createProductionDraft = vi.fn();
 const postProduction = vi.fn();
 const editPostedProduction = vi.fn();
@@ -140,10 +125,6 @@ const mintTerminalToken = vi.fn();
 
 vi.mock('@shareat/domain', () => ({
   assertFieldRules: () => ({}),
-  upsertPosItemMap: (...args: unknown[]) => upsertPosItemMap(...args),
-  decideMapRequest: (...args: unknown[]) => decideMapRequest(...args),
-  requestMap: (...args: unknown[]) => requestMap(...args),
-  finalizeSections: (...args: unknown[]) => finalizeSections(...args),
   createProductionDraft: (...args: unknown[]) => createProductionDraft(...args),
   postProduction: (...args: unknown[]) => postProduction(...args),
   editPostedProduction: (...args: unknown[]) => editPostedProduction(...args),
@@ -213,91 +194,6 @@ async function authErr(capability: string, S: string): Promise<InstanceType<type
 }
 
 const rows: Row[] = [
-  {
-    file: 'inventory/pos-map',
-    capability: 'manage_pos_map',
-    run: async (S) => {
-      upsertPosItemMap.mockRejectedValueOnce(await authErr('manage_pos_map', S));
-      const { upsertPosItemMapAction } = await import('../src/app/inventory/pos-map/actions');
-      const fd = new FormData();
-      fd.set('storeId', 'store-1');
-      fd.set('mode', 'direct');
-      const to = await expectRedirectTo(() => upsertPosItemMapAction(fd));
-      return errorOf(to)!;
-    },
-  },
-  {
-    file: 'inventory/pos-map',
-    capability: 'request_pos_map',
-    run: async (S) => {
-      upsertPosItemMap.mockRejectedValueOnce(await authErr('request_pos_map', S));
-      const { upsertPosItemMapAction } = await import('../src/app/inventory/pos-map/actions');
-      const fd = new FormData();
-      fd.set('storeId', 'store-1');
-      fd.set('mode', 'no_stock');
-      const to = await expectRedirectTo(() => upsertPosItemMapAction(fd));
-      return errorOf(to)!;
-    },
-  },
-  {
-    file: 'inventory/pos-map',
-    capability: 'decide_pos_map_request',
-    run: async (S) => {
-      decideMapRequest.mockRejectedValueOnce(await authErr('decide_pos_map_request', S));
-      const { decideMapRequestAction } = await import('../src/app/inventory/pos-map/actions');
-      const fd = new FormData();
-      fd.set('storeId', 'store-1');
-      fd.set('requestId', 'req-1');
-      fd.set('decision', 'approved');
-      const to = await expectRedirectTo(() => decideMapRequestAction(fd));
-      return errorOf(to)!;
-    },
-  },
-  {
-    file: 'inventory/pos-usage',
-    capability: 'record_stock_movement',
-    run: async (S) => {
-      buildPlanForDay.mockRejectedValueOnce(await authErr('record_stock_movement', S));
-      const { buildPlanAction } = await import('../src/app/inventory/pos-usage/actions');
-      const fd = new FormData();
-      fd.set('storeId', 'store-1');
-      fd.set('salesDayId', 'sd-1');
-      fd.set('locationId', 'loc-1');
-      const to = await expectRedirectTo(() => buildPlanAction(fd));
-      return errorOf(to)!;
-    },
-  },
-  {
-    file: 'inventory/pos-usage',
-    capability: 'finalize_pos_usage_pull',
-    run: async (S) => {
-      finalizeSections.mockRejectedValueOnce(await authErr('finalize_pos_usage_pull', S));
-      const { finalizeSectionAction } = await import('../src/app/inventory/pos-usage/actions');
-      const fd = new FormData();
-      fd.set('storeId', 'store-1');
-      fd.set('salesDayId', 'sd-1');
-      fd.set('pullId', 'pull-1');
-      fd.set('section', 'direct');
-      const to = await expectRedirectTo(() => finalizeSectionAction(fd));
-      return errorOf(to)!;
-    },
-  },
-  {
-    file: 'inventory/pos-usage',
-    capability: 'request_pos_map',
-    run: async (S) => {
-      requestMap.mockRejectedValueOnce(await authErr('request_pos_map', S));
-      const { requestMapFromPullAction } = await import('../src/app/inventory/pos-usage/actions');
-      const fd = new FormData();
-      fd.set('storeId', 'store-1');
-      fd.set('salesDayId', 'sd-1');
-      fd.set('pullId', 'pull-1');
-      fd.set('posItemKey', 'key-1');
-      fd.set('posItemName', 'Name');
-      const to = await expectRedirectTo(() => requestMapFromPullAction(fd));
-      return errorOf(to)!;
-    },
-  },
   {
     file: 'inventory/production',
     capability: 'record_stock_movement',
@@ -785,47 +681,12 @@ describe('K1 (⛔) — a non-presentable error still hits its kept local branch,
 });
 
 // ===========================================================================================
-// K2 (⛔ green now) — one row per emptied file (6): a plain, non-presentable Error with a UUID in
+// K2 (⛔ green now) — one row per emptied file (4; pos-map and pos-usage retired by T-550): a plain, non-presentable Error with a UUID in
 // it renders exactly the SHARED errorMessage, with no UUID — the fallback these files keep once
 // their local bypass is gone is the one they already fall through to today.
 // ===========================================================================================
 
 describe('K2 (⛔) — an emptied file’s fallback already equals the shared errorMessage, no UUID', () => {
-  it(
-    'pos-map',
-    async () => {
-      upsertPosItemMap.mockRejectedValueOnce(new Error(`upsertPosItemMap: ${U} text`));
-      const { upsertPosItemMapAction } = await import('../src/app/inventory/pos-map/actions');
-      const { errorMessage } = await import('../src/lib/constraint-messages');
-      const fd = new FormData();
-      fd.set('storeId', 'store-1');
-      fd.set('mode', 'direct');
-      const to = await expectRedirectTo(() => upsertPosItemMapAction(fd));
-      const error = errorOf(to)!;
-      expect(error).toBe(errorMessage(new Error(`upsertPosItemMap: ${U} text`)));
-      expect(error).not.toContain(U);
-    },
-    30000,
-  );
-
-  it(
-    'pos-usage',
-    async () => {
-      buildPlanForDay.mockRejectedValueOnce(new Error(`buildPlanForDay: ${U} text`));
-      const { buildPlanAction } = await import('../src/app/inventory/pos-usage/actions');
-      const { errorMessage } = await import('../src/lib/constraint-messages');
-      const fd = new FormData();
-      fd.set('storeId', 'store-1');
-      fd.set('salesDayId', 'sd-1');
-      fd.set('locationId', 'loc-1');
-      const to = await expectRedirectTo(() => buildPlanAction(fd));
-      const error = errorOf(to)!;
-      expect(error).toBe(errorMessage(new Error(`buildPlanForDay: ${U} text`)));
-      expect(error).not.toContain(U);
-    },
-    30000,
-  );
-
   it(
     'staff/[employmentId]/credentials',
     async () => {

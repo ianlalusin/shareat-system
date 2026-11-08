@@ -68,6 +68,20 @@ describe('T-539 registry - the two POS keys', () => {
     });
   });
 
+  it('pos.table_warn_minutes (S3): minutes, default 90, bounds 1..600, namespace pos, admin capability, exact label and help [kills: a wrong default, unit or bound]', () => {
+    expect(isBusinessRuleKey('pos.table_warn_minutes')).toBe(true);
+    expect(def('pos.table_warn_minutes')).toMatchObject({
+      label: 'Minutes before a table tile turns red',
+      help: 'A table seated longer than this shows a red time bar on the POS Orders screen, so staff check on it.',
+      unit: 'minutes',
+      default: '90',
+      min: '1',
+      max: '600',
+      namespace: 'pos',
+      capability: 'manage_business_rules',
+    });
+  });
+
   it('the help texts say what the number does, in the spec words [kills: a help that drifted from the spec]', () => {
     expect(def('pos.senior_pwd_discount_percent')!.help).toBe(
       'The discount the law gives a senior citizen or a person with disability on their own share of the bill, after VAT is taken out of that share. The law sets it at 20. Change it only when the law changes.',
@@ -101,6 +115,40 @@ describe('T-539 registry - the two POS keys', () => {
   });
 });
 
+// `minutes()` is the S3 API under test.
+const TABLE: BusinessRuleKey = 'pos.table_warn_minutes';
+const minutesOf = (value: string) => buildRuleBook([row(TABLE, value, '2026-01-01', 1)]).valueOn(TABLE, '2026-11-06');
+
+describe('T-539 S3 rule book - minutes()', () => {
+  it('a minutes rule with no row answers its default as the whole number 90, unit minutes [kills: minutes() missing; a float; a wrong default]', () => {
+    const v = buildRuleBook([]).valueOn(TABLE, '2026-11-06');
+    expect(v.unit).toBe('minutes');
+    expect(v.minutes()).toBe(90);
+    expect(typeof v.minutes()).toBe('number');
+  });
+
+  it('a stored row wins and is read exactly: 1, 30, 600 [kills: an off-by-one at either end]', () => {
+    expect(minutesOf('1.000000').minutes()).toBe(1);
+    expect(minutesOf('30.000000').minutes()).toBe(30);
+    expect(minutesOf('600.000000').minutes()).toBe(600);
+  });
+
+  it('minutes() throws on a stored 30.5 or 30.000001, never rounding [kills: truncating a fraction of a minute]', () => {
+    expect(minutesOf('30').minutes()).toBe(30); // control
+    for (const bad of ['30.5', '30.500000', '30.000001']) refuses(() => minutesOf(bad).minutes());
+  });
+
+  it('minutes() throws on money, percent and hour rules; money, percent and hour conversions throw on a minutes rule [kills: minutes() accepting any unit]', () => {
+    const book = buildRuleBook([]);
+    expect(book.valueOn(TABLE, '2026-11-06').minutes()).toBe(90); // control
+    for (const k of [VAT, SC, HOUR, FLOOR]) refuses(() => book.valueOn(k, '2026-11-06').minutes());
+    const v = book.valueOn(TABLE, '2026-11-06');
+    refuses(() => v.centavos());
+    refuses(() => v.basisPoints());
+    refuses(() => (v as unknown as WithHour).hour());
+  });
+});
+
 describe('T-539 rule book - hour() and the POS percent', () => {
   it('an hour rule with no row answers its default as the whole number 4, unit hour [kills: hour() missing; a float]', () => {
     const v = buildRuleBook([]).valueOn(HOUR, '2026-11-06');
@@ -126,6 +174,7 @@ describe('T-539 rule book - hour() and the POS percent', () => {
   it('hour() throws on a percent rule and on a money rule [kills: hour() accepting any unit]', () => {
     expect(hourOf('4').hour()).toBe(4); // control: hour() exists and works on an hour rule
     const book = buildRuleBook([]);
+    refuses(() => (book.valueOn(TABLE, '2026-11-06') as unknown as WithHour).hour());
     refuses(() => (book.valueOn(VAT, '2026-11-06') as unknown as WithHour).hour());
     refuses(() => (book.valueOn(SC, '2026-11-06') as unknown as WithHour).hour());
     refuses(() => (book.valueOn(FLOOR, '2026-11-06') as unknown as WithHour).hour());

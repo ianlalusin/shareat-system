@@ -21,6 +21,7 @@ export interface PosRules {
   readonly scPwdPercentBasisPoints: bigint;
   /** The Manila hour a business day starts at (4 = 04:00). */
   readonly businessDayStartHour: number;
+  readonly tableWarnMinutes: number;
 }
 export interface PosDeps {
   readonly readRules?: (tx: Tx, orgId: string, businessDate: string) => Promise<PosRules>;

@@ -373,8 +373,8 @@ describe('GET /api/pos/snapshot (R7)', () => {
     const f = await fixture();
     const res = await get(f);
     expect(res.status).toBe(200);
-    const j = (await res.json()) as { rules: { vatPercentBasisPoints: number | string; scPwdPercentBasisPoints: number | string; businessDayStartHour: number } };
-    expect([Number(j.rules.vatPercentBasisPoints), Number(j.rules.scPwdPercentBasisPoints), j.rules.businessDayStartHour]).toEqual([1200, 2000, 4]);
+    const j = (await res.json()) as { rules: { vatPercentBasisPoints: number | string; scPwdPercentBasisPoints: number | string; businessDayStartHour: number; tableWarnMinutes: number } };
+    expect([Number(j.rules.vatPercentBasisPoints), Number(j.rules.scPwdPercentBasisPoints), j.rules.businessDayStartHour, j.rules.tableWarnMinutes]).toEqual([1200, 2000, 4, 90]);
   });
 
   it('no terminal row for this pairing is 409 "This tablet has no till number yet. Ask a manager."', async () => {

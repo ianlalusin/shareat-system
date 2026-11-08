@@ -88,7 +88,6 @@ const NO_ROW_TARGET: readonly string[] = [
   'app/inventory/deliveries/inbound/[shipmentId]/page.tsx', // T-398 S5: shipment line items, no per-row record page
   'app/inventory/locations/page.tsx',
   'app/inventory/low-stock/page.tsx',
-  'app/inventory/pos-usage/page.tsx',
   'app/inventory/returns/page.tsx',
   'app/inventory/transfers/page.tsx',
   'app/liabilities/[id]/page.tsx',
@@ -112,7 +111,6 @@ const NO_ROW_TARGET: readonly string[] = [
   'app/findings/scorecard/page.tsx',
   'app/fixed-assets/[id]/page.tsx',
   'app/inventory/page.tsx',
-  'app/inventory/pos-map/page.tsx',
   'app/inventory/production/[id]/page.tsx',
   'app/inventory/production/recipes/[id]/page.tsx', // T-413: read-only ingredient lines, no row destination
   'app/items/[id]/page.tsx',
