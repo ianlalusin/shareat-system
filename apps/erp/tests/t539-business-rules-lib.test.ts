@@ -56,6 +56,20 @@ describe('T-539 inputValue - the hour box holds a whole number', () => {
   });
 });
 
+describe('T-539 S3 minutes unit - display and box', () => {
+  it('showValue("minutes", ...) reads "90 min" and "1 min", never a percent or a clock [kills: 90 shown as 90% or 1:30 a.m.]', () => {
+    expect(show('minutes', '90.000000')).toBe('90 min');
+    expect(show('minutes', '90')).toBe('90 min');
+    expect(show('minutes', '1.000000')).toBe('1 min');
+    expect(show('minutes', '600.000000')).toBe('600 min');
+  });
+
+  it('the box holds a whole number: "90.000000" -> "90", "600.000000" -> "600" [kills: a minutes box that shows 90.000000]', () => {
+    expect(input('minutes', '90.000000')).toBe('90');
+    expect(input('minutes', '600.000000')).toBe('600');
+  });
+});
+
 describe('T-539 RULE_GROUPS - POS is a group, last, after Tax', () => {
   it('the headings in order are Settlement, Tax, POS [kills: POS rules missing from the screen, or shown first]', () => {
     expect(RULE_GROUPS.map((g) => g.heading)).toEqual(['Settlement', 'Tax', 'POS']);

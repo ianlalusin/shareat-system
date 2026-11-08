@@ -38,6 +38,7 @@ import {
   plainDay, RATES, receiptOfSession, salePayload, seniorDay, seniorEntry, sessionRow, signedIn, sql, standOpenedPayload, stateVersionOf, uuid,
   type Ev, type Fx,
 } from './_fixtures/t525-pos';
+import { putRule } from './_fixtures/t512-rules';
 import { insOffer } from '../../../db/tests/integration/_fixtures/t401-menu';
 
 afterAll(closeAll);
@@ -50,7 +51,7 @@ afterEach(() => {
 // ------------------------------------------------------------------------------------------------------------------------------
 type Result = { seq: number; status: 'applied' | 'duplicate' | 'conflict' | 'quarantined' | 'retry'; error?: string; storedKind?: string };
 type Applied = { stateVersion: number; results: Result[] };
-type Deps = { readRules?: (tx: unknown, orgId: string, businessDate: string) => Promise<{ vatPercentBasisPoints: bigint; scPwdPercentBasisPoints: bigint; businessDayStartHour: number }>; now?: () => Date };
+type Deps = { readRules?: (tx: unknown, orgId: string, businessDate: string) => Promise<{ vatPercentBasisPoints: bigint; scPwdPercentBasisPoints: bigint; businessDayStartHour: number; tableWarnMinutes: number }>; now?: () => Date };
 const lazy = <K extends string>(path: string, label: string) =>
   new Proxy({} as Record<K, (...a: unknown[]) => Promise<unknown>>, {
     get: (_t, name: string) => async (...args: unknown[]) => {
@@ -1055,8 +1056,17 @@ describe('R7 - the snapshot (domain: buildPosSnapshot)', () => {
     expect(Number(r.vatPercentBasisPoints)).toBe(1200);
     expect(Number(r.scPwdPercentBasisPoints)).toBe(2000);
     expect(r.businessDayStartHour).toBe(4);
+    expect(r.tableWarnMinutes).toBe(90);
     const d = (await snapshot(f, {})).body.rules as Record<string, unknown>;
-    expect([Number(d.vatPercentBasisPoints), Number(d.scPwdPercentBasisPoints), d.businessDayStartHour]).toEqual([1200, 2000, 4]);
+    expect([Number(d.vatPercentBasisPoints), Number(d.scPwdPercentBasisPoints), d.businessDayStartHour, d.tableWarnMinutes]).toEqual([1200, 2000, 4, 90]);
+  });
+
+  it('rules (T-539 S3): the snapshot carries pos.table_warn_minutes; a dated change to 30 shows through the default reader and an injected reader is passed through [kills: tableWarnMinutes dropped from the snapshot body]', async () => {
+    const f = await fixture();
+    await putRule(sql, f.orgId, 'pos.table_warn_minutes', '30.000000', '2000-01-02');
+    expect(((await snapshot(f, {})).body.rules as Record<string, unknown>).tableWarnMinutes).toBe(30);
+    const injected = { readRules: async () => ({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 45 }) };
+    expect(((await snapshot(f, injected)).body.rules as Record<string, unknown>).tableWarnMinutes).toBe(45);
   });
 
   it('staff: who may sign in now, with the 3-digit code and ONLY the POS capabilities they hold; nobody who may not; no PIN material anywhere', async () => {

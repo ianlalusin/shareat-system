@@ -5,7 +5,6 @@
  */
 import type { ProjectedStoreMenu, StoreMenuV2 } from '@shareat/domain';
 import type { PosEvent, PosEventResult } from '@/lib/pos-device';
-import { POS_TILE_WARN_AFTER_MINUTES } from '../_shell/constants';
 import { offlineFor } from '../_shell/status-pill';
 import { asStoreMenu, displayUnitPrice } from './menu-filter';
 
@@ -301,10 +300,11 @@ export function seatStandChoices(stands: readonly { id: string; number: number }
   return [...stands].sort((a, b) => a.number - b.number).map((s) => ({ id: s.id, number: s.number, inUse: tiles.some((t) => t.standId === s.id) }));
 }
 
-export function tileClock(openedAtDevice: string, nowMs: number): { minutes: number; label: string; warn: boolean } {
+/** `warnMinutes` is the snapshot's `rules.tableWarnMinutes` (T-539 S3); null (a cached snapshot older than the rule) means no warning. Display only: it blocks nothing. */
+export function tileClock(openedAtDevice: string, nowMs: number, warnMinutes: number | null): { minutes: number; label: string; warn: boolean } {
   const ms = Math.max(0, nowMs - Date.parse(openedAtDevice));
   const minutes = Math.floor(ms / 60_000);
-  return { minutes, label: offlineFor(ms), warn: minutes > POS_TILE_WARN_AFTER_MINUTES };
+  return { minutes, label: offlineFor(ms), warn: warnMinutes !== null && minutes > warnMinutes };
 }
 
 /** One sentence per QUARANTINED result, naming the stand. `view` is the one computed while the events were still in the outbox. */

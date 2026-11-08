@@ -15,7 +15,7 @@
  *       (a pending line's unitPrice is the DISPLAY price: menu amount + option deltas, as a decimal string like "260.00")
  *   Tiles are ordered by openedAtDevice, oldest first. Lines keep server order, pending lines are appended in outbox order.
  *   seatStandChoices(snapshotStands, tiles): { id: string; number: number; inUse: boolean }[]   ordered by number; inUse = some tile holds that stand (pending ones too)
- *   tileClock(openedAtDevice: string, nowMs: number): { minutes: number; label: string; warn: boolean }   label like the offline pill ("45m", "1h 29m"); warn only PAST 90 minutes
+ *   tileClock(openedAtDevice: string, nowMs: number, warnMinutes: number | null): { minutes: number; label: string; warn: boolean }   label like the offline pill ("45m", "1h 29m"); warn only PAST the snapshot's tableWarnMinutes (T-539 S3: third argument, null = never)
  *   refusalNotices(sent: PosEvent[], results: PosEventResult[], view: ReturnType<typeof projectOrders>): string[]
  *       one sentence per QUARANTINED result, naming the stand: "A change to Stand 4 was refused. A manager will see it." (view = computed BEFORE the events left the outbox)
  *
@@ -228,12 +228,21 @@ describe('projectOrders - removed events, merging and never inventing', () => {
 });
 
 describe('time seated and the notice for a refused change', () => {
-  it('the clock reads like the offline pill and the bar turns to warning only past 1 h 30', async () => {
+  it('the clock reads like the offline pill and the bar turns to warning only past the snapshot rule (90 here)', async () => {
     const { tileClock } = await load();
     const t0 = Date.parse(T_A);
-    expect(tileClock(T_A, t0 + 45 * 60_000)).toEqual({ minutes: 45, label: '45m', warn: false });
-    expect(tileClock(T_A, t0 + 89 * 60_000)).toEqual({ minutes: 89, label: '1h 29m', warn: false });
-    expect(tileClock(T_A, t0 + 91 * 60_000)).toEqual({ minutes: 91, label: '1h 31m', warn: true });
+    expect(tileClock(T_A, t0 + 45 * 60_000, 90)).toEqual({ minutes: 45, label: '45m', warn: false });
+    expect(tileClock(T_A, t0 + 89 * 60_000, 90)).toEqual({ minutes: 89, label: '1h 29m', warn: false });
+    expect(tileClock(T_A, t0 + 91 * 60_000, 90)).toEqual({ minutes: 91, label: '1h 31m', warn: true });
+  });
+
+  it('T-539 S3: with the rule at 30 a tile is red at 31 minutes and not at 29 or exactly 30; with no rule (an old cached snapshot) it never goes red [kills: a constant 90 back in the clock; >= for >]', async () => {
+    const { tileClock } = await load();
+    const t0 = Date.parse(T_A);
+    expect(tileClock(T_A, t0 + 29 * 60_000, 30).warn).toBe(false);
+    expect(tileClock(T_A, t0 + 30 * 60_000, 30).warn).toBe(false);
+    expect(tileClock(T_A, t0 + 31 * 60_000, 30).warn).toBe(true);
+    expect(tileClock(T_A, t0 + 600 * 60_000, null).warn).toBe(false);
   });
 
   it('a quarantined change says which stand, in the one sentence; applied and duplicate results say nothing', async () => {
