@@ -1,6 +1,6 @@
 # T-571 — A collapsed card that holds nothing but a button, and the half-empty card row
 
-Status: **BUILT** on branch `fix/disclosure-minimal` (worktree `.worktrees/disclosure`), from `origin/main`
+Status: **BUILT** on branch `ui/t571-minimal-disclosure` (worktree `.worktrees/disclosure`), from `origin/main`
 `9b4041d`, 8 Nov 2026. Ian, on the deployed supplier page (`erp2.shareat.net/ap/suppliers/01a148a4-…`):
 
 > "find every instance of this card which collapse but only has a minimal content like just this one it just have
@@ -59,6 +59,7 @@ it that way.
 | one table-less card, then a table/no card | half width, right half empty | **full width** |
 | two table-less cards together | side by side | side by side (unchanged) |
 | two pairs, or four in a row | two per row | two per row (unchanged) |
+| multi-store supplier: details card, then the store picker | details half width beside the picker | **details and picker each full width** (details card carries `data-fullwidth`, which the pair rule skips) |
 | a run of three | 2 + 1 (the third half, empty beside it) | unchanged — see "not fixed" |
 
 ## Contract
@@ -68,8 +69,8 @@ it that way.
   `bankAccountName`, `bankAccountNumber`, `notes`, and `creditTermsDays` through `nativeAttrs`).
 - The undo/cancel semantics of `EditableRecord` are untouched (the dialog is the same component).
 - Two measured censuses move because a control CEASED TO EXIST (the removed `<summary>`), never to make a test
-  pass: `action-link-sweep` total 1540 → 1539, FAIL 115 → 114, and the `app/ap/suppliers/[id]/page.tsx` 20 px
-  baseline entry is removed (`touch-target-baseline.json`). Each carries a dated comment line, as that file
+  pass: `action-link-sweep` total 1626 → 1625, FAIL 113 → 112, and one of the `app/ap/suppliers/[id]/page.tsx` 20 px
+  baseline entries is removed (`touch-target-baseline.json`). Each carries a dated comment line, as that file
   requires. `t450-phone-table-*`, `t452`, `t440-s2` and `t384` censuses re-run unchanged.
 
 ## Out (recorded, not done)
@@ -83,12 +84,13 @@ it that way.
 
 ## Tests
 
-`apps/erp/tests/t571-minimal-disclosure-and-width.test.ts` — 9 tests:
+`apps/erp/tests/t571-minimal-disclosure-and-width.test.ts` — 11 tests:
 
 - **the scanner, with a control:** a fabricated `<details><EditableRecord/></details>` is reported, a
   `<details><form>…</form></details>` is not; the real tree reports none.
 - the supplier page has no `<details>`, no `Edit this supplier` summary, the pencil between the heading and the
   facts, and every edited field still present.
+- the multi-store layout (details card, store picker, table card): neither matches the pair rule, with a control that removes the `data-fullwidth` marker and sees the picker pair with it; and the page carries the marker.
 - the pair rule: both selectors are in `globals.css`, the second half is evaluated against a real DOM (a
   table-less `section` after another table-less one matches; one after a table card does not), and the old blanket
   rule is gone. ⚠️ happy-dom 21 cannot evaluate a `:has()` nested inside a `:has()`, so the first half is pinned
@@ -98,9 +100,9 @@ it that way.
 
 - **`npx tsc --noEmit`** (root `tsconfig.json`): clean, exit 0.
 - **`npm run build`**: exit 0; every route still `ƒ (Dynamic)`.
-- **`t571-minimal-disclosure-and-width.test.ts`**: 9/9.
-- **`action-link-sweep`**: 14/14 after the measured baseline moves above (1540 → 1539, FAIL 115 → 114, the
-  supplier page's 20 px entry removed).
+- **`t571-minimal-disclosure-and-width.test.ts`**: 11/11.
+- **`action-link-sweep`**: 14/14 after the measured baseline moves above (1626 → 1625, FAIL 113 → 112, the
+  supplier page's 20 px entry trimmed; re-measured on the tree merged with main `2f38142`).
 - **Guards that read this page or its form:** `t440-s9-applies-when` (renders the real `SupplierDetailPage`
   component and reads the `creditTermsDays` input out of the markup — green, which is this page's render check),
   `t389-keep-typing-guard`, `t384-s3-lock-and-save-guard`, `t411-row-link-census`, `t406-account-code-guard`,

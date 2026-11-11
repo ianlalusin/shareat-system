@@ -103,8 +103,8 @@ describe('the supplier page', () => {
 
 describe('the details card uses the full width when it has no neighbour to share the row with', () => {
   const css = readFileSync(join(erpSrc, 'app', 'globals.css'), 'utf8');
-  const FIRST_OF_PAIR = '.erp-page[data-view="detail"][data-sectioned] > section:not(:has(table)):has(+ section:not(:has(table)))';
-  const SECOND_OF_PAIR = '.erp-page[data-view="detail"][data-sectioned] > section:not(:has(table)) + section:not(:has(table))';
+  const FIRST_OF_PAIR = '.erp-page[data-view="detail"][data-sectioned] > section:not(:has(table)):not([data-fullwidth]):has(+ section:not(:has(table)):not([data-fullwidth]))';
+  const SECOND_OF_PAIR = '.erp-page[data-view="detail"][data-sectioned] > section:not(:has(table)):not([data-fullwidth]) + section:not(:has(table)):not([data-fullwidth])';
 
   it('both halves of the pair rule are in the stylesheet', () => {
     expect(css).toContain(FIRST_OF_PAIR);
@@ -141,6 +141,30 @@ describe('the details card uses the full width when it has no neighbour to share
     expect(second.matches(SECOND_OF_PAIR)).toBe(true);
     // A table-less card that follows a TABLE card is not half of a pair.
     expect(tableCard.matches(SECOND_OF_PAIR)).toBe(false);
+  });
+
+  it('multi-store supplier: the details card and the store picker both span the row (neither is half of a pair)', () => {
+    const page = document.createElement('div');
+    page.className = 'erp-page';
+    page.dataset.view = 'detail';
+    page.dataset.sectioned = '';
+    const details = document.createElement('section');
+    details.setAttribute('data-fullwidth', '');
+    const picker = document.createElement('section'); // "Which store's payables?" - table-less, right after details
+    const openItems = document.createElement('section');
+    openItems.append(document.createElement('table'));
+    page.append(details, picker, openItems);
+    document.body.append(page);
+    expect(details.matches(SECOND_OF_PAIR)).toBe(false);
+    expect(picker.matches(SECOND_OF_PAIR), 'the picker must not pair with the details card').toBe(false);
+    // Control: without the marker the picker WOULD pair with it and sit in a half cell (the bug AUDIT found).
+    details.removeAttribute('data-fullwidth');
+    expect(picker.matches(SECOND_OF_PAIR)).toBe(true);
+  });
+
+  it('the supplier page marks its details card data-fullwidth', () => {
+    const src = readFileSync(join(erpSrc, 'app', 'ap', 'suppliers', '[id]', 'page.tsx'), 'utf8');
+    expect(src).toMatch(/<section data-fullwidth[^>]*>\s*<div[^>]*>\s*<h2 className="font-medium">Supplier details/);
   });
 
   it('the first card of a pair is pinned in the stylesheet (happy-dom cannot evaluate a :has() inside a :has())', () => {

@@ -90,7 +90,7 @@ export default async function SupplierDetailPage({
       {/* Ian 2026-10-14 (T-404): "the supplier details not shown". Every field lived only inside the
           collapsed edit form below, so a supplier with nothing open read as a blank page. This is the
           read-only view; editing stays in the disclosure. The bank number is masked, as on the register. */}
-      <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+      <section data-fullwidth className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-medium">Supplier details</h2>
           {/* ---------------------------------------------------------------- T-188: the record itself.
