@@ -95,11 +95,10 @@ function offerFor(menu: ProjectedStoreMenu, itemId: string, variantId: string | 
 }
 
 function optionDelta(item: ProjectedItem, variant: ProjectedVariant, chosen: readonly string[] | undefined): { delta: Money; names: string[] } {
-  if (!chosen || chosen.length === 0) return { delta: money('0'), names: [] };
   let delta = money('0');
   const names: string[] = [];
   const perGroup = new Map<string, number>();
-  for (const id of new Set(chosen)) {
+  for (const id of new Set(chosen ?? [])) {
     const group = variant.optionGroups.find((g) => g.values.some((v) => v.id === id));
     const value = group?.values.find((v) => v.id === id);
     if (!group || !value) throw refuse('pos: option not on the item', `That choice is not available for ${item.name}.`);
@@ -111,6 +110,13 @@ function optionDelta(item: ProjectedItem, variant: ProjectedVariant, chosen: rea
     }
     delta = add(delta, money(value.channels.store.priceDelta));
     names.push(value.name);
+  }
+  // T-552 (audit P-003): every group the variant offers is judged, not only the ones the line chose from. Same rule as the screen's isOptionChoiceValid,
+  // so a required group with no orderable value is refused here exactly as the screen cannot satisfy it.
+  for (const group of variant.optionGroups) {
+    if (group.minSelections > (perGroup.get(group.id) ?? 0)) {
+      throw refuse('pos: option required', `${group.name}: choose at least ${group.minSelections} for ${item.name}.`);
+    }
   }
   return { delta, names };
 }

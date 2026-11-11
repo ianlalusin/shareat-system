@@ -26,7 +26,7 @@ describe('T-512 registry - closed set', () => {
   it('holds the five T-512 keys, unchanged in name (T-539 adds the POS keys on top, pinned in t539-pos-rule-keys; T-519 adds its own later) [kills: a missing or renamed T-512 key]', () => {
     const have = Object.keys(RULE_REGISTRY);
     for (const k of KEYS) expect(have, k).toContain(k);
-    expect(have.filter((k) => !(KEYS as readonly string[]).includes(k)).sort()).toEqual(['pos.business_day_start_hour', 'pos.senior_pwd_discount_percent', 'pos.table_warn_minutes']);
+    expect(have.filter((k) => !(KEYS as readonly string[]).includes(k)).sort()).toEqual(['pos.business_day_start_hour', 'pos.sale_variance_tolerance', 'pos.senior_pwd_discount_percent', 'pos.table_warn_minutes']);
   });
 
   it('every entry carries label, help, unit, default, min, max, capability and namespace', () => {

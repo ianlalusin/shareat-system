@@ -698,4 +698,5 @@ export type PosDiscountPresetRow = typeof posDiscountPresets.$inferSelect;
 export type TableSessionLineDiscountRow = typeof tableSessionLineDiscounts.$inferSelect;
 export type TableSessionLineRow = typeof tableSessionLines.$inferSelect;
 export type PosSalesReceiptRow = typeof posSalesReceipts.$inferSelect;
+export type PosDayCloseRow = typeof posDayCloses.$inferSelect;
 export type PosEventRow = typeof posEvents.$inferSelect;
