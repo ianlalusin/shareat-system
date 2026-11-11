@@ -12,10 +12,12 @@ allocationsFor
 apiUrl
 applyCreditAction
 applyReceiptDeltaServerFirst
+approveDay
 arrivalLag
 assetsMissingCapitalisation
 branchOrderDetail
 buildCoverageReport
+buildPlan
 byMethodOf
 calculateBillTotalsCentavosT423
 callEntry
@@ -29,10 +31,8 @@ childLogger
 closeAsLateReceipt
 closeYear
 collectActorUids
-confirmHeads
 confirmTradeOrder
 convertSpecimen
-correctPlatformSales
 countedVariances
 createFakeFirestore
 createFakeIdb
@@ -43,6 +43,7 @@ datesInWeek
 dayIdOf
 daypartedMenu
 daypartsOverlap
+decideMapRequest
 deleteDocumentNonBlocking
 depreciateAsset
 depreciationDrift
@@ -56,6 +57,7 @@ expectedAccumulated
 fakeLocks
 fetchApplicableGlobalCharges
 fetchApplicableGlobalDiscounts
+finalizeSections
 findCurrentDocument
 findLiveOfKind
 findPostedSettlementForChannelDay
@@ -67,14 +69,11 @@ formatCoverageReport
 formatKitchenQty
 formatLogAmount
 formatLogDescription
-formatReceipt
-formatRefillSlip
 getActiveFake
 getCalendarWeatherIcon
 getGroupKey
 getKitchenTicketContribution
 getNonCentavoCount
-getSessionBill
 groupIntoFamilies
 hasFingerprint
 hasOtherActiveAdmin
@@ -97,12 +96,15 @@ listAvailableCommissaries
 listBirthdayRequests
 listCategoryLives
 listClaimRequests
+listDayIdsWithLivePull
 listLiveForStore
 listLobbyEntries
+listMapsForStore
 listOrderMessages
 listPayRates
 listPosQuarantine
 listPunchesForDay
+listRequestsForStore
 listRoster
 listTodaysSalesReceipts
 listWriteOffsForCharge
@@ -149,6 +151,7 @@ remainingOf
 removeEntry
 removeUsageLine
 replayQuarantinedEvent
+requestMap
 reserveNext
 resetLobbyReadLimiterForTests
 resetNonCentavoCount
@@ -173,7 +176,6 @@ seedServerSession
 seedSession
 seedStaff
 seedStore
-serveLine
 setActiveFake
 setCostBasisItem
 setDocumentNonBlocking
@@ -202,6 +204,7 @@ uploadReceiptLogo
 uploadStoreLogo
 upsertCategoryLife
 upsertPolicy
+upsertPosItemMap
 useAuth
 useCollection
 useDoc

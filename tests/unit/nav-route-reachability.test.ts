@@ -155,6 +155,12 @@ const UNLINKED_BY_DESIGN: Record<string, string> = {
   '/clock':
     'The terminal kiosk. Opened on a provisioned device, and bible §5.2 forbids it touching the ' +
     'server at all — it must never sit in a menu a signed-in manager sees.',
+  // T-526 R1: the full-screen POS kiosk. Each is a real page (placeholder until its slice) reached from tablet sign-in or the ERP button.
+  '/pos': 'full-screen POS, reached from tablet sign-in or the ERP button; never a sidebar link',
+  '/pos/kitchen': 'full-screen POS, reached from tablet sign-in or the ERP button; never a sidebar link',
+  '/pos/refills': 'full-screen POS, reached from tablet sign-in or the ERP button; never a sidebar link',
+  '/pos/receipts': 'full-screen POS, reached from tablet sign-in or the ERP button; never a sidebar link',
+  '/pos/till': 'full-screen POS, reached from tablet sign-in or the ERP button; never a sidebar link',
   '/sign-in':
     'Reached by redirect when there is no session. `nav.tsx` renders nothing without one, so a ' +
     'nav entry pointing here could never be shown to anybody who needed it.',

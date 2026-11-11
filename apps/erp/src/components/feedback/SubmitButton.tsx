@@ -33,6 +33,8 @@ export interface SubmitButtonProps {
   /** `primary` by default. A Save repeated on one view (one per row or per category) is `secondary`:
    *  ADR-013 allows one brand-red primary per view. */
   readonly variant?: Extract<ButtonVariant, 'primary' | 'secondary'>;
+  /** `null` keeps the words instead of the round icon the words would pick (T-511 S6d: "Post settlement" stays text). */
+  readonly icon?: null;
 }
 
 function Spinner(): ReactNode {
@@ -54,12 +56,13 @@ function Spinner(): ReactNode {
   );
 }
 
-export function SubmitButton({ children, pendingLabel, className, disabled, variant = 'primary' }: SubmitButtonProps) {
+export function SubmitButton({ children, pendingLabel, className, disabled, variant = 'primary', icon }: SubmitButtonProps) {
   const { pending } = useFormStatus();
   // T-440: inside a checked form, a failing rule makes Save truly `disabled`. It must be read here, not set imperatively:
   // this button re-renders when `pending` ends and would otherwise undo an imperative change. No provider = unchanged.
   const blocked = useContext(CheckContext)?.blocked === true;
   const state = submitButtonState({ pending, label: children, pendingLabel });
+  const resolvedIcon = icon === null ? null : actionIconFor(children);
 
   return (
     <Button
@@ -70,10 +73,10 @@ export function SubmitButton({ children, pendingLabel, className, disabled, vari
       data-check-aware="true"
       aria-busy={state.ariaBusy ? 'true' : undefined}
       // T-448: the icon comes from the resting words ("Save"), so "Saving…" keeps the same round button, spinning.
-      icon={actionIconFor(children)}
+      icon={resolvedIcon}
       busyIcon={pending ? <Spinner /> : undefined}
     >
-      {actionIconFor(children) ? state.label : (
+      {resolvedIcon ? state.label : (
         <>
           {pending ? <Spinner /> : null}
           {state.label}

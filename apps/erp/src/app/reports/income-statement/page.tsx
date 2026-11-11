@@ -7,7 +7,6 @@ import { ReportBasis } from '@/components/reports/ReportBasis';
 import { ReportFilters } from '@/components/reports/ReportFilters';
 import { CsvExportLink } from '@/components/reports/CsvExportLink';
 import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Income Statement — Shareat System' };
 
@@ -60,15 +59,11 @@ export default async function IncomeStatementPage({
     result.otherIncomeExpenseLines.length > 0;
 
   return (
-    <Page density="wide">
-      <div>
-        <h1 className="text-2xl font-semibold">Income Statement</h1>
-        <PageDescription>
-          A GROUP BY query over journal_lines — a new revenue or expense account appears
-          here automatically, with no code change.
-        </PageDescription>
-      </div>
-
+    <Page
+      density="wide"
+      title="Income Statement"
+      description="A GROUP BY query over journal_lines — a new revenue or expense account appears here automatically, with no code change."
+    >
       <ReportFilters
         basePath="/reports/income-statement"
         orgs={[{ id: orgId, label: `${scope.orgName} (${scope.orgCode})` }]}

@@ -143,7 +143,9 @@ describe('T-348 S2 — the sweep ratchet (SW1/SW2)', () => {
 
 describe('T-348 S2 — the two neutral-500 prose sites move too (SW3)', () => {
   it('SW3: the element PAIRED with admin/stores\' and admin/users\' <h1> is a <PageDescription>, not just present somewhere in the file', () => {
-    for (const rel of ['admin/stores/page.tsx', 'admin/users/page.tsx']) {
+    // T-540 (7 Nov 2026, BOSS approved): admin/users moved onto <Page title description>, so it has no hand-written <h1>
+    // pair any more; the prose still renders through PageHeader's PageDescription. admin/stores (a rule-2 skip) stays.
+    for (const rel of ['admin/stores/page.tsx']) {
       const tag = tagPairedWithH1(resolve(appRoot, rel));
       expect(tag, `${rel}: expected an <h1>-then-<PageDescription> pair`).toBe('PageDescription');
     }
@@ -172,7 +174,10 @@ describe('T-348 S2 — the population lands exactly, nothing dropped or doubled 
     // 132 -> 133, T-508 S2b: /kitchen carries its <PageDescription>.
     // 133 -> 134, T-510 S3: /menu/hours carries its <PageDescription>.
     // 134 -> 135, T-512 (T-511 S5c): /settings/business-rules carries its <PageDescription>; re-measured after rebase on main (T-523 0238 present), 7 Nov 2026, BOSS approved.
-    expect(count).toBe(135);
+    // 135 -> 128, T-540 (DeepSeek work order): seven pages moved onto <Page title description>, which renders the prose
+    // through PageHeader, so seven call sites left app/; 7 Nov 2026, BOSS approved.
+    // 128 -> 126, T-550 (row 452): the retired /inventory/pos-map and /inventory/pos-usage pages each carried one <PageDescription>; measured by walking app/.
+    expect(count).toBe(126);
   });
 });
 
@@ -227,8 +232,6 @@ describe('T-348 S2 — SW6: class B/C/D sites keep their exact class strings (mu
     'inventory/locations/page.tsx': ['mt-4 text-sm text-neutral-600', 'mt-4 text-sm text-neutral-600'],
     'inventory/low-stock/page.tsx': ['mt-4 text-sm text-neutral-600'],
     'inventory/page.tsx': ['mt-4 text-sm text-neutral-600'],
-    'inventory/pos-map/page.tsx': ['mt-4 text-sm text-neutral-600'],
-    'inventory/pos-usage/page.tsx': ['mt-4 text-sm text-neutral-600'],
     'inventory/production/page.tsx': ['mt-4 text-sm text-neutral-600'],
     'inventory/returns/page.tsx': ['mt-4 text-sm text-neutral-600'],
     'inventory/transfers/page.tsx': ['mt-4 text-sm text-neutral-600'],

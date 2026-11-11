@@ -194,8 +194,9 @@ export async function markVoided(
   orgId: string,
   id: string,
   values: { voidedBy: string; voidReason: string },
-): Promise<void> {
-  await tx
+): Promise<boolean> {
+  // Guarded in the WHERE (status = 'posted'), not read-then-write: two voids racing must not both write, and the first reason and voider are never overwritten.
+  const rows = await tx
     .update(channelSettlements)
     .set({
       status: 'voided',
@@ -204,7 +205,9 @@ export async function markVoided(
       voidReason: values.voidReason,
       updatedAt: sql`now()`,
     })
-    .where(and(eq(channelSettlements.orgId, orgId), eq(channelSettlements.id, id)));
+    .where(and(eq(channelSettlements.orgId, orgId), eq(channelSettlements.id, id), eq(channelSettlements.status, 'posted')))
+    .returning({ id: channelSettlements.id });
+  return rows.length > 0;
 }
 
 /**

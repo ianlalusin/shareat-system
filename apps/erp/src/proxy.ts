@@ -25,8 +25,9 @@ export function proxy(request: NextRequest) {
 }
 
 // ⛔ Statically analysed at build time — cannot be built from a shared constant or a loop
-// (middleware.md / proxy.md: "matcher values need to be constants"). Scoped to exactly the one
-// route this fixes: proxy does not run on the other 100 routes at all.
+// (middleware.md / proxy.md: "matcher values need to be constants"). Scoped to exactly the two
+// kiosk trees: proxy does not run on the other routes at all. T-526 R1 added the full-screen POS
+// (`/pos`); the API doors under `/api/pos` are deliberately not matched.
 export const config = {
-  matcher: ['/clock', '/clock/:path*'],
+  matcher: ['/clock', '/clock/:path*', '/pos', '/pos/:path*'],
 };

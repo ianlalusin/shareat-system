@@ -124,6 +124,48 @@
 }
 
 /*
+ * T-526 R1 (bible row 433) - the POS Kitchen screen is dark unless the viewer chose light. `/pos/kitchen/layout.tsx` decides on the server
+ * and puts `.pos-theme[data-theme]` on its wrapper; when that says dark, the SAME tokens as the block above apply to the whole page (top
+ * bar and body included), so the first paint is right with no script. ⛔ A copy of that block: `tests/t526-kitchen-token-sync.test.ts`
+ * fails when the two drift. (The block above cannot take a second selector: three suites match its selector text exactly.)
+ */
+:root:has(.pos-theme[data-theme='dark']) {
+  color-scheme: dark;
+
+  --canvas: #121110;
+  --surface: #1c1a18;
+  --surface-border: #34302b;
+  --workspace: var(--canvas);
+  --workspace-border: var(--surface-border);
+  --workspace-stripe: var(--canvas);
+  --field: #151412;
+  --field-border: #746b5f;
+  --ink: #f5efe4;
+  --muted: #a89f92;
+
+  --brand: #d40909; /* fill only, text uses --brand-ink */
+  --brand-ink: #ff7a70;
+
+  /* ADR-013 Amendment 5: #f87171 on #1c1a18 clears 4.5:1. Components keep using text-danger,
+     border-danger and bg-danger-surface; the theme swaps the value underneath them. */
+  --danger: #f87171;
+  --danger-surface: #2a0f0f;
+
+  --warning: #2b2210;
+  --warning-soft: #2b2210;
+  --warning-ink: #f4b942;
+
+  --success: #4ade80;
+  --success-soft: #0f2a1c;
+  --info: #93b4ff;
+  --info-soft: #142038;
+  --progress: #c4b5fd;
+  --progress-soft: #241b3d;
+  --closed: #aab4c2;
+  --closed-soft: #23262b;
+}
+
+/*
  * T-387 S1 — the logo is black ink on a transparent PNG, so on Grill Night's charcoal only the red
  * "S" survived (seen in the §9.4 screenshots). The dark board (docs/design/t387/brand-dark-grill-
  * night.dc.html) sits it on a cream disc; this does the same with the dark --ink, which is that
@@ -214,6 +256,20 @@
 @media (pointer: coarse) {
   .shell-nav-row {
     min-height: 44px;
+  }
+}
+
+/*
+ * T-545 (DEF-815) — the dialog's Close "×" stays 32px (`h-8 w-8` on the button) with a mouse and
+ * grows to 44px under a finger, the same plain-CSS shape as .shell-nav-row above (Tailwind 3.4 has
+ * no pointer-coarse variant). The selector is `.erp-dialog .erp-dialog-close` — two classes — so it
+ * beats the `h-8 w-8` utilities whatever order Tailwind emits them in; a single-class rule only
+ * ties with them. The icon inside stays 18px.
+ */
+@media (pointer: coarse) {
+  .erp-dialog .erp-dialog-close {
+    height: 44px;
+    width: 44px;
   }
 }
 
@@ -424,7 +480,7 @@
    hand-tuned; they are excluded here and must not be restyled by this rule. */
 @media (min-width: 768px) and (pointer: fine) {
   :is(.erp-page:not(:has([aria-label="Right now"])), .erp-dialog) :is(
-    [data-erp-control="single"]:not([type="file"]):not([type="checkbox"]):not([type="radio"]),
+    [data-erp-control="single"]:not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([data-erp-size="free"]),
     input:is(:not([type]), [type="text"], [type="email"], [type="tel"], [type="search"], [type="password"], [type="number"], [type="date"], [type="month"], [type="time"], [type="url"]),
     select,
     button:not(.erp-help-tip):not(.erp-icon-btn):not([data-erp-size="free"])
@@ -477,6 +533,9 @@
 .erp-dialog[data-size="sm"] { --erp-dialog-width: 28rem; }
 .erp-dialog[data-size="lg"] { --erp-dialog-width: 64rem; }
 .erp-dialog[data-size="xl"] { --erp-dialog-width: 80rem; }
+/* T-528e: the on-screen receipt. Narrow (the paper is 32 characters wide), half a rem from the top and bottom edge, and a snug body so the whole bill shows on a 1280x800 tablet. */
+.erp-dialog[data-size="receipt"] { --erp-dialog-width: 26rem; max-height: calc(100dvh - 1rem); }
+.erp-dialog[data-size="receipt"] .erp-dialog-body { padding-block: 0.5rem; }
 .erp-dialog-body { container-type: inline-size; }
 /* T-548: one scrollbar. The page behind is locked while any modal is open (pure CSS, nothing to leak), the dialog never
    scrolls itself, and only .erp-dialog-body scrolls, so the header and the action band stay put. */
@@ -541,6 +600,15 @@ html { scrollbar-gutter: stable; }
   }
   .split-workspace-details {
     grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  }
+  /* T-511 S6d: the details section (the second child) follows the scroll; stacked below the form it must not. */
+  .split-workspace-sticky > :nth-child(2) {
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100dvh - 2rem); /* a tall preview scrolls inside, so Post stays reachable */
+    overflow-y: auto;
+    padding: 0.25rem; /* room inside the scroll box so a focus ring at its edge is not clipped */
+    margin: -0.25rem;
   }
 }
 

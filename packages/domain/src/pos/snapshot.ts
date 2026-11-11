@@ -13,7 +13,7 @@ import { canonicalJson } from '../menu/project';
 import { loadStoreMenu } from '../menu/load-store-menu';
 import { refuse } from '../shared/refusal';
 import { POS_NOT_SWITCHED_ON, type PosPairing } from './inbox';
-import { listKitchenQueue, listOpenStands, listRefillQueue } from './sale';
+import { listKitchenQueue, listOpenStands, listRefillableTables, listRefillQueue } from './sale';
 import { businessDateOf, readRules, requireStoreScope, type PosDeps } from './shared';
 
 /** The POS capabilities the tablet greys its buttons by (the closed list of R7's `staff`). */
@@ -22,12 +22,12 @@ export const NO_TILL_NUMBER = 'This tablet has no till number yet. Ask a manager
 
 export interface PosSnapshot {
   body: {
-    store: { storeId: string; name: string; mode: string; terminalNo: number };
+    store: { storeId: string; name: string; mode: string; terminalNo: number; vatRegistered: boolean; receiptPaperMm: number; receiptCopies: number };
     menu: Awaited<ReturnType<typeof loadStoreMenu>>;
     stands: { id: string; number: number }[];
     tenders: { id: string; name: string; kind: string }[];
     discountPresets: { id: string; name: string; valueType: string; value: string }[];
-    rules: { vatPercentBasisPoints: number; scPwdPercentBasisPoints: number; businessDayStartHour: number };
+    rules: { vatPercentBasisPoints: number; scPwdPercentBasisPoints: number; businessDayStartHour: number; tableWarnMinutes: number };
     staff: { personId: string; displayName: string; employeeId: string; posCapabilities: string[] }[];
     device: { pairingId: string; lastSeq: number; lastTerminalSeq: number };
     businessDate: string;
@@ -44,7 +44,7 @@ export async function buildPosSnapshot(tx: Tx, input: { pairing: PosPairing }, d
   const terminal = await posV2Repo.getTerminalForPairing(tx, orgId, storeId, pairingId);
   if (!terminal) throw refuse('pos: pairing has no terminal', NO_TILL_NUMBER);
   const storeRow = await storesRepo.getById(tx, orgId, storeId);
-  const menu = await loadStoreMenu(tx, orgId, storeId);
+  const menu = await loadStoreMenu(tx, orgId, storeId, undefined, { showWithdrawnStore: true }); // T-527b: a sold-out dish stays on the tablet, greyed (row 307)
   const businessDate = await businessDateOf(tx, orgId, storeId, deps);
   const rules = await readRules(tx, orgId, businessDate, deps);
 
@@ -59,7 +59,7 @@ export async function buildPosSnapshot(tx: Tx, input: { pairing: PosPairing }, d
   }
 
   const body: PosSnapshot['body'] = {
-    store: { storeId, name: storeRow?.name ?? '', mode: store.mode, terminalNo: terminal.terminalNo },
+    store: { storeId, name: storeRow?.name ?? '', mode: store.mode, terminalNo: terminal.terminalNo, receiptPaperMm: terminal.receiptPaperMm, receiptCopies: terminal.receiptCopies, vatRegistered: (await posV2Repo.getOrgTaxType(tx, orgId)) === 'vat' }, // T-528 R1: the tablet prices with the org's own VAT status
     menu,
     stands: (await posV2Repo.listActiveStands(tx, orgId, storeId)).map((s) => ({ id: s.id, number: s.number })),
     tenders: (await posV1Repo.listTendersByStore(tx, orgId, storeId)).filter((t) => t.isActive).map((t) => ({ id: t.id, name: t.name, kind: t.kind })),
@@ -68,6 +68,7 @@ export async function buildPosSnapshot(tx: Tx, input: { pairing: PosPairing }, d
       vatPercentBasisPoints: Number(rules.vatPercentBasisPoints),
       scPwdPercentBasisPoints: Number(rules.scPwdPercentBasisPoints),
       businessDayStartHour: rules.businessDayStartHour,
+      tableWarnMinutes: rules.tableWarnMinutes,
     },
     staff,
     device: {
@@ -91,7 +92,7 @@ export function loadPosSnapshot(pairing: PosPairing, deps?: PosDeps): Promise<Po
 export type PosStateAnswer =
   | { status: 'forbidden' }
   | { status: 'not_modified' }
-  | { status: 'ok'; body: { stateVersion: number; openStands: unknown[] | null; kitchenQueue: unknown[] | null; refillQueue: unknown[] | null } };
+  | { status: 'ok'; body: { stateVersion: number; openStands: unknown[] | null; kitchenQueue: unknown[] | null; refillQueue: unknown[] | null; refillTables: unknown[] | null } };
 
 /**
  * `since` is the version the screen already holds (-1 when it has none). Store scope is judged FIRST, so a 304 never confirms another store's version;
@@ -114,6 +115,8 @@ export function readPosState(actor: Actor, input: { storeId: string; since: numb
       ? (await listKitchenQueue(tx, actor, input.stationId ? { ...at, stationId: input.stationId } : at)).tickets
       : null;
     const refillQueue = (await can(tx, actor, 'request_pos_refill', at)) ? (await listRefillQueue(tx, actor, at)).tickets : null;
-    return { status: 'ok', body: { stateVersion, openStands, kitchenQueue, refillQueue } };
+    // T-529: the open package tables, for a person who may ask for a refill or confirm heads.
+    const refillTables = (await can(tx, actor, 'request_pos_refill', at)) || (await can(tx, actor, 'confirm_pos_heads', at)) ? (await listRefillableTables(tx, actor, at)).tables : null;
+    return { status: 'ok', body: { stateVersion, openStands, kitchenQueue, refillQueue, refillTables } };
   });
 }

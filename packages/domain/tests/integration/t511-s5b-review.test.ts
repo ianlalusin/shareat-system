@@ -51,7 +51,7 @@ import { inMemoryDriver, setStorageDriver } from '@shareat/domain';
 import { ingestSettlementFile } from '../../src/settlement-intake/ingest';
 import { listReviewDays, overrideLoanAllocation, rejectDay, reopenDay } from '../../src/settlement-intake/review';
 import {
-  LIPA_FP, MALVAR_FP, UUID_RE, asOrg, attempt, auditRows, bookLine, ledgerCount, lineOn, lineRows, loanLineRows, mkLoan, salesDay, settlementCount,
+  LIPA_FP, MALVAR_FP, UUID_RE, asOrg, attempt, auditRows, bookLine, ledgerCount, lineOn, lineRows, loanLineRows, mkLoan, postedSalesDay as salesDay, settlementCount,
   setDestination, stageGrabOctober, synthFoodpanda, upload, world3, type World3,
 } from './_fixtures/t511-s5-world';
 

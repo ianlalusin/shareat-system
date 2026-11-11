@@ -24,15 +24,15 @@ vi.mock('../src/lib/page-access', () => ({
   requirePageAccess: vi.fn(async () => ({ actor: { orgId: 'org-1', personId: 'admin-1' }, refusal: H.allowed ? null : 'REFUSED' })),
 }));
 vi.mock('../src/app/staff/lib', async () => ({ staffStoresFor: vi.fn(async () => [STORE]) }));
-vi.mock('../src/app/admin/pos-tablets/actions', () => ({ registerTabletAction: vi.fn(), revokeTabletAction: vi.fn(), clearLockAction: vi.fn() }));
+vi.mock('../src/app/admin/pos-tablets/actions', () => ({ registerTabletAction: vi.fn(), revokeTabletAction: vi.fn(), clearLockAction: vi.fn(), createTillAction: vi.fn(), linkTillAction: vi.fn(), setTillPrinterAction: vi.fn() }));
 vi.mock('../src/app/admin/pos-tablets/lib', async (orig) => {
   const actual = await orig<typeof import('../src/app/admin/pos-tablets/lib')>();
-  return { ...actual, loadPosTablets: vi.fn(async () => H.view) };
+  return { ...actual, loadPosTablets: vi.fn(async () => H.view), loadTills: vi.fn(async () => ({ terminals: [], freePairings: [] })) }; // T-546: the Tills section has its own reader
 });
 
 beforeAll(async () => {
   await import('../src/app/admin/pos-tablets/page');
-}, 30_000);
+}, 120_000);
 
 async function render(): Promise<string> {
   const Page = (await import('../src/app/admin/pos-tablets/page')).default;

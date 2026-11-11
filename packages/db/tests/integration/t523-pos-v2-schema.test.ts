@@ -35,7 +35,7 @@ afterAll(async () => {
 const UPDATABLE: Readonly<Record<string, readonly string[]>> = {
   pos_stores: ['mode', 'live_from', 'state_version', 'changed_by', 'changed_at'],
   pos_stands: ['status', 'updated_at'],
-  pos_terminals: ['pairing_id', 'updated_at'],
+  pos_terminals: ['pairing_id', 'updated_at', 'receipt_paper_mm', 'receipt_copies'],
   table_sessions: ['heads_cashier', 'heads_server', 'status', 'voided_by', 'voided_at_device', 'void_reason', 'voided_offline'],
   table_session_lines: ['kitchen_status', 'served_at_device', 'served_by'],
   pos_sales_receipts: ['day_close_id'],

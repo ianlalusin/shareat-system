@@ -20,7 +20,7 @@ export interface RuleDefinition {
   readonly label: string;
   /** One sentence saying what the number does. */
   readonly help: string;
-  readonly unit: 'money' | 'percent' | 'hour';
+  readonly unit: 'money' | 'percent' | 'hour' | 'minutes';
   readonly default: string;
   readonly min: string;
   readonly max: string;
@@ -97,6 +97,16 @@ export const RULE_REGISTRY = {
     default: '4',
     min: '0',
     max: '23',
+    capability: RULE_ADMIN_CAPABILITY,
+    namespace: 'pos',
+  },
+  'pos.table_warn_minutes': {
+    label: 'Minutes before a table tile turns red',
+    help: 'A table seated longer than this shows a red time bar on the POS Orders screen, so staff check on it.',
+    unit: 'minutes',
+    default: '90',
+    min: '1',
+    max: '600',
     capability: RULE_ADMIN_CAPABILITY,
     namespace: 'pos',
   },

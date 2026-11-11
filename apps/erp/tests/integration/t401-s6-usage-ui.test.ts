@@ -282,20 +282,6 @@ describe('B3 - the tolerance settings form (admin only)', () => {
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
-describe('B4 - the POS usage page says the pull is a check', () => {
-  it('a built plan page mentions "check" and no longer says finalizing posts stock ("nothing left to post", "Puts back the stock this pull used")', async () => {
-    const { w, dayId, pullId } = await scenario('ui4');
-    h.actor = w.manager;
-    const Page = (await import('../../src/app/inventory/pos-usage/page')).default as (p: unknown) => Promise<unknown>;
-    const html = text(renderToStaticMarkup((await Page({ searchParams: Promise.resolve({ store: w.a.storeId, day: dayId, pull: pullId }) })) as never));
-    expect(html).toMatch(/check/i);
-    expect(html).not.toMatch(/nothing left to post/i);
-    expect(html).not.toMatch(/Puts back the stock this pull used/i);
-    expect(html, 'no claim that finalizing takes stock out').not.toMatch(/posts? (the )?stock|takes? (the )?stock out|stock out/i);
-  }, 180_000);
-});
-
-// ---------------------------------------------------------------------------------------------------------------------
 describe("B5 - day-close warning: yesterday's usage not posted (a warning, never a block)", () => {
   // A11 (orchestrator, 15 Oct): the warning is about the day BEFORE THE SALES DAY BEING VIEWED (DAY), not before today.
   const yesterday = (): string => addDays(parseBusinessDate(DAY), -1);

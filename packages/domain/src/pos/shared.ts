@@ -21,6 +21,7 @@ export interface PosRules {
   readonly scPwdPercentBasisPoints: bigint;
   /** The Manila hour a business day starts at (4 = 04:00). */
   readonly businessDayStartHour: number;
+  readonly tableWarnMinutes: number;
 }
 export interface PosDeps {
   readonly readRules?: (tx: Tx, orgId: string, businessDate: string) => Promise<PosRules>;
@@ -174,8 +175,6 @@ export function snapshotOf(lines: readonly LoadedLine[], vatRegistered: boolean,
     ),
   };
 }
-
-export const hasStatutory = (lines: readonly LoadedLine[]): boolean => lines.some((l) => l.discounts.some((d) => d.kind === 'senior' || d.kind === 'pwd'));
 
 /** A basis-point percent as the percent text the discount row stores: 2000n -> '20.00'. */
 export const percentText = (bp: bigint): string => `${bp / 100n}.${String(bp % 100n).padStart(2, '0')}`;
