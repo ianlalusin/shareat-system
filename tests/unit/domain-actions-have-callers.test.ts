@@ -348,6 +348,10 @@ const EXEMPT: Record<string, string> = {
     'UNWIRED — T-526 / T-533: T-525 built the quarantine review (docs/tasks/525-pos-v2-apis.md R6) as domain functions only; the quarantine screen for managers is their caller. Remove this row when it lands (7 Nov 2026).',
   discardQuarantinedEvent:
     'UNWIRED — T-526 / T-533: T-525 built the quarantine review (docs/tasks/525-pos-v2-apis.md R6) as domain functions only; the quarantine screen for managers is their caller. Remove this row when it lands (7 Nov 2026).',
+  readingFor:
+    'INTERNAL — T-531: `xReading` (the X-reading, route GET /api/pos/x-reading and the Till tab) and `closeDay` / `closeBacklog` (packages/domain/src/pos/day-close.ts) call it after their own capability check; it is exported only so a test can read a window at a chosen time, so it is not a screen action of its own.',
+  deriveSalesDayFromZ:
+    'INTERNAL — T-531: `closeDay` and `closeBacklog` (packages/domain/src/pos/day-close.ts) call it inside the close transaction for each Z, after the capability check and the manager approval; the routes POST /api/pos/day-close and /api/pos/day-close/backlog call those, so it is not a screen action of its own.',
 };
 
 describe('T-227 — every action-shaped domain export is reachable from a screen', () => {

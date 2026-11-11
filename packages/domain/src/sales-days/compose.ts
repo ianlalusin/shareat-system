@@ -28,7 +28,8 @@ export function platformSalesTotal(channels: Pick<ChannelRow, 'isRemittedDaily' 
 export function routeInputForDay(day: DayRow, channels: ChannelRow[], tenders: TenderRow[]): RouteSalesDayInput {
   let totalSales = money(day.totalSales);
   let alaCarteSales = money(day.alaCarteSales);
-  if (day.source === 'pos_v1_day_feed') {
+  // T-531: and a day derived from the POS receipts, which also owns only what POS rang (the same composition, so verify and the correction never differ).
+  if (day.source !== 'legacy_typed') {
     const platform = platformSalesTotal(channels);
     if (!isZero(platform)) {
       totalSales = add(totalSales, platform);
@@ -51,13 +52,20 @@ export function routeInputForDay(day: DayRow, channels: ChannelRow[], tenders: T
     // T-375 (W11): a feed day's refunds post to 4950 beside its cash net of them; a typed day has none.
     refunds: money(day.refunds),
     tenders: tenders.map((t) => ({ moneyAccountId: t.moneyAccountId, amount: money(t.amount) })),
-    channels: channels.map((c) => ({
-      channelId: c.channelId,
-      channelName: c.channelName,
-      isRemittedDaily: c.isRemittedDaily,
-      receivableAccountCode: c.receivableAccountCode,
-      amount: money(c.amount),
-      noSales: c.noSales,
-    })),
+    channels: [
+      // T-531: a day from the POS receipts has no remitted channel ROW (the POS has no channels), but the router's channel check ("the channels sum to the total") applies as soon
+      // as a platform row exists. This one in-memory row stands for the till's own sales, exactly as a feed day's remitted row does; it is never stored and posts no line.
+      ...(day.source === 'pos_receipts'
+        ? [{ channelId: 'pos_receipts', channelName: 'POS receipts', isRemittedDaily: true, receivableAccountCode: null, amount: money(day.totalSales), noSales: false }]
+        : []),
+      ...channels.map((c) => ({
+        channelId: c.channelId,
+        channelName: c.channelName,
+        isRemittedDaily: c.isRemittedDaily,
+        receivableAccountCode: c.receivableAccountCode,
+        amount: money(c.amount),
+        noSales: c.noSales,
+      })),
+    ],
   };
 }

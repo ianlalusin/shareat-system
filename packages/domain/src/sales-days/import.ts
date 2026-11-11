@@ -119,6 +119,10 @@ type Day = NonNullable<Awaited<ReturnType<typeof salesDaysRepo.getById>>>;
 /** What a day that already exists on the date allows. Used before the fetch (no lock) and again under the lock. */
 async function gateExistingDay(tx: Tx, actor: Actor, input: ImportSalesDayInput, day: Day): Promise<void> {
   const when = safeHumanDate(input.businessDate);
+  // T-531: a date held by a day derived from the POS receipts (the Z) is never imported from v1: the new POS owns it (row 436).
+  if (day.source === 'pos_receipts') {
+    throw refuse(`importSalesDay: sales day ${day.id} is derived from the POS receipts`, `${when} was closed on the new POS, so it can't be imported from v1.`);
+  }
   if (day.status === 'verified') {
     throw refuse(
       `importSalesDay: sales day ${day.id} is verified`,
