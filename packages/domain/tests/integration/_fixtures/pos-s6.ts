@@ -16,7 +16,7 @@ import { testItemCode } from './item-code';
  * S6 TESTER list). Tests only.
  *
  * One org with: Lipa (LINKED to POS, Cash + GCash tenders, a Walk-in channel and a non-remitted Foodpanda channel with
- * receivable 1220), the periods Dec 2026 - Mar 2027, all open (a closed period may only precede open ones, so a test that needs a closed
+ * receivable 1220), the periods Dec 2025 - Mar 2027 (T-551: the v1 day feed cannot import after 31 Dec 2026, so tests date their imported days in 2026 and others stay in Dec 2026 - Mar 2027), all open (a closed period may only precede open ones, so a test that needs a closed
  * month closes Dec and Jan itself), a manager (Lipa),
  * an admin (Lipa) and a plain staff (Lipa, role staff, NO grant: lacks verify_sales_day). With `stock: true` Lipa also
  * has a kitchen, Cheese and Buns on hand (100 each) and the S5 item maps (A -> Cheese x1, B -> Buns x0.5), for the
@@ -27,7 +27,7 @@ let seq = 0;
 export const uid = (p: string) => `${p}-${Date.now()}-${++seq}-${Math.random().toString(36).slice(2, 6)}`;
 
 /** The business date every S6 test imports unless it says otherwise. */
-export const DAY = '2027-01-10';
+export const DAY = '2026-01-10';
 
 /** R1's drifted day: a voided 50.00 cash receipt. P 1,000.00, K 550.00, Cash 650.00 + GCash 350.00. Gross 1,050.00. */
 export const R1_FIGURES: PosV1SalesFigures = { ...D1_FIGURES, paidTotal: 1000, packageOnly: 550, methods: { Cash: 650, GCash: 350 } };
@@ -50,7 +50,7 @@ export async function s6Fixture(sql: postgres.Sql, hint: string, o: { stock?: bo
   await seedChartOfAccounts(sql, orgId);
   await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status)
     select ${orgId}, m::date, (m + interval '1 month' - interval '1 day')::date, 'open'
-    from generate_series('2026-12-01'::date, '2027-03-01'::date, interval '1 month') m`;
+    from generate_series('2025-12-01'::date, '2027-03-01'::date, interval '1 month') m`;
 
   const [store] = await sql<{ id: string }[]>`
     insert into stores (org_id, code, name, stock_model) values (${orgId}, ${uid('st')}, 'Lipa', ${o.stock ? 'multi_room' : 'single_room'}) returning id`;
@@ -105,10 +105,10 @@ export async function s6Fixture(sql: postgres.Sql, hint: string, o: { stock?: bo
       values (${orgId}, ${`orgs/${orgId}/p-${uid('f')}.jpg`}, 'image/jpeg', 10, 'x', 'receipt_photo', ${managerId}) returning id`;
     const [del] = await sql<{ id: string }[]>`
       insert into deliveries (org_id, store_id, kind, delivered_on, proof_file_id, created_by)
-      values (${orgId}, ${storeId}, 'purchase', '2026-12-02', ${file!.id}, ${managerId}) returning id`;
+      values (${orgId}, ${storeId}, 'purchase', '2025-12-02', ${file!.id}, ${managerId}) returning id`;
     await asOrgOn(orgId, (tx) =>
       receiveDelivery(tx, {
-        orgId, storeId, deliveryId: del!.id, deliveredOn: '2026-12-02', locations, receivedBy: managerId,
+        orgId, storeId, deliveryId: del!.id, deliveredOn: '2025-12-02', locations, receivedBy: managerId,
         lines: [{ lineId: '1', itemId, itemKind: 'meat_slab', receivedQuantity: quantity('100'), conversionFactor: '1', unitCost: '10.0000', locationId: kitchen }],
       }),
     );
