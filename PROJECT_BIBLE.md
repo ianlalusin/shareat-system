@@ -65,35 +65,35 @@
 - `1233–1267` 10. Phase plan
 - `1268–1284` 11. Migration & ETL rules
 - `1285–1349` 12. Inherited landmines — do not repeat these
-- `1350–1785` 13. Decision log
-- `1786–1805` 14. Amendment protocol
-- `1806–1810` 15. Engineering standards — the industry practices this project follows
-  - `1811–1816` 15.1 Build order: walking skeleton first
-  - `1817–1828` 15.2 Golden-master testing — the most important practice here
-  - `1829–1837` 15.3 Strangler Fig, not big-bang cutover
-  - `1838–1842` 15.4 No dual-write
-  - `1843–1851` 15.5 Expand/contract migrations
-  - `1852–1860` 15.6 Observability from day zero, not later
-  - `1861–1865` 15.7 CI gates
-  - `1866–1870` 15.8 Backups and a tested restore
-  - `1871–1875` 15.9 Twelve-Factor config
-  - `1876–1883` 15.10 Append-only ledgers — but not event sourcing
-  - `1884–1888` 15.11 Defence in depth
-  - `1889–1917` 15.12 Skills are lenses, not assurance
-  - `1918–1924` 15.13 Reconciliation is a permanent feature
-- `1925–1929` 16. The accounting spine
-  - `1930–1961` 16.0 What we are actually fixing — the diagnosis
-  - `1962–2005` 16.1 The ten invariants — non-negotiable
-  - `2006–2020` 16.2 The oracle: how "correct" is tested
-  - `2021–2042` 16.3 The model — header + lines, not legs
-  - `2043–2062` 16.4 Deliberately simpler than ERPNext
-  - `2063–2132` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2133–2157` 16.6 What v1 already gets right — preserve the intent
-  - `2158–2179` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2180–2194` 16.8 What v1's accounting already gets right
-  - `2195–2238` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2239–2289` 16.10 Posting patterns — one canonical pattern per business event
-  - `2290–2322` 16.11 Inventory's accounting integration
+- `1350–1790` 13. Decision log
+- `1791–1810` 14. Amendment protocol
+- `1811–1815` 15. Engineering standards — the industry practices this project follows
+  - `1816–1821` 15.1 Build order: walking skeleton first
+  - `1822–1833` 15.2 Golden-master testing — the most important practice here
+  - `1834–1842` 15.3 Strangler Fig, not big-bang cutover
+  - `1843–1847` 15.4 No dual-write
+  - `1848–1856` 15.5 Expand/contract migrations
+  - `1857–1865` 15.6 Observability from day zero, not later
+  - `1866–1870` 15.7 CI gates
+  - `1871–1875` 15.8 Backups and a tested restore
+  - `1876–1880` 15.9 Twelve-Factor config
+  - `1881–1888` 15.10 Append-only ledgers — but not event sourcing
+  - `1889–1893` 15.11 Defence in depth
+  - `1894–1922` 15.12 Skills are lenses, not assurance
+  - `1923–1929` 15.13 Reconciliation is a permanent feature
+- `1930–1934` 16. The accounting spine
+  - `1935–1966` 16.0 What we are actually fixing — the diagnosis
+  - `1967–2010` 16.1 The ten invariants — non-negotiable
+  - `2011–2025` 16.2 The oracle: how "correct" is tested
+  - `2026–2047` 16.3 The model — header + lines, not legs
+  - `2048–2067` 16.4 Deliberately simpler than ERPNext
+  - `2068–2137` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2138–2162` 16.6 What v1 already gets right — preserve the intent
+  - `2163–2184` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2185–2199` 16.8 What v1's accounting already gets right
+  - `2200–2243` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2244–2294` 16.10 Posting patterns — one canonical pattern per business event
+  - `2295–2327` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1782,6 +1782,11 @@ just a patch.**
 | 450 | 2026-11-07 | **A POS v2 Z THAT WOULD COVER MORE THAN 2 BUSINESS DAYS IS REFUSED WITH "CALL A MANAGER". THE MANAGER THEN RUNS "CLOSE DAY BY DAY" WITH THEIR PIN: ONE Z AND ONE SALES DAY PER PAST BUSINESS DAY THAT HAS SALES, OLDEST FIRST, WITH TODAY LEFT OPEN. IT IS AUDITED AS ONE BACKLOG CLOSE.** Ian, 2026-11-07, via BOSS, answering T-531 O2. A forgotten Z covering 2 dates stays allowed (row 390). Longer gaps would book several days of sales on one date, so they are split by the receipts' own business dates. Spec: T-531 R11. | Keeps every day's sales on its own date even after a missed close | Yes |
 | 451 | 2026-11-08 | **SAVE IS A FLOPPY DISK. VERIFY AND CONFIRM ARE A CHECK. A PERIOD CLOSE ("CLOSE MONTH / BRANCH / SHIFT ...") IS A PADLOCK, NEVER THE CANCEL X. APPROVE IS A THUMBS-UP. POST (TO THE LEDGER) IS A BOOK. EVERY OTHER ICON IS UNCHANGED UNTIL IAN RULES AGAIN.** Ian, 2026-11-08, via BOSS, after seeing the icon-only button grid (T-549). Submit and Send keep the paper plane; a bare "Close", Cancel, Discard and Dismiss keep the X. Spec: `docs/tasks/549-save-and-verify-icons.md`. | A cancel X on a month close read as "cancel", and one paper plane for approve, post and verify hid which step you are taking | Yes |
 | 452 | 2026-11-08 | ⭐ **v1 AND v2 ARE SEPARATE BACKENDS EXCEPT SIGN-IN (AUTH) AND FILE STORAGE. A STORE ON POS v1 STAYS ON THE v1 ERP (ITS BOOKS AND ITS STOCK) UNTIL IT SWITCHES TO POS v2; THE v2 ERP COVERS ONLY STORES ON POS v2, FROM EACH STORE'S SWITCH DATE. "POS USAGE PULL" AND "POS ITEM MAPPING" ARE RETIRED NOW. SUPERSEDES ROW 379's NIGHTLY v1-RECEIPT BRIDGE INTO POSTGRES FOR ALL STORES FROM 1 JAN 2027.** Ian, 2026-11-08, via BOSS: *"the plan is completely separate backend for v1 and v2, except auth and storage, so pulling v1's records like that mapping to v2 won't pay off since v2 will have a shared backend."* **What it supersedes:** row 379 parts (2) and (3) as they apply to v1 stores (the nightly per-receipt bridge for all stores; the T-396 extension); rows 341–342 (the v1-pull usage drafts and their auto-post); and any plan that books v1 stores in the v2 ERP from 2027 (ADR-005's single opening on 1 Jan for every store; `docs/plans/pos-customer-v2-phase-plan.md` and `pos-v2-design.md` §3.1 "Nightly receipt bridge"). **Still standing:** row 436, the December day-total bridge from POS v2 **to** v1 for Lipa (T-531). It writes into v1 so that v1's 2026 books stay whole, and it is not a v1→v2 import. **Consequences:** (1) the 2026 and 2027 books are split **per store by switch date**. Lipa is on the v2 ERP from 7 Dec 2026 (but its 2026 books still close on v1, through the December bridge). Malvar, Davao and Padre Garcia stay on the v1 ERP until each switches in 2027. (2) Reports that cover all stores need **v1 + v2 consolidation**. Nothing builds this yet. (3) The **1 Jan 2027 cutover** no longer means "every store opens on v2". It means the v2 ERP opens for the stores already on POS v2, and each later store opens on its own switch date. **Affected work:** T-550 (retire the two pages, keep the data tables); T-177 (item mapping and usage pull, retired); T-373, T-374, T-375 S5 and T-401 S6 (the usage pull screens and actions); T-472 (the nightly receipt bridge, live since 25 Oct); T-396 (the 06:00 v1 day-feed import); T-119 (classification and purge, with the cutover meaning changed); ADR-005 (books-first cutover); ADR-015; `docs/CAPABILITY-GAPS.md`; `docs/decisions/OPEN-DECISIONS.md`; `docs/plans/pos-customer-v2-phase-plan.md`; `docs/plans/pos-v2-design.md` §3.1 and §8. **⛔ FOR IAN TO DECIDE, NOT DECIDED HERE:** (a) T-472 is live and runs nightly. Should it be switched off now, or left running until a later date? (b) T-396 books v1-fed sales days for linked v1 stores in the v2 ERP. Should it stop for every store still on POS v1, and what happens to the v1-store sales days already booked in v2 in 2026? (c) Which modules does "books and stock" split by store? AP and suppliers, payroll and attendance, expenses and cash requests, and AR are org-wide today. Do v1 stores keep using the v2 ERP for those, or move back to v1? (d) Each later store's opening balances in the v2 ERP at its switch date: the method, and who prepares them. (e) Consolidated reporting: whether it is needed for 2027, and how (a later task, a manual export, or v1's own reports). (f) The 2027 org-level items that span both ERPs (shared suppliers, inter-store transfers, the commissary): how they are booked while stores sit on different ERPs. | Each POS generation keeps one consistent backend; no costly mapping of v1 records into v2 | Yes |
+| 453 | 2026-11-11 | **A POS v2 SALE WHOSE PAYMENT IS A LITTLE SHORT OF THE SERVER'S RECOMPUTED TOTAL IS RECORDED, NEVER REFUSED OR QUARANTINED. THE GAP IS FLAGGED AS A VARIANCE. THE TOLERANCE IS A BUSINESS RULE, `pos.sale_variance_tolerance`: DEFAULT ₱0.01, EDITABLE BY AN ADMIN, HARD MAXIMUM ₱0.10. A GAP ABOVE THE TOLERANCE IS STILL RECORDED, AND IS FLAGGED AS A FINDING, NOT REFUSED.** Ian, 2026-11-11, via BOSS, answering audit item P-002. The case: an offline sale paid ₱99.99 that the server prices at ₱100.00. Ian: *"may raise the tolerance up to .1"*. This fixes a contradiction in T-524: R9(2) says a recompute mismatch never refuses the sale, while R9(3) requires `paid ≥ total` exactly, which would quarantine it. Spec: a small slice before go-live, with a seed migration. | The money taken is what was taken; a centavo-level difference is a reconciliation item, not a lost sale | Yes |
+| 454 | 2026-11-11 | **THE ERP `/pos` TABLET SWITCHES BETWEEN LUNCH AND DINNER PRICES ON ITS OWN WHILE OFFLINE, BEFORE GO-LIVE.** This is a required slice, the same as T-510 S4b did for `apps/pos`. The device picks the price slot whose daypart window holds its own clock, from the snapshot's `hours` and per-variant `slots`. It re-checks at the next boundary and when the app resumes, and it fails closed when zero or two slots hold. Ian, 2026-11-11, via BOSS, answering audit item P-006. | A tablet that is offline across 17:00 must still charge the dinner price | Yes |
+| 455 | 2026-11-11 | **RAISING THE OFFLINE PIN VERIFIER'S PBKDF2 ROUNDS TO 600,000 WAITS UNTIL AFTER GO-LIVE (What's Left).** The rounds stay at 210,000 (T-526 R4) for release 1. Ian, 2026-11-11, via BOSS, answering audit item P-008. | Avoids a slower offline sign-in on the Lipa tablet before the soak has measured it | Yes |
+| 456 | 2026-11-11 | **SWITCHING A STORE'S POS TO LIVE (OR BACK) IS ALLOWED FOR THE `admin` AND `super_admin` ROLES ONLY, WITH A REASON, AUDITED.** Ian, 2026-11-11, via BOSS, answering T-533 O1. Store managers cannot do it. | The switch decides whether real sales are booked | Yes |
+| 457 | 2026-11-11 | **POS v2 SOAK #1 RUNS AT LIPA ON SATURDAY 28 NOVEMBER 2026, 2–4 PM**, in test mode, with real staff, the real tablet and printer, and the scripted actions of `docs/runbooks/pos-soak-plan.md`. Soak #2 runs by Wednesday 2 December if #1 finds a blocker (row 431). Ian, 2026-11-11, via BOSS, answering T-533 O2. | A quiet afternoon window that still has real traffic | Yes |
 
 ## 14. Amendment protocol
 
