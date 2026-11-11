@@ -360,4 +360,3 @@ describe('T-512 listReviewDays - reading the rule book adds at most ONE query to
     }
   }
 });
-
