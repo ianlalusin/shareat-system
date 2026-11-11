@@ -155,6 +155,7 @@ export function TerminalSection() {
     // toast with one explicit action; closing it leaves the terminal exactly as it was.
     closeQuestion();
     const shown = toast({
+      variant: "destructive",
       title: `Release ${what}?`,
       description: "The tablet using it will stop taking payment until it is set up again.",
       duration: 15000,

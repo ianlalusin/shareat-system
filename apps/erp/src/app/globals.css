@@ -51,6 +51,12 @@
 
   --success: #0e6b45;
   --success-soft: #e2f1e8;
+
+  /* T-568 — toast fill. Yellow is a surface, never body text; the toast's ink stays fixed
+     in both themes, so a dark page does not turn the type light on yellow. */
+  --toast: #f5d76e;
+  --toast-edge: #e7c44e;
+  --toast-ink: #241f18;
   --info: #1e4fb8;
   --info-soft: #e7eefb;
   --progress: #6427c9;
@@ -296,6 +302,8 @@
   .erp-tip { animation: erp-tip-in 0.12s ease-out both; }
   @keyframes erp-tip-in { from { opacity: 0; } to { opacity: 1; } }
   .toast-in { animation: toast-in 0.55s cubic-bezier(.34, 1.56, .64, 1) both; }
+  .toast-progress { animation: toast-progress 4s linear forwards; }
+  @keyframes toast-progress { from { transform: scaleX(1); } to { transform: scaleX(0); } }
   .stamp-slam { transform: rotate(-12deg); animation: stamp-slam 0.6s cubic-bezier(.5, 0, .5, 1.4) both; }
   .empty-flame { transform-box: fill-box; transform-origin: 50% 100%; animation: si-flick 1.2s ease-in-out infinite alternate; }
 

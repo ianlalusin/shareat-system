@@ -253,3 +253,33 @@ Audit fixes folded in:
 Tests: `apps/pos/src/components/settings/TerminalSection.release.test.ts` (real TerminalSection and Toaster, ports
 mocked: store in the label, nothing before the action, double click = one release, store change, different person,
 leaving the screen).
+
+## S4 - Toast design: Ticket by default, Keycap for destructive (approved by Ian, 11 Nov)
+
+Source commits 988470b (five directions, `docs/designs/toast-choices/`) and 953eedb. Ian picked **02 Ticket**
+for ordinary toasts and **01 Keycap** for destructive ones.
+
+- **Ticket**: flat brand-yellow panel, 2 px ink border, hard offset shadow, a dashed stub down the left edge, and a
+  split action pill (cream label + red arrow cell).
+- **Keycap**: the same yellow panel with a black exclamation square and a black keycap action (3 px lip). Used for
+  destructive confirmations and destructive errors (POS "Release terminal" uses it).
+- No background pattern. Same panel in light and dark theme: yellow is a fill, ink is the text.
+
+Scope: `apps/erp/src/app/globals.css` (toast tokens, stub, progress line), `apps/erp/src/components/feedback/Toaster.tsx`
+(the success toast becomes the Ticket, 4 s life and de-dupe unchanged), `apps/pos/src/app/globals.css`,
+`apps/pos/src/components/ui/toast.tsx` and `toaster.tsx`, and the release confirmation's destructive variant.
+
+Rules kept: the toast stays a live region / Radix toast; the action is the only way to confirm and closing it changes
+nothing; contrast is ink on yellow and white on brand red.
+
+Audit fixes folded in:
+
+- **UI-002** (POS, 320 px, long action label): the toast wraps (`flex-wrap`), the message is shrinkable with a basis and
+  breaks long tokens, and the action pill may shrink and wrap (`min-h-9`, no `shrink-0`) while the arrow cell stays on
+  the pill. Test: `apps/pos/src/components/ui/toast-narrow.test.ts` (structure on the real Toaster; happy-dom has no
+  layout engine).
+- **UI-003** (ERP, long reference): the toast and its text are `min-w-0`, and the text breaks anywhere. Test:
+  `apps/erp/tests/t568-toast-long-token.test.ts`.
+
+Screenshots from the old branch are under `docs/reviews/t568/s4-toast-design/` (they were injected-markup mock-ups, not
+captures of the live flow; the audit says so, and they are kept as design reference only).
