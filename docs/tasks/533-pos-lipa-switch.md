@@ -166,8 +166,10 @@ Typecheck · unit · the integration files for R1–R3, plus t531 (closing in a 
 0247 guard. Use the lane's own `_test` DB and its own `npm ci`. **Never print any `.env.local` value, and never print
 any Firestore credential or document id beyond counts.**
 
-## Open (for Ian, via BOSS)
+## Ian's answers (11 Nov 2026; bible rows 456, 457)
 
-- **O1.** Who may switch a store live? The proposal is **admin only** (Ian and the admins), with a reason, audited.
-- **O2.** Soak #1 window at Lipa on Sat 28 Nov: which hours are quiet enough to run 30 scripted actions with real
-  staff? The proposal is 2–4 p.m.
+- **O1, row 456.** Switching a store live, or back, is allowed for the roles **`admin` and `super_admin` only**. R1's
+  capability check must accept exactly those two roles. Store managers are refused, which is tested. Reuse the
+  existing role ranking (T-531 R10 used it); do not invent a new one.
+- **O2, row 457.** Soak #1 runs at **Lipa on Saturday 28 November, 2–4 p.m.**, in test mode. `pos-soak-plan.md` states
+  that window. Soak #2 runs by Wednesday 2 December if #1 has a blocker.
