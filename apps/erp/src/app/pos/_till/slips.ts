@@ -17,6 +17,9 @@ export interface ReadingJson {
   toCheckCount: number;
   lateCount: number;
   spansTwoDates: boolean;
+  /** T-558: the short payments of the window and how many receipts are findings. */
+  varianceTotal?: string;
+  shortfallCount?: number;
   unliSales?: string;
   alaCarteSales?: string;
   heads?: number;
@@ -60,6 +63,8 @@ export function readingSlipView(reading: ReadingJson, ctx: SlipContext): Reading
     packageSessions: reading.packageSessions ?? 0,
     seniorPwdDiners: reading.seniorPwdDiners ?? 0,
     tenders: reading.byTender.map((t) => ({ name: t.name, amount: amountOf(t.amount) })),
+    varianceTotal: amountOf(reading.varianceTotal),
+    shortfallCount: reading.shortfallCount ?? 0,
     toCheckCount: reading.toCheckCount,
     lateCount: reading.lateCount,
   };

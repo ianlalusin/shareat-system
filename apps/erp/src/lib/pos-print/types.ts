@@ -144,6 +144,10 @@ export interface ReadingSlipView {
   seniorPwdDiners: number;
   /** One row per tender, the NET collected. */
   tenders: { name: string; amount: Money }[];
+  /** T-558: Σ of the receipts' short payments (money not collected); printed only above zero. Optional: a view without it prints as before. */
+  varianceTotal?: Money;
+  /** T-558: receipts short by more than the tolerance (findings); printed only above zero. */
+  shortfallCount?: number;
   /** Offline wallet payments still to check; printed only above zero. */
   toCheckCount: number;
   /** Receipts recorded after their window opened; printed only above zero. */

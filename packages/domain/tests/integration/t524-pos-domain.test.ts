@@ -57,7 +57,7 @@ import { insDaypart, insDaypartOffer, insOptionOffer, insRule, menuFixture, newI
 // ------------------------------------------------------------------------------------------------------------------------------
 // The subject, loaded lazily so a missing module fails each case with its own message instead of killing the file at import.
 // ------------------------------------------------------------------------------------------------------------------------------
-type Deps = { readRules?: (tx: Tx, orgId: string, businessDate: string) => Promise<{ vatPercentBasisPoints: bigint; scPwdPercentBasisPoints: bigint; businessDayStartHour: number }>; now?: () => Date };
+type Deps = { readRules?: (tx: Tx, orgId: string, businessDate: string) => Promise<{ vatPercentBasisPoints: bigint; scPwdPercentBasisPoints: bigint; businessDayStartHour: number; saleVarianceToleranceCentavos?: bigint }>; now?: () => Date };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type W<R = any> = (tx: Tx, actor: Actor, input: any, deps?: Deps) => Promise<R>;
 interface PosApi {
@@ -97,7 +97,7 @@ const uuid = (): string => globalThis.crypto.randomUUID();
 const nowIso = () => new Date().toISOString();
 const actorOf = (orgId: string, personId: string): Actor => ({ personId, orgId });
 // BOSS ruling 6 Nov: one injectable reader; percents are basis points (12% = 1200n); the business day starts at an integer hour (4 = 04:00).
-const RATES: Deps = { readRules: async () => ({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4 }) };
+const RATES: Deps = { readRules: async () => ({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, saleVarianceToleranceCentavos: 1n }) };
 const HOLDER = 'Zyxwv Quillfeather'; // a senior's name: must appear in statutory_discount_records and NOWHERE else
 const IDNO = 'OSCA-9990042';
 const SAME_ID_SENTENCE = 'This change was already recorded differently on the till.';
@@ -1415,15 +1415,22 @@ describe('R9 / test 9 - completeSale: the server recomputes, then freezes', () =
     expect((await receiptPayments(i2.receiptId)).every((r) => r.change_given === '0.00')).toBe(true);
   });
 
-  it('over-payment with a wallet only is refused; so is change larger than the cash tendered; so is under-payment', async () => {
+  it('over-payment with a wallet only is refused; so is change larger than the cash tendered (under-payment is no longer refused: T-558, see the next case)', async () => {
     const f = await fixture();
     const s = await porkSession(f); // 500.00
     const pay = (payments: unknown[]) => saleInput(f, s.sessionId, { payments }).then((i) => complete(f, i));
     await expectRefusal(pay([{ tenderId: f.gcash, amount: '600.00', referenceNo: 'GC1234567', toCheck: false }]), 'Change can only be given in cash.');
     await expectRefusal(pay([{ tenderId: f.cash, amount: '10.00', toCheck: false }, { tenderId: f.gcash, amount: '505.00', referenceNo: 'GC1234567', toCheck: false }]), 'Change can only be given in cash.');
-    await expectRefusal(pay([{ tenderId: f.cash, amount: '499.99', toCheck: false }]));
     expect(await receiptOf(s.sessionId)).toBeUndefined();
     expect((await sessionRow(s.sessionId)).status).toBe('open');
+  });
+
+  it('T-558 replaces "under-payment is refused": cash 499.99 on 500.00 is recorded (the sale is never lost), paid, with no change', async () => {
+    const f = await fixture();
+    const s = await porkSession(f); // 500.00
+    await saleInput(f, s.sessionId, { payments: [{ tenderId: f.cash, amount: '499.99', toCheck: false }] }).then((i) => complete(f, i));
+    expect(await receiptOf(s.sessionId)).toBeDefined();
+    expect((await sessionRow(s.sessionId)).status).toBe('paid');
   });
 
   it('payment rows: 1 to 20 (21 refused, 20 fine); amounts above 0; an active tender of THIS store', async () => {

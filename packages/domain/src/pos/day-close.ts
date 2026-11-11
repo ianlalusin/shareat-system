@@ -81,6 +81,10 @@ export interface Reading {
   unliSales: Money;
   alaCarteSales: Money;
   byTender: TenderLine[];
+  /** T-558: Σ of the receipts' short payments (a gap above zero only; an overpayment's change never offsets one). Σ byTender + varianceTotal = grossTotal (asserted). */
+  varianceTotal: Money;
+  /** T-558: how many receipts have a gap above the tolerance in force on their business date (the findings). Receipts, not audit rows. */
+  shortfallCount: number;
   /** Offline wallet payments still to check against the statement. */
   toCheckCount: number;
   heads: number;
@@ -129,6 +133,14 @@ async function openWindow(tx: Tx, orgId: string, storeId: string, terminalId: st
   return { store, open, hour, lastZ, start: dayStart(dates[0] ?? startHourDate(at, hour), hour) };
 }
 
+/** T-558: the receipts paid short (total above the sum tendered), with the gap in centavos. A receipt paid in full or over (change) is never listed: change never offsets a gap. */
+async function shortPaid(tx: Tx, orgId: string, receipts: readonly Receipt[]): Promise<{ receipt: Receipt; gap: bigint }[]> {
+  const paid = await posV2Repo.receiptPaidSums(tx, orgId, receipts.map((r) => r.id));
+  return receipts
+    .map((receipt) => ({ receipt, gap: toCentavos(money(receipt.total)) - toCentavos(money(paid.get(receipt.id) ?? '0')) }))
+    .filter((x) => x.gap > 0n);
+}
+
 /** The figures of a set of receipts in a window. Every amount is exact centavos; three identities are asserted, and a break is a bug, never a rounding. */
 async function figuresOf(
   tx: Tx,
@@ -138,6 +150,7 @@ async function figuresOf(
   receipts: readonly Receipt[],
   window: { start: Date; end: Date },
   hour: number,
+  deps: PosDeps | undefined,
 ): Promise<Reading> {
   const f = await posV2Repo.receiptFigures(tx, orgId, receipts.map((r) => r.id));
   const subtotal = sumCentavos(receipts.map((r) => r.subtotal));
@@ -158,7 +171,18 @@ async function figuresOf(
       return { tenderId: p.tenderId, name: t?.name ?? 'Unknown tender', kind: (t?.kind ?? 'wallet') as 'cash' | 'wallet', amount: fromCentavos(toCentavos(money(p.amount)) - toCentavos(money(p.change))) };
     })
     .sort((a, b) => compare(b.amount, a.amount) || a.name.localeCompare(b.name));
-  if (byTender.reduce((a, t) => a + toCentavos(t.amount), 0n) !== gross) throw internalFault(`day close: tenders do not add up to the receipts' total ${gross} centavos`);
+  // T-558 (row 453): a short-paid receipt is the tender side's gap. Σ tenders + Σ gaps = gross, exactly.
+  let variance = 0n;
+  let shortfallCount = 0;
+  const toleranceOn = new Map<string, bigint>();
+  for (const { receipt: r, gap } of await shortPaid(tx, orgId, receipts)) {
+    variance += gap;
+    // shortcut: the receipt's business date is taken from its own device time; a late receipt carried into a later Z could differ, only when the rule changes between those days.
+    const day = startHourDate(r.issuedAtDevice, hour);
+    if (!toleranceOn.has(day)) toleranceOn.set(day, (await readRules(tx, orgId, day, deps)).saleVarianceToleranceCentavos);
+    if (gap > toleranceOn.get(day)!) shortfallCount += 1;
+  }
+  if (byTender.reduce((a, t) => a + toCentavos(t.amount), 0n) + variance !== gross) throw internalFault(`day close: tenders ${byTender.reduce((a, t) => a + toCentavos(t.amount), 0n)} + short payments ${variance} do not add up to the receipts' total ${gross} centavos`);
 
   const lastMs = Math.max(window.start.getTime(), window.end.getTime() - 1);
   return {
@@ -175,6 +199,8 @@ async function figuresOf(
     unliSales: fromCentavos(unli),
     alaCarteSales: fromCentavos(ala),
     byTender,
+    varianceTotal: fromCentavos(variance),
+    shortfallCount,
     toCheckCount: f.byTender.reduce((a, p) => a + p.toCheck, 0),
     heads: f.heads,
     packageSessions: f.packageSessions,
@@ -186,7 +212,7 @@ async function figuresOf(
 /** The open window of one terminal as figures. Pure apart from reads; no capability check (its callers have done theirs). */
 export async function readingFor(tx: Tx, actor: Actor, input: { storeId: string; terminalId: string; at: Date }, deps?: PosDeps): Promise<Reading> {
   const w = await openWindow(tx, actor.orgId, input.storeId, input.terminalId, input.at, deps);
-  return figuresOf(tx, actor.orgId, input.storeId, input.terminalId, w.open, { start: w.start, end: input.at }, w.hour);
+  return figuresOf(tx, actor.orgId, input.storeId, input.terminalId, w.open, { start: w.start, end: input.at }, w.hour, deps);
 }
 
 /** The X reading: the open window of the paired tablet's till, written nowhere. `record_sale`. */
@@ -207,7 +233,7 @@ export async function xReading(tx: Tx, actor: Actor, input: { storeId: string; t
 async function readingOfClose(tx: Tx, orgId: string, close: posV2Repo.PosDayCloseRow, deps: PosDeps | undefined): Promise<Reading> {
   const receipts = await posV2Repo.listReceiptsOfClose(tx, orgId, close.storeId, close.id);
   const { businessDayStartHour: hour } = await readRules(tx, orgId, close.businessDate, deps);
-  return figuresOf(tx, orgId, close.storeId, close.terminalId, receipts, { start: close.windowStart, end: close.windowEnd }, hour);
+  return figuresOf(tx, orgId, close.storeId, close.terminalId, receipts, { start: close.windowStart, end: close.windowEnd }, hour, deps);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -347,7 +373,7 @@ export async function closeDay(tx: Tx, actor: Actor, input: CloseDayInput, deps?
   const at = nowOf(deps);
   const w = await openWindow(tx, orgId, storeId, till.terminalId, at, deps);
   if (!w.store || w.store.mode === 'off') throw refuse('pos: store switched off', NOT_ON);
-  const reading = await figuresOf(tx, orgId, storeId, till.terminalId, w.open, { start: w.start, end: at }, w.hour);
+  const reading = await figuresOf(tx, orgId, storeId, till.terminalId, w.open, { start: w.start, end: at }, w.hour, deps);
   if (reading.receiptCount === 0) throw refuse('pos: nothing to close', NO_SALES_TO_CLOSE);
   // R11 (row 450): from the oldest unclosed receipt's business day to today's, no more than 2 business dates.
   const today = startHourDate(at, w.hour);
@@ -430,7 +456,7 @@ export async function closeBacklog(tx: Tx, actor: Actor, input: CloseBacklogInpu
   for (const day of days) {
     const receipts = groups.get(day)!;
     const end = dayStart(addDays(parseBusinessDate(day), 1), w.hour);
-    const reading = await figuresOf(tx, orgId, storeId, till.terminalId, receipts, { start, end }, w.hour);
+    const reading = await figuresOf(tx, orgId, storeId, till.terminalId, receipts, { start, end }, w.hour, deps);
     zNo += 1;
     const closeId = uuidv5(day, runId);
     const { salesDayId } = await writeZ(tx, actor, ctx, { closeId, zNo, businessDate: day, windowStart: start, windowEnd: end, receipts, reading });
@@ -499,7 +525,7 @@ export async function deriveSalesDayFromZ(
     totalSales: reading.subtotal, unliSales: reading.unliSales, alaCarteSales: reading.alaCarteSales,
     seniorDiscount: reading.discounts.senior, pwdDiscount: reading.discounts.pwd, otherDiscount: reading.discounts.other,
     comps: ZERO, serviceCharge: ZERO, otherCharges: ZERO, cashCollected: cash, onlineCollected: online, creditSales: ZERO, refunds: ZERO,
-    channels: [], tenders: [...wallets.entries()].map(([moneyAccountId, amount]) => ({ moneyAccountId, amount })),
+    allowShortPayment: true, channels: [], tenders: [...wallets.entries()].map(([moneyAccountId, amount]) => ({ moneyAccountId, amount })),
   });
   if (!routed.ok) throw refuse(`pos: the day ${date} cannot post: ${routed.reason}`, `The day ${date} cannot be booked as it stands: ${routed.reason}. Nothing was closed.`);
 
@@ -548,6 +574,7 @@ async function bridgePayloadFor(tx: Tx, orgId: string, storeId: string, business
     closes.push({
       receiptCount: d.close.receiptCount,
       grossTotal: d.close.grossTotal,
+      varianceTotal: fromCentavos((await shortPaid(tx, orgId, receipts)).reduce((a, x) => a + x.gap, 0n)),
       discountTotal: fromCentavos(sumCentavos(receipts.map((r) => r.discountTotal))),
       unliSales: fromCentavos(sumCentavos([f.packageGross])),
       heads: f.heads,
