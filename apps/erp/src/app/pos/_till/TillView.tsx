@@ -32,7 +32,7 @@ const failed = (json: Record<string, unknown>, fallback: string): CloseAnswer =>
 export function TillView({ reading, history, isManager, store, cashierName, tillCountsHref }: Props) {
   const router = useRouter();
   const pos = usePos();
-  const { layout, copies } = printSettingsOf(store);
+  const { layout } = printSettingsOf(store);
   const deps: TillDeps = {
     postClose: async (body) => {
       const { json } = await post('/api/pos/day-close', body);
@@ -55,7 +55,7 @@ export function TillView({ reading, history, isManager, store, cashierName, till
       if (json.ok === true) router.refresh();
       return json.ok === true ? { ok: true } : { ok: false, error: typeof json.error === 'string' ? json.error : 'v1 could not be reached. Try again.' };
     },
-    print: (lines) => printLines(lines, { copies }), // the till's own copy count (T-546), as Payment's receipt does
+    print: (lines, opts) => printLines(lines, opts), // X/Z/Reprint slips: TillPanel asks for 1 copy (cash-control slips, not receipts)
     newId: () => globalThis.crypto.randomUUID(),
   };
   return <TillPanel reading={reading} history={history} online={pos?.online ?? true} isManager={isManager} layout={layout} store={store} cashierName={cashierName} tillCountsHref={tillCountsHref} deps={deps} />;
