@@ -480,5 +480,5 @@ function Pill({ tone, children }: { tone: 'neutral' | 'amber'; children: React.R
     tone === 'amber'
       ? 'bg-warning-soft text-warning-ink'
       : 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300';
-  return <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${cls}`}>{children}</span>;
+  return <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${cls}`}>{children}</span>;
 }

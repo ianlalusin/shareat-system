@@ -244,7 +244,7 @@ export function SalesLine({
         />
         <span
           className={
-            'absolute bottom-[18px] whitespace-nowrap rounded-[10px] bg-ink px-3 py-2 text-[13px] leading-snug text-canvas ' +
+            'absolute bottom-[18px] whitespace-nowrap rounded-[10px] bg-ink px-3 py-2 text-sm leading-snug text-canvas ' +
             (calloutRight ? 'right-0' : '-left-4')
           }
         >
@@ -261,7 +261,7 @@ export function SalesLine({
         ))}
       </div>
       {hasLines ? null : (
-      <figcaption className="mt-3.5 flex gap-5 text-[13px] text-muted">
+      <figcaption className="mt-3.5 flex gap-5 text-sm text-muted">
         <span className="inline-flex items-center gap-2">
           <span className="h-[3px] w-[22px] rounded-sm" style={{ background: 'var(--brand-ink)' }} />
           {curName}
@@ -273,7 +273,7 @@ export function SalesLine({
       </figcaption>
       )}
       {legend && legend.length > 0 ? (
-        <ul className="m-0 mt-3 flex list-none flex-wrap gap-x-5 gap-y-2 p-0 text-[13px] text-muted">
+        <ul className="m-0 mt-3 flex list-none flex-wrap gap-x-5 gap-y-2 p-0 text-sm text-muted">
           <li className="inline-flex items-center gap-2">
             <span className="h-[3px] w-[18px] rounded-sm" style={{ background: 'var(--brand-ink)' }} />
             Gross sales
@@ -293,7 +293,7 @@ export function SalesLine({
           ))}
         </ul>
       ) : null}
-      {note ? <p className="m-0 mt-2 text-[13px] text-muted">{note}</p> : null}
+      {note ? <p className="m-0 mt-2 text-sm text-muted">{note}</p> : null}
     </figure>
   );
 }

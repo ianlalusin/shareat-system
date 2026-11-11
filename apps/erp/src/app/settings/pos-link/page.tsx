@@ -115,11 +115,11 @@ function StoreCard({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-medium">{row.storeName}</h2>
         {link ? (
-          <span className="rounded bg-success-soft px-1.5 py-0.5 text-[11px] font-medium text-success">
+          <span className="rounded bg-success-soft px-1.5 py-0.5 text-xs font-medium text-success">
             Linked to {link.posStoreName}
           </span>
         ) : (
-          <span className="rounded bg-warning-soft px-1.5 py-0.5 text-[11px] font-medium text-warning-ink">
+          <span className="rounded bg-warning-soft px-1.5 py-0.5 text-xs font-medium text-warning-ink">
             Not linked — sales are typed
           </span>
         )}

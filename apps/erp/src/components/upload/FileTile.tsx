@@ -25,8 +25,8 @@ export function FileTile({
           <path d="M14 3v5h5M10 13h6M10 17h6" />
         </svg>
       )}
-      {name ? <span className="w-full truncate text-[11px] leading-tight">{name}</span> : null}
-      {size ? <span className="text-[11px] leading-tight text-muted">{size}</span> : null}
+      {name ? <span className="w-full truncate text-xs leading-tight">{name}</span> : null}
+      {size ? <span className="text-xs leading-tight text-muted">{size}</span> : null}
     </span>
   );
 }

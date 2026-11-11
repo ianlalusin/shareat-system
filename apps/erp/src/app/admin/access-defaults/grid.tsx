@@ -92,7 +92,7 @@ function OnByPosition({
   activeDefaults: ActiveDefaultsByPosition;
 }) {
   return (
-    <span className="block text-[11px] font-normal text-ink/70">
+    <span className="block text-xs font-normal text-ink/70">
       On:{' '}
       {positions.map((p, i) => (
         <span key={p.id} className="whitespace-nowrap">
@@ -143,8 +143,8 @@ export function DesktopGrid({
             {positions.map((p) => (
               <th key={p.id} className="px-3 py-2 font-medium">
                 {p.name}
-                {!p.isCanonical && <span className="ml-1 text-[10px] text-neutral-500 dark:text-neutral-400">(this store)</span>}
-                <span className="block text-[11px] font-normal text-neutral-500 dark:text-neutral-400">
+                {!p.isCanonical && <span className="ml-1 text-xs text-neutral-500 dark:text-neutral-400">(this store)</span>}
+                <span className="block text-xs font-normal text-neutral-500 dark:text-neutral-400">
                   {p.holderCount} holder{p.holderCount === 1 ? '' : 's'}
                 </span>
                 {!p.isCanonical && (
@@ -194,7 +194,7 @@ export function DesktopGrid({
                         {positions.map((p) => (
                           <th key={p.id} className="px-3 py-2 font-medium">
                             {p.name}
-                            {!p.isCanonical && <span className="ml-1 text-[10px] text-ink/60">(this store)</span>}
+                            {!p.isCanonical && <span className="ml-1 text-xs text-ink/60">(this store)</span>}
                           </th>
                         ))}
                       </tr>
@@ -204,11 +204,11 @@ export function DesktopGrid({
                         <tr key={cell.capability} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                           <td className="px-3 py-2 text-xs">
                             <span>{capabilityTitle(cell.capability)}</span>
-                            <span className="block font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
+                            <span className="block font-mono text-xs text-neutral-500 dark:text-neutral-400">
                               {cell.capability}
                             </span>
                             {cell.inherited && (
-                              <span className="ml-2 rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-sans text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+                              <span className="ml-2 rounded bg-neutral-100 px-1.5 py-0.5 text-xs font-sans text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
                                 inherited
                               </span>
                             )}
@@ -224,7 +224,7 @@ export function DesktopGrid({
                                   <ToggleButton storeId={storeId} positionId={p.id} capability={cell.capability} active={active} />
                                 )}
                                 {disclosure && (
-                                  <p className="mt-1 text-[11px] font-medium text-warning-ink">{disclosure}</p>
+                                  <p className="mt-1 text-xs font-medium text-warning-ink">{disclosure}</p>
                                 )}
                               </td>
                             );
@@ -316,11 +316,11 @@ export function MobileSections({
                                       <span className="min-w-0 text-xs">
                                         <span>{capabilityTitle(cell.capability)}</span>
                                         {cell.inherited && (
-                                          <span className="ml-2 block font-sans text-[11px] text-neutral-500 dark:text-neutral-400">
+                                          <span className="ml-2 block font-sans text-xs text-neutral-500 dark:text-neutral-400">
                                             Every staff member already has this through the role matrix.
                                           </span>
                                         )}
-                                        <span className="block font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
+                                        <span className="block font-mono text-xs text-neutral-500 dark:text-neutral-400">
                                           {cell.capability}
                                         </span>
                                       </span>
@@ -333,7 +333,7 @@ export function MobileSections({
                                       </div>
                                     </div>
                                     {disclosure && (
-                                      <p className="mt-2 text-[11px] font-medium text-warning-ink">{disclosure}</p>
+                                      <p className="mt-2 text-xs font-medium text-warning-ink">{disclosure}</p>
                                     )}
                                   </div>
                                 );

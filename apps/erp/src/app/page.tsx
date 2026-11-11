@@ -283,7 +283,7 @@ export default async function DashboardPage({
             <ChannelDonut rows={channelRows} subtitle="where the orders came from" />
           ) : (
             <div className="flex flex-col gap-4">
-              <h2 className="m-0 border-t-2 border-ink pt-3 font-display text-[28px] font-bold leading-none">By channel</h2>
+              <h2 className="m-0 border-t-2 border-ink pt-3 font-display text-3xl font-bold leading-none">By channel</h2>
               <EmptyState message={`No sales ${fromDate} to ${toDate}.`} />
             </div>
           )}
@@ -299,8 +299,8 @@ export default async function DashboardPage({
 
         <section className="flex flex-col gap-2">
           <div className="flex items-center gap-4 border-t-2 border-ink pt-3">
-            <h2 className="m-0 font-display text-[28px] font-bold leading-none">Waiting on you</h2>
-            <span className="text-[13px] text-muted">tap a number to deal with it</span>
+            <h2 className="m-0 font-display text-3xl font-bold leading-none">Waiting on you</h2>
+            <span className="text-sm text-muted">tap a number to deal with it</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
             <OutlineCount href="/findings" count={hardFindingsOpen} label="Findings" hint={`hard, open · ${period}`} />
@@ -313,8 +313,8 @@ export default async function DashboardPage({
         {govTile ? (
           <section aria-label="Government payments" className="flex flex-col gap-2">
             <div className="flex items-center gap-4 border-t-2 border-ink pt-3">
-              <h2 className="m-0 font-display text-[28px] font-bold leading-none">Government payments</h2>
-              <span className="text-[13px] text-muted">SSS, PhilHealth, Pag-IBIG and BIR · owed and not yet paid</span>
+              <h2 className="m-0 font-display text-3xl font-bold leading-none">Government payments</h2>
+              <span className="text-sm text-muted">SSS, PhilHealth, Pag-IBIG and BIR · owed and not yet paid</span>
             </div>
             <MetricStrip label="Government payments owed" columns={4}>
               {[
@@ -339,7 +339,7 @@ export default async function DashboardPage({
               ))}
             </MetricStrip>
             {govTile.agencies.some((a) => a.noDueDay) ? (
-              <p className="text-[13px] text-muted">
+              <p className="text-sm text-muted">
                 No due day set for {govTile.agencies.filter((a) => a.noDueDay).map((a) => a.agency.toUpperCase()).join(', ')}, so overdue cannot be told.{' '}
                 <Link href="/payroll/rates" className="underline underline-offset-2">
                   Set it under Employer numbers
@@ -352,8 +352,8 @@ export default async function DashboardPage({
         {usageScorecard.length > 0 ? (
           <section className="flex flex-col gap-2">
             <div className="flex items-center gap-4 border-t-2 border-ink pt-3">
-              <h2 className="m-0 font-display text-[28px] font-bold leading-none">Usage check</h2>
-              <span className="text-[13px] text-muted">POS usage drafts · {rangeText}</span>
+              <h2 className="m-0 font-display text-3xl font-bold leading-none">Usage check</h2>
+              <span className="text-sm text-muted">POS usage drafts · {rangeText}</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -398,7 +398,7 @@ function StatCard({ label, value, note, href, className = '', currency = true }:
           {currency && <span className="mr-0.5 text-[0.5em] text-muted">₱</span>}
           {value}
         </span>
-        <span className="text-[13px] text-muted">{note}</span>
+        <span className="text-sm text-muted">{note}</span>
       </Link>
     </div>
   );

@@ -58,7 +58,7 @@ export function SalesHover({ points }: { points: SalesHoverPoint[] }) {
           />
           <span
             className={
-              'pointer-events-none absolute -translate-y-1/2 whitespace-nowrap rounded-md border-l-2 px-2 py-1 text-[12px] leading-tight tabular-nums text-ink shadow-md ' +
+              'pointer-events-none absolute -translate-y-1/2 whitespace-nowrap rounded-md border-l-2 px-2 py-1 text-xs leading-tight tabular-nums text-ink shadow-md ' +
               (x > 0.7 ? '-translate-x-[calc(100%+10px)]' : 'translate-x-[10px]')
             }
             style={{
@@ -70,9 +70,9 @@ export function SalesHover({ points }: { points: SalesHoverPoint[] }) {
             }}
           >
             <span className="block text-muted">{p.day}</span>
-            <b className="font-display text-[14px]">₱{p.text}</b>
+            <b className="font-display text-sm">₱{p.text}</b>
             {p.channels && p.channels.length > 0 ? (
-              <span className="mt-1 block text-[11px] text-muted">
+              <span className="mt-1 block text-xs text-muted">
                 {p.channels.map((c) => (
                   <span key={c.name} className="flex items-center gap-1.5">
                     <span className="h-1.5 w-1.5 flex-none rounded-full" style={{ background: c.color }} />

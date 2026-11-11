@@ -142,17 +142,17 @@ export default async function ExpenseCategoriesSettingsPage({
                       </EditableRecord>
                     )}
                     {isUnmapped && (
-                      <span className="ml-2 rounded bg-warning-soft px-1.5 py-0.5 text-[11px] font-medium text-warning-ink">
+                      <span className="ml-2 rounded bg-warning-soft px-1.5 py-0.5 text-xs font-medium text-warning-ink">
                         unmapped
                       </span>
                     )}
                     {c.isSystem && (
-                      <span className="ml-2 rounded bg-neutral-200 px-1.5 py-0.5 text-[11px] font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+                      <span className="ml-2 rounded bg-neutral-200 px-1.5 py-0.5 text-xs font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
                         seeded
                       </span>
                     )}
                     {!c.isActive && (
-                      <span className="ml-2 rounded bg-neutral-200 px-1.5 py-0.5 text-[11px] font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+                      <span className="ml-2 rounded bg-neutral-200 px-1.5 py-0.5 text-xs font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
                         retired
                       </span>
                     )}

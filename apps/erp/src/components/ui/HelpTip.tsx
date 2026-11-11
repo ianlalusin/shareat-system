@@ -59,7 +59,7 @@ export function HelpTip({ children, label }: HelpTipProps) {
         onFocus={() => setHover(true)}
         onBlur={() => setHover(false)}
       >
-        <span aria-hidden="true" className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-current text-[10px]">?</span>
+        <span aria-hidden="true" className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-current text-xs">?</span>
       </button>
       <span id={id} role="tooltip" className="erp-help-tip-pop" hidden={!shown}>
         {children}
