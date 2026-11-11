@@ -15,7 +15,7 @@ import type { LeaveRow } from '@shareat/domain';
 import { ACTION_LINK } from '@/components/action-link';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Button, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Badge, Button, Input, LinkRow, NumTd, RowLink, Select, Table, Td, Th } from '@/components/ui';
 
 export const metadata = { title: 'Attendance review — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -103,10 +103,10 @@ export default async function AttendanceReviewPage({
           <Input name="from" type="date" defaultValue={from} className="w-full" />
         </label>
         <label className="flex min-w-0 flex-1 basis-40 flex-col gap-1 text-xs uppercase tracking-wide text-neutral-500">
-          to
+          To
           <Input name="to" type="date" defaultValue={to} className="w-full" />
         </label>
-        <Button type="submit" variant="primary">
+        <Button type="submit" variant="primary" icon={null}>
           Show
         </Button>
       </form>
@@ -118,7 +118,7 @@ export default async function AttendanceReviewPage({
         </h2>
 
         {queued.length === 0 ? (
-          <p className="rounded border border-dashed border-surface-border p-6 text-center text-sm text-neutral-500">
+          <p className="rounded-[20px] border border-dashed border-surface-border p-6 text-center text-sm text-muted">
             Nothing is waiting on a decision in this period.
           </p>
         ) : (
@@ -136,28 +136,26 @@ export default async function AttendanceReviewPage({
           <span className="text-sm font-normal text-neutral-500">({roster.length})</span>
         </h2>
         {roster.length === 0 ? (
-          <p className="rounded border border-dashed border-surface-border p-6 text-center text-sm text-neutral-500">
+          <p className="rounded-[20px] border border-dashed border-surface-border p-6 text-center text-sm text-muted">
             No attendance days in this range.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[40rem] text-sm">
-              <thead className="text-left text-xs uppercase tracking-wide text-neutral-500">
-                <tr>
-                  <th className="py-2 pr-4">Day</th>
-                  <th className="pr-4">Person</th>
-                  <th className="pr-4 text-right">Paid</th>
-                  <th className="pr-6 text-right">Overtime</th>
-                  <th className="pr-2">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {roster.map((d) => (
-                  <RosterRow key={d.id} day={d} />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table card={{ title: 'Person', subtitle: 'Day', keys: ['Status', 'Paid'] }}>
+            <thead>
+              <tr>
+                <Th>Day</Th>
+                <Th>Person</Th>
+                <Th numeric>Paid</Th>
+                <Th numeric>Overtime</Th>
+                <Th>Status</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {roster.map((d) => (
+                <RosterRow key={d.id} day={d} />
+              ))}
+            </tbody>
+          </Table>
         )}
       </section>
 
@@ -166,7 +164,7 @@ export default async function AttendanceReviewPage({
           Leave in the period <span className="text-sm font-normal text-neutral-500">({leave.length})</span>
         </h2>
         {leave.length === 0 ? (
-          <p className="rounded border border-dashed border-surface-border p-6 text-center text-sm text-neutral-500">
+          <p className="rounded-[20px] border border-dashed border-surface-border p-6 text-center text-sm text-muted">
             No leave in this range. Ask for or decide leave on{' '}
             <a href="/attendance/leave" className={ACTION_LINK}>
               the leave page
@@ -174,23 +172,21 @@ export default async function AttendanceReviewPage({
             .
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[40rem] text-sm">
-              <thead className="text-left text-xs uppercase tracking-wide text-neutral-500">
-                <tr>
-                  <th className="py-2 pr-4">Day</th>
-                  <th className="pr-4">Person</th>
-                  <th className="pr-4">Kind</th>
-                  <th className="pr-2">Pay</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leave.map((l) => (
-                  <LeaveGridRow key={`${l.requestId}:${l.date}`} row={l} />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table card={{ title: 'Person', subtitle: 'Day', keys: ['Pay'] }}>
+            <thead>
+              <tr>
+                <Th>Day</Th>
+                <Th>Person</Th>
+                <Th>Kind</Th>
+                <Th>Pay</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {leave.map((l) => (
+                <LeaveGridRow key={`${l.requestId}:${l.date}`} row={l} />
+              ))}
+            </tbody>
+          </Table>
         )}
       </section>
     </Page>
@@ -200,15 +196,15 @@ export default async function AttendanceReviewPage({
 /** One leave date. Paid / Unpaid is the badge; a clash flag means punches also exist on that date (the date would be paid twice). */
 function LeaveGridRow({ row }: { row: LeaveRow }) {
   return (
-    <tr className="border-t border-surface-border">
-      <td className="py-2 pr-4 tabular-nums">{row.date}</td>
-      <td className="pr-4">{row.personName}</td>
-      <td className="pr-4">
+    <tr>
+      <Td className="tabular-nums">{row.date}</Td>
+      <Td>{row.personName}</Td>
+      <Td>
         {row.leaveType.replace(/_/g, ' ')}
         {row.kind === 'rest_day' ? ' · rest day' : ''}
         {row.status === 'pending' ? ' · pending' : ''}
-      </td>
-      <td className="pr-2">
+      </Td>
+      <Td>
         {row.kind === 'rest_day' ? (
           <Badge tone="closed" label="Rest day" />
         ) : row.paid ? (
@@ -217,7 +213,7 @@ function LeaveGridRow({ row }: { row: LeaveRow }) {
           <Badge tone="closed" label="Unpaid" />
         )}
         {row.clash && <Badge tone="warning" label="Clash: punches that day" className="ml-2" />}
-      </td>
+      </Td>
     </tr>
   );
 }
@@ -238,7 +234,7 @@ function QueueRow({ day }: { day: QueuedDay }) {
         </div>
         {day.reasons.map((r) => (
           <p key={r} className="text-xs text-warning-ink">
-            ⚠️ {REVIEW_REASON_TEXT[r]}
+            {REVIEW_REASON_TEXT[r]}
           </p>
         ))}
       </Link>
@@ -248,28 +244,28 @@ function QueueRow({ day }: { day: QueuedDay }) {
 
 function RosterRow({ day }: { day: ReviewDayRow }) {
   return (
-    <LinkRow className="border-t border-surface-border">
-      <td className="py-2 pr-4">
+    <LinkRow>
+      <Td>
         <RowLink href={`/attendance/${day.id}`}>
           {day.shiftDay}
         </RowLink>
-      </td>
-      <td className="pr-4">{day.personName}</td>
-      <td className="pr-4 text-right tabular-nums">
+      </Td>
+      <Td>{day.personName}</Td>
+      <NumTd>
         {asHours(day.computedMinutes)}
         {day.isHalfDay ? ' ½' : ''}
-      </td>
-      <td className="pr-6 text-right tabular-nums">
+      </NumTd>
+      <NumTd>
         {day.pendingOtMinutes === 0
           ? '—'
           : day.approvedOtMinutes === null
             ? `${asHours(day.pendingOtMinutes)} pending`
             : `${asHours(day.approvedOtMinutes)} approved`}
-      </td>
-      <td className="pr-2">
+      </NumTd>
+      <Td>
         <Badge status={day.status} />
         {day.frozenAt ? ' · frozen' : ''}
-      </td>
+      </Td>
     </LinkRow>
   );
 }

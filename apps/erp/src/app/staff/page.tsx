@@ -57,6 +57,8 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
   ]);
 
   // The Positions tab only uses names and ids - photos and live state are for the Cards and Roster views.
+  // The ID cards are the default again (Ian, 2026-11-09); the table-first Roster is the
+  // alternate view for scanning a long list.
   const view: 'cards' | 'roster' | 'positions' =
     sp.view === 'roster' ? 'roster' : sp.view === 'positions' ? 'positions' : 'cards';
 
@@ -113,12 +115,12 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
         <div>
           <h1 className="text-2xl font-semibold">Staff and positions</h1>
           <PageDescription className="mt-1">
-            Who is on the roster at this store right now, and the positions they hold. ⭐ Every attendance, payroll and
-            credential screen in this app needs an employment to point at — this is where one gets
-            created (DEF-131).
+            Who is on the roster at this store, which position they hold, and where they are in the
+            day. Every attendance, payroll and credential screen points at an employment created
+            here.
           </PageDescription>
         </div>
-        <Link href={`/staff/hire?store=${storeId}`} className="inline-flex min-h-11 items-center rounded-[12px] border border-transparent bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-hover">
+        <Link href={`/staff/hire?store=${storeId}`} className="inline-flex min-h-11 items-center rounded-full border border-transparent bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-hover">
           Hire
         </Link>
       </div>
@@ -157,7 +159,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
                 <details>
                   <summary className="flex min-h-11 cursor-pointer items-center px-3 py-1.5">
                     {p.name}
-                    {p.isCanonical && <span className="ml-1 text-xs text-neutral-500 dark:text-neutral-400">(canonical)</span>}
+                    {p.isCanonical && <span className="ml-1 text-xs text-muted">(canonical)</span>}
                     <span className="ml-1">· {holders.length}</span>
                   </summary>
                   {holders.length === 0 ? (

@@ -16,7 +16,7 @@ export function LinkRow({ className, ...rest }: HTMLAttributes<HTMLTableRowEleme
 }
 /** The row's ONE link: a real anchor with an accessible name (T-258 point 4), stretched over the whole row. */
 export function RowLink({ className, ...rest }: ComponentProps<typeof Link>) {
-  return <Link className={join(`underline underline-offset-2 ${ROW_LINK_STRETCH}`, className)} {...rest} />;
+  return <Link className={join(`text-sm underline underline-offset-2 ${ROW_LINK_STRETCH}`, className)} {...rest} />;
 }
 /** Anything else in a linked row (a form, a second link, an input) sits ABOVE the stretched box. */
 export function RowAction({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {
