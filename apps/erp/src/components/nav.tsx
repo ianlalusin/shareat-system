@@ -213,7 +213,7 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       // T-508 S2b: which kitchen station cooks each item; a store manager's screen (manage_store_settings).
       { href: '/kitchen', label: 'Kitchen setup' },
       // T-510 S3: the hours a menu price can follow (Lunch, Dinner); a store manager's screen (manage_store_settings).
-      { href: '/menu/hours', label: 'Lunch and dinner hours' },
+      { href: '/menu/hours', label: 'Menu hours' },
       // ⭐ DEF-197 — the screen that exists so a dead letter is VISIBLE was itself invisible. This
       // is landmine #14's whole structural fix (bible §12 row 14: v1's recovery path is a banner
       // saying "tell a manager", and there is nothing for the manager to open), and it was in no
