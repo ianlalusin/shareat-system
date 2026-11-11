@@ -26,14 +26,15 @@ if (!/shareat_test|_test(\?|$)/.test(url)) {
 }
 
 import { RefusalError } from '@shareat/db';
+import { V1_WIRE_KEYS } from '../../src/pos/v1-bridge-payload';
 import { AuthorizationError } from '@shareat/auth';
 import { D1, D2, D3, DC, sql, ymd, asOrg, auditsOf, clockAt, close, closeAll, closesOf, fakeWriter, manila, pinOf, standardDay, world, type World } from './_fixtures/t531-day-close';
 
 afterAll(closeAll);
 
 const EXPECTED = {
-  payments: { totalGross: 2896.71, txCount: 3, byMethod: { cash: 2396.71, GCash: 500 }, discountsTotal: 178.29, chargesTotal: 0, voidCashRetainedTotal: 0 },
-  sales: { dineInSalesGross: 2245 },
+  payments: { totalGross: 2896.71, txCount: 3, byMethod: { cash: 2396.71, GCash: 500 }, discountsTotal: 178.29, chargesTotal: 0, [V1_WIRE_KEYS.voidRetainedCash]: 0 },
+  sales: { [V1_WIRE_KEYS.unliGross]: 2245 },
   guests: { guestCountFinalTotal: 5, packageSessionsCount: 2 },
 };
 const pathOf = (w: World, date: string) => `stores/${w.posStoreId}/analytics/${ymd(date)}`;

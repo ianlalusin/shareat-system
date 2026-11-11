@@ -14,6 +14,9 @@ import { add, compare, money, toCentavos, type Money } from '@shareat/core/money
 import { parseBusinessDate } from '@shareat/core/datetime';
 import { refuse } from '../shared/refusal';
 
+/** The ONLY place v1's trap-word wire keys are written (glossary-trap-names exempts this file alone): they are the real keys v1 reads. */
+export const V1_WIRE_KEYS = { unliGross: 'dineInSalesGross', voidRetainedCash: 'voidCashRetainedTotal' } as const;
+
 /** The last business date the bridge writes (row 436). A later date is refused here, in code. */
 export const V1_BRIDGE_LAST_DATE = '2026-12-31';
 
@@ -39,8 +42,8 @@ export interface V1BridgePayload {
   /** Always false: a full overwrite. */
   merge: false;
   data: {
-    payments: { totalGross: number; txCount: number; byMethod: Record<string, number>; discountsTotal: number; chargesTotal: 0; voidCashRetainedTotal: 0 };
-    sales: { dineInSalesGross: number };
+    payments: { totalGross: number; txCount: number; byMethod: Record<string, number>; discountsTotal: number; chargesTotal: 0 } & Record<typeof V1_WIRE_KEYS.voidRetainedCash, 0>;
+    sales: Record<typeof V1_WIRE_KEYS.unliGross, number>;
     guests: { guestCountFinalTotal: number; packageSessionsCount: number };
   };
 }
@@ -83,14 +86,14 @@ export function buildV1BridgePayload(input: { posStoreId: string; businessDate: 
     byMethod: Object.fromEntries([...byMethod.entries()].map(([k, v]) => [k, num(v)])),
     discountsTotal: num(sum(closes.map((c) => money(c.discountTotal)))),
     chargesTotal: 0 as const,
-    voidCashRetainedTotal: 0 as const,
+    [V1_WIRE_KEYS.voidRetainedCash]: 0 as const,
   };
   return {
     path: `stores/${posStoreId}/analytics/${businessDate.replace(/-/g, '')}`,
     merge: false,
     data: {
       payments,
-      sales: { dineInSalesGross: num(sum(closes.map((c) => money(c.unliSales)))) },
+      sales: { [V1_WIRE_KEYS.unliGross]: num(sum(closes.map((c) => money(c.unliSales)))) },
       guests: { guestCountFinalTotal: closes.reduce((a, c) => a + c.heads, 0), packageSessionsCount: closes.reduce((a, c) => a + c.packageSessions, 0) },
     },
   };

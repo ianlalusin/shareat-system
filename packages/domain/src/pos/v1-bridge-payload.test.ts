@@ -13,6 +13,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { RefusalError } from '@shareat/db';
+import { V1_WIRE_KEYS } from './v1-bridge-payload';
 
 type Tender = { name: string; kind: 'cash' | 'wallet'; v1Alias: string | null; amount: string };
 type Close = { receiptCount: number; grossTotal: string; discountTotal: string; unliSales: string; heads: number; packageSessions: number; tenders: Tender[] };
@@ -42,14 +43,14 @@ const standard = (): Close => ({
 });
 
 describe('R5 - the exact document', () => {
-  it('a known day: every field R5 names, including sales.dineInSalesGross (without it v1 books the whole day as take-out), and NOTHING else', async () => {
+  it('a known day: every field R5 names, including the unli gross field (without it v1 books the whole day as take-out), and NOTHING else', async () => {
     const out = await build('2026-11-02', [standard()]);
     expect(out.path).toBe('stores/lipa-v1/analytics/20261102');
     expect(out.data).toEqual({
       payments: {
-        totalGross: 2896.71, txCount: 3, byMethod: { cash: 2396.71, GCash: 500 }, discountsTotal: 178.29, chargesTotal: 0, voidCashRetainedTotal: 0,
+        totalGross: 2896.71, txCount: 3, byMethod: { cash: 2396.71, GCash: 500 }, discountsTotal: 178.29, chargesTotal: 0, [V1_WIRE_KEYS.voidRetainedCash]: 0,
       },
-      sales: { dineInSalesGross: 2245 },
+      sales: { [V1_WIRE_KEYS.unliGross]: 2245 },
       guests: { guestCountFinalTotal: 5, packageSessionsCount: 2 },
     });
   });
@@ -62,10 +63,10 @@ describe('R5 - the exact document', () => {
     expect((await build('2026-12-31', [standard()])).path).toBe('stores/lipa-v1/analytics/20261231');
   });
 
-  it('dineInSalesGross is the unli figure STATED by the Z, not a residual: a day of only a la carte sends 0, and no take-out field exists', async () => {
+  it('the unli gross field is the unli figure STATED by the Z, not a residual: a day of only a la carte sends 0, and no take-out field exists', async () => {
     const c = standard();
     const out = await build('2026-11-02', [{ ...c, unliSales: '0.00', heads: 0, packageSessions: 0 }]);
-    expect((out.data.sales as Record<string, number>)).toEqual({ dineInSalesGross: 0 });
+    expect((out.data.sales as Record<string, number>)).toEqual({ [V1_WIRE_KEYS.unliGross]: 0 });
     expect(JSON.stringify(out.data)).not.toMatch(/takeOut/i);
   });
 });
@@ -79,8 +80,8 @@ describe('R5 - several Zs on one business date sum into ONE document', () => {
     };
     const out = await build('2026-11-02', [a, b]);
     expect(out.data).toEqual({
-      payments: { totalGross: 950, txCount: 3, byMethod: { cash: 750, GCash: 200 }, discountsTotal: 50, chargesTotal: 0, voidCashRetainedTotal: 0 },
-      sales: { dineInSalesGross: 449 },
+      payments: { totalGross: 950, txCount: 3, byMethod: { cash: 750, GCash: 200 }, discountsTotal: 50, chargesTotal: 0, [V1_WIRE_KEYS.voidRetainedCash]: 0 },
+      sales: { [V1_WIRE_KEYS.unliGross]: 449 },
       guests: { guestCountFinalTotal: 1, packageSessionsCount: 1 },
     });
   });
