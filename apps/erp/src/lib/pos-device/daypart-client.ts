@@ -33,7 +33,7 @@ const hhmmOf = (min: number): string => `${String(Math.floor(min / 60)).padStart
 
 function valid(w: DaypartWindow): boolean {
   if (!Array.isArray(w.days) || w.days.length === 0 || new Set(w.days).size !== w.days.length) return false;
-  if (!w.days.every((d) => Number.isInteger(d) && d >= 0 && d <= 6)) return false;
+  if (!w.days.every((d: number) => Number.isInteger(d) && d >= 0 && d <= 6)) return false;
   const s = minutesOf(w.start), e = minutesOf(w.end);
   return s !== null && e !== null && s !== e;
 }

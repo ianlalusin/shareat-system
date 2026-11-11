@@ -7,6 +7,10 @@ import { startClock } from './menu-clock';
 
 export function useMenuClock(hours: DaypartHours | undefined, nextChangeAt: string | null): number {
   const [at, setAt] = useState(() => Date.now());
-  useEffect(() => startClock({ hours, nextChangeAt, onTick: () => setAt(Date.now()) }), [hours, nextChangeAt]);
+  useEffect(() => {
+    // startClock only arms a FUTURE timer; hours that arrive late (or change) would leave `at` stale until the next boundary, so catch up first.
+    setAt(Date.now());
+    return startClock({ hours, nextChangeAt, onTick: () => setAt(Date.now()) });
+  }, [hours, nextChangeAt]);
   return at;
 }
