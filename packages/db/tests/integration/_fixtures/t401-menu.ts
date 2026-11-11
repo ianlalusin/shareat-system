@@ -180,21 +180,16 @@ export const insRuleOffer = (
       values (${f.orgId}, ${f.storeId}, ${variantId}, ${r.channel ?? 'online'}, ${r.amount ?? null}, ${r.heads ?? null}, ${r.extra ?? null},
               ${r.mode}, ${r.pct ?? null}, ${r.fixed ?? null}, ${r.withdrawn ?? false}, ${f.personId}) returning id`;
 
-/** T-510: a store daypart (default every day, 08:00-17:00 store-local). Raw SQL as the owner. T-565: opens its version 1 too, as the writers do. */
+/** T-510: a store daypart (default every day, 08:00-17:00 store-local). Raw SQL as the owner (T-565: the database opens its version 1). */
 export const insDaypart = (
   f: Who & { storeId: string },
   o: { storeId?: string; name?: string; days?: readonly number[]; start?: string; end?: string } = {},
 ) =>
   sql<{ id: string }[]>`
-    with d as (
-      insert into menu_dayparts (org_id, store_id, name, days, start_time, end_time, created_by)
-      values (${f.orgId}, ${o.storeId ?? f.storeId}, ${o.name ?? uid('DP')}, ${`{${(o.days ?? [0, 1, 2, 3, 4, 5, 6]).join(',')}}`}::smallint[],
-              ${o.start ?? '08:00'}::time, ${o.end ?? '17:00'}::time, ${f.personId})
-      returning id, org_id, store_id, name, days, start_time, end_time, status, created_at),
-    v as (
-      insert into menu_daypart_versions (org_id, store_id, daypart_id, name, days, start_time, end_time, status, valid_from)
-      select org_id, store_id, id, name, days, start_time, end_time, status, created_at from d)
-    select id from d`;
+    insert into menu_dayparts (org_id, store_id, name, days, start_time, end_time, created_by)
+    values (${f.orgId}, ${o.storeId ?? f.storeId}, ${o.name ?? uid('DP')}, ${`{${(o.days ?? [0, 1, 2, 3, 4, 5, 6]).join(',')}}`}::smallint[],
+            ${o.start ?? '08:00'}::time, ${o.end ?? '17:00'}::time, ${f.personId})
+    returning id`;
 
 /** T-510: a fixed-price offer tied to a daypart (null = all day); `at` as insRule (an interval offset from now(), null = now()). */
 export const insDaypartOffer = (

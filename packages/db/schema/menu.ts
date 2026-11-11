@@ -497,9 +497,10 @@ export const menuDayparts = pgTable(
 /**
  * T-565 (migration 0251): the dated history of a daypart's window. A row is the window (and status) of one daypart from `valid_from` to `valid_to`
  * (NULL = still open); the version in force at `t` has `valid_from <= t < coalesce(valid_to, infinity)`. Append-only: the only change is closing
- * `valid_to` once. `menu_dayparts` stays the CURRENT row; the writers in repo/dayparts.ts keep the two in step in one transaction.
+ * `valid_to` once. `menu_dayparts` stays the CURRENT row; the triggers menu_dayparts_version_insert_trg / _update_trg (migration 0251) keep the two in step in one transaction.
  *
- * NOTE: hand-added in migration 0251 - UNIQUE (daypart_id) WHERE valid_to IS NULL (menu_daypart_versions_one_open_key); the same window CHECKs as
+ * NOTE: hand-added in migration 0251 - UNIQUE (daypart_id) WHERE valid_to IS NULL (menu_daypart_versions_one_open_key); EXCLUDE USING gist
+ * (daypart_id WITH =, tstzrange(valid_from, valid_to, '[)') WITH &&) (menu_daypart_versions_no_overlap); the same window CHECKs as
  * menu_dayparts (the days CHECK calls menu_daypart_days_ok) and menu_daypart_versions_valid_range_check (valid_to >= valid_from); the trigger
  * menu_daypart_versions_append_guard (ENABLE ALWAYS; only valid_to, once, from NULL; no DELETE); RLS and the grants (column-level UPDATE: valid_to only).
  */

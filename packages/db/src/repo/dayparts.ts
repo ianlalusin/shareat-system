@@ -61,45 +61,19 @@ export async function lockDaypartForUpdate(tx: Tx, orgId: string, id: string): P
   return row;
 }
 
-/** A window version's time is the transaction's `now()` cut to the millisecond, the grain a reader's `at` has, so a reader in the writer's own transaction sees what it just wrote. */
-const VERSION_NOW = sql`date_trunc('milliseconds', now())`;
-
-/** T-565 (0251): creating a daypart opens its version 1, in the same transaction. */
+/** T-565 (0251): the window version 1 is opened by the menu_dayparts_version_sync trigger, not here. */
 export async function insertDaypart(tx: Tx, input: InsertDaypartInput): Promise<MenuDaypartRow> {
   const [row] = await tx.insert(menuDayparts).values(input).returning();
-  await tx.insert(menuDaypartVersions).values({
-    orgId: row!.orgId,
-    storeId: row!.storeId,
-    daypartId: row!.id,
-    name: row!.name,
-    days: row!.days,
-    startTime: row!.startTime,
-    endTime: row!.endTime,
-    status: row!.status,
-    validFrom: row!.createdAt,
-  });
   return row!;
 }
 
-/**
- * T-565 (0251): every edit or retire closes the open version and opens the next from the row as now stored, in the same transaction. The close
- * is `greatest(now, valid_from)` so a transaction that began before the previous edit committed can never close a version before it opened, and
- * the next version opens exactly where the old one closed (no gap, no overlap). A row that never had a version (none exists after 0251, but a
- * hand-built fixture may) just opens one now.
- */
+/** T-565 (0251): an edit or retire closes the open window version and opens the next in the database (trigger menu_dayparts_version_sync), not here. */
 export async function updateDaypart(tx: Tx, id: string, patch: UpdateDaypartPatch): Promise<MenuDaypartRow> {
   const [row] = await tx
     .update(menuDayparts)
     .set({ ...patch, updatedAt: sql`now()` })
     .where(eq(menuDayparts.id, id))
     .returning();
-  await tx.execute(sql`
-    update menu_daypart_versions set valid_to = greatest(${VERSION_NOW}, valid_from) where daypart_id = ${id}::uuid and valid_to is null`);
-  await tx.execute(sql`
-    insert into menu_daypart_versions (org_id, store_id, daypart_id, name, days, start_time, end_time, status, valid_from)
-    select d.org_id, d.store_id, d.id, d.name, d.days, d.start_time, d.end_time, d.status,
-           coalesce((select max(v.valid_to) from menu_daypart_versions v where v.daypart_id = d.id), ${VERSION_NOW})
-      from menu_dayparts d where d.id = ${id}::uuid`);
   return row!;
 }
 

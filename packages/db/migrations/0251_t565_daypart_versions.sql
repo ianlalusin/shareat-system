@@ -15,8 +15,13 @@
 --     is refused; the org follows from the store). UNIQUE (store_id, id) is the target of the line key below. org_id is NOT NULL and RLS is the org backstop.
 --   * Backfill (between the B0251 markers; idempotent): one OPEN version per existing daypart, valid_from = the daypart's created_at, copying its current
 --     window and status. A RETIRED daypart gets an open version with status 'retired' (not a closed one): a reader at "now" then still finds the daypart exactly as
---     menu_dayparts says, and the window is the same before and after the retirement because no history of the earlier edits exists to restore. From here on
---     the writers (repo/dayparts.ts) keep it: create opens version 1; an edit closes the open version and opens the next; a retire does the same with status 'retired'.
+--     menu_dayparts says, and the window is the same before and after the retirement because no history of the earlier edits exists to restore.
+--   * The versions are kept by the DATABASE, not by a writer: AFTER INSERT and AFTER UPDATE OF (name, days, start_time, end_time, status) triggers on menu_dayparts
+--     (menu_dayparts_version_sync) open version 1 on create, and on a changed window close the open version and open the next (a retire opens one with status
+--     'retired'). They stamp the time as the transaction's now() cut to the millisecond (the grain of a reader's `at`), so a read at dbNow in the writer's own
+--     transaction sees what was just written; version 1 uses the row's created_at cut the same way. Origin-mode triggers (a replica-mode bulk load does not re-run them).
+--   * No two versions of one daypart overlap in time: EXCLUDE USING gist (daypart_id WITH =, tstzrange(valid_from, valid_to, '[)') WITH &&) (btree_gist since 0105).
+--     Zero-length versions (two edits in one transaction) are empty ranges and never conflict.
 --   * table_session_lines.daypart_version_id (nullable): the window version a dayparted offer was judged by when the line was written (NULL for an all-day offer
 --     and for every line written before this migration). Composite key (store_id, daypart_version_id) -> menu_daypart_versions (store_id, id), MATCH SIMPLE so
 --     NULL is free. Frozen from birth: table_session_lines_guard compares to_jsonb(NEW) with the three kitchen columns removed, and the UPDATE grant is not widened.
@@ -70,6 +75,9 @@ CREATE UNIQUE INDEX "menu_daypart_versions_one_open_key" ON "menu_daypart_versio
 --> statement-breakpoint
 CREATE INDEX "menu_daypart_versions_org_store_idx" ON "menu_daypart_versions" ("org_id","store_id");
 --> statement-breakpoint
+ALTER TABLE "menu_daypart_versions" ADD CONSTRAINT "menu_daypart_versions_no_overlap"
+	EXCLUDE USING gist ("daypart_id" WITH =, tstzrange("valid_from", "valid_to", '[)') WITH &&);
+--> statement-breakpoint
 
 -- B0251:begin
 INSERT INTO "menu_daypart_versions" ("org_id","store_id","daypart_id","name","days","start_time","end_time","status","valid_from")
@@ -110,6 +118,38 @@ CREATE TRIGGER "menu_daypart_versions_append_guard" BEFORE UPDATE OR DELETE ON "
 	FOR EACH ROW EXECUTE FUNCTION "menu_daypart_versions_append_guard"();
 --> statement-breakpoint
 ALTER TABLE "menu_daypart_versions" ENABLE ALWAYS TRIGGER "menu_daypart_versions_append_guard";
+--> statement-breakpoint
+
+-- The one writer of versions (created AFTER the backfill so it is not run over the rows the backfill just wrote).
+CREATE FUNCTION "menu_dayparts_version_sync"() RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $fn$
+DECLARE
+	v_now timestamptz := date_trunc('milliseconds', now());
+	v_from timestamptz;
+BEGIN
+	IF TG_OP = 'INSERT' THEN
+		v_from := date_trunc('milliseconds', NEW."created_at");
+	ELSE
+		-- greatest(): a transaction that began before the previous edit committed can never close a version before it opened.
+		UPDATE "menu_daypart_versions" SET "valid_to" = greatest(v_now, "valid_from")
+		 WHERE "daypart_id" = NEW."id" AND "valid_to" IS NULL
+		RETURNING "valid_to" INTO v_from;
+		v_from := coalesce(v_from, v_now);
+	END IF;
+	INSERT INTO "menu_daypart_versions" ("org_id","store_id","daypart_id","name","days","start_time","end_time","status","valid_from")
+	VALUES (NEW."org_id", NEW."store_id", NEW."id", NEW."name", NEW."days", NEW."start_time", NEW."end_time", NEW."status", v_from);
+	RETURN NULL;
+END;
+$fn$;
+--> statement-breakpoint
+REVOKE EXECUTE ON FUNCTION "menu_dayparts_version_sync"() FROM PUBLIC;
+--> statement-breakpoint
+CREATE TRIGGER "menu_dayparts_version_insert_trg" AFTER INSERT ON "menu_dayparts"
+	FOR EACH ROW EXECUTE FUNCTION "menu_dayparts_version_sync"();
+--> statement-breakpoint
+CREATE TRIGGER "menu_dayparts_version_update_trg" AFTER UPDATE OF "name","days","start_time","end_time","status" ON "menu_dayparts"
+	FOR EACH ROW WHEN (OLD."name" IS DISTINCT FROM NEW."name" OR OLD."days" IS DISTINCT FROM NEW."days" OR OLD."start_time" IS DISTINCT FROM NEW."start_time"
+	                OR OLD."end_time" IS DISTINCT FROM NEW."end_time" OR OLD."status" IS DISTINCT FROM NEW."status")
+	EXECUTE FUNCTION "menu_dayparts_version_sync"();
 --> statement-breakpoint
 
 ALTER TABLE "table_session_lines" ADD COLUMN "daypart_version_id" uuid;

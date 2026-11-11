@@ -13,7 +13,7 @@ import { posV2Repo, type Tx } from '@shareat/db';
 import { refuse, gone } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { POS_LINE_NOTE_RULES, POS_REASON_RULES } from '../field-rules/pos';
-import { loadStoreMenu, loadStoreMenuWithVersions } from '../menu/load-store-menu';
+import { loadStoreMenuWithVersions } from '../menu/load-store-menu';
 import type { ProjectedItem, ProjectedStoreMenu, ProjectedVariant } from '../menu/project';
 import {
   audit,
@@ -329,11 +329,14 @@ async function followHeads(tx: Tx, actor: Actor, ctx: { storeId: string; pairing
   const bundle = pkg.find((l) => l.bundleHeads !== null && l.bundleHeads > 1);
   const perHead = pkg.find((l) => l.bundleHeads === null);
   let extraUnit: string | null = null;
+  /** T-565: when the extra-head price is read from the menu now, the window version of THAT read (price and version from one window); undefined = copy the template line's. */
+  let extraVersion: string | null | undefined;
   if (bundle) {
     extraUnit = perHead?.unitPrice ?? null; // in a bundle session the other package lines (no bundle_heads) are the extra-head lines
     if (extraUnit === null && after > bundle.bundleHeads!) {
-      const m = await loadStoreMenu(tx, actor.orgId, ctx.storeId, at);
-      const offer = m.menu.items.flatMap((i) => i.variants).find((v) => v.id === bundle.menuItemVariantId)?.channels.store;
+      const m = await loadStoreMenuWithVersions(tx, actor.orgId, ctx.storeId, at);
+      const offer = m.menu.menu.items.flatMap((i) => i.variants).find((v) => v.id === bundle.menuItemVariantId)?.channels.store;
+      extraVersion = (bundle.menuItemVariantId ? m.versionOfVariant.get(bundle.menuItemVariantId) : undefined) ?? null;
       extraUnit = offer && offer.orderable ? offer.extraHeadAmount : null;
       if (extraUnit === null) throw refuse('pos: no extra-head amount', 'There is no price for extra heads here yet.');
     }
@@ -359,20 +362,24 @@ async function followHeads(tx: Tx, actor: Actor, ctx: { storeId: string; pairing
     ...(place ? { addedAt: place.addedAt } : {}),
   });
   const extraName = bundle ? `${bundle.name} - extra head` : '';
+  const extraLine = (from: (typeof pkg)[number], qty: number): posV2Repo.NewSessionLine => ({
+    ...mk(from, qty, money(extraUnit!), extraName),
+    daypartVersionId: extraVersion === undefined ? from.daypartVersionId : extraVersion,
+  });
   const fresh: posV2Repo.NewSessionLine[] = [];
   let cancelled: string[] = [];
   if (!served) {
     // Re-make: a per-head line is replaced whole; a bundle line stays (its price covers N heads) and only the extra-head line follows.
     cancelled = pkg.filter((l) => l.id !== bundle?.id).map((l) => l.id);
     if (bundle) {
-      if (after > bundle.bundleHeads!) fresh.push(mk(bundle, after - bundle.bundleHeads!, money(extraUnit!), extraName));
+      if (after > bundle.bundleHeads!) fresh.push(extraLine(bundle, after - bundle.bundleHeads!));
     } else {
       // T-527b: the re-made head line keeps the replaced line's place in the order (addedAtDevice, addedAt, id), so the table's list does not reshuffle.
       fresh.push(mk(perHead!, after, money(perHead!.unitPrice), perHead!.name, sameSpotId(perHead!.id), perHead!));
     }
   } else {
     const diff = after - covered; // > 0 here (a decrease was refused above)
-    if (diff > 0) fresh.push(bundle ? mk(bundle, diff, money(extraUnit!), extraName) : mk(perHead!, diff, money(perHead!.unitPrice), perHead!.name));
+    if (diff > 0) fresh.push(bundle ? extraLine(bundle, diff) : mk(perHead!, diff, money(perHead!.unitPrice), perHead!.name));
   }
   const toRemove = live.filter((l) => cancelled.includes(l.id)).flatMap((l) => l.discounts.map((d) => d.id));
   await posV2Repo.removeLineDiscounts(tx, actor.orgId, ctx.storeId, toRemove, actor.personId, at);
