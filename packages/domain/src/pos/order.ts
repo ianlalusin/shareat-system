@@ -372,7 +372,7 @@ async function followHeads(tx: Tx, actor: Actor, ctx: { storeId: string; pairing
 async function changeHeads(
   tx: Tx,
   actor: Actor,
-  input: { storeId: string; pairingId: string | null; sessionId: string },
+  input: { storeId: string; pairingId: string | null; sessionId: string; atDevice?: string | Date },
   pairingId: string | null,
   change: { headsCashier?: number; headsServer?: number },
 ): Promise<{ wrote: boolean }> {
@@ -382,7 +382,8 @@ async function changeHeads(
   const next = { headsCashier: change.headsCashier ?? session.headsCashier, headsServer: change.headsServer ?? session.headsServer };
   if (next.headsCashier === session.headsCashier && next.headsServer === session.headsServer) return { wrote: false };
   const after = billedHeads(next.headsCashier, next.headsServer);
-  const at = new Date();
+  // T-559: a heads.set queued on a tablet is priced (a new extra-head line) at ITS device time, like addLines prices a line at `addedAtDevice`; a Server Action has none and uses now.
+  const at = input.atDevice === undefined ? new Date() : deviceTime(input.atDevice, 'The time of the change');
   await followHeads(tx, actor, { storeId: input.storeId, pairingId }, session, before, after, at);
   await posV2Repo.setSessionHeads(tx, actor.orgId, input.storeId, sessionId, change);
   await audit(tx, actor, 'pos.heads_changed', {
@@ -401,7 +402,7 @@ export async function confirmHeads(tx: Tx, actor: Actor, input: { storeId: strin
   return changeHeads(tx, actor, input, pairingId, { headsServer });
 }
 
-export async function setHeadsCashier(tx: Tx, actor: Actor, input: { storeId: string; pairingId: string | null; sessionId: string; headsCashier: number }): Promise<{ wrote: boolean }> {
+export async function setHeadsCashier(tx: Tx, actor: Actor, input: { storeId: string; pairingId: string | null; sessionId: string; headsCashier: number; atDevice?: string | Date }): Promise<{ wrote: boolean }> {
   await authorize(tx, actor, 'record_sale', { storeId: input.storeId });
   const pairingId = await requireContext(tx, actor, input.storeId, input.pairingId, false);
   const sessionId = uuidInput(input.sessionId, 'The table id');

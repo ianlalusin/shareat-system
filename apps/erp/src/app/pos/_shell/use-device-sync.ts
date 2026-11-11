@@ -12,7 +12,7 @@ import { makePosSend } from './drain-send';
 import { POS_STATE_REFRESH_EVENT } from './use-pos-state';
 import { browserPromoteJar, promoteAfterTabletSignIn } from './pending-verifier';
 import { showNeedsInternetOnce } from './offline-band';
-import { refreshSnapshot, type SnapshotBody } from './snapshot-sync';
+import { refreshSnapshot, snapshotNextChangeAt, type SnapshotBody } from './snapshot-sync';
 import { restoredOfflineActor, type OfflineActor } from './offline-actor';
 import { paymentPartOf, type SnapshotPaymentPart } from './payment-part';
 import type { SnapshotStaff } from './verifier-expiry';
@@ -23,6 +23,8 @@ export type { OfflineActor, SnapshotPaymentPart };
 export interface SnapshotOrdersPart {
   stands: { id: string; number: number }[];
   menu: unknown;
+  /** T-559: when the menu next changes (a 304 keeps this fresh from `x-next-change-at`); drives the shell's menu clock and a snapshot re-fetch at that time. */
+  nextChangeAt?: string | null;
   /** T-539 S3: minutes before a table tile turns red. Null when the cached snapshot is older than the rule (no tile turns red until the next refresh). */
   tableWarnMinutes?: number | null;
   /** T-528: what the Payment screen prices and pays with. Null when the cached snapshot is older than the fields it needs (the tablet must go online once). */
@@ -62,7 +64,7 @@ function ordersPartOf(s: CachedSnapshot | null): SnapshotOrdersPart | null {
   const b = s?.body as (Partial<SnapshotOrdersPart> & Record<string, unknown>) | undefined;
   if (!b || !Array.isArray(b.stands) || !b.menu) return null;
   const warn = (b.rules as { tableWarnMinutes?: unknown } | undefined)?.tableWarnMinutes;
-  return { stands: b.stands, menu: b.menu, tableWarnMinutes: typeof warn === 'number' ? warn : null, payment: paymentPartOf(b) };
+  return { stands: b.stands, menu: b.menu, nextChangeAt: snapshotNextChangeAt(s), tableWarnMinutes: typeof warn === 'number' ? warn : null, payment: paymentPartOf(b) };
 }
 
 const sameEvents = (a: PosEvent[], b: PosEvent[]): boolean => a.length === b.length && a.every((e, i) => e.seq === b[i]!.seq);
@@ -82,6 +84,7 @@ export function useDeviceSync(input: { paired: boolean; personId: string; online
   const draining = useRef(false);
   const again = useRef(false);
   const onResults = useRef<((sent: PosEvent[], results: PosEventResult[]) => void) | null>(null);
+  const refreshRef = useRef<(() => Promise<void>) | null>(null);
 
   const setOfflineActor = useCallback((next: OfflineActor | null) => {
     setActor(next);
@@ -157,13 +160,25 @@ export function useDeviceSync(input: { paired: boolean; personId: string; online
         await promoteAfterTabletSignIn({ storage: window.sessionStorage, jar: browserPromoteJar(), staff: staffOf(snap), personId, nowMs: Date.now() }).catch(() => undefined);
       }
     };
+    refreshRef.current = run;
     void run();
     const timer = setInterval(run, POS_SNAPSHOT_REFRESH_MS);
     return () => {
       stopped = true;
+      refreshRef.current = null;
       clearInterval(timer);
     };
   }, [paired, personId]);
+
+  // T-559 R3: a scheduled price change is fetched when it is due, not up to 5 minutes later. A 304 moves `nextChangeAt` (touchSnapshot), which re-arms this; a
+  // time already past arms nothing, so a stale time cannot loop.
+  const nextChange = snapshotNextChangeAt(snapshot);
+  useEffect(() => {
+    const ms = nextChange ? Date.parse(nextChange) - Date.now() : NaN;
+    if (!paired || !(ms > 0)) return;
+    const t = setTimeout(() => void refreshRef.current?.(), Math.min(ms, 2 ** 31 - 1));
+    return () => clearTimeout(t);
+  }, [paired, nextChange]);
 
   // The waiting count follows the outbox every poll beat; an online tablet with something waiting sends it every 10 s, never from a hidden tab.
   useEffect(() => {
