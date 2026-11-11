@@ -4,7 +4,7 @@
 > (bible row 454; audit item P-006).
 > **Migration:** none. **Risk:** medium. It changes the price the tablet shows and sends; the server still re-prices
 > every sale (T-524). The builder is Sonnet, and the auditor is Sonnet because it touches money display.
-> **Model:** T-510 S4b, BUILT on 7 Nov for `apps/pos`. This task **ports the same behaviour** into the ERP `/pos`
+> **Model:** T-510 S4b, already done on 7 Nov for `apps/pos`. This task **ports the same behaviour** into the ERP `/pos`
 > (T-526 to T-528).
 > **Read:** `docs/tasks/510-menu-dayparts.md` R6 and the S4b line; `apps/pos/src/lib/menu/daypart-client.ts` and its
 > parity test; `apps/pos/src/lib/menu/clock.ts`, `from-erp.ts`, `menuStore.ts` and `refresh.ts`. They are references:
