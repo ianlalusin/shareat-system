@@ -10,6 +10,7 @@
  * driven through `recordExpenseForInvoiceAction` with a COD invoice of ₱1,000.00 and ₱10.00 cash lines.
  * Every "nothing posted" assertion is paired with the control legs that post through the same door.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
@@ -19,7 +20,7 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — the database name must contain "_test".`);
 }
 

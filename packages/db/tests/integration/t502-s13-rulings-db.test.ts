@@ -7,6 +7,7 @@
  * column), which proves the refusal is about the service kind and not a malformed fixture.
  * A6: a service is never a variation (CHECK on items and item_requests).
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import postgres from 'postgres';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -14,7 +15,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) throw new Error('Refusing to run: database name must contain "_test".');
+if (!isTestDatabaseUrl(url)) throw new Error('Refusing to run: database name must contain "_test".');
 
 const sql = postgres(url, { max: 4 });
 afterAll(async () => {

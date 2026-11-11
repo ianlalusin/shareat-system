@@ -3,6 +3,7 @@
  * (4) a leg's owner must be the loan's own store, an unknown or malformed loan id is a plain refusal, the same loan in two cases is the duplicate sentence;
  * (5a) a reason given within tolerance is not stored; (5c) two loans cross-store to the SAME owner post two triples. Mutants are named in each title `[kills: ...]`.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { sql as dsql } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -12,7 +13,7 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — name must contain "_test".`);
 }
 

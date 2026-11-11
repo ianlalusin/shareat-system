@@ -12,6 +12,7 @@
  * Timeline: live_from D1; "now" is D4 14:00; sales on D1, D2, D3 and D4 (today). The backlog is D1..D3 (3 Zs), today D4 stays open.
  * Each past Z's window ends at the NEXT day's 04:00 (the day start hour), so the windows are D1 04:00-D2 04:00, D2 04:00-D3 04:00, D3 04:00-D4 04:00.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 
@@ -19,7 +20,7 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
 }
 

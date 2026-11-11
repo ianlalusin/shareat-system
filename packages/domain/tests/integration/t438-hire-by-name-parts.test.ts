@@ -9,6 +9,7 @@
  * renamePerson(tx, actor, { employmentId, lastName, firstName, middleName? }); both exported from the people barrel.
  * The H3 audit row is located by entity id and `after.sameNameConfirmed`, not by an action name the spec does not give.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -20,7 +21,7 @@ import { createPerson, searchPersons } from '../../src/people';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
 }
 const sql = postgres(url, { max: 5 });

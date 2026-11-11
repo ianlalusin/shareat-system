@@ -18,6 +18,7 @@
  *  - Q-R1d: `t523-pos-v2-schema.test.ts` line ~992 asserts `sales_days_check_figure_lock`'s source does NOT contain 'pos_receipts'. 0247 makes that false
  *    by design; the builder must change that one assertion (it is not a spec change, a consequence).
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -29,7 +30,7 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
 }
 

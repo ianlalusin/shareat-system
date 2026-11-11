@@ -2,6 +2,7 @@
  * T-510 S2 - the 0234 owner backfill for `pair_menu_dayparts` (the eighth super-admin-only capability), same shape as
  * t401-s1-add-menu-item-backfill.test.ts. The block between the B0234 markers runs as the migration role in a transaction that is ALWAYS rolled back.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,7 +14,7 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
 }
 

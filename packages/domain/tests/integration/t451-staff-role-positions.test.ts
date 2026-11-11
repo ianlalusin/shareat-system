@@ -1,3 +1,4 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import postgres from 'postgres';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -7,7 +8,7 @@ import { createEmployment, setEmploymentPositions } from '@shareat/domain';
 import { asOrg, fixture, uid } from './_fixtures/t433-b2b';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
-if (!url || !/shareat_test|_test(\?|$)/.test(url)) throw new Error('A test PostgreSQL database is required.');
+if (!url || !isTestDatabaseUrl(url)) throw new Error('A test PostgreSQL database is required.');
 const sql = postgres(url, { max: 5 });
 afterAll(async () => { await closeDb(); await sql.end({ timeout: 5 }); });
 async function roleFixture(hint: string) {

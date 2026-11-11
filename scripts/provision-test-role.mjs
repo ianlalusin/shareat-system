@@ -42,6 +42,7 @@
  * Never prints a URL — the password may legitimately contain '@' and TEST_DATABASE_URL's
  * own password is real enough to be worth not echoing.
  */
+import { isTestDatabaseUrl } from './lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import postgres from 'postgres';
 
@@ -63,7 +64,7 @@ if (!url) {
 
 // Same guard as tests/integration/setup.ts — this script creates a LOGIN role on the whole
 // cluster and must not be pointable at production by accident.
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   console.error(
     `Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — the database name ` +
       'must contain "_test". These are the same tests that TRUNCATE tables.',

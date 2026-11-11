@@ -62,6 +62,7 @@
  * concept at all — that information now lives only here, in `CAPABILITY-MATRIX.md`'s Notes
  * column, and in the position-grant rows `0152` wrote.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -78,7 +79,7 @@ const baseUrl = process.env.TEST_DATABASE_URL;
 if (!baseUrl) {
   throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 }
-if (!/shareat_test|_test(\?|$)/.test(baseUrl)) {
+if (!isTestDatabaseUrl(baseUrl)) {
   throw new Error(
     `Refusing to run against ${baseUrl.replace(/:\/\/[^@]*@/, '://***@')} — the database name must contain "_test".`,
   );
