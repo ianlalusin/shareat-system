@@ -243,6 +243,8 @@ export interface NewSessionLine {
   unitPrice: Money;
   /** N > 1 for a "(up to N)" bundle line, else null. */
   bundleHeads: number | null;
+  /** Sorted, distinct chosen option value ids ([] = none, null = a legacy parent's line) - T-557. */
+  optionValueIds: string[] | null;
   kitchenStationId: string | null;
   note: string | null;
   addedBy: string;
@@ -268,6 +270,7 @@ export async function insertLines(tx: Tx, rows: NewSessionLine[]): Promise<void>
       qty: r.qty,
       unitPrice: r.unitPrice,
       bundleHeads: r.bundleHeads,
+      optionValueIds: r.optionValueIds,
       kitchenStationId: r.kitchenStationId,
       note: r.note,
       addedBy: r.addedBy,
@@ -455,6 +458,7 @@ export interface NewReceiptLine {
   name: string;
   qty: number;
   unitPrice: Money;
+  optionValueIds: string[] | null;
   gross: Money;
   discountTotal: Money;
   net: Money;
@@ -514,6 +518,7 @@ export async function insertReceiptLines(tx: Tx, rows: NewReceiptLine[]): Promis
       name: r.name,
       qty: r.qty,
       unitPrice: r.unitPrice,
+      optionValueIds: r.optionValueIds,
       gross: r.gross,
       discountTotal: r.discountTotal,
       net: r.net,

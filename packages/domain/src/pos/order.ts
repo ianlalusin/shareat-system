@@ -131,14 +131,18 @@ function sameLine(existing: posV2Repo.TableSessionLineRow, input: { sessionId: s
 }
 
 /**
- * T-556: does a replayed line pick the variant and options the stored line was made with? A line keeps its variant id but its options only inside `name`
- * (" + A, B"), so they are read from the menu at the line's device time (orderability ignored: a replay may come after a sell-out).
- * shortcut: the option names are compared in the order sent and as a name suffix, and an item the menu no longer lists is not checked; upgrade by storing the option ids on the line.
+ * T-556/T-557: does a replayed line pick the variant and options the stored line was made with? A line with stored `optionValueIds` compares the sorted distinct id sets.
+ * A legacy line (NULL, written before migration 0249) keeps its options only inside `name` (" + A, B"), so they are read from the menu at the line's device time (orderability ignored: a replay may come after a sell-out).
+ * shortcut: legacy lines compare the option names in the order sent and as a name suffix, and an item the menu no longer lists is not checked; those lines cannot be backfilled.
  */
 async function sameChoices(menus: MenuAt, at: Date, prior: posV2Repo.TableSessionLineRow, l: LineInput): Promise<boolean> {
   const item = (await menus.at(at)).menu.items.find((i) => i.id === l.menuItemId);
   const variant = item && (l.variantId ? item.variants.find((v) => v.id === l.variantId) : item.variants.find((v) => v.isDefault) ?? item.variants[0]);
   if (prior.menuItemVariantId !== (variant?.id ?? l.variantId ?? prior.menuItemVariantId)) return false;
+  if (prior.optionValueIds) {
+    const want = [...new Set(l.optionValueIds ?? [])].sort();
+    return want.length === prior.optionValueIds.length && want.every((id, i) => id === prior.optionValueIds![i]);
+  }
   if (!variant) return !l.optionValueIds?.length;
   const all = variant.optionGroups.flatMap((g) => g.values);
   const names = [...new Set(l.optionValueIds ?? [])].map((id) => all.find((v) => v.id === id)?.name);
@@ -191,6 +195,7 @@ async function writeLines(tx: Tx, actor: Actor, ctx: { storeId: string; pairingI
       kitchenStationId: item.stationId,
       note: s.note,
       bundleHeads: null as number | null,
+      optionValueIds: [...new Set(s.l.optionValueIds ?? [])].sort(),
       addedBy: actor.personId,
       addedOnPairingId: ctx.pairingId,
       addedAtDevice: s.at,
@@ -363,6 +368,7 @@ async function followHeads(tx: Tx, actor: Actor, ctx: { storeId: string; pairing
     qty,
     unitPrice: unit,
     bundleHeads: null,
+    optionValueIds: from.optionValueIds,
     kitchenStationId: from.kitchenStationId,
     note: from.note,
     addedBy: actor.personId,
@@ -472,7 +478,7 @@ export async function requestRefill(
     if (item.itemType !== 'refill' || !allowed.has(item.id)) throw refuse('pos: not a refill of the package', `${item.name} is not a refill of this table's package.`);
     rows.push({
       id: s.lineId, orgId: actor.orgId, storeId: input.storeId, sessionId, kind: 'refill', menuItemId: item.id, menuItemVariantId: variant.id,
-      name: item.name, qty: s.qty, unitPrice: money('0'), bundleHeads: null, kitchenStationId: item.stationId, note: null, addedBy: actor.personId, addedOnPairingId: pairingId, addedAtDevice: s.at,
+      name: item.name, qty: s.qty, unitPrice: money('0'), bundleHeads: null, optionValueIds: [], kitchenStationId: item.stationId, note: null, addedBy: actor.personId, addedOnPairingId: pairingId, addedAtDevice: s.at,
     });
   }
   if (rows.length === 0) return { wrote: false };

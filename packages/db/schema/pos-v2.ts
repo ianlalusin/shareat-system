@@ -260,6 +260,8 @@ export const tableSessionLines = pgTable(
     unitPrice: numeric('unit_price', { precision: 14, scale: 2 }).notNull(),
     /** The heads a "(up to N)" bundle line covers (N > 1), written from the menu at order time; NULL for every other line. Added in migration 0240 (T-524 audit F1); frozen by the line guard like every non-kitchen column. */
     bundleHeads: smallint('bundle_heads'),
+    /** The option value ids chosen on this line, sorted and distinct ({} = none); NULL = written before migration 0249 (T-557), options only in `name`. Set at insert, never updated. */
+    optionValueIds: uuid('option_value_ids').array(),
     /** Composite FK (store_id, kitchen_station_id) -> kitchen_stations (store_id, id), hand-added in migration 0238 (no single-column FK). */
     kitchenStationId: uuid('kitchen_station_id'),
     kitchenStatus: text('kitchen_status', { enum: KITCHEN_LINE_STATUSES }).notNull().default('queued'),
@@ -519,6 +521,8 @@ export const posSalesReceiptLines = pgTable(
     name: text('name').notNull(),
     qty: integer('qty').notNull(),
     unitPrice: numeric('unit_price', { precision: 14, scale: 2 }).notNull(),
+    /** Copied from the session line (T-557): sorted, distinct option value ids; NULL = a line written before migration 0249. */
+    optionValueIds: uuid('option_value_ids').array(),
     /** qty * unit_price (CHECK). Refills appear at 0. */
     gross: numeric('gross', { precision: 14, scale: 2 }).notNull(),
     /** The sum of this line's discounts (T-524 keeps that equal to pos_sales_receipt_line_discounts; a CHECK cannot sum child rows). */
