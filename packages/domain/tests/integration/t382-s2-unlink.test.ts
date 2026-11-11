@@ -51,10 +51,10 @@ afterAll(async () => {
   await sql.end({ timeout: 5 });
 });
 
-const D1 = '2027-01-10';
-const D2 = '2027-01-11';
-const D3 = '2027-01-12';
-const NEWDAY = '2027-01-20';
+const D1 = '2026-12-10';
+const D2 = '2026-12-11';
+const D3 = '2026-12-12';
+const NEWDAY = '2026-12-20';
 
 // ---- fixture: s6Fixture (Lipa LINKED, Cash+GCash, manager/admin) + a super admin + Batangas (never linked) -------
 async function fixture(hint: string, o: { stock?: boolean } = {}) {
@@ -193,7 +193,7 @@ describe('U1 - a super admin unlinks a store with three verified imported days',
     expect((audit[0]!.after as Record<string, unknown>)['unlinkedAt'], 'after.unlinkedAt present').toBeTruthy();
 
     await expect(typedDay(f, f.storeId, f.walkInId, NEWDAY)).resolves.toHaveProperty('id');
-    expect(await sentenceOf(imp(f, '2027-01-21'))).toBe(S.unlinkedImport('Lipa'));
+    expect(await sentenceOf(imp(f, '2026-12-21'))).toBe(S.unlinkedImport('Lipa'));
   });
   // Mutants: the audit append skipped -> `audit` has 0 rows, red. `unlinked_at` not set -> the row/typed-day asserts, red.
 });
@@ -244,7 +244,7 @@ describe('U2 - I2: an unlink changes no day, tender, channel, feed, correction o
     expect(
       await sentenceOf(
         asOrgOn(f.orgId, (tx) =>
-          D.postPosCorrection(tx, f.manager, { salesDayId: dayId, feedId, entryDate: '2027-01-20', reason: 'POS voided a cash receipt' }),
+          D.postPosCorrection(tx, f.manager, { salesDayId: dayId, feedId, entryDate: '2026-12-20', reason: 'POS voided a cash receipt' }),
         ),
       ),
     ).toBe(S.figuresUnreadable('Lipa'));
@@ -371,7 +371,7 @@ describe('U8 - R8 relink after an unlink (REV-1: the full UNIQUE stays)', () => 
     expect(feedPosIds.map((r) => r.pos_store_id), 'history is kept: the old feeds still carry P1').toEqual([f.posStoreId]);
     // the link is LIVE again: the store takes imports and refuses typed days
     expect(await sentenceOf(typedDay(f, f.storeId, f.walkInId, NEWDAY))).toBe('Lipa takes its sales from POS. Import the day instead.');
-    await expect(imp(f, '2027-01-21')).resolves.toHaveProperty('id');
+    await expect(imp(f, '2026-12-21')).resolves.toHaveProperty('id');
   });
 
   it('the SAME store links to a free P2: live on P2, the old feeds still carry P1', async () => {
@@ -604,7 +604,7 @@ describe('U12 - R9a: no correction or recheck of an old imported day after a rel
     return { dayId, feedId };
   }
   const correct = (f: F, dayId: string, feedId: string) =>
-    asOrgOn(f.orgId, (tx) => D.postPosCorrection(tx, f.manager, { salesDayId: dayId, feedId, entryDate: '2027-01-20', reason: 'POS voided a cash receipt' }));
+    asOrgOn(f.orgId, (tx) => D.postPosCorrection(tx, f.manager, { salesDayId: dayId, feedId, entryDate: '2026-12-20', reason: 'POS voided a cash receipt' }));
   const corrections = (dayId: string) => count(`select count(*)::text n from sales_day_pos_corrections where sales_day_id = $1`, dayId);
   const entries = (f: F) => count(`select count(*)::text n from journal_entries where org_id = $1`, f.orgId);
 
