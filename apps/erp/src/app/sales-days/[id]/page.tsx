@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { authorize, can as canDo } from '@shareat/auth';
 import { salesDaysRepo, journalRepo, posV1Repo } from '@shareat/db';
-import { packageCapExcess, unpostedUsageDraftCount } from '@shareat/domain';
+import { packageCapExcess, unpostedUsageDraftCount, V1_DAY_FEED_LAST_DATE, V1_DAY_FEED_STOPPED_SENTENCE } from '@shareat/domain';
 import { add, compare, formatMoney, money, ZERO } from '@shareat/core/money';
 import { addDays, formatBusinessDateTime, parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { listStores, listActingPersons, getStoreLink } from '../lib';
@@ -388,7 +388,12 @@ export default async function SalesDayDetailPage({
         </form>
       )}
 
-      {unverified && can.edit && isFeedDay && (
+      {/* T-551: a day dated after the cut-off cannot be re-imported (bible row 452 b); say so instead of offering it. */}
+      {unverified && can.edit && isFeedDay && day.businessDate > V1_DAY_FEED_LAST_DATE && (
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">{V1_DAY_FEED_STOPPED_SENTENCE}</p>
+      )}
+
+      {unverified && can.edit && isFeedDay && day.businessDate <= V1_DAY_FEED_LAST_DATE && (
         <form action={reimportSalesDayAction} className="space-y-2 text-sm">
           {hiddenIds}
           <Button type="submit" variant="secondary">
