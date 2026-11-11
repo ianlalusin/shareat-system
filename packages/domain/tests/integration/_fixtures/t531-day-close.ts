@@ -67,7 +67,10 @@ export interface TenderLine { tenderId: string; amount: string }
 export interface Reading {
   storeId?: string; terminalId?: string; windowStart: Date; windowEnd: Date; receiptCount: number; grossTotal: string; subtotal: string; discountTotal: string;
   discounts: { senior: string; pwd: string; other: string }; seniorPwdDiners: number; unliSales: string; alaCarteSales: string;
-  byTender: TenderLine[] | Record<string, string>; toCheckCount: number; heads: number; packageSessions: number; lateCount: number; spansTwoDates: boolean;
+  byTender: TenderLine[] | Record<string, string>;
+  /** T-558 (R3): Sum of the receipts' short payments (gaps > 0), and how many of them are above the tolerance (findings). */
+  varianceTotal?: string; shortfallCount?: number;
+  toCheckCount: number; heads: number; packageSessions: number; lateCount: number; spansTwoDates: boolean;
 }
 export interface CloseResult { wrote: boolean; dayCloseId: string; zNo: number; reading: Reading; salesDayId: string | null }
 interface DayCloseApi {
@@ -148,6 +151,10 @@ export interface SaleSpec {
   terminalNo?: number;
   /** When given, the helper fails loudly unless priceSession produced exactly this total (the hand figure of the case). */
   expectTotal?: string;
+  /** T-558: the rule reader the sale runs with (default RATES; `{}` = the real reader over the database). `now` is always the sale's own time. */
+  deps?: Omit<Deps, 'now'>;
+  /** T-558: edit the completeSale input after priceSession built it (e.g. a device total that differs from the server's). */
+  mutate?: (input: Record<string, unknown>) => void;
 }
 export interface MadeSale { receiptId: string; sessionId: string; subtotal: string; discountTotal: string; total: string; terminalSeq: number }
 
@@ -157,7 +164,7 @@ export async function sell(f: World, o: SaleSpec): Promise<MadeSale> {
     return terminal.use(() => sell(f, { ...rest, terminalNo: terminal.no }));
   }
   const who = o.who ?? f.counter;
-  const deps = { ...RATES, now: () => o.at };
+  const deps = { ...(o.deps ?? RATES), now: () => o.at };
   const sessionId = uuid();
   const pairing = f.pairingId;
   const stand = await f.stand();
@@ -217,6 +224,7 @@ export async function sell(f: World, o: SaleSpec): Promise<MadeSale> {
     })),
     seniors,
   };
+  o.mutate?.(input as unknown as Record<string, unknown>);
   await asOrg(f.orgId, (tx) => completeSale(tx, who, input, deps));
   return { receiptId, sessionId, subtotal: priced.subtotal, discountTotal: priced.discountTotal, total: priced.total, terminalSeq };
 }

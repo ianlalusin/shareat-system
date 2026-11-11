@@ -51,6 +51,7 @@ export function routeInputForDay(day: DayRow, channels: ChannelRow[], tenders: T
     creditSales: money(day.creditSales),
     // T-375 (W11): a feed day's refunds post to 4950 beside its cash net of them; a typed day has none.
     refunds: money(day.refunds),
+    allowShortPayment: day.source === 'pos_receipts',
     tenders: tenders.map((t) => ({ moneyAccountId: t.moneyAccountId, amount: money(t.amount) })),
     channels: [
       // T-531: a day from the POS receipts has no remitted channel ROW (the POS has no channels), but the router's channel check ("the channels sum to the total") applies as soon

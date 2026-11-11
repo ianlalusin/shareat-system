@@ -992,6 +992,17 @@ export interface ReceiptFigures {
 
 const idList = (ids: readonly string[]): SQL => sql.join(ids.map((i) => sql`${i}`), sql`, `);
 
+/** T-558: Σ amount tendered per receipt (decimal text), for the receipts that took any payment; a short payment is a receipt whose sum is below its total. */
+export async function receiptPaidSums(tx: Tx, orgId: string, receiptIds: string[]): Promise<Map<string, string>> {
+  if (receiptIds.length === 0) return new Map();
+  const rows = (await tx.execute(sql`
+    select p.receipt_id as receipt_id, sum(p.amount)::text as paid
+      from pos_sales_receipt_payments p
+     where p.org_id = ${orgId} and p.receipt_id in (${idList(receiptIds)})
+     group by p.receipt_id`)) as unknown as { receipt_id: string; paid: string }[];
+  return new Map(rows.map((r) => [r.receipt_id, r.paid]));
+}
+
 export async function receiptFigures(tx: Tx, orgId: string, receiptIds: string[]): Promise<ReceiptFigures> {
   const discountByKind = { senior: '0', pwd: '0', preset: '0', custom: '0' };
   if (receiptIds.length === 0) return { packageGross: '0', otherGross: '0', discountByKind, statutoryDiners: 0, byTender: [], packageSessions: 0, heads: 0 };

@@ -189,8 +189,10 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
   });
   const paid = rows.reduce((a, r) => add(a, r.amount), money('0'));
   const total = money(priced.total);
-  if (compare(paid, total) < 0) throw refuse('pos: underpaid', 'The payments add up to less than the total.');
-  const change = subtract(paid, total);
+  // T-558 (row 453): a short payment is RECORDED, never refused (the customer has already left). gap > 0 means no change; it is a routine variance up to the
+  // tolerance in force on the sale's business date, a finding above it. Overpayment keeps the change-only-from-cash rule below.
+  const gap = compare(paid, total) < 0 ? subtract(total, paid) : money('0');
+  const change = compare(paid, total) < 0 ? money('0') : subtract(paid, total);
   let changeRow = -1;
   if (compare(change, money('0')) > 0) {
     const cash = rows.map((r, i) => ({ r, i })).filter((x) => x.r.kind === 'cash').sort((a, b) => compare(b.r.amount, a.r.amount));
@@ -287,6 +289,19 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
         truncated: priced.lines.length > MISMATCH_LINE_CAP,
       },
     });
+  }
+  if (compare(gap, money('0')) > 0) {
+    const tolerance = rules!.rules.saleVarianceToleranceCentavos;
+    const o = {
+      storeId, entityId: receiptId, pairingId, at: issuedAt,
+      after: {
+        gap: gap.toString(), tolerance: fromCentavos(tolerance).toString(), deviceTotal: deviceTotal.toString(), serverTotal: priced.total,
+        payments: rows.map((r) => ({ tenderId: r.tenderId, amount: r.amount.toString() })),
+      },
+    };
+    // Literal action names so the build's audit scan sees both.
+    if (toCentavos(gap) > tolerance) await audit(tx, actor, 'pos.sale_payment_shortfall', o);
+    else await audit(tx, actor, 'pos.sale_payment_variance', o);
   }
   await audit(tx, actor, 'pos.sale_completed', {
     storeId, entityId: receiptId, pairingId, at: issuedAt,
