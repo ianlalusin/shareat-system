@@ -87,7 +87,7 @@ const lineSpec: Spec = {
   req: { lineId: uuid, menuItemId: uuid, qty: int, addedAtDevice: time },
   opt: { variantId: uuid, note: str, optionValueIds: list(uuid, MAX_ITEMS) },
 };
-const refillLineSpec: Spec = { req: { lineId: uuid, menuItemId: uuid, qty: int, addedAtDevice: time } };
+const refillLineSpec: Spec = { req: { lineId: uuid, menuItemId: uuid, qty: int, addedAtDevice: time }, opt: { optionValueIds: list(uuid, 1) } }; // T-566: at most one flavour
 
 type Base = { storeId: string; pairingId: string };
 interface Handler {

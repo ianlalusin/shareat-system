@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { add, money, type Money } from '@shareat/core/money';
 import { authorize, type Actor } from '@shareat/auth';
 import { posV2Repo, type Tx } from '@shareat/db';
-import { refuse, gone } from '../shared/refusal';
+import { refuse, gone, RefusalError } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { POS_LINE_NOTE_RULES, POS_REASON_RULES } from '../field-rules/pos';
 import { loadStoreMenu } from '../menu/load-store-menu';
@@ -115,6 +115,30 @@ function optionDelta(item: ProjectedItem, variant: ProjectedVariant, chosen: rea
   return { delta, names };
 }
 
+/** The name stored on a line (and printed on the outage slip): the item, then its size, then the chosen options. */
+const lineName = (item: ProjectedItem, variant: ProjectedVariant, names: readonly string[]): string =>
+  `${item.name}${variant.label ? ` - ${variant.label}` : ''}${names.length ? ` + ${names.join(', ')}` : ''}`;
+
+/**
+ * T-566: a refill carries at most ONE flavour (an option value of the meat's variant), required when a group with a flavour on sale has `minSelections` above 0
+ * (v1 `requiresFlavor`). The allowed / on-sale / group-max rules are `optionDelta`'s; only its sentence is v1's. The refill is free: the delta is dropped.
+ */
+function refillFlavour(item: ProjectedItem, variant: ProjectedVariant, chosen: readonly string[] | undefined): string[] {
+  const ids = [...new Set(chosen ?? [])];
+  if (ids.length > 1) throw refuse('pos: one flavour per refill', `Choose one flavour for ${item.name}.`);
+  if (ids.length === 0) {
+    if (variant.optionGroups.some((g) => g.minSelections > 0 && g.values.some((v) => v.channels.store.orderable))) throw refuse('pos: flavour required', `Choose a flavour for ${item.name}.`);
+    return [];
+  }
+  try {
+    optionDelta(item, variant, ids);
+  } catch (e) {
+    if (e instanceof RefusalError) throw refuse('pos: flavour not available', `That flavour is not available for ${item.name}.`);
+    throw e;
+  }
+  return ids;
+}
+
 /**
  * Existing row for a device lineId: the same content is a replay (skip it); different content is refused. T-556: also the variant, the option set
  * (`choices`) and, for a bundle line, the head count: the line covers `bundleHeads` and the heads above it sit on the derived extra-heads row (`extraHeadsQty`).
@@ -185,7 +209,7 @@ async function writeLines(tx: Tx, actor: Actor, ctx: { storeId: string; pairingI
     if (item.itemType === 'package' && session.mode !== 'dine_in') throw refuse('pos: package on take-out', 'A package can only be sold to a table, not take-out.');
     if (offer.amount === null) throw refuse('pos: no amount', `${item.name} has no price here yet.`);
     const { delta, names } = optionDelta(item, variant, s.l.optionValueIds);
-    const base = `${item.name}${variant.label ? ` - ${variant.label}` : ''}${names.length ? ` + ${names.join(', ')}` : ''}`;
+    const base = lineName(item, variant, names);
     const common = {
       orgId: actor.orgId,
       storeId: ctx.storeId,
@@ -445,16 +469,19 @@ export async function setHeadsCashier(tx: Tx, actor: Actor, input: { storeId: st
 export async function requestRefill(
   tx: Tx,
   actor: Actor,
-  input: { storeId: string; pairingId: string | null; sessionId: string; lines: { lineId: string; menuItemId: string; qty: number; addedAtDevice: string | Date }[] },
+  input: { storeId: string; pairingId: string | null; sessionId: string; lines: { lineId: string; menuItemId: string; qty: number; addedAtDevice: string | Date; optionValueIds?: string[] }[] },
 ): Promise<{ wrote: boolean }> {
   await authorize(tx, actor, 'request_pos_refill', { storeId: input.storeId });
   const pairingId = await requireContext(tx, actor, input.storeId, input.pairingId, true);
   const sessionId = uuidInput(input.sessionId, 'The table id');
   if (!Array.isArray(input.lines) || input.lines.length < 1 || input.lines.length > 100) throw refuse('pos: bad line count', 'Ask for between 1 and 100 refills at a time.');
   const shaped = input.lines.map((l) => ({ l, ...checkLineShape({ ...l, note: undefined }) }));
+  if (new Set(shaped.map((s) => s.l.menuItemId)).size !== shaped.length) throw refuse('pos: same meat twice', 'Each meat can be in a refill request only once.');
   const existing = new Map((await posV2Repo.getLinesByIds(tx, actor.orgId, input.storeId, shaped.map((s) => s.lineId))).map((r) => [r.id, r]));
+  // T-566: the flavour is part of the content (NULL = a refill written before migration 0249, which had none).
+  const sameFlavour = (a: readonly string[] | null | undefined, b: readonly string[] | undefined) => [...new Set(a ?? [])].sort().join() === [...new Set(b ?? [])].sort().join();
   const sameRefill = (s: (typeof shaped)[number], prior: posV2Repo.TableSessionLineRow) =>
-    prior.sessionId === sessionId && prior.kind === 'refill' && prior.menuItemId === s.l.menuItemId && prior.qty === s.qty;
+    prior.sessionId === sessionId && prior.kind === 'refill' && prior.menuItemId === s.l.menuItemId && prior.qty === s.qty && sameFlavour(prior.optionValueIds, s.l.optionValueIds);
   // Audit F6: a full replay is answered before the table's state is judged (it may have been paid since).
   if (shaped.every((s) => existing.has(s.lineId))) {
     if (shaped.some((s) => !sameRefill(s, existing.get(s.lineId)!))) throw recordedDifferently();
@@ -476,9 +503,11 @@ export async function requestRefill(
     const allowed = new Set(menu.menu.items.flatMap((i) => i.variants).filter((v) => packageVariants.has(v.id)).flatMap((v) => v.refillItemIds));
     const { item, variant } = offerFor(menu, s.l.menuItemId, undefined);
     if (item.itemType !== 'refill' || !allowed.has(item.id)) throw refuse('pos: not a refill of the package', `${item.name} is not a refill of this table's package.`);
+    const chosen = refillFlavour(item, variant, s.l.optionValueIds);
+    const flavourNames = variant.optionGroups.flatMap((g) => g.values.filter((v) => chosen.includes(v.id)).map((v) => v.name));
     rows.push({
       id: s.lineId, orgId: actor.orgId, storeId: input.storeId, sessionId, kind: 'refill', menuItemId: item.id, menuItemVariantId: variant.id,
-      name: item.name, qty: s.qty, unitPrice: money('0'), bundleHeads: null, optionValueIds: [], kitchenStationId: item.stationId, note: null, addedBy: actor.personId, addedOnPairingId: pairingId, addedAtDevice: s.at,
+      name: lineName(item, variant, flavourNames), qty: s.qty, unitPrice: money('0'), bundleHeads: null, optionValueIds: chosen.sort(), kitchenStationId: item.stationId, note: null, addedBy: actor.personId, addedOnPairingId: pairingId, addedAtDevice: s.at,
     });
   }
   if (rows.length === 0) return { wrote: false };
