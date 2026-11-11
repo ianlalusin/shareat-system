@@ -272,6 +272,9 @@ export async function recordOwnerSelfAgreement(
   if (compare(input.amount, remaining) > 0) {
     throw refuse('recordOwnerSelfAgreement: amount above what the charge still has unrecovered', `The amount cannot be more than the charge still has to recover, which is ${remaining}.`);
   }
+  // T-555: the owner's act happens today, so an entry dated later is still signed today (a future signing date would not count for recovery yet).
+  const today = toBusinessDate();
+  const signed = input.on.localeCompare(today) > 0 ? today : input.on;
   const { id } = await deductionAgreementsRepo.insertAgreement(tx, {
     orgId: actor.orgId,
     personId: input.personId,
@@ -280,9 +283,9 @@ export async function recordOwnerSelfAgreement(
     sourceEntryId: input.sourceEntryId,
     amount: input.amount,
     perPayrollLimit: input.amount,
-    noticeGivenAt: input.on,
+    noticeGivenAt: signed,
     employeeExplanation: 'own request',
-    signedOn: input.on,
+    signedOn: signed,
     evidenceFileId: null,
     recordedBy: actor.personId,
   });
@@ -292,7 +295,7 @@ export async function recordOwnerSelfAgreement(
     storeId: input.storeId,
     entityId: id,
     before: null,
-    after: { amount: String(input.amount), perPayrollLimit: String(input.amount), sourceType: 'owner_pay_recovery', signedOn: input.on },
+    after: { amount: String(input.amount), perPayrollLimit: String(input.amount), sourceType: 'owner_pay_recovery', signedOn: signed },
     source: 'web',
   });
 }

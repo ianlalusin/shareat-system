@@ -25,6 +25,7 @@ import type { Actor } from '@shareat/auth';
 import { addDays, toBusinessDate } from '@shareat/core/datetime';
 import { money } from '@shareat/core/money';
 import { RefusalError } from '../../src/shared/refusal';
+import { recordOwnerSelfAgreement } from '../../src/payroll/deduction-agreements';
 import {
   agreedRecoverable, applyDeductionRecovery, post13thMonthRun, postPayRun, postSeparation, preview13thMonthRun,
   previewSeparation, recordDeductionAgreement, seedAttendanceConfig, seedCanonicalPositions,
@@ -194,5 +195,22 @@ describe('T-555 - writer: the signing date cannot be in the future', () => {
     expect(err).toBeInstanceOf(RefusalError);
     expect((err as RefusalError).userMessage).toContain('The signing date cannot be in the future.');
     await expect(rec(f, today)).resolves.toHaveProperty('id');
+  });
+});
+
+describe('T-555 - owner self-agreement: an entry dated later is signed today, never in the future', () => {
+  it('on = tomorrow -> signed_on is today; on = a past date is kept', async () => {
+    const f = await fixture('ownerself');
+    const today = toBusinessDate();
+    const run = async (on: string) => {
+      const entry = await chargeEntry(sql, f, f.workerId, '300.00', 'owner_pay_recovery');
+      await asOrg(f.orgId, (tx) =>
+        recordOwnerSelfAgreement(tx, actor(f.orgId, f.workerId), { personId: f.workerId, storeId: f.storeId, sourceEntryId: entry, amount: money('300.00'), on }));
+      const [row] = await sql<{ signed_on: string; notice: string }[]>`
+        select signed_on::text, notice_given_at::text as notice from staff_deduction_agreements where source_entry_id = ${entry}`;
+      return row!;
+    };
+    expect(await run(addDays(today, 5))).toEqual({ signed_on: today, notice: today });
+    expect(await run('2026-01-04')).toEqual({ signed_on: '2026-01-04', notice: '2026-01-04' });
   });
 });
