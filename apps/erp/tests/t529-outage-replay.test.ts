@@ -4,8 +4,8 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { fakeMeta, id, IT, MENU } from './helpers/t529-fixtures';
-import { NO_TICKET_NO, printOutageForEvent } from '../src/app/pos/_kitchen/outage-print';
-import { OUTAGE_PRINTED_KEY, printUnprinted, pruneOutagePrinted, pruneOutagePrintedToPending } from '../src/app/pos/_kitchen/outage-replay';
+import { KITCHEN_TICKET_SEQ_KEY, NO_TICKET_NO, printOutageForEvent } from '../src/app/pos/_kitchen/outage-print';
+import { OUTAGE_INFLIGHT_KEY, OUTAGE_PRINTED_KEY, printUnprinted, pruneOutagePrinted, pruneOutagePrintedToPending } from '../src/app/pos/_kitchen/outage-replay';
 
 const SESSION = id(6001);
 const STAND_ID = id(6002);
@@ -75,6 +75,66 @@ describe('the offline switch prints what was saved before the poll said Offline'
     expect(res.message).toBe('Kitchen ticket did not print. Tap Reprint.');
     expect(meta.store.get(OUTAGE_PRINTED_KEY)).toEqual([7]);
     expect((await printUnprinted(failing, [linesAdded(7)])).failed).toEqual([]);
+  });
+});
+
+describe('T-561 an outage ticket is marked printed only once it printed (or is saved for reprint)', () => {
+  it('(a) printing event 2 of 3 throws: 1 and 3 print and are marked, 2 is not marked, the message is set, and the next replay retries 2', async () => {
+    const { deps, meta, printLines } = setup();
+    let counterWrites = 0;
+    const flaky = {
+      ...deps(false),
+      setMeta: async <T>(k: string, v: T) => {
+        if (k === KITCHEN_TICKET_SEQ_KEY && ++counterWrites === 2) throw new Error('disk full');
+        return meta.setMeta(k, v);
+      },
+    };
+    const pending = [linesAdded(1), linesAdded(2), linesAdded(3)];
+    const res = await printUnprinted(flaky, pending);
+    expect(printLines).toHaveBeenCalledTimes(2);
+    expect(meta.store.get(OUTAGE_PRINTED_KEY)).toEqual([1, 3]);
+    expect(res.message).not.toBeNull();
+    expect(meta.store.get(OUTAGE_INFLIGHT_KEY) ?? []).toEqual([]);
+    const again = await printUnprinted(deps(false), pending);
+    expect(again.printed).toBe(1);
+    expect(printLines).toHaveBeenCalledTimes(3);
+    expect(meta.store.get(OUTAGE_PRINTED_KEY)).toEqual([1, 2, 3]);
+    expect(again.message).toBeNull();
+  });
+
+  it('(b) a seq left in flight by a crash is not printed again: it comes back as a Reprint job with a message, and is marked so it is offered once', async () => {
+    const { deps, meta, printLines } = setup({ meta: fakeMeta({ [OUTAGE_INFLIGHT_KEY]: [4] }) });
+    const res = await printUnprinted(deps(false), [linesAdded(4)]);
+    expect(printLines).not.toHaveBeenCalled();
+    expect(res.failed).toHaveLength(1);
+    expect(res.failed[0]!.lines.some((l) => l.includes('GRILL'))).toBe(true);
+    expect(res.message).not.toBeNull();
+    expect(meta.store.get(OUTAGE_PRINTED_KEY)).toEqual([4]);
+    expect(meta.store.get(OUTAGE_INFLIGHT_KEY)).toEqual([]);
+    const second = await printUnprinted(deps(false), [linesAdded(4)]);
+    expect(second).toEqual({ printed: 0, failed: [], message: null });
+    expect(printLines).not.toHaveBeenCalled();
+  });
+
+  it('(c) the normal path is unchanged: every event prints once, a second replay prints nothing, and nothing is left in flight', async () => {
+    const { deps, meta, printLines } = setup();
+    const pending = [standOpened(1), linesAdded(2), refill(3)];
+    const first = await printUnprinted(deps(false), pending);
+    expect(first).toEqual({ printed: 3, failed: [], message: null });
+    expect(printLines).toHaveBeenCalledTimes(3);
+    expect(meta.store.get(OUTAGE_PRINTED_KEY)).toEqual([1, 2, 3]);
+    expect(meta.store.get(OUTAGE_INFLIGHT_KEY) ?? []).toEqual([]);
+    expect((await printUnprinted(deps(false), pending)).printed).toBe(0);
+    expect(printLines).toHaveBeenCalledTimes(3);
+  });
+
+  it('pruning forgets in-flight seqs the outbox dropped, the same way as printed ones', async () => {
+    const m = fakeMeta({ [OUTAGE_PRINTED_KEY]: [1, 2], [OUTAGE_INFLIGHT_KEY]: [2, 3] });
+    await pruneOutagePrinted(m, [2]);
+    expect(m.store.get(OUTAGE_INFLIGHT_KEY)).toEqual([3]);
+    await pruneOutagePrintedToPending(m, [1, 5]);
+    expect(m.store.get(OUTAGE_PRINTED_KEY)).toEqual([1]);
+    expect(m.store.get(OUTAGE_INFLIGHT_KEY)).toEqual([]);
   });
 });
 
