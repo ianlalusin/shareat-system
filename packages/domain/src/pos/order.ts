@@ -13,7 +13,7 @@ import { posV2Repo, type Tx } from '@shareat/db';
 import { refuse, gone } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { POS_LINE_NOTE_RULES, POS_REASON_RULES } from '../field-rules/pos';
-import { loadStoreMenu } from '../menu/load-store-menu';
+import { loadStoreMenu, loadStoreMenuWithVersions } from '../menu/load-store-menu';
 import type { ProjectedItem, ProjectedStoreMenu, ProjectedVariant } from '../menu/project';
 import {
   audit,
@@ -56,17 +56,19 @@ export async function lockOpenSession(tx: Tx, orgId: string, storeId: string, se
 // ---------------------------------------------------------------------------------------------------------------------
 // The server's menu prices a line (R4)
 // ---------------------------------------------------------------------------------------------------------------------
+/** The menu at one instant, with (T-565) the daypart window version each dayparted store offer was judged by: windows as they stood at that instant. */
+type MenuAsOf = Awaited<ReturnType<typeof loadStoreMenuWithVersions>>;
 class MenuAt {
-  private readonly cache = new Map<number, ProjectedStoreMenu>();
+  private readonly cache = new Map<number, MenuAsOf>();
   constructor(
     private readonly tx: Tx,
     private readonly orgId: string,
     private readonly storeId: string,
   ) {}
-  async at(when: Date): Promise<ProjectedStoreMenu> {
+  async at(when: Date): Promise<MenuAsOf> {
     let m = this.cache.get(when.getTime());
     if (!m) {
-      m = await loadStoreMenu(this.tx, this.orgId, this.storeId, when);
+      m = await loadStoreMenuWithVersions(this.tx, this.orgId, this.storeId, when);
       this.cache.set(when.getTime(), m);
     }
     return m;
@@ -159,7 +161,8 @@ async function writeLines(tx: Tx, actor: Actor, ctx: { storeId: string; pairingI
       continue;
     }
     fresh++;
-    const { item, variant, offer } = offerFor(await menus.at(s.at), s.l.menuItemId, s.l.variantId);
+    const asOf = await menus.at(s.at);
+    const { item, variant, offer } = offerFor(asOf.menu, s.l.menuItemId, s.l.variantId);
     if (item.itemType === 'refill') throw refuse('pos: refill via addLines', `${item.name} is a refill: ask for it from the refill screen.`);
     if (item.itemType === 'package' && session.mode !== 'dine_in') throw refuse('pos: package on take-out', 'A package can only be sold to a table, not take-out.');
     if (offer.amount === null) throw refuse('pos: no amount', `${item.name} has no price here yet.`);
@@ -172,6 +175,7 @@ async function writeLines(tx: Tx, actor: Actor, ctx: { storeId: string; pairingI
       menuItemId: item.id,
       menuItemVariantId: variant.id,
       kitchenStationId: item.stationId,
+      daypartVersionId: asOf.versionOfVariant.get(variant.id) ?? null,
       note: s.note,
       bundleHeads: null as number | null,
       addedBy: actor.personId,
@@ -347,6 +351,7 @@ async function followHeads(tx: Tx, actor: Actor, ctx: { storeId: string; pairing
     unitPrice: unit,
     bundleHeads: null,
     kitchenStationId: from.kitchenStationId,
+    daypartVersionId: from.daypartVersionId, // a re-made head line keeps the window it was first judged by
     note: from.note,
     addedBy: actor.personId,
     addedOnPairingId: ctx.pairingId,
@@ -449,13 +454,14 @@ export async function requestRefill(
       continue;
     }
     if (packageVariants.size === 0) throw refuse('pos: refill without a package', 'This table has no package to refill.');
-    const menu = await menus.at(s.at);
+    const asOf = await menus.at(s.at);
+    const menu = asOf.menu;
     const allowed = new Set(menu.menu.items.flatMap((i) => i.variants).filter((v) => packageVariants.has(v.id)).flatMap((v) => v.refillItemIds));
     const { item, variant } = offerFor(menu, s.l.menuItemId, undefined);
     if (item.itemType !== 'refill' || !allowed.has(item.id)) throw refuse('pos: not a refill of the package', `${item.name} is not a refill of this table's package.`);
     rows.push({
       id: s.lineId, orgId: actor.orgId, storeId: input.storeId, sessionId, kind: 'refill', menuItemId: item.id, menuItemVariantId: variant.id,
-      name: item.name, qty: s.qty, unitPrice: money('0'), bundleHeads: null, kitchenStationId: item.stationId, note: null, addedBy: actor.personId, addedOnPairingId: pairingId, addedAtDevice: s.at,
+      name: item.name, qty: s.qty, unitPrice: money('0'), bundleHeads: null, kitchenStationId: item.stationId, daypartVersionId: asOf.versionOfVariant.get(variant.id) ?? null, note: null, addedBy: actor.personId, addedOnPairingId: pairingId, addedAtDevice: s.at,
     });
   }
   if (rows.length === 0) return { wrote: false };

@@ -5,8 +5,8 @@
  * daypart, overlap) live in the database; authorize, audit and plain-word refusals are the domain's (slice S2). The DB role may
  * UPDATE exactly name, days, start_time, end_time, status and updated_at, so `updateDaypart` cannot move a daypart to another store.
  */
-import { and, asc, eq, sql } from 'drizzle-orm';
-import { menuDayparts, type MenuStatus } from '../../schema/menu';
+import { and, asc, eq, gt, isNull, lte, or, sql } from 'drizzle-orm';
+import { menuDaypartVersions, menuDayparts, type MenuStatus } from '../../schema/menu';
 import { stores } from '../../schema/stores';
 import type { Tx } from '../client';
 
@@ -61,18 +61,67 @@ export async function lockDaypartForUpdate(tx: Tx, orgId: string, id: string): P
   return row;
 }
 
+/** A window version's time is the transaction's `now()` cut to the millisecond, the grain a reader's `at` has, so a reader in the writer's own transaction sees what it just wrote. */
+const VERSION_NOW = sql`date_trunc('milliseconds', now())`;
+
+/** T-565 (0251): creating a daypart opens its version 1, in the same transaction. */
 export async function insertDaypart(tx: Tx, input: InsertDaypartInput): Promise<MenuDaypartRow> {
   const [row] = await tx.insert(menuDayparts).values(input).returning();
+  await tx.insert(menuDaypartVersions).values({
+    orgId: row!.orgId,
+    storeId: row!.storeId,
+    daypartId: row!.id,
+    name: row!.name,
+    days: row!.days,
+    startTime: row!.startTime,
+    endTime: row!.endTime,
+    status: row!.status,
+    validFrom: row!.createdAt,
+  });
   return row!;
 }
 
+/**
+ * T-565 (0251): every edit or retire closes the open version and opens the next from the row as now stored, in the same transaction. The close
+ * is `greatest(now, valid_from)` so a transaction that began before the previous edit committed can never close a version before it opened, and
+ * the next version opens exactly where the old one closed (no gap, no overlap). A row that never had a version (none exists after 0251, but a
+ * hand-built fixture may) just opens one now.
+ */
 export async function updateDaypart(tx: Tx, id: string, patch: UpdateDaypartPatch): Promise<MenuDaypartRow> {
   const [row] = await tx
     .update(menuDayparts)
     .set({ ...patch, updatedAt: sql`now()` })
     .where(eq(menuDayparts.id, id))
     .returning();
+  await tx.execute(sql`
+    update menu_daypart_versions set valid_to = greatest(${VERSION_NOW}, valid_from) where daypart_id = ${id}::uuid and valid_to is null`);
+  await tx.execute(sql`
+    insert into menu_daypart_versions (org_id, store_id, daypart_id, name, days, start_time, end_time, status, valid_from)
+    select d.org_id, d.store_id, d.id, d.name, d.days, d.start_time, d.end_time, d.status,
+           coalesce((select max(v.valid_to) from menu_daypart_versions v where v.daypart_id = d.id), ${VERSION_NOW})
+      from menu_dayparts d where d.id = ${id}::uuid`);
   return row!;
+}
+
+export type MenuDaypartVersionRow = typeof menuDaypartVersions.$inferSelect;
+
+/**
+ * T-565 (0251): the window of every daypart of one store as it stood at `at` (retired dayparts included, status as then): the version with
+ * `valid_from <= at < coalesce(valid_to, infinity)`. At "now" this is exactly `listDaypartsOfStore`. A daypart created after `at` has no row.
+ */
+export async function listDaypartWindowsAsOf(tx: Tx, orgId: string, storeId: string, at: Date): Promise<MenuDaypartVersionRow[]> {
+  return tx
+    .select()
+    .from(menuDaypartVersions)
+    .where(
+      and(
+        eq(menuDaypartVersions.orgId, orgId),
+        eq(menuDaypartVersions.storeId, storeId),
+        lte(menuDaypartVersions.validFrom, at),
+        or(isNull(menuDaypartVersions.validTo), gt(menuDaypartVersions.validTo, at)),
+      ),
+    )
+    .orderBy(asc(menuDaypartVersions.startTime), asc(menuDaypartVersions.name), asc(menuDaypartVersions.daypartId));
 }
 
 /** The store's IANA timezone (`stores.timezone`); every daypart window is wall clock in it. undefined when the store is not visible. */

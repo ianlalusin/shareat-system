@@ -626,6 +626,12 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'validator',
     reason: "id/org/store never change; retire refused while a live offer uses the daypart; a days/time edit may not create an overlap (0233). Reads other rows.",
   },
+  menu_daypart_versions_append_guard: {
+    table: 'menu_daypart_versions',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A daypart window version is never deleted, and its only change is closing valid_to once from NULL (0251, ENABLE ALWAYS). Decides only from TG_OP and OLD/NEW.',
+  },
   menu_offers_update_guard: {
     table: 'menu_offers',
     mode: 'always',

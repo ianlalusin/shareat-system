@@ -1555,6 +1555,13 @@
       "when": 1807500707084,
       "tag": "0248_t558_pos_sale_variance_tolerance",
       "breakpoints": true
+    },
+    {
+      "idx": 251,
+      "version": "7",
+      "when": 1807759907084,
+      "tag": "0251_t565_daypart_versions",
+      "breakpoints": true
     }
   ]
 }

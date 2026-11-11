@@ -52,7 +52,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { kitchenStations } from './kitchen';
-import { menuItems, menuItemVariants } from './menu';
+import { menuDaypartVersions, menuItems, menuItemVariants } from './menu';
 import { organizations } from './organizations';
 import { persons } from './persons';
 import { posTabletPairings } from './pos-tablet-pairings';
@@ -262,6 +262,8 @@ export const tableSessionLines = pgTable(
     bundleHeads: smallint('bundle_heads'),
     /** Composite FK (store_id, kitchen_station_id) -> kitchen_stations (store_id, id), hand-added in migration 0238 (no single-column FK). */
     kitchenStationId: uuid('kitchen_station_id'),
+    /** T-565 (migration 0251): the daypart window version a dayparted offer was judged by when the line was written; NULL for an all-day offer and for lines older than 0251. Composite FK (store_id, daypart_version_id) -> menu_daypart_versions, hand-added in migration 0251 (no single-column FK). */
+    daypartVersionId: uuid('daypart_version_id'),
     kitchenStatus: text('kitchen_status', { enum: KITCHEN_LINE_STATUSES }).notNull().default('queued'),
     servedAtDevice: timestamp('served_at_device', { withTimezone: true }),
     servedBy: personCol('served_by'),
@@ -293,6 +295,7 @@ export const tableSessionLines = pgTable(
     foreignKey({ columns: [t.orgId, t.storeId], foreignColumns: [stores.orgId, stores.id], name: 'table_session_lines_store_id_same_org_fk' }).onDelete('restrict'),
     foreignKey({ columns: [t.storeId, t.sessionId], foreignColumns: [tableSessions.storeId, tableSessions.id], name: 'table_session_lines_session_same_store_fk' }).onDelete('restrict'),
     foreignKey({ columns: [t.storeId, t.kitchenStationId], foreignColumns: [kitchenStations.storeId, kitchenStations.id], name: 'table_session_lines_kitchen_station_same_store_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.storeId, t.daypartVersionId], foreignColumns: [menuDaypartVersions.storeId, menuDaypartVersions.id], name: 'table_session_lines_daypart_version_same_store_fk' }).onDelete('restrict'),
     twin('table_session_lines_menu_item_id_same_org_fk', t.orgId, t.menuItemId, menuItems.orgId, menuItems.id),
     twin('table_session_lines_menu_item_variant_id_same_org_fk', t.orgId, t.menuItemVariantId, menuItemVariants.orgId, menuItemVariants.id),
     foreignKey({ columns: [t.orgId, t.servedBy], foreignColumns: [persons.orgId, persons.id], name: 'table_session_lines_served_by_same_org_fk' }).onDelete('restrict'),

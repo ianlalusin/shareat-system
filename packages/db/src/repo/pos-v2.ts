@@ -246,6 +246,8 @@ export interface NewSessionLine {
   /** N > 1 for a "(up to N)" bundle line, else null. */
   bundleHeads: number | null;
   kitchenStationId: string | null;
+  /** T-565: the daypart window version the offer was judged by; null for an all-day offer. */
+  daypartVersionId: string | null;
   note: string | null;
   addedBy: string;
   addedOnPairingId: string | null;
@@ -271,6 +273,7 @@ export async function insertLines(tx: Tx, rows: NewSessionLine[]): Promise<void>
       unitPrice: r.unitPrice,
       bundleHeads: r.bundleHeads,
       kitchenStationId: r.kitchenStationId,
+      daypartVersionId: r.daypartVersionId,
       note: r.note,
       addedBy: r.addedBy,
       addedOnPairingId: r.addedOnPairingId,
