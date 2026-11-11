@@ -16,7 +16,8 @@ import { Button, type ButtonProps, type ButtonVariant } from './Button';
 
 const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
-export type DialogSize = 'sm' | 'md' | 'lg' | 'xl';
+/** `receipt` (T-528e): a narrow, tall panel for fixed-width text, as tall as the screen allows. */
+export type DialogSize = 'sm' | 'md' | 'lg' | 'xl' | 'receipt';
 
 export interface DialogProps {
   readonly open: boolean;
@@ -72,7 +73,7 @@ export function Dialog({ open, onClose, title, description, size = 'md', childre
           <button
             type="button"
             data-erp-size="free"
-            className="-mr-2 inline-flex h-8 w-8 shrink-0 text-sm items-center justify-center rounded-md text-muted hover:bg-canvas hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+            className="erp-dialog-close -mr-2 inline-flex h-8 w-8 shrink-0 text-sm items-center justify-center rounded-md text-muted hover:bg-canvas hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
             aria-label="Close"
             onClick={() => ref.current?.close()}
           >

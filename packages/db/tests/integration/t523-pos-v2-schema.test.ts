@@ -35,7 +35,7 @@ afterAll(async () => {
 const UPDATABLE: Readonly<Record<string, readonly string[]>> = {
   pos_stores: ['mode', 'live_from', 'state_version', 'changed_by', 'changed_at'],
   pos_stands: ['status', 'updated_at'],
-  pos_terminals: ['pairing_id', 'updated_at'],
+  pos_terminals: ['pairing_id', 'updated_at', 'receipt_paper_mm', 'receipt_copies'],
   table_sessions: ['heads_cashier', 'heads_server', 'status', 'voided_by', 'voided_at_device', 'void_reason', 'voided_offline'],
   table_session_lines: ['kitchen_status', 'served_at_device', 'served_by'],
   pos_sales_receipts: ['day_close_id'],
@@ -330,6 +330,19 @@ const salesDayRow = (w: B, o: Record<string, unknown> = {}) => ({
   created_by: w.personId,
   ...o,
 });
+
+/**
+ * T-531 (0247): a pos_receipts sales day is created only inside the derivation flag, for a LIVE store, on or after live_from. These tests are about the
+ * source list and the Z link, so the store is made live from before every date the rows use and the insert runs with the flag on (as the day close does).
+ */
+async function insPosReceiptsDay(w: B, row: Record<string, unknown>): Promise<string> {
+  await sql`insert into pos_stores (org_id, store_id, mode, live_from, changed_by) values (${w.orgId}, ${w.storeId}, 'live', '2026-10-01', ${w.personId}) on conflict (store_id) do nothing`;
+  return sql.begin(async (t) => {
+    await t`select set_config('app.sales_day_derivation', 'on', true)`;
+    const [r] = await t<{ id: string }[]>`insert into sales_days ${t(row as never)} returning id`;
+    return r!.id;
+  });
+}
 
 /** A row in every one of the fourteen tables for this org (for the RLS test). */
 async function fillAll(w: W) {
@@ -932,7 +945,7 @@ describe('R11 sales_days learns its third source (test 7)', () => {
   it('7: source pos_receipts with a day close is accepted; the check list is now legacy_typed | pos_v1_day_feed | pos_receipts', async () => {
     const w = await world('sd7a');
     const z = await dayClose(w);
-    expect(await refusal(() => ins('sales_days', salesDayRow(w, { source: 'pos_receipts', pos_day_close_id: z })))).toBeUndefined();
+    expect(await refusal(() => insPosReceiptsDay(w, salesDayRow(w, { source: 'pos_receipts', pos_day_close_id: z })))).toBeUndefined();
     const [d] = await sql<{ def: string }[]>`select pg_get_constraintdef(oid) def from pg_constraint where conname = 'sales_days_source_check' and conrelid = 'public.sales_days'::regclass`;
     for (const v of ['legacy_typed', 'pos_v1_day_feed', 'pos_receipts']) expect(d!.def).toContain(v);
   });
@@ -986,17 +999,17 @@ describe('R11 sales_days learns its third source (test 7)', () => {
     expect(trg[0]!.def).toBe('CREATE TRIGGER sales_days_figure_lock BEFORE INSERT OR UPDATE ON public.sales_days FOR EACH ROW EXECUTE FUNCTION sales_days_check_figure_lock()');
     expect(trg[1]!.def).toContain('BEFORE UPDATE ON public.sales_days');
     expect(trg[1]!.def).toContain('sales_days_check_verify_requires_submitted()');
-    // the functions behind them name no source other than the feed (0238 added 'pos_receipts' to the CHECK, not to the lock)
+    // the functions behind them name the feed and, since 0247 (T-531), 'pos_receipts' (the day derived from the POS receipts)
     const fn = await sql<{ src: string }[]>`select prosrc src from pg_proc where proname = 'sales_days_check_figure_lock'`;
     expect(fn[0]!.src).toContain("NEW.source <> 'pos_v1_day_feed'");
-    expect(fn[0]!.src).not.toContain('pos_receipts');
+    expect(fn[0]!.src).toContain('pos_receipts');
   });
 
   it('7: pos_day_close_id names a day close of the same organisation (same-org twin, 23503)', async () => {
     const w = await world('sd7d');
     const other = await world('sd7d-other');
     const foreign = await dayClose(other);
-    expectCode(await refusal(() => ins('sales_days', salesDayRow(w, { source: 'pos_receipts', pos_day_close_id: foreign }))), '23503');
+    expectCode(await refusal(() => insPosReceiptsDay(w, salesDayRow(w, { source: 'pos_receipts', pos_day_close_id: foreign }))), '23503');
   });
 });
 

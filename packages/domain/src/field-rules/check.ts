@@ -214,7 +214,7 @@ export function checkField(rule: FieldRule, raw: string | null | undefined): Fie
       return { ok: true, value: v };
     }
     case 'number': {
-      // ⭐ T-551 — the number boxes GROUP what is typed ("1,200" minutes, "12,500" units), so the live rule has to read
+      // ⭐ T-570 — the number boxes GROUP what is typed ("1,200" minutes, "12,500" units), so the live rule has to read
       // a correct grouping exactly as the parser does (T-504 item 7) and hand on the plain digits. A wrong grouping
       // is left alone and refused by the grammar below, never re-read (DEF-383).
       const plain = ungroupThousands(v) ?? v;

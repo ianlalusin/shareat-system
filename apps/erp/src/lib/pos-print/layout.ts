@@ -1,4 +1,3 @@
-import type { Money } from '@shareat/core/money';
 import type { PrintLayout } from './types';
 
 /**
@@ -41,11 +40,10 @@ export function center(text: string, cols: number): string {
  */
 export function justify(left: string, right: string, cols: number): string[] {
   requireColumns(cols);
-  // A `right` that fills or overruns the paper leaves no room for the left side at all. Amounts are
-  // short enough that this never happens on a 58 mm roll; if it somehow does, keeping the figure
-  // readable matters more than the column bound, so it gets its own final line.
+  // A `right` that fills or overruns the paper leaves no room for the label beside it: the label gets its own
+  // line(s), then the value is cut with `wrap` and each piece is right-aligned. No returned line exceeds `cols`.
   const room = cols - right.length - 1;
-  if (room < 1) return [...wrap(left, cols), right];
+  if (room < 1) return [...wrap(left, cols), ...wrap(right, cols).map((piece) => piece.padStart(cols))];
 
   const gap = cols - left.length - right.length;
   if (gap >= 1) return [left + ' '.repeat(gap) + right];
@@ -55,36 +53,42 @@ export function justify(left: string, right: string, cols: number): string[] {
   return [...parts, last + ' '.repeat(Math.max(1, cols - last.length - right.length)) + right];
 }
 
-/** Word wrap at `cols`, hard-cutting any single word longer than the paper. Empty text → `[""]`. */
+/**
+ * Word wrap at `cols`, hard-cutting any single word longer than the paper. Empty text → `[""]`.
+ * Leading spaces (an indented discount label) are kept on every continuation line.
+ */
 export function wrap(text: string, cols: number): string[] {
   requireColumns(cols);
+  const lead = (/^ */.exec(text)?.[0] ?? '').length;
+  const indent = ' '.repeat(lead < cols ? lead : 0);
+  const width = cols - indent.length;
   const lines: string[] = [];
   let current = '';
 
   for (const word of text.split(/\s+/).filter(Boolean)) {
-    if (word.length > cols) {
+    if (word.length > width) {
       // A name with no spaces ("Supercalifragilistic…") must be cut, not overflow the roll.
       if (current) {
-        lines.push(current);
+        lines.push(indent + current);
         current = '';
       }
       let rest = word;
-      while (rest.length > cols) {
-        lines.push(rest.slice(0, cols));
-        rest = rest.slice(cols);
+      while (rest.length > width) {
+        lines.push(indent + rest.slice(0, width));
+        rest = rest.slice(width);
       }
       current = rest;
       continue;
     }
     if (!current) current = word;
-    else if (current.length + 1 + word.length <= cols) current += ` ${word}`;
+    else if (current.length + 1 + word.length <= width) current += ` ${word}`;
     else {
-      lines.push(current);
+      lines.push(indent + current);
       current = word;
     }
   }
 
-  if (current) lines.push(current);
+  if (current) lines.push(indent + current);
   return lines.length ? lines : [''];
 }
 
@@ -95,14 +99,14 @@ export function rule(cols: number): string {
 }
 
 /**
- * A `Money` as it is printed: thousands commas, no currency symbol (thermal code pages often have no
+ * A money figure (a decimal string) as it is printed: thousands commas, no currency symbol (thermal code pages often have no
  * ₱), sign preserved.
  *
  * STRING WORK ONLY. There is no `Number()`, no `parseFloat`, no arithmetic — the figure arrives exact
  * as a decimal string (bible §6) and it is printed exactly as it arrived. Anything that recomputed
  * here could contradict the amount the diner actually paid.
  */
-export function printAmount(m: Money): string {
+export function printAmount(m: string): string {
   const value = m.trim();
   const negative = value.startsWith('-');
   const body = negative ? value.slice(1) : value;

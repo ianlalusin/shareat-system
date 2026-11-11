@@ -158,6 +158,10 @@ export const posTerminals = pgTable(
     /** The tablet currently acting as this terminal. Receipts key on the TERMINAL, events on the PAIRING: a replaced tablet keeps the receipt series (DEF-587). */
     /** Composite FK (store_id, pairing_id) -> pos_tablet_pairings, hand-added in migration 0238 (no single-column FK). */
     pairingId: uuid('pairing_id'),
+    /** T-546 (0246): the receipt roll in this till's printer, 58 or 80 mm. The tablet prints with it (snapshot R3); a replaced tablet inherits it. */
+    receiptPaperMm: smallint('receipt_paper_mm').notNull().default(58),
+    /** T-546 (0246): customer copies per receipt, 1 to 3. */
+    receiptCopies: smallint('receipt_copies').notNull().default(1),
     createdBy: personCol('created_by').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
@@ -168,6 +172,8 @@ export const posTerminals = pgTable(
     // NOTE: pos_terminals_pairing_key, a partial UNIQUE (pairing_id) WHERE pairing_id IS NOT NULL - hand-added in migration 0238.
     uniqueIndex('pos_terminals_pairing_key').on(t.pairingId).where(sql`${t.pairingId} is not null`),
     check('pos_terminals_terminal_no_check', sql`${t.terminalNo} between 1 and 99`),
+    check('pos_terminals_receipt_paper_mm_check', sql`${t.receiptPaperMm} in (58, 80)`),
+    check('pos_terminals_receipt_copies_check', sql`${t.receiptCopies} between 1 and 3`),
     foreignKey({ columns: [t.orgId, t.storeId], foreignColumns: [stores.orgId, stores.id], name: 'pos_terminals_store_id_same_org_fk' }).onDelete('restrict'),
     foreignKey({ columns: [t.orgId, t.createdBy], foreignColumns: [persons.orgId, persons.id], name: 'pos_terminals_created_by_same_org_fk' }).onDelete('restrict'),
     foreignKey({ columns: [t.storeId, t.pairingId], foreignColumns: [posTabletPairings.storeId, posTabletPairings.id], name: 'pos_terminals_pairing_same_store_fk' }).onDelete('restrict'),
@@ -692,4 +698,5 @@ export type PosDiscountPresetRow = typeof posDiscountPresets.$inferSelect;
 export type TableSessionLineDiscountRow = typeof tableSessionLineDiscounts.$inferSelect;
 export type TableSessionLineRow = typeof tableSessionLines.$inferSelect;
 export type PosSalesReceiptRow = typeof posSalesReceipts.$inferSelect;
+export type PosDayCloseRow = typeof posDayCloses.$inferSelect;
 export type PosEventRow = typeof posEvents.$inferSelect;

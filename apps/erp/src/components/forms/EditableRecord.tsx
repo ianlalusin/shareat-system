@@ -156,7 +156,7 @@ export interface ChangeControl {
   defaultChecked?: boolean;
   multiple?: boolean;
   options?: ReadonlyArray<{ selected: boolean; defaultSelected: boolean }>;
-  /** T-551: a number box (`inputMode` decimal/numeric) — compared by its digits, so the app's commas are not an edit. */
+  /** T-570: a number box (`inputMode` decimal/numeric) — compared by its digits, so the app's commas are not an edit. */
   numeric?: boolean;
 }
 
@@ -171,7 +171,7 @@ export function changedNames(controls: ReadonlyArray<ChangeControl>): string[] {
     let dirty: boolean;
     if (c.type === 'checkbox' || c.type === 'radio') dirty = c.checked !== c.defaultChecked;
     else if (c.type.startsWith('select')) dirty = selectIsDirty(c.options ?? [], c.multiple === true || c.type === 'select-multiple');
-    // T-551 — the number boxes group what is typed, so "10,493.75" and "10493.75" are the SAME figure: a comma
+    // T-570 — the number boxes group what is typed, so "10,493.75" and "10493.75" are the SAME figure: a comma
     // the app inserted is not an edit the person made. Anything else still compares byte for byte.
     else dirty = c.numeric ? plainNumberEntry(c.value) !== plainNumberEntry(c.defaultValue ?? '') : c.value !== c.defaultValue;
     if (dirty && !out.includes(c.name)) out.push(c.name);
@@ -419,7 +419,7 @@ export function EditableRecordView({
             <DialogActions>
               <CheckSummary active={check?.active === true} summary={check?.summary ?? null} className="w-full text-left" />
               <button type="submit" className={PRIMARY} disabled={blocked} data-check-aware="true" aria-label={saveLabel} data-tip={saveLabel}>
-                <ActionIcon name="check" />
+                <ActionIcon name="save" />
               </button>
               <button type="button" className={SECONDARY} onClick={onCancel} aria-label="Cancel" data-tip="Cancel">
                 <ActionIcon name="close" />

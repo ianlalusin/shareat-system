@@ -1,5 +1,5 @@
 /**
- * T-551 — the pure rules behind "a number box never holds anything but a number" (DEF-815).
+ * T-570 — the pure rules behind "a number box never holds anything but a number" (DEF-821).
  *
  * The formatter is only allowed to emit text the SHARED parser reads back to the same figure, so this file also
  * runs every formatted value through `parseDecimalInput` (T-504 item 7 accepts a correct grouping; DEF-383 refuses

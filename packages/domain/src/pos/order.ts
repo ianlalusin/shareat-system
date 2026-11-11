@@ -95,11 +95,10 @@ function offerFor(menu: ProjectedStoreMenu, itemId: string, variantId: string | 
 }
 
 function optionDelta(item: ProjectedItem, variant: ProjectedVariant, chosen: readonly string[] | undefined): { delta: Money; names: string[] } {
-  if (!chosen || chosen.length === 0) return { delta: money('0'), names: [] };
   let delta = money('0');
   const names: string[] = [];
   const perGroup = new Map<string, number>();
-  for (const id of new Set(chosen)) {
+  for (const id of new Set(chosen ?? [])) {
     const group = variant.optionGroups.find((g) => g.values.some((v) => v.id === id));
     const value = group?.values.find((v) => v.id === id);
     if (!group || !value) throw refuse('pos: option not on the item', `That choice is not available for ${item.name}.`);
@@ -111,6 +110,13 @@ function optionDelta(item: ProjectedItem, variant: ProjectedVariant, chosen: rea
     }
     delta = add(delta, money(value.channels.store.priceDelta));
     names.push(value.name);
+  }
+  // T-552 (audit P-003): every group the variant offers is judged, not only the ones the line chose from. Same rule as the screen's isOptionChoiceValid,
+  // so a required group with no orderable value is refused here exactly as the screen cannot satisfy it.
+  for (const group of variant.optionGroups) {
+    if (group.minSelections > (perGroup.get(group.id) ?? 0)) {
+      throw refuse('pos: option required', `${group.name}: choose at least ${group.minSelections} for ${item.name}.`);
+    }
   }
   return { delta, names };
 }
@@ -286,6 +292,14 @@ export async function addLines(tx: Tx, actor: Actor, input: { storeId: string; p
 const PACKAGE_SERVED = 'The package was already served. Void the stand or keep the heads.';
 
 /**
+ * T-527b: lines are ordered by (addedAtDevice, addedAt, id) in the database and (addedAtDevice, id) on the tablet. A re-made head line keeps the replaced line's
+ * addedAtDevice and addedAt, and, when that id is a device UUIDv7 (millisecond + counter), keeps its leading part too, so it stays in the same place among lines of the same event.
+ */
+function sameSpotId(old: string): string | undefined {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-/i.test(old) ? old.slice(0, 18).toLowerCase() + randomUUID().slice(18) : undefined;
+}
+
+/**
  * The billed heads changed from `before` to `after`. The package line(s) follow (rulings 1 and 2): nothing served - the queued package lines are
  * cancelled (their discounts removed with them) and re-made at the new heads at the SAME prices; a served package line stays and an INCREASE
  * adds a new package line for the difference; a DECREASE is refused while any package line is served.
@@ -320,7 +334,7 @@ async function followHeads(tx: Tx, actor: Actor, ctx: { storeId: string; pairing
       if (extraUnit === null) throw refuse('pos: no extra-head amount', 'There is no price for extra heads here yet.');
     }
   }
-  const mk = (from: (typeof pkg)[number], qty: number, unit: Money, name: string, id?: string): posV2Repo.NewSessionLine => ({
+  const mk = (from: (typeof pkg)[number], qty: number, unit: Money, name: string, id?: string, place?: { addedAtDevice: Date; addedAt: Date }): posV2Repo.NewSessionLine => ({
     id: id ?? randomUUID(),
     orgId: actor.orgId,
     storeId: ctx.storeId,
@@ -336,7 +350,8 @@ async function followHeads(tx: Tx, actor: Actor, ctx: { storeId: string; pairing
     note: from.note,
     addedBy: actor.personId,
     addedOnPairingId: ctx.pairingId,
-    addedAtDevice: at,
+    addedAtDevice: place?.addedAtDevice ?? at,
+    ...(place ? { addedAt: place.addedAt } : {}),
   });
   const extraName = bundle ? `${bundle.name} - extra head` : '';
   const fresh: posV2Repo.NewSessionLine[] = [];
@@ -347,7 +362,8 @@ async function followHeads(tx: Tx, actor: Actor, ctx: { storeId: string; pairing
     if (bundle) {
       if (after > bundle.bundleHeads!) fresh.push(mk(bundle, after - bundle.bundleHeads!, money(extraUnit!), extraName));
     } else {
-      fresh.push(mk(perHead!, after, money(perHead!.unitPrice), perHead!.name));
+      // T-527b: the re-made head line keeps the replaced line's place in the order (addedAtDevice, addedAt, id), so the table's list does not reshuffle.
+      fresh.push(mk(perHead!, after, money(perHead!.unitPrice), perHead!.name, sameSpotId(perHead!.id), perHead!));
     }
   } else {
     const diff = after - covered; // > 0 here (a decrease was refused above)

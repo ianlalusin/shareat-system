@@ -86,9 +86,6 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       { href: '/inventory/counts', label: 'Counts' },
       // T-176, 2026-09-04 — a slicing run or prep batch posts as one stock transaction.
       { href: '/inventory/production', label: 'Production' },
-      // T-177 — a day's POS sales turned into inventory consumption, so on-hand stays honest.
-      { href: '/inventory/pos-usage', label: 'POS usage pull' },
-      { href: '/inventory/pos-map', label: 'POS item mapping' },
       { href: '/inventory/low-stock', label: 'Low stock' },
       { href: '/commissary/orders', label: 'Branch orders' },
       // ⭐ DEF-129 — `commissary_item_map` had no writer anywhere until 2026-09-03, so every real

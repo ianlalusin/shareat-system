@@ -58,11 +58,19 @@ export interface PricedLine {
   readonly net: Money;
   readonly discounts: PricedDiscount[];
 }
+/** The VAT split the receipt prints (T-528b). Not stored: only printed. Non-VAT org: all '0.00' except vatExemptSales (the senior/PWD covered gross, v1's "SC/PWD SALES"). */
+export interface PricedVat {
+  readonly vatableSales: Money;
+  readonly vatExemptSales: Money;
+  readonly vatAmount: Money;
+  readonly vatRemovedForScPwd: Money;
+}
 export interface PricedSession {
   readonly lines: PricedLine[];
   readonly subtotal: Money;
   readonly discountTotal: Money;
   readonly total: Money;
+  readonly vat: PricedVat;
 }
 
 /** n / d rounded half-up, n >= 0, d > 0. */
@@ -85,6 +93,9 @@ function unitShares(line: PriceLineInput): bigint[] {
 export function priceSession(snapshot: PriceSnapshot): PricedSession {
   const vatBp = snapshot.vatPercentBasisPoints;
   const scBp = snapshot.scPwdPercentBasisPoints;
+  let exempt = 0n; // senior/PWD covered share, VAT-exclusive (gross on a non-VAT org)
+  let removed = 0n; // VAT taken off the senior/PWD shares
+  let coveredNet = 0n; // what the senior/PWD shares still cost after VAT and the percent
   const lines: PricedLine[] = snapshot.lines.map((line) => {
     const shares = unitShares(line);
     const gross = shares.reduce((a, s) => a + s, 0n);
@@ -102,6 +113,9 @@ export function priceSession(snapshot: PriceSnapshot): PricedSession {
         } else {
           amount = halfUp(g * scBp, 10000n);
         }
+        exempt += g - vat;
+        removed += vat;
+        coveredNet += g - vat - amount;
       } else if (d.valueType === 'percent') {
         const v = scaled(d.value);
         amount = halfUp(g * v.n, 100n * 10n ** v.scale);
@@ -116,5 +130,12 @@ export function priceSession(snapshot: PriceSnapshot): PricedSession {
   });
   const subtotal = lines.reduce((a, l) => a + toCentavos(l.gross), 0n);
   const discountTotal = lines.reduce((a, l) => a + toCentavos(l.discountTotal), 0n);
-  return { lines, subtotal: fromCentavos(subtotal), discountTotal: fromCentavos(discountTotal), total: fromCentavos(subtotal - discountTotal) };
+  const total = subtotal - discountTotal;
+  // vatable + VAT = restNet exactly, so the identity holds to the centavo with nothing left over.
+  const restNet = total - coveredNet;
+  const vatAmount = snapshot.vatRegistered ? halfUp(restNet * vatBp, 10000n + vatBp) : 0n;
+  const vat: PricedVat = snapshot.vatRegistered
+    ? { vatableSales: fromCentavos(restNet - vatAmount), vatExemptSales: fromCentavos(exempt), vatAmount: fromCentavos(vatAmount), vatRemovedForScPwd: fromCentavos(removed) }
+    : { vatableSales: fromCentavos(0n), vatExemptSales: fromCentavos(exempt), vatAmount: fromCentavos(0n), vatRemovedForScPwd: fromCentavos(0n) };
+  return { lines, subtotal: fromCentavos(subtotal), discountTotal: fromCentavos(discountTotal), total: fromCentavos(total), vat };
 }

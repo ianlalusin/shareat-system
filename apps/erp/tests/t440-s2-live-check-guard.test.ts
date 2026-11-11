@@ -414,15 +414,14 @@ const EXEMPT: Record<string, { count: number; reason: string }> = {
   'sign-in/TabletSignInForm.tsx': { count: 2, reason: 'T-464 pre-session POS tablet sign-in (Employee ID + PIN): no signed-in actor, no rule set; the server re-validates both (1-3 digits, 6-digit PIN) before any charge' },
   'sign-in/TerminalSignInForm.tsx': { count: 3, reason: 'credentials go to Firebase in the browser; no server action; client-only checks deliberately absent' },
   'till/page.tsx': { count: 1, reason: `count:\${a.id} per-denomination counts: ${REPEATED}` },
-  // T-551 (DEF-815) — the number boxes that carry `inputMode` so the entry behaviour (filter + group) applies, and why
+  // T-570 (DEF-821) — the number boxes that carry `inputMode` so the entry behaviour (filter + group) applies, and why
   // none of them can spread `nativeAttrs`: there is no field rule to spread. Counts are exact; a conversion that
   // wires a rule later must REMOVE the entry (the stale check fails loudly if it does not).
-  'channel-settlements/review/DayDetail.tsx': { count: 1, reason: 'the per-day amount box has no field rule (the settlement preview and record parse it); T-551 marks it inputMode for the entry behaviour' },
+  'channel-settlements/review/DayDetail.tsx': { count: 1, reason: 'the per-day amount box has no field rule (the settlement preview and record parse it); T-570 marks it inputMode for the entry behaviour' },
   'inventory/deliveries/inbound/[shipmentId]/page.tsx': { count: 1, reason: `receivedQuantity per line: ${REPEATED}` },
-  'inventory/pos-map/page.tsx': { count: 1, reason: 'quantityPerSale has no field rule in INVENTORY_POS_MAP_RULES (the menu item rules own that name); the domain parses it' },
   'inventory/production/page.tsx': { count: 3, reason: 'labourCost / outputQuantity / the line quantity have no field rule in INVENTORY_PRODUCTION_RULES; the domain parses each (money, quantity 14,3)' },
-  'kitchen/KitchenSections.tsx': { count: 3, reason: 'slaMinutes / sortOrder are ruled in the kitchen rule set, but this section is not on a CheckedForm yet (the S7 sweep owns that); T-551 marks them inputMode for the entry behaviour' },
-  'payroll/rates/page.tsx': { count: 1, reason: 'dueDay is not in the payroll rule sets (the server validates 1-31); T-551 marks it inputMode' },
+  'kitchen/KitchenSections.tsx': { count: 3, reason: 'slaMinutes / sortOrder are ruled in the kitchen rule set, but this section is not on a CheckedForm yet (the S7 sweep owns that); T-570 marks them inputMode for the entry behaviour' },
+  'payroll/rates/page.tsx': { count: 1, reason: 'dueDay is not in the payroll rule sets (the server validates 1-31); T-570 marks it inputMode' },
   'payroll/statutory-payments/new/page.tsx': { count: 1, reason: `lineAmount per agency: ${REPEATED}` },
   'sales-days/SalesDayForm.tsx': { count: 2, reason: 'channel_* / tender_*: no field rule — judged by the salesDay.channels.tickedOrTyped business rule (T-504) and the domain parser' },
 };

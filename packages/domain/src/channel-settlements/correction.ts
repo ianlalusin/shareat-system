@@ -14,7 +14,10 @@
  * stands because that function's `new` never carries platform rows the staff typed differently.
  *
  * Until slice 8 fixes `outstandingFor`, only the standard channel receivable is cleared by a settlement, so another receivable code is refused.
- * No caller until slice 7 (approve a settlement day) posts the correction first and the settlement second, in one transaction.
+ * `approveDay` (settlement-intake/approve.ts) posts the correction first and the settlement second, in one transaction.
+ *
+ * ⛔ approve is the ONLY caller, and the lock order depends on it: approve takes the channel lock, then the staged line FOR UPDATE, and this function then takes the sales day lock
+ * (line, then sales day). A second caller that locks the sales day first would deadlock against an approve. Add one deliberately (and change the source scan that pins it) or not at all.
  */
 import { auditLogRepo, channelSettlementsRepo, fiscalPeriodsRepo, journalRepo, manilaToday, posV1Repo, salesDaysRepo, settlementIntakeRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';

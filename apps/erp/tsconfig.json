@@ -20,6 +20,7 @@
       "@shareat/domain/expenses/allocate": ["../../packages/domain/src/expenses/allocate.ts"],
       "@shareat/domain/refusal-leaf": ["../../packages/domain/src/shared/refusal-leaf.ts"],
       "@shareat/domain/attendance/fingerprint": ["../../packages/domain/src/attendance/fingerprint/index.ts"],
+      "@shareat/domain/pos/price": ["../../packages/domain/src/pos/price.ts"],
       "@shareat/domain": ["../../packages/domain/src/index.ts"]
     }
   },

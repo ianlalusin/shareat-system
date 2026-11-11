@@ -40,6 +40,7 @@ vi.mock('../src/lib/session', () => ({
   setSessionCookie: (...a: unknown[]) => calls.setSessionCookie(...a),
   setPosTabletCookie: (...a: unknown[]) => calls.setPosTabletCookie(...a),
   clearPosTabletCookie: (...a: unknown[]) => calls.clearPosTabletCookie(...a),
+  setPosPromoteCookie: vi.fn(), // T-526: the action sets the promote flag after a success
   clearSessionCookie: vi.fn(),
   readSessionToken: vi.fn(),
   setSetupIdentityCookie: vi.fn(),

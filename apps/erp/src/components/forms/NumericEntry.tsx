@@ -1,6 +1,6 @@
 'use client';
 /**
- * T-551 (DEF-815) — every number box in the ERP filters and groups as the person types.
+ * T-570 (DEF-821) — every number box in the ERP filters and groups as the person types.
  *
  * Mounted once, in `app/layout.tsx`, and it works on the DOCUMENT rather than on a component per field, because
  * the rule is a property of the whole app and the boxes are spread over ~40 server-rendered pages, `CheckedForm`s,
@@ -32,6 +32,8 @@ import { useEffect } from 'react';
 import { caretAfterFormat, formatNumberEntry, type NumberEntryOptions } from '@/lib/number-entry';
 
 /** The text-like types a numeric value can actually be typed into (type=number is the browser's, not ours). */
+const isDigit = (c: string) => c >= '0' && c <= '9';
+
 const TEXT_TYPES = new Set(['text', 'search', 'tel']);
 
 function optionsFor(el: HTMLInputElement): NumberEntryOptions | null {
@@ -95,6 +97,26 @@ export function NumericEntryBehaviour() {
       el.dispatchEvent(new Event('input', { bubbles: true }));
     };
 
+    // Backspace/Delete next to a grouping comma: left alone, the browser deletes the COMMA, the formatter puts it
+    // back and the caret steps over it again - the person is stuck (audit N-001). The comma is the app's, not the
+    // person's, so the key removes the digit on the far side of it instead.
+    const onBeforeInput = (event: Event) => {
+      const el = event.target;
+      if (!(el instanceof HTMLInputElement) || !(event instanceof InputEvent)) return;
+      const forward = event.inputType === 'deleteContentForward';
+      if (!forward && event.inputType !== 'deleteContentBackward') return;
+      if (!optionsFor(el) || el.selectionStart === null || el.selectionStart !== el.selectionEnd) return;
+      const caret = el.selectionStart;
+      const comma = forward ? caret : caret - 1;
+      const digit = forward ? caret + 1 : caret - 2;
+      if (el.value.charAt(comma) !== ',' || !isDigit(el.value.charAt(digit))) return;
+      event.preventDefault();
+      writeValue(el, el.value.slice(0, digit) + el.value.slice(digit + 1));
+      const at = forward ? caret : caret - 2;
+      el.setSelectionRange(at, at);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+
     const onInput = (event: Event) => {
       const el = event.target;
       if (!(el instanceof HTMLInputElement)) return;
@@ -124,10 +146,12 @@ export function NumericEntryBehaviour() {
     };
 
     document.addEventListener('focusin', onFocusIn, true);
+    document.addEventListener('beforeinput', onBeforeInput, true);
     document.addEventListener('input', onInput, true);
     document.addEventListener('submit', onSubmit, true);
     return () => {
       document.removeEventListener('focusin', onFocusIn, true);
+      document.removeEventListener('beforeinput', onBeforeInput, true);
       document.removeEventListener('input', onInput, true);
       document.removeEventListener('submit', onSubmit, true);
     };

@@ -11,19 +11,57 @@
  *
  * The server refuses a malformed ID again; the digit filter here is a convenience, never the control.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { signInWithTabletPinAction } from './actions';
 import { EmailSignInForm } from './EmailSignInForm';
 import { Button, Input } from '@/components/ui';
+import { POS_PENDING_VERIFIER_KEY, savePendingVerifier } from '../pos/_shell/pending-verifier';
 
 export function TabletSignInForm({ next, label }: { next: string; label: string }) {
   const [staffCode, setStaffCode] = useState('');
   const [pin, setPin] = useState('');
   const [manager, setManager] = useState(false);
+  // T-526 R4: 'idle' -> 'deriving' (the offline PIN verifier is being made) -> 'go' (the one re-submit that reaches the server action).
+  const phase = useRef<'idle' | 'deriving' | 'go'>('idle');
+
+  // T-526 R4: a verifier left by an earlier attempt (a mistyped PIN) must never survive into a different sign-in: cleared when the page opens
+  // and again when the manager's email form is chosen (the form instance survives the error redirect, so mount alone is not enough).
+  const clearPending = () => {
+    try {
+      window.sessionStorage.removeItem(POS_PENDING_VERIFIER_KEY);
+      document.cookie = 'shareat_pos_promote=; path=/pos; max-age=0';
+    } catch {
+      // storage blocked: nothing was ever parked
+    }
+  };
+  useEffect(clearPending, []);
+
+  /**
+   * T-526 R4 - before the Server Action runs, derive the offline PIN verifier in this browser and park it in sessionStorage as PENDING
+   * (`/pos` promotes it after a successful sign-in and always deletes it). The PIN is read from this form only, never stored or sent anywhere
+   * new, and a failure here never blocks sign-in: the person just has no offline sign-in until their next online one.
+   */
+  async function makeVerifierThenSubmit(e: FormEvent<HTMLFormElement>) {
+    if (phase.current === 'go') {
+      phase.current = 'idle';
+      return;
+    }
+    e.preventDefault();
+    if (phase.current === 'deriving') return;
+    phase.current = 'deriving';
+    const form = e.currentTarget;
+    try {
+      await savePendingVerifier(window.sessionStorage, { employeeId: staffCode.padStart(3, '0'), pin, nowMs: Date.now() });
+    } catch {
+      // no verifier is made; sign-in goes ahead
+    }
+    phase.current = 'go';
+    form.requestSubmit();
+  }
 
   return (
     <div className="space-y-6">
-      <form action={signInWithTabletPinAction} className="space-y-4 text-sm">
+      <form action={signInWithTabletPinAction} onSubmit={makeVerifierThenSubmit} className="space-y-4 text-sm">
         <p className="text-sm font-medium">{label}</p>
         <input type="hidden" name="next" value={next} />
         <label className="flex flex-col gap-1">
@@ -66,7 +104,10 @@ export function TabletSignInForm({ next, label }: { next: string; label: string 
         <EmailSignInForm next={next} />
       ) : (
         <p className="text-center text-xs">
-          <Button type="button" variant="ghost" onClick={() => setManager(true)}>
+          <Button type="button" variant="ghost" onClick={() => {
+              clearPending();
+              setManager(true);
+            }}>
             Manager sign-in
           </Button>
         </p>

@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { requireSession } from '../../../lib/session';
 import { Page } from '@/components/shell/Page';
+import { FlashBanner } from '@/components/ui';
+import { withFlash } from '@/lib/flash';
 import { previewSettlementAction } from '../actions';
 import { SettlementForm } from '../SettlementForm';
 import { listActiveLoans, listChannels, listWaitingDays } from '../lib';
@@ -11,15 +13,16 @@ export const dynamic = 'force-dynamic';
 
 /**
  * T-544 - recording a settlement is a page of its own, not a modal on the overview. It loads exactly what the overview used to hand
- * `SettlementForm`; the form, its actions and its rules are unchanged. A post error still lands on the overview with its banner.
+ * `SettlementForm`; the form, its actions and its rules are unchanged. A refused post lands back here with its banner (T-511 S6d); a good one goes to the overview.
  */
 export default async function RecordSettlementPage({
   searchParams,
 }: {
   searchParams: Promise<{ channel?: string; day?: string }>;
 }) {
-  const sp = await searchParams;
   const { actor } = await requireSession('/channel-settlements/record');
+  // After the session check, so a flash cookie waiting for this page is not spent on a sign-in redirect.
+  const sp = await withFlash(searchParams);
   const [channels, waiting, loans] = await Promise.all([
     listChannels(actor.orgId),
     listWaitingDays(actor.orgId),
@@ -40,6 +43,7 @@ export default async function RecordSettlementPage({
         </Link>
       }
     >
+      <FlashBanner flash={sp} />
       <SettlementForm
         previewAction={previewSettlementAction}
         channels={channels

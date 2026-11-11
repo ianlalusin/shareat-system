@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * T-551 (DEF-815) — the behaviour itself, in a real DOM: a number box filters what is typed, groups it in threes,
+ * T-570 (DEF-821) — the behaviour itself, in a real DOM: a number box filters what is typed, groups it in threes,
  * keeps the caret on the digit, and submits the plain figure. `NumericEntryBehaviour` is mounted once in the root
  * layout; here it is mounted over fixture forms exactly as the app mounts it.
  */
@@ -42,6 +42,21 @@ function type(el: HTMLInputElement, value: string, caret = value.length): void {
     /* not every type exposes a selection */
   }
   el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+/**
+ * A real Backspace/Delete: `beforeinput` first; if nothing cancels it, the browser deletes the character itself
+ * (one char, or the selection) and fires `input`. `type()` above hands over whole values and so cannot see this.
+ */
+function press(el: HTMLInputElement, key: 'Backspace' | 'Delete'): void {
+  const inputType = key === 'Backspace' ? 'deleteContentBackward' : 'deleteContentForward';
+  const go = el.dispatchEvent(new InputEvent('beforeinput', { inputType, bubbles: true, cancelable: true }));
+  if (!go) return;
+  const start = el.selectionStart ?? el.value.length;
+  const end = el.selectionEnd ?? start;
+  const from = start !== end ? start : key === 'Backspace' ? Math.max(0, start - 1) : start;
+  const to = start !== end ? end : key === 'Backspace' ? start : Math.min(el.value.length, start + 1);
+  type(el, el.value.slice(0, from) + el.value.slice(to), from);
 }
 
 function input(host: HTMLElement): HTMLInputElement {
@@ -171,6 +186,62 @@ describe('typing', () => {
     });
     expect(a?.value).toBe('1234');
     expect(b?.value).toBe('1234');
+  });
+});
+
+describe('Backspace / Delete next to a grouping comma (audit N-001)', () => {
+  async function boxWith(typed: string) {
+    const host = await mount(h('form', null, h('input', { name: 'amount', inputMode: 'decimal' })));
+    const el = input(host);
+    await act(async () => {
+      el.focus();
+      type(el, typed);
+    });
+    return el;
+  }
+
+  it('Backspace right after the comma deletes the digit before it: 1,234 -> 234', async () => {
+    const el = await boxWith('1234');
+    expect(el.value).toBe('1,234');
+    await act(async () => {
+      el.setSelectionRange(2, 2);
+      press(el, 'Backspace');
+    });
+    expect(el.value).toBe('234');
+    expect(el.selectionStart).toBe(0);
+  });
+
+  it('Delete right before the comma deletes the digit after it: 1,234 -> 134', async () => {
+    const el = await boxWith('1234');
+    await act(async () => {
+      el.setSelectionRange(1, 1);
+      press(el, 'Delete');
+    });
+    expect(el.value).toBe('134');
+    expect(el.selectionStart).toBe(1);
+  });
+
+  it('keeps going: repeated Backspace across commas keeps deleting digits, never sticks', async () => {
+    const el = await boxWith('1234567');
+    await act(async () => {
+      el.setSelectionRange(6, 6);
+    });
+    const seen: string[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      await act(async () => press(el, 'Backspace'));
+      seen.push(el.value);
+    }
+    expect(seen).toEqual(['123,567', '12,567', '1,567']);
+  });
+
+  it('a Backspace away from a comma still deletes the plain character and regroups', async () => {
+    const el = await boxWith('1234567');
+    expect(el.value).toBe('1,234,567');
+    await act(async () => {
+      el.setSelectionRange(9, 9);
+      press(el, 'Backspace');
+    });
+    expect(el.value).toBe('123,456');
   });
 });
 

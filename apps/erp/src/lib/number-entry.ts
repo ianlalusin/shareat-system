@@ -1,5 +1,5 @@
 /**
- * Number entry — the one rule for a box that holds a number (T-551, DEF-815).
+ * Number entry — the one rule for a box that holds a number (T-570, DEF-821).
  *
  * Every money/quantity box in the ERP is a TEXT input with `inputMode="decimal"` (T-343 S5.5s–w), so the browser
  * no longer filters what reaches it: a letter, a peso sign or a stray symbol used to be swallowed by
