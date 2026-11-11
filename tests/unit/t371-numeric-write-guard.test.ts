@@ -90,6 +90,11 @@ const EXEMPT: Record<string, (typeof EXEMPT_REASONS)[number]> = {
   'packages/domain/src/menu/daypart.ts::weeklyIntervals::e > s': 'not-a-column-value',
   'packages/domain/src/menu/daypart.ts::weeklyIntervals::to <= MINUTES_PER_WEEK': 'not-a-column-value',
   'packages/domain/src/menu/daypart.ts::nextBoundary::e < s': 'not-a-column-value',
+  // T-559 client port of daypart.ts: HH:MM minutes, validated by minutesOf/valid() before any comparison
+  'apps/erp/src/lib/pos-device/daypart-client.ts::contains::s < e': 'not-a-column-value',
+  'apps/erp/src/lib/pos-device/daypart-client.ts::contains::m >= s': 'not-a-column-value',
+  'apps/erp/src/lib/pos-device/daypart-client.ts::contains::m < e': 'not-a-column-value',
+  'apps/erp/src/lib/pos-device/daypart-client.ts::scan::e < s': 'not-a-column-value',
   // string-vs-string ORDERING of fiscal-period keys / ids / dates ('2026-01' <= '2026-02'): lexicographic by design, never a money comparison
   'packages/domain/src/shared/straight-line.ts::periodsThroughOf::p.period <= asOfPeriod': 'not-a-column-value',
   'packages/domain/src/shared/allocate-oldest-first.ts::compareItems::dateA < dateB': 'not-a-column-value',

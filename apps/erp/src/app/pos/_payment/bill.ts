@@ -7,7 +7,7 @@ import { fromCentavos, money, toCentavos } from '@shareat/core/money';
 import type { PriceLineInput, PricedSession } from '@shareat/domain/pos/price';
 import type { PosEvent } from '@/lib/pos-device';
 import type { ReceiptLine } from '@/lib/pos-print/types';
-import { asStoreMenu, type MenuLike } from '../_orders/menu-filter';
+import { asStoreMenu, storeAnswer, whenOf, type MenuLike } from '../_orders/menu-filter';
 import type { ProjectedSession, SessionBody } from '../_orders/project';
 import { freeUnits, type BillDiscount, type BillLine } from './logic';
 
@@ -64,16 +64,17 @@ const sameLines = (e: PosEvent, ids: Set<string>): string | null => {
 };
 
 export function projectBill(i: { extraIds?: Readonly<Record<string, string>>; sessionId: string; view: ProjectedSession | undefined; body: SessionBody | undefined; pending: readonly PosEvent[]; menu: MenuLike | null; presets: readonly PresetLike[] }): ProjectedBill {
-  const items = i.menu ? asStoreMenu(i.menu).items : [];
+  const storeMenu = i.menu ? asStoreMenu(i.menu) : null;
+  const items = storeMenu ? storeMenu.items : [];
   const live = (i.view?.lines ?? []).filter((l) => !l.cancelled);
   // The menu item behind each line the server does not hold yet, from the event that adds it.
-  const pendingMenu = new Map<string, { menuItemId: string | null; variantId: string | null }>();
+  const pendingMenu = new Map<string, { menuItemId: string | null; variantId: string | null; addedAt: string | null }>();
   for (const e of i.pending) {
     const p = e.payload as Payload;
     if ((e.kind === 'stand.opened' || e.kind === 'lines.added') && Array.isArray(p.lines)) {
       for (const raw of p.lines as Payload[]) {
         const id = str(raw.lineId);
-        if (id) pendingMenu.set(id, { menuItemId: str(raw.menuItemId), variantId: str(raw.variantId) });
+        if (id) pendingMenu.set(id, { menuItemId: str(raw.menuItemId), variantId: str(raw.variantId), addedAt: str(raw.addedAtDevice) });
       }
     }
   }
@@ -85,13 +86,15 @@ export function projectBill(i: { extraIds?: Readonly<Record<string, string>>; se
     const from = pendingMenu.get(l.id);
     const item = !server && from ? items.find((x) => x.id === from.menuItemId) : undefined;
     const variant = item?.variants.find((v) => v.id === from?.variantId) ?? item?.variants.find((v) => v.isDefault) ?? item?.variants[0];
-    const offer = variant?.channels.store;
-    const pendingBundle = offer !== undefined && offer.orderable && offer.bundleHeads !== null && offer.bundleHeads > 1 ? offer.bundleHeads : null;
+    // T-559: the slot at the line's OWN time, as the server prices it (`menus.at(addedAtDevice)`); a line the server already holds keeps its own unitPrice.
+    const answer = variant && storeMenu ? storeAnswer(variant, whenOf(storeMenu, new Date(from?.addedAt ?? NaN))) : undefined;
+    const offer = answer?.orderable ? answer.offer : undefined;
+    const pendingBundle = offer !== undefined && offer.bundleHeads !== null && offer.bundleHeads > 1 ? offer.bundleHeads : null;
     const kind: 'package' | 'item' = server ? (server.kind === 'package' ? 'package' : 'item') : l.extraHeads || item?.itemType === 'package' ? 'package' : 'item';
     if (l.unitPrice === null && problem === null) problem = `The price of ${l.name} is not on this tablet yet. Connect once to refresh it.`;
     // A bundle sold to more heads than it covers: the server adds a flat "(extra head)" line under its own derived id (order.ts); the bill must hold the same line.
     if (pendingBundle !== null && l.qty > pendingBundle) {
-      const extraAmount = offer?.orderable ? offer.extraHeadAmount : null;
+      const extraAmount = offer ? offer.extraHeadAmount : null;
       const extraId = i.extraIds?.[l.id];
       if (!extraId) needsExtraFor.push(l.id);
       else if (extraAmount === null && problem === null) problem = `${l.name} has no price for extra heads on this tablet yet.`;
@@ -143,8 +146,13 @@ export function projectBill(i: { extraIds?: Readonly<Record<string, string>>; se
       const existingExtras = packages.filter((l) => l !== bundle && l.bundleHeads === null);
       // The extra-head price: the table's own extra-head line, else the bundle's store offer.
       const serverItemId = i.body?.lines.find((s) => s.id === bundle.lineId)?.menuItemId ?? pendingMenu.get(bundle.lineId)?.menuItemId;
-      const offered = items.find((x) => x.id === serverItemId)?.variants.map((v) => v.channels.store).find((o) => o.orderable && o.bundleHeads === bundleHeads);
-      const extraUnit = existingExtras[0]?.unitPrice ?? (offered && offered.orderable ? offered.extraHeadAmount : null);
+      // T-559: the server prices a new extra-head line at the heads.set event's device time (the inbox hands it to setHeadsCashier as `atDevice`, like addLines uses
+      // `addedAtDevice`), so the slot is read at that time. Later events reuse the first extra line's price, so the event that first takes the table above the bundle counts.
+      const serverHeads = i.body?.session.headsServer ?? i.view?.headsServer ?? 0;
+      const creating = headsEvents.find((e) => Math.max(num((e.payload as Payload).headsCashier) ?? 0, serverHeads) > bundleHeads) ?? headsEvents[headsEvents.length - 1]!;
+      const headsWhen = storeMenu ? whenOf(storeMenu, new Date(creating.occurredAtDevice)) : undefined;
+      const offered = items.find((x) => x.id === serverItemId)?.variants.flatMap((v) => { const a = storeAnswer(v, headsWhen); return a.orderable ? [a.offer] : []; }).find((o) => o.bundleHeads === bundleHeads);
+      const extraUnit = existingExtras[0]?.unitPrice ?? (offered ? offered.extraHeadAmount : null);
       const covered = packages.reduce((a, l) => a + (l.bundleHeads ?? l.qty), 0);
       let qty: number;
       if (!served) {
