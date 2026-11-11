@@ -201,3 +201,25 @@ Built:
 
 - `/admin/users/[personId]` is still the 7,800 px capability wall. It needs search, grouping and
   progressive disclosure; it is the next People task, not a table/card patch.
+
+## S2 - Inline admin PIN with a confirmation that asks every time
+
+Source commits 6a2385f, b64a02a, 0ab63f9. Administrator PINs on `/staff` (`IssueAdminPinForm.tsx`): the
+field and its button share one row; submitting opens a dialog that explains what an administrator PIN
+approves, that re-issuing replaces the old PIN and ends live sessions, and that the PIN must be handed
+over privately. Nothing is issued until the person confirms, and **every** issue asks again.
+
+Audit fixes folded in (audit `2026-11-09-ui-groups-pass-FINAL`):
+
+- **UI-001** - the approval is not a flag that lives between submits. `confirm()` raises it only for the
+  duration of its own `requestSubmit()` call and drops it in a `finally`, so a confirmed submit that never
+  fires (a refusal, a rule that went invalid) cannot wave the next issue past the question. A pending guard
+  (React's form status) stops a second question or send while one is in flight.
+- **UI-006** - the form is the shared `CheckedForm` with `STAFF_PIN_RULES` and a ruled `Field`, so the
+  "A PIN must be exactly 6 digits." line and the disabled Save come from the shared path. The confirmation
+  runs after the rules: a failing PIN never reaches the dialog. No baseline exemption.
+- **UI-007** - the fixed `w-40` is gone; the field uses `Field width="code"` inside `FormGrid layout="fields"`.
+
+Tests: `apps/erp/tests/issue-admin-pin-confirm.test.ts` (asks every time, asks after Cancel, no consent left
+behind by a submit that never fires, shared rules refuse first, nothing sent while in flight).
+Screenshots: `docs/reviews/t568/s2-admin-pin/`.

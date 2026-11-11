@@ -533,7 +533,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1602 -> 1614, +12 T-529 Kitchen/Refills controls; re-measured after rebase on main, 8 Nov 2026, BOSS approved.
     // 1614 -> 1626, +12 T-531 till and day-close controls, all PASS (FAIL/UNRESOLVED buckets unmoved); re-measured on main ff553f6, 11 Nov 2026, BOSS approved.
     // 1626 -> 1628, T-568 S1 (groups pass): +2 net controls across the table/card pass; FAIL/UNRESOLVED moved as noted above; re-measured by runCensus(), 12 Nov 2026.
-    expect(results.length).toBe(1628);
+    // 1628 -> 1629, T-568 S2: the admin PIN confirmation dialog adds two buttons (Cancel, Yes) and the PIN row's Button became a SubmitButton (not a census candidate), net +1, all PASS at 44px; FAIL/UNRESOLVED unmoved; re-measured by runCensus().
+    expect(results.length).toBe(1629);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
