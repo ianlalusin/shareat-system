@@ -223,3 +223,33 @@ Audit fixes folded in (audit `2026-11-09-ui-groups-pass-FINAL`):
 Tests: `apps/erp/tests/issue-admin-pin-confirm.test.ts` (asks every time, asks after Cancel, no consent left
 behind by a submit that never fires, shared rules refuse first, nothing sent while in flight).
 Screenshots: `docs/reviews/t568/s2-admin-pin/`.
+
+## S3 - In-app notifications instead of native browser dialogs
+
+> Find every confirmation message in the codebase. Any confirm that would use the browser's own
+> dialog (`window.confirm`, `window.alert`, `window.prompt`) must move to the app's notification
+> UI. Keep the decision explicit: the person still confirms the destructive action.
+
+Source commit 17e58dc.
+
+| File | Native call | Now |
+|---|---|---|
+| `apps/pos/src/components/settings/TerminalSection.tsx` | `window.confirm` (release a tablet's terminal number) | A toast naming the terminal AND the store, with one explicit **Release** action; closing it leaves the terminal as it was |
+| `apps/pos/src/components/settings/OutboxSection.tsx` | `window.alert(text)` (X-slip with no printer) | A toast plus the shared in-app `SlipTextDialog` (Copy, Close) |
+| `apps/pos/src/components/settings/DaySection.tsx` | `window.alert(text)` (X/Z reading with no printer) | Same `SlipTextDialog`. **Added on port**: this call did not exist when the old branch was written (T-471 S3 on main). |
+
+The `confirm(...)` calls in POS's pins/cashier/kitchen/reservations screens use the app's own
+`confirm-dialog`; the two `window.confirm` strings left in ERP are comments.
+Census now: no callable `window.confirm`, `window.alert` or `window.prompt` in `apps/`, `packages/`, `scripts/`.
+
+Audit fixes folded in:
+
+- **UI-004** - the label carries the store (`Release terminal 01 at <store>?`). The question is dismissed when the
+  signed-in person or the store changes or the section unmounts, and the action re-checks the live context before it
+  calls release (a click that still lands is refused with "Release cancelled").
+- **UI-005** - a synchronous in-flight guard (a ref, not React state) plus the action disabled and the toast closed
+  once it is pressed, so a double click makes one call.
+
+Tests: `apps/pos/src/components/settings/TerminalSection.release.test.ts` (real TerminalSection and Toaster, ports
+mocked: store in the label, nothing before the action, double click = one release, store change, different person,
+leaving the screen).
