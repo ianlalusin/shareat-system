@@ -77,7 +77,7 @@ afterEach(() => {
 // Markup helpers — same posture as t337/S6b: parse the real rendered HTML.
 // ---------------------------------------------------------------------------------------------
 
-const MUTED_TOKENS = 'block font-mono text-[11px] text-neutral-500 dark:text-neutral-400'.split(/\s+/);
+const MUTED_TOKENS = 'block font-mono text-xs text-neutral-500 dark:text-neutral-400'.split(/\s+/);
 const SNAKE_CASE_RE = /\b[a-z]+(?:_[a-z]+)+\b/g;
 
 function stripTags(html: string): string {

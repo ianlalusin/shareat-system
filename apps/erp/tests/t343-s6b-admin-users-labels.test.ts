@@ -206,7 +206,7 @@ function superAdminDetail() {
 // rendered HTML, never re-derive what the page "should" produce.
 // ---------------------------------------------------------------------------------------------
 
-const MUTED_TOKENS = 'block font-mono text-[11px] text-neutral-500 dark:text-neutral-400'.split(/\s+/);
+const MUTED_TOKENS = 'block font-mono text-xs text-neutral-500 dark:text-neutral-400'.split(/\s+/);
 
 function stripTags(html: string): string {
   return html

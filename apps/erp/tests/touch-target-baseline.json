@@ -242,9 +242,6 @@
     ]
   },
   "unresolved": {
-    "app/page.tsx": [
-      "ancestry truncated — no font size resolvable"
-    ],
     "app/admin/pos-tablets/TillsSection.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
     ],

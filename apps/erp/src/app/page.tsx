@@ -341,7 +341,7 @@ export default async function DashboardPage({
             {govTile.agencies.some((a) => a.noDueDay) ? (
               <p className="text-sm text-muted">
                 No due day set for {govTile.agencies.filter((a) => a.noDueDay).map((a) => a.agency.toUpperCase()).join(', ')}, so overdue cannot be told.{' '}
-                <Link href="/payroll/rates" className="underline underline-offset-2">
+                <Link href="/payroll/rates" className="inline-flex min-h-6 items-center underline underline-offset-2">
                   Set it under Employer numbers
                 </Link>
               </p>
