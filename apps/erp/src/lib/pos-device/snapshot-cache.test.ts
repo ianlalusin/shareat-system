@@ -27,6 +27,21 @@ describe('T-530a — the snapshot cache', () => {
     expect(await readSnapshot()).toEqual({ body: { menu: ['adobo'] }, etag: 'e1', fetchedAtMs: 2_500 });
   });
 
+  it('touch with a nextChangeAt persists it across a reopen; touch without keeps it', async () => {
+    await saveSnapshot({ body: {}, etag: 'e1', fetchedAtMs: 1_000 });
+    await touchSnapshot(2_000, '2026-11-12T10:00:00.000Z');
+    expect(await readSnapshot()).toMatchObject({ fetchedAtMs: 2_000, nextChangeAt: '2026-11-12T10:00:00.000Z' }); // each read reopens the DB
+
+    await touchSnapshot(3_000);
+    expect(await readSnapshot()).toMatchObject({ fetchedAtMs: 3_000, nextChangeAt: '2026-11-12T10:00:00.000Z' });
+  });
+
+  it('a full save round-trips nextChangeAt', async () => {
+    const snapshot = { body: { menu: [] }, etag: 'e2', fetchedAtMs: 5_000, nextChangeAt: '2026-11-13T00:00:00.000Z' };
+    await saveSnapshot(snapshot);
+    expect(await readSnapshot()).toEqual(snapshot);
+  });
+
   it('touch with nothing stored does nothing', async () => {
     await touchSnapshot(1_234);
     expect(await readSnapshot()).toBeNull();

@@ -59,6 +59,8 @@ export interface CachedSnapshot {
   body: unknown;
   etag: string;
   fetchedAtMs: number;
+  /** ISO time the menu next changes: a 304 refreshes it from `x-next-change-at` (T-559); falls back to the body's own. */
+  nextChangeAt?: string | null;
 }
 
 /** An opaque PIN-verifier record, created by T-526. Stored and returned as-is; never computed here. */

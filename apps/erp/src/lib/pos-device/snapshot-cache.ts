@@ -37,15 +37,15 @@ export async function saveSnapshot(snapshot: CachedSnapshot): Promise<void> {
   }
 }
 
-/** After a 304: only the fetch time moves. With nothing stored this does nothing. */
-export async function touchSnapshot(fetchedAtMs: number): Promise<void> {
+/** After a 304: the fetch time moves, and `nextChangeAt` too when given (else the stored one stays). With nothing stored this does nothing. */
+export async function touchSnapshot(fetchedAtMs: number, nextChangeAt?: string | null): Promise<void> {
   const db = await openDeviceDb();
   try {
     const tx = db.transaction(SNAPSHOT_STORE, 'readwrite');
     const done = transactionDone(tx);
     const store = tx.objectStore(SNAPSHOT_STORE);
     const existing = await asPromise<CachedSnapshot | undefined>(store.get(SNAPSHOT_KEY));
-    if (existing !== undefined) store.put({ ...existing, fetchedAtMs }, SNAPSHOT_KEY);
+    if (existing !== undefined) store.put({ ...existing, fetchedAtMs, ...(nextChangeAt !== undefined ? { nextChangeAt } : {}) }, SNAPSHOT_KEY);
     await done;
   } finally {
     db.close();
