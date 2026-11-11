@@ -15,7 +15,8 @@ export type SendOutcome =
   | { kind: 'ok'; stateVersion: number; results: PosEventResult[] }
   | { kind: 'http'; status: number }
   | { kind: 'network' };
-export interface CachedSnapshot { body: unknown; etag: string; fetchedAtMs: number }
+/** `nextChangeAt` (T-559 R3): set only by a 304 (touchSnapshot's 2nd argument, the `x-next-change-at` header); absent means "read it from the body's menu". */
+export interface CachedSnapshot { body: unknown; etag: string; fetchedAtMs: number; nextChangeAt?: string | null }
 export interface StoredVerifier { personId: string; employeeId: string; salt: string; hash: string; iterations: number; createdAtMs: number }
 export interface DrainReport {
   stopped: 'empty' | 'retry' | 'http' | 'network';
@@ -88,8 +89,8 @@ export function drain(send: (events: PosEvent[]) => Promise<SendOutcome>): Promi
 export async function saveSnapshot(s: CachedSnapshot): Promise<void> {
   snapshot = s;
 }
-export async function touchSnapshot(fetchedAtMs: number): Promise<void> {
-  if (snapshot) snapshot = { ...snapshot, fetchedAtMs };
+export async function touchSnapshot(fetchedAtMs: number, nextChangeAt?: string): Promise<void> {
+  if (snapshot) snapshot = { ...snapshot, fetchedAtMs, ...(nextChangeAt !== undefined ? { nextChangeAt } : {}) };
 }
 export async function readSnapshot(): Promise<CachedSnapshot | null> {
   return snapshot;
