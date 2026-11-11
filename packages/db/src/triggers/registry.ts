@@ -503,7 +503,8 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     table: 'sales_days',
     mode: 'origin',
     kind: 'validator',
-    reason: "A linked store's day figures change only inside the derivation (0185, T-375 R6) - reads the store's CURRENT link and the flag.",
+    reason:
+      "A linked store's day figures change only inside the derivation (0185, T-375 R6); a pos_receipts day (0247, T-531) is created and changed only inside the derivation, for a LIVE store on or after live_from, and a v1 feed day on or after live_from is refused - reads the store's CURRENT link, its pos_stores row and the flag.",
   },
   // T-385 (0188): the order submitted -> verified. Origin: a replay or restore must load historic days verified straight from open.
   sales_days_verify_requires_submitted: {
@@ -532,13 +533,13 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     table: 'sales_day_tenders',
     mode: 'origin',
     kind: 'validator',
-    reason: "A linked store's tender rows change only inside the derivation (0185) - reads the day's source, status and the store's link.",
+    reason: "A linked store's tender rows change only inside the derivation (0185); the tender rows of a pos_receipts day (0247, T-531) likewise, while the day is open or submitted - reads the day's source, status and the store's link.",
   },
   sales_day_channels_lock: {
     table: 'sales_day_channels',
     mode: 'origin',
     kind: 'validator',
-    reason: "A feed day's remitted channel rows change only inside the derivation; platform rows only while the day is unverified (0185).",
+    reason: "A feed day's remitted channel rows change only inside the derivation; platform rows only while the day is unverified (0185). A pos_receipts day (0247, T-531) takes platform rows while open or submitted and no remitted row.",
   },
   pos_v1_store_links_store_fixed: {
     table: 'pos_v1_store_links',

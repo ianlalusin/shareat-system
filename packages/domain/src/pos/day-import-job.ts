@@ -19,6 +19,8 @@
  *    "not configured" stops the org (one line).
  *  - Not a failure: a closed day (notice, retried every morning until it ages out of the window) and a pile of unverified drafts
  *    (notice). A gap beyond the 7-day window IS said, as a failure (a notice on the org's first-ever run).
+ *  - T-551 (row 452 b): the v1 day feed ends on `V1_DAY_FEED_LAST_DATE`. The last date imported is `min(yesterday, that)`, and the
+ *    gap notice never counts a later date, so after the window passes 31 Dec a run has nothing to do and says so cleanly.
  *  - A dry run fetches and imports inside a rolled-back transaction, skips the recheck, and writes no `scheduler_runs` row.
  */
 import { AuthorizationError, type Actor } from '@shareat/auth';
@@ -27,7 +29,7 @@ import { toBusinessDate } from '@shareat/core';
 import { addDays as addBusinessDays, parseBusinessDate } from '@shareat/core/datetime';
 import { logger } from '@shareat/core/logger';
 import { runJobForOrg, listOrgsToRun, type JobOutcome } from '../scheduler';
-import { importSalesDay, type ImportFetchers, type ImportSalesDayOutcome } from '../sales-days/import';
+import { importSalesDay, V1_DAY_FEED_LAST_DATE, type ImportFetchers, type ImportSalesDayOutcome } from '../sales-days/import';
 import { safeHumanDate, SalesDayBlockedError } from '../sales-days/create-block';
 import { recheckRecentDays } from './v1-recheck';
 import { PosNotConfiguredError, PosUnreachableError } from './v1-feed';
@@ -172,6 +174,8 @@ async function importForOrg(
 
   const yesterday = addDays(today, -1);
   const capStart = addDays(yesterday, -(CATCH_UP_DAYS - 1));
+  // T-551 (row 452 b): the v1 day feed ends on 2026-12-31. Nothing after it is imported, and no later date is ever called missing.
+  const lastDate = yesterday.localeCompare(V1_DAY_FEED_LAST_DATE) > 0 ? V1_DAY_FEED_LAST_DATE : yesterday;
   const prevRunDate = prevRunAt ? toBusinessDate(prevRunAt) : null;
   const prevCleanDate = prevRunAt && prevRunOk ? prevRunDate : null;
 
@@ -196,7 +200,8 @@ async function importForOrg(
     // unfinished) said nothing reliable, so the count goes back to the link date.
     const gapFrom = prevCleanDate && prevCleanDate.localeCompare(linkDate) > 0 ? prevCleanDate : linkDate;
     if (gapFrom.localeCompare(capStart) < 0) {
-      const gapEnd = addDays(capStart, -1);
+      const dayBeforeWindow = addDays(capStart, -1);
+      const gapEnd = dayBeforeWindow.localeCompare(V1_DAY_FEED_LAST_DATE) > 0 ? V1_DAY_FEED_LAST_DATE : dayBeforeWindow;
       const have = await withOrgPrincipal(org.id, (tx) => salesDaysRepo.datesWithAnyDay(tx, org.id, link.storeId, gapFrom, gapEnd));
       const gap = dateRange(gapFrom, gapEnd).filter((d) => !have.has(d));
       if (gap.length > 0) {
@@ -209,10 +214,10 @@ async function importForOrg(
     }
 
     const from = linkDate.localeCompare(capStart) > 0 ? linkDate : capStart;
-    if (from.localeCompare(yesterday) > 0) continue;
-    const dates = dateRange(from, yesterday);
+    if (from.localeCompare(lastDate) > 0) continue;
+    const dates = dateRange(from, lastDate);
     const existing = await withOrgPrincipal(org.id, (tx) =>
-      salesDaysRepo.datesWithAnyDay(tx, org.id, link.storeId, from, yesterday),
+      salesDaysRepo.datesWithAnyDay(tx, org.id, link.storeId, from, lastDate),
     );
 
     const imported: string[] = [];

@@ -100,8 +100,9 @@ describe('G1 (b) - the figure inputs exist only in SalesDayForm.tsx', () => {
 });
 
 describe('G1 (c) - the derivation flag is written in one place', () => {
-  it('app.sales_day_derivation appears only in the repo file, the 0185 and 0187 migrations and test files', () => {
-    const allowed = (f: string) => f === REPO_FILE || /^packages\/db\/migrations\/018[57]_[^/]*\.sql$/.test(f) || isTest(f);
+  // T-531: 0247 amends the same two functions, so it names the flag too (its own CREATE OR REPLACE of the 0185 bodies).
+  it('app.sales_day_derivation appears only in the repo file, the 0185, 0187 and 0247 migrations and test files', () => {
+    const allowed = (f: string) => f === REPO_FILE || /^packages\/db\/migrations\/(018[57]|0247)_[^/]*\.sql$/.test(f) || isTest(f);
     const offenders = ALL.filter((f) => !allowed(f) && setsDerivationFlag(read(f))).sort();
     expect(offenders).toEqual([]);
   });
