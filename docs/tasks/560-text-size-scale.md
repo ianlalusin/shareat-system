@@ -128,6 +128,12 @@ Claude approves these two:**
    ```
    The pin needs `text-xs` in place of `text-[11px]`.
 
+3. `apps/erp/tests/t343-s6b-admin-users-labels.test.ts:209` — the same exact-string pin
+   (`MUTED_TOKENS = 'block font-mono text-[11px] text-neutral-500 dark:text-neutral-400'`), so its U1
+   case reports the same stray capability keys. It did not appear in my local run because that
+   file's `beforeAll` hit its own 30s timeout first on this loaded machine; CI hit the assertion.
+   The pin needs `text-xs` there too.
+
 **Checks (real output, worktree `wt-t560`, real `npm ci`, `origin/main` = `6252b22`):**
 
 ```
@@ -169,3 +175,12 @@ a quieter run).
 
 **Smoketest:** not run. T-560 §6 does not ask for one and the token swap cannot change behaviour;
 `npm run dev` on 9008 is shared with other lanes.
+
+**CI (PR #221, run 42949798134):** the `typecheck, test, build` job fails **only** in the Unit tests
+step, on those three pinned guard files:
+```
+ Test Files  3 failed | 616 passed (619)
+      Tests  5 failed | 12295 passed | 5 skipped (12305)
+```
+action-link-sweep ×2, t343-s6c ×2, t343-s6b ×1. **Typecheck passed**; the Build step was skipped
+because Unit tests stopped the job. No other test failed in CI.
