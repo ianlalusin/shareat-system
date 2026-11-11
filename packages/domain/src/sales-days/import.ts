@@ -35,6 +35,11 @@ import { assertCanOpenDay, safeHumanDate } from './create-block';
 /** The last business date the v1 day feed may book into this ERP. Fixed by Ian's ruling, bible row 452 (b): not a business setting. */
 export const V1_DAY_FEED_LAST_DATE = '2026-12-31';
 
+/** True when a `YYYY-MM-DD` business date is after the v1 day feed's last date (string order is date order). */
+export function isAfterV1DayFeed(businessDate: string): boolean {
+  return businessDate.localeCompare(V1_DAY_FEED_LAST_DATE) > 0;
+}
+
 /** What a person is told when they ask for a date after `V1_DAY_FEED_LAST_DATE`. */
 export const V1_DAY_FEED_STOPPED_SENTENCE =
   'From 2027 the v1 day feed is not imported into this ERP. Stores on POS v1 keep their sales in the v1 ERP.';
@@ -185,7 +190,7 @@ async function runImport(tx: Tx, actor: Actor, input: ImportSalesDayInput, fetch
     throw refuse(`importSalesDay: invalid business date ${JSON.stringify(input.businessDate)}`, "That isn't a valid date. Use YYYY-MM-DD.");
   }
   // T-551: first of the business refusals, before any read or fetch. `YYYY-MM-DD` strings compare as dates.
-  if (input.businessDate > V1_DAY_FEED_LAST_DATE) {
+  if (isAfterV1DayFeed(input.businessDate)) {
     throw refuse(`importSalesDay: ${input.businessDate} is after ${V1_DAY_FEED_LAST_DATE}, the v1 day feed has stopped`, V1_DAY_FEED_STOPPED_SENTENCE);
   }
 

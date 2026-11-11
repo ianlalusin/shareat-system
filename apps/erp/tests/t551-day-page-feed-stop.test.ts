@@ -21,7 +21,7 @@ function reimportBlock(src: string): string {
 
 describe('T-551 - the day page and the feed cut-off', () => {
   it('the Re-import form is only rendered while the day is on or before the cut-off date', () => {
-    expect(reimportBlock(source)).toMatch(/V1_DAY_FEED_LAST_DATE/);
+    expect(reimportBlock(source)).toContain('!isAfterV1DayFeed(day.businessDate) &&');
   });
 
   it('a day after the cut-off shows the sentence instead', () => {

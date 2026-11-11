@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { toBusinessDate } from '@shareat/core/datetime';
-import { V1_DAY_FEED_LAST_DATE, V1_DAY_FEED_STOPPED_SENTENCE } from '@shareat/domain';
+import { isAfterV1DayFeed, V1_DAY_FEED_LAST_DATE, V1_DAY_FEED_STOPPED_SENTENCE } from '@shareat/domain';
 import { listStores, listChannels, listStoreMoneyAccounts, getStoreLink } from '../lib';
 import { requireSession } from '../../../lib/session';
 import { createSalesDayAction, importSalesDayAction } from '../actions';
@@ -42,7 +42,7 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
 
   // T-551: the v1 day feed ends on V1_DAY_FEED_LAST_DATE, so the import date cannot start on, or reach, a later day.
   const today = toBusinessDate();
-  const feedStopped = today > V1_DAY_FEED_LAST_DATE;
+  const feedStopped = isAfterV1DayFeed(today);
 
   const carry = new URLSearchParams();
   if (storeId) carry.set('store', storeId);
