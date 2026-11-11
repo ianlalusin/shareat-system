@@ -126,7 +126,7 @@ describe('W2 - the Corrections section and Post correction', () => {
 
   it('the manager submits the action: the correction row and its entry (Dr 4100 50.00 / Cr 1110 50.00) exist, it redirects without an error, and the section then lists the correction', async () => {
     const { f, dayId, feedId } = await setup('w2c');
-    const to = await run(f.manager, form({ salesDayId: dayId, feedId, entryDate: '2027-01-20', reason: REASON }));
+    const to = await run(f.manager, form({ salesDayId: dayId, feedId, entryDate: '2026-01-20', reason: REASON }));
     expect(to.searchParams.get('error')).toBeNull();
 
     const rows = await corrections(dayId);
@@ -145,7 +145,7 @@ describe('W2 - the Corrections section and Post correction', () => {
 
   it('a staff submitting the action is refused (a redirect with an error) and nothing is posted', async () => {
     const { dayId, feedId, staff } = await setup('w2d');
-    const to = await run(staff, form({ salesDayId: dayId, feedId, entryDate: '2027-01-20', reason: REASON }));
+    const to = await run(staff, form({ salesDayId: dayId, feedId, entryDate: '2026-01-20', reason: REASON }));
     expect(to.searchParams.get('error'), 'a sentence, not silence').toBeTruthy();
     expect(await corrections(dayId)).toHaveLength(0);
   });

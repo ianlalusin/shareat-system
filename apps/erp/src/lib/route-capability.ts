@@ -42,6 +42,12 @@ import type { Capability } from '@shareat/auth';
 export type RouteRequirement = Capability | readonly Capability[] | null;
 
 export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
+  // T-526 R1: the full-screen POS. Receipts and Till inherit '/pos' (record_sale) by prefix; Kitchen and Refills each need their own word,
+  // so holding another POS word never opens them. The shell's tabs read this same map (`navHrefAllowed`), so a tab and its page cannot disagree.
+  '/pos': 'record_sale',
+  '/pos/kitchen': 'serve_pos_ticket',
+  '/pos/refills': 'request_pos_refill',
+
   // --- Who may act, and where. The keys to the building. -------------------------------------
   '/admin/users': 'manage_users',
   '/admin/stores': 'manage_stores',

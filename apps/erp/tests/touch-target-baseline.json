@@ -119,12 +119,6 @@
       20,
       20
     ],
-    "app/inventory/pos-map/page.tsx": [
-      20
-    ],
-    "app/inventory/pos-usage/page.tsx": [
-      20
-    ],
     "app/inventory/production/page.tsx": [
       20,
       20
@@ -250,6 +244,9 @@
     "app/page.tsx": [
       "ancestry truncated — no font size resolvable"
     ],
+    "app/admin/pos-tablets/TillsSection.tsx": [
+      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
+    ],
     "app/admin/stores/[id]/page.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)",
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
@@ -301,9 +298,6 @@
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
     ],
     "app/inventory/deliveries/[id]/page.tsx": [
-      "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
-    ],
-    "app/inventory/pos-usage/page.tsx": [
       "intrinsic checkbox/radio box, independent of font size — not resolvable from source (Ian’s ruling, §6.1)"
     ],
     "app/payroll/separations/page.tsx": [

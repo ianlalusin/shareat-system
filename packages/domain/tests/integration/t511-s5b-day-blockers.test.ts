@@ -47,7 +47,7 @@ import { ingestSettlementFile } from '../../src/settlement-intake/ingest';
 import { dayBlockers } from '../../src/settlement-intake/day-checks';
 import { overrideLoanAllocation, rejectDay } from '../../src/settlement-intake/review';
 import {
-  LIPA_FP, UUID_RE, asOrg, bookLine, closedPeriod, lineById, lineOn, mkLoan, postedSettlementRaw, salesDay, setDestination, stageGrabOctober, synthFoodpanda,
+  LIPA_FP, UUID_RE, asOrg, bookLine, closedPeriod, lineById, lineOn, mkLoan, postedSettlementRaw, postedSalesDay as salesDay, setDestination, stageGrabOctober, synthFoodpanda,
   world3, type World3,
 } from './_fixtures/t511-s5-world';
 
@@ -176,7 +176,8 @@ describe('T-511 S5b dayBlockers - one blocker at a time, from a day that is othe
     await sql`update settlement_day_lines set paid_state = 'paid' where org_id = ${z.orgId}`;
     await setDestination(sql, z, z.fpA);
     await salesDay(sql, z, z.storeA, z.fpA, '2026-10-12', '0.00', { verified: true, noSales: true });
-    expect(await codes(z, z.managerA, z.fpA, '2026-10-12')).toEqual([]);
+    // T-511 S7a: a confirmed zero is still not an "unverified" day, but it holds no journal entry, so the file figure has nothing to replace: the one new blocker, in the spec's words.
+    expect(await codes(z, z.managerA, z.fpA, '2026-10-12')).toEqual(['sales_day_not_posted']);
   });
 
   it('no destination account on the channel (the T-150 sentence) [kills: a missing account found only at posting]', async () => {
@@ -395,7 +396,7 @@ describe('T-511 S5b dayBlockers - the documented order, every blocker at once', 
     // no destination account (never set), no loan recorded (the loan check blocks), 12 Oct still pending (an earlier day is open)
     const r = await asOrg(w.orgId, (tx) => dayBlockers(tx, w.admin, old, { today: TODAY }));
     const documented = [
-      'not_paid', 'charges_unexplained', 'store_not_matched', 'sales_day_not_verified', 'loan_check', 'no_destination_account', 'negative_net_deposit',
+      'not_paid', 'charges_unexplained', 'store_not_matched', 'sales_day_not_verified', 'loan_check', 'loan_leg_problem', 'no_destination_account', 'negative_net_deposit',
       'posted_settlement_exists', 'earlier_day_open', 'line_not_current',
     ];
     expect(r.blockers.map((b) => b.code), 'every blocker that applies, in the documented order (no_file does not apply: a line exists)').toEqual(documented);

@@ -24,7 +24,7 @@ export interface RuleRowInput {
 /** A rule's value on one date. */
 export interface RuleValue {
   readonly key: BusinessRuleKey;
-  readonly unit: 'money' | 'percent' | 'hour';
+  readonly unit: 'money' | 'percent' | 'hour' | 'minutes';
   /** The number as text ('80.000000', or the registry default '50.00'). */
   readonly text: string;
   /** Money only: whole centavos. Throws for a percent or for a figure finer than a centavo. */
@@ -33,6 +33,8 @@ export interface RuleValue {
   basisPoints(): bigint;
   /** Hour only: a whole number from 0 to 23. Throws for any other unit or a stored figure that is not a whole hour. */
   hour(): number;
+  /** Minutes only: a whole number of minutes. Throws for any other unit or a stored figure that is not a whole number. */
+  minutes(): number;
 }
 
 export interface RuleBook {
@@ -65,17 +67,23 @@ function valueOf(key: BusinessRuleKey, text: string): RuleValue {
     unit,
     text,
     centavos() {
-      if (unit !== 'money') throw internalFault(`business rule ${key} is ${unit === 'hour' ? 'an hour' : 'a percent'}, not money`);
+      if (unit !== 'money') throw internalFault(`business rule ${key} is ${unit === 'hour' ? 'an hour' : unit === 'minutes' ? 'minutes' : 'a percent'}, not money`);
       return hundredths(text, key);
     },
     basisPoints() {
-      if (unit !== 'percent') throw internalFault(`business rule ${key} is ${unit === 'hour' ? 'an hour' : 'money'}, not a percent`);
+      if (unit !== 'percent') throw internalFault(`business rule ${key} is ${unit === 'hour' ? 'an hour' : unit === 'minutes' ? 'minutes' : 'money'}, not a percent`);
       return hundredths(text, key);
     },
     hour() {
       if (unit !== 'hour') throw internalFault(`business rule ${key} is ${unit}, not an hour`);
       const n = scaled(text, key);
       if (n % 1_000_000n !== 0n || n > 23_000_000n) throw internalFault(`business rule ${key}: ${text} is not a whole hour from 0 to 23`);
+      return Number(n / 1_000_000n);
+    },
+    minutes() {
+      if (unit !== 'minutes') throw internalFault(`business rule ${key} is ${unit}, not minutes`);
+      const n = scaled(text, key);
+      if (n % 1_000_000n !== 0n) throw internalFault(`business rule ${key}: ${text} is not a whole number of minutes`);
       return Number(n / 1_000_000n);
     },
   };

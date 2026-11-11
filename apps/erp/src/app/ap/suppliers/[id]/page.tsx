@@ -96,7 +96,7 @@ export default async function SupplierDetailPage({
           {/* ---------------------------------------------------------------- T-188: the record itself.
               ⛔ Until 2026-08-30 a supplier could be CREATED and never EDITED — `updateSupplier`
               existed in the repo with no caller — so a typo in a name was permanent.
-              T-552: the pencil stands beside the facts it edits. It used to sit alone inside a collapsed
+              T-571: the pencil stands beside the facts it edits. It used to sit alone inside a collapsed
               "Edit this supplier" card, so expanding that card revealed nothing but the button. */}
           <EditableRecord rules={SUPPLIER_ADD_RULES} action={editSupplierAction} label={supplier.name} hidden={{ supplierId: supplier.id }} typed={typed}>
             <div className="space-y-4">

@@ -5,6 +5,7 @@
  * raw `throw new Error` is not used in this folder (T-343 ratchet).
  */
 import { RefusalError, refuse } from '../shared/refusal';
+import { groupedMoney } from './text';
 
 export const SETTLEMENT_INTAKE_REFUSAL_CODES = [
   'FILE_EMPTY',
@@ -47,6 +48,10 @@ export const SETTLEMENT_INTAKE_REFUSAL_CODES = [
   'LINE_ALREADY_DECIDED',
   'LINE_NOT_REJECTED',
   'LOAN_OVERRIDE_REFUSED',
+  // Slice 7a (approve): the day is held by a blocker, the person uploaded the file, or the books ask for the approver's reason.
+  'DAY_BLOCKED',
+  'UPLOADER_CANNOT_APPROVE',
+  'NEEDS_REASON',
 ] as const;
 export type SettlementIntakeRefusalCode = (typeof SETTLEMENT_INTAKE_REFUSAL_CODES)[number];
 
@@ -63,6 +68,12 @@ export class SettlementIntakeRefusal extends RefusalError {
 export function intakeRefusal(code: SettlementIntakeRefusalCode, sentence: string): SettlementIntakeRefusal {
   const r = refuse(sentence, sentence);
   return new SettlementIntakeRefusal(code, r.message, r.userMessage);
+}
+
+/** The sentence that asks for the approver's reason: `difference` is the ABSOLUTE difference (numeric(14,2) text), `sign` which way it goes. */
+export function needsReasonSentence(difference: string, sign: 'short' | 'over'): string {
+  const gap = groupedMoney(difference);
+  return `The payout is ${gap} ${sign === 'over' ? 'more' : 'less'} than this day still owed. Type a reason to accept the difference, then approve again.`;
 }
 
 const UUID_SHAPE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;

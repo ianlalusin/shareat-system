@@ -35,7 +35,7 @@ import { moneyFixture } from './_fixtures/t402-s3-money';
 import { WASTAGE_RECORD_RULES, WASTAGE_REVERSE_RULES } from '../../src/field-rules/wastage';
 import { ITEMS_REJECT_RULES, ITEMS_RENAME_RULES, ITEMS_UNIT_RULES } from '../../src/field-rules/items';
 import { MENU_CATEGORY_RULES, MENU_ITEM_ADD_RULES, MENU_REQUEST_RULES } from '../../src/field-rules/menu';
-import { INVENTORY_LOCATION_RULES, INVENTORY_POS_MAP_RULES, INVENTORY_TRANSFER_RULES } from '../../src/field-rules/inventory';
+import { INVENTORY_LOCATION_RULES, INVENTORY_TRANSFER_RULES } from '../../src/field-rules/inventory';
 import { COMMISSARY_LINK_RULES } from '../../src/field-rules/commissary';
 import { CUTOVER_COUNT_RULES, CUTOVER_FIGURE_RULES } from '../../src/field-rules/cutover';
 import { checkField } from '../../src/field-rules/check';
@@ -168,14 +168,6 @@ describe('T-440 S5: a bad value is refused with the rule sentence and nothing is
       'stock_locations',
       (f) => run('inventory/locations/actions', 'createLocationAction', { storeId: f.storeId, code: ' ', name: 'Walk-in', typeId: FAKE_ID, role: 'storage' }),
       sentence(INVENTORY_LOCATION_RULES.code, ''),
-    );
-  });
-
-  it('inventory upsertPosItemMapAction: a blank POS item key is refused; no map (mutant: assert removed from upsertPosItemMapAction)', async () => {
-    await refused(
-      'pos_item_maps',
-      (f) => run('inventory/pos-map/actions', 'upsertPosItemMapAction', { storeId: f.storeId, posItemKey: '', posItemName: 'Halo-halo', mode: 'no_stock' }),
-      sentence(INVENTORY_POS_MAP_RULES.posItemKey, ''),
     );
   });
 
