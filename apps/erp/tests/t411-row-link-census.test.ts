@@ -60,6 +60,8 @@ const ROW_LINK: readonly string[] = [
 
 /** Tables with no row destination: reports, editing grids, read-only detail lines. Untouched by T-411. */
 const NO_ROW_TARGET: readonly string[] = [
+  // T-546, 8 Nov 2026, BOSS approved: tills list, no row target
+  'app/admin/pos-tablets/TillsSection.tsx',
   // T-502 S4: the import preview rows are findings about lines of an uploaded file; there is nothing to open
   'app/items/import/page.tsx',
   // T-511 S4: the days still waiting for a file, per channel: a summary, nothing to open yet (the review screen is slice 5)
@@ -88,7 +90,6 @@ const NO_ROW_TARGET: readonly string[] = [
   'app/inventory/deliveries/inbound/[shipmentId]/page.tsx', // T-398 S5: shipment line items, no per-row record page
   'app/inventory/locations/page.tsx',
   'app/inventory/low-stock/page.tsx',
-  'app/inventory/pos-usage/page.tsx',
   'app/inventory/returns/page.tsx',
   'app/inventory/transfers/page.tsx',
   'app/liabilities/[id]/page.tsx',
@@ -112,7 +113,6 @@ const NO_ROW_TARGET: readonly string[] = [
   'app/findings/scorecard/page.tsx',
   'app/fixed-assets/[id]/page.tsx',
   'app/inventory/page.tsx',
-  'app/inventory/pos-map/page.tsx',
   'app/inventory/production/[id]/page.tsx',
   'app/inventory/production/recipes/[id]/page.tsx', // T-413: read-only ingredient lines, no row destination
   'app/items/[id]/page.tsx',

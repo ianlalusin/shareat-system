@@ -12,7 +12,7 @@ import { CheckedForm, FieldCheck } from '@/components/forms';
 import { CASH_REQUEST_CREATE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Button, FlashBanner, FormModal, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
+import { Badge, Button, FlashBanner, FormModal, Input, LinkRow, RowLink, Select, statusTone, DialogActions } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Cash requests — Shareat System' };
@@ -109,9 +109,11 @@ export default async function CashRequestsPage({
                 <Input name="notes" className="w-full" />
               </Field>
             </div>
-            <Button type="submit" variant="primary">
-              Submit request
-            </Button>
+            <DialogActions>
+              <Button type="submit" variant="primary">
+                Submit request
+              </Button>
+            </DialogActions>
           </CheckedForm>
         </FormModal>
       </div>

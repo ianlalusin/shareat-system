@@ -94,6 +94,8 @@ export interface InsertOtherLineInput {
   amount: Money;
   lineDate: string | null;
   description: string | null;
+  /** T-511 S6c: the staged VAT of a `period_charge` line; absent or null is stored NULL. */
+  vat?: Money | null;
 }
 
 async function uploadById(tx: Tx, orgId: string, id: string): Promise<UploadRow> {
@@ -216,7 +218,9 @@ export async function insertOtherLines(
   lines: readonly InsertOtherLineInput[],
 ): Promise<void> {
   if (lines.length === 0) return;
-  await tx.insert(settlementOtherLines).values(lines.map((l) => ({ ...l, orgId, uploadId, dayLineId })));
+  await tx.insert(settlementOtherLines).values(
+    lines.map(({ vat, ...l }) => ({ ...l, vatAmount: vat ?? null, orgId, uploadId, dayLineId })),
+  );
 }
 
 /**
@@ -247,23 +251,24 @@ export async function salesDayFiguresMany(
   tx: Tx,
   orgId: string,
   pairs: readonly { channelId: string; salesDate: string }[],
-): Promise<Map<string, { recorded: Money | null; verified: boolean; noSales: boolean }>> {
-  const out = new Map<string, { recorded: Money | null; verified: boolean; noSales: boolean }>();
+): Promise<Map<string, { recorded: Money | null; verified: boolean; noSales: boolean; unposted: boolean }>> {
+  const out = new Map<string, { recorded: Money | null; verified: boolean; noSales: boolean; unposted: boolean }>();
   if (pairs.length === 0) return out;
   const channels = [...new Set(pairs.map((p) => p.channelId))];
   const dates = pairs.map((p) => p.salesDate).sort();
   const rows = (await tx.execute(sql`
-    select sdc.channel_id::text as channel_id, sd.business_date::text as business_date, sd.status, sdc.no_sales, sdc.amount::text as amount
+    select sdc.channel_id::text as channel_id, sd.business_date::text as business_date, sd.status, sdc.no_sales, sdc.amount::text as amount, (sd.journal_entry_id is null) as no_entry
       from sales_day_channels sdc
       join sales_days sd on sd.id = sdc.sales_day_id
      where sd.org_id = ${orgId} and sdc.channel_id in (${sql.join(channels.map((id) => sql`${id}`), sql`, `)})
        and sd.business_date >= ${dates[0]!} and sd.business_date <= ${dates[dates.length - 1]!}
-  `)) as unknown as { channel_id: string; business_date: string; status: string; no_sales: boolean; amount: string }[];
+  `)) as unknown as { channel_id: string; business_date: string; status: string; no_sales: boolean; amount: string; no_entry: boolean }[];
   for (const r of rows) {
     const key = `${r.channel_id}|${r.business_date}`;
     if (out.has(key)) continue; // salesDayFigure takes the first row it finds; so does this
     const verified = r.status === 'verified';
-    out.set(key, { recorded: verified && !r.no_sales ? money(r.amount) : null, verified, noSales: r.no_sales });
+    // `unposted` (T-511 S7a): a verified day with no journal entry, so a platform correction has nothing to replace
+    out.set(key, { recorded: verified && !r.no_sales ? money(r.amount) : null, verified, noSales: r.no_sales, unposted: verified && r.no_entry });
   }
   return out;
 }
@@ -558,6 +563,100 @@ export async function markReopened(tx: Tx, orgId: string, lineId: string): Promi
   return rows.length === 1;
 }
 
+/**
+ * T-511 S7a. Compare-and-set: only a CURRENT line that is still pending is booked; `decided_by`, `decided_at` and `settlement_id` are set together (the review-shape
+ * CHECK). false = someone decided first, a newer file replaced it, or it is not pending. Called by `approveDay` only.
+ */
+export async function markBooked(tx: Tx, orgId: string, lineId: string, o: { decidedBy: string; settlementId: string }): Promise<boolean> {
+  const rows = await tx
+    .update(settlementDayLines)
+    .set({ reviewState: 'booked', decidedBy: o.decidedBy, decidedAt: sql`now()`, settlementId: o.settlementId })
+    .where(and(eq(settlementDayLines.orgId, orgId), eq(settlementDayLines.id, lineId), eq(settlementDayLines.isCurrent, true), eq(settlementDayLines.reviewState, 'pending')))
+    .returning({ id: settlementDayLines.id });
+  return rows.length === 1;
+}
+
+/**
+ * T-511 S7a. The CURRENT line booked by this settlement goes back to pending, its decision columns cleared (the review-shape CHECK); a line that is no longer current stays
+ * booked as history. Returns the line returned, or null. Called by the void of a channel settlement only.
+ */
+export async function markUnbooked(tx: Tx, orgId: string, settlementId: string): Promise<DayLineRow | null> {
+  const rows = await tx
+    .update(settlementDayLines)
+    .set({ reviewState: 'pending', decisionReason: null, decidedBy: null, decidedAt: null, settlementId: null })
+    .where(and(eq(settlementDayLines.orgId, orgId), eq(settlementDayLines.settlementId, settlementId), eq(settlementDayLines.isCurrent, true), eq(settlementDayLines.reviewState, 'booked')))
+    .returning();
+  return rows[0] ?? null;
+}
+
+/** T-511 S7a. The people who uploaded the line's source upload and its payout upload (Grab has both, Foodpanda only the invoice), distinct. The uploader rule reads this and nothing else. */
+export async function uploaderIdsOfLine(tx: Tx, orgId: string, lineId: string): Promise<string[]> {
+  const rows = (await tx.execute(sql`
+    select distinct u.uploaded_by::text as person_id
+      from settlement_day_lines l
+      join settlement_uploads u on u.org_id = l.org_id and (u.id = l.source_upload_id or u.id = l.payout_upload_id)
+     where l.org_id = ${orgId} and l.id = ${lineId}
+  `)) as unknown as { person_id: string }[];
+  return rows.map((r) => r.person_id);
+}
+
+/** The key of one Foodpanda invoice across every upload of it: the channel and the invoice number the staged days carry as their payout reference. */
+export const invoiceKey = (channelId: string, invoiceNumber: string): string => `${channelId}|${invoiceNumber}`;
+
+/**
+ * What the carrier rule (Foodpanda, Ruling 6) reads of one INVOICE (a channel and an invoice number, whichever upload brought each day):
+ * the latest current sales date of its days, and its period charges: every charge BOOKED from any upload of the invoice (with whether a live settlement netted it), and one
+ * entry with `chargeId` null per charge still staged and not booked. A staged charge is not "unbooked" when its upload was replaced by a newer one (it can never be booked
+ * from there) or when a booked copy of it exists (same store, channel, date, net amount and description: the copy a re-uploaded file stages again).
+ */
+export interface InvoiceCarrierFacts {
+  /** the latest sales date among the CURRENT day lines of the invoice (any review state); null when it has none */
+  carrierDate: string | null;
+  charges: { chargeId: string | null; totalAmount: string | null; nettedBySettlementId: string | null }[];
+}
+
+/** T-511 S7a. Read only, three reads however many invoices; an invoice with no line and no charge is present with `carrierDate` null. A charge counts as netted only through a settlement that is not voided. */
+export async function invoiceCarrierFactsMany(tx: Tx, orgId: string, invoices: readonly { channelId: string; invoiceNumber: string }[]): Promise<Map<string, InvoiceCarrierFacts>> {
+  const out = new Map<string, InvoiceCarrierFacts>(invoices.map((i) => [invoiceKey(i.channelId, i.invoiceNumber), { carrierDate: null, charges: [] }]));
+  if (invoices.length === 0) return out;
+  const pairs = sql.join(invoices.map((i) => sql`(${i.channelId}::uuid, ${i.invoiceNumber})`), sql`, `);
+  const latest = (await tx.execute(sql`
+    select channel_id::text as channel_id, payout_reference, max(sales_date)::text as d
+      from settlement_day_lines
+     where org_id = ${orgId} and is_current and platform = 'foodpanda' and (channel_id, payout_reference) in (${pairs})
+     group by channel_id, payout_reference
+  `)) as unknown as { channel_id: string; payout_reference: string; d: string }[];
+  for (const r of latest) out.get(invoiceKey(r.channel_id, r.payout_reference))!.carrierDate = r.d;
+  const booked = (await tx.execute(sql`
+    select u.channel_id::text as channel_id, u.invoice_number, c.id::text as charge_id, c.total_amount::text as total_amount,
+           (select k.settlement_id::text
+              from channel_settlement_charge_links k
+              join channel_settlements st on st.org_id = k.org_id and st.id = k.settlement_id
+             where k.org_id = c.org_id and k.charge_id = c.id and st.status <> 'voided'
+             limit 1) as netted_by
+      from channel_period_charges c
+      join settlement_uploads u on u.org_id = c.org_id and u.id = c.upload_id
+     where c.org_id = ${orgId} and (u.channel_id, u.invoice_number) in (${pairs})
+     order by c.id
+  `)) as unknown as { channel_id: string; invoice_number: string; charge_id: string; total_amount: string; netted_by: string | null }[];
+  for (const r of booked) out.get(invoiceKey(r.channel_id, r.invoice_number))!.charges.push({ chargeId: r.charge_id, totalAmount: r.total_amount, nettedBySettlementId: r.netted_by });
+  const staged = (await tx.execute(sql`
+    select u.channel_id::text as channel_id, u.invoice_number
+      from settlement_other_lines ol
+      join settlement_uploads u on u.org_id = ol.org_id and u.id = ol.upload_id
+     where ol.org_id = ${orgId} and ol.kind = 'period_charge' and ol.day_line_id is null and ol.is_current
+       and u.superseded_by is null and (u.channel_id, u.invoice_number) in (${pairs})
+       and not exists (select 1 from channel_period_charges c where c.org_id = ol.org_id and c.other_line_id = ol.id)
+       and not exists (
+         select 1 from channel_period_charges c2
+          where c2.org_id = ol.org_id and c2.store_id = u.store_id and c2.channel_id = u.channel_id and c2.charge_date = ol.line_date
+            and c2.net_amount = ol.amount and c2.description is not distinct from ol.description)
+     order by ol.id
+  `)) as unknown as { channel_id: string; invoice_number: string }[];
+  for (const r of staged) out.get(invoiceKey(r.channel_id, r.invoice_number))!.charges.push({ chargeId: null, totalAmount: null, nettedBySettlementId: null });
+  return out;
+}
+
 /** An override flips the day's active DEDUCTION lines inactive (`is_active` is the only updatable column); disbursals are never touched. */
 export async function deactivateDeductionLines(tx: Tx, orgId: string, dayLineId: string): Promise<void> {
   await tx
@@ -643,4 +742,49 @@ export async function listPlatformCorrectionsForDay(tx: Tx, orgId: string, sales
 export async function insertPlatformCorrection(tx: Tx, input: InsertPlatformCorrectionInput): Promise<void> {
   // `posted_at` is the statement's own clock (as `posV1Repo.insertCorrection`), so corrections order exactly by when they were written.
   await tx.insert(salesDayPlatformCorrections).values({ ...input, postedAt: sql`clock_timestamp()` });
+}
+
+// ---------------------------------------------------------------------------------------------
+// T-511 S6c: one staged other line with the channel and store of its upload (`postPlatformCharge`). Read only.
+// ---------------------------------------------------------------------------------------------
+export interface OtherLineWithUpload {
+  id: string;
+  uploadId: string;
+  channelId: string;
+  storeId: string;
+  kind: string;
+  bookedAs: string;
+  dayLineId: string | null;
+  isCurrent: boolean;
+  amount: string;
+  vatAmount: string | null;
+  lineDate: string | null;
+  description: string | null;
+  /** the line's upload was replaced by a newer one (ingest sets this for the same channel, kind and period) */
+  uploadSupersededBy: string | null;
+}
+
+/** One staged other line by id, with its upload's channel and store, or null (another org's id is null too). */
+export async function otherLineWithUpload(tx: Tx, orgId: string, id: string): Promise<OtherLineWithUpload | null> {
+  const [row] = await tx
+    .select({
+      id: settlementOtherLines.id,
+      uploadId: settlementOtherLines.uploadId,
+      channelId: settlementUploads.channelId,
+      storeId: settlementUploads.storeId,
+      kind: settlementOtherLines.kind,
+      bookedAs: settlementOtherLines.bookedAs,
+      dayLineId: settlementOtherLines.dayLineId,
+      isCurrent: settlementOtherLines.isCurrent,
+      amount: settlementOtherLines.amount,
+      vatAmount: settlementOtherLines.vatAmount,
+      lineDate: settlementOtherLines.lineDate,
+      description: settlementOtherLines.description,
+      uploadSupersededBy: settlementUploads.supersededBy,
+    })
+    .from(settlementOtherLines)
+    .innerJoin(settlementUploads, and(eq(settlementUploads.orgId, settlementOtherLines.orgId), eq(settlementUploads.id, settlementOtherLines.uploadId)))
+    .where(and(eq(settlementOtherLines.orgId, orgId), eq(settlementOtherLines.id, id)))
+    .limit(1);
+  return row ?? null;
 }

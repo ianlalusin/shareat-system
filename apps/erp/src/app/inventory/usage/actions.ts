@@ -18,8 +18,9 @@
  */
 import { redirectWithFlash } from '@/lib/flash';
 import { revalidatePath } from 'next/cache';
-import { assertFieldRules, deleteUsageDraft, postUsage, replenishAfterUsage, saveUsageDraft, voidUsage } from '@shareat/domain';
-import { INVENTORY_USAGE_VOID_RULES } from '@shareat/domain/field-rules';
+import { assertFieldRules, deleteUsageDraft, postUsage, replenishAfterUsage, saveUsageDraft, voidPosUsagePull, voidUsage } from '@shareat/domain';
+import { INVENTORY_POS_VOID_RULES, INVENTORY_USAGE_VOID_RULES } from '@shareat/domain/field-rules';
+import { posMappingRepo } from '@shareat/db';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { withOrgPrincipal } from './lib';
 import { requireActor } from '../../../lib/session';
@@ -200,4 +201,37 @@ export async function voidUsageAction(fd: FormData): Promise<void> {
   return await redirectWithFlash(`/inventory/usage/${recordId}`, {}, { stamp: 'VOID', ok: result.reversalEntryIds.length > 0
         ? `Voided. Stock and the FIFO layers are restored, and the entry is reversed — journal ${result.reversalEntryIds.join(', ')}.`
         : 'Voided. Stock and the FIFO layers are restored.' });
+}
+
+/**
+ * T-550 (Ian, 8 Nov): the Void for a posted usage record a live POS pull made, moved here from the retired pull page. The whole pull is
+ * voided (every record it made is reversed). Same capability, reason rule and approval record as the old `voidPullAction`. The pull is
+ * found from the RECORD on the server, never from a posted field.
+ */
+export async function voidPullUsageAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/inventory/usage');
+  const recordId = str(fd, 'recordId');
+  const reason = str(fd, 'reason');
+
+  let count = 0;
+  try {
+    const live = await withOrgPrincipal(actor.orgId, (tx) => posMappingRepo.livePullForUsageRecord(tx, recordId));
+    if (!live) throw new Error('This usage record did not come from a live POS pull, so there is no pull to void.');
+    // T-412 Tier P: an administrator's PIN, verified on the server against the PULL's store.
+    const target = await loadDestructiveTarget(actor, 'pos_usage_pull', live.pullId, ['void_usage_record']);
+    assertFieldRules(INVENTORY_POS_VOID_RULES, fd);
+    const approval = await verifyAdminApproval(null, { actor, storeId: target.storeId, pin: str(fd, 'adminPin'), capability: 'void_usage_record' });
+    const result = await withOrgPrincipal(actor.orgId, async (tx) => {
+      const r = await voidPosUsagePull(tx, actor, { pullId: live.pullId, reason });
+      await recordApproval(tx, actor, approval, { capability: 'void_usage_record', entityType: 'pos_usage_pull', entityId: live.pullId, storeId: target.storeId });
+      return r;
+    });
+    count = result.reversedRecordCount;
+  } catch (err) {
+    return await redirectWithFlash(`/inventory/usage/${recordId}`, {}, { error: errorMessage(err) });
+  }
+
+  revalidatePath('/inventory/usage');
+  revalidatePath(`/inventory/usage/${recordId}`);
+  return await redirectWithFlash(`/inventory/usage/${recordId}`, {}, { stamp: 'VOID', ok: `Pull voided — ${count} usage record(s) reversed. The day can be pulled again.` });
 }

@@ -4,7 +4,7 @@
  */
 import { PAYROLL_STATUTORY_RATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { CheckedForm } from '@/components/forms';
-import { Button, Field, FormGrid, FormSection, Input, Select } from '@/components/ui';
+import { Button, DialogActions, Field, FormGrid, FormSection, Input, Select } from '@/components/ui';
 import { addStatutoryRateAction } from './actions';
 import { AgencyProvider, AgencySelect, ForAgency, RateInput } from './AgencyBlocks';
 import type { RateAgency } from './rate-fields';
@@ -114,14 +114,14 @@ export function StatutoryRateForm({ initialAgency = 'sss', initialValues = {} }:
                 <Input {...nativeAttrs(PAYROLL_STATUTORY_RATE_RULES.sourceRef)} className="w-full" />
               </Field>
             </div>
-            <div className="flex items-end">
-              <Button type="submit" variant="primary" icon={null}>
-                Save
-              </Button>
-            </div>
           </FormGrid>
         </FormSection>
       </AgencyProvider>
+      <DialogActions>
+        <Button type="submit" variant="primary" icon={null}>
+          Save
+        </Button>
+      </DialogActions>
     </CheckedForm>
   );
 }

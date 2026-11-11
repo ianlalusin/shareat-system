@@ -34,6 +34,8 @@ const rel = (f: string) => relative(APP_ROOT, f).replace(/\\/g, '/');
 
 /** Files whose raw record-bound form is deliberate. Each needs a reason. Empty at the end of S3b. */
 const EXEMPT: Record<string, string> = {
+  // T-546 (BOSS approved): the Tills table. One small settings row per till (its tablet; its paper and copies), each saved on its own with one click and audited; locking a row behind Edit would add a tap to a two-control setting.
+  'admin/pos-tablets/TillsSection.tsx': 'T-546: per-till settings rows saved one at a time, not an edit-in-place record',
   // T-193 S5: an add form (hidden request id and hidden month/agency inputs), not a record-bound edit-in-place form.
   'payroll/statutory-payments/new/page.tsx': 'T-193 S5: an add form with hidden id inputs, not record-bound',
   // DEF-778: an add form whose only hidden *Id is the per-render request id; its date default is a prop, not a record.
@@ -50,6 +52,9 @@ const EXEMPT: Record<string, string> = {
 // `<button>` labels written in app/ - they are the `label=` prop of <ConfirmDestructive>, whose own submit button is the one
 // control (apps/erp/tests/t412-destructive-census.test.ts is the guard for those). Their entries left this list with them.
 const COMMANDS: Record<string, string> = {
+  'Add till': 'T-546 (BOSS approved): adds a till (the receipt-number identity of a store); audited',
+  'Set tablet': 'T-546 (BOSS approved): chooses which paired tablet acts as a till, or none; audited',
+  'Save printer': "T-546 (BOSS approved): sets the till's receipt paper and copies, which the tablet then prints with; audited",
   'Register tablet': 'T-505: links a POS tablet to the store so it can ask a manager for a refund approval (grants access); audited',
   'Clear the lock': "T-505: lifts a tablet's approval lock (restores access) after wrong manager PINs; audited",
   'Remove staff positions': 'T-451: explicit removal of legacy assignments for privileged roles; existing role and authorization stay intact',
@@ -85,7 +90,7 @@ const COMMANDS: Record<string, string> = {
   'Post payout(s)': 'posts to the ledger',
   'Post payslip(s)': 'posts to the ledger',
   'Value the count': 'writes the generated opening inventory entry (T-390 S5)',
-  'Post this settlement': 'posts to the ledger',
+  'Post settlement': 'posts to the ledger',
   'Pay': 'books a payment',
   'Clear the approval-PIN cap': 'lifts an administrator-PIN cap early (T-416, audited)',
   'Reopen PIN sign-in': 'lets PIN sign-in back in at a stopped store (T-395 S2, audited)',
@@ -105,7 +110,6 @@ const COMMANDS: Record<string, string> = {
   'Return': 'returns stock or goods',
   'Approve': 'moves a status',
   'Approve &amp; post': 'moves a status',
-  'Approve (no stock)': 'moves a status',
   'Accept': 'moves a status',
   'Accept for now': 'moves a status',
   'Reject': 'moves a status',
@@ -125,8 +129,6 @@ const COMMANDS: Record<string, string> = {
   'Close shift': 'moves a status',
   'Confirm term': 'confirms a status change',
   'I confirm this is done': 'confirms a cutover step',
-  'Finalize': 'moves a status',
-  'Finish this pull — nothing left to post': 'moves a status',
   'Mark paid by the platform — posts nothing': 'moves a status',
   'Mark ready': 'moves a status',
   'Propose': 'moves a status',
@@ -137,7 +139,6 @@ const COMMANDS: Record<string, string> = {
   'Dispute — flag for review, does not stop the 15-day clock': 'moves a status',
   'Override': 'overrides a verified day',
   '\u2192 Move to reviewing': 'moves a status',
-  'Flag as unmappable': 'moves a status',
   'Open branch': 'opening a store is a status change',
   'Create the missing month': 'creates a period',
   'Make default': 'changes which record is default',
@@ -170,7 +171,6 @@ const COMMANDS: Record<string, string> = {
   'Anchor': 'anchors a balance / period (a posting)',
   'Confirm change': 'confirms a status change',
   'Set up rooms': 'provisions rooms (a one-shot setup action)',
-  'Build plan': 'generates a plan (an action, not data entry)',
   'Keep &ldquo;&rdquo;': 'items/page: a permanent item merge (label is Keep &ldquo;{name}&rdquo;)',
   'Different items — stop asking': 'T-443: records that a look-alike pair are different products, so the panel stops suggesting a merge',
   'Undo': 'T-443: removes a dismissal, so the look-alike pair is suggested again',

@@ -109,11 +109,13 @@ export async function previewSettlementAction(req: PreviewRequest): Promise<Prev
 
 export async function recordSettlementAction(formData: FormData): Promise<void> {
   const actor = await requireActor();
+  let channelId = '';
+  let salesDayId = '';
 
   try {
     // T-440: the screen's rule set (CHANNEL_SETTLEMENT_RECORD_RULES) is asserted in recordChannelSettlement, AFTER authorize().
-    const channelId = str(formData, 'channelId');
-    const salesDayId = str(formData, 'salesDayId');
+    channelId = str(formData, 'channelId');
+    salesDayId = str(formData, 'salesDayId');
     if (!channelId) throw new Error('Choose the channel this payout is for.');
     // the blank-day refusal lives in recordChannelSettlement, AFTER authorize() and the field rules.
 
@@ -156,7 +158,11 @@ export async function recordSettlementAction(formData: FormData): Promise<void> 
       }),
     );
   } catch (err) {
-    return await redirectWithFlash('/channel-settlements', {}, { error: errorMessage(err) });
+    // T-511 S6d: a refusal lands back on the form, with the channel and day still chosen. Typed figures are not kept (as before).
+    return await redirectWithFlash('/channel-settlements/record', {
+      ...(channelId ? { channel: channelId } : {}),
+      ...(salesDayId ? { day: salesDayId } : {}),
+    }, { error: errorMessage(err) });
   }
 
   return await redirectWithFlash('/channel-settlements', {}, { ok: 'posted' });

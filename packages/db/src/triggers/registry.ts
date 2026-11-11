@@ -167,6 +167,19 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'history_guard',
     reason: 'A platform sales correction row is never updated or deleted; a wrong one is corrected by a new row (the platform-corrections migration, T-511 S6b). Decides only from TG_OP.',
   },
+  // T-511 S6c (migration 0244): a period charge and a settlement-charge link are never edited or deleted (ALWAYS 41 -> 43).
+  channel_period_charges_append_only: {
+    table: 'channel_period_charges',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A posted platform period charge is never updated or deleted; a wrong one is reversed by hand in the books (0244, T-511 S6c). Decides only from TG_OP.',
+  },
+  channel_settlement_charge_links_append_only: {
+    table: 'channel_settlement_charge_links',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A settlement-charge link is never updated or deleted; a void of the settlement leaves it as history and it stops counting through the parent status (0244, T-511 S6c). Decides only from TG_OP.',
+  },
   missed_month_adjustments_no_update_trg: {
     table: 'missed_month_adjustments',
     mode: 'always',

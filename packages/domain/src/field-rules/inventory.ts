@@ -48,13 +48,7 @@ export const INVENTORY_THRESHOLD_RULES = defineFieldRules('inventory.setThreshol
   threshold: { label: 'Low-stock threshold', optional: true, kind: 'number', min: 0 },
 });
 
-/** New / edit POS item mapping. */
-export const INVENTORY_POS_MAP_RULES = defineFieldRules('inventory.upsertPosItemMap', {
-  posItemKey: { label: 'The POS item key', kind: 'text', requires: 'A map needs the POS item key.' },
-  posItemName: { label: 'The POS item name', kind: 'text', requires: 'A map needs the POS item name.' },
-});
-
-/** Void a POS usage pull. */
+/** Void a POS usage pull (T-550: from the posted usage record's page). */
 export const INVENTORY_POS_VOID_RULES = defineFieldRules('inventory.voidPosUsagePull', {
   reason: { label: 'The reason', kind: 'text', requires: 'Say why this pull is being voided.' },
 });

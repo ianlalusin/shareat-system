@@ -33,7 +33,7 @@ describe('T-452 compact card field groups', () => {
     const staff = read('apps/erp/src/app/staff/[employmentId]/page.tsx');
     expect(staff.slice(staff.indexOf('label="government numbers"'))).toContain('layout="pairs"');
     const settlement = read('apps/erp/src/app/channel-settlements/SettlementForm.tsx');
-    expect((settlement.match(/<FormGrid layout="pairs">/g) ?? []).length).toBe(5);
+    expect((settlement.match(/<FormGrid layout="pairs">/g) ?? []).length).toBe(2); // T-511 S6d: 5 -> 2 (the payout figures, the loan pair); the deductions are their own 2/3-column container grid
     expect(settlement).toContain('label={d.label}');
     expect(settlement).toContain('hint={<>{accountLabel(d.account)}');
     expect(settlement).toContain('<SplitWorkspace formTitle="Payout details" detailsTitle="Payout check"');

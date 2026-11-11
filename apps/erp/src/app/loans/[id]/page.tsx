@@ -8,7 +8,7 @@ import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, ConfirmDestructive, FlashBanner, FormModal, Input, Select, statusLabel } from '@/components/ui';
+import { Button, ConfirmDestructive, FlashBanner, FormModal, Input, Select, statusLabel, DialogActions } from '@/components/ui';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import { LOAN_DRAW_RULES, LOAN_PAYMENT_RULES, LOAN_REPAYMENT_RULES, LOAN_REVERSE_RULES, nativeAttrs, type FieldRule } from '@shareat/domain/field-rules';
 
@@ -119,11 +119,11 @@ export default async function LoanPage({
               <Field label="On" rule={LOAN_DRAW_RULES.on}>
                 <Input type="date" {...nativeAttrs(LOAN_DRAW_RULES.on)} defaultValue={today()} className="w-full" />
               </Field>
-              <div className="sm:col-span-3">
+              <DialogActions className="sm:col-span-3">
                 <Button type="submit" variant="secondary">
                   Record the draw
                 </Button>
-              </div>
+              </DialogActions>
             </CheckedForm>
           </FormModal>
         </section>
@@ -182,11 +182,11 @@ export default async function LoanPage({
               <Field label="On" rule={LOAN_PAYMENT_RULES.on}>
                 <Input type="date" {...nativeAttrs(LOAN_PAYMENT_RULES.on)} defaultValue={today()} className="w-full" />
               </Field>
-              <div className="sm:col-span-3">
+              <DialogActions className="sm:col-span-3">
                 <Button type="submit" variant="primary">
                   Record payment
                 </Button>
-              </div>
+              </DialogActions>
             </CheckedForm>
           </FormModal>
         </section>

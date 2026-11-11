@@ -5,6 +5,8 @@ import { withFlash } from '../../../lib/flash';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { staffStoresFor } from '../../staff/lib';
 import { pairPosTabletAction, unpairPosTabletAction } from './actions';
+import { loadTills } from '../../admin/pos-tablets/lib';
+import { TillsSection } from '../../admin/pos-tablets/TillsSection';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { Banner, Button, ConfirmDestructive, FlashBanner, Input } from '@/components/ui';
@@ -44,6 +46,10 @@ export default async function PosTabletPage({ searchParams }: { searchParams: Pr
     ),
   );
 
+  // T-546: each store's tills, for the stores this person may pair at (the read authorizes at the store itself).
+  const tillsByStore = new Map<string, Awaited<ReturnType<typeof loadTills>>>();
+  for (const s of stores) tillsByStore.set(s.id, await loadTills(actor, s.id));
+
   return (
     <Page density="table">
       <div>
@@ -70,65 +76,69 @@ export default async function PosTabletPage({ searchParams }: { searchParams: Pr
         const mine = rows.filter((r) => r.storeId === s.id);
         const live = mine.find((r) => !r.revokedAt);
         const past = mine.filter((r) => r.revokedAt);
+        const tills = tillsByStore.get(s.id);
         return (
-          <section key={s.id} className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-            <h2 className="font-medium">{s.name}</h2>
+          <div key={s.id} className="space-y-4">
+            <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+              <h2 className="font-medium">{s.name}</h2>
 
-            {live ? (
-              <div className="space-y-2 text-sm">
-                <p>
-                  <strong>{live.label}</strong> is this store&apos;s POS tablet.
-                </p>
-                <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                  Paired by {live.pairedByName} on {when(live.pairedAt)}. Last used {when(live.lastUsedAt)}.
-                </p>
-                <form action={unpairPosTabletAction} className="space-y-2">
-                  <input type="hidden" name="pairingId" value={live.id} />
-                  <ConfirmDestructive
-                    tier="retype"
-                    label="Un-pair tablet"
-                    consequence="Signs this tablet out at once and puts it back to the email sign-in. Nothing is deleted."
-                    expectedName={live.label}
-                  />
-                </form>
-              </div>
-            ) : (
-              <p className="text-sm text-neutral-500 dark:text-neutral-400">No tablet is paired yet.</p>
-            )}
-
-            <form action={pairPosTabletAction} className="space-y-3 text-sm">
-              <h3 className="font-medium">{live ? 'Pair a different tablet' : 'Pair this tablet'}</h3>
-              <input type="hidden" name="storeId" value={s.id} />
-              {live && (
-                <Banner tone="warning">
-                  This replaces the current POS tablet &lsquo;{live.label}&rsquo;. It is signed out and stops working.
-                </Banner>
+              {live ? (
+                <div className="space-y-2 text-sm">
+                  <p>
+                    <strong>{live.label}</strong> is this store&apos;s POS tablet.
+                  </p>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                    Paired by {live.pairedByName} on {when(live.pairedAt)}. Last used {when(live.lastUsedAt)}.
+                  </p>
+                  <form action={unpairPosTabletAction} className="space-y-2">
+                    <input type="hidden" name="pairingId" value={live.id} />
+                    <ConfirmDestructive
+                      tier="retype"
+                      label="Un-pair tablet"
+                      consequence="Signs this tablet out at once and puts it back to the email sign-in. Nothing is deleted."
+                      expectedName={live.label}
+                    />
+                  </form>
+                </div>
+              ) : (
+                <p className="text-sm text-neutral-500 dark:text-neutral-400">No tablet is paired yet.</p>
               )}
-              <label className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Name for this tablet</span>
-                <Input name="label" placeholder="Lipa counter" />
-              </label>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                You will be signed out here, and this browser becomes the {s.name} tablet.
-              </p>
-              <Button type="submit" variant="primary">
-                Pair this tablet
-              </Button>
-            </form>
 
-            {past.length > 0 && (
-              <details className="text-xs text-neutral-500 dark:text-neutral-400">
-                <summary className="inline-flex min-h-6 cursor-pointer items-center">Earlier tablets ({past.length})</summary>
-                <ul className="mt-2 space-y-1">
-                  {past.map((r) => (
-                    <li key={r.id}>
-                      {r.label} — paired by {r.pairedByName} on {when(r.pairedAt)}, last used {when(r.lastUsedAt)}, ended {when(r.revokedAt)}.
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            )}
-          </section>
+              <form action={pairPosTabletAction} className="space-y-3 text-sm">
+                <h3 className="font-medium">{live ? 'Pair a different tablet' : 'Pair this tablet'}</h3>
+                <input type="hidden" name="storeId" value={s.id} />
+                {live && (
+                  <Banner tone="warning">
+                    This replaces the current POS tablet &lsquo;{live.label}&rsquo;. It is signed out and stops working.
+                  </Banner>
+                )}
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Name for this tablet</span>
+                  <Input name="label" placeholder="Lipa counter" />
+                </label>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                  You will be signed out here, and this browser becomes the {s.name} tablet.
+                </p>
+                <Button type="submit" variant="primary">
+                  Pair this tablet
+                </Button>
+              </form>
+
+              {past.length > 0 && (
+                <details className="text-xs text-neutral-500 dark:text-neutral-400">
+                  <summary className="inline-flex min-h-6 cursor-pointer items-center">Earlier tablets ({past.length})</summary>
+                  <ul className="mt-2 space-y-1">
+                    {past.map((r) => (
+                      <li key={r.id}>
+                        {r.label} — paired by {r.pairedByName} on {when(r.pairedAt)}, last used {when(r.lastUsedAt)}, ended {when(r.revokedAt)}.
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </section>
+            {tills ? <TillsSection store={s} tills={tills} returnTo="/settings/pos-tablet" /> : null}
+          </div>
         );
       })}
     </Page>

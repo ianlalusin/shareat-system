@@ -152,8 +152,13 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('settlement_day.rejected', 'data', 'normal', 'store', 'settlement_day_lines', 'T-511'),
   def('settlement_day.reopened', 'data', 'normal', 'store', 'settlement_day_lines', 'T-511'),
   def('settlement_loan.allocation_overridden', 'data', 'normal', 'store', 'settlement_day_lines', 'T-511'),
+  // T-511 S7a: a person approved a staged day and the books moved (correction + settlement in one transaction), and a void of that settlement returned the day to pending; entity = the staged day line (dotted: new).
+  def('settlement_day.approved', 'money', 'high', 'store', 'settlement_day_lines', 'T-511'),
+  def('settlement_day.unbooked', 'data', 'normal', 'store', 'settlement_day_lines', 'T-511'),
   // T-511 S6b: the platform file figure replaced the staff figure for one channel and day through a correcting entry; entity = the correction row (dotted: new).
   def('platform_sales.corrected', 'money', 'high', 'store', 'sales_day_platform_corrections', 'T-511'),
+  // T-511 S6c: a platform charge with no sales day was booked (Dr 6400 fee + VAT / Cr 1220 that channel); entity = the channel_period_charges row (dotted: new).
+  def('channel_charge.posted', 'money', 'high', 'store', 'channel_period_charges', 'T-511'),
   // T-512 (T-511 S5c): an admin changed a business rule (value, from-date, reason). Org scope: a rule is the organisation's, never a store's (dotted: new).
   def('business_rule.changed', 'settings', 'high', 'org', 'business_rule_values', 'T-512', ADMIN),
   // T-455 S2: a cashier's moves on the customer lobby line (park a walk-in, call, seat, remove). Payloads carry code, size, stand and session id - never a name or phone.
@@ -200,6 +205,10 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-525: a manager replayed or discarded a quarantined tablet event (entity = the pos_events row). Server-only: the tablet never sends them.
   def('pos.event_replayed', 'order', 'normal', 'store', 'pos_events', 'T-525'),
   def('pos.event_discarded', 'order', 'high', 'store', 'pos_events', 'T-525'),
+  // T-546: a manager or admin added a till, chose its tablet, or set its receipt printer (entity = the pos_terminals row). Written from the ERP screen only.
+  def('pos.terminal_created', 'settings', 'normal', 'store', 'pos_terminals', 'T-546'),
+  def('pos.terminal_linked', 'settings', 'normal', 'store', 'pos_terminals', 'T-546'),
+  def('pos.terminal_printer_set', 'settings', 'normal', 'store', 'pos_terminals', 'T-546'),
   def('create_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('update_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('reactivate_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),

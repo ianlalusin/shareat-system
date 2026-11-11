@@ -19,8 +19,9 @@ export const dynamic = 'force-dynamic';
 const HISTORY_SHOWN = 3;
 
 const HOUR_BOX = { type: 'number', inputMode: 'numeric', step: 1, min: 0, max: 23 } as const;
+const MINUTES_BOX = { type: 'number', inputMode: 'numeric', step: 1, min: 1, max: 600 } as const;
 
-const NEW_VALUE_LABEL: Record<BusinessRuleItem['unit'], string> = { money: 'New value (pesos)', percent: 'New value (percent)', hour: 'New value (hour, 0–23)' };
+const NEW_VALUE_LABEL: Record<BusinessRuleItem['unit'], string> = { money: 'New value (pesos)', percent: 'New value (percent)', hour: 'New value (hour, 0–23)', minutes: 'New value (minutes)' };
 
 /**
  * `/settings/business-rules`. T-512 (T-511 S5c).
@@ -78,8 +79,8 @@ export default async function BusinessRulesPage({ searchParams }: { searchParams
                     >
                       <FormGrid>
                         <Field label={NEW_VALUE_LABEL[item.unit]} rule={SETTINGS_BUSINESS_RULE_RULES.value}>
-                          {/* An hour is a whole-number box (step 1, 0 to 23): the field rule's pattern alone would let 4.5 through; the writer refuses a fraction too. */}
-                          <Input {...nativeAttrs(SETTINGS_BUSINESS_RULE_RULES.value)} {...(item.unit === 'hour' ? HOUR_BOX : { inputMode: 'decimal' as const })} defaultValue={inputValue(item.unit, item.current)} className="w-full text-right" />
+                          {/* An hour or a count of minutes is a whole-number box (step 1; 0 to 23 or 1 to 600): the field rule's pattern alone would let 4.5 through; the writer refuses a fraction too. */}
+                          <Input {...nativeAttrs(SETTINGS_BUSINESS_RULE_RULES.value)} {...(item.unit === 'hour' ? HOUR_BOX : item.unit === 'minutes' ? MINUTES_BOX : { inputMode: 'decimal' as const })} defaultValue={inputValue(item.unit, item.current)} className="w-full text-right" />
                         </Field>
                         <Field label="Starts on" rule={SETTINGS_BUSINESS_RULE_RULES.effectiveFrom}>
                           <Input {...nativeAttrs(SETTINGS_BUSINESS_RULE_RULES.effectiveFrom)} type="date" min={view.today} defaultValue={view.tomorrow} className="w-full" />

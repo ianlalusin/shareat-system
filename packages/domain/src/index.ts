@@ -188,6 +188,8 @@ export { lineToSettlementInput } from './settlement-intake/settlement-input';
 export type { StagedSettlementInput } from './settlement-intake/settlement-input';
 export { checkLoanDay, loanCheckForViewer } from './settlement-intake/loan-check';
 export type { LoanCheckResult, LoanCheckStatus, LoanCheckViewerView } from './settlement-intake/loan-check';
+export { approveDay } from './settlement-intake/approve';
+export type { ApproveDayResult } from './settlement-intake/approve';
 export { dayBlockers } from './settlement-intake/day-checks';
 export type { DayBlocker, DayBlockersResult } from './settlement-intake/day-checks';
 export { getReviewDayDetail, listReviewDays, overrideLoanAllocation, rejectDay, reopenDay } from './settlement-intake/review';

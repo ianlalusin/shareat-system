@@ -202,19 +202,21 @@ describe('W1 - the Request form: locked code for managers, an override only for 
 
 describe('W1b - the override sits with the direct add, not with the request', () => {
   it(
-    'W1b: for a super-admin the "Use a different code" input is drawn AFTER the "Request item" button and before / with "Add directly (super-admin)", with no Request button between, so it is not among the request fields. Killing mutant: override drawn above the Request button, among the request fields. Red if the override is drawn among the request fields',
+    'W1b: for a super-admin the "Use a different code" input is drawn AFTER the request fields (the sourcing fieldset) and before the pinned action band (T-548: Request item, then Add directly), so it is not among the request fields. Killing mutant: override drawn above / inside the request fields. Red if the override is drawn among the request fields',
     async () => {
       const f = await fixture('w1b');
       const html = decode(await itemsHtmlAs(f.superAdmin));
       const requestBtn = html.indexOf('>Request item<');
       const overrideAt = html.indexOf('Use a different code (super-admin)');
       const directAt = html.indexOf('Add directly (super-admin)');
+      const lastRequestField = html.indexOf('These are independent choices');
       expect(requestBtn, 'Request item button').toBeGreaterThan(-1);
       expect(directAt, 'Add directly button').toBeGreaterThan(-1);
       expect(overrideAt, 'override label').toBeGreaterThan(-1);
-      expect(overrideAt, 'after the Request item button').toBeGreaterThan(requestBtn);
-      expect(overrideAt, 'before / with the Add directly button').toBeLessThan(directAt);
-      expect(html.slice(overrideAt, directAt), 'no Request item button between').not.toContain('>Request item<');
+      expect(lastRequestField, 'the last request field (sourcing note)').toBeGreaterThan(-1);
+      expect(overrideAt, 'after the request fields').toBeGreaterThan(lastRequestField);
+      expect(overrideAt, 'before the action band').toBeLessThan(requestBtn);
+      expect(requestBtn, 'Request item, then Add directly').toBeLessThan(directAt);
     },
     60_000,
   );

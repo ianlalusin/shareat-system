@@ -167,6 +167,18 @@ const EXEMPT: Record<string, string> = {
     'INTERNAL — `createSalesDay` (`sales-days/create.ts:87`) and `editSalesDay` (`sales-days/edit.ts:45`) call it (T-375 S3, R13) ' +
     'to refuse typed figures on a store linked to POS. A gate inside those two, not a human boundary of its own.',
 
+  // ---- T-550 — the POS usage pull and POS item mapping pages are retired (row 452); the domain and the data stay ----
+  buildPlan:
+    'UNWIRED — T-550: page retired (row 452); domain kept until the cutover decision.',
+  finalizeSections:
+    'UNWIRED — T-550: page retired (row 452); domain kept until the cutover decision.',
+  upsertPosItemMap:
+    'UNWIRED — T-550: page retired (row 452); domain kept until the cutover decision.',
+  requestMap:
+    'UNWIRED — T-550: page retired (row 452); domain kept until the cutover decision.',
+  decideMapRequest:
+    'UNWIRED — T-550: page retired (row 452); domain kept until the cutover decision.',
+
   // ---- 4. unwired: nothing calls it, and that is the gap -------------------------------------
   //
   // ⭐ Four rows lived here for exactly one commit. `voidCollection`, `writeOffCharge`,
@@ -278,6 +290,22 @@ const EXEMPT: Record<string, string> = {
     'WRAPPER — the test seam of `correctPlatformSales`, the production entry point which calls this with the Manila clock; only the integration tests pass another clock (a sales day in the fixture calendar). ' +
     'It is not on the barrel, so no app can date an entry in the future. Delete this row with the `correctPlatformSales` row in S7 if the seam is folded away.',
 
+  // ---- T-511 S6c — the platform charge with no sales day -------------------------------------
+  postPlatformCharge:
+    'UNWIRED — slice 7 (approve a settlement day) calls it: S7 approve calls it, posting the weekly fee and any uncategorised charge of the invoice once, before the payouts that net them (S6c spec, 7 Nov 2026). ' +
+    'Delete this row in S7, when `apps/` reaches it (BOSS-approved precedent: correctPlatformSales, 7 Nov 2026).',
+  postPlatformChargeOnClock:
+    'WRAPPER — the test seam of `postPlatformCharge`, the production entry point which calls this with the Manila clock; only the integration tests pass another clock (a charge in the fixture calendar). ' +
+    'It is not on the barrel, so no app can date an entry in the future. S7 approve calls the production function. Delete this row with the `postPlatformCharge` row in S7 if the seam is folded away.',
+
+  // ---- T-511 S7a — approve a settlement day (domain only; the screen is S7b) -----------------
+  approveDay:
+    'UNWIRED — S7b calls it: the Approve button of the settlement review screen (`approveDayAction`). The domain action is built and tested in S7a, one slice ahead of its screen (S7 spec, 8 Nov 2026; precedent: correctPlatformSales). ' +
+    'Delete this row in S7b, when `apps/` reaches it.',
+
+  authorizeWith:
+    'INTERNAL — the gate with a sentence of the settlement review screen own: `rejectDay`, `reopenDay`, `overrideLoanAllocation` (review.ts) and `approveDay` (approve.ts) call it; it is exported only so approve.ts shares it (S7a).',
+
   // ---- T-511 S5b — the settlement review stage ---------------------------------------------
   loanCheckForDay:
     'INTERNAL — `dayBlockers`, `dayBlockersForLines` and `getReviewDayDetail` / `listReviewDays` (`settlement-intake/review.ts`) call it; the screens read the loan check through ' +
@@ -291,8 +319,6 @@ const EXEMPT: Record<string, string> = {
   addLines:
     'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
   setHeadsCashier:
-    'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
-  requestRefill:
     'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
   cancelLine:
     'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
@@ -310,14 +336,10 @@ const EXEMPT: Record<string, string> = {
     'INTERNAL — T-525: `readPosState` (packages/domain/src/pos/snapshot.ts) calls it for the state poll, each read only for a person who holds its capability; the route /api/pos/state calls `readPosState`, so this is not a screen action of its own.',
   listKitchenQueue:
     'INTERNAL — T-525: `readPosState` (packages/domain/src/pos/snapshot.ts) calls it for the state poll, each read only for a person who holds its capability; the route /api/pos/state calls `readPosState`, so this is not a screen action of its own.',
+  listRefillableTables:
+    'INTERNAL — T-529: `readPosState` (packages/domain/src/pos/snapshot.ts) calls it for the state poll (`refillTables`), only for a person who holds request_pos_refill or confirm_pos_heads; the route /api/pos/state calls `readPosState`, so this is not a screen action of its own.',
   listRefillQueue:
     'INTERNAL — T-525: `readPosState` (packages/domain/src/pos/snapshot.ts) calls it for the state poll, each read only for a person who holds its capability; the route /api/pos/state calls `readPosState`, so this is not a screen action of its own.',
-  confirmHeads:
-    'UNWIRED — T-527 / T-529: the server phone is its caller (online-only, pairingId null, A9); T-525 left it out of the tablet events. Remove this row when it lands (7 Nov 2026).',
-  serveLine:
-    'UNWIRED — T-527 / T-529: the kitchen screen is its caller (online-only, pairingId null, A9); T-525 left it out of the tablet events. Remove this row when it lands (7 Nov 2026).',
-  getSessionBill:
-    'UNWIRED — T-526 on: the till screens read the live bill through it; T-525 does not serve it (the tablet prices offline from its snapshot). Remove this row when it lands (7 Nov 2026).',
   listTodaysSalesReceipts:
     'UNWIRED — T-526 on: the till screens list the day receipts through it; no T-525 door serves it. Remove this row when it lands (7 Nov 2026).',
   listPosQuarantine:

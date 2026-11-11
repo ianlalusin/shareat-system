@@ -43,13 +43,14 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
   // Already signed in? Nothing to do here.
   // ⚠️ `safeNext` and not an inline check: this line accepted `next=//evil.com` until T-232's review
   // found it, because `startsWith('/')` is true of a protocol-relative URL. One rule, one place.
-  const existing = await currentSession();
-  if (existing) redirect(await landingForActor(existing.actor, sp.next ?? ''));
-
   // T-464 - a PAIRED POS tablet shows Employee ID + PIN only. The pairing is resolved from the httpOnly cookie on the server, on every
   // load (so a revoke bites at once); a cookie that names nothing live is forgotten and the page is today's, unchanged.
   const tabletToken = await readPosTabletToken();
   const pairing = tabletToken ? await resolvePosTablet(null, tabletToken) : null;
+
+  const existing = await currentSession();
+  // T-526b: a person already signed in on the paired tablet lands in the POS the same way a fresh tablet sign-in does (their own org's pairing only).
+  if (existing) redirect(await landingForActor(existing.actor, sp.next ?? '', pairing && pairing.orgId === existing.actor.orgId ? { tabletStoreId: pairing.storeId } : undefined));
 
   if (pairing) {
     return (

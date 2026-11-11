@@ -59,6 +59,7 @@ export async function listActiveMaps(tx: Tx, storeId: string): Promise<PosItemMa
     .where(and(eq(posItemMaps.storeId, storeId), eq(posItemMaps.status, 'active')));
 }
 
+// UNUSED — T-550: page retired (row 452); kept until the cutover decision.
 export async function listMapsForStore(tx: Tx, storeId: string): Promise<PosItemMapRow[]> {
   return tx.select(mapColumns).from(posItemMaps).where(eq(posItemMaps.storeId, storeId));
 }
@@ -173,6 +174,7 @@ export async function findOpenRequest(tx: Tx, storeId: string, posItemKey: strin
   return row;
 }
 
+// UNUSED — T-550: page retired (row 452); kept until the cutover decision.
 export async function listRequestsForStore(tx: Tx, storeId: string): Promise<PosMapRequestRow[]> {
   return tx.select(requestColumns).from(posMapRequests).where(eq(posMapRequests.storeId, storeId));
 }
@@ -317,7 +319,8 @@ export async function findLivePullOnVoidedDayForDate(tx: Tx, storeId: string, bu
   return row;
 }
 
-/** T-373 S1: which of these sales days carry a non-void pull (the picker keeps a voided one that does). */
+/** T-373 S1: which of these sales days carry a non-void pull (the picker keeps a voided one that does).
+ * UNUSED — T-550: page retired (row 452); kept until the cutover decision. */
 export async function listDayIdsWithLivePull(tx: Tx, storeId: string, salesDayIds: readonly string[]): Promise<Set<string>> {
   if (salesDayIds.length === 0) return new Set();
   const rows = await tx

@@ -35,3 +35,5 @@ export { isSnapshotUsable, readSnapshot, saveSnapshot, touchSnapshot } from './s
 export { deleteVerifier, getVerifierByEmployeeId, listVerifiers, putVerifier } from './verifier-store';
 
 export { getMeta, setMeta } from './meta';
+
+export * from './pin-verifier';

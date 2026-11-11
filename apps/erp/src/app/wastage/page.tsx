@@ -10,7 +10,7 @@ import { recordOrderWastageAction } from './actions';
 import { WASTAGE_RECORD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { CheckedForm } from '@/components/forms';
 import { Page } from '@/components/shell/Page';
-import { Badge, Banner, Button, FlashBanner, FormGrid, Field, FormModal, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Badge, Banner, Button, DialogActions, FlashBanner, FormGrid, Field, FormModal, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -185,7 +185,9 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
             </a>
             .
           </p>
-          <Button type="submit" variant="primary">Save</Button>
+          <DialogActions>
+            <Button type="submit" variant="primary">Save</Button>
+          </DialogActions>
         </CheckedForm>
         </FormModal>
       </div>

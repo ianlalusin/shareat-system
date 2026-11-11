@@ -21,7 +21,6 @@ import {
   businessDateAndRules,
   businessDateOf,
   deviceTime,
-  hasStatutory,
   loadLiveLines,
   recordedDifferently,
   requireContext,
@@ -110,10 +109,9 @@ const pad = (n: number, w: number) => String(n).padStart(w, '0');
 /** What the bill is, priced from the database (the screen's figure and the receipt's figure are this one). */
 async function priceFromDb(tx: Tx, actor: Actor, storeId: string, lines: LoadedLine[], deps: PosDeps | undefined, at?: Date): Promise<{ priced: PricedSession; rules: Awaited<ReturnType<typeof businessDateAndRules>> | undefined }> {
   const taxType = await posV2Repo.getOrgTaxType(tx, actor.orgId);
-  const needRules = hasStatutory(lines);
-  const resolved = needRules ? await businessDateAndRules(tx, actor.orgId, storeId, deps, at) : undefined;
-  const rules = resolved?.rules ?? { vatPercentBasisPoints: 0n, scPwdPercentBasisPoints: 0n };
-  return { priced: priceSession(snapshotOf(lines, taxType === 'vat', rules)), rules: resolved };
+  // T-528: always the real rates, so `priced.vat` (the receipt's VAT split) is right for every bill, not only one with a senior/PWD discount.
+  const resolved = await businessDateAndRules(tx, actor.orgId, storeId, deps, at);
+  return { priced: priceSession(snapshotOf(lines, taxType === 'vat', resolved.rules)), rules: resolved };
 }
 
 const sameCentavos = (a: string, b: Money) => {
@@ -320,6 +318,7 @@ export async function getSessionBill(tx: Tx, actor: Actor, input: { storeId: str
     session: { id: session.id, mode: session.mode, standId: session.standId, status: session.status, headsCashier: session.headsCashier, headsServer: session.headsServer },
     lines: lines.map((l) => ({
       id: l.id, kind: l.kind, name: l.name, qty: l.qty, unitPrice: l.unitPrice, kitchenStatus: l.kitchenStatus, bundleHeads: l.bundleHeads,
+      menuItemId: l.menuItemId, note: l.note, addedAtDevice: l.addedAtDevice,
       discounts: l.discounts.map((d) => ({ id: d.id, kind: d.kind, valueType: d.valueType, value: money(d.value), qty: d.qty, dinerNo: d.dinerNo, presetId: d.presetId })),
     })),
     pricing: priced,
@@ -341,8 +340,27 @@ export async function listOpenStands(tx: Tx, actor: Actor, input: { storeId: str
 
 const ticket = (r: Awaited<ReturnType<typeof posV2Repo.listQueuedLines>>[number]) => ({
   lineId: r.line.id, sessionId: r.line.sessionId, standNumber: r.standNumber, sessionMode: r.sessionMode, kind: r.line.kind, name: r.line.name, qty: r.line.qty,
-  note: r.line.note, stationId: r.line.kitchenStationId, addedAtDevice: r.line.addedAtDevice,
+  note: r.line.note, stationId: r.line.kitchenStationId, addedAtDevice: r.line.addedAtDevice, askedBy: r.askedBy,
 });
+
+/**
+ * T-529: the open dine-in tables that hold a package (the refill stand picker and the heads list), one row per table, by stand number.
+ * Needs `request_pos_refill` OR `confirm_pos_heads` at the store: a phone that may do either needs to see the tables.
+ */
+export async function listRefillableTables(tx: Tx, actor: Actor, input: { storeId: string }) {
+  await requireStoreScope(tx, actor, input.storeId);
+  const at = { storeId: input.storeId };
+  if (!(await can(tx, actor, 'request_pos_refill', at)) && !(await can(tx, actor, 'confirm_pos_heads', at))) await authorize(tx, actor, 'request_pos_refill', at);
+  // One row per table. A table may hold more than one package variant: `packageVariantIds` has every one (first line first), `packageVariantId` is the first.
+  const byTable = new Map<string, { sessionId: string; standNumber: number; packageVariantId: string; packageVariantIds: string[]; headsCashier: number; headsServer: number | null }>();
+  for (const r of await posV2Repo.listRefillableTables(tx, actor.orgId, input.storeId)) {
+    if (r.packageVariantId === null) continue;
+    const have = byTable.get(r.sessionId);
+    if (!have) byTable.set(r.sessionId, { sessionId: r.sessionId, standNumber: r.standNumber, packageVariantId: r.packageVariantId, packageVariantIds: [r.packageVariantId], headsCashier: r.headsCashier, headsServer: r.headsServer });
+    else if (!have.packageVariantIds.includes(r.packageVariantId)) have.packageVariantIds.push(r.packageVariantId);
+  }
+  return { tables: [...byTable.values()] };
+}
 
 export async function listKitchenQueue(tx: Tx, actor: Actor, input: { storeId: string; stationId?: string }) {
   await requireStoreScope(tx, actor, input.storeId);

@@ -6,7 +6,7 @@ import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { SETTINGS_ATTENDANCE_POLICY_RULES, SETTINGS_LEAVE_CAP_RULES, SETTINGS_LEAVE_KIND_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Button, Checkbox, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
+import { Button, Checkbox, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { ATTENDANCE_POLICY } from './typed-forms';
@@ -309,9 +309,11 @@ export default async function AttendanceSettingsPage({
                 <Input {...nativeAttrs(SETTINGS_LEAVE_CAP_RULES.yearlyCap)} className="mt-1 w-full" />
               </Field>
             </FormGrid>
-            <Button type="submit" variant="primary">
-              Save leave limit
-            </Button>
+            <DialogActions>
+              <Button type="submit" variant="primary">
+                Save leave limit
+              </Button>
+            </DialogActions>
           </CheckedForm>
           </FormModal>
           </div>
@@ -360,9 +362,11 @@ export default async function AttendanceSettingsPage({
               </Field>
             </FormGrid>
             <Checkbox name="needsProof" label="Needs a certificate" />
-            <Button type="submit" variant="secondary">
-              Add kind
-            </Button>
+            <DialogActions>
+              <Button type="submit" variant="secondary">
+                Add kind
+              </Button>
+            </DialogActions>
           </CheckedForm>
           </FormModal>
           </div>
