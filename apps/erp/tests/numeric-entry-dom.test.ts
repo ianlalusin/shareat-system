@@ -66,7 +66,7 @@ function input(host: HTMLElement): HTMLInputElement {
 }
 
 describe('focus / the Edit button', () => {
-  it('regroups an existing value before the first keystroke, and moves defaultValue with it', async () => {
+  it('regroups an existing value before the first keystroke (defaultValue is left alone)', async () => {
     const host = await mount(h('form', null, h('input', { name: 'amount', inputMode: 'decimal', defaultValue: '10493.75' })));
     const el = input(host);
     await act(async () => {
@@ -342,5 +342,65 @@ describe('it is mounted where the whole app sees it', () => {
     const layout = readFileSync(resolve(__dirname, '../src/app/layout.tsx'), 'utf8');
     expect(layout).toMatch(/from '@\/components\/forms\/NumericEntry'/);
     expect(layout).toMatch(/<NumericEntryBehaviour\s*\/>/);
+  });
+});
+
+describe('paste and IME (AUDIT T-570)', () => {
+  /** A paste: `beforeinput` first; if nothing cancels it, the browser puts the text in and fires `input`. */
+  function paste(el: HTMLInputElement, text: string): boolean {
+    const go = el.dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertFromPaste', data: text, bubbles: true, cancelable: true }));
+    if (go) type(el, text);
+    return go;
+  }
+
+  it.each([
+    ['12,5', 'a comma that is not a thousands group'],
+    ['1e3', 'an exponent'],
+    ['N/A', 'letters'],
+    ['0,500', 'a leading-zero group'],
+  ])('refuses a pasted %s (%s) and keeps the previous value', async (text) => {
+    const host = await mount(h('form', null, h('input', { name: 'amount', inputMode: 'decimal', defaultValue: '' })));
+    const el = input(host);
+    await act(async () => type(el, '4500'));
+    expect(el.value).toBe('4,500');
+    let went = true;
+    await act(async () => {
+      went = paste(el, text);
+    });
+    expect(went).toBe(false);
+    expect(el.value).toBe('4,500');
+    expect(el.validationMessage).toMatch(/numbers only/i);
+    await act(async () => type(el, '45001')); // the next edit clears the message
+    expect(el.validationMessage).toBe('');
+  });
+
+  it.each([
+    ['1,234.50', '1,234.50'],
+    ['₱1,234.50', '1,234.50'],
+    ['1234.5', '1,234.5'],
+    ['-1,200', '-1,200'],
+  ])('accepts a pasted %s', async (text, shown) => {
+    const host = await mount(h('form', null, h('input', { name: 'amount', inputMode: 'decimal' })));
+    const el = input(host);
+    await act(async () => {
+      expect(paste(el, text)).toBe(true);
+    });
+    expect(el.value).toBe(shown);
+  });
+
+  it('a Backspace while an IME is composing is left to the IME (no double delete)', async () => {
+    const host = await mount(h('form', null, h('input', { name: 'amount', inputMode: 'decimal' })));
+    const el = input(host);
+    await act(async () => {
+      el.focus();
+      type(el, '1234');
+    });
+    await act(async () => el.setSelectionRange(2, 2)); // right after the comma of "1,234"
+    let go = true;
+    await act(async () => {
+      go = el.dispatchEvent(new InputEvent('beforeinput', { inputType: 'deleteContentBackward', isComposing: true, bubbles: true, cancelable: true }));
+    });
+    expect(go).toBe(true);
+    expect(el.value).toBe('1,234');
   });
 });

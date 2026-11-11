@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { parseDecimalInput } from '@shareat/domain/money-input';
-import { caretAfterFormat, formatNumberEntry, plainNumberEntry } from '../src/lib/number-entry';
+import { caretAfterFormat, formatNumberEntry, isCleanPaste, plainNumberEntry } from '../src/lib/number-entry';
 
 describe('formatNumberEntry groups the whole part and keeps the fraction exactly as typed', () => {
   it.each([
@@ -123,5 +123,30 @@ describe('caretAfterFormat keeps the cursor on the same digit', () => {
     const caret = caretAfterFormat('1049', 2, before);
     const typed = `${before.slice(0, caret)}3${before.slice(caret)}`;
     expect(formatNumberEntry(typed)).toBe('10,349');
+  });
+});
+
+describe('isCleanPaste refuses what it would otherwise re-read (AUDIT T-570)', () => {
+  it.each(['1,234.50', '1234', '₱1,234.50', 'PHP 1,200', '-1,200', '.5', '5.', '1,234,567.89'])('accepts %j', (text) => {
+    expect(isCleanPaste(text)).toBe(true);
+  });
+  it.each(['12,5', '1e3', '1 234', 'N/A', '0,500', '01,000', '1,23', '16,98,0', '(1,200)', '1.2.3', '--5', '', 'abc'])('refuses %j', (text) => {
+    expect(isCleanPaste(text)).toBe(false);
+  });
+  it('a whole-number box takes no point and no sign', () => {
+    expect(isCleanPaste('1,200', { decimal: false, negative: false })).toBe(true);
+    expect(isCleanPaste('12.5', { decimal: false, negative: false })).toBe(false);
+    expect(isCleanPaste('-5', { decimal: false, negative: false })).toBe(false);
+  });
+});
+
+describe('exactness beyond a float (AUDIT minor 4): the text is never turned into a number', () => {
+  it('keeps every digit above 2^53', () => {
+    expect(plainNumberEntry('9007199254740993.99')).toBe('9007199254740993.99');
+    expect(formatNumberEntry('12345678901234567890')).toBe('12,345,678,901,234,567,890');
+  });
+  it('drops full-width and Arabic-Indic digits instead of misreading them', () => {
+    expect(formatNumberEntry('１２３')).toBe('');
+    expect(formatNumberEntry('١٢٣')).toBe('');
   });
 });

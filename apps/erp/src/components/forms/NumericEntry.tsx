@@ -29,7 +29,7 @@
  * does not leave the box ungrouped.
  */
 import { useEffect } from 'react';
-import { caretAfterFormat, formatNumberEntry, type NumberEntryOptions } from '@/lib/number-entry';
+import { caretAfterFormat, formatNumberEntry, isCleanPaste, type NumberEntryOptions } from '@/lib/number-entry';
 
 /** The text-like types a numeric value can actually be typed into (type=number is the browser's, not ours). */
 const isDigit = (c: string) => c >= '0' && c <= '9';
@@ -103,6 +103,19 @@ export function NumericEntryBehaviour() {
     const onBeforeInput = (event: Event) => {
       const el = event.target;
       if (!(el instanceof HTMLInputElement) || !(event instanceof InputEvent)) return;
+      // A paste arrives whole: one that is not already a number ("12,5", "1e3", "N/A") is refused, never re-read as
+      // a different figure (AUDIT T-570). The box keeps what it held and says why.
+      if (event.inputType === 'insertFromPaste' || event.inputType === 'insertFromDrop') {
+        const options = optionsFor(el);
+        const text = event.data ?? event.dataTransfer?.getData('text/plain') ?? '';
+        if (options && text !== '' && !isCleanPaste(text, options)) {
+          event.preventDefault();
+          el.setCustomValidity('Numbers only - that paste is not a number, so nothing was pasted');
+          el.reportValidity();
+        }
+        return;
+      }
+      if (event.isComposing) return; // an IME owns the edit: deleting here as well would delete twice
       const forward = event.inputType === 'deleteContentForward';
       if (!forward && event.inputType !== 'deleteContentBackward') return;
       if (!optionsFor(el) || el.selectionStart === null || el.selectionStart !== el.selectionEnd) return;
@@ -120,6 +133,7 @@ export function NumericEntryBehaviour() {
     const onInput = (event: Event) => {
       const el = event.target;
       if (!(el instanceof HTMLInputElement)) return;
+      el.setCustomValidity(''); // a refused paste's message goes away at the next edit
       if (event instanceof InputEvent && event.isComposing) return; // an IME is still composing
       const options = optionsFor(el);
       if (!options) return;

@@ -1,6 +1,6 @@
 # T-570 — A number box filters what is typed and groups the thousands as you type
 
-Status: **BUILT** on branch `fix/numeric-entry` (worktree `.worktrees/numeric-entry`), from `origin/main`
+Status: **BUILT, AUDIT fixes applied** on branch `ui/t570-number-entry` (PR #239; local worktree `.worktrees/numeric-entry`), from `origin/main`
 `d44852d`, 8 Nov 2026, pushed. Ian, on the deployed ERP (screenshot: the sales-day **Foodpanda** box holding
 `1,0493.75`).
 Numbered **T-570** (it was first labelled T-551, which main later used for the v1 day feed).
@@ -43,9 +43,11 @@ Two failures behind that sentence, both visible on the screenshot:
 5. **The server never sees a comma.** The grouping is stripped on submit, before the form's value is read.
 6. **Whole-number boxes take digits only and are never grouped** (`inputMode="numeric"`: PINs, minutes,
    OTPs — `123456` must not become `123,456`), and **a leading zero is kept**: `012345` is a PIN, not 12,345.
-7. **A comma is a grouping mark, never a decimal point.** `1,5` shows `15` (the person sees the digits),
-   never 1.5 — DEF-472's lesson is that re-reading a separator is how a number becomes 10× wrong, and
-   DEF-383's ruling is that a wrong grouping is refused, not guessed at.
+7. **A comma is a grouping mark, never a decimal point.** Typing `1,5` key by key shows `15` (the person sees the
+   digits they typed), never 1.5. A **paste** arrives whole and is judged whole (AUDIT, BOSS ruling): `12,5`, `1e3`,
+   `N/A`, `0,500` are **refused** — the box keeps its previous value and shows "Numbers only" — never silently
+   re-read as 125 / 13 / blank. DEF-472: re-reading a separator is how a number becomes 10× wrong; DEF-383: a wrong
+   grouping is refused, not guessed at. (`isCleanPaste` in `number-entry.ts`.)
 8. **A `number` live rule reads a correct grouping the same way the parser does** and hands on the plain
    digits. A wrong grouping is still refused.
 
@@ -63,10 +65,15 @@ sets (T-343 S5.5) are exactly the population; `type="number"` is left to the bro
   - `caretAfterFormat(before, caret, after)` — same digits to the left; separators inserted at the caret are
     crossed to the right, so `1,049` + typing `3` after the `0` gives `10,349`, not `13,049`.
 - `apps/erp/src/components/forms/NumericEntry.tsx` (`'use client'`) — `NumericEntryBehaviour`, one
-  `useEffect` with three document listeners: `focusin` (regroup, move `defaultValue`, dispatch a bubbling
-  `input` so a controlled field and the live rules see the same text), `input` (filter + regroup + caret),
-  `submit` in the capture phase (strip; put the display back after the action has read the form).
-  Disabled, read-only, `type="number"` and composing IME input are left alone.
+  `useEffect` with three document listeners: `focusin` (regroup — `defaultValue` is deliberately NOT moved, React re-applies it
+  — and dispatch a bubbling `input` so a controlled field and the live rules see the same text), `beforeinput`
+  (refuse a malformed paste; Backspace/Delete beside a grouping comma removes the digit beyond it, N-001; does nothing
+  while `isComposing`), `input` (filter + regroup + caret), `submit` in the capture phase (strip; put the display back
+  after the action has read the form). Four listeners, not three. Disabled, read-only, `type="number"` and composing
+  IME input are left alone.
+- **Every client reader of a box ungroups first** (AUDIT blocker/major): the box HOLDS "1,234.50", so
+  `tryMoney` in `packages/domain/src/shared/money-lines.ts` (used by `MoneyLines`, `validateMoneyLines`,
+  `InvoiceBatchRecord`) reads through `ungroupThousands`; `BudgetHint` does the same. The server parser is unchanged.
 - `packages/domain/src/shared/money-input.ts` — the grouping rule is now **`ungroupThousands`**, used by
   `parseDecimalInput` (unchanged behaviour) and by `case 'number'` in `packages/domain/src/field-rules/check.ts`.
 - `apps/erp/src/app/layout.tsx` — mounts it, beside `Toaster` and `TooltipLayer`.
@@ -95,9 +102,9 @@ The census is a scan, not a test; T-343's R-legs remain the guard for the boxes 
 ## Contract
 
 - No change to field names, server actions, permissions, rules, sentences, layout or classes.
-- **`EditableRecord`'s "changed?" test does not see the commas.** A value regrouped on focus also moves that
-  control's `defaultValue`, so Cancel, `form.reset()` and "Save or cancel the changes you are making first"
-  behave exactly as before; typing still makes the record dirty.
+- **`EditableRecord`'s "changed?" test does not see the commas.** It compares a number box by its digits
+  (`plainNumberEntry`); `defaultValue` is not moved, so Cancel, `form.reset()` and "Save or cancel the changes you are
+  making first" behave as before; typing still makes the record dirty.
 - **A stored value never holds a comma** (T-504 item 7), and `parseDecimalInput` is unchanged for every
   existing reader (its own test file is untouched and still green).
 - No migration, no schema, no new dependency.
@@ -118,6 +125,11 @@ The census is a scan, not a test; T-343's R-legs remain the guard for the boxes 
   (and the deployed `1,0493.75` is repaired), typing filters and groups with the caret kept, a numeric box
   never groups, a controlled box (`MoneyLines`) keeps React's value in step, submit strips and restores the
   display, disabled/read-only and `type="number"` are untouched, the root layout mounts it.
+- `apps/erp/tests/t570-money-readers.test.ts` — real `MoneyLines` and `InvoiceBatchRecord` with `NumericEntryBehaviour`
+  mounted: typing 1,200 / 1,234.50 gives exact totals, no false "not a valid amount", and Save enables on a 1,734.50 payment.
+- `packages/domain/tests/unit/t570-try-money.test.ts` — the shared reader; `number-entry.test.ts` also covers
+  `isCleanPaste`, values above 2^53 and full-width/Arabic digits; `numeric-entry-dom.test.ts` covers paste refusal and the
+  IME-safe delete.
 - `packages/domain/tests/unit/t570-number-rule-commas.test.ts` — `ungroupThousands`, and `case 'number'`
   accepting `1,200` / `11,000.5` (range judged on the value) while refusing `1,5`, `0,500`, `16,98,0`.
 

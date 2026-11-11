@@ -76,6 +76,26 @@ export function formatNumberEntry(raw: string, options: NumberEntryOptions = {})
   return `${sign}${whole}${hasDot ? `.${fraction}` : ''}`;
 }
 
+/**
+ * Is pasted text a number we may read at all? (AUDIT T-570, BOSS ruling.) Typing is filtered one key at a time, but a
+ * PASTE arrives whole, and "12,5" (a European decimal) or "1e3" would be silently re-read as 125 and 13 - ten times off.
+ * A paste is accepted only if it already is a number: digits, a '.', a leading '-' where allowed, and any comma only as a
+ * correct group of three. Currency marks and the unicode spaces a paste brings are ignored, as the formatter does.
+ * Anything else is REFUSED (the caller keeps the previous value) - never guessed at (DEF-383, DEF-472).
+ */
+export function isCleanPaste(raw: string, options: NumberEntryOptions = {}): boolean {
+  const { decimal, negative } = { ...DEFAULTS, ...options };
+  const text = raw
+    .replace(/[    ]/g, ' ')
+    .replace(/[₱$€£¥]/g, '')
+    .replace(/\bPHP\b/gi, '')
+    .trim();
+  const unsigned = negative && text.startsWith('-') ? text.slice(1) : text;
+  const whole = '(?:\\d+|[1-9]\\d{0,2}(?:,\\d{3})+)';
+  const shape = decimal ? `(?:${whole}(?:\\.\\d*)?|\\.\\d+)` : whole;
+  return new RegExp(`^${shape}$`).test(unsigned);
+}
+
 /** The same text with the grouping removed — what is submitted, never with a comma in it. */
 export function plainNumberEntry(raw: string, options: NumberEntryOptions = {}): string {
   return formatNumberEntry(raw, { ...options, group: false });
