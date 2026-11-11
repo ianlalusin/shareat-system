@@ -30,6 +30,8 @@ export interface V1BridgeTender {
 export interface V1BridgeClose {
   receiptCount: number;
   grossTotal: string;
+  /** T-558: the Z's short payments (Σ of its receipts' gaps), 0.00 when none. Tenders + this = grossTotal. */
+  varianceTotal?: string;
   discountTotal: string;
   unliSales: string;
   heads: number;
@@ -47,6 +49,9 @@ export interface V1BridgePayload {
     guests: { guestCountFinalTotal: number; packageSessionsCount: number };
   };
 }
+
+/** v1's own external check of a day's payment methods against its total (PHP 1): a fact about v1, not a business setting. */
+const V1_CHECK_TOLERANCE = money('1');
 
 export const v1BridgeDateAllowed = (businessDate: string): boolean => businessDate <= V1_BRIDGE_LAST_DATE;
 
@@ -73,9 +78,14 @@ export function buildV1BridgePayload(input: { posStoreId: string; businessDate: 
   }
   const totalGross = sum(closes.map((c) => money(c.grossTotal)));
   const methods = sum([...byMethod.values()]);
-  if (compare(methods, totalGross) !== 0) {
+  // T-558: the gross stays the gross; the methods sum to gross - variance. v1 checks its methods against the total within PHP 1, so a day short by more is sent by hand.
+  const variance = sum(closes.map((c) => money(c.varianceTotal ?? '0')));
+  if (compare(variance, V1_CHECK_TOLERANCE) > 0) {
+    throw refuse(`v1 bridge: short payments ${variance} exceed v1's check on ${businessDate}`, `Short payments of ₱${variance} exceed v1's ₱1 check; send this day by hand.`);
+  }
+  if (compare(add(methods, variance), totalGross) !== 0) {
     throw refuse(
-      `v1 bridge: methods ${methods} differ from the total ${totalGross} on ${businessDate}`,
+      `v1 bridge: methods ${methods} + short payments ${variance} differ from the total ${totalGross} on ${businessDate}`,
       `The payments for ${businessDate} (${methods}) do not add up to the day's total (${totalGross}), so it was not sent to v1.`,
     );
   }

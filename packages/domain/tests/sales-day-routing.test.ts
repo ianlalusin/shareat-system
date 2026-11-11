@@ -462,3 +462,39 @@ describe('⛔ charges — two kinds that look alike and are opposite in the book
     expect(r.reason).toMatch(/service charge/);
   });
 });
+
+describe('T-558 allowShortPayment — a POS day whose tenders are a few centavos short of what was sold', () => {
+  const day = (cash: string, flag?: boolean) =>
+    input({ totalSales: money('100'), alaCarteSales: money('100'), cashCollected: money(cash), ...(flag === undefined ? {} : { allowShortPayment: flag }) });
+
+  it('short by 0.01 with the flag: ONE 7350 debit of 0.01 (no party), the entry balances, revenue stays at full price', () => {
+    const r = routeSalesDay(day('99.99', true));
+    if (!r.ok) throw new Error(`expected ok, got: ${r.reason}`);
+    expect(posted(r)).toEqual({ 'DR 1110': '99.99', 'DR 7350': '0.01', 'CR 4150': '100.00' });
+    const short = r.lines.filter((l) => l.accountCode === '7350');
+    expect(short).toHaveLength(1);
+    expect(short[0]!.partyType ?? null).toBeNull();
+    expect(short[0]!.partyId ?? null).toBeNull();
+    const sum = (side: 'debit' | 'credit') => r.lines.filter((l) => l.side === side).reduce((a, l) => a + Math.round(Number(l.amount) * 100), 0);
+    expect(sum('debit')).toBe(sum('credit'));
+  });
+
+  it('over-collected by 0.01 with the flag is still refused: "does not reconcile" [kills: `> 0` turned into `!== 0` in the shortfall test]', () => {
+    const r = routeSalesDay(day('100.01', true));
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error('unreachable');
+    expect(r.reason).toMatch(/does not reconcile/);
+  });
+
+  it('short by 0.01 with the flag false, and with the flag absent: refused', () => {
+    for (const flag of [false, undefined]) {
+      const r = routeSalesDay(day('99.99', flag));
+      expect(r.ok, String(flag)).toBe(false);
+      if (!r.ok) expect(r.reason).toMatch(/does not reconcile/);
+    }
+  });
+
+  it('exactly collected with the flag posts no 7350 line', () => {
+    expect(posted(routeSalesDay(day('100.00', true)))).toEqual({ 'DR 1110': '100.00', 'CR 4150': '100.00' });
+  });
+});

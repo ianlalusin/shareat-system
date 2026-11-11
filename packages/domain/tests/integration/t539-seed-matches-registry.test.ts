@@ -108,8 +108,8 @@ describe('T-539 seed pin - 0239, 0241 and 0245 together equal every registry def
     expect(rows[0]!.reason).toBe('Starting value');
   });
 
-  it('0239, 0241 and 0245 for one org write exactly one row per registry key, and every value IS the registry default [kills: a seed value that drifted from the registry; a registry key with no seed row anywhere]', async () => {
-    const rows = await replay([fileOf('0239_'), fileOf('0241_'), fileOf('0245_')]);
+  it('0239, 0241, 0245 and 0248 for one org write exactly one row per registry key, and every value IS the registry default [kills: a seed value that drifted from the registry; a registry key with no seed row anywhere]', async () => {
+    const rows = await replay([fileOf('0239_'), fileOf('0241_'), fileOf('0245_'), fileOf('0248_')]);
     expect(rows.map((r) => r.key)).toEqual(Object.keys(RULE_REGISTRY).sort());
     for (const r of rows) {
       const want = (RULE_REGISTRY as Record<string, { default: unknown }>)[r.key]!.default;
@@ -120,8 +120,8 @@ describe('T-539 seed pin - 0239, 0241 and 0245 together equal every registry def
     }
   });
 
-  it('the three files name no key outside the registry, and between them name every registry key [kills: a typo in a seeded key; a key nobody seeds]', () => {
-    const named = [...new Set([...namedKeys(text(fileOf('0239_'))), ...namedKeys(text(fileOf('0241_'))), ...namedKeys(text(fileOf('0245_')))])].sort();
+  it('the four files name no key outside the registry, and between them name every registry key [kills: a typo in a seeded key; a key nobody seeds]', () => {
+    const named = [...new Set([...namedKeys(text(fileOf('0239_'))), ...namedKeys(text(fileOf('0241_'))), ...namedKeys(text(fileOf('0245_'))), ...namedKeys(text(fileOf('0248_')))])].sort();
     expect(named).toEqual(Object.keys(RULE_REGISTRY).sort());
   });
 

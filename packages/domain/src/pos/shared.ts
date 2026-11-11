@@ -22,6 +22,8 @@ export interface PosRules {
   /** The Manila hour a business day starts at (4 = 04:00). */
   readonly businessDayStartHour: number;
   readonly tableWarnMinutes: number;
+  /** T-558: the largest short payment (centavos) recorded as a routine variance; above it, a finding. */
+  readonly saleVarianceToleranceCentavos: bigint;
 }
 export interface PosDeps {
   readonly readRules?: (tx: Tx, orgId: string, businessDate: string) => Promise<PosRules>;
