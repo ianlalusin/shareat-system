@@ -260,6 +260,7 @@ async function fixture(mode: 'off' | 'test' | 'live' = 'test') {
   // Ruling 9: option values with a store price delta. One single-choice group on the pork (Large +30.00; "Extra sauce" has NO store offer), one on the cola (+5.00).
   const optionOn = async (itemId: string, delta: string) => {
     const o = await newOption(m);
+    await sql`update menu_option_groups set min_selections = 0 where id = ${o.groupId}`; // T-552: newOption makes a REQUIRED group; these tests add the item with no choice
     await insOptionOffer(m, o.valueId, delta);
     await sql`insert into menu_option_group_links (org_id, option_group_id, menu_item_id, status, created_by) values (${orgId}, ${o.groupId}, ${itemId}, 'active', ${m.personId})`;
     return o;
