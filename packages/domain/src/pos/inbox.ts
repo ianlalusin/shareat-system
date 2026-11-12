@@ -553,4 +553,3 @@ export async function discardQuarantinedEvent(tx: Tx, actor: Actor, input: { sto
   await auditResolution(tx, actor, row, input.storeId, 'discarded', { reason });
   return { discarded: true };
 }
-
