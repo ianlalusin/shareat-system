@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fakeMeta, id, IT, MENU } from './helpers/t529-fixtures';
 import { KITCHEN_TICKET_SEQ_KEY, NO_TICKET_NO, printOutageForEvent } from '../src/app/pos/_kitchen/outage-print';
-import { OUTAGE_INFLIGHT_KEY, OUTAGE_PRINTED_KEY, printUnprinted, pruneOutagePrinted, pruneOutagePrintedToPending } from '../src/app/pos/_kitchen/outage-replay';
+import { OUTAGE_INFLIGHT_KEY, OUTAGE_PRINTED_KEY, OUTAGE_REPRINT_KEY, PRINT_RETRY_NOTE, printUnprinted, pruneOutagePrinted, pruneOutagePrintedToPending, recoveryFailedNote } from '../src/app/pos/_kitchen/outage-replay';
 
 const SESSION = id(6001);
 const STAND_ID = id(6002);
@@ -109,6 +109,7 @@ describe('T-561 an outage ticket is marked printed only once it printed (or is s
     expect(res.failed).toHaveLength(1);
     expect(res.failed[0]!.lines.some((l) => l.includes('GRILL'))).toBe(true);
     expect(res.message).not.toBeNull();
+    expect(meta.store.get(OUTAGE_REPRINT_KEY)).toHaveLength(1);
     expect(meta.store.get(OUTAGE_PRINTED_KEY)).toEqual([4]);
     expect(meta.store.get(OUTAGE_INFLIGHT_KEY)).toEqual([]);
     const second = await printUnprinted(deps(false), [linesAdded(4)]);
@@ -135,6 +136,58 @@ describe('T-561 an outage ticket is marked printed only once it printed (or is s
     await pruneOutagePrintedToPending(m, [1, 5]);
     expect(m.store.get(OUTAGE_PRINTED_KEY)).toEqual([1]);
     expect(m.store.get(OUTAGE_INFLIGHT_KEY)).toEqual([]);
+  });
+});
+
+describe('T-561 revision 1 - the printed mark never runs ahead of the saved Reprint job', () => {
+  const failingSet = (meta: ReturnType<typeof fakeMeta>, key: string) => async <T>(k: string, v: T) => {
+    if (k === key) throw new Error('disk full');
+    return meta.setMeta(k, v);
+  };
+
+  it('(d) crash leftover: when the Reprint job cannot be saved the seq stays in flight and unmarked, with the recovery warning; the next replay saves it and marks it', async () => {
+    const { deps, meta, printLines } = setup({ meta: fakeMeta({ [OUTAGE_INFLIGHT_KEY]: [4] }) });
+    const res = await printUnprinted({ ...deps(false), setMeta: failingSet(meta, OUTAGE_REPRINT_KEY) }, [linesAdded(4)]);
+    expect(res.message).toBe(recoveryFailedNote(['event 4']));
+    expect(meta.store.get(OUTAGE_PRINTED_KEY) ?? []).toEqual([]);
+    expect(meta.store.get(OUTAGE_INFLIGHT_KEY)).toEqual([4]);
+    const again = await printUnprinted(deps(false), [linesAdded(4)]);
+    expect(printLines).not.toHaveBeenCalled();
+    expect(again.failed).toHaveLength(1);
+    expect(meta.store.get(OUTAGE_REPRINT_KEY)).toHaveLength(1);
+    expect(meta.store.get(OUTAGE_PRINTED_KEY)).toEqual([4]);
+    expect(meta.store.get(OUTAGE_INFLIGHT_KEY)).toEqual([]);
+  });
+
+  it('(e) normal path: a refused ticket is saved to Reprint before the seq is marked; if the save fails the seq stays in flight and the next replay offers it without printing again', async () => {
+    const saved = setup();
+    const refusing = { ...saved.deps(false), printLines: vi.fn(async (): Promise<'failed'> => 'failed') };
+    const res = await printUnprinted(refusing, [linesAdded(7)]);
+    expect(res.failed).toHaveLength(1);
+    expect(saved.meta.store.get(OUTAGE_REPRINT_KEY)).toHaveLength(1);
+    expect(saved.meta.store.get(OUTAGE_PRINTED_KEY)).toEqual([7]);
+
+    const { deps, meta, printLines } = setup();
+    const broken = { ...deps(false), printLines: vi.fn(async (): Promise<'failed'> => 'failed'), setMeta: failingSet(meta, OUTAGE_REPRINT_KEY) };
+    const bad = await printUnprinted(broken, [linesAdded(8)]);
+    expect(bad.message).toBe(PRINT_RETRY_NOTE);
+    expect(meta.store.get(OUTAGE_PRINTED_KEY) ?? []).toEqual([]);
+    expect(meta.store.get(OUTAGE_INFLIGHT_KEY)).toEqual([8]);
+    const again = await printUnprinted(deps(false), [linesAdded(8)]);
+    expect(printLines).not.toHaveBeenCalled();
+    expect(again.failed).toHaveLength(1);
+    expect(meta.store.get(OUTAGE_REPRINT_KEY)).toHaveLength(1);
+    expect(meta.store.get(OUTAGE_PRINTED_KEY)).toEqual([8]);
+  });
+
+  it('(f) a crash leftover whose paper cannot be rebuilt returns a warning naming the table, no jobs, and stays in flight unmarked', async () => {
+    const { deps, meta } = setup({ meta: fakeMeta({ [OUTAGE_INFLIGHT_KEY]: [5] }) });
+    const res = await printUnprinted({ ...deps(false), tableLabels: { [SESSION]: '7' }, setMeta: failingSet(meta, KITCHEN_TICKET_SEQ_KEY) }, [linesAdded(5)]);
+    expect(res.message).toBe(recoveryFailedNote(['table 7']));
+    expect(res.message).toContain('table 7');
+    expect(res.failed).toEqual([]);
+    expect(meta.store.get(OUTAGE_INFLIGHT_KEY)).toEqual([5]);
+    expect(meta.store.get(OUTAGE_PRINTED_KEY) ?? []).toEqual([]);
   });
 });
 

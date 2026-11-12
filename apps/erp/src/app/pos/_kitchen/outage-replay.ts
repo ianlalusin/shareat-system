@@ -13,6 +13,8 @@ export const OUTAGE_PRINTED_KEY = 'app.outagePrinted';
 export const OUTAGE_REPRINT_KEY = 'app.outageReprint';
 export const OUTAGE_INFLIGHT_KEY = 'app.outageInflight';
 export const PRINT_RETRY_NOTE = 'A kitchen ticket did not print. It will retry; tell the kitchen.';
+/** Names what could not be rebuilt (a table label when the event has one, else its seq) so the cashier can tell the kitchen which ticket is missing. */
+export const recoveryFailedNote = (names: readonly string[]) => `Kitchen ticket from before the restart could not be rebuilt (${names.join(', ')}). It will retry; tell the kitchen.`;
 const PRINTABLE = new Set(['stand.opened', 'lines.added', 'refill.requested']);
 
 export interface OutageEvent {
@@ -34,6 +36,8 @@ const writeSet = (m: Meta, key: string, s: Set<number>) => m.setMeta(key, [...s]
 // The seqs THIS page is printing right now: they sit in the in-flight key too, but are not crash leftovers. shortcut: per page load, not per tab; two tabs
 // of one till would see each other's in-flight seq as a leftover (it then goes to Reprint, never prints twice), upgrade if a till ever runs two tabs.
 const active = new Set<number>();
+// Saves failed paper to the Reprint list. Call inside `locked` (writeReprintJobs locks itself) and BEFORE the seq is marked printed, so the mark never outruns the job.
+const addReprint = async (m: Meta, jobs: readonly PrintJob[]) => m.setMeta(OUTAGE_REPRINT_KEY, [...(await readJobs(m)), ...jobs]);
 const CAPTURE = async (): Promise<'failed'> => 'failed'; // a printer that prints nothing: the jobs come back as `failed`, ready for the Reprint list
 
 /** Prints what is pending and not yet printed. Online: prints nothing and marks nothing (the event waits for an offline switch). */
@@ -52,17 +56,23 @@ export async function printUnprinted(deps: OutageDeps, pending: readonly OutageE
     }
   }
   const full = { ...deps, tableLabels };
+  const recoveryFailed: string[] = [];
   const mine = await locked(async () => {
     const printed = await readSet(deps, OUTAGE_PRINTED_KEY);
     const inflight = await readSet(deps, OUTAGE_INFLIGHT_KEY);
     // Leftovers of a crash: never printed again by itself. The paper it would print is captured (not sent) and offered on the Reprint list; then it counts as printed.
     for (const e of todo.filter((x) => inflight.has(x.seq) && !active.has(x.seq))) {
       if (!printed.has(e.seq)) {
+        let rebuilt: PrintJob[];
         try {
-          total.failed.push(...(await printOutageForEvent({ ...full, printLines: CAPTURE }, e)).failed);
+          rebuilt = (await printOutageForEvent({ ...full, printLines: CAPTURE }, e)).failed;
+          if (rebuilt.length > 0) await addReprint(deps, rebuilt);
         } catch {
-          continue; // could not build the paper: stays in flight and is offered again next replay
+          const label = typeof (e.payload as { sessionId?: unknown }).sessionId === 'string' ? tableLabels[(e.payload as { sessionId: string }).sessionId] : null;
+          recoveryFailed.push(label ? `table ${label}` : `event ${e.seq}`);
+          continue; // could not build or save the paper: stays in flight and is offered again next replay
         }
+        total.failed.push(...rebuilt);
         printed.add(e.seq);
         await writeSet(deps, OUTAGE_PRINTED_KEY, printed);
       }
@@ -81,18 +91,25 @@ export async function printUnprinted(deps: OutageDeps, pending: readonly OutageE
   });
   let threw = false;
   for (const e of mine) {
-    let done = false;
+    let r: OutageResult | undefined;
     try {
-      const r = await printOutageForEvent(full, e);
+      r = await printOutageForEvent(full, e);
       total.printed += r.printed;
-      total.failed.push(...r.failed);
-      done = true;
     } catch {
       threw = true; // no PrintJob exists: leave it unmarked so the next replay retries it
     }
     try {
       await locked(async () => {
-        if (done) {
+        if (r && r.failed.length > 0) {
+          try {
+            await addReprint(deps, r.failed);
+          } catch {
+            threw = true; // stays in flight: the next replay offers it to Reprint, since some paper may already be out
+            return;
+          }
+          total.failed.push(...r.failed);
+        }
+        if (r) {
           const printed = await readSet(deps, OUTAGE_PRINTED_KEY);
           printed.add(e.seq);
           await writeSet(deps, OUTAGE_PRINTED_KEY, printed);
@@ -105,7 +122,8 @@ export async function printUnprinted(deps: OutageDeps, pending: readonly OutageE
       active.delete(e.seq);
     }
   }
-  return { ...total, message: threw ? PRINT_RETRY_NOTE : total.failed.length > 0 ? PRINT_FAILED_NOTE : null };
+  const message = threw ? PRINT_RETRY_NOTE : recoveryFailed.length > 0 ? recoveryFailedNote(recoveryFailed) : total.failed.length > 0 ? PRINT_FAILED_NOTE : null;
+  return { ...total, message };
 }
 
 /** The outbox dropped these events (sent): forget them. */
@@ -132,10 +150,11 @@ function pruneBoth(m: Meta, keep: (seq: number) => boolean): Promise<void> {
 }
 
 /** Tickets that did not print wait for Reprint, and survive a reload: the order is saved, and so is the paper that was lost. */
-export async function readReprintJobs(m: Meta): Promise<PrintJob[]> {
+async function readJobs(m: Meta): Promise<PrintJob[]> {
   const saved = await m.getMeta<PrintJob[]>(OUTAGE_REPRINT_KEY);
   return Array.isArray(saved) ? saved.filter((j) => Array.isArray(j?.lines) && typeof j.copies === 'number') : [];
 }
+export const readReprintJobs = (m: Meta): Promise<PrintJob[]> => locked(() => readJobs(m));
 export function writeReprintJobs(m: Meta, jobs: readonly PrintJob[]): Promise<void> {
   return locked(() => m.setMeta(OUTAGE_REPRINT_KEY, [...jobs]));
 }

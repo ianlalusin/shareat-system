@@ -12,6 +12,7 @@ import { printLines } from '@/lib/pos-print/adapter';
 import { PRINT_FAILED_NOTE, reprintOutage, type OutageResult, type PrintJob } from './outage-print';
 import { PRINT_RETRY_NOTE, readReprintJobs, writeReprintJobs } from './outage-replay';
 
+const SAVE_FAILED_NOTE = 'The waiting kitchen tickets could not be saved on this device. Reprint them now; tell the kitchen.';
 const EMPTY: PrintJob[] = [];
 let jobs: PrintJob[] = EMPTY;
 const listeners = new Set<() => void>();
@@ -19,7 +20,8 @@ const meta = { getMeta, setMeta };
 const set = (next: PrintJob[], persist = true) => {
   jobs = next.length === 0 ? EMPTY : next;
   for (const l of listeners) l();
-  if (persist) void writeReprintJobs(meta, jobs).catch(() => undefined);
+  // A failed save is shown, not swallowed: the list is only in memory until the next save works.
+  if (persist) void writeReprintJobs(meta, jobs).catch(() => showOutageNotice(SAVE_FAILED_NOTE));
 };
 let restored = false;
 const same = (a: PrintJob, b: PrintJob) => JSON.stringify(a) === JSON.stringify(b);
@@ -30,7 +32,6 @@ async function restore(): Promise<void> {
   const saved = (await readReprintJobs(meta).catch(() => [])).filter((s) => !jobs.some((j) => same(j, s)));
   if (saved.length > 0) set([...saved, ...jobs], false);
 }
-export const addFailedPrintJobs = (more: PrintJob[]) => set([...jobs, ...more]);
 // T-561: a message with no paper behind it (a ticket that threw before a job existed). The next replay that finishes clean clears it.
 let notice: string | null = null;
 export const outageNotice = () => notice;
@@ -41,7 +42,8 @@ export function showOutageNotice(text: string | null): void {
 }
 /** What a replay or a direct print came back with: failed paper goes to the Reprint list, any other message to the notice. */
 export function reportOutage(r: OutageResult): void {
-  if (r.failed.length > 0) addFailedPrintJobs(r.failed);
+  // printUnprinted already saved r.failed; reading the saved list (not appending) keeps one copy of each ticket.
+  if (r.failed.length > 0) void readReprintJobs(meta).then((saved) => set(saved, false), () => set([...jobs, ...r.failed], false));
   showOutageNotice(r.message === PRINT_FAILED_NOTE ? null : r.message);
 }
 /** The replay or print itself blew up (the device store failed): say so, the order is saved and the paper is retried. */
