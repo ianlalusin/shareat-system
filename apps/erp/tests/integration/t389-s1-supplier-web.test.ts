@@ -22,8 +22,9 @@ import { sql as dsql } from 'drizzle-orm';
  *    hidden marker issuesOfficialReceiptPresent. `bankAccountNumber` is excluded (Q1 = a, SENSITIVE).
  *  - the hint text on a typed reopen: "The account number is not kept after a refused save. Check it before saving."
  *    arrives on the record as `typed.hint` (def.notKeptHint).
- *  - SPEC GAP: the form sits inside a closed <details>. A reopened (or dropped) record must be VISIBLE, so the page opens
- *    the <details> (the `open` attribute) when the record has a typed view; with none it stays closed.
+ *  - SPEC GAP: a reopened (or dropped) record must be VISIBLE. Until T-571 the form sat inside a closed <details> that
+ *    the page opened when the record had a typed view; T-571 removed that card, so the record now sits beside the
+ *    details heading and is never hidden. The tests assert it is in no <details> at all.
  * Each test names its killing mutant.
  */
 config({ path: '.env.local' });
@@ -179,12 +180,11 @@ function editForm(html: string): string {
   const start = html.lastIndexOf('<form', at);
   return html.slice(start, html.indexOf('</form>', at));
 }
-/** Is the <details> that wraps the edit form open? null = the form is not inside a <details> at all. */
-function detailsOpen(html: string): boolean | null {
+/** Is the edit form inside a <details> (a collapsed card that could hide it)? T-571: it must never be. */
+function insideDetails(html: string): boolean {
   const at = html.indexOf('name="termsMode"');
   const open = html.lastIndexOf('<details', at);
-  if (open < 0 || html.lastIndexOf('</details>', at) > open) return null;
-  return /\bopen\b/.test(html.slice(open, html.indexOf('>', open)));
+  return open >= 0 && html.lastIndexOf('</details>', at) < open;
 }
 
 describe('S1 supplier - a refused save keeps what was typed (DEF-617)', () => {
@@ -250,12 +250,12 @@ describe('S1 supplier - a refused save keeps what was typed (DEF-617)', () => {
     const rec = supplierRecord(s.id);
     expect(rec?.typed).toEqual({ kind: 'typed', fields: p.t!.fields, hint: NOT_KEPT_HINT });
     expect(plain(form), 'the hint is on the record').toContain(NOT_KEPT_HINT);
-    expect(detailsOpen(html), 'the <details> around the form is open so the reopened record can be seen').toBe(true);
-    // Red on HEAD: the record is locked, typed is undefined, the details stays closed.
+    expect(insideDetails(html), 'the reopened record is not hidden inside a collapsed <details>').toBe(false);
+    // Red on HEAD: the record is locked, typed is undefined.
     // Mutant: draw typed values as the defaults -> the "never drawn" loop is red. Drop the hint -> red.
   });
 
-  it('W4: another supplier\'s page, given the same flash, stays locked with nothing typed and its details closed', async () => {
+  it('W4: another supplier\'s page, given the same flash, stays locked with nothing typed and is not inside a collapsed card', async () => {
     const f = await fixture('w4');
     const a = await supplier(f, 'w4a');
     const b = await supplier(f, 'w4b');
@@ -263,20 +263,20 @@ describe('S1 supplier - a refused save keeps what was typed (DEF-617)', () => {
     const html = await render(f, b.id, pageParamsOf(r.signal.url));
     expect(editForm(html)).toContain('<fieldset disabled');
     expect(supplierRecord(b.id)?.typed ?? null).toBeNull();
-    expect(detailsOpen(html)).toBe(false);
+    expect(insideDetails(html)).toBe(false);
     // Mutant: typedFor ignores the record id -> B reopens with A's typing, red.
   });
 
-  it('W5 (control, green on HEAD): with no flash the record is locked, nothing typed, the details closed', async () => {
+  it('W5 (control, green on HEAD): with no flash the record is locked, nothing typed, no collapsed card', async () => {
     const f = await fixture('w5');
     const s = await supplier(f, 'w5');
     const html = await render(f, s.id);
     expect(editForm(html)).toContain('<fieldset disabled');
     expect(supplierRecord(s.id)?.typed ?? null).toBeNull();
-    expect(detailsOpen(html)).toBe(false);
+    expect(insideDetails(html)).toBe(false);
   });
 
-  it('W6: typing too long to keep (a 5,000-character note): td in the cookie, no t; the page shows the sentence, the record stays locked with the stored values, details open', async () => {
+  it('W6: typing too long to keep (a 5,000-character note): td in the cookie, no t; the page shows the sentence, the record stays locked with the stored values, in no collapsed card', async () => {
     const f = await fixture('w6');
     const s = await supplier(f, 'w6');
     const r = await submit(f, refusedForm(s, { notes: 'LongNote-'.repeat(560) }));
@@ -289,7 +289,7 @@ describe('S1 supplier - a refused save keeps what was typed (DEF-617)', () => {
     expect(editForm(html)).toContain(`value="${s.name}"`);
     expect(plain(html)).toContain('What you typed was too long to keep. This shows what is saved. Press Edit and enter your change again.');
     expect(supplierRecord(s.id)?.typed).toEqual({ kind: 'dropped' });
-    expect(detailsOpen(html), 'the sentence must be visible').toBe(true);
+    expect(insideDetails(html), 'the sentence must be visible: no collapsed card hides the record').toBe(false);
     expect(html).not.toContain('LongNote-');
   });
 
