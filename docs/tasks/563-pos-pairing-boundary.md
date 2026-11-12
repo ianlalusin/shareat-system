@@ -46,6 +46,12 @@ Re-pairing (`settings/pos-tablet/actions.ts:34`) sets a new cookie and leaves In
 - The new repo function goes in `packages/db/src/repo/pos-v2.ts`. `getLivePairing` at :122 is the model, with no revoked filter.
 - ⚠️ **Builder must verify:** any handler that resolves the till via `getTerminalForPairing(origin)` (pos-v2.ts:705). A carried-over `sale.completed` whose till has since been re-linked to the new pairing (`setTillPairing`, :830) must still post. If it doesn't, resolve the terminal from the origin pairing's history or from the receipt's terminal. Pin it with a test. Report what you found before you change it.
 
+> **AMENDED 12 Nov (planner ruling on the builder's finding):** passing the origin pairing to `applyPosEvents` cannot work. Every handler requires a LIVE pairing (`requireContext` → `getLivePairing`), `completeSale` requires the till's pairing to equal it (sale.ts:183, and the till follows the new pairing), and replacing a tablet ends its PIN sessions as `revoked`. So for a carry-over, the new domain entry `applyPosBatch` works like this:
+> - it **stores and dedupes each event under the ORIGIN pairing** (UNIQUE pairing_id+seq);
+> - it **runs the handlers under the cookie's LIVE pairing** (same store, the live till);
+> - its PIN check uses the origin pairing, where a PIN session **revoked at or after the event time** still counts. That applies only to a carry-over; a session revoked before the event never vouches.
+> - Out: a manager replay of a quarantined carried-over event whose pairing is revoked still fails, the same as any replaced tablet today.
+
 **R4 — Device reaction to 409 / a new pairing (device + shell).**
 - Rows whose origin got 409 stay in the outbox, marked held in memory only, with no delete.
 - When `snapshot.device.pairingId` ≠ a pending row's `pairingId` and the server answered 409 for it, the POS shell shows a persistent banner: "N sales from another store are waiting on this tablet. Pair it back to that store to send them, or ask a manager."
