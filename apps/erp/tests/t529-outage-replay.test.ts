@@ -3,8 +3,8 @@
  * (2) a missing till number prints `K-—`, never `K-0-…`. Plain logic: the device store, the printer and the menu are injected.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { fakeMeta, id, IT, MENU } from './helpers/t529-fixtures';
-import { KITCHEN_TICKET_SEQ_KEY, NO_TICKET_NO, printOutageForEvent } from '../src/app/pos/_kitchen/outage-print';
+import { fakeMeta, id, IT, MENU, menuWithPrint, ST } from './helpers/t529-fixtures';
+import { KITCHEN_TICKET_SEQ_KEY, NO_TICKET_NO, PRINT_FAILED_NOTE, printOutageForEvent } from '../src/app/pos/_kitchen/outage-print';
 import { OUTAGE_INFLIGHT_KEY, OUTAGE_PRINTED_KEY, OUTAGE_REPRINT_KEY, PRINT_RETRY_NOTE, printUnprinted, pruneOutagePrinted, pruneOutagePrintedToPending, recoveryFailedNote } from '../src/app/pos/_kitchen/outage-replay';
 
 const SESSION = id(6001);
@@ -188,6 +188,58 @@ describe('T-561 revision 1 - the printed mark never runs ahead of the saved Repr
     expect(res.failed).toEqual([]);
     expect(meta.store.get(OUTAGE_INFLIGHT_KEY)).toEqual([5]);
     expect(meta.store.get(OUTAGE_PRINTED_KEY) ?? []).toEqual([]);
+  });
+});
+
+describe('T-561 follow-up (audit F3) - a partly printed multi-station order never prints again by itself', () => {
+  const GRILL_AND_DRINKS = {
+    seq: 1, kind: 'lines.added', payload: { sessionId: SESSION, lines: [line(1, IT.pork), line(2, IT.tea)] },
+  };
+  const multi = (o: Parameters<typeof setup>[0] = {}) => {
+    const s = setup(o);
+    return { ...s, deps: (online: boolean) => ({ ...s.deps(online), menu: menuWithPrint({ [ST.drinks]: true }) }) };
+  };
+  const sentTo = (printLines: ReturnType<typeof setup>['printLines']) => printLines.mock.calls.map((c) => (c[0].join(' ').includes('GRILL') ? 'grill' : c[0].join(' ').includes('DRINKS') ? 'drinks' : '?'));
+
+  it('(a) the second counter write fails: nothing is printed or marked, and the retry prints both stations exactly once', async () => {
+    const { deps, meta, printLines } = multi();
+    let counterWrites = 0;
+    const flaky = {
+      ...deps(false),
+      setMeta: async <T>(k: string, v: T) => {
+        if (k === KITCHEN_TICKET_SEQ_KEY && ++counterWrites === 2) throw new Error('disk full');
+        return meta.setMeta(k, v);
+      },
+    };
+    const res = await printUnprinted(flaky, [GRILL_AND_DRINKS]);
+    expect(printLines).not.toHaveBeenCalled();
+    expect(res.message).toBe(PRINT_RETRY_NOTE);
+    expect(meta.store.get(OUTAGE_PRINTED_KEY) ?? []).toEqual([]);
+    expect(meta.store.get(OUTAGE_INFLIGHT_KEY) ?? []).toEqual([]);
+    const again = await printUnprinted(deps(false), [GRILL_AND_DRINKS]);
+    expect(again).toEqual({ printed: 2, failed: [], message: null });
+    expect(sentTo(printLines)).toEqual(['grill', 'drinks']);
+    expect(meta.store.get(OUTAGE_PRINTED_KEY)).toEqual([1]);
+  });
+
+  it('(b) the second send throws after the first printed: Grill is not printed again on replay or reload, Drinks lands in Reprint, and the event is marked', async () => {
+    const { deps, meta, printLines } = multi();
+    printLines.mockImplementationOnce(async () => 'printed').mockImplementationOnce(async () => {
+      throw new Error('printer unplugged');
+    });
+    const res = await printUnprinted(deps(false), [GRILL_AND_DRINKS]);
+    expect(res.printed).toBe(1);
+    expect(res.failed).toHaveLength(1);
+    expect(res.failed[0]!.lines.join(' ')).toContain('DRINKS');
+    expect(res.message).toBe(PRINT_FAILED_NOTE);
+    expect(meta.store.get(OUTAGE_REPRINT_KEY)).toHaveLength(1);
+    expect(meta.store.get(OUTAGE_PRINTED_KEY)).toEqual([1]);
+    expect(meta.store.get(OUTAGE_INFLIGHT_KEY) ?? []).toEqual([]);
+    expect(await printUnprinted(deps(false), [GRILL_AND_DRINKS])).toEqual({ printed: 0, failed: [], message: null });
+    const reopened = multi({ meta: fakeMeta(Object.fromEntries(meta.store)) });
+    expect((await printUnprinted(reopened.deps(false), [GRILL_AND_DRINKS])).printed).toBe(0);
+    expect(printLines).toHaveBeenCalledTimes(2);
+    expect(reopened.printLines).not.toHaveBeenCalled();
   });
 });
 
