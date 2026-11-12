@@ -34,7 +34,7 @@ import {
 import { ACTION_LINK } from '@/components/action-link';
 import { PhotoThumb } from '@/components/upload/PhotoThumb';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
-import { Badge, Button, ConfirmDestructive, FlashBanner, Input, LinkRow, RowLink, Select, FormModal } from '@/components/ui';
+import { Badge, Button, ConfirmDestructive, FlashBanner, Input, LinkRow, RowLink, Select, FormModal, DialogActions } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { typedFor, type TypedView } from '@/lib/keep-typing';
@@ -612,9 +612,11 @@ return (
                 <ClosedMonthOverride closedMonths={[closedMonth]} dateFieldName="invoiceDate" initialDate={invoice.invoiceDate} />
               </>
             )}
-            <SubmitButton variant="secondary" pendingLabel="Saving…">
-              Record expense
-            </SubmitButton>
+            <DialogActions>
+              <SubmitButton variant="secondary" pendingLabel="Saving…">
+                Record expense
+              </SubmitButton>
+            </DialogActions>
           </CheckedForm>
           </FormModal>
         </div>

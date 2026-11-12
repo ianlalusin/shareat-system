@@ -21,7 +21,6 @@ import {
   businessDateAndRules,
   businessDateOf,
   deviceTime,
-  hasStatutory,
   loadLiveLines,
   recordedDifferently,
   requireContext,
@@ -110,10 +109,9 @@ const pad = (n: number, w: number) => String(n).padStart(w, '0');
 /** What the bill is, priced from the database (the screen's figure and the receipt's figure are this one). */
 async function priceFromDb(tx: Tx, actor: Actor, storeId: string, lines: LoadedLine[], deps: PosDeps | undefined, at?: Date): Promise<{ priced: PricedSession; rules: Awaited<ReturnType<typeof businessDateAndRules>> | undefined }> {
   const taxType = await posV2Repo.getOrgTaxType(tx, actor.orgId);
-  const needRules = hasStatutory(lines);
-  const resolved = needRules ? await businessDateAndRules(tx, actor.orgId, storeId, deps, at) : undefined;
-  const rules = resolved?.rules ?? { vatPercentBasisPoints: 0n, scPwdPercentBasisPoints: 0n };
-  return { priced: priceSession(snapshotOf(lines, taxType === 'vat', rules)), rules: resolved };
+  // T-528: always the real rates, so `priced.vat` (the receipt's VAT split) is right for every bill, not only one with a senior/PWD discount.
+  const resolved = await businessDateAndRules(tx, actor.orgId, storeId, deps, at);
+  return { priced: priceSession(snapshotOf(lines, taxType === 'vat', resolved.rules)), rules: resolved };
 }
 
 const sameCentavos = (a: string, b: Money) => {
@@ -123,6 +121,31 @@ const sameCentavos = (a: string, b: Money) => {
     return false;
   }
 };
+
+/** T-556 (audit P-001, R9): a replay is a no-op only when it carries what the frozen receipt recorded: the sale's flags, time and tablet total, its payments and its card holders. */
+async function replayMatches(tx: Tx, actor: Actor, input: CompleteSaleInput, prior: posV2Repo.PosSalesReceiptRow, at: { issuedAt: Date; offline: boolean; printed: string }): Promise<boolean> {
+  if (prior.offline !== at.offline || prior.issuedAtDevice.getTime() !== at.issuedAt.getTime() || !sameCentavos(String(input.device?.total ?? ''), money(prior.deviceTotal))) return false;
+  const pays = input.payments;
+  if (!Array.isArray(pays)) return false;
+  const kinds = new Map((await posV2Repo.listTenders(tx, actor.orgId, pays.map((p) => String(p.tenderId)))).map((t) => [t.id, t.kind]));
+  const payKey = (tenderId: string, amount: Money, ref: string, toCheck: boolean) => `${tenderId}|${toCentavos(amount)}|${ref}|${toCheck}`;
+  const sent = pays.map((p) => {
+    const ref = kinds.get(String(p.tenderId)) === 'wallet' ? assertFieldRules(POS_PAYMENT_REFERENCE_RULES, { referenceNo: p.referenceNo ?? '' }).referenceNo! : '';
+    return payKey(String(p.tenderId), parseMoneyInput(String(p.amount ?? ''), 'pos: the payment amount', 'The payment amount'), ref, p.toCheck === true);
+  });
+  const stored = (await posV2Repo.listReceiptPayments(tx, actor.orgId, prior.id)).map((r) => payKey(r.tenderId, money(r.amount), r.referenceNo ?? '', r.toCheck));
+  if (JSON.stringify(sent.sort()) !== JSON.stringify(stored.sort())) return false;
+
+  const holders = (Array.isArray(input.seniors) ? input.seniors : []).map((e) => {
+    const h = assertFieldRules(POS_STATUTORY_HOLDER_RULES, { holderName: e.holderName ?? '', idNumber: e.idNumber ?? '' });
+    return { dinerNo: e.dinerNo, kind: e.kind, idNumber: h.idNumber!, holderName: h.holderName! };
+  });
+  const card = (x: { kind: string; idNumber: string; holderName: string }) => `${x.kind}|${x.idNumber}|${x.holderName}`;
+  const recorded = await posV2Repo.listReceiptStatutory(tx, actor.orgId, prior.storeId, prior.id, at.printed);
+  if (JSON.stringify(holders.map(card).sort()) !== JSON.stringify(recorded.map(card).sort())) return false;
+  // shortcut: a diner's number is checked only where its discount left a receipt row (one that rounded to nothing leaves none), the card details always.
+  return recorded.every((r) => r.dinerNo === null || holders.some((h) => h.dinerNo === r.dinerNo && card(h) === card(r)));
+}
 
 export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInput, deps?: PosDeps): Promise<{ wrote: boolean; receiptId: string }> {
   await authorize(tx, actor, 'record_sale', { storeId: input.storeId });
@@ -141,7 +164,10 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
   const terminal = await posV2Repo.getTerminalByNo(tx, actor.orgId, storeId, terminalNo);
   const prior = await posV2Repo.getReceiptBySession(tx, actor.orgId, storeId, sessionId);
   if (prior) {
-    if (prior.id === receiptId && prior.terminalSeq === terminalSeq && terminal?.id === prior.terminalId) return { wrote: false, receiptId };
+    if (prior.id === receiptId && prior.terminalSeq === terminalSeq && terminal?.id === prior.terminalId) {
+      if (!(await replayMatches(tx, actor, input, prior, { issuedAt, offline, printed: `${await posV2Repo.getStoreCode(tx, actor.orgId, storeId)}-${pad(terminalNo, 2)}-${pad(terminalSeq, 6)}` }))) throw recordedDifferently();
+      return { wrote: false, receiptId };
+    }
     if (prior.id === receiptId) throw recordedDifferently();
     throw refuse('pos: table already paid', 'This table is already paid.');
   }
@@ -191,8 +217,10 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
   });
   const paid = rows.reduce((a, r) => add(a, r.amount), money('0'));
   const total = money(priced.total);
-  if (compare(paid, total) < 0) throw refuse('pos: underpaid', 'The payments add up to less than the total.');
-  const change = subtract(paid, total);
+  // T-558 (row 453): a short payment is RECORDED, never refused (the customer has already left). gap > 0 means no change; it is a routine variance up to the
+  // tolerance in force on the sale's business date, a finding above it. Overpayment keeps the change-only-from-cash rule below.
+  const gap = compare(paid, total) < 0 ? subtract(total, paid) : money('0');
+  const change = compare(paid, total) < 0 ? money('0') : subtract(paid, total);
   let changeRow = -1;
   if (compare(change, money('0')) > 0) {
     const cash = rows.map((r, i) => ({ r, i })).filter((x) => x.r.kind === 'cash').sort((a, b) => compare(b.r.amount, a.r.amount));
@@ -290,6 +318,19 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
       },
     });
   }
+  if (compare(gap, money('0')) > 0) {
+    const tolerance = rules!.rules.saleVarianceToleranceCentavos;
+    const o = {
+      storeId, entityId: receiptId, pairingId, at: issuedAt,
+      after: {
+        gap: gap.toString(), tolerance: fromCentavos(tolerance).toString(), deviceTotal: deviceTotal.toString(), serverTotal: priced.total,
+        payments: rows.map((r) => ({ tenderId: r.tenderId, amount: r.amount.toString() })),
+      },
+    };
+    // Literal action names so the build's audit scan sees both.
+    if (toCentavos(gap) > tolerance) await audit(tx, actor, 'pos.sale_payment_shortfall', o);
+    else await audit(tx, actor, 'pos.sale_payment_variance', o);
+  }
   await audit(tx, actor, 'pos.sale_completed', {
     storeId, entityId: receiptId, pairingId, at: issuedAt,
     after: { sessionId, receiptNo: printed, offline, subtotal: priced.subtotal, discountTotal: priced.discountTotal, total: priced.total, payments: rows.length, statutoryDiners: holders.length },
@@ -320,6 +361,7 @@ export async function getSessionBill(tx: Tx, actor: Actor, input: { storeId: str
     session: { id: session.id, mode: session.mode, standId: session.standId, status: session.status, headsCashier: session.headsCashier, headsServer: session.headsServer },
     lines: lines.map((l) => ({
       id: l.id, kind: l.kind, name: l.name, qty: l.qty, unitPrice: l.unitPrice, kitchenStatus: l.kitchenStatus, bundleHeads: l.bundleHeads,
+      menuItemId: l.menuItemId, note: l.note, addedAtDevice: l.addedAtDevice,
       discounts: l.discounts.map((d) => ({ id: d.id, kind: d.kind, valueType: d.valueType, value: money(d.value), qty: d.qty, dinerNo: d.dinerNo, presetId: d.presetId })),
     })),
     pricing: priced,
@@ -341,8 +383,27 @@ export async function listOpenStands(tx: Tx, actor: Actor, input: { storeId: str
 
 const ticket = (r: Awaited<ReturnType<typeof posV2Repo.listQueuedLines>>[number]) => ({
   lineId: r.line.id, sessionId: r.line.sessionId, standNumber: r.standNumber, sessionMode: r.sessionMode, kind: r.line.kind, name: r.line.name, qty: r.line.qty,
-  note: r.line.note, stationId: r.line.kitchenStationId, addedAtDevice: r.line.addedAtDevice,
+  note: r.line.note, stationId: r.line.kitchenStationId, addedAtDevice: r.line.addedAtDevice, askedBy: r.askedBy,
 });
+
+/**
+ * T-529: the open dine-in tables that hold a package (the refill stand picker and the heads list), one row per table, by stand number.
+ * Needs `request_pos_refill` OR `confirm_pos_heads` at the store: a phone that may do either needs to see the tables.
+ */
+export async function listRefillableTables(tx: Tx, actor: Actor, input: { storeId: string }) {
+  await requireStoreScope(tx, actor, input.storeId);
+  const at = { storeId: input.storeId };
+  if (!(await can(tx, actor, 'request_pos_refill', at)) && !(await can(tx, actor, 'confirm_pos_heads', at))) await authorize(tx, actor, 'request_pos_refill', at);
+  // One row per table. A table may hold more than one package variant: `packageVariantIds` has every one (first line first), `packageVariantId` is the first.
+  const byTable = new Map<string, { sessionId: string; standNumber: number; packageVariantId: string; packageVariantIds: string[]; headsCashier: number; headsServer: number | null }>();
+  for (const r of await posV2Repo.listRefillableTables(tx, actor.orgId, input.storeId)) {
+    if (r.packageVariantId === null) continue;
+    const have = byTable.get(r.sessionId);
+    if (!have) byTable.set(r.sessionId, { sessionId: r.sessionId, standNumber: r.standNumber, packageVariantId: r.packageVariantId, packageVariantIds: [r.packageVariantId], headsCashier: r.headsCashier, headsServer: r.headsServer });
+    else if (!have.packageVariantIds.includes(r.packageVariantId)) have.packageVariantIds.push(r.packageVariantId);
+  }
+  return { tables: [...byTable.values()] };
+}
 
 export async function listKitchenQueue(tx: Tx, actor: Actor, input: { storeId: string; stationId?: string }) {
   await requireStoreScope(tx, actor, input.storeId);

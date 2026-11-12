@@ -12,7 +12,7 @@ import {
 } from './lib';
 import { selectDefaultCommissaryStoreId } from './default-store';
 import { Page } from '@/components/shell/Page';
-import { Button, ConfirmDestructive, Field, FlashBanner, FormGrid, FormModal, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, LinkRow, RowLink, Select } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { COMMISSARY_LINK_RULES, COMMISSARY_MAP_RULES, COMMISSARY_OFFERING_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FilterRow } from '@/components/FilterRow';
@@ -126,9 +126,11 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
               <option value="inactive">Inactive</option>
             </Select>
           </label>
-          <Button type="submit" variant="primary">
-            Save
-          </Button>
+          <DialogActions className="w-full">
+            <Button type="submit" variant="primary">
+              Save
+            </Button>
+          </DialogActions>
         </CheckedForm>
           </FormModal>
         </div>
@@ -196,9 +198,11 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
           <Field label={<span className="text-neutral-600 dark:text-neutral-400">Manual cost (optional)</span>} className="text-sm" rule={COMMISSARY_OFFERING_RULES.manualCost}>
             <Input {...nativeAttrs(COMMISSARY_OFFERING_RULES.manualCost)} placeholder="tier 3 of the price fallback" className="w-full" />
           </Field>
-          <Button type="submit" variant="secondary">
-            Save
-          </Button>
+          <DialogActions className="w-full">
+            <Button type="submit" variant="secondary">
+              Save
+            </Button>
+          </DialogActions>
         </CheckedForm>
           </FormModal>
         </div>
@@ -315,9 +319,11 @@ export default async function CommissaryCataloguePage({ searchParams }: { search
                 </Select>
               </label>
               </FormGrid>
-              <Button type="submit" variant="secondary">
-                Save
-              </Button>
+              <DialogActions>
+                <Button type="submit" variant="secondary">
+                  Save
+                </Button>
+              </DialogActions>
             </CheckedForm>
           </FormModal>
           ) : null}

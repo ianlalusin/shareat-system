@@ -8,7 +8,7 @@ import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { MENU_CATEGORY_RULES, MENU_ITEM_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select } from '@/components/ui';
+import { Badge, Banner, Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select } from '@/components/ui';
 import { createCategoryAction, createItemAction, editCategoryAction, retireCategoryAction } from './actions';
 import { listCategories, listOverviewItems, storesInScope, withOrgPrincipal } from './lib';
 import { MENU_CATEGORY } from './typed-forms';
@@ -77,9 +77,11 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
                     <Input {...nativeAttrs(MENU_CATEGORY_RULES.sortOrder)} />
                   </Field>
                 </FormGrid>
-                <Button type="submit" variant="primary">
-                  Save
-                </Button>
+                <DialogActions>
+                  <Button type="submit" variant="primary">
+                    Save
+                  </Button>
+                </DialogActions>
               </CheckedForm>
             </FormModal>
           )}
@@ -112,9 +114,11 @@ export default async function MenuPage({ searchParams }: { searchParams: Promise
                     <Input name="description" />
                   </Field>
                 </FormGrid>
-                <Button type="submit" variant="primary">
-                  Save
-                </Button>
+                <DialogActions>
+                  <Button type="submit" variant="primary">
+                    Save
+                  </Button>
+                </DialogActions>
               </CheckedForm>
             </FormModal>
           )}

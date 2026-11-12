@@ -18,7 +18,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, FlashBanner, Input, LinkRow, RowAction, RowLink, Select, FormGrid, FormSection, type FieldProps, FormModal } from '@/components/ui';
+import { Button, FlashBanner, Input, LinkRow, RowAction, RowLink, Select, FormGrid, FormSection, type FieldProps, FormModal, DialogActions } from '@/components/ui';
 
 export const metadata = { title: 'Customers — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -251,9 +251,11 @@ export default async function CustomersPage({
               </Field>
             </FormGrid>
           </FormSection>
-          <Button type="submit" variant="primary">
-            Save
-          </Button>
+          <DialogActions>
+            <Button type="submit" variant="primary">
+              Save
+            </Button>
+          </DialogActions>
         </CheckedForm>
         </FormModal>
       </div>

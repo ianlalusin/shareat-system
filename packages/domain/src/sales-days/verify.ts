@@ -17,8 +17,8 @@
  *
  * T-385 (Ian 2026-10-09): verify requires `submitted`. The check sits before routing and posting.
  */
-import { authorize, type Actor, can } from '@shareat/auth';
-import { auditLogRepo, journalRepo, posV1Repo, salesDaysRepo, settlementIntakeRepo, type Tx } from '@shareat/db';
+import { authorize, isStoreManagerOrAbove, type Actor, can } from '@shareat/auth';
+import { accessRepo, auditLogRepo, journalRepo, posV1Repo, salesDaysRepo, settlementIntakeRepo, type Tx } from '@shareat/db';
 import type { PeriodOverrideReason } from '@shareat/db/schema';
 import { buildPeriodFacts, periodRefusal } from '../business-rules';
 import { postEntry } from '../ledger/post-entry';
@@ -77,7 +77,8 @@ async function runSubmit(tx: Tx, actor: Actor, salesDayId: string): Promise<void
  */
 async function assertChannelsComplete(tx: Tx, actor: Actor, day: { id: string; storeId: string; source: string }): Promise<void> {
   const configured = await salesDaysRepo.listChannels(tx, actor.orgId, day.storeId, { activeOnly: true });
-  const required = day.source === 'pos_v1_day_feed' ? configured.filter((c) => !c.isRemittedDaily) : configured;
+  // T-531 (ruling 2): a day derived from the POS receipts is treated like a feed day: it has no remitted (Walk-in) row, so only the non-remitted channels are required.
+  const required = day.source !== 'legacy_typed' ? configured.filter((c) => !c.isRemittedDaily) : configured;
   if (required.length === 0) return;
   const rows = new Map((await salesDaysRepo.getChannelsForDay(tx, day.id)).map((r) => [r.channelId, r]));
   const missing = required.filter((c) => {
@@ -87,6 +88,21 @@ async function assertChannelsComplete(tx: Tx, actor: Actor, day: { id: string; s
   if (missing.length === 0) return;
   const names = missing.map((c) => c.name);
   throw refuse(`submitSalesDay: sales day ${day.id} has channels with neither sales nor "no sales": ${names.join(', ')}`, submitMissingSentence(names));
+}
+
+/**
+ * T-531 R10: who may verify a POS-derived day, on top of `verify_sales_day` at the store (already checked by `authorize`): a role of manager, admin or super_admin
+ * (the one chain of command in `@shareat/auth`), and not the person who closed the Z (the day's own, or any Z of that store and date). `verify_own_sales_day` does not
+ * exempt anyone: this check runs first, and the submitter of such a day IS its closer.
+ */
+export const POS_DAY_NOT_VOIDABLE_SENTENCE = "A sales day from the POS can't be voided. Correct it with a refund or a platform correction.";
+export const POS_DAY_VERIFIER_SENTENCE = 'A sales day from the POS is verified by a store manager or above who did not close the day.';
+async function assertPosDayVerifier(tx: Tx, actor: Actor, day: { id: string; storeId: string; businessDate: string }): Promise<void> {
+  const role = (await accessRepo.activeRoleForPerson(tx, actor.personId, actor.orgId))?.role;
+  const closers = await salesDaysRepo.listZClosersForDay(tx, actor.orgId, day);
+  if (!isStoreManagerOrAbove(role) || closers.includes(actor.personId)) {
+    throw refuse(`verifySalesDay: sales day ${day.id} is from the POS: the verifier must be a manager or above who did not close the Z`, POS_DAY_VERIFIER_SENTENCE);
+  }
 }
 
 // -------------------------------------------------------------------------------------
@@ -142,12 +158,15 @@ async function runVerify(tx: Tx, actor: Actor, salesDayId: string, options?: Ver
     );
   }
 
+  // T-531 R10 (Ian, row 449): a day derived from the POS receipts (the Z) is verified only by a store manager or above who did not close the day.
+  if (day.source === 'pos_receipts') await assertPosDayVerifier(tx, actor, day);
+
   // T-504: a verifier may edit a submitted day and blank a channel; the same completeness rule as submit holds at the post.
   await assertChannelsComplete(tx, actor, day);
 
-  // T-385 S3: the person who submitted a day may not verify it, unless they hold verify_own_sales_day (super-admin only).
+  // T-385 S3: the person who submitted a day may not verify it, unless they hold verify_own_sales_day (super-admin only). R10 clause 4: never a POS-derived day.
   if (day.submittedBy && day.submittedBy === actor.personId) {
-    const exempt = await can(tx, actor, 'verify_own_sales_day');
+    const exempt = day.source !== 'pos_receipts' && (await can(tx, actor, 'verify_own_sales_day'));
     if (!exempt) {
       throw refuse(
         `verifySalesDay: sales day ${salesDayId} was submitted by the actor — a different person must verify`,
@@ -258,6 +277,11 @@ async function runVoid(
 
   if (day.status === 'voided') {
     throw refuse(`voidSalesDay: sales day ${salesDayId} is already voided`, 'This sales day is already voided.');
+  }
+  // T-531: a day derived from the POS receipts is never voided. Its receipts stay frozen to the Z, so nothing could derive the date again and that date's sales would be lost
+  // for good. A wrong figure is corrected by a refund or a platform correction instead.
+  if (day.source === 'pos_receipts') {
+    throw refuse(`voidSalesDay: sales day ${salesDayId} is derived from the POS receipts (frozen to its Z); voiding it would lose the date`, POS_DAY_NOT_VOIDABLE_SENTENCE);
   }
 
   const trimmed = (reason ?? '').trim();

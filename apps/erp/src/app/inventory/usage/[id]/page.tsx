@@ -1,16 +1,15 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireSession } from '../../../../lib/session';
-import { deleteUsageDraftAction, postUsageAction, voidUsageAction } from '../actions';
+import { deleteUsageDraftAction, postUsageAction, voidPullUsageAction, voidUsageAction } from '../actions';
 import { usageRecordDetail } from '../lib';
 import { wastageReasonLabel } from '@shareat/domain';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { ACTION_LINK } from '@/components/action-link';
 import { withFlash } from '@/lib/flash';
 import { Button, ConfirmDestructive, Field, FlashBanner, Input, LinkRow, RowLink, statusLabel } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
-import { INVENTORY_USAGE_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { INVENTORY_POS_VOID_RULES, INVENTORY_USAGE_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Usage record — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -43,11 +42,11 @@ export default async function UsageRecordPage({
   const { actor } = await requireSession(`/inventory/usage/${id}`);
   const detail = await usageRecordDetail(actor.orgId, id);
   if (!detail) notFound();
-  const { record, locationName, lines, fromLivePull } = detail;
+  const { record, locationName, lines, livePullId } = detail;
 
   const canPost = record.status === 'draft';
   const canDeleteDraft = record.status === 'draft';
-  const canVoid = record.status === 'posted' && !fromLivePull;
+  const canVoid = record.status === 'posted' && !livePullId;
 
   return (
     <Page view="detail" sectioned density="table">
@@ -142,13 +141,18 @@ export default async function UsageRecordPage({
         </dl>
       )}
 
-      {record.status === 'posted' && fromLivePull && (
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          This usage came from a POS pull, so it is voided with the pull.{' '}
-          <Link href={`/inventory/pos-usage?store=${record.storeId}`} className={ACTION_LINK}>
-            Void it under Inventory › POS usage →
-          </Link>
-        </p>
+      {record.status === 'posted' && livePullId && (
+        <CheckedForm rules={INVENTORY_POS_VOID_RULES} action={voidPullUsageAction} className="flex flex-wrap items-end gap-3">
+          <input type="hidden" name="recordId" value={record.id} />
+          <Field label="Void the POS pull — say why" className="flex min-w-0 grow flex-col gap-1 text-xs text-neutral-600 dark:text-neutral-400" rule={INVENTORY_POS_VOID_RULES.reason}>
+            <Input {...nativeAttrs(INVENTORY_POS_VOID_RULES.reason)} placeholder="reason" className="w-full" />
+          </Field>
+          <ConfirmDestructive
+            tier="admin-pin"
+            label="Void POS pull"
+            consequence="This usage came from a POS pull, so the whole pull is voided: every usage record it made is reversed, and the day can be pulled again. An administrator must approve with their own PIN."
+          />
+        </CheckedForm>
       )}
 
       {canVoid && (

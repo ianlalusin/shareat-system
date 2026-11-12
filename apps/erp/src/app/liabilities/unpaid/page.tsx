@@ -5,7 +5,6 @@ import { accountLabel } from '@/lib/account-label';
 import { ACTION_LINK } from '@/components/action-link';
 import { peso } from '@/lib/format';
 import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { Badge, Banner, Card, LinkRow, NumTd, RowLink, Table, Td, Th } from '@/components/ui';
 import { reportScope, runReport } from '../../reports/lib';
 import { daysWord, isOverdue, leftoverDirection, orderLines } from './lib';
@@ -33,15 +32,11 @@ export default async function UnpaidPage({ searchParams }: { searchParams: Promi
   const currentStore = scope.storeId ? storeName(scope.storeId) : 'All stores';
 
   return (
-    <Page density="table">
-      <div>
-        <h1 className="text-2xl font-semibold">Everything unpaid</h1>
-        <PageDescription>
-          What the business still owes, grouped by kind, worked out live from the records that own each figure. Nothing
-          here is stored or changed by this page.
-        </PageDescription>
-      </div>
-
+    <Page
+      density="table"
+      title="Everything unpaid"
+      description="What the business still owes, grouped by kind, worked out live from the records that own each figure. Nothing here is stored or changed by this page."
+    >
       <nav aria-label="Store" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
         <span className="text-muted">{currentStore}</span>
         {scope.coversWholeOrg && (

@@ -34,7 +34,7 @@ import Link from 'next/link';
 import { ACTION_LINK } from '@/components/action-link';
 import { withFlash } from '@/lib/flash';
 import { Page } from '@/components/shell/Page';
-import { Banner, Button, Checkbox, FlashBanner, Input, LinkRow, RowLink, Select, FormGrid, FormSection, Field, FormModal } from '@/components/ui';
+import { Banner, Button, Checkbox, DialogActions, FlashBanner, Input, LinkRow, RowLink, Select, FormGrid, FormSection, Field, FormModal } from '@/components/ui';
 import { PageDescription } from '@/components/shell/PageDescription';
 
 export const metadata = { title: 'Items — Shareat System' };
@@ -183,26 +183,26 @@ export default async function ItemsPage({
                   Buy = bought from suppliers. Retail = sold à la carte. Wholesale = sold to our branches, franchisees or outside buyers like Xlice. These are independent choices; a store can override them on the item&rsquo;s page.
                 </p>
               </fieldset>
-              <div className="flex flex-wrap gap-2">
+              {/* T-386 R7: the override belongs to the direct add (a super-admin), not to the request fields. */}
+              {canOverride && (
+                <Field label={<span className="text-xs text-neutral-500 dark:text-neutral-400">Use a different code (super-admin)</span>} rule={ITEMS_REQUEST_RULES.code} className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                  <Input {...nativeAttrs(ITEMS_REQUEST_RULES.code)}
+                    pattern="[A-Za-z0-9]{4}-[0-9]{3}"
+
+                    type="text"
+                    autoComplete="off"
+
+                    placeholder="CHWN-001"
+                    className="font-mono"
+                  />
+                </Field>
+              )}
+              <DialogActions>
                 <Button type="submit" variant="primary">Request item</Button>
-                {/* T-386 R7: the override belongs to the direct add (a super-admin), not to the request fields. */}
-                {canOverride && (
-                  <Field label={<span className="text-xs text-neutral-500 dark:text-neutral-400">Use a different code (super-admin)</span>} rule={ITEMS_REQUEST_RULES.code} className="flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
-                    <Input {...nativeAttrs(ITEMS_REQUEST_RULES.code)}
-                      pattern="[A-Za-z0-9]{4}-[0-9]{3}"
-
-                      type="text"
-                      autoComplete="off"
-
-                      placeholder="CHWN-001"
-                      className="font-mono"
-                    />
-                  </Field>
-                )}
                 <Button type="submit" variant="secondary" formAction={createItemAction}>
                   Add directly (super-admin)
                 </Button>
-              </div>
+              </DialogActions>
             </CheckedForm>
         </FormModal>
         </div>

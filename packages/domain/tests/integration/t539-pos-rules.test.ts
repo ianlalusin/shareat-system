@@ -38,7 +38,9 @@ afterAll(async () => {
 const SC = 'pos.senior_pwd_discount_percent';
 const HOUR = 'pos.business_day_start_hour';
 const VAT = 'tax.vat_percent';
+const TABLE = 'pos.table_warn_minutes';
 const HOUR_LABEL = 'Hour a new POS business day starts (0–23)';
+const TABLE_LABEL = 'Minutes before a table tile turns red';
 
 const set = (w: RuleWorld, who: { personId: string; orgId: string }, input: { key: string; value: string; effectiveFrom: string; reason: string }) =>
   asOrg(w.orgId, (tx) => setBusinessRule(tx, who, input as never));
@@ -57,12 +59,13 @@ function queryCounter(tx: Tx): { count: () => number; stop: () => void } {
 }
 
 describe('T-539 readPosRules - the reader', () => {
-  it('a fresh org (no rows) reads exactly { vat 1200n, senior/PWD 2000n, start hour 4 } [kills: an absent row read as zero; a wrong default; hour as bigint]', async () => {
+  it('a fresh org (no rows) reads exactly { vat 1200n, senior/PWD 2000n, start hour 4, table warning 90 } [kills: an absent row read as zero; a wrong default; hour as bigint]', async () => {
     const w = await ruleWorld(sql, 'pos-fresh');
     const r = await read(w.orgId, '2026-11-06');
-    expect(r).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4 });
+    expect(r).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n });
     expect(typeof r.businessDayStartHour).toBe('number');
-    expect(Object.keys(r).sort()).toEqual(['businessDayStartHour', 'scPwdPercentBasisPoints', 'vatPercentBasisPoints']);
+    expect(typeof r.tableWarnMinutes).toBe('number');
+    expect(Object.keys(r).sort()).toEqual(['businessDayStartHour', 'saleVarianceToleranceCentavos', 'scPwdPercentBasisPoints', 'tableWarnMinutes', 'vatPercentBasisPoints']);
   });
 
   it('after setBusinessRule(senior/PWD, 25, from 2026-12-01 equivalent) the day before reads 2000n and the start day reads 2500n; the other two stay [kills: a change applied early; a change applied late]', async () => {
@@ -71,8 +74,8 @@ describe('T-539 readPosRules - the reader', () => {
     const from = daysFromToday(1);
     const before = daysFromToday(0);
     await set(w, w.admin, { key: SC, value: '25', effectiveFrom: from, reason: 'Law changed' });
-    expect(await read(w.orgId, before)).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4 });
-    expect(await read(w.orgId, from)).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2500n, businessDayStartHour: 4 });
+    expect(await read(w.orgId, before)).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n });
+    expect(await read(w.orgId, from)).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2500n, businessDayStartHour: 4, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n });
     expect(await read(w.orgId, daysFromToday(30))).toMatchObject({ scPwdPercentBasisPoints: 2500n });
   });
 
@@ -87,9 +90,31 @@ describe('T-539 readPosRules - the reader', () => {
     const w = await ruleWorld(sql, 'pos-each');
     await putRule(sql, w.orgId, VAT, '11.000000', '2026-12-01');
     await putRule(sql, w.orgId, HOUR, '6.000000', '2026-12-10');
-    expect(await read(w.orgId, '2026-11-30')).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4 });
-    expect(await read(w.orgId, '2026-12-01')).toEqual({ vatPercentBasisPoints: 1100n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4 });
-    expect(await read(w.orgId, '2026-12-10')).toEqual({ vatPercentBasisPoints: 1100n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 6 });
+    expect(await read(w.orgId, '2026-11-30')).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n });
+    expect(await read(w.orgId, '2026-12-01')).toEqual({ vatPercentBasisPoints: 1100n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n });
+    expect(await read(w.orgId, '2026-12-10')).toEqual({ vatPercentBasisPoints: 1100n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 6, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n });
+  });
+
+  it('S3: a dated change of the table warning: 90 before its start day, 30 from it; the other three stay [kills: a change applied early or late; tableWarnMinutes read from the wrong row]', async () => {
+    const w = await ruleWorld(sql, 'pos-table-dated');
+    const from = daysFromToday(1);
+    await set(w, w.admin, { key: TABLE, value: '30', effectiveFrom: from, reason: 'Check on tables sooner' });
+    expect(await read(w.orgId, daysFromToday(0))).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n });
+    expect(await read(w.orgId, from)).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 30, saleVarianceToleranceCentavos: 1n });
+    expect(await auditCount(sql, w.orgId)).toBe(1);
+  });
+
+  it('S3: the same dated read on raw rows: 2026-11-30 reads 90, 2026-12-01 reads 30 [kills: < for <= at the start day]', async () => {
+    const w = await ruleWorld(sql, 'pos-table-spec-dates');
+    await putRule(sql, w.orgId, TABLE, '30.000000', '2026-12-01');
+    expect((await read(w.orgId, '2026-11-30')).tableWarnMinutes).toBe(90);
+    expect((await read(w.orgId, '2026-12-01')).tableWarnMinutes).toBe(30);
+  });
+
+  it('S3: a stored 30.5 minutes (a row no writer would make) is refused at read, never rounded [kills: minutes truncated to 30]', async () => {
+    const w = await ruleWorld(sql, 'pos-bad-minutes');
+    await putRule(sql, w.orgId, TABLE, '30.500000', '2000-01-01');
+    expect((await attempt(() => read(w.orgId, '2026-11-06'))).ok).toBe(false);
   });
 
   it('one org never reads another org\'s POS rows [kills: a read keyed on something other than the org]', async () => {
@@ -107,7 +132,7 @@ describe('T-539 readPosRules - the reader', () => {
     expect(r.ok).toBe(false);
   });
 
-  it('it costs ONE statement for all three rules [kills: a query per key]', async () => {
+  it('it costs ONE statement for all four rules [kills: a query per key]', async () => {
     const w = await ruleWorld(sql, 'pos-count');
     await putRule(sql, w.orgId, SC, '25.000000', '2026-12-01');
     const n = await asOrg(w.orgId, async (tx) => {
@@ -134,7 +159,7 @@ describe('T-539 setBusinessRule - the POS keys through the existing writer', () 
       ].sort(),
     );
     expect(await auditCount(sql, w.orgId)).toBe(2);
-    expect(await read(w.orgId, from)).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2500n, businessDayStartHour: 6 });
+    expect(await read(w.orgId, from)).toEqual({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2500n, businessDayStartHour: 6, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n });
   });
 
   it('a whole hour is accepted at both ends: 0 and 23 [kills: an off-by-one on the hour bounds]', async () => {
@@ -197,6 +222,38 @@ describe('T-539 setBusinessRule - the POS keys through the existing writer', () 
     }
     expect(await ruleRows(sql, w.orgId)).toHaveLength(0);
     expect(await auditCount(sql, w.orgId)).toBe(0);
+  });
+
+  it('S3: a whole number of minutes is accepted at both ends (1 and 600); 30.5 gets the whole-number sentence; 0, 601 and 9999 get the bounds sentence; nothing extra is written [kills: a fraction of a minute stored; an off-by-one on the bounds]', async () => {
+    const w = await ruleWorld(sql, 'pos-minutes-writer');
+    await set(w, w.admin, { key: TABLE, value: '1', effectiveFrom: daysFromToday(1), reason: 'Min' });
+    await set(w, w.admin, { key: TABLE, value: '600', effectiveFrom: daysFromToday(2), reason: 'Max' });
+    expect((await read(w.orgId, daysFromToday(1))).tableWarnMinutes).toBe(1);
+    expect((await read(w.orgId, daysFromToday(2))).tableWarnMinutes).toBe(600);
+    for (const value of ['30.5', '30.25']) {
+      const r = await attempt(() => set(w, w.admin, { key: TABLE, value, effectiveFrom: daysFromToday(1), reason: 'half minute' }));
+      expect(r.ok, `${value} was accepted`).toBe(false);
+      if (!r.ok) expect((r.error as RefusalError).userMessage).toBe(`${TABLE_LABEL} must be a whole number of minutes.`);
+    }
+    for (const value of ['0', '601', '9999']) {
+      const r = await attempt(() => set(w, w.admin, { key: TABLE, value, effectiveFrom: daysFromToday(1), reason: 'out of range' }));
+      expect(r.ok, `${value} was accepted`).toBe(false);
+      if (!r.ok) expect((r.error as RefusalError).userMessage).toBe(`${TABLE_LABEL} must be between 1 and 600.`);
+    }
+    expect(await ruleRows(sql, w.orgId)).toHaveLength(2);
+  });
+
+  it('S3: a manager and a staff member are refused for the table warning with AuthorizationError naming manage_business_rules [kills: the new key with a weaker gate]', async () => {
+    const w = await ruleWorld(sql, 'pos-table-gate');
+    for (const actor of [w.manager, w.staff]) {
+      const r = await attempt(() => set(w, actor, { key: TABLE, value: '30', effectiveFrom: daysFromToday(1), reason: 'try' }));
+      expect(r.ok).toBe(false);
+      if (!r.ok) {
+        expect(r.error).toBeInstanceOf(AuthorizationError);
+        expect((r.error as AuthorizationError).capability).toBe('manage_business_rules');
+      }
+    }
+    expect(await ruleRows(sql, w.orgId)).toHaveLength(0);
   });
 
   it('the gate still comes first for the hour: a staff member sending 4.5 gets the permission refusal, not the whole-hour sentence [kills: the hour check before authorize]', async () => {

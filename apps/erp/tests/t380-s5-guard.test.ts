@@ -12,15 +12,15 @@ import { findingsForFile, findingsForSource } from './no-typed-values-in-urls';
  * cannot silently stop seeing it.
  */
 const ACTIONS = [
-  'inventory/counts', 'inventory/deliveries', 'inventory/locations', 'inventory/low-stock', 'inventory/pos-map',
-  'inventory/pos-usage', 'inventory/production', 'inventory/returns', 'inventory/usage', 'attendance/lane',
+  'inventory/counts', 'inventory/deliveries', 'inventory/locations', 'inventory/low-stock',
+  'inventory/production', 'inventory/returns', 'inventory/usage', 'attendance/lane',
   'attendance/terminals', 'attendance/[dayId]', 'staff', 'staff/[employmentId]/credentials', 'wastage',
 ].map((d) => `app/${d}/actions.ts`);
 
 const PAGES = [
   'app/inventory/counts/page.tsx', 'app/inventory/counts/[id]/page.tsx', 'app/inventory/deliveries/page.tsx',
   'app/inventory/deliveries/[id]/page.tsx', 'app/inventory/locations/page.tsx', 'app/inventory/low-stock/page.tsx',
-  'app/inventory/pos-map/page.tsx', 'app/inventory/pos-usage/page.tsx', 'app/inventory/production/page.tsx',
+  'app/inventory/production/page.tsx',
   'app/inventory/production/[id]/page.tsx', 'app/inventory/returns/page.tsx', 'app/inventory/usage/page.tsx',
   'app/inventory/usage/[id]/page.tsx', 'app/attendance/[dayId]/page.tsx', 'app/attendance/lane/page.tsx',
   'app/attendance/terminals/page.tsx', 'app/staff/page.tsx', 'app/staff/hire/page.tsx',

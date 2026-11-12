@@ -2,7 +2,6 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { listUsers } from './lib';
 import { ROLE_LABEL } from '@shareat/auth';
 import { Page } from '@/components/shell/Page';
-import { PageDescription } from '@/components/shell/PageDescription';
 import { Banner, LinkRow, RowLink } from '@/components/ui';
 
 export const metadata = { title: 'Users and roles — Shareat System' };
@@ -24,15 +23,11 @@ export default async function UsersPage() {
   const roleless = users.filter((u) => u.role === null).length;
 
   return (
-    <Page density="table">
-      <div>
-        <h1 className="text-2xl font-semibold">Users and roles</h1>
-        <PageDescription>
-          Who holds which role, which stores they can see, and what they have been granted beyond
-          their role.
-        </PageDescription>
-      </div>
-
+    <Page
+      density="table"
+      title="Users and roles"
+      description="Who holds which role, which stores they can see, and what they have been granted beyond their role."
+    >
       {roleless > 0 && (
         <Banner tone="warning">
           <strong>

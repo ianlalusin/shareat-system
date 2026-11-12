@@ -27,7 +27,7 @@ import {
   readSessionToken,
   setSetupIdentityCookie,
   readPosTabletToken,
-  setPosTabletCookie,
+  setPosTabletCookie, setPosPromoteCookie,
   clearPosTabletCookie,
 } from '../../lib/session';
 import { verifyFirebaseIdToken } from '../../lib/firebase-auth-admin';
@@ -123,8 +123,8 @@ export async function signInWithTabletPinAction(formData: FormData): Promise<voi
     const cookieToken = await readPosTabletToken();
     const result = await signInOnPairedTablet(null, { cookieToken, staffCode, pin });
     await setSessionCookie(result.token, result.expiresAt);
-    if (cookieToken) await setPosTabletCookie(cookieToken); // keep the cookie fresh while the tablet is in use
-    redirectTo = await landingForToken(result.token, str(formData, 'next'));
+    if (cookieToken) await Promise.all([setPosTabletCookie(cookieToken), setPosPromoteCookie()]); // keep the cookie fresh; T-526: the promote flag
+    redirectTo = await landingForToken(result.token, str(formData, 'next'), { tabletStoreId: result.pairing.storeId }); // T-526 R2: only this action passes the store
   } catch (err) {
     // A revoked / stale / forged pairing is dead: forget it so the sign-in page falls back to today's screen.
     if (err instanceof AuthenticationError && err.message === TABLET_NOT_PAIRED) await clearPosTabletCookie();

@@ -13,7 +13,7 @@ import {
 } from './lib';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { Page } from '@/components/shell/Page';
-import { Badge, Button, Field, FlashBanner, FormGrid, FormModal, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
+import { Badge, Button, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { COMMISSARY_ORDER_NEW_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FilterRow } from '@/components/FilterRow';
@@ -236,9 +236,11 @@ function NewOrderForm({ choice, branchStoreId }: { choice: CommissaryChoice; bra
           Commissary catalogue first. Whatever rate is used is captured onto the line.
         </p>
       </div>
-      <Button type="submit" variant="primary">
-        Save draft
-      </Button>
+      <DialogActions>
+        <Button type="submit" variant="primary">
+          Save draft
+        </Button>
+      </DialogActions>
     </CheckedForm>
     </FormModal>
     </div>

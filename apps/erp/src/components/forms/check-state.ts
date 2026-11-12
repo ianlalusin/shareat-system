@@ -95,6 +95,9 @@ export interface CheckCtx {
   result(name: string): FieldCheck | undefined;
   touched(name: string): boolean;
   applies(name: string): boolean;
+  /** T-548: a `DialogActions` band inside the form registered itself, so the summary renders in the band, not after the form. */
+  inBand: boolean;
+  registerBand(): () => void;
 }
 
 const INACTIVE: CheckCtx = {
@@ -110,6 +113,8 @@ const INACTIVE: CheckCtx = {
   result: () => undefined,
   touched: () => false,
   applies: () => true,
+  inBand: false,
+  registerBand: () => () => {},
 };
 
 export function checkContextValue(set: FieldRuleSetLike, state: CheckedFormState): CheckCtx {
@@ -149,6 +154,8 @@ export function checkContextValue(set: FieldRuleSetLike, state: CheckedFormState
     result: (name) => results.get(name),
     touched: (name) => state.touched[name] === true,
     applies: (name) => applicable.get(name) !== false,
+    inBand: false,
+    registerBand: () => () => {},
   };
 }
 

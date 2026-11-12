@@ -36,6 +36,7 @@ const MIGRATIONS = join(__dirname, '..', '..', '..', 'db', 'migrations');
 
 const T512_KEYS = ['settlement.variance_floor_amount', 'settlement.variance_percent', 'settlement.loan_final_tolerance', 'tax.withholding_rate_percent', 'tax.vat_percent'];
 const POS_KEYS = ['pos.business_day_start_hour', 'pos.senior_pwd_discount_percent'];
+const TABLE_KEYS = ['pos.table_warn_minutes'];
 
 const fileOf = (prefix: string): string => {
   const f = readdirSync(MIGRATIONS).find((n) => n.startsWith(prefix));
@@ -75,7 +76,7 @@ async function replay(paths: string[]): Promise<Row[]> {
 const text = (path: string): string => readFileSync(path, 'utf8');
 const namedKeys = (t: string): string[] => [...new Set([...t.matchAll(/'((?:settlement|tax|payroll|pos)\.[a-z_]+)'/g)].map((m) => m[1]!))].sort();
 
-describe('T-539 seed pin - 0239 plus 0241 together equal every registry default', () => {
+describe('T-539 seed pin - 0239, 0241 and 0245 together equal every registry default', () => {
   it('0239 on its own still seeds exactly the five T-512 keys (the old assertion, narrowed, not weakened) [kills: 0239 edited after it was applied]', async () => {
     const rows = await replay([fileOf('0239_')]);
     expect(rows.map((r) => r.key)).toEqual([...T512_KEYS].sort());
@@ -98,8 +99,17 @@ describe('T-539 seed pin - 0239 plus 0241 together equal every registry default'
     }
   });
 
-  it('0239 then 0241 for one org writes exactly one row per registry key, and every value IS the registry default [kills: a seed value that drifted from the registry; a registry key with no seed row anywhere]', async () => {
-    const rows = await replay([fileOf('0239_'), fileOf('0241_')]);
+  it('0245 on its own seeds exactly pos.table_warn_minutes: 90, at 2000-01-01, set_by null, reason "Starting value" [kills: a wrong value, date or reason; an old key seeded twice]', async () => {
+    const rows = await replay([fileOf('0245_')]);
+    expect(rows.map((r) => r.key)).toEqual(TABLE_KEYS);
+    expect(Number(rows[0]!.value)).toBe(90);
+    expect(rows[0]!.effective_from).toBe('2000-01-01');
+    expect(rows[0]!.set_by).toBeNull();
+    expect(rows[0]!.reason).toBe('Starting value');
+  });
+
+  it('0239, 0241, 0245 and 0248 for one org write exactly one row per registry key, and every value IS the registry default [kills: a seed value that drifted from the registry; a registry key with no seed row anywhere]', async () => {
+    const rows = await replay([fileOf('0239_'), fileOf('0241_'), fileOf('0245_'), fileOf('0248_')]);
     expect(rows.map((r) => r.key)).toEqual(Object.keys(RULE_REGISTRY).sort());
     for (const r of rows) {
       const want = (RULE_REGISTRY as Record<string, { default: unknown }>)[r.key]!.default;
@@ -110,14 +120,16 @@ describe('T-539 seed pin - 0239 plus 0241 together equal every registry default'
     }
   });
 
-  it('the two files name no key outside the registry, and between them name every registry key [kills: a typo in a seeded key; a key nobody seeds]', () => {
-    const named = [...new Set([...namedKeys(text(fileOf('0239_'))), ...namedKeys(text(fileOf('0241_')))])].sort();
+  it('the four files name no key outside the registry, and between them name every registry key [kills: a typo in a seeded key; a key nobody seeds]', () => {
+    const named = [...new Set([...namedKeys(text(fileOf('0239_'))), ...namedKeys(text(fileOf('0241_'))), ...namedKeys(text(fileOf('0245_'))), ...namedKeys(text(fileOf('0248_')))])].sort();
     expect(named).toEqual(Object.keys(RULE_REGISTRY).sort());
   });
 
-  it('0241 is data only: no table, trigger, policy or grant [kills: schema work smuggled into the seed migration]', () => {
-    const t = text(fileOf('0241_')).replace(/--[^\n]*/g, '');
-    expect(t).not.toMatch(/\b(create|alter|drop)\s+(table|trigger|policy|function|index)\b/i);
-    expect(t).not.toMatch(/\b(grant|revoke)\b/i);
+  it('0241 and 0245 are data only: no table, trigger, policy or grant [kills: schema work smuggled into a seed migration]', () => {
+    for (const prefix of ['0241_', '0245_']) {
+      const t = text(fileOf(prefix)).replace(/--[^\n]*/g, '');
+      expect(t, prefix).not.toMatch(/\b(create|alter|drop)\s+(table|trigger|policy|function|index)\b/i);
+      expect(t, prefix).not.toMatch(/\b(grant|revoke)\b/i);
+    }
   });
 });

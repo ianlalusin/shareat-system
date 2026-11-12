@@ -25,7 +25,7 @@
  * `sales_channels_org_id_id_store_id_unique` (that FK's target; see schema/sales-days.ts). The partial unique `settlement_day_lines_settlement_id_key` is mirrored below.
  */
 import { sql } from 'drizzle-orm';
-import { boolean, check, date, foreignKey, index, integer, numeric, pgTable, text, timestamp, unique, uniqueIndex, uuid, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { boolean, check, date, foreignKey, index, integer, numeric, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { channelSettlements } from './channel-settlements';
 import { journalEntries } from './journal';
 import { loans } from './loans';
@@ -273,10 +273,14 @@ export const settlementOtherLines = pgTable(
     lineDate: date('line_date'),
     /** Generic text only: no names, no personal data. */
     description: text('description'),
+    /** T-511 S6c (0244): the VAT of a `period_charge` line (net x the file's rate, half up, once; signed like `amount`). NULL = staged before S6c or not a period charge. */
+    vatAmount: numeric('vat_amount', { precision: 14, scale: 2 }),
     isCurrent: boolean('is_current').notNull().default(true),
   },
   (t) => [
     index('settlement_other_lines_org_upload_idx').on(t.orgId, t.uploadId),
+    unique('settlement_other_lines_org_id_id_unique').on(t.orgId, t.id),
+    check('settlement_other_lines_vat_amount_finite_check', sql`${t.vatAmount} > '-Infinity'::numeric and ${t.vatAmount} < 'Infinity'::numeric`),
     check('settlement_other_lines_kind_check', sql`${t.kind} in ('adjustment', 'compensation', 'chargeback', 'withholding_tax', 'advertisement', 'cancelled_order', 'period_charge', 'platform_fee_weekly', 'pandago')`),
     check('settlement_other_lines_booked_as_check', sql`${t.bookedAs} in ('platformFee', 'marketing', 'none')`),
     /** PandaGO is never booked from a settlement statement. */
@@ -330,5 +334,75 @@ export const salesDayPlatformCorrections = pgTable(
     foreignKey({ columns: [t.orgId, t.dayLineId], foreignColumns: [settlementDayLines.orgId, settlementDayLines.id], name: 'sales_day_platform_corrections_day_line_id_same_org_fk' }).onDelete('restrict'),
     foreignKey({ columns: [t.orgId, t.journalEntryId], foreignColumns: [journalEntries.orgId, journalEntries.id], name: 'sales_day_platform_corrections_journal_entry_id_same_org_fk' }).onDelete('restrict'),
     foreignKey({ columns: [t.orgId, t.postedBy], foreignColumns: [persons.orgId, persons.id], name: 'sales_day_platform_corrections_posted_by_same_org_fk' }).onDelete('restrict'),
+  ],
+);
+
+/**
+ * T-511 S6c (migration 0244) - the append-only record of a platform charge booked with no sales day (`postPlatformCharge`): Dr 6400 (fee + VAT) / Cr 1220 that channel,
+ * dated on the charge (or the first open date after it). `totalAmount = netAmount + vatAmount`, signed (a platform credit note is negative), never zero.
+ *
+ * NOTE: hand-added in 0244: ENABLE and FORCE ROW LEVEL SECURITY, the policy channel_period_charges_org_isolation (app_current_org()), the grants (SELECT and INSERT only),
+ * the append-only refuse trigger channel_period_charges_append_only (ENABLE ALWAYS), the finite checks and the total identity check. The channel and store are ONE 3-column
+ * FK onto sales_channels (org_id, id, store_id), so a charge never names another store than its channel's.
+ */
+export const channelPeriodCharges = pgTable(
+  'channel_period_charges',
+  {
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    storeId: uuid('store_id').notNull(),
+    channelId: uuid('channel_id').notNull(),
+    otherLineId: uuid('other_line_id').notNull(),
+    uploadId: uuid('upload_id').notNull(),
+    chargeDate: date('charge_date').notNull(),
+    netAmount: numeric('net_amount', { precision: 14, scale: 2 }).notNull(),
+    vatAmount: numeric('vat_amount', { precision: 14, scale: 2 }).notNull(),
+    totalAmount: numeric('total_amount', { precision: 14, scale: 2 }).notNull(),
+    entryDate: date('entry_date').notNull(),
+    journalEntryId: uuid('journal_entry_id').notNull(),
+    description: text('description'),
+    postedBy: uuid('posted_by').notNull(),
+    postedAt: timestamp('posted_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('channel_period_charges_other_line_unique').on(t.orgId, t.otherLineId),
+    unique('channel_period_charges_journal_entry_unique').on(t.orgId, t.journalEntryId),
+    unique('channel_period_charges_org_id_id_unique').on(t.orgId, t.id),
+    check('channel_period_charges_total_not_zero_check', sql`${t.totalAmount} <> 0`),
+    check('channel_period_charges_total_identity_check', sql`${t.totalAmount} = ${t.netAmount} + ${t.vatAmount}`),
+    check('channel_period_charges_net_amount_finite_check', finite(t.netAmount)),
+    check('channel_period_charges_vat_amount_finite_check', finite(t.vatAmount)),
+    check('channel_period_charges_total_amount_finite_check', finite(t.totalAmount)),
+    foreignKey({ columns: [t.orgId, t.channelId, t.storeId], foreignColumns: [salesChannels.orgId, salesChannels.id, salesChannels.storeId], name: 'channel_period_charges_channel_store_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.orgId, t.otherLineId], foreignColumns: [settlementOtherLines.orgId, settlementOtherLines.id], name: 'channel_period_charges_other_line_id_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.orgId, t.uploadId], foreignColumns: [settlementUploads.orgId, settlementUploads.id], name: 'channel_period_charges_upload_id_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.orgId, t.journalEntryId], foreignColumns: [journalEntries.orgId, journalEntries.id], name: 'channel_period_charges_journal_entry_id_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.orgId, t.postedBy], foreignColumns: [persons.orgId, persons.id], name: 'channel_period_charges_posted_by_same_org_fk' }).onDelete('restrict'),
+  ],
+);
+
+/**
+ * T-511 S6c (migration 0244) - which booked charges a channel settlement netted out of its payout. History: a void of the settlement leaves the row and it stops counting
+ * through the parent status. No unique on the charge alone (a void frees the charge for another settlement).
+ *
+ * NOTE: hand-added in 0244: ENABLE and FORCE ROW LEVEL SECURITY, the policy channel_settlement_charge_links_org_isolation, the grants (SELECT and INSERT only) and the
+ * append-only refuse trigger channel_settlement_charge_links_append_only (ENABLE ALWAYS).
+ */
+export const channelSettlementChargeLinks = pgTable(
+  'channel_settlement_charge_links',
+  {
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'restrict' }),
+    settlementId: uuid('settlement_id').notNull(),
+    chargeId: uuid('charge_id').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.settlementId, t.chargeId], name: 'channel_settlement_charge_links_pkey' }),
+    index('channel_settlement_charge_links_org_charge_idx').on(t.orgId, t.chargeId),
+    foreignKey({ columns: [t.orgId, t.settlementId], foreignColumns: [channelSettlements.orgId, channelSettlements.id], name: 'channel_settlement_charge_links_settlement_id_same_org_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.orgId, t.chargeId], foreignColumns: [channelPeriodCharges.orgId, channelPeriodCharges.id], name: 'channel_settlement_charge_links_charge_id_same_org_fk' }).onDelete('restrict'),
   ],
 );

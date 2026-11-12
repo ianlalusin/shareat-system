@@ -9,7 +9,7 @@
  * The FIRST render equals the server render (inactive: Save enabled, no lines), so a browser without scripts submits and the
  * server refuses with the very same sentence. Checks start in a layout effect that reads the form's current values.
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, type ComponentPropsWithoutRef, type FormEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ComponentPropsWithoutRef, type FormEvent } from 'react';
 import { ruleInputNames, type FieldRuleSetLike } from '@shareat/domain/field-rules';
 import { CheckContext } from './context';
 import { CheckSummary } from './CheckSummary';
@@ -31,9 +31,15 @@ export function CheckedForm({ rules, action, children, ...formProps }: CheckedFo
   const names = useMemo(() => new Set(ruleInputNames(rules)), [rules]);
   // T-475: a `<RuleCheck>` inside the form reports verdicts here and asks for its `watch` controls to be read as well.
   const host = useRuleHost(formRef, dispatch);
+  // T-548: a DialogActions band inside the form carries the check line itself; shortcut: a count, so two bands would show two lines (one per form is the rule).
+  const [bands, setBands] = useState(0);
+  const registerBand = useCallback(() => {
+    setBands((n) => n + 1);
+    return () => setBands((n) => n - 1);
+  }, []);
   const ctx = useMemo(
-    () => ({ ...checkContextValue(rules, state), setVerdict: host.setVerdict, track: host.track }),
-    [rules, state, host.setVerdict, host.track],
+    () => ({ ...checkContextValue(rules, state), setVerdict: host.setVerdict, track: host.track, inBand: bands > 0, registerBand }),
+    [rules, state, host.setVerdict, host.track, bands, registerBand],
   );
 
   const reread = useCallback(() => {
@@ -76,7 +82,7 @@ export function CheckedForm({ rules, action, children, ...formProps }: CheckedFo
         }
       >
         {children}
-        <CheckSummary active={ctx.active} summary={ctx.summary} />
+        {ctx.inBand ? null : <CheckSummary active={ctx.active} summary={ctx.summary} />}
       </form>
     </CheckContext.Provider>
   );

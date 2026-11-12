@@ -57,8 +57,8 @@ const WIRED: ReadonlyArray<readonly [string, string, string, string]> = [
   ['payroll/actions.ts', 'voidPayRunAction', 'VOID', 'void a pay run'],
   ['payroll/separations/actions.ts', 'voidSeparationAction', 'VOID', 'void a separation'],
   ['inventory/usage/actions.ts', 'voidUsageAction', 'VOID', 'void usage'],
+  ['inventory/usage/actions.ts', 'voidPullUsageAction', 'VOID', 'void a POS pull'], // T-550: moved from the retired pos-usage page
   ['inventory/production/actions.ts', 'voidProductionAction', 'VOID', 'void production'],
-  ['inventory/pos-usage/actions.ts', 'voidPullAction', 'VOID', 'void a POS pull'],
   ['inventory/returns/actions.ts', 'voidReturnAction', 'VOID', 'void a return'],
   ['trade/orders/actions.ts', 'voidOrderAction', 'VOID', 'void a trade order'],
   ['trade/returns/actions.ts', 'voidReturnAction', 'VOID', 'void a trade return'],

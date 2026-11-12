@@ -27,7 +27,7 @@ import type { RuleBook } from '../business-rules/book';
 import { dayBlockers, dayBlockersForLines, type DayBlocker } from './day-checks';
 import { LOAN_RULE_KEYS, loadLoanCheckContext, loanCheckViewerOf, loanCheckForDay, primeLoanCheckCoverage, type LoanCheckContext, type LoanCheckViewer, type LoanCheckViewerView } from './loan-check';
 import { intakeRefusal } from './refusal';
-import { foodpandaRuleDate, stageFoodpandaDays, stageRulesOn, STAGE_RULE_KEYS } from './stage';
+import { foodpandaRuleDate, stageFoodpandaDays, stageRulesOn, STAGE_RULE_KEYS, vatCentavosOf } from './stage';
 import { readStoredUpload, type StoredUpload } from './stored-upload';
 import { groupedMoney, plainDate } from './text';
 
@@ -293,9 +293,7 @@ async function vatOnFeesOf(tx: Tx, orgId: string, line: SettlementDayLineRow): P
   const numerator = invoice.charges
     .filter((c) => c.kind === 'cpc_ad' || c.kind === 'platform_fee')
     .reduce((t, c) => t + centsOf(c.netTotal) * BigInt(c.vatRate), 0n);
-  const abs = numerator < 0n ? -numerator : numerator;
-  const rounded = (2n * abs + 100n) / 200n;
-  return fromCentavos(numerator < 0n ? -rounded : rounded);
+  return fromCentavos(vatCentavosOf(numerator));
 }
 
 /** One day for the review screen, or null for an unknown line, another org's line or a line the actor may not see (the same answer for all three). */
@@ -385,7 +383,7 @@ const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
  * The gate, with a sentence of this screen's own. The platform's refusal for a store the person is not assigned to NAMES that store; here it must not (a manager
  * of one store learns nothing about another), and the stock wording of an admin-only word ("post into a closed period") would confuse here. The refusal keeps its type.
  */
-async function authorizeWith(tx: Tx, actor: Actor, capability: Capability, storeId: string | undefined, sentence: string): Promise<void> {
+export async function authorizeWith(tx: Tx, actor: Actor, capability: Capability, storeId: string | undefined, sentence: string): Promise<void> {
   try {
     await authorize(tx, actor, capability, storeId === undefined ? {} : { storeId });
   } catch (e) {

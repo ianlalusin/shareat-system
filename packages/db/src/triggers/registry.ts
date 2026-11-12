@@ -167,6 +167,19 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     kind: 'history_guard',
     reason: 'A platform sales correction row is never updated or deleted; a wrong one is corrected by a new row (the platform-corrections migration, T-511 S6b). Decides only from TG_OP.',
   },
+  // T-511 S6c (migration 0244): a period charge and a settlement-charge link are never edited or deleted (ALWAYS 41 -> 43).
+  channel_period_charges_append_only: {
+    table: 'channel_period_charges',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A posted platform period charge is never updated or deleted; a wrong one is reversed by hand in the books (0244, T-511 S6c). Decides only from TG_OP.',
+  },
+  channel_settlement_charge_links_append_only: {
+    table: 'channel_settlement_charge_links',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A settlement-charge link is never updated or deleted; a void of the settlement leaves it as history and it stops counting through the parent status (0244, T-511 S6c). Decides only from TG_OP.',
+  },
   missed_month_adjustments_no_update_trg: {
     table: 'missed_month_adjustments',
     mode: 'always',
@@ -490,7 +503,8 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     table: 'sales_days',
     mode: 'origin',
     kind: 'validator',
-    reason: "A linked store's day figures change only inside the derivation (0185, T-375 R6) - reads the store's CURRENT link and the flag.",
+    reason:
+      "A linked store's day figures change only inside the derivation (0185, T-375 R6); a pos_receipts day (0247, T-531) is created and changed only inside the derivation, for a LIVE store on or after live_from, and a v1 feed day on or after live_from is refused - reads the store's CURRENT link, its pos_stores row and the flag.",
   },
   // T-385 (0188): the order submitted -> verified. Origin: a replay or restore must load historic days verified straight from open.
   sales_days_verify_requires_submitted: {
@@ -519,13 +533,13 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     table: 'sales_day_tenders',
     mode: 'origin',
     kind: 'validator',
-    reason: "A linked store's tender rows change only inside the derivation (0185) - reads the day's source, status and the store's link.",
+    reason: "A linked store's tender rows change only inside the derivation (0185); the tender rows of a pos_receipts day (0247, T-531) likewise, while the day is open or submitted - reads the day's source, status and the store's link.",
   },
   sales_day_channels_lock: {
     table: 'sales_day_channels',
     mode: 'origin',
     kind: 'validator',
-    reason: "A feed day's remitted channel rows change only inside the derivation; platform rows only while the day is unverified (0185).",
+    reason: "A feed day's remitted channel rows change only inside the derivation; platform rows only while the day is unverified (0185). A pos_receipts day (0247, T-531) takes platform rows while open or submitted and no remitted row.",
   },
   pos_v1_store_links_store_fixed: {
     table: 'pos_v1_store_links',

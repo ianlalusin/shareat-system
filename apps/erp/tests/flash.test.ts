@@ -106,12 +106,12 @@ describe('F1 - nothing typed goes in the URL; the cookie holds it', () => {
   });
 
   it('nav keys stay in the URL beside f; with no flash at all the cookie is not set and f is omitted', async () => {
-    const withFlashed = await post('/pos-usage', { day: UUID }, { ok: 'done' });
+    const withFlashed = await post('/inventory/usage', { day: UUID }, { ok: 'done' });
     expect(withFlashed.u.searchParams.get('day')).toBe(UUID);
     expect(withFlashed.f).not.toBeNull();
 
     resetJar();
-    const bare = await post('/pos-usage', { day: UUID });
+    const bare = await post('/inventory/usage', { day: UUID });
     expect(bare.u.searchParams.get('day')).toBe(UUID);
     expect(bare.f).toBeNull();
     expect(currentJar().sets).toHaveLength(0);

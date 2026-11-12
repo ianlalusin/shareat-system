@@ -1158,6 +1158,146 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
       'nothing is stored. The receivable clears exactly either way: gross - commission - banked is swept in one line, not left on 1220.',
   },
 
+  // T-511 S6c (migration 0244): a platform charge with no sales day (the weekly fee, or an uncategorised Appendix B charge) is booked once, on the charge date, against the
+  // channel's receivable; the payout that later settles a day must NOT expense it again. storeRef: 'branch1' is the store of the uploaded invoice's channel.
+  {
+    id: 'channel_charge.period_fee',
+    sourceType: 'channel_charge',
+    title: 'A platform charge with no sales day — fee and VAT as one expense, the channel credited (T-511 S6c)',
+    narrative:
+      'v2-only. A Foodpanda invoice carries a ₱100 weekly platform fee that no sales day can pay, and ₱12 of VAT on it: ₱112 in all. ' +
+      'Once a manager approves the file the charge is booked on the date printed on it (or the first open date after it): Dr 6400 ₱112 (the fee and its VAT, one line), ' +
+      'Cr 1220 ₱112 with the channel as party. Foodpanda will take the ₱112 off a later payout, so the receivable already shows it as a credit.',
+    input: { channel: 'Foodpanda', chargeDate: '2026-01-10', description: 'Platform Fee', netTotal: '100.00', vatAmount: '12.00' },
+    expect: [
+      D('6400', '112.00', null, { storeRef: 'branch1', lineMemo: 'Foodpanda platform fee, VAT included' }),
+      C('1220', '112.00', { type: 'channel', id: 'CH-FOODPANDA' }, { storeRef: 'branch1', lineMemo: 'Foodpanda platform fee, VAT included' }),
+    ],
+    entryDate: '2026-01-15',
+    trap:
+      'The VAT is part of the cost (no VAT engine, no input-VAT account: bible row 75), so ONE 6400 line carries fee plus VAT. The credit goes to 1220 with the channel as party, ' +
+      'or the platform aging and the settlement cannot see it. A platform credit note is the same two accounts on the opposite sides, never a negative amount. ' +
+      'The staged line is not the document: the posting is recorded once per staged line, so approving the same invoice twice books it once.',
+  },
+  {
+    id: 'channel_settlement.nets_period_charge',
+    sourceType: 'channel_settlement',
+    title: 'Channel settlement — the payout already netted a booked period charge, so it is not expensed again (T-511 S6c)',
+    narrative:
+      'The weekly charge above (₱100 fee + ₱12 VAT = ₱112) is booked. Foodpanda pays a ₱10,000 day, takes ₱2,000 of day fees (VAT included) and the ₱112 charge: ' +
+      '₱7,888 is banked. The settlement names the charge it nets: Dr 1140 ₱7,888, Dr 6400 ₱2,000 (the day fees only), Cr 1220 ₱9,888 (the day less the charge already ' +
+      'credited). Nothing is left over: there is no 6420 shortfall. 6400 holds ₱2,112 in all, the charge once.',
+    input: {
+      channel: 'Foodpanda',
+      businessDate: '2026-01-10',
+      grossAmount: '10000.00',
+      platformFee: '2000.00',
+      settleChargeIds: ['CHARGE-WEEKLY-FEE'],
+      netDeposited: '7888.00',
+    },
+    expect: [
+      D('1140', '7888.00', { type: 'money_account', id: 'MA-PAYOUT' }, { storeRef: 'branch1', lineMemo: 'Foodpanda settlement' }),
+      D('6400', '2000.00', null, { storeRef: 'branch1', lineMemo: 'Platform fee' }),
+      C('1220', '9888.00', { type: 'channel', id: 'CH-FOODPANDA' }, { storeRef: 'branch1', lineMemo: 'Foodpanda settlement' }),
+    ],
+    entryDate: '2026-01-20',
+    trap:
+      'The platform deducts a charge you already booked, so the payout is SHORT of the day by exactly that charge. Settled the plain way, that gap (112) is swept to 6420 and the charge ' +
+      'is expensed twice (6400 112 and 6420 112). Naming the charge (settleChargeIds) credits 1220 by the day less the charge, so the difference is zero. A charge counts as ' +
+      'netted only while its settlement stands: a void frees it. The difference tolerance never decides this; the link does.',
+  },
+
+  // T-511 S7a: approve a settlement day. The two worked examples of the S7 spec, each with its setup entries (the sales figure and the correction; the week's other entries).
+  // `approveDay` posts the correction FIRST and the settlement second, in one transaction; both fixtures are proved against the real function (t511-s7a-posting-patterns-real).
+  {
+    id: 'channel_settlement.grab_day_after_correction',
+    sourceType: 'channel_settlement',
+    title: 'Approve a Grab day — the platform figure replaces the staff figure first, then the payout clears the whole day (T-511 S7a)',
+    narrative:
+      'Staff typed a ₱10,000 Grab day (Dr 1220 / Cr 4150 ₱10,000). The Grab file says ₱11,000, with ₱2,200 commission, a ₱100 platform fee, a ₱500 loan repayment and ₱8,200 paid out. ' +
+      'Approving the day posts two entries in one transaction. First the correction: Dr 1220 ₱1,000 (party the channel) / Cr 4150 ₱1,000, dated on the sales day. Then the settlement: ' +
+      'Dr 1140 ₱8,200, Dr 6400 ₱2,300 (commission and platform fee), Dr 2400 ₱500 (the loan), Cr 1220 ₱11,000. The difference is zero, so nothing is asked and nothing is swept.',
+    input: {
+      channel: 'Grab',
+      businessDate: '2026-01-10',
+      staffFigure: '10000.00',
+      fileFigure: '11000.00',
+      grossAmount: '11000.00',
+      commission: '2200.00',
+      platformFee: '100.00',
+      loanLegs: [{ loan: 'Lipa loan', amount: '500.00' }],
+      netDeposited: '8200.00',
+    },
+    setup: [
+      [
+        D('1220', '10000.00', { type: 'channel', id: 'CH-GRAB' }, { storeRef: 'branch1', lineMemo: 'Grab sales day' }),
+        C('4150', '10000.00', null, { storeRef: 'branch1', lineMemo: 'Grab sales day' }),
+      ],
+      [
+        D('1220', '1000.00', { type: 'channel', id: 'CH-GRAB' }, { storeRef: 'branch1', lineMemo: 'Grab file correction' }),
+        C('4150', '1000.00', null, { storeRef: 'branch1', lineMemo: 'Grab file correction' }),
+      ],
+    ],
+    setupSourceTypes: ['sale', 'sale'],
+    expect: [
+      D('1140', '8200.00', { type: 'money_account', id: 'MA-PAYOUT' }, { storeRef: 'branch1', lineMemo: 'Grab settlement' }),
+      D('6400', '2200.00', null, { storeRef: 'branch1', lineMemo: 'Commission' }),
+      D('6400', '100.00', null, { storeRef: 'branch1', lineMemo: 'Platform fee' }),
+      D('2400', '500.00', { type: 'loan', id: 'LOAN-LIPA' }, { storeRef: 'branch1', lineMemo: 'Loan repayment' }),
+      C('1220', '11000.00', { type: 'channel', id: 'CH-GRAB' }, { storeRef: 'branch1', lineMemo: 'Grab settlement' }),
+    ],
+    entryDate: '2026-01-10',
+    trap:
+      'The ORDER is the control. Settle the day first and the payout clears only the ₱10,000 staff typed, while ₱8,200 + ₱2,300 + ₱500 leave the books: the ₱1,000 gap is inside the ' +
+      'tolerance, so it books silently as a gain on 7100 and 4150 never learns the sales figure was wrong. Correcting first makes the difference zero. The staff figure is never edited: ' +
+      'the correction is a new fact on the ledger, and a re-approve after a void posts no second correction.',
+  },
+  {
+    id: 'channel_settlement.foodpanda_week_with_charge',
+    sourceType: 'channel_settlement',
+    title: 'Approve a Foodpanda week — the last day of the invoice nets the booked period charge once (T-511 S7a)',
+    narrative:
+      'One Foodpanda invoice covers three days: ₱9,000 (₱1,800 fees, ₱7,200 banked), ₱8,000 (₱1,600, ₱6,400) and ₱10,000 (₱2,000, ₱8,000 staged), plus a charge on no day: ₱100 and ₱12 VAT, ₱112, ' +
+      'booked first (Dr 6400 / Cr 1220 ₱112). The platform took the ₱112 out of the invoice payout, so the LAST day of the invoice carries it: that day names the charge and banks ₱8,000 less ₱112 = ₱7,888. ' +
+      'The first two days approve as plain days. The bank receives ₱7,200 + ₱6,400 + ₱7,888 = ₱21,488, the invoice total, and 6400 holds the charge once.',
+    input: {
+      channel: 'Foodpanda',
+      businessDate: '2026-01-12',
+      invoice: '200777000001',
+      grossAmount: '10000.00',
+      commission: '2000.00',
+      settleChargeIds: ['CHARGE-WEEKLY-FEE'],
+      netDeposited: '7888.00',
+    },
+    setup: [
+      [
+        D('6400', '112.00', null, { storeRef: 'branch1', lineMemo: 'Foodpanda platform fee, VAT included' }),
+        C('1220', '112.00', { type: 'channel', id: 'CH-FOODPANDA' }, { storeRef: 'branch1', lineMemo: 'Foodpanda platform fee, VAT included' }),
+      ],
+      [
+        D('1140', '7200.00', { type: 'money_account', id: 'MA-PAYOUT' }, { storeRef: 'branch1', lineMemo: 'Foodpanda settlement' }),
+        D('6400', '1800.00', null, { storeRef: 'branch1', lineMemo: 'Commission' }),
+        C('1220', '9000.00', { type: 'channel', id: 'CH-FOODPANDA' }, { storeRef: 'branch1', lineMemo: 'Foodpanda settlement' }),
+      ],
+      [
+        D('1140', '6400.00', { type: 'money_account', id: 'MA-PAYOUT' }, { storeRef: 'branch1', lineMemo: 'Foodpanda settlement' }),
+        D('6400', '1600.00', null, { storeRef: 'branch1', lineMemo: 'Commission' }),
+        C('1220', '8000.00', { type: 'channel', id: 'CH-FOODPANDA' }, { storeRef: 'branch1', lineMemo: 'Foodpanda settlement' }),
+      ],
+    ],
+    setupSourceTypes: ['channel_charge', 'channel_settlement', 'channel_settlement'],
+    expect: [
+      D('1140', '7888.00', { type: 'money_account', id: 'MA-PAYOUT' }, { storeRef: 'branch1', lineMemo: 'Foodpanda settlement' }),
+      D('6400', '2000.00', null, { storeRef: 'branch1', lineMemo: 'Commission' }),
+      C('1220', '9888.00', { type: 'channel', id: 'CH-FOODPANDA' }, { storeRef: 'branch1', lineMemo: 'Foodpanda settlement' }),
+    ],
+    entryDate: '2026-01-14',
+    trap:
+      'Only ONE day of the invoice carries the charge: the latest-dated day. Name it on an earlier day and that day banks less than it should while the carrier banks too much; name it nowhere and ' +
+      'the ₱112 is swept to 6420 and expensed twice. A day is held until the charge is booked, because the payout is short by exactly that charge. If the carrier day is rejected the charge stays a ' +
+      'credit on 1220, and a void of the carrier frees the charge so the re-approve nets it again.',
+  },
+
   // =========================================================================================
   // amortization — 38 legs. Always both legs (leg-mapping.ts: "always both", same shape as
   // depreciation). One of ADR-005's five January-required capabilities.

@@ -66,6 +66,8 @@ export interface UsageRecordDetail {
   readonly lines: UsageLineView[];
   /** T-374 S7 (R10): a live POS pull made this record, so it is voided with the pull, not here. */
   readonly fromLivePull: boolean;
+  /** T-550: the live pull that made this record (the id the Void-pull action works from), or null. */
+  readonly livePullId: string | null;
 }
 
 export async function usageRecordDetail(orgId: string, id: string): Promise<UsageRecordDetail | null> {
@@ -92,8 +94,8 @@ export async function usageRecordDetail(orgId: string, id: string): Promise<Usag
       });
     }
 
-    const fromLivePull = !!(await posMappingRepo.livePullForUsageRecord(tx, id));
-    return { record, locationName: roomName, lines: lineViews, fromLivePull };
+    const livePull = await posMappingRepo.livePullForUsageRecord(tx, id);
+    return { record, locationName: roomName, lines: lineViews, fromLivePull: !!livePull, livePullId: livePull?.pullId ?? null };
   });
 }
 

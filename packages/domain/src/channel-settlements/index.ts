@@ -10,7 +10,7 @@
  * again as a separate expense document, and it cost **₱198,148.29** across two stores. One
  * function owns these legs, which makes the double-count impossible rather than merely forbidden.
  */
-import { auditLogRepo, channelSettlementsRepo, loansRepo, moneyAccountsRepo, moneyTransfersRepo, type Tx } from '@shareat/db';
+import { advisoryLocksRepo, auditLogRepo, channelSettlementsRepo, loansRepo, moneyAccountsRepo, moneyTransfersRepo, settlementIntakeRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { logger } from '@shareat/core/logger';
 import { compare, fromCentavos, isZero, money, negate, toCentavos, ZERO, type Money } from '@shareat/core/money';
@@ -103,6 +103,12 @@ export interface RecordSettlementInput {
    * Without it a typo can quietly become expense or revenue. Within tolerance it is ignored (not stored, not refused).
    */
   acknowledgeDifference?: { reason: string } | null;
+  /**
+   * T-511 S6c: the booked period charges (`postPlatformCharge` -> `channel_period_charges.id`) the platform netted out of THIS payout. Each already credited the receivable
+   * when it was booked, so the payout clears that much LESS of it: naming them is what stops the charge being expensed a second time as a settlement variance. Same channel
+   * and store, booked, not already netted by a live (not voided) settlement; a duplicate id counts once. Empty or absent is no charge netted.
+   */
+  settleChargeIds?: string[];
 }
 
 export interface LoanLegInput {
@@ -138,7 +144,7 @@ export interface SettlementPreview {
   storeId: string;
   /** What `1220` says this channel is still owed, right now. Derived, never stored. */
   outstanding: string;
-  /** What this settlement would credit `1220` — capped at what is actually owed. */
+  /** What this settlement would credit `1220` — capped at what is actually owed, less the booked charges it nets (S6c). The same figure the posting stores. */
   outstandingCleared: string;
   /** The six deduction kinds, summed. **Signed** — a promo day can make this negative. */
   feesTotal: string;
@@ -403,6 +409,8 @@ function computeSettlement(
   figures: SettlementFigures,
   acknowledge: { reason: string } | null | undefined,
   outstanding: Money,
+  /** T-511 S6c: the total of the booked charges this payout netted (signed; zero when none). */
+  nettedCharges: Money,
   channelName: string,
   rules: VarianceRules,
 ): ComputedSettlement {
@@ -415,7 +423,9 @@ function computeSettlement(
   const loanDeduction = figures.loanLegs.reduce((t, l) => t + toCentavos(l.amount), 0n);
   const netDeposited = c(figures.netDeposited);
   const gross = c(figures.gross);
-  const owed = c(outstanding);
+  const netted = c(nettedCharges);
+  // The charges already credited 1220 when they were booked, so before them the receivable stood at owed + netted.
+  const owedGross = c(outstanding) + netted;
   const toleranceMills = toleranceMillsFor(gross, rules);
   const tolerance = millsToMoney(toleranceMills);
 
@@ -424,7 +434,7 @@ function computeSettlement(
   if (netDeposited < 0n) {
     blockers.push(NEGATIVE_DEPOSIT_BLOCKER);
   }
-  if (owed <= 0n) {
+  if (owedGross <= 0n) {
     blockers.push(
       `${channelName} has nothing outstanding to settle. Either the sales day was never ` +
         'verified, or this payout is already settled.',
@@ -433,7 +443,24 @@ function computeSettlement(
 
   // The receivable this clears is capped at what is actually outstanding — settling more than
   // is owed would drive 1220 negative, which is never a real state.
-  const outstandingCleared = owed < gross ? owed : gross;
+  // T-511 S6c: what the payout settles of the receivable, less the charges it nets (they were credited when booked). This is the figure STORED and credited to 1220,
+  // so `channel_settlements_identity_check` (cleared + gain = fees + variance + loan + net) holds.
+  const settled = owedGross < gross ? owedGross : gross;
+  const outstandingCleared = settled - netted;
+  if (netted !== 0n && outstandingCleared < 0n) {
+    blockers.push(
+      `The charges netted out of this payout (₱${fromCentavos(netted)}) are more than the receivable this payout settles (₱${fromCentavos(settled)}). ` +
+        'Name only the charges the platform took out of this payout.',
+    );
+  }
+
+  // Nothing to post at all (the netted charges use up the whole receivable and no money, fee or loan moved): refuse in words instead of an empty entry.
+  const anyFee = [d.commission, d.marketing, d.platformFee, d.vatOnFees, d.withholdingTax, d.penalty].some((v) => c(v) !== 0n);
+  if (outstandingCleared === 0n && netDeposited === 0n && !anyFee && figures.loanLegs.every((l) => toCentavos(l.amount) === 0n)) {
+    blockers.push(
+      `There is nothing to record for ${channelName}: the charges netted out of this payout use up the whole receivable it settles, and no money was deposited.`,
+    );
+  }
 
   // ⭐ variance is a statement about the SALES DAY, not about the platform.
   //    positive → staff over-reported; the shortfall is swept to 6420
@@ -536,11 +563,17 @@ export const NEGATIVE_DEPOSIT_BLOCKER =
 async function gatherSettlementContext(
   trx: Tx,
   actor: Actor,
-  input: { storeId: string; channelId: string; businessDate: string },
+  input: { storeId: string; channelId: string; businessDate: string; settleChargeIds?: readonly string[] },
+  /** The posting locks each netted charge before reading whether it is taken; the preview only reads. */
+  lockCharges: boolean,
 ): Promise<{
   config: { name: string; storeId: string; destinationMoneyAccountId: string | null; taxTreatment: string };
   destinationName: string | null;
   outstanding: Money;
+  /** T-511 S6c: the netted charges, de-duplicated, and their total. */
+  chargeIds: string[];
+  nettedCharges: Money;
+  chargeBlockers: string[];
   configBlockers: string[];
   /** T-512 — the variance rules in force on the business date: one rule-book query, the same for the preview and the posting. */
   variance: VarianceRules;
@@ -562,7 +595,42 @@ async function gatherSettlementContext(
   // T-371 R4 — the ledger's balance is re-minted, never `Number()`-ed: a malformed figure throws here.
   const outstanding = money(await R.outstandingFor(trx, actor.orgId, input.channelId));
   const variance = varianceRulesOn(await loadRuleBook(trx, actor.orgId, VARIANCE_RULE_KEYS), input.businessDate);
-  return { config, destinationName, outstanding, configBlockers, variance };
+  const netting = await chargeNetting(trx, actor.orgId, input, config, lockCharges);
+  return { config, destinationName, outstanding, chargeIds: netting.ids, nettedCharges: netting.total, chargeBlockers: netting.blockers, configBlockers, variance };
+}
+
+/**
+ * T-511 S6c - the booked charges this payout nets: de-duplicated (a repeated id counts once), each one checked in plain words, and (for the posting) serialised per
+ * charge by a transaction advisory lock taken in sorted order BEFORE the "already netted" read, so two payouts naming one charge cannot both pass. An id that is not a
+ * booked charge (unknown, a staged line, another org's) reads as "could not be found". A link counts only through a settlement that is not voided.
+ */
+async function chargeNetting(
+  trx: Tx,
+  orgId: string,
+  input: { channelId: string; settleChargeIds?: readonly string[] },
+  config: { name: string; storeId: string },
+  lock: boolean,
+): Promise<{ ids: string[]; total: Money; blockers: string[] }> {
+  const ids = [...new Set((input.settleChargeIds ?? []).map((i) => (i ?? '').trim().toLowerCase()).filter((i) => i !== ''))];
+  if (ids.length === 0) return { ids, total: ZERO, blockers: [] };
+  const real = ids.filter((i) => UUID_TEXT.test(i));
+  if (lock) for (const id of [...real].sort()) await advisoryLocksRepo.lockPeriodCharge(trx, id);
+  const rows = new Map((await R.chargesForNetting(trx, orgId, real)).map((r) => [r.id, r]));
+  const blockers = new Set<string>();
+  let total = 0n;
+  for (const id of ids) {
+    const row = rows.get(id);
+    if (!row) {
+      blockers.add('One of the charges named for this payout could not be found, or has not been booked yet.');
+    } else if (row.channelId !== input.channelId || row.storeId !== config.storeId) {
+      blockers.add(`A charge named for this payout does not belong to ${config.name}. Name only the charges of this channel and store.`);
+    } else if (row.nettedBySettlementId) {
+      blockers.add(`A charge of ₱${row.totalAmount} dated ${row.chargeDate} was already netted out of another payout. Void that payout first, or leave the charge out of this one.`);
+    } else {
+      total += toCentavos(money(row.totalAmount));
+    }
+  }
+  return { ids, total: fromCentavos(total), blockers: [...blockers] };
 }
 
 /**
@@ -577,7 +645,7 @@ export async function previewChannelSettlement(
   input: Omit<RecordSettlementInput, 'salesDayId' | 'settledOn'> & { settledOn?: string },
 ): Promise<SettlementPreview> {
   const run = async (trx: Tx): Promise<SettlementPreview> => {
-    const ctx = await gatherSettlementContext(trx, actor, input);
+    const ctx = await gatherSettlementContext(trx, actor, input, false);
     // S5.5v Amendment A1 / A2 item 3 — the docstring's promise is "every refusal it would hit", so
     // EVERY bad figure is COLLECTED alongside the config blockers, never thrown past them.
     // `recordChannelSettlement` (below) keeps the throw — a post is all-or-nothing, a preview is not.
@@ -586,7 +654,7 @@ export async function previewChannelSettlement(
     // S5.5v Amendment A2 item 2 — a figure that failed to parse has no safe value to compute
     // with; running the arithmetic anyway is how "NaN" reaches the screen. Zero figures, blockers
     // only, until every field parses.
-    const c = figures ? computeSettlement(figures, input.acknowledgeDifference, ctx.outstanding, ctx.config.name, ctx.variance) : ZERO_COMPUTED_SETTLEMENT;
+    const c = figures ? computeSettlement(figures, input.acknowledgeDifference, ctx.outstanding, ctx.nettedCharges, ctx.config.name, ctx.variance) : ZERO_COMPUTED_SETTLEMENT;
     return {
       channelName: ctx.config.name,
       storeId: ctx.config.storeId,
@@ -599,7 +667,7 @@ export async function previewChannelSettlement(
       settlementGain: c.settlementGain,
       tolerance: c.tolerance,
       destinationAccountName: ctx.destinationName,
-      blockers: [...ctx.configBlockers, ...figureBlockers, ...legBlockers, ...c.blockers],
+      blockers: [...ctx.configBlockers, ...ctx.chargeBlockers, ...figureBlockers, ...legBlockers, ...c.blockers],
       needsAcknowledgement: c.needsAcknowledgement,
       difference: c.difference,
       differenceSign: c.differenceSign,
@@ -646,16 +714,19 @@ export async function recordChannelSettlement(
           'a payout covering several days is one settlement per day, sharing a reference.',
       );
     }
-    const ctx = await gatherSettlementContext(trx, actor, input);
+    // T-511 S7a (audit): the channel lock approve takes, taken here too (re-entrant inside approve), BEFORE the balance is read, so a hand-recorded settlement and an approve
+    // of the same channel cannot both clear the same balance.
+    await advisoryLocksRepo.lockSettlementChannel(trx, input.channelId);
+    const ctx = await gatherSettlementContext(trx, actor, input, true);
     const figures = assertSettlementFigures('recordChannelSettlement', input);
     const legBlockers = await loanLegBlockers(trx, actor.orgId, figures.loanLegs);
     if (legBlockers.length > 0) throw refuse('recordChannelSettlement: a loan leg is not valid', legBlockers[0]!);
     const config = ctx.config;
-    const c = computeSettlement(figures, input.acknowledgeDifference, ctx.outstanding, config.name, ctx.variance);
+    const c = computeSettlement(figures, input.acknowledgeDifference, ctx.outstanding, ctx.nettedCharges, config.name, ctx.variance);
 
     // ⚠️ Config refusals first — "no destination account" explains a settlement that cannot be
     // banked far better than the arithmetic error it would otherwise cause.
-    const blockers = [...ctx.configBlockers, ...c.blockers];
+    const blockers = [...ctx.configBlockers, ...ctx.chargeBlockers, ...c.blockers];
     if (blockers.length > 0) throw new Error(`recordChannelSettlement: ${blockers[0]}`);
 
     const {
@@ -704,6 +775,8 @@ export async function recordChannelSettlement(
     });
     // T-511 S6a: the legs go in with the header, in this transaction. A deferred trigger checks at commit that they add up to `loanDeduction`.
     await R.insertLoanLegs(trx, actor.orgId, settlementId, figures.loanLegs);
+    // T-511 S6c: the charges this payout netted, in the same transaction. History: a void leaves them and they stop counting through the parent status.
+    await R.insertChargeLinks(trx, actor.orgId, settlementId, ctx.chargeIds);
 
     const memo = `${config.name} settlement — ${input.businessDate}`;
     const lines: Parameters<typeof postEntry>[1]['lines'] = [];
@@ -804,15 +877,17 @@ export async function recordChannelSettlement(
       }
     }
 
-    // ...and the receivable it all clears.
-    lines.push({
-      accountCode: R.CHANNEL_RECEIVABLE_CODE,
-      storeId: input.storeId,
-      credit: outstandingCleared,
-      partyType: R.PARTY_TYPE,
-      partyId: input.channelId,
-      lineMemo: memo,
-    });
+    // ...and the receivable it all clears. A zero credit is never posted (the netted charges can use up the whole receivable); computeSettlement blocks the case where no line is left.
+    if (!isZero(outstandingCleared)) {
+      lines.push({
+        accountCode: R.CHANNEL_RECEIVABLE_CODE,
+        storeId: input.storeId,
+        credit: outstandingCleared,
+        partyType: R.PARTY_TYPE,
+        partyId: input.channelId,
+        lineMemo: memo,
+      });
+    }
 
     const posted = await postEntry(trx, {
       orgId: actor.orgId,
@@ -978,9 +1053,14 @@ export async function voidChannelSettlement(
   input: { settlementId: string; reason: string },
 ): Promise<{ reversedEntryId: string }> {
   const run = async (trx: Tx) => {
-    const s = await R.getById(trx, actor.orgId, input.settlementId);
-    if (!s) throw new Error(`voidChannelSettlement: settlement ${input.settlementId} does not exist.`);
-    await authorize(trx, actor, 'record_ar_collection', { storeId: s.storeId });
+    const seen = await R.getById(trx, actor.orgId, input.settlementId);
+    if (!seen) throw new Error(`voidChannelSettlement: settlement ${input.settlementId} does not exist.`);
+    await authorize(trx, actor, 'record_ar_collection', { storeId: seen.storeId });
+    // The channel lock approve takes first (channel, then the staged line, then the books), so a void and an approve of the same channel queue instead of crossing.
+    await advisoryLocksRepo.lockSettlementChannel(trx, seen.channelId);
+    // Read again under the lock: a second voider that queued behind the first must see it voided.
+    const s = (await R.getById(trx, actor.orgId, input.settlementId)) ?? seen;
+    if (s.status === 'voided') throw refuse(`voidChannelSettlement: settlement is ${s.status}, not posted.`, 'This settlement was already voided.');
     if (s.status !== 'posted') throw new Error(`voidChannelSettlement: settlement is ${s.status}, not posted.`);
     if (!s.journalEntryId) throw new Error('voidChannelSettlement: posted settlement carries no entry — that is a bug.');
 
@@ -999,7 +1079,23 @@ export async function voidChannelSettlement(
       reason,
       reversedBy: actor.personId,
     });
-    await R.markVoided(trx, actor.orgId, s.id, { voidedBy: actor.personId, voidReason: reason });
+    if (!(await R.markVoided(trx, actor.orgId, s.id, { voidedBy: actor.personId, voidReason: reason }))) {
+      throw refuse(`voidChannelSettlement: settlement ${s.id} is no longer posted`, 'This settlement was already voided.');
+    }
+    // T-511 S7a: a staged day this settlement booked goes back to pending in the same transaction (a plain void is not a dead end). Only the CURRENT line returns; a line a
+    // newer file replaced stays booked as history. A hand-recorded settlement carries no line, so nothing happens.
+    const returned = await settlementIntakeRepo.markUnbooked(trx, actor.orgId, s.id);
+    if (returned) {
+      await auditLogRepo.append(trx, actor.orgId, {
+        actorPersonId: actor.personId,
+        action: 'settlement_day.unbooked',
+        storeId: returned.storeId,
+        entityId: returned.id,
+        before: { reviewState: 'booked', settlementId: s.id },
+        after: { reviewState: 'pending', voidedSettlementId: s.id },
+        source: 'web',
+      });
+    }
     return { reversedEntryId: reversal.reversalEntryId };
   };
   return run(tx);
@@ -1106,3 +1202,7 @@ export async function listPostedSettlementsForStore(
 // T-511 S6b: the platform file figure replaces the staff figure in a day's sales and receivable (no caller until slice 7 approves a day).
 export { correctPlatformSales } from './correction';
 export type { CorrectPlatformSalesInput, CorrectPlatformSalesResult } from './correction';
+
+// T-511 S6c: a platform charge with no sales day is booked once (no caller until slice 7 approves an upload). The clock seam stays off the barrel.
+export { postPlatformCharge } from './charge';
+export type { PostPlatformChargeInput, PostPlatformChargeResult } from './charge';

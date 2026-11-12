@@ -41,6 +41,8 @@ export { SplitWorkspace } from './SplitWorkspace';
 // T-448: forms live in modals; long help lives behind (?).
 export { Dialog, FormModal } from './Dialog';
 export type { DialogProps, DialogSize, FormModalProps } from './Dialog';
+export { DialogActions } from './DialogActions';
+export type { DialogActionsProps } from './DialogActions';
 export { HelpTip } from './HelpTip';
 export type { HelpTipProps } from './HelpTip';
 export { DisclosureCard } from './DisclosureCard';

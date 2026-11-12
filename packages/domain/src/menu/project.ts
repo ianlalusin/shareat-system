@@ -115,7 +115,12 @@ function channelDelta(delta: string | undefined): ChannelDelta {
   return delta === undefined ? { orderable: false, notOffered: 'no_offer' } : { orderable: true, priceDelta: delta };
 }
 
-export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Date): ProjectedStoreMenu {
+/**
+ * `showWithdrawnStore` is for the POS tablet only (T-527b, row 307): a variant whose STORE offer is withdrawn (sold out) is kept in `items` with
+ * `channels.store = { orderable: false, notOffered: 'withdrawn' }` so the picker can show it greyed. Off by default: the server's own pricing,
+ * the terminal feed and every content hash stay exactly what they were.
+ */
+export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Date, opts: { showWithdrawnStore?: boolean } = {}): ProjectedStoreMenu {
   const entry = snapshot.stores.find((s) => s.storeId === storeId);
   if (!entry) throw internalFault(`projectStoreMenu: store ${storeId} is not in the snapshot`);
   if (entry.at.getTime() !== at.getTime()) {
@@ -154,6 +159,7 @@ export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Da
   };
 
   const shows = (c: ChannelOffer): boolean => c.orderable || c.notOffered === 'outside_hours';
+  const showsStore = (c: ChannelOffer): boolean => shows(c) || (opts.showWithdrawnStore === true && !c.orderable && c.notOffered === 'withdrawn');
 
   const itemById = new Map(snapshot.items.map((i) => [i.id, i]));
   const groupById = new Map(snapshot.optionGroups.map((g) => [g.id, g]));
@@ -168,7 +174,7 @@ export function projectStoreMenu(snapshot: MenuSnapshot, storeId: string, at: Da
       store: channelFor(v.id, 'store'),
       online: channelFor(v.id, 'online'),
     };
-    if (!shows(channels.store) && !shows(channels.online)) continue;
+    if (!showsStore(channels.store) && !shows(channels.online)) continue;
     appearing.set(v.id, { variant: v, channels });
   }
   const appearingItemIds = new Set<string>();

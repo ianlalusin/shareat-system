@@ -20,7 +20,7 @@ import { DetailLayout } from '@/components/shell/DetailLayout';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Button, Field, FlashBanner, FormModal, Input, Select } from '@/components/ui';
+import { Button, Field, FlashBanner, FormModal, Input, Select, DialogActions } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import {
   OWNERS_CLOSE_MONTH_RULES,
@@ -168,9 +168,11 @@ export default async function OwnerPage({
               <Field label="On" rule={OWNERS_CONTRIBUTION_RULES.on}>
                 <Input type="date" {...nativeAttrs(OWNERS_CONTRIBUTION_RULES.on)} defaultValue={today()} className="w-full" />
               </Field>
-              <Button type="submit" variant="secondary">
-                Record contribution
-              </Button>
+              <DialogActions>
+                <Button type="submit" variant="secondary">
+                  Record contribution
+                </Button>
+              </DialogActions>
             </CheckedForm>
           </FormModal>
         </section>
@@ -211,9 +213,11 @@ export default async function OwnerPage({
               <Field label="On" rule={OWNERS_DRAWING_RULES.on}>
                 <Input type="date" {...nativeAttrs(OWNERS_DRAWING_RULES.on)} defaultValue={today()} className="w-full" />
               </Field>
-              <Button type="submit" variant="primary">
-                Record drawing
-              </Button>
+              <DialogActions>
+                <Button type="submit" variant="primary">
+                  Record drawing
+                </Button>
+              </DialogActions>
             </CheckedForm>
           </FormModal>
         </section>
@@ -262,9 +266,11 @@ export default async function OwnerPage({
                   <Input type="date" {...nativeAttrs(OWNERS_CLOSE_MONTH_RULES.on)} defaultValue={today()} className="w-full" />
                 </Field>
               </div>
-              <Button type="submit" variant="secondary">
-                Close {owner.closableMonth.slice(0, 7)}
-              </Button>
+              <DialogActions>
+                <Button type="submit" variant="secondary">
+                  Close {owner.closableMonth.slice(0, 7)}
+                </Button>
+              </DialogActions>
             </CheckedForm>
           </FormModal>
         ) : (

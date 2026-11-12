@@ -1420,6 +1420,16 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       'A posting document: it names a journal entry (purge) and a sales day (purge). Append-only by trigger. Purged ' +
       'BEFORE sales_days (PURGE_ORDER_HINT).',
   },
+  channel_period_charges: {
+    class: 'purge',
+    reason:
+      'T-511 S6c. A posting document: it names a journal entry (purge), a staged other line and upload (purge) and a channel (purge). Append-only by trigger. ' +
+      'Purged BEFORE settlement_other_lines, settlement_uploads and journal_entries (PURGE_ORDER_HINT).',
+  },
+  channel_settlement_charge_links: {
+    class: 'purge',
+    reason: 'T-511 S6c. Child of channel_settlements and channel_period_charges (which charges a payout netted); purges with them, links first.',
+  },
   sales_day_platform_corrections: {
     class: 'purge',
     reason:
@@ -1646,6 +1656,9 @@ export const PURGE_ORDER_HINT: readonly string[] = [
   'expense_budgets',
   // T-511 S6a: a leg cites its settlement, so the legs go first.
   'channel_settlement_loan_legs',
+  // T-511 S6c: a link cites its settlement and its charge; a charge cites its other line, upload, channel and journal entry (all purged later in this list).
+  'channel_settlement_charge_links',
+  'channel_period_charges',
   'channel_settlements',
   'sales_day_channels',
   // T-375: corrections cite a sales day, two feeds and a journal entry; usage pulls cite a sales day and a feed.
