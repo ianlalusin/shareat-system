@@ -260,8 +260,6 @@ export const tableSessionLines = pgTable(
     unitPrice: numeric('unit_price', { precision: 14, scale: 2 }).notNull(),
     /** The heads a "(up to N)" bundle line covers (N > 1), written from the menu at order time; NULL for every other line. Added in migration 0240 (T-524 audit F1); frozen by the line guard like every non-kitchen column. */
     bundleHeads: smallint('bundle_heads'),
-    /** The option value ids chosen on this line, sorted and distinct ({} = none); NULL = written before migration 0249 (T-557), options only in `name`. Set at insert, never updated. */
-    optionValueIds: uuid('option_value_ids').array(),
     /** Composite FK (store_id, kitchen_station_id) -> kitchen_stations (store_id, id), hand-added in migration 0238 (no single-column FK). */
     kitchenStationId: uuid('kitchen_station_id'),
     kitchenStatus: text('kitchen_status', { enum: KITCHEN_LINE_STATUSES }).notNull().default('queued'),
@@ -274,6 +272,8 @@ export const tableSessionLines = pgTable(
     addedOnPairingId: uuid('added_on_pairing_id'),
     addedAtDevice: timestamp('added_at_device', { withTimezone: true }).notNull(),
     addedAt: timestamp('added_at', { withTimezone: true }).notNull().defaultNow(),
+    /** The option value ids chosen on this line, sorted and distinct ({} = none); NULL = written before migration 0249 (T-557), options only in `name`. Set at insert, never updated. Declared last because migration 0249 added it last: the T-569 export prints columns in this order and the test compares it to the database's. */
+    optionValueIds: uuid('option_value_ids').array(),
   },
   (t) => [
     check('table_session_lines_unit_price_finite_check', sql`${t.unitPrice} > '-Infinity'::numeric and ${t.unitPrice} < 'Infinity'::numeric`),
@@ -521,14 +521,14 @@ export const posSalesReceiptLines = pgTable(
     name: text('name').notNull(),
     qty: integer('qty').notNull(),
     unitPrice: numeric('unit_price', { precision: 14, scale: 2 }).notNull(),
-    /** Copied from the session line (T-557): sorted, distinct option value ids; NULL = a line written before migration 0249. */
-    optionValueIds: uuid('option_value_ids').array(),
     /** qty * unit_price (CHECK). Refills appear at 0. */
     gross: numeric('gross', { precision: 14, scale: 2 }).notNull(),
     /** The sum of this line's discounts (T-524 keeps that equal to pos_sales_receipt_line_discounts; a CHECK cannot sum child rows). */
     discountTotal: numeric('discount_total', { precision: 14, scale: 2 }).notNull().default('0'),
     /** gross - discount_total (CHECK). */
     net: numeric('net', { precision: 14, scale: 2 }).notNull(),
+    /** Copied from the session line (T-557): sorted, distinct option value ids; NULL = a line written before migration 0249. Declared last because 0249 added it last (see table_session_lines). */
+    optionValueIds: uuid('option_value_ids').array(),
   },
   (t) => [
     check('pos_sales_receipt_lines_unit_price_finite_check', sql`${t.unitPrice} > '-Infinity'::numeric and ${t.unitPrice} < 'Infinity'::numeric`),
@@ -702,4 +702,5 @@ export type PosDiscountPresetRow = typeof posDiscountPresets.$inferSelect;
 export type TableSessionLineDiscountRow = typeof tableSessionLineDiscounts.$inferSelect;
 export type TableSessionLineRow = typeof tableSessionLines.$inferSelect;
 export type PosSalesReceiptRow = typeof posSalesReceipts.$inferSelect;
+export type PosDayCloseRow = typeof posDayCloses.$inferSelect;
 export type PosEventRow = typeof posEvents.$inferSelect;

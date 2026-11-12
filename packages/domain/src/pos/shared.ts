@@ -4,7 +4,7 @@
  * docs/tasks/524-pos-v2-domain.md.
  */
 import { createHash } from 'node:crypto';
-import { toBusinessDate } from '@shareat/core/datetime';
+import { addDays, parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { accessRepo, auditLogRepo, posV2Repo, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { readPosRules } from '../business-rules/pos-rules';
@@ -22,6 +22,8 @@ export interface PosRules {
   /** The Manila hour a business day starts at (4 = 04:00). */
   readonly businessDayStartHour: number;
   readonly tableWarnMinutes: number;
+  /** T-558: the largest short payment (centavos) recorded as a routine variance; above it, a finding. */
+  readonly saleVarianceToleranceCentavos: bigint;
 }
 export interface PosDeps {
   readonly readRules?: (tx: Tx, orgId: string, businessDate: string) => Promise<PosRules>;
@@ -34,20 +36,27 @@ export async function readRules(tx: Tx, orgId: string, businessDate: string, dep
 }
 
 /**
- * The business date of the open Z window (rows 348, 390): the Manila date the window started on - the last Z's `window_end` - or, before the
- * first Z, the Manila date of (now - business-day-start hours). Only the second case needs a rule (the hour), so a store with a Z needs none.
- * T-531 reuses it through `currentBusinessDate`.
+ * The business date a sale (or a Z) carries. T-531 ruling 1 (8 Nov 2026): a Z is dated with the business day it CLOSES, so receipts and statutory
+ * rows must carry the date their Z will have:
+ *
+ *   max(lastZ.business_date + 1 day, startHourDate(at))      where startHourDate(t) = the Manila date of (t - businessDayStartHour)
+ *
+ * With no earlier Z only the second term applies (the start-hour rule). The moment of the EVENT (a sale's issuedAtDevice) decides the second term, so an
+ * offline sale replayed after the day-start hour still lands on its own day; the server clock is only the answer when no device time is given. The hour is
+ * read on the Manila calendar date of the moment itself, not the business date: the business date is unknown until the hour is known.
  */
 export async function businessDateOf(tx: Tx, orgId: string, storeId: string, deps: PosDeps | undefined, at?: Date): Promise<string> {
-  const lastZ = await posV2Repo.lastDayCloseEnd(tx, orgId, storeId);
-  if (lastZ) return toBusinessDate(lastZ);
-  // The moment of the EVENT (a sale's issuedAtDevice) decides the day, so an offline sale replayed after the day-start hour still lands on its own day;
-  // the server clock is only the answer when no device time is given.
   const now = at ?? (deps?.now ? deps.now() : new Date());
-  // The hour is read on the Manila calendar date of the sale itself, not the business date: the business date is unknown until the hour is known.
   const { businessDayStartHour } = await readRules(tx, orgId, toBusinessDate(now), deps);
-  return toBusinessDate(new Date(now.getTime() - businessDayStartHour * 3_600_000));
+  const byClock = startHourDate(now, businessDayStartHour);
+  const lastZ = await posV2Repo.lastDayCloseBusinessDate(tx, orgId, storeId);
+  if (!lastZ) return byClock;
+  const afterZ = addDays(parseBusinessDate(lastZ), 1);
+  return afterZ > byClock ? afterZ : byClock;
 }
+
+/** The business date of an instant under a day that starts at `hour` Manila time (4 = 04:00): the Manila date of (t - hour). */
+export const startHourDate = (t: Date, hour: number): string => toBusinessDate(new Date(t.getTime() - hour * 3_600_000));
 
 /** The business date and the rules in force on it (a sale with a senior or PWD discount needs both). */
 export async function businessDateAndRules(tx: Tx, orgId: string, storeId: string, deps: PosDeps | undefined, at?: Date): Promise<{ businessDate: string; rules: PosRules }> {

@@ -258,4 +258,3 @@ describe('time seated and the notice for a refused change', () => {
     expect(refusalNotices(sent, [{ seq: opened.seq, status: 'applied' }, { seq: heads.seq, status: 'duplicate' }], view)).toEqual([]);
   });
 });
-
