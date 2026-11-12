@@ -29,7 +29,7 @@ Ian must keep Lipa's December POS v2 data after the purge. No export of POS v2 t
 | `payments` | `pos_sales_receipt_payments` (:552) | same |
 | `day-closes` | `pos_day_closes` (:394) | store + `business_date` in range |
 | `day-close-tenders` | `pos_day_close_tenders` (:432) | day close in the chosen closes |
-| `table-sessions` | `table_sessions` (:186) | store + business date of opening in range (builder: use the column the receipts/sessions already use for the business date; never the device clock) |
+| `table-sessions` | `table_sessions` (:186) | store + EITHER the business date of `opened_at` OR its receipt's business date in range (BOSS 12 Nov, Codex P2: a backup repeats a row in two files rather than lose it). Never the device clock |
 | `device-events` | `pos_events` (:594): the raw device log. **Not purged** (BOSS 12 Nov), but exported so the December download is the complete record. `payload` is already scrubbed at insert | store + event time in range (server-side time column if one exists) |
 
 - Header row = database column names.
