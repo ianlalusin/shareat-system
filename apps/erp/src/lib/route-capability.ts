@@ -84,6 +84,7 @@ export const ROUTE_CAPABILITY: Readonly<Record<string, RouteRequirement>> = {
   '/reports/store-comparison': 'view_financial_reports',
   '/reports/expense-items': 'view_financial_reports',
   '/reports/sales-rollup': 'view_financial_reports',
+  '/reports/pos-data': 'view_financial_reports',
 
   // --- What the business owes and owns, and what people are paid ------------------------------
   // ⚠️ `/payroll` is the one people react to most strongly when it is visible on a counter

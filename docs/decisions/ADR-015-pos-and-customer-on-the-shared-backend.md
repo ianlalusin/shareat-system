@@ -275,4 +275,3 @@ Customer v2 sends **no push**: on-page notices only (A6).
    go-live gate and must start by Wed 2 Dec. The first release is scoped down (design §9); refunds, Convert, the
    wrong-tender correction, senior/PWD per diner, online orders and loyalty (row 432) follow.
 5. **A8 is closed (row 434).** Q1 → rows 348 and 390 · Q2 → rows 378, 408, 431 · Q3 → row 348 · Q4 → row 348.
-

@@ -18,6 +18,7 @@
  * every data read are the real thing, against this lane's own database.
  */
 import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
@@ -28,7 +29,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!isTestDatabaseUrl(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} — the database name must contain "_test".`);
 }
 
 const sql = postgres(url, { max: 5 });

@@ -1,4 +1,5 @@
 import { isTestDatabaseUrl } from '../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../helpers/redact-db-url';
 import { randomUUID } from 'node:crypto';
 import fc from 'fast-check';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -36,7 +37,7 @@ if (!url) {
 }
 if (!isTestDatabaseUrl(url)) {
   throw new Error(
-    `Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — the database name must contain "_test".`,
+    `Refusing to run against ${redactDbUrl(url)} — the database name must contain "_test".`,
   );
 }
 

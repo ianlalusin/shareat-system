@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 /**
  * T-531 R4 "Posting" and R10 (TESTER) - the derived sales day is verified by a DIFFERENT, senior person through the EXISTING `verifySalesDay`, and posts a balanced
  * `sale.mixed` entry (docs/POSTING-PATTERNS.md "Sale", the two balance identities). docs/tasks/531-pos-day-close.md R4, R8 "Posting", R10 (Ian, row 449).
@@ -11,7 +13,6 @@
  *
  * RED NOW FOR THE RIGHT REASON: closeDay does not exist, so the day cannot be made ("MISSING EXPORT ... (T-531 not built)"); the v1-fed controls run for real.
  */
-import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 
@@ -20,7 +21,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!isTestDatabaseUrl(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { RefusalError } from '@shareat/db';

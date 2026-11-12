@@ -1,4 +1,5 @@
 import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -16,14 +17,14 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!isTestDatabaseUrl(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { closeDb } from '@shareat/db';
 import { AuthorizationError } from '@shareat/auth';
 import * as D from '@shareat/domain';
 import { importTestDay } from './_fixtures/pos-day';
-import { asOrgOn, s6Fixture, type S6F } from './_fixtures/pos-s6';
+import { asOrgOn, s6Fixture as s6FixtureAllPeriods, type S6F } from './_fixtures/pos-s6';
 import { mkSubmitter, mkTypedDay } from './_fixtures/sales-day-flow';
 import { tickMissingChannels } from './_fixtures/no-sales-ticks';
 
@@ -36,6 +37,13 @@ afterAll(async () => {
 const M = '2026-12';
 const DAY_IN_M = '2026-12-18';
 const OVERRIDE = { reason: 'data_entry_error' as const, note: 'Day was submitted late' };
+/** T-551: the shared fixture's periods now start in Dec 2025; this file closes Dec 2026, which must be the earliest open period. */
+const s6Fixture = async (...a: Parameters<typeof s6FixtureAllPeriods>): Promise<S6F> => {
+  const f = await s6FixtureAllPeriods(...a);
+  await a[0]`delete from fiscal_periods where org_id = ${f.orgId} and starts_on < '2026-12-01'`;
+  return f;
+};
+
 const CLOSED_SENTENCE = 'December 2026 is closed. Ask an administrator to post this one entry into it.';
 
 const userMessage = (e: unknown): string => String((e as { userMessage?: string }).userMessage ?? (e as Error).message);

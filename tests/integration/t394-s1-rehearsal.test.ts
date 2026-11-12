@@ -1,4 +1,5 @@
 import { isTestDatabaseUrl } from '../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../helpers/redact-db-url';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -34,7 +35,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!isTestDatabaseUrl(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - name must contain "_test".`);
 }
 
 import { checkFiscalCoverage, checkLiveness, checkPostPurge, snapshotStart } from '../../scripts/lib/rehearsal/checks';

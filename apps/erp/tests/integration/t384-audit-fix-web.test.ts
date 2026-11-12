@@ -1,4 +1,5 @@
 import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -22,7 +23,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!isTestDatabaseUrl(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 const h = vi.hoisted(() => ({
@@ -152,7 +153,7 @@ describe('A5 - sales-days/[id]: Platform sales with no saved rows is an add', ()
   async function dayFixture(hint: string) {
     const f = await orgWith(hint, 'admin');
     await seedChartOfAccounts(sql, f.orgId);
-    await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${f.orgId}, '2027-01-01', '2027-01-31', 'open')`;
+    await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${f.orgId}, '2026-01-01', '2026-01-31', 'open')`;
     const [st] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${f.orgId}, ${uid('st')}, 'Lipa') returning id`;
     const storeId = st!.id;
     await sql`insert into person_store_scope (person_id, store_id) values (${f.actor.personId}, ${storeId})`;
@@ -167,7 +168,7 @@ describe('A5 - sales-days/[id]: Platform sales with no saved rows is an add', ()
       values (${f.orgId}, ${storeId}, 'GCash - Lipa', 'ewallet', '1140', 'cashier') returning id`;
     await linkTestStore(sql, { orgId: f.orgId, storeId, channelId: walkIn, createdBy: f.actor.personId });
     await seedTestTenders(sql, { orgId: f.orgId, storeId, walletAccountId: g!.id });
-    const { id } = await asOrg(f.orgId, (tx) => importTestDay(tx, f.actor, { storeId, businessDate: '2027-01-10' }));
+    const { id } = await asOrg(f.orgId, (tx) => importTestDay(tx, f.actor, { storeId, businessDate: '2026-01-10' }));
     return { ...f, storeId, dayId: id, panda };
   }
   async function platformForm(f: Awaited<ReturnType<typeof dayFixture>>): Promise<string> {

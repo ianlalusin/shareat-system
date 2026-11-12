@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 /**
  * T-558 R1 (TESTER) - `readPosRules` carries the tolerance, and the writer enforces the ceiling. docs/tasks/558-pos-sale-variance-tolerance.md R1.
  *   - `readPosRules` returns `saleVarianceToleranceCentavos: bigint` (default 1n = PHP 0.01), dated like every other rule;
@@ -7,7 +9,6 @@
  *
  * RED NOW: the registry has no such key (the writer says "not a business rule"), and readPosRules returns no tolerance.
  */
-import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -17,7 +18,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!isTestDatabaseUrl(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { closeDb, RefusalError } from '@shareat/db';

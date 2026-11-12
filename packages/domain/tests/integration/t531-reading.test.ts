@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 /**
  * T-531 R2 (TESTER) - the reading: `readingFor` and `xReading` (docs/tasks/531-pos-day-close.md R2, R8 "Reading"). Real Postgres on a scratch "_test" database.
  * Sales are made through the real domain; every device figure is priceSession's (see `_fixtures/t531-day-close.ts`, which also holds the standard day's hand figures).
@@ -11,7 +13,6 @@
  *
  * Window times (Manila, day starts 04:00): D1 04:00 is where a store live from D1 opens its first window (row 390); the first window is read at `at`.
  */
-import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 
@@ -20,7 +21,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!isTestDatabaseUrl(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { AuthorizationError } from '@shareat/auth';

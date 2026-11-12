@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 /**
  * T-558 R1 (TESTER) - the seed pin for migration 0248, and every key. docs/tasks/558-pos-sale-variance-tolerance.md R1: "Migration 0248_t558_pos_sale_variance_tolerance.sql: data only,
  * following the 0241/0245 seed pattern. It inserts 0.01 per org. Its journal entry is idx 248, with `when` = 0247's + 86400000."; "the seed pin, covering every key".
@@ -9,7 +11,6 @@
  *
  * RED NOW: there is no 0248 migration and no registry key.
  */
-import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -21,7 +22,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!isTestDatabaseUrl(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { RULE_REGISTRY } from '../../src/business-rules/registry';

@@ -20,6 +20,7 @@
  * expected to succeed once 0164 lands, throws 23514 today.
  */
 import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -33,7 +34,7 @@ config({ path: '.env.local' });
 const baseUrl = process.env.TEST_DATABASE_URL;
 if (!baseUrl) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!isTestDatabaseUrl(baseUrl)) {
-  throw new Error(`Refusing to run against ${baseUrl.replace(/:\/\/[^@]*@/, '://***@')} — name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(baseUrl)} — name must contain "_test".`);
 }
 
 const REAL_MIGRATIONS_FOLDER = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..', 'migrations');

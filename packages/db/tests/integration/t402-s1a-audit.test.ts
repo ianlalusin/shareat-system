@@ -8,6 +8,7 @@
  * TESTER, not BUILDER. A and B run in rolled-back transactions on the lane DB; C migrates a scratch database.
  */
 import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from 'dotenv';
@@ -21,7 +22,7 @@ config({ path: '.env.local' });
 const baseUrl = process.env.TEST_DATABASE_URL;
 if (!baseUrl) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!isTestDatabaseUrl(baseUrl)) {
-  throw new Error(`Refusing to run against ${baseUrl.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(baseUrl)} - the database name must contain "_test".`);
 }
 import { APP_ROLE } from '../../src/rls/registry';
 

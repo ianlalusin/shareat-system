@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 /**
  * T-558 R2 (TESTER) - `completeSale` records a short-paid sale instead of refusing it, and flags the gap. docs/tasks/558-pos-sale-variance-tolerance.md R2; bible row 453.
  *
@@ -16,7 +18,6 @@
  * RED NOW FOR THE RIGHT REASON: completeSale refuses "The payments add up to less than the total." (pos: underpaid) where the cases expect a recorded sale; the audit actions are
  * not in the catalogue.
  */
-import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 
@@ -25,7 +26,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!isTestDatabaseUrl(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { RefusalError, catalogueEntry } from '@shareat/db';

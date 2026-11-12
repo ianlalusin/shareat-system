@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 /**
  * T-558 R3 (TESTER) - the day close with short-paid receipts (amends T-531). docs/tasks/558-pos-sale-variance-tolerance.md R3; bible rows 453, 270.
  *
@@ -16,7 +18,6 @@
  * RED NOW FOR THE RIGHT REASON: the reading has no varianceTotal; and closing a day with a short receipt is refused by the derived-day check
  * ("The day ... cannot be booked as it stands: the day does not reconcile") because the tender side is short.
  */
-import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 
@@ -25,7 +26,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!isTestDatabaseUrl(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { RefusalError } from '@shareat/db';

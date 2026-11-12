@@ -13,6 +13,7 @@
  * tagged 0158").
  */
 import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -28,7 +29,7 @@ config({ path: '.env.local' });
 const baseUrl = process.env.TEST_DATABASE_URL;
 if (!baseUrl) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!isTestDatabaseUrl(baseUrl)) {
-  throw new Error(`Refusing to run against ${baseUrl.replace(/:\/\/[^@]*@/, '://***@')} — the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(baseUrl)} — the database name must contain "_test".`);
 }
 
 const REAL_MIGRATIONS_FOLDER = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..', 'migrations');

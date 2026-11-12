@@ -1,4 +1,5 @@
 import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -35,7 +36,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!isTestDatabaseUrl(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
@@ -68,8 +69,11 @@ async function asOrg<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
 }
 const actorOf = (orgId: string, personId: string): Actor => ({ personId, orgId });
 
-const DAY = '2027-01-10';
-const DAY2 = '2027-01-11';
+// The dates sit in Dec 2026 because the v1 day feed (T-551) cannot import after 31 Dec 2026.
+// The finding's "last 14 days" reads now() in SQL, which a fake JS Date cannot move, so the test passes "today" in.
+const FROZEN_TODAY = '2026-12-31';
+const DAY = '2026-12-30';
+const DAY2 = '2026-12-31';
 const ZERO_FIGURES = { paidTotal: 0, receiptCount: 0, packageOnly: 0, discounts: 0, charges: 0, methods: {} };
 type Section = 'direct' | 'recipe' | 'orphan';
 type MapMode = 'direct' | 'recipe' | 'no_stock' | 'none';
@@ -83,7 +87,7 @@ async function fixture(hint: string) {
   await seedChartOfAccounts(sql, orgId);
   await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status)
     select ${orgId}, m::date, (m + interval '1 month' - interval '1 day')::date, 'open'
-    from generate_series('2026-12-01'::date, '2027-02-01'::date, interval '1 month') m`;
+    from generate_series('2026-11-01'::date, '2027-01-01'::date, interval '1 month') m`;
   const [st] = await sql<{ id: string }[]>`insert into stores (org_id, code, name, stock_model) values (${orgId}, ${uid('st')}, 'Lipa', 'multi_room') returning id`;
   const storeId = st!.id;
   const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Manager') returning id`;
@@ -114,10 +118,10 @@ async function fixture(hint: string) {
       values (${orgId}, ${`orgs/${orgId}/p-${uid('f')}.jpg`}, 'image/jpeg', 10, 'x', 'receipt_photo', ${managerId}) returning id`;
     const [del] = await sql<{ id: string }[]>`
       insert into deliveries (org_id, store_id, kind, delivered_on, proof_file_id, created_by)
-      values (${orgId}, ${storeId}, 'purchase', '2026-12-02', ${file!.id}, ${managerId}) returning id`;
+      values (${orgId}, ${storeId}, 'purchase', '2026-11-02', ${file!.id}, ${managerId}) returning id`;
     await asOrg(orgId, (tx) =>
       receiveDelivery(tx, {
-        orgId, storeId, deliveryId: del!.id, deliveredOn: '2026-12-02', locations, receivedBy: managerId,
+        orgId, storeId, deliveryId: del!.id, deliveredOn: '2026-11-02', locations, receivedBy: managerId,
         lines: [{ lineId: '1', itemId, itemKind: 'meat_slab', receivedQuantity: quantity('100'), conversionFactor: '1', unitCost: '10.0000', locationId: kitchen }],
       }),
     );
@@ -211,7 +215,7 @@ const storedLines = (pullId: string) =>
 const usageCount = async (f: F) =>
   Number((await sql<{ n: string }[]>`select count(*)::text as n from stock_usage_records where org_id = ${f.orgId}`)[0]!.n);
 const notRun = (f: F) =>
-  asOrg(f.orgId, async (tx) => (await findingsRepo.posUsagePullNotRun(tx, f.orgId)).filter((x) => x.storeId === f.storeId));
+  asOrg(f.orgId, async (tx) => (await findingsRepo.posUsagePullNotRun(tx, f.orgId, FROZEN_TODAY)).filter((x) => x.storeId === f.storeId));
 
 // =====================================================================================================
 describe('E1 - the smoke case: direct finalized, recipe and orphan empty -> the pull finishes', () => {

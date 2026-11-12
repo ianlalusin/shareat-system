@@ -1,4 +1,5 @@
 import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
@@ -20,7 +21,7 @@ if (!url) {
 }
 if (!isTestDatabaseUrl(url)) {
   throw new Error(
-    `Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`,
+    `Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`,
   );
 }
 

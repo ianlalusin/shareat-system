@@ -63,6 +63,7 @@
  * column, and in the position-grant rows `0152` wrote.
  */
 import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -81,7 +82,7 @@ if (!baseUrl) {
 }
 if (!isTestDatabaseUrl(baseUrl)) {
   throw new Error(
-    `Refusing to run against ${baseUrl.replace(/:\/\/[^@]*@/, '://***@')} — the database name must contain "_test".`,
+    `Refusing to run against ${redactDbUrl(baseUrl)} — the database name must contain "_test".`,
   );
 }
 

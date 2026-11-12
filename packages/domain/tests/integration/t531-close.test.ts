@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 /**
  * T-531 R3 / R4 (TESTER) - `closeDay` and the sales day it derives. docs/tasks/531-pos-day-close.md R3, R4, R8 "Close". Real Postgres on a scratch "_test" database.
  *
@@ -14,7 +16,6 @@
  *
  * RED NOW FOR THE RIGHT REASON: packages/domain/src/pos/day-close.ts does not exist ("MISSING EXPORT ... (T-531 not built)", after the fixture ran).
  */
-import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 
@@ -23,7 +24,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!isTestDatabaseUrl(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { posV2Repo, RefusalError } from '@shareat/db';
