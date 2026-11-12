@@ -13,6 +13,7 @@
  *  DELETE or TRUNCATE granted; UPDATE on stores; withLobbyPrincipal still switching to shareat_app (or to no role); role/org not transaction-scoped;
  *  the role bypassing org isolation; migration without lock_timeout first or without a journal entry on the grid.
  */
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -25,7 +26,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 process.env.DATABASE_URL = url;
 

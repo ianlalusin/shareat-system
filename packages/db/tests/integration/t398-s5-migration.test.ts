@@ -18,6 +18,7 @@
  *   registry kind missing -> G1; classification missing -> G2; job list shortened -> J1; disposition not added -> TD1;
  *   a table created in the scratch DB differently from the catalog -> L2.
  */
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -35,7 +36,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 const sql = postgres(url, { max: 3 });
 afterAll(async () => {

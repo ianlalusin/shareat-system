@@ -1,3 +1,4 @@
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 /**
  * T-531 R11 (TESTER) - a Z that would span more than 2 business days is refused, and "Close day by day" (`closeBacklog`) closes the backlog one business day at a time.
  * docs/tasks/531-pos-day-close.md R11 (Ian, bible row 450), R8. Real Postgres on a scratch "_test" database.
@@ -20,7 +21,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { RefusalError } from '@shareat/db';
