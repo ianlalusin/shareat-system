@@ -121,15 +121,36 @@ function optionDelta(item: ProjectedItem, variant: ProjectedVariant, chosen: rea
   return { delta, names };
 }
 
-/** Existing row for a device lineId: the same content is a replay (skip it); different content is refused. */
-function sameLine(existing: posV2Repo.TableSessionLineRow, input: { sessionId: string; menuItemId: string; qty: number; note: string | null }): boolean {
-  const bundle = existing.bundleHeads !== null; // a bundle line's qty is not the heads the device sent
+/**
+ * Existing row for a device lineId: the same content is a replay (skip it); different content is refused. T-556: also the variant, the option set
+ * (`choices`) and, for a bundle line, the head count: the line covers `bundleHeads` and the heads above it sit on the derived extra-heads row (`extraHeadsQty`).
+ */
+function sameLine(existing: posV2Repo.TableSessionLineRow, input: { sessionId: string; menuItemId: string; qty: number; note: string | null; choices: boolean; extraHeadsQty: number | null }): boolean {
+  const heads = existing.bundleHeads; // a bundle line's qty is not the heads the device sent
   return (
     existing.sessionId === input.sessionId &&
     existing.menuItemId === input.menuItemId &&
     (existing.note ?? null) === input.note &&
-    (bundle || existing.qty === input.qty)
+    input.choices &&
+    (heads !== null ? (input.qty > heads ? input.qty - heads : null) === input.extraHeadsQty : existing.qty === input.qty)
   );
+}
+
+/**
+ * T-556: does a replayed line pick the variant and options the stored line was made with? A line keeps its variant id but its options only inside `name`
+ * (" + A, B"), so they are read from the menu at the line's device time (orderability ignored: a replay may come after a sell-out).
+ * shortcut: the option names are compared in the order sent and as a name suffix, and an item the menu no longer lists is not checked; upgrade by storing the option ids on the line.
+ */
+async function sameChoices(menus: MenuAt, at: Date, prior: posV2Repo.TableSessionLineRow, l: LineInput): Promise<boolean> {
+  const item = (await menus.at(at)).menu.items.find((i) => i.id === l.menuItemId);
+  const variant = item && (l.variantId ? item.variants.find((v) => v.id === l.variantId) : item.variants.find((v) => v.isDefault) ?? item.variants[0]);
+  if (prior.menuItemVariantId !== (variant?.id ?? l.variantId ?? prior.menuItemVariantId)) return false;
+  if (!variant) return !l.optionValueIds?.length;
+  const all = variant.optionGroups.flatMap((g) => g.values);
+  const names = [...new Set(l.optionValueIds ?? [])].map((id) => all.find((v) => v.id === id)?.name);
+  if (names.includes(undefined)) return false;
+  const stored = prior.name.replace(/ \((up to \d+|extra head)\)$/, '');
+  return names.length ? stored.endsWith(` + ${names.join(', ')}`) : !all.some((v) => stored.endsWith(` + ${v.name}`) || stored.endsWith(`, ${v.name}`));
 }
 
 function checkLineShape(l: LineInput): { lineId: string; qty: number; note: string | null; at: Date } {
@@ -155,7 +176,9 @@ async function writeLines(tx: Tx, actor: Actor, ctx: { storeId: string; pairingI
   for (const s of shaped) {
     const prior = existing.get(s.lineId);
     if (prior) {
-      if (!sameLine(prior, { sessionId: session.id, menuItemId: s.l.menuItemId, qty: s.qty, note: s.note })) throw recordedDifferently();
+      const extra = prior.bundleHeads !== null ? await posV2Repo.getLine(tx, actor.orgId, ctx.storeId, uuidv5(EXTRA_HEADS, s.lineId)) : undefined;
+      const choices = await sameChoices(menus, s.at, prior, s.l);
+      if (!sameLine(prior, { sessionId: session.id, menuItemId: s.l.menuItemId, qty: s.qty, note: s.note, choices, extraHeadsQty: extra?.qty ?? null })) throw recordedDifferently();
       continue;
     }
     fresh++;
