@@ -30,6 +30,7 @@ Ian must keep Lipa's December POS v2 data after the purge. No export of POS v2 t
 | `day-closes` | `pos_day_closes` (:394) | store + `business_date` in range |
 | `day-close-tenders` | `pos_day_close_tenders` (:432) | day close in the chosen closes |
 | `table-sessions` | `table_sessions` (:186) | store + business date of opening in range (builder: use the column the receipts/sessions already use for the business date; never the device clock) |
+| `device-events` | `pos_events` (:594): the raw device log. **Not purged** (BOSS 12 Nov), but exported so the December download is the complete record. `payload` is already scrubbed at insert | store + event time in range (server-side time column if one exists) |
 
 - Header row = database column names.
 - Values are the **raw database text**: `numeric` columns come out as Postgres prints them (e.g. `1234.50`), with no `formatMoney`, no `₱` and no thousands comma. A plain decimal string is what `escapeCsvCell` (`packages/core/src/csv.ts`) leaves unprefixed, and Excel reads it as an exact 2-decimal number.
@@ -60,7 +61,7 @@ Ian must keep Lipa's December POS v2 data after the purge. No export of POS v2 t
 **R6 — Page and nav.**
 - The page sits under Reports in `nav.tsx`. Use a server component and the existing report page patterns (store select and date inputs like `reports/sales-rollup/page.tsx`).
 - One sentence of help: "Download every POS v2 record for one store and date range before the 2027 clean-up. One file per table; open them in Excel."
-- Plain words for the link names: Receipts · Receipt lines · Line discounts · Payments · Day closes · Day close tenders · Table sessions.
+- Plain words for the link names: Receipts · Receipt lines · Line discounts · Payments · Day closes · Day close tenders · Table sessions · Device log.
 - Census updates (only the entries for the new page): nav-route-reachability, route-capability-coverage, t348 page description, action-link-sweep, touch-target baseline.
 
 ## Out of scope
@@ -68,7 +69,6 @@ Ian must keep Lipa's December POS v2 data after the purge. No export of POS v2 t
 | Out | Why |
 |---|---|
 | xlsx or zip | No writer exists on main. BOSS: no new dependency |
-| `pos_events` (the raw device log) | Not in the purge list. Ask BOSS if the runbook wants it; adding it later is one table entry |
 | A totals or summary sheet | It is a copy, not a report. The sales day and the ledger already carry the totals |
 | Several stores in one file | One store per file keeps the scope check simple and auditable |
 
