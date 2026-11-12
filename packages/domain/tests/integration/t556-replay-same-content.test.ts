@@ -146,6 +146,7 @@ async function extras(f: Fx) {
   await insRule(f, largeVariantId);
   await insOffer(f, largeVariantId, '300.00');
   const a = await newOption(f);
+  await sql`update menu_option_groups set min_selections = 0 where id = ${a.groupId}`; // T-552: newOption makes a REQUIRED group; these replays add the item with and without a choice
   await insOptionOffer(f, a.valueId, '30.00');
   const b = (await sql<{ id: string }[]>`
     insert into menu_option_values (org_id, option_group_id, name, sort_order, status, created_by) values (${f.orgId}, ${a.groupId}, 'Extra sauce', 1, 'active', ${f.personId}) returning id`)[0]!.id;

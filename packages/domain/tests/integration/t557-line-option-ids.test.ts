@@ -26,6 +26,7 @@ async function menuWithOptions(f: Fx) {
   await insOptionOffer(f, a.valueId, '30.00');
   const c = await newOption(f);
   await insOptionOffer(f, c.valueId, '10.00');
+  await sql`update menu_option_groups set min_selections = 0 where id in (${a.groupId}, ${c.groupId})`; // T-552: newOption makes a REQUIRED group; these lines are added with and without a choice
   const family = await newItem(f, 'package', 'Family Pack');
   await insRule(f, family.variantId);
   await sql`insert into menu_offers (org_id, store_id, variant_id, channel, daypart_id, amount, bundle_heads, extra_head_amount, withdrawn, created_by)
