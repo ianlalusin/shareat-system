@@ -14,12 +14,16 @@ const DEVICE = vi.hoisted(() => ({
   meta: new Map<string, unknown>(),
   outbox: [] as { seq: number; kind: string; personId: string; occurredAtDevice: string; payload: Record<string, unknown> }[],
   reads: [] as number[],
-  print: vi.fn(async (_l: string[], _o: { copies: number }) => 'printed' as const),
+  failCounter: false,
+  print: vi.fn(async (_l: string[], _o: { copies: number }): Promise<'printed' | 'failed'> => 'printed'),
 }));
 vi.mock('@/lib/pos-device', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   getMeta: async (k: string) => (DEVICE.meta.get(k) as never) ?? null,
-  setMeta: async (k: string, v: unknown) => void DEVICE.meta.set(k, v),
+  setMeta: async (k: string, v: unknown) => {
+    if (DEVICE.failCounter && k === 'app.kitchenTicketSeq') throw new Error('disk full');
+    DEVICE.meta.set(k, v);
+  },
   countPending: async () => DEVICE.outbox.length,
   listPending: async (limit: number) => {
     DEVICE.reads.push(limit);
@@ -30,6 +34,7 @@ vi.mock('@/lib/pos-device', async (orig) => ({
 }));
 vi.mock('@/lib/pos-print/adapter', () => ({ printLines: (...a: [string[], { copies: number }]) => DEVICE.print(...a), printerMode: () => 'browser' }));
 
+import { outageNotice, reportOutage } from '../src/app/pos/_kitchen/outage-jobs';
 import { useOutageReplay } from '../src/app/pos/_kitchen/use-outage-replay';
 import { useDeviceSync, type DeviceSync } from '../src/app/pos/_shell/use-device-sync';
 
@@ -41,6 +46,7 @@ beforeEach(() => {
   DEVICE.meta.clear();
   DEVICE.outbox = [];
   DEVICE.reads = [];
+  DEVICE.failCounter = false;
   DEVICE.print.mockClear();
   host = document.createElement('div');
   document.body.appendChild(host);
@@ -103,6 +109,39 @@ describe('use-outage-replay', () => {
     await replay({ pending: [ORDER(3), ORDER(4)] as never }); // 4 is new, not yet printed: nothing is dropped
     await settle();
     expect(DEVICE.meta.get('app.outagePrinted')).toEqual([3]);
+  });
+
+  it('T-561: a ticket that could not be printed is not marked printed, and the message reaches the screen state instead of being swallowed', async () => {
+    DEVICE.failCounter = true;
+    await replay({ pending: [ORDER(1)] as never, online: false });
+    await settle();
+    expect(DEVICE.print).not.toHaveBeenCalled();
+    expect(DEVICE.meta.get('app.outagePrinted') ?? []).toEqual([]);
+    expect(outageNotice()).not.toBeNull();
+  });
+
+  it('T-561 follow-up: a crash leftover whose ticket counter write fails keeps its seq in flight and the banner state names the table', async () => {
+    DEVICE.failCounter = true;
+    DEVICE.meta.set('app.outageInflight', [1]);
+    await replay({ pending: [ORDER(1)] as never, online: false, openStands: [] });
+    await settle();
+    expect(DEVICE.meta.get('app.outageInflight')).toEqual([1]);
+    expect(DEVICE.meta.get('app.outagePrinted') ?? []).toEqual([]);
+    expect(outageNotice()).toContain('could not be rebuilt');
+    expect(outageNotice()).toContain('event 1');
+  });
+
+  it('T-561 follow-up: after the Reprint job is saved, the stored reprint list (read back from the device store) holds it once, and reportOutage does not add a second copy', async () => {
+    DEVICE.print.mockImplementation(async () => 'failed');
+    await replay({ pending: [ORDER(1)] as never, online: false });
+    await settle();
+    const saved = DEVICE.meta.get('app.outageReprint') as unknown[];
+    expect(saved).toHaveLength(1);
+    expect(DEVICE.meta.get('app.outagePrinted')).toEqual([1]);
+    reportOutage({ printed: 0, failed: [], message: null });
+    await settle();
+    expect(DEVICE.meta.get('app.outageReprint')).toHaveLength(1);
+    DEVICE.print.mockImplementation(async () => 'printed');
   });
 
   it('a phone (not paired) never prints', async () => {
