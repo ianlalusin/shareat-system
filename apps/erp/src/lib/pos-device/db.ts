@@ -31,6 +31,9 @@ export const SNAPSHOT_KEY = 'current';
 export const COUNTER_NEXT_SEQ = 'nextSeq';
 export const COUNTER_NEXT_TERMINAL_SEQ = 'nextTerminalSeq';
 
+/** T-563: the `app.*` key naming the pairing this tablet is bound to (written by every good snapshot refresh; read by `enqueue`). */
+export const META_PAIRING_ID = 'app.pairingId';
+
 /** The index on `verifiers` that `verifier-store.ts` looks a person up by. */
 export const VERIFIER_BY_EMPLOYEE_INDEX = 'byEmployeeId';
 

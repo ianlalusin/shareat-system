@@ -22,6 +22,8 @@ export type PosEventKind =
 /** One queued till action, with the device's own sequence number on it. */
 export interface PosEvent {
   seq: number;
+  /** T-563: the pairing this tablet was bound to when the event was made. Absent only on a pre-T-563 row, which is held and never sent. */
+  pairingId?: string;
   kind: PosEventKind;
   personId: string;
   occurredAtDevice: string;
@@ -29,7 +31,7 @@ export interface PosEvent {
 }
 
 /** A new event before the outbox gives it a `seq`. */
-export type NewPosEvent = Omit<PosEvent, 'seq'>;
+export type NewPosEvent = Omit<PosEvent, 'seq' | 'pairingId'>;
 
 /**
  * What the server did with one event.
@@ -51,7 +53,7 @@ export interface PosEventResult {
 /** What the caller's network function returns for one `POST /api/pos/events`. */
 export type SendOutcome =
   | { kind: 'ok'; stateVersion: number; results: PosEventResult[] }
-  | { kind: 'http'; status: number } // 400, 401, 409, 413, 415, 5xx...
+  | { kind: 'http'; status: number; code?: string } // 400, 401, 409 (`code` POS_PAIRING_MISMATCH: made under another store), 413, 415, 5xx...
   | { kind: 'network' }; // no connection / timeout
 
 /** The last good menu + settings the tablet can sell from offline. */
@@ -81,4 +83,9 @@ export interface DrainReport {
   removed: number;
   conflicts: PosEventResult[];
   stateVersion: number | null;
+  /** T-563: pairings whose events the server refused to take under the current store (they stay in the outbox). */
+  heldOrigins: string[];
 }
+
+/** The server's code when a batch was made under another store than the tablet is paired to now (T-563). */
+export const POS_PAIRING_MISMATCH = 'POS_PAIRING_MISMATCH';
