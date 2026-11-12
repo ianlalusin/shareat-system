@@ -8,6 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakeIdb, type FakeIdbFactory } from '../../../tests/helpers/fake-idb';
 import { openDeviceDb } from './db';
+import { bindPairing } from './meta';
 import {
   applyResults,
   countPending,
@@ -46,6 +47,7 @@ beforeEach(async () => {
   // opens on boot too; the fake is not built for 50 concurrent first-time upgrades).
   const db = await openDeviceDb();
   db.close();
+  await bindPairing('P1'); // T-563: a tablet cannot queue a sale before its first snapshot named its pairing
 });
 
 afterEach(() => {

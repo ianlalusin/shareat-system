@@ -208,6 +208,10 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-525: a manager replayed or discarded a quarantined tablet event (entity = the pos_events row). Server-only: the tablet never sends them.
   def('pos.event_replayed', 'order', 'normal', 'store', 'pos_events', 'T-525'),
   def('pos.event_discarded', 'order', 'high', 'store', 'pos_events', 'T-525'),
+  // T-563: a carried-over event whose person could not be vouched for on the tablet it was made on is set aside for a manager (entity = that earlier pairing).
+  def('pos_events.carry_over_refused', 'order', 'high', 'store', 'pos_tablet_pairings', 'T-563', { actor: 'system' }),
+  // T-563 (audit P-004): a tablet that was replaced or paired back sent sales made under its earlier pairing of the SAME store (entity = that earlier pairing). Server-written, once per batch that stored anything.
+  def('pos_events.carried_over', 'order', 'high', 'store', 'pos_tablet_pairings', 'T-563', { actor: 'system' }),
   // T-546: a manager or admin added a till, chose its tablet, or set its receipt printer (entity = the pos_terminals row). Written from the ERP screen only.
   def('pos.terminal_created', 'settings', 'normal', 'store', 'pos_terminals', 'T-546'),
   def('pos.terminal_linked', 'settings', 'normal', 'store', 'pos_terminals', 'T-546'),
