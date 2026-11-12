@@ -95,11 +95,10 @@ function offerFor(menu: ProjectedStoreMenu, itemId: string, variantId: string | 
 }
 
 function optionDelta(item: ProjectedItem, variant: ProjectedVariant, chosen: readonly string[] | undefined): { delta: Money; names: string[] } {
-  if (!chosen || chosen.length === 0) return { delta: money('0'), names: [] };
   let delta = money('0');
   const names: string[] = [];
   const perGroup = new Map<string, number>();
-  for (const id of new Set(chosen)) {
+  for (const id of new Set(chosen ?? [])) {
     const group = variant.optionGroups.find((g) => g.values.some((v) => v.id === id));
     const value = group?.values.find((v) => v.id === id);
     if (!group || !value) throw refuse('pos: option not on the item', `That choice is not available for ${item.name}.`);
@@ -111,6 +110,13 @@ function optionDelta(item: ProjectedItem, variant: ProjectedVariant, chosen: rea
     }
     delta = add(delta, money(value.channels.store.priceDelta));
     names.push(value.name);
+  }
+  // T-552 (audit P-003): every group the variant offers is judged, not only the ones the line chose from. Same rule as the screen's isOptionChoiceValid,
+  // so a required group with no orderable value is refused here exactly as the screen cannot satisfy it.
+  for (const group of variant.optionGroups) {
+    if (group.minSelections > (perGroup.get(group.id) ?? 0)) {
+      throw refuse('pos: option required', `${group.name}: choose at least ${group.minSelections} for ${item.name}.`);
+    }
   }
   return { delta, names };
 }
@@ -395,7 +401,7 @@ async function followHeads(tx: Tx, actor: Actor, ctx: { storeId: string; pairing
 async function changeHeads(
   tx: Tx,
   actor: Actor,
-  input: { storeId: string; pairingId: string | null; sessionId: string },
+  input: { storeId: string; pairingId: string | null; sessionId: string; atDevice?: string | Date },
   pairingId: string | null,
   change: { headsCashier?: number; headsServer?: number },
 ): Promise<{ wrote: boolean }> {
@@ -405,7 +411,8 @@ async function changeHeads(
   const next = { headsCashier: change.headsCashier ?? session.headsCashier, headsServer: change.headsServer ?? session.headsServer };
   if (next.headsCashier === session.headsCashier && next.headsServer === session.headsServer) return { wrote: false };
   const after = billedHeads(next.headsCashier, next.headsServer);
-  const at = new Date();
+  // T-559: a heads.set queued on a tablet is priced (a new extra-head line) at ITS device time, like addLines prices a line at `addedAtDevice`; a Server Action has none and uses now.
+  const at = input.atDevice === undefined ? new Date() : deviceTime(input.atDevice, 'The time of the change');
   await followHeads(tx, actor, { storeId: input.storeId, pairingId }, session, before, after, at);
   await posV2Repo.setSessionHeads(tx, actor.orgId, input.storeId, sessionId, change);
   await audit(tx, actor, 'pos.heads_changed', {
@@ -424,7 +431,7 @@ export async function confirmHeads(tx: Tx, actor: Actor, input: { storeId: strin
   return changeHeads(tx, actor, input, pairingId, { headsServer });
 }
 
-export async function setHeadsCashier(tx: Tx, actor: Actor, input: { storeId: string; pairingId: string | null; sessionId: string; headsCashier: number }): Promise<{ wrote: boolean }> {
+export async function setHeadsCashier(tx: Tx, actor: Actor, input: { storeId: string; pairingId: string | null; sessionId: string; headsCashier: number; atDevice?: string | Date }): Promise<{ wrote: boolean }> {
   await authorize(tx, actor, 'record_sale', { storeId: input.storeId });
   const pairingId = await requireContext(tx, actor, input.storeId, input.pairingId, false);
   const sessionId = uuidInput(input.sessionId, 'The table id');

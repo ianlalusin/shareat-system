@@ -86,7 +86,8 @@ export async function verifyPosManagerApproval(tx: Tx | null, input: PosApproval
  * that stores the quarantined row, so the miss commits with it (and is charged exactly once, because the first charge was rolled back). Same bucket, cap and
  * auto-lift as `verifyPosManagerApproval`. A capped bucket just refuses again and charges nothing more.
  *
- * ⛔ SERVER-ONLY, and not a door: never call it from a route or a Server Action. Its ONE caller is the events inbox (`packages/domain/src/pos/inbox.ts`); it is
+ * ⛔ SERVER-ONLY, and not a door: never call it from a route or a Server Action. Its TWO callers are the events inbox (`packages/domain/src/pos/inbox.ts`) and the day close
+ * (`packages/domain/src/pos/day-close.ts`, T-531: a right PIN with another person's Employee ID is charged as a miss in its own committed transaction); it is
  * exported only because the domain package cannot reach this file any other way.
  */
 export async function recordPosApprovalMiss(tx: Tx, input: { orgId: string; terminalPersonId: string }): Promise<void> {
