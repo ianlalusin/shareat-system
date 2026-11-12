@@ -247,7 +247,7 @@ describe('T-402 S1b - the entries the spec names are in, graded as written (R3, 
       expect(e!.sensitivity).toBe(sensitivity);
       // T-402 S2 flips its 17 entries live (they gain a caller); every other entry stays reserved until its slice/app exists.
       // T-524 (6 Nov 2026) writes pos.session_voided (POS v2 void), so it is live too; every other pos.* entry here stays reserved.
-      expect(e!.reserved, `${action} reserved?`).toBe(!(S2_LIVE.has(action) || action === 'pos.session_voided'));
+      expect(e!.reserved, `${action} reserved?`).toBe(!(S2_LIVE.has(action) || action === 'pos.session_voided' || action === 'data.export_downloaded')); // T-569: the POS data download writes data.export_downloaded
       for (const [k, v] of Object.entries(extra ?? {})) expect((e as unknown as Record<string, unknown>)[k], `${action}.${k}`).toEqual(v);
     });
   }
@@ -383,8 +383,8 @@ describe('T-402 S3 (C7) - the cutover trio is live, admin-viewed, written by a p
       expect(e.clientSources).toEqual([]);
     });
   }
-  it('S3 leaves the verb-less entries reserved: expense.submitted/rejected, sales_day.reopened, remittance.confirmed, data.export_downloaded, data.bulk_import_applied, data.activity_log_exported', () => {
-    for (const a of ['expense.submitted', 'expense.rejected', 'sales_day.reopened', 'remittance.confirmed', 'data.export_downloaded', 'data.bulk_import_applied', 'data.activity_log_exported']) {
+  it('S3 leaves the verb-less entries reserved: expense.submitted/rejected, sales_day.reopened, remittance.confirmed, data.bulk_import_applied, data.activity_log_exported', () => {
+    for (const a of ['expense.submitted', 'expense.rejected', 'sales_day.reopened', 'remittance.confirmed', 'data.bulk_import_applied', 'data.activity_log_exported']) {
       expect(catalogueEntry(a)!.reserved, a).toBe(true);
     }
   });
