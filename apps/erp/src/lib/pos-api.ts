@@ -4,7 +4,7 @@
  * (the snapshot overrides that with `private, no-cache` and an ETag, R7).
  */
 import { logger } from '@shareat/core/logger';
-import { AuthorizationError, resolvePosTablet, type PosTabletIdentity } from '@shareat/auth';
+import { AuthenticationError, AuthorizationError, resolvePosTablet, type PosTabletIdentity } from '@shareat/auth';
 import { RefusalError } from '@shareat/db';
 import { readPosTabletToken } from '@/lib/session';
 
@@ -57,6 +57,8 @@ export async function guarded(route: string, run: () => Promise<Response>): Prom
     if (err instanceof BodyTooLarge) return fail(413, 'That request is too large.');
     if (err instanceof RefusalError) return fail(409, err.userMessage);
     if (err instanceof AuthorizationError && err.userMessage) return fail(403, err.userMessage);
+    // T-531: a wrong manager PIN, or a PIN the cap has locked out: the sentence is the one approval sentence (never the PIN).
+    if (err instanceof AuthenticationError) return fail(401, err.message);
     logger.error({ route, code: (err as { code?: string } | null)?.code }, 'pos api: unexpected failure');
     return fail(500, 'Something went wrong on the server. Try again in a moment.');
   }

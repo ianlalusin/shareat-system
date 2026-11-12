@@ -95,11 +95,10 @@ function offerFor(menu: ProjectedStoreMenu, itemId: string, variantId: string | 
 }
 
 function optionDelta(item: ProjectedItem, variant: ProjectedVariant, chosen: readonly string[] | undefined): { delta: Money; names: string[] } {
-  if (!chosen || chosen.length === 0) return { delta: money('0'), names: [] };
   let delta = money('0');
   const names: string[] = [];
   const perGroup = new Map<string, number>();
-  for (const id of new Set(chosen)) {
+  for (const id of new Set(chosen ?? [])) {
     const group = variant.optionGroups.find((g) => g.values.some((v) => v.id === id));
     const value = group?.values.find((v) => v.id === id);
     if (!group || !value) throw refuse('pos: option not on the item', `That choice is not available for ${item.name}.`);
@@ -112,18 +111,46 @@ function optionDelta(item: ProjectedItem, variant: ProjectedVariant, chosen: rea
     delta = add(delta, money(value.channels.store.priceDelta));
     names.push(value.name);
   }
+  // T-552 (audit P-003): every group the variant offers is judged, not only the ones the line chose from. Same rule as the screen's isOptionChoiceValid,
+  // so a required group with no orderable value is refused here exactly as the screen cannot satisfy it.
+  for (const group of variant.optionGroups) {
+    if (group.minSelections > (perGroup.get(group.id) ?? 0)) {
+      throw refuse('pos: option required', `${group.name}: choose at least ${group.minSelections} for ${item.name}.`);
+    }
+  }
   return { delta, names };
 }
 
-/** Existing row for a device lineId: the same content is a replay (skip it); different content is refused. */
-function sameLine(existing: posV2Repo.TableSessionLineRow, input: { sessionId: string; menuItemId: string; qty: number; note: string | null }): boolean {
-  const bundle = existing.bundleHeads !== null; // a bundle line's qty is not the heads the device sent
+/**
+ * Existing row for a device lineId: the same content is a replay (skip it); different content is refused. T-556: also the variant, the option set
+ * (`choices`) and, for a bundle line, the head count: the line covers `bundleHeads` and the heads above it sit on the derived extra-heads row (`extraHeadsQty`).
+ */
+function sameLine(existing: posV2Repo.TableSessionLineRow, input: { sessionId: string; menuItemId: string; qty: number; note: string | null; choices: boolean; extraHeadsQty: number | null }): boolean {
+  const heads = existing.bundleHeads; // a bundle line's qty is not the heads the device sent
   return (
     existing.sessionId === input.sessionId &&
     existing.menuItemId === input.menuItemId &&
     (existing.note ?? null) === input.note &&
-    (bundle || existing.qty === input.qty)
+    input.choices &&
+    (heads !== null ? (input.qty > heads ? input.qty - heads : null) === input.extraHeadsQty : existing.qty === input.qty)
   );
+}
+
+/**
+ * T-556: does a replayed line pick the variant and options the stored line was made with? A line keeps its variant id but its options only inside `name`
+ * (" + A, B"), so they are read from the menu at the line's device time (orderability ignored: a replay may come after a sell-out).
+ * shortcut: the option names are compared in the order sent and as a name suffix, and an item the menu no longer lists is not checked; upgrade by storing the option ids on the line.
+ */
+async function sameChoices(menus: MenuAt, at: Date, prior: posV2Repo.TableSessionLineRow, l: LineInput): Promise<boolean> {
+  const item = (await menus.at(at)).menu.items.find((i) => i.id === l.menuItemId);
+  const variant = item && (l.variantId ? item.variants.find((v) => v.id === l.variantId) : item.variants.find((v) => v.isDefault) ?? item.variants[0]);
+  if (prior.menuItemVariantId !== (variant?.id ?? l.variantId ?? prior.menuItemVariantId)) return false;
+  if (!variant) return !l.optionValueIds?.length;
+  const all = variant.optionGroups.flatMap((g) => g.values);
+  const names = [...new Set(l.optionValueIds ?? [])].map((id) => all.find((v) => v.id === id)?.name);
+  if (names.includes(undefined)) return false;
+  const stored = prior.name.replace(/ \((up to \d+|extra head)\)$/, '');
+  return names.length ? stored.endsWith(` + ${names.join(', ')}`) : !all.some((v) => stored.endsWith(` + ${v.name}`) || stored.endsWith(`, ${v.name}`));
 }
 
 function checkLineShape(l: LineInput): { lineId: string; qty: number; note: string | null; at: Date } {
@@ -149,7 +176,9 @@ async function writeLines(tx: Tx, actor: Actor, ctx: { storeId: string; pairingI
   for (const s of shaped) {
     const prior = existing.get(s.lineId);
     if (prior) {
-      if (!sameLine(prior, { sessionId: session.id, menuItemId: s.l.menuItemId, qty: s.qty, note: s.note })) throw recordedDifferently();
+      const extra = prior.bundleHeads !== null ? await posV2Repo.getLine(tx, actor.orgId, ctx.storeId, uuidv5(EXTRA_HEADS, s.lineId)) : undefined;
+      const choices = await sameChoices(menus, s.at, prior, s.l);
+      if (!sameLine(prior, { sessionId: session.id, menuItemId: s.l.menuItemId, qty: s.qty, note: s.note, choices, extraHeadsQty: extra?.qty ?? null })) throw recordedDifferently();
       continue;
     }
     fresh++;
@@ -372,7 +401,7 @@ async function followHeads(tx: Tx, actor: Actor, ctx: { storeId: string; pairing
 async function changeHeads(
   tx: Tx,
   actor: Actor,
-  input: { storeId: string; pairingId: string | null; sessionId: string },
+  input: { storeId: string; pairingId: string | null; sessionId: string; atDevice?: string | Date },
   pairingId: string | null,
   change: { headsCashier?: number; headsServer?: number },
 ): Promise<{ wrote: boolean }> {
@@ -382,7 +411,8 @@ async function changeHeads(
   const next = { headsCashier: change.headsCashier ?? session.headsCashier, headsServer: change.headsServer ?? session.headsServer };
   if (next.headsCashier === session.headsCashier && next.headsServer === session.headsServer) return { wrote: false };
   const after = billedHeads(next.headsCashier, next.headsServer);
-  const at = new Date();
+  // T-559: a heads.set queued on a tablet is priced (a new extra-head line) at ITS device time, like addLines prices a line at `addedAtDevice`; a Server Action has none and uses now.
+  const at = input.atDevice === undefined ? new Date() : deviceTime(input.atDevice, 'The time of the change');
   await followHeads(tx, actor, { storeId: input.storeId, pairingId }, session, before, after, at);
   await posV2Repo.setSessionHeads(tx, actor.orgId, input.storeId, sessionId, change);
   await audit(tx, actor, 'pos.heads_changed', {
@@ -401,7 +431,7 @@ export async function confirmHeads(tx: Tx, actor: Actor, input: { storeId: strin
   return changeHeads(tx, actor, input, pairingId, { headsServer });
 }
 
-export async function setHeadsCashier(tx: Tx, actor: Actor, input: { storeId: string; pairingId: string | null; sessionId: string; headsCashier: number }): Promise<{ wrote: boolean }> {
+export async function setHeadsCashier(tx: Tx, actor: Actor, input: { storeId: string; pairingId: string | null; sessionId: string; headsCashier: number; atDevice?: string | Date }): Promise<{ wrote: boolean }> {
   await authorize(tx, actor, 'record_sale', { storeId: input.storeId });
   const pairingId = await requireContext(tx, actor, input.storeId, input.pairingId, false);
   const sessionId = uuidInput(input.sessionId, 'The table id');
