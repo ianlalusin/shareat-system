@@ -66,7 +66,7 @@ export async function mkTypedDay(
   sql: SqlLike,
   f: { orgId: string; manager: Actor },
   scoped: string[],
-  businessDate = '2027-01-10',
+  businessDate = '2026-01-10',
 ): Promise<{ id: string; storeId: string }> {
   const { createSalesDay, transactionAsOrg } = await loadDomainHelpers();
   const q = sql as postgres.Sql;

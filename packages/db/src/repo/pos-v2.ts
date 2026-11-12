@@ -37,6 +37,7 @@ import { employments } from '../../schema/employment';
 import { persons } from '../../schema/persons';
 import { posTabletPairings } from '../../schema/pos-tablet-pairings';
 import { tenders } from '../../schema/pos-v1';
+import { statutoryDiscountRecords } from '../../schema/statutory-discounts';
 import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
 
@@ -131,6 +132,24 @@ export async function getLivePairing(tx: Tx, orgId: string, storeId: string, pai
         isNull(posTabletPairings.revokedAt),
       ),
     );
+  return row;
+}
+
+/** T-563: the store's one live pairing (the tablet that is paired now), or undefined. */
+export async function getLivePairingOfStore(tx: Tx, orgId: string, storeId: string): Promise<{ id: string } | undefined> {
+  const [row] = await tx
+    .select({ id: posTabletPairings.id })
+    .from(posTabletPairings)
+    .where(and(eq(posTabletPairings.orgId, orgId), eq(posTabletPairings.storeId, storeId), isNull(posTabletPairings.revokedAt)));
+  return row;
+}
+
+/** T-563: a pairing of this store, LIVE OR REVOKED (the pairing an event was made on may have been replaced since), or undefined. */
+export async function getPairingOfStore(tx: Tx, orgId: string, storeId: string, pairingId: string): Promise<{ id: string; revokedAt: Date | null } | undefined> {
+  const [row] = await tx
+    .select({ id: posTabletPairings.id, revokedAt: posTabletPairings.revokedAt })
+    .from(posTabletPairings)
+    .where(and(eq(posTabletPairings.id, pairingId), eq(posTabletPairings.orgId, orgId), eq(posTabletPairings.storeId, storeId)));
   return row;
 }
 
@@ -394,6 +413,34 @@ export async function getReceiptBySession(tx: Tx, orgId: string, storeId: string
     .from(posSalesReceipts)
     .where(and(eq(posSalesReceipts.tableSessionId, sessionId), eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.storeId, storeId)));
   return row;
+}
+
+/** The payments a receipt recorded: what a replay of the sale is compared with (T-556). */
+export async function listReceiptPayments(tx: Tx, orgId: string, receiptId: string): Promise<{ tenderId: string; amount: string; referenceNo: string | null; toCheck: boolean }[]> {
+  return tx
+    .select({ tenderId: posSalesReceiptPayments.tenderId, amount: posSalesReceiptPayments.amount, referenceNo: posSalesReceiptPayments.referenceNo, toCheck: posSalesReceiptPayments.toCheck })
+    .from(posSalesReceiptPayments)
+    .where(and(eq(posSalesReceiptPayments.orgId, orgId), eq(posSalesReceiptPayments.receiptId, receiptId)));
+}
+
+/**
+ * The senior/PWD card holders a POS sale wrote to the statutory register under its printed number. `dinerNo` is known only for a diner whose
+ * discount left a receipt row (a discount that rounds to nothing leaves none), else null (T-556).
+ */
+export async function listReceiptStatutory(
+  tx: Tx, orgId: string, storeId: string, receiptId: string, invoiceNumber: string,
+): Promise<{ kind: 'senior' | 'pwd'; idNumber: string; holderName: string; dinerNo: number | null }[]> {
+  const records = await tx
+    .select({ id: statutoryDiscountRecords.id, kind: statutoryDiscountRecords.kind, idNumber: statutoryDiscountRecords.idNumber, holderName: statutoryDiscountRecords.holderName })
+    .from(statutoryDiscountRecords)
+    .where(and(eq(statutoryDiscountRecords.orgId, orgId), eq(statutoryDiscountRecords.storeId, storeId), eq(statutoryDiscountRecords.invoiceNumber, invoiceNumber), eq(statutoryDiscountRecords.source, 'pos')));
+  const diners = await tx
+    .selectDistinct({ recordId: posSalesReceiptLineDiscounts.statutoryRecordId, dinerNo: posSalesReceiptLineDiscounts.dinerNo })
+    .from(posSalesReceiptLineDiscounts)
+    .innerJoin(posSalesReceiptLines, eq(posSalesReceiptLines.id, posSalesReceiptLineDiscounts.receiptLineId))
+    .where(and(eq(posSalesReceiptLines.orgId, orgId), eq(posSalesReceiptLines.receiptId, receiptId)));
+  const dinerOf = new Map(diners.map((d) => [d.recordId, d.dinerNo]));
+  return records.map((r) => ({ kind: r.kind, idNumber: r.idNumber, holderName: r.holderName, dinerNo: dinerOf.get(r.id) ?? null }));
 }
 
 export async function terminalSeqUsed(tx: Tx, orgId: string, terminalId: string, terminalSeq: number): Promise<boolean> {
@@ -723,7 +770,17 @@ export async function getStateVersion(tx: Tx, orgId: string, storeId: string): P
  * R4 clause 3: did this person sign in with a PIN on THIS pairing, issued in [from, to]? An ended session counts, except one that was revoked.
  * `sessions.device_id` is text, so the pairing id is compared as text.
  */
-export async function hasPinSessionOnPairing(tx: Tx, orgId: string, personId: string, storeId: string, pairingId: string, from: Date, to: Date): Promise<boolean> {
+export async function hasPinSessionOnPairing(
+  tx: Tx,
+  orgId: string,
+  personId: string,
+  storeId: string,
+  pairingId: string,
+  from: Date,
+  to: Date,
+  /** T-563 (carry-over from a REPLACED tablet): a session revoked at or after this moment still vouches, because the PIN was entered while the tablet was valid. */
+  revokedAtOrAfter?: Date,
+): Promise<boolean> {
   const rows = (await tx.execute(sql`
     select 1 as ok
       from sessions s
@@ -735,7 +792,7 @@ export async function hasPinSessionOnPairing(tx: Tx, orgId: string, personId: st
        and s.credential_kind = 'pin'
        and s.issued_at >= ${from.toISOString()}::timestamptz
        and s.issued_at <= ${to.toISOString()}::timestamptz
-       and (s.ended_reason is null or s.ended_reason <> 'revoked')
+       and (s.ended_reason is null or s.ended_reason <> 'revoked'${revokedAtOrAfter ? sql` or s.ended_at >= ${revokedAtOrAfter.toISOString()}::timestamptz` : sql``})
      limit 1
   `)) as unknown as { ok: number }[];
   return rows.length > 0;

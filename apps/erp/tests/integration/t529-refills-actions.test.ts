@@ -243,7 +243,7 @@ describe('a refill from the store tablet through the REAL /api/pos/events', () =
     ];
     HOLD.token = f.pairingToken;
     const res: Response = await events.POST(
-      new Request('http://localhost:9008/api/pos/events', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ events: batch }) }),
+      new Request('http://localhost:9008/api/pos/events', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pairingId: f.pairingId, events: batch }) }),
     );
     expect(res.status).toBe(200);
     const results = ((await res.json()) as { results: { seq: number; status: string; error?: string }[] }).results;
@@ -276,7 +276,7 @@ describe('a refill from the store tablet through the REAL /api/pos/events', () =
       { seq: 2, ...refill },
     ];
     HOLD.token = f.pairingToken;
-    const res: Response = await events.POST(new Request('http://localhost:9008/api/pos/events', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ events: batch }) }));
+    const res: Response = await events.POST(new Request('http://localhost:9008/api/pos/events', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pairingId: f.pairingId, events: batch }) }));
     const results = ((await res.json()) as { results: { seq: number; status: string }[] }).results;
     expect(results[0]!.status).toBe('applied');
     expect(results[1]!.status).not.toBe('applied');
