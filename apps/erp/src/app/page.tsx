@@ -356,7 +356,7 @@ export default async function DashboardPage({
               <span className="text-[13px] text-muted">POS usage drafts · {rangeText}</span>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table aria-label="POS usage drafts" className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-muted">
                     <th className="py-1 pr-4 font-medium">Store</th>
