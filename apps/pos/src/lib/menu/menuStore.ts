@@ -22,6 +22,7 @@ export function createMenuStore(d: MenuStoreDeps) {
   const loadSource = d.loadSource ?? loadMenuSource, saveSource = d.saveSource ?? saveMenuSource;
   const now = d.now ?? Date.now;
   let state: MenuState = { source: 'firestore', cached: null };
+  let activeStoreId: string | null = null;
   const listeners = new Set<() => void>();
   const set = (next: MenuState) => { if (next.source !== state.source || next.cached !== state.cached) { state = next; for (const l of [...listeners]) l(); } };
 
@@ -31,6 +32,8 @@ export function createMenuStore(d: MenuStoreDeps) {
       storeId, online: d.connectivity.getState().online, read: () => load(storeId), write: save,
       fetchMenu: (inm) => d.fetchMenu(storeId, inm), now,
     });
+    // Drop a result for a store the device has left (or after the source flipped): the per-store cache write already happened.
+    if (activeStoreId !== storeId || state.source !== 'erp') return;
     if (r.cache && (r.changed || r.rescheduled || !state.cached || state.cached.storeId !== storeId)) set({ ...state, cached: r.cache });
   }
 
@@ -44,6 +47,7 @@ export function createMenuStore(d: MenuStoreDeps) {
     start(storeId: string): () => void {
       // A cache for another store must never be served: drop it now; the load below brings in this store's own.
       if (state.cached && state.cached.storeId !== storeId) set({ ...state, cached: null });
+      activeStoreId = storeId;
       let stopped = false, wasOnline = d.connectivity.getState().online, timer: ReturnType<typeof setTimeout> | undefined;
       const go = () => { if (!stopped) void refresh(storeId); };
       const arm = () => {
@@ -67,7 +71,7 @@ export function createMenuStore(d: MenuStoreDeps) {
       const poll = setInterval(go, MENU_REFRESH_MS);
       const initial = d.connectivity.getState().menuSource;
       if (initial) adoptSource(initial);
-      return () => { stopped = true; unsubConn(); unsubMenu(); clearInterval(poll); if (timer) clearTimeout(timer); };
+      return () => { stopped = true; if (activeStoreId === storeId) activeStoreId = null; unsubConn(); unsubMenu(); clearInterval(poll); if (timer) clearTimeout(timer); };
     },
   };
 }

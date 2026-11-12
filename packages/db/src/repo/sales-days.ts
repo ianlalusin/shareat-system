@@ -39,8 +39,8 @@ export interface SalesDayRow {
   status: SalesDayStatus;
   posSourced: boolean;
   posSourcedAt: Date | null;
-  /** T-375: `legacy_typed` (a typed day) or `pos_v1_day_feed` (derived from a stored POS response). */
-  source: 'legacy_typed' | 'pos_v1_day_feed';
+  /** T-375: `legacy_typed` (a typed day) or `pos_v1_day_feed` (derived from a stored POS response); T-531: `pos_receipts` (derived from the POS receipts by the day close). */
+  source: 'legacy_typed' | 'pos_v1_day_feed' | 'pos_receipts';
   /** The `sales` feed a feed day was derived from; null on a typed day. */
   posV1DayFeedId: string | null;
   /** POS refunds of a feed day (posts to 4950); always 0.00 on a typed day. */
@@ -384,6 +384,59 @@ export type InsertSalesDayInput = Pick<
 export async function insertSalesDay(tx: Tx, input: InsertSalesDayInput): Promise<{ id: string }> {
   const [row] = await tx.insert(salesDays).values(input).returning({ id: salesDays.id });
   return row!;
+}
+
+/**
+ * T-531: the day the Z derives from the POS receipts (`source = 'pos_receipts'`). Written only inside `withSalesDayDerivation` (the 0247 trigger refuses it
+ * otherwise), by `pos/day-close.ts`. A separate function, not `insertSalesDay`: that one has two callers by guard (t375 G1 e).
+ */
+export interface InsertPosReceiptsDayInput {
+  orgId: string;
+  storeId: string;
+  businessDate: string;
+  posDayCloseId: string;
+  createdBy: string;
+  posSourcedAt: Date;
+  totalSales: Money;
+  unliSales: Money;
+  alaCarteSales: Money;
+  seniorDiscount: Money;
+  pwdDiscount: Money;
+  otherDiscount: Money;
+  cashCollected: Money;
+  onlineCollected: Money;
+}
+
+export async function insertPosReceiptsDay(tx: Tx, input: InsertPosReceiptsDayInput): Promise<{ id: string }> {
+  const [row] = await tx
+    .insert(salesDays)
+    .values({ ...input, source: 'pos_receipts', posSourced: true })
+    .returning({ id: salesDays.id });
+  return row!;
+}
+
+/**
+ * T-531 R10: who closed the Z(s) behind a POS-derived day: the day's own Z, and any other Z of the same store and business date.
+ */
+export async function listZClosersForDay(tx: Tx, orgId: string, day: { storeId: string; businessDate: string; posDayCloseId?: string | null }): Promise<string[]> {
+  const rows = (await tx.execute(sql`
+    select distinct c.closed_by as person_id
+      from pos_day_closes c
+     where c.org_id = ${orgId}
+       and c.store_id = ${day.storeId}
+       and (c.business_date = ${day.businessDate}::date ${day.posDayCloseId ? sql`or c.id = ${day.posDayCloseId}` : sql``})
+  `)) as unknown as { person_id: string }[];
+  return rows.map((r) => r.person_id);
+}
+
+/** T-531: the sales day derived from one Z (a replayed close answers with it), or undefined (test mode derives none). */
+export async function getIdByPosDayClose(tx: Tx, orgId: string, posDayCloseId: string): Promise<string | undefined> {
+  const [row] = await tx
+    .select({ id: salesDays.id })
+    .from(salesDays)
+    .where(and(eq(salesDays.orgId, orgId), eq(salesDays.posDayCloseId, posDayCloseId)))
+    .limit(1);
+  return row?.id;
 }
 
 export async function getById(tx: Tx, orgId: string, id: string): Promise<SalesDayRow | undefined> {

@@ -6,8 +6,9 @@
  * Every function takes the caller's transaction first and filters by org AND store; RLS is the backstop. The domain bumps
  * `pos_stores.state_version` (`bumpStateVersion`) once per call that changes anything a screen shows.
  */
-import { and, asc, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, ne, sql, type SQL } from 'drizzle-orm';
 import {
+  posDayCloseTenders,
   posDayCloses,
   posDiscountPresets,
   posEvents,
@@ -21,6 +22,7 @@ import {
   tableSessionLineDiscounts,
   tableSessionLines,
   tableSessions,
+  type PosDayCloseRow,
   type PosDiscountPresetRow,
   type PosEventRow,
   type PosSalesReceiptRow,
@@ -35,10 +37,12 @@ import { employments } from '../../schema/employment';
 import { persons } from '../../schema/persons';
 import { posTabletPairings } from '../../schema/pos-tablet-pairings';
 import { tenders } from '../../schema/pos-v1';
+import { statutoryDiscountRecords } from '../../schema/statutory-discounts';
 import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
 
 export type {
+  PosDayCloseRow,
   PosDiscountPresetRow,
   PosEventRow,
   PosSalesReceiptRow,
@@ -391,6 +395,34 @@ export async function getReceiptBySession(tx: Tx, orgId: string, storeId: string
     .from(posSalesReceipts)
     .where(and(eq(posSalesReceipts.tableSessionId, sessionId), eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.storeId, storeId)));
   return row;
+}
+
+/** The payments a receipt recorded: what a replay of the sale is compared with (T-556). */
+export async function listReceiptPayments(tx: Tx, orgId: string, receiptId: string): Promise<{ tenderId: string; amount: string; referenceNo: string | null; toCheck: boolean }[]> {
+  return tx
+    .select({ tenderId: posSalesReceiptPayments.tenderId, amount: posSalesReceiptPayments.amount, referenceNo: posSalesReceiptPayments.referenceNo, toCheck: posSalesReceiptPayments.toCheck })
+    .from(posSalesReceiptPayments)
+    .where(and(eq(posSalesReceiptPayments.orgId, orgId), eq(posSalesReceiptPayments.receiptId, receiptId)));
+}
+
+/**
+ * The senior/PWD card holders a POS sale wrote to the statutory register under its printed number. `dinerNo` is known only for a diner whose
+ * discount left a receipt row (a discount that rounds to nothing leaves none), else null (T-556).
+ */
+export async function listReceiptStatutory(
+  tx: Tx, orgId: string, storeId: string, receiptId: string, invoiceNumber: string,
+): Promise<{ kind: 'senior' | 'pwd'; idNumber: string; holderName: string; dinerNo: number | null }[]> {
+  const records = await tx
+    .select({ id: statutoryDiscountRecords.id, kind: statutoryDiscountRecords.kind, idNumber: statutoryDiscountRecords.idNumber, holderName: statutoryDiscountRecords.holderName })
+    .from(statutoryDiscountRecords)
+    .where(and(eq(statutoryDiscountRecords.orgId, orgId), eq(statutoryDiscountRecords.storeId, storeId), eq(statutoryDiscountRecords.invoiceNumber, invoiceNumber), eq(statutoryDiscountRecords.source, 'pos')));
+  const diners = await tx
+    .selectDistinct({ recordId: posSalesReceiptLineDiscounts.statutoryRecordId, dinerNo: posSalesReceiptLineDiscounts.dinerNo })
+    .from(posSalesReceiptLineDiscounts)
+    .innerJoin(posSalesReceiptLines, eq(posSalesReceiptLines.id, posSalesReceiptLineDiscounts.receiptLineId))
+    .where(and(eq(posSalesReceiptLines.orgId, orgId), eq(posSalesReceiptLines.receiptId, receiptId)));
+  const dinerOf = new Map(diners.map((d) => [d.recordId, d.dinerNo]));
+  return records.map((r) => ({ kind: r.kind, idNumber: r.idNumber, holderName: r.holderName, dinerNo: dinerOf.get(r.id) ?? null }));
 }
 
 export async function terminalSeqUsed(tx: Tx, orgId: string, terminalId: string, terminalSeq: number): Promise<boolean> {
@@ -836,4 +868,208 @@ export async function setTillPrinter(tx: Tx, orgId: string, storeId: string, ter
     .update(posTerminals)
     .set({ receiptPaperMm, receiptCopies, updatedAt: sql`now()` })
     .where(and(eq(posTerminals.id, terminalId), eq(posTerminals.orgId, orgId), eq(posTerminals.storeId, storeId)));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-531 - the day close (the Z): reads for the reading, the one-time receipt freeze, the Z rows. No rule lives here
+// (packages/domain/src/pos/day-close.ts decides). docs/tasks/531-pos-day-close.md.
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** The store's latest Z by BUSINESS DATE (any terminal), as `YYYY-MM-DD`, or undefined before the first Z. T-531 ruling 1: the next Z, and every receipt after it, is dated after this. */
+export async function lastDayCloseBusinessDate(tx: Tx, orgId: string, storeId: string): Promise<string | undefined> {
+  const [row] = await tx
+    .select({ d: sql<string | null>`max(${posDayCloses.businessDate})::text` })
+    .from(posDayCloses)
+    .where(and(eq(posDayCloses.orgId, orgId), eq(posDayCloses.storeId, storeId)));
+  return row?.d ?? undefined;
+}
+
+/** The latest Z of ONE terminal (by z_no), or undefined before its first. */
+export async function lastDayCloseOfTerminal(tx: Tx, orgId: string, storeId: string, terminalId: string): Promise<PosDayCloseRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(posDayCloses)
+    .where(and(eq(posDayCloses.orgId, orgId), eq(posDayCloses.storeId, storeId), eq(posDayCloses.terminalId, terminalId)))
+    .orderBy(desc(posDayCloses.zNo))
+    .limit(1);
+  return row;
+}
+
+export async function getDayClose(tx: Tx, orgId: string, storeId: string, id: string): Promise<PosDayCloseRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(posDayCloses)
+    .where(and(eq(posDayCloses.id, id), eq(posDayCloses.orgId, orgId), eq(posDayCloses.storeId, storeId)));
+  return row;
+}
+
+/** One terminal of the store by id. */
+export async function getTerminal(tx: Tx, orgId: string, storeId: string, terminalId: string): Promise<PosTerminalRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(posTerminals)
+    .where(and(eq(posTerminals.id, terminalId), eq(posTerminals.orgId, orgId), eq(posTerminals.storeId, storeId)));
+  return row;
+}
+
+/** The receipts of one terminal not yet in any Z (day_close_id IS NULL), oldest first. */
+export async function listOpenReceipts(tx: Tx, orgId: string, storeId: string, terminalId: string): Promise<PosSalesReceiptRow[]> {
+  return tx
+    .select()
+    .from(posSalesReceipts)
+    .where(and(eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.storeId, storeId), eq(posSalesReceipts.terminalId, terminalId), isNull(posSalesReceipts.dayCloseId)))
+    .orderBy(asc(posSalesReceipts.issuedAtDevice), asc(posSalesReceipts.id));
+}
+
+/** The receipts frozen to one Z, oldest first. */
+export async function listReceiptsOfClose(tx: Tx, orgId: string, storeId: string, dayCloseId: string): Promise<PosSalesReceiptRow[]> {
+  return tx
+    .select()
+    .from(posSalesReceipts)
+    .where(and(eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.storeId, storeId), eq(posSalesReceipts.dayCloseId, dayCloseId)))
+    .orderBy(asc(posSalesReceipts.issuedAtDevice), asc(posSalesReceipts.id));
+}
+
+export interface NewDayClose {
+  id: string;
+  orgId: string;
+  storeId: string;
+  terminalId: string;
+  zNo: number;
+  businessDate: string;
+  windowStart: Date;
+  windowEnd: Date;
+  receiptCount: number;
+  grossTotal: Money;
+  closedBy: string;
+  approvedBy: string;
+}
+
+export async function insertDayClose(tx: Tx, z: NewDayClose): Promise<void> {
+  await tx.insert(posDayCloses).values(z);
+}
+
+export async function insertDayCloseTenders(tx: Tx, rows: { orgId: string; dayCloseId: string; tenderId: string; amount: Money }[]): Promise<void> {
+  if (rows.length === 0) return;
+  await tx.insert(posDayCloseTenders).values(rows);
+}
+
+/**
+ * Freezes the receipts to the Z: sets `day_close_id` (the one column the 0238 grant lets the app write, NULL -> value once). `WHERE day_close_id IS NULL`, so a
+ * receipt a racing close already took is not touched; the CALLER compares the returned row count with the count it read and refuses when they differ.
+ */
+export async function closeReceipts(tx: Tx, orgId: string, storeId: string, dayCloseId: string, receiptIds: string[]): Promise<number> {
+  if (receiptIds.length === 0) return 0;
+  const rows = await tx
+    .update(posSalesReceipts)
+    .set({ dayCloseId })
+    .where(and(eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.storeId, storeId), inArray(posSalesReceipts.id, receiptIds), isNull(posSalesReceipts.dayCloseId)))
+    .returning({ id: posSalesReceipts.id });
+  return rows.length;
+}
+
+export interface DayCloseWithTenders {
+  close: PosDayCloseRow;
+  tenders: { tenderId: string; amount: string }[];
+}
+
+async function withTenders(tx: Tx, orgId: string, closes: PosDayCloseRow[]): Promise<DayCloseWithTenders[]> {
+  if (closes.length === 0) return [];
+  const rows = await tx
+    .select({ dayCloseId: posDayCloseTenders.dayCloseId, tenderId: posDayCloseTenders.tenderId, amount: posDayCloseTenders.amount })
+    .from(posDayCloseTenders)
+    .where(and(eq(posDayCloseTenders.orgId, orgId), inArray(posDayCloseTenders.dayCloseId, closes.map((c) => c.id))));
+  return closes.map((close) => ({ close, tenders: rows.filter((r) => r.dayCloseId === close.id).map((r) => ({ tenderId: r.tenderId, amount: r.amount })) }));
+}
+
+/** The store's Zs (all terminals), newest first, with their tender rows. */
+export async function listDayCloses(tx: Tx, orgId: string, storeId: string, limit: number): Promise<DayCloseWithTenders[]> {
+  const closes = await tx
+    .select()
+    .from(posDayCloses)
+    .where(and(eq(posDayCloses.orgId, orgId), eq(posDayCloses.storeId, storeId)))
+    .orderBy(desc(posDayCloses.businessDate), desc(posDayCloses.zNo))
+    .limit(limit);
+  return withTenders(tx, orgId, closes);
+}
+
+/** Every Z of the store on one business date (any terminal) with its tender rows, in z_no order. */
+export async function listDayClosesOfDate(tx: Tx, orgId: string, storeId: string, businessDate: string): Promise<DayCloseWithTenders[]> {
+  const closes = await tx
+    .select()
+    .from(posDayCloses)
+    .where(and(eq(posDayCloses.orgId, orgId), eq(posDayCloses.storeId, storeId), eq(posDayCloses.businessDate, businessDate)))
+    .orderBy(asc(posDayCloses.zNo));
+  return withTenders(tx, orgId, closes);
+}
+
+/** Sums over the receipts of one window, as exact decimal text (the domain turns them into Money). */
+export interface ReceiptFigures {
+  /** Σ gross of package lines, Σ gross of every other line. */
+  packageGross: string;
+  otherGross: string;
+  /** Σ (vat_removed + discount_amount) per discount kind. */
+  discountByKind: Record<'senior' | 'pwd' | 'preset' | 'custom', string>;
+  /** Distinct statutory rows (senior / PWD diners). */
+  statutoryDiners: number;
+  /** Per tender: Σ amount, Σ change given, and how many payments are offline wallet payments still to check. */
+  byTender: { tenderId: string; amount: string; change: string; toCheck: number }[];
+  /** Package sessions (a receipt with a package line): their count and the Σ of their billed heads (the larger of the cashier's and the server's count). */
+  packageSessions: number;
+  heads: number;
+}
+
+const idList = (ids: readonly string[]): SQL => sql.join(ids.map((i) => sql`${i}`), sql`, `);
+
+/** T-558: Σ amount tendered per receipt (decimal text), for the receipts that took any payment; a short payment is a receipt whose sum is below its total. */
+export async function receiptPaidSums(tx: Tx, orgId: string, receiptIds: string[]): Promise<Map<string, string>> {
+  if (receiptIds.length === 0) return new Map();
+  const rows = (await tx.execute(sql`
+    select p.receipt_id as receipt_id, sum(p.amount)::text as paid
+      from pos_sales_receipt_payments p
+     where p.org_id = ${orgId} and p.receipt_id in (${idList(receiptIds)})
+     group by p.receipt_id`)) as unknown as { receipt_id: string; paid: string }[];
+  return new Map(rows.map((r) => [r.receipt_id, r.paid]));
+}
+
+export async function receiptFigures(tx: Tx, orgId: string, receiptIds: string[]): Promise<ReceiptFigures> {
+  const discountByKind = { senior: '0', pwd: '0', preset: '0', custom: '0' };
+  if (receiptIds.length === 0) return { packageGross: '0', otherGross: '0', discountByKind, statutoryDiners: 0, byTender: [], packageSessions: 0, heads: 0 };
+  const ids = idList(receiptIds);
+  const lines = (await tx.execute(sql`
+    select coalesce(sum(l.gross) filter (where l.kind = 'package'), 0)::text as pkg, coalesce(sum(l.gross) filter (where l.kind <> 'package'), 0)::text as other
+      from pos_sales_receipt_lines l
+     where l.org_id = ${orgId} and l.receipt_id in (${ids})`)) as unknown as { pkg: string; other: string }[];
+  const disc = (await tx.execute(sql`
+    select d.kind as kind, sum(d.vat_removed + d.discount_amount)::text as total
+      from pos_sales_receipt_line_discounts d
+      join pos_sales_receipt_lines l on l.id = d.receipt_line_id
+     where d.org_id = ${orgId} and l.receipt_id in (${ids})
+     group by d.kind`)) as unknown as { kind: 'senior' | 'pwd' | 'preset' | 'custom'; total: string }[];
+  const diners = (await tx.execute(sql`
+    select count(distinct d.statutory_record_id)::int as n
+      from pos_sales_receipt_line_discounts d
+      join pos_sales_receipt_lines l on l.id = d.receipt_line_id
+     where d.org_id = ${orgId} and l.receipt_id in (${ids})`)) as unknown as { n: number }[];
+  const pays = (await tx.execute(sql`
+    select p.tender_id as tender_id, sum(p.amount)::text as amount, sum(p.change_given)::text as change, (count(*) filter (where p.to_check))::int as to_check
+      from pos_sales_receipt_payments p
+     where p.org_id = ${orgId} and p.receipt_id in (${ids})
+     group by p.tender_id`)) as unknown as { tender_id: string; amount: string; change: string; to_check: number }[];
+  const sessions = (await tx.execute(sql`
+    select count(*)::int as n, coalesce(sum(greatest(s.heads_cashier, coalesce(s.heads_server, 0))), 0)::int as heads
+      from pos_sales_receipts r
+      join table_sessions s on s.id = r.table_session_id
+     where r.org_id = ${orgId} and r.id in (${ids})
+       and exists (select 1 from pos_sales_receipt_lines l where l.receipt_id = r.id and l.kind = 'package')`)) as unknown as { n: number; heads: number }[];
+  for (const d of disc) discountByKind[d.kind] = d.total;
+  return {
+    packageGross: lines[0]?.pkg ?? '0',
+    otherGross: lines[0]?.other ?? '0',
+    discountByKind,
+    statutoryDiners: Number(diners[0]?.n ?? 0),
+    byTender: pays.map((p) => ({ tenderId: p.tender_id, amount: p.amount, change: p.change, toCheck: Number(p.to_check) })),
+    packageSessions: Number(sessions[0]?.n ?? 0),
+    heads: Number(sessions[0]?.heads ?? 0),
+  };
 }

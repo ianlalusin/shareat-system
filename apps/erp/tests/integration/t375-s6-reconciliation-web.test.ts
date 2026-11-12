@@ -149,7 +149,7 @@ const rechecks = (f: S6F) =>
 describe('R2 - the import action runs the prior-7-days recheck after the import has committed', () => {
   it('verified feed days D-1..D-8: importing D rechecks D-1..D-7 (not D-8), each after the import committed; D-3\'s fetch throws -> D is imported, the other six are rechecked, the failure is logged', async () => {
     const f = await s6Fixture(sql, 'r2');
-    const dates = ['2027-01-09', '2027-01-08', '2027-01-07', '2027-01-06', '2027-01-05', '2027-01-04', '2027-01-03', '2027-01-02'];
+    const dates = ['2026-01-09', '2026-01-08', '2026-01-07', '2026-01-06', '2026-01-05', '2026-01-04', '2026-01-03', '2026-01-02'];
     const ids: Record<string, string> = {};
     for (const d of dates) ids[d] = await importVerified(f, d);
     expect(await rechecks(f), 'control: nothing is rechecked before the import action').toHaveLength(0);
@@ -158,7 +158,7 @@ describe('R2 - the import action runs the prior-7-days recheck after the import 
     const error = vi.spyOn(logger, 'error');
     spies.push(warn, error);
     bridge.storeId = f.storeId;
-    bridge.failDate = '2027-01-07'; // D-3
+    bridge.failDate = '2026-01-07'; // D-3
     calls.length = 0;
 
     const to = await run(f.admin, actions.importSalesDayAction, form({ storeId: f.storeId, businessDate: DAY }), 'importSalesDayAction');
@@ -178,7 +178,7 @@ describe('R2 - the import action runs the prior-7-days recheck after the import 
       byDate.set(r.business_date, e);
     }
     expect([...byDate.keys()].sort(), 'D-1..D-7 except the failed D-3; never D-8, never D itself').toEqual(
-      ['2027-01-03', '2027-01-04', '2027-01-05', '2027-01-06', '2027-01-08', '2027-01-09'],
+      ['2026-01-03', '2026-01-04', '2026-01-05', '2026-01-06', '2026-01-08', '2026-01-09'],
     );
     for (const [d, e] of byDate) {
       expect(e.kinds.sort(), `${d}: one batch, both kinds`).toEqual(['sales', 'sold_items']);
@@ -193,7 +193,7 @@ describe('R2 - the import action runs the prior-7-days recheck after the import 
 
     const logged = [...warn.mock.calls, ...error.mock.calls].map((c) => JSON.stringify(c.map((a) => (a instanceof Error ? a.message : a))));
     expect(
-      logged.some((line) => line.includes('2027-01-07') || line.includes(ids['2027-01-07']!)),
+      logged.some((line) => line.includes('2026-01-07') || line.includes(ids['2026-01-07']!)),
       `the failed recheck is logged (saw: ${logged.length} warn/error calls)`,
     ).toBe(true);
   });
@@ -270,7 +270,7 @@ describe('W1 (T-377 S1, DEF-596) - the page after a posted correction says "Post
     ).ids.sales!;
     const { postPosCorrection } = await import('../../../../packages/domain/src/sales-days/correction');
     await asOrgOn(f.orgId, (tx) =>
-      postPosCorrection(tx, f.manager, { salesDayId: dayId, feedId, entryDate: '2027-01-20', reason: 'POS voided a cash receipt' }),
+      postPosCorrection(tx, f.manager, { salesDayId: dayId, feedId, entryDate: '2026-01-20', reason: 'POS voided a cash receipt' }),
     );
     h.actor = f.admin;
 

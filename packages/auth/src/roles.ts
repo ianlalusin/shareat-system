@@ -300,6 +300,14 @@ const ROLE_RANK: Readonly<Record<Role, number>> = {
 };
 
 /**
+ * T-531 (Ian, row 449; planner ruling 4, 8 Nov 2026): "store manager or above" = the roles `manager`, `admin` and `super_admin` (there is no area-manager role).
+ * Read off the SAME chain of command as the seniority rule above (`ROLE_RANK`), so there is one ladder; a person with no active role (undefined) is below all of it.
+ */
+export function isStoreManagerOrAbove(role: string | undefined | null): boolean {
+  return role !== undefined && role !== null && role in ROLE_RANK && ROLE_RANK[role as Role] >= ROLE_RANK.manager;
+}
+
+/**
  * The actor's rank for the purpose above.
  *
  * ⛔ **Super-admin AUTHORITY, not the `super_admin` literal** — the distinction T-232 §2.2 had to
