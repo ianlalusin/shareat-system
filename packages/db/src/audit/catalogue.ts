@@ -377,7 +377,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-475 S3: an admin verified the supplier invoice they logged themselves (written beside ap_invoice.approved).
   def('ap_invoice.self_verified', 'money', 'high', 'store', 'ap_invoices', 'T-475'),
   def('ap_payment.recorded', 'money', 'normal', 'store', 'ap_payments', 'T-402'),
-  def('data.export_downloaded', 'data', 'high', 'org', 'exports', 'T-402', ADMIN_RES),
+  // T-569: live - the POS v2 data download writes it (store_id stays null: the store is in the details).
+  def('data.export_downloaded', 'data', 'high', 'org', 'exports', 'T-402', ADMIN),
   def('data.bulk_import_applied', 'data', 'high', 'org', 'imports', 'T-402', RES),
   def('data.activity_log_exported', 'data', 'high', 'org', 'audit_log', 'T-402', ADMIN_RES),
   def('cutover.purge', 'data', 'critical', 'org', 'organizations', 'T-402', { ...ADMIN, actor: 'either' }),
