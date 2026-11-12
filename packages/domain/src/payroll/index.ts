@@ -803,7 +803,7 @@ export async function postPayRun(
       });
       await payrollRepo.setPayslipEntry(trx, payslipId, posted.entryId);
       // T-519 R6: spend the recovery against the person's agreements and complete any that are now paid, in this transaction.
-      await applyDeductionRecovery(trx, actor.orgId, slip.personId, posted.entryId, slip.advanceRecovered, agreementTakenInRun);
+      await applyDeductionRecovery(trx, actor.orgId, slip.personId, posted.entryId, slip.advanceRecovered, input.periodEnd, agreementTakenInRun);
 
       // ⭐ The freeze. `attendance_days.frozen_by_pay_run_id` has waited for this since T-157, and
       // the guard that reads it is already live in `adjudicate.ts` and `adjustments.ts`.
