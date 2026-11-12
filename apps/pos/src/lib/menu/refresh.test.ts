@@ -207,6 +207,66 @@ describe('menu store: the switch and the triggers', () => {
     expect(h.fetchMenu).toHaveBeenCalledTimes(1);
     stop();
   });
+
+  describe('a late refresh for another store is dropped (T-553, MC-001)', () => {
+    // fetch per store stays pending until the test resolves it; load is keyed by store id (nothing cached, so every fetch is a 200).
+    function lateStore() {
+      let conn: Conn = { online: true, menuSource: 'erp' };
+      const ls = new Set<() => void>();
+      const pending: Record<string, (r: any) => void> = {};
+      const store = createMenuStore({
+        connectivity: { getState: () => conn, subscribe: (l) => { ls.add(l); return () => { ls.delete(l); }; } },
+        fetchMenu: (s) => new Promise((res) => { pending[s] = res; }),
+        load: async () => null, save: async () => {}, loadSource: async () => null, saveSource: async () => {},
+      });
+      const answer = async (s: string) => { pending[s]({ status: 200, body: { contentHash: `h${s}`, nextChangeAt: null, menu: sampleMenu() } }); await vi.advanceTimersByTimeAsync(0); };
+      return { store, answer, setConn: (c: Conn) => { conn = c; ls.forEach((l) => l()); } };
+    }
+    it('(a) A pending, switch to B, B arrives, then A arrives: the store still holds B', async () => {
+      const t = lateStore();
+      const stopA = t.store.start('A');
+      await vi.advanceTimersByTimeAsync(0);
+      stopA();
+      const stopB = t.store.start('B');
+      await vi.advanceTimersByTimeAsync(0);
+      await t.answer('B');
+      expect(t.store.getState().cached!.storeId).toBe('B');
+      await t.answer('A');
+      expect(t.store.getState().cached!.storeId).toBe('B');
+      stopB();
+    });
+    it('(b) A arrives before B: A is never published, the store ends with B', async () => {
+      const t = lateStore();
+      const stopA = t.store.start('A');
+      await vi.advanceTimersByTimeAsync(0);
+      stopA();
+      const stopB = t.store.start('B');
+      await vi.advanceTimersByTimeAsync(0);
+      await t.answer('A');
+      expect(t.store.getState().cached).toBeNull();
+      await t.answer('B');
+      expect(t.store.getState().cached!.storeId).toBe('B');
+      stopB();
+    });
+    it('(c) stop with no replacement: a result arriving after stop is not published', async () => {
+      const t = lateStore();
+      const stopA = t.store.start('A');
+      await vi.advanceTimersByTimeAsync(0);
+      stopA();
+      await t.answer('A');
+      expect(t.store.getState().cached).toBeNull();
+    });
+    it('(d) source flips to firestore while a fetch is in flight: the late result is not published', async () => {
+      const t = lateStore();
+      const stopA = t.store.start('A');
+      await vi.advanceTimersByTimeAsync(0);
+      t.setConn({ online: true, menuSource: 'firestore' });
+      expect(t.store.getState().source).toBe('firestore');
+      await t.answer('A');
+      expect(t.store.getState()).toEqual({ source: 'firestore', cached: null });
+      stopA();
+    });
+  });
 });
 
 describe('menu store: re-linking to another store', () => {
