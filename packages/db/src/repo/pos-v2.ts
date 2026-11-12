@@ -37,6 +37,7 @@ import { employments } from '../../schema/employment';
 import { persons } from '../../schema/persons';
 import { posTabletPairings } from '../../schema/pos-tablet-pairings';
 import { tenders } from '../../schema/pos-v1';
+import { statutoryDiscountRecords } from '../../schema/statutory-discounts';
 import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
 
@@ -394,6 +395,34 @@ export async function getReceiptBySession(tx: Tx, orgId: string, storeId: string
     .from(posSalesReceipts)
     .where(and(eq(posSalesReceipts.tableSessionId, sessionId), eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.storeId, storeId)));
   return row;
+}
+
+/** The payments a receipt recorded: what a replay of the sale is compared with (T-556). */
+export async function listReceiptPayments(tx: Tx, orgId: string, receiptId: string): Promise<{ tenderId: string; amount: string; referenceNo: string | null; toCheck: boolean }[]> {
+  return tx
+    .select({ tenderId: posSalesReceiptPayments.tenderId, amount: posSalesReceiptPayments.amount, referenceNo: posSalesReceiptPayments.referenceNo, toCheck: posSalesReceiptPayments.toCheck })
+    .from(posSalesReceiptPayments)
+    .where(and(eq(posSalesReceiptPayments.orgId, orgId), eq(posSalesReceiptPayments.receiptId, receiptId)));
+}
+
+/**
+ * The senior/PWD card holders a POS sale wrote to the statutory register under its printed number. `dinerNo` is known only for a diner whose
+ * discount left a receipt row (a discount that rounds to nothing leaves none), else null (T-556).
+ */
+export async function listReceiptStatutory(
+  tx: Tx, orgId: string, storeId: string, receiptId: string, invoiceNumber: string,
+): Promise<{ kind: 'senior' | 'pwd'; idNumber: string; holderName: string; dinerNo: number | null }[]> {
+  const records = await tx
+    .select({ id: statutoryDiscountRecords.id, kind: statutoryDiscountRecords.kind, idNumber: statutoryDiscountRecords.idNumber, holderName: statutoryDiscountRecords.holderName })
+    .from(statutoryDiscountRecords)
+    .where(and(eq(statutoryDiscountRecords.orgId, orgId), eq(statutoryDiscountRecords.storeId, storeId), eq(statutoryDiscountRecords.invoiceNumber, invoiceNumber), eq(statutoryDiscountRecords.source, 'pos')));
+  const diners = await tx
+    .selectDistinct({ recordId: posSalesReceiptLineDiscounts.statutoryRecordId, dinerNo: posSalesReceiptLineDiscounts.dinerNo })
+    .from(posSalesReceiptLineDiscounts)
+    .innerJoin(posSalesReceiptLines, eq(posSalesReceiptLines.id, posSalesReceiptLineDiscounts.receiptLineId))
+    .where(and(eq(posSalesReceiptLines.orgId, orgId), eq(posSalesReceiptLines.receiptId, receiptId)));
+  const dinerOf = new Map(diners.map((d) => [d.recordId, d.dinerNo]));
+  return records.map((r) => ({ kind: r.kind, idNumber: r.idNumber, holderName: r.holderName, dinerNo: dinerOf.get(r.id) ?? null }));
 }
 
 export async function terminalSeqUsed(tx: Tx, orgId: string, terminalId: string, terminalSeq: number): Promise<boolean> {
