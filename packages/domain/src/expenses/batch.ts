@@ -77,7 +77,14 @@ export async function recordInvoiceExpensesBatch(
       'supplier invoice',
     );
   }
-  await apRepo.lockInvoiceForRecording(tx, actor.orgId, input.supplierInvoiceId);
+  // T-554 (E-001): judge the invoice by the row the lock returns - a verification may have committed since the read above.
+  const locked = await apRepo.lockInvoiceForRecording(tx, actor.orgId, input.supplierInvoiceId);
+  if (!locked || locked.storeId !== input.storeId) {
+    throw gone(
+      `recordInvoiceExpensesBatch: supplier invoice ${input.supplierInvoiceId} does not exist in org ${actor.orgId} at store ${input.storeId}`,
+      'supplier invoice',
+    );
+  }
 
   const facts = await expensesRepo.invoicePartsFacts(tx, actor.orgId, input.supplierInvoiceId);
   const parts = facts ? buildInvoiceParts(facts) : undefined;
@@ -141,10 +148,10 @@ export async function recordInvoiceExpensesBatch(
       payments: lines.map((l) => ({ ...l, amount: String(l.amount) })),
     });
     expenseIds.push(id);
-    if (invoice.status === 'verified') await approveExpense(tx, actor, id);
+    if (locked.status === 'verified') await approveExpense(tx, actor, id);
   }
 
-  const status = invoice.status === 'verified' ? 'posted' : 'draft';
+  const status = locked.status === 'verified' ? 'posted' : 'draft';
   await auditLogRepo.append(tx, actor.orgId, {
     actorPersonId: actor.personId,
     action: 'expense.batch_recorded',
