@@ -65,14 +65,17 @@ async function pricedItem(name: string, amount: string) {
   return it;
 }
 
+/** T-557 (0249): a uuid[] cell is exported as Postgres text, `{a,b}`. */
+const OPTION_IDS = '{11111111-1111-4111-8111-111111111111,22222222-2222-4222-8222-222222222222}';
+
 /** A receipt with one line and one payment, written in ONE transaction (the database refuses children added to a receipt after the transaction that wrote it). */
 async function insertReceipt(o: { store: string; terminal: string; seq: number; session: string; at: string; tender: string; amount: string }): Promise<string> {
   return sql.begin(async (t) => {
     const [r] = await t<{ id: string }[]>`
       insert into pos_sales_receipts (org_id, store_id, terminal_id, receipt_seq, table_session_id, cashier_id, issued_at_device, received_at, subtotal, discount_total, total, device_total, offline)
       values (${w.orgId}, ${o.store}, ${o.terminal}, ${o.seq}, ${o.session}, ${w.adminId}, ${o.at}::timestamptz, ${o.at}::timestamptz, ${o.amount}, 0, ${o.amount}, ${o.amount}, false) returning id`;
-    await t`insert into pos_sales_receipt_lines (org_id, receipt_id, line_no, kind, name, qty, unit_price, gross, discount_total, net)
-            values (${w.orgId}, ${r!.id}, 1, 'item', 'Raw line', 1, ${o.amount}, ${o.amount}, 0, ${o.amount})`;
+    await t`insert into pos_sales_receipt_lines (org_id, receipt_id, line_no, kind, name, qty, unit_price, gross, discount_total, net, option_value_ids)
+            values (${w.orgId}, ${r!.id}, 1, 'item', 'Raw line', 1, ${o.amount}, ${o.amount}, 0, ${o.amount}, ${OPTION_IDS}::uuid[])`;
     await t`insert into pos_sales_receipt_payments (org_id, receipt_id, tender_id, amount, change_given) values (${w.orgId}, ${r!.id}, ${o.tender}, ${o.amount}, 0)`;
     return r!.id;
   });
@@ -316,6 +319,7 @@ describe('C - another store: its receipts, lines and payments never reach this s
     const bLines = (await exp(w.admin, { storeId: w.store2Id, ...ALL, table: 'receipt-lines' })).rows;
     const bPays = (await exp(w.admin, { storeId: w.store2Id, ...ALL, table: 'payments' })).rows;
     expect(bLines.map((l) => l.name)).toEqual(['Raw line']);
+    expect(bLines.map((l) => l.option_value_ids)).toEqual([OPTION_IDS]); // a uuid[] cell is Postgres text
     expect(bPays.map((p) => p.amount)).toEqual(['77.70']);
     expect(bLines.every((l) => bIds.has(l.receipt_id))).toBe(true);
     expect(bPays.every((p) => bIds.has(p.receipt_id))).toBe(true);
