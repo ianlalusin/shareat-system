@@ -155,6 +155,7 @@ Times are Manila (`Asia/Manila`). Durations `TBD (S4)`. Evidence goes in one dat
 | `TBD` | **E3** Pin the cutover-eve dump | Ian | in the DO Spaces panel copy that night's `.dump`, `.manifest.json` and `.roles.sql` to `postgres/pinned/<date>/` (no script does this; `postgres/pinned/` is never pruned, T-393 R4). Note the dump's sha256 from the manifest | `TBD (S4)` | the three keys | keys exist under `pinned/` |
 | `TBD` | **E4** Last restore drill | Checker | `sudo systemctl start shareat-restore-drill.service`; read its log | `TBD (S4)` | drill report `postgres/drills/<date>.json` | trial balance equals the manifest. **Wizard step C1 is a tick that quotes this report's name (t394-q5 a).** Fails: no-go until fixed |
 | `TBD` | **E5** Counts done, C3 drafting started | counters, encoder | `/cutover/count` per store | `TBD (S4)` (scale Lipa's time by three stores) | wizard shows counts | every item has a number (an empty shelf is a typed zero) |
+| `TBD` | **E5b** Lipa's December POS data downloaded (D-003, Ian 12 Nov: purge as planned, Ian keeps a copy) | Ian | the receipts/lines/payments/day-closes export from **T-569** (POS lane; live and tried before 20 Dec), store Lipa, 1-31 Dec | `TBD (S4)` | the saved file(s) | the file opens and its December total matches the Z readings. No file = no purge (the purge erases these rows) |
 | `TBD` | **E6** Go/no-go meeting (§4) | Ian | the tick sheet | | signed sheet | **no-go = stay on v1, new date 1 April 2027 (ADR-005)** |
 
 ### 3.2 1 January (the purge and the opening)

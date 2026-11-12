@@ -5,6 +5,7 @@ import { withFlash } from '../../../lib/flash';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { staffStoresFor } from '../../staff/lib';
 import { pairPosTabletAction, unpairPosTabletAction } from './actions';
+import { PendingSalesFence } from './PendingSalesFence';
 import { loadTills } from '../../admin/pos-tablets/lib';
 import { TillsSection } from '../../admin/pos-tablets/TillsSection';
 import { Page } from '@/components/shell/Page';
@@ -91,13 +92,15 @@ export default async function PosTabletPage({ searchParams }: { searchParams: Pr
                     Paired by {live.pairedByName} on {when(live.pairedAt)}. Last used {when(live.lastUsedAt)}.
                   </p>
                   <form action={unpairPosTabletAction} className="space-y-2">
-                    <input type="hidden" name="pairingId" value={live.id} />
-                    <ConfirmDestructive
-                      tier="retype"
-                      label="Un-pair tablet"
-                      consequence="Signs this tablet out at once and puts it back to the email sign-in. Nothing is deleted."
-                      expectedName={live.label}
-                    />
+                    <PendingSalesFence>
+                      <input type="hidden" name="pairingId" value={live.id} />
+                      <ConfirmDestructive
+                        tier="retype"
+                        label="Un-pair tablet"
+                        consequence="Signs this tablet out at once and puts it back to the email sign-in. Nothing is deleted."
+                        expectedName={live.label}
+                      />
+                    </PendingSalesFence>
                   </form>
                 </div>
               ) : (
@@ -105,23 +108,25 @@ export default async function PosTabletPage({ searchParams }: { searchParams: Pr
               )}
 
               <form action={pairPosTabletAction} className="space-y-3 text-sm">
-                <h3 className="font-medium">{live ? 'Pair a different tablet' : 'Pair this tablet'}</h3>
-                <input type="hidden" name="storeId" value={s.id} />
-                {live && (
-                  <Banner tone="warning">
-                    This replaces the current POS tablet &lsquo;{live.label}&rsquo;. It is signed out and stops working.
-                  </Banner>
-                )}
-                <label className="flex flex-col gap-1">
-                  <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Name for this tablet</span>
-                  <Input name="label" placeholder="Lipa counter" />
-                </label>
-                <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                  You will be signed out here, and this browser becomes the {s.name} tablet.
-                </p>
-                <Button type="submit" variant="primary">
-                  Pair this tablet
-                </Button>
+                <PendingSalesFence>
+                  <h3 className="font-medium">{live ? 'Pair a different tablet' : 'Pair this tablet'}</h3>
+                  <input type="hidden" name="storeId" value={s.id} />
+                  {live && (
+                    <Banner tone="warning">
+                      This replaces the current POS tablet &lsquo;{live.label}&rsquo;. It is signed out and stops working.
+                    </Banner>
+                  )}
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Name for this tablet</span>
+                    <Input name="label" placeholder="Lipa counter" />
+                  </label>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                    You will be signed out here, and this browser becomes the {s.name} tablet.
+                  </p>
+                  <Button type="submit" variant="primary">
+                    Pair this tablet
+                  </Button>
+                </PendingSalesFence>
               </form>
 
               {past.length > 0 && (

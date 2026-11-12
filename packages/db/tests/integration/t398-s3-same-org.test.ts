@@ -23,6 +23,7 @@
  *   - OPEN_DEF_491 / NO_FK_REFERENCES not shrunk      -> the pin legs red (and the S1 census file's pins)
  *   - batch_id left as 'ref-gap'                      -> the D2 leg red
  */
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -37,7 +38,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 const sql = postgres(url, { max: 5 });
@@ -149,7 +150,7 @@ describe('K1b -- the exemptions file after S3 (D2): no org->org left open, NO_FK
   it('RED until the builder edits NO_FK_REFERENCES: 24 entries, no ref-gap kind remains', () => {
     // T-455 S1 (0215): +lobby_entries.client_request_id (idempotency-key). 24 -> 25.
     // T-472 S1 (0216): +5 pos_bridge external keys (pos_store_id x2, firestore_doc_id, parent_doc_id, pos_item_id). 25 -> 30.
-    expect(NO_FK_REFERENCES.length, `NO_FK_REFERENCES has ${NO_FK_REFERENCES.length} entries; S3 leaves 24`).toBe(31); // T-398 S6 (0220): +franchise_access_log.session_id (snapshot), 30 -> 31
+    expect(NO_FK_REFERENCES.length, `NO_FK_REFERENCES has ${NO_FK_REFERENCES.length} entries; S3 leaves 24`).toBe(33); // T-398 S6 (0220): +franchise_access_log.session_id (snapshot), 30 -> 31; T-557 (0249): +pos_sales_receipt_lines.option_value_ids and table_session_lines.option_value_ids, 31 -> 33
     expect(NO_FK_REFERENCES.filter((e) => e.kind === 'ref-gap').map((e) => e.column)).toEqual([]);
   });
   it('RED until reclassified (D2): pos_v1_day_feeds.batch_id is an idempotency-key (it has no parent), still declared, still FK-less', async () => {

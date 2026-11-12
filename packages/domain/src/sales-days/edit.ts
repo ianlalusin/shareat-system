@@ -61,6 +61,10 @@ async function runEdit(tx: Tx, actor: Actor, input: EditSalesDayInput): Promise<
     return { id: day.id };
   }
   if (!('totalSales' in input)) throw refuse(`editSalesDay: sales day ${day.id} was given nothing to change`, 'There was nothing to save.');
+  // T-531 (row 270): a day derived from the POS receipts has NO typed figure: only platform rows (above) may be entered. The derivation-flag trigger (0247) refuses the same write in the database.
+  if (day.source === 'pos_receipts') {
+    throw refuse(`editSalesDay: sales day ${day.id} is derived from the POS receipts; its figures are never typed`, "This day's figures come from the POS close and can't be typed. Only platform sales can be entered here.");
+  }
 
   // T-375 S3 (R13): a store linked to POS since the day was typed has its days imported, never edited here. Asked
   // BEFORE the status rule, so a verified typed day gets the same sentence as an open one.
