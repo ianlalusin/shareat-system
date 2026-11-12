@@ -35,7 +35,7 @@ export default async function PrerequisiteRefusalsPage() {
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] border-collapse text-sm">
+          <table aria-label="Prerequisite walls" className="w-full min-w-[560px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-neutral-300 text-left dark:border-neutral-700">
                 <th className="py-2 pr-4 font-medium">Reason code</th>
