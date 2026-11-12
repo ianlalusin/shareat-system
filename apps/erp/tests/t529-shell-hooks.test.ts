@@ -15,7 +15,7 @@ const DEVICE = vi.hoisted(() => ({
   outbox: [] as { seq: number; kind: string; personId: string; occurredAtDevice: string; payload: Record<string, unknown> }[],
   reads: [] as number[],
   failCounter: false,
-  print: vi.fn(async (_l: string[], _o: { copies: number }) => 'printed' as const),
+  print: vi.fn(async (_l: string[], _o: { copies: number }): Promise<'printed' | 'failed'> => 'printed'),
 }));
 vi.mock('@/lib/pos-device', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
@@ -34,7 +34,7 @@ vi.mock('@/lib/pos-device', async (orig) => ({
 }));
 vi.mock('@/lib/pos-print/adapter', () => ({ printLines: (...a: [string[], { copies: number }]) => DEVICE.print(...a), printerMode: () => 'browser' }));
 
-import { outageNotice } from '../src/app/pos/_kitchen/outage-jobs';
+import { outageNotice, reportOutage } from '../src/app/pos/_kitchen/outage-jobs';
 import { useOutageReplay } from '../src/app/pos/_kitchen/use-outage-replay';
 import { useDeviceSync, type DeviceSync } from '../src/app/pos/_shell/use-device-sync';
 
@@ -118,6 +118,30 @@ describe('use-outage-replay', () => {
     expect(DEVICE.print).not.toHaveBeenCalled();
     expect(DEVICE.meta.get('app.outagePrinted') ?? []).toEqual([]);
     expect(outageNotice()).not.toBeNull();
+  });
+
+  it('T-561 follow-up: a crash leftover whose ticket counter write fails keeps its seq in flight and the banner state names the table', async () => {
+    DEVICE.failCounter = true;
+    DEVICE.meta.set('app.outageInflight', [1]);
+    await replay({ pending: [ORDER(1)] as never, online: false, openStands: [] });
+    await settle();
+    expect(DEVICE.meta.get('app.outageInflight')).toEqual([1]);
+    expect(DEVICE.meta.get('app.outagePrinted') ?? []).toEqual([]);
+    expect(outageNotice()).toContain('could not be rebuilt');
+    expect(outageNotice()).toContain('event 1');
+  });
+
+  it('T-561 follow-up: after the Reprint job is saved, the stored reprint list (read back from the device store) holds it once, and reportOutage does not add a second copy', async () => {
+    DEVICE.print.mockImplementation(async () => 'failed');
+    await replay({ pending: [ORDER(1)] as never, online: false });
+    await settle();
+    const saved = DEVICE.meta.get('app.outageReprint') as unknown[];
+    expect(saved).toHaveLength(1);
+    expect(DEVICE.meta.get('app.outagePrinted')).toEqual([1]);
+    reportOutage({ printed: 0, failed: [], message: null });
+    await settle();
+    expect(DEVICE.meta.get('app.outageReprint')).toHaveLength(1);
+    DEVICE.print.mockImplementation(async () => 'printed');
   });
 
   it('a phone (not paired) never prints', async () => {
