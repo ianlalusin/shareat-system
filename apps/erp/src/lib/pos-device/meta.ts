@@ -5,7 +5,7 @@
  * (`nextSeq`, `nextTerminalSeq`), which only `outbox.ts` may touch: a stray `setMeta('nextSeq', 9)`
  * would hand out a sequence number twice, and the server would reject the second sale.
  */
-import { META_STORE, openDeviceDb } from './db';
+import { META_PAIRING_ID, META_STORE, openDeviceDb } from './db';
 
 /** Only this prefix is storable. Counters live in the same store without it. */
 export const APP_KEY_PREFIX = 'app.';
@@ -55,3 +55,6 @@ export async function setMeta<T>(key: string, value: T): Promise<void> {
     db.close();
   }
 }
+
+/** T-563: remember which pairing this tablet is bound to. A good snapshot refresh calls it; `enqueue` stamps it on every event it queues. */
+export const bindPairing = (pairingId: string): Promise<void> => setMeta(META_PAIRING_ID, pairingId);

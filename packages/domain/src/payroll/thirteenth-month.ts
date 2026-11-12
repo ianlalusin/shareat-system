@@ -250,7 +250,7 @@ export async function post13thMonthRun(
         lines,
       });
       await thirteenthMonthRepo.setThirteenthMonthPayoutEntry(trx, payoutId, posted.entryId);
-      await applyDeductionRecovery(trx, actor.orgId, payout.personId, posted.entryId, payout.advanceRecovered);
+      await applyDeductionRecovery(trx, actor.orgId, payout.personId, posted.entryId, payout.advanceRecovered, `${input.year}-12-31`);
     }
 
     const ok = await thirteenthMonthRepo.markThirteenthMonthRunPosted(trx, actor.orgId, runId, actor.personId);
