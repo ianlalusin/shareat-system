@@ -1163,7 +1163,7 @@ const businessDateOfInstant = (instant: AnyPgColumn, hour: number): SQL<string> 
  *
  * The business date of a receipt is its day close's `business_date` once it is closed (so the files agree with the Z readings), else the business date of
  * the SERVER's `received_at` under the day-start hour `startHour` (the Z's own rule: an unclosed receipt at 01:00 belongs to the previous day); a session
- * takes its receipt's date, else the same rule on its server `opened_at`. A device clock is never used. A device event is dated by the Manila calendar
+ * is included when EITHER the same rule on its server `opened_at` OR its receipt's date is in range (a backup repeats a row rather than lose it; BOSS 12 Nov). A device clock is never used. A device event is dated by the Manila calendar
  * date of `received_at` (a raw log, not a business record).
  */
 export async function exportRowsForStore(
@@ -1176,8 +1176,10 @@ export async function exportRowsForStore(
   startHour: number,
 ): Promise<PosExportResult> {
   const receiptDate = sql<string>`coalesce((select ${posDayCloses.businessDate} from ${posDayCloses} where ${posDayCloses.id} = ${posSalesReceipts.dayCloseId}), ${businessDateOfInstant(posSalesReceipts.receivedAt, startHour)})`;
-  const sessionDate = sql<string>`coalesce((select ${posDayCloses.businessDate} from ${posSalesReceipts} join ${posDayCloses} on ${posDayCloses.id} = ${posSalesReceipts.dayCloseId} where ${posSalesReceipts.tableSessionId} = ${tableSessions.id}), ${businessDateOfInstant(tableSessions.openedAt, startHour)})`;
+  const openedDate = businessDateOfInstant(tableSessions.openedAt, startHour);
   const inRange = (d: SQL<string>): SQL => sql`${d} >= ${from}::date and ${d} <= ${to}::date`;
+  // A backup repeats a row rather than lose one: a session is in if EITHER its opening business date OR any of its receipts' business dates is in range.
+  const sessionIncluded = sql`(${inRange(openedDate)} or exists (select 1 from ${posSalesReceipts} where ${posSalesReceipts.tableSessionId} = ${tableSessions.id} and ${inRange(receiptDate)}))`;
 
   const receiptIds = () =>
     tx
@@ -1228,8 +1230,8 @@ export async function exportRowsForStore(
       break;
     case 'table-sessions':
       t = tableSessions;
-      where = and(eq(tableSessions.orgId, orgId), eq(tableSessions.storeId, storeId), inRange(sessionDate));
-      order = [sessionDate, sql`${tableSessions.id}`];
+      where = and(eq(tableSessions.orgId, orgId), eq(tableSessions.storeId, storeId), sessionIncluded);
+      order = [openedDate, sql`${tableSessions.id}`];
       break;
     case 'device-events':
       t = posEvents;

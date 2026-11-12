@@ -340,3 +340,34 @@ describe('B - a receipt or session with no Z yet takes the business day (start h
     expect((await exp(w.manager, { storeId: w.storeId, from: day, to: day, table: 'receipts' }, midnight)).rows.map((r) => r.id).sort()).toEqual([early, late].sort());
   });
 });
+
+describe('D - a table session is in a file if EITHER its opening business date OR its receipts business date is in range (a backup repeats a row, never loses one)', () => {
+  it('opened the 31st and paid and Z-d the 1st: in both days files; opened inside the range with a next-day Z: in the opened-day file; no receipt: in; outside both: out', async () => {
+    const e = addDays(D1, 40); // "31 December"
+    const f = addDays(e, 1); // "1 January"
+    const far = addDays(e, 10);
+    const at = (d: string, hm: string) => manila(d, hm).toISOString();
+    const [terminal] = await sql<{ id: string }[]>`select id from pos_terminals where store_id = ${w.storeId} and terminal_no = 1`;
+    const [z] = await sql<{ id: string }[]>`
+      insert into pos_day_closes (org_id, store_id, terminal_id, z_no, business_date, window_start, window_end, receipt_count, gross_total, closed_by, approved_by)
+      values (${w.orgId}, ${w.storeId}, ${terminal!.id}, 9001, ${f}, ${at(f, '04:00')}, ${at(f, '23:00')}, 0, 0, ${w.managerId}, ${w.adminId}) returning id`;
+    const zClosed = async (receiptId: string) => { await sql`update pos_sales_receipts set day_close_id = ${z!.id} where id = ${receiptId}`; };
+    const pay = (seq: number, session: string, when: string) => insertReceipt({ store: w.storeId, terminal: terminal!.id, seq, session, at: when, tender: w.cash, amount: '5.50' });
+
+    const crossing = await rawSession(w.storeId, w.stand7, w.pairingId, at(e, '23:00')); // opened 31st 23:00, paid 1st
+    await zClosed(await pay(9201, crossing, at(f, '10:00')));
+    const lateZ = await rawSession(w.storeId, w.stand7, w.pairingId, at(e, '12:00')); // opened and paid on the 31st, but its Z is dated the 1st
+    await zClosed(await pay(9202, lateZ, at(e, '23:50')));
+    const noReceipt = await rawSession(w.storeId, w.stand7, w.pairingId, at(e, '10:00'));
+    const outside = await rawSession(w.storeId, w.stand7, w.pairingId, at(far, '10:00')); // opened and paid ten days on, no Z
+    await pay(9203, outside, at(far, '10:30'));
+
+    const ids = async (d: string) => new Set((await exp(w.manager, { storeId: w.storeId, from: d, to: d, table: 'table-sessions' }, RATES)).rows.map((r) => r.id));
+    const [onE, onF] = [await ids(e), await ids(f)];
+    expect([crossing, lateZ, noReceipt].every((s) => onE.has(s))).toBe(true); // opening date (also the 'a' case: not lost from the 31st file once paid)
+    expect(onE.has(outside)).toBe(false);
+    expect([crossing, lateZ].every((s) => onF.has(s))).toBe(true); // receipt date: the 1st file repeats them
+    expect(onF.has(noReceipt)).toBe(false);
+    expect(onF.has(outside)).toBe(false);
+  });
+});
