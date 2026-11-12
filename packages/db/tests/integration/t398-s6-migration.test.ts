@@ -215,7 +215,7 @@ describe('G -- registrations: RLS registry kind, cutover classification, census,
     expect(e, 'RED today: the session_id declaration is missing').toBeDefined();
     expect(String(e!.kind)).toBe('snapshot');
     expect(e!.reason.length).toBeGreaterThan(20);
-    expect(NO_FK_REFERENCES.length, 'NO_FK_PIN 30 -> 31').toBe(31);
+    expect(NO_FK_REFERENCES.length, 'NO_FK_PIN 31 -> 33 (T-557 0249)').toBe(33);
   });
 
   it.each(TABLES)('G2 %s is classified in CUTOVER_CLASSIFICATION as keep, with a reason (QO-7: configuration / append-only history PG is owed)', (t) => {

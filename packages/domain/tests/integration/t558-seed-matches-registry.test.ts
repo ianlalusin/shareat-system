@@ -84,7 +84,7 @@ describe('T-558 seed pin - migration 0248', () => {
     expect(e248, '0248 is in the journal').toBeDefined();
     expect(e248!.tag).toBe(FILE.replace(/\.sql$/, ''));
     expect(e248!.when).toBe(e247!.when + 86_400_000);
-    expect(journal.entries.at(-1)!.idx, '0248 is the last entry').toBe(248);
+    expect(journal.entries.at(-1)!.idx, '0248 is the last entry, or is followed only by later ones (0249 = T-557)').toBeGreaterThanOrEqual(248);
   });
 
   it('0248 on its own seeds exactly pos.sale_variance_tolerance: 0.01, at 2000-01-01, set_by null, reason "Starting value" [kills: a wrong value, date or reason; another key seeded twice]', async () => {

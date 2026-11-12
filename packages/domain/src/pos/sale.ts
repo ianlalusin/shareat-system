@@ -280,7 +280,7 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
     const p = priced.lines[i]!;
     const id = globalThis.crypto.randomUUID();
     receiptLineIds.set(l.id, id);
-    return { id, orgId: actor.orgId, receiptId, lineNo: i + 1, sessionLineId: l.id, kind: l.kind, name: l.name, qty: l.qty, unitPrice: money(l.unitPrice), gross: p.gross, discountTotal: p.discountTotal, net: p.net };
+    return { id, orgId: actor.orgId, receiptId, lineNo: i + 1, sessionLineId: l.id, kind: l.kind, name: l.name, qty: l.qty, unitPrice: money(l.unitPrice), optionValueIds: l.optionValueIds, gross: p.gross, discountTotal: p.discountTotal, net: p.net };
   });
   await posV2Repo.insertReceiptLines(tx, lineRows);
   const presetNames = new Map<string, string>();

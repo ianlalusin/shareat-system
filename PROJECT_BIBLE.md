@@ -65,35 +65,35 @@
 - `1233–1267` 10. Phase plan
 - `1268–1284` 11. Migration & ETL rules
 - `1285–1349` 12. Inherited landmines — do not repeat these
-- `1350–1790` 13. Decision log
-- `1791–1810` 14. Amendment protocol
-- `1811–1815` 15. Engineering standards — the industry practices this project follows
-  - `1816–1821` 15.1 Build order: walking skeleton first
-  - `1822–1833` 15.2 Golden-master testing — the most important practice here
-  - `1834–1842` 15.3 Strangler Fig, not big-bang cutover
-  - `1843–1847` 15.4 No dual-write
-  - `1848–1856` 15.5 Expand/contract migrations
-  - `1857–1865` 15.6 Observability from day zero, not later
-  - `1866–1870` 15.7 CI gates
-  - `1871–1875` 15.8 Backups and a tested restore
-  - `1876–1880` 15.9 Twelve-Factor config
-  - `1881–1888` 15.10 Append-only ledgers — but not event sourcing
-  - `1889–1893` 15.11 Defence in depth
-  - `1894–1922` 15.12 Skills are lenses, not assurance
-  - `1923–1929` 15.13 Reconciliation is a permanent feature
-- `1930–1934` 16. The accounting spine
-  - `1935–1966` 16.0 What we are actually fixing — the diagnosis
-  - `1967–2010` 16.1 The ten invariants — non-negotiable
-  - `2011–2025` 16.2 The oracle: how "correct" is tested
-  - `2026–2047` 16.3 The model — header + lines, not legs
-  - `2048–2067` 16.4 Deliberately simpler than ERPNext
-  - `2068–2137` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2138–2162` 16.6 What v1 already gets right — preserve the intent
-  - `2163–2184` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2185–2199` 16.8 What v1's accounting already gets right
-  - `2200–2243` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2244–2294` 16.10 Posting patterns — one canonical pattern per business event
-  - `2295–2327` 16.11 Inventory's accounting integration
+- `1350–1791` 13. Decision log
+- `1792–1811` 14. Amendment protocol
+- `1812–1816` 15. Engineering standards — the industry practices this project follows
+  - `1817–1822` 15.1 Build order: walking skeleton first
+  - `1823–1834` 15.2 Golden-master testing — the most important practice here
+  - `1835–1843` 15.3 Strangler Fig, not big-bang cutover
+  - `1844–1848` 15.4 No dual-write
+  - `1849–1857` 15.5 Expand/contract migrations
+  - `1858–1866` 15.6 Observability from day zero, not later
+  - `1867–1871` 15.7 CI gates
+  - `1872–1876` 15.8 Backups and a tested restore
+  - `1877–1881` 15.9 Twelve-Factor config
+  - `1882–1889` 15.10 Append-only ledgers — but not event sourcing
+  - `1890–1894` 15.11 Defence in depth
+  - `1895–1923` 15.12 Skills are lenses, not assurance
+  - `1924–1930` 15.13 Reconciliation is a permanent feature
+- `1931–1935` 16. The accounting spine
+  - `1936–1967` 16.0 What we are actually fixing — the diagnosis
+  - `1968–2011` 16.1 The ten invariants — non-negotiable
+  - `2012–2026` 16.2 The oracle: how "correct" is tested
+  - `2027–2048` 16.3 The model — header + lines, not legs
+  - `2049–2068` 16.4 Deliberately simpler than ERPNext
+  - `2069–2138` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2139–2163` 16.6 What v1 already gets right — preserve the intent
+  - `2164–2185` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2186–2200` 16.8 What v1's accounting already gets right
+  - `2201–2244` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2245–2295` 16.10 Posting patterns — one canonical pattern per business event
+  - `2296–2328` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1787,6 +1787,7 @@ just a patch.**
 | 455 | 2026-11-11 | **RAISING THE OFFLINE PIN VERIFIER'S PBKDF2 ROUNDS TO 600,000 WAITS UNTIL AFTER GO-LIVE (What's Left).** The rounds stay at 210,000 (T-526 R4) for release 1. Ian, 2026-11-11, via BOSS, answering audit item P-008. | Avoids a slower offline sign-in on the Lipa tablet before the soak has measured it | Yes |
 | 456 | 2026-11-11 | **SWITCHING A STORE'S POS TO LIVE (OR BACK) IS ALLOWED FOR THE `admin` AND `super_admin` ROLES ONLY, WITH A REASON, AUDITED.** Ian, 2026-11-11, via BOSS, answering T-533 O1. Store managers cannot do it. | The switch decides whether real sales are booked | Yes |
 | 457 | 2026-11-11 | **POS v2 SOAK #1 RUNS AT LIPA ON SATURDAY 28 NOVEMBER 2026, 2–4 PM**, in test mode, with real staff, the real tablet and printer, and the scripted actions of `docs/runbooks/pos-soak-plan.md`. Soak #2 runs by Wednesday 2 December if #1 finds a blocker (row 431). Ian, 2026-11-11, via BOSS, answering T-533 O2. | A quiet afternoon window that still has real traffic | Yes |
+| 458 | 2026-11-11 | **A POS LINE STORES WHICH OPTIONS WERE CHOSEN, AS IDS, FROM MIGRATION 0249 ON (ON THE SESSION LINE AND COPIED TO THE RECEIPT LINE). A REPLAY IS COMPARED BY THESE IDS; ONLY LINES WRITTEN BEFORE 0249 FALL BACK TO COMPARING OPTION NAMES.** | Ian, 11 Nov (go-live eve): names break when an option is renamed, and a frozen receipt line can never be repaired later, so the ids are stored now. Audit P-001 / T-556 compared by name only as a stop-gap | Yes (a column; unused if dropped). See T-557, docs/tasks/557-store-option-ids-on-lines.md, PR #225 |
 
 ## 14. Amendment protocol
 
