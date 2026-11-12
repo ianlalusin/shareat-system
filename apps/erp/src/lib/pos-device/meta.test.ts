@@ -3,7 +3,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakeIdb, type FakeIdbFactory } from '../../../tests/helpers/fake-idb';
-import { getMeta, setMeta } from './meta';
+import { bindPairing, getMeta, setMeta } from './meta';
 import { countPending, enqueue } from './outbox';
 
 let fake: FakeIdbFactory;
@@ -37,6 +37,7 @@ describe('T-530a — app.* values', () => {
     await expect(setMeta('nextTerminalSeq', 9)).rejects.toThrow();
 
     expect(await countPending()).toBe(0);
+    await bindPairing('P1');
     expect((await enqueue({
       kind: 'stand.opened',
       personId: 'person-1',

@@ -130,7 +130,7 @@ async function sendAndPay(w: World, t: Awaited<ReturnType<typeof tableOffline>>,
     tenders: w.snapshot.tenders as never, seniors: [], rows: [{ tenderId: w.f.cash, amount: '2000.00' }],
   });
   const events = [...t.outbox.map(({ seq, ...e }) => ({ seq, ...e })), { seq: 10, ...sale }];
-  const res = await callRoute(EVENTS, 'POST', tabletCookie(w.f), { events });
+  const res = await callRoute(EVENTS, 'POST', tabletCookie(w.f), { pairingId: w.f.pairingId, events });
   expect(res.status).toBe(200);
   const results = ((await res.json()) as { results: { seq: number; status: string; error?: string }[] }).results;
   return { receiptId, results };
@@ -249,7 +249,7 @@ describe('audit fix 1: a heads.set queued offline prices its extra-head line at 
     return bill;
   };
   const send = async (w: BundleWorld, events: PosEvent[]) => {
-    const res = await callRoute(EVENTS, 'POST', tabletCookie(w.f), { events });
+    const res = await callRoute(EVENTS, 'POST', tabletCookie(w.f), { pairingId: w.f.pairingId, events });
     expect(res.status).toBe(200);
     return ((await res.json()) as { results: { seq: number; status: string; error?: string }[] }).results;
   };
