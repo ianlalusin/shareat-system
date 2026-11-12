@@ -408,12 +408,12 @@ describe('T-519 audit fixes - live balance, live charge, reversal chains', () =>
     let firstApplied!: () => void;
     const applied = new Promise<void>((r) => { firstApplied = r; });
     const first = asOrgT519(f.orgId, async (tx) => {
-      await applyDeductionRecovery(tx, f.orgId, f.workerId, payoutA, money('60.00'));
+      await applyDeductionRecovery(tx, f.orgId, f.workerId, payoutA, money('60.00'), '2026-01-15');
       firstApplied();
       await gate; // hold the first post open (uncommitted)
     });
     await applied;
-    const second = Promise.allSettled([asOrgT519(f.orgId, (tx) => applyDeductionRecovery(tx, f.orgId, f.workerId, payoutB, money('60.00')))]);
+    const second = Promise.allSettled([asOrgT519(f.orgId, (tx) => applyDeductionRecovery(tx, f.orgId, f.workerId, payoutB, money('60.00'), '2026-01-15'))]);
     await new Promise((r) => setTimeout(r, 800)); // the second is parked on the lock; with no lock it would finish inside this wait
     release();
     await first;

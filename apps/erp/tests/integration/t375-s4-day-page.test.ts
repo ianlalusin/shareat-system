@@ -66,7 +66,7 @@ import { tickMissingChannels } from '../../../../packages/domain/tests/integrati
 const sql = postgres(url, { max: 5 });
 let seq = 0;
 const uid = (p: string) => `${p}-${Date.now()}-${++seq}`;
-const D10 = '2027-01-10';
+const D10 = '2026-01-10';
 
 afterAll(async () => {
   const { closeDb } = await import('@shareat/db');
@@ -123,7 +123,7 @@ async function fixture(hint: string) {
   const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
   const orgId = org!.id;
   await seedChartOfAccounts(sql, orgId);
-  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2027-01-01', '2027-01-31', 'open')`;
+  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2026-01-01', '2026-01-31', 'open')`;
   const mkStore = async (name: string) =>
     (await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${orgId}, ${uid('st')}, ${name}) returning id`)[0]!.id;
   const storeId = await mkStore('Lipa');

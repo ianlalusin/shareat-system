@@ -232,7 +232,7 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
         <p className="text-sm text-neutral-600 dark:text-neutral-400">Nothing open at this store.</p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-          <table className="w-full min-w-[640px] border-collapse text-sm">
+          <table aria-label="Open wastage" className="w-full min-w-[640px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
                 <th className="px-3 py-2 font-medium">Opened</th>
@@ -265,7 +265,7 @@ export default async function WastagePage({ searchParams }: { searchParams: Prom
         <section>
           <h2 className="font-medium">Recent history</h2>
           <div className="mt-2 overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <table className="w-full min-w-[640px] border-collapse text-sm">
+            <table aria-label="Recent history" className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
                   <th className="px-3 py-2 font-medium">Opened</th>

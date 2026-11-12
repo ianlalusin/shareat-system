@@ -114,7 +114,7 @@ describe('T-385 S1 - verifySalesDay requires a submitted day', () => {
   it('V6: the repo refuses too - markVerified on an OPEN row finds no row to move and the row is unchanged', async () => {
     const { f, dayId } = await setup('v6');
     // a real entry id to hand over (any verified day's), so the only thing that can refuse the call is the status guard
-    const other = await mkTypedDay(sql, f, [f.managerId, f.adminId], '2027-01-11');
+    const other = await mkTypedDay(sql, f, [f.managerId, f.adminId], '2026-01-11');
     const posted = await asOrgOn(f.orgId, (tx) => submitThenVerify(tx, f.manager, other.id, f.admin));
     const err = await rejection(
       asOrgOn(f.orgId, (tx) =>

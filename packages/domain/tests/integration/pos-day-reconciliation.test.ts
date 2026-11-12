@@ -106,7 +106,7 @@ describe('getPosDayReconciliation', () => {
     const dayId = await importVerified(f);
     const feedId = (await recheck(f, R1_FIGURES)).ids.sales!;
     await asOrgOn(f.orgId, (tx) =>
-      D.postPosCorrection(tx, f.manager, { salesDayId: dayId, feedId, entryDate: '2027-01-20', reason: 'POS voided a cash receipt' }),
+      D.postPosCorrection(tx, f.manager, { salesDayId: dayId, feedId, entryDate: '2026-01-20', reason: 'POS voided a cash receipt' }),
     );
 
     const result = await reconcile(f);
@@ -133,7 +133,7 @@ describe('getPosDayReconciliation', () => {
   it('a date with no sales day and no stored feed is "none" on both sides, the ledger side absent', async () => {
     const f = await s6Fixture(sql, 'no-ledger-row');
 
-    const result = await reconcile(f, '2027-01-15');
+    const result = await reconcile(f, '2026-01-15');
 
     expect(result.postedBasis).toEqual({ status: 'none' });
     expect(result.latest).toEqual({ status: 'none' });

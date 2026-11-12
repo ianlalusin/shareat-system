@@ -232,9 +232,8 @@ export const salesDays = pgTable(
 
     /** T-375 S1 (migration 0183, R1): where the figures came from. `legacy_typed` is today's typed path (a store
      *  not yet linked to POS); `pos_v1_day_feed` is a day DERIVED from a stored POS response. Kept by 0184. */
-    // NOTE: the DATABASE list also allows 'pos_receipts' since migration 0238 (T-523, R11), but this TS enum is deliberately NOT widened yet: SalesDayRow in repo/sales-days.ts is the
-    // hand-written twin of this type and no code reads or writes a pos_receipts day until T-531 derives one. T-531 widens both in the same change.
-    source: text('source', { enum: ['legacy_typed', 'pos_v1_day_feed'] as const }).notNull().default('legacy_typed'),
+    // T-531: widened with SalesDayRow in repo/sales-days.ts (its hand-written twin). A 'pos_receipts' day is derived from the POS receipts by the day close (pos/day-close.ts); 0247 lets it be written.
+    source: text('source', { enum: ['legacy_typed', 'pos_v1_day_feed', 'pos_receipts'] as const }).notNull().default('legacy_typed'),
     /** T-523 (migration 0238, R11): the Z this day was derived from; non-null iff `source = 'pos_receipts'`. T-531 makes the derivation; 0238 only lets the row exist. */
     posDayCloseId: uuid('pos_day_close_id').references(() => posDayCloses.id, { onDelete: 'restrict' }),
     /** The `sales` feed the day was derived from; non-null iff `source = 'pos_v1_day_feed'`. */
