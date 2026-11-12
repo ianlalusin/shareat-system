@@ -93,7 +93,7 @@ type Base = { storeId: string; pairingId: string };
 interface Handler {
   spec: Spec;
   /** The payload is already checked against `spec`; the cast only restores the type the schema proves. */
-  run: (tx: Tx, actor: Actor, base: Base, p: Record<string, unknown>, deps: PosDeps | undefined) => Promise<unknown>;
+  run: (tx: Tx, actor: Actor, base: Base, p: Record<string, unknown>, deps: PosDeps | undefined, occurredAt: Date) => Promise<unknown>;
 }
 const HANDLERS: ReadonlyMap<string, Handler> = new Map<string, Handler>([
   [
@@ -104,7 +104,7 @@ const HANDLERS: ReadonlyMap<string, Handler> = new Map<string, Handler>([
     },
   ],
   ['lines.added', { spec: { req: { sessionId: uuid, lines: list(obj(lineSpec), MAX_ITEMS) } }, run: (tx, a, b, p) => addLines(tx, a, { ...p, ...b } as unknown as Parameters<typeof addLines>[2]) }],
-  ['heads.set', { spec: { req: { sessionId: uuid, headsCashier: int } }, run: (tx, a, b, p) => setHeadsCashier(tx, a, { ...p, ...b } as unknown as Parameters<typeof setHeadsCashier>[2]) }],
+  ['heads.set', { spec: { req: { sessionId: uuid, headsCashier: int } }, run: (tx, a, b, p, _d, at) => setHeadsCashier(tx, a, { ...p, ...b, atDevice: at } as unknown as Parameters<typeof setHeadsCashier>[2]) }],
   [
     'refill.requested',
     { spec: { req: { sessionId: uuid, lines: list(obj(refillLineSpec), MAX_ITEMS) } }, run: (tx, a, b, p) => requestRefill(tx, a, { ...p, ...b } as unknown as Parameters<typeof requestRefill>[2]) },
@@ -301,7 +301,7 @@ async function runEvent(tx: Tx, pairing: PosPairing, e: Running, deps: PosDeps |
   if (e.preProblem) throw invalid(e.preProblem);
   const problem = problemOf(handler.spec, e.payload);
   if (problem) throw invalid(problem);
-  await handler.run(tx, actor, { storeId: pairing.storeId, pairingId: pairing.pairingId }, e.payload, deps);
+  await handler.run(tx, actor, { storeId: pairing.storeId, pairingId: pairing.pairingId }, e.payload, deps, e.occurredAt);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

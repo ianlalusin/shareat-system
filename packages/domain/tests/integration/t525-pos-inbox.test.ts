@@ -1065,7 +1065,7 @@ describe('R7 - the snapshot (domain: buildPosSnapshot)', () => {
     const f = await fixture();
     await putRule(sql, f.orgId, 'pos.table_warn_minutes', '30.000000', '2000-01-02');
     expect(((await snapshot(f, {})).body.rules as Record<string, unknown>).tableWarnMinutes).toBe(30);
-    const injected = { readRules: async () => ({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 45 }) };
+    const injected = { readRules: async () => ({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 45, saleVarianceToleranceCentavos: 1n }) };
     expect(((await snapshot(f, injected)).body.rules as Record<string, unknown>).tableWarnMinutes).toBe(45);
   });
 

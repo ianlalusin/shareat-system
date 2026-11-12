@@ -4,7 +4,7 @@
  * (exact centavos, no floats). docs/tasks/527-pos-orders-screen.md (Addendum, T-527b).
  */
 import { add, money, multiply, ZERO, type Money } from '@shareat/core/money';
-import { asStoreMenu, displayUnitPrice, type MenuLike } from './menu-filter';
+import { asStoreMenu, displayUnitPrice, storeAnswer, whenOf, type MenuLike } from './menu-filter';
 import type { CartLine } from './payloads';
 
 export interface CartRow {
@@ -23,9 +23,14 @@ export interface CartRow {
   bundleNote: string | null;
 }
 
-/** `heads` is what a package line is billed for (the table's heads); null/0 counts as 1. A bundle's flat price covers N heads, then the extra-head price. */
-export function cartRows(cart: readonly CartLine[], menu: MenuLike, heads: number | null): CartRow[] {
-  const items = asStoreMenu(menu).items;
+/**
+ * `heads` is what a package line is billed for (the table's heads); null/0 counts as 1. A bundle's flat price covers N heads, then the extra-head price.
+ * T-559: prices are the daypart slot at `at` (now, unless a test injects it).
+ */
+export function cartRows(cart: readonly CartLine[], menu: MenuLike, heads: number | null, at: Date = new Date()): CartRow[] {
+  const m = asStoreMenu(menu);
+  const items = m.items;
+  const when = whenOf(m, at);
   return cart.map((l, index): CartRow => {
     const item = items.find((i) => i.id === l.itemId);
     const variant = item?.variants.find((v) => v.id === l.variantId) ?? item?.variants.find((v) => v.isDefault) ?? item?.variants[0];
@@ -34,9 +39,9 @@ export function cartRows(cart: readonly CartLine[], menu: MenuLike, heads: numbe
     const name = `${item?.name ?? 'Item'}${variant?.label ? ` - ${variant.label}` : ''}`;
     const base = { index, name, options, note: l.note ?? null, isPackage };
     if (!item || !variant) return { ...base, qty: l.qty, unit: null, total: null, bundleNote: null };
-    const unit = money(displayUnitPrice(variant, l.optionValueIds ?? []));
-    const offer = variant.channels.store;
-    const bundle = offer.orderable && offer.bundleHeads !== null && offer.bundleHeads > 1 ? offer : null;
+    const unit = money(displayUnitPrice(variant, l.optionValueIds ?? [], when));
+    const answer = storeAnswer(variant, when);
+    const bundle = answer.orderable && answer.offer.bundleHeads !== null && answer.offer.bundleHeads > 1 ? answer.offer : null;
     if (isPackage && bundle) {
       const covered = bundle.bundleHeads!;
       const extra = Math.max(0, (heads ?? 1) - covered);

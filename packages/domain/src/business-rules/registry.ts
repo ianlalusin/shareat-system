@@ -110,6 +110,16 @@ export const RULE_REGISTRY = {
     capability: RULE_ADMIN_CAPABILITY,
     namespace: 'pos',
   },
+  'pos.sale_variance_tolerance': {
+    label: 'Largest short payment on a POS sale that counts as normal (₱)',
+    help: 'The most a cashier may accept below the bill without it being flagged as a shortfall. ₱0.01 covers normal rounding.',
+    unit: 'money',
+    default: '0.01',
+    min: '0',
+    max: '0.10', // the hard ceiling (bible row 453, Ian 11 Nov 2026)
+    capability: RULE_ADMIN_CAPABILITY,
+    namespace: 'pos',
+  },
 } as const satisfies Record<string, RuleDefinition>;
 
 export type BusinessRuleKey = keyof typeof RULE_REGISTRY;

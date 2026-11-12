@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { toBusinessDate } from '@shareat/core/datetime';
+import { isAfterV1DayFeed, V1_DAY_FEED_LAST_DATE, V1_DAY_FEED_STOPPED_SENTENCE } from '@shareat/domain';
 import { listStores, listChannels, listStoreMoneyAccounts, getStoreLink } from '../lib';
 import { requireSession } from '../../../lib/session';
 import { createSalesDayAction, importSalesDayAction } from '../actions';
@@ -38,6 +39,10 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
   // T-369 S3 (DEF-291): store-scoped IN THE QUERY, with the same `storeId` the hidden input and the
   // channel listing use. `create.ts`'s tender resolver still refuses a foreign wallet at save time.
   const wallets = storeId && !link ? await listStoreMoneyAccounts(orgId, storeId) : [];
+
+  // T-551: the v1 day feed ends on V1_DAY_FEED_LAST_DATE, so the import date cannot start on, or reach, a later day.
+  const today = toBusinessDate();
+  const feedStopped = isAfterV1DayFeed(today);
 
   const carry = new URLSearchParams();
   if (storeId) carry.set('store', storeId);
@@ -111,9 +116,15 @@ export default async function NewSalesDayPage({ searchParams }: { searchParams: 
                   </p>
                 </div>
                 <Field label="Business date" rule={SALES_DAY_IMPORT_RULES.businessDate}>
-                  <Input type="date" {...nativeAttrs(SALES_DAY_IMPORT_RULES.businessDate)} defaultValue={toBusinessDate()} />
+                  <Input
+                    type="date"
+                    {...nativeAttrs(SALES_DAY_IMPORT_RULES.businessDate)}
+                    max={V1_DAY_FEED_LAST_DATE}
+                    defaultValue={feedStopped ? V1_DAY_FEED_LAST_DATE : today}
+                  />
                 </Field>
               </section>
+              {feedStopped && <p className="font-semibold text-neutral-800 dark:text-neutral-200">{V1_DAY_FEED_STOPPED_SENTENCE}</p>}
               <p className="text-neutral-600 dark:text-neutral-400">
                 The figures are read from POS, never typed. Importing a date again while it is still open or
                 submitted brings in whatever POS says now.
