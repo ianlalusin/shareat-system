@@ -6,7 +6,8 @@
  * Every function takes the caller's transaction first and filters by org AND store; RLS is the backstop. The domain bumps
  * `pos_stores.state_version` (`bumpStateVersion`) once per call that changes anything a screen shows.
  */
-import { and, asc, desc, eq, inArray, isNull, ne, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, inArray, isNull, ne, sql, type SQL } from 'drizzle-orm';
+import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
 import {
   posDayCloseTenders,
   posDayCloses,
@@ -1100,4 +1101,184 @@ export async function receiptFigures(tx: Tx, orgId: string, receiptIds: string[]
     packageSessions: Number(sessions[0]?.n ?? 0),
     heads: Number(sessions[0]?.heads ?? 0),
   };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-569 - the data download: every column of a purged POS v2 table, as text, for one store and a date range.
+// ---------------------------------------------------------------------------------------------------------------------
+export const POS_EXPORT_TABLES = [
+  'receipts',
+  'receipt-lines',
+  'receipt-line-discounts',
+  'payments',
+  'day-closes',
+  'day-close-tenders',
+  'table-sessions',
+  'device-events',
+] as const;
+export type PosExportTable = (typeof POS_EXPORT_TABLES)[number];
+
+export interface PosExportResult {
+  /** The database column names, in table order. */
+  columns: string[];
+  rows: Record<string, string | null>[];
+}
+
+/** A cell as text, in SQL, so no number or date ever passes through JavaScript: `numeric` prints as Postgres prints it (`1234.50`). A timestamp prints as ISO with its offset. */
+function exportCell(col: AnyPgColumn): SQL<string | null> {
+  return col.columnType === 'PgTimestamp' ? sql<string | null>`to_jsonb(${col}) #>> '{}'` : sql<string | null>`${col}::text`;
+}
+
+/** Bible row 353: a senior/PWD holder's ID number and name are never written out, whatever depth they sit at in a device payload. */
+const REDACTED_KEYS: ReadonlySet<string> = new Set(['idNumber', 'holderName']);
+
+/**
+ * jsonb text, compacted (jsonb prints a space after `:` and `,`) with the value of every `idNumber` / `holderName` key, at any depth, replaced by
+ * "[redacted]". A small reader over the text: a number or any other value is copied through as written, never parsed.
+ */
+function compactRedactedJson(text: string): string {
+  let i = 0;
+  const skip = (): void => {
+    while (i < text.length && (text[i] === ' ' || text[i] === '\n' || text[i] === '\t' || text[i] === '\r')) i++;
+  };
+  const str = (): string => {
+    const start = i++;
+    while (i < text.length && text[i] !== '"') i += text[i] === '\\' ? 2 : 1;
+    return text.slice(start, ++i);
+  };
+  const value = (): string => {
+    skip();
+    const ch = text[i];
+    if (ch === '"') return str();
+    if (ch === '{' || ch === '[') {
+      const close = ch === '{' ? '}' : ']';
+      const parts: string[] = [];
+      i++;
+      skip();
+      if (text[i] === close) {
+        i++;
+        return ch + close;
+      }
+      for (;;) {
+        skip();
+        if (ch === '{') {
+          const key = str();
+          skip();
+          i++; // the colon
+          const v = value();
+          parts.push(`${key}:${REDACTED_KEYS.has(JSON.parse(key) as string) ? '"[redacted]"' : v}`);
+        } else parts.push(value());
+        skip();
+        if (text[i++] === close) break;
+      }
+      return ch + parts.join(',') + close;
+    }
+    const start = i;
+    while (i < text.length && !',]} \n\t\r'.includes(text[i]!)) i++;
+    return text.slice(start, i);
+  };
+  return value();
+}
+
+const manilaDate = (instant: AnyPgColumn): SQL<string> => sql<string>`(${instant} at time zone 'Asia/Manila')::date`;
+/** The business date of a server instant when the business day starts at `hour` Manila time: the Manila date of (t - hour), the same rule as `startHourDate` in the POS domain. */
+const businessDateOfInstant = (instant: AnyPgColumn, hour: number): SQL<string> =>
+  sql<string>`((${instant} - ${hour} * interval '1 hour') at time zone 'Asia/Manila')::date`;
+
+/**
+ * One table's rows for one store and a date range (`from` and `to` are business dates, both included). Scoped by org AND store; the child tables are
+ * reached only through the chosen parents.
+ *
+ * The business date of a receipt is its day close's `business_date` once it is closed (so the files agree with the Z readings), else the business date of
+ * the SERVER's `received_at` under the day-start hour `startHour` (the Z's own rule: an unclosed receipt at 01:00 belongs to the previous day); a session
+ * is included when EITHER the same rule on its server `opened_at` OR its receipt's date is in range (a backup repeats a row rather than lose it; BOSS 12 Nov). A device clock is never used. A device event is dated by the Manila calendar
+ * date of `received_at` (a raw log, not a business record).
+ */
+export async function exportRowsForStore(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  from: string,
+  to: string,
+  table: PosExportTable,
+  startHour: number,
+): Promise<PosExportResult> {
+  const receiptDate = sql<string>`coalesce((select ${posDayCloses.businessDate} from ${posDayCloses} where ${posDayCloses.id} = ${posSalesReceipts.dayCloseId}), ${businessDateOfInstant(posSalesReceipts.receivedAt, startHour)})`;
+  const openedDate = businessDateOfInstant(tableSessions.openedAt, startHour);
+  const inRange = (d: SQL<string>): SQL => sql`${d} >= ${from}::date and ${d} <= ${to}::date`;
+  // A backup repeats a row rather than lose one: a session is in if EITHER its opening business date OR any of its receipts' business dates is in range.
+  const sessionIncluded = sql`(${inRange(openedDate)} or exists (select 1 from ${posSalesReceipts} where ${posSalesReceipts.tableSessionId} = ${tableSessions.id} and ${inRange(receiptDate)}))`;
+
+  const receiptIds = () =>
+    tx
+      .select({ id: posSalesReceipts.id })
+      .from(posSalesReceipts)
+      .where(and(eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.storeId, storeId), inRange(receiptDate)));
+  const lineIds = () =>
+    tx.select({ id: posSalesReceiptLines.id }).from(posSalesReceiptLines).where(and(eq(posSalesReceiptLines.orgId, orgId), inArray(posSalesReceiptLines.receiptId, receiptIds())));
+  const closeIds = () =>
+    tx
+      .select({ id: posDayCloses.id })
+      .from(posDayCloses)
+      .where(and(eq(posDayCloses.orgId, orgId), eq(posDayCloses.storeId, storeId), inRange(sql<string>`${posDayCloses.businessDate}`)));
+
+  let t: PgTable;
+  let where: SQL | undefined;
+  let order: SQL[];
+  switch (table) {
+    case 'receipts':
+      t = posSalesReceipts;
+      where = and(eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.storeId, storeId), inRange(receiptDate));
+      order = [receiptDate, sql`${posSalesReceipts.id}`];
+      break;
+    case 'receipt-lines':
+      t = posSalesReceiptLines;
+      where = and(eq(posSalesReceiptLines.orgId, orgId), inArray(posSalesReceiptLines.receiptId, receiptIds()));
+      order = [sql`${posSalesReceiptLines.receiptId}`, sql`${posSalesReceiptLines.lineNo}`];
+      break;
+    case 'receipt-line-discounts':
+      t = posSalesReceiptLineDiscounts;
+      where = and(eq(posSalesReceiptLineDiscounts.orgId, orgId), inArray(posSalesReceiptLineDiscounts.receiptLineId, lineIds()));
+      order = [sql`${posSalesReceiptLineDiscounts.receiptLineId}`, sql`${posSalesReceiptLineDiscounts.id}`];
+      break;
+    case 'payments':
+      t = posSalesReceiptPayments;
+      where = and(eq(posSalesReceiptPayments.orgId, orgId), inArray(posSalesReceiptPayments.receiptId, receiptIds()));
+      order = [sql`${posSalesReceiptPayments.receiptId}`, sql`${posSalesReceiptPayments.id}`];
+      break;
+    case 'day-closes':
+      t = posDayCloses;
+      where = and(eq(posDayCloses.orgId, orgId), eq(posDayCloses.storeId, storeId), inRange(sql<string>`${posDayCloses.businessDate}`));
+      order = [sql`${posDayCloses.businessDate}`, sql`${posDayCloses.id}`];
+      break;
+    case 'day-close-tenders':
+      t = posDayCloseTenders;
+      where = and(eq(posDayCloseTenders.orgId, orgId), inArray(posDayCloseTenders.dayCloseId, closeIds()));
+      order = [sql`${posDayCloseTenders.dayCloseId}`, sql`${posDayCloseTenders.id}`];
+      break;
+    case 'table-sessions':
+      t = tableSessions;
+      where = and(eq(tableSessions.orgId, orgId), eq(tableSessions.storeId, storeId), sessionIncluded);
+      order = [openedDate, sql`${tableSessions.id}`];
+      break;
+    case 'device-events':
+      t = posEvents;
+      where = and(eq(posEvents.orgId, orgId), eq(posEvents.storeId, storeId), inRange(manilaDate(posEvents.receivedAt)));
+      order = [manilaDate(posEvents.receivedAt), sql`${posEvents.id}`];
+      break;
+  }
+
+  const cols = getTableColumns(t) as Record<string, AnyPgColumn>;
+  const keys = Object.keys(cols);
+  const shape = Object.fromEntries(keys.map((k) => [k, exportCell(cols[k]!)]));
+  const found = await tx
+    .select(shape)
+    .from(t)
+    .where(where)
+    .orderBy(...order);
+  const columns = keys.map((k) => cols[k]!.name);
+  const rows = (found as Record<string, string | null>[]).map((r) =>
+    Object.fromEntries(keys.map((k) => [cols[k]!.name, cols[k]!.columnType === 'PgJsonb' && r[k] !== null ? compactRedactedJson(r[k]!) : r[k]!])),
+  );
+  return { columns, rows };
 }
