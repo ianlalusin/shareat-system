@@ -39,7 +39,7 @@ export default async function UsersPage() {
       )}
 
       <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-        <table className="w-full text-sm">
+        <table aria-label="Users and roles" className="w-full text-sm">
           <thead className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
             <tr>
               <th className="px-4 py-2 font-medium">Name</th>

@@ -10,7 +10,11 @@ export { voidUnpaidSession, completeSale, currentBusinessDate, getSessionBill, l
 export type { CompleteSaleInput, VoidInput } from './sale';
 export {
   applyPosEvents,
+  applyPosBatch,
   parsePosEvents,
+  parsePosBatchPairingId,
+  POS_PAIRING_MISMATCH,
+  POS_PAIRING_MISMATCH_CODE,
   listPosQuarantine,
   replayQuarantinedEvent,
   discardQuarantinedEvent,

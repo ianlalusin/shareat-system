@@ -136,6 +136,24 @@ export async function getLivePairing(tx: Tx, orgId: string, storeId: string, pai
   return row;
 }
 
+/** T-563: the store's one live pairing (the tablet that is paired now), or undefined. */
+export async function getLivePairingOfStore(tx: Tx, orgId: string, storeId: string): Promise<{ id: string } | undefined> {
+  const [row] = await tx
+    .select({ id: posTabletPairings.id })
+    .from(posTabletPairings)
+    .where(and(eq(posTabletPairings.orgId, orgId), eq(posTabletPairings.storeId, storeId), isNull(posTabletPairings.revokedAt)));
+  return row;
+}
+
+/** T-563: a pairing of this store, LIVE OR REVOKED (the pairing an event was made on may have been replaced since), or undefined. */
+export async function getPairingOfStore(tx: Tx, orgId: string, storeId: string, pairingId: string): Promise<{ id: string; revokedAt: Date | null } | undefined> {
+  const [row] = await tx
+    .select({ id: posTabletPairings.id, revokedAt: posTabletPairings.revokedAt })
+    .from(posTabletPairings)
+    .where(and(eq(posTabletPairings.id, pairingId), eq(posTabletPairings.orgId, orgId), eq(posTabletPairings.storeId, storeId)));
+  return row;
+}
+
 export async function getStand(tx: Tx, orgId: string, storeId: string, standId: string): Promise<PosStandRow | undefined> {
   const [row] = await tx
     .select()
@@ -753,7 +771,17 @@ export async function getStateVersion(tx: Tx, orgId: string, storeId: string): P
  * R4 clause 3: did this person sign in with a PIN on THIS pairing, issued in [from, to]? An ended session counts, except one that was revoked.
  * `sessions.device_id` is text, so the pairing id is compared as text.
  */
-export async function hasPinSessionOnPairing(tx: Tx, orgId: string, personId: string, storeId: string, pairingId: string, from: Date, to: Date): Promise<boolean> {
+export async function hasPinSessionOnPairing(
+  tx: Tx,
+  orgId: string,
+  personId: string,
+  storeId: string,
+  pairingId: string,
+  from: Date,
+  to: Date,
+  /** T-563 (carry-over from a REPLACED tablet): a session revoked at or after this moment still vouches, because the PIN was entered while the tablet was valid. */
+  revokedAtOrAfter?: Date,
+): Promise<boolean> {
   const rows = (await tx.execute(sql`
     select 1 as ok
       from sessions s
@@ -765,7 +793,7 @@ export async function hasPinSessionOnPairing(tx: Tx, orgId: string, personId: st
        and s.credential_kind = 'pin'
        and s.issued_at >= ${from.toISOString()}::timestamptz
        and s.issued_at <= ${to.toISOString()}::timestamptz
-       and (s.ended_reason is null or s.ended_reason <> 'revoked')
+       and (s.ended_reason is null or s.ended_reason <> 'revoked'${revokedAtOrAfter ? sql` or s.ended_at >= ${revokedAtOrAfter.toISOString()}::timestamptz` : sql``})
      limit 1
   `)) as unknown as { ok: number }[];
   return rows.length > 0;

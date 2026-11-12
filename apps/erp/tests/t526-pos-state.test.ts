@@ -156,7 +156,7 @@ describe('T-526 R1/R3 - which tabs a person sees', () => {
 });
 
 describe('T-526 R3 - the drain network mapper (makePosSend)', () => {
-  const events = [{ seq: 1, kind: 'stand.opened', personId: 'p', occurredAtDevice: '2026-11-07T01:00:00.000Z', payload: {} }] as never;
+  const events = [{ seq: 1, pairingId: 'pair-1', kind: 'stand.opened', personId: 'p', occurredAtDevice: '2026-11-07T01:00:00.000Z', payload: {} }] as never;
 
   it('POSTs { events } as JSON to /api/pos/events with the same-origin cookie', async () => {
     const f = vi.fn(async () => json({ ok: true, stateVersion: 9, results: [{ seq: 1, status: 'applied' }] }));
@@ -166,7 +166,7 @@ describe('T-526 R3 - the drain network mapper (makePosSend)', () => {
     expect(init.method).toBe('POST');
     expect(init.credentials).toBe('same-origin');
     expect(new Headers(init.headers).get('content-type')).toMatch(/^application\/json/);
-    expect(JSON.parse(String(init.body))).toEqual({ events });
+    expect(JSON.parse(String(init.body))).toEqual({ pairingId: 'pair-1', events });
   });
 
   it('a 200 maps to ok with the server stateVersion and results', async () => {
