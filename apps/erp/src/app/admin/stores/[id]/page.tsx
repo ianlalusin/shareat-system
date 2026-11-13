@@ -104,7 +104,7 @@ export default async function StoreDetailPage({
         </Link>
         {' '}
         <Link href={`/menu/hours?store=${id}`} className={ACTION_LINK}>
-          Lunch and dinner hours →
+          Menu hours →
         </Link>
       </p>
 

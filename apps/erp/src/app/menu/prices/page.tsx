@@ -142,11 +142,11 @@ export default async function MenuPricesPage({ searchParams }: { searchParams: P
           </FilterRow>
           {!canPrice && <p className="text-sm text-muted">You can read these prices but not change them at this store.</p>}
           {canPrice && !canPair && data.slots.some((r) => r.daypartId !== null) && (
-            <p className="text-sm text-muted">Only a super admin can change which prices belong to lunch or dinner. You can still change a price.</p>
+            <p className="text-sm text-muted">Only a super admin can change which prices belong to menu hours. You can still change a price.</p>
           )}
           {canHours && (
             <Link href={`/menu/hours?store=${store.id}`} className="inline-flex min-h-6 items-center text-sm underline underline-offset-4">
-              Change the lunch and dinner hours
+              Change the menu hours
             </Link>
           )}
           <Grid data={data} storeId={store.id} canPrice={canPrice} canPair={canPair} />
@@ -194,8 +194,8 @@ const FAULT_SENTENCE: Record<LiveOfferFault['reason'], string> = {
   mixed_all_day_and_daypart: 'This package has an all-day price and prices by time of day at the same time, so no price can be shown. A super admin needs to withdraw one of them.',
   overlapping_dayparts: 'Two time-of-day prices for this package cover the same hours, so no price can be shown. A super admin needs to withdraw one of them.',
   tied_offers: 'Two prices for this package were saved at the exact same moment, so no price can be shown. A super admin needs to set the price again.',
-  unknown_daypart: 'A price here points to hours that are missing or retired, so no price can be shown. Check this store’s lunch and dinner hours.',
-  invalid_daypart: 'A price here points to hours that are not valid, so no price can be shown. Check this store’s lunch and dinner hours.',
+  unknown_daypart: 'A price here points to hours that are missing or retired, so no price can be shown. Check this store’s menu hours.',
+  invalid_daypart: 'A price here points to hours that are not valid, so no price can be shown. Check this store’s menu hours.',
   invalid_time_zone: 'This store’s time zone cannot be read, so no price can be shown. Ask an administrator to correct it on the store page.',
   invalid_instant: 'The time could not be read, so no price can be shown. Reload the page; if it stays, tell an administrator.',
 };
@@ -210,7 +210,7 @@ function notOfferedText(n: { availableFrom: string | null; availableAt: Date | n
 /** The "When" box of the price form: All day, or one of the store's windows. */
 function WhenSelect({ choices, initial }: { choices: DaypartView[]; initial: string }) {
   return (
-    <Field label="When" className="text-sm" hint="All day, or only the hours of Lunch or Dinner.">
+    <Field label="When" className="text-sm" hint="All day, or only during one of the store's menu hours.">
       <Select name="daypartId" defaultValue={initial} className="w-full">
         <option value="">All day</option>
         {choices.map((d) => (
@@ -296,7 +296,7 @@ function PriceForm({
           <p className="text-xs text-muted">
             A new price cannot start earlier than a change already saved or scheduled for this package, store and channel. Lunch, Dinner and all day count together.
             If you see &ldquo;a later change is already scheduled&rdquo;, clear the scheduled change or pick a later time.
-            {whenChoices && ' To move a package from an all-day price to Lunch and Dinner prices, withdraw the all-day price first.'}
+            {whenChoices && ' To move a package from an all-day price to time-of-day prices, withdraw the all-day price first.'}
           </p>
         )}
         <DialogActions>
@@ -461,7 +461,7 @@ function Panel({
       ))}
 
       {canPrice && noActiveHours && (
-        <p className="text-sm text-muted">This store has no active lunch and dinner hours, so only an all-day price can be set here. Add hours first to price by time of day.</p>
+        <p className="text-sm text-muted">This store has no active menu hours, so only an all-day price can be set here. Add hours first to price by time of day.</p>
       )}
       {canPrice && canPair && dayparted && !noActiveHours && freeWindows.length === 0 && (
         <p className="text-sm text-muted">Every set of hours already has a price. Change a price above, or withdraw one first.</p>
