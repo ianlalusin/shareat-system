@@ -2,7 +2,7 @@ import { toBusinessDate } from '@shareat/core/datetime';
 import Link from 'next/link';
 import { REISSUE_INTERVALS } from '@shareat/db/schema';
 import { compare, money, toCentavos, ZERO } from '@shareat/core/money';
-import { requireSession } from '../../lib/session';
+import { requirePageAccess } from '@/lib/page-access';
 import { removeBudgetAction, setBudgetAction } from './actions';
 import {
   INTERVAL_LABEL,
@@ -51,7 +51,8 @@ interface SearchParams {
 
 export default async function BudgetsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/budgets');
+  const { actor, refusal } = await requirePageAccess('/budgets');
+  if (refusal) return refusal;
   const orgId = actor.orgId;
 
   const stores = await listStores(orgId);

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { compare, money, ZERO } from '@shareat/core/money';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '@/lib/page-access';
 import { cancelAction, decideAction, releaseAction, settleAction } from '../actions';
 import {
   STATUS_LABEL,
@@ -44,7 +44,8 @@ export default async function CashRequestPage({
 }) {
   const { id } = await params;
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`/cash-requests/${id}`);
+  const { actor, refusal } = await requirePageAccess(`/cash-requests/${id}`);
+  if (refusal) return refusal;
 
   const req = await getDetail(actor.orgId, id);
   if (!req) notFound();

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '@/lib/page-access';
 import {
   CLASSIFICATION_LABEL,
   listSuppliersWithPosition,
@@ -40,7 +40,8 @@ export default async function SuppliersPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/ap/suppliers');
+  const { actor, refusal } = await requirePageAccess('/ap/suppliers');
+  if (refusal) return refusal;
 
   const all = await listSuppliersWithPosition(actor.orgId);
   const q = sp.q ?? '';

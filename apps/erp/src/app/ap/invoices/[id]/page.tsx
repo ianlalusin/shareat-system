@@ -8,7 +8,7 @@ import { previewInvoiceDrafts } from '@shareat/domain';
 import { buildDraftsFacts, buildReceiptFacts, buildVerifySupplierFacts } from '@shareat/domain/business-rules';
 import { canViewPhoto, photoKinds } from '../../../../lib/photo-link';
 import { peso } from '../../../../lib/format';
-import { requireSession } from '../../../../lib/session';
+import { requirePageAccess } from '@/lib/page-access';
 import { verifyInvoiceAction, voidInvoiceAction, setInvoiceLinesAction, voidPaymentAction, recordInvoiceExpenseAction } from '../../actions';
 import { getInvoice, getSupplier, listCategoriesGrouped, itemPickerFor, invoiceLines, INVOICE_LINE_ROWS } from '../../lib';
 import { withOrgPrincipal } from '../../../expenses/lib';
@@ -58,7 +58,8 @@ export default async function InvoiceDetailPage({
 }) {
   const { id } = await params;
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`/ap/invoices/${id}`);
+  const { actor, refusal } = await requirePageAccess(`/ap/invoices/${id}`);
+  if (refusal) return refusal;
   const orgId = actor.orgId;
 
   const invoice = await getInvoice(orgId, id);

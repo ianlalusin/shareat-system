@@ -1,6 +1,6 @@
 import { PhotoUpload } from '@/components/upload/PhotoUpload';
 import Link from 'next/link';
-import { requireSession } from '../../lib/session';
+import { requirePageAccess } from '@/lib/page-access';
 import { recordInvoiceAction } from './actions';
 import { listSuppliersWithPosition, listInvoicesWithStanding, standingPills, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
@@ -28,7 +28,8 @@ interface SearchParams {
 
 export default async function ApPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/ap');
+  const { actor, refusal } = await requirePageAccess('/ap');
+  if (refusal) return refusal;
 
   const onlySelfVerified = sp.selfVerified === '1';
   const onlyPending = sp.status === 'pending';

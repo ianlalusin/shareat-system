@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { peso } from '../../../../lib/format';
-import { requireSession } from '../../../../lib/session';
+import { requirePageAccess } from '@/lib/page-access';
 import { editSupplierAction, recordPaymentAction, autoAllocatePaymentAction } from '../../actions';
 import { getSupplier, getPosition, listOpenItems, listInvoices, moneyAccountsFor, storesWithOpenItems, today } from '../../lib';
 import { SUPPLIER_CLASSIFICATIONS, SUPPLIER_STATUSES, SUPPLIER_VAT_STATUSES } from '@shareat/db';
@@ -36,7 +36,8 @@ export default async function SupplierDetailPage({
 }) {
   const { id } = await params;
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`/ap/suppliers/${id}`);
+  const { actor, refusal } = await requirePageAccess(`/ap/suppliers/${id}`);
+  if (refusal) return refusal;
   const orgId = actor.orgId;
 
   const supplier = await getSupplier(orgId, id);

@@ -1,4 +1,4 @@
-import { requireSession } from '../../lib/session';
+import { requirePageAccess } from '@/lib/page-access';
 import { createRequestAction } from './actions';
 import {
   STATUS_LABEL,
@@ -28,7 +28,8 @@ export default async function CashRequestsPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/cash-requests');
+  const { actor, refusal } = await requirePageAccess('/cash-requests');
+  if (refusal) return refusal;
 
   const [stores, persons, requests] = await Promise.all([
     listStores(actor.orgId),
