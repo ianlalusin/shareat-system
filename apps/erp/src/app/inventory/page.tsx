@@ -2,8 +2,9 @@ import Link from 'next/link';
 import { listStores, stockSummary } from './lib';
 import { requireSession } from '../../lib/session';
 import { Page } from '@/components/shell/Page';
+import { PageDescription } from '@/components/shell/PageDescription';
 import { FilterRow } from '@/components/FilterRow';
-import { Select } from '@/components/ui';
+import { Card, EmptyState, NumTd, Select, Table, Td, Th } from '@/components/ui';
 
 export const metadata = { title: 'Stock on hand — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -36,38 +37,34 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
 
   return (
     <Page density="table" className="">
-      <div className="flex flex-wrap items-baseline justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Stock on hand</h1>
-        {/* ⭐ DEF-135 (2026-09-03): rooms, deliveries, usage and counts each had a tested engine
-            and no screen. They are the four doors stock actually passes through; this page is
-            where their effect is read back, so it links to every one of them. */}
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-          <Link href={`/inventory/locations?store=${storeId}`} className="underline underline-offset-4">
-            Rooms →
-          </Link>
-          <Link href={`/inventory/deliveries?store=${storeId}`} className="underline underline-offset-4">
-            Deliveries →
-          </Link>
-          <Link href={`/inventory/usage?store=${storeId}`} className="underline underline-offset-4">
-            Usage & wastage →
-          </Link>
-          <Link href={`/inventory/counts?store=${storeId}`} className="underline underline-offset-4">
-            Counts →
-          </Link>
-          <Link href="/inventory/transfers" className="underline underline-offset-4">
-            Transfers →
-          </Link>
-          <Link href="/inventory/returns" className="underline underline-offset-4">
-            Returns →
-          </Link>
-          <Link href="/inventory/low-stock" className="underline underline-offset-4">
-            Low stock →
-          </Link>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold">Stock on hand</h1>
+          <PageDescription className="mt-1">
+            On-hand is a query over every movement ever recorded — there is no balance column to drift.
+          </PageDescription>
         </div>
+        {/* The four doors stock actually passes through, plus the two exceptions and the alert. */}
+        <nav aria-label="Inventory sections" className="flex max-w-full flex-wrap gap-2 pb-1 text-sm md:flex-nowrap md:overflow-x-auto">
+          {[
+            { href: `/inventory/locations?store=${storeId}`, label: 'Rooms' },
+            { href: `/inventory/deliveries?store=${storeId}`, label: 'Deliveries' },
+            { href: `/inventory/usage?store=${storeId}`, label: 'Usage & wastage' },
+            { href: `/inventory/counts?store=${storeId}`, label: 'Counts' },
+            { href: '/inventory/transfers', label: 'Transfers' },
+            { href: '/inventory/returns', label: 'Returns' },
+            { href: '/inventory/low-stock', label: 'Low stock' },
+          ].map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="inline-flex min-h-9 shrink-0 items-center rounded-full border border-surface-border bg-surface px-3 text-sm text-ink hover:bg-canvas"
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
       </div>
-      <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-        On-hand is a query over every movement ever recorded — there is no balance column to drift.
-      </p>
 
       <FilterRow className="mt-6">
         <label className="text-sm">
@@ -87,88 +84,89 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         equal the subledger "continuously, not at year end" — and until this page, nowhere in the
         product showed it. It lived only inside test assertions.
       */}
-      <section
-        className={`mt-6 rounded-lg border p-4 ${
-          ties
-            ? 'border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900'
-            : 'border-warning bg-warning-soft'
-        }`}
-      >
-        <h2 className="text-sm font-medium">
-          {ties ? 'Inventory ties to the ledger' : '⚠️ Inventory does NOT tie to the ledger'}
-        </h2>
-        <dl className="mt-3 grid grid-cols-2 gap-x-8 gap-y-1 text-sm sm:grid-cols-4">
+      <Card className={`mt-6 ${ties ? '' : 'border-warning bg-warning-soft'}`}>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-sm font-semibold">
+            {ties ? 'Inventory ties to the ledger' : 'Inventory does not tie to the ledger'}
+          </h2>
+          <span className="text-xs text-muted">
+            {ties ? 'Every peso of stock has a ledger entry.' : 'Investigate the difference before closing.'}
+          </span>
+        </div>
+        <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div>
-            <dt className="text-neutral-500">FIFO layers</dt>
-            <dd className="tabular-nums">₱{summary.layerValue}</dd>
+            <dt className="text-xs text-muted">FIFO layers</dt>
+            <dd className="mt-1 font-display text-2xl font-extrabold tabular-nums">₱{summary.layerValue}</dd>
           </div>
           <div>
-            <dt className="text-neutral-500">Inventory on the books</dt>
-            <dd className="tabular-nums">₱{summary.accountValue}</dd>
+            <dt className="text-xs text-muted">On the books</dt>
+            <dd className="mt-1 font-display text-2xl font-extrabold tabular-nums">₱{summary.accountValue}</dd>
           </div>
           <div>
-            <dt className="text-neutral-500">Difference</dt>
-            <dd className="tabular-nums">₱{drift}</dd>
+            <dt className="text-xs text-muted">Difference</dt>
+            <dd className={`mt-1 font-display text-2xl font-extrabold tabular-nums ${ties ? '' : 'text-warning-ink'}`}>₱{drift}</dd>
           </div>
           <div>
-            {/*
-              ⚠️ Shown APART, never netted in. Goods on a truck are in no FIFO layer, because a
-              layer is a thing on a shelf — conflating the two is DEF-098.
-            */}
-            <dt className="text-neutral-500">In transit (branch orders)</dt>
-            <dd className="tabular-nums">₱{summary.inTransitValue}</dd>
+            {/* Goods on a truck are in no FIFO layer: a layer is a thing on a shelf. */}
+            <dt className="text-xs text-muted">In transit (branch orders)</dt>
+            <dd className="mt-1 font-display text-2xl font-extrabold tabular-nums">₱{summary.inTransitValue}</dd>
           </div>
         </dl>
-      </section>
+      </Card>
 
       {summary.rows.length === 0 ? (
-        <p className="mt-8 text-sm text-neutral-600 dark:text-neutral-400">
-          No item in this store has a balance. Stock arrives through a{' '}
-          <Link href={`/inventory/deliveries?store=${storeId}`} className="underline underline-offset-4">
-            delivery
-          </Link>{' '}
-          or a commissary receipt.
-        </p>
+        <EmptyState
+          illustration="truck"
+          title="No stock on hand yet"
+          body="Stock arrives through a delivery or a commissary receipt. Once it does, every movement is visible here."
+          action={
+            <Link
+              href={`/inventory/deliveries?store=${storeId}`}
+              className="mt-2 inline-flex min-h-11 items-center rounded-full bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-hover"
+            >
+              Record a delivery
+            </Link>
+          }
+        />
       ) : (
-        <table className="mt-8 w-full border-collapse text-sm">
+        <Table card={{ title: 'Item', subtitle: 'Where', keys: ['On hand', 'Value'] }}>
           <thead>
-            <tr className="border-b border-neutral-300 text-left dark:border-neutral-700">
-              <th className="py-2 pr-4 font-medium">Item</th>
-              <th className="py-2 pr-4 font-medium">Where</th>
-              <th className="py-2 pr-4 text-right font-medium">On hand</th>
-              <th className="py-2 text-right font-medium">Value</th>
+            <tr>
+              <Th>Item</Th>
+              <Th>Where</Th>
+              <Th numeric>On hand</Th>
+              <Th numeric>Value</Th>
             </tr>
           </thead>
           <tbody>
             {summary.rows.map((row) => (
-              <tr key={row.itemId} className="border-b border-neutral-200 align-top dark:border-neutral-800">
-                <td className="py-2 pr-4">
+              <tr key={row.itemId} className="align-top">
+                <Td>
                   <span className="font-medium">{row.name}</span>
-                  <span className="ml-2 text-xs text-neutral-500">{row.code}</span>
-                </td>
-                <td className="py-2 pr-4 text-neutral-600 dark:text-neutral-400">
+                  <span className="ml-2 font-mono text-xs text-muted">{row.code}</span>
+                </Td>
+                <Td className="text-muted">
                   {row.byLocation.map((l) => (
                     <div key={l.locationName}>
                       {l.locationName} <span className="tabular-nums">{l.quantity}</span>
                     </div>
                   ))}
-                </td>
-                <td className="py-2 pr-4 text-right tabular-nums">
+                </Td>
+                <NumTd>
                   {row.quantity} {row.baseUnit}
-                </td>
-                <td className="py-2 text-right tabular-nums">
-                  {/* ⚠️ A balance with no open layer is a real state worth seeing rather than
-                      showing as ₱0 — it means stock exists that no receipt ever valued. */}
+                </NumTd>
+                <NumTd>
+                  {/* A balance with no open layer is a real state: stock exists that no receipt valued. */}
                   {row.value === null ? (
                     <span className="text-warning-ink">no layer</span>
                   ) : (
                     `₱${row.value}`
                   )}
-                </td>
+                </NumTd>
               </tr>
             ))}
           </tbody>
-        </table>
+        </Table>
       )}
     </Page>
   );
