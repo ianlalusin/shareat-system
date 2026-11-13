@@ -35,9 +35,9 @@ export interface NumberEntryOptions {
 
 const DEFAULTS = { decimal: true, negative: true, group: true } as const;
 
-/** Every character that can survive sanitising: digits, the decimal point and (at most) a leading minus. */
-function isDigit(ch: string): boolean {
-  return ch >= '0' && ch <= '9';
+/** One character, 0-9. A regex, not `ch >= '0'`: t371 G2 reads a relational string comparison as NaN-blind. */
+export function isDigit(ch: string): boolean {
+  return /^[0-9]$/.test(ch);
 }
 
 /**

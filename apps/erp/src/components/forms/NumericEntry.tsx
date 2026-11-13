@@ -29,11 +29,9 @@
  * does not leave the box ungrouped.
  */
 import { useEffect } from 'react';
-import { caretAfterFormat, formatNumberEntry, isCleanPaste, type NumberEntryOptions } from '@/lib/number-entry';
+import { caretAfterFormat, formatNumberEntry, isCleanPaste, isDigit, type NumberEntryOptions } from '@/lib/number-entry';
 
 /** The text-like types a numeric value can actually be typed into (type=number is the browser's, not ours). */
-const isDigit = (c: string) => c >= '0' && c <= '9';
-
 const TEXT_TYPES = new Set(['text', 'search', 'tel']);
 
 function optionsFor(el: HTMLInputElement): NumberEntryOptions | null {
