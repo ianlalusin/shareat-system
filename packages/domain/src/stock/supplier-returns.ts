@@ -41,7 +41,7 @@ import { reverseEntry } from '../ledger/reverse-entry';
 import { GRNI_ACCOUNT, INVENTORY_ACCOUNT_BY_ITEM_KIND } from './receipt-posting';
 import { perBaseUnit } from '../deliveries/receive';
 import { closedStockPeriodSentence, closedStockPeriodSentenceToday } from './period-guard';
-import { compareQuantity, isPositiveQuantity, quantity, subtractQuantity, type Quantity } from './quantity';
+import { addQuantity, compareQuantity, isPositiveQuantity, quantity, subtractQuantity, type Quantity } from './quantity';
 import { parseRequiredQuantity } from './quantity-field';
 
 const ADVANCES_ACCOUNT = apRepo.ADVANCES_CODE;
@@ -178,6 +178,9 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
   // T-574 (DEF-838): serialise per delivery line BEFORE the first read of what is already returned, in sorted id order so two
   // multi-line returns naming the same lines the other way round queue instead of deadlocking.
   for (const id of [...ofLines.keys()].sort()) await advisoryLocksRepo.lockDeliveryLine(tx, id);
+  // T-574 audit: one request may name a delivery line from two rooms (the item+room guard allows it), so the cap is judged on the
+  // running SUM requested for that line, not on each request line alone.
+  const requested = new Map<string, Quantity>();
   for (const line of lines) {
     if (!line.deliveryLineId) continue;
     const deliveryLine = ofLines.get(line.deliveryLineId)!; // set for every id in the loop above
@@ -186,7 +189,9 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
       await supplierReturnsRepo.returnedQuantityForDeliveryLine(tx, line.deliveryLineId),
     );
     const cap = subtractQuantity(received, alreadyReturned);
-    if (compareQuantity(line.quantity, cap) > 0) {
+    const total = addQuantity(requested.get(line.deliveryLineId) ?? quantity('0'), line.quantity);
+    requested.set(line.deliveryLineId, total);
+    if (compareQuantity(total, cap) > 0) {
       return {
         ok: false,
         reason: `delivery line ${line.deliveryLineId}: only ${cap} is still returnable (received ${received}, already returned ${alreadyReturned})`,

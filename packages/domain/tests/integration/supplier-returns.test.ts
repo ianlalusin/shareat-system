@@ -1000,6 +1000,54 @@ describe('T-574 — the returnable cap holds under concurrency and across stores
     expect(second.ok, JSON.stringify(second)).toBe(true);
   });
 
+  // T-574 audit: one request may name the SAME delivery line from two rooms. The cap must hold on the SUM, not per request line.
+  describe('one request, same delivery line in two rooms', () => {
+    async function twoRooms() {
+      const f = await fixture();
+      const [type] = await sql<{ id: string }[]>`select id from location_types where org_id = ${f.orgId} limit 1`;
+      const [room2] = await sql<{ id: string }[]>`
+        insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by)
+        values (${f.orgId}, ${f.storeId}, 'A2', 'Room A2', ${type!.id}, 'operating', false, ${f.staff.personId}) returning id`;
+      const { deliveryId, deliveryLineId } = await receiveOne(f, '10.000', '100.0000', '2026-01-05');
+      // Plenty of OTHER stock in BOTH rooms, so on-hand never refuses: only the line cap can.
+      await receiveOne(f, '30.000', '100.0000', '2026-01-04');
+      await receiveOne({ ...f, locationId: room2!.id }, '30.000', '100.0000', '2026-01-04');
+      const ret = (lines: [string, string][]) => asOrg(f.orgId, (tx) =>
+        recordReturn(tx, {
+          storeId: f.storeId, supplierId: f.supplierId, deliveryId,
+          returnedOn: '2026-01-06', reason: 'damaged', actor: f.staff,
+          lines: lines.map(([locationId, qty]) => ({
+            itemId: f.itemId, itemKind: 'raw_material' as const, locationId, quantity: quantity(qty), deliveryLineId,
+          })),
+        }),
+      );
+      return { f, room2: room2!.id, deliveryLineId, ret };
+    }
+
+    it('⭐ 6 + 6 against 10 received is refused with the cap error, and nothing is posted', async () => {
+      const { f, room2, ret } = await twoRooms();
+      const res = await ret([[f.locationId, '6.000'], [room2, '6.000']]);
+      expect(res.ok ? 'posted 12' : res.reason).toMatch(/only 10\.000 is still returnable/);
+      const [cnt] = await sql<{ n: string }[]>`select count(*)::text as n from supplier_return_lines`;
+      expect(cnt!.n).toBe('0');
+    });
+
+    it('4 + 6 against 10 received is allowed (exactly the cap)', async () => {
+      const { f, room2, deliveryLineId, ret } = await twoRooms();
+      const res = await ret([[f.locationId, '4.000'], [room2, '6.000']]);
+      expect(res.ok, JSON.stringify(res)).toBe(true);
+      expect(await asOrg(f.orgId, (tx) => returnableQuantity(tx, deliveryLineId))).toBe('0.000');
+    });
+
+    it('3 already returned, then 4 + 4 in one request is refused (only 7 left)', async () => {
+      const { f, room2, deliveryLineId, ret } = await twoRooms();
+      expect((await ret([[f.locationId, '3.000']])).ok).toBe(true);
+      const res = await ret([[f.locationId, '4.000'], [room2, '4.000']]);
+      expect(res.ok ? 'posted 8' : res.reason).toMatch(/only 7\.000 is still returnable/);
+      expect(await asOrg(f.orgId, (tx) => returnableQuantity(tx, deliveryLineId))).toBe('7.000');
+    });
+  });
+
   it('a line from ANOTHER supplier\'s delivery at the same store is refused in words, and nothing is posted', async () => {
     const f = await fixture();
     const mine = await receiveOne(f, '10.000', '100.0000', '2026-01-05');
