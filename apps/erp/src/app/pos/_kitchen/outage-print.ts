@@ -125,12 +125,17 @@ export async function printOutageForEvent(deps: OutageDeps, event: { kind: strin
   }
   // The stations in menu order (only those that print on an outage), then the catch-all for lines with no known station, which always prints.
   const tickets = [...menu.stations.filter((s) => s.printOnOutage).map((s) => ({ key: s.id as string | null, name: s.name })), { key: null, name: CATCH_ALL_STATION }];
+  // Phase 1: reserve every number and build every job. A throw here means nothing is on paper yet, so the caller may safely retry the whole event (a number
+  // already reserved is simply skipped: a gap in K-numbers is harmless). Phase 2 only sends, and `send` never throws, so once any paper may be out the
+  // event always comes back as a result (T-561 audit F3): unsent or uncertain jobs are in `failed` for Reprint, never replayed automatically.
+  const jobs: PrintJob[] = [];
   for (const t of tickets) {
     const items = byStation.get(t.key);
     if (!items) continue;
     const ticketNo = deps.terminalNo === null ? NO_TICKET_NO : await nextKitchenTicketNo({ ...deps, terminalNo: deps.terminalNo });
-    await send(deps.printLines, { lines: formatKitchenTicket({ stationName: t.name, tableLabel, ticketNo, sentAtLocal: deps.sentAtLocal, items, offline: true }, deps.layout), copies: deps.copies }, tally);
+    jobs.push({ lines: formatKitchenTicket({ stationName: t.name, tableLabel, ticketNo, sentAtLocal: deps.sentAtLocal, items, offline: true }, deps.layout), copies: deps.copies });
   }
+  for (const job of jobs) await send(deps.printLines, job, tally);
   return settle(tally);
 }
 
