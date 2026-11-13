@@ -45,6 +45,9 @@ export function HelpTip({ children, label }: HelpTipProps) {
     >
       <button
         type="button"
+        // T-568: a help tip is not a row control. Without this the phone-card annotator sees a
+        // button in <th> and renders the whole header row as a card.
+        data-card-ignore=""
         // 24px hit area (the census floor), a 16px circle drawn inside it.
         className="erp-help-tip -my-1 inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold leading-none text-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
         aria-label={label ? `Help: ${label}` : 'Help'}

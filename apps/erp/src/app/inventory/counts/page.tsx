@@ -3,7 +3,7 @@ import { countsRegister, listStores } from './lib';
 import { openCountSessionAction } from './actions';
 import { requireSession } from '../../../lib/session';
 import { Page } from '@/components/shell/Page';
-import { Badge, Button, DialogActions, FlashBanner, FormGrid, FormModal, Field, Input, LinkRow, RowLink, Select, statusTone } from '@/components/ui';
+import { Badge, Button, Card, DialogActions, EmptyState, FlashBanner, FormGrid, FormModal, Field, Input, LinkRow, NumTd, RowLink, Select, Table, Td, Th, statusTone } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { INVENTORY_COUNT_OPEN_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { FilterRow } from '@/components/FilterRow';
@@ -62,7 +62,7 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
       </div>
       <PageDescription>
         Freeze a room, count it, and the difference between what was counted and what the ledger said
-        posts to <strong>stock count differences</strong> at FIFO cost — the gap v1 never closed.
+        posts to <strong>stock count differences</strong> at FIFO cost.
       </PageDescription>
 
       <FlashBanner flash={sp} />
@@ -80,8 +80,8 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
         </label>
       </FilterRow>
 
-      <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="font-medium">Open a count</h2>
+      <Card>
+        <h2 className="font-semibold">Open a count</h2>
         <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
           Every room ticked freezes the moment you submit — usage, wastage, transfers and receipts into
           it are refused until this count is committed or cancelled.
@@ -123,44 +123,48 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
           </FormModal>
           </div>
         )}
-      </section>
+      </Card>
 
       <section>
         <h2 className="text-lg font-medium">Sessions</h2>
         {sessions.length === 0 ? (
-          <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">No counts recorded for this store yet.</p>
+          <EmptyState
+            illustration="magnifier"
+            title="No counts recorded for this store"
+            body="Open a count above, tick the rooms to freeze, and the resulting lines will appear here."
+          />
         ) : (
-          <table className="mt-3 w-full border-collapse text-sm">
+          <Table card={{ title: 'Rooms', subtitle: 'Counted on', keys: ['Status', 'Lines'] }}>
             <thead>
-              <tr className="border-b border-neutral-300 text-left dark:border-neutral-700">
-                <th className="py-2 pr-4 font-medium">Rooms</th>
-                <th className="py-2 pr-4 font-medium">Counted on</th>
-                <th className="py-2 pr-4 font-medium">Status</th>
-                <th className="py-2 pr-4 font-medium">Lines</th>
-                <th className="py-2 font-medium">Opened</th>
+              <tr>
+                <Th>Rooms</Th>
+                <Th>Counted on</Th>
+                <Th>Status</Th>
+                <Th numeric>Lines</Th>
+                <Th>Opened</Th>
               </tr>
             </thead>
             <tbody>
               {sessions.map((s) => (
-                <LinkRow key={s.id} className="border-b border-neutral-200 align-top dark:border-neutral-800">
-                  <td className="py-2 pr-4">
+                <LinkRow key={s.id} className="align-top">
+                  <Td>
                     <RowLink href={`/inventory/counts/${s.id}`}>
                       {s.locations.map((l) => l.name).join(', ') || '—'}
                     </RowLink>
-                    {s.note && <div className="text-xs text-neutral-500">{s.note}</div>}
-                  </td>
-                  <td className="py-2 pr-4 tabular-nums">{s.countedOn}</td>
-                  <td className="py-2 pr-4">
+                    {s.note && <div className="text-xs text-muted">{s.note}</div>}
+                  </Td>
+                  <Td className="tabular-nums">{s.countedOn}</Td>
+                  <Td>
                     <Badge tone={statusTone(s.status)} label={STATUS_LABEL[s.status] ?? s.status} />
-                  </td>
-                  <td className="py-2 pr-4 tabular-nums">{s.lineCount}</td>
-                  <td className="py-2 text-xs text-neutral-500">
+                  </Td>
+                  <NumTd>{s.lineCount}</NumTd>
+                  <Td className="text-xs text-muted">
                     {s.openedByName} · {when(s.openedAt)}
-                  </td>
+                  </Td>
                 </LinkRow>
               ))}
             </tbody>
-          </table>
+          </Table>
         )}
       </section>
     </Page>

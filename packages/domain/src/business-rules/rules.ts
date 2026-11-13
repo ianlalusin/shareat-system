@@ -19,7 +19,7 @@ import { assertFieldRules } from '../shared/field-rules-assert';
 import { refuse } from '../shared/refusal';
 import { internalFault } from '../shared/refusal-leaf';
 import { buildRuleBook, type RuleBook, type RuleValue } from './book';
-import { RULE_ADMIN_CAPABILITY, RULE_REGISTRY, isBusinessRuleKey, type BusinessRuleKey, type RuleDefinition } from './registry';
+import { RULE_ADMIN_CAPABILITY, RULE_REGISTRY, isBusinessRuleKey, type BusinessRuleKey, type RuleDefinition, type RuleUnit } from './registry';
 
 const ALL_KEYS = Object.keys(RULE_REGISTRY) as BusinessRuleKey[];
 
@@ -47,6 +47,8 @@ function checkedBounds(def: RuleDefinition, key: string, value: string): void {
   const n = hundredths(value);
   if (def.unit === 'hour' && n % 100n !== 0n) throw refuse(`business rule ${key}: not a whole hour`, `${def.label} must be a whole hour from 0 to 23.`);
   if (def.unit === 'minutes' && n % 100n !== 0n) throw refuse(`business rule ${key}: not a whole number of minutes`, `${def.label} must be a whole number of minutes.`);
+  if (def.unit === 'days' && n % 100n !== 0n) throw refuse(`business rule ${key}: not a whole number of days`, `${def.label} must be a whole number of days.`);
+  if (def.unit === 'flag' && n !== 0n && n !== 100n) throw refuse(`business rule ${key}: not 0 or 1`, `${def.label} must be On or Off.`);
   if (n < hundredths(def.min) || n > hundredths(def.max)) {
     throw refuse(`business rule ${key}: out of bounds`, `${def.label} must be between ${def.min} and ${def.max}.`);
   }
@@ -113,7 +115,7 @@ export interface BusinessRuleItem {
   readonly key: BusinessRuleKey;
   readonly label: string;
   readonly help: string;
-  readonly unit: 'money' | 'percent' | 'hour' | 'minutes';
+  readonly unit: RuleUnit;
   readonly namespace: 'settlement' | 'tax' | 'pos';
   readonly min: string;
   readonly max: string;

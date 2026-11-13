@@ -5,6 +5,7 @@ import { Inbox, Printer } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { SlipTextDialog } from "./SlipTextDialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthContext } from "@/context/auth-context";
 import { useStoreContext } from "@/context/store-context";
@@ -53,6 +54,7 @@ export function OutboxSection() {
   const [latest, setLatest] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [slipText, setSlipText] = useState<string | null>(null);
 
   const isManager = appUser?.role === "manager" || appUser?.role === "admin" || appUser?.isPlatformAdmin === true;
 
@@ -87,8 +89,12 @@ export function OutboxSection() {
       const outcome = await printXSlipText(text, widthMm);
       if (outcome === "printed") toast({ title: "X-slip printed" });
       else {
-        toast({ variant: outcome === "failed" ? "destructive" : "default", title: outcome === "failed" ? "Print failed" : "No printer paired", description: "Copy the slip from the screen." });
-        window.alert(text);
+        toast({
+          variant: outcome === "failed" ? "destructive" : "default",
+          title: outcome === "failed" ? "Print failed" : "No printer paired",
+          description: "The X-slip is ready — copy it from the window on screen.",
+        });
+        setSlipText(text);
       }
     } finally {
       setBusy(false);
@@ -101,6 +107,7 @@ export function OutboxSection() {
   const showLink = canShowUpdateLink({ unsentCount: status.unsentCount, currentVersion: APP_VERSION, latestVersion: latest });
 
   return (
+    <>
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><Inbox className="h-5 w-5" /> Unsent sales</CardTitle>
@@ -169,6 +176,9 @@ export function OutboxSection() {
         )}
       </CardContent>
     </Card>
+
+    <SlipTextDialog text={slipText} title="X-slip — copy this text" onClose={() => setSlipText(null)} />
+    </>
   );
 }
 

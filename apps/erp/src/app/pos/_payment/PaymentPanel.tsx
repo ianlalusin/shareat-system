@@ -16,6 +16,7 @@ import type { NewPosEvent } from '@/lib/pos-device';
 import { printAmount } from '@/lib/pos-print/layout';
 import type { PrintLayout, ReceiptView } from '@/lib/pos-print/types';
 import { AmountPad } from './AmountPad';
+import { lookupSeniorRepeat, repeatWarning } from './senior-repeat';
 import { receiptLinesOf, statutoryDiners, toPriceLines, type BillLineRow, type PresetLike, type ProjectedBill } from './bill';
 import { DiscountSheet, type SheetTarget } from './DiscountSheet';
 import {
@@ -137,6 +138,8 @@ export function PaymentPanel(p: PaymentPanelProps) {
   const [active, setActive] = useState<number | null>(null);
   const [fresh, setFresh] = useState(false); // the next digit replaces the pre-filled amount
   const [holders, setHolders] = useState<Record<number, { holderName: string; idNumber: string }>>({});
+  // T-575: the repeat-card warning under a diner's ID box, filled when the box loses focus. `id` is the number it was asked about, so a warning never outlives an edit of the box.
+  const [repeats, setRepeats] = useState<Record<number, { id: string; text: string }>>({});
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -195,6 +198,13 @@ export function PaymentPanel(p: PaymentPanelProps) {
     root?.querySelector<HTMLElement>('[data-tender]:not(:disabled)')?.focus();
     setFocusNew(null);
   }, [focusNew]);
+
+  const askRepeat = async (dinerNo: number, raw: string) => {
+    const id = raw.trim();
+    const check = await lookupSeniorRepeat({ idNumber: id, online: p.online, fetch: (...a) => fetch(...a) });
+    const text = check ? repeatWarning(check, Date.now()) : null;
+    setRepeats((r) => ({ ...r, [dinerNo]: { id, text: text ?? '' } }));
+  };
 
   const priced = useMemo<PricedSession | null>(() => {
     try {
@@ -385,7 +395,12 @@ export function PaymentPanel(p: PaymentPanelProps) {
                     {d.kind === 'pwd' ? 'PWD' : 'Senior'} #{d.dinerNo}
                   </legend>
                   <input type="text" data-erp-size="free" data-holder={`${d.dinerNo}-holderName`} className={FIELD} {...HOLDER_ATTRS.holderName} placeholder="Name on the card" aria-label={`Name for ${d.kind === 'pwd' ? 'PWD' : 'Senior'} #${d.dinerNo}`} value={holders[d.dinerNo]?.holderName ?? ''} onChange={(e) => setHolders((h) => ({ ...h, [d.dinerNo]: { holderName: e.target.value, idNumber: h[d.dinerNo]?.idNumber ?? '' } }))} />
-                  <input type="text" data-erp-size="free" data-holder={`${d.dinerNo}-idNumber`} className={FIELD} {...HOLDER_ATTRS.idNumber} placeholder="ID number" aria-label={`ID number for ${d.kind === 'pwd' ? 'PWD' : 'Senior'} #${d.dinerNo}`} value={holders[d.dinerNo]?.idNumber ?? ''} onChange={(e) => setHolders((h) => ({ ...h, [d.dinerNo]: { holderName: h[d.dinerNo]?.holderName ?? '', idNumber: e.target.value } }))} />
+                  <input type="text" data-erp-size="free" data-holder={`${d.dinerNo}-idNumber`} className={FIELD} {...HOLDER_ATTRS.idNumber} placeholder="ID number" aria-label={`ID number for ${d.kind === 'pwd' ? 'PWD' : 'Senior'} #${d.dinerNo}`} value={holders[d.dinerNo]?.idNumber ?? ''} onChange={(e) => setHolders((h) => ({ ...h, [d.dinerNo]: { holderName: h[d.dinerNo]?.holderName ?? '', idNumber: e.target.value } }))} onBlur={(e) => void askRepeat(d.dinerNo, e.target.value)} />
+                  {repeats[d.dinerNo]?.text && repeats[d.dinerNo]!.id === (holders[d.dinerNo]?.idNumber ?? '').trim() ? (
+                    <p role="status" className="rounded-2xl bg-warning-soft px-4 py-2 text-sm font-semibold text-warning-ink">
+                      {repeats[d.dinerNo]!.text}
+                    </p>
+                  ) : null}
                 </fieldset>
               ))}
             </div>

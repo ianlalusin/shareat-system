@@ -155,6 +155,10 @@ The route needs no key, no database and no Firebase, so it also answers while th
 - Unpaid-table void: only a signed-in manager or admin, only on a table that tablet opened. It is marked `voidedOffline`, listed in Settings under "Review after
   outage" and by the detector (section 8).
 - Pay or void a table opened on ANOTHER tablet: refused ("This table was opened on another tablet. Pay it there, or wait for the internet.").
+- Repeat senior/PWD card warning (T-575, bible row 462): online, typing a card number on the payment screen asks the server whether it was already used at this store within the
+  window (Settings > Business rules > "Days a senior or PWD card number is checked for repeat use", default 1 = the same business day). **Offline the check is skipped silently**:
+  a tablet cannot see another tablet's bills. The sale is never blocked. When the sale is saved, the server records `pos.senior_id_repeat` in the activity log for a manager to
+  review (this receipt and the earlier ones, never the card number or the name), also for an offline sale once it reaches the server.
 - At 50,000.00 pesos of unsent sales a banner tells the manager. Selling never stops.
 - An **X-slip** (cash control, not a BIR document) prints every 4 hours of an offline period and on demand (Settings > Unsent sales > Print X-slip). With no
   printer paired it shows on screen until someone prints it or confirms they wrote it down.
