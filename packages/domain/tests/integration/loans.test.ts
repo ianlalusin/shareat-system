@@ -424,3 +424,53 @@ describe('DEF-272 — a sub-centavo amount is refused with a written sentence, n
     ).rejects.toMatchObject({"name":"RefusalError","message":"loans.recordLoanPayment.amount: money check failed","userMessage":"The payment amount — \"0.004\" is not a valid amount. Use at most two decimal places."});
   });
 });
+
+/**
+ * T-573 (DEF-840) — two payments on one loan at the same moment must not both read the same balance and the same
+ * "since" date. Each call is its own real transaction on its own pooled connection (like t414's release race).
+ */
+describe('⛔ T-573: concurrent payments on one loan serialise on the loan row (DEF-840)', () => {
+  it('two parallel payments book the accrued interest ONCE; the second starts from the first\'s payment', async () => {
+    const f = await fixture('race-interest');
+    await asOrg(f.orgId, (tx) =>
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: f.loanId, amount: '200000.00', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+    );
+    const pay = () =>
+      asOrg(f.orgId, (tx) =>
+        recordLoanPayment(tx, f.admin, { loanId: f.loanId, amount: '5000.00', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
+      );
+    const results = await Promise.all([pay(), pay()]);
+
+    // One day of straight interest on 200,000 at 2%/month is 133.33 — booked by exactly one of the two.
+    const interest = results.map((r) => r.split.interest).sort();
+    expect(interest).toEqual(['0.00', '133.33']);
+    // 10,000 paid in all, less the one interest charge, retired principal.
+    expect((await position(f)).outstanding).toBe('190133.33');
+  });
+
+  it('a payment that would overpay once the first has committed is refused, and the debt is paid exactly once', async () => {
+    const f = await fixture('race-overpay');
+    // The shared safe is funded by the fixture loan so the account can cover both draws.
+    await asOrg(f.orgId, (tx) =>
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: f.loanId, amount: '200000.00', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+    );
+    const small = await asOrg(f.orgId, (tx) =>
+      createLoan(tx, f.admin, {
+        storeId: f.storeId, lenderName: 'Grab', name: 'Small loan', principalAmount: '1000.00', interestRate: '2',
+        ratePeriod: 'month', interestMethod: 'straight', paymentFrequency: 'daily', termPeriods: 90, startDate: '2026-05-11',
+      }),
+    );
+    await asOrg(f.orgId, (tx) =>
+      disburseLoan(tx, f.admin, { requestId: crypto.randomUUID(), loanId: small.id, amount: '1000.00', intoMoneyAccountId: f.safe, on: '2026-05-11' }),
+    );
+    // 1,000 principal + 0.67 interest (1,000 × 2% / 30, one day) clears it. Two of them cannot both be right.
+    const clear = () =>
+      asOrg(f.orgId, (tx) =>
+        recordLoanPayment(tx, f.admin, { loanId: small.id, amount: '1000.67', fromMoneyAccountId: f.safe, on: '2026-05-12' }),
+      );
+    const results = await Promise.allSettled([clear(), clear()]);
+    expect(results.map((r) => r.status).sort()).toEqual(['fulfilled', 'rejected']);
+    const pos = await asOrg(f.orgId, (tx) => loansRepo.positionOf(tx, f.orgId, small.id));
+    expect(pos.outstanding).toBe('0.00');
+  });
+});

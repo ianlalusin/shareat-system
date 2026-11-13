@@ -721,6 +721,8 @@ export async function recordChannelSettlement(
     const figures = assertSettlementFigures('recordChannelSettlement', input);
     const legBlockers = await loanLegBlockers(trx, actor.orgId, figures.loanLegs);
     if (legBlockers.length > 0) throw refuse('recordChannelSettlement: a loan leg is not valid', legBlockers[0]!);
+    // T-573: a dock lowers a loan's principal, so it takes the same row lock a payment does (in id order: two settlements cannot deadlock).
+    for (const id of [...new Set(figures.loanLegs.map((l) => l.loanId))].sort()) await loansRepo.lockForPayment(trx, actor.orgId, id);
     const config = ctx.config;
     const c = computeSettlement(figures, input.acknowledgeDifference, ctx.outstanding, ctx.nettedCharges, config.name, ctx.variance);
 

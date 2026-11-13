@@ -90,6 +90,23 @@ export async function getById(tx: Tx, orgId: string, id: string): Promise<LoanRo
   return row as LoanRow | undefined;
 }
 
+/**
+ * ⭐ T-573 (DEF-840): lock one loan for the rest of this transaction (`SELECT ... FOR UPDATE`, the shape of `cash-requests.lockForSpend`).
+ *
+ * Every writer of a loan's position calls this BEFORE it reads `positionOf` / `lastPaymentDate`, so two payments on one loan serialise on
+ * the loan row: the second waits for the first to commit, then reads the balance and "since" date the first left. ⛔ Without it both read the
+ * same outstanding and the same last-payment date, book the interest twice, and both pass the overpayment guard.
+ * Returns whether the loan exists in this org (a stranger's id locks nothing).
+ */
+export async function lockForPayment(tx: Tx, orgId: string, loanId: string): Promise<boolean> {
+  const rows = await tx
+    .select({ id: loans.id })
+    .from(loans)
+    .where(and(eq(loans.id, loanId), eq(loans.orgId, orgId)))
+    .for('update');
+  return rows.length > 0;
+}
+
 export async function listLoans(
   tx: Tx,
   orgId: string,
