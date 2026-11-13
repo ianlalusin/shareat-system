@@ -130,6 +130,8 @@ vi.mock('../src/lib/session', () => ({
   requireSession: vi.fn(async () => ({ actor: { orgId: 'org-1', personId: 'p-1' }, sessionId: 'x', credentialKind: 'pin', storeId: null })),
   requireActor: vi.fn(async () => ({ orgId: 'org-1', personId: 'p-1' })),
 }));
+// T-577: /ap is route-gated now; this test is about the form's rules, so the gate (which reads the database) is stubbed open.
+vi.mock('../src/lib/page-access', () => ({ requirePageAccess: async () => ({ actor: { orgId: 'org-1', personId: 'p-1' }, refusal: null }) }));
 vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
 vi.mock('../src/app/ap/actions', () => ({
   createSupplierAction: vi.fn(), recordInvoiceAction: vi.fn(), editSupplierAction: vi.fn(),
@@ -144,6 +146,8 @@ vi.mock('../src/app/ap/lib', async (orig) => {
     listStores: vi.fn(async () => []),
     getSupplier: vi.fn(async () => SUPPLIER),
     getPosition: vi.fn(async () => '0.00'),
+    getPositionInScope: vi.fn(async () => '0.00'),
+    apStoreIds: vi.fn(async () => undefined),
     listOpenItems: vi.fn(async () => []),
     moneyAccountsFor: vi.fn(async () => []),
     storesWithOpenItems: vi.fn(async () => []),

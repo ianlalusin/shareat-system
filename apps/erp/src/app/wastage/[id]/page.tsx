@@ -6,6 +6,7 @@ import { listPostedSettlementsForStore, matchWastagesToSettlement, type Settleab
 import { toBusinessDate } from '@shareat/core/datetime';
 import { peso } from '../../../lib/format';
 import { requireSession } from '../../../lib/session';
+import { canReadAtStore } from '@/lib/can-read-at-store';
 import { withOrgPrincipal } from '../../expenses/lib';
 import {
   confirmSettlementMatchAction,
@@ -44,7 +45,8 @@ export default async function WastageDetailPage({
 
   const data = await withOrgPrincipal(actor.orgId, async (tx) => {
     const row = await orderWastageRepo.findById(tx, actor.orgId, id);
-    if (!row) return null;
+    // T-577 (DEF-834): checked BEFORE any further read of this record's store (the settlements loader would refuse with an error, not a not-found).
+    if (!row || !(await canReadAtStore(tx, actor, row.storeId, ['record_order_wastage', 'resolve_order_wastage']))) return null;
     const allocations = await orderWastageRepo.listAllocations(tx, row.id);
     const [salesDay] = await tx
       .select({ businessDate: schema.salesDays.businessDate })
