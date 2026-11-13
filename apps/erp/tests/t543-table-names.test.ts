@@ -36,12 +36,10 @@ const NAMED: ReadonlyArray<{ readonly file: string; readonly label: string }> = 
   { file: 'admin/access-defaults/grid.tsx', label: 'Position access defaults' },
   { file: 'admin/prerequisite-refusals/page.tsx', label: 'Prerequisite walls' },
   { file: 'admin/stores/page.tsx', label: 'Stores' },
-  { file: 'admin/users/page.tsx', label: 'Users and roles' },
   { file: 'ap/invoices/[id]/page.tsx', label: 'Invoice lines' },
   { file: 'ap/suppliers/page.tsx', label: 'Suppliers' },
   { file: 'ap/suppliers/[id]/page.tsx', label: 'Open items' },
   { file: 'ap/vat/page.tsx', label: 'VAT summary' },
-  { file: 'attendance/page.tsx', label: 'Attendance days' },
   { file: 'attendance/lane/page.tsx', label: 'Recently resolved' },
   { file: 'attendance/terminals/page.tsx', label: 'Terminals' },
   { file: 'channel-settlements/page.tsx', label: 'Days to settle' },
@@ -51,6 +49,15 @@ const NAMED: ReadonlyArray<{ readonly file: string; readonly label: string }> = 
   { file: 'commissary/catalogue/page.tsx', label: 'Linked branches' },
   { file: 'wastage/page.tsx', label: 'Open wastage' },
   { file: 'commissary/orders/page.tsx', label: 'Branch orders' },
+];
+
+/**
+ * T-568 moved these pages onto the shared <Table> component, which renders `label` as aria-label
+ * (proved by the component test below), so the name now lives in a `label=` prop, not a raw tag.
+ */
+const NAMED_VIA_TABLE: ReadonlyArray<{ readonly file: string; readonly labels: readonly string[] }> = [
+  { file: 'admin/users/page.tsx', labels: ['Users and roles'] },
+  { file: 'attendance/page.tsx', labels: ['Attendance days', 'Leave in the period'] },
 ];
 
 /** `//` and block comments out, newlines kept so a line number stays true. */
@@ -111,6 +118,18 @@ describe('T-543 — the named tables carry their name', () => {
       if (/\b(?:T|DEF)-\d/.test(label)) problems.push(`${file}: "${label}" carries a code`);
       const actual = ariaLabelOf(firstTableTag(file));
       if (actual !== label) problems.push(`${file}: expected aria-label="${label}", found ${actual === undefined ? 'none' : `"${actual}"`}`);
+    }
+    expect(problems).toEqual([]);
+  });
+});
+
+describe('T-568 x T-543 — pages on the shared <Table> pass the same names as a label prop', () => {
+  it('every <Table> carries its label', () => {
+    const problems: string[] = [];
+    for (const { file, labels } of NAMED_VIA_TABLE) {
+      const src = stripComments(readFileSync(resolve(appRoot, file), 'utf8'));
+      const found = (src.match(/<Table\b[^>]*>/g) ?? []).map((t) => /\blabel="([^"]*)"/.exec(t)?.[1]);
+      if (JSON.stringify(found) !== JSON.stringify(labels)) problems.push(`${file}: expected ${JSON.stringify(labels)}, found ${JSON.stringify(found)}`);
     }
     expect(problems).toEqual([]);
   });

@@ -13,7 +13,7 @@ function DaypartFields({ d }: { d?: DaypartView }) {
     <div className="space-y-3 text-sm">
       <FormGrid>
         <Field label="Name">
-          <Input name="name" defaultValue={d?.name ?? ''} placeholder="Lunch, Dinner…" className="mt-1 w-full" />
+          <Input name="name" defaultValue={d?.name ?? ''} placeholder="Breakfast, Lunch, Dinner…" className="mt-1 w-full" />
         </Field>
         <Field label="Starts">
           <Input type="time" name="start" defaultValue={d?.start ?? ''} className="mt-1 w-full tabular-nums" />
@@ -31,7 +31,7 @@ function DaypartFields({ d }: { d?: DaypartView }) {
         </div>
       </fieldset>
       <p className="text-xs text-neutral-500">
-        Use the store&apos;s clock. For hours that run past midnight, end earlier than you start: 17:00 to 08:00 means dinner ends at 08:00 the next morning.
+        Use the store&apos;s clock. For hours that run past midnight, end earlier than you start: 17:00 to 08:00 means the window ends at 08:00 the next morning.
       </p>
     </div>
   );
@@ -47,7 +47,7 @@ export function DaypartsSection({ storeId, dayparts, canManage, from }: { storeI
   const retired = dayparts.filter((d) => d.status === 'retired');
   return (
     <section id="dayparts" className={CARD}>
-      <h2 className="text-sm font-medium">Lunch and dinner hours</h2>
+      <h2 className="text-sm font-medium">Menu hours</h2>
       <p className="text-xs text-neutral-500">
         Hours a price can follow, like Lunch from 08:00 to 17:00. A price tied to Lunch is only on sale in those hours; the cashier sees when it opens next.
         A super admin chooses which prices follow which hours, under Menu prices.
@@ -111,7 +111,7 @@ export function DaypartsSection({ storeId, dayparts, canManage, from }: { storeI
         </details>
       )}
       {canManage ? (
-        <FormModal trigger="Add hours" triggerIcon={null} triggerVariant="secondary" title="Add lunch or dinner hours" size="md">
+        <FormModal trigger="Add hours" triggerIcon={null} triggerVariant="secondary" title="Add menu hours" size="md">
           <form action={createDaypartAction} className="space-y-3">
             <input type="hidden" name="storeId" value={storeId} />
             {back}

@@ -7,7 +7,7 @@
  * shift table to draw one from (t387-q6).
  */
 import Link from 'next/link';
-import { Badge } from '@/components/ui';
+import { Badge, LinkRow, RowLink, Table, Td, Th } from '@/components/ui';
 import { PhotoThumb } from '@/components/upload/PhotoThumb';
 import { businessDayRange, toBusinessDate } from '@shareat/core/datetime';
 import { formatTenure } from './tenure';
@@ -33,7 +33,8 @@ export interface StaffPerson {
 
 const LIVE_LABEL: Record<LiveState, string> = { on: 'On shift', break: 'On break', off: 'Off' };
 const LIVE_TONE = { on: 'success', break: 'warning', off: 'closed' } as const;
-const RING: Record<LiveState, string> = { on: 'ring-success', break: 'ring-warning', off: 'ring-closed' };
+// Off is the ordinary state, not an alarm: a neutral ring reads as "nothing to see".
+const RING: Record<LiveState, string> = { on: 'ring-success', break: 'ring-warning', off: 'ring-surface-border' };
 const AVATAR_TONES = [
   'bg-info-soft text-info',
   'bg-success-soft text-success',
@@ -130,7 +131,30 @@ export function ViewSwitch({ view, storeId }: { view: 'cards' | 'roster' | 'posi
 // ---- the ID-card wall ---------------------------------------------------------------------------
 
 const CARD_LINK =
-  'relative flex min-h-11 w-full flex-col items-center overflow-hidden rounded-[18px] border border-surface-border bg-surface pb-5 text-ink shadow-sm motion-safe:transition-transform motion-safe:hover:-rotate-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-canvas';
+  'relative flex h-full min-h-[9.5rem] w-full flex-col overflow-hidden rounded-[20px] border border-surface-border bg-surface text-ink shadow-sm motion-safe:transition motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-canvas';
+
+/** Group cards by the question a manager is asking: who is in today, or what they do. */
+function cardBuckets(people: StaffPerson[], states: Record<string, LiveEntry> | null) {
+  if (states) {
+    const order: LiveState[] = ['on', 'break', 'off'];
+    const labels: Record<LiveState, string> = { on: 'On shift', break: 'On break', off: 'Off today' };
+    return order.map((state) => ({
+      key: state,
+      label: labels[state],
+      people: people.filter((p) => (states[p.id]?.state ?? 'off') === state),
+    }));
+  }
+  const groups = new Map<string, StaffPerson[]>();
+  for (const person of people) {
+    // Group by the same role-first title the card shows. A manager who happens to hold a
+    // "Cashier" position must not be filed under Cashier.
+    const key = staffRoleTitle(person.role, person.primaryPosition);
+    groups.set(key, [...(groups.get(key) ?? []), person]);
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, rows]) => ({ key, label: key, people: rows }));
+}
 
 export function CardWall({
   people,
@@ -143,37 +167,74 @@ export function CardWall({
   today: string;
   states: Record<string, LiveEntry> | null;
 }) {
+  const buckets = cardBuckets(people, states).filter((bucket) => bucket.people.length > 0);
+  if (buckets.length === 0) {
+    return <p data-view="cards" className="text-sm text-muted">Nobody is on this store&rsquo;s roster yet.</p>;
+  }
   return (
-    <ul data-view="cards" className="grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-x-7 gap-y-9">
-      {people.map((p) => (
-        <li key={p.id} data-staff-card className="flex flex-col items-center">
-          <span aria-hidden="true" className="h-8 w-4 rounded-t-sm bg-brand" />
-          <span aria-hidden="true" className="-mb-0.5 h-3 w-6 rounded-t-[14px] border-[3px] border-b-0 border-closed" />
-          <Link href={`/staff/${p.id}`} className={CARD_LINK}>
-            <span aria-hidden="true" className="absolute inset-x-[-10%] top-0 h-24 rounded-b-[50%] bg-brand" />
-            <span aria-hidden="true" className="absolute left-1/2 top-2.5 h-2 w-7 -translate-x-1/2 rounded-full bg-canvas opacity-90" />
-            <Avatar person={p} inLink className="relative mt-11 h-24 w-24 rounded-full border-4 border-surface text-4xl" />
-            <span className="mt-3 px-3 text-center font-display text-xl font-extrabold uppercase leading-tight">{p.displayName}</span>
-            <span className="mt-1 text-xs font-bold uppercase tracking-wide text-brand-ink">{staffRoleTitle(p.role, p.primaryPosition)}</span>
-            <span className="mt-0.5 text-xs text-muted">
-              {storeName} · {formatTenure(p.startedOn, today)}
-            </span>
-            <span className="mt-1 text-xs capitalize text-muted">{p.employmentStatus.replace(/-/g, ' ')}</span>
-            {states ? (
-              <span className="mt-3">
-                <LiveChip entry={states[p.id]} />
-              </span>
-            ) : null}
-          </Link>
-        </li>
+    <div data-view="cards" className="space-y-7">
+      {buckets.map((bucket) => (
+        <section key={bucket.key} aria-labelledby={`staff-card-group-${bucket.key}`}>
+          <div className="mb-3 flex items-baseline gap-2">
+            <h2 id={`staff-card-group-${bucket.key}`} className="text-sm font-semibold text-ink">
+              {bucket.label}
+            </h2>
+            <span className="text-xs tabular-nums text-muted">{bucket.people.length}</span>
+          </div>
+          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {bucket.people.map((p) => {
+              const entry = states?.[p.id];
+              const ring = states ? RING[entry?.state ?? 'off'] : 'ring-surface-border';
+              return (
+                <li key={p.id} data-staff-card>
+                  <Link href={`/staff/${p.id}`} className={CARD_LINK}>
+                    {/* The two ID-card cues: a brand band and a punched slot. */}
+                    <span aria-hidden="true" className="h-1.5 w-full bg-brand" />
+                    <span
+                      aria-hidden="true"
+                      className="absolute left-1/2 top-1 h-1.5 w-7 -translate-x-1/2 rounded-full bg-canvas/85"
+                    />
+                    <div className="flex flex-1 items-start gap-4 p-4">
+                      <Avatar
+                        person={p}
+                        inLink
+                        className={`h-16 w-16 shrink-0 rounded-2xl text-2xl ring-2 ring-offset-2 ring-offset-surface ${ring}`}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="min-w-0 font-display text-lg font-extrabold uppercase leading-tight">
+                            {p.displayName}
+                          </span>
+                          {states ? <LiveChip entry={entry} /> : null}
+                        </div>
+                        <span className="mt-1 block text-xs font-bold uppercase tracking-wide text-brand-ink">
+                          {staffRoleTitle(p.role, p.primaryPosition)}
+                        </span>
+                        <span className="mt-2 block text-xs text-muted">
+                          {storeName} · {formatTenure(p.startedOn, today)}
+                        </span>
+                        <span className="mt-0.5 block text-xs capitalize text-muted">
+                          {p.employmentStatus.replace(/-/g, ' ')}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-auto flex items-center justify-between border-t border-surface-border px-4 py-2 text-[11px] uppercase tracking-wide text-muted">
+                      <span>ID card</span>
+                      <span className="normal-case tracking-normal text-brand-ink">View profile →</span>
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       ))}
-    </ul>
+    </div>
   );
 }
 
 // ---- the live roster ----------------------------------------------------------------------------
 
-const ROW_LINK = 'inline-flex min-h-11 items-center font-semibold text-ink hover:text-brand-ink';
 const STRIP_FROM = 6;
 const STRIP_SPAN = 18; // 6a .. 12a
 
@@ -228,19 +289,17 @@ export function Roster({
   return (
     <div data-view="roster" className="space-y-4">
       {states ? (
-        <dl className="flex flex-wrap gap-8">
-          <div>
-            <dd className="font-display text-4xl font-extrabold leading-none text-success">{count('on')}</dd>
-            <dt className="text-sm text-muted">on shift</dt>
-          </div>
-          <div>
-            <dd className="font-display text-4xl font-extrabold leading-none text-warning-ink">{count('break')}</dd>
-            <dt className="text-sm text-muted">on break</dt>
-          </div>
-          <div>
-            <dd className="font-display text-4xl font-extrabold leading-none">{count('off')}</dd>
-            <dt className="text-sm text-muted">off today</dt>
-          </div>
+        <dl className="grid grid-cols-3 gap-px overflow-hidden rounded-[20px] border border-surface-border bg-surface-border sm:max-w-lg">
+          {[
+            { key: 'on' as const, label: 'on shift', tone: 'text-success' },
+            { key: 'break' as const, label: 'on break', tone: 'text-warning-ink' },
+            { key: 'off' as const, label: 'off today', tone: 'text-ink' },
+          ].map((stat) => (
+            <div key={stat.key} className="bg-surface px-4 py-3">
+              <dd className={`font-display text-3xl font-extrabold leading-none tabular-nums ${stat.tone}`}>{count(stat.key)}</dd>
+              <dt className="mt-1 text-xs text-muted">{stat.label}</dt>
+            </div>
+          ))}
         </dl>
       ) : null}
       {states ? (
@@ -260,31 +319,60 @@ export function Roster({
           <span>6a to midnight</span>
         </p>
       ) : null}
-      <div className="overflow-x-auto">
-        <ul className="min-w-[44rem] divide-y divide-surface-border border-y border-surface-border">
+      {/* Table on a wide screen; the shared phone annotator turns each row into a card below md. */}
+      <Table card={{ title: 'Person', subtitle: 'Position', keys: states ? ['Status'] : undefined }}>
+        <thead>
+          <tr>
+            <Th className="w-14">Photo</Th>
+            <Th>Person</Th>
+            <Th>Position</Th>
+            {states ? <Th className="w-[38%]">Today</Th> : null}
+            {states ? <Th className="w-32">Status</Th> : null}
+          </tr>
+        </thead>
+        <tbody>
           {people.map((p) => {
             const entry = states?.[p.id];
             const ring = states ? RING[entry?.state ?? 'off'] : 'ring-surface-border';
             return (
-              <li key={p.id} className="grid grid-cols-[minmax(12rem,1.4fr)_minmax(14rem,2.4fr)_9rem] items-center gap-5 px-2 py-3 hover:bg-surface">
-                <span className="flex min-w-0 items-center gap-3.5">
-                  <Avatar person={p} className={`h-11 w-11 shrink-0 rounded-full text-base ring-2 ring-offset-2 ring-offset-canvas ${ring}`} />
-                  <span className="flex min-w-0 flex-col">
-                    <Link href={`/staff/${p.id}`} className={ROW_LINK}>
-                      {p.displayName}
-                    </Link>
-                    <span className="text-xs text-muted">
+              <LinkRow key={p.id} className="align-middle">
+                <Td aria-label="Photo">
+                  <Avatar
+                    person={p}
+                    className={`h-10 w-10 rounded-full text-sm ring-2 ring-offset-2 ring-offset-surface ${ring}`}
+                  />
+                </Td>
+                <Td>
+                  <RowLink href={`/staff/${p.id}`}>{p.displayName}</RowLink>
+                </Td>
+                <Td>
+                  <div className="flex min-w-0 flex-col">
+                    <span className="text-sm">
                       {staffRoleTitle(p.role, p.primaryPosition)} · {formatTenure(p.startedOn, today)}
                     </span>
-                  </span>
-                </span>
-                {states ? <DayStrip entry={entry} now={now} /> : <span />}
-                <span>{states ? <LiveChip entry={entry} /> : null}</span>
-              </li>
+                    <span className="text-xs capitalize text-muted">
+                      {p.employmentStatus.replace(/-/g, ' ')}
+                    </span>
+                  </div>
+                </Td>
+                {states ? (
+                  <Td aria-label="Today">
+                    <DayStrip entry={entry} now={now} />
+                  </Td>
+                ) : null}
+                {states ? (
+                  <Td aria-label="Status">
+                    <LiveChip entry={entry} />
+                  </Td>
+                ) : null}
+              </LinkRow>
             );
           })}
-        </ul>
-      </div>
+        </tbody>
+      </Table>
+      {people.length === 0 ? (
+        <p className="text-sm text-muted">Nobody is on this store&rsquo;s roster yet.</p>
+      ) : null}
     </div>
   );
 }

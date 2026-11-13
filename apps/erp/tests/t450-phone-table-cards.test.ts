@@ -37,6 +37,12 @@ describe('T-450 original table nodes become labeled phone cards', () => {
     enhancePhoneTables(root); expect(root.querySelectorAll('[data-card-toggle]')).toHaveLength(1);
     expect(cell(root, '[data-card-slot="extra"]').textContent).toBe('APPL-001');
   });
+  it('does not turn a help tip in <th> into a visible header card, and does not concatenate hidden help text', () => {
+    const root = fixture('<table><thead><tr><th>Item</th><th>Threshold<button type="button" data-card-ignore>?</button><span role="tooltip" hidden>A number of 0 or more.</span></th></tr></thead><tbody><tr><td>Salt</td><td><input value="0" aria-label="Threshold"></td></tr></tbody></table>');
+    enhancePhoneTables(root);
+    expect(root.querySelector('thead')?.hasAttribute('data-card-controls')).toBe(false);
+    expect(cell(root, 'tbody td:nth-child(2)').dataset.cardLabel).toBe('Threshold');
+  });
   it('reuses an existing image and keeps editors visible rather than hiding them as secondary fields', () => {
     const root = fixture('<table><thead><tr><th>Photo</th><th>Item</th><th>Type</th><th>Amount</th><th>Note</th></tr></thead><tbody><tr><td><img src="/synthetic.png" alt="Apple"></td><td>Apple</td><td>Supply</td><td>₱100.00</td><td><input value="Keep visible"></td></tr></tbody></table>');
     const image = root.querySelector('img'), input = root.querySelector('input'); enhancePhoneTables(root);
