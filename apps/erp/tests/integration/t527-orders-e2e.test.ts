@@ -78,7 +78,7 @@ describe('fixture sanity (runs now)', () => {
     const sessionId = uuid();
     const [unliLine, porkLine] = [uuid(), uuid()];
     const send = async (events: ReturnType<typeof ev>[]) => {
-      const res = await callRoute('../../src/app/api/pos/events/route', 'POST', tabletCookie(f), { events });
+      const res = await callRoute('../../src/app/api/pos/events/route', 'POST', tabletCookie(f), { pairingId: f.pairingId, events });
       expect(res.status).toBe(200);
       return ((await res.json()) as { results: { status: string }[] }).results.map((r) => r.status);
     };
@@ -116,7 +116,7 @@ describe('the Orders tab\'s events, through the real inbox', () => {
     };
     const at = new Date();
     const post = async (seq: number, ev: { kind: string; personId: string; occurredAtDevice: string; payload: unknown }) => {
-      const res = await callRoute('../../src/app/api/pos/events/route', 'POST', tabletCookie(f), { events: [{ seq, ...ev }] });
+      const res = await callRoute('../../src/app/api/pos/events/route', 'POST', tabletCookie(f), { pairingId: f.pairingId, events: [{ seq, ...ev }] });
       expect(res.status).toBe(200);
       const j = (await res.json()) as { results: { seq: number; status: string; error?: string }[] };
       expect(j.results, `event ${seq} (${ev.kind})`).toEqual([{ seq, status: 'applied' }]);
@@ -179,7 +179,7 @@ describe('the Orders tab\'s events, through the real inbox', () => {
     const snapshot = (await snap.json()) as { menu: unknown };
     const event = takeOutEvent({ personId: f.counterId, name: 'Ana', now: new Date(), menu: snapshot.menu, newId: uuid, cart: [{ itemId: f.menu.pork.itemId, variantId: f.menu.pork.variantId, qty: 2 }] });
     const send = async (seq: number) =>
-      ((await (await callRoute('../../src/app/api/pos/events/route', 'POST', tabletCookie(f), { events: [{ seq, ...event }] })).json()) as { results: { status: string; error?: string }[] }).results[0]!;
+      ((await (await callRoute('../../src/app/api/pos/events/route', 'POST', tabletCookie(f), { pairingId: f.pairingId, events: [{ seq, ...event }] })).json()) as { results: { status: string; error?: string }[] }).results[0]!;
     expect(await send(1)).toMatchObject({ status: 'applied' });
     expect(await send(1)).toMatchObject({ status: 'duplicate' });
     const open = await asOrg(f.orgId, (tx) => listOpenStands(tx, f.counter, { storeId: f.storeId }));

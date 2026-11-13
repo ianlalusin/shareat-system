@@ -57,13 +57,18 @@ export function Toaster({ token, ok, stamp }: ToasterProps) {
         className={`pointer-events-none fixed inset-0 z-50 flex justify-center px-5 ${word ? 'items-end pb-[22vh]' : 'items-center'}`}
       >
         {text ? (
-          <div className="toast-in flex max-w-md items-center gap-3 rounded-[20px] bg-ink py-3 pl-3 pr-5 text-[15px] font-medium text-canvas shadow-2xl ring-1 ring-black/5">
-            <span aria-hidden="true" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-success text-white">
-              <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round" focusable="false">
+          <div
+            data-toast-variant="ticket"
+            className="toast-in relative flex min-w-0 max-w-md items-start gap-3 overflow-hidden rounded-[18px] border-2 border-[var(--toast-ink)] bg-[var(--toast)] py-3 pl-10 pr-5 text-sm text-[var(--toast-ink)] shadow-[6px_6px_0_var(--toast-edge)]"
+          >
+            <span aria-hidden="true" className="absolute inset-y-3 left-[14px] border-l-2 border-dashed border-black/25" />
+            <span aria-hidden="true" className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand text-white">
+              <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" focusable="false">
                 <path d="M5 12.5l4.5 4.5L19 7.5" />
               </svg>
             </span>
-            <span>{text}</span>
+            <span className="relative min-w-0 break-words font-semibold leading-5 [overflow-wrap:anywhere]">{text}</span>
+            <span aria-hidden="true" className="toast-progress absolute inset-x-0 bottom-0 h-[3px] origin-left bg-brand" />
           </div>
         ) : null}
       </div>

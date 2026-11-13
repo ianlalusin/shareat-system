@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Toast choices — Shareat</title>
+<style>
+  :root{
+    --yellow:#F5D76E;
+    --yellow-deep:#E7C44E;
+    --cream:#FFF7DD;
+    --ink:#241F18;
+    --muted:#6D5F48;
+    --red:#D40909;
+    --stage:#F3EBDD;
+    --paper:#FBF7EF;
+    --line:rgba(36,31,24,.16);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,sans-serif}
+  .board{max-width:1500px;margin:0 auto;padding:40px 34px 54px}
+  .mast{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:26px}
+  .mast h1{font-size:34px;line-height:1;letter-spacing:-.04em;margin:0;font-weight:800}
+  .mast p{margin:8px 0 0;color:var(--muted);font-size:14px;max-width:720px}
+  .swatches{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+  .sw{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .sw i{width:22px;height:22px;border-radius:6px;border:1px solid rgba(36,31,24,.18);display:block}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  .choice{background:#fffdf8;border:1px solid var(--line);border-radius:18px;overflow:hidden;display:flex;flex-direction:column}
+  .choice-head{display:flex;align-items:baseline;gap:12px;padding:16px 18px 0}
+  .choice-head .num{font:700 11px/1 "Segoe UI";letter-spacing:.14em;color:var(--red)}
+  .choice-head h2{margin:0;font-size:18px;letter-spacing:-.02em}
+  .choice-head p{margin:0 0 0 auto;color:var(--muted);font-size:12px;max-width:48%}
+  .stage{min-height:230px;margin:14px 18px 0;border-radius:14px;background:var(--stage);display:grid;place-items:center;padding:24px 20px;position:relative;overflow:hidden}
+  .stage:before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 18% 18%,rgba(255,255,255,.5),transparent 36%)}
+  .choice-foot{display:flex;gap:10px;padding:13px 18px 16px;font-size:12px;color:var(--muted);line-height:1.45}
+  .choice-foot b{color:var(--ink)}
+  .toast{width:416px;max-width:100%;background:var(--yellow);color:var(--ink);position:relative;font-size:13px;line-height:1.4}
+  .toast .copy{min-width:0}
+  .toast .eyebrow{display:block;font-size:9px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+  .toast h3{margin:0;font-size:15px;line-height:1.25;letter-spacing:-.01em;font-weight:800}
+  .toast p{margin:4px 0 0;color:#443A2A;font-size:12px;line-height:1.45}
+  .toast .row{display:flex;align-items:center;gap:10px;margin-top:13px}
+  .toast .close{position:absolute;top:8px;right:9px;width:24px;height:24px;border:0;background:transparent;color:var(--ink);opacity:.55;font-size:17px;line-height:1;cursor:pointer;border-radius:50%}
+  .toast .close:hover{opacity:1;background:rgba(36,31,24,.08)}
+  .toast button{font-family:inherit;cursor:pointer}
+
+  /* 01 — Keycap */
+  .t1{border:2px solid var(--ink);border-radius:16px;padding:16px 16px 16px 60px;box-shadow:7px 7px 0 var(--yellow-deep)}
+  .t1 .mark{position:absolute;left:15px;top:15px;width:31px;height:31px;border-radius:9px;background:var(--ink);color:var(--yellow);display:grid;place-items:center;font-weight:900;font-size:16px}
+  .t1 .action{background:var(--ink);color:var(--cream);border:0;border-radius:9px;padding:10px 14px;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;box-shadow:0 3px 0 #000;transition:transform .08s ease,box-shadow .08s ease}
+  .t1 .action:hover{transform:translateY(1px);box-shadow:0 2px 0 #000}
+  .t1 .action:active{transform:translateY(3px);box-shadow:0 0 0 #000}
+  .t1 .progress{position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(36,31,24,.10);border-radius:0 0 14px 14px;overflow:hidden}
+  .t1 .progress i{display:block;height:100%;width:62%;background:var(--red)}
+
+  /* 02 — Ticket */
+  .t2{border:2px solid var(--ink);border-radius:18px;padding:16px 18px 16px 48px;overflow:hidden}
+  .t2:before,.t2:after{content:"";position:absolute;top:50%;width:14px;height:14px;border:2px solid var(--ink);border-radius:50%;background:var(--stage);transform:translateY(-50%)}
+  .t2:before{left:-8px}
+  .t2:after{right:-8px}
+  .t2 .stub{position:absolute;left:14px;top:16px;bottom:16px;width:2px;border-left:2px dashed rgba(36,31,24,.32)}
+  .t2 .serial{display:block;font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.14em;color:var(--muted);margin-bottom:6px}
+  .t2 .action{display:inline-flex;align-items:stretch;border:2px solid var(--ink);border-radius:999px;overflow:hidden;background:var(--cream);padding:0}
+  .t2 .action span:first-child{padding:9px 12px;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+  .t2 .action span:last-child{padding:9px 11px;background:var(--red);color:#fff;font-size:14px;display:grid;place-items:center;border-left:2px solid var(--ink)}
+  .t2 .action:hover span:first-child{background:#fff}
+
+  /* 03 — Rule */
+  .t3{border:1px solid rgba(36,31,24,.18);border-left:6px solid var(--red);border-radius:11px;padding:17px 20px;box-shadow:0 18px 40px -32px rgba(36,31,24,.65)}
+  .t3 h3{font-size:17px;letter-spacing:-.02em}
+  .t3 .action{background:none;border:0;padding:0 0 2px;font-size:11px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);position:relative;display:inline-flex;gap:9px;align-items:center}
+  .t3 .action:after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--red);transform:scaleX(.55);transform-origin:left;transition:transform .18s ease}
+  .t3 .action:hover:after{transform:scaleX(1)}
+
+  /* 04 — Inset */
+  .t4{border:1px solid #E0BF51;border-radius:26px;padding:18px 20px 20px;box-shadow:0 22px 46px -34px rgba(36,31,24,.8),inset 0 1px 0 #FFF2C0}
+  .t4 .action{display:inline-flex;align-items:center;gap:9px;background:var(--cream);border:0;border-radius:999px;padding:8px 12px 8px 10px;font-size:11px;font-weight:800;box-shadow:inset 0 1px 0 #fff,0 2px 5px rgba(36,31,24,.14)}
+  .t4 .dot{width:8px;height:8px;border-radius:50%;background:var(--red);box-shadow:0 0 0 3px rgba(212,9,9,.12)}
+  .t4 .arrow{font-size:14px;margin-left:2px}
+  .t4 .progress{position:absolute;left:20px;right:20px;bottom:0;height:3px;border-radius:99px;background:rgba(36,31,24,.12);overflow:hidden}
+  .t4 .progress i{display:block;height:100%;width:58%;border-radius:99px;background:var(--red)}
+
+  /* 05 — Tab */
+  .t5{border:2px solid var(--ink);border-radius:15px;padding:16px 20px 36px;overflow:hidden}
+  .t5 .fold{position:absolute;top:0;right:0;width:28px;height:28px;background:linear-gradient(225deg,var(--stage) 48%,#D9B94A 49%);border-left:2px solid var(--ink);border-bottom:2px solid var(--ink);border-radius:0 13px 0 10px}
+  .t5 .action{position:absolute;right:16px;bottom:-2px;background:var(--red);color:#fff;border:2px solid var(--ink);border-bottom:0;border-radius:10px 10px 0 0;padding:9px 15px 11px;font-size:10px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;box-shadow:0 -2px 0 rgba(255,255,255,.18) inset}
+  .t5 .action:hover{background:#B50707}
+  .t5 .close{right:36px}
+  .t5 .cancel{position:absolute;right:132px;bottom:12px;border:0;background:transparent;color:var(--muted);font-size:11px;font-weight:600;padding:6px 2px;text-decoration:underline;text-underline-offset:3px}
+  .t5 .cancel:hover{color:var(--ink)}
+  .t5 .kicker{display:inline-flex;align-items:center;gap:7px;font-size:9px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  .t5 .kicker i{width:6px;height:6px;border-radius:50%;background:var(--red);display:block}
+
+  @media(max-width:1050px){.grid{grid-template-columns:1fr}.choice-head p{max-width:60%}}
+</style>
+</head>
+<body>
+<div class="board">
+  <header class="mast">
+    <div>
+      <h1>Toast, five ways.</h1>
+      <p>One flat brand-yellow surface. No background pattern. Five different button ideas — all use the same approve/cancel anatomy, so any of them can replace the native browser confirm.</p>
+    </div>
+    <div class="swatches">
+      <span class="sw"><i style="background:#F5D76E"></i>Flat brand yellow</span>
+      <span class="sw"><i style="background:#241F18"></i>Ink</span>
+      <span class="sw"><i style="background:#D40909"></i>Brand red</span>
+      <span class="sw"><i style="background:#FFF7DD"></i>Cream</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="choice" id="c1">
+      <div class="choice-head"><span class="num">01</span><h2>Keycap</h2><p>A pressed-metal confirm. The action is a physical keycap.</p></div>
+      <div class="stage">
+        <div class="toast t1">
+          <span class="mark">!</span>
+          <button class="close" aria-label="Close">×</button>
+          <div class="copy">
+            <span class="eyebrow">Terminal · confirm</span>
+            <h3>Release terminal 05?</h3>
+            <p>The tablet using it will stop taking payment until it is set up again.</p>
+            <div class="row"><button class="action">Release</button><button class="close" style="position:static;opacity:.55;font-size:11px;width:auto;height:auto;padding:6px 2px">Cancel</button></div>
+          </div>
+          <div class="progress"><i></i></div>
+        </div>
+      </div>
+      <div class="choice-foot"><span><b>Button:</b> black keycap with a 3 px bottom lip; it presses down 3 px on click.</span><span><b>Use when:</b> the action is irreversible and should feel physical.</span></div>
+    </section>
+
+    <section class="choice" id="c2">
+      <div class="choice-head"><span class="num">02</span><h2>Ticket</h2><p>A torn ticket. The action is a split pill, cream then red.</p></div>
+      <div class="stage">
+        <div class="toast t2">
+          <span class="stub"></span>
+          <button class="close" aria-label="Close">×</button>
+          <span class="serial">T-05 · RELEASE</span>
+          <div class="copy">
+            <h3>Release terminal 05?</h3>
+            <p>The tablet using it will stop taking payment until it is set up again.</p>
+            <div class="row">
+              <button class="action"><span>Release</span><span>→</span></button>
+              <button class="close" style="position:static;opacity:.55;font-size:11px;width:auto;height:auto;padding:6px 2px">Keep it</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="choice-foot"><span><b>Button:</b> one pill split into words and a red arrow cell; the arrow is the confirm.</span><span><b>Use when:</b> the toast is part of a sequence of operational actions.</span></div>
+    </section>
+
+    <section class="choice" id="c3">
+      <div class="choice-head"><span class="num">03</span><h2>Rule</h2><p>Editorial. The action is a text link with a red rule that draws itself.</p></div>
+      <div class="stage">
+        <div class="toast t3">
+          <button class="close" aria-label="Close">×</button>
+          <div class="copy">
+            <span class="eyebrow">Before you issue</span>
+            <h3>Re-issue Dev Admin&rsquo;s PIN?</h3>
+            <p>The old PIN stops working, and their live sessions end on every device.</p>
+            <div class="row"><button class="action">Yes, re-issue <span>→</span></button><button class="close" style="position:static;opacity:.55;font-size:11px;width:auto;height:auto;padding:6px 2px">Cancel</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="choice-foot"><span><b>Button:</b> no box — a 3 px red rule grows from 55% to 100% on hover.</span><span><b>Use when:</b> the copy is the interface, or the toast sits inside a dense form.</span></div>
+    </section>
+
+    <section class="choice" id="c4">
+      <div class="choice-head"><span class="num">04</span><h2>Inset</h2><p>A soft capsule. The action is cream set into the yellow with a status dot.</p></div>
+      <div class="stage">
+        <div class="toast t4">
+          <button class="close" aria-label="Close">×</button>
+          <div class="copy">
+            <span class="eyebrow">Unsent sales</span>
+            <h3>Print the X-slip?</h3>
+            <p>No printer is paired. The slip will open here, ready to copy.</p>
+            <div class="row"><button class="action"><span class="dot"></span>Open X-slip <span class="arrow">→</span></button><button class="close" style="position:static;opacity:.55;font-size:11px;width:auto;height:auto;padding:6px 2px">Not now</button></div>
+          </div>
+          <div class="progress"><i></i></div>
+        </div>
+      </div>
+      <div class="choice-foot"><span><b>Button:</b> an inset cream capsule with a red status dot and a tiny arrow.</span><span><b>Use when:</b> you want the toast to feel quieter and more product-like.</span></div>
+    </section>
+
+    <section class="choice" id="c5">
+      <div class="choice-head"><span class="num">05</span><h2>Tab</h2><p>A folder tab. The action sits on the bottom edge; the corner folds.</p></div>
+      <div class="stage">
+        <div class="toast t5">
+          <span class="fold"></span>
+          <button class="close" aria-label="Close">×</button>
+          <div class="copy">
+            <span class="kicker"><i></i>Needs your call</span>
+            <h3>Book this missed month?</h3>
+            <p>₱1,000.00 for Smoketest Chiller · 2026-01 will post to the current open month.</p>
+            <div class="row"><button class="action">Book it</button></div>
+            <button class="cancel">Leave it</button>
+          </div>
+        </div>
+      </div>
+      <div class="choice-foot"><span><b>Button:</b> a red file tab on the bottom edge with an ink outline and no bottom border.</span><span><b>Use when:</b> the toast belongs to a ledger, a record or a document.</span></div>
+    </section>
+  </div>
+</div>
+</body>
+</html>

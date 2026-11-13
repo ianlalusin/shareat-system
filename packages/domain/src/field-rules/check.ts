@@ -46,6 +46,8 @@ export interface FieldRule {
    * NUL and other control characters (tab, line break and carriage return are fine) are refused in plain words.
    */
   readonly plainText?: true;
+  /** text: values never accepted whatever their case (compared on the trimmed text); the rule's `requires` is the refusal. */
+  readonly refuses?: readonly string[];
   /** Existing requirement wording, except malformed money keeps the parser sentence per Ian. */
   readonly requires?: string;
   /** Existing number/money bound sentence; never replaces blank or malformed-input requirements. */
@@ -197,6 +199,7 @@ export function checkField(rule: FieldRule, raw: string | null | undefined): Fie
       if (max !== undefined && v.length > max) {
         return bad(rule, lengthSentence(rule, 'character'), `${plural(v.length - max, 'character')} too long`);
       }
+      if (rule.refuses?.some((x) => x.toLowerCase() === v.toLowerCase())) return bad(rule, lengthSentence(rule, 'character'), 'Enter the real value');
       return { ok: true, value: v };
     }
     case 'digits': {

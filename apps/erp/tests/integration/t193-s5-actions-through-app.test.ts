@@ -1,3 +1,4 @@
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import postgres from 'postgres';
 import { afterAll, describe, expect, it, vi } from 'vitest';
@@ -23,7 +24,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 vi.setConfig({ testTimeout: 120_000, hookTimeout: 60_000 });

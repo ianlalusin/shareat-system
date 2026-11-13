@@ -59,6 +59,8 @@ export function Orders() {
   const storeId = pos?.storeId ?? null;
   const snapshot = pos?.ordersSnapshot ?? null;
   const menu = (snapshot?.menu ?? null) as MenuLike | null;
+  const clockAt = pos?.clockAt;
+  const menuAt = useMemo(() => (clockAt === undefined ? undefined : new Date(clockAt)), [clockAt]); // T-559: the picker's "now" follows the shell's menu clock
 
   // What is drawn: the dropped-but-not-yet-caught-up events (settling) first, then the outbox as it stands.
   const outbox = pos?.pendingEvents ?? EMPTY;
@@ -270,7 +272,7 @@ export function Orders() {
       <OutageBanner />
       {notice ? <Banner tone="warning">{notice}</Banner> : null}
       {access.canWrite && stands === null ? <p className="text-sm text-muted">Waiting for the open tables…</p> : null}
-      {dialog ? <OrderDialog mode={dialog} menu={menu} stands={snapshot?.stands ?? []} tiles={view.tiles} onClose={() => setDialog(null)} onSend={send} /> : null}
+      {dialog ? <OrderDialog mode={dialog} menu={menu} stands={snapshot?.stands ?? []} tiles={view.tiles} onClose={() => setDialog(null)} onSend={send} at={menuAt} /> : null}
       <div hidden={dialog !== null}>
         <OrdersView
           readOnly={!access.canWrite}

@@ -159,3 +159,44 @@
     
 
     
+
+/* T-568 — Ian picked Ticket for ordinary toasts and Keycap for destructive ones. */
+.toast-ticket {
+  background: #f5d76e;
+  color: #241f18;
+  border: 2px solid #241f18;
+  border-radius: 18px;
+  box-shadow: 6px 6px 0 #e7c44e;
+}
+.toast-ticket::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  bottom: 14px;
+  border-left: 2px dashed rgba(36, 31, 24, 0.30);
+  pointer-events: none;
+}
+.toast-keycap {
+  background: #f5d76e;
+  color: #241f18;
+  border: 2px solid #241f18;
+  border-radius: 16px;
+  box-shadow: 7px 7px 0 #e7c44e;
+}
+.toast-keycap::before {
+  content: "!";
+  position: absolute;
+  left: 15px;
+  top: 15px;
+  width: 31px;
+  height: 31px;
+  border-radius: 9px;
+  background: #241f18;
+  color: #f5d76e;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  font-size: 16px;
+  pointer-events: none;
+}
