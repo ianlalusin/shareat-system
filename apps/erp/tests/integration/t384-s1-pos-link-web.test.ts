@@ -512,7 +512,8 @@ describe('W6 - every tender is an EditableRecord (A0 L1, L2, L6)', () => {
     const f = await fixture('w6e');
     await sql`update tenders set is_active = false, updated_at = now() where id = ${f.qrTender}`;
     const card = cardOf(await render(f), f.storeId);
-    const det = /<details\b(?![^>]*\bopen\b)[^>]*>[\s\S]*?<\/details>/.exec(card)?.[0];
+    // Anchored on its summary: the store card is itself a closed <details> (T-568), so "first closed details" is the card.
+    const det = /<details\b(?![^>]*\bopen\b)[^>]*>\s*<summary[^>]*>Retired tenders[\s\S]*?<\/details>/.exec(card)?.[0];
     expect(det, 'a closed <details> for retired tenders').toBeDefined();
     expect(plain(det!)).toMatch(/Retired tenders \(1\)/);
     expect(plain(det!)).toContain('Restore');
