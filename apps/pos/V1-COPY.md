@@ -181,3 +181,5 @@ T-457 updates the v2-only `src/lib/terminal/claim.ts`: bounded ascending range p
 - `src/components/cashier/start-session-form.tsx` (T-518): the package tab gets an optional "A la carte" section (picker in collect mode, chosen list with qty and remove) and passes `initialAddons` to `startSession`.
 - `src/components/cashier/firestore.ts` (T-518): `StartSessionPayload.initialAddons`; `startSession` writes the add-on bill lines, one add-on kitchen ticket per stationed line and `billingRevision` +1 per line in the same single batch as the package; ADDON_ADDED logged per line after commit; the offline backup print covers the add-on tickets.
 - New files: `src/lib/pos2/addon-line-builder.ts`, `src/lib/pos2/chosen-addons.ts` (and their tests).
+- `src/components/pins/customers-admin.tsx` (T-578, DEF-837): the password-slip print escapes the customer name, phone, temporary password and date with `escapeHtml`.
+- New files: `src/lib/escape-html.ts` (and its test).
