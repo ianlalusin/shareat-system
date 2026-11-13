@@ -8,7 +8,7 @@
  */
 import { add, compare, fromCentavos, money, subtract, toCentavos, type Money } from '@shareat/core/money';
 import { authorize, can, verifyPosManagerApproval, POS_TERMINAL_NOT_REGISTERED, type Actor } from '@shareat/auth';
-import { posV2Repo, statutoryDiscountsRepo, type Tx } from '@shareat/db';
+import { advisoryLocksRepo, posV2Repo, statutoryDiscountsRepo, type Tx } from '@shareat/db';
 import { refuse, gone } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { parseMoneyInput } from '../shared/money-input';
@@ -259,6 +259,8 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
   const storeCode = await posV2Repo.getStoreCode(tx, actor.orgId, storeId);
   const printed = `${storeCode}-${pad(terminalNo, 2)}-${pad(terminalSeq, 6)}`;
   const recordIds = new Map<number, string>();
+  // T-575 follow-up: one card used by two tills at once - each would miss the other's uncommitted register row below; queue per card (sorted, so two multi-card sales cannot deadlock).
+  for (const id of [...new Set(holders.map((h) => h.idNumber.trim().toLowerCase()))].sort()) await advisoryLocksRepo.lockSeniorCard(tx, actor.orgId, storeId, id);
   for (const h of holders) {
     const g = diners.get(h.dinerNo)!;
     const rec = await statutoryDiscountsRepo.create(tx, {

@@ -155,6 +155,10 @@ export interface SaleSpec {
   deps?: Omit<Deps, 'now'>;
   /** T-558: edit the completeSale input after priceSession built it (e.g. a device total that differs from the server's). */
   mutate?: (input: Record<string, unknown>) => void;
+  /** T-575 follow-up: awaited after the table is prepared and before the completeSale transaction opens (lets two tills be prepared first). */
+  beforeComplete?: () => Promise<void>;
+  /** T-575 follow-up: awaited inside the completeSale transaction, after it returns and before commit (hold it open; throw to roll it back). */
+  afterComplete?: () => Promise<void>;
 }
 export interface MadeSale { receiptId: string; sessionId: string; subtotal: string; discountTotal: string; total: string; terminalSeq: number }
 
@@ -225,7 +229,11 @@ export async function sell(f: World, o: SaleSpec): Promise<MadeSale> {
     seniors,
   };
   o.mutate?.(input as unknown as Record<string, unknown>);
-  await asOrg(f.orgId, (tx) => completeSale(tx, who, input, deps));
+  await o.beforeComplete?.();
+  await asOrg(f.orgId, async (tx) => {
+    await completeSale(tx, who, input, deps);
+    await o.afterComplete?.();
+  });
   return { receiptId, sessionId, subtotal: priced.subtotal, discountTotal: priced.discountTotal, total: priced.total, terminalSeq };
 }
 

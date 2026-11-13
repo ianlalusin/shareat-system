@@ -19,6 +19,7 @@
  *     UNORDERED pair of store ids), 392001 (dual-run store-week, keyed on org:store:week), 436001 (a
  *     person's leave: caps, SIL balance, one-leave-day-per-date, keyed on the person id), 511001
  *     (settlement upload, keyed on the channel id), 511002 (a booked period charge being netted by a payout, keyed on the charge id), 574001 (one delivery line's returnable quantity, keyed on the line id), 574002 (customer returns on a charge-less trade order, keyed on the order id), 531001 (a store's POS day close / backlog close, keyed on the store id).
+ *     575001 (one senior/PWD card at one store, keyed on org:store:normalised card number).
  *   - Migration 0211: namespace 443001 (item family structure, keyed on org id).
  *   - A `hashtext(storeId)` collision only serialises two stores for a moment; it never gives a
  *     wrong answer (the same reasoning as `access.ts` `lockOrgAccess`).
@@ -167,4 +168,15 @@ const TRADE_ORDER_RETURN_LOCK_NAMESPACE = 574002;
  *  pass "received minus already returned" per order line. Keyed on the order id. */
 export async function lockTradeOrderReturn(tx: Tx, tradeOrderId: string): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(${TRADE_ORDER_RETURN_LOCK_NAMESPACE}::int4, hashtext(${tradeOrderId}::text))`);
+}
+
+/** Namespace (first int4) for the per-card senior/PWD repeat-use lock. T-575 follow-up (audit 14 Nov 2026). */
+const SENIOR_CARD_LOCK_NAMESPACE = 575001;
+
+/** Serialises sales that use ONE senior/PWD card at one store, taken BEFORE the register row is written and re-read: the later sale queues, then sees the earlier one's
+ *  committed row and writes the repeat trail. Keyed on org:store:normalised card number (same normalisation as the register lookup). ⚠️ A multi-card caller must take these in SORTED order. */
+export async function lockSeniorCard(tx: Tx, orgId: string, storeId: string, idNumber: string): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(${SENIOR_CARD_LOCK_NAMESPACE}::int4, hashtext(${orgId}::text || ':' || ${storeId}::text || ':' || lower(btrim(${idNumber}::text))))`,
+  );
 }

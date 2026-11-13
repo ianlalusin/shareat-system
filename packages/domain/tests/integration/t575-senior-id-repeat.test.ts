@@ -63,10 +63,10 @@ async function priorUse(w: World, o: { storeId?: string; date: string; invoice: 
     values (${w.orgId}, ${o.storeId ?? w.storeId}, ${o.date}, ${o.invoice}, 'senior', ${o.id ?? IDNO}, ${HOLDER}, '100.00', '20.00', 'pos', ${w.counterId},
             ${o.voided ? w.managerId : null}, ${o.voided ? new Date() : null}, ${o.voided ? 'Mistyped' : null})`;
 }
-const seniorSale = (w: World, at: Date, o: { id?: string; capture?: (i: Record<string, unknown>) => void } = {}) =>
+const seniorSale = (w: World, at: Date, o: { id?: string; capture?: (i: Record<string, unknown>) => void; beforeComplete?: () => Promise<void>; afterComplete?: () => Promise<void> } = {}) =>
   sell(w, {
     at, items: [{ item: w.menu.pork, qty: 1 }], discounts: [{ lineIndex: 0, kind: 'senior', qty: 1, dinerNo: 1 }],
-    pay: [{ tenderId: w.cash, amount: '300.00' }],
+    pay: [{ tenderId: w.cash, amount: '300.00' }], beforeComplete: o.beforeComplete, afterComplete: o.afterComplete,
     mutate: (i) => {
       if (o.id) (i.seniors as { idNumber: string }[])[0]!.idNumber = o.id;
       o.capture?.(structuredClone(i));
@@ -183,5 +183,115 @@ describe('T-575 who may ask, and what may be asked', () => {
     await expect(check(w, IDNO, { who: w.kitchen })).rejects.toThrow();
     await expect(check(w, IDNO, { who: w.managerOther })).rejects.toThrow();
     await expect(check(w, IDNO, { who: actorOf(w.orgId, uuid()) })).rejects.toThrow();
+  });
+});
+
+describe('T-575 follow-up: two tills, one new card at the same moment', () => {
+  // ⚠ Sales of one store already queue behind each other at the END of completeSale (bumpStateVersion locks the pos_stores row until commit), so "B finishes while A is open" can
+  // never hold. What matters is where B waits: BEFORE it reads the register (the card lock, a Postgres advisory lock) or only after (the state-version row, a transactionid lock).
+  const waiters = async (type: 'advisory' | 'transactionid'): Promise<number> =>
+    (await sql<{ n: number }[]>`
+      select count(*)::int n from pg_locks l join pg_stat_activity s on s.pid = l.pid where l.locktype = ${type} and not l.granted and s.datname = current_database()`)[0]!.n;
+  const until = async (ok: () => Promise<boolean>, ms = 10000): Promise<boolean> => {
+    for (const end = Date.now() + ms; Date.now() < end; await new Promise((r) => setTimeout(r, 50))) if (await ok()) return true;
+    return false;
+  };
+
+  /** A senior sale prepared (stand, lines, discount) but not yet completed: `go()` starts completeSale, then the transaction is held open until `release()` (or rolled back by release(true)). */
+  function till(w: World, id: string) {
+    let rollback = false;
+    let go!: () => void;
+    const goP = new Promise<void>((r) => (go = r));
+    let release!: () => void;
+    const relP = new Promise<void>((r) => (release = r));
+    let prepared!: () => void;
+    const preparedP = new Promise<void>((r) => (prepared = r));
+    let parked!: () => void;
+    const parkedP = new Promise<void>((r) => (parked = r));
+    const done = seniorSale(w, new Date(), {
+      id,
+      beforeComplete: async () => { prepared(); await goP; },
+      afterComplete: async () => { parked(); await relP; if (rollback) throw new Error('ROLLBACK-A'); },
+    });
+    done.catch(() => undefined); // a rolled-back till is expected; the test awaits it itself
+    const orFails = (p: Promise<void>) => Promise.race([p, done.then(() => undefined)]); // a failed prepare must fail the test, not hang it
+    return { done, go, release: (rb = false) => { rollback = rb; release(); }, prepared: () => orFails(preparedP), parked: () => orFails(parkedP) };
+  }
+  const receipts = async (w: World) => (await sql<{ n: number }[]>`select count(*)::int n from pos_sales_receipts where org_id = ${w.orgId}`)[0]!.n;
+
+  it('(c1) the second till waits on the CARD lock, then writes ONE trail on its receipt naming the first [kills: both sales missing each other uncommitted row, so no trail is written]', async () => {
+    const w = await world75();
+    const card = 'OSCA-5750001';
+    const a = till(w, card);
+    const b = till(w, ` ${card.toLowerCase()} `); // another case, padded
+    b.release();
+    let queued = false;
+    try {
+      await Promise.all([a.prepared(), b.prepared()]);
+      a.go();
+      await a.parked(); // A has run completeSale and is held before commit
+      b.go();
+      queued = await until(async () => (await waiters('advisory')) === 1); // B is queued on the card lock, not past it
+    } finally {
+      a.release();
+      b.go();
+    }
+    const sa = await a.done;
+    const sb = await b.done;
+    expect(await receipts(w)).toBe(2);
+    const rows = await repeatAudits(w);
+    expect.soft(rows).toHaveLength(1);
+    expect.soft(rows[0]?.entity_id).toBe(sb.receiptId);
+    expect.soft(rows[0]?.after).toEqual({ receiptId: sb.receiptId, earlierReceiptIds: [sa.receiptId] });
+    expect(queued).toBe(true);
+  });
+
+  it('(c2) two different cards at the same moment do not queue on the card lock, and leave no trail [kills: a lock that serialises every senior sale of the store]', async () => {
+    const w = await world75();
+    const a = till(w, 'OSCA-5750002');
+    const b = till(w, 'OSCA-5750003');
+    b.release();
+    let atBump = false;
+    let cardWaiters = -1;
+    try {
+      await Promise.all([a.prepared(), b.prepared()]);
+      a.go();
+      await a.parked();
+      b.go();
+      atBump = await until(async () => (await waiters('transactionid')) === 1); // B went past the card step and now waits only behind A's store row
+      cardWaiters = await waiters('advisory');
+    } finally {
+      a.release();
+      b.go();
+    }
+    await a.done;
+    await b.done;
+    expect(atBump).toBe(true);
+    expect(cardWaiters).toBe(0);
+    expect(await receipts(w)).toBe(2);
+    expect(await repeatAudits(w)).toHaveLength(0);
+  });
+
+  it('(c3) the first till is rolled back: the second finishes with NO trail and nothing is left locked [kills: a lock that outlives a rollback, or a phantom repeat]', async () => {
+    const w = await world75();
+    const card = 'OSCA-5750004';
+    const a = till(w, card);
+    const b = till(w, card);
+    b.release();
+    try {
+      await Promise.all([a.prepared(), b.prepared()]);
+      a.go();
+      await a.parked();
+      b.go();
+      await until(async () => (await waiters('advisory')) === 1);
+    } finally {
+      a.release(true);
+      b.go();
+    }
+    await expect(a.done).rejects.toThrow('ROLLBACK-A');
+    await b.done;
+    expect(await receipts(w)).toBe(1);
+    expect(await repeatAudits(w)).toHaveLength(0);
+    expect(await waiters('advisory')).toBe(0);
   });
 });
