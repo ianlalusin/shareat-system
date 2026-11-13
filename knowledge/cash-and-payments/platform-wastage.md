@@ -4,8 +4,8 @@ topic: cash-and-payments/platform-wastage
 about: [manager, staff]
 readers: managers
 must_be_exact: true
-related: [cash-and-payments/platform-payouts, customer-experience/online-orders, staff/cashier-take-out-and-online-sop]
-updated: 2026-10-23
+related: [cash-and-payments/platform-payouts, customer-experience/online-orders, staff/cashier-take-out-and-online-sop, cash-and-payments/future-franchise-platform-settlement]
+updated: 2026-11-04
 ---
 
 # Foodpanda and Grab wastage
@@ -29,3 +29,10 @@ refunded to the customer, taken out of Shareat's payout. Today this is the only 
    - If the platform pays it back, mark it **resolved**.
    - If the platform does not pay, decide whether it becomes a store expense or is charged to
      the staff member who handled the order.
+
+## Future franchise authority and staff objections
+
+See [future franchise platform settlement](future-franchise-platform-settlement.md) for manager
+case resolution/appeals, warranted staff-charge approval and ERP recording, and franchisee review
+of employee objections. An ERP charge is not automatic authorization for a payroll deduction.
+Keep those future-franchise assignments distinct from the existing workflow described above.

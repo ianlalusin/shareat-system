@@ -17,7 +17,7 @@ import { CheckedForm } from '@/components/forms';
 import { PREPAID_ADD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
-import { Badge, Banner, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, RowLink, Select, statusTone, DialogActions } from '@/components/ui';
+import { Badge, Banner, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, NumTd, RowLink, Select, Table, Td, Th, statusTone, DialogActions } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 
 export const metadata = { title: 'Prepaid expenses — Shareat System' };
@@ -192,53 +192,49 @@ export default async function PrepaidPage({
 
       {/* ── The register ─────────────────────────────────────────────────────────────── */}
       {items.length > 0 ? (
-        <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-          <table className="w-full min-w-[820px] border-collapse text-sm">
+        <Table card={{ title: 'Item', subtitle: 'Store', keys: ['Still unused', 'State'] }}>
             <thead>
-              <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
-                <th className="px-3 py-2 font-medium">Item</th>
-                <th className="px-3 py-2 font-medium">Store</th>
-                <th className="px-3 py-2 font-medium">Covers</th>
-                <th className="px-3 py-2 text-right font-medium">Cost</th>
-                <th className="px-3 py-2 text-right font-medium">Released</th>
-                <th className="px-3 py-2 text-right font-medium">Still unused</th>
-                <th className="px-3 py-2 font-medium">State</th>
+              <tr>
+                <Th>Item</Th>
+                <Th>Store</Th>
+                <Th>Covers</Th>
+                <Th numeric>Cost</Th>
+                <Th numeric>Released</Th>
+                <Th numeric>Still unused</Th>
+                <Th>State</Th>
               </tr>
             </thead>
             <tbody>
               {items.map((i) => (
                 <LinkRow
                   key={i.id}
-                  className={`border-b border-neutral-100 last:border-0 dark:border-neutral-900 ${
-                    i.status === 'active' ? '' : 'opacity-60'
-                  }`}
+                  className={i.status === 'active' ? undefined : 'opacity-60'}
                 >
-                  <td className="px-3 py-2">
+                  <Td>
                     <RowLink href={`/prepaid/${i.id}`}>
                       {i.name}
                     </RowLink>
                     {i.needsReview && i.status === 'active' && (
                       <Badge tone="warning" label="Term unconfirmed" className="ml-2" />
                     )}
-                    <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                    <div className="text-xs text-muted">
                       {CATEGORY_LABEL[i.category] ?? i.category}
                     </div>
-                  </td>
-                  <td className="px-3 py-2">{storeById.get(i.storeId)?.code ?? '—'}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">
+                  </Td>
+                  <Td>{storeById.get(i.storeId)?.code ?? '—'}</Td>
+                  <Td className="whitespace-nowrap">
                     {i.coverageStartDate} · {i.coverageMonths} mo
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(i.totalCost)}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(i.amortised)}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(i.remaining)}</td>
-                  <td className="px-3 py-2 text-xs">
+                  </Td>
+                  <NumTd className="font-mono">{peso(i.totalCost)}</NumTd>
+                  <NumTd className="font-mono">{peso(i.amortised)}</NumTd>
+                  <NumTd className="font-mono">{peso(i.remaining)}</NumTd>
+                  <Td className="text-xs">
                     <Badge tone={statusTone(i.status)} label={STATUS_LABEL[i.status] ?? i.status} />
-                  </td>
+                  </Td>
                 </LinkRow>
               ))}
             </tbody>
-          </table>
-        </div>
+          </Table>
       ) : (
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
           {onlyReview ? 'Nothing needs review.' : 'No prepaid items yet.'}

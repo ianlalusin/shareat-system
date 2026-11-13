@@ -52,11 +52,11 @@ describe('T-450 entire ERP table rollout', () => {
     expect(declarations['min-height']).toBe('44px');
   });
   it('exposes shared hierarchy metadata without per-page card markup or styles', () => {
-    const html = renderToStaticMarkup(h(Table, { card: { title: 'Item', subtitle: 'Kind', keys: ['Priced per'] } }, 'Fixture'));
+    const html = renderToStaticMarkup(h(Table, { card: { title: 'Item', subtitle: 'Kind', keys: ['Code'] } }, 'Fixture'));
     expect(html).toContain('data-card-title="Item"'); expect(html).toContain('data-card-subtitle="Kind"');
-    expect(html).toContain('data-card-keys="Priced per"');
+    expect(html).toContain('data-card-keys="Code"');
     const items = read('apps/erp/src/app/items/page.tsx');
-    expect(items).toContain('data-card-title="Item" data-card-subtitle="Kind" data-card-keys="Priced per"');
+    expect(items).toContain('data-card-title="Item" data-card-subtitle="Kind" data-card-keys="Code"');
     expect(items).not.toContain('data-card-toggle');
     const css = read('apps/erp/src/app/globals.css');
     expect(css).toContain('grid-template-columns: 44px minmax(0, 1fr) auto');
@@ -101,6 +101,8 @@ describe('T-450 entire ERP table rollout', () => {
     const unlabelled = actual.filter(row => row.headerless > 0);
     // The generic Table forwards the caller's headers; it does not own column labels.
     expect(unlabelled.map(row => row.file)).toEqual(['apps/erp/src/components/ui/Table.tsx']);
-    expect(actual.reduce((count, row) => count + row.tables, 0)).toBeGreaterThan(100);
+    // T-568: the same rollout now has some tables in the shared <Table> primitive. Count both so
+    // moving a definition to the shared surface cannot look like deleting coverage.
+    expect(actual.reduce((count, row) => count + row.tables + row.sharedTables, 0)).toBeGreaterThan(100);
   });
 });

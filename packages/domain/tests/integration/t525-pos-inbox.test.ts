@@ -926,26 +926,26 @@ describe('R6 - quarantine review (domain only)', () => {
 
   const replayWith = (f: Fx, eventId: string) => asOrg(f.orgId, (tx) => INBOX.replayQuarantinedEvent(tx, f.manager, { storeId: f.storeId, eventId }, RATES)) as Promise<{ replayed: boolean; error?: string }>;
 
-  it('a quarantined sale is replayed once its table is ready: one receipt, one statutory row per diner, resolution replayed', async () => {
+  it('a quarantined sale is replayed once its table is ready: one receipt, resolution replayed (T-572: a senior sale is refused instead - see t572-senior-id-scrub)', async () => {
     const f = await fixture();
     await signedIn(f, f.counterId);
-    const [open, lines, discount, sale] = seniorDay(f).events as [Ev, Ev, Ev, Ev];
-    // the sale arrives BEFORE the senior discount it needs: refused, so quarantined; the discount then lands
-    const r = await send(f, [open, lines, { ...sale, seq: 3 }, { ...discount, seq: 4 }], RATES);
-    expect(statuses(r)).toEqual(['applied', 'applied', 'quarantined', 'applied']);
-    const row = (await eventsOf(f)).find((x) => Number(x.seq) === 3)!;
+    const [open, lines, sale] = plainDay(f).events as [Ev, Ev, Ev];
+    // the sale arrives BEFORE the lines it sells: refused, so quarantined; the lines then land
+    const r = await send(f, [open, { ...sale, seq: 2 }, { ...lines, seq: 3 }], RATES);
+    expect(statuses(r)).toEqual(['applied', 'quarantined', 'applied']);
+    const row = (await eventsOf(f)).find((x) => Number(x.seq) === 2)!;
     expect(await replayWith(f, row.id)).toMatchObject({ replayed: true });
-    expect(await counts(f)).toMatchObject({ receipts: 1, statutory: 1 });
+    expect(await counts(f)).toMatchObject({ receipts: 1, statutory: 0 });
     expect(await rowOf(row.id)).toMatchObject({ resolution: 'replayed', resolved_by: f.managerId });
   });
 
-  it('a sale replay that refuses THROWS (the manager\'s transaction aborts): no receipt, no statutory row, the row stays unresolved', async () => {
+  it('a sale replay that refuses THROWS (the manager transaction aborts): no receipt, the row stays unresolved', async () => {
     const f = await fixture();
     await signedIn(f, f.counterId);
-    const [open, lines, , sale] = seniorDay(f).events as [Ev, Ev, Ev, Ev];
-    const r = await send(f, [open, lines, { ...sale, seq: 3 }], RATES); // no senior discount ever added
-    expect(statuses(r)).toEqual(['applied', 'applied', 'quarantined']);
-    const row = (await eventsOf(f)).find((x) => Number(x.seq) === 3)!;
+    const [open, , sale] = plainDay(f).events as [Ev, Ev, Ev];
+    const r = await send(f, [open, { ...sale, seq: 2 }], RATES); // its lines never arrive
+    expect(statuses(r)).toEqual(['applied', 'quarantined']);
+    const row = (await eventsOf(f)).find((x) => Number(x.seq) === 2)!;
     await expectRefusal(replayWith(f, row.id));
     expect(await counts(f)).toMatchObject({ receipts: 0, statutory: 0 });
     expect(await rowOf(row.id)).toMatchObject({ resolution: null, resolved_by: null });

@@ -116,7 +116,7 @@ describe('R-legs — real render: RecordTransferForm.tsx amountIn', () => {
     expect(tag).not.toMatch(/\bmin="/);
     expect(tag).not.toMatch(/\bmax="/);
     expect(tag).toMatch(/inputMode="decimal"/);
-  });
+  }, 60_000); // first render imports RecordTransferForm cold; exceeds the 5s default
 
   // T-343 S5.5v ruled edit: amountOut is now converted (spec §S5.5v BUILDER path
   // `money-transfers/RecordTransferForm.tsx`) — flipped from the "stays a real number spinner" pin
