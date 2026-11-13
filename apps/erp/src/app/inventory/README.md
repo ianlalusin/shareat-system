@@ -15,8 +15,7 @@ Parent blueprint: [up one directory](../README.md).
 - [deliveries](./deliveries/README.md) — Deliveries at `/inventory/deliveries`. FIFO stock views, receiving, room transfers, usage, counts and production workflows.
 - [locations](./locations/README.md) — Stock locations at `/inventory/locations`. FIFO stock views, receiving, room transfers, usage, counts and production workflows.
 - [low-stock](./low-stock/README.md) — Low stock at `/inventory/low-stock`. FIFO stock views, receiving, room transfers, usage, counts and production workflows.
-- [pos-map](./pos-map/README.md) — POS item mapping at `/inventory/pos-map`. FIFO stock views, receiving, room transfers, usage, counts and production workflows.
-- [pos-usage](./pos-usage/README.md) — Daily POS usage pull at `/inventory/pos-usage`. FIFO stock views, receiving, room transfers, usage, counts and production workflows.
+- The retired POS item-mapping and POS usage-pull screens (T-550) have no page or README here; their tables and domain code remain.
 - [production](./production/README.md) — Production at `/inventory/production`. FIFO stock views, receiving, room transfers, usage, counts and production workflows.
 - [returns](./returns/README.md) — Supplier returns at `/inventory/returns`. FIFO stock views, receiving, room transfers, usage, counts and production workflows.
 - [transfers](./transfers/README.md) — Stock transfers at `/inventory/transfers`. FIFO stock views, receiving, room transfers, usage, counts and production workflows.
