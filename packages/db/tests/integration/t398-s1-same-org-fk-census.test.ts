@@ -11,6 +11,7 @@
  * have no composite twin), L1 (no S1 migration). Green by construction: C2, C3, C5-C7 and the pin
  * detectors (they prove the checker, which lives in this file).
  */
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -36,7 +37,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 const sql = postgres(url, { max: 4 });
@@ -72,7 +73,8 @@ const ORG_LESS_PIN: readonly string[] = ['etl_quarantine', 'etl_reconciliation',
 // T-455 S1 (0215): +lobby_entries.client_request_id (idempotency-key). 24 -> 25.
 // T-472 S1 (0216): +5 pos_bridge external keys (pos_store_id x2, firestore_doc_id, parent_doc_id, pos_item_id). 25 -> 30; +pos_bridge_receipts.raw jsonb. 9 -> 10.
 // T-398 S6 (K12): +franchise_access_log.session_id (kind snapshot: sessions is purged, so a kept log row must not point at it by FK). 30 -> 31.
-const NO_FK_PIN = { count: 31, sha256: '2854c8820ad2d1a22a3966071429731cf2bad9e2293a6e6103fbafd576071a5c' } as const;
+// T-557 (0249): +2 option_value_ids columns (snapshot). 31 -> 33.
+const NO_FK_PIN = { count: 33, sha256: '2da266d840985c770afa546da19d4f3bd1a10b42bb9542e68ad68f024eb74bf7' } as const;
 // T-523 (0238): +pos_events.payload (snapshot). 10 -> 11.
 const JSONB_PIN = { count: 11, sha256: '0f3c5edf61b692c8c9675c71c7d3f6879df392fd9c8b1f26a7a010f5403ca8e5' } as const;
 

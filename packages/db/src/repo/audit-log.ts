@@ -13,7 +13,7 @@
  * null); `appendClientEvent` is the storage half of the R10 offline envelope (S3 owns the rest).
  */
 import { createHash } from 'node:crypto';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type postgres from 'postgres';
 import type { Tx } from '../client';
 import { refuse } from '../refusal';
@@ -422,6 +422,25 @@ export async function latestForEntity(
     .orderBy(desc(auditLog.occurredAt))
     .limit(1);
   return row;
+}
+
+/**
+ * T-531: the store's audit rows for the given actions, newest first (the day close reads the v1 bridge's sent / failed marks to say what the Till tab shows).
+ * Tenancy is the caller's `tx`; `orgId` and `storeId` are explicit filters as everywhere in this directory.
+ */
+export async function listForStoreActions(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  actions: readonly string[],
+  limit = 500,
+): Promise<{ action: string; entityId: string; after: unknown; occurredAt: Date }[]> {
+  return tx
+    .select({ action: auditLog.action, entityId: auditLog.entityId, after: auditLog.after, occurredAt: auditLog.occurredAt })
+    .from(auditLog)
+    .where(and(eq(auditLog.orgId, orgId), eq(auditLog.storeId, storeId), inArray(auditLog.action, [...actions])))
+    .orderBy(desc(auditLog.occurredAt), desc(auditLog.id))
+    .limit(limit);
 }
 
 /**

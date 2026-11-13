@@ -141,7 +141,7 @@ export default async function AttendanceReviewPage({
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[40rem] text-sm">
+            <table aria-label="Attendance days" className="w-full min-w-[40rem] text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-neutral-500">
                 <tr>
                   <th className="py-2 pr-4">Day</th>
@@ -175,7 +175,7 @@ export default async function AttendanceReviewPage({
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[40rem] text-sm">
+            <table aria-label="Leave in the period" className="w-full min-w-[40rem] text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-neutral-500">
                 <tr>
                   <th className="py-2 pr-4">Day</th>

@@ -15,8 +15,11 @@ export const POS_PAYMENT_REFERENCE_RULES = defineFieldRules('pos.paymentReferenc
   referenceNo: { label: 'The reference number', kind: 'text', min: 4, max: 40, requires: 'The reference number must be 4 to 40 characters.' },
 });
 
+/** T-572: what the POS device log (pos_events) stores in place of a senior or PWD card number or name. Never accepted as either (the rules below), so a log copy can never be booked as a real card. */
+export const POS_REDACTED = '[redacted]';
+
 /** The card details of a senior or PWD diner, written only to the statutory register (row 353). */
 export const POS_STATUTORY_HOLDER_RULES = defineFieldRules('pos.statutoryHolder', {
-  holderName: { label: 'The card holder name', kind: 'text', max: 120, requires: 'Enter the name on the senior or PWD card.' },
-  idNumber: { label: 'The card number', kind: 'text', max: 60, requires: 'Enter the senior or PWD card number.' },
+  holderName: { label: 'The card holder name', kind: 'text', max: 120, refuses: [POS_REDACTED], requires: 'Enter the name on the senior or PWD card.' },
+  idNumber: { label: 'The card number', kind: 'text', max: 60, refuses: [POS_REDACTED], requires: 'Enter the senior or PWD card number.' },
 });

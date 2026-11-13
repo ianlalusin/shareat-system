@@ -6,8 +6,10 @@
  * Every function takes the caller's transaction first and filters by org AND store; RLS is the backstop. The domain bumps
  * `pos_stores.state_version` (`bumpStateVersion`) once per call that changes anything a screen shows.
  */
-import { and, asc, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, inArray, isNull, ne, sql, type SQL } from 'drizzle-orm';
+import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
 import {
+  posDayCloseTenders,
   posDayCloses,
   posDiscountPresets,
   posEvents,
@@ -21,6 +23,7 @@ import {
   tableSessionLineDiscounts,
   tableSessionLines,
   tableSessions,
+  type PosDayCloseRow,
   type PosDiscountPresetRow,
   type PosEventRow,
   type PosSalesReceiptRow,
@@ -35,10 +38,12 @@ import { employments } from '../../schema/employment';
 import { persons } from '../../schema/persons';
 import { posTabletPairings } from '../../schema/pos-tablet-pairings';
 import { tenders } from '../../schema/pos-v1';
+import { statutoryDiscountRecords } from '../../schema/statutory-discounts';
 import type { Money } from '@shareat/core/money';
 import type { Tx } from '../client';
 
 export type {
+  PosDayCloseRow,
   PosDiscountPresetRow,
   PosEventRow,
   PosSalesReceiptRow,
@@ -128,6 +133,24 @@ export async function getLivePairing(tx: Tx, orgId: string, storeId: string, pai
         isNull(posTabletPairings.revokedAt),
       ),
     );
+  return row;
+}
+
+/** T-563: the store's one live pairing (the tablet that is paired now), or undefined. */
+export async function getLivePairingOfStore(tx: Tx, orgId: string, storeId: string): Promise<{ id: string } | undefined> {
+  const [row] = await tx
+    .select({ id: posTabletPairings.id })
+    .from(posTabletPairings)
+    .where(and(eq(posTabletPairings.orgId, orgId), eq(posTabletPairings.storeId, storeId), isNull(posTabletPairings.revokedAt)));
+  return row;
+}
+
+/** T-563: a pairing of this store, LIVE OR REVOKED (the pairing an event was made on may have been replaced since), or undefined. */
+export async function getPairingOfStore(tx: Tx, orgId: string, storeId: string, pairingId: string): Promise<{ id: string; revokedAt: Date | null } | undefined> {
+  const [row] = await tx
+    .select({ id: posTabletPairings.id, revokedAt: posTabletPairings.revokedAt })
+    .from(posTabletPairings)
+    .where(and(eq(posTabletPairings.id, pairingId), eq(posTabletPairings.orgId, orgId), eq(posTabletPairings.storeId, storeId)));
   return row;
 }
 
@@ -242,6 +265,8 @@ export interface NewSessionLine {
   unitPrice: Money;
   /** N > 1 for a "(up to N)" bundle line, else null. */
   bundleHeads: number | null;
+  /** Sorted, distinct chosen option value ids ([] = none, null = a legacy parent's line) - T-557. */
+  optionValueIds: string[] | null;
   kitchenStationId: string | null;
   note: string | null;
   addedBy: string;
@@ -267,6 +292,7 @@ export async function insertLines(tx: Tx, rows: NewSessionLine[]): Promise<void>
       qty: r.qty,
       unitPrice: r.unitPrice,
       bundleHeads: r.bundleHeads,
+      optionValueIds: r.optionValueIds,
       kitchenStationId: r.kitchenStationId,
       note: r.note,
       addedBy: r.addedBy,
@@ -393,6 +419,34 @@ export async function getReceiptBySession(tx: Tx, orgId: string, storeId: string
   return row;
 }
 
+/** The payments a receipt recorded: what a replay of the sale is compared with (T-556). */
+export async function listReceiptPayments(tx: Tx, orgId: string, receiptId: string): Promise<{ tenderId: string; amount: string; referenceNo: string | null; toCheck: boolean }[]> {
+  return tx
+    .select({ tenderId: posSalesReceiptPayments.tenderId, amount: posSalesReceiptPayments.amount, referenceNo: posSalesReceiptPayments.referenceNo, toCheck: posSalesReceiptPayments.toCheck })
+    .from(posSalesReceiptPayments)
+    .where(and(eq(posSalesReceiptPayments.orgId, orgId), eq(posSalesReceiptPayments.receiptId, receiptId)));
+}
+
+/**
+ * The senior/PWD card holders a POS sale wrote to the statutory register under its printed number. `dinerNo` is known only for a diner whose
+ * discount left a receipt row (a discount that rounds to nothing leaves none), else null (T-556).
+ */
+export async function listReceiptStatutory(
+  tx: Tx, orgId: string, storeId: string, receiptId: string, invoiceNumber: string,
+): Promise<{ kind: 'senior' | 'pwd'; idNumber: string; holderName: string; dinerNo: number | null }[]> {
+  const records = await tx
+    .select({ id: statutoryDiscountRecords.id, kind: statutoryDiscountRecords.kind, idNumber: statutoryDiscountRecords.idNumber, holderName: statutoryDiscountRecords.holderName })
+    .from(statutoryDiscountRecords)
+    .where(and(eq(statutoryDiscountRecords.orgId, orgId), eq(statutoryDiscountRecords.storeId, storeId), eq(statutoryDiscountRecords.invoiceNumber, invoiceNumber), eq(statutoryDiscountRecords.source, 'pos')));
+  const diners = await tx
+    .selectDistinct({ recordId: posSalesReceiptLineDiscounts.statutoryRecordId, dinerNo: posSalesReceiptLineDiscounts.dinerNo })
+    .from(posSalesReceiptLineDiscounts)
+    .innerJoin(posSalesReceiptLines, eq(posSalesReceiptLines.id, posSalesReceiptLineDiscounts.receiptLineId))
+    .where(and(eq(posSalesReceiptLines.orgId, orgId), eq(posSalesReceiptLines.receiptId, receiptId)));
+  const dinerOf = new Map(diners.map((d) => [d.recordId, d.dinerNo]));
+  return records.map((r) => ({ kind: r.kind, idNumber: r.idNumber, holderName: r.holderName, dinerNo: dinerOf.get(r.id) ?? null }));
+}
+
 export async function terminalSeqUsed(tx: Tx, orgId: string, terminalId: string, terminalSeq: number): Promise<boolean> {
   const [row] = await tx
     .select({ id: posSalesReceipts.id })
@@ -426,6 +480,7 @@ export interface NewReceiptLine {
   name: string;
   qty: number;
   unitPrice: Money;
+  optionValueIds: string[] | null;
   gross: Money;
   discountTotal: Money;
   net: Money;
@@ -485,6 +540,7 @@ export async function insertReceiptLines(tx: Tx, rows: NewReceiptLine[]): Promis
       name: r.name,
       qty: r.qty,
       unitPrice: r.unitPrice,
+      optionValueIds: r.optionValueIds,
       gross: r.gross,
       discountTotal: r.discountTotal,
       net: r.net,
@@ -720,7 +776,17 @@ export async function getStateVersion(tx: Tx, orgId: string, storeId: string): P
  * R4 clause 3: did this person sign in with a PIN on THIS pairing, issued in [from, to]? An ended session counts, except one that was revoked.
  * `sessions.device_id` is text, so the pairing id is compared as text.
  */
-export async function hasPinSessionOnPairing(tx: Tx, orgId: string, personId: string, storeId: string, pairingId: string, from: Date, to: Date): Promise<boolean> {
+export async function hasPinSessionOnPairing(
+  tx: Tx,
+  orgId: string,
+  personId: string,
+  storeId: string,
+  pairingId: string,
+  from: Date,
+  to: Date,
+  /** T-563 (carry-over from a REPLACED tablet): a session revoked at or after this moment still vouches, because the PIN was entered while the tablet was valid. */
+  revokedAtOrAfter?: Date,
+): Promise<boolean> {
   const rows = (await tx.execute(sql`
     select 1 as ok
       from sessions s
@@ -732,7 +798,7 @@ export async function hasPinSessionOnPairing(tx: Tx, orgId: string, personId: st
        and s.credential_kind = 'pin'
        and s.issued_at >= ${from.toISOString()}::timestamptz
        and s.issued_at <= ${to.toISOString()}::timestamptz
-       and (s.ended_reason is null or s.ended_reason <> 'revoked')
+       and (s.ended_reason is null or s.ended_reason <> 'revoked'${revokedAtOrAfter ? sql` or s.ended_at >= ${revokedAtOrAfter.toISOString()}::timestamptz` : sql``})
      limit 1
   `)) as unknown as { ok: number }[];
   return rows.length > 0;
@@ -836,4 +902,388 @@ export async function setTillPrinter(tx: Tx, orgId: string, storeId: string, ter
     .update(posTerminals)
     .set({ receiptPaperMm, receiptCopies, updatedAt: sql`now()` })
     .where(and(eq(posTerminals.id, terminalId), eq(posTerminals.orgId, orgId), eq(posTerminals.storeId, storeId)));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-531 - the day close (the Z): reads for the reading, the one-time receipt freeze, the Z rows. No rule lives here
+// (packages/domain/src/pos/day-close.ts decides). docs/tasks/531-pos-day-close.md.
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** The store's latest Z by BUSINESS DATE (any terminal), as `YYYY-MM-DD`, or undefined before the first Z. T-531 ruling 1: the next Z, and every receipt after it, is dated after this. */
+export async function lastDayCloseBusinessDate(tx: Tx, orgId: string, storeId: string): Promise<string | undefined> {
+  const [row] = await tx
+    .select({ d: sql<string | null>`max(${posDayCloses.businessDate})::text` })
+    .from(posDayCloses)
+    .where(and(eq(posDayCloses.orgId, orgId), eq(posDayCloses.storeId, storeId)));
+  return row?.d ?? undefined;
+}
+
+/** The latest Z of ONE terminal (by z_no), or undefined before its first. */
+export async function lastDayCloseOfTerminal(tx: Tx, orgId: string, storeId: string, terminalId: string): Promise<PosDayCloseRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(posDayCloses)
+    .where(and(eq(posDayCloses.orgId, orgId), eq(posDayCloses.storeId, storeId), eq(posDayCloses.terminalId, terminalId)))
+    .orderBy(desc(posDayCloses.zNo))
+    .limit(1);
+  return row;
+}
+
+export async function getDayClose(tx: Tx, orgId: string, storeId: string, id: string): Promise<PosDayCloseRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(posDayCloses)
+    .where(and(eq(posDayCloses.id, id), eq(posDayCloses.orgId, orgId), eq(posDayCloses.storeId, storeId)));
+  return row;
+}
+
+/** One terminal of the store by id. */
+export async function getTerminal(tx: Tx, orgId: string, storeId: string, terminalId: string): Promise<PosTerminalRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(posTerminals)
+    .where(and(eq(posTerminals.id, terminalId), eq(posTerminals.orgId, orgId), eq(posTerminals.storeId, storeId)));
+  return row;
+}
+
+/** The receipts of one terminal not yet in any Z (day_close_id IS NULL), oldest first. */
+export async function listOpenReceipts(tx: Tx, orgId: string, storeId: string, terminalId: string): Promise<PosSalesReceiptRow[]> {
+  return tx
+    .select()
+    .from(posSalesReceipts)
+    .where(and(eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.storeId, storeId), eq(posSalesReceipts.terminalId, terminalId), isNull(posSalesReceipts.dayCloseId)))
+    .orderBy(asc(posSalesReceipts.issuedAtDevice), asc(posSalesReceipts.id));
+}
+
+/** The receipts frozen to one Z, oldest first. */
+export async function listReceiptsOfClose(tx: Tx, orgId: string, storeId: string, dayCloseId: string): Promise<PosSalesReceiptRow[]> {
+  return tx
+    .select()
+    .from(posSalesReceipts)
+    .where(and(eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.storeId, storeId), eq(posSalesReceipts.dayCloseId, dayCloseId)))
+    .orderBy(asc(posSalesReceipts.issuedAtDevice), asc(posSalesReceipts.id));
+}
+
+export interface NewDayClose {
+  id: string;
+  orgId: string;
+  storeId: string;
+  terminalId: string;
+  zNo: number;
+  businessDate: string;
+  windowStart: Date;
+  windowEnd: Date;
+  receiptCount: number;
+  grossTotal: Money;
+  closedBy: string;
+  approvedBy: string;
+}
+
+export async function insertDayClose(tx: Tx, z: NewDayClose): Promise<void> {
+  await tx.insert(posDayCloses).values(z);
+}
+
+export async function insertDayCloseTenders(tx: Tx, rows: { orgId: string; dayCloseId: string; tenderId: string; amount: Money }[]): Promise<void> {
+  if (rows.length === 0) return;
+  await tx.insert(posDayCloseTenders).values(rows);
+}
+
+/**
+ * Freezes the receipts to the Z: sets `day_close_id` (the one column the 0238 grant lets the app write, NULL -> value once). `WHERE day_close_id IS NULL`, so a
+ * receipt a racing close already took is not touched; the CALLER compares the returned row count with the count it read and refuses when they differ.
+ */
+export async function closeReceipts(tx: Tx, orgId: string, storeId: string, dayCloseId: string, receiptIds: string[]): Promise<number> {
+  if (receiptIds.length === 0) return 0;
+  const rows = await tx
+    .update(posSalesReceipts)
+    .set({ dayCloseId })
+    .where(and(eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.storeId, storeId), inArray(posSalesReceipts.id, receiptIds), isNull(posSalesReceipts.dayCloseId)))
+    .returning({ id: posSalesReceipts.id });
+  return rows.length;
+}
+
+export interface DayCloseWithTenders {
+  close: PosDayCloseRow;
+  tenders: { tenderId: string; amount: string }[];
+}
+
+async function withTenders(tx: Tx, orgId: string, closes: PosDayCloseRow[]): Promise<DayCloseWithTenders[]> {
+  if (closes.length === 0) return [];
+  const rows = await tx
+    .select({ dayCloseId: posDayCloseTenders.dayCloseId, tenderId: posDayCloseTenders.tenderId, amount: posDayCloseTenders.amount })
+    .from(posDayCloseTenders)
+    .where(and(eq(posDayCloseTenders.orgId, orgId), inArray(posDayCloseTenders.dayCloseId, closes.map((c) => c.id))));
+  return closes.map((close) => ({ close, tenders: rows.filter((r) => r.dayCloseId === close.id).map((r) => ({ tenderId: r.tenderId, amount: r.amount })) }));
+}
+
+/** The store's Zs (all terminals), newest first, with their tender rows. */
+export async function listDayCloses(tx: Tx, orgId: string, storeId: string, limit: number): Promise<DayCloseWithTenders[]> {
+  const closes = await tx
+    .select()
+    .from(posDayCloses)
+    .where(and(eq(posDayCloses.orgId, orgId), eq(posDayCloses.storeId, storeId)))
+    .orderBy(desc(posDayCloses.businessDate), desc(posDayCloses.zNo))
+    .limit(limit);
+  return withTenders(tx, orgId, closes);
+}
+
+/** Every Z of the store on one business date (any terminal) with its tender rows, in z_no order. */
+export async function listDayClosesOfDate(tx: Tx, orgId: string, storeId: string, businessDate: string): Promise<DayCloseWithTenders[]> {
+  const closes = await tx
+    .select()
+    .from(posDayCloses)
+    .where(and(eq(posDayCloses.orgId, orgId), eq(posDayCloses.storeId, storeId), eq(posDayCloses.businessDate, businessDate)))
+    .orderBy(asc(posDayCloses.zNo));
+  return withTenders(tx, orgId, closes);
+}
+
+/** Sums over the receipts of one window, as exact decimal text (the domain turns them into Money). */
+export interface ReceiptFigures {
+  /** Σ gross of package lines, Σ gross of every other line. */
+  packageGross: string;
+  otherGross: string;
+  /** Σ (vat_removed + discount_amount) per discount kind. */
+  discountByKind: Record<'senior' | 'pwd' | 'preset' | 'custom', string>;
+  /** Distinct statutory rows (senior / PWD diners). */
+  statutoryDiners: number;
+  /** Per tender: Σ amount, Σ change given, and how many payments are offline wallet payments still to check. */
+  byTender: { tenderId: string; amount: string; change: string; toCheck: number }[];
+  /** Package sessions (a receipt with a package line): their count and the Σ of their billed heads (the larger of the cashier's and the server's count). */
+  packageSessions: number;
+  heads: number;
+}
+
+const idList = (ids: readonly string[]): SQL => sql.join(ids.map((i) => sql`${i}`), sql`, `);
+
+/** T-558: Σ amount tendered per receipt (decimal text), for the receipts that took any payment; a short payment is a receipt whose sum is below its total. */
+export async function receiptPaidSums(tx: Tx, orgId: string, receiptIds: string[]): Promise<Map<string, string>> {
+  if (receiptIds.length === 0) return new Map();
+  const rows = (await tx.execute(sql`
+    select p.receipt_id as receipt_id, sum(p.amount)::text as paid
+      from pos_sales_receipt_payments p
+     where p.org_id = ${orgId} and p.receipt_id in (${idList(receiptIds)})
+     group by p.receipt_id`)) as unknown as { receipt_id: string; paid: string }[];
+  return new Map(rows.map((r) => [r.receipt_id, r.paid]));
+}
+
+export async function receiptFigures(tx: Tx, orgId: string, receiptIds: string[]): Promise<ReceiptFigures> {
+  const discountByKind = { senior: '0', pwd: '0', preset: '0', custom: '0' };
+  if (receiptIds.length === 0) return { packageGross: '0', otherGross: '0', discountByKind, statutoryDiners: 0, byTender: [], packageSessions: 0, heads: 0 };
+  const ids = idList(receiptIds);
+  const lines = (await tx.execute(sql`
+    select coalesce(sum(l.gross) filter (where l.kind = 'package'), 0)::text as pkg, coalesce(sum(l.gross) filter (where l.kind <> 'package'), 0)::text as other
+      from pos_sales_receipt_lines l
+     where l.org_id = ${orgId} and l.receipt_id in (${ids})`)) as unknown as { pkg: string; other: string }[];
+  const disc = (await tx.execute(sql`
+    select d.kind as kind, sum(d.vat_removed + d.discount_amount)::text as total
+      from pos_sales_receipt_line_discounts d
+      join pos_sales_receipt_lines l on l.id = d.receipt_line_id
+     where d.org_id = ${orgId} and l.receipt_id in (${ids})
+     group by d.kind`)) as unknown as { kind: 'senior' | 'pwd' | 'preset' | 'custom'; total: string }[];
+  const diners = (await tx.execute(sql`
+    select count(distinct d.statutory_record_id)::int as n
+      from pos_sales_receipt_line_discounts d
+      join pos_sales_receipt_lines l on l.id = d.receipt_line_id
+     where d.org_id = ${orgId} and l.receipt_id in (${ids})`)) as unknown as { n: number }[];
+  const pays = (await tx.execute(sql`
+    select p.tender_id as tender_id, sum(p.amount)::text as amount, sum(p.change_given)::text as change, (count(*) filter (where p.to_check))::int as to_check
+      from pos_sales_receipt_payments p
+     where p.org_id = ${orgId} and p.receipt_id in (${ids})
+     group by p.tender_id`)) as unknown as { tender_id: string; amount: string; change: string; to_check: number }[];
+  const sessions = (await tx.execute(sql`
+    select count(*)::int as n, coalesce(sum(greatest(s.heads_cashier, coalesce(s.heads_server, 0))), 0)::int as heads
+      from pos_sales_receipts r
+      join table_sessions s on s.id = r.table_session_id
+     where r.org_id = ${orgId} and r.id in (${ids})
+       and exists (select 1 from pos_sales_receipt_lines l where l.receipt_id = r.id and l.kind = 'package')`)) as unknown as { n: number; heads: number }[];
+  for (const d of disc) discountByKind[d.kind] = d.total;
+  return {
+    packageGross: lines[0]?.pkg ?? '0',
+    otherGross: lines[0]?.other ?? '0',
+    discountByKind,
+    statutoryDiners: Number(diners[0]?.n ?? 0),
+    byTender: pays.map((p) => ({ tenderId: p.tender_id, amount: p.amount, change: p.change, toCheck: Number(p.to_check) })),
+    packageSessions: Number(sessions[0]?.n ?? 0),
+    heads: Number(sessions[0]?.heads ?? 0),
+  };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// T-569 - the data download: every column of a purged POS v2 table, as text, for one store and a date range.
+// ---------------------------------------------------------------------------------------------------------------------
+export const POS_EXPORT_TABLES = [
+  'receipts',
+  'receipt-lines',
+  'receipt-line-discounts',
+  'payments',
+  'day-closes',
+  'day-close-tenders',
+  'table-sessions',
+  'device-events',
+] as const;
+export type PosExportTable = (typeof POS_EXPORT_TABLES)[number];
+
+export interface PosExportResult {
+  /** The database column names, in table order. */
+  columns: string[];
+  rows: Record<string, string | null>[];
+}
+
+/** A cell as text, in SQL, so no number or date ever passes through JavaScript: `numeric` prints as Postgres prints it (`1234.50`). A timestamp prints as ISO with its offset. */
+function exportCell(col: AnyPgColumn): SQL<string | null> {
+  return col.columnType === 'PgTimestamp' ? sql<string | null>`to_jsonb(${col}) #>> '{}'` : sql<string | null>`${col}::text`;
+}
+
+/** Bible row 353: a senior/PWD holder's ID number and name are never written out, whatever depth they sit at in a device payload. */
+const REDACTED_KEYS: ReadonlySet<string> = new Set(['idNumber', 'holderName']);
+
+/**
+ * jsonb text, compacted (jsonb prints a space after `:` and `,`) with the value of every `idNumber` / `holderName` key, at any depth, replaced by
+ * "[redacted]". A small reader over the text: a number or any other value is copied through as written, never parsed.
+ */
+function compactRedactedJson(text: string): string {
+  let i = 0;
+  const skip = (): void => {
+    while (i < text.length && (text[i] === ' ' || text[i] === '\n' || text[i] === '\t' || text[i] === '\r')) i++;
+  };
+  const str = (): string => {
+    const start = i++;
+    while (i < text.length && text[i] !== '"') i += text[i] === '\\' ? 2 : 1;
+    return text.slice(start, ++i);
+  };
+  const value = (): string => {
+    skip();
+    const ch = text[i];
+    if (ch === '"') return str();
+    if (ch === '{' || ch === '[') {
+      const close = ch === '{' ? '}' : ']';
+      const parts: string[] = [];
+      i++;
+      skip();
+      if (text[i] === close) {
+        i++;
+        return ch + close;
+      }
+      for (;;) {
+        skip();
+        if (ch === '{') {
+          const key = str();
+          skip();
+          i++; // the colon
+          const v = value();
+          parts.push(`${key}:${REDACTED_KEYS.has(JSON.parse(key) as string) ? '"[redacted]"' : v}`);
+        } else parts.push(value());
+        skip();
+        if (text[i++] === close) break;
+      }
+      return ch + parts.join(',') + close;
+    }
+    const start = i;
+    while (i < text.length && !',]} \n\t\r'.includes(text[i]!)) i++;
+    return text.slice(start, i);
+  };
+  return value();
+}
+
+const manilaDate = (instant: AnyPgColumn): SQL<string> => sql<string>`(${instant} at time zone 'Asia/Manila')::date`;
+/** The business date of a server instant when the business day starts at `hour` Manila time: the Manila date of (t - hour), the same rule as `startHourDate` in the POS domain. */
+const businessDateOfInstant = (instant: AnyPgColumn, hour: number): SQL<string> =>
+  sql<string>`((${instant} - ${hour} * interval '1 hour') at time zone 'Asia/Manila')::date`;
+
+/**
+ * One table's rows for one store and a date range (`from` and `to` are business dates, both included). Scoped by org AND store; the child tables are
+ * reached only through the chosen parents.
+ *
+ * The business date of a receipt is its day close's `business_date` once it is closed (so the files agree with the Z readings), else the business date of
+ * the SERVER's `received_at` under the day-start hour `startHour` (the Z's own rule: an unclosed receipt at 01:00 belongs to the previous day); a session
+ * is included when EITHER the same rule on its server `opened_at` OR its receipt's date is in range (a backup repeats a row rather than lose it; BOSS 12 Nov). A device clock is never used. A device event is dated by the Manila calendar
+ * date of `received_at` (a raw log, not a business record).
+ */
+export async function exportRowsForStore(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  from: string,
+  to: string,
+  table: PosExportTable,
+  startHour: number,
+): Promise<PosExportResult> {
+  const receiptDate = sql<string>`coalesce((select ${posDayCloses.businessDate} from ${posDayCloses} where ${posDayCloses.id} = ${posSalesReceipts.dayCloseId}), ${businessDateOfInstant(posSalesReceipts.receivedAt, startHour)})`;
+  const openedDate = businessDateOfInstant(tableSessions.openedAt, startHour);
+  const inRange = (d: SQL<string>): SQL => sql`${d} >= ${from}::date and ${d} <= ${to}::date`;
+  // A backup repeats a row rather than lose one: a session is in if EITHER its opening business date OR any of its receipts' business dates is in range.
+  const sessionIncluded = sql`(${inRange(openedDate)} or exists (select 1 from ${posSalesReceipts} where ${posSalesReceipts.tableSessionId} = ${tableSessions.id} and ${inRange(receiptDate)}))`;
+
+  const receiptIds = () =>
+    tx
+      .select({ id: posSalesReceipts.id })
+      .from(posSalesReceipts)
+      .where(and(eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.storeId, storeId), inRange(receiptDate)));
+  const lineIds = () =>
+    tx.select({ id: posSalesReceiptLines.id }).from(posSalesReceiptLines).where(and(eq(posSalesReceiptLines.orgId, orgId), inArray(posSalesReceiptLines.receiptId, receiptIds())));
+  const closeIds = () =>
+    tx
+      .select({ id: posDayCloses.id })
+      .from(posDayCloses)
+      .where(and(eq(posDayCloses.orgId, orgId), eq(posDayCloses.storeId, storeId), inRange(sql<string>`${posDayCloses.businessDate}`)));
+
+  let t: PgTable;
+  let where: SQL | undefined;
+  let order: SQL[];
+  switch (table) {
+    case 'receipts':
+      t = posSalesReceipts;
+      where = and(eq(posSalesReceipts.orgId, orgId), eq(posSalesReceipts.storeId, storeId), inRange(receiptDate));
+      order = [receiptDate, sql`${posSalesReceipts.id}`];
+      break;
+    case 'receipt-lines':
+      t = posSalesReceiptLines;
+      where = and(eq(posSalesReceiptLines.orgId, orgId), inArray(posSalesReceiptLines.receiptId, receiptIds()));
+      order = [sql`${posSalesReceiptLines.receiptId}`, sql`${posSalesReceiptLines.lineNo}`];
+      break;
+    case 'receipt-line-discounts':
+      t = posSalesReceiptLineDiscounts;
+      where = and(eq(posSalesReceiptLineDiscounts.orgId, orgId), inArray(posSalesReceiptLineDiscounts.receiptLineId, lineIds()));
+      order = [sql`${posSalesReceiptLineDiscounts.receiptLineId}`, sql`${posSalesReceiptLineDiscounts.id}`];
+      break;
+    case 'payments':
+      t = posSalesReceiptPayments;
+      where = and(eq(posSalesReceiptPayments.orgId, orgId), inArray(posSalesReceiptPayments.receiptId, receiptIds()));
+      order = [sql`${posSalesReceiptPayments.receiptId}`, sql`${posSalesReceiptPayments.id}`];
+      break;
+    case 'day-closes':
+      t = posDayCloses;
+      where = and(eq(posDayCloses.orgId, orgId), eq(posDayCloses.storeId, storeId), inRange(sql<string>`${posDayCloses.businessDate}`));
+      order = [sql`${posDayCloses.businessDate}`, sql`${posDayCloses.id}`];
+      break;
+    case 'day-close-tenders':
+      t = posDayCloseTenders;
+      where = and(eq(posDayCloseTenders.orgId, orgId), inArray(posDayCloseTenders.dayCloseId, closeIds()));
+      order = [sql`${posDayCloseTenders.dayCloseId}`, sql`${posDayCloseTenders.id}`];
+      break;
+    case 'table-sessions':
+      t = tableSessions;
+      where = and(eq(tableSessions.orgId, orgId), eq(tableSessions.storeId, storeId), sessionIncluded);
+      order = [openedDate, sql`${tableSessions.id}`];
+      break;
+    case 'device-events':
+      t = posEvents;
+      where = and(eq(posEvents.orgId, orgId), eq(posEvents.storeId, storeId), inRange(manilaDate(posEvents.receivedAt)));
+      order = [manilaDate(posEvents.receivedAt), sql`${posEvents.id}`];
+      break;
+  }
+
+  const cols = getTableColumns(t) as Record<string, AnyPgColumn>;
+  const keys = Object.keys(cols);
+  const shape = Object.fromEntries(keys.map((k) => [k, exportCell(cols[k]!)]));
+  const found = await tx
+    .select(shape)
+    .from(t)
+    .where(where)
+    .orderBy(...order);
+  const columns = keys.map((k) => cols[k]!.name);
+  const rows = (found as Record<string, string | null>[]).map((r) =>
+    Object.fromEntries(keys.map((k) => [cols[k]!.name, cols[k]!.columnType === 'PgJsonb' && r[k] !== null ? compactRedactedJson(r[k]!) : r[k]!])),
+  );
+  return { columns, rows };
 }

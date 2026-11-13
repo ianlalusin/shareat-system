@@ -62,6 +62,7 @@
  * concept at all — that information now lives only here, in `CAPABILITY-MATRIX.md`'s Notes
  * column, and in the position-grant rows `0152` wrote.
  */
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -80,7 +81,7 @@ if (!baseUrl) {
 }
 if (!/shareat_test|_test(\?|$)/.test(baseUrl)) {
   throw new Error(
-    `Refusing to run against ${baseUrl.replace(/:\/\/[^@]*@/, '://***@')} — the database name must contain "_test".`,
+    `Refusing to run against ${redactDbUrl(baseUrl)} — the database name must contain "_test".`,
   );
 }
 

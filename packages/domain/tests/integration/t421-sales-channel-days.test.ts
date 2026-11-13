@@ -1,3 +1,4 @@
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -10,10 +11,10 @@ import postgres from 'postgres';
  * TESTER, not BUILDER. Every assertion is on the TARGET shape; the money is exact `Money` (strings) arithmetic.
  *
  * ## Fixture (store A is POS-linked, so its days are imported feed days; store B is unlinked and typed)
- *  - D1 2027-01-10 verified: Walk-in 1,000.10 (the feed) + Grab 200.20 (platform row) = 1,200.30
- *  - D2 2027-01-11 verified feed day with no remitted sales, Foodpanda 300.30 (platform row)
- *  - D3 2027-01-12 verified, then VOIDED (its pair nets to 0 in the ledger, and it is not 'verified')
- *  - D4 2027-01-13 no sales
+ *  - D1 2026-01-10 verified: Walk-in 1,000.10 (the feed) + Grab 200.20 (platform row) = 1,200.30
+ *  - D2 2026-01-11 verified feed day with no remitted sales, Foodpanda 300.30 (platform row)
+ *  - D3 2026-01-12 verified, then VOIDED (its pair nets to 0 in the ledger, and it is not 'verified')
+ *  - D4 2026-01-13 no sales
  *  - a POS correction of -50.00 on D1's sales (Dr 4100), posted with entry date D2
  *  - store B: a typed Walk-in 500.00 day on D1
  *
@@ -27,7 +28,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { closeDb } from '@shareat/db';
@@ -43,10 +44,10 @@ afterAll(async () => {
   await sql.end({ timeout: 5 });
 });
 
-const D1 = '2027-01-10';
-const D2 = '2027-01-11';
-const D3 = '2027-01-12';
-const D4 = '2027-01-13';
+const D1 = '2026-01-10';
+const D2 = '2026-01-11';
+const D3 = '2026-01-12';
+const D4 = '2026-01-13';
 
 interface ChannelBlock { channelId: string | null; channelName: string; total: Money }
 interface ChannelDay { day: string; total: Money; channels: ChannelBlock[] }
@@ -232,7 +233,7 @@ describe('T-421 case 6 - a day whose ledger total no longer matches its blocks i
     const before = await rollup(f.storeId);
     expect(before.unreconciledDays, 'control: a clean range lists nothing').toEqual([]);
 
-    const period = (await sql<{ id: string }[]>`select id from fiscal_periods where org_id = ${f.orgId} and starts_on = '2027-01-01'`)[0]!.id;
+    const period = (await sql<{ id: string }[]>`select id from fiscal_periods where org_id = ${f.orgId} and starts_on = '2026-01-01'`)[0]!.id;
     const acct = async (code: string) => (await sql<{ id: string }[]>`select id from accounts where org_id = ${f.orgId} and code = ${code}`)[0]!.id;
     const [rev, cash] = [await acct('4100'), await acct('1110')];
     await sql.begin(async (trx) => {

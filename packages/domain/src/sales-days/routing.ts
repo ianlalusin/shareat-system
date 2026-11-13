@@ -84,7 +84,7 @@
  * 0"*. **Flooring hides exactly the case worth seeing**: a negative means the tender figures
  * disagree, which is a real signal about a real problem. Here it surfaces as a blocked posting.
  */
-import { add, isZero, money, subtract, type Money } from '@shareat/core/money';
+import { add, compare, isZero, money, subtract, type Money } from '@shareat/core/money';
 
 /** Where a sales day's money lands. Deliberately a named map rather than literals scattered
  *  through the routing logic — the same shape as EXPENSE_FUNDING_ACCOUNTS. */
@@ -113,6 +113,12 @@ export const SALES_DAY_ACCOUNTS = {
    *  really are income (Ian: "all in one account, separated from service charge"). */
   OTHER_CHARGES: '4500',
 } as const;
+
+/**
+ * T-558 (bible row 453): where the shortfall of a POS day lands when its tenders come up short of what was sold ("Cash over and short").
+ * Cash over and short; Ian 11 Nov, bible row 459, POSTING-PATTERNS sale.pos-short-payment
+ */
+export const POS_SHORT_PAYMENT_ACCOUNT = '7350';
 
 export interface SalesDayChannelInput {
   channelId: string;
@@ -143,6 +149,12 @@ export interface RouteSalesDayInput {
    * collected is already net of them) and posted as a `Dr 4950` line. Absent = 0: a legacy typed day never has any.
    */
   refunds?: Money;
+  /**
+   * T-558: true only for a day derived from POS receipts (`source = 'pos_receipts'`). A receipt can be paid a few centavos short of the server's total and is
+   * recorded anyway, so such a day's tenders may come up short of what was sold; the shortfall (revenue - discounts - tenders, from the day's own figures) posts as
+   * ONE extra debit to POS_SHORT_PAYMENT_ACCOUNT. A day whose tenders EXCEED what was sold still fails the reconciliation. Absent = false: every other day stays exact.
+   */
+  allowShortPayment?: boolean;
   /** Every channel row on the day, remitted and not. */
   channels: SalesDayChannelInput[];
   /** ⭐ WHERE the online money landed — one row per money account (DEF-068, bible row 148).
@@ -241,7 +253,7 @@ export function routeSalesDay(input: RouteSalesDayInput): RouteSalesDayResult {
   // service charge on behalf of the staff, the other charges on the business's own account.
   const discountsTotal = add(input.seniorDiscount, input.pwdDiscount, input.otherDiscount);
   const refunds = input.refunds ?? money('0');
-  const collectedSide = add(
+  let collectedSide = add(
     input.cashCollected,
     input.onlineCollected,
     input.creditSales,
@@ -251,6 +263,11 @@ export function routeSalesDay(input: RouteSalesDayInput): RouteSalesDayResult {
     refunds,
   );
   const earnedSide = add(input.totalSales, input.serviceCharge, input.otherCharges);
+  let shortPayment = money('0');
+  if (input.allowShortPayment && compare(earnedSide, collectedSide) > 0) {
+    shortPayment = subtract(earnedSide, collectedSide);
+    collectedSide = add(collectedSide, shortPayment);
+  }
   if (!isZero(subtract(collectedSide, earnedSide))) {
     return {
       ok: false,
@@ -318,6 +335,9 @@ export function routeSalesDay(input: RouteSalesDayInput): RouteSalesDayResult {
   }
   if (!isZero(input.comps)) {
     lines.push({ accountCode: SALES_DAY_ACCOUNTS.COMPS, side: 'debit', amount: input.comps, lineMemo: 'comps' });
+  }
+  if (!isZero(shortPayment)) {
+    lines.push({ accountCode: POS_SHORT_PAYMENT_ACCOUNT, side: 'debit', amount: shortPayment, lineMemo: 'short payments (POS)' });
   }
   if (!isZero(refunds)) {
     lines.push({ accountCode: SALES_DAY_ACCOUNTS.REFUNDS, side: 'debit', amount: refunds, lineMemo: 'refunds (POS)' });

@@ -1899,7 +1899,9 @@ export async function openShiftsStale(tx: Tx, orgId: string): Promise<DetectedFi
  * longer this detector's job to nag about forever; it becomes a standing data-quality fact for
  * the daily review to log once, not a permanent hard finding.
  */
-export async function posUsagePullNotRun(tx: Tx, orgId: string): Promise<DetectedFinding[]> {
+export async function posUsagePullNotRun(tx: Tx, orgId: string, asOf?: string): Promise<DetectedFinding[]> {
+  // `asOf` (a Manila business date) lets a test pin "today"; production passes nothing and the database clock is used.
+  const today = asOf ? sql`${asOf}::date` : MANILA_TODAY;
   const rows = (await tx.execute(sql`
     select d.store_id::text as store_id, s.name as store_name,
            count(*)::int as n, min(d.business_date)::text as oldest
@@ -1907,7 +1909,7 @@ export async function posUsagePullNotRun(tx: Tx, orgId: string): Promise<Detecte
       join stores s on s.id = d.store_id
      where d.org_id = ${orgId}
        and d.status = 'verified'
-       and d.business_date >= ((now() at time zone 'Asia/Manila')::date - 14)
+       and d.business_date >= (${today} - 14)
        and exists (select 1 from pos_item_maps m where m.store_id = d.store_id and m.status = 'active')
        and not exists (
          select 1 from pos_usage_pulls p where p.sales_day_id = d.id and p.status = 'finalized'

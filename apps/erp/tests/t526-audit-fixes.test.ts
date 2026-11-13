@@ -12,6 +12,7 @@ const { dev } = vi.hoisted(() => ({
     touchSnapshot: vi.fn(async () => undefined),
     readSnapshot: vi.fn(async (): Promise<unknown> => null),
     resumeAbove: vi.fn(async () => undefined),
+    bindPairing: vi.fn(async (_id: string) => undefined), // T-563
     listVerifiers: vi.fn(async (): Promise<unknown[]> => []),
     deleteVerifier: vi.fn(async (_personId: string): Promise<void> => undefined),
   },

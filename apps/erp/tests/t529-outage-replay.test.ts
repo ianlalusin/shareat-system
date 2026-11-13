@@ -4,8 +4,8 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { fakeMeta, id, IT, MENU } from './helpers/t529-fixtures';
-import { NO_TICKET_NO, printOutageForEvent } from '../src/app/pos/_kitchen/outage-print';
-import { OUTAGE_PRINTED_KEY, printUnprinted, pruneOutagePrinted, pruneOutagePrintedToPending } from '../src/app/pos/_kitchen/outage-replay';
+import { KITCHEN_TICKET_SEQ_KEY, NO_TICKET_NO, printOutageForEvent } from '../src/app/pos/_kitchen/outage-print';
+import { OUTAGE_INFLIGHT_KEY, OUTAGE_PRINTED_KEY, OUTAGE_REPRINT_KEY, PRINT_RETRY_NOTE, printUnprinted, pruneOutagePrinted, pruneOutagePrintedToPending, recoveryFailedNote } from '../src/app/pos/_kitchen/outage-replay';
 
 const SESSION = id(6001);
 const STAND_ID = id(6002);
@@ -75,6 +75,119 @@ describe('the offline switch prints what was saved before the poll said Offline'
     expect(res.message).toBe('Kitchen ticket did not print. Tap Reprint.');
     expect(meta.store.get(OUTAGE_PRINTED_KEY)).toEqual([7]);
     expect((await printUnprinted(failing, [linesAdded(7)])).failed).toEqual([]);
+  });
+});
+
+describe('T-561 an outage ticket is marked printed only once it printed (or is saved for reprint)', () => {
+  it('(a) printing event 2 of 3 throws: 1 and 3 print and are marked, 2 is not marked, the message is set, and the next replay retries 2', async () => {
+    const { deps, meta, printLines } = setup();
+    let counterWrites = 0;
+    const flaky = {
+      ...deps(false),
+      setMeta: async <T>(k: string, v: T) => {
+        if (k === KITCHEN_TICKET_SEQ_KEY && ++counterWrites === 2) throw new Error('disk full');
+        return meta.setMeta(k, v);
+      },
+    };
+    const pending = [linesAdded(1), linesAdded(2), linesAdded(3)];
+    const res = await printUnprinted(flaky, pending);
+    expect(printLines).toHaveBeenCalledTimes(2);
+    expect(meta.store.get(OUTAGE_PRINTED_KEY)).toEqual([1, 3]);
+    expect(res.message).not.toBeNull();
+    expect(meta.store.get(OUTAGE_INFLIGHT_KEY) ?? []).toEqual([]);
+    const again = await printUnprinted(deps(false), pending);
+    expect(again.printed).toBe(1);
+    expect(printLines).toHaveBeenCalledTimes(3);
+    expect(meta.store.get(OUTAGE_PRINTED_KEY)).toEqual([1, 2, 3]);
+    expect(again.message).toBeNull();
+  });
+
+  it('(b) a seq left in flight by a crash is not printed again: it comes back as a Reprint job with a message, and is marked so it is offered once', async () => {
+    const { deps, meta, printLines } = setup({ meta: fakeMeta({ [OUTAGE_INFLIGHT_KEY]: [4] }) });
+    const res = await printUnprinted(deps(false), [linesAdded(4)]);
+    expect(printLines).not.toHaveBeenCalled();
+    expect(res.failed).toHaveLength(1);
+    expect(res.failed[0]!.lines.some((l) => l.includes('GRILL'))).toBe(true);
+    expect(res.message).not.toBeNull();
+    expect(meta.store.get(OUTAGE_REPRINT_KEY)).toHaveLength(1);
+    expect(meta.store.get(OUTAGE_PRINTED_KEY)).toEqual([4]);
+    expect(meta.store.get(OUTAGE_INFLIGHT_KEY)).toEqual([]);
+    const second = await printUnprinted(deps(false), [linesAdded(4)]);
+    expect(second).toEqual({ printed: 0, failed: [], message: null });
+    expect(printLines).not.toHaveBeenCalled();
+  });
+
+  it('(c) the normal path is unchanged: every event prints once, a second replay prints nothing, and nothing is left in flight', async () => {
+    const { deps, meta, printLines } = setup();
+    const pending = [standOpened(1), linesAdded(2), refill(3)];
+    const first = await printUnprinted(deps(false), pending);
+    expect(first).toEqual({ printed: 3, failed: [], message: null });
+    expect(printLines).toHaveBeenCalledTimes(3);
+    expect(meta.store.get(OUTAGE_PRINTED_KEY)).toEqual([1, 2, 3]);
+    expect(meta.store.get(OUTAGE_INFLIGHT_KEY) ?? []).toEqual([]);
+    expect((await printUnprinted(deps(false), pending)).printed).toBe(0);
+    expect(printLines).toHaveBeenCalledTimes(3);
+  });
+
+  it('pruning forgets in-flight seqs the outbox dropped, the same way as printed ones', async () => {
+    const m = fakeMeta({ [OUTAGE_PRINTED_KEY]: [1, 2], [OUTAGE_INFLIGHT_KEY]: [2, 3] });
+    await pruneOutagePrinted(m, [2]);
+    expect(m.store.get(OUTAGE_INFLIGHT_KEY)).toEqual([3]);
+    await pruneOutagePrintedToPending(m, [1, 5]);
+    expect(m.store.get(OUTAGE_PRINTED_KEY)).toEqual([1]);
+    expect(m.store.get(OUTAGE_INFLIGHT_KEY)).toEqual([]);
+  });
+});
+
+describe('T-561 revision 1 - the printed mark never runs ahead of the saved Reprint job', () => {
+  const failingSet = (meta: ReturnType<typeof fakeMeta>, key: string) => async <T>(k: string, v: T) => {
+    if (k === key) throw new Error('disk full');
+    return meta.setMeta(k, v);
+  };
+
+  it('(d) crash leftover: when the Reprint job cannot be saved the seq stays in flight and unmarked, with the recovery warning; the next replay saves it and marks it', async () => {
+    const { deps, meta, printLines } = setup({ meta: fakeMeta({ [OUTAGE_INFLIGHT_KEY]: [4] }) });
+    const res = await printUnprinted({ ...deps(false), setMeta: failingSet(meta, OUTAGE_REPRINT_KEY) }, [linesAdded(4)]);
+    expect(res.message).toBe(recoveryFailedNote(['event 4']));
+    expect(meta.store.get(OUTAGE_PRINTED_KEY) ?? []).toEqual([]);
+    expect(meta.store.get(OUTAGE_INFLIGHT_KEY)).toEqual([4]);
+    const again = await printUnprinted(deps(false), [linesAdded(4)]);
+    expect(printLines).not.toHaveBeenCalled();
+    expect(again.failed).toHaveLength(1);
+    expect(meta.store.get(OUTAGE_REPRINT_KEY)).toHaveLength(1);
+    expect(meta.store.get(OUTAGE_PRINTED_KEY)).toEqual([4]);
+    expect(meta.store.get(OUTAGE_INFLIGHT_KEY)).toEqual([]);
+  });
+
+  it('(e) normal path: a refused ticket is saved to Reprint before the seq is marked; if the save fails the seq stays in flight and the next replay offers it without printing again', async () => {
+    const saved = setup();
+    const refusing = { ...saved.deps(false), printLines: vi.fn(async (): Promise<'failed'> => 'failed') };
+    const res = await printUnprinted(refusing, [linesAdded(7)]);
+    expect(res.failed).toHaveLength(1);
+    expect(saved.meta.store.get(OUTAGE_REPRINT_KEY)).toHaveLength(1);
+    expect(saved.meta.store.get(OUTAGE_PRINTED_KEY)).toEqual([7]);
+
+    const { deps, meta, printLines } = setup();
+    const broken = { ...deps(false), printLines: vi.fn(async (): Promise<'failed'> => 'failed'), setMeta: failingSet(meta, OUTAGE_REPRINT_KEY) };
+    const bad = await printUnprinted(broken, [linesAdded(8)]);
+    expect(bad.message).toBe(PRINT_RETRY_NOTE);
+    expect(meta.store.get(OUTAGE_PRINTED_KEY) ?? []).toEqual([]);
+    expect(meta.store.get(OUTAGE_INFLIGHT_KEY)).toEqual([8]);
+    const again = await printUnprinted(deps(false), [linesAdded(8)]);
+    expect(printLines).not.toHaveBeenCalled();
+    expect(again.failed).toHaveLength(1);
+    expect(meta.store.get(OUTAGE_REPRINT_KEY)).toHaveLength(1);
+    expect(meta.store.get(OUTAGE_PRINTED_KEY)).toEqual([8]);
+  });
+
+  it('(f) a crash leftover whose paper cannot be rebuilt returns a warning naming the table, no jobs, and stays in flight unmarked', async () => {
+    const { deps, meta } = setup({ meta: fakeMeta({ [OUTAGE_INFLIGHT_KEY]: [5] }) });
+    const res = await printUnprinted({ ...deps(false), tableLabels: { [SESSION]: '7' }, setMeta: failingSet(meta, KITCHEN_TICKET_SEQ_KEY) }, [linesAdded(5)]);
+    expect(res.message).toBe(recoveryFailedNote(['table 7']));
+    expect(res.message).toContain('table 7');
+    expect(res.failed).toEqual([]);
+    expect(meta.store.get(OUTAGE_INFLIGHT_KEY)).toEqual([5]);
+    expect(meta.store.get(OUTAGE_PRINTED_KEY) ?? []).toEqual([]);
   });
 });
 
