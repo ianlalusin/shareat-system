@@ -6,9 +6,6 @@
       20,
       20
     ],
-    "app/admin/users/page.tsx": [
-      20
-    ],
     "app/admin/users/[personId]/page.tsx": [
       16,
       20,
@@ -108,16 +105,6 @@
       20
     ],
     "app/inventory/low-stock/page.tsx": [
-      20
-    ],
-    "app/inventory/page.tsx": [
-      20,
-      20,
-      20,
-      20,
-      20,
-      20,
-      20,
       20
     ],
     "app/inventory/production/page.tsx": [
@@ -370,6 +357,15 @@
     ],
     "components/ui/Textarea.tsx": [
       "className could not be resolved statically (dynamic expression outside the known shapes)"
+    ],
+    "app/admin/users/page.tsx": [
+      "ancestry truncated — no font size resolvable"
+    ],
+    "app/findings/page.tsx": [
+      "an ancestor className could not be resolved statically"
+    ],
+    "app/staff/StaffViews.tsx": [
+      "ancestry truncated — no font size resolvable"
     ]
   }
 }

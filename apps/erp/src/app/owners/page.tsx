@@ -14,7 +14,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Banner, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, RowLink, Select, DialogActions } from '@/components/ui';
+import { Banner, Button, Field, FlashBanner, FormGrid, FormModal, FormSection, Input, LinkRow, NumTd, RowLink, Select, Table, Td, Th, DialogActions } from '@/components/ui';
 
 export const metadata = { title: 'Owners — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -172,63 +172,49 @@ export default async function OwnersPage({
 
       {/* ── The register ─────────────────────────────────────────────────────────────── */}
       {owners.length > 0 ? (
-        <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-          <table className="w-full min-w-[880px] border-collapse text-sm">
+        <Table card={{ title: 'Owner', subtitle: 'Store', keys: ['Net', 'Owes'] }}>
             <thead>
-              <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
-                <th className="px-3 py-2 font-medium">Owner</th>
-                <th className="px-3 py-2 font-medium">Store</th>
-                <th className="px-3 py-2 text-right font-medium">Contributed</th>
-                <th className="px-3 py-2 text-right font-medium">Drawn</th>
-                <th className="px-3 py-2 text-right font-medium">Net</th>
-                <th className="px-3 py-2 text-right font-medium">Owes</th>
-                <th className="px-3 py-2 font-medium">Limit</th>
+              <tr>
+                <Th>Owner</Th>
+                <Th>Store</Th>
+                <Th numeric>Contributed</Th>
+                <Th numeric>Drawn</Th>
+                <Th numeric>Net</Th>
+                <Th numeric>Owes</Th>
+                <Th>Limit</Th>
               </tr>
             </thead>
             <tbody>
               {owners.map((o) => (
                 <LinkRow
                   key={o.id}
-                  className={`border-b border-neutral-100 last:border-0 dark:border-neutral-900 ${
-                    o.status === 'active' ? '' : 'opacity-60'
-                  }`}
+                  className={o.status === 'active' ? undefined : 'opacity-60'}
                 >
-                  <td className="px-3 py-2">
+                  <Td>
                     <RowLink href={`/owners/${o.id}`}>
                       {personById.get(o.personId)?.displayName ?? 'Unknown'}
                     </RowLink>
-                    <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                    <div className="text-xs text-muted">
                       {o.role ?? '—'}
                       {o.ownershipPercentage && (
-                        // ⚠️ Labelled advisory on purpose: nothing validates that these sum to 100,
-                        // because a store mid-restructure legitimately does not.
                         <> · {Number(o.ownershipPercentage)}% (indicative)</>
                       )}
                     </div>
-                  </td>
-                  <td className="px-3 py-2">{storeById.get(o.storeId)?.code ?? '—'}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">
-                    {peso(o.position.contributed)}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">
-                    {peso(o.position.drawn)}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">
-                    {peso(o.position.net)}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">
-                    {peso(o.position.receivable)}
-                  </td>
-                  <td className="px-3 py-2 text-xs whitespace-nowrap">
+                  </Td>
+                  <Td>{storeById.get(o.storeId)?.code ?? '—'}</Td>
+                  <NumTd className="font-mono">{peso(o.position.contributed)}</NumTd>
+                  <NumTd className="font-mono">{peso(o.position.drawn)}</NumTd>
+                  <NumTd className="font-mono">{peso(o.position.net)}</NumTd>
+                  <NumTd className="font-mono">{peso(o.position.receivable)}</NumTd>
+                  <Td className="text-xs whitespace-nowrap">
                     {o.drawingLimit
                       ? `${peso(o.drawingLimit)} ${o.drawingLimitPeriod}`
                       : 'none'}
-                  </td>
+                  </Td>
                 </LinkRow>
               ))}
             </tbody>
-          </table>
-        </div>
+          </Table>
       ) : (
         <p className="text-sm text-neutral-500 dark:text-neutral-400">No owners recorded.</p>
       )}

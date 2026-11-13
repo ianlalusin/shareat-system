@@ -9,6 +9,7 @@ import { createTenderAction, linkStoreToPosAction, setTenderActiveAction, unlink
 import { POS_LINK_EDIT, TENDER_EDIT } from './typed-forms';
 import { canUnlink, posLinkRows, posStoreOptions, storeTenders, tenderMapping, type PosLinkStoreRow, type StoreTenders, type TenderAdminRow } from './lib';
 import { Page } from '@/components/shell/Page';
+import { ChevronIcon } from '@/components/shell/icons';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { SETTINGS_POS_LINK_RULES, SETTINGS_POS_UNLINK_RULES, SETTINGS_TENDER_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { Banner, Button, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select, Textarea } from '@/components/ui';
@@ -111,21 +112,28 @@ function StoreCard({
 }) {
   const link = row.link;
   return (
-    <section id={`store-${row.storeId}`} className="scroll-mt-4 space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-medium">{row.storeName}</h2>
-        {link ? (
-          <span className="rounded bg-success-soft px-1.5 py-0.5 text-xs font-medium text-success">
-            Linked to {link.posStoreName}
-          </span>
-        ) : (
-          <span className="rounded bg-warning-soft px-1.5 py-0.5 text-xs font-medium text-warning-ink">
-            Not linked — sales are typed
-          </span>
-        )}
-      </div>
+    <details
+      id={`store-${row.storeId}`}
+      open={feedback ? true : undefined}
+      className="group scroll-mt-4 rounded-[20px] border border-surface-border bg-surface"
+    >
+      <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+        <span className="font-medium">{row.storeName}</span>
+        <span className="flex items-center gap-2">
+          {link ? (
+            <span className="rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success">
+              Linked to {link.posStoreName}
+            </span>
+          ) : (
+            <span className="rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning-ink">
+              Not linked — sales are typed
+            </span>
+          )}
+          <ChevronIcon className="size-4 text-muted transition group-open:rotate-180" />
+        </span>
+      </summary>
 
-      <div className="space-y-3 text-sm">
+      <div className="space-y-3 border-t border-surface-border px-4 py-4 text-sm">
         <h3 className="font-medium">Link to POS</h3>
         {link ? (
           // A linked store's link is a saved record: locked until Edit (A0 L1).
@@ -267,7 +275,6 @@ function StoreCard({
           </FormModal>
           </div>
         )}
-      </div>
 
       {row.unlinked && !link && (
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -282,7 +289,8 @@ function StoreCard({
       {feedback?.ok && <Banner tone="success">{feedback.ok}</Banner>}
 
       <TendersSection storeId={row.storeId} storeName={row.storeName} linked={!!link} t={tenders} flash={flash} actorId={actorId} />
-    </section>
+      </div>
+    </details>
   );
 }
 

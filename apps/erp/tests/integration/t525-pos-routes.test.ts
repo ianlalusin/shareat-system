@@ -99,7 +99,7 @@ async function call(route: Route, method: 'GET' | 'POST', o: Call = {}): Promise
   return (handler as (r: Request) => Promise<Response>)(req);
 }
 const tablet = (f: Fx) => ({ [POS_TABLET_COOKIE]: f.pairingToken });
-const post = (f: Fx, events: unknown, o: Call = {}) => call('events', 'POST', { cookies: tablet(f), body: JSON.stringify({ events }), ...o });
+const post = (f: Fx, events: unknown, o: Call = {}) => call('events', 'POST', { cookies: tablet(f), body: JSON.stringify({ pairingId: f.pairingId, events }), ...o }); // T-563: a batch names the pairing it was made under
 const noStore = (res: Response) => expect(res.headers.get('cache-control') ?? '').toContain('no-store');
 async function expectFailure(res: Response, status: number, error?: string) {
   expect(res.status).toBe(status);
@@ -163,7 +163,7 @@ describe('POST /api/pos/events - the envelope (R2)', () => {
   it('a body that is not application/json is 415 (text/plain, form posts, no content-type); application/json with a charset is accepted; nothing is processed on a 415', async () => {
     const f = await fixture();
     await pinSession(f, f.counterId);
-    const body = JSON.stringify({ events: plainDay(f).events });
+    const body = JSON.stringify({ pairingId: f.pairingId, events: plainDay(f).events });
     for (const contentType of ['text/plain', 'application/x-www-form-urlencoded', 'multipart/form-data; boundary=x', null]) {
       const res = await call('events', 'POST', { cookies: tablet(f), body, contentType });
       await expectFailure(res, 415);
@@ -244,7 +244,7 @@ describe('POST /api/pos/events - the envelope (R2)', () => {
     const f = await fixture();
     await pinSession(f, f.counterId);
     // store B has a live pairing but no pos_stores row at all
-    const none = await call('events', 'POST', { cookies: { [POS_TABLET_COOKIE]: f.pairingBToken }, body: JSON.stringify({ events: [unknownEvent(f, 1)] }) });
+    const none = await call('events', 'POST', { cookies: { [POS_TABLET_COOKIE]: f.pairingBToken }, body: JSON.stringify({ pairingId: f.pairingBId, events: [unknownEvent(f, 1)] }) });
     await expectFailure(none, 409, NOT_ON);
     expect(await counts(f)).toMatchObject({ events: 0 });
 

@@ -2,6 +2,9 @@
 const CONTROL = 'button,a[href],input:not([type="hidden"]),select,textarea,[tabindex]';
 const EDITOR = 'button,input:not([type="hidden"]),select,textarea,[role="button"],[role="checkbox"],[role="radio"],[role="combobox"],[contenteditable]:not([contenteditable="false"])';
 const cellsOf = (row: HTMLTableRowElement) => Array.from(row.cells).filter(cell => !cell.hasAttribute('data-card-toggle-cell'));
+/** A control that is part of the row, not a help tip or other annotation-only affordance. */
+const meaningful = (element: Element) => !element.closest('[data-card-ignore]');
+const hasControl = (root: Element) => Array.from(root.querySelectorAll(CONTROL)).some(meaningful);
 let detailId = 0;
 function attribute(element: Element, name: string, value: string) {
   if (element.getAttribute(name) !== value) element.setAttribute(name, value);
@@ -14,7 +17,9 @@ function headerText(cell: Element): string {
   if (explicit) return explicit;
   // Detached text-only inspection; the clone is NEVER mounted or given handlers.
   const copy = cell.cloneNode(true) as Element;
-  copy.querySelectorAll('form,input,select,textarea,[aria-hidden="true"],table').forEach(node => node.remove());
+  // T-568: hidden help-tip prose lives in the DOM for screen readers. It is not part of the
+  // visible heading, and concatenating it produced labels like "ThresholdA number of 0 or more".
+  copy.querySelectorAll('form,input,select,textarea,[aria-hidden="true"],table,[hidden],[role="tooltip"],[data-card-ignore]').forEach(node => node.remove());
   return (copy.textContent ?? '').replace(/\s+/g, ' ').trim();
 }
 function span(cell: HTMLTableCellElement, name: 'colSpan' | 'rowSpan', remaining: number): number {
@@ -49,7 +54,7 @@ function summarizeRow(table: HTMLTableElement, row: HTMLTableRowElement) {
   if (!cells.length) return;
   const named = (name: string | null) => name ? cells.find(cell => cell.dataset.cardLabel?.toLowerCase() === name.toLowerCase()) : undefined;
   const label = (cell: HTMLTableCellElement) => cell.dataset.cardLabel ?? '';
-  const editable = (cell: HTMLTableCellElement) => Boolean(cell.querySelector(EDITOR));
+  const editable = (cell: HTMLTableCellElement) => Array.from(cell.querySelectorAll(EDITOR)).some(meaningful);
   const imageCell = cells.find(cell => cell.querySelector('img') && (/photo|image|picture|avatar/i.test(label(cell)) || !headerText(cell)));
   const available = cells.filter(cell => cell !== imageCell);
   const title = named(table.getAttribute('data-card-title'))
@@ -71,9 +76,9 @@ function summarizeRow(table: HTMLTableElement, row: HTMLTableRowElement) {
   if (keys.length && !group) attribute(row, 'data-card-has-keys', '');
   else row.removeAttribute('data-card-has-keys');
   const text = headerText(title);
-  const words = text.split(/\s+/).filter(Boolean);
-  const initials = [words[0], words.length === 1 ? undefined : words[words.length - 1]]
-    .filter((word): word is string => Boolean(word)).map(word => [...word][0] ?? '').join('').toUpperCase();
+  // T-568: first two words, punctuation stripped — "T343S6C Test Item (slab)" was rendering "T(".
+  const words = text.split(/\s+/).map(word => word.replace(/^[^A-Za-z0-9]+/, '')).filter(Boolean);
+  const initials = words.slice(0, 2).map(word => [...word][0] ?? '').join('').toUpperCase();
   attribute(row, 'data-card-avatar', initials || '·');
   const image = imageCell?.querySelector('img') ?? title.querySelector('img');
   if (image) { attribute(row, 'data-card-has-image', ''); attribute(image, 'data-card-image', ''); }
@@ -82,7 +87,8 @@ function summarizeRow(table: HTMLTableElement, row: HTMLTableRowElement) {
   for (const cell of cells) {
     const keyIndex = keys.indexOf(cell);
     const slot = group ? 'group' : cell === imageCell ? 'media' : cell === title ? 'title'
-      : editable(cell) ? 'actions' : keyIndex !== -1 ? 'key' : cell === subtitle ? 'subtitle' : 'extra';
+      : cell.hasAttribute('data-card-action') || editable(cell) ? 'actions'
+      : keyIndex !== -1 ? 'key' : cell === subtitle ? 'subtitle' : 'extra';
     attribute(cell, 'data-card-slot', slot);
     if (slot === 'key') attribute(cell, 'data-card-key-order', String(keyIndex + 1));
     else cell.removeAttribute('data-card-key-order');
@@ -130,12 +136,12 @@ function enhanceTable(table: HTMLTableElement) {
     role(row, 'row');
     Array.from(row.cells).forEach(cell => {
       role(cell, 'columnheader');
-      if (cell.querySelector(CONTROL)) attribute(cell, 'data-card-control', '');
+      if (hasControl(cell)) attribute(cell, 'data-card-control', '');
       else cell.removeAttribute('data-card-control');
     });
   }
   if (table.tHead) {
-    if (table.tHead.querySelector(CONTROL)) attribute(table.tHead, 'data-card-controls', '');
+    if (hasControl(table.tHead)) attribute(table.tHead, 'data-card-controls', '');
     else table.tHead.removeAttribute('data-card-controls');
   }
   const sections = [...Array.from(table.tBodies), ...(table.tFoot ? [table.tFoot] : [])];

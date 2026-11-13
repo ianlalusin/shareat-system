@@ -14,7 +14,8 @@ import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { SETTINGS_EXPENSE_CATEGORY_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Button, DialogActions, Field, FlashBanner, FormGrid, FormModal, Input, Select } from '@/components/ui';
+import { Button, Card, DialogActions, EmptyState, Field, FlashBanner, FormGrid, FormModal, Input, Select, Table, Td, Th } from '@/components/ui';
+import { FilterRow } from '@/components/FilterRow';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { EXPENSE_CATEGORY_ACCOUNT, EXPENSE_CATEGORY_RENAME, EXPENSE_SUBCATEGORY_RENAME } from './typed-forms';
@@ -25,6 +26,8 @@ export const dynamic = 'force-dynamic';
 interface SearchParams {
   ok?: string;
   error?: string;
+  group?: string;
+  q?: string;
 }
 
 /**
@@ -62,6 +65,24 @@ export default async function ExpenseCategoriesSettingsPage({
 
   const unmapped = categories.filter((c) => c.accountCode === null);
   const blockedTotal = unmapped.reduce((n, c) => n + c.blockedDraftCount, 0);
+  const accountByCode = new Map(accounts.map((a) => [a.code, a]));
+  const groupFilter =
+    sp.group && ['CAPEX', 'COGS', 'OPEX', 'PERSONAL'].includes(sp.group) ? sp.group : '';
+  const query = (sp.q ?? '').trim().toLowerCase();
+  const filtered = categories.filter((c) => {
+    if (groupFilter && c.group !== groupFilter) return false;
+    if (!query) return true;
+    return [c.category, c.group, accountByCode.get(c.accountCode ?? '')?.name]
+      .filter((value): value is string => Boolean(value))
+      .some((value) => value.toLowerCase().includes(query));
+  });
+  const grouped = new Map<string, typeof filtered>();
+  for (const category of filtered) {
+    const rows = grouped.get(category.group) ?? [];
+    rows.push(category);
+    grouped.set(category.group, rows);
+  }
+  const groups = [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b));
 
   return (
     <Page density="table">
@@ -100,196 +121,244 @@ export default async function ExpenseCategoriesSettingsPage({
         )}
       </p>
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-neutral-200 text-left dark:border-neutral-800">
-              <th className="py-2 pr-3 font-medium">Category</th>
-              <th className="py-2 pr-3 font-medium">Group</th>
-              <th className="py-2 pr-3 font-medium">Blocking</th>
-              <th className="py-2 font-medium">Posts to</th>
-            </tr>
-          </thead>
-          <tbody>
-            {categories.map((c) => {
-              const isUnmapped = c.accountCode === null;
-              return (
-                <tr
-                  key={c.id}
-                  className={`border-b border-neutral-100 align-middle dark:border-neutral-900 ${
-                    !c.isActive ? 'opacity-60' : isUnmapped ? 'bg-warning-soft' : ''
-                  }`}
-                >
-                  <td className="py-2 pr-3">
-                    {/* ⛔ A SEEDED row cannot be renamed — the seed owns its name (bible §4.4
-                        rule 5), and renaming it here would have the next seed re-create the
-                        original beside it. It can still be retired, which is rule 2's own wording
-                        and what makes a 38-row seed survivable for a business that uses 20. */}
-                    {/* T-448: the name is always text; a non-seeded row adds an Edit button (modal). */}
-                    <span className="mr-2">{c.category}</span>
-                    {!c.isSystem && (
-                      <EditableRecord action={renameCategoryAction} label={c.category} hidden={{ categoryId: c.id }} typed={typedFor(sp, EXPENSE_CATEGORY_RENAME, c.id, actor.personId)} rules={SETTINGS_EXPENSE_CATEGORY_RULES}>
-                        <FormGrid layout="fields">
-                          <Field label="Name" width="name" rule={SETTINGS_EXPENSE_CATEGORY_RULES.category}>
-                            <Input
-                              {...nativeAttrs(SETTINGS_EXPENSE_CATEGORY_RULES.category)}
-                              defaultValue={c.category}
-                              aria-label={`Name of ${c.category}`}
-                              className="w-full"
-                            />
-                          </Field>
-                        </FormGrid>
-                      </EditableRecord>
-                    )}
-                    {isUnmapped && (
-                      <span className="ml-2 rounded bg-warning-soft px-1.5 py-0.5 text-xs font-medium text-warning-ink">
-                        unmapped
-                      </span>
-                    )}
-                    {c.isSystem && (
-                      <span className="ml-2 rounded bg-neutral-200 px-1.5 py-0.5 text-xs font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
-                        seeded
-                      </span>
-                    )}
-                    {!c.isActive && (
-                      <span className="ml-2 rounded bg-neutral-200 px-1.5 py-0.5 text-xs font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
-                        retired
-                      </span>
-                    )}
-                    {/* T-502 section 11: sub-categories, set on the ITEM (a cashier never picks one). Add, rename, retire; never delete. */}
-                    <div className="mt-2 space-y-1 border-l border-neutral-200 pl-3 dark:border-neutral-800">
-                      {subcategories.filter((s) => s.categoryId === c.id).map((s) => (
-                        <div key={s.id} className={`flex flex-wrap items-center gap-2 text-xs ${s.isActive ? '' : 'opacity-60'}`}>
-                          <span>{s.name}{!s.isActive ? ' (retired)' : ''}</span>
-                          <EditableRecord action={renameSubcategoryAction} label={s.name} hidden={{ subcategoryId: s.id }} typed={typedFor(sp, EXPENSE_SUBCATEGORY_RENAME, s.id, actor.personId)}>
-                            <FormGrid layout="fields">
-                              <Field label="Name" width="name">
-                                <Input name="name" defaultValue={s.name} aria-label={`Name of ${s.name}`} className="w-full" />
-                              </Field>
-                            </FormGrid>
-                          </EditableRecord>
-                          <form action={setSubcategoryActiveAction}>
-                            <input type="hidden" name="subcategoryId" value={s.id} />
-                            <input type="hidden" name="isActive" value={s.isActive ? 'false' : 'true'} />
-                            <button type="submit" className={`${ACTION_LINK} text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200`}>
-                              {s.isActive ? 'Retire' : 'Reinstate'}
-                            </button>
-                          </form>
-                        </div>
-                      ))}
-                      <FormModal trigger="+ Sub-category" title={`Add a sub-category to ${c.category}`} size="sm">
-                        <form action={createSubcategoryAction} className="space-y-3">
-                          <input type="hidden" name="categoryId" value={c.id} />
-                          <FormGrid layout="fields">
-                            <Field label="Name" width="name">
-                              <Input name="name" placeholder="Pork" className="w-full" />
-                            </Field>
-                          </FormGrid>
-                          <DialogActions>
-                            <Button type="submit" variant="primary">Save</Button>
-                          </DialogActions>
-                        </form>
-                      </FormModal>
-                    </div>
-                    <form action={setCategoryActiveAction} className="mt-1">
-                      <input type="hidden" name="categoryId" value={c.id} />
-                      <input type="hidden" name="categoryLabel" value={c.category} />
-                      <input type="hidden" name="isActive" value={c.isActive ? 'false' : 'true'} />
-                      <button
-                        type="submit"
-                        className={`${ACTION_LINK} text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200`}
+      <FilterRow>
+        <label className="text-sm">
+          <span className="block text-muted">Group</span>
+          <Select name="group" defaultValue={groupFilter} className="mt-1">
+            <option value="">All groups</option>
+            <option value="CAPEX">CAPEX — equipment</option>
+            <option value="COGS">COGS — cost of goods sold</option>
+            <option value="OPEX">OPEX — running cost</option>
+            <option value="PERSONAL">PERSONAL — owner’s drawings</option>
+          </Select>
+        </label>
+        <label className="min-w-48 flex-1 text-sm">
+          <span className="block text-muted">Search</span>
+          <Input name="q" defaultValue={sp.q ?? ''} placeholder="Category or account" className="mt-1 w-full" />
+        </label>
+      </FilterRow>
+
+      <p className="text-xs text-muted">
+        {filtered.length} of {categories.length} categories · {unmapped.length} unmapped
+      </p>
+
+      {filtered.length === 0 ? (
+        <EmptyState
+          illustration="magnifier"
+          title="No categories match"
+          body="Clear the group or search filter to see the rest of the register."
+        />
+      ) : (
+        <div className="space-y-7">
+          {groups.map(([groupName, rows]) => (
+            <section key={groupName} className="space-y-2">
+              <div className="flex items-baseline gap-2">
+                <h2 className="text-sm font-semibold">{groupName}</h2>
+                <span className="text-xs tabular-nums text-muted">{rows.length}</span>
+              </div>
+              <Table card={{ title: 'Category', subtitle: 'Posts to' }}>
+                <thead>
+                  <tr>
+                    <Th>Category</Th>
+                    <Th>Group</Th>
+                    <Th>Blocking</Th>
+                    <Th>Posts to</Th>
+                    <Th className="w-28" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((c) => {
+                    const isUnmapped = c.accountCode === null;
+                    const mapped = accountByCode.get(c.accountCode ?? '');
+                    return (
+                      <tr
+                        key={c.id}
+                        className={
+                          !c.isActive ? 'opacity-60' : isUnmapped ? 'bg-warning-soft/40' : undefined
+                        }
                       >
-                        {c.isActive ? 'Retire' : 'Reinstate'}
-                      </button>
-                    </form>
-                  </td>
-                  <td className="py-2 pr-3 text-neutral-500 dark:text-neutral-400">{c.group}</td>
-                  <td className="py-2 pr-3 text-neutral-500 dark:text-neutral-400">
-                    {c.blockedDraftCount === 0 ? (
-                      '—'
-                    ) : (
-                      <span className="font-medium text-warning-ink">
-                        {c.blockedDraftCount} draft{c.blockedDraftCount === 1 ? '' : 's'}
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-2">
-                    {!isUnmapped ? (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span>{accounts.find((a) => a.code === c.accountCode) ? `${c.accountCode} · ${accounts.find((a) => a.code === c.accountCode)!.name}` : c.accountCode}</span>
-                        <EditableRecord
-                          action={setCategoryAccountAction}
-                          label={`account for ${c.category}`}
-                          hidden={{ categoryId: c.id, categoryLabel: c.category }}
-                          typed={typedFor(sp, EXPENSE_CATEGORY_ACCOUNT, c.id, actor.personId)}
-                        >
-                          <FormGrid layout="fields">
-                            <Field label="Posts to" width="name">
-                              <Select
-                                name="accountCode"
-                                defaultValue={c.accountCode ?? ''}
-                                className="w-full"
-                                aria-label={`Account for ${c.category}`}
+                        <Td data-card-heading={c.category}>
+                          <span className="font-medium">{c.category}</span>
+                          {isUnmapped && (
+                            <span className="ml-2 rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning-ink">
+                              unmapped
+                            </span>
+                          )}
+                          {c.isSystem && (
+                            <span className="ml-2 rounded-full bg-canvas px-2 py-0.5 text-xs text-muted">
+                              seeded
+                            </span>
+                          )}
+                          {!c.isActive && (
+                            <span className="ml-2 rounded-full bg-closed-soft px-2 py-0.5 text-xs text-closed">
+                              retired
+                            </span>
+                          )}
+                          {/* T-502 section 11: sub-categories, set on the ITEM (a cashier never picks one). Add, rename, retire; never delete. */}
+                          <div className="mt-2 space-y-1 border-l border-surface-border pl-3">
+                            {subcategories.filter((s) => s.categoryId === c.id).map((s) => (
+                              <div key={s.id} className={`flex flex-wrap items-center gap-2 text-xs ${s.isActive ? '' : 'opacity-60'}`}>
+                                <span>{s.name}{!s.isActive ? ' (retired)' : ''}</span>
+                                <EditableRecord action={renameSubcategoryAction} label={s.name} hidden={{ subcategoryId: s.id }} typed={typedFor(sp, EXPENSE_SUBCATEGORY_RENAME, s.id, actor.personId)}>
+                                  <FormGrid layout="fields">
+                                    <Field label="Name" width="name">
+                                      <Input name="name" defaultValue={s.name} aria-label={`Name of ${s.name}`} className="w-full" />
+                                    </Field>
+                                  </FormGrid>
+                                </EditableRecord>
+                                <form action={setSubcategoryActiveAction}>
+                                  <input type="hidden" name="subcategoryId" value={s.id} />
+                                  <input type="hidden" name="isActive" value={s.isActive ? 'false' : 'true'} />
+                                  <button type="submit" className={`${ACTION_LINK} text-muted hover:text-ink`}>
+                                    {s.isActive ? 'Retire' : 'Reinstate'}
+                                  </button>
+                                </form>
+                              </div>
+                            ))}
+                            <FormModal trigger="+ Sub-category" title={`Add a sub-category to ${c.category}`} size="sm">
+                              <form action={createSubcategoryAction} className="space-y-3">
+                                <input type="hidden" name="categoryId" value={c.id} />
+                                <FormGrid layout="fields">
+                                  <Field label="Name" width="name">
+                                    <Input name="name" placeholder="Pork" className="w-full" />
+                                  </Field>
+                                </FormGrid>
+                                <DialogActions>
+                                  <Button type="submit" variant="primary">Save</Button>
+                                </DialogActions>
+                              </form>
+                            </FormModal>
+                          </div>
+                        </Td>
+                        <Td className="text-xs text-muted">{c.group}</Td>
+                        <Td className="text-xs">
+                          {c.blockedDraftCount === 0 ? (
+                            '—'
+                          ) : (
+                            <span className="font-medium text-warning-ink">
+                              {c.blockedDraftCount} draft{c.blockedDraftCount === 1 ? '' : 's'}
+                            </span>
+                          )}
+                        </Td>
+                        <Td>
+                          {mapped ? (
+                            <span>
+                              {c.accountCode} · {mapped.name}
+                            </span>
+                          ) : (
+                            <span className="text-warning-ink">Not mapped — blocks posting</span>
+                          )}
+                        </Td>
+                        <Td className="text-right whitespace-nowrap">
+                          <div data-card-ignore className="flex flex-wrap items-center justify-end gap-1">
+                            {!c.isSystem && (
+                              <EditableRecord
+                                action={renameCategoryAction}
+                                label={c.category}
+                                hidden={{ categoryId: c.id }}
+                                typed={typedFor(sp, EXPENSE_CATEGORY_RENAME, c.id, actor.personId)}
+                                rules={SETTINGS_EXPENSE_CATEGORY_RULES}
                               >
-                                {/* ⭐ A real choice, not a placeholder: picking it CLEARS the mapping.
-                                    `account_code` is nullable on purpose so a wrong mapping is
-                                    removable — a wrong account posts silently, an absent one refuses. */}
-                                <option value="">— none (blocks posting) —</option>
-                                {accounts.map((a) => (
-                                  <option key={a.code} value={a.code}>
-                                    {a.code} · {a.name}
-                                  </option>
-                                ))}
-                              </Select>
-                            </Field>
-                          </FormGrid>
-                        </EditableRecord>
-                      </div>
-                    ) : (
-                      /* No account saved yet: an ADD — a "Set account" button opens it in a modal. */
-                      <FormModal trigger="Set account" title={`Set account for ${c.category}`} size="sm">
-                        <form action={setCategoryAccountAction} className="space-y-3">
-                          <input type="hidden" name="categoryId" value={c.id} />
-                          <input type="hidden" name="categoryLabel" value={c.category} />
-                          <FormGrid layout="fields">
-                            <Field label="Posts to" width="name">
-                              <Select
-                                name="accountCode"
-                                defaultValue=""
-                                className="w-full"
-                                aria-label={`Account for ${c.category}`}
+                                <FormGrid layout="fields">
+                                  <Field label="Name" width="name" rule={SETTINGS_EXPENSE_CATEGORY_RULES.category}>
+                                    <Input
+                                      {...nativeAttrs(SETTINGS_EXPENSE_CATEGORY_RULES.category)}
+                                      defaultValue={c.category}
+                                      aria-label={`Name of ${c.category}`}
+                                      className="w-full"
+                                    />
+                                  </Field>
+                                </FormGrid>
+                              </EditableRecord>
+                            )}
+                            {mapped ? (
+                              <EditableRecord
+                                action={setCategoryAccountAction}
+                                label={`account for ${c.category}`}
+                                hidden={{ categoryId: c.id, categoryLabel: c.category }}
+                                typed={typedFor(sp, EXPENSE_CATEGORY_ACCOUNT, c.id, actor.personId)}
                               >
-                                <option value="">— none (blocks posting) —</option>
-                                {accounts.map((a) => (
-                                  <option key={a.code} value={a.code}>
-                                    {a.code} · {a.name}
-                                  </option>
-                                ))}
-                              </Select>
-                            </Field>
-                          </FormGrid>
-                          <DialogActions>
-                            <Button type="submit" variant="primary">
-                              Save
-                            </Button>
-                          </DialogActions>
-                        </form>
-                      </FormModal>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                                <FormGrid layout="fields">
+                                  <Field label="Posts to" width="name">
+                                    <Select
+                                      name="accountCode"
+                                      defaultValue={c.accountCode ?? ''}
+                                      className="w-full"
+                                      aria-label={`Account for ${c.category}`}
+                                    >
+                                      {/* ⭐ A real choice, not a placeholder: picking it CLEARS the mapping.
+                                          `account_code` is nullable on purpose so a wrong mapping is
+                                          removable — a wrong account posts silently, an absent one refuses. */}
+                                      <option value="">— none (blocks posting) —</option>
+                                      {accounts.map((a) => (
+                                        <option key={a.code} value={a.code}>
+                                          {a.code} · {a.name}
+                                        </option>
+                                      ))}
+                                    </Select>
+                                  </Field>
+                                </FormGrid>
+                              </EditableRecord>
+                            ) : (
+                              <FormModal trigger="Set account" triggerLabel={`Set account for ${c.category}`} title={`Set account for ${c.category}`} size="sm">
+                                <form action={setCategoryAccountAction} className="space-y-3">
+                                  <input type="hidden" name="categoryId" value={c.id} />
+                                  <input type="hidden" name="categoryLabel" value={c.category} />
+                                  <FormGrid layout="fields">
+                                    <Field label="Posts to" width="name">
+                                      <Select
+                                        name="accountCode"
+                                        defaultValue=""
+                                        className="w-full"
+                                        aria-label={`Account for ${c.category}`}
+                                      >
+                                        <option value="">— none (blocks posting) —</option>
+                                        {accounts.map((a) => (
+                                          <option key={a.code} value={a.code}>
+                                            {a.code} · {a.name}
+                                          </option>
+                                        ))}
+                                      </Select>
+                                    </Field>
+                                  </FormGrid>
+                                  <DialogActions>
+                                    <Button type="submit" variant="primary">
+                                      Save
+                                    </Button>
+                                  </DialogActions>
+                                </form>
+                              </FormModal>
+                            )}
+                            <form action={setCategoryActiveAction}>
+                              <input type="hidden" name="categoryId" value={c.id} />
+                              <input type="hidden" name="categoryLabel" value={c.category} />
+                              <input type="hidden" name="isActive" value={c.isActive ? 'false' : 'true'} />
+                              <button
+                                type="submit"
+                                className={`${ACTION_LINK} text-xs text-muted hover:text-ink`}
+                              >
+                                {c.isActive ? 'Retire' : 'Reinstate'}
+                              </button>
+                            </form>
+                          </div>
+                        </Td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </Table>
+            </section>
+          ))}
+        </div>
+      )}
+
 
       {/* ⭐ T-229 slice 2. The database change this paragraph used to promise is migration 0134:
           uniqueness moved to `lower(trim(category))`, so a hand-typed name can no longer collide
           with a seeded one by case or spacing — bible §4.4 rule 3, DEF-205. */}
-      <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+      <Card>
         <div className="flex items-center justify-between gap-3">
-          <h2 className="font-medium">Add a category</h2>
+          <h2 className="font-semibold">Add a category</h2>
           <FormModal trigger="+ Add category" title="Add a category" size="md">
             <CheckedForm rules={SETTINGS_EXPENSE_CATEGORY_RULES} action={createCategoryAction} className="space-y-3 text-sm">
               <FormGrid layout="fields">
@@ -323,11 +392,11 @@ export default async function ExpenseCategoriesSettingsPage({
             </CheckedForm>
           </FormModal>
         </div>
-        <p className="mt-3 text-xs text-neutral-500 dark:text-neutral-400">
+        <p className="mt-3 text-xs text-muted">
           Names are compared ignoring case and spacing. A category is <strong>retired, never deleted</strong> — everything
           already recorded in it keeps working.
         </p>
-      </section>
+      </Card>
 
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
         Stuck drafts appear on{' '}

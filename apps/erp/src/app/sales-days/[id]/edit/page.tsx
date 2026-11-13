@@ -71,7 +71,7 @@ export default async function EditSalesDayPage({
   );
 
   // T-375 S3 (R13): the linked-store refusal shares this block (and its one PageDescription) with the status refusals.
-  const takesFromPos = link !== null || day.source === 'pos_v1_day_feed';
+  const takesFromPos = link !== null || day.source !== 'legacy_typed';
   if (takesFromPos || !unverified || !canEdit) {
     return (
       <Page density="table">

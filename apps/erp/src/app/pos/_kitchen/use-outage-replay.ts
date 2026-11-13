@@ -9,7 +9,7 @@ import { useEffect, useRef } from 'react';
 import type { PosEvent } from '@/lib/pos-device';
 import { getMeta, setMeta } from '@/lib/pos-device';
 import type { SnapshotOrdersPart } from '../_shell/use-device-sync';
-import { addFailedPrintJobs } from './outage-jobs';
+import { reportOutage, reportOutageError } from './outage-jobs';
 import { pruneOutagePrinted, pruneOutagePrintedToPending, printUnprinted } from './outage-replay';
 import { outageDeps } from './use-outage-print';
 
@@ -31,7 +31,7 @@ export function useOutageReplay(i: { paired: boolean; online: boolean; snapshot:
     const deps = outageDeps({ online, snapshot, tableLabels: labels });
     if (!deps) return;
     void printUnprinted(deps, pending)
-      .then((r) => r.failed.length > 0 && addFailedPrintJobs(r.failed))
-      .catch(() => undefined);
+      .then(reportOutage)
+      .catch(reportOutageError);
   }, [paired, online, loaded, pending, snapshot, openStands]);
 }

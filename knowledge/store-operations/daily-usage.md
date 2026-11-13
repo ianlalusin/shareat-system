@@ -4,8 +4,8 @@ topic: store-operations/daily-usage
 about: [staff, manager]
 readers: staff
 must_be_exact: false
-related: [store-operations/opening-and-closing, planned]
-updated: 2026-10-23
+related: [store-operations/opening-and-closing, planned, store-operations/future-franchise-stock-and-purchasing]
+updated: 2026-11-04
 ---
 
 # Nightly usage recording
@@ -27,3 +27,10 @@ cashier, and others.
 - The store does a physical count every month and compares it with the usage records.
 - If the count and the records do not match, the manager corrects the record, investigates what
   went wrong, and takes action.
+
+## Future franchise authority
+
+For future franchises, staff record usage and the manager verifies and reports discrepancies;
+the **franchisee handles stock adjustments/write-offs**. See [future franchise stock rules](future-franchise-stock-and-purchasing.md).
+This is a different responsibility scope from the manager-correction description above; do not
+silently apply the future-franchise allocation to company-owned stores.

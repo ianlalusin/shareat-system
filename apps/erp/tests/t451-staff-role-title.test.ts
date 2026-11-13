@@ -18,12 +18,15 @@ describe('T-451 role-first staff presentation', () => {
       if (role !== 'staff') expect(html).not.toContain('Cashier');
     }
   });
-  it('preserves the lanyard ID-card design with role-first titles', () => {
+  it('preserves an ID-card design with role-first titles', () => {
     const html = renderToStaticMarkup(createElement(CardWall, { people: [{ id: 'e', displayName: 'Synthetic Person', primaryPosition: 'Cashier', employmentStatus: 'regular', startedOn: '2026-01-01', photoFileId: null }], storeName: 'Test', today: '2026-10-21', states: null }));
     expect(html).toContain('data-staff-card');
-    expect(html).toContain('rounded-b-[50%]');
-    expect(html).toContain('rounded-t-[14px]');
-    expect(html).toContain('hover:-rotate');
+    // T-568: the lanyard is a compact badge now — brand band, punched slot and ID-card footer
+    // are the cues that keep it an ID card rather than a generic profile tile.
+    expect(html).toContain('ID card');
+    expect(html).toContain('View profile');
+    expect(html).toContain('bg-brand');
+    expect(html).toContain('rounded-[20px]');
   });
 });
 

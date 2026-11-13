@@ -417,6 +417,25 @@ export const WORKED_EXAMPLES: readonly WorkedExample[] = [
       'A negative delta is the SAME two accounts on the opposite sides, not a different pair and not a negative amount: ' +
       'debit and credit are never negative. The revenue account is the one the original sales-day posting used (4150), never a new one.',
   },
+  {
+    id: 'sale.pos-short-payment',
+    sourceType: 'sale',
+    title: 'The POS took a few centavos less than the bill — the gap is Cash over and short (T-558, bible row 459)',
+    narrative:
+      'v2-only, POS-derived days. The day\'s receipts total ₱1,000.00 of unli; one receipt was paid one centavo short, so the ' +
+      'tenders total ₱999.99 cash. Revenue stays at the full receipt prices, the tender line shows what was taken, and the ' +
+      'gap posts as one 7350 debit (Ian, 2026-11-11, bible row 459).',
+    input: { businessDate: '2026-01-12', gross: '1000.00', cashTendered: '999.99', variance: '0.01' },
+    expect: [
+      D('1110', '999.99', null, { lineMemo: 'cash tender' }),
+      D('7350', '0.01', null, { lineMemo: 'short payment within tolerance' }),
+      C('4100', '1000.00', null, { lineMemo: 'dine-in unlimited' }),
+    ],
+    entryDate: '2026-01-12',
+    trap:
+      'Never lower revenue to match the cash and never charge the gap to the cashier (1230): a short payment the till accepted ' +
+      'is a sale at full price with a cash shortfall, which is what 7350 carries (the same account remittance.overage swings the other way).',
+  },
 
   // =========================================================================================
   // salary_advance — 1,488 legs. leg-mapping.ts FINDING: disbursement and repayment (the
