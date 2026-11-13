@@ -4,8 +4,8 @@ topic: store-operations/opening-and-closing
 about: [staff, manager]
 readers: staff
 must_be_exact: false
-related: [staff/cashier-dine-in-sop, staff/server-and-kitchen-sop, planned, store-operations/daily-usage]
-updated: 2026-10-23
+related: [staff/cashier-dine-in-sop, staff/server-and-kitchen-sop, planned, store-operations/daily-usage, store-operations/future-franchise-daily-operations, cash-and-payments/future-franchise-cash-and-sales-controls]
+updated: 2026-11-04
 ---
 
 # Opening and closing the store
@@ -41,3 +41,10 @@ checklists are written in plain Tagalog. The items on each checklist are set in 
 - If an item is rejected by the AI, or is not marked complete, the manager is warned. The manager
   makes sure the task is redone, or files it as an infraction against the staff member.
 - If a staff member misses their whole checklist, the ERP files an infraction automatically.
+
+## Future franchise responsibility assignments
+
+For future franchises, see [daily operations](future-franchise-daily-operations.md) for manager
+oversight and approved backup duties, and [cash controls](../cash-and-payments/future-franchise-cash-and-sales-controls.md)
+for cash custody when both vault key holders are absent. These assignments do not change the
+checklist mechanics described above or prove a software rollout.
