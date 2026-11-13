@@ -10,7 +10,11 @@ export { voidUnpaidSession, completeSale, currentBusinessDate, getSessionBill, l
 export type { CompleteSaleInput, VoidInput } from './sale';
 export {
   applyPosEvents,
+  applyPosBatch,
   parsePosEvents,
+  parsePosBatchPairingId,
+  POS_PAIRING_MISMATCH,
+  POS_PAIRING_MISMATCH_CODE,
   listPosQuarantine,
   replayQuarantinedEvent,
   discardQuarantinedEvent,
@@ -43,3 +47,5 @@ export {
 export type { Reading, TenderLine, CloseDayInput, CloseDayResult, CloseBacklogInput, BacklogClose, DayCloseListItem, V1BridgeWriter, V1BridgeStatus, V1HistoryStatus, CloseApproval } from './day-close';
 export { buildV1BridgePayload, V1_BRIDGE_LAST_DATE, v1BridgeDateAllowed } from './v1-bridge-payload';
 export type { V1BridgeClose, V1BridgeTender, V1BridgePayload } from './v1-bridge-payload';
+export { exportPosData, POS_EXPORT_MAX_DAYS } from './data-export';
+export type { PosDataExport } from './data-export';

@@ -1,7 +1,7 @@
 # T-546 — POS till numbers and receipt printer settings per terminal
 
-> **Status:** spec written 7 Nov 2026 by the POS design lane (Opus planner). Not built. **REQUIRED before the soak
-> (T-533)** (BOSS, 7 Nov).
+> **Status:** spec written 7 Nov 2026 by the POS design lane (Opus planner). **Built and merged (PR #210, 8375465).**
+> **REQUIRED before the soak (T-533)** (BOSS, 7 Nov).
 > **Migration:** **0246** (reserved). **Risk:** high (schema plus admin auth), so a Sonnet builder and a Sonnet
 > auditor are used.
 > **Depends on:** T-523 (`pos_terminals`, on main), T-525 (the snapshot), and T-528 (the print adapter and its two
@@ -14,7 +14,7 @@
 
 ## Goal
 
-On **Admin → POS tablets**, a manager of the store, or an admin, can:
+On **Settings → POS tablet** (the manager door) and on **Admin → POS tablets** (admin only), a manager of the store, or an admin, can:
 - see each store's tills;
 - add a till number;
 - choose which paired tablet acts as that till;
@@ -47,8 +47,16 @@ not on the tablet. A replaced tablet takes over the till's number series (DEF-58
 
 ## R2 — Domain (`packages/domain/src/pos/terminals.ts`)
 
-Every function is `(tx, actor, input)` and calls `authorize` first. The capability is the one `/admin/pos-tablets`
-already uses (`provision_clock_terminal`, `ROUTE_CAPABILITY`), and it is checked against the **store's** scope.
+Every function is `(tx, actor, input)` and calls `authorize` first. The capability is **`pair_pos_tablet`** (admin and
+manager by role, staff never), checked against the **store's** scope, so a manager of another store is refused.
+
+> **Ruling (D-001, 12 Nov 2026).** This section first named `provision_clock_terminal`, which is admin-only, while R5
+> needs a store manager to succeed. Both cannot hold. The built code chose `pair_pos_tablet`
+> (`packages/domain/src/pos/terminals.ts:7-8`). Managers reach the Tills section through **Settings → POS tablet**
+> (`/settings/pos-tablet`, gated by `pair_pos_tablet`). `/admin/pos-tablets` keeps its own admin-only gate
+> (`provision_clock_terminal`) and shows the same Tills section to admins. This is separate from that page's
+> refund-registration controls (linking a tablet's device id so it can ask a manager for a refund approval, T-505,
+> admin or super admin only), which are unchanged. A till's tablet and printer settings never grant refund approval.
 
 - `listTerminals(tx, actor, {storeId})` returns, for each till:
   - `{id, terminalNo, pairingId, pairingLabel, receiptPaperMm, receiptCopies}`;
@@ -75,7 +83,7 @@ already uses (`provision_clock_terminal`, `ROUTE_CAPABILITY`), and it is checked
   - prints with `{width: store.receiptPaperMm, font: 'normal'}` and `copies: store.receiptCopies`;
   - when an old cached snapshot lacks them, keeps Pay blocked with the existing "connect once to refresh" sentence.
 
-## R4 — Screen (`/admin/pos-tablets`)
+## R4 — Screen (`/settings/pos-tablet` for managers; `/admin/pos-tablets` for admins)
 
 - Add a **Tills** section per store, under the existing pairings list. It is a table with columns: Till, Tablet, Paper
   and Copies, plus actions.
@@ -109,7 +117,7 @@ already uses (`provision_clock_terminal`, `ROUTE_CAPABILITY`), and it is checked
   - copies 2 calls the adapter with `{copies: 2}`;
   - an old snapshot without the keys blocks Pay.
 - **Screen:**
-  - the page refuses a person without the capability;
+  - each page refuses a person without its capability (`pair_pos_tablet` on `/settings/pos-tablet`, `provision_clock_terminal` on `/admin/pos-tablets`);
   - an integration test runs the actions through the real domain.
 
 ## R6 — Gates

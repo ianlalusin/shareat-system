@@ -11,7 +11,7 @@ import { printLines } from '@/lib/pos-print/adapter';
 import { printSettingsOf } from '../_payment/logic';
 import type { MenuLike } from '../_orders/menu-filter';
 import type { PosContextValue } from '../_shell/pos-context';
-import { addFailedPrintJobs } from './outage-jobs';
+import { reportOutage, reportOutageError } from './outage-jobs';
 import type { OutageDeps } from './outage-print';
 import { printUnprinted, type OutageEvent } from './outage-replay';
 
@@ -45,10 +45,9 @@ export function useOutagePrint(pos: Pick<PosContextValue, 'paired' | 'online' | 
       const deps = paired ? outageDeps({ online, snapshot, tableLabels: tableLabels() }) : null;
       if (!deps) return;
       try {
-        const result = await printUnprinted(deps, [event]);
-        if (result.failed.length > 0) addFailedPrintJobs(result.failed);
+        reportOutage(await printUnprinted(deps, [event]));
       } catch {
-        // the order is saved; a paper problem must never turn into a failed send
+        reportOutageError(); // the order is saved; a paper problem must never turn into a failed send, but it must show
       }
     },
     [paired, online, snapshot, tableLabels],

@@ -6,7 +6,7 @@
 import type { ProjectedStoreMenu, StoreMenuV2 } from '@shareat/domain';
 import type { PosEvent, PosEventResult } from '@/lib/pos-device';
 import { offlineFor } from '../_shell/status-pill';
-import { asStoreMenu, displayUnitPrice } from './menu-filter';
+import { asStoreMenu, pendingPrice, storeAnswer, whenOf } from './menu-filter';
 
 export interface ServerStand {
   sessionId: string;
@@ -177,15 +177,18 @@ export function projectOrders(server: OrdersServer, pending: readonly PosEvent[]
     const variant = item?.variants.find((v) => v.id === l.variantId) ?? item?.variants.find((v) => v.isDefault) ?? item?.variants[0];
     const chosen = Array.isArray(l.optionValueIds) ? (l.optionValueIds as string[]) : [];
     const optionNames = variant ? variant.optionGroups.flatMap((g) => g.values.filter((v) => chosen.includes(v.id)).map((v) => v.name)) : [];
-    const offer = variant?.channels.store;
+    // T-559: the slot at the line's OWN time (the server prices it at `menus.at(addedAtDevice)`), never the live price the snapshot was fetched at.
+    const when = menu ? whenOf(menu, new Date(str(l.addedAtDevice) ?? NaN)) : undefined;
+    const answer = variant && when ? storeAnswer(variant, when) : undefined;
+    const offer = answer?.orderable ? answer.offer : undefined;
     return {
       kind: item?.itemType === 'package' ? 'package' : 'item',
-      bundle: offer !== undefined && offer.orderable && offer.bundleHeads !== null && offer.bundleHeads > 1,
+      bundle: offer !== undefined && offer.bundleHeads !== null && offer.bundleHeads > 1,
       line: {
         id,
         name: item ? `${item.name}${variant?.label ? ` - ${variant.label}` : ''}` : 'Item',
         qty: typeof l.qty === 'number' ? l.qty : 1,
-        unitPrice: variant ? displayUnitPrice(variant, chosen) : null,
+        unitPrice: variant && when ? pendingPrice(variant, chosen, when) : null,
         kitchenStatus: 'queued',
         note: str(l.note),
         optionNames,
