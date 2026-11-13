@@ -20,7 +20,7 @@ that makes those actions need the manager PIN.
    `discount.added`, `discount.removed`, like `session.voided`. The PIN is never stored (the inbox scrub covers /pin/i).
 3. UI: the discount sheet and the cancel dialog ask for the manager PIN only when the store's rule is on (the rule
    travels in the snapshot).
-4. **Offline — PENDING Ian, recommended:** with the rule ON and the till offline, the action is ALLOWED, marked
+4. **Offline — RULED (Ian, 13 Nov):** with the rule ON and the till offline, the action is ALLOWED, marked
    "needs manager review", and the server writes `pos.line_action_unapproved` on drain. Refusing offline would stop
    the floor during an outage; the PIN verifier is online-only (rows 355/356).
 5. Rule OFF: exactly today's behaviour.

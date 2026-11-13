@@ -4,7 +4,7 @@ Status: SPEC (BOSS, 2026-11-13). POS lane, Sonnet builder + auditor. No migratio
 
 ## Ruling
 Ian, 13 Nov: warn on repeated use; never block; no manager PIN.
-**Window — PENDING Ian (Open Questions `q-def843-window`). Build with (a) same store, same business day**, read
+**Window — RULED (a) same store, same business day (Ian, 13 Nov).** Built, read
 from a store setting so (b)/(c) need no code change: key `pos.senior_id_repeat_window` in the business-rule
 registry (`registry.ts` pattern, read in `business-rules/pos-rules.ts`), values `store_day` (default) |
 `org_day` | `store_7d`. Admin-editable like the other POS rules (no hard-coded business values).
