@@ -11,6 +11,8 @@ import {
   type SupplierRow,
 } from '@shareat/db';
 import { withOrgPrincipal, listStores } from '../expenses/lib';
+import { heldStoreIdsOrAll } from '../../lib/held-stores';
+import type { Actor, Capability } from '@shareat/auth';
 import { compare, money } from '@shareat/core/money';
 
 import { peso } from '../../lib/format';
@@ -30,23 +32,43 @@ export interface SupplierWithPosition extends SupplierRow {
   controlBalance: string;
 }
 
-export async function listSuppliersWithPosition(orgId: string): Promise<SupplierWithPosition[]> {
+/**
+ * T-577 (DEF-834): the STORE-scoped capabilities the AP screens' reads need (`approve_supplier` is org-wide master data, so it is not here).
+ * A viewer sees invoices, balances and open items only at stores where they hold one of these; an admin who holds them everywhere sees everything.
+ */
+export const AP_STORE_CAPABILITIES: readonly Capability[] = ['record_supplier_invoice', 'verify_supplier_invoice', 'record_ap_payment'];
+
+/** The store ids the AP lists may show; `undefined` = every store (no filtering). See `heldStoreIdsOrAll`. */
+export async function apStoreIds(actor: Actor): Promise<readonly string[] | undefined> {
+  return withOrgPrincipal(actor.orgId, (tx) => heldStoreIdsOrAll(tx, actor, AP_STORE_CAPABILITIES));
+}
+
+/** What a supplier is owed across `storeIds` only (`undefined` = the whole org, one query). */
+async function positionInScope(tx: Parameters<typeof apRepo.positionOf>[0], orgId: string, supplierId: string, storeIds: readonly string[] | undefined): Promise<string> {
+  if (!storeIds) return (await apRepo.positionOf(tx, orgId, supplierId)).controlBalance;
+  let total = 0;
+  for (const storeId of storeIds) total += Number((await apRepo.positionOf(tx, orgId, supplierId, storeId)).controlBalance);
+  return total.toFixed(2);
+}
+
+export async function getPositionInScope(orgId: string, supplierId: string, storeIds: readonly string[] | undefined): Promise<string> {
+  return withOrgPrincipal(orgId, (tx) => positionInScope(tx, orgId, supplierId, storeIds));
+}
+
+/** Suppliers are org-level; their BALANCE is limited to `storeIds` (`undefined` = whole org). */
+export async function listSuppliersWithPosition(orgId: string, storeIds?: readonly string[]): Promise<SupplierWithPosition[]> {
   return withOrgPrincipal(orgId, async (tx) => {
     const suppliers = await apRepo.listSuppliers(tx, orgId, { includeInactive: true });
-    return Promise.all(
-      suppliers.map(async (s) => ({
-        ...s,
-        controlBalance: (await apRepo.positionOf(tx, orgId, s.id)).controlBalance,
-      })),
-    );
+    return Promise.all(suppliers.map(async (s) => ({ ...s, controlBalance: await positionInScope(tx, orgId, s.id, storeIds) })));
   });
 }
 
 export async function listInvoices(
   orgId: string,
-  filter: { supplierId?: string; status?: SupplierInvoiceRow['status']; selfVerified?: true } = {},
+  filter: { supplierId?: string; status?: SupplierInvoiceRow['status']; selfVerified?: true; storeIds?: readonly string[] } = {},
 ): Promise<SupplierInvoiceRow[]> {
-  return withOrgPrincipal(orgId, (tx) => apRepo.listSupplierInvoices(tx, orgId, filter));
+  const { storeIds, ...repoFilter } = filter; // T-577: `storeIds` limits the rows to those stores; absent = every store
+  return withOrgPrincipal(orgId, async (tx) => (await apRepo.listSupplierInvoices(tx, orgId, repoFilter)).filter((r) => !storeIds || storeIds.includes(r.storeId)));
 }
 
 /** T-520: one row of the /ap list. `recorded`/`remaining` = the invoice page's Recorded/Remaining; `owed` = what its open items still owe. */
@@ -62,10 +84,11 @@ export interface InvoiceListRow extends SupplierInvoiceRow {
  */
 export async function listInvoicesWithStanding(
   orgId: string,
-  filter: { supplierId?: string; status?: SupplierInvoiceRow['status']; selfVerified?: true } = {},
+  filter: { supplierId?: string; status?: SupplierInvoiceRow['status']; selfVerified?: true; storeIds?: readonly string[] } = {},
 ): Promise<InvoiceListRow[]> {
+  const { storeIds, ...repoFilter } = filter; // T-577: `storeIds` limits the rows to those stores; absent = every store
   return withOrgPrincipal(orgId, async (tx) => {
-    const rows = await apRepo.listSupplierInvoices(tx, orgId, filter);
+    const rows = (await apRepo.listSupplierInvoices(tx, orgId, repoFilter)).filter((r) => !storeIds || storeIds.includes(r.storeId));
     const [capacity, owed] = await Promise.all([
       apRepo.capacityOfMany(tx, orgId, rows.map((r) => r.id)),
       apRepo.owedByInvoice(tx, orgId),
@@ -173,9 +196,10 @@ export async function getPosition(orgId: string, supplierId: string, storeId?: s
 export async function storesWithOpenItems(
   orgId: string,
   supplierId: string,
+  storeIds?: readonly string[],
 ): Promise<{ storeId: string; storeName: string; outstanding: string; count: number }[]> {
   return withOrgPrincipal(orgId, async (tx) => {
-    const stores = await listStores(orgId);
+    const stores = (await listStores(orgId)).filter((s) => !storeIds || storeIds.includes(s.id)); // T-577: only the viewer's stores
     const out: { storeId: string; storeName: string; outstanding: string; count: number }[] = [];
     for (const s of stores) {
       const items = await apRepo.openItems(tx, orgId, supplierId, s.id);

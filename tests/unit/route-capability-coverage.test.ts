@@ -380,3 +380,40 @@ describe('T-435 - the map keeps its promises', () => {
     }
   });
 });
+
+// =====================================================================================================================
+// T-577 (DEF-834, Ian 13 Nov, bible row 461) - the finance screens are read-gated. Behaviour (refusal / allowed per capability, store
+// not-found) is proved against real Postgres in apps/erp/tests/integration/t577-finance-read-gates.test.ts; this is the cheap structural half.
+// =====================================================================================================================
+
+describe('T-577 - /ap, /budgets and /cash-requests are mapped, and every page under them calls the gate', () => {
+  it('each root names real capabilities and children inherit (a longer null key would re-open one, so none may exist)', () => {
+    for (const root of ['/ap', '/budgets', '/cash-requests']) {
+      expect(accepts(root).length, root).toBeGreaterThan(0);
+      const reopened = Object.keys(ROUTE_CAPABILITY).filter((k) => k.startsWith(`${root}/`) && ROUTE_CAPABILITY[k] === null);
+      expect(reopened, `${root}: a null child entry would re-open a finance screen`).toEqual([]);
+    }
+    expect(accepts('/ap/invoices/019a0000-0000-7000-8000-000000000001')).toEqual(accepts('/ap'));
+    expect(accepts('/cash-requests/019a0000-0000-7000-8000-000000000001')).toEqual(accepts('/cash-requests'));
+  });
+
+  it('every page under them calls requirePageAccess, never bare requireSession', () => {
+    const under = trackedPages().filter((f) => /^\/(ap|budgets|cash-requests)(\/|$)/.test(routeOf(f)));
+    expect(under.length, 'the three screens and their children exist').toBeGreaterThanOrEqual(8);
+    const offenders = under.filter((f) => !codeOnly(readFileSync(path.join(repoRoot, f), 'utf8')).includes('requirePageAccess(')).map(routeOf);
+    expect(offenders.sort()).toEqual([]);
+  });
+
+  it('the three single-record pages ask canReadAtStore about the RECORD\'s own storeId, and answer not-found', () => {
+    const want: Record<string, RegExp> = {
+      'apps/erp/src/app/expenses/[id]/page.tsx': /canReadAtStore\(tx, actor, expense\.storeId,/,
+      'apps/erp/src/app/sales-days/[id]/page.tsx': /canReadAtStore\(tx, actor, day\.storeId,/,
+      'apps/erp/src/app/wastage/[id]/page.tsx': /canReadAtStore\(tx, actor, row\.storeId,/,
+    };
+    for (const [file, re] of Object.entries(want)) {
+      const src = codeOnly(readFileSync(path.join(repoRoot, file), 'utf8'));
+      expect(re.test(src), `${file}: the store check on the record's own store`).toBe(true);
+      expect(src.includes('notFound()'), `${file}: refusal is the standard not-found`).toBe(true);
+    }
+  });
+});
