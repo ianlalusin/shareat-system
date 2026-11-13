@@ -27,7 +27,7 @@
  * fixed first and both the stock movements and the entry carry it from the start.
  */
 import { add, compare, decimal, money, multiplyToMoney, ZERO, type Decimal, type Money } from '@shareat/core/money';
-import { advisoryLocksRepo, apRepo, deliveriesRepo, moneyAccountsRepo, stockLayersRepo, supplierReturnsRepo, type Tx } from '@shareat/db';
+import { advisoryLocksRepo, apRepo, deliveriesRepo, moneyAccountsRepo, stockLayersRepo, storesRepo, supplierReturnsRepo, type Tx } from '@shareat/db';
 import { parseMoneyInput } from '../shared/money-input';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { INVENTORY_REFUND_RULES } from '../field-rules/inventory';
@@ -80,6 +80,13 @@ async function deriveLineCreditBasis(
   const layer = await stockLayersRepo.findByDeliveryItem(tx, deliveryId, itemId);
   if (!layer) return 'supplier_advance';
   return layer.isProvisional ? 'grni' : 'supplier_advance';
+}
+
+/** T-574 (DEF-857): a return is made at the store that received the goods; names both stores. null = same store. */
+async function otherStoreSentence(tx: Tx, orgId: string, deliveryStoreId: string, returnStoreId: string): Promise<string | null> {
+  if (deliveryStoreId === returnStoreId) return null;
+  const name = async (id: string) => (await storesRepo.getById(tx, orgId, id))?.name ?? 'another store';
+  return `That delivery was received at ${await name(deliveryStoreId)}, not ${await name(returnStoreId)}.`;
 }
 
 export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<RecordReturnOutcome> {
@@ -138,10 +145,15 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
     if (delivery.supplierId !== input.supplierId) {
       return { ok: false, reason: `delivery ${input.deliveryId} was not from supplier ${input.supplierId}` };
     }
+    const elsewhere = await otherStoreSentence(tx, orgId, delivery.storeId, input.storeId);
+    if (elsewhere) return { ok: false, reason: elsewhere };
   }
 
   // ⭐ Invariant 2 — capped at received minus already returned, per delivery line. Checked BEFORE
   // any write, same "all preconditions first" discipline T-166 §7.2 named.
+  // T-574 (DEF-857): a line is judged by ITS OWN delivery's store too, so a return that names no delivery (or another one) cannot cite
+  // a line received elsewhere. Read before the lock (a line never changes delivery), refused before any stock read.
+  const ofLines = new Map<string, NonNullable<Awaited<ReturnType<typeof deliveriesRepo.getDeliveryLine>>>>();
   for (const line of lines) {
     if (!line.deliveryLineId) continue;
     const deliveryLine = await deliveriesRepo.getDeliveryLine(tx, line.deliveryLineId);
@@ -149,6 +161,18 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
     if (deliveryLine.itemId !== line.itemId) {
       return { ok: false, reason: `delivery line ${line.deliveryLineId} is for a different item than ${line.itemId}` };
     }
+    const lineDelivery = await deliveriesRepo.getDelivery(tx, deliveryLine.deliveryId);
+    if (!lineDelivery) return { ok: false, reason: `delivery ${deliveryLine.deliveryId} does not exist` };
+    const elsewhere = await otherStoreSentence(tx, orgId, lineDelivery.storeId, input.storeId);
+    if (elsewhere) return { ok: false, reason: elsewhere };
+    ofLines.set(line.deliveryLineId, deliveryLine);
+  }
+  // T-574 (DEF-838): serialise per delivery line BEFORE the first read of what is already returned, in sorted id order so two
+  // multi-line returns naming the same lines the other way round queue instead of deadlocking.
+  for (const id of [...ofLines.keys()].sort()) await advisoryLocksRepo.lockDeliveryLine(tx, id);
+  for (const line of lines) {
+    if (!line.deliveryLineId) continue;
+    const deliveryLine = ofLines.get(line.deliveryLineId)!; // set for every id in the loop above
     const received = quantity(deliveryLine.receivedQuantity ?? '0');
     const alreadyReturned = quantity(
       await supplierReturnsRepo.returnedQuantityForDeliveryLine(tx, line.deliveryLineId),
@@ -324,6 +348,11 @@ export async function voidReturn(
   if (closedReturnedOn) return { ok: false, reason: closedReturnedOn };
 
   const lines = await supplierReturnsRepo.getReturnLines(tx, returnId);
+
+  // T-574 (DEF-838): a void gives quantity back to the lines' returnable cap, so it takes the same per-line locks as a new return (sorted).
+  for (const id of [...new Set(lines.flatMap((l) => (l.deliveryLineId ? [l.deliveryLineId] : [])))].sort()) {
+    await advisoryLocksRepo.lockDeliveryLine(tx, id);
+  }
 
   // ⭐ Invariant 9. The credit this return contributed to 1240 is not tracked per-return — it is
   // a pooled, fungible balance (invariant 6: a query, never a stored column) — so "has THIS
