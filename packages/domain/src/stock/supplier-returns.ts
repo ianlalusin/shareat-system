@@ -165,6 +165,14 @@ export async function recordReturn(tx: Tx, input: RecordReturnInput): Promise<Re
     if (!lineDelivery) return { ok: false, reason: `delivery ${deliveryLine.deliveryId} does not exist` };
     const elsewhere = await otherStoreSentence(tx, orgId, lineDelivery.storeId, input.storeId);
     if (elsewhere) return { ok: false, reason: elsewhere };
+    // T-574 audit: the line must sit on the delivery the return names, and on a delivery from the supplier the return names.
+    if (input.deliveryId && deliveryLine.deliveryId !== input.deliveryId) {
+      return { ok: false, reason: 'That item is on a different delivery than the one this return names.' };
+    }
+    if (lineDelivery.supplierId !== input.supplierId) {
+      const supplierName = async (id: string | null) => (id ? (await apRepo.getSupplierById(tx, orgId, id))?.name : undefined) ?? 'another supplier';
+      return { ok: false, reason: `That item came from ${await supplierName(lineDelivery.supplierId)}'s delivery, not ${await supplierName(input.supplierId)}'s.` };
+    }
     ofLines.set(line.deliveryLineId, deliveryLine);
   }
   // T-574 (DEF-838): serialise per delivery line BEFORE the first read of what is already returned, in sorted id order so two
