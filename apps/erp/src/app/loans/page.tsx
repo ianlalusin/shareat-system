@@ -7,7 +7,7 @@ import { METHOD_LABEL, listRegister, listStores, peso, today } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Button, FlashBanner, Input, LinkRow, RowLink, Select, FormModal, FormGrid, FormSection, type FieldProps, DialogActions } from '@/components/ui';
+import { Badge, Button, FlashBanner, Input, LinkRow, NumTd, RowLink, Select, FormModal, FormGrid, FormSection, Table, Td, Th, type FieldProps, DialogActions } from '@/components/ui';
 
 export const metadata = { title: 'Loans — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -174,57 +174,45 @@ export default async function LoansPage({
 
       {/* ── The register ─────────────────────────────────────────────────────────────── */}
       {loans.length > 0 ? (
-        <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-          <table className="w-full min-w-[860px] border-collapse text-sm">
+        <Table card={{ title: 'Loan', subtitle: 'Store', keys: ['Outstanding', 'State'] }}>
             <thead>
-              <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
-                <th className="px-3 py-2 font-medium">Loan</th>
-                <th className="px-3 py-2 font-medium">Store</th>
-                <th className="px-3 py-2 font-medium">Terms</th>
-                <th className="px-3 py-2 text-right font-medium">Drawn</th>
-                <th className="px-3 py-2 text-right font-medium">Repaid</th>
-                <th className="px-3 py-2 text-right font-medium">Outstanding</th>
-                <th className="px-3 py-2 font-medium">State</th>
+              <tr>
+                <Th>Loan</Th>
+                <Th>Store</Th>
+                <Th>Terms</Th>
+                <Th numeric>Drawn</Th>
+                <Th numeric>Repaid</Th>
+                <Th numeric>Outstanding</Th>
+                <Th>State</Th>
               </tr>
             </thead>
             <tbody>
               {loans.map((l) => (
                 <LinkRow
                   key={l.id}
-                  className={`border-b border-neutral-100 last:border-0 dark:border-neutral-900 ${
-                    l.status === 'active' ? '' : 'opacity-60'
-                  }`}
+                  className={l.status === 'active' ? undefined : 'opacity-60'}
                 >
-                  <td className="px-3 py-2">
+                  <Td>
                     <RowLink href={`/loans/${l.id}`}>
                       {l.name}
                     </RowLink>
-                    <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                      {l.lenderName}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2">{storeById.get(l.storeId)?.code ?? '—'}</td>
-                  <td className="px-3 py-2 text-xs whitespace-nowrap">
+                    <div className="text-xs text-muted">{l.lenderName}</div>
+                  </Td>
+                  <Td>{storeById.get(l.storeId)?.code ?? '—'}</Td>
+                  <Td className="text-xs whitespace-nowrap">
                     {/* ⚠️ The rate is meaningless without its period — "2%" is twelve times more
                         per year when it is monthly, and v1 had rows where nobody had said which. */}
                     {Number(l.interestRate)}% per {l.ratePeriod} · {l.termPeriods}{' '}
                     {l.paymentFrequency}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">
-                    {peso(l.position.disbursed)}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">
-                    {peso(l.position.principalPaid)}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">
-                    {peso(l.position.outstanding)}
-                  </td>
-                  <td className="px-3 py-2 text-xs"><Badge status={l.status} /></td>
+                  </Td>
+                  <NumTd className="font-mono">{peso(l.position.disbursed)}</NumTd>
+                  <NumTd className="font-mono">{peso(l.position.principalPaid)}</NumTd>
+                  <NumTd className="font-mono">{peso(l.position.outstanding)}</NumTd>
+                  <Td className="text-xs"><Badge status={l.status} /></Td>
                 </LinkRow>
               ))}
             </tbody>
-          </table>
-        </div>
+          </Table>
       ) : (
         <p className="text-sm text-neutral-500 dark:text-neutral-400">No loans recorded.</p>
       )}

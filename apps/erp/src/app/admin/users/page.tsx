@@ -2,7 +2,7 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { listUsers } from './lib';
 import { ROLE_LABEL } from '@shareat/auth';
 import { Page } from '@/components/shell/Page';
-import { Banner, LinkRow, RowLink } from '@/components/ui';
+import { Banner, LinkRow, NumTd, RowLink, Table, Td, Th } from '@/components/ui';
 
 export const metadata = { title: 'Users and roles — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -38,62 +38,58 @@ export default async function UsersPage() {
         </Banner>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-        <table aria-label="Users and roles" className="w-full text-sm">
-          <thead className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
+      <Table label="Users and roles" card={{ title: 'Name', subtitle: 'Role', keys: ['Stores', 'Extra grants'] }}>
+        <thead>
+          <tr>
+            <Th>Name</Th>
+            <Th>Role</Th>
+            <Th numeric>Stores</Th>
+            <Th numeric>Extra grants</Th>
+            <Th className="w-24" />
+          </tr>
+        </thead>
+        <tbody>
+          {users.length === 0 && (
             <tr>
-              <th className="px-4 py-2 font-medium">Name</th>
-              <th className="px-4 py-2 font-medium">Role</th>
-              <th className="px-4 py-2 font-medium">Stores</th>
-              <th className="px-4 py-2 font-medium">Extra grants</th>
-              <th className="px-4 py-2" />
+              <Td colSpan={5} className="py-6 text-muted">
+                Nobody in this organisation yet. People are created by hiring them on{' '}
+                <a href="/staff" className="underline underline-offset-4">
+                  Staff
+                </a>
+                .
+              </Td>
             </tr>
-          </thead>
-          <tbody>
-            {users.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-neutral-500 dark:text-neutral-400">
-                  Nobody in this organisation yet. People are created by hiring them on{' '}
-                  <a href="/staff" className="underline underline-offset-4">
-                    Staff
-                  </a>
-                  .
-                </td>
-              </tr>
-            )}
-            {users.map((u) => (
-              <LinkRow key={u.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                <td className="px-4 py-2">
-                  {u.displayName}
-                  {!u.isActive && <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400">(inactive)</span>}
-                </td>
-                <td className="px-4 py-2">
-                  {u.role ? (
-                    <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-800">
-                      {ROLE_LABEL[u.role]}
-                    </span>
-                  ) : (
-                    <span className="rounded bg-warning-soft px-2 py-0.5 text-xs text-warning-ink">
-                      no role — cannot do anything
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-2 text-neutral-600 dark:text-neutral-400">{u.storeScopeCount}</td>
-                <td className="px-4 py-2 text-neutral-600 dark:text-neutral-400">{u.activeGrantCount}</td>
-                <td className="px-4 py-2 text-right">
-                  <RowLink href={`/admin/users/${u.id}`}>
-                    Manage →
-                  </RowLink>
-                </td>
-              </LinkRow>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          )}
+          {users.map((u) => (
+            <LinkRow key={u.id}>
+              <Td>
+                <span className="font-medium">{u.displayName}</span>
+                {!u.isActive && <span className="ml-2 text-xs text-muted">(inactive)</span>}
+              </Td>
+              <Td>
+                {u.role ? (
+                  <span className="inline-flex rounded-full bg-canvas px-2 py-0.5 text-xs text-muted">
+                    {ROLE_LABEL[u.role]}
+                  </span>
+                ) : (
+                  <span className="inline-flex rounded-full bg-warning-soft px-2 py-0.5 text-xs text-warning-ink">
+                    no role — cannot do anything
+                  </span>
+                )}
+              </Td>
+              <NumTd className="text-muted">{u.storeScopeCount}</NumTd>
+              <NumTd className="text-muted">{u.activeGrantCount}</NumTd>
+              <td data-card-action="" className="border-t border-surface-border px-3 py-2 text-right">
+                <RowLink href={`/admin/users/${u.id}`}>Manage</RowLink>
+              </td>
+            </LinkRow>
+          ))}
+        </tbody>
+      </Table>
 
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
-        Only a super-admin can appoint an admin (bible row 116). Nobody can change their own role,
-        and the org&rsquo;s last admin cannot be demoted.
+        Only a super-admin can appoint an admin. Nobody can change their own role, and the
+        organisation&rsquo;s last admin cannot be demoted.
       </p>
     </Page>
   );

@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Hash, Check, Copy } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { useOnlineStatus } from "@/hooks/use-online-status";
 import { useAuthContext } from "@/context/auth-context";
 import { useStoreContext } from "@/context/store-context";
@@ -97,20 +98,74 @@ export function TerminalSection() {
     }
   };
 
-  const handleRelease = async () => {
+  // Release asks first, in a toast that stays up for 15 s. That question belongs to ONE store and ONE signed-in person on THIS
+  // screen: it is dismissed when either changes or the section unmounts, and the action re-checks before it calls release.
+  const live = useRef({ storeId: activeStore?.id ?? null, uid: appUser?.uid ?? null });
+  live.current = { storeId: activeStore?.id ?? null, uid: appUser?.uid ?? null };
+  const mounted = useRef(true);
+  const question = useRef<{ dismiss: () => void } | null>(null);
+  // Synchronous, so a double click (two events before React re-renders `busy`) sends one release, not two.
+  const releasing = useRef(false);
+  const closeQuestion = () => {
+    question.current?.dismiss();
+    question.current = null;
+  };
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      closeQuestion();
+    };
+  }, []);
+  useEffect(() => closeQuestion, [activeStore?.id, appUser?.uid]);
+
+  const handleRelease = () => {
     const terminalNo = parseTerminalNo();
     if (terminalNo === null || !activeStore || !appUser) return;
-    if (!window.confirm(`Release terminal ${String(terminalNo).padStart(2, "0")}? The tablet using it will stop taking payment until it is set up again.`)) return;
-    setBusy(true);
-    try {
-      await releaseTerminal(getFirestorePort(), { storeId: activeStore.id, terminalNo, uid: appUser.uid });
-      toast({ title: "Terminal released", description: `Terminal ${String(terminalNo).padStart(2, "0")} can be set up on another tablet.` });
-      await refresh();
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Could not release the terminal", description: e?.message ?? String(e) });
-    } finally {
-      setBusy(false);
-    }
+    const label = String(terminalNo).padStart(2, "0");
+    const { id: storeId, name: storeName } = activeStore;
+    const uid = appUser.uid;
+    const what = `terminal ${label} at ${storeName}`;
+
+    const release = async () => {
+      if (releasing.current) return;
+      if (!mounted.current || live.current.storeId !== storeId || live.current.uid !== uid) {
+        closeQuestion();
+        toast({ variant: "destructive", title: "Release cancelled", description: "The store or the signed-in person changed. Ask again." });
+        return;
+      }
+      releasing.current = true;
+      // Nothing is left to click while the release runs.
+      shown.update({ id: shown.id, action: <ToastAction altText={`Release ${what}`} disabled>Release</ToastAction> });
+      closeQuestion();
+      setBusy(true);
+      try {
+        await releaseTerminal(getFirestorePort(), { storeId, terminalNo, uid });
+        toast({ title: "Terminal released", description: `Terminal ${label} at ${storeName} can be set up on another tablet.` });
+        if (mounted.current) await refresh();
+      } catch (e: any) {
+        toast({ variant: "destructive", title: "Could not release the terminal", description: e?.message ?? String(e) });
+      } finally {
+        releasing.current = false;
+        if (mounted.current) setBusy(false);
+      }
+    };
+
+    // T-568: a browser confirm() blocks the tablet and cannot be styled. The confirmation is a
+    // toast with one explicit action; closing it leaves the terminal exactly as it was.
+    closeQuestion();
+    const shown = toast({
+      variant: "destructive",
+      title: `Release ${what}?`,
+      description: "The tablet using it will stop taking payment until it is set up again.",
+      duration: 15000,
+      action: (
+        <ToastAction altText={`Release ${what}`} onClick={() => { void release(); }}>
+          Release
+        </ToastAction>
+      ),
+    });
+    question.current = { dismiss: shown.dismiss };
   };
 
   let nextNumber: string | null = null;
