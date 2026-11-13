@@ -1583,6 +1583,13 @@
       "when": 1808105507084,
       "tag": "0255_t575_pos_senior_id_repeat_days",
       "breakpoints": true
+    },
+    {
+      "idx": 256,
+      "version": "7",
+      "when": 1808191907084,
+      "tag": "0256_t576_pos_require_pin_line_actions",
+      "breakpoints": true
     }
   ]
 }

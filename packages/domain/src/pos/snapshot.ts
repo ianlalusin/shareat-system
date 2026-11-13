@@ -27,7 +27,7 @@ export interface PosSnapshot {
     stands: { id: string; number: number }[];
     tenders: { id: string; name: string; kind: string }[];
     discountPresets: { id: string; name: string; valueType: string; value: string }[];
-    rules: { vatPercentBasisPoints: number; scPwdPercentBasisPoints: number; businessDayStartHour: number; tableWarnMinutes: number; /** T-558: display hint only (centavos); the tablet never enforces it. */ saleVarianceToleranceCentavos: number };
+    rules: { vatPercentBasisPoints: number; scPwdPercentBasisPoints: number; businessDayStartHour: number; tableWarnMinutes: number; /** T-558: display hint only (centavos); the tablet never enforces it. */ saleVarianceToleranceCentavos: number; /** T-576: the tablet asks for a manager PIN on a line cancel / line discount when true. */ requirePinLineActions: boolean };
     staff: { personId: string; displayName: string; employeeId: string; posCapabilities: string[] }[];
     device: { pairingId: string; lastSeq: number; lastTerminalSeq: number };
     businessDate: string;
@@ -70,6 +70,7 @@ export async function buildPosSnapshot(tx: Tx, input: { pairing: PosPairing }, d
       businessDayStartHour: rules.businessDayStartHour,
       tableWarnMinutes: rules.tableWarnMinutes,
       saleVarianceToleranceCentavos: Number(rules.saleVarianceToleranceCentavos),
+      requirePinLineActions: rules.requirePinLineActions === true,
     },
     staff,
     device: {

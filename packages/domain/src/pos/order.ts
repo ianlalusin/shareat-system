@@ -25,7 +25,9 @@ import {
   uuidInput,
   uuidv5,
   wholeNumber,
+  type PosDeps,
 } from './shared';
+import { gateLineAction, type LineApprovalInput } from './line-approval';
 
 type SessionRow = posV2Repo.TableSessionRow;
 
@@ -551,7 +553,7 @@ export async function serveLine(tx: Tx, actor: Actor, input: { storeId: string; 
   return { wrote: true };
 }
 
-export async function cancelLine(tx: Tx, actor: Actor, input: { storeId: string; pairingId: string | null; lineId: string; reason: string }): Promise<{ wrote: boolean }> {
+export async function cancelLine(tx: Tx, actor: Actor, input: { storeId: string; pairingId: string | null; lineId: string; reason: string } & LineApprovalInput, deps?: PosDeps): Promise<{ wrote: boolean }> {
   await authorize(tx, actor, 'record_sale', { storeId: input.storeId });
   const pairingId = await requireContext(tx, actor, input.storeId, input.pairingId, false);
   const { reason } = assertFieldRules(POS_REASON_RULES, { reason: input.reason });
@@ -560,8 +562,10 @@ export async function cancelLine(tx: Tx, actor: Actor, input: { storeId: string;
   if (line.kitchenStatus === 'cancelled') return { wrote: false }; // Audit F6: a replay is answered before the table's state is judged
   await lockOpenSession(tx, actor.orgId, input.storeId, line.sessionId);
   if (line.kitchenStatus === 'served') throw refuse('pos: line served', 'That line was already served and cannot be cancelled.');
+  // T-576: with the rule on, a manager's PIN (or approval) is needed; off, this returns {} and nothing below changes.
+  const gate = await gateLineAction(tx, actor, { storeId: input.storeId, pairingId, sessionId: line.sessionId, lineIds: [line.id], action: 'line.cancelled', targetId: line.id, deps, input });
   await posV2Repo.markLinesCancelled(tx, actor.orgId, input.storeId, [line.id]);
-  await audit(tx, actor, 'pos.line_cancelled', { storeId: input.storeId, entityId: line.id, pairingId, at: new Date(), before: { status: 'queued', name: line.name, qty: line.qty }, after: { status: 'cancelled', reason } });
+  await audit(tx, actor, 'pos.line_cancelled', { storeId: input.storeId, entityId: line.id, pairingId, at: new Date(), before: { status: 'queued', name: line.name, qty: line.qty }, after: { status: 'cancelled', reason, ...(gate.approvedBy ? { approvedBy: gate.approvedBy } : {}) } });
   await posV2Repo.bumpStateVersion(tx, actor.orgId, input.storeId);
   return { wrote: true };
 }
