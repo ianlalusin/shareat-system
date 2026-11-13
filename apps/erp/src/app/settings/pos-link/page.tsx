@@ -126,10 +126,10 @@ function StoreCard({
             </span>
           ) : (
             <span className="rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-medium text-warning-ink">
-              Not linked
+              Not linked — sales are typed
             </span>
           )}
-          <ChevronIcon className="h-4 w-4 text-muted transition group-open:rotate-180" />
+          <ChevronIcon className="size-4 text-muted transition group-open:rotate-180" />
         </span>
       </summary>
 

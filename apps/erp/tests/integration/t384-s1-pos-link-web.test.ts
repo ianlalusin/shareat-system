@@ -200,11 +200,11 @@ async function render(f: F, params: Record<string, string> = {}, methods: string
   return renderToStaticMarkup(el as never);
 }
 
-/** The markup of one store's card: from its <section id="store-ID"> to the next card (or the end). */
+/** The markup of one store's card: from its <details id="store-ID"> to the next card (or the end). */
 function cardOf(html: string, storeId: string): string {
-  const start = html.indexOf(`<section id="store-${storeId}"`);
+  const start = html.indexOf(`<details id="store-${storeId}"`);
   if (start < 0) return '';
-  const next = html.indexOf('<section id="store-', start + 10);
+  const next = html.indexOf('<details id="store-', start + 10);
   return html.slice(start, next < 0 ? undefined : next);
 }
 const hiddenValue = (body: string, n: string): string | undefined => {
@@ -329,7 +329,7 @@ describe('W2 - only accounts a wallet can use (R6, DEF-611)', () => {
 
 // ---------------------------------------------------------------------------------------------------------------
 describe('W3 - feedback lands on the store card (R7, DEF-612)', () => {
-  const head = (html: string) => plain(html.slice(0, html.indexOf('<section id="store-')));
+  const head = (html: string) => plain(html.slice(0, html.indexOf('<details id="store-')));
 
   it("W3a: an error for store A renders inside A's card with role=alert, not at the top and not on another card", async () => {
     const f = await fixture('w3a');
