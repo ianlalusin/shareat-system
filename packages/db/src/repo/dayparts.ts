@@ -5,8 +5,8 @@
  * daypart, overlap) live in the database; authorize, audit and plain-word refusals are the domain's (slice S2). The DB role may
  * UPDATE exactly name, days, start_time, end_time, status and updated_at, so `updateDaypart` cannot move a daypart to another store.
  */
-import { and, asc, eq, sql } from 'drizzle-orm';
-import { menuDayparts, type MenuStatus } from '../../schema/menu';
+import { and, asc, eq, gt, isNull, lte, or, sql } from 'drizzle-orm';
+import { menuDaypartVersions, menuDayparts, type MenuStatus } from '../../schema/menu';
 import { stores } from '../../schema/stores';
 import type { Tx } from '../client';
 
@@ -61,11 +61,13 @@ export async function lockDaypartForUpdate(tx: Tx, orgId: string, id: string): P
   return row;
 }
 
+/** T-565 (0253): the window version 1 is opened by the menu_dayparts_version_sync trigger, not here. */
 export async function insertDaypart(tx: Tx, input: InsertDaypartInput): Promise<MenuDaypartRow> {
   const [row] = await tx.insert(menuDayparts).values(input).returning();
   return row!;
 }
 
+/** T-565 (0253): an edit or retire closes the open window version and opens the next in the database (trigger menu_dayparts_version_sync), not here. */
 export async function updateDaypart(tx: Tx, id: string, patch: UpdateDaypartPatch): Promise<MenuDaypartRow> {
   const [row] = await tx
     .update(menuDayparts)
@@ -73,6 +75,27 @@ export async function updateDaypart(tx: Tx, id: string, patch: UpdateDaypartPatc
     .where(eq(menuDayparts.id, id))
     .returning();
   return row!;
+}
+
+export type MenuDaypartVersionRow = typeof menuDaypartVersions.$inferSelect;
+
+/**
+ * T-565 (0253): the window of every daypart of one store as it stood at `at` (retired dayparts included, status as then): the version with
+ * `valid_from <= at < coalesce(valid_to, infinity)`. At "now" this is exactly `listDaypartsOfStore`. A daypart created after `at` has no row.
+ */
+export async function listDaypartWindowsAsOf(tx: Tx, orgId: string, storeId: string, at: Date): Promise<MenuDaypartVersionRow[]> {
+  return tx
+    .select()
+    .from(menuDaypartVersions)
+    .where(
+      and(
+        eq(menuDaypartVersions.orgId, orgId),
+        eq(menuDaypartVersions.storeId, storeId),
+        lte(menuDaypartVersions.validFrom, at),
+        or(isNull(menuDaypartVersions.validTo), gt(menuDaypartVersions.validTo, at)),
+      ),
+    )
+    .orderBy(asc(menuDaypartVersions.startTime), asc(menuDaypartVersions.name), asc(menuDaypartVersions.daypartId));
 }
 
 /** The store's IANA timezone (`stores.timezone`); every daypart window is wall clock in it. undefined when the store is not visible. */
