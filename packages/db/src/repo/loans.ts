@@ -96,15 +96,16 @@ export async function getById(tx: Tx, orgId: string, id: string): Promise<LoanRo
  * Every writer of a loan's position calls this BEFORE it reads `positionOf` / `lastPaymentDate`, so two payments on one loan serialise on
  * the loan row: the second waits for the first to commit, then reads the balance and "since" date the first left. ⛔ Without it both read the
  * same outstanding and the same last-payment date, book the interest twice, and both pass the overpayment guard.
- * Returns whether the loan exists in this org (a stranger's id locks nothing).
+ * Returns the loan row AS COMMITTED when the lock was granted (READ COMMITTED re-reads it after waiting), so callers use its `status`, not one read
+ * before the wait; `undefined` when the loan is not in this org (a stranger's id locks nothing).
  */
-export async function lockForPayment(tx: Tx, orgId: string, loanId: string): Promise<boolean> {
+export async function lockForPayment(tx: Tx, orgId: string, loanId: string): Promise<LoanRow | undefined> {
   const rows = await tx
-    .select({ id: loans.id })
+    .select()
     .from(loans)
     .where(and(eq(loans.id, loanId), eq(loans.orgId, orgId)))
     .for('update');
-  return rows.length > 0;
+  return rows[0] as LoanRow | undefined;
 }
 
 export async function listLoans(
