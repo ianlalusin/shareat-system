@@ -1569,6 +1569,13 @@
       "when": 1807846307084,
       "tag": "0252_t572_pos_events_senior_id_scrub",
       "breakpoints": true
+    },
+    {
+      "idx": 255,
+      "version": "7",
+      "when": 1808105507084,
+      "tag": "0255_t575_pos_senior_id_repeat_days",
+      "breakpoints": true
     }
   ]
 }
