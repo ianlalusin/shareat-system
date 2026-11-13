@@ -1547,6 +1547,10 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
     class: 'keep',
     reason: 'A store’s dayparts (Lunch, Dinner) are standing menu configuration (T-510), kept with the offers that point at them.',
   },
+  menu_daypart_versions: {
+    class: 'keep',
+    reason: 'The dated history of each daypart window (T-565) is menu configuration, kept with the daypart it versions; the purged POS lines that name a version are removed first.',
+  },
   pos_stores: {
     class: 'keep',
     reason:
