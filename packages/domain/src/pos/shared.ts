@@ -24,6 +24,8 @@ export interface PosRules {
   readonly tableWarnMinutes: number;
   /** T-558: the largest short payment (centavos) recorded as a routine variance; above it, a finding. */
   readonly saleVarianceToleranceCentavos: bigint;
+  /** T-576: a line cancel / line discount / discount removal needs a manager PIN (or manager approval). Absent from an injected reader = off. */
+  readonly requirePinLineActions: boolean;
 }
 export interface PosDeps {
   readonly readRules?: (tx: Tx, orgId: string, businessDate: string) => Promise<PosRules>;

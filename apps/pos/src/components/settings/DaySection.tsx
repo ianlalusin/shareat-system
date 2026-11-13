@@ -15,6 +15,7 @@ import { closeDay, readX } from "@/lib/pos2/zReadingClient";
 import { formatZSlip } from "@/lib/printing/zSlipFormatter";
 import { paperWidthFor, printXSlipText } from "@/lib/outbox/xSlipRun";
 import { unsentSalesWarningText } from "@/lib/outbox/updateGate";
+import { SlipTextDialog } from "./SlipTextDialog";
 
 const stamp = (ms: number) => new Date(ms).toLocaleString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium", timeStyle: "short" });
 
@@ -31,6 +32,7 @@ export function DaySection() {
   const [busy, setBusy] = useState(false);
   const [askPin, setAskPin] = useState(false);
   const [pin, setPin] = useState("");
+  const [slip, setSlip] = useState<{ text: string; title: string } | null>(null);
   // Kept until the Z is saved so a retry after a lost answer returns the same Z instead of closing the day twice.
   const requestId = useRef<string | null>(null);
 
@@ -44,8 +46,8 @@ export function DaySection() {
     const outcome = await printXSlipText(text, widthMm);
     if (outcome === "printed") toast({ title });
     else {
-      toast({ variant: outcome === "failed" ? "destructive" : "default", title: outcome === "failed" ? "Print failed" : "No printer paired", description: "Copy the slip from the screen." });
-      window.alert(text);
+      toast({ variant: outcome === "failed" ? "destructive" : "default", title: outcome === "failed" ? "Print failed" : "No printer paired", description: "The slip is ready - copy it from the window on screen." });
+      setSlip({ text, title: "Slip - copy this text" });
     }
   };
 
@@ -115,6 +117,7 @@ export function DaySection() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <SlipTextDialog text={slip?.text ?? null} title={slip?.title ?? ""} onClose={() => setSlip(null)} />
     </Card>
   );
 }

@@ -6,7 +6,7 @@ import { deliveryFormData, deliveryRegister, listStores } from './lib';
 import { NewDeliveryForm } from './NewDeliveryForm';
 import { createDeliveryAction } from './actions';
 import { Page } from '@/components/shell/Page';
-import { Badge, FlashBanner, FormModal, LinkRow, RowLink, Select } from '@/components/ui';
+import { Badge, EmptyState, FlashBanner, FormModal, LinkRow, NumTd, RowLink, Select, Table, Td, Th } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -50,8 +50,8 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: P
           <h1 className="text-2xl font-semibold">Deliveries</h1>
           <PageDescription className="mt-1">
             The document goods actually arrive on. Record what is coming, then receive what
-            actually came. ⭐ Receiving is the ONLY door stock enters by — quantity, cost and the
-            books all follow from that one action.
+            actually came. Receiving is the only door stock enters by — quantity, cost and the books
+            all follow from that one action.
           </PageDescription>
         </div>
         <div className="flex flex-wrap items-baseline gap-4">
@@ -95,41 +95,45 @@ export default async function DeliveriesPage({ searchParams }: { searchParams: P
           </FormModal>
         </div>
         {deliveries.length === 0 ? (
-          <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">Nothing recorded yet.</p>
+          <EmptyState
+            illustration="truck"
+            title="Nothing recorded yet"
+            body="A delivery is the document goods arrive on. Record what is coming, then receive what actually came."
+          />
         ) : (
-          <div className="mt-3 overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <table className="w-full min-w-[640px] border-collapse text-sm">
+          <div className="mt-3">
+            <Table card={{ title: 'Kind', subtitle: 'Date', keys: ['Total', 'Status'] }}>
               <thead>
-                <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
-                  <th className="px-3 py-2 font-medium">Date</th>
-                  <th className="px-3 py-2 font-medium">Kind</th>
-                  <th className="px-3 py-2 font-medium">Supplier</th>
-                  <th className="px-3 py-2 font-medium">Reference</th>
-                  <th className="px-3 py-2 text-right font-medium">Lines</th>
-                  <th className="px-3 py-2 text-right font-medium">Total</th>
-                  <th className="px-3 py-2 font-medium">Status</th>
+                <tr>
+                  <Th>Date</Th>
+                  <Th>Kind</Th>
+                  <Th>Supplier</Th>
+                  <Th>Reference</Th>
+                  <Th numeric>Lines</Th>
+                  <Th numeric>Total</Th>
+                  <Th>Status</Th>
                 </tr>
               </thead>
               <tbody>
                 {deliveries.map((d) => (
-                  <LinkRow key={d.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                    <td className="px-3 py-2">
+                  <LinkRow key={d.id}>
+                    <Td>
                       <RowLink href={`/inventory/deliveries/${d.id}`}>
                         {d.deliveredOn}
                       </RowLink>
-                    </td>
-                    <td className="px-3 py-2">{KIND_LABEL[d.kind] ?? d.kind}</td>
-                    <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">{d.supplierName ?? '—'}</td>
-                    <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">{d.referenceNo ?? '—'}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{d.lineCount}</td>
-                    <td className="px-3 py-2 text-right font-mono tabular-nums">{peso(d.total)}</td>
-                    <td className="px-3 py-2">
+                    </Td>
+                    <Td>{KIND_LABEL[d.kind] ?? d.kind}</Td>
+                    <Td className="text-muted">{d.supplierName ?? '—'}</Td>
+                    <Td className="text-muted">{d.referenceNo ?? '—'}</Td>
+                    <NumTd>{d.lineCount}</NumTd>
+                    <NumTd className="font-mono">{peso(d.total)}</NumTd>
+                    <Td>
                       <Badge status={d.status} />
-                    </td>
+                    </Td>
                   </LinkRow>
                 ))}
               </tbody>
-            </table>
+            </Table>
           </div>
         )}
       </section>

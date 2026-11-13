@@ -62,7 +62,7 @@ const SALT_BYTES = 16;
  * keeps them apart, and it is cheaper and less error-prone than a second environment variable
  * somebody will forget to set — which is exactly how DEF-062's secret came to be unset.
  */
-function derivedKey(label: 'pin-lookup' | 'session-token' | 'setup-identity' | 'flash' | 'pos-tablet'): string {
+function derivedKey(label: 'pin-lookup' | 'session-token' | 'setup-identity' | 'flash' | 'pos-tablet' | 'pos-line-approval'): string {
   return createHmac('sha256', env().SESSION_SECRET).update(`shareat:${label}:v1`).digest('hex');
 }
 
@@ -226,6 +226,34 @@ export function signFlash(encodedPayload: string): string {
 export function flashSignatureMatches(encodedPayload: string, signature: string): boolean {
   const expected = Buffer.from(signFlash(encodedPayload), 'base64url');
   const actual = Buffer.from(signature, 'base64url');
+  if (actual.length !== expected.length || actual.length === 0) return false;
+  return timingSafeEqual(actual, expected);
+}
+
+/**
+ * T-576 - the POS line-action approval token: HMAC-SHA256 over org | store | pairing | approver | action | target | expiry | detail, under its own derived key.
+ * The route signs it after a manager PIN checked out; the events inbox verifies it. Nothing but the signature is secret, and nothing in it is the PIN.
+ */
+export interface PosLineApprovalClaim {
+  orgId: string;
+  storeId: string;
+  pairingId: string;
+  approverId: string;
+  action: string;
+  targetId: string;
+  /** Epoch milliseconds. */
+  exp: number;
+  /** What exactly was approved (a discount's kind / preset / type / value / units); '' for a cancel or a removal. Last in the signed text, so it cannot shift another field. */
+  detail: string;
+}
+const lineApprovalText = (c: PosLineApprovalClaim): string => [c.orgId, c.storeId, c.pairingId, c.approverId, c.action, c.targetId, c.exp, c.detail].join('|');
+export function signPosLineApproval(c: PosLineApprovalClaim): string {
+  return createHmac('sha256', derivedKey('pos-line-approval')).update(lineApprovalText(c)).digest('base64url');
+}
+/** Constant-time check of {@link signPosLineApproval}. False (never a throw) for any malformed token. */
+export function posLineApprovalMatches(c: PosLineApprovalClaim, token: string): boolean {
+  const expected = Buffer.from(signPosLineApproval(c), 'base64url');
+  const actual = Buffer.from(typeof token === 'string' ? token : '', 'base64url');
   if (actual.length !== expected.length || actual.length === 0) return false;
   return timingSafeEqual(actual, expected);
 }

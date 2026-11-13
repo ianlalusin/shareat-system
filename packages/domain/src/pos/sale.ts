@@ -15,6 +15,7 @@ import { parseMoneyInput } from '../shared/money-input';
 import { POS_PAYMENT_REFERENCE_RULES, POS_REASON_RULES, POS_STATUTORY_HOLDER_RULES } from '../field-rules/pos';
 import { priceSession, type PricedSession } from './price';
 import { isUniqueViolation, lockOpenSession } from './order';
+import { earlierUsesOfCard } from './senior-repeat';
 import {
   audit,
   billedHeads,
@@ -266,6 +267,14 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
     });
     recordIds.set(h.dinerNo, rec.id);
   }
+  // T-575 (row 462): a card already used at this store in the window is flagged for a manager below (never refused). Our own rows are left out by the printed number.
+  const earlierReceipts = new Set<string>();
+  let repeatedCard = false;
+  for (const h of holders) {
+    const uses = await earlierUsesOfCard(tx, actor.orgId, storeId, h.idNumber, rules!.businessDate, printed);
+    if (uses.length > 0) repeatedCard = true;
+    for (const u of uses) if (u.receiptId) earlierReceipts.add(u.receiptId);
+  }
   try {
     await posV2Repo.insertReceipt(tx, {
       id: receiptId, orgId: actor.orgId, storeId, terminalId: terminal.id, terminalSeq, tableSessionId: sessionId, cashierId: actor.personId, issuedAtDevice: issuedAt,
@@ -331,6 +340,8 @@ export async function completeSale(tx: Tx, actor: Actor, input: CompleteSaleInpu
     if (toCentavos(gap) > tolerance) await audit(tx, actor, 'pos.sale_payment_shortfall', o);
     else await audit(tx, actor, 'pos.sale_payment_variance', o);
   }
+  // The manager's trail: this receipt and the earlier ones. No card number and no name (the earlier receipts lead to them). shortcut: at most 50 earlier receipts are listed.
+  if (repeatedCard) await audit(tx, actor, 'pos.senior_id_repeat', { storeId, entityId: receiptId, pairingId, at: issuedAt, after: { receiptId, earlierReceiptIds: [...earlierReceipts].slice(0, 50) } });
   await audit(tx, actor, 'pos.sale_completed', {
     storeId, entityId: receiptId, pairingId, at: issuedAt,
     after: { sessionId, receiptNo: printed, offline, subtotal: priced.subtotal, discountTotal: priced.discountTotal, total: priced.total, payments: rows.length, statutoryDiners: holders.length },

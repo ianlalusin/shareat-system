@@ -3,13 +3,15 @@
 /**
  * T-528 R2 - the discount sheet: tap a line, choose a preset, a custom amount (a percent or pesos per unit, on a keypad) or Senior / PWD for a numbered
  * diner, then how many units. Every rule is checked here with the server's own sentence (`checkDiscount`), so a discount that breaks one cannot be added.
- * "Apply to all" takes a preset only. Any cashier may do this with no PIN; each change is audited by the server (row 440).
+ * "Apply to all" takes a preset only. Any cashier may do this with no PIN; each change is audited by the server (row 440). T-576: when the store's rule is on, a custom or preset discount asks for the manager PIN (online) or is flagged for review (offline).
  */
 import { useState } from 'react';
 import { Dialog } from '@/components/ui';
 import { AmountPad } from './AmountPad';
 import { appendAmountKey, checkDiscount, freeUnits, type BillLine, type DiscountAdd } from './logic';
 import type { PresetLike } from './bill';
+import { LineApprovalField } from '../_shell/LineApprovalField';
+import type { LineApprovalMode } from '../_shell/line-approval';
 
 // Plain literals: the touch-target census reads them.
 const CHOICE = 'min-h-12 rounded-2xl border px-4 text-left text-base font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
@@ -22,14 +24,16 @@ type Choice = { type: 'preset'; presetId: string } | { type: 'custom' } | { type
 
 export type SheetTarget = { kind: 'line'; line: BillLine } | { kind: 'all' };
 
-export function DiscountSheet({ target, bill, heads, presets, onClose, onAdd, onApplyAll }: {
+export function DiscountSheet({ target, bill, heads, presets, approvalMode = 'none', onClose, onAdd, onApplyAll }: {
   target: SheetTarget;
   bill: readonly BillLine[];
   heads: number;
   presets: readonly PresetLike[];
+  /** T-576: the store asks for a manager PIN on a custom or preset discount (and on every-line), or flags it for review when offline. Senior/PWD are never asked. */
+  approvalMode?: LineApprovalMode;
   onClose: () => void;
-  onAdd: (add: DiscountAdd & { presetId?: string }) => Promise<string | null>;
-  onApplyAll: (presetId: string) => Promise<string | null>;
+  onAdd: (add: DiscountAdd & { presetId?: string }, pin: string) => Promise<string | null>;
+  onApplyAll: (presetId: string, pin: string) => Promise<string | null>;
 }) {
   const line = target.kind === 'line' ? target.line : null;
   const [choice, setChoice] = useState<Choice | null>(null);
@@ -39,6 +43,7 @@ export function DiscountSheet({ target, bill, heads, presets, onClose, onAdd, on
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pin, setPin] = useState('');
 
   const free = line ? freeUnits(line) : 0;
   const add: DiscountAdd | null =
@@ -52,7 +57,10 @@ export function DiscountSheet({ target, bill, heads, presets, onClose, onAdd, on
   // The sheet shows the refusal as soon as a choice breaks a rule; an unfinished custom amount is not a refusal yet.
   const refusal = add ? checkDiscount(bill, heads, add) : null;
   const waitingForValue = choice?.type === 'custom' && value === '';
-  const ready = target.kind === 'all' ? choice?.type === 'preset' : add !== null && refusal === null && !waitingForValue;
+  // A senior/PWD discount is the statutory rate, never a cashier's choice, so it never asks for a PIN.
+  const mode: LineApprovalMode = choice?.type === 'senior' || choice?.type === 'pwd' ? 'none' : approvalMode;
+  const needsPin = mode === 'pin' && pin === '';
+  const ready = (target.kind === 'all' ? choice?.type === 'preset' : add !== null && refusal === null && !waitingForValue) && !needsPin;
 
   const confirm = async () => {
     setBusy(true);
@@ -60,10 +68,10 @@ export function DiscountSheet({ target, bill, heads, presets, onClose, onAdd, on
     const message =
       target.kind === 'all'
         ? choice?.type === 'preset'
-          ? await onApplyAll(choice.presetId)
+          ? await onApplyAll(choice.presetId, mode === 'pin' ? pin : '')
           : 'Choose a discount.'
         : add
-          ? await onAdd({ ...add, ...(choice?.type === 'preset' ? { presetId: choice.presetId } : {}) })
+          ? await onAdd({ ...add, ...(choice?.type === 'preset' ? { presetId: choice.presetId } : {}) }, mode === 'pin' ? pin : '')
           : 'Choose a discount.';
     setBusy(false);
     if (message) setError(message);
@@ -146,6 +154,8 @@ export function DiscountSheet({ target, bill, heads, presets, onClose, onAdd, on
             </div>
           </section>
         ) : null}
+
+        {choice ? <LineApprovalField mode={mode} pin={pin} onPin={setPin} /> : null}
 
         {line && choice ? (
           <div className="flex items-center gap-3" role="group" aria-label="Units">

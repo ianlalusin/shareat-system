@@ -26,6 +26,7 @@ copy (T-422 Ruling 6). Re-running the copy script brings the originals back; re-
 - T-508 S5 (R9): with `POS_MENU_SOURCE=erp` these read the ERP menu adapter (`src/lib/menu/*`) instead of Firestore; source `firestore` is unchanged:
   `src/context/store-context.tsx` (add-ons, the single source), `src/hooks/useStoreConfigDoc.ts` (packages, flavours), `src/components/server/RefillPOSModal.tsx`,
   `src/components/server/ServerPageClient.tsx`, `src/app/kitchen/page.tsx` (station tabs, flavour names), `src/components/kitchen/history/HistoryPageClient.tsx` (station name).
+- T-568 S4 (toast design, Ian 11 Nov): `src/app/globals.css` (Ticket and Keycap panel styles at the end), `src/components/ui/toast.tsx` (variants, action pill, close, wrapping on a narrow screen), `src/components/ui/toaster.tsx` (message block layout).
 
 ## Files deleted after the copy (orphaned by the edits above; Acceptance 3)
 
@@ -180,3 +181,5 @@ T-457 updates the v2-only `src/lib/terminal/claim.ts`: bounded ascending range p
 - `src/components/cashier/start-session-form.tsx` (T-518): the package tab gets an optional "A la carte" section (picker in collect mode, chosen list with qty and remove) and passes `initialAddons` to `startSession`.
 - `src/components/cashier/firestore.ts` (T-518): `StartSessionPayload.initialAddons`; `startSession` writes the add-on bill lines, one add-on kitchen ticket per stationed line and `billingRevision` +1 per line in the same single batch as the package; ADDON_ADDED logged per line after commit; the offline backup print covers the add-on tickets.
 - New files: `src/lib/pos2/addon-line-builder.ts`, `src/lib/pos2/chosen-addons.ts` (and their tests).
+- `src/components/pins/customers-admin.tsx` (T-578, DEF-837): the password-slip print escapes the customer name, phone, temporary password and date with `escapeHtml`.
+- New files: `src/lib/escape-html.ts` (and its test).

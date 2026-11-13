@@ -19,7 +19,7 @@ import {
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, DialogActions, FormGrid, FormModal, HelpTip, Input, Select } from '@/components/ui';
+import { Badge, Banner, Button, ConfirmDestructive, Field, FlashBanner, DialogActions, FormGrid, FormModal, HelpTip, Input, NumTd, Select, Table, Td, Th } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { PAYROLL_PAY_RATE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { chargeRepaymentLabel } from '../staff/deduction-labels';
@@ -137,11 +137,11 @@ export default async function PayrollPage({
           <Field label="From" width="date">
             <Input name="start" type="date" defaultValue={periodStart} className="w-full" />
           </Field>
-          <Field label="to" width="date">
+          <Field label="To" width="date">
             <Input name="end" type="date" defaultValue={periodEnd} className="w-full" />
           </Field>
           <div className="!flex-none self-end">
-            <Button type="submit" variant="secondary">
+            <Button type="submit" variant="secondary" icon={null}>
               Preview
             </Button>
           </div>
@@ -189,8 +189,8 @@ export default async function PayrollPage({
                 ? `, paid ${cfg.payoutLagDays}d after`
                 : ''}
           </span>
-          <span className="text-neutral-500 dark:text-neutral-400">
-            ⭐ Hours count in half-hour steps; anything under is not paid. Late is exact.
+          <span className="text-muted">
+            Hours count in half-hour steps; anything under is not paid. Late is exact.
           </span>
         </p>
       )}
@@ -224,20 +224,20 @@ export default async function PayrollPage({
 
           {pv.needsReviewDays > 0 && (
             <Banner tone="warning">
-              ⚠️ <strong>{pv.needsReviewDays} day(s) still need a manager&rsquo;s review</strong> and
-              are excluded from this run. ⛔ They are counted here on purpose — a run that silently
+              <strong>{pv.needsReviewDays} day(s) still need a manager&rsquo;s review</strong> and
+              are excluded from this run. They are counted here on purpose — a run that silently
               skipped them would look identical to a run where nobody worked.
             </Banner>
           )}
 
           {pv.heldZeroCreditDays > 0 && (
             <Banner tone="warning">
-              ⏸️ <strong>
+              <strong>
                 {pv.heldZeroCreditDays} day(s) were too short to credit a day at all
               </strong>{' '}
               and are <strong>held</strong> — not paid here, and deliberately{' '}
-              <strong>not frozen</strong>. ⭐ The whole stint is waiting as overtime for a
-              manager&rsquo;s decision; once decided, the next run pays it. ⛔ Held, not lost —
+              <strong>not frozen</strong>. The whole stint is waiting as overtime for a
+              manager&rsquo;s decision; once decided, the next run pays it. Held, not lost —
               paying them at ₱0 now would freeze them and put that overtime permanently out of
               reach.
             </Banner>
@@ -245,18 +245,18 @@ export default async function PayrollPage({
 
           {pv.unapprovedOtMinutes > 0 && (
             <Banner tone="warning">
-              ⚠️ <strong>
+              <strong>
                 {Math.floor(pv.unapprovedOtMinutes / 60)}h {pv.unapprovedOtMinutes % 60}m of
                 overtime is awaiting a manager&rsquo;s approval
               </strong>{' '}
-              and is <strong>not</strong> in these figures. ⛔ Pending overtime is never paid
+              and is <strong>not</strong> in these figures. Pending overtime is never paid
               unapproved — approve it on the attendance day, then preview again.
             </Banner>
           )}
 
           {pv.unratedEmployments.length > 0 && (
             <Banner tone="error">
-              ⛔ <strong>No pay rate in force</strong> for{' '}
+              <strong>No pay rate in force</strong> for{' '}
               {pv.unratedEmployments.map((u) => `${u.personName} (${u.days}d)`).join(', ')}. Set a
               rate below — a day priced at ₱0 is indistinguishable from a day nobody worked, so the
               run refuses rather than guessing.
@@ -265,7 +265,7 @@ export default async function PayrollPage({
 
           {pv.unconfirmedRates.length > 0 && (
             <Banner tone="warning">
-              ⚠️ <strong>Rates not confirmed:</strong> {pv.unconfirmedRates.join('; ')}. The figures below use them, but the run
+              <strong>Rates not confirmed:</strong> {pv.unconfirmedRates.join('; ')}. The figures below use them, but the run
               cannot be posted until the accountant approves them under
               Payroll rates (in the menu).
             </Banner>
@@ -273,7 +273,7 @@ export default async function PayrollPage({
 
           {pv.missingGovernmentIds.length > 0 && (
             <Banner tone="warning">
-              ⚠️ <strong>Missing government numbers — not deducted:</strong>{' '}
+              <strong>Missing government numbers — not deducted:</strong>{' '}
               {pv.missingGovernmentIds
                 .map((m) => `${m.personName} (${m.agency === 'sss' ? 'SSS' : m.agency === 'philhealth' ? 'PhilHealth' : 'Pag-IBIG'})`)
                 .join(', ')}
@@ -283,68 +283,58 @@ export default async function PayrollPage({
           )}
 
           {pv.slips.length === 0 ? (
-            <p className="rounded border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500 dark:border-neutral-700">
-              Nothing payable in this period.
+            <p className="rounded-[20px] border border-dashed border-surface-border p-6 text-center text-sm text-muted">
+              Nothing payable in this period — no attendance or leave in this window produced a
+              payslip.
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[60rem] text-sm">
-                <thead>
-                  <tr className="text-left text-xs uppercase tracking-wide text-neutral-500">
-                    <th className="py-1 pr-3 font-medium">Person</th>
-                    <th className="py-1 pr-3 text-right font-medium">Days</th>
-                    <th className="py-1 pr-3 text-right font-medium">Basic</th>
-                    <th className="py-1 pr-3 text-right font-medium">OT + ND + Hol</th>
-                    <th className="py-1 pr-3 text-right font-medium">Leave + SIL payout</th>
-                    <th className="py-1 pr-3 text-right font-medium">Gross</th>
-                    <th className="py-1 pr-3 text-right font-medium">SSS / PhilHealth / Pag-IBIG</th>
-                    <th className="py-1 pr-3 text-right font-medium">Tax</th>
-                    <th className="py-1 pr-3 text-right font-medium">Repayments</th>
-                    <th className="py-1 text-right font-medium">Net</th>
+            <Table card={{ title: 'Person', keys: ['Net', 'Gross'] }}>
+              <thead>
+                <tr>
+                  <Th>Person</Th>
+                  <Th numeric>Days</Th>
+                  <Th numeric>Basic</Th>
+                  <Th numeric>OT + ND + Hol</Th>
+                  <Th numeric>Leave + SIL payout</Th>
+                  <Th numeric>Gross</Th>
+                  <Th numeric>SSS / PhilHealth / Pag-IBIG</Th>
+                  <Th numeric>Tax</Th>
+                  <Th numeric>Repayments</Th>
+                  <Th numeric>Net</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {pv.slips.map((s) => (
+                  <tr key={s.employmentId}>
+                    <Td>{s.personName}</Td>
+                    <NumTd>{s.daysWorked}</NumTd>
+                    <NumTd className="font-mono">{peso(Number(s.basicPay))}</NumTd>
+                    <NumTd className="font-mono text-muted">
+                      {peso(Number(s.otPay) + Number(s.nightDiffPay) + Number(s.holidayPay))}
+                    </NumTd>
+                    <NumTd className="font-mono text-muted">
+                      {peso(Number(s.leavePay) + Number(s.silConversionPay))}
+                    </NumTd>
+                    <NumTd className="font-mono">{peso(Number(s.grossPay))}</NumTd>
+                    <NumTd className="font-mono text-xs">
+                      {peso(Number(s.sssEe))} / {peso(Number(s.philhealthEe))} / {peso(Number(s.pagibigEe))}
+                      {s.skippedAgencies.length > 0 && (
+                        <div className="font-sans text-warning-ink">
+                          not deducted: no {s.skippedAgencies.map((a) => (a === 'sss' ? 'SSS' : a === 'philhealth' ? 'PhilHealth' : 'Pag-IBIG')).join(', ')} no.
+                        </div>
+                      )}
+                    </NumTd>
+                    <NumTd className="font-mono">
+                      {s.isMwe ? 'MWE' : peso(Number(s.withholding))}
+                    </NumTd>
+                    <NumTd className="font-mono text-warning-ink">
+                      {compare(money(s.advanceRecovered), ZERO) > 0 ? `−${peso(Number(s.advanceRecovered))}` : '—'}
+                    </NumTd>
+                    <NumTd className="font-mono font-semibold">{peso(Number(s.netPay))}</NumTd>
                   </tr>
-                </thead>
-                <tbody>
-                  {pv.slips.map((s) => (
-                    <tr
-                      key={s.employmentId}
-                      className="border-t border-neutral-200 dark:border-neutral-800"
-                    >
-                      <td className="py-1.5 pr-3">{s.personName}</td>
-                      <td className="py-1.5 pr-3 text-right tabular-nums">{s.daysWorked}</td>
-                      <td className="py-1.5 pr-3 text-right font-mono tabular-nums">
-                        {peso(Number(s.basicPay))}
-                      </td>
-                      <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-neutral-500">
-                        {peso(Number(s.otPay) + Number(s.nightDiffPay) + Number(s.holidayPay))}
-                      </td>
-                      <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-neutral-500">
-                        {peso(Number(s.leavePay) + Number(s.silConversionPay))}
-                      </td>
-                      <td className="py-1.5 pr-3 text-right font-mono tabular-nums">
-                        {peso(Number(s.grossPay))}
-                      </td>
-                      <td className="py-1.5 pr-3 text-right font-mono text-xs tabular-nums">
-                        {peso(Number(s.sssEe))} / {peso(Number(s.philhealthEe))} / {peso(Number(s.pagibigEe))}
-                        {s.skippedAgencies.length > 0 && (
-                          <div className="font-sans text-warning-ink">
-                            not deducted: no {s.skippedAgencies.map((a) => (a === 'sss' ? 'SSS' : a === 'philhealth' ? 'PhilHealth' : 'Pag-IBIG')).join(', ')} no.
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-1.5 pr-3 text-right font-mono tabular-nums">
-                        {s.isMwe ? 'MWE' : peso(Number(s.withholding))}
-                      </td>
-                      <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-warning-ink">
-                        {compare(money(s.advanceRecovered), ZERO) > 0 ? `−${peso(Number(s.advanceRecovered))}` : '—'}
-                      </td>
-                      <td className="py-1.5 text-right font-mono font-medium tabular-nums">
-                        {peso(Number(s.netPay))}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </Table>
           )}
 
           {pv.slips.length > 0 && pv.unratedEmployments.length === 0 && (
@@ -379,35 +369,34 @@ export default async function PayrollPage({
         <div className="flex items-center gap-1">
           <h2 className="text-sm font-medium">Pay rates</h2>
           <HelpTip label="Pay rates">
-            ⛔ A rate is never edited — a new one <strong>supersedes</strong> it from its effective
+            A rate is never edited — a new one <strong>supersedes</strong> it from its effective
             date, because a payslip already posted was computed under the old one and has to stay
-            explicable. ⚠️ Only a <strong>daily</strong> basis has a compute path.
+            explicable. Only a <strong>daily</strong> basis has a compute path.
           </HelpTip>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[32rem] text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-neutral-500">
-                <th className="py-1 pr-3 font-medium">Person</th>
-                <th className="py-1 pr-3 font-medium">Rate in force today</th>
-                <th className="py-1 text-right font-medium">
-                  <span className="sr-only">Set a new rate</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {roster.map((r) => (
-                <tr key={r.id} className="border-t border-neutral-200 dark:border-neutral-800">
-                  <td className="py-2 pr-3">{r.personName}</td>
-                  <td className="py-2 pr-3 font-mono tabular-nums">
-                    {r.rate ? `${peso(Number(r.rate.amount))} / ${r.rate.basis}` : '—'}
-                    {r.rate && (
-                      <span className="ml-2 font-sans text-xs text-neutral-500">
-                        from {r.rate.effectiveFrom}
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-2 text-right">
+        <Table card={{ title: 'Person', keys: ['Rate in force today'] }}>
+          <thead>
+            <tr>
+              <Th>Person</Th>
+              <Th>Rate in force today</Th>
+              <Th className="w-24">
+                <span className="sr-only">Set a new rate</span>
+              </Th>
+            </tr>
+          </thead>
+          <tbody>
+            {roster.map((r) => (
+              <tr key={r.id}>
+                <Td>{r.personName}</Td>
+                <Td className="font-mono tabular-nums">
+                  {r.rate ? `${peso(Number(r.rate.amount))} / ${r.rate.basis}` : '—'}
+                  {r.rate && (
+                    <span className="ml-2 font-sans text-xs text-muted">
+                      from {r.rate.effectiveFrom}
+                    </span>
+                  )}
+                </Td>
+                <Td className="text-right">
                     {/* T-448: the per-row inline form is now a modal opened by "Set rate". */}
                     <FormModal
                       trigger="Set rate"
@@ -441,20 +430,19 @@ export default async function PayrollPage({
                         </DialogActions>
                       </CheckedForm>
                     </FormModal>
-                  </td>
+                  </Td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
+          </tbody>
+        </Table>
       </section>
 
       {/* ------------------------------------------------------------------ history */}
       <section className="space-y-3">
         <h2 className="text-sm font-medium">Runs</h2>
         {runs.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500 dark:border-neutral-700">
-            No pay run yet at this store.
+          <p className="rounded-[20px] border border-dashed border-surface-border p-6 text-center text-sm text-muted">
+            No pay run yet at this store. Posting a preview creates the first run.
           </p>
         ) : (
           runs.map((run) => (
@@ -499,7 +487,7 @@ export default async function PayrollPage({
                     consequence="Voids this pay run and reverses its entries. An administrator must approve with their own PIN."
                   />
                   <span className="text-xs text-neutral-500">
-                    ⭐ Reverses the entries and unfreezes the days, so the period is payable again.
+                    Reverses the entries and unfreezes the days, so the period is payable again.
                   </span>
                 </form>
               )}

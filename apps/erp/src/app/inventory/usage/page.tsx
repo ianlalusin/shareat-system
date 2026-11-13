@@ -10,7 +10,7 @@ import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Banner, FlashBanner, FormModal, Input, LinkRow, RowLink, Select } from '@/components/ui';
+import { Badge, Banner, EmptyState, FlashBanner, FormModal, Input, LinkRow, NumTd, RowLink, Select, Table, Td, Th } from '@/components/ui';
 
 export const metadata = { title: 'Usage & wastage — Shareat System' };
 export const dynamic = 'force-dynamic';
@@ -64,8 +64,8 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
         <div>
           <h1 className="text-2xl font-semibold">Usage &amp; wastage</h1>
           <PageDescription className="mt-1">
-            A floor worker records what was consumed or spoiled; a manager posts it. ⭐ Posting is
-            the only step that moves stock and hits the books.
+            A floor worker records what was consumed or spoiled; a manager posts it. Posting is the
+            only step that moves stock and hits the books.
           </PageDescription>
         </div>
         <Link href={`/inventory?store=${storeId}`} className="text-sm underline underline-offset-4">
@@ -100,33 +100,31 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
             Nothing to check for this date: no POS plan covers an item that day.
           </p>
         ) : (
-          <div className="mt-3 overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <table className="w-full min-w-[520px] border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
-                  <th className="px-3 py-2 font-medium">Item</th>
-                  <th className="px-3 py-2 text-right font-medium">Expected</th>
-                  <th className="px-3 py-2 text-right font-medium">Recorded</th>
-                  <th className="px-3 py-2 text-right font-medium">Used in cooking</th>
-                  <th className="px-3 py-2 font-medium">Check</th>
+          <Table card={{ title: 'Item', keys: ['Expected', 'Recorded'] }}>
+            <thead>
+              <tr>
+                <Th>Item</Th>
+                <Th numeric>Expected</Th>
+                <Th numeric>Recorded</Th>
+                <Th numeric>Used in cooking</Th>
+                <Th>Check</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {queue.variances.map((v) => (
+                <tr key={v.itemId}>
+                  <Td>{v.itemName}</Td>
+                  <NumTd>{plainQty(v.expected)}</NumTd>
+                  <NumTd>{plainQty(v.actual)}</NumTd>
+                  <NumTd>{v.cooked && plainQty(v.cooked) !== '0' ? plainQty(v.cooked) : ''}</NumTd>
+                  <Td className={v.withinBand ? 'text-success' : 'text-danger'}>
+                    {v.withinBand ? `Within ${pctOf(v.tolerance)}` : `Outside ${pctOf(v.tolerance)}`}
+                    {!v.withinBand && plainQty(v.actual) === '0' ? ' (nothing recorded yet)' : ''}
+                  </Td>
                 </tr>
-              </thead>
-              <tbody>
-                {queue.variances.map((v) => (
-                  <tr key={v.itemId} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                    <td className="px-3 py-2">{v.itemName}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{plainQty(v.expected)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{plainQty(v.actual)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{v.cooked && plainQty(v.cooked) !== '0' ? plainQty(v.cooked) : ''}</td>
-                    <td className={`px-3 py-2 ${v.withinBand ? 'text-success' : 'text-danger'}`}>
-                      {v.withinBand ? `Within ${pctOf(v.tolerance)}` : `Outside ${pctOf(v.tolerance)}`}
-                      {!v.withinBand && plainQty(v.actual) === '0' ? ' (nothing recorded yet)' : ''}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </Table>
         )}
       </section>
 
@@ -139,36 +137,34 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
         {queue.cooked.length === 0 ? (
           <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">No cooking from a recipe was recorded for this date.</p>
         ) : (
-          <div className="mt-3 overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <table className="w-full min-w-[520px] border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
-                  <th className="px-3 py-2 font-medium">Item</th>
-                  <th className="px-3 py-2 text-right font-medium">Quantity</th>
-                  <th className="px-3 py-2 font-medium">From</th>
-                  <th className="px-3 py-2 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {queue.cooked.map((c, i) => (
-                  <LinkRow key={`${c.recordId}-${c.itemId}-${i}`} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                    <td className="px-3 py-2">{c.itemName}</td>
-                    <td className={`px-3 py-2 text-right tabular-nums ${c.isDraft ? 'text-neutral-500 dark:text-neutral-500' : ''}`}>
-                      {plainQty(c.quantity)} {c.unit}
-                    </td>
-                    <td className="px-3 py-2">
-                      <RowLink href={`/inventory/production/${c.recordId}`}>
-                        Recipe: {c.recipeName}
-                      </RowLink>
-                    </td>
-                    <td className="px-3 py-2">
-                      {c.isDraft ? <span className="text-xs text-amber-700 dark:text-amber-400">Draft — not posted yet</span> : 'Posted'}
-                    </td>
-                  </LinkRow>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table card={{ title: 'Item', subtitle: 'From', keys: ['Quantity'] }}>
+            <thead>
+              <tr>
+                <Th>Item</Th>
+                <Th numeric>Quantity</Th>
+                <Th>From</Th>
+                <Th>Status</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {queue.cooked.map((c, i) => (
+                <LinkRow key={`${c.recordId}-${c.itemId}-${i}`}>
+                  <Td>{c.itemName}</Td>
+                  <NumTd className={c.isDraft ? 'text-muted' : ''}>
+                    {plainQty(c.quantity)} {c.unit}
+                  </NumTd>
+                  <Td>
+                    <RowLink href={`/inventory/production/${c.recordId}`}>
+                      Recipe: {c.recipeName}
+                    </RowLink>
+                  </Td>
+                  <Td>
+                    {c.isDraft ? <span className="text-xs text-warning-ink">Draft — not posted yet</span> : 'Posted'}
+                  </Td>
+                </LinkRow>
+              ))}
+            </tbody>
+          </Table>
         )}
       </section>
 
@@ -177,41 +173,39 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
         {queue.drafts.length === 0 ? (
           <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">No usage drafts are waiting.</p>
         ) : (
-          <div className="mt-3 overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <table className="w-full min-w-[560px] border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
-                  <th className="px-3 py-2 font-medium">Date</th>
-                  <th className="px-3 py-2 font-medium">Room</th>
-                  <th className="px-3 py-2 font-medium">Written by</th>
-                  <th className="px-3 py-2 font-medium">Lines</th>
-                  <th className="px-3 py-2 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {queue.drafts.map((d) => (
-                  <LinkRow key={d.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                    <td className="px-3 py-2">
-                      <RowLink href={`/inventory/usage/${d.id}`}>
-                        {d.usedOn}
-                      </RowLink>
-                    </td>
-                    <td className="px-3 py-2">{d.locationName}</td>
-                    <td className="px-3 py-2">{d.createdByName}</td>
-                    <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">
-                      {d.lines.map((l) => `${l.itemName} ${plainQty(l.quantity)} ${l.unit}`).join('; ')}
-                    </td>
-                    <td className="px-3 py-2">
-                      <Badge status={d.status} />
-                      {d.pullVoided && (
-                        <span className="ml-2 text-xs text-amber-700 dark:text-amber-400">Pull voided - check this draft against what was really used.</span>
-                      )}
-                    </td>
-                  </LinkRow>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table card={{ title: 'Room', subtitle: 'Date', keys: ['Status'] }}>
+            <thead>
+              <tr>
+                <Th>Date</Th>
+                <Th>Room</Th>
+                <Th>Written by</Th>
+                <Th>Lines</Th>
+                <Th>Status</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {queue.drafts.map((d) => (
+                <LinkRow key={d.id}>
+                  <Td>
+                    <RowLink href={`/inventory/usage/${d.id}`}>
+                      {d.usedOn}
+                    </RowLink>
+                  </Td>
+                  <Td>{d.locationName}</Td>
+                  <Td>{d.createdByName}</Td>
+                  <Td className="text-muted">
+                    {d.lines.map((l) => `${l.itemName} ${plainQty(l.quantity)} ${l.unit}`).join('; ')}
+                  </Td>
+                  <Td>
+                    <Badge status={d.status} />
+                    {d.pullVoided && (
+                      <span className="ml-2 text-xs text-warning-ink">Pull voided — check this draft against what was really used.</span>
+                    )}
+                  </Td>
+                </LinkRow>
+              ))}
+            </tbody>
+          </Table>
         )}
       </section>
 
@@ -245,42 +239,42 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
           ) : null}
         </div>
         {records.length === 0 ? (
-          <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">Nothing recorded yet.</p>
+          <EmptyState
+            illustration="truck"
+            title="Nothing recorded yet"
+            body="A draft records what was consumed or spoiled. Posting is the step that moves stock."
+          />
         ) : (
-          <div className="mt-3 overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <table className="w-full min-w-[560px] border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
-                  <th className="px-3 py-2 font-medium">Date</th>
-                  <th className="px-3 py-2 font-medium">Kind</th>
-                  <th className="px-3 py-2 font-medium">Room</th>
-                  <th className="px-3 py-2 font-medium">Reason</th>
-                  <th className="px-3 py-2 text-right font-medium">Lines</th>
-                  <th className="px-3 py-2 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {records.map((r) => (
-                  <LinkRow key={r.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
-                    <td className="px-3 py-2">
-                      <RowLink href={`/inventory/usage/${r.id}`}>
-                        {r.usedOn}
-                      </RowLink>
-                    </td>
-                    <td className="px-3 py-2">{KIND_LABEL[r.kind] ?? r.kind}</td>
-                    <td className="px-3 py-2">{r.locationName}</td>
-                    <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">
-                      {r.reasonCode ? wastageReasonLabel(r.reasonCode) : '—'}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums">{r.lineCount}</td>
-                    <td className="px-3 py-2">
-                      <Badge status={r.status} />
-                    </td>
-                  </LinkRow>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table card={{ title: 'Kind', subtitle: 'Date', keys: ['Status'] }}>
+            <thead>
+              <tr>
+                <Th>Date</Th>
+                <Th>Kind</Th>
+                <Th>Room</Th>
+                <Th>Reason</Th>
+                <Th numeric>Lines</Th>
+                <Th>Status</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {records.map((r) => (
+                <LinkRow key={r.id}>
+                  <Td>
+                    <RowLink href={`/inventory/usage/${r.id}`}>
+                      {r.usedOn}
+                    </RowLink>
+                  </Td>
+                  <Td>{KIND_LABEL[r.kind] ?? r.kind}</Td>
+                  <Td>{r.locationName}</Td>
+                  <Td className="text-muted">{r.reasonCode ? wastageReasonLabel(r.reasonCode) : '—'}</Td>
+                  <NumTd>{r.lineCount}</NumTd>
+                  <Td>
+                    <Badge status={r.status} />
+                  </Td>
+                </LinkRow>
+              ))}
+            </tbody>
+          </Table>
         )}
       </section>
     </Page>
