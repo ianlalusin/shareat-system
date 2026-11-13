@@ -58,7 +58,7 @@ import { insDaypart, insDaypartOffer, insOptionOffer, insRule, menuFixture, newI
 // ------------------------------------------------------------------------------------------------------------------------------
 // The subject, loaded lazily so a missing module fails each case with its own message instead of killing the file at import.
 // ------------------------------------------------------------------------------------------------------------------------------
-type Deps = { readRules?: (tx: Tx, orgId: string, businessDate: string) => Promise<{ vatPercentBasisPoints: bigint; scPwdPercentBasisPoints: bigint; businessDayStartHour: number; saleVarianceToleranceCentavos?: bigint }>; now?: () => Date };
+type Deps = { readRules?: (tx: Tx, orgId: string, businessDate: string) => Promise<{ vatPercentBasisPoints: bigint; scPwdPercentBasisPoints: bigint; businessDayStartHour: number; saleVarianceToleranceCentavos?: bigint; requirePinLineActions?: boolean }>; now?: () => Date };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type W<R = any> = (tx: Tx, actor: Actor, input: any, deps?: Deps) => Promise<R>;
 interface PosApi {
@@ -98,7 +98,7 @@ const uuid = (): string => globalThis.crypto.randomUUID();
 const nowIso = () => new Date().toISOString();
 const actorOf = (orgId: string, personId: string): Actor => ({ personId, orgId });
 // BOSS ruling 6 Nov: one injectable reader; percents are basis points (12% = 1200n); the business day starts at an integer hour (4 = 04:00).
-const RATES: Deps = { readRules: async () => ({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, saleVarianceToleranceCentavos: 1n }) };
+const RATES: Deps = { readRules: async () => ({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, saleVarianceToleranceCentavos: 1n, requirePinLineActions: false }) };
 const HOLDER = 'Zyxwv Quillfeather'; // a senior's name: must appear in statutory_discount_records and NOWHERE else
 const IDNO = 'OSCA-9990042';
 const SAME_ID_SENTENCE = 'This change was already recorded differently on the till.';

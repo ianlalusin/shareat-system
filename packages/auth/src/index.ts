@@ -87,3 +87,5 @@ export type {
  *  `apps/erp/src/lib/session.ts` owns the cookie, never the key. */
 export { signSetupIdentity, setupIdentitySignatureMatches } from './credentials';
 export { signFlash, flashSignatureMatches } from './credentials';
+export { signPosLineApproval, posLineApprovalMatches } from './credentials';
+export type { PosLineApprovalClaim } from './credentials';

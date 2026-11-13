@@ -6,6 +6,7 @@
  */
 import type { ProjectedStoreMenu, StoreMenuV2 } from '@shareat/domain';
 import type { NewPosEvent, PosEvent } from '@/lib/pos-device';
+import type { ApprovalFields } from '../_shell/line-approval';
 import { asStoreMenu } from './menu-filter';
 
 export interface CartLine {
@@ -97,8 +98,8 @@ export function setHeadsEvent(i: { personId: string; sessionId: string; heads: n
   return { kind: 'heads.set', personId: i.personId, occurredAtDevice: i.now.toISOString(), payload: { sessionId: i.sessionId, headsCashier: i.heads } };
 }
 
-export function cancelLineEvent(i: { personId: string; lineId: string; reason: string; now: Date }): NewPosEvent {
-  return { kind: 'line.cancelled', personId: i.personId, occurredAtDevice: i.now.toISOString(), payload: { lineId: i.lineId, reason: i.reason } };
+export function cancelLineEvent(i: { personId: string; lineId: string; reason: string; now: Date; /** T-576: the manager PIN, or offline: true when the rule asks for one and the till is offline. */ approval?: ApprovalFields }): NewPosEvent {
+  return { kind: 'line.cancelled', personId: i.personId, occurredAtDevice: i.now.toISOString(), payload: { lineId: i.lineId, reason: i.reason, ...i.approval } };
 }
 
 /** The one write path: save to the tablet's outbox first, and only then ask for a send. A failed save changes nothing and says so. */
