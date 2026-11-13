@@ -100,7 +100,10 @@ function fixedWidthControls(src: string): Hit[] {
     const cm = /className=\{?[`"]([^`"]*)/.exec(tag);
     if (!cm || !FIXED_WIDTH.test(cm[1]!)) continue;
     const before = clean.slice(0, m.index);
-    if (before.lastIndexOf('<td') > before.lastIndexOf('</td>')) continue; // a cell is the measure
+    // T-568: the shared cell primitives are still table cells. Recognise both spellings.
+    const cellOpen = Math.max(before.lastIndexOf('<td'), before.lastIndexOf('<Td'));
+    const cellClose = Math.max(before.lastIndexOf('</td>'), before.lastIndexOf('</Td>'));
+    if (cellOpen > cellClose) continue; // a cell is the measure
     hits.push({ tag: m[1]!, cls: cm[1]!, snippet: tag.slice(0, 80) });
   }
   return hits;
@@ -267,6 +270,8 @@ describe('T-384 S2a G5 - positive controls (literal fixtures)', () => {
     expect(fixedWidthControls('<select className={`rounded max-w-sm`}>')).toHaveLength(1);
     expect(fixedWidthControls('<input className="w-[12rem]" />')).toHaveLength(1);
     expect(fixedWidthControls('<td><input className="w-28" /></td>')).toHaveLength(0);
+    expect(fixedWidthControls('<Td><input className="w-28" /></Td>')).toHaveLength(0);
+    expect(fixedWidthControls('<Td>x</Td><input className="w-28" />')).toHaveLength(1);
     expect(fixedWidthControls('<td>x</td><input className="w-28" />')).toHaveLength(1);
     expect(fixedWidthControls('<input className="w-full sm:w-auto sm:min-w-48 sm:flex-1" />')).toHaveLength(0);
   });

@@ -1,3 +1,4 @@
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 /**
  * T-531 R4 "Posting" and R10 (TESTER) - the derived sales day is verified by a DIFFERENT, senior person through the EXISTING `verifySalesDay`, and posts a balanced
  * `sale.mixed` entry (docs/POSTING-PATTERNS.md "Sale", the two balance identities). docs/tasks/531-pos-day-close.md R4, R8 "Posting", R10 (Ian, row 449).
@@ -19,7 +20,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { RefusalError } from '@shareat/db';

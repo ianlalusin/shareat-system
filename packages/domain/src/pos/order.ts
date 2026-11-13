@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { add, money, type Money } from '@shareat/core/money';
 import { authorize, type Actor } from '@shareat/auth';
 import { posV2Repo, type Tx } from '@shareat/db';
-import { refuse, gone } from '../shared/refusal';
+import { refuse, gone, RefusalError } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { POS_LINE_NOTE_RULES, POS_REASON_RULES } from '../field-rules/pos';
 import { loadStoreMenu } from '../menu/load-store-menu';
@@ -121,15 +121,64 @@ function optionDelta(item: ProjectedItem, variant: ProjectedVariant, chosen: rea
   return { delta, names };
 }
 
-/** Existing row for a device lineId: the same content is a replay (skip it); different content is refused. */
-function sameLine(existing: posV2Repo.TableSessionLineRow, input: { sessionId: string; menuItemId: string; qty: number; note: string | null }): boolean {
-  const bundle = existing.bundleHeads !== null; // a bundle line's qty is not the heads the device sent
+/** The name stored on a line (and printed on the outage slip): the item, then its size, then the chosen options. */
+const lineName = (item: ProjectedItem, variant: ProjectedVariant, names: readonly string[]): string =>
+  `${item.name}${variant.label ? ` - ${variant.label}` : ''}${names.length ? ` + ${names.join(', ')}` : ''}`;
+
+/**
+ * T-566: a refill carries at most ONE flavour (an option value of the meat's variant), required when a group with a flavour on sale has `minSelections` above 0
+ * (v1 `requiresFlavor`). The allowed / on-sale / group-max rules are `optionDelta`'s; only its sentence is v1's. The refill is free: the delta is dropped.
+ */
+function refillFlavour(item: ProjectedItem, variant: ProjectedVariant, chosen: readonly string[] | undefined): string[] {
+  const ids = [...new Set(chosen ?? [])];
+  if (ids.length > 1) throw refuse('pos: one flavour per refill', `Choose one flavour for ${item.name}.`);
+  if (ids.length === 0) {
+    if (variant.optionGroups.some((g) => g.minSelections > 0 && g.values.some((v) => v.channels.store.orderable))) throw refuse('pos: flavour required', `Choose a flavour for ${item.name}.`);
+    return [];
+  }
+  try {
+    optionDelta(item, variant, ids);
+  } catch (e) {
+    if (e instanceof RefusalError) throw refuse('pos: flavour not available', `That flavour is not available for ${item.name}.`);
+    throw e;
+  }
+  return ids;
+}
+
+/**
+ * Existing row for a device lineId: the same content is a replay (skip it); different content is refused. T-556: also the variant, the option set
+ * (`choices`) and, for a bundle line, the head count: the line covers `bundleHeads` and the heads above it sit on the derived extra-heads row (`extraHeadsQty`).
+ */
+function sameLine(existing: posV2Repo.TableSessionLineRow, input: { sessionId: string; menuItemId: string; qty: number; note: string | null; choices: boolean; extraHeadsQty: number | null }): boolean {
+  const heads = existing.bundleHeads; // a bundle line's qty is not the heads the device sent
   return (
     existing.sessionId === input.sessionId &&
     existing.menuItemId === input.menuItemId &&
     (existing.note ?? null) === input.note &&
-    (bundle || existing.qty === input.qty)
+    input.choices &&
+    (heads !== null ? (input.qty > heads ? input.qty - heads : null) === input.extraHeadsQty : existing.qty === input.qty)
   );
+}
+
+/**
+ * T-556/T-557: does a replayed line pick the variant and options the stored line was made with? A line with stored `optionValueIds` compares the sorted distinct id sets.
+ * A legacy line (NULL, written before migration 0249) keeps its options only inside `name` (" + A, B"), so they are read from the menu at the line's device time (orderability ignored: a replay may come after a sell-out).
+ * shortcut: legacy lines compare the option names in the order sent and as a name suffix, and an item the menu no longer lists is not checked; those lines cannot be backfilled.
+ */
+async function sameChoices(menus: MenuAt, at: Date, prior: posV2Repo.TableSessionLineRow, l: LineInput): Promise<boolean> {
+  const item = (await menus.at(at)).menu.items.find((i) => i.id === l.menuItemId);
+  const variant = item && (l.variantId ? item.variants.find((v) => v.id === l.variantId) : item.variants.find((v) => v.isDefault) ?? item.variants[0]);
+  if (prior.menuItemVariantId !== (variant?.id ?? l.variantId ?? prior.menuItemVariantId)) return false;
+  if (prior.optionValueIds) {
+    const want = [...new Set(l.optionValueIds ?? [])].sort();
+    return want.length === prior.optionValueIds.length && want.every((id, i) => id === prior.optionValueIds![i]);
+  }
+  if (!variant) return !l.optionValueIds?.length;
+  const all = variant.optionGroups.flatMap((g) => g.values);
+  const names = [...new Set(l.optionValueIds ?? [])].map((id) => all.find((v) => v.id === id)?.name);
+  if (names.includes(undefined)) return false;
+  const stored = prior.name.replace(/ \((up to \d+|extra head)\)$/, '');
+  return names.length ? stored.endsWith(` + ${names.join(', ')}`) : !all.some((v) => stored.endsWith(` + ${v.name}`) || stored.endsWith(`, ${v.name}`));
 }
 
 function checkLineShape(l: LineInput): { lineId: string; qty: number; note: string | null; at: Date } {
@@ -155,7 +204,9 @@ async function writeLines(tx: Tx, actor: Actor, ctx: { storeId: string; pairingI
   for (const s of shaped) {
     const prior = existing.get(s.lineId);
     if (prior) {
-      if (!sameLine(prior, { sessionId: session.id, menuItemId: s.l.menuItemId, qty: s.qty, note: s.note })) throw recordedDifferently();
+      const extra = prior.bundleHeads !== null ? await posV2Repo.getLine(tx, actor.orgId, ctx.storeId, uuidv5(EXTRA_HEADS, s.lineId)) : undefined;
+      const choices = await sameChoices(menus, s.at, prior, s.l);
+      if (!sameLine(prior, { sessionId: session.id, menuItemId: s.l.menuItemId, qty: s.qty, note: s.note, choices, extraHeadsQty: extra?.qty ?? null })) throw recordedDifferently();
       continue;
     }
     fresh++;
@@ -164,7 +215,7 @@ async function writeLines(tx: Tx, actor: Actor, ctx: { storeId: string; pairingI
     if (item.itemType === 'package' && session.mode !== 'dine_in') throw refuse('pos: package on take-out', 'A package can only be sold to a table, not take-out.');
     if (offer.amount === null) throw refuse('pos: no amount', `${item.name} has no price here yet.`);
     const { delta, names } = optionDelta(item, variant, s.l.optionValueIds);
-    const base = `${item.name}${variant.label ? ` - ${variant.label}` : ''}${names.length ? ` + ${names.join(', ')}` : ''}`;
+    const base = lineName(item, variant, names);
     const common = {
       orgId: actor.orgId,
       storeId: ctx.storeId,
@@ -174,6 +225,7 @@ async function writeLines(tx: Tx, actor: Actor, ctx: { storeId: string; pairingI
       kitchenStationId: item.stationId,
       note: s.note,
       bundleHeads: null as number | null,
+      optionValueIds: [...new Set(s.l.optionValueIds ?? [])].sort(),
       addedBy: actor.personId,
       addedOnPairingId: ctx.pairingId,
       addedAtDevice: s.at,
@@ -346,6 +398,7 @@ async function followHeads(tx: Tx, actor: Actor, ctx: { storeId: string; pairing
     qty,
     unitPrice: unit,
     bundleHeads: null,
+    optionValueIds: from.optionValueIds,
     kitchenStationId: from.kitchenStationId,
     note: from.note,
     addedBy: actor.personId,
@@ -378,7 +431,7 @@ async function followHeads(tx: Tx, actor: Actor, ctx: { storeId: string; pairing
 async function changeHeads(
   tx: Tx,
   actor: Actor,
-  input: { storeId: string; pairingId: string | null; sessionId: string },
+  input: { storeId: string; pairingId: string | null; sessionId: string; atDevice?: string | Date },
   pairingId: string | null,
   change: { headsCashier?: number; headsServer?: number },
 ): Promise<{ wrote: boolean }> {
@@ -388,7 +441,8 @@ async function changeHeads(
   const next = { headsCashier: change.headsCashier ?? session.headsCashier, headsServer: change.headsServer ?? session.headsServer };
   if (next.headsCashier === session.headsCashier && next.headsServer === session.headsServer) return { wrote: false };
   const after = billedHeads(next.headsCashier, next.headsServer);
-  const at = new Date();
+  // T-559: a heads.set queued on a tablet is priced (a new extra-head line) at ITS device time, like addLines prices a line at `addedAtDevice`; a Server Action has none and uses now.
+  const at = input.atDevice === undefined ? new Date() : deviceTime(input.atDevice, 'The time of the change');
   await followHeads(tx, actor, { storeId: input.storeId, pairingId }, session, before, after, at);
   await posV2Repo.setSessionHeads(tx, actor.orgId, input.storeId, sessionId, change);
   await audit(tx, actor, 'pos.heads_changed', {
@@ -407,7 +461,7 @@ export async function confirmHeads(tx: Tx, actor: Actor, input: { storeId: strin
   return changeHeads(tx, actor, input, pairingId, { headsServer });
 }
 
-export async function setHeadsCashier(tx: Tx, actor: Actor, input: { storeId: string; pairingId: string | null; sessionId: string; headsCashier: number }): Promise<{ wrote: boolean }> {
+export async function setHeadsCashier(tx: Tx, actor: Actor, input: { storeId: string; pairingId: string | null; sessionId: string; headsCashier: number; atDevice?: string | Date }): Promise<{ wrote: boolean }> {
   await authorize(tx, actor, 'record_sale', { storeId: input.storeId });
   const pairingId = await requireContext(tx, actor, input.storeId, input.pairingId, false);
   const sessionId = uuidInput(input.sessionId, 'The table id');
@@ -422,16 +476,19 @@ export async function setHeadsCashier(tx: Tx, actor: Actor, input: { storeId: st
 export async function requestRefill(
   tx: Tx,
   actor: Actor,
-  input: { storeId: string; pairingId: string | null; sessionId: string; lines: { lineId: string; menuItemId: string; qty: number; addedAtDevice: string | Date }[] },
+  input: { storeId: string; pairingId: string | null; sessionId: string; lines: { lineId: string; menuItemId: string; qty: number; addedAtDevice: string | Date; optionValueIds?: string[] }[] },
 ): Promise<{ wrote: boolean }> {
   await authorize(tx, actor, 'request_pos_refill', { storeId: input.storeId });
   const pairingId = await requireContext(tx, actor, input.storeId, input.pairingId, true);
   const sessionId = uuidInput(input.sessionId, 'The table id');
   if (!Array.isArray(input.lines) || input.lines.length < 1 || input.lines.length > 100) throw refuse('pos: bad line count', 'Ask for between 1 and 100 refills at a time.');
   const shaped = input.lines.map((l) => ({ l, ...checkLineShape({ ...l, note: undefined }) }));
+  if (new Set(shaped.map((s) => s.l.menuItemId)).size !== shaped.length) throw refuse('pos: same meat twice', 'Each meat can be in a refill request only once.');
   const existing = new Map((await posV2Repo.getLinesByIds(tx, actor.orgId, input.storeId, shaped.map((s) => s.lineId))).map((r) => [r.id, r]));
+  // T-566: the flavour is part of the content (NULL = a refill written before migration 0249, which had none).
+  const sameFlavour = (a: readonly string[] | null | undefined, b: readonly string[] | undefined) => [...new Set(a ?? [])].sort().join() === [...new Set(b ?? [])].sort().join();
   const sameRefill = (s: (typeof shaped)[number], prior: posV2Repo.TableSessionLineRow) =>
-    prior.sessionId === sessionId && prior.kind === 'refill' && prior.menuItemId === s.l.menuItemId && prior.qty === s.qty;
+    prior.sessionId === sessionId && prior.kind === 'refill' && prior.menuItemId === s.l.menuItemId && prior.qty === s.qty && sameFlavour(prior.optionValueIds, s.l.optionValueIds);
   // Audit F6: a full replay is answered before the table's state is judged (it may have been paid since).
   if (shaped.every((s) => existing.has(s.lineId))) {
     if (shaped.some((s) => !sameRefill(s, existing.get(s.lineId)!))) throw recordedDifferently();
@@ -453,9 +510,11 @@ export async function requestRefill(
     const allowed = new Set(menu.menu.items.flatMap((i) => i.variants).filter((v) => packageVariants.has(v.id)).flatMap((v) => v.refillItemIds));
     const { item, variant } = offerFor(menu, s.l.menuItemId, undefined);
     if (item.itemType !== 'refill' || !allowed.has(item.id)) throw refuse('pos: not a refill of the package', `${item.name} is not a refill of this table's package.`);
+    const chosen = refillFlavour(item, variant, s.l.optionValueIds);
+    const flavourNames = variant.optionGroups.flatMap((g) => g.values.filter((v) => chosen.includes(v.id)).map((v) => v.name));
     rows.push({
       id: s.lineId, orgId: actor.orgId, storeId: input.storeId, sessionId, kind: 'refill', menuItemId: item.id, menuItemVariantId: variant.id,
-      name: item.name, qty: s.qty, unitPrice: money('0'), bundleHeads: null, kitchenStationId: item.stationId, note: null, addedBy: actor.personId, addedOnPairingId: pairingId, addedAtDevice: s.at,
+      name: lineName(item, variant, flavourNames), qty: s.qty, unitPrice: money('0'), bundleHeads: null, optionValueIds: chosen.sort(), kitchenStationId: item.stationId, note: null, addedBy: actor.personId, addedOnPairingId: pairingId, addedAtDevice: s.at,
     });
   }
   if (rows.length === 0) return { wrote: false };

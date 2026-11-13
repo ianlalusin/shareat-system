@@ -174,9 +174,9 @@ standing prompt is `C:\Users\ianla\webapps\shareat-coord\work-orders\FREEBUFF-PR
 | Step | Who |
 |---|---|
 | Writes the work order into `open\`, reserves its numbers on the board | Opus planner (BOSS or a spec lane) |
-| Claims it, builds it in its own worktree and `wo/` branch, opens one PR, moves it to `done\` | **You** (today: Freebuff with DeepSeek or Nemotron) |
+| Claims it, builds it in its own worktree and `wo/` branch, opens one PR, moves it to `done\` | **You** (today: DeepSeek) |
 | Runs CI on the PR | GitHub |
-| Audits open PRs' diffs every 12 hours, **before** they are queued | Codex |
+| Audits open PRs' diffs, **before** they are queued, and posts its findings as one PR comment headed "Codex audit" (not a file in `shareat-audits\OPEN`; Ian, 11 Nov) | Codex |
 | Fixes the audit findings on the same branch, then verifies | a Claude Sonnet fixer, verified by Opus |
 | Merges, one at a time, then deploys | BOSS's merge queue only |
 

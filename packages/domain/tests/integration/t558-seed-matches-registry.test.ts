@@ -1,3 +1,4 @@
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 /**
  * T-558 R1 (TESTER) - the seed pin for migration 0248, and every key. docs/tasks/558-pos-sale-variance-tolerance.md R1: "Migration 0248_t558_pos_sale_variance_tolerance.sql: data only,
  * following the 0241/0245 seed pattern. It inserts 0.01 per org. Its journal entry is idx 248, with `when` = 0247's + 86400000."; "the seed pin, covering every key".
@@ -20,7 +21,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { RULE_REGISTRY } from '../../src/business-rules/registry';
@@ -83,7 +84,7 @@ describe('T-558 seed pin - migration 0248', () => {
     expect(e248, '0248 is in the journal').toBeDefined();
     expect(e248!.tag).toBe(FILE.replace(/\.sql$/, ''));
     expect(e248!.when).toBe(e247!.when + 86_400_000);
-    expect(journal.entries.at(-1)!.idx, '0248 is the last entry').toBe(248);
+    expect(journal.entries.at(-1)!.idx, '0248 is the last entry, or is followed only by later ones (0249 = T-557)').toBeGreaterThanOrEqual(248);
   });
 
   it('0248 on its own seeds exactly pos.sale_variance_tolerance: 0.01, at 2000-01-01, set_by null, reason "Starting value" [kills: a wrong value, date or reason; another key seeded twice]', async () => {

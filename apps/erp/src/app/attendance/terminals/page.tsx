@@ -121,7 +121,7 @@ export default async function TerminalsPage({
           </p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-surface-border">
-            <table className="w-full min-w-[640px] border-collapse text-sm">
+            <table aria-label="Terminals" className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-surface-border bg-canvas text-left">
                   <th className="px-3 py-2 font-medium">Label</th>

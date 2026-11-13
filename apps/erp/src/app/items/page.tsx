@@ -238,7 +238,7 @@ export default async function ItemsPage({
         </nav>
         {items.length > 0 ? (
           <div data-screen-scroll="catalogue" className="catalogue-table min-w-0 rounded-lg border border-surface-border bg-surface">
-            <table data-card-title="Item" data-card-subtitle="Kind" data-card-keys="Priced per" className="w-full min-w-[560px] border-collapse text-sm">
+            <table data-card-title="Item" data-card-subtitle="Kind" data-card-keys="Code" className="w-full min-w-[560px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
                   <th scope="col" className="px-3 py-2 font-medium">Item</th>
@@ -253,7 +253,7 @@ export default async function ItemsPage({
                 {rows.map(({ item: i, indented }) => (
                   <LinkRow key={i.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-900">
                     <td className={indented ? 'py-2 pl-8 pr-3' : 'px-3 py-2'}>
-                      {indented && <span aria-hidden="true" className="mr-1 text-neutral-500 dark:text-neutral-400">↳</span>}
+                      {indented && <span aria-hidden="true" className="mr-1 text-muted">↳</span>}
                       <RowLink href={`/items/${i.id}`}>{i.name}</RowLink>
                       {i.status !== 'active' && (
                         <span className="ml-2 text-xs text-neutral-500">({i.status})</span>
@@ -303,7 +303,7 @@ export default async function ItemsPage({
                 <div className="mb-2">
                   <a href={`/items/${d.aId}`} className="underline hover:no-underline">{d.aName}</a>
                   <span className="text-neutral-500"> ({d.aUnit})</span>
-                  <span className="mx-2 text-neutral-500 dark:text-neutral-400">vs</span>
+                  <span className="mx-2 text-muted">vs</span>
                   <a href={`/items/${d.bId}`} className="underline hover:no-underline">{d.bName}</a>
                   <span className="text-neutral-500"> ({d.bUnit})</span>
                   <span className="ml-2 text-xs text-neutral-500">
@@ -357,7 +357,7 @@ export default async function ItemsPage({
             {dismissed.map((d) => (
               <li key={d.id} className="flex flex-wrap items-center gap-2">
                 <a href={`/items/${d.itemAId}`} className="inline-block py-0.5 underline hover:no-underline">{d.itemAName}</a>
-                <span className="text-neutral-500 dark:text-neutral-400">and</span>
+                <span className="text-muted">and</span>
                 <a href={`/items/${d.itemBId}`} className="inline-block py-0.5 underline hover:no-underline">{d.itemBName}</a>
                 {d.note ? <span className="text-xs text-neutral-500 dark:text-neutral-400">— {d.note}</span> : null}
                 <form action={undoDuplicateDismissalAction}>

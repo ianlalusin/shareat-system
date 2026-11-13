@@ -1,3 +1,4 @@
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
@@ -36,7 +37,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
@@ -160,9 +161,9 @@ async function runConcurrencyLeg<TA, TB>(
 const ROW_LOCK = ['transactionid', 'tuple'];
 
 // ---- fixture ---------------------------------------------------------------------------------------
-const DAY = '2027-01-10'; // D
-const DAY2 = '2027-01-11';
-const TYPED = '2027-01-09';
+const DAY = '2026-01-10'; // D
+const DAY2 = '2026-01-11';
+const TYPED = '2026-01-09';
 const AB: readonly PosV1SoldItemInput[] = [
   { key: 'A', name: 'A', physicalQty: 3 },
   { key: 'B', name: 'B', physicalQty: 2 },
@@ -179,10 +180,10 @@ async function fixture(hint: string, o: { link?: boolean } = {}) {
   const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
   const orgId = org!.id;
   await seedChartOfAccounts(sql, orgId);
-  // Contiguous open months: the stock-in month (Dec 2026), the sales days' month (Jan 2027) and one after.
+  // Contiguous open months: the stock-in month (Dec 2025), the sales days' month (Jan 2026) and one after.
   await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status)
     select ${orgId}, m::date, (m + interval '1 month' - interval '1 day')::date, 'open'
-    from generate_series('2026-12-01'::date, '2027-02-01'::date, interval '1 month') m`;
+    from generate_series('2025-12-01'::date, '2026-02-01'::date, interval '1 month') m`;
   const mkStore = async (name: string) =>
     (await sql<{ id: string }[]>`insert into stores (org_id, code, name, stock_model) values (${orgId}, ${uid('st')}, ${name}, 'multi_room') returning id`)[0]!.id;
   const storeId = await mkStore('Lipa');
@@ -230,10 +231,10 @@ async function fixture(hint: string, o: { link?: boolean } = {}) {
       values (${orgId}, ${`orgs/${orgId}/p-${uid('f')}.jpg`}, 'image/jpeg', 10, 'x', 'receipt_photo', ${managerId}) returning id`;
     const [del] = await sql<{ id: string }[]>`
       insert into deliveries (org_id, store_id, kind, delivered_on, proof_file_id, created_by)
-      values (${orgId}, ${storeId}, 'purchase', '2026-12-02', ${file!.id}, ${managerId}) returning id`;
+      values (${orgId}, ${storeId}, 'purchase', '2025-12-02', ${file!.id}, ${managerId}) returning id`;
     await asOrg(orgId, (tx) =>
       receiveDelivery(tx, {
-        orgId, storeId, deliveryId: del!.id, deliveredOn: '2026-12-02', locations, receivedBy: managerId,
+        orgId, storeId, deliveryId: del!.id, deliveredOn: '2025-12-02', locations, receivedBy: managerId,
         lines: [{ lineId: '1', itemId, itemKind: 'meat_slab', receivedQuantity: quantity('100'), conversionFactor: '1', unitCost: '10.0000', locationId: kitchen }],
       }),
     );

@@ -5,9 +5,11 @@ import { positionHolders } from './role-title';
 import { positionsForStore, rosterForStore, staffStoresFor, withOrgPrincipal } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
-import { Button, Field, FlashBanner, Input } from '@/components/ui';
+import { Button, Field, FlashBanner, FormGrid, Input } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
+import { IssueAdminPinConfirm } from './IssueAdminPinConfirm';
 import { STAFF_PIN_RULES, STAFF_POSITION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { SubmitButton } from '@/components/feedback/SubmitButton';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
 import { can } from '@shareat/auth';
@@ -57,6 +59,8 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
   ]);
 
   // The Positions tab only uses names and ids - photos and live state are for the Cards and Roster views.
+  // The ID cards are the default again (Ian, 2026-11-09); the table-first Roster is the
+  // alternate view for scanning a long list.
   const view: 'cards' | 'roster' | 'positions' =
     sp.view === 'roster' ? 'roster' : sp.view === 'positions' ? 'positions' : 'cards';
 
@@ -113,12 +117,12 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
         <div>
           <h1 className="text-2xl font-semibold">Staff and positions</h1>
           <PageDescription className="mt-1">
-            Who is on the roster at this store right now, and the positions they hold. ⭐ Every attendance, payroll and
-            credential screen in this app needs an employment to point at — this is where one gets
-            created (DEF-131).
+            Who is on the roster at this store, which position they hold, and where they are in the
+            day. Every attendance, payroll and credential screen points at an employment created
+            here.
           </PageDescription>
         </div>
-        <Link href={`/staff/hire?store=${storeId}`} className="inline-flex min-h-11 items-center rounded-[12px] border border-transparent bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-hover">
+        <Link href={`/staff/hire?store=${storeId}`} className="inline-flex min-h-11 items-center rounded-full border border-transparent bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-hover">
           Hire
         </Link>
       </div>
@@ -157,7 +161,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
                 <details>
                   <summary className="flex min-h-11 cursor-pointer items-center px-3 py-1.5">
                     {p.name}
-                    {p.isCanonical && <span className="ml-1 text-xs text-neutral-500 dark:text-neutral-400">(canonical)</span>}
+                    {p.isCanonical && <span className="ml-1 text-xs text-muted">(canonical)</span>}
                     <span className="ml-1">· {holders.length}</span>
                   </summary>
                   {holders.length === 0 ? (
@@ -210,32 +214,35 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
       {pinStatus && <PinSignInPanel storeId={storeId} status={pinStatus} />}
 
       {adminPins && adminPins.length > 0 && (
-        <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-          <h2 className="font-medium">Administrator PINs</h2>
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            An administrator approves a void, a reversal, a delete or a cutover step by typing their own 6-digit PIN. One who
-            signs in by email only has no PIN until one is issued here. Issuing a new PIN replaces the old one and ends that
-            person&rsquo;s live sessions.
+        <section className="space-y-3 rounded-[20px] border border-surface-border bg-surface p-4">
+          <h2 className="font-semibold">Administrator PINs</h2>
+          <p className="text-xs text-muted">
+            An administrator approves a void, a reversal, a delete or a cutover step with their own
+            6-digit PIN. One who signs in by email only has no PIN until one is issued here.
           </p>
-          <ul className="divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
+          <ul className="divide-y divide-surface-border text-sm">
             {adminPins.map((a) => (
-              <li key={a.personId} className="flex flex-wrap items-end justify-between gap-3 py-2">
+              <li key={a.personId} className="flex flex-wrap items-center justify-between gap-3 py-3">
                 <div>
                   <div className="font-medium">{a.displayName}</div>
-                  <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                  <div className="text-xs text-muted">
                     {a.role === 'super_admin' ? 'Super admin' : 'Admin'} · {a.hasPin ? 'PIN issued' : 'No PIN yet'}
                   </div>
                 </div>
-                <CheckedForm rules={STAFF_PIN_RULES} action={issueAdminPinAction} className="flex flex-wrap items-end gap-2">
-                  <input type="hidden" name="personId" value={a.personId} />
-                  <input type="hidden" name="storeId" value={storeId} />
-                  <Field label={`${a.hasPin ? 'New PIN' : 'PIN'} (6 digits)`} rule={STAFF_PIN_RULES.pin}>
-                    <Input {...nativeAttrs(STAFF_PIN_RULES.pin)} type="password" autoComplete="off" />
-                  </Field>
-                  <Button type="submit" variant="secondary">
-                    {a.hasPin ? 'Re-issue PIN' : 'Issue PIN'}
-                  </Button>
-                </CheckedForm>
+                <IssueAdminPinConfirm displayName={a.displayName} hasPin={a.hasPin}>
+                  <CheckedForm rules={STAFF_PIN_RULES} action={issueAdminPinAction} className="flex flex-wrap items-end gap-2">
+                    <input type="hidden" name="personId" value={a.personId} />
+                    <input type="hidden" name="storeId" value={storeId} />
+                    <FormGrid layout="fields" className="flex-1">
+                      <Field label={`${a.hasPin ? 'New PIN' : 'PIN'} (6 digits)`} width="code" rule={STAFF_PIN_RULES.pin}>
+                        <Input {...nativeAttrs(STAFF_PIN_RULES.pin)} type="password" autoComplete="off" className="w-full" />
+                      </Field>
+                    </FormGrid>
+                    <SubmitButton variant="secondary" icon={null} pendingLabel="Issuing…">
+                      {a.hasPin ? 'Re-issue PIN' : 'Issue PIN'}
+                    </SubmitButton>
+                  </CheckedForm>
+                </IssueAdminPinConfirm>
               </li>
             ))}
           </ul>

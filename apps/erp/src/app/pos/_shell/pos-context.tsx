@@ -30,6 +30,8 @@ export interface PosContextValue {
   stateVersion: number | null;
   pendingEvents: PosEvent[];
   ordersSnapshot: SnapshotOrdersPart | null;
+  /** T-559: the menu clock, in ms: the time of its last tick (a daypart boundary, app resume, back online). The priced views read it as "now". */
+  clockAt?: number;
   /** The table bodies the Orders tab has fetched, written by it and read by the shell's refusal notice (a cancelled line names its stand from here). */
   bodiesRef: MutableRefObject<Record<string, SessionBody | undefined>>;
   requestDrain: () => void;

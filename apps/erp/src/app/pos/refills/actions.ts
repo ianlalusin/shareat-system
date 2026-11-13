@@ -15,13 +15,13 @@ const ROUTE = '/pos/refills';
 
 export type WriteResult = { ok: true; wrote: boolean } | { ok: false; error: string };
 
-export async function requestRefillAction(input: { storeId: string; sessionId: string; lines: { lineId: string; menuItemId: string; qty: number }[] }): Promise<WriteResult> {
+export async function requestRefillAction(input: { storeId: string; sessionId: string; lines: { lineId: string; menuItemId: string; qty: number; optionValueIds?: string[] }[] }): Promise<WriteResult> {
   const actor = await requireActor(ROUTE);
   const store = await actionStore(actor, input?.storeId);
   if ('error' in store) return { ok: false, error: store.error };
   try {
     const at = new Date();
-    const lines = (Array.isArray(input.lines) ? input.lines : []).map((l) => ({ lineId: l.lineId, menuItemId: l.menuItemId, qty: l.qty, addedAtDevice: at }));
+    const lines = (Array.isArray(input.lines) ? input.lines : []).map((l) => ({ lineId: l.lineId, menuItemId: l.menuItemId, qty: l.qty, addedAtDevice: at, ...(l.optionValueIds ? { optionValueIds: l.optionValueIds } : {}) }));
     const r = await withOrgPrincipal(actor.orgId, (tx) => requestRefill(tx, actor, { storeId: store.storeId, pairingId: null, sessionId: input.sessionId, lines }));
     return { ok: true, wrote: r.wrote };
   } catch (err) {

@@ -13,6 +13,7 @@
  * ⛔ The migrating role. `SET ROLE`/`SET LOCAL ROLE` to it is required for every D3(control)/N1-N3
  * leg to mean anything — the file FAILS (not skips) if it is impossible (spec's own instruction).
  */
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -24,7 +25,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} — the database name must contain "_test".`);
 }
 
 import { APP_ROLE } from '../../src/rls/registry';

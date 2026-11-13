@@ -1,3 +1,4 @@
+import { redactDbUrl } from '../helpers/redact-db-url';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -27,7 +28,7 @@ config({ path: '.env.local' });
 const laneUrl = process.env.TEST_DATABASE_URL;
 if (!laneUrl) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!/shareat_test|_test(\?|$)/.test(laneUrl)) {
-  throw new Error(`Refusing to run against ${laneUrl.replace(/:\/\/[^@]*@/, '://***@')} - name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(laneUrl)} - name must contain "_test".`);
 }
 if (!['localhost', '127.0.0.1'].includes(new URL(laneUrl).hostname)) throw new Error('T-394 S1 CLI tests run on localhost only.');
 
