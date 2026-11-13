@@ -1243,6 +1243,10 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
     scope: 'org_column',
     reason: 'T-510 R1: a store’s dayparts; the store belongs to one org, the policy is the org backstop and the repo filters by store. Org-scoped like the menu offers that point at them.',
   },
+  menu_daypart_versions: {
+    scope: 'org_column',
+    reason: 'T-565: the dated window history of a store’s dayparts; same org-column policy as menu_dayparts, the repo filters by store.',
+  },
   pos_stores: {
     scope: 'org_column',
     reason: 'T-523 R1: the per-store POS switch (off | test | live) and polling counter; the store belongs to one org, the policy is the org backstop and the repo filters by store.',
