@@ -131,6 +131,16 @@ export const RULE_REGISTRY = {
     capability: RULE_ADMIN_CAPABILITY,
     namespace: 'pos',
   },
+  'pos.require_pin_line_actions': {
+    label: 'Manager PIN for cancelling a line or giving a line discount',
+    help: 'When On, cancelling a line, giving a discount on a line (including marking it free) and removing a line discount need a manager PIN at the till, unless the person already holds manager approval. Offline the till goes ahead and flags the action for a manager to review. Off by default.',
+    unit: 'flag',
+    default: '0',
+    min: '0',
+    max: '1',
+    capability: RULE_ADMIN_CAPABILITY,
+    namespace: 'pos',
+  },
 } as const satisfies Record<string, RuleDefinition>;
 
 export type BusinessRuleKey = keyof typeof RULE_REGISTRY;

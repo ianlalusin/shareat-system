@@ -31,7 +31,7 @@ afterAll(async () => {
 const MIGRATIONS = join(__dirname, '..', '..', '..', 'db', 'migrations');
 const KEY = 'pos.senior_id_repeat_days';
 const FILE = '0255_t575_pos_senior_id_repeat_days.sql';
-const SEEDS = ['0239_', '0241_', '0245_', '0248_', '0255_'];
+const SEEDS = ['0239_', '0241_', '0245_', '0248_', '0255_', '0256_'];
 
 const fileOf = (prefix: string): string => {
   const f = readdirSync(MIGRATIONS).find((n) => n.startsWith(prefix));
@@ -95,7 +95,7 @@ describe('T-575 seed pin - migration 0255', () => {
     expect(rows[0]!.reason).toBe('Starting value');
   });
 
-  it('0239, 0241, 0245, 0248 and 0255 for one org write exactly one row per registry key, and every value IS the registry default [kills: drift between the seed and the registry; a registry key with no seed row anywhere]', async () => {
+  it('0239, 0241, 0245, 0248, 0255 and 0256 (T-576) for one org write exactly one row per registry key, and every value IS the registry default [kills: drift between the seed and the registry; a registry key with no seed row anywhere]', async () => {
     const rows = await replay(SEEDS.map(fileOf));
     expect(rows.map((r) => r.key)).toEqual(Object.keys(RULE_REGISTRY).sort());
     for (const r of rows) {
@@ -107,7 +107,7 @@ describe('T-575 seed pin - migration 0255', () => {
     }
   });
 
-  it('the five files name no key outside the registry, and between them name every registry key [kills: a typo in a seeded key]', () => {
+  it('the six files (0256 = T-576) name no key outside the registry, and between them name every registry key [kills: a typo in a seeded key]', () => {
     const named = [...new Set(SEEDS.flatMap((p) => namedKeys(text(fileOf(p)))))].sort();
     expect(named).toEqual(Object.keys(RULE_REGISTRY).sort());
   });

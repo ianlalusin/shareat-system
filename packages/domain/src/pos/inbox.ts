@@ -101,7 +101,10 @@ const lineSpec: Spec = {
 };
 const refillLineSpec: Spec = { req: { lineId: uuid, menuItemId: uuid, qty: int, addedAtDevice: time }, opt: { optionValueIds: list(uuid, 1) } }; // T-566: at most one flavour
 
-type Base = { storeId: string; pairingId: string };
+/** T-576: `replayApprovedBy` is set only by a manager's replay of a quarantined line action, `madeOnPairingId` only by the inbox; both are always overwritten after the payload, so a payload can never name them (and the schema refuses the keys anyway). */
+type Base = { storeId: string; pairingId: string; replayApprovedBy?: string; madeOnPairingId?: string };
+/** T-576: a line action's online manager approval (a signed token from POST /api/pos/line-approval - never the PIN) and the tablet's own "I was offline" flag. */
+const lineApproval = { approval: obj({ req: { token: str, approverId: uuid, exp: int } }), offline: bool };
 interface Handler {
   spec: Spec;
   /** The payload is already checked against `spec`; the cast only restores the type the schema proves. */
@@ -121,26 +124,26 @@ const HANDLERS: ReadonlyMap<string, Handler> = new Map<string, Handler>([
     'refill.requested',
     { spec: { req: { sessionId: uuid, lines: list(obj(refillLineSpec), MAX_ITEMS) } }, run: (tx, a, b, p) => requestRefill(tx, a, { ...p, ...b } as unknown as Parameters<typeof requestRefill>[2]) },
   ],
-  ['line.cancelled', { spec: { req: { lineId: uuid, reason: str } }, run: (tx, a, b, p) => cancelLine(tx, a, { ...p, ...b } as unknown as Parameters<typeof cancelLine>[2]) }],
+  ['line.cancelled', { spec: { req: { lineId: uuid, reason: str }, opt: lineApproval }, run: (tx, a, b, p, d) => cancelLine(tx, a, { ...p, ...b } as unknown as Parameters<typeof cancelLine>[2], d) }],
   [
     'discount.added',
     {
       spec: {
         req: { discountId: uuid, lineId: uuid, kind: oneOf('senior', 'pwd', 'preset', 'custom'), qty: int, appliedAtDevice: time },
-        opt: { presetId: uuid, valueType: oneOf('percent', 'fixed'), value: str, dinerNo: int },
+        opt: { presetId: uuid, valueType: oneOf('percent', 'fixed'), value: str, dinerNo: int, ...lineApproval },
       },
       run: (tx, a, b, p, d) => addLineDiscount(tx, a, { ...p, ...b } as unknown as Parameters<typeof addLineDiscount>[2], d),
     },
   ],
   [
     'discount.removed',
-    { spec: { req: { discountId: uuid, removedAtDevice: time } }, run: (tx, a, b, p) => removeLineDiscount(tx, a, { ...p, ...b } as unknown as Parameters<typeof removeLineDiscount>[2]) },
+    { spec: { req: { discountId: uuid, removedAtDevice: time }, opt: lineApproval }, run: (tx, a, b, p, d) => removeLineDiscount(tx, a, { ...p, ...b } as unknown as Parameters<typeof removeLineDiscount>[2], d) },
   ],
   [
     'discount.applied_to_all',
     {
-      spec: { req: { sessionId: uuid, presetId: uuid, applyId: uuid, appliedAtDevice: time } },
-      run: (tx, a, b, p) => applyPresetToAllLines(tx, a, { ...p, ...b } as unknown as Parameters<typeof applyPresetToAllLines>[2]),
+      spec: { req: { sessionId: uuid, presetId: uuid, applyId: uuid, appliedAtDevice: time }, opt: lineApproval },
+      run: (tx, a, b, p, d) => applyPresetToAllLines(tx, a, { ...p, ...b } as unknown as Parameters<typeof applyPresetToAllLines>[2], d),
     },
   ],
   [
@@ -312,6 +315,8 @@ interface Running {
   preProblem?: string | null;
   /** The device time is outside the years 1 to 9999 (or not a time): refused before anything else, and stored with the received time instead. */
   dateProblem?: string | null;
+  /** T-576: the manager replaying this quarantined event (their approve_pos_correction stands in for the line action's manager approval). */
+  replayApprovedBy?: string;
 }
 
 /** R4: the four clauses, then the actor the domain's own `authorize()` judges. `serverNow` is the server clock (for a replay, the moment the event arrived). */
@@ -346,7 +351,7 @@ async function runEvent(tx: Tx, pairing: PosPairing, e: Running, deps: PosDeps |
   if (e.preProblem) throw invalid(e.preProblem);
   const problem = problemOf(handler.spec, e.payload);
   if (problem) throw invalid(problem);
-  await handler.run(tx, actor, { storeId: pairing.storeId, pairingId: pairing.pairingId }, e.payload, deps, e.occurredAt);
+  await handler.run(tx, actor, { storeId: pairing.storeId, pairingId: pairing.pairingId, replayApprovedBy: e.replayApprovedBy, madeOnPairingId: madeOn?.pairingId ?? pairing.pairingId }, e.payload, deps, e.occurredAt);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -552,7 +557,7 @@ export async function replayQuarantinedEvent(
   const origin = carried ? await posV2Repo.getPairingOfStore(tx, actor.orgId, input.storeId, row.pairingId) : undefined;
   const pairing = { pairingId: carried ? live.id : row.pairingId, orgId: actor.orgId, storeId: input.storeId };
   const madeOn = carried ? { pairingId: row.pairingId, revokedAt: origin?.revokedAt ?? null } : undefined;
-  const run = (t: Tx) => runEvent(t, pairing, { kind: row.kind, personId: row.personId!, payload, occurredAt: row.occurredAtDevice }, deps, row.receivedAt, madeOn);
+  const run = (t: Tx) => runEvent(t, pairing, { kind: row.kind, personId: row.personId!, payload, occurredAt: row.occurredAtDevice, replayApprovedBy: actor.personId }, deps, row.receivedAt, madeOn);
   try {
     // A refusal must leave nothing behind, so the run is a savepoint - except a sale: migration 0240's append guard refuses a receipt child written in one.
     // (A sale throws only before its first write, or on a database error that aborts this transaction whole.)

@@ -12,6 +12,8 @@ import { MenuPicker } from './MenuPicker';
 import type { MenuLike } from './menu-filter';
 import { CANCEL_REASONS, CANCEL_REASON_MAX, CANCEL_REASON_MIN, HEADS_MAX, HEADS_MIN, TAKE_OUT_NAME_MAX, type CartLine } from './payloads';
 import { seatStandChoices, type Tile } from './project';
+import { LineApprovalField } from '../_shell/LineApprovalField';
+import type { LineApprovalMode } from '../_shell/line-approval';
 
 /** UI starting value for the seat dialog's heads stepper (from the design); not a business setting. */
 const START_HEADS = 2;
@@ -170,18 +172,20 @@ export function OrderDialog({ mode, menu, stands, tiles, onClose, onSend, at }: 
   );
 }
 
-export function CancelLineDialog({ lineName, onClose, onConfirm }: { lineName: string; onClose: () => void; onConfirm: (reason: string) => Promise<string | null> }) {
+/** T-576: `approvalMode` pin = the store asks for a manager PIN (it goes with the reason); review = offline, goes ahead with a "needs manager review" note. */
+export function CancelLineDialog({ lineName, approvalMode = 'none', onClose, onConfirm }: { lineName: string; approvalMode?: LineApprovalMode; onClose: () => void; onConfirm: (reason: string, pin: string) => Promise<string | null> }) {
+  const [pin, setPin] = useState('');
   const [pick, setPick] = useState<string | null>(null);
   const [other, setOther] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const typed = other.trim();
   const reason = pick === 'Other' ? typed : pick;
-  const ready = reason !== null && reason.length >= CANCEL_REASON_MIN;
+  const ready = reason !== null && reason.length >= CANCEL_REASON_MIN && !(approvalMode === 'pin' && pin === '');
   const confirm = async () => {
     if (!reason) return;
     setBusy(true);
-    const message = await onConfirm(reason);
+    const message = await onConfirm(reason, approvalMode === 'pin' ? pin : '');
     setBusy(false);
     if (message) setError(message);
     else onClose();
@@ -214,6 +218,7 @@ export function CancelLineDialog({ lineName, onClose, onConfirm }: { lineName: s
             <input type="text" data-erp-size="free" className={FIELD} value={other} onChange={(e) => setOther(e.target.value.slice(0, CANCEL_REASON_MAX))} />
           </label>
         ) : null}
+        <LineApprovalField mode={approvalMode} pin={pin} onPin={setPin} />
       </div>
     </Dialog>
   );
