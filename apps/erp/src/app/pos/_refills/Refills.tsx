@@ -30,6 +30,8 @@ const NO_CONNECTION = 'That did not send. Check the internet and try again.';
 const STEP = 'min-h-12 min-w-12 inline-flex items-center justify-center rounded-full border border-surface-border bg-surface text-xl font-semibold text-ink hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:opacity-50';
 const SEND = 'min-h-16 w-full inline-flex items-center justify-center rounded-full border border-transparent bg-brand px-6 text-base font-semibold text-white hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:bg-surface-border disabled:text-muted disabled:cursor-not-allowed';
 const SERVED = 'min-h-12 min-w-12 shrink-0 inline-flex items-center justify-center rounded-full border border-surface-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:opacity-50';
+// T-566: one flavour per meat, a pill like the stand picker's (aria-pressed, 48 px).
+const CHIP = 'min-h-12 min-w-12 rounded-full border px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
 const CONFIRM = 'min-h-12 shrink-0 inline-flex items-center justify-center rounded-full border border-surface-border bg-surface px-5 text-sm font-semibold text-ink hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:opacity-50';
 
 export function Refills() {
@@ -37,6 +39,7 @@ export function Refills() {
   const meta = useMenuMeta(pos);
   const [selected, setSelected] = useState<string | null>(null);
   const [qtys, setQtys] = useState<Record<string, number>>({});
+  const [flavours, setFlavours] = useState<Record<string, string>>({});
   const [heads, setHeads] = useState<Record<string, number>>({});
   const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -75,6 +78,9 @@ export function Refills() {
   // Every package on the table offers its refills; a meat two packages share is listed once.
   const meats = table ? [...new Map((table.packageVariantIds ?? [table.packageVariantId]).flatMap((v) => meta?.refillCatalog[v] ?? []).map((m) => [m.itemId, m])).values()] : [];
   const picked = meats.reduce((n, m) => n + (qtys[m.itemId] ?? 0), 0);
+  // The chosen flavour of a meat, only while the menu still offers it.
+  const flavourOf = (m: (typeof meats)[number]) => m.flavours.find((f) => f.id === flavours[m.itemId])?.id ?? null;
+  const needsFlavour = meats.some((m) => (qtys[m.itemId] ?? 0) > 0 && m.flavourRequired && flavourOf(m) === null);
   const personId = actingPersonId(pos.offlineActorPersonId ? { personId: pos.offlineActorPersonId } : null, pos.personId);
 
   const send = async () => {
@@ -83,7 +89,7 @@ export function Refills() {
     setProblem(null);
     setSent(null);
     try {
-      const cart = meats.map((m) => ({ itemId: m.itemId, qty: qtys[m.itemId] ?? 0 }));
+      const cart = meats.map((m) => ({ itemId: m.itemId, qty: qtys[m.itemId] ?? 0, optionValueId: flavourOf(m) }));
       let n = 0;
       const newId = () => {
         const i = n++;
@@ -99,6 +105,7 @@ export function Refills() {
       }
       pendingIds.current = [];
       setQtys({});
+      setFlavours({});
       setSent(`Sent to the kitchen · ${table.label}`);
     } catch (e) {
       setProblem(e instanceof Error && e.message !== '' && !/fetch|network/i.test(e.message) ? e.message : NO_CONNECTION);
@@ -188,12 +195,12 @@ export function Refills() {
               ) : tables.length === 0 ? (
                 <p className="text-sm text-muted">No table with a package is open.</p>
               ) : (
-                <RefillStandRow tables={tables} selectedSessionId={selected} onSelect={(id) => (setSelected(id), pendingIds.current = [], setQtys({}), setSent(null))} />
+                <RefillStandRow tables={tables} selectedSessionId={selected} onSelect={(id) => (setSelected(id), pendingIds.current = [], setQtys({}), setFlavours({}), setSent(null))} />
               )}
               {table ? (
                 <ul className="space-y-1" aria-label={`Meats for ${table.label}`}>
                   {meats.map((m) => (
-                    <li key={m.itemId} className="flex items-center justify-between gap-3">
+                    <li key={m.itemId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-1">
                       <span className="min-w-0 text-base">{m.name}</span>
                       <span className="flex items-center gap-3" role="group" aria-label={m.name}>
                         <button type="button" data-erp-size="free" className={STEP} aria-label={`Fewer ${m.name}`} disabled={(qtys[m.itemId] ?? 0) === 0} onClick={() => (pendingIds.current = [], setQtys((q) => ({ ...q, [m.itemId]: stepQty(q[m.itemId] ?? 0, -1) })))}>
@@ -204,13 +211,34 @@ export function Refills() {
                           +
                         </button>
                       </span>
+                      {m.flavours.length > 0 ? (
+                        <div className="flex w-full flex-wrap gap-2" role="group" aria-label={`Flavour for ${m.name}${m.flavourRequired ? ' (required)' : ''}`}>
+                          {m.flavours.map((f) => {
+                            const on = flavourOf(m) === f.id;
+                            return (
+                              <button
+                                key={f.id}
+                                type="button"
+                                data-erp-size="free"
+                                aria-pressed={on}
+                                aria-label={`Flavour ${f.name}, ${m.name}`}
+                                className={`${CHIP} ${on ? 'border-ink bg-ink text-canvas' : 'border-surface-border bg-surface text-ink hover:bg-canvas'}`}
+                                onClick={() => (pendingIds.current = [], setFlavours((c) => (c[m.itemId] === f.id ? Object.fromEntries(Object.entries(c).filter(([k]) => k !== m.itemId)) : { ...c, [m.itemId]: f.id })))}
+                              >
+                                {f.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
                     </li>
                   ))}
                   {meats.length === 0 ? <li className="text-sm text-muted">This package lists no refills.</li> : null}
                 </ul>
               ) : null}
+              {needsFlavour ? <p className="text-sm text-muted">Choose a flavour for each meat that needs one.</p> : null}
               {sent ? <p role="status" className="text-sm font-semibold text-success">{sent}</p> : null}
-              <button type="button" data-erp-size="free" className={SEND} disabled={!table || picked === 0 || busy} onClick={() => void send()}>
+              <button type="button" data-erp-size="free" className={SEND} disabled={!table || picked === 0 || busy || needsFlavour} onClick={() => void send()}>
                 {table ? `Send refill · ${table.label}` : 'Pick a stand'}
               </button>
             </div>

@@ -1,12 +1,13 @@
 /**
  * T-559 R3 / R4 (TESTER, written before the code) - the 304 handoff: S4 audit item (1). A boundary that changes nothing visible gives a 304; the cached
  * `nextChangeAt` must still move to the `x-next-change-at` header, or the shell's timer is dead after that boundary. docs/tasks/559 R3.
- * Runs against the REAL device module (the in-memory stub until T-530a lands; same public API either way), so the stub and the sync are tested together.
+ * Runs against the REAL device store (T-530a, IndexedDB via the fake-idb helper), so the store and the sync are tested together.
  * CONTRACT (backward compatible): touchSnapshot(fetchedAtMs, nextChangeAt?) - the second argument is optional; without it the stored value stays.
  *   CachedSnapshot gains an optional `nextChangeAt?: string | null`. A 200 is saved exactly as before ({ body, etag, fetchedAtMs }).
  *   snapshotNextChangeAt(cached) = cached.nextChangeAt ?? cached.body.menu.nextChangeAt ?? null   (apps/erp/src/app/pos/_shell/snapshot-sync.ts)
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createFakeIdb } from './helpers/fake-idb';
 import { readSnapshot, saveSnapshot, touchSnapshot } from '@/lib/pos-device';
 import { refreshSnapshot, snapshotNextChangeAt } from '@/app/pos/_shell/snapshot-sync';
 
@@ -16,7 +17,12 @@ const menu = { menu: { schemaVersion: 2 }, contentHash: 'h1', nextChangeAt: '202
 const body = { ok: true, staff, device: { pairingId: 'pair-1', lastSeq: 40, lastTerminalSeq: 9 }, rules: null, stands: [], menu };
 
 beforeEach(async () => {
+  vi.stubGlobal('indexedDB', createFakeIdb({ commitDelayMs: 2 }));
   await saveSnapshot({ body, etag: '"v0"', fetchedAtMs: NOW - 1000 });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('the device module: touchSnapshot(fetchedAtMs, nextChangeAt?)', () => {
@@ -30,10 +36,9 @@ describe('the device module: touchSnapshot(fetchedAtMs, nextChangeAt?)', () => {
     expect(await readSnapshot()).toMatchObject({ fetchedAtMs: NOW, nextChangeAt: '2026-11-01T10:00:00.000Z' });
   });
   it('with nothing stored it does nothing and does not throw', async () => {
-    vi.resetModules();
-    const fresh = await import('@/lib/pos-device/stub');
-    await expect(fresh.touchSnapshot(NOW, '2026-11-01T10:00:00.000Z')).resolves.toBeUndefined();
-    expect(await fresh.readSnapshot()).toBeNull();
+    vi.stubGlobal('indexedDB', createFakeIdb({ commitDelayMs: 2 })); // a fresh, empty device database
+    await expect(touchSnapshot(NOW, '2026-11-01T10:00:00.000Z')).resolves.toBeUndefined();
+    expect(await readSnapshot()).toBeNull();
   });
 });
 

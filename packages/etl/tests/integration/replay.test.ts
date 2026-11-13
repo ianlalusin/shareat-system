@@ -1,3 +1,4 @@
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -31,7 +32,7 @@ if (!url) {
 }
 if (!/shareat_test|_test(\?|$)/.test(url)) {
   throw new Error(
-    `Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — the database name must contain "_test".`,
+    `Refusing to run against ${redactDbUrl(url)} — the database name must contain "_test".`,
   );
 }
 

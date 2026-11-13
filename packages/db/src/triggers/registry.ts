@@ -1542,7 +1542,7 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     mode: 'always',
     kind: 'history_guard',
     reason:
-      'An inbox event is frozen at insert; only the three resolution columns may go NULL -> a value once; never deleted (0238, T-523 R10). Decides only from OLD/NEW.',
+      'An inbox event is frozen at insert; only the three resolution columns may go NULL -> a value once; never deleted (0238, T-523 R10). Lifted once by migration 0252 (T-572, DEF-823) to redact senior/PWD IDs in stored payloads, then re-enabled ALWAYS. Decides only from OLD/NEW.',
   },
   pos_sales_receipt_line_discounts_append_only: {
     table: 'pos_sales_receipt_line_discounts',

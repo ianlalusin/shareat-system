@@ -13,7 +13,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { Badge, Banner, Button } from '@/components/ui';
 import { signOutAction } from '@/app/sign-in/actions';
 import { printerMode } from '@/lib/pos-print/adapter';
-import { POS_CONFLICT_MESSAGE, POS_NEEDS_INTERNET_ONCE, POS_STORE_ACCESS_LOST, POS_TABLET_UNPAIRED_MESSAGE, posHttpErrorMessage } from './messages';
+import { POS_CONFLICT_MESSAGE, POS_NEEDS_INTERNET_ONCE, POS_STORE_ACCESS_LOST, POS_TABLET_UNPAIRED_MESSAGE, posHeldSalesMessage, posHttpErrorMessage } from './messages';
 import { SwitchCashierDialog } from './SwitchCashierDialog';
 import { posOfflineBandText } from './offline-band';
 import { asStoreMenu, type MenuLike } from '../_orders/menu-filter';
@@ -274,6 +274,7 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
               </Button>
             </Banner>
           ))}
+          {sync.heldSales > 0 ? <Banner tone="warning">{posHeldSalesMessage(sync.heldSales)}</Banner> : null}
           {sync.conflicts > 0 ? (
             <Banner tone="warning">
               {POS_CONFLICT_MESSAGE}{' '}

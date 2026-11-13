@@ -149,7 +149,7 @@ export default async function LanePage({
             Recently resolved
           </h2>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[36rem] text-left text-sm">
+            <table aria-label="Recently resolved" className="w-full min-w-[36rem] text-left text-sm">
               <thead className="text-xs text-neutral-500 dark:text-neutral-500">
                 <tr>
                   <th className="py-2 pr-4 font-medium">When</th>

@@ -140,7 +140,7 @@ export default async function AttendanceReviewPage({
             No attendance days in this range.
           </p>
         ) : (
-          <Table card={{ title: 'Person', subtitle: 'Day', keys: ['Status', 'Paid'] }}>
+          <Table label="Attendance days" card={{ title: 'Person', subtitle: 'Day', keys: ['Status', 'Paid'] }}>
             <thead>
               <tr>
                 <Th>Day</Th>
@@ -172,7 +172,7 @@ export default async function AttendanceReviewPage({
             .
           </p>
         ) : (
-          <Table card={{ title: 'Person', subtitle: 'Day', keys: ['Pay'] }}>
+          <Table label="Leave in the period" card={{ title: 'Person', subtitle: 'Day', keys: ['Pay'] }}>
             <thead>
               <tr>
                 <Th>Day</Th>

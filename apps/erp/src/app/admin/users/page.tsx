@@ -38,7 +38,7 @@ export default async function UsersPage() {
         </Banner>
       )}
 
-      <Table card={{ title: 'Name', subtitle: 'Role', keys: ['Stores', 'Extra grants'] }}>
+      <Table label="Users and roles" card={{ title: 'Name', subtitle: 'Role', keys: ['Stores', 'Extra grants'] }}>
         <thead>
           <tr>
             <Th>Name</Th>
