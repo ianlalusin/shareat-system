@@ -13,6 +13,7 @@
  * Read consistently with the ruling (dated the same day, and the one that names `set_channel_payout`
  * explicitly): C1/R1 use an ADMIN actor below, not a manager — manager is C6/R3's actor, refused.
  */
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
@@ -23,7 +24,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} — name must contain "_test".`);
 }
 
 import { seedChartOfAccounts } from '../../../../packages/db/seed/chart-of-accounts';

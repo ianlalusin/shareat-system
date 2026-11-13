@@ -9,6 +9,7 @@
 import { authorize, AuthenticationError, AuthorizationError, recordPosApprovalMiss, POS_DEVICE_CLOCK_SKEW_MS, POS_OFFLINE_SIGNIN_WINDOW_MS, POS_SIGNIN_CLOCK_SLACK_MS, type Actor } from '@shareat/auth';
 import { logger } from '@shareat/core/logger';
 import { accessRepo, auditLogRepo, posV2Repo, RefusalError, withOrgPrincipal, type Tx } from '@shareat/db';
+import { POS_REDACTED } from '../field-rules/pos';
 import { canonicalJson } from '../menu/project';
 import { gone, refuse } from '../shared/refusal';
 import { addLineDiscount, applyPresetToAllLines, removeLineDiscount } from './discounts';
@@ -19,6 +20,7 @@ import type { PosDeps } from './shared';
 export const POS_NOT_SWITCHED_ON = 'The POS is not switched on for this store.';
 const ALREADY_HANDLED = 'This event was already handled.';
 const REPLAY_VOID = 'Ask the manager to void this table again from the till.';
+const REPLAY_SENIOR = 'This sale had a senior or PWD discount. Its ID numbers are not kept in the device log, so it cannot be replayed. Discard it and ring the sale again.';
 
 /** A refusal code that means "not the event's fault": the event is NOT stored, the tablet keeps it and tries again. A missing setup must not bury good sales. (Empty since T-539 wired the rules; the list stays as the one place to add a code.) */
 export const RETRYABLE_POS_CODES: readonly string[] = [];
@@ -31,6 +33,16 @@ export interface PosPairing {
   orgId: string;
   storeId: string;
 }
+/** T-563: what a tablet answers when its batch was made under a pairing of ANOTHER store (or an unknown one): nothing is applied, the device keeps the events. */
+export const POS_PAIRING_MISMATCH_CODE = 'POS_PAIRING_MISMATCH';
+export const POS_PAIRING_MISMATCH = 'These sales were made on this tablet when it was paired to another store. Pair it back to that store to send them.';
+
+/** T-563: the pairing an event was made under, and when that pairing was revoked (null while live). */
+export interface PosMadeOn {
+  pairingId: string;
+  revokedAt: Date | null;
+}
+
 export interface PosEventIn {
   seq: number;
   kind: string;
@@ -87,13 +99,13 @@ const lineSpec: Spec = {
   req: { lineId: uuid, menuItemId: uuid, qty: int, addedAtDevice: time },
   opt: { variantId: uuid, note: str, optionValueIds: list(uuid, MAX_ITEMS) },
 };
-const refillLineSpec: Spec = { req: { lineId: uuid, menuItemId: uuid, qty: int, addedAtDevice: time } };
+const refillLineSpec: Spec = { req: { lineId: uuid, menuItemId: uuid, qty: int, addedAtDevice: time }, opt: { optionValueIds: list(uuid, 1) } }; // T-566: at most one flavour
 
 type Base = { storeId: string; pairingId: string };
 interface Handler {
   spec: Spec;
   /** The payload is already checked against `spec`; the cast only restores the type the schema proves. */
-  run: (tx: Tx, actor: Actor, base: Base, p: Record<string, unknown>, deps: PosDeps | undefined) => Promise<unknown>;
+  run: (tx: Tx, actor: Actor, base: Base, p: Record<string, unknown>, deps: PosDeps | undefined, occurredAt: Date) => Promise<unknown>;
 }
 const HANDLERS: ReadonlyMap<string, Handler> = new Map<string, Handler>([
   [
@@ -104,7 +116,7 @@ const HANDLERS: ReadonlyMap<string, Handler> = new Map<string, Handler>([
     },
   ],
   ['lines.added', { spec: { req: { sessionId: uuid, lines: list(obj(lineSpec), MAX_ITEMS) } }, run: (tx, a, b, p) => addLines(tx, a, { ...p, ...b } as unknown as Parameters<typeof addLines>[2]) }],
-  ['heads.set', { spec: { req: { sessionId: uuid, headsCashier: int } }, run: (tx, a, b, p) => setHeadsCashier(tx, a, { ...p, ...b } as unknown as Parameters<typeof setHeadsCashier>[2]) }],
+  ['heads.set', { spec: { req: { sessionId: uuid, headsCashier: int } }, run: (tx, a, b, p, _d, at) => setHeadsCashier(tx, a, { ...p, ...b, atDevice: at } as unknown as Parameters<typeof setHeadsCashier>[2]) }],
   [
     'refill.requested',
     { spec: { req: { sessionId: uuid, lines: list(obj(refillLineSpec), MAX_ITEMS) } }, run: (tx, a, b, p) => requestRefill(tx, a, { ...p, ...b } as unknown as Parameters<typeof requestRefill>[2]) },
@@ -168,10 +180,31 @@ interface Scrubbed {
   problem: string | null;
 }
 /**
+ * T-572 (DEF-823): a `sale.completed` payload as the device log may keep it. Each `seniors[]` element is REBUILT from an allowlist: `dinerNo` and `kind` stay (when they are what
+ * the event allows), the card number and the name become the fixed marker, and any other key is dropped. A fixed marker, not a hash: a card number is short enough to be
+ * brute-forced back out of a hash. A `seniors` that is not a list becomes the marker too; the register (statutory_discount_records) is the only place the real values live.
+ * Migration 0252 does the same to rows written before this rule, and a test pins that the two agree.
+ */
+export function scrubStatutoryHolders(payload: Record<string, unknown>): Record<string, unknown> {
+  if (!Array.isArray(payload.seniors)) return payload.seniors === undefined || payload.seniors === null ? payload : { ...payload, seniors: POS_REDACTED };
+  const holder = (s: unknown) => {
+    const e = isObj(s) ? s : {};
+    return {
+      dinerNo: typeof e.dinerNo === 'number' && Number.isInteger(e.dinerNo) ? e.dinerNo : POS_REDACTED,
+      kind: e.kind === 'senior' || e.kind === 'pwd' ? e.kind : POS_REDACTED,
+      idNumber: POS_REDACTED,
+      holderName: POS_REDACTED,
+    };
+  };
+  return { ...payload, seniors: payload.seniors.map(holder) };
+}
+
+/**
  * What is stored for an event (and compared on a resend): a PIN never lands in a table, so every key whose name matches /pin/i, at any depth and on any
  * kind, is replaced by `pinGiven: true`; and a NUL character or an unpaired UTF-16 surrogate (neither of which Postgres can hold in jsonb), in a key or a value, is replaced by U+FFFD, the event being flagged invalid.
+ * T-572: and on a `sale.completed`, a senior or PWD card holder's number and name are replaced by a marker (`scrubStatutoryHolders`).
  */
-function scrub(payload: Record<string, unknown>): Scrubbed {
+function scrub(kind: string, payload: Record<string, unknown>): Scrubbed {
   let problem: string | null = null;
   const text = (t: string) => {
     if (!t.includes('\u0000') && t.isWellFormed()) return t;
@@ -193,7 +226,8 @@ function scrub(payload: Record<string, unknown>): Scrubbed {
     }
     return out;
   };
-  return { value: walk(payload, 0) as Record<string, unknown>, problem };
+  const value = walk(payload, 0) as Record<string, unknown>;
+  return { value: kind === 'sale.completed' ? scrubStatutoryHolders(value) : value, problem };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -201,6 +235,11 @@ function scrub(payload: Record<string, unknown>): Scrubbed {
 // ---------------------------------------------------------------------------------------------------------------------
 const KIND_SHAPE = /^[a-z]+(\.[a-z_]+)+$/;
 export const MAX_EVENTS_PER_BATCH = 100;
+
+/** T-563: the pairing a batch says its events were made under (batch level only; null when absent or not a uuid). Lower-cased, as the database keeps them. */
+export function parsePosBatchPairingId(body: unknown): string | null {
+  return isObj(body) && typeof body.pairingId === 'string' && UUID_RE.test(body.pairingId) ? body.pairingId.toLowerCase() : null;
+}
 
 export function parsePosEvents(body: unknown): { ok: true; events: PosEventIn[] } | { ok: false; error: string } {
   if (!isObj(body) || !Array.isArray(body.events)) return { ok: false, error: 'Send an object with a list of events.' };
@@ -276,8 +315,8 @@ interface Running {
 }
 
 /** R4: the four clauses, then the actor the domain's own `authorize()` judges. `serverNow` is the server clock (for a replay, the moment the event arrived). */
-async function checkPerson(tx: Tx, pairing: PosPairing, e: Running, serverNow: Date): Promise<Actor> {
-  const { orgId, storeId, pairingId } = pairing;
+async function checkPerson(tx: Tx, pairing: PosPairing, e: Running, serverNow: Date, madeOn?: PosMadeOn): Promise<Actor> {
+  const { orgId, storeId } = pairing;
   const person = await posV2Repo.getPersonOfOrg(tx, orgId, e.personId);
   if (!person) throw personRefused(`That person (${e.personId}) is not on this organisation's staff list.`);
   if (!person.isActive) throw personRefused('That person is not active any more.');
@@ -286,51 +325,59 @@ async function checkPerson(tx: Tx, pairing: PosPairing, e: Running, serverNow: D
     throw personRefused("The tablet's clock is too far from the server's clock. Ask a manager to check the time on the tablet.");
   }
   const from = new Date(e.occurredAt.getTime() - POS_OFFLINE_SIGNIN_WINDOW_MS);
-  const to = new Date(e.occurredAt.getTime() + POS_SIGNIN_CLOCK_SLACK_MS);
-  if (!(await posV2Repo.hasPinSessionOnPairing(tx, orgId, e.personId, storeId, pairingId, from, to))) {
+  // T-563 (BOSS rule): a carried-over event is vouched for only by a sign-in on its origin tablet that (1) began at or before the event - no clock slack, (2) had
+  // not ended before it (a REVOKED session still counts if it ended at or after the event), and (3) the event was made no later than the moment that tablet was replaced.
+  const carried = madeOn !== undefined && madeOn.pairingId !== pairing.pairingId;
+  if (carried && madeOn.revokedAt && e.occurredAt.getTime() > madeOn.revokedAt.getTime()) {
+    throw personRefused('This sale was made after the tablet it came from was replaced, so that tablet cannot vouch for it.');
+  }
+  const to = new Date(e.occurredAt.getTime() + (carried ? 0 : POS_SIGNIN_CLOCK_SLACK_MS));
+  if (!(await posV2Repo.hasPinSessionOnPairing(tx, orgId, e.personId, storeId, carried ? madeOn.pairingId : pairing.pairingId, from, to, carried ? e.occurredAt : undefined))) {
     throw personRefused('That person has not signed in with a PIN on this tablet in the last week.');
   }
   return { personId: e.personId, orgId };
 }
 
-async function runEvent(tx: Tx, pairing: PosPairing, e: Running, deps: PosDeps | undefined, serverNow: Date): Promise<void> {
+async function runEvent(tx: Tx, pairing: PosPairing, e: Running, deps: PosDeps | undefined, serverNow: Date, madeOn?: PosMadeOn): Promise<void> {
   if (e.dateProblem) throw invalid(e.dateProblem);
-  const actor = await checkPerson(tx, pairing, e, serverNow);
+  const actor = await checkPerson(tx, pairing, e, serverNow, madeOn);
   const handler = HANDLERS.get(e.kind);
   if (!handler) throw new PosEventRefusal('POS_EVENT_UNKNOWN_KIND', `This server does not know the event kind "${e.kind}" yet.`);
   if (e.preProblem) throw invalid(e.preProblem);
   const problem = problemOf(handler.spec, e.payload);
   if (problem) throw invalid(problem);
-  await handler.run(tx, actor, { storeId: pairing.storeId, pairingId: pairing.pairingId }, e.payload, deps);
+  await handler.run(tx, actor, { storeId: pairing.storeId, pairingId: pairing.pairingId }, e.payload, deps, e.occurredAt);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 // R2/R5 - a batch
 // ---------------------------------------------------------------------------------------------------------------------
-async function classifyExisting(pairing: PosPairing, e: PosEventIn, stored: Record<string, unknown>): Promise<PosEventResult> {
-  const row = await withOrgPrincipal(pairing.orgId, (tx) => posV2Repo.getPosEventByPairingSeq(tx, pairing.orgId, pairing.storeId, pairing.pairingId, e.seq));
+async function classifyExisting(pairing: PosPairing, madeOn: PosMadeOn, e: PosEventIn, stored: Record<string, unknown>): Promise<PosEventResult> {
+  const row = await withOrgPrincipal(pairing.orgId, (tx) => posV2Repo.getPosEventByPairingSeq(tx, pairing.orgId, pairing.storeId, madeOn.pairingId, e.seq));
   if (!row) return { seq: e.seq, status: 'retry' }; // the first copy rolled back while we looked: send it again
   if (row.kind === e.kind && (canonicalJson(row.payload) === canonicalJson(stored) || canonicalJson(row.payload) === canonicalJson(UNSTORABLE))) return { seq: e.seq, status: 'duplicate' };
   return { seq: e.seq, status: 'conflict', storedKind: row.kind };
 }
 
-async function applyOne(pairing: PosPairing, e: PosEventIn, deps: PosDeps | undefined): Promise<PosEventResult> {
-  const { orgId, storeId, pairingId } = pairing;
+/** `madeOn` (T-563): the pairing the event was made under. It keys the stored row and the dedupe; `pairing` (the cookie's) is what the handlers act under. */
+async function applyOne(pairing: PosPairing, madeOn: PosMadeOn, e: PosEventIn, deps: PosDeps | undefined): Promise<PosEventResult> {
+  const { orgId, storeId } = pairing;
+  const pairingId = madeOn.pairingId;
   const occurredAt = new Date(e.occurredAtDevice);
   const received = new Date();
   const year = occurredAt.getUTCFullYear();
   const dateProblem = year >= 1 && year <= 9999 ? null : `the time ${JSON.stringify(e.occurredAtDevice.slice(0, 40))} is outside the years 1 to 9999`;
-  const scrubbed = scrub(e.payload);
+  const scrubbed = scrub(e.kind, e.payload);
   const stored = scrubbed.value;
   const row = { orgId, storeId, pairingId, seq: e.seq, kind: e.kind, payload: stored, personId: e.personId, occurredAtDevice: dateProblem ? received : occurredAt };
   try {
     await withOrgPrincipal(orgId, async (tx) => {
       await posV2Repo.insertPosEvent(tx, { ...row, status: 'applied', error: null });
-      await runEvent(tx, pairing, { kind: e.kind, personId: e.personId, payload: e.payload, occurredAt, preProblem: scrubbed.problem, dateProblem }, deps, deps?.now?.() ?? new Date());
+      await runEvent(tx, pairing, { kind: e.kind, personId: e.personId, payload: e.payload, occurredAt, preProblem: scrubbed.problem, dateProblem }, deps, deps?.now?.() ?? new Date(), madeOn);
     });
     return { seq: e.seq, status: 'applied' };
   } catch (err) {
-    if (isUniqueViolation(err, 'pos_events_pairing_seq_unique')) return classifyExisting(pairing, e, stored);
+    if (isUniqueViolation(err, 'pos_events_pairing_seq_unique')) return classifyExisting(pairing, madeOn, e, stored);
     const fault = eventFault(err);
     if (!fault || isRetryableRefusal(fault.code)) {
       // A bug or a temporary failure: never the event's fault, never dropped. No payload in the log (it can carry a card number).
@@ -351,7 +398,7 @@ async function applyOne(pairing: PosPairing, e: PosEventIn, deps: PosDeps | unde
     try {
       await writeQuarantine(row, error);
     } catch (err2) {
-      if (isUniqueViolation(err2, 'pos_events_pairing_seq_unique')) return classifyExisting(pairing, e, stored);
+      if (isUniqueViolation(err2, 'pos_events_pairing_seq_unique')) return classifyExisting(pairing, madeOn, e, stored);
       const state = sqlstateOf(err2);
       // The safety net: an event whose own data the database will not hold must never wedge the queue. Store it once more with no payload and the received time.
       if (state?.startsWith('22')) {
@@ -360,13 +407,26 @@ async function applyOne(pairing: PosPairing, e: PosEventIn, deps: PosDeps | unde
           await writeQuarantine({ ...row, payload: UNSTORABLE, occurredAtDevice: received }, fallback);
           return { seq: e.seq, status: 'quarantined', error: fallback };
         } catch (err3) {
-          if (isUniqueViolation(err3, 'pos_events_pairing_seq_unique')) return classifyExisting(pairing, e, stored);
+          if (isUniqueViolation(err3, 'pos_events_pairing_seq_unique')) return classifyExisting(pairing, madeOn, e, stored);
           logger.warn({ code: sqlstateOf(err3) ?? 'unknown', pairingId, seq: e.seq, kind: e.kind }, 'pos inbox: retry, could not store even a bare quarantined event');
           return { seq: e.seq, status: 'retry' };
         }
       }
       logger.warn({ code: state ?? 'unknown', pairingId, seq: e.seq, kind: e.kind }, 'pos inbox: retry, could not store a quarantined event');
       return { seq: e.seq, status: 'retry' };
+    }
+    if (pairingId !== pairing.pairingId && fault.code === 'POS_EVENT_PERSON_REFUSED') {
+      // T-563: a carried-over event whose person could not be vouched for is a finding. The event is already safe in quarantine, so a failed audit write is logged, never the batch's failure.
+      await withOrgPrincipal(orgId, (tx) =>
+        auditLogRepo.appendSystem(tx, orgId, {
+          action: 'pos_events.carry_over_refused',
+          storeId,
+          entityId: pairingId,
+          before: null,
+          after: { fromPairingId: pairingId, toPairingId: pairing.pairingId, seq: e.seq, reason: fault.sentence },
+          source: 'pos',
+        }),
+      ).catch((auditErr: unknown) => logger.warn({ code: sqlstateOf(auditErr) ?? 'unknown', pairingId, seq: e.seq }, 'pos inbox: could not write the carry-over refusal audit row'));
     }
     return { seq: e.seq, status: 'quarantined', error };
   }
@@ -376,18 +436,54 @@ async function applyOne(pairing: PosPairing, e: PosEventIn, deps: PosDeps | unde
  * Runs the events in ascending seq, each in its own transaction. A `retry` stops the batch (later events get no result). The store's POS switch is
  * checked first: `off` (or no switch row) refuses the whole batch with POS_NOT_SWITCHED_ON and the device keeps its outbox.
  */
-export async function applyPosEvents(input: { pairing: PosPairing; events: PosEventIn[] }, deps?: PosDeps): Promise<{ stateVersion: number; results: PosEventResult[] }> {
+export async function applyPosEvents(input: { pairing: PosPairing; events: PosEventIn[]; madeOn?: PosMadeOn }, deps?: PosDeps): Promise<{ stateVersion: number; results: PosEventResult[] }> {
   const { pairing } = input;
+  const madeOn = input.madeOn ?? { pairingId: pairing.pairingId, revokedAt: null };
   const store = await withOrgPrincipal(pairing.orgId, (tx) => posV2Repo.getPosStore(tx, pairing.orgId, pairing.storeId));
   if (!store || store.mode === 'off') throw refuse('pos: store switched off', POS_NOT_SWITCHED_ON);
   const results: PosEventResult[] = [];
   for (const e of [...input.events].sort((a, b) => a.seq - b.seq)) {
-    const r = await applyOne(pairing, e, deps);
+    const r = await applyOne(pairing, madeOn, e, deps);
     results.push(r);
     if (r.status === 'retry') break;
   }
   const stateVersion = await withOrgPrincipal(pairing.orgId, (tx) => posV2Repo.getStateVersion(tx, pairing.orgId, pairing.storeId));
   return { stateVersion: stateVersion ?? 0, results };
+}
+
+/**
+ * T-563 (audit P-004): a batch is taken under the pairing it was MADE on, or not at all.
+ * - made on the cookie's own pairing: as before;
+ * - made on another pairing of the SAME organisation and store, live or revoked (the tablet was replaced, or paired back): a carry-over. The events are stored
+ *   under the pairing they were made on (so their `(pairing, seq)` dedupe and their PIN-session check stay true) and act under the cookie's live pairing; one
+ *   audit row says so;
+ * - anything else (another store, another organisation, no such pairing): `{ ok: false }`, nothing stored, nothing applied, and the device keeps every event.
+ */
+export async function applyPosBatch(
+  input: { pairing: PosPairing; madeOn: string; events: PosEventIn[] },
+  deps?: PosDeps,
+): Promise<{ ok: true; stateVersion: number; results: PosEventResult[] } | { ok: false }> {
+  const { pairing, madeOn, events } = input;
+  if (madeOn === pairing.pairingId) return { ok: true, ...(await applyPosEvents({ pairing, events }, deps)) };
+  const known = await withOrgPrincipal(pairing.orgId, (tx) => posV2Repo.getPairingOfStore(tx, pairing.orgId, pairing.storeId, madeOn));
+  if (!known) return { ok: false };
+  const answer = await applyPosEvents({ pairing, events, madeOn: { pairingId: known.id, revokedAt: known.revokedAt } }, deps);
+  // a replay of a batch already taken stores nothing new, so it adds no second audit row
+  const count = answer.results.filter((r) => r.status === 'applied' || r.status === 'quarantined').length;
+  if (count > 0) {
+    // shortcut: the audit is written after the events commit, so a failed audit write is not retried, and a resent batch writes a second row for its new events only; upgrade if the audit must be exact.
+    await withOrgPrincipal(pairing.orgId, (tx) =>
+      auditLogRepo.appendSystem(tx, pairing.orgId, {
+        action: 'pos_events.carried_over',
+        storeId: pairing.storeId,
+        entityId: madeOn,
+        before: null,
+        after: { fromPairingId: madeOn, toPairingId: pairing.pairingId, count },
+        source: 'pos',
+      }),
+    );
+  }
+  return { ok: true, ...answer };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -446,10 +542,17 @@ export async function replayQuarantinedEvent(
   const row = await openQuarantineRow(tx, actor, input);
   const payload = row.payload as Record<string, unknown>;
   if (row.kind === 'session.voided' && isObj(payload.approval) && payload.approval.pinGiven === true) return { replayed: false, error: REPLAY_VOID };
+  // T-572: the stored copy of a sale holds the marker where a card number was, so it must never be run (it would book "[redacted]" as a BIR card). Applies to the carried-over replay below too.
+  if (row.kind === 'sale.completed' && payload.seniors != null && !(Array.isArray(payload.seniors) && payload.seniors.length === 0)) return { replayed: false, error: REPLAY_SENIOR };
   if (row.error?.startsWith('POS_EVENT_INVALID:')) return { replayed: false, error: 'This event was not valid as sent. Discard it and re-enter the sale on the till.' };
   if (row.personId === null) return { replayed: false, error: 'The person on this event is not on the staff list, so it cannot be replayed. Discard it.' };
-  const pairing = { pairingId: row.pairingId, orgId: actor.orgId, storeId: input.storeId };
-  const run = (t: Tx) => runEvent(t, pairing, { kind: row.kind, personId: row.personId!, payload, occurredAt: row.occurredAtDevice }, deps, row.receivedAt);
+  // T-563: a carried-over row (made on a tablet since replaced) is replayed under the store's LIVE pairing, with the same carry-over PIN rule as on arrival.
+  const live = await posV2Repo.getLivePairingOfStore(tx, actor.orgId, input.storeId);
+  const carried = live !== undefined && live.id !== row.pairingId;
+  const origin = carried ? await posV2Repo.getPairingOfStore(tx, actor.orgId, input.storeId, row.pairingId) : undefined;
+  const pairing = { pairingId: carried ? live.id : row.pairingId, orgId: actor.orgId, storeId: input.storeId };
+  const madeOn = carried ? { pairingId: row.pairingId, revokedAt: origin?.revokedAt ?? null } : undefined;
+  const run = (t: Tx) => runEvent(t, pairing, { kind: row.kind, personId: row.personId!, payload, occurredAt: row.occurredAtDevice }, deps, row.receivedAt, madeOn);
   try {
     // A refusal must leave nothing behind, so the run is a savepoint - except a sale: migration 0240's append guard refuses a receipt child written in one.
     // (A sale throws only before its first write, or on a database error that aborts this transaction whole.)
@@ -476,4 +579,3 @@ export async function discardQuarantinedEvent(tx: Tx, actor: Actor, input: { sto
   await auditResolution(tx, actor, row, input.storeId, 'discarded', { reason });
   return { discarded: true };
 }
-

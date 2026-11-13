@@ -104,20 +104,22 @@ export async function listForPerson(tx: Tx, orgId: string, personId: string): Pr
 }
 
 /**
- * The person's ACTIVE agreements, oldest first. With `lock`, the rows are locked first (`for update`, in the same order), so two payroll
+ * The person's ACTIVE agreements, oldest first (only those signed on or before `signedOnOrBefore`, when given). With `lock`, the rows are locked first (`for update`, in the same order), so two payroll
  * posts for one person cannot both spend the same unpaid amount.
  */
-export async function listActiveForPerson(tx: Tx, orgId: string, personId: string, lock = false): Promise<AgreementRow[]> {
+export async function listActiveForPerson(tx: Tx, orgId: string, personId: string, lock = false, signedOnOrBefore?: string): Promise<AgreementRow[]> {
+  // T-555: an agreement counts only once signed (`signed_on <= the payout date`); the lock set matches the read set.
+  const signed = signedOnOrBefore ? sql`and signed_on <= ${signedOnOrBefore}` : sql``;
   if (lock) {
     await tx.execute(
       sql`select id from staff_deduction_agreements
-          where org_id = ${orgId} and person_id = ${personId} and status = 'active'
+          where org_id = ${orgId} and person_id = ${personId} and status = 'active' ${signed}
           order by recorded_at, id for update`,
     );
   }
   return (await tx.execute(
     sql`select ${SELECT_ROW} from staff_deduction_agreements a
-        where a.org_id = ${orgId} and a.person_id = ${personId} and a.status = 'active'
+        where a.org_id = ${orgId} and a.person_id = ${personId} and a.status = 'active' ${signed}
         order by a.recorded_at, a.id`,
   )) as unknown as AgreementRow[];
 }

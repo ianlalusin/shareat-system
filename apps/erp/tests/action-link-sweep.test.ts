@@ -531,7 +531,9 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1595 -> 1602, T-546 Tills (+7 controls); re-measured after rebase on main, 8 Nov 2026, BOSS approved.
     // 1602 -> 1614, +12 T-529 Kitchen/Refills controls; re-measured after rebase on main, 8 Nov 2026, BOSS approved.
     // 1614 -> 1626, +12 T-531 till and day-close controls, all PASS (FAIL/UNRESOLVED buckets unmoved); re-measured on main ff553f6, 11 Nov 2026, BOSS approved.
-    expect(results.length).toBe(1626);
+    // 1626 -> 1631, +5 T-569 POS data page controls, all PASS
+    // 1631 -> 1632, T-566 (P-007, Ian 11 Nov): +1 compliant control, the refill flavour pill <button aria-pressed> on /pos Refills (48 px); FAIL/UNRESOLVED unmoved at 113/50 (asserted above); measured by CI runCensus().
+    expect(results.length).toBe(1632);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
