@@ -6,9 +6,11 @@
  */
 import { useState } from 'react';
 import { Dialog } from '@/components/ui';
+import { nativeAttrs, STAFF_PIN_RULES } from '@shareat/domain/field-rules';
 import { PIN_LABEL, REVIEW_NOTE, type LineApprovalMode } from './line-approval';
 
 const FIELD = 'min-h-12 w-full rounded-2xl border border-field-border bg-field px-4 text-base text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
+const PIN_ATTRS = nativeAttrs(STAFF_PIN_RULES.pin);
 const SEND = 'min-h-16 w-full inline-flex items-center justify-center rounded-full border border-transparent bg-brand px-6 text-base font-semibold text-white hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink disabled:bg-surface-border disabled:text-muted disabled:cursor-not-allowed';
 
 export function LineApprovalField({ mode, pin, onPin }: { mode: LineApprovalMode; pin: string; onPin: (v: string) => void }) {
@@ -17,7 +19,7 @@ export function LineApprovalField({ mode, pin, onPin }: { mode: LineApprovalMode
   return (
     <label className="block space-y-2 text-sm font-semibold text-muted">
       <span className="block">{PIN_LABEL}</span>
-      <input type="password" inputMode="numeric" autoComplete="off" data-erp-size="free" className={FIELD} value={pin} onChange={(e) => onPin(e.target.value.slice(0, 12))} />
+      <input {...PIN_ATTRS} type="password" autoComplete="off" data-erp-size="free" className={FIELD} value={pin} onChange={(e) => onPin(e.target.value.slice(0, 12))} />
     </label>
   );
 }
