@@ -57,7 +57,7 @@ async function setup(hint: string) {
   const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
   const orgId = org!.id;
   await seedChartOfAccounts(sql, orgId);
-  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2027-01-01', '2027-01-31', 'open')`;
+  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2026-01-01', '2026-01-31', 'open')`;
   const [store] = await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${orgId}, ${uid('st')}, 'Lipa') returning id`;
   const storeId = store!.id;
   const adminId = await person(orgId, 'Admin', 'admin', [storeId]);
@@ -80,7 +80,7 @@ async function setup(hint: string) {
     values (${orgId}, ${storeId}, 'GCash - Lipa', 'ewallet', '1140', 'cashier') returning id`;
   await linkTestStore(sql, { orgId, storeId, channelId: walkInId, createdBy: adminId });
   await seedTestTenders(sql, { orgId, storeId, walletAccountId: gcash!.id });
-  const { id: salesDayId } = await asOrg(orgId, (tx) => importTestDay(tx, actor(orgId, staffId), { storeId, businessDate: '2027-01-10' }));
+  const { id: salesDayId } = await asOrg(orgId, (tx) => importTestDay(tx, actor(orgId, staffId), { storeId, businessDate: '2026-01-10' }));
   // The day already carries a Foodpanda platform row, so the page draws the platform form as a locked record.
   await sql`insert into sales_day_channels (sales_day_id, channel_id, amount) values (${salesDayId}, ${foodpandaId}, '500.00')`;
   return { orgId, storeId, salesDayId, foodpandaId, grabId, admin: actor(orgId, adminId), other: actor(orgId, admin2Id) };

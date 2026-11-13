@@ -19,6 +19,7 @@ const { dev } = vi.hoisted(() => ({
     touchSnapshot: vi.fn(async () => undefined),
     readSnapshot: vi.fn(async (): Promise<unknown> => null),
     resumeAbove: vi.fn(async () => undefined),
+    bindPairing: vi.fn(async (_id: string) => undefined), // T-563
     listVerifiers: vi.fn(async (): Promise<unknown[]> => []),
     deleteVerifier: vi.fn(async (_personId: string): Promise<void> => undefined),
     isSnapshotUsable: (s: { fetchedAtMs: number } | null, nowMs: number, maxAgeMs: number) => s !== null && nowMs - s.fetchedAtMs <= maxAgeMs,
@@ -40,7 +41,7 @@ const verifier = (personId: string, employeeId: string) => ({ personId, employee
 const body = { ok: true, staff, device: { pairingId: 'pair-1', lastSeq: 40, lastTerminalSeq: 9 }, rules: null };
 
 beforeEach(() => {
-  for (const f of [dev.saveSnapshot, dev.touchSnapshot, dev.readSnapshot, dev.resumeAbove, dev.listVerifiers, dev.deleteVerifier]) f.mockClear();
+  for (const f of [dev.saveSnapshot, dev.touchSnapshot, dev.readSnapshot, dev.resumeAbove, dev.bindPairing, dev.listVerifiers, dev.deleteVerifier]) f.mockClear();
   dev.readSnapshot.mockResolvedValue(null);
   dev.listVerifiers.mockResolvedValue([]);
 });

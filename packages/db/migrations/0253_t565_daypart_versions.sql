@@ -1,4 +1,4 @@
--- 0251 -- T-565 (audit MC-002): menu_daypart_versions, the dated history of every daypart window. docs/tasks/565-daypart-versions.md s2.
+-- 0253 -- T-565 (audit MC-002): menu_daypart_versions, the dated history of every daypart window. docs/tasks/565-daypart-versions.md s2.
 -- Hand-authored per ADR-012 s5. Journal head when written: 0248; 0249 (T-557) and 0250 (T-564) are reserved and unmerged, so `when` is 0248 + 3 days and
 -- the orchestrator fixes the ordering at merge time.
 --
@@ -13,7 +13,7 @@
 --     valid_from <= at < coalesce(valid_to, infinity).
 --   * Keys: (org_id, store_id) -> stores (same-org twin of the plain store FK), (store_id, daypart_id) -> menu_dayparts (store_id, id) (a daypart of another store
 --     is refused; the org follows from the store). UNIQUE (store_id, id) is the target of the line key below. org_id is NOT NULL and RLS is the org backstop.
---   * Backfill (between the B0251 markers; idempotent): one OPEN version per existing daypart, valid_from = the daypart's created_at, copying its current
+--   * Backfill (between the B0253 markers; idempotent): one OPEN version per existing daypart, valid_from = the daypart's created_at, copying its current
 --     window and status. A RETIRED daypart gets an open version with status 'retired' (not a closed one): a reader at "now" then still finds the daypart exactly as
 --     menu_dayparts says, and the window is the same before and after the retirement because no history of the earlier edits exists to restore.
 --   * The versions are kept by the DATABASE, not by a writer: AFTER INSERT and AFTER UPDATE OF (name, days, start_time, end_time, status) triggers on menu_dayparts
@@ -79,13 +79,13 @@ ALTER TABLE "menu_daypart_versions" ADD CONSTRAINT "menu_daypart_versions_no_ove
 	EXCLUDE USING gist ("daypart_id" WITH =, tstzrange("valid_from", "valid_to", '[)') WITH &&);
 --> statement-breakpoint
 
--- B0251:begin
+-- B0253:begin
 INSERT INTO "menu_daypart_versions" ("org_id","store_id","daypart_id","name","days","start_time","end_time","status","valid_from")
 SELECT d."org_id", d."store_id", d."id", d."name", d."days", d."start_time", d."end_time", d."status", d."created_at"
   FROM "menu_dayparts" d
  WHERE NOT EXISTS (SELECT 1 FROM "menu_daypart_versions" v WHERE v."daypart_id" = d."id");
 --> statement-breakpoint
--- B0251:end
+-- B0253:end
 
 ALTER TABLE "menu_daypart_versions" ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint

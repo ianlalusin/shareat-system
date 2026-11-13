@@ -33,7 +33,11 @@ export function FilterRow({ children, submitLabel = 'Show', className }: FilterR
       className={`flex flex-wrap items-end gap-3 gap-y-2${className ? ` ${className}` : ''}`}
     >
       {children}
-      <Button type="submit">{submitLabel}</Button>
+      {/* A filter is applied by a word, not an icon: the eye that "Show" used to become was
+          indistinguishable from a view toggle. */}
+      <Button type="submit" icon={null}>
+        {submitLabel}
+      </Button>
     </form>
   );
 }

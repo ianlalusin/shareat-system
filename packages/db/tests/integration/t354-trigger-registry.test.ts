@@ -11,6 +11,7 @@
  *
  * Real Postgres via TEST_DATABASE_URL, `_test` name guard (matches every sibling integration file).
  */
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -20,7 +21,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} — the database name must contain "_test".`);
 }
 
 const sql = postgres(url, { max: 3 });
@@ -128,8 +129,8 @@ describe('T1 — registry floor', () => {
     // T-524 (0240): three receipt-child append guards, 50 -> 53; re-measured after rebase on main (0238+0239 present), 7 Nov 2026, BOSS approved.
     // T-511 S6a (0242): channel_settlement_loan_legs_append_only 53 -> 54; S6b (0243): sales_day_platform_corrections_append_only 54 -> 55; re-measured after rebase on main (0238-0241 present), 7 Nov 2026, BOSS approved.
     // T-511 S6c (0244): channel_period_charges_append_only + channel_settlement_charge_links_append_only, 55 -> 57; re-measured after rebase on main (0238-0243 present), 8 Nov 2026, BOSS approved.
-    // T-565 (0251): menu_daypart_versions_append_guard, 57 -> 58; re-measured as the count of mode:'always' entries in TRIGGER_REGISTRY on a tree with 0251 applied.
-    expect(always.length, 'expected exactly 58 ALWAYS triggers (R1 + 0175 + 0179 + 0183 + 0189 + 0196 + 0206 + 0215 + 0217 + 0220 + 0221 + 0222 + 0238 + 0239 + 0240 + 0242 + 0243 + 0244 + 0251)').toBe(58);
+    // T-565 (0253): menu_daypart_versions_append_guard, 57 -> 58; re-measured as the count of mode:'always' entries in TRIGGER_REGISTRY on a tree with 0253 applied.
+    expect(always.length, 'expected exactly 58 ALWAYS triggers (R1 + 0175 + 0179 + 0183 + 0189 + 0196 + 0206 + 0215 + 0217 + 0220 + 0221 + 0222 + 0238 + 0239 + 0240 + 0242 + 0243 + 0244 + 0253)').toBe(58);
 
     const alwaysNames = new Set(always.map(([name]) => name));
     for (const { trigger } of ALWAYS_TRIGGERS) {

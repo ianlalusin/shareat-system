@@ -14,6 +14,7 @@ import { Loader2, Search, KeyRound, Copy, Printer, Sparkles, Users, Coins, Scrol
 import { format, formatDistanceToNow } from "date-fns";
 import { isNativeBluetoothAvailable, getLastPrinterAddress, printViaNativeBluetooth } from "@/lib/printing/printHub";
 import { formatSharelebratorPasswordText } from "@/lib/printing/receiptFormatter";
+import { escapeHtml } from "@/lib/escape-html";
 import { LegacyPointsPanel } from "@/components/pins/legacy-points-panel";
 
 type LedgerEntry = {
@@ -396,21 +397,21 @@ export function CustomersAdmin({ storeId }: { storeId?: string }) {
   <div class="tagline">Password Reset</div>
   <div class="section">
     <div class="label">Cardholder</div>
-    <div class="value">${customer.name}</div>
+    <div class="value">${escapeHtml(customer.name)}</div>
   </div>
   <div class="section">
     <div class="label">Phone</div>
-    <div class="value">${customer.phone}</div>
+    <div class="value">${escapeHtml(customer.phone)}</div>
   </div>
   <div class="pw-box">
     <div class="pw-label">Temporary Password</div>
-    <div class="pw-value">${tempPassword}</div>
+    <div class="pw-value">${escapeHtml(tempPassword)}</div>
   </div>
   <div class="footer">
     Use this password to log in to your Sharelebrator account.
     Please change your password after logging in for security.
   </div>
-  <div class="date">Reset on ${resetDate}</div>
+  <div class="date">Reset on ${escapeHtml(resetDate)}</div>
   <script>window.onload = function() { window.print(); setTimeout(function() { window.close(); }, 500); };</script>
 </body>
 </html>`;

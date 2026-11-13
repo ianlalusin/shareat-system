@@ -1,17 +1,16 @@
-import { accountLabel } from '@/lib/account-label';
 import { toBusinessDate } from '@shareat/core/datetime';
 import Link from 'next/link';
-import { compare, money, ZERO } from '@shareat/core/money';
+import { add, compare, money, ZERO } from '@shareat/core/money';
 import { requirePageAccess } from '../../lib/page-access';
 import type { PickerOption } from '../../components/two-way-picker';
 import { voidMoneyTransferAction } from './actions';
 import { RecordTransferForm } from './RecordTransferForm';
 import { SettleBetweenStoresForm, type SettlePairOption } from './SettleBetweenStoresForm';
-import { CUSTODIAN_LABEL, listAccountBalances, listRecentTransfers, listSettlementPairs, listStores, listTransferableAccounts, peso } from './lib';
+import { listAccountBalances, listRecentTransfers, listSettlementPairs, listStores, listTransferableAccounts, peso } from './lib';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
-import { Badge, Banner, ConfirmDestructive, Field, FlashBanner, Input, FormModal } from '@/components/ui';
+import { Badge, Banner, ConfirmDestructive, Field, FlashBanner, Input, FormModal, NumTd, Table, Td, Th } from '@/components/ui';
 import { CheckedForm } from '@/components/forms';
 import { TRANSFER_VOID_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
@@ -58,6 +57,19 @@ export default async function MoneyTransfersPage({
   const byStore = stores
     .map((s) => ({ store: s, accounts: usable.filter((a) => a.storeId === s.id) }))
     .filter((g) => g.accounts.length > 0);
+
+  // T-568: the balance register is a store × account matrix, not 48 loose cards.
+  const accountNames = [...new Set(accounts.map((a) => a.name))].sort((a, b) => {
+    const order = ['Cashier cash', 'Cashier online', 'Office cash', 'Office online', 'Staff float'];
+    const ia = order.indexOf(a);
+    const ib = order.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+  });
+  const balanceStores = stores
+    .map((s) => ({ store: s, rows: accounts.filter((a) => a.storeId === s.id) }))
+    .filter((g) => g.rows.length > 0);
+  const balanceFor = (rows: typeof accounts, name: string) =>
+    rows.filter((a) => a.name === name).reduce((total, a) => add(total, money(a.balance)), ZERO);
 
   // ⭐ Built server-side, WITH `peso` already applied — a plain function cannot cross the
   // server/client boundary as a prop, so `RecordTransferForm` (a client component, for
@@ -137,37 +149,107 @@ export default async function MoneyTransfersPage({
 
       {/* ── What is where ────────────────────────────────────────────────────────────── */}
       {accounts.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="font-medium">What is where, right now</h2>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {accounts.map((a) => (
-              <div
-                key={a.id}
-                className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800"
-              >
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-sm font-medium">{a.name}</span>
-                  {/* ⚠️ A negative reads as an ordinary figure unless it is coloured — and a
-                      negative cash balance is never ordinary. */}
-                  <span
-                    className={`font-mono text-sm tabular-nums ${
-                      compare(money(a.balance), ZERO) < 0 ? 'text-warning-ink' : ''
-                    }`}
-                  >
-                    {peso(a.balance)}
-                  </span>
-                </div>
-                <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                  {storeById.get(a.storeId)?.code ?? '—'} ·{' '}
-                  {CUSTODIAN_LABEL[a.custodian] ?? a.custodian} ·{' '}
-                  <span>{accountLabel(a.glAccountCode)}</span>
-                </div>
-              </div>
-            ))}
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="font-semibold">What is where, right now</h2>
+            <span className="text-xs text-muted">
+              {balanceStores.length} stores · {accountNames.length} account types
+            </span>
           </div>
-          {/* ⭐ Every figure above is summed from the journal on this request. There is no balance
-              column anywhere in this feature — v1 kept one and it drifted. */}
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+
+          <div className="hidden md:block">
+            <Table>
+              <thead>
+                <tr>
+                  <Th>Store</Th>
+                  {accountNames.map((name) => (
+                    <Th key={name} numeric>
+                      {name}
+                    </Th>
+                  ))}
+                  <Th numeric>Total</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {balanceStores.map(({ store, rows }) => {
+                  const total = rows.reduce((sum, a) => add(sum, money(a.balance)), ZERO);
+                  return (
+                    <tr key={store.id}>
+                      <Td>
+                        <span className="font-mono text-xs">{store.code}</span>
+                        <span className="block text-xs text-muted">{store.name}</span>
+                      </Td>
+                      {accountNames.map((name) => {
+                        const has = rows.some((a) => a.name === name);
+                        const balance = balanceFor(rows, name);
+                        return (
+                          <NumTd
+                            key={name}
+                            className={compare(balance, ZERO) < 0 ? 'text-warning-ink' : undefined}
+                          >
+                            {has ? peso(balance) : '—'}
+                          </NumTd>
+                        );
+                      })}
+                      <NumTd className="font-semibold">{peso(total)}</NumTd>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <Td className="font-semibold">All stores</Td>
+                  {accountNames.map((name) => (
+                    <NumTd key={name} className="font-semibold">
+                      {peso(balanceFor(accounts, name))}
+                    </NumTd>
+                  ))}
+                  <NumTd className="font-semibold">
+                    {peso(accounts.reduce((sum, a) => add(sum, money(a.balance)), ZERO))}
+                  </NumTd>
+                </tr>
+              </tfoot>
+            </Table>
+          </div>
+
+          <ul className="space-y-3 md:hidden">
+            {balanceStores.map(({ store, rows }) => {
+              const total = rows.reduce((sum, a) => add(sum, money(a.balance)), ZERO);
+              return (
+                <li key={store.id} className="rounded-[20px] border border-surface-border bg-surface p-4">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-semibold">{store.name}</span>
+                    <span className="font-mono text-xs text-muted">{store.code}</span>
+                  </div>
+                  <dl className="mt-3 space-y-2 text-sm">
+                    {accountNames.map((name) => {
+                      if (!rows.some((a) => a.name === name)) return null;
+                      const balance = balanceFor(rows, name);
+                      return (
+                        <div key={name} className="flex items-baseline justify-between gap-3">
+                          <dt className="text-muted">{name}</dt>
+                          <dd
+                            className={`font-mono tabular-nums ${
+                              compare(balance, ZERO) < 0 ? 'text-warning-ink' : ''
+                            }`}
+                          >
+                            {peso(balance)}
+                          </dd>
+                        </div>
+                      );
+                    })}
+                  </dl>
+                  <div className="mt-3 flex items-baseline justify-between border-t border-surface-border pt-2 text-sm font-semibold">
+                    <span>Store total</span>
+                    <span className="font-mono tabular-nums">{peso(total)}</span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          {/* Every figure above is summed from the journal on this request; there is no balance column. */}
+          <p className="text-xs text-muted">
             Each figure is summed from the ledger on load, not stored — so it cannot drift from
             the books it is meant to describe.
           </p>

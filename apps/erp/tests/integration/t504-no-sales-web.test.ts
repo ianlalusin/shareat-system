@@ -60,7 +60,7 @@ async function setup(hint: string) {
   const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
   const orgId = org!.id;
   await seedChartOfAccounts(sql, orgId);
-  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2027-01-01', '2027-01-31', 'open')`;
+  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2026-01-01', '2026-01-31', 'open')`;
   const mkStore = async (name: string) =>
     (await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${orgId}, ${uid('st')}, ${name}) returning id`)[0]!.id;
   const storeId = await mkStore('Batangas');
@@ -112,9 +112,9 @@ describe('A. the actions pass channels through as typed', () => {
   it('blank unticked saves an OPEN draft with no row for that channel (item 9; was: skipped by the action, rule 5)', async () => {
     const c = await setup('a1');
     const { createSalesDayAction } = await actions();
-    const r = await run(() => createSalesDayAction(createForm(c, '2027-01-10')));
+    const r = await run(() => createSalesDayAction(createForm(c, '2026-01-10')));
     expect(r.error).toBeUndefined();
-    const d = await dayOn(c, '2027-01-10');
+    const d = await dayOn(c, '2026-01-10');
     expect(d?.status).toBe('open');
     expect((await rows(d!.id)).map((x) => x.channel_id)).toEqual([c.walkIn]);
   });
@@ -122,25 +122,25 @@ describe('A. the actions pass channels through as typed', () => {
   it('0 unticked is refused in words and nothing is saved', async () => {
     const c = await setup('a2');
     const { createSalesDayAction } = await actions();
-    const r = await run(() => createSalesDayAction(createForm(c, '2027-01-11', { [`channel_${c.foodpanda}`]: '0' })));
+    const r = await run(() => createSalesDayAction(createForm(c, '2026-01-11', { [`channel_${c.foodpanda}`]: '0' })));
     expect(r.error).toBe(MISSING('Foodpanda'));
-    expect(await dayOn(c, '2027-01-11')).toBeUndefined();
+    expect(await dayOn(c, '2026-01-11')).toBeUndefined();
   });
 
   it('DEF-628 at the action: ticked + an amount is refused ("choose one"), not silently turned into 0', async () => {
     const c = await setup('a3');
     const { createSalesDayAction } = await actions();
-    const r = await run(() => createSalesDayAction(createForm(c, '2027-01-12', { [`channel_${c.foodpanda}`]: '500', [`nosales_${c.foodpanda}`]: 'on' })));
+    const r = await run(() => createSalesDayAction(createForm(c, '2026-01-12', { [`channel_${c.foodpanda}`]: '500', [`nosales_${c.foodpanda}`]: 'on' })));
     expect(r.error).toBe(BOTH('Foodpanda'));
-    expect(await dayOn(c, '2027-01-12')).toBeUndefined();
+    expect(await dayOn(c, '2026-01-12')).toBeUndefined();
   });
 
   it('ticked + blank saves a no-sales row; "16,980" in another box saves 16980.00', async () => {
     const c = await setup('a4');
     const { createSalesDayAction } = await actions();
-    const r = await run(() => createSalesDayAction(createForm(c, '2027-01-13', { [`channel_${c.walkIn}`]: '16,980', [`channel_${c.foodpanda}`]: '', [`nosales_${c.foodpanda}`]: 'on' })));
+    const r = await run(() => createSalesDayAction(createForm(c, '2026-01-13', { [`channel_${c.walkIn}`]: '16,980', [`channel_${c.foodpanda}`]: '', [`nosales_${c.foodpanda}`]: 'on' })));
     expect(r.error).toBeUndefined();
-    const rs = await rows((await dayOn(c, '2027-01-13'))!.id);
+    const rs = await rows((await dayOn(c, '2026-01-13'))!.id);
     const fp = rs.find((x) => x.channel_id === c.foodpanda)!;
     expect([Number(fp.amount), fp.no_sales]).toEqual([0, true]);
     expect(Number(rs.find((x) => x.channel_id === c.walkIn)!.amount)).toBe(16980);
@@ -149,31 +149,31 @@ describe('A. the actions pass channels through as typed', () => {
   it('edit action: ticked + amount refused; blank clears the row and keeps the day open', async () => {
     const c = await setup('a5');
     const { createSalesDayAction, editSalesDayAction } = await actions();
-    await run(() => createSalesDayAction(createForm(c, '2027-01-14', { [`channel_${c.foodpanda}`]: '40' })));
-    const d = (await dayOn(c, '2027-01-14'))!;
+    await run(() => createSalesDayAction(createForm(c, '2026-01-14', { [`channel_${c.foodpanda}`]: '40' })));
+    const d = (await dayOn(c, '2026-01-14'))!;
     const editForm = (over: Record<string, string | null>) => form({ storeId: c.storeId, salesDayId: d.id, ...FIG, [`channel_${c.walkIn}`]: '960', ...over });
     const bad = await run(() => editSalesDayAction(editForm({ [`channel_${c.foodpanda}`]: '40', [`nosales_${c.foodpanda}`]: 'on' })));
     expect(bad.error).toBe(BOTH('Foodpanda'));
     const ok = await run(() => editSalesDayAction(editForm({ [`channel_${c.foodpanda}`]: '' })));
     expect(ok.error).toBeUndefined();
     expect((await rows(d.id)).some((x) => x.channel_id === c.foodpanda)).toBe(false);
-    expect((await dayOn(c, '2027-01-14'))!.status).toBe('open');
+    expect((await dayOn(c, '2026-01-14'))!.status).toBe('open');
   });
 
   it('submit action: a day with a blank channel is refused naming it; the day stays open', async () => {
     const c = await setup('a6');
     const { createSalesDayAction, submitSalesDayAction } = await actions();
-    await run(() => createSalesDayAction(createForm(c, '2027-01-15')));
-    const d = (await dayOn(c, '2027-01-15'))!;
+    await run(() => createSalesDayAction(createForm(c, '2026-01-15')));
+    const d = (await dayOn(c, '2026-01-15'))!;
     const r = await run(() => submitSalesDayAction(form({ storeId: c.storeId, salesDayId: d.id })));
     expect(r.error).toBe(SUBMIT_MISSING('Foodpanda'));
-    expect((await dayOn(c, '2027-01-15'))!.status).toBe('open');
+    expect((await dayOn(c, '2026-01-15'))!.status).toBe('open');
   });
 
   it('platform boxes via the one edit action: ticked + amount refused (DEF-628); 0 unticked refused; "1,500.50" saves', async () => {
     const c = await setup('a7');
     const { editSalesDayAction } = await actions();
-    const { id } = await asOrg(c.orgId, (tx) => importTestDay(tx, c.manager, { storeId: c.feedStoreId, businessDate: '2027-01-10' }));
+    const { id } = await asOrg(c.orgId, (tx) => importTestDay(tx, c.manager, { storeId: c.feedStoreId, businessDate: '2026-01-10' }));
     // Ruling 3: the platform boxes are saved by the ONE edit action (`platform=1` marks a POS-fed day's form).
     const pf = (over: Record<string, string | null>) => form({ storeId: c.feedStoreId, salesDayId: id, platform: '1', ...over });
     expect((await run(() => editSalesDayAction(pf({ [`channel_${c.fFoodpanda}`]: '500', [`nosales_${c.fFoodpanda}`]: 'on' })))).error).toBe(BOTH('Foodpanda'));
@@ -234,8 +234,8 @@ describe('B. the live rule on the typed pages', () => {
   it('/sales-days/[id]/edit', async () => {
     const c = await setup('b2');
     const { createSalesDayAction } = await actions();
-    await run(() => createSalesDayAction(createForm(c, '2027-01-10')));
-    const d = (await dayOn(c, '2027-01-10'))!;
+    await run(() => createSalesDayAction(createForm(c, '2026-01-10')));
+    const d = (await dayOn(c, '2026-01-10'))!;
     await liveRuleLegs(c, () => editPage(d.id));
   });
 });
@@ -248,13 +248,13 @@ describe('C. one Save for the whole report', () => {
     const c = await setup('c1');
     expect(saveButtons(await newPage(c)).length).toBe(1);
     const { createSalesDayAction } = await actions();
-    await run(() => createSalesDayAction(createForm(c, '2027-01-10')));
-    expect(saveButtons(await editPage((await dayOn(c, '2027-01-10'))!.id)).length).toBe(1);
+    await run(() => createSalesDayAction(createForm(c, '2026-01-10')));
+    expect(saveButtons(await editPage((await dayOn(c, '2026-01-10'))!.id)).length).toBe(1);
   });
 
   it('feed day: the Platform sales boxes sit in a form that owns one Save, and the page has no other Save', async () => {
     const c = await setup('c2');
-    const { id } = await asOrg(c.orgId, (tx) => importTestDay(tx, c.manager, { storeId: c.feedStoreId, businessDate: '2027-01-10' }));
+    const { id } = await asOrg(c.orgId, (tx) => importTestDay(tx, c.manager, { storeId: c.feedStoreId, businessDate: '2026-01-10' }));
     const html = await dayPage(id);
     const at = html.indexOf(`name="channel_${c.fFoodpanda}"`);
     expect(at, 'the Platform sales box is on the day page').toBeGreaterThan(-1);
@@ -281,8 +281,8 @@ describe('D. the form remembers unsaved typing (markup only; the browser behavio
     const c = await setup('d2');
     const { draftKey } = await import('../../src/app/sales-days/draft-memory');
     const { createSalesDayAction } = await actions();
-    await run(() => createSalesDayAction(createForm(c, '2027-01-10')));
-    const html = await editPage((await dayOn(c, '2027-01-10'))!.id);
-    expect(html).toContain(`data-draft-key="${draftKey(c.manager.personId, c.storeId, '2027-01-10')}"`);
+    await run(() => createSalesDayAction(createForm(c, '2026-01-10')));
+    const html = await editPage((await dayOn(c, '2026-01-10'))!.id);
+    expect(html).toContain(`data-draft-key="${draftKey(c.manager.personId, c.storeId, '2026-01-10')}"`);
   });
 });

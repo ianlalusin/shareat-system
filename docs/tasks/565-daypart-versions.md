@@ -1,6 +1,6 @@
 # T-565: a queued order is judged by the daypart window in force when the tablet took it (audit MC-002)
 
-**Status:** SPEC 2026-11-11 (AUDIT). Number and migration from the orchestrator: **T-565, migration 0251**, with `when` =
+**Status:** SPEC 2026-11-11 (AUDIT). Number and migration from the orchestrator: **T-565, migration 0253**, with `when` =
 0250's `when` + 86400000. 0250 is T-564 (settlement renumber) and 0249 is T-557; both must reach main first. Build now, and
 set the final journal entry at merge time. Ian's ruling "b" (11 Nov). The design was approved by BOSS: server-side dated
 versions, plus the version saved on each line. Ian also ruled that dayparts stay fully admin-configured (add, edit or retire
@@ -29,7 +29,7 @@ when it syncs after a manager edits the window. Offers are already versioned by 
    - append-only: no UPDATE except setting `valid_to` once from NULL, and no DELETE;
    - at most one open version per daypart (a unique partial index where `valid_to IS NULL`);
    - RLS like `menu_dayparts`.
-2. **Backfill in 0251.** One open version per existing daypart, `valid_from` = the daypart's `created_at`. A retired daypart
+2. **Backfill in 0253.** One open version per existing daypart, `valid_from` = the daypart's `created_at`. A retired daypart
    gets a version with status 'retired', or a closed one; choose whichever keeps "as of" lookups right before and after
    retirement, and test both.
 3. **Writers** (domain `createDaypart`, `updateDaypart`, `retireDaypart`, in the same transaction, SQL in the repo):

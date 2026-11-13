@@ -12,11 +12,12 @@ export const PICK_A_MEAT = 'Pick at least one meat.';
 
 export const stepQty = (qty: number, delta: 1 | -1): number => Math.min(REFILL_QTY_MAX, Math.max(0, qty + delta));
 
-type Cart = readonly { itemId: string; qty: number }[];
+/** `optionValueId`: the one flavour chosen for the meat (T-566), if any. */
+type Cart = readonly { itemId: string; qty: number; optionValueId?: string | null }[];
 const pick = (cart: Cart, newId: () => string) => {
   const rows = cart.filter((c) => c.qty > 0);
   if (rows.length === 0) throw new Error(PICK_A_MEAT);
-  return rows.map((c) => ({ lineId: newId(), menuItemId: c.itemId, qty: c.qty }));
+  return rows.map((c) => ({ lineId: newId(), menuItemId: c.itemId, qty: c.qty, ...(c.optionValueId ? { optionValueIds: [c.optionValueId] } : {}) }));
 };
 
 export function refillEvent(i: { personId: string; sessionId: string; cart: Cart; now: Date; newId: () => string }): NewPosEvent {
@@ -29,6 +30,6 @@ export function refillEvent(i: { personId: string; sessionId: string; cart: Cart
   };
 }
 
-export function refillRequestInput(i: { sessionId: string; cart: Cart; newId: () => string; now?: Date }): { sessionId: string; lines: { lineId: string; menuItemId: string; qty: number }[] } {
+export function refillRequestInput(i: { sessionId: string; cart: Cart; newId: () => string; now?: Date }): { sessionId: string; lines: { lineId: string; menuItemId: string; qty: number; optionValueIds?: string[] }[] } {
   return { sessionId: i.sessionId, lines: pick(i.cart, i.newId) };
 }

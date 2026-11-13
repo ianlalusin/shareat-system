@@ -4,8 +4,8 @@ topic: staff/server-and-kitchen-sop
 about: [server, cook, cashier]
 readers: staff
 must_be_exact: false
-related: [customer-experience/dine-in-journey, customer-experience/customer-app, policies/leftover-policy, staff/cashier-dine-in-sop, policies/allergies-and-dietary-requests, customer-experience/take-out-in-store, staff/cashier-take-out-and-online-sop, store-operations/opening-and-closing]
-updated: 2026-10-23
+related: [customer-experience/dine-in-journey, customer-experience/customer-app, policies/leftover-policy, staff/cashier-dine-in-sop, policies/allergies-and-dietary-requests, customer-experience/take-out-in-store, staff/cashier-take-out-and-online-sop, store-operations/opening-and-closing, store-operations/future-franchise-daily-operations]
+updated: 2026-11-04
 ---
 
 # Server and kitchen SOP
@@ -37,3 +37,10 @@ updated: 2026-10-23
    them to the cashier.
 7. If the Foodpanda tablet or the Grab Merchant phone is kept in the kitchen, handle those orders
    directly from the device.
+
+## Future franchise supervision
+
+See [future franchise daily operations](../store-operations/future-franchise-daily-operations.md)
+for manager verification of daily food/service standards and platform-order fulfillment oversight.
+These future-franchise duties supplement the assigned service tasks without changing current
+company-owned-store responsibility arrangements.

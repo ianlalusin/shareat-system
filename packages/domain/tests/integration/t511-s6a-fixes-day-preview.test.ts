@@ -4,6 +4,7 @@
  * preview's sentences. This test watches what the preview is GIVEN, on a real two-loan Lipa day (the S5 world), by wrapping `previewChannelSettlement`.
  * MUTANTS are named in each title `[kills: ...]`.
  */
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
@@ -12,7 +13,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 const seen = vi.hoisted(() => ({ inputs: [] as { loanLegs?: { loanId: string; amount: string; ownerStoreId?: string | null }[] }[] }));

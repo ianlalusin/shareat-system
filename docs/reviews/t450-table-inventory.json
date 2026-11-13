@@ -25,8 +25,8 @@
   },
   {
     "file": "apps/erp/src/app/admin/users/page.tsx",
-    "tables": 1,
-    "sharedTables": 0,
+    "tables": 0,
+    "sharedTables": 1,
     "headerless": 0
   },
   {
@@ -67,8 +67,8 @@
   },
   {
     "file": "apps/erp/src/app/attendance/page.tsx",
-    "tables": 2,
-    "sharedTables": 0,
+    "tables": 0,
+    "sharedTables": 2,
     "headerless": 0
   },
   {
@@ -187,8 +187,8 @@
   },
   {
     "file": "apps/erp/src/app/inventory/counts/page.tsx",
-    "tables": 1,
-    "sharedTables": 0,
+    "tables": 0,
+    "sharedTables": 1,
     "headerless": 0
   },
   {
@@ -211,26 +211,26 @@
   },
   {
     "file": "apps/erp/src/app/inventory/deliveries/page.tsx",
-    "tables": 1,
-    "sharedTables": 0,
+    "tables": 0,
+    "sharedTables": 1,
     "headerless": 0
   },
   {
     "file": "apps/erp/src/app/inventory/locations/page.tsx",
-    "tables": 1,
-    "sharedTables": 0,
+    "tables": 0,
+    "sharedTables": 1,
     "headerless": 0
   },
   {
     "file": "apps/erp/src/app/inventory/low-stock/page.tsx",
-    "tables": 2,
-    "sharedTables": 0,
+    "tables": 0,
+    "sharedTables": 2,
     "headerless": 0
   },
   {
     "file": "apps/erp/src/app/inventory/page.tsx",
-    "tables": 1,
-    "sharedTables": 0,
+    "tables": 0,
+    "sharedTables": 1,
     "headerless": 0
   },
   {
@@ -277,8 +277,8 @@
   },
   {
     "file": "apps/erp/src/app/inventory/usage/page.tsx",
-    "tables": 4,
-    "sharedTables": 0,
+    "tables": 0,
+    "sharedTables": 4,
     "headerless": 0
   },
   {
@@ -325,8 +325,8 @@
   },
   {
     "file": "apps/erp/src/app/loans/page.tsx",
-    "tables": 1,
-    "sharedTables": 0,
+    "tables": 0,
+    "sharedTables": 1,
     "headerless": 0
   },
   {
@@ -343,14 +343,14 @@
   },
   {
     "file": "apps/erp/src/app/money-accounts/page.tsx",
-    "tables": 1,
-    "sharedTables": 0,
+    "tables": 0,
+    "sharedTables": 1,
     "headerless": 0
   },
   {
     "file": "apps/erp/src/app/money-transfers/page.tsx",
     "tables": 1,
-    "sharedTables": 0,
+    "sharedTables": 1,
     "headerless": 0
   },
   {
@@ -361,8 +361,8 @@
   },
   {
     "file": "apps/erp/src/app/owners/page.tsx",
-    "tables": 1,
-    "sharedTables": 0,
+    "tables": 0,
+    "sharedTables": 1,
     "headerless": 0
   },
   {
@@ -373,8 +373,8 @@
   },
   {
     "file": "apps/erp/src/app/payroll/page.tsx",
-    "tables": 2,
-    "sharedTables": 0,
+    "tables": 0,
+    "sharedTables": 2,
     "headerless": 0
   },
   {
@@ -409,8 +409,8 @@
   },
   {
     "file": "apps/erp/src/app/prepaid/page.tsx",
-    "tables": 1,
-    "sharedTables": 0,
+    "tables": 0,
+    "sharedTables": 1,
     "headerless": 0
   },
   {
@@ -445,14 +445,20 @@
   },
   {
     "file": "apps/erp/src/app/settings/expense-categories/page.tsx",
-    "tables": 1,
-    "sharedTables": 0,
+    "tables": 0,
+    "sharedTables": 1,
     "headerless": 0
   },
   {
     "file": "apps/erp/src/app/settings/pos-link/page.tsx",
     "tables": 1,
     "sharedTables": 0,
+    "headerless": 0
+  },
+  {
+    "file": "apps/erp/src/app/staff/StaffViews.tsx",
+    "tables": 0,
+    "sharedTables": 1,
     "headerless": 0
   },
   {

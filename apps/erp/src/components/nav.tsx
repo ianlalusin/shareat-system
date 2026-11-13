@@ -166,6 +166,8 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       { href: '/reports/expense-items', label: 'Spending by item' },
       { href: '/reports/sales-rollup', label: 'Sales rollup' },
       { href: '/reports/pos-reconciliation', label: 'POS reconciliation' },
+      // T-569: a copy of every POS v2 table before the 2027 clean-up, as CSV.
+      { href: '/reports/pos-data', label: 'POS data download' },
       { href: '/reports/dual-run', label: 'Dual run' },
       // ⭐ DEF-139 — the screen worked and was tested but had no nav entry, so it was reachable
       // only by typing the URL. Same failure shape as this file's own header comment.
@@ -213,7 +215,7 @@ export const GROUPS: { label: string; icon: GroupIconKey; links: { href: string;
       // T-508 S2b: which kitchen station cooks each item; a store manager's screen (manage_store_settings).
       { href: '/kitchen', label: 'Kitchen setup' },
       // T-510 S3: the hours a menu price can follow (Lunch, Dinner); a store manager's screen (manage_store_settings).
-      { href: '/menu/hours', label: 'Lunch and dinner hours' },
+      { href: '/menu/hours', label: 'Menu hours' },
       // ⭐ DEF-197 — the screen that exists so a dead letter is VISIBLE was itself invisible. This
       // is landmine #14's whole structural fix (bible §12 row 14: v1's recovery path is a banner
       // saying "tell a manager", and there is nothing for the manager to open), and it was in no

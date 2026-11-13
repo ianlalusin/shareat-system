@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 
 /**
- * T-565 (audit MC-002) - migration 0251, menu_daypart_versions: kept by the database (triggers on menu_dayparts), append-only, one open version per
+ * T-565 (audit MC-002) - migration 0253, menu_daypart_versions: kept by the database (triggers on menu_dayparts), append-only, one open version per
  * daypart, no two versions overlapping, RLS, same-store keys and the backfill. docs/tasks/565-daypart-versions.md s2, s3.
  * Real PostgreSQL on a "_test" database; the owner connection sees the triggers, shareat_app sees the grants.
  */
@@ -30,7 +30,7 @@ const insertVersion = (f: Fx, dp: string, from: object, to: object | null) =>
   sql`insert into menu_daypart_versions (org_id, store_id, daypart_id, name, days, start_time, end_time, status, valid_from, valid_to)
       values (${f.orgId}, ${f.storeId}, ${dp}, 'V', ${ALL}::smallint[], '08:00', '17:00', 'active', ${from as never}, ${to as never})`;
 
-describe('menu_daypart_versions (0251)', () => {
+describe('menu_daypart_versions (0253)', () => {
   it('append-only: a window edit, a second close and a DELETE are refused; closing once from NULL is the only change', async () => {
     const f = await menuFixture('t565-append');
     const v = await openVersion(await rawDaypart(f, 'Lunch'));
@@ -107,7 +107,7 @@ describe('menu_daypart_versions (0251)', () => {
   });
 });
 
-describe('0251 - the database keeps the versions (triggers on menu_dayparts)', () => {
+describe('0253 - the database keeps the versions (triggers on menu_dayparts)', () => {
   /** The open version, side by side with the daypart row: every window column must agree. */
   const agree = async (dp: string) =>
     (
@@ -164,13 +164,13 @@ describe('0251 - the database keeps the versions (triggers on menu_dayparts)', (
   });
 });
 
-describe('0251 backfill', () => {
-  /** The statements between the B0251 markers: what the migration runs over the dayparts that exist when it is applied. */
+describe('0253 backfill', () => {
+  /** The statements between the B0253 markers: what the migration runs over the dayparts that exist when it is applied. */
   const block = (() => {
-    const text = readFileSync(join(fileURLToPath(new URL('.', import.meta.url)), '..', '..', 'migrations', '0251_t565_daypart_versions.sql'), 'utf8');
-    const begin = text.indexOf('-- B0251:begin');
-    const end = text.indexOf('-- B0251:end');
-    if (begin < 0 || end < begin) throw new Error('B0251 block not found in migration 0251');
+    const text = readFileSync(join(fileURLToPath(new URL('.', import.meta.url)), '..', '..', 'migrations', '0253_t565_daypart_versions.sql'), 'utf8');
+    const begin = text.indexOf('-- B0253:begin');
+    const end = text.indexOf('-- B0253:end');
+    if (begin < 0 || end < begin) throw new Error('B0253 block not found in migration 0253');
     return text.slice(begin, end).split(/-->\s*statement-breakpoint/).map((x) => x.trim()).filter((x) => x.length > 0);
   })();
 

@@ -16,7 +16,7 @@ export function LinkRow({ className, ...rest }: HTMLAttributes<HTMLTableRowEleme
 }
 /** The row's ONE link: a real anchor with an accessible name (T-258 point 4), stretched over the whole row. */
 export function RowLink({ className, ...rest }: ComponentProps<typeof Link>) {
-  return <Link className={join(`underline underline-offset-2 ${ROW_LINK_STRETCH}`, className)} {...rest} />;
+  return <Link className={join(`text-sm underline underline-offset-2 ${ROW_LINK_STRETCH}`, className)} {...rest} />;
 }
 /** Anything else in a linked row (a form, a second link, an input) sits ABOVE the stretched box. */
 export function RowAction({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {
@@ -30,10 +30,15 @@ export interface TableCardSummary {
   readonly keys?: readonly string[];
 }
 
-export function Table({ className, children, card }: { readonly className?: string; readonly children?: ReactNode; readonly card?: TableCardSummary }) {
+export function Table({ className, children, card, label }: { readonly className?: string; readonly children?: ReactNode; readonly card?: TableCardSummary; readonly label?: string }) {
   return (
     <div className="min-w-0 overflow-x-auto rounded-[20px] border border-surface-border">
-      <table data-card-title={card?.title} data-card-subtitle={card?.subtitle} data-card-keys={card?.keys?.join('|')} className={join('w-full border-collapse text-sm text-ink', className)}>{children}</table>
+      {/*
+        T-543 — `label` is the table's accessible name. A screen reader announces only "table"
+        for an unnamed one, and this ERP has ~108 of them. Omitted (`undefined`) means the
+        attribute is not rendered at all, so a table without a label is exactly as it was.
+      */}
+      <table aria-label={label} data-card-title={card?.title} data-card-subtitle={card?.subtitle} data-card-keys={card?.keys?.join('|')} className={join('w-full border-collapse text-sm text-ink', className)}>{children}</table>
     </div>
   );
 }

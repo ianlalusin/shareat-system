@@ -1,8 +1,9 @@
 # T-550 — Retire "POS usage pull" and "POS item mapping" (keep the data)
 
 > **Status:** spec written 8 Nov 2026 by the POS design lane (Opus planner). Not built.
-> **Authority:** bible row 452 (Ian, 8 Nov): v1 and v2 are separate backends, and the v2 ERP covers only stores on
-> POS v2. Mapping v1 records into v2 does not pay off.
+> **Authority:** bible row 452 (Ian, 8 Nov): v1 and v2 are separate backends. Only a v1 store's sales and stock stay
+> in v1; suppliers and AP, payroll, expenses, cash requests and customers and AR are org-wide in the v2 ERP for every
+> store from 1 Jan 2027. Mapping v1 records into v2 does not pay off.
 > **Migration:** none. **No destructive migration:** every table and its rows stay (`pos-mapping`, the usage-pull
 > drafts and their history). **Risk:** low to medium. This removes screens only, and the guard census moves. The
 > builder is Sonnet. Use Haiku for the census sweeps.
@@ -15,12 +16,12 @@ Remove two ERP pages that only served v1 stores in the v2 ERP, without losing an
 
 After this, nobody can open, link to or act on them, and nothing in the v2 ERP pulls usage from POS v1.
 
-## Out of scope (each needs Ian's decision first; row 452 ⛔ items a–f)
+## Out of scope (Ian answered these on 8 Nov, row 452 a and b; this task does not act on them)
 
 | Out | Why |
 |---|---|
-| Switching off the T-472 nightly receipt bridge | Row 452 (a). It is a live job, so Ian decides when |
-| Stopping T-396, the 06:00 v1 day import, for v1 stores | Row 452 (b) |
+| Switching off the T-472 nightly receipt bridge | Row 452 (a): **it stops now**. It is a systemd timer on the production host with no ERP screen, so **Ian runs the stop himself** (`sudo systemctl disable --now shareat-pos-receipt-bridge.timer`); no agent touches the server and this task changes no code for it. Its tables and copied rows stay |
+| Stopping T-396, the 06:00 v1 day import, for v1 stores | Row 452 (b): it keeps importing until 2026-12-31 and stops for v1 stores from 2027-01-01. The 2026 rows stay. The code change is a separate task (T-551), not this one |
 | Any change to sales days, posting, stock levels or the usage history already recorded | Data stays as it is. No re-booking |
 | Dropping tables or columns | "Keep the data tables" (BOSS, 8 Nov). A later task may drop them after the 2027 cutover, if Ian wants |
 

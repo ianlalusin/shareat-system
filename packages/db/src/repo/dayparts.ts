@@ -61,13 +61,13 @@ export async function lockDaypartForUpdate(tx: Tx, orgId: string, id: string): P
   return row;
 }
 
-/** T-565 (0251): the window version 1 is opened by the menu_dayparts_version_sync trigger, not here. */
+/** T-565 (0253): the window version 1 is opened by the menu_dayparts_version_sync trigger, not here. */
 export async function insertDaypart(tx: Tx, input: InsertDaypartInput): Promise<MenuDaypartRow> {
   const [row] = await tx.insert(menuDayparts).values(input).returning();
   return row!;
 }
 
-/** T-565 (0251): an edit or retire closes the open window version and opens the next in the database (trigger menu_dayparts_version_sync), not here. */
+/** T-565 (0253): an edit or retire closes the open window version and opens the next in the database (trigger menu_dayparts_version_sync), not here. */
 export async function updateDaypart(tx: Tx, id: string, patch: UpdateDaypartPatch): Promise<MenuDaypartRow> {
   const [row] = await tx
     .update(menuDayparts)
@@ -80,7 +80,7 @@ export async function updateDaypart(tx: Tx, id: string, patch: UpdateDaypartPatc
 export type MenuDaypartVersionRow = typeof menuDaypartVersions.$inferSelect;
 
 /**
- * T-565 (0251): the window of every daypart of one store as it stood at `at` (retired dayparts included, status as then): the version with
+ * T-565 (0253): the window of every daypart of one store as it stood at `at` (retired dayparts included, status as then): the version with
  * `valid_from <= at < coalesce(valid_to, infinity)`. At "now" this is exactly `listDaypartsOfStore`. A daypart created after `at` has no row.
  */
 export async function listDaypartWindowsAsOf(tx: Tx, orgId: string, storeId: string, at: Date): Promise<MenuDaypartVersionRow[]> {

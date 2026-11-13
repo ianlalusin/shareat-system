@@ -1,3 +1,4 @@
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -20,7 +21,7 @@ config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
@@ -138,11 +139,11 @@ const ROW_LOCK = ['transactionid', 'tuple'];
 
 // -----------------------------------------------------------------------------------------------
 // Fixture: Lipa (Walk-in remitted, Foodpanda 1220 tracked), a second store with its own day,
-// a manager and an admin-less "nobody" (no role), a kitchen with Coke stock, Jan-Mar 2027 open.
+// a manager and an admin-less "nobody" (no role), a kitchen with Coke stock, Jan-Mar 2026 open.
 // -----------------------------------------------------------------------------------------------
-const STOCK_DAY = '2027-01-15';
-const D1 = '2027-02-10';
-const D2 = '2027-02-11';
+const STOCK_DAY = '2026-01-15';
+const D1 = '2026-02-10';
+const D2 = '2026-02-11';
 
 async function fixture(hint: string, opts: { instant?: boolean } = {}) {
   const code = uid(`t373s1-${hint}`);
@@ -150,9 +151,9 @@ async function fixture(hint: string, opts: { instant?: boolean } = {}) {
   const orgId = org!.id;
   await seedChartOfAccounts(sql, orgId);
   await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values
-    (${orgId}, '2027-01-01', '2027-01-31', 'open'),
-    (${orgId}, '2027-02-01', '2027-02-28', 'open'),
-    (${orgId}, '2027-03-01', '2027-03-31', 'open')`;
+    (${orgId}, '2026-01-01', '2026-01-31', 'open'),
+    (${orgId}, '2026-02-01', '2026-02-28', 'open'),
+    (${orgId}, '2026-03-01', '2026-03-31', 'open')`;
   const mkStore = async (h: string) =>
     (await sql<{ id: string }[]>`insert into stores (org_id, code, name, stock_model) values (${orgId}, ${uid(h)}, ${`Store ${h}`}, 'multi_room') returning id`)[0]!.id;
   const storeId = await mkStore(`${hint}-lipa`);
@@ -576,7 +577,7 @@ describe('T12 - the same date cannot be pulled twice across a void', () => {
     const m = r7.exec(out.reason);
     expect(m, `reason was: ${out.reason}`).not.toBeNull();
     // The spec writes the date as "{d MMM YYYY}" in R7 but names no formatter; accept humanDate or d MMM YYYY.
-    expect([humanDate(D1 as never), '10 Feb 2027']).toContain(m![1]);
+    expect([humanDate(D1 as never), '10 Feb 2026']).toContain(m![1]);
     expect(out.reason).not.toMatch(UUID);
     expect(await pullRows(f)).toBe(pulls);
     expect(await usageRows(f)).toBe(usage);

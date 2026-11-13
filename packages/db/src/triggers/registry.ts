@@ -630,19 +630,19 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     table: 'menu_dayparts',
     mode: 'origin',
     kind: 'derivation',
-    reason: 'Opens window version 1 of a new daypart from the row itself (0251). A replica-mode bulk load must not run it twice.',
+    reason: 'Opens window version 1 of a new daypart from the row itself (0253). A replica-mode bulk load must not run it twice.',
   },
   menu_dayparts_version_update_trg: {
     table: 'menu_dayparts',
     mode: 'origin',
     kind: 'derivation',
-    reason: 'On a changed window or status, closes the open window version and opens the next from the row itself (0251). Derived, so a replay does not re-run it.',
+    reason: 'On a changed window or status, closes the open window version and opens the next from the row itself (0253). Derived, so a replay does not re-run it.',
   },
   menu_daypart_versions_append_guard: {
     table: 'menu_daypart_versions',
     mode: 'always',
     kind: 'history_guard',
-    reason: 'A daypart window version is never deleted, and its only change is closing valid_to once from NULL (0251, ENABLE ALWAYS). Decides only from TG_OP and OLD/NEW.',
+    reason: 'A daypart window version is never deleted, and its only change is closing valid_to once from NULL (0253, ENABLE ALWAYS). Decides only from TG_OP and OLD/NEW.',
   },
   menu_offers_update_guard: {
     table: 'menu_offers',
@@ -1560,7 +1560,7 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     mode: 'always',
     kind: 'history_guard',
     reason:
-      'An inbox event is frozen at insert; only the three resolution columns may go NULL -> a value once; never deleted (0238, T-523 R10). Decides only from OLD/NEW.',
+      'An inbox event is frozen at insert; only the three resolution columns may go NULL -> a value once; never deleted (0238, T-523 R10). Lifted once by migration 0252 (T-572, DEF-823) to redact senior/PWD IDs in stored payloads, then re-enabled ALWAYS. Decides only from OLD/NEW.',
   },
   pos_sales_receipt_line_discounts_append_only: {
     table: 'pos_sales_receipt_line_discounts',
