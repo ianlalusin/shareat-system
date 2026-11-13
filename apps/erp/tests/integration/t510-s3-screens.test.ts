@@ -111,7 +111,7 @@ describe('Lunch and Dinner side by side', () => {
     expect(mg).toContain('aria-label="Change price"');
     expect(mg).not.toMatch(/<select[^>]*name="daypartId"/);
     expect(mg).not.toContain('aria-label="Withdraw the Lunch price"');
-    expect(mt).toContain('Only a super admin can change which prices belong to lunch or dinner');
+    expect(mt).toContain('Only a super admin can change which prices belong to menu hours');
   });
 
   it('the actions pass the daypart: a manager re-prices a slot; a manager cannot create, re-link or withdraw one; a super admin can', async () => {
