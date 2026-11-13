@@ -9,8 +9,9 @@ import { buildDraftsFacts, buildReceiptFacts, buildVerifySupplierFacts } from '@
 import { canViewPhoto, photoKinds } from '../../../../lib/photo-link';
 import { peso } from '../../../../lib/format';
 import { requirePageAccess } from '@/lib/page-access';
+import { canReadAtStore } from '@/lib/can-read-at-store';
 import { verifyInvoiceAction, voidInvoiceAction, setInvoiceLinesAction, voidPaymentAction, recordInvoiceExpenseAction } from '../../actions';
-import { getInvoice, getSupplier, listCategoriesGrouped, itemPickerFor, invoiceLines, INVOICE_LINE_ROWS } from '../../lib';
+import { AP_STORE_CAPABILITIES, getInvoice, getSupplier, listCategoriesGrouped, itemPickerFor, invoiceLines, INVOICE_LINE_ROWS } from '../../lib';
 import { withOrgPrincipal } from '../../../expenses/lib';
 import { canOverrideClosedMonth } from '../../../expenses/reimbursements/lib';
 import { closedMonthOf, closedMonths } from '../../../../lib/period-override';
@@ -63,7 +64,8 @@ export default async function InvoiceDetailPage({
   const orgId = actor.orgId;
 
   const invoice = await getInvoice(orgId, id);
-  if (!invoice) notFound();
+  // T-577 (DEF-834): an invoice outside the viewer's stores is the same not-found as a forged id.
+  if (!invoice || !(await withOrgPrincipal(orgId, (tx) => canReadAtStore(tx, actor, invoice.storeId, AP_STORE_CAPABILITIES)))) notFound();
   const supplier = await getSupplier(orgId, invoice.supplierId);
 
   const [capacity, linkedExpenses, categories, moneyLines] = await Promise.all([

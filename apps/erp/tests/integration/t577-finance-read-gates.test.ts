@@ -2,8 +2,9 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import type { Actor, Capability } from '@shareat/auth';
 import { grantEverydayPositionAccess } from '../../../../packages/domain/tests/integration/_fixtures/staff-everyday-access';
-import { M, expectAbsent, expectPresent, expectRefusalCard, pageError, plain, render, session, sql, uid, world, type World } from './t435-fixture';
+import { M, asOrg, expectAbsent, expectPresent, expectRefusalCard, pageError, plain, render, session, sql, uid, world, type World } from './t435-fixture';
 import { ROUTE_CAPABILITY, capabilitiesForRoute } from '../../src/lib/route-capability';
+import { postEntry } from '../../../../packages/domain/src/ledger/post-entry';
 
 /**
  * T-577 (DEF-834, Ian 13 Nov, bible row 461) - the finance screens are read-gated by capability and by store.
@@ -37,6 +38,12 @@ const FORGED = '019a0000-0000-7000-8000-000000000001';
 interface Records {
   supplierId: string;
   invoiceS1: string;
+  invoiceS2: string;
+  trackedS1: string;
+  trackedS2: string;
+  cashRequestS2: string;
+  /** a cashier at S1: holds create_expense AND record_supplier_invoice there (the position default), nothing else */
+  cashier: Actor;
   expenseS1: string;
   expenseS2: string;
   dayS1: string;
@@ -49,7 +56,10 @@ interface Records {
 }
 
 const EX = { s1: 'Zinnia fixture spend', s2: 'Yarrow fixture spend' } as const;
-const WA = { s1: 'Quince wastage reason', s2: 'Rhubarb wastage reason' } as const;
+const WA = { s1: 'Quince wastage reason', s2: 'Rhubarb wastage reason', t1: 'Tamarind tracked reason', t2: 'Ugli tracked reason' } as const;
+const INV = { s1: 'INV-ALPHA-S1-7001', s2: 'INV-BRAVO-S2-7002' } as const;
+/** what the supplier is owed at each store (ledger), so a balance shown to a store-limited viewer can be told from the org total */
+const OWED = { s1: '111.00', s2: '222.00', all: '333.00' } as const;
 
 let cached: Promise<Records> | null = null;
 const records = (): Promise<Records> => (cached ??= build());
@@ -62,9 +72,9 @@ async function build(): Promise<Records> {
   const [supplier] = await sql<{ id: string }[]>`insert into suppliers (org_id, name, created_by) values (${orgId}, ${uid('sup')}, ${adminId}) returning id`;
   const invoice = async (storeId: string) => {
     const [i] = await sql<{ id: string }[]>`
-      insert into supplier_invoices (org_id, store_id, supplier_id, invoice_date, total_amount, status, verified_by, verified_at,
+      insert into supplier_invoices (org_id, store_id, supplier_id, invoice_no, invoice_date, total_amount, status, verified_by, verified_at,
         attested_supplier, attested_invoice, attested_items, attested_price, created_by)
-      values (${orgId}, ${storeId}, ${supplier!.id}, '2026-01-10', '500.00', 'verified', ${w.M1.personId}, now(), true, true, true, true, ${adminId})
+      values (${orgId}, ${storeId}, ${supplier!.id}, ${storeId === s1 ? INV.s1 : INV.s2}, '2026-01-10', '500.00', 'verified', ${w.M1.personId}, now(), true, true, true, true, ${adminId})
       returning id`;
     return i!.id;
   };
@@ -89,40 +99,59 @@ async function build(): Promise<Records> {
   const dayS1 = await day(s1, '2026-01-11');
   const dayS2 = await day(s2, '2026-01-12');
 
-  const wastage = async (storeId: string, dayId: string, reason: string) => {
+  const wastage = async (storeId: string, dayId: string, reason: string, typeMode: 'instant' | 'tracked' = 'instant') => {
     const [ch] = await sql<{ id: string }[]>`insert into sales_channels (org_id, store_id, name, is_remitted_daily) values (${orgId}, ${storeId}, ${uid('Chan')}, true) returning id`;
     const [x] = await sql<{ id: string }[]>`
       insert into order_wastages (org_id, store_id, sales_day_id, channel_id, channel, type_mode, amount, reason, created_by)
-      values (${orgId}, ${storeId}, ${dayId}, ${ch!.id}, 'Foodpanda', 'instant', '50.00', ${reason}, ${adminId}) returning id`;
+      values (${orgId}, ${storeId}, ${dayId}, ${ch!.id}, 'Foodpanda', ${typeMode}, '50.00', ${reason}, ${adminId}) returning id`;
     return x!.id;
   };
   const wastageS1 = await wastage(s1, dayS1, WA.s1);
   const wastageS2 = await wastage(s2, dayS2, WA.s2);
+  // tracked + unresolved: the page also reads this store's posted channel settlements (the listPostedSettlementsForStore branch)
+  const trackedS1 = await wastage(s1, dayS1, WA.t1, 'tracked');
+  const trackedS2 = await wastage(s2, dayS2, WA.t2, 'tracked');
 
   const [cr] = await sql<{ id: string }[]>`
     insert into cash_requests (org_id, store_id, requested_for, purpose, requested_amount, requested_on, created_by)
     values (${orgId}, ${s1}, ${adminId}, 'Synthetic float', '100.00', '2026-01-10', ${adminId}) returning id`;
+
+  const [cr2] = await sql<{ id: string }[]>`
+    insert into cash_requests (org_id, store_id, requested_for, purpose, requested_amount, requested_on, created_by)
+    values (${orgId}, ${s2}, ${adminId}, 'Bravo float', '100.00', '2026-01-10', ${adminId}) returning id`;
+
+  // The supplier owes at both stores: 111.00 at S1, 222.00 at S2 (AP control 2110, party = the supplier).
+  for (const [storeId, amount] of [[s1, OWED.s1], [s2, OWED.s2]] as const) {
+    await asOrg(orgId, (tx) =>
+      postEntry(tx, {
+        orgId, entryDate: '2026-01-10', sourceType: 'manual_journal', sourceId: uid('owe'), idempotencyKey: uid('owe'), memo: 'T-577 fixture payable', postedBy: adminId,
+        lines: [{ accountCode: '6200', storeId, debit: amount }, { accountCode: '2110', storeId, credit: amount, partyType: 'supplier', partyId: supplier!.id }],
+      }),
+    );
+  }
+
+  const cashier = await staffHolding(w, ['create_expense', 'record_supplier_invoice']);
 
   // One staff person per capability the new gates list: holds that capability at S1 and nothing else the gates look at.
   const only = new Map<string, Actor>();
   const everyCapability = new Set<string>();
   for (const route of ['/ap', '/budgets', '/cash-requests']) for (const c of capabilitiesForRoute(route)) everyCapability.add(c);
   for (const cap of [...everyCapability, 'edit_own_expense', 'create_expense', 'approve_expense', 'record_order_wastage', 'resolve_order_wastage', 'submit_sales_day', 'verify_sales_day']) {
-    only.set(cap, await staffHolding(w, cap as Capability));
+    only.set(cap, await staffHolding(w, [cap as Capability]));
   }
 
-  return { supplierId: supplier!.id, invoiceS1, expenseS1, expenseS2, dayS1, dayS2, wastageS1, wastageS2, cashRequestS1: cr!.id, only };
+  return { supplierId: supplier!.id, invoiceS1, invoiceS2, trackedS1, trackedS2, cashRequestS2: cr2!.id, cashier, expenseS1, expenseS2, dayS1, dayS2, wastageS1, wastageS2, cashRequestS1: cr!.id, only };
 }
 
-async function staffHolding(w: World, capability: Capability): Promise<Actor> {
-  const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${w.orgId}, ${`Only ${capability}`}) returning id`;
+async function staffHolding(w: World, capabilities: readonly Capability[]): Promise<Actor> {
+  const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${w.orgId}, ${`Only ${capabilities.join('+')}`}) returning id`;
   await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${w.orgId}, 'staff')`;
   await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${w.s1})`;
   const [e] = await sql<{ id: string }[]>`
     insert into employments (org_id, store_id, person_id, staff_code, employment_status, started_on, created_by)
     values (${w.orgId}, ${w.s1}, ${p!.id}, ${`SE-${Date.now()}${Math.floor(Math.random() * 1e9)}`}, 'regular', '2025-01-01', ${w.A.personId}) returning id`;
   await grantEverydayPositionAccess(sql, {
-    orgId: w.orgId, storeId: w.s1, employmentId: e!.id, personId: p!.id, setBy: w.A.personId, capabilities: [capability],
+    orgId: w.orgId, storeId: w.s1, employmentId: e!.id, personId: p!.id, setBy: w.A.personId, capabilities,
   });
   return { personId: p!.id, orgId: w.orgId };
 }
@@ -259,4 +288,97 @@ describe('T-577 - single-record pages: a record outside the viewer\'s stores is 
       });
     }
   }
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Round 2 (auditor): people whose capability is STORE-scoped (a cashier holds create_expense / record_supplier_invoice by position)
+// pass the route gate, so the pages must also limit what they show to the viewer's own stores.
+// ---------------------------------------------------------------------------------------------------------------------
+
+describe('T-577 r2 - /ap/invoices/[id] and /cash-requests/[id]: another store\'s record is a not-found (M5)', () => {
+  it('cashier at S1: sees the S1 invoice, gets the SAME not-found as a forged id for the S2 invoice; admin sees both', async () => {
+    const w = await world();
+    const r = await records();
+    expectPresent(await render(page.apInvoice, r.cashier, { params: { id: r.invoiceS1 } }), 'cashier S1 invoice', INV.s1);
+    const other = await pageError(() => render(page.apInvoice, r.cashier, { params: { id: r.invoiceS2 } }));
+    expect(other, 'S2 invoice for the S1 cashier').toBe(NOT_FOUND);
+    expect(await pageError(() => render(page.apInvoice, r.cashier, { params: { id: FORGED } })), 'forged id').toBe(other);
+    expectPresent(await render(page.apInvoice, w.A, { params: { id: r.invoiceS1 } }), 'A S1 invoice', INV.s1);
+    expectPresent(await render(page.apInvoice, w.A, { params: { id: r.invoiceS2 } }), 'A S2 invoice', INV.s2);
+  });
+
+  it('cashier at S1: sees the S1 cash request, not-found for the S2 one; admin sees both', async () => {
+    const w = await world();
+    const r = await records();
+    expectPresent(await render(page.cashRequest, r.cashier, { params: { id: r.cashRequestS1 } }), 'cashier S1 request', 'Synthetic float');
+    expect(await pageError(() => render(page.cashRequest, r.cashier, { params: { id: r.cashRequestS2 } })), 'S2 request for the S1 cashier').toBe(NOT_FOUND);
+    expectPresent(await render(page.cashRequest, w.A, { params: { id: r.cashRequestS1 } }), 'A S1 request', 'Synthetic float');
+    expectPresent(await render(page.cashRequest, w.A, { params: { id: r.cashRequestS2 } }), 'A S2 request', 'Bravo float');
+  });
+});
+
+describe('T-577 r2 - the lists show only the viewer\'s stores (M6, M7)', () => {
+  it('/ap: the S1 cashier sees the S1 invoice and NOT the S2 one (nor its store); admin sees both', async () => {
+    const w = await world();
+    const r = await records();
+    const cashier = await render(page.ap, r.cashier);
+    expectPresent(cashier, 'cashier /ap', INV.s1);
+    expectAbsent(cashier, 'cashier /ap', INV.s2, M.s2Name);
+    const admin = await render(page.ap, w.A);
+    expectPresent(admin, 'A /ap', INV.s1, INV.s2);
+  });
+
+  it('/ap supplier balances: the S1 cashier sees 111.00 (S1 only), never 222.00 or the 333.00 total; admin sees 333.00 - list and supplier page', async () => {
+    const w = await world();
+    const r = await records();
+    for (const [name, load, props] of [['/ap/suppliers', page.apSuppliers, {}], ['/ap/suppliers/[id]', page.apSupplier, { params: { id: r.supplierId } }]] as const) {
+      const cashier = await render(load, r.cashier, props);
+      expectPresent(cashier, `cashier ${name}`, OWED.s1);
+      expectAbsent(cashier, `cashier ${name}`, OWED.s2, OWED.all);
+      expectPresent(await render(load, w.A, props), `A ${name}`, OWED.all);
+    }
+  });
+
+  it('/ap/suppliers/[id]: the S1 cashier sees the S1 invoice listed, not the S2 one; admin sees both', async () => {
+    const w = await world();
+    const r = await records();
+    const cashier = await render(page.apSupplier, r.cashier, { params: { id: r.supplierId } });
+    expectPresent(cashier, 'cashier supplier page', INV.s1);
+    expectAbsent(cashier, 'cashier supplier page', INV.s2);
+    expectPresent(await render(page.apSupplier, w.A, { params: { id: r.supplierId } }), 'A supplier page', INV.s1, INV.s2);
+  });
+
+  it('/cash-requests: the S1 cashier sees the S1 request and NOT the S2 one; admin sees both', async () => {
+    const w = await world();
+    const r = await records();
+    const cashier = await render(page.cashRequests, r.cashier);
+    expectPresent(cashier, 'cashier /cash-requests', r.cashRequestS1);
+    expectAbsent(cashier, 'cashier /cash-requests', r.cashRequestS2);
+    const admin = await render(page.cashRequests, w.A);
+    expectPresent(admin, 'A /cash-requests', r.cashRequestS1, r.cashRequestS2);
+  });
+});
+
+describe('T-577 r2 - sales-days/[id]/edit: not-found before any "can\'t edit" message (M8)', () => {
+  const edit = () => import('../../src/app/sales-days/[id]/edit/page');
+  it('M1 edits the S1 day page; the S2 day is a not-found for M1, the same as a forged id; C (none) gets not-found, not a message', async () => {
+    const w = await world();
+    const r = await records();
+    expect(plain(await render(edit, w.M1, { params: { id: r.dayS1 } })).length).toBeGreaterThan(50);
+    const other = await pageError(() => render(edit, w.M1, { params: { id: r.dayS2 } }));
+    expect(other).toBe(NOT_FOUND);
+    expect(await pageError(() => render(edit, w.M1, { params: { id: FORGED } }))).toBe(other);
+    expect(await pageError(() => render(edit, w.C, { params: { id: r.dayS1 } }))).toBe(NOT_FOUND);
+  });
+});
+
+describe('T-577 r2 - wastage/[id]: a tracked, unresolved record outside the viewer\'s stores (M3 on the settlements branch)', () => {
+  it('M1 sees the S1 tracked record (the settlements loader runs, as a holder) and gets not-found - not an authorization error - for the S2 one', async () => {
+    const w = await world();
+    const r = await records();
+    expectPresent(await render(page.wastage, w.M1, { params: { id: r.trackedS1 } }), 'M1 tracked S1', WA.t1);
+    expect(await pageError(() => render(page.wastage, w.M1, { params: { id: r.trackedS2 } })), 'tracked S2 for M1').toBe(NOT_FOUND);
+    expect(await pageError(() => render(page.wastage, w.M2, { params: { id: r.trackedS1 } })), 'tracked S1 for M2').toBe(NOT_FOUND);
+    expectPresent(await render(page.wastage, w.A, { params: { id: r.trackedS2 } }), 'A tracked S2', WA.t2);
+  });
 });

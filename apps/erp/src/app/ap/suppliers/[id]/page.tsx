@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import { peso } from '../../../../lib/format';
 import { requirePageAccess } from '@/lib/page-access';
 import { editSupplierAction, recordPaymentAction, autoAllocatePaymentAction } from '../../actions';
-import { getSupplier, getPosition, listOpenItems, listInvoices, moneyAccountsFor, storesWithOpenItems, today } from '../../lib';
+import { apStoreIds, getSupplier, getPosition, getPositionInScope, listOpenItems, listInvoices, moneyAccountsFor, storesWithOpenItems, today } from '../../lib';
 import { SUPPLIER_CLASSIFICATIONS, SUPPLIER_STATUSES, SUPPLIER_VAT_STATUSES } from '@shareat/db';
 import { CLASSIFICATION_LABEL, VAT_STATUS_LABEL, maskAccountNumber } from '../../lib';
 import { Page } from '@/components/shell/Page';
@@ -43,10 +43,12 @@ export default async function SupplierDetailPage({
   const supplier = await getSupplier(orgId, id);
   if (!supplier) notFound();
 
+  // T-577 (DEF-834): the supplier is org-level; its balance, invoices and open items are the viewer's stores' only (undefined = every store).
+  const storeIds = await apStoreIds(actor);
   const [balance, invoices, storeOptions] = await Promise.all([
-    getPosition(orgId, id),
-    listInvoices(orgId, { supplierId: id }),
-    storesWithOpenItems(orgId, id),
+    getPositionInScope(orgId, id, storeIds),
+    listInvoices(orgId, { supplierId: id, ...(storeIds ? { storeIds } : {}) }),
+    storesWithOpenItems(orgId, id, storeIds),
   ]);
   // T-389: the typing (or the "too long to keep" notice) for THIS supplier's edit record, from the signed flash.
   const typed = typedFor(sp, SUPPLIER_EDIT, supplier.id, actor.personId);
