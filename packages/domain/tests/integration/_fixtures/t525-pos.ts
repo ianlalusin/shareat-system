@@ -32,7 +32,7 @@ export const nowIso = () => new Date().toISOString();
 export const DAY = 24 * 3600e3;
 export const actorOf = (orgId: string, personId: string): Actor => ({ personId, orgId });
 /** The injectable rule reader (T-524 pattern): 12% VAT, 20% senior/PWD, business day starts at 04:00. Basis points. */
-export const RATES = { readRules: async () => ({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 90 }) };
+export const RATES = { readRules: async () => ({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 90, saleVarianceToleranceCentavos: 1n }) };
 export const HOLDER = 'Zyxwv Quillfeather'; // a senior's name: lives in statutory_discount_records and NOWHERE else
 export const IDNO = 'OSCA-9990042';
 

@@ -218,7 +218,7 @@ export async function postSeparation(
         lines,
       });
       await separationsRepo.setSeparationEntry(trx, separationId, posted.entryId);
-      await applyDeductionRecovery(trx, actor.orgId, employment.personId, posted.entryId, advanceRecovered);
+      await applyDeductionRecovery(trx, actor.orgId, employment.personId, posted.entryId, advanceRecovered, input.separationDate);
     }
 
     // ⭐ T-436 (D12): a person whose LAST job this is leaves with their unused SIL days paid in cash, in the same transaction, instead

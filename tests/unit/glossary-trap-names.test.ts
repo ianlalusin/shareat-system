@@ -61,6 +61,8 @@ const ALLOWED_PREFIXES = [
   // (fixtures.ts), exactly the ETL's reason: they are the real names on the wire and pretending otherwise would
   // misdescribe the source. Every other v2 file reads a feed through the v2-named keys exported from wire.ts.
   'packages/db/src/pos-v1/',
+  // T-531: writes the v1 wire payload (December bridge), the same reason packages/etl is exempt.
+  'packages/domain/src/pos/v1-bridge-payload.ts',
   'tests/unit/glossary-trap-names.test.ts',
 ];
 
