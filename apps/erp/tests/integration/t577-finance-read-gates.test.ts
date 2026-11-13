@@ -39,6 +39,10 @@ interface Records {
   supplierId: string;
   invoiceS1: string;
   invoiceS2: string;
+  invoiceS3: string;
+  cashRequestS3: string;
+  /** a super_admin with ZERO scope rows */
+  superAdmin: Actor;
   trackedS1: string;
   trackedS2: string;
   cashRequestS2: string;
@@ -57,9 +61,9 @@ interface Records {
 
 const EX = { s1: 'Zinnia fixture spend', s2: 'Yarrow fixture spend' } as const;
 const WA = { s1: 'Quince wastage reason', s2: 'Rhubarb wastage reason', t1: 'Tamarind tracked reason', t2: 'Ugli tracked reason' } as const;
-const INV = { s1: 'INV-ALPHA-S1-7001', s2: 'INV-BRAVO-S2-7002' } as const;
+const INV = { s1: 'INV-ALPHA-S1-7001', s2: 'INV-BRAVO-S2-7002', s3: 'INV-CHARLIE-S3-7003' } as const;
 /** what the supplier is owed at each store (ledger), so a balance shown to a store-limited viewer can be told from the org total */
-const OWED = { s1: '111.00', s2: '222.00', all: '333.00' } as const;
+const OWED = { s1: '111.00', s2: '222.00', s3: '444.00', all: '777.00' } as const;
 
 let cached: Promise<Records> | null = null;
 const records = (): Promise<Records> => (cached ??= build());
@@ -74,12 +78,13 @@ async function build(): Promise<Records> {
     const [i] = await sql<{ id: string }[]>`
       insert into supplier_invoices (org_id, store_id, supplier_id, invoice_no, invoice_date, total_amount, status, verified_by, verified_at,
         attested_supplier, attested_invoice, attested_items, attested_price, created_by)
-      values (${orgId}, ${storeId}, ${supplier!.id}, ${storeId === s1 ? INV.s1 : INV.s2}, '2026-01-10', '500.00', 'verified', ${w.M1.personId}, now(), true, true, true, true, ${adminId})
+      values (${orgId}, ${storeId}, ${supplier!.id}, ${storeId === s1 ? INV.s1 : storeId === s2 ? INV.s2 : INV.s3}, '2026-01-10', '500.00', 'verified', ${w.M1.personId}, now(), true, true, true, true, ${adminId})
       returning id`;
     return i!.id;
   };
   const invoiceS1 = await invoice(s1);
   const invoiceS2 = await invoice(s2);
+  const invoiceS3 = await invoice(w.s3); // S3 is RETIRED (is_active = false)
   const [cat] = await sql<{ id: string }[]>`insert into expense_categories (org_id, "group", category, account_code) values (${orgId}, 'OPEX', ${uid('cat')}, null) returning id`;
   const expense = async (storeId: string, invoiceId: string, particulars: string) => {
     const [e] = await sql<{ id: string }[]>`
@@ -121,7 +126,7 @@ async function build(): Promise<Records> {
     values (${orgId}, ${s2}, ${adminId}, 'Bravo float', '100.00', '2026-01-10', ${adminId}) returning id`;
 
   // The supplier owes at both stores: 111.00 at S1, 222.00 at S2 (AP control 2110, party = the supplier).
-  for (const [storeId, amount] of [[s1, OWED.s1], [s2, OWED.s2]] as const) {
+  for (const [storeId, amount] of [[s1, OWED.s1], [s2, OWED.s2], [w.s3, OWED.s3]] as const) {
     await asOrg(orgId, (tx) =>
       postEntry(tx, {
         orgId, entryDate: '2026-01-10', sourceType: 'manual_journal', sourceId: uid('owe'), idempotencyKey: uid('owe'), memo: 'T-577 fixture payable', postedBy: adminId,
@@ -129,6 +134,12 @@ async function build(): Promise<Records> {
       }),
     );
   }
+
+  const [cr3] = await sql<{ id: string }[]>`
+    insert into cash_requests (org_id, store_id, requested_for, purpose, requested_amount, requested_on, created_by)
+    values (${orgId}, ${w.s3}, ${adminId}, 'Charlie float', '100.00', '2026-01-10', ${adminId}) returning id`;
+  const [sa] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${orgId}, 'Superia Noscope') returning id`;
+  await sql`insert into person_roles (person_id, org_id, role) values (${sa!.id}, ${orgId}, 'super_admin')`;
 
   const cashier = await staffHolding(w, ['create_expense', 'record_supplier_invoice']);
 
@@ -140,7 +151,7 @@ async function build(): Promise<Records> {
     only.set(cap, await staffHolding(w, [cap as Capability]));
   }
 
-  return { supplierId: supplier!.id, invoiceS1, invoiceS2, trackedS1, trackedS2, cashRequestS2: cr2!.id, cashier, expenseS1, expenseS2, dayS1, dayS2, wastageS1, wastageS2, cashRequestS1: cr!.id, only };
+  return { supplierId: supplier!.id, invoiceS1, invoiceS2, invoiceS3, cashRequestS3: cr3!.id, superAdmin: { personId: sa!.id, orgId },  trackedS1, trackedS2, cashRequestS2: cr2!.id, cashier, expenseS1, expenseS2, dayS1, dayS2, wastageS1, wastageS2, cashRequestS1: cr!.id, only };
 }
 
 async function staffHolding(w: World, capabilities: readonly Capability[]): Promise<Actor> {
@@ -380,5 +391,70 @@ describe('T-577 r2 - wastage/[id]: a tracked, unresolved record outside the view
     expect(await pageError(() => render(page.wastage, w.M1, { params: { id: r.trackedS2 } })), 'tracked S2 for M1').toBe(NOT_FOUND);
     expect(await pageError(() => render(page.wastage, w.M2, { params: { id: r.trackedS1 } })), 'tracked S1 for M2').toBe(NOT_FOUND);
     expectPresent(await render(page.wastage, w.A, { params: { id: r.trackedS2 } }), 'A tracked S2', WA.t2);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Round 3 (Opus ruling): org-wide roles (admin, super_admin) are NEVER store-filtered on these reads, whatever their scope rows say, retired
+// stores included. Scope rows are fanned out only for stores ACTIVE at appointment, so filtering on them would hide a retired store's debt.
+// G = an admin with ZERO scope rows (the shared world's "Gideon Nostores"); S3 is retired and holds an invoice, a cash request and 444.00 owed.
+// ---------------------------------------------------------------------------------------------------------------------
+
+describe('T-577 r3 - an admin with no scope row at a retired store still sees that store (M9)', () => {
+  it('/ap: G sees the S1, S2 AND retired-S3 invoices', async () => {
+    const w = await world();
+    expectPresent(await render(page.ap, w.G), 'G /ap', INV.s1, INV.s2, INV.s3);
+  });
+
+  it('supplier balances: G sees the full 777.00 including the retired store\'s 444.00, never the understated 333.00 (list and supplier page)', async () => {
+    const w = await world();
+    const r = await records();
+    for (const [name, load, props] of [['/ap/suppliers', page.apSuppliers, {}], ['/ap/suppliers/[id]', page.apSupplier, { params: { id: r.supplierId } }]] as const) {
+      const html = await render(load, w.G, props);
+      expectPresent(html, `G ${name}`, OWED.all);
+      expectAbsent(html, `G ${name}`, '333.00');
+    }
+  });
+
+  it('the retired store\'s invoice and cash request open for G; /cash-requests lists it', async () => {
+    const w = await world();
+    const r = await records();
+    expectPresent(await render(page.apInvoice, w.G, { params: { id: r.invoiceS3 } }), 'G S3 invoice', INV.s3);
+    expectPresent(await render(page.cashRequest, w.G, { params: { id: r.cashRequestS3 } }), 'G S3 request', 'Charlie float');
+    expectPresent(await render(page.cashRequests, w.G), 'G /cash-requests', r.cashRequestS1, r.cashRequestS2, r.cashRequestS3);
+  });
+
+  it('a manager (not org-wide) is still filtered: M1 sees none of the retired store\'s records', async () => {
+    const w = await world();
+    const r = await records();
+    expectAbsent(await render(page.ap, w.M1), 'M1 /ap', INV.s2, INV.s3);
+    expect(await pageError(() => render(page.apInvoice, w.M1, { params: { id: r.invoiceS3 } })), 'M1 S3 invoice').toBe(NOT_FOUND);
+    expect(await pageError(() => render(page.cashRequest, w.M1, { params: { id: r.cashRequestS3 } })), 'M1 S3 request').toBe(NOT_FOUND);
+  });
+});
+
+describe('T-577 r3 - a super_admin with zero scope rows sees every store', () => {
+  it('lists, balances and details across S1, S2 and the retired S3', async () => {
+    const r = await records();
+    const sa = r.superAdmin;
+    expectPresent(await render(page.ap, sa), 'super_admin /ap', INV.s1, INV.s2, INV.s3);
+    expectPresent(await render(page.apSuppliers, sa), 'super_admin /ap/suppliers', OWED.all);
+    expectPresent(await render(page.apInvoice, sa, { params: { id: r.invoiceS3 } }), 'super_admin S3 invoice', INV.s3);
+    expectPresent(await render(page.cashRequests, sa), 'super_admin /cash-requests', r.cashRequestS1, r.cashRequestS2, r.cashRequestS3);
+    expectPresent(await render(page.cashRequest, sa, { params: { id: r.cashRequestS3 } }), 'super_admin S3 request', 'Charlie float');
+  });
+});
+
+describe('T-577 r3 - /budgets limits its stores to where the viewer holds manage_expense_budgets (M10)', () => {
+  it('M1 (manager at S1) sees S1 only, and a forged ?store=<S2> falls back, showing nothing of S2; admin sees every store', async () => {
+    const w = await world();
+    const plainHtml = await render(page.budgets, w.M1);
+    expectPresent(plainHtml, 'M1 /budgets', M.s1Name);
+    expectAbsent(plainHtml, 'M1 /budgets', M.s2Name, w.s2);
+    const forged = await render(page.budgets, w.M1, { search: { store: w.s2 } });
+    expectPresent(forged, 'M1 /budgets?store=S2', M.s1Name);
+    expectAbsent(forged, 'M1 /budgets?store=S2', M.s2Name, w.s2);
+    expectPresent(await render(page.budgets, w.A), 'A /budgets', M.s1Name, M.s2Name);
+    expectPresent(await render(page.budgets, w.G), 'G /budgets (admin, no scope rows)', M.s1Name, M.s2Name);
   });
 });

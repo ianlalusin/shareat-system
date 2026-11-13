@@ -13,7 +13,9 @@ import {
   periodLabel,
   periodOptions,
   peso,
+  withOrgPrincipal,
 } from './lib';
+import { heldStoreIdsOrAll } from '@/lib/held-stores';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
@@ -55,7 +57,9 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
   if (refusal) return refusal;
   const orgId = actor.orgId;
 
-  const stores = await listStores(orgId);
+  // T-577: only stores where the viewer holds manage_expense_budgets (org-wide roles: all). A forged ?store= for another store falls back to the first allowed one.
+  const storeIds = await withOrgPrincipal(orgId, (tx) => heldStoreIdsOrAll(tx, actor, ['manage_expense_budgets']));
+  const stores = (await listStores(orgId)).filter((s) => !storeIds || storeIds.includes(s.id));
   const storeId = sp.store && stores.some((s) => s.id === sp.store) ? sp.store : (stores[0]?.id ?? '');
   const periods = periodOptions();
   const periodKey = sp.period && /^\d{6}$/.test(sp.period) ? sp.period : currentPeriodKey();

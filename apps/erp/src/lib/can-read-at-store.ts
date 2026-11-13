@@ -8,10 +8,20 @@
  *
  * Its own file, not `page-access.tsx`: tests that stub `page-access` to skip the route gate must not also stub away the store check.
  */
-import { can, type Actor, type Capability } from '@shareat/auth';
-import type { Tx } from '@shareat/db';
+import { can, isAdministrative, type Actor, type Capability } from '@shareat/auth';
+import { accessRepo, type Tx } from '@shareat/db';
+
+/**
+ * Org-wide roles (`admin`, `super_admin`: auth's own `isAdministrative`) are NEVER store-filtered on a READ page, whatever their scope rows say.
+ * Scope rows are fanned out only for stores ACTIVE when the admin was appointed, so filtering on them would hide a retired store's debt from the
+ * people who answer for it (Opus ruling, T-577 round 3). Reads only: `can()` and every write gate are untouched.
+ */
+export async function isOrgWideRole(tx: Tx, actor: Actor): Promise<boolean> {
+  return isAdministrative((await accessRepo.activeRoleForPerson(tx, actor.personId, actor.orgId))?.role);
+}
 
 export async function canReadAtStore(tx: Tx, actor: Actor, storeId: string, capabilities: readonly Capability[]): Promise<boolean> {
+  if (await isOrgWideRole(tx, actor)) return true;
   for (const capability of capabilities) if (await can(tx, actor, capability, { storeId })) return true;
   return false;
 }
