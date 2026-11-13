@@ -65,35 +65,35 @@
 - `1233–1267` 10. Phase plan
 - `1268–1284` 11. Migration & ETL rules
 - `1285–1349` 12. Inherited landmines — do not repeat these
-- `1350–1792` 13. Decision log
-- `1793–1812` 14. Amendment protocol
-- `1813–1817` 15. Engineering standards — the industry practices this project follows
-  - `1818–1823` 15.1 Build order: walking skeleton first
-  - `1824–1835` 15.2 Golden-master testing — the most important practice here
-  - `1836–1844` 15.3 Strangler Fig, not big-bang cutover
-  - `1845–1849` 15.4 No dual-write
-  - `1850–1858` 15.5 Expand/contract migrations
-  - `1859–1867` 15.6 Observability from day zero, not later
-  - `1868–1872` 15.7 CI gates
-  - `1873–1877` 15.8 Backups and a tested restore
-  - `1878–1882` 15.9 Twelve-Factor config
-  - `1883–1890` 15.10 Append-only ledgers — but not event sourcing
-  - `1891–1895` 15.11 Defence in depth
-  - `1896–1924` 15.12 Skills are lenses, not assurance
-  - `1925–1931` 15.13 Reconciliation is a permanent feature
-- `1932–1936` 16. The accounting spine
-  - `1937–1968` 16.0 What we are actually fixing — the diagnosis
-  - `1969–2012` 16.1 The ten invariants — non-negotiable
-  - `2013–2027` 16.2 The oracle: how "correct" is tested
-  - `2028–2049` 16.3 The model — header + lines, not legs
-  - `2050–2069` 16.4 Deliberately simpler than ERPNext
-  - `2070–2139` 16.5 PH-specific rules — isolated, versioned, dated
-  - `2140–2164` 16.6 What v1 already gets right — preserve the intent
-  - `2165–2186` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
-  - `2187–2201` 16.8 What v1's accounting already gets right
-  - `2202–2245` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
-  - `2246–2296` 16.10 Posting patterns — one canonical pattern per business event
-  - `2297–2329` 16.11 Inventory's accounting integration
+- `1350–1796` 13. Decision log
+- `1797–1816` 14. Amendment protocol
+- `1817–1821` 15. Engineering standards — the industry practices this project follows
+  - `1822–1827` 15.1 Build order: walking skeleton first
+  - `1828–1839` 15.2 Golden-master testing — the most important practice here
+  - `1840–1848` 15.3 Strangler Fig, not big-bang cutover
+  - `1849–1853` 15.4 No dual-write
+  - `1854–1862` 15.5 Expand/contract migrations
+  - `1863–1871` 15.6 Observability from day zero, not later
+  - `1872–1876` 15.7 CI gates
+  - `1877–1881` 15.8 Backups and a tested restore
+  - `1882–1886` 15.9 Twelve-Factor config
+  - `1887–1894` 15.10 Append-only ledgers — but not event sourcing
+  - `1895–1899` 15.11 Defence in depth
+  - `1900–1928` 15.12 Skills are lenses, not assurance
+  - `1929–1935` 15.13 Reconciliation is a permanent feature
+- `1936–1940` 16. The accounting spine
+  - `1941–1972` 16.0 What we are actually fixing — the diagnosis
+  - `1973–2016` 16.1 The ten invariants — non-negotiable
+  - `2017–2031` 16.2 The oracle: how "correct" is tested
+  - `2032–2053` 16.3 The model — header + lines, not legs
+  - `2054–2073` 16.4 Deliberately simpler than ERPNext
+  - `2074–2143` 16.5 PH-specific rules — isolated, versioned, dated
+  - `2144–2168` 16.6 What v1 already gets right — preserve the intent
+  - `2169–2190` 16.7 Known defects v2 must fix — the Phase 1–3 requirements list
+  - `2191–2205` 16.8 What v1's accounting already gets right
+  - `2206–2249` 16.9 Chart-of-accounts governance — lifecycle, not "create everything"
+  - `2250–2300` 16.10 Posting patterns — one canonical pattern per business event
+  - `2301–2333` 16.11 Inventory's accounting integration
 
 <!-- TOC:END -->
 
@@ -1789,6 +1789,10 @@ just a patch.**
 | 457 | 2026-11-11 | **POS v2 SOAK #1 RUNS AT LIPA ON SATURDAY 28 NOVEMBER 2026, 2–4 PM**, in test mode, with real staff, the real tablet and printer, and the scripted actions of `docs/runbooks/pos-soak-plan.md`. Soak #2 runs by Wednesday 2 December if #1 finds a blocker (row 431). Ian, 2026-11-11, via BOSS, answering T-533 O2. | A quiet afternoon window that still has real traffic | Yes |
 | 458 | 2026-11-11 | **A POS LINE STORES WHICH OPTIONS WERE CHOSEN, AS IDS, FROM MIGRATION 0249 ON (ON THE SESSION LINE AND COPIED TO THE RECEIPT LINE). A REPLAY IS COMPARED BY THESE IDS; ONLY LINES WRITTEN BEFORE 0249 FALL BACK TO COMPARING OPTION NAMES.** | Ian, 11 Nov (go-live eve): names break when an option is renamed, and a frozen receipt line can never be repaired later, so the ids are stored now. Audit P-001 / T-556 compared by name only as a stop-gap | Yes (a column; unused if dropped). See T-557, docs/tasks/557-store-option-ids-on-lines.md, PR #225 |
 | 459 | 2026-11-11 | **A SHORT PAYMENT ON A POS-DERIVED SALES DAY POSTS DR 7350 CASH OVER AND SHORT.** Revenue stays at the full receipt prices and the tender lines show what was actually taken; the gap (gross − tenders − discounts − comps) is one 7350 debit, never a lower revenue line and never a charge to the cashier (1230). Pattern `sale.pos-short-payment` in `docs/POSTING-PATTERNS.md`. Ian, 2026-11-11, via BOSS, answering T-558 (option a); supersedes the PENDING mark on `POS_SHORT_PAYMENT_ACCOUNT`. | Revenue reports what was sold; the tolerance gap is a cash difference, which 7350 already carries for remittances | Yes |
+| 460 | 2026-11-13 | **A POS CASHIER MAY VOID A LINE, MARK IT FREE AND GIVE A LINE DISCOUNT WITHOUT MANAGER APPROVAL - BY DESIGN. A STORE SETTING, OFF BY DEFAULT, MAKES ALL THREE REQUIRE THE MANAGER PIN.** The setting is a store setting with an ERP screen, a capability and an audit row (row 'no hard-coded business settings'); while it is off the three actions stay as today and are audit-logged. With it on and the till offline, the action is allowed and flagged for manager review (Ian, 13 Nov). | Ian, 13 Nov, answering audit DEF-833: cashiers run the floor at small stores; the guard must exist for the store that needs it, not be forced on all | Yes (a setting; off = today's behaviour). DEF-833 |
+| 461 | 2026-11-13 | **THE ERP FINANCE SCREENS ARE READ-GATED BY CAPABILITY AND STORE SCOPE.** `/ap`, `/budgets` and `/cash-requests` are added to `ROUTE_CAPABILITY`; the single-record pages `expenses/[id]`, `sales-days/[id]` and `wastage/[id]` refuse a record outside the viewer's store scope. Signed-in alone is never enough to read money. | Ian, 13 Nov, answering audit DEF-834 (any signed-in staff could read them org-wide) | Yes (gates only). DEF-834 |
+| 462 | 2026-11-13 | **A SENIOR/PWD ID USED AGAIN IS WARNED ABOUT, NEVER BLOCKED, AND NEEDS NO MANAGER PIN.** The cashier sees the warning and may continue; the repeat is recorded. 'Again' means the same store on the same business day (Ian, 13 Nov, option a); the window is a store setting so it can change without code. | Ian, 13 Nov, answering audit DEF-843: a real senior may return the same day; blocking would refuse a legal discount (RA 9994 / RA 10754) | Yes. DEF-843 |
+| 463 | 2026-11-13 | **VOIDING A RESERVATION DEPOSIT NEEDS THE MANAGER PIN, AND IS REFUSED ONCE THE DEPOSIT HAS BEEN APPLIED TO A BILL.** Free text alone is never enough. | Ian, 13 Nov, agreeing with audit DEF-844's recommendation: a deposit is customer money held | Yes. DEF-844 |
 
 ## 14. Amendment protocol
 
