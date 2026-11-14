@@ -52,6 +52,8 @@ const EXEMPT: Record<string, string> = {
 // `<button>` labels written in app/ - they are the `label=` prop of <ConfirmDestructive>, whose own submit button is the one
 // control (apps/erp/tests/t412-destructive-census.test.ts is the guard for those). Their entries left this list with them.
 const COMMANDS: Record<string, string> = {
+  'Approve and book': 'T-511 S7b (BOSS approved): approves one settlement day and books its payout (money in the books); audited; the uploader rule and the blockers are re-checked in the domain',
+  'Book this charge': 'T-511 S7b (BOSS approved): books one platform charge that belongs to no sales day (money out for good); audited; the uploader rule is applied in the domain',
   'Add till': 'T-546 (BOSS approved): adds a till (the receipt-number identity of a store); audited',
   'Set tablet': 'T-546 (BOSS approved): chooses which paired tablet acts as a till, or none; audited',
   'Save printer': "T-546 (BOSS approved): sets the till's receipt paper and copies, which the tablet then prints with; audited",
