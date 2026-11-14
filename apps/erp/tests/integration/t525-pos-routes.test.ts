@@ -364,6 +364,8 @@ describe('GET /api/pos/snapshot (R7)', () => {
     expect((await get(f, { headers: { 'if-none-match': '"0000000000000000000000000000000000000000000000000000000000000000"' } })).status).toBe(200);
 
     await insOffer(f, f.menu.pork.variantId, '275.00');
+    // the offer is stored at now() (microseconds) and the menu is read at now() cut to the millisecond: wait (at most ~2 ms, on the database clock) until the offer is past (t565, 411d50e)
+    await sql`select pg_sleep(greatest(0, extract(epoch from (select max(effective_from) from menu_offers where store_id = ${f.storeId}) + interval '2 milliseconds' - clock_timestamp())))`;
     const changed = await get(f, { headers: { 'if-none-match': etag } });
     expect(changed.status, 'the old ETag no longer matches after a price change').toBe(200);
     expect(changed.headers.get('etag')).not.toBe(etag);
