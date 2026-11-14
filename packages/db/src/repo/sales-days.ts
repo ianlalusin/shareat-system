@@ -121,6 +121,8 @@ export interface SalesChannelRow {
   /** T-511 S2a: which delivery platform this channel is, and the store code that platform prints on its statements. Both set or both NULL. */
   platform: 'grab' | 'foodpanda' | null;
   platformStoreCode: string | null;
+  /** T-564: bank-name fragments for the payout parser. Stored, not yet read by intake. */
+  bankHints: string[];
 }
 
 /**
@@ -153,6 +155,7 @@ export async function listChannels(
       taxTreatment: salesChannels.taxTreatment,
       platform: salesChannels.platform,
       platformStoreCode: salesChannels.platformStoreCode,
+      bankHints: salesChannels.bankHints,
     })
     .from(salesChannels)
     .where(where)
@@ -205,6 +208,7 @@ export async function channelById(tx: Tx, orgId: string, channelId: string): Pro
       taxTreatment: salesChannels.taxTreatment,
       platform: salesChannels.platform,
       platformStoreCode: salesChannels.platformStoreCode,
+      bankHints: salesChannels.bankHints,
     })
     .from(salesChannels)
     .where(and(eq(salesChannels.orgId, orgId), eq(salesChannels.id, channelId)))
@@ -333,6 +337,14 @@ export async function setChannelPlatformCode(
   await tx
     .update(salesChannels)
     .set({ platform, platformStoreCode: code, updatedAt: sql`now()` })
+    .where(and(eq(salesChannels.orgId, orgId), eq(salesChannels.id, channelId)));
+}
+
+/** T-564: the only writer of `bank_hints`. Does not touch anything else on the channel. */
+export async function setChannelBankHints(tx: Tx, orgId: string, channelId: string, bankHints: string[]): Promise<void> {
+  await tx
+    .update(salesChannels)
+    .set({ bankHints, updatedAt: sql`now()` })
     .where(and(eq(salesChannels.orgId, orgId), eq(salesChannels.id, channelId)));
 }
 

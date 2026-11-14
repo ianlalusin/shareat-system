@@ -89,11 +89,10 @@ what makes expected remittance computable**, and it is already there.
 
 ### ⚠️ Two smaller landmines in the settlement wiring
 
-- **`foodpandaPartnerCode` is documented as NOT unique** — *"Lipa and the TEST sandbox deliberately
-  share O6JZ."* ✅ **Not a real constraint, and v2 should drop it:** Ian, 2026-08-25 — *"never mind
-  TEST, it's a test store, not real."* The only collision is with a sandbox that does not carry
-  forward (ADR-007 purges it), so **v2 may treat the partner code as unique per store** and gets a
-  simpler key for free. *Recorded because the comment reads like a business rule and is not one.*
+- **`foodpandaPartnerCode` is unique** — Ian, 2026-11-10: the v1 note that Lipa and the TEST sandbox
+  share `O6JZ` was a test-store artefact, not a business rule. v2 already enforces it as
+  `sales_channels.platform_store_code` (T-511 S2a, migration 0228: unique per organisation and
+  platform, ignoring case); T-564 adds no second copy of it.
 - **`matchLabels` / `fileHints`** route uploaded settlement PDFs/CSVs by **outlet-name text match
   and filename substring** (`"lip 15.zip"` → Lipa). Works, and is fragile in the same way as §2.
 

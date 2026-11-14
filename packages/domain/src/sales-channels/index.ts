@@ -33,7 +33,7 @@ import { auditLogRepo, posV1Repo, salesDaysRepo, storesRepo, type Tx } from '@sh
 import { authorize, can, type Actor } from '@shareat/auth';
 import { refuse } from '../shared/refusal';
 import { assertFieldRules } from '../shared/field-rules-assert';
-import { SETTINGS_PLATFORM_CODE_RULES, SETTINGS_SALES_CHANNEL_RULES } from '../field-rules/settings';
+import { SETTINGS_BANK_HINTS_RULES, SETTINGS_PLATFORM_CODE_RULES, SETTINGS_SALES_CHANNEL_RULES } from '../field-rules/settings';
 
 /** Store-scoped, manager ✅ — `packages/auth/src/capabilities.ts:206`, `:492`. */
 const CAPABILITY = 'manage_store_settings' as const;
@@ -54,6 +54,8 @@ export interface SalesChannelAdminRow {
   /** T-511 S2b — read-only here; `setSalesChannelPlatformCode` owns both (admin only). */
   readonly platform: 'grab' | 'foodpanda' | null;
   readonly platformStoreCode: string | null;
+  /** T-564 — bank-name fragments for the payout parser. Stored, not yet read by intake. */
+  readonly bankHints: readonly string[];
 }
 
 export interface CreateSalesChannelInput {
@@ -324,6 +326,36 @@ export async function setSalesChannelPlatformCode(
 }
 
 /**
+ * T-564 — bank-name fragments a payout parser can use to recognise a channel's account (stored, not yet read by intake).
+ * `manage_store_settings` on the channel's own store, like the rest of the channel settings. A same-value save writes nothing; a
+ * real change writes its audit row in the same transaction.
+ */
+export async function setSalesChannelBankHints(
+  tx: Tx,
+  actor: Actor,
+  input: { channelId: string; bankHints: readonly string[] },
+): Promise<{ wrote: boolean }> {
+  const channel = await salesDaysRepo.channelById(tx, actor.orgId, input.channelId);
+  if (!channel) throw refuse(`setSalesChannelBankHints: channel ${input.channelId} does not exist.`, 'That channel no longer exists.');
+  await authorize(tx, actor, CAPABILITY, { storeId: channel.storeId });
+  const bankHints = [...new Set(input.bankHints.map((s) => s.trim()).filter(Boolean))];
+  // After the gate: a format limit (at most 20 names, 60 characters each) in plain words.
+  assertFieldRules(SETTINGS_BANK_HINTS_RULES, { bankHints: bankHints.join(',') });
+  if (JSON.stringify(bankHints) === JSON.stringify(channel.bankHints)) return { wrote: false };
+  await salesDaysRepo.setChannelBankHints(tx, actor.orgId, input.channelId, bankHints);
+  await auditLogRepo.append(tx, actor.orgId, {
+    actorPersonId: actor.personId,
+    action: 'sales_channel.bank_hints_edited',
+    storeId: channel.storeId,
+    entityId: input.channelId,
+    before: { bankHints: channel.bankHints },
+    after: { bankHints },
+    source: 'web',
+  });
+  return { wrote: true };
+}
+
+/**
  * ⛔ **Deactivate, never delete, and there is no delete function here on purpose.**
  * `sales_day_channels`, `order_wastages` and `channel_settlements` all reference a channel with
  * `on delete restrict`, so a delete either fails at the FK or destroys the party behind a posted
@@ -369,6 +401,7 @@ export async function listSalesChannelsForAdmin(
     taxTreatment: r.taxTreatment,
     platform: r.platform,
     platformStoreCode: r.platformStoreCode,
+    bankHints: r.bankHints,
   }));
 }
 

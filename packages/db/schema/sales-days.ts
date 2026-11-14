@@ -139,6 +139,8 @@ export const salesChannels = pgTable(
      */
     platform: text('platform', { enum: ['grab', 'foodpanda'] as const }),
     platformStoreCode: text('platform_store_code'),
+    /** T-564 (migration 0257) — bank-name fragments a payout parser can use to recognise this channel's account. Stored, not yet read by intake. */
+    bankHints: text('bank_hints').array().notNull().default(sql`'{}'::text[]`),
     isActive: boolean('is_active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),

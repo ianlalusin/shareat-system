@@ -8,7 +8,7 @@
  * screen would be presentation, and presentation is not a control (DEF-051).
  */
 import { moneyAccountsRepo } from '@shareat/db';
-import { listSalesChannelsForAdmin, receivableAccountOptions } from '@shareat/domain';
+import { getStoreChannelSettlementConfig, listSalesChannelsForAdmin, receivableAccountOptions } from '@shareat/domain';
 import { can, type Actor } from '@shareat/auth';
 import { withOrgPrincipal } from '../../expenses/lib';
 
@@ -18,6 +18,11 @@ export type SalesChannelAdminRow = Awaited<ReturnType<typeof listSalesChannelsFo
 
 export async function channelsForStore(actor: Actor, storeId: string): Promise<SalesChannelAdminRow[]> {
   return withOrgPrincipal(actor.orgId, (tx) => listSalesChannelsForAdmin(tx, actor, { storeId }));
+}
+
+/** T-564: the store's settlement wiring, if it has any. */
+export async function settlementConfigForStore(actor: Actor, storeId: string) {
+  return withOrgPrincipal(actor.orgId, (tx) => getStoreChannelSettlementConfig(tx, actor, storeId));
 }
 
 /** Postable, active, party-bearing accounts — T-230 invariant 4. `1220` is the answer in practice. */
