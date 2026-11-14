@@ -187,7 +187,7 @@ export default async function SeparationsPage({
                 <input type="checkbox" name="clearanceConfirmed" className="mt-0.5" />
                 <span>
                   <span className="block text-xs font-medium">Clearance confirmed</span>
-                  <span className="block text-[11px] text-neutral-500">
+                  <span className="block text-xs text-neutral-500">
                     No outstanding accountabilities. ⛔ Required — posting refuses without this.
                   </span>
                 </span>

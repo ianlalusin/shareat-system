@@ -150,7 +150,7 @@ export default async function MoneyAccountsPage({
                   <div className="flex flex-wrap items-baseline gap-2">
                     <h2 className="text-sm font-semibold">{name}</h2>
                     {rows.some((a) => a.isFoundation) && (
-                      <span className="rounded-full bg-info-soft px-2 py-0.5 text-[11px] font-medium text-info">
+                      <span className="rounded-full bg-info-soft px-2 py-0.5 text-xs font-medium text-info">
                         Always present
                       </span>
                     )}
@@ -177,7 +177,7 @@ export default async function MoneyAccountsPage({
                               <span className="font-mono text-xs">{store?.code ?? '—'}</span>
                               <span className="block text-xs text-muted">{store?.name ?? 'Unknown store'}</span>
                               {!a.isActive && (
-                                <span className="mt-1 inline-flex rounded-full bg-closed-soft px-2 py-0.5 text-[11px] font-medium text-closed">
+                                <span className="mt-1 inline-flex rounded-full bg-closed-soft px-2 py-0.5 text-xs font-medium text-closed">
                                   Retired
                                 </span>
                               )}

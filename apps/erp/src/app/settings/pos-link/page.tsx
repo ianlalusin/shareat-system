@@ -121,11 +121,11 @@ function StoreCard({
         <span className="font-medium">{row.storeName}</span>
         <span className="flex items-center gap-2">
           {link ? (
-            <span className="rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-medium text-success">
+            <span className="rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success">
               Linked to {link.posStoreName}
             </span>
           ) : (
-            <span className="rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-medium text-warning-ink">
+            <span className="rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning-ink">
               Not linked — sales are typed
             </span>
           )}
