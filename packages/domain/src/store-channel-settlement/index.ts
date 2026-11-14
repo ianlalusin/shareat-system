@@ -16,7 +16,7 @@ import { authorize, type Actor } from '@shareat/auth';
 import { auditLogRepo, storeChannelSettlementRepo, storesRepo, type Tx, type StoreChannelSettlementConfigRow } from '@shareat/db';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { SETTINGS_STORE_SETTLEMENT_RULES } from '../field-rules/settings';
-import { refuse } from '../shared/refusal';
+import { internalFault, refuse } from '../shared/refusal';
 
 export type StoreChannelSettlementConfig = StoreChannelSettlementConfigRow;
 
@@ -97,7 +97,7 @@ export async function saveStoreChannelSettlement(
     matchLabels: matchLabels.join(','),
     fileHints: fileHints.join(','),
   });
-  if (!storeKey) throw new Error('saveStoreChannelSettlement: a checked store key came back empty.');
+  if (!storeKey) throw internalFault('saveStoreChannelSettlement: a checked store key came back empty.');
 
   if (existing && existing.storeKey !== storeKey) throw keyCannotChange(existing.storeKey);
 
@@ -129,7 +129,7 @@ export async function saveStoreChannelSettlement(
   // The upsert never writes `store_key` on a conflict, so two first saves racing for one store can leave the OTHER person's key
   // stored. Re-read what is really there: the audit row records it, and a key that was not stored is refused, not recorded.
   const saved = await storeChannelSettlementRepo.getConfigByStore(tx, actor.orgId, input.storeId);
-  if (!saved) throw new Error('saveStoreChannelSettlement: the saved row could not be read back.');
+  if (!saved) throw internalFault('saveStoreChannelSettlement: the saved row could not be read back.');
   if (saved.storeKey !== storeKey) throw keyCannotChange(saved.storeKey);
 
   await auditLogRepo.append(tx, actor.orgId, {

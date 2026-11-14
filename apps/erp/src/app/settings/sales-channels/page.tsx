@@ -323,8 +323,7 @@ function SettlementWiring({ storeId, config }: { storeId: string; config: Awaite
         The short name and the labels that will let a Foodpanda or Grab payout statement be matched to this branch. They are{' '}
         <strong>saved for later and not used to match anything yet</strong>. The platform and its store code are set on each channel below.
       </p>
-      <CheckedForm rules={SETTINGS_STORE_SETTLEMENT_RULES} action={saveStoreSettlementAction} className="space-y-3 text-sm">
-        <input type="hidden" name="storeId" value={storeId} />
+      <EditableRecord action={saveStoreSettlementAction} label="settlement wiring" hidden={{ storeId }} typed={null} rules={SETTINGS_STORE_SETTLEMENT_RULES}>
         <FormGrid>
           <Field
             label={<span className="text-neutral-600 dark:text-neutral-400">Store key</span>}
@@ -357,10 +356,7 @@ function SettlementWiring({ storeId, config }: { storeId: string; config: Awaite
             </span>
           }
         />
-        <Button type="submit" variant="secondary">
-          Save
-        </Button>
-      </CheckedForm>
+      </EditableRecord>
     </section>
   );
 }
@@ -368,9 +364,7 @@ function SettlementWiring({ storeId, config }: { storeId: string; config: Awaite
 /** T-564: a channel's bank hints, in their own small form. Saved for the payout parser; nothing reads them yet. */
 function BankHintsForm({ channel, storeId }: { channel: SalesChannelAdminRow; storeId: string }) {
   return (
-    <CheckedForm rules={SETTINGS_BANK_HINTS_RULES} action={setBankHintsAction} className="space-y-2 border-t border-neutral-200 pt-3 text-sm dark:border-neutral-800">
-      <input type="hidden" name="storeId" value={storeId} />
-      <input type="hidden" name="channelId" value={channel.id} />
+    <EditableRecord action={setBankHintsAction} label={`${channel.name} bank names`} hidden={{ storeId, channelId: channel.id }} typed={null} rules={SETTINGS_BANK_HINTS_RULES}>
       <Field
         label={<span className="text-neutral-600 dark:text-neutral-400">Bank names on this channel&apos;s payouts, separated by commas</span>}
         hint="At most 20, each at most 60 characters. Saved for the payout reader; nothing uses it yet."
@@ -378,10 +372,7 @@ function BankHintsForm({ channel, storeId }: { channel: SalesChannelAdminRow; st
       >
         <Input {...nativeAttrs(SETTINGS_BANK_HINTS_RULES.bankHints)} defaultValue={channel.bankHints.join(', ')} placeholder="maribank, bdo" className="mt-1 w-full" />
       </Field>
-      <Button type="submit" variant="secondary">
-        Save bank names
-      </Button>
-    </CheckedForm>
+    </EditableRecord>
   );
 }
 
