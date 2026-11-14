@@ -10,7 +10,7 @@
  * again as a separate expense document, and it cost **₱198,148.29** across two stores. One
  * function owns these legs, which makes the double-count impossible rather than merely forbidden.
  */
-import { advisoryLocksRepo, auditLogRepo, channelSettlementsRepo, loansRepo, moneyAccountsRepo, moneyTransfersRepo, settlementIntakeRepo, type Tx } from '@shareat/db';
+import { advisoryLocksRepo, auditLogRepo, channelSettlementsRepo, loansRepo, moneyAccountsRepo, moneyTransfersRepo, settlementIntakeRepo, storeChannelSettlementRepo, type Tx } from '@shareat/db';
 import { authorize, type Actor } from '@shareat/auth';
 import { logger } from '@shareat/core/logger';
 import { compare, fromCentavos, isZero, money, negate, toCentavos, ZERO, type Money } from '@shareat/core/money';
@@ -20,6 +20,7 @@ import { parseDecimalInput, parseMoneyInput } from '../shared/money-input';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { CHANNEL_PAYOUT_DESTINATION_RULES, CHANNEL_SETTLEMENT_RECORD_RULES, SETTLEMENT_DIFFERENCE_RULES } from '../field-rules/channel-settlements';
 import { refuse } from '../shared/refusal';
+import { settlementWiringWarnings } from '../store-channel-settlement';
 import { loadRuleBook } from '../business-rules/rules';
 import type { BusinessRuleKey } from '../business-rules/registry';
 import type { RuleBook } from '../business-rules/book';
@@ -154,6 +155,9 @@ export interface SettlementPreview {
   settlementGain: string;
   tolerance: string;
   destinationAccountName: string | null;
+  /** T-564 — the store's settlement key (null when none saved) and what is missing from its wiring, in plain words. Warnings NEVER block a post and are not in `blockers`. */
+  storeKey: string | null;
+  wiringWarnings: string[];
   /**
    * Why this cannot post as entered. **Empty means it will post.** The first entry is the exact
    * sentence `recordChannelSettlement` would throw, because they come from the same function.
@@ -646,6 +650,8 @@ export async function previewChannelSettlement(
 ): Promise<SettlementPreview> {
   const run = async (trx: Tx): Promise<SettlementPreview> => {
     const ctx = await gatherSettlementContext(trx, actor, input, false);
+    // T-564: a pure read AFTER the gate, so a caller who may not preview never learns a store's key. Not in `gatherSettlementContext`: the posting does not need it.
+    const wiring = await storeChannelSettlementRepo.getConfigByStore(trx, actor.orgId, ctx.config.storeId);
     // S5.5v Amendment A1 / A2 item 3 — the docstring's promise is "every refusal it would hit", so
     // EVERY bad figure is COLLECTED alongside the config blockers, never thrown past them.
     // `recordChannelSettlement` (below) keeps the throw — a post is all-or-nothing, a preview is not.
@@ -667,6 +673,8 @@ export async function previewChannelSettlement(
       settlementGain: c.settlementGain,
       tolerance: c.tolerance,
       destinationAccountName: ctx.destinationName,
+      storeKey: wiring?.storeKey ?? null,
+      wiringWarnings: settlementWiringWarnings(wiring),
       blockers: [...ctx.configBlockers, ...ctx.chargeBlockers, ...figureBlockers, ...legBlockers, ...c.blockers],
       needsAcknowledgement: c.needsAcknowledgement,
       difference: c.difference,

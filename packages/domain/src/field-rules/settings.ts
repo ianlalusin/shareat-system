@@ -78,6 +78,48 @@ export const SETTINGS_PLATFORM_CODE_RULES = defineFieldRules('settings.setSalesC
   },
 });
 
+/** T-564: a comma-separated list of at most 20 entries, each at most 60 characters (a format limit only; the words are free). */
+const LIST_PATTERN = '^[^,]{0,60}(?:,[^,]{0,60}){0,19}$';
+const LIST_SAYS = 'at most 20 entries separated by commas, each at most 60 characters';
+
+/** /settings/sales-channels, the per-store settlement wiring (T-564). The store key has a shape; labels and hints are free words with a size limit. */
+export const SETTINGS_STORE_SETTLEMENT_RULES = defineFieldRules('settings.storeSettlement', {
+  storeKey: {
+    label: 'The store key',
+    kind: 'pattern',
+    pattern: '^[a-z0-9][a-z0-9-]{1,23}$',
+    patternSays: '2 to 24 lowercase letters, numbers or dashes, starting with a letter or number',
+  },
+  matchLabels: {
+    label: 'The outlet names',
+    optional: true,
+    kind: 'pattern',
+    pattern: LIST_PATTERN,
+    patternSays: LIST_SAYS,
+    requires: 'Outlet names: give at most 20, separated by commas, each at most 60 characters.',
+  },
+  fileHints: {
+    label: 'The file name starts',
+    optional: true,
+    kind: 'pattern',
+    pattern: LIST_PATTERN,
+    patternSays: LIST_SAYS,
+    requires: 'File name starts: give at most 20, separated by commas, each at most 60 characters.',
+  },
+});
+
+/** /settings/sales-channels, a channel's bank names (T-564). */
+export const SETTINGS_BANK_HINTS_RULES = defineFieldRules('settings.setSalesChannelBankHints', {
+  bankHints: {
+    label: 'The bank names',
+    optional: true,
+    kind: 'pattern',
+    pattern: LIST_PATTERN,
+    patternSays: LIST_SAYS,
+    requires: 'Bank names: give at most 20, separated by commas, each at most 60 characters.',
+  },
+});
+
 /**
  * /settings/pos-link, the link form. `posStoreName` is a typed box only when POS cannot list its stores; in picker mode the
  * form carries a fixed value for it (the action takes POS's own name from the list), so the set is the same in both modes.

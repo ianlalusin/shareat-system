@@ -131,6 +131,9 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-511 S2b: an admin names a sales channel's delivery platform and statement store code, and records a loan's expected daily repayment (dotted: new).
   def('sales_channel.platform_code_edited', 'settings', 'high', 'store', 'sales_channels', 'T-511'),
   def('loan.repayment_amount_edited', 'money', 'high', 'store', 'loans', 'T-511'),
+  // T-564 (T-515 re-applied): a store's settlement wiring saved, and a channel's bank hints edited (dotted: new). Payloads are keys, labels and hints, no personal data.
+  def('store_settlement.wiring_saved', 'settings', 'normal', 'store', 'store_channel_settlement_configs', 'T-564'),
+  def('sales_channel.bank_hints_edited', 'settings', 'normal', 'store', 'sales_channels', 'T-564'),
   // T-519 S1: a signed staff deduction agreement recorded or cancelled (dotted: new). Payloads carry amounts and ids, never the employee's explanation.
   def('staff_deduction_agreement.recorded', 'money', 'high', 'store', 'staff_deduction_agreements', 'T-519'),
   def('staff_deduction_agreement.cancelled', 'money', 'high', 'store', 'staff_deduction_agreements', 'T-519'),

@@ -46,6 +46,8 @@ const POS_CHANNEL = "Choose the sales channel POS's sales land in.";
 const POS_TAX = "Choose the tax type shown in the POS store's settings.";
 const PCODE = 'A store code is a UUID for Grab, or 3 to 12 letters or digits for Foodpanda.';
 const BLANK = '   ';
+const LIST_21 = Array.from({ length: 21 }, (_, i) => `n${i}`).join(',');
+const LIST_SAYS = (what: string) => `${what}: give at most 20, separated by commas, each at most 60 characters.`;
 const BRULE = 'A value is a plain number with at most two decimals, for example 50 or 12.5.';
 const BRULE_WHY = 'Say why the rule is changing, in under 500 characters.';
 
@@ -60,6 +62,18 @@ const ROWS: Record<string, Row> = {
   'settings.addLeaveType.code': { ok: 'study_2', bad: [['x', KIND], ['1abc', KIND], ['a-b', KIND]], blank: KIND },
   'settings.expenseCategory.category': { ok: 'Scooter rental', bad: [[BLANK, 'A category needs a name.']], blank: 'A category needs a name.' },
   'settings.salesChannel.name': { ok: 'Grab', bad: [[BLANK, 'A sales channel needs a name.']], blank: 'A sales channel needs a name.' },
+  'settings.storeSettlement.storeKey': {
+    ok: 'lipa',
+    bad: [
+      ['LIPA', 'The store key must be 2 to 24 lowercase letters, numbers or dashes, starting with a letter or number.'],
+      ['z', 'The store key must be 2 to 24 lowercase letters, numbers or dashes, starting with a letter or number.'],
+      ['lipa!', 'The store key must be 2 to 24 lowercase letters, numbers or dashes, starting with a letter or number.'],
+    ],
+    blank: 'The store key is required.',
+  },
+  'settings.storeSettlement.matchLabels': { ok: 'shareat lipa, lipa', bad: [[LIST_21, LIST_SAYS('Outlet names')], ['x'.repeat(61), LIST_SAYS('Outlet names')]] },
+  'settings.storeSettlement.fileHints': { ok: 'lip, lipa', bad: [[LIST_21, LIST_SAYS('File name starts')], ['x'.repeat(61), LIST_SAYS('File name starts')]] },
+  'settings.setSalesChannelBankHints.bankHints': { ok: 'maribank, bdo', bad: [[LIST_21, LIST_SAYS('Bank names')], ['x'.repeat(61), LIST_SAYS('Bank names')]] },
   'settings.linkStoreToPos.posStoreId': { ok: 'POS-7', bad: [[BLANK, POS_ID]], blank: POS_ID },
   'settings.linkStoreToPos.posStoreName': { ok: 'Lipa POS', bad: [[BLANK, POS_NAME]], blank: POS_NAME },
   'settings.linkStoreToPos.salesChannelId': { ok: 'chan-1', bad: [[BLANK, POS_CHANNEL]], blank: POS_CHANNEL },
