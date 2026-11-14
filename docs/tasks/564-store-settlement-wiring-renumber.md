@@ -36,9 +36,12 @@ T-515's intent is in `docs/tasks/515-store-settings-and-settlement-config.md` (r
    grants SELECT/INSERT/UPDATE, registries (`rls/registry.ts`, `cutover/classification.ts`), journal entry LAST with
    `idx` 257 and `when` = main's 0256 `when` (1808191907084) + 86,400,000 = **1808278307084**. Do not touch main's
    0213_t398. Re-read main's journal first; if a higher idx exists, use the next free number above it and tell BOSS.
-4. **Wiring warnings**, a pure read on the settlement preview (`storeKey`, `wiringWarnings`): store has no key; channel
-   has a platform but no `platform_store_code` (Foodpanda); store has no settlement config. Warnings never block
-   posting. `settlementConfigBlockers`, netting, locks and variance are unchanged.
+4. **Wiring warnings**, a pure read on the settlement preview (`storeKey`, `wiringWarnings`): (1) the store has no key
+   (no wiring row); (2) the store has a key but no match labels and no file hints, so there is nothing to match by.
+   **Amended 2026-11-14 (BOSS ruling):** the third warning in the first draft, "channel has a platform but no
+   `platform_store_code`", is DROPPED: main's `sales_channels_platform_code_pair_check` makes it impossible
+   (both set or both null). Warnings never block posting and are not in `blockers`. `settlementConfigBlockers`,
+   netting, locks and variance are unchanged.
 5. **Cash handling:** no second cash-policy form. The store page links to the existing `/remittance` cash settings,
    Sales channels and POS link.
 6. **UI doors (Ian's standing rule):** the "Settlement wiring" panel on `/settings/sales-channels` edits store key (once),

@@ -2,18 +2,20 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { listStores } from '../../expenses/lib';
 import {
   createSalesChannelAction,
+  saveStoreSettlementAction,
+  setBankHintsAction,
   setPlatformCodeAction,
   setSalesChannelActiveAction,
   updateSalesChannelAction,
 } from './actions';
-import { canEditPlatformCode, channelsForStore, moneyAccountNames, receivableOptions, type SalesChannelAdminRow } from './lib';
+import { canEditPlatformCode, channelsForStore, moneyAccountNames, receivableOptions, settlementConfigForStore, type SalesChannelAdminRow } from './lib';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { ACTION_LINK } from '@/components/action-link';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { CheckedForm, EditableRecord } from '@/components/forms';
-import { SETTINGS_PLATFORM_CODE_RULES, SETTINGS_SALES_CHANNEL_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Banner, Button, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
+import { SETTINGS_BANK_HINTS_RULES, SETTINGS_PLATFORM_CODE_RULES, SETTINGS_SALES_CHANNEL_RULES, SETTINGS_STORE_SETTLEMENT_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import { Banner, Button, Checkbox, Field, FlashBanner, FormGrid, Input, Select } from '@/components/ui';
 import { withFlash } from '@/lib/flash';
 import { typedFor } from '@/lib/keep-typing';
 import { SALES_CHANNEL_EDIT } from './typed-forms';
@@ -81,12 +83,13 @@ export default async function SalesChannelsSettingsPage({
     );
   }
 
-  const [channels, accounts, walletNames, canSetPlatformCode] = await Promise.all([
+  const [channels, accounts, walletNames, canSetPlatformCode, settlement] = await Promise.all([
     channelsForStore(actor, storeId),
     receivableOptions(actor),
     moneyAccountNames(actor),
     // T-511 S2b: admin only, at THIS store. Presentation: the domain function is the gate.
     canEditPlatformCode(actor, storeId),
+    settlementConfigForStore(actor, storeId),
   ]);
 
   const active = channels.filter((c) => c.isActive);
@@ -127,6 +130,8 @@ export default async function SalesChannelsSettingsPage({
           walk-in channel whose money reaches the till.
         </Banner>
       )}
+
+      <SettlementWiring storeId={storeId} config={settlement} />
 
       {active.map((c) => (
         <ChannelCard key={c.id} channel={c} storeId={storeId} accounts={accounts} walletNames={walletNames} sp={sp} actorId={actor.personId} canSetPlatformCode={canSetPlatformCode} />
@@ -285,6 +290,8 @@ function ChannelCard({
 
       {canSetPlatformCode && <PlatformCodeForm channel={channel} storeId={storeId} />}
 
+      <BankHintsForm channel={channel} storeId={storeId} />
+
       <form action={setSalesChannelActiveAction}>
         <input type="hidden" name="storeId" value={storeId} />
         <input type="hidden" name="channelId" value={channel.id} />
@@ -298,6 +305,83 @@ function ChannelCard({
         </button>
       </form>
     </section>
+  );
+}
+
+/**
+ * T-564: the store's settlement wiring. Stored for the day a payout statement is matched to a store by name or file; nothing matches
+ * on it yet, and the panel says so. The key is fixed once saved (the box is read-only then and the domain refuses a change).
+ */
+function SettlementWiring({ storeId, config }: { storeId: string; config: Awaited<ReturnType<typeof settlementConfigForStore>> }) {
+  return (
+    <section className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="font-medium">Settlement wiring</h2>
+        <Pill tone={config ? 'neutral' : 'amber'}>{config ? 'Saved' : 'Not set up'}</Pill>
+      </div>
+      <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        The short name and the labels that will let a Foodpanda or Grab payout statement be matched to this branch. They are{' '}
+        <strong>saved for later and not used to match anything yet</strong>. The platform and its store code are set on each channel below.
+      </p>
+      <CheckedForm rules={SETTINGS_STORE_SETTLEMENT_RULES} action={saveStoreSettlementAction} className="space-y-3 text-sm">
+        <input type="hidden" name="storeId" value={storeId} />
+        <FormGrid>
+          <Field
+            label={<span className="text-neutral-600 dark:text-neutral-400">Store key</span>}
+            hint={config ? 'Lowercase letters, numbers and dashes. Fixed once saved.' : 'Lowercase letters, numbers and dashes, for example lipa. Fixed once saved, so choose it carefully.'}
+            rule={SETTINGS_STORE_SETTLEMENT_RULES.storeKey}
+          >
+            <Input
+              {...nativeAttrs(SETTINGS_STORE_SETTLEMENT_RULES.storeKey)}
+              defaultValue={config?.storeKey ?? ''}
+              readOnly={Boolean(config)}
+              placeholder="lipa"
+              className="mt-1 w-full read-only:bg-canvas read-only:text-muted"
+            />
+          </Field>
+        </FormGrid>
+        <Field label={<span className="text-neutral-600 dark:text-neutral-400">Outlet names on statements, separated by commas</span>} hint="At most 20, each at most 60 characters." rule={SETTINGS_STORE_SETTLEMENT_RULES.matchLabels}>
+          <Input {...nativeAttrs(SETTINGS_STORE_SETTLEMENT_RULES.matchLabels)} defaultValue={config?.matchLabels.join(', ') ?? ''} placeholder="shareat lipa, lipa" className="mt-1 w-full" />
+        </Field>
+        <Field label={<span className="text-neutral-600 dark:text-neutral-400">Start of the file names, separated by commas</span>} hint="At most 20, each at most 60 characters." rule={SETTINGS_STORE_SETTLEMENT_RULES.fileHints}>
+          <Input {...nativeAttrs(SETTINGS_STORE_SETTLEMENT_RULES.fileHints)} defaultValue={config?.fileHints.join(', ') ?? ''} placeholder="lip, lipa" className="mt-1 w-full" />
+        </Field>
+        <Checkbox
+          name="wastageEmailIngestEnabled"
+          value="true"
+          defaultChecked={config?.wastageEmailIngestEnabled ?? false}
+          label={
+            <span>
+              <span className="font-medium">Read wastage emails for this branch</span>
+              <span className="block text-xs text-muted">Off until ticked. Saved for later; nothing reads wastage emails from this yet.</span>
+            </span>
+          }
+        />
+        <Button type="submit" variant="secondary">
+          Save
+        </Button>
+      </CheckedForm>
+    </section>
+  );
+}
+
+/** T-564: a channel's bank hints, in their own small form. Saved for the payout parser; nothing reads them yet. */
+function BankHintsForm({ channel, storeId }: { channel: SalesChannelAdminRow; storeId: string }) {
+  return (
+    <CheckedForm rules={SETTINGS_BANK_HINTS_RULES} action={setBankHintsAction} className="space-y-2 border-t border-neutral-200 pt-3 text-sm dark:border-neutral-800">
+      <input type="hidden" name="storeId" value={storeId} />
+      <input type="hidden" name="channelId" value={channel.id} />
+      <Field
+        label={<span className="text-neutral-600 dark:text-neutral-400">Bank names on this channel&apos;s payouts, separated by commas</span>}
+        hint="At most 20, each at most 60 characters. Saved for the payout reader; nothing uses it yet."
+        rule={SETTINGS_BANK_HINTS_RULES.bankHints}
+      >
+        <Input {...nativeAttrs(SETTINGS_BANK_HINTS_RULES.bankHints)} defaultValue={channel.bankHints.join(', ')} placeholder="maribank, bdo" className="mt-1 w-full" />
+      </Field>
+      <Button type="submit" variant="secondary">
+        Save bank names
+      </Button>
+    </CheckedForm>
   );
 }
 

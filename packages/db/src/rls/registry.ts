@@ -365,6 +365,12 @@ export const RLS_REGISTRY: Readonly<Record<string, RlsEntry>> = {
       'Per-store channel configuration. Org-scoped for the same reason as accounts: a franchise ' +
       'owner configures their own channels and must never see, let alone edit, those of another org.',
   },
+  store_channel_settlement_configs: {
+    scope: 'org_column',
+    reason:
+      'Per-store channel-settlement wiring (T-564): the store key, match labels, file hints and the wastage-email opt-in. ' +
+      'Org-scoped because it is configuration that names a store to outside matching, so one org must never read the wiring of another.',
+  },
   statutory_discount_records: {
     scope: 'org_column',
     reason:

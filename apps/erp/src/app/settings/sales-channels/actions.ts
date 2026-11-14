@@ -9,7 +9,14 @@
  * here would protect only this one caller, and the screen would be one new form away from a hole.
  */
 import { revalidatePath } from 'next/cache';
-import { createSalesChannel, setSalesChannelActive, setSalesChannelPlatformCode, updateSalesChannel } from '@shareat/domain';
+import {
+  createSalesChannel,
+  saveStoreChannelSettlement,
+  setSalesChannelActive,
+  setSalesChannelBankHints,
+  setSalesChannelPlatformCode,
+  updateSalesChannel,
+} from '@shareat/domain';
 import { requireActor } from '../../../lib/session';
 import { errorMessage } from '../../../lib/constraint-messages';
 import { withOrgPrincipal } from './lib';
@@ -97,6 +104,61 @@ export async function updateSalesChannelAction(fd: FormData): Promise<void> {
   // ⭐ Renaming is safe to state plainly: wastages point at the channel by id, so nothing that is
   //   already recorded resolves differently — T-230 contract 3.
   return await redirectWithFlash('/settings/sales-channels', { store: storeId }, { ok: `Saved. Anything already recorded against this channel is unaffected.` });
+}
+
+function csv(fd: FormData, key: string): string[] {
+  return str(fd, key)
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+/**
+ * T-564: the store's settlement wiring (store key, labels, file hints, email opt-in). The domain function is the gate, the key rules,
+ * the "key cannot change" refusal and the audit row; nothing here re-implements any of it. STORED, not yet read by intake.
+ */
+export async function saveStoreSettlementAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/settings/sales-channels');
+  const storeId = str(fd, 'storeId');
+  let wrote = false;
+  try {
+    const result = await withOrgPrincipal(actor.orgId, (tx) =>
+      saveStoreChannelSettlement(tx, actor, {
+        storeId,
+        storeKey: str(fd, 'storeKey'),
+        matchLabels: csv(fd, 'matchLabels'),
+        fileHints: csv(fd, 'fileHints'),
+        wastageEmailIngestEnabled: str(fd, 'wastageEmailIngestEnabled') === 'true',
+      }),
+    );
+    wrote = result.wrote;
+  } catch (err) {
+    return await redirectWithFlash('/settings/sales-channels', { store: storeId }, { error: errorMessage(err) });
+  }
+  revalidatePath('/settings/sales-channels');
+  revalidatePath('/channel-settlements');
+  return await redirectWithFlash('/settings/sales-channels', { store: storeId }, {
+    ok: wrote ? 'Settlement wiring saved.' : 'Nothing changed: that is already the saved wiring.',
+  });
+}
+
+/** T-564: a channel's bank hints, in their own small form so the shared edit form (and its rules) stay as they were. */
+export async function setBankHintsAction(fd: FormData): Promise<void> {
+  const actor = await requireActor('/settings/sales-channels');
+  const storeId = str(fd, 'storeId');
+  let wrote = false;
+  try {
+    const result = await withOrgPrincipal(actor.orgId, (tx) =>
+      setSalesChannelBankHints(tx, actor, { channelId: str(fd, 'channelId'), bankHints: csv(fd, 'bankHints') }),
+    );
+    wrote = result.wrote;
+  } catch (err) {
+    return await redirectWithFlash('/settings/sales-channels', { store: storeId }, { error: errorMessage(err) });
+  }
+  revalidatePath('/settings/sales-channels');
+  return await redirectWithFlash('/settings/sales-channels', { store: storeId }, {
+    ok: wrote ? 'Bank hints saved.' : 'Nothing changed: those are already the saved bank hints.',
+  });
 }
 
 export async function setSalesChannelActiveAction(fd: FormData): Promise<void> {

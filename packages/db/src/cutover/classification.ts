@@ -226,6 +226,12 @@ export const CUTOVER_CLASSIFICATION: Readonly<Record<string, CutoverEntry>> = {
       're-seeding at cutover would change ids that pilot sales days reference, and the ' +
       'remittable flag is a business decision about each channel, not pilot data.',
   },
+  store_channel_settlement_configs: {
+    class: 'keep',
+    reason:
+      'Per-store configuration (T-564) — store key, match labels, file hints and the wastage-email opt-in. Same class as ' +
+      'sales_channels: it is not pilot activity, and re-seeding it would change a store key that other records name.',
+  },
   /** ⚠️ **This one is not obviously `purge`, and the reasoning is worth reading before changing
    *  it.** Every other operational table is purged because the 2027-01-01 opening entry replaces
    *  it. **This table is not replaced by anything** — the opening entry is a balance-sheet

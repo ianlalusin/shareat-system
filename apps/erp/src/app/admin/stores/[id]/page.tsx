@@ -106,6 +106,18 @@ export default async function StoreDetailPage({
         <Link href={`/menu/hours?store=${id}`} className={ACTION_LINK}>
           Menu hours →
         </Link>
+        {' '}
+        <Link href={`/settings/sales-channels?store=${id}`} className={ACTION_LINK}>
+          Sales channels and settlement wiring →
+        </Link>
+        {' '}
+        <Link href={`/settings/pos-link?store=${id}`} className={ACTION_LINK}>
+          POS link →
+        </Link>
+        {' '}
+        <Link href={`/remittance?store=${id}`} className={ACTION_LINK}>
+          Cash settings →
+        </Link>
       </p>
 
 
