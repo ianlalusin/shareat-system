@@ -12,7 +12,6 @@ allocationsFor
 apiUrl
 applyCreditAction
 applyReceiptDeltaServerFirst
-approveDay
 arrivalLag
 assetsMissingCapitalisation
 branchOrderDetail
