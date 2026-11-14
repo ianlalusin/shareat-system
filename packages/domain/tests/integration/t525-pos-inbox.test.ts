@@ -1124,6 +1124,8 @@ describe('R7 - the snapshot (domain: buildPosSnapshot)', () => {
     const b = await snapshot(f);
     expect(b.etag).toBe(a.etag);
     await insOffer(f, f.menu.pork.variantId, '275.00'); // a newer store offer for the pork: its price is now 275.00
+    // The offer is stored at now() (microseconds); the snapshot reads the menu at now() cut to the millisecond (a JS Date). Taken in the same millisecond the new offer is still "upcoming" and the ETag is unchanged, so wait (at most ~2 ms, on the database clock) until it is past.
+    await sql`select pg_sleep(greatest(0, extract(epoch from (select max(effective_from) from menu_offers where variant_id = ${f.menu.pork.variantId}) + interval '2 milliseconds' - clock_timestamp())))`;
     const c = await snapshot(f);
     expect(c.etag).not.toBe(a.etag);
     expect((c.body.menu as { contentHash: string }).contentHash).not.toBe((a.body.menu as { contentHash: string }).contentHash);
