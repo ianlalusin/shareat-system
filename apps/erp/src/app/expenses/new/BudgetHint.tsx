@@ -18,6 +18,7 @@
  * derived from `journal_lines`-adjacent facts, never from a stored counter.
  */
 import { useEffect, useState } from 'react';
+import { ungroupThousands } from '@shareat/domain/money-input';
 
 export interface BudgetCap {
   categoryId: string;
@@ -46,7 +47,7 @@ export function BudgetHint({ caps, periodKey }: { caps: BudgetCap[]; periodKey: 
       // under-state every split expense and quietly make the hint optimistic.
       let total = 0;
       for (const input of form.querySelectorAll<HTMLInputElement>('input[name^="amount_"]')) {
-        const n = Number(input.value);
+        const n = Number(ungroupThousands(input.value.trim()) ?? input.value); // the box holds the grouped text (T-570)
         if (Number.isFinite(n)) total += n;
       }
       setEntered(total);

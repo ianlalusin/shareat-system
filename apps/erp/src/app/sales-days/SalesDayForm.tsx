@@ -165,6 +165,7 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, dateField
                     <td className="py-2">
                       <Input
                         name={`channel_${c.id}`}
+                        inputMode="decimal"
                         placeholder="0.00"
                         defaultValue={prior && !prior.noSales ? prior.amount : undefined}
                         className={FIELD}
@@ -211,7 +212,7 @@ export function SalesDayForm({ storeLabel, businessDate, dateEditable, dateField
                   <td className="py-2">{w.name}</td>
                   <td className="py-2 text-xs text-neutral-500 dark:text-neutral-400">{w.custodian}</td>
                   <td className="py-2">
-                    <Input name={`tender_${w.id}`} placeholder="0.00" defaultValue={defaults?.tenders?.[w.id]} className={FIELD} />
+                    <Input name={`tender_${w.id}`} inputMode="decimal" placeholder="0.00" defaultValue={defaults?.tenders?.[w.id]} className={FIELD} />
                   </td>
                 </tr>
               ))}

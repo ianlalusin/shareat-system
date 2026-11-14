@@ -135,7 +135,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
                 <Input type="date" {...nativeAttrs(INVENTORY_PRODUCTION_RULES.producedOn)} defaultValue={toBusinessDate()} className="w-full" />
               </Field>
               <Field label={<span className="text-neutral-600 dark:text-neutral-400">Labour cost (optional)</span>} className="text-sm">
-                <Input type="text" name="labourCost" placeholder="0.00" className="w-full" />
+                <Input type="text" name="labourCost" inputMode="decimal" placeholder="0.00" className="w-full" />
               </Field>
             </FormGrid>
 
@@ -154,7 +154,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
                   </Select>
                 </Field>
                 <Field label={<span className="text-neutral-600 dark:text-neutral-400">Quantity made (in the recipe&apos;s unit)</span>} className="text-sm">
-                  <Input name="outputQuantity" placeholder="e.g. 4" className="w-full" />
+                  <Input name="outputQuantity" inputMode="decimal" placeholder="e.g. 4" className="w-full" />
                 </Field>
                 <p className="text-sm text-neutral-600 dark:text-neutral-400">
                   The ingredients are worked out from the recipe for the quantity made. You do not type them.
@@ -241,7 +241,7 @@ function LineRows({
                 </option>
               ))}
             </Select>
-            <Input name={`${prefix}Quantity`} placeholder="quantity" className="w-full" />
+            <Input name={`${prefix}Quantity`} inputMode="decimal" placeholder="quantity" className="w-full" />
             <Input name={`${prefix}Unit`} placeholder="unit (kg, g, ...)" className="w-full" />
           </div>
         ))}

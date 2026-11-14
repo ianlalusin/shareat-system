@@ -171,7 +171,7 @@ export default async function NewStatutoryPaymentPage({ searchParams }: { search
                     </div>
                     <div>
                       <input type="hidden" name="lineStoreId" value={l.storeId} />
-                      <Input name="lineAmount" defaultValue={keptAmounts.get(l.storeId) ?? l.outstanding} aria-label={`Amount paid for ${name}`} className="w-full" />
+                      <Input name="lineAmount" inputMode="decimal" defaultValue={keptAmounts.get(l.storeId) ?? l.outstanding} aria-label={`Amount paid for ${name}`} className="w-full" />
                     </div>
                   </li>
                 );

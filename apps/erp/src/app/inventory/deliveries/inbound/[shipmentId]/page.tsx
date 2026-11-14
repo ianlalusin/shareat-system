@@ -106,7 +106,7 @@ export default async function InboundShipmentPage({
                           </Select>
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          <Input name="receivedQuantity" defaultValue={shippedQty} className="w-24 text-right tabular-nums" />
+                          <Input name="receivedQuantity" inputMode="decimal" defaultValue={shippedQty} className="w-24 text-right tabular-nums" />
                         </td>
                       </>
                     ) : (
