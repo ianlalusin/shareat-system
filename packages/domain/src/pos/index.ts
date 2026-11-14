@@ -8,6 +8,10 @@ export { addLineDiscount, removeLineDiscount, applyPresetToAllLines } from './di
 export type { AddLineDiscountInput } from './discounts';
 export { voidUnpaidSession, completeSale, currentBusinessDate, getSessionBill, listOpenStands, listRefillableTables, listKitchenQueue, listRefillQueue, listTodaysSalesReceipts } from './sale';
 export type { CompleteSaleInput, VoidInput } from './sale';
+export { grantLineApproval } from './line-approval';
+export type { LineApprovalGrant } from './line-approval';
+export { checkSeniorIdRepeat } from './senior-repeat';
+export type { SeniorIdCheck } from './senior-repeat';
 export {
   applyPosEvents,
   applyPosBatch,

@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { compare, money, ZERO } from '@shareat/core/money';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '@/lib/page-access';
+import { canReadAtStore } from '@/lib/can-read-at-store';
 import { cancelAction, decideAction, releaseAction, settleAction } from '../actions';
 import {
+  CASH_REQUEST_CAPABILITIES,
   STATUS_LABEL,
   getDetail,
   listActivePersons,
@@ -11,6 +13,7 @@ import {
   moneyAccounts,
   peso,
   today,
+  withOrgPrincipal,
 } from '../lib';
 import { CheckedForm, FieldCheck } from '@/components/forms';
 import {
@@ -44,10 +47,12 @@ export default async function CashRequestPage({
 }) {
   const { id } = await params;
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession(`/cash-requests/${id}`);
+  const { actor, refusal } = await requirePageAccess(`/cash-requests/${id}`);
+  if (refusal) return refusal;
 
   const req = await getDetail(actor.orgId, id);
-  if (!req) notFound();
+  // T-577 (DEF-834): a request outside the viewer's stores is the same not-found as a forged id.
+  if (!req || !(await withOrgPrincipal(actor.orgId, (tx) => canReadAtStore(tx, actor, req.storeId, CASH_REQUEST_CAPABILITIES)))) notFound();
 
   const [accounts, stores, persons] = await Promise.all([
     moneyAccounts(actor.orgId, req.storeId),

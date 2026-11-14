@@ -983,3 +983,24 @@ the ERP on the 4 GB box. Like the ERP unit it never builds: it runs a tree CI sh
 ⚠️ **Not installed and not enabled.** `provision.sh` copies it with the other `shareat-*.service` files but
 enables only `shareat-erp.service`. Shipping a POS build in `deploy.yml`, the Caddy route and the memory
 check are a later task plus ops steps on the droplet.
+
+## Interface
+
+- provision.sh is a root-run Bash entry point with an optional domain argument; adjacent shareat-*.service/shareat-*.timer files define runtime processes and schedules.
+- The existing runbooks above retain the manual migration, cutover, deployment and timer activation procedure.
+
+## Invariants
+
+- The script explicitly says Ian runs provisioning; it is not an agent verification command.
+- Install does not mean armed: application/job units are installed and daemon-reloaded, while timer activation remains an explicit operator step.
+- Builds run in CI and the production host receives an artifact; no build runs on either droplet.
+
+## Side Effects
+
+- If an operator runs provision.sh, it changes Linux users/permissions, /srv and log/backup directories, sudoers, systemd units, package repositories and PostgreSQL client tools.
+- With a domain, it configures/reloads Caddy for ERP port 9008. Bootstrap only read these files.
+
+## Verification
+
+- Inspect the matching unit and its runbook; do not execute provisioning for a documentation check.
+- For the runnable application smoke procedure, use ../SMOKETEST.md.

@@ -34,7 +34,7 @@ export { flushSecurityEvents, enqueueEventStoreMismatch, enqueueEventReplayConfl
 export { AuthenticationError, AuthorizationError } from './errors';
 export type { Actor, AuthorizeContext } from './authorize';
 
-export { assignRole, assignRoleAsActor, elevateManager, grantCapabilityAsActor, holdsSuperAdminAuthority, isStoreManagerOrAbove } from './roles';
+export { assignRole, assignRoleAsActor, elevateManager, grantCapabilityAsActor, holdsSuperAdminAuthority, isAdministrative, isStoreManagerOrAbove } from './roles';
 export type { AssignRoleInput, AssignRoleAsActorInput, AssignRoleResult } from './roles';
 
 export {
@@ -87,3 +87,5 @@ export type {
  *  `apps/erp/src/lib/session.ts` owns the cookie, never the key. */
 export { signSetupIdentity, setupIdentitySignatureMatches } from './credentials';
 export { signFlash, flashSignatureMatches } from './credentials';
+export { signPosLineApproval, posLineApprovalMatches } from './credentials';
+export type { PosLineApprovalClaim } from './credentials';

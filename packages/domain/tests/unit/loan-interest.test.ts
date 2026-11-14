@@ -27,7 +27,7 @@ describe('dailyRate', () => {
 
 describe('accruedInterest', () => {
   const base = {
-    ratePercent: 2,
+    ratePercent: '2',
     ratePeriod: 'month' as const,
     principal: money('200000.00'),
   };
@@ -212,5 +212,53 @@ describe('scheduledInstalment', () => {
     // The annuity formula has (factor − 1) underneath, which is 0 when the rate is 0 — the classic
     // way this blows up.
     expect(r).toBe('1000.00');
+  });
+});
+
+/**
+ * T-573 (DEF-841) — interest is exact: scaled bigint from the stored decimal rate string, half-up to the centavo, ONE rounding.
+ * Every `want` below is hand-computed: base × rate% × days / (100 × 1|30|365). The float formula this replaced lands a centavo
+ * low on a half-centavo tie (0.365 is not representable) and loses the last digits on a ₱5M+ balance.
+ */
+describe('accruedInterest — exact (DEF-841)', () => {
+  const run = (o: { base: string; rate: string; period: 'day' | 'month' | 'year'; days: number; method?: 'straight' | 'amortizing' | 'equal_principal' }) => {
+    // 2026-01-01 + days, in UTC date arithmetic (no leap-day surprises inside the cases below).
+    const until = new Date(Date.parse('2026-01-01T00:00:00Z') + o.days * 86_400_000).toISOString().slice(0, 10);
+    return accruedInterest({
+      outstanding: money(o.base),
+      principal: money(o.base),
+      ratePercent: o.rate,
+      ratePeriod: o.period,
+      method: o.method ?? 'amortizing',
+      since: '2026-01-01',
+      until,
+    });
+  };
+
+  const table: readonly [string, Parameters<typeof run>[0], string][] = [
+    ['₱5,000,000 at 36%/yr for 365 days is exactly 1,800,000', { base: '5000000.00', rate: '36', period: 'year', days: 365 }, '1800000.00'],
+    ['₱5,000,000.01 at 36.5%/day for 100 days (large base; float is a centavo low)', { base: '5000000.01', rate: '36.5', period: 'day', days: 100 }, '182500000.37'],
+    ['₱99,999,999,999.99 at 36%/yr for 365 days = 35,999,999,999.9964, rounds to 36,000,000,000.00', { base: '99999999999.99', rate: '36', period: 'year', days: 365 }, '36000000000.00'],
+    ['tiny balance ₱0.01 for a year at 2%/month rounds to 0', { base: '0.01', rate: '2', period: 'month', days: 30 }, '0.00'],
+    ['half-centavo tie rounds UP: ₱0.50 at 36.5%/day for 2 days = 0.365', { base: '0.50', rate: '36.5', period: 'day', days: 2 }, '0.37'],
+    ['half-centavo tie rounds UP: ₱0.50 at 36.5%/yr for 90 days = 0.045', { base: '0.50', rate: '36.5', period: 'year', days: 90 }, '0.05'],
+    ['just under a tie stays down: ₱0.50 at 36.4%/day for 2 days = 0.364', { base: '0.50', rate: '36.4', period: 'day', days: 2 }, '0.36'],
+    ['day: ₱1,000 at 0.1%/day for 30 days', { base: '1000.00', rate: '0.1', period: 'day', days: 30 }, '30.00'],
+    ['month: ₱200,000 at 2%/month for 1 day = 133.333…', { base: '200000.00', rate: '2', period: 'month', days: 1 }, '133.33'],
+    ['month: ₱200,000 at 2%/month for 30 days', { base: '200000.00', rate: '2', period: 'month', days: 30 }, '4000.00'],
+    ['year: ₱200,000 at 12.3456%/yr for 100 days (4-dp rate)', { base: '200000.00', rate: '12.3456', period: 'year', days: 100 }, '6764.71'],
+    ['stored form "2.0000" equals "2"', { base: '200000.00', rate: '2.0000', period: 'month', days: 1 }, '133.33'],
+    ['zero rate accrues nothing', { base: '200000.00', rate: '0', period: 'month', days: 30 }, '0.00'],
+    ['straight method: charged on the principal', { base: '200000.00', rate: '2', period: 'month', days: 15, method: 'straight' }, '2000.00'],
+    ['equal_principal method: charged on the outstanding', { base: '200000.00', rate: '2', period: 'month', days: 15, method: 'equal_principal' }, '2000.00'],
+  ];
+  it.each(table)('%s', (_name, input, want) => {
+    expect(run(input)).toBe(want);
+  });
+
+  it('refuses a rate that is not a plain non-negative decimal (no float coercion, no exponent form)', () => {
+    for (const bad of ['', 'abc', '-1', '1e2', '1,5', 'NaN']) {
+      expect(() => run({ base: '100.00', rate: bad, period: 'day', days: 1 })).toThrow();
+    }
   });
 });

@@ -130,19 +130,27 @@ export function resolveStoreOffers(rows: readonly Row[], dayparts: readonly Dayp
   };
 }
 
-/** Reads the store's raw in-force rows, its dayparts and timezone, and resolves what is live at `at`. */
-export async function loadLiveStoreOffers(tx: Tx, orgId: string, storeId: string, at: Date): Promise<LiveStoreOffers> {
+export interface LiveStoreOffersAsOf extends LiveStoreOffers {
+  /** T-565: daypart id -> the id of the window VERSION in force at `at`; what a POS line records as the window it was judged by. */
+  readonly daypartVersionIds: ReadonlyMap<string, string>;
+}
+
+/**
+ * Reads the store's raw in-force rows, its dayparts as they stood AT `at` (T-565: the window versions in force then, not today's edited rows)
+ * and timezone, and resolves what is live at `at`. At "now" the windows are exactly the current ones.
+ */
+export async function loadLiveStoreOffers(tx: Tx, orgId: string, storeId: string, at: Date): Promise<LiveStoreOffersAsOf> {
   const [rows, dayparts, timeZone] = await Promise.all([
     menuRepo.offersInForce(tx, storeId, at),
-    daypartsRepo.listDaypartsOfStore(tx, orgId, storeId),
+    daypartsRepo.listDaypartWindowsAsOf(tx, orgId, storeId, at),
     daypartsRepo.storeTimezone(tx, storeId),
   ]);
   const windows: DaypartWindow[] = dayparts.map((d) => ({
-    id: d.id,
+    id: d.daypartId,
     days: d.days,
     start: d.startTime.slice(0, 5),
     end: d.endTime.slice(0, 5),
   }));
   // A store the caller cannot see has no timezone and no rows; the resolver reports an unusable zone as a fault, never a price.
-  return resolveStoreOffers(rows, windows, at, timeZone ?? '');
+  return { ...resolveStoreOffers(rows, windows, at, timeZone ?? ''), daypartVersionIds: new Map(dayparts.map((d) => [d.daypartId, d.id])) };
 }

@@ -536,7 +536,9 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1631 -> 1632, T-566 (P-007, Ian 11 Nov): +1 compliant control, the refill flavour pill <button aria-pressed> on /pos Refills (48 px); FAIL/UNRESOLVED unmoved at 113/50 (asserted above); measured by CI runCensus().
     // 1626 -> 1628, T-568 S1 (groups pass): +2 net controls across the table/card pass; FAIL/UNRESOLVED moved as noted above; re-measured by runCensus(), 12 Nov 2026.
     // 1628 -> 1629, T-568 S2: the admin PIN confirmation dialog adds two buttons (Cancel, Yes) and the PIN row's Button became a SubmitButton (not a census candidate), net +1, all PASS at 44px; FAIL/UNRESOLVED unmoved; re-measured by runCensus().
-    expect(results.length).toBe(1635);
+    // 1635 -> 1636, T-575 (13 Nov 2026): +1 compliant control, the On/Off <select> the business-rules screen shows for a `flag` rule (T-576 will be its first key); FAIL/UNRESOLVED unmoved; re-measured by runCensus().
+    // 1636 -> 1638, T-576 (13 Nov 2026): +2 compliant controls, the manager-PIN box (data-erp-size="free", min-h-12) in LineApprovalField and the confirm button of ManagerPinDialog (min-h-16); FAIL/UNRESOLVED unmoved (asserted above); re-measured by runCensus().
+    expect(results.length).toBe(1638);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {
