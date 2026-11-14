@@ -26,3 +26,25 @@ Screens only talk to the `CustomerData` interface (`src/data/customer-data.ts`) 
 - `npm test -w @shareat/customer` runs this app's own tests (the root `unit` project skips `apps/customer`).
 - `npm run build -w @shareat/customer` is the server build; `npm run build:cap -w @shareat/customer` is the static export to `out/` for the Android app.
 - It must never import from another app (`tests/unit/app-boundaries.test.ts`).
+
+## Interface
+
+- Default exports in capacitor.config.ts, next.config.mjs, tailwind.config.ts and postcss.config.mjs configure the Android identity, two Next.js build modes and shared visual tokens.
+- The @shareat/customer workspace serves on 9010; BUILD_TARGET=capacitor selects a static export to out/.
+- [android](./android/README.md) — Android source/build namespace for the Shareat Order wrapper.
+- [scripts](./scripts/README.md) — Static-export build entry point for the Android wrapper.
+- [src](./src/README.md) — Customer application source grouped into routes, presentation, a data boundary and browser helpers.
+
+## Invariants
+
+- The current implementation uses sample CustomerData rather than live order or payment APIs.
+- App id is net.shareat.order; Android mixed content is disabled; app imports must not cross into another app.
+
+## Side Effects
+
+- Dev/start opens port 9010; builds write .next/ or out/.
+- At runtime, the provider creates an in-memory fixture and accesses browser storage for device/session identifiers.
+
+## Verification
+
+- From the repository root: `npm test -w @shareat/customer`. This app has its own Vitest configuration; the root unit project excludes it.

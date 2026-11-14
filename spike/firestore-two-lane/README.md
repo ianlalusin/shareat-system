@@ -151,3 +151,23 @@ mirror → inbox → ingestor shape stands as planned. The four findings above a
 | App name is persistence identity | T-184 — a pinned constant with the warning attached |
 | Device must sign in while online | T-159 (provisioning is not complete until a round trip succeeds) |
 | Browser confirmation still owed | T-184's definition of done |
+
+## Interface
+
+- device-principal.ts exports unsignedCustomToken(uid, claims) for the Auth emulator only.
+- vitest.config.ts configures serialized Node tests; package.json runs the Firestore emulator under shareat-spike.
+
+## Invariants
+
+- Unsigned custom tokens are emulator-only and must never be used for production authentication.
+- The spike is not a workspace member; application and package code must not import it.
+- Recorded historical results above are not test runs performed by this bootstrap.
+
+## Side Effects
+
+- Token generation reads wall-clock time and encodes claims locally; test runs use emulator network endpoints and fake IndexedDB/browser storage.
+- No emulator test was executed during documentation generation.
+
+## Verification
+
+- From the repository root: `npm --prefix spike/firestore-two-lane test` (requires the emulator CLI and local spike dependencies).
