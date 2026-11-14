@@ -12,7 +12,8 @@ import { findUnsafeRedirectInCatchForFile } from './redirect-in-catch-sweep';
  *
  * CONTRACT (files and conventions; the builder must meet these or ask BOSS to change the tests):
  *  S1  Files: review/page.tsx (the day table), review/DayDetail.tsx (the detail), review/actions.ts or actions.tsx ('use server'). A nav item with href "/channel-settlements/review".
- *  S2  APPROVE IS HIDDEN until slice 7: the word "Approve" (and approveDay-style names) appears in no code of the review folder. A comment may mention it.
+ *  S2  T-511 S7b (replaces "approve is hidden until slice 7"): Approve exists only as the action approveDayAction + its form with the label "Approve and book"; the domain's
+ *      approveDay( is called only inside the action and no other file of the folder calls it. The one other new action is bookChargeAction (label "Book this charge").
  *  S3  Conventions: every submit goes through `SubmitButton` (no hand-made `<button type="submit">`, no `<input type="submit">`); the reject reason is a `CheckedForm` or `EditableRecord`
  *      with `rules=` (the field rules come from the domain, not typed again here); controls in the table sit in `RowAction`; the table is `Table card=` for the phone layout.
  *  S4  Actions: 'use server' first; requireActor FIRST in each exported action; the actor never read from the form; each calls its domain function inside `withOrgPrincipal`; the catch
@@ -54,12 +55,20 @@ describe('T-511 S5b screen - files and navigation', () => {
   });
 });
 
-describe('T-511 S5b screen - Approve is hidden until slice 7', () => {
-  it('the word Approve and any approve-style name appear in no code of the review folder [kills: a button that books before S7]', () => {
-    const text = all();
-    expect(text).not.toMatch(/\bApprove\b/);
-    expect(text).not.toMatch(/\bapprove[A-Z]\w*/);
-    expect(text).not.toMatch(/\bapprove\(/);
+describe('T-511 S7b screen - Approve exists only as the action and its form', () => {
+  it('approveDay( is called only inside approveDayAction; the only approve-style names are the action, the domain function it calls and the labelled form [kills: a second door to booking a day; an approve button wired to something else]', () => {
+    expect(codeOnly(page())).not.toMatch(/\bapproveDay\(/);
+    expect(codeOnly(detail())).not.toMatch(/\bapproveDay\(/);
+    const inActions = codeOnly(actions());
+    expect(inActions.match(/\bapproveDay\(/g)?.length).toBe(1);
+    expect(fn(inActions, 'approveDayAction')).toContain('approveDay(');
+    const names = new Set(codeOnly([page(), detail(), actions()].join('\n')).match(/\bapprove[A-Z]\w*/g) ?? []);
+    // approveWhy is the plain reason the domain gives a person who may not approve
+    expect([...names].sort()).toEqual(['approveDay', 'approveDayAction', 'approveWhy']);
+    expect(codeOnly(detail())).toMatch(/action=\{approveDayAction\}/);
+    expect(codeOnly(detail())).toContain('Approve and book');
+    expect(codeOnly(detail())).toContain('Book this charge');
+    expect(codeOnly(page())).not.toMatch(/\bApprove\b/);
   });
 });
 
@@ -97,15 +106,21 @@ describe('T-511 S5b screen - the house conventions', () => {
 });
 
 describe('T-511 S5b actions - the shape every action keeps', () => {
-  const names = ['rejectDayAction', 'reopenDayAction', 'overrideLoanAllocationAction'];
+  const names = ['rejectDayAction', 'reopenDayAction', 'overrideLoanAllocationAction', 'approveDayAction', 'bookChargeAction'];
 
-  it("'use server' is the first statement and the three actions are exported async functions [kills: an action that is not a server action]", () => {
+  it("'use server' is the first statement and the five actions are exported async functions [kills: an action that is not a server action]", () => {
     expect(codeOnly(actions()).trimStart().startsWith("'use server'")).toBe(true);
     for (const n of names) expect(actions()).toMatch(new RegExp(`export async function ${n}\\(`));
   });
 
   it('each action takes requireActor first, calls its domain function inside withOrgPrincipal, and never reads the actor from the form [kills: a client-supplied actor; a domain call outside the principal]', () => {
-    const domainFor: Record<string, string> = { rejectDayAction: 'rejectDay(', reopenDayAction: 'reopenDay(', overrideLoanAllocationAction: 'overrideLoanAllocation(' };
+    const domainFor: Record<string, string> = {
+      rejectDayAction: 'rejectDay(',
+      reopenDayAction: 'reopenDay(',
+      overrideLoanAllocationAction: 'overrideLoanAllocation(',
+      approveDayAction: 'approveDay(',
+      bookChargeAction: 'bookPeriodCharge(',
+    };
     for (const n of names) {
       const body = fn(actions(), n);
       expect(body, n).toMatch(/\{\s*const actor = await requireActor\(/);

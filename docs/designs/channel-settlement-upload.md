@@ -1,7 +1,7 @@
 # Foodpanda and Grab settlement upload
 
 *   **Author:** Ian Lalusin
-*   **Status:** Draft. Reviewed by Goldfish stages 5 to 9 on 2026-11-03; fixes applied; owner decisions recorded below. Several items remain open (see Open Questions).
+*   **Status:** Draft. Reviewed by Goldfish stages 5 to 9 on 2026-11-03; fixes applied; owner decisions recorded below. Several items remain open (see Open Questions). Build progress 11 Nov 2026: slices 1 to 7 are built (upload, staging, review, the platform sales correction, charges, approve and book from the review screen: S7a domain, S7b screen); the payment-arrival dating and deferrals (slice 8) are not.
 *   **Date:** 2026-11-03
 *   **Related:** [T-150 channel settlement](../tasks/150-channel-settlement.md), [capability matrix](../decisions/CAPABILITY-MATRIX.md), [intake notes](channel-settlement-upload-intake.md), [T-511 slice 1 spec](../tasks/511-settlement-upload-s1-spec.md), [real-file facts](../discovery/grab-foodpanda-settlement-files.md)
 

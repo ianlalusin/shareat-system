@@ -286,27 +286,22 @@ const EXEMPT: Record<string, string> = {
 
   // ---- T-511 S6b — the platform sales correction ---------------------------------------------
   correctPlatformSales:
-    'UNWIRED — slice 7 (approve a settlement day) calls it: the correction posts first and the settlement second, in ONE transaction (design decision 17, BOSS ruling 7). ' +
-    'Delete this row in S7, when `apps/` reaches it (BOSS-approved precedent: loanCheckForDay, 5 Nov 2026; row named in the S6 spec, 7 Nov 2026).',
+    'INTERNAL — `approveDay` (`settlement-intake/approve.ts`) calls it: the correction posts first and the settlement second, in ONE transaction (design decision 17, BOSS ruling 7). ' +
+    'The screen reaches it through the Approve button (`approveDayAction`), never directly (S7b, 11 Nov 2026).',
   correctPlatformSalesOnClock:
     'WRAPPER — the test seam of `correctPlatformSales`, the production entry point which calls this with the Manila clock; only the integration tests pass another clock (a sales day in the fixture calendar). ' +
-    'It is not on the barrel, so no app can date an entry in the future. Delete this row with the `correctPlatformSales` row in S7 if the seam is folded away.',
+    'It is not on the barrel, so no app can date an entry in the future.',
 
   // ---- T-511 S6c — the platform charge with no sales day -------------------------------------
   postPlatformCharge:
-    'UNWIRED — slice 7 (approve a settlement day) calls it: S7 approve calls it, posting the weekly fee and any uncategorised charge of the invoice once, before the payouts that net them (S6c spec, 7 Nov 2026). ' +
-    'Delete this row in S7, when `apps/` reaches it (BOSS-approved precedent: correctPlatformSales, 7 Nov 2026).',
+    'INTERNAL — `bookPeriodCharge` (`settlement-intake/review.ts`) calls it, after the uploader rule, and posts the weekly fee and any uncategorised charge of the invoice once, before the payout that nets them. ' +
+    'The screen reaches it through "Book this charge" (`bookChargeAction`), never directly (S7b, 11 Nov 2026).',
   postPlatformChargeOnClock:
     'WRAPPER — the test seam of `postPlatformCharge`, the production entry point which calls this with the Manila clock; only the integration tests pass another clock (a charge in the fixture calendar). ' +
-    'It is not on the barrel, so no app can date an entry in the future. S7 approve calls the production function. Delete this row with the `postPlatformCharge` row in S7 if the seam is folded away.',
-
-  // ---- T-511 S7a — approve a settlement day (domain only; the screen is S7b) -----------------
-  approveDay:
-    'UNWIRED — S7b calls it: the Approve button of the settlement review screen (`approveDayAction`). The domain action is built and tested in S7a, one slice ahead of its screen (S7 spec, 8 Nov 2026; precedent: correctPlatformSales). ' +
-    'Delete this row in S7b, when `apps/` reaches it.',
+    'It is not on the barrel, so no app can date an entry in the future.',
 
   authorizeWith:
-    'INTERNAL — the gate with a sentence of the settlement review screen own: `rejectDay`, `reopenDay`, `overrideLoanAllocation` (review.ts) and `approveDay` (approve.ts) call it; it is exported only so approve.ts shares it (S7a).',
+    'INTERNAL — the gate with a sentence of the settlement review screen own: `rejectDay`, `reopenDay`, `overrideLoanAllocation`, `bookPeriodCharge` (review.ts) and `approveDay` (approve.ts) call it; it is exported only so approve.ts shares it (S7a).',
 
   // ---- T-511 S5b — the settlement review stage ---------------------------------------------
   loanCheckForDay:

@@ -540,7 +540,8 @@ describe('T-262 / DEF-269 — every interactive control matches the accepted bas
     // 1635 -> 1636, T-575 (13 Nov 2026): +1 compliant control, the On/Off <select> the business-rules screen shows for a `flag` rule (T-576 will be its first key); FAIL/UNRESOLVED unmoved; re-measured by runCensus().
     // 1636 -> 1638, T-576 (13 Nov 2026): +2 compliant controls, the manager-PIN box (data-erp-size="free", min-h-12) in LineApprovalField and the confirm button of ManagerPinDialog (min-h-16); FAIL/UNRESOLVED unmoved (asserted above); re-measured by runCensus().
     // 1638 -> 1637, T-571 (12 Nov 2026): the /ap/suppliers/[id] collapsed-card <summary> left the census; measured by runCensus().
-    expect(results.length).toBe(1637);
+    // 1637 -> 1638, T-511 S7b, 11 Nov 2026 (BOSS approved): +1 control on /channel-settlements/review, re-measured by runCensus(); FAIL/UNRESOLVED baselines unchanged.
+    expect(results.length).toBe(1638);
   });
 
   it('T-450 Add disclosure has a 44px target without a new baseline exemption', () => {

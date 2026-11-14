@@ -1,12 +1,14 @@
 /**
  * T-511 S5b - the review stage of the settlement upload: what a manager reads, rejects and reopens. docs/tasks/511-settlement-upload-s5-spec.md "S5b" item 4.
  *
- * Nothing is booked here (approve and the books are slice 7). Four reads/writes:
+ * Reads and decisions only; booking a day is `approveDay` (approve.ts), and booking a period charge is `bookPeriodCharge` below (it calls `postPlatformCharge`). Reads/writes:
  *   - `listReviewDays`: the day table, store-scoped by the gate of recording a channel settlement; Foodpanda days carry their invoice; Appendix-B-only
  *     invoices (PandaGO) are listed apart.
  *   - `getReviewDayDetail`: one day, with the staff-accuracy order list re-read from the stored file when the file and staff disagree.
  *   - `rejectDay` / `reopenDay`: a decision, compare-and-set on the line, audited. A rejection needs a reason (kept with the decision).
  *   - `overrideLoanAllocation`: an admin pins a Grab day's loan deductions to loans; the old lines go inactive, never deleted.
+ *   - T-511 S7b: the detail also says whether the actor may approve and why not, whether the day carries its invoice's charges, the invoice's charges and where a booked day was
+ *     booked; `listPeriodCharges` lists every staged period charge (Foodpanda charges that belong to no sales day); `bookPeriodCharge` books one (the uploader rule, then `postPlatformCharge`).
  *
  * Capabilities (no new one, BOSS ruling 6, 5 Nov): reject = `record_ar_collection` at the line's store (the gate of recording a channel settlement);
  * reopen = `override_period_lock` (admin, whole org); override = `edit_loan_repayment_amount` at the line's store (admin).
@@ -15,18 +17,19 @@
 import { authorize, AuthorizationError, can, type Actor, type Capability } from '@shareat/auth';
 import { toBusinessDate } from '@shareat/core/datetime';
 import { logger } from '@shareat/core/logger';
-import { ZERO, compare, fromCentavos, isZero, money, subtract, toCentavos, type Money } from '@shareat/core/money';
-import { auditLogRepo, fiscalPeriodsRepo, loansRepo, settlementIntakeRepo, storesRepo, type SettlementDayLineRow, type Tx } from '@shareat/db';
-import { pastTolerance, toleranceMillsFor, varianceRulesOn, VARIANCE_RULE_KEYS } from '../channel-settlements';
+import { ZERO, add, compare, fromCentavos, isZero, money, subtract, toCentavos, type Money } from '@shareat/core/money';
+import { auditLogRepo, channelSettlementsRepo, fiscalPeriodsRepo, loansRepo, settlementIntakeRepo, storesRepo, type PeriodChargeFact, type SettlementDayLineRow, type Tx } from '@shareat/db';
+import { pastTolerance, postPlatformCharge, toleranceMillsFor, varianceRulesOn, VARIANCE_RULE_KEYS, type PostPlatformChargeResult } from '../channel-settlements';
 import { SETTLEMENT_DAY_REJECT_REASON_MAX, SETTLEMENT_DAY_REJECT_RULES } from '../field-rules/channel-settlements';
 import { capAuditText } from '../shared/audit-text';
 import { assertFieldRules } from '../shared/field-rules-assert';
 import { refuse } from '../shared/refusal';
 import { loadRuleBook } from '../business-rules/rules';
 import type { RuleBook } from '../business-rules/book';
-import { dayBlockers, dayBlockersForLines, type DayBlocker } from './day-checks';
+import { carrierOfLine, dayBlockers, dayBlockersForLines, type DayBlocker } from './day-checks';
 import { LOAN_RULE_KEYS, loadLoanCheckContext, loanCheckViewerOf, loanCheckForDay, primeLoanCheckCoverage, type LoanCheckContext, type LoanCheckViewer, type LoanCheckViewerView } from './loan-check';
 import { intakeRefusal } from './refusal';
+import { invoiceOf } from './settlement-input';
 import { foodpandaRuleDate, stageFoodpandaDays, stageRulesOn, STAGE_RULE_KEYS, vatCentavosOf } from './stage';
 import { readStoredUpload, type StoredUpload } from './stored-upload';
 import { groupedMoney, plainDate } from './text';
@@ -268,6 +271,18 @@ export interface ReviewDayDetail {
   blockers: DayBlocker[];
   willPostOn: string | null;
   postNote: string | null;
+  /** T-511 S7b: may this person approve this day? Only a pending day can be approved; `approveWhy` is the plain reason when not (the person uploaded a file it comes from) */
+  canApprove: boolean;
+  approveWhy: string | null;
+  /** Foodpanda: the day whose payout also settles the charges of its invoice (the latest day of the invoice) */
+  isCarrier: boolean;
+  /** the sentence saying so, when charges are booked and waiting to be netted */
+  carrierNote: string | null;
+  /** Foodpanda: the charges of this day's invoice, shown on every day of the invoice (empty for Grab and for an invoice with none) */
+  invoiceCharges: PeriodChargeView[];
+  /** a booked day: the date its payout was booked on, and how to undo it; null otherwise */
+  bookedOn: string | null;
+  undoNote: string | null;
 }
 
 const centsOf = (t: string): bigint => toCentavos(money(t));
@@ -343,6 +358,18 @@ export async function getReviewDayDetail(tx: Tx, actor: Actor, input: { lineId: 
   });
   const others = await settlementIntakeRepo.otherLinesOf(tx, orgId, line.id);
 
+  // T-511 S7b: who may approve, the invoice's charges, and where a booked day went
+  const administrator = await can(tx, actor, 'override_period_lock');
+  const uploaderBlocked =
+    line.reviewState === 'pending' && !administrator && (await settlementIntakeRepo.uploaderIdsOfLine(tx, orgId, line.id)).includes(actor.personId);
+  const carrier = await carrierOfLine(tx, orgId, line);
+  const inv = invoiceOf(line);
+  const invoiceCharges = inv ? await chargeViews(tx, actor, await settlementIntakeRepo.periodChargeFacts(tx, orgId, { invoices: [inv] }), administrator) : [];
+  const carrierNote = carrier.charges
+    ? `This payout also settles ${carrier.charges.ids.length} ${carrier.charges.ids.length === 1 ? 'charge' : 'charges'} of this invoice. The bank deposit is the file's net minus ${groupedMoney(carrier.charges.total)}.`
+    : null;
+  const settlement = line.reviewState === 'booked' && line.settlementId ? await channelSettlementsRepo.getById(tx, orgId, line.settlementId) : null;
+
   return {
     lineId: line.id,
     storeId: line.storeId,
@@ -367,7 +394,98 @@ export async function getReviewDayDetail(tx: Tx, actor: Actor, input: { lineId: 
     blockers: checks.blockers,
     willPostOn: checks.willPostOn,
     postNote: checks.postNote,
+    canApprove: line.reviewState === 'pending' && !uploaderBlocked,
+    approveWhy: uploaderBlocked ? UPLOADER_APPROVE_SENTENCE : null,
+    isCarrier: carrier.isCarrier,
+    carrierNote,
+    invoiceCharges,
+    bookedOn: settlement?.settledOn ?? null,
+    undoNote: settlement ? UNDO_SENTENCE : null,
   };
+}
+
+const UPLOADER_APPROVE_SENTENCE = 'You uploaded a file this day comes from, so someone else must approve it.';
+const UPLOADER_CHARGE_SENTENCE = 'You uploaded the file this charge comes from, so someone else must book it.';
+const UNDO_SENTENCE = 'To undo it, an administrator cancels the settlement on the Overview tab. The day then comes back here as waiting.';
+
+/* ------------------------------------------------------------------ period charges (S7b) */
+
+export type PeriodChargeState = 'not_booked' | 'booked' | 'replaced' | 'cannot_book';
+
+/** One staged charge that belongs to no sales day. `why` is the plain reason it cannot be booked (or not by this person); no id of a person leaves the server. */
+export interface PeriodChargeView {
+  otherLineId: string;
+  /** the invoice number, when the file gave one */
+  invoiceNumber: string | null;
+  chargeDate: string | null;
+  description: string | null;
+  net: string;
+  vat: string | null;
+  /** net + VAT; null when the VAT was not kept */
+  total: string | null;
+  state: PeriodChargeState;
+  why: string | null;
+  /** the "Book this charge" button shows only when true */
+  canBook: boolean;
+}
+
+/** The refusals `postPlatformCharge` would give, told in advance (it stays the backstop: it checks all of them again, and more, such as a closed month). */
+function chargeStateOf(f: PeriodChargeFact): { state: PeriodChargeState; why: string | null } {
+  if (f.booked) return { state: 'booked', why: null };
+  if (!f.isCurrent || f.uploadReplaced) return { state: 'replaced', why: 'This file was replaced by a newer upload; book the charge from the newer file.' };
+  if (f.copy) {
+    return {
+      state: 'cannot_book',
+      why: `A charge of ${groupedMoney(f.copy.totalAmount)} dated ${plainDate(f.copy.chargeDate)} with the same description is already booked, probably from an earlier copy of this file. If it really is a second, separate charge, ask the owner.`,
+    };
+  }
+  if (f.vat === null) return { state: 'cannot_book', why: "This charge was saved before its VAT was kept, and the same file can't be uploaded again. Ask for a corrected file, or ask the owner to fix it." };
+  if (f.lineDate === null) return { state: 'cannot_book', why: "This charge has no date on the statement, so it can't be booked. Ask for help." };
+  if (isZero(add(money(f.net), money(f.vat)))) return { state: 'cannot_book', why: 'This charge comes to nothing, so there is nothing to book.' };
+  return { state: 'not_booked', why: null };
+}
+
+async function chargeViews(tx: Tx, actor: Actor, facts: readonly PeriodChargeFact[], administrator: boolean): Promise<PeriodChargeView[]> {
+  const permitted = new Map<string, boolean>();
+  const out: PeriodChargeView[] = [];
+  for (const f of facts) {
+    if (!permitted.has(f.storeId)) permitted.set(f.storeId, await can(tx, actor, 'record_ar_collection', { storeId: f.storeId }));
+    const { state, why } = chargeStateOf(f);
+    const own = !administrator && f.uploadedBy === actor.personId;
+    out.push({
+      otherLineId: f.otherLineId,
+      invoiceNumber: f.invoiceNumber,
+      chargeDate: f.lineDate,
+      description: f.description,
+      net: f.net,
+      vat: f.vat,
+      total: f.vat === null ? null : String(add(money(f.net), money(f.vat))),
+      state,
+      why: state === 'not_booked' && own ? UPLOADER_CHARGE_SENTENCE : why,
+      canBook: state === 'not_booked' && permitted.get(f.storeId)! && !own,
+    });
+  }
+  return out;
+}
+
+/** Every staged period charge of the stores the actor may review, posted or not, newest first (the section "Charges not tied to a day"; this covers the fee-only invoice that has no day row). */
+export async function listPeriodCharges(tx: Tx, actor: Actor): Promise<PeriodChargeView[]> {
+  const { ids } = await visibleStoreIds(tx, actor);
+  const facts = await settlementIntakeRepo.periodChargeFacts(tx, actor.orgId, { storeIds: ids });
+  return chargeViews(tx, actor, facts, await can(tx, actor, 'override_period_lock'));
+}
+
+/**
+ * Book one period charge from the review screen. The gate of the charge's store first (in this screen's own words, no store named), then the uploader rule: a person who
+ * uploaded the charge's file does not book it, unless an administrator (the rule `approveDay` keeps); then `postPlatformCharge`, unchanged, which keeps every other refusal.
+ */
+export async function bookPeriodCharge(tx: Tx, actor: Actor, input: { otherLineId: string }): Promise<PostPlatformChargeResult> {
+  const seen = UUID_SHAPE.test(input.otherLineId) ? await settlementIntakeRepo.otherLineWithUpload(tx, actor.orgId, input.otherLineId) : null;
+  if (!seen) throw intakeRefusal('LINE_NOT_FOUND', 'This charge was not found. Reload the page.');
+  await authorizeWith(tx, actor, 'record_ar_collection', seen.storeId, 'You do not have permission to book charges for this store.');
+  const upload = await settlementIntakeRepo.findUploadById(tx, actor.orgId, seen.uploadId);
+  if (upload?.uploadedBy === actor.personId && !(await can(tx, actor, 'override_period_lock'))) throw intakeRefusal('UPLOADER_CANNOT_APPROVE', UPLOADER_CHARGE_SENTENCE);
+  return postPlatformCharge(tx, actor, { otherLineId: seen.id });
 }
 
 /* ------------------------------------------------------------------ decisions */
