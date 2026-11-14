@@ -6,6 +6,8 @@
  * (managerA = a manager scoped to store A only) (role rows, all scoped to BOTH stores so a refusal is the
  * capability's, not a scope accident); `grantedStaff` = staff role + the position grant `set_menu_price` for store A ONLY (T-318).
  */
+import { isTestDatabaseUrl } from '../../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
@@ -19,8 +21,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 export const sql = postgres(url, { max: 5 });

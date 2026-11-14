@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -29,8 +31,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} — the database name must contain "_test".`);
 }
 
 class RedirectSignal extends Error {
@@ -238,13 +240,13 @@ describe('T9 — "Payments against this bill"', () => {
     const a = await bill(f, '3000.00', 'INV-A');
     await payBills(f, '3000.00', [{ expenseId: a.expenseId, amountApplied: '3000.00' }]);
 
-    for (const who of [f.staff, f.otherManager]) {
-      const html = await renderBill(who, a.invoiceId);
-      expect(html, 'the row is visible').toMatch(/Payments against this bill/);
-      expect(html).toMatch(/3,000\.00/);
-      expect(voidPanels(html), 'no void panel for a non-holder').toHaveLength(0);
-      expect(html).not.toMatch(/Void this payment/);
-    }
+    // T-577: a viewer outside the bill's store no longer reads it at all (the same not-found as a forged id); staff at the store still do.
+    const html = await renderBill(f.staff, a.invoiceId);
+    expect(html, 'the row is visible').toMatch(/Payments against this bill/);
+    expect(html).toMatch(/3,000\.00/);
+    expect(voidPanels(html), 'no void panel for a non-holder').toHaveLength(0);
+    expect(html).not.toMatch(/Void this payment/);
+    await expect(renderBill(f.otherManager, a.invoiceId), 'another store manager').rejects.toThrow(/notFound\(\)/);
   });
 
   it('a voided payment shows "Voided — {reason}" and no control; the bill\'s other forms are unchanged', async () => {

@@ -8,21 +8,23 @@
  * Touch size is `min-h-12` (3rem) on every control. No state library: React state only.
  */
 import Link from 'next/link';
-import { startTransition, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { startTransition, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Badge, Banner, Button } from '@/components/ui';
 import { signOutAction } from '@/app/sign-in/actions';
 import { printerMode } from '@/lib/pos-print/adapter';
-import { POS_CONFLICT_MESSAGE, POS_NEEDS_INTERNET_ONCE, POS_STORE_ACCESS_LOST, POS_TABLET_UNPAIRED_MESSAGE, posHttpErrorMessage } from './messages';
+import { POS_CONFLICT_MESSAGE, POS_NEEDS_INTERNET_ONCE, POS_STORE_ACCESS_LOST, POS_TABLET_UNPAIRED_MESSAGE, posHeldSalesMessage, posHttpErrorMessage } from './messages';
 import { SwitchCashierDialog } from './SwitchCashierDialog';
 import { posOfflineBandText } from './offline-band';
-import type { MenuLike } from '../_orders/menu-filter';
+import { asStoreMenu, type MenuLike } from '../_orders/menu-filter';
 import { projectOrders, refusalNotices, type SessionBody, type ServerStand } from '../_orders/project';
 import { PosContext } from './pos-context';
 import { statusPillLabel, statusPillShort } from './status-pill';
 import { tabCount, visibleTabs } from './tabs';
 import { useDeviceSync } from './use-device-sync';
+import { useMenuClock } from './use-menu-clock';
 import { usePosState } from './use-pos-state';
+import { useOutageReplay } from '../_kitchen/use-outage-replay';
 
 export interface PosShellProps {
   person: { personId: string; displayName: string };
@@ -50,6 +52,12 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
   const store = stores.find((s) => s.id === storeId);
   const state = usePosState(storeId);
   const sync = useDeviceSync({ paired: pairedStoreId !== null, personId: person.personId, online: state.online });
+  // T-559 R3: the daypart clock. It ticks at each window boundary, on resume and when back online, so the priced views follow the tablet's own clock offline.
+  const snapshotMenu = sync.ordersSnapshot?.menu;
+  const menuHours = useMemo(() => (snapshotMenu ? asStoreMenu(snapshotMenu as MenuLike).hours : undefined), [snapshotMenu]);
+  const clockAt = useMenuClock(menuHours, sync.ordersSnapshot?.nextChangeAt ?? null);
+  // T-529 R3: orders saved in the ~6 s before the poll says Offline still print, once.
+  useOutageReplay({ paired: pairedStoreId !== null, online: state.online, snapshot: sync.ordersSnapshot, pending: sync.pendingEvents, loaded: sync.pendingLoaded, openStands: state.body?.openStands ?? null });
   const [switching, setSwitching] = useState(false);
   const [offlineSince, setOfflineSince] = useState<number | null>(null);
   const [now, setNow] = useState(0);
@@ -141,9 +149,14 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
     personName: name,
     online: state.online,
     openStands: state.body?.openStands ?? null,
+    kitchenQueue: state.body?.kitchenQueue ?? null,
+    refillQueue: state.body?.refillQueue ?? null,
+    refillTables: state.body?.refillTables ?? null,
+    held: caps,
     stateVersion: state.body?.stateVersion ?? null,
     pendingEvents: sync.pendingEvents,
     ordersSnapshot: sync.ordersSnapshot,
+    clockAt,
     requestDrain: sync.requestDrain,
     setResultsHandler: sync.setResultsHandler,
   };
@@ -261,6 +274,7 @@ export function PosShell({ person, heldPos, stores, pairedStoreId, erpHref, chil
               </Button>
             </Banner>
           ))}
+          {sync.heldSales > 0 ? <Banner tone="warning">{posHeldSalesMessage(sync.heldSales)}</Banner> : null}
           {sync.conflicts > 0 ? (
             <Banner tone="warning">
               {POS_CONFLICT_MESSAGE}{' '}

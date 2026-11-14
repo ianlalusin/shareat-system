@@ -13,7 +13,7 @@ import { listStores, locationsPageData } from './lib';
 import { Page } from '@/components/shell/Page';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { INVENTORY_LOCATION_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Button, Checkbox, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select } from '@/components/ui';
+import { Button, Checkbox, ConfirmDestructive, DialogActions, Field, FlashBanner, FormGrid, FormModal, HelpTip, Input, Select, Table, Td, Th } from '@/components/ui';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { withFlash } from '@/lib/flash';
@@ -161,32 +161,31 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
               </CheckedForm>
             </FormModal>
           </div>
-          <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-            <table className="w-full min-w-[720px] border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-neutral-200 bg-neutral-50 text-left dark:border-neutral-800 dark:bg-neutral-900">
-                  <th className="px-3 py-2 font-medium">Room</th>
-                  <th className="px-3 py-2 font-medium">Type / role</th>
-                  <th className="px-3 py-2 font-medium">Purpose</th>
-                  <th className="px-3 py-2 font-medium">Default</th>
-                  <th className="px-3 py-2 font-medium">Status</th>
-                  <th className="px-3 py-2 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {locations.map((loc) => (
-                  <tr key={loc.id} className="border-b border-neutral-100 align-top last:border-0 dark:border-neutral-900">
-                    <td className="px-3 py-2">
-                      <div className="font-medium">{loc.name}</div>
-                      <div className="font-mono text-xs text-neutral-500">{loc.code}</div>
-                    </td>
-                    <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">
-                      {loc.typeName} · {loc.role}
-                    </td>
-                    <td className="px-3 py-2">{loc.purpose === 'receiving' ? 'Receiving' : 'Normal'}</td>
-                    <td className="px-3 py-2">{loc.isDefault ? '★ default' : ''}</td>
-                    <td className="px-3 py-2">{loc.status}</td>
-                    <td className="px-3 py-2">
+          <Table card={{ title: 'Room', subtitle: 'Type / role', keys: [] }}>
+            <thead>
+              <tr>
+                <Th>Room</Th>
+                <Th>Type / role</Th>
+                <Th>Purpose</Th>
+                <Th>Default</Th>
+                <Th>Status</Th>
+                <Th className="w-24">Actions</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {locations.map((loc) => (
+                <tr key={loc.id} className="align-top">
+                  <Td>
+                    <div className="font-medium">{loc.name}</div>
+                    <div className="font-mono text-xs text-muted">{loc.code}</div>
+                  </Td>
+                  <Td className="text-muted">
+                    {loc.typeName} · {loc.role}
+                  </Td>
+                  <Td>{loc.purpose === 'receiving' ? 'Receiving' : 'Normal'}</Td>
+                  <Td>{loc.isDefault ? 'Default' : ''}</Td>
+                  <Td>{loc.status}</Td>
+                  <Td>
                       <div className="flex flex-wrap items-center gap-2">
                         <EditableRecord
                           action={updateLocationAction}
@@ -257,12 +256,11 @@ export default async function StockLocationsPage({ searchParams }: { searchParam
                           )}
                         </>
                       </div>
-                    </td>
+                    </Td>
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+            </Table>
         </section>
       )}
     </Page>

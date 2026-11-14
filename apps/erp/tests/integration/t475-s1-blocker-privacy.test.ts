@@ -1,5 +1,8 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { grantPositionCapability } from '../helpers/grant-position-capability';
 import postgres from 'postgres';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
@@ -13,8 +16,8 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} — the database name must contain "_test".`);
 }
 
 vi.mock('next/navigation', () => ({
@@ -98,6 +101,8 @@ describe('T-475 S1 - a viewer who may not verify sees no blocker detail', () => 
     expect(CAPTURED.length, 'control: the verify form mounts RuleChecks for the verifier').toBeGreaterThan(0);
     expect(verifierFacts, 'control: the verifier is given the drawer blocker').toMatch(/holds |is short/);
 
+    // T-577: floor staff read the invoice page by holding record_supplier_invoice at the store (position-granted); they still may not verify.
+    await grantPositionCapability(sql, { orgId: f.orgId, storeId: f.storeId, personId: f.staffId, setBy: f.adminId, capability: 'record_supplier_invoice' });
     const staffHtml = await render(f.staff, inv);
     expect(staffHtml, 'the page itself rendered for the viewer').toContain('Pending');
     const staffFacts = JSON.stringify(CAPTURED.map((c) => c.facts));

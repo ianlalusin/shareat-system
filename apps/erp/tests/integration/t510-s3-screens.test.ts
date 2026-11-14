@@ -67,7 +67,7 @@ describe('a store with no dayparts looks exactly as before', () => {
       expect(html).toContain('>Withdraw<');
       // The ONE allowed difference from before T-510: a person who may manage store settings gets a link to the hours page.
       expect(html).toContain(`/menu/hours?store=${c.storeB}`);
-      const rest = plain(html).replace('Change the lunch and dinner hours', '');
+      const rest = plain(html).replace('Change the menu hours', '');
       expect(rest).not.toMatch(/lunch|dinner|not offered now|super admin|hours/i);
     }
   });
@@ -111,7 +111,7 @@ describe('Lunch and Dinner side by side', () => {
     expect(mg).toContain('aria-label="Change price"');
     expect(mg).not.toMatch(/<select[^>]*name="daypartId"/);
     expect(mg).not.toContain('aria-label="Withdraw the Lunch price"');
-    expect(mt).toContain('Only a super admin can change which prices belong to lunch or dinner');
+    expect(mt).toContain('Only a super admin can change which prices belong to menu hours');
   });
 
   it('the actions pass the daypart: a manager re-prices a slot; a manager cannot create, re-link or withdraw one; a super admin can', async () => {
@@ -163,7 +163,7 @@ describe('/admin/stores/[id]: lunch and dinner hours', () => {
     expect(add.flash.error).toBeUndefined();
     const [d] = await sql<{ id: string }[]>`select id from menu_dayparts where store_id = ${c.storeA} and name = 'Dinner'`;
     const page = plain(await render(STORE_PAGE, c.admin, { params: { id: c.storeA } }));
-    expect(page).toContain('Lunch and dinner hours');
+    expect(page).toContain('Menu hours');
     expect(page).toContain('Dinner 17:00 to 08:00 next day Every day');
 
     const edit = await run(STORES, 'updateDaypartAction', c.admin, f({ daypartId: d!.id, name: 'Late dinner', days: ['5', '6'], start: '18:00', end: '02:00' }));
@@ -321,7 +321,7 @@ describe('T-510 S3 audit fixes', () => {
     await run(STORES, 'retireDaypartAction', c.admin, fd({ storeId: c.storeA, daypartId: l, confirmName: 'Lunch' }));
     for (const who of [c.superAdmin, c.managerA]) {
       const html = await render(PRICES_PAGE, who, { search: { store: c.storeA } });
-      expect(plain(html)).toContain('no active lunch and dinner hours, so only an all-day price can be set here');
+      expect(plain(html)).toContain('no active menu hours, so only an all-day price can be set here');
       expect(html).toContain('>Set price<');
       expect(html).not.toContain('aria-label="Add price for another time"');
     }

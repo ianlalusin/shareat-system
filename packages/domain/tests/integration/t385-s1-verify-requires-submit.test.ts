@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -23,8 +25,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { closeDb, salesDaysRepo, RefusalError } from '@shareat/db';
@@ -113,7 +115,7 @@ describe('T-385 S1 - verifySalesDay requires a submitted day', () => {
   it('V6: the repo refuses too - markVerified on an OPEN row finds no row to move and the row is unchanged', async () => {
     const { f, dayId } = await setup('v6');
     // a real entry id to hand over (any verified day's), so the only thing that can refuse the call is the status guard
-    const other = await mkTypedDay(sql, f, [f.managerId, f.adminId], '2027-01-11');
+    const other = await mkTypedDay(sql, f, [f.managerId, f.adminId], '2026-01-11');
     const posted = await asOrgOn(f.orgId, (tx) => submitThenVerify(tx, f.manager, other.id, f.admin));
     const err = await rejection(
       asOrgOn(f.orgId, (tx) =>

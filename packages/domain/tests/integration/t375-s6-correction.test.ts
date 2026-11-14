@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -34,8 +36,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { closeDb, type Tx } from '@shareat/db';
@@ -111,17 +113,17 @@ const dayFigures = (dayId: string) => sql`
          other_charges, cash_collected, online_collected, credit_sales, refunds, journal_entry_id
     from sales_days where id = ${dayId}`;
 const drift = (f: S6F) =>
-  asOrgOn(f.orgId, async (tx) => (await D.listFindings(tx, f.orgId, { period: '2026-12' })).findings.filter((x) => x.kind === 'posDayFeedDrift'));
+  asOrgOn(f.orgId, async (tx) => (await D.listFindings(tx, f.orgId, { period: '2025-12' })).findings.filter((x) => x.kind === 'posDayFeedDrift'));
 
 const S = {
   already: 'That POS check has already been posted as a correction.',
   unchanged: (d: string) => `POS's figures for ${hd(d)} haven't changed since they were posted.`,
   early: (d: string) => `A correction can't be dated before the day it corrects (${hd(d)}).`,
-  closed: 'January 2027 is closed. A correction must be dated in an open month. Choose a later date.',
+  closed: 'January 2026 is closed. A correction must be dated in an open month. Choose a later date.',
   noPeriod: (d: string) => `There is no fiscal period for ${hd(d)} yet.`,
   unmapped: 'POS took ₱350.00 as "Maya", which isn\'t set up as a tender for this store. An admin maps it under Settings › POS link, then import again.',
 };
-const OPEN_DATE = '2027-01-20';
+const OPEN_DATE = '2026-01-20';
 
 // =====================================================================================================
 describe('X1 - the entry points the screens call are exported from @shareat/domain', () => {
@@ -186,9 +188,9 @@ describe('C3 - the date of a correction', () => {
     const { dayId, feedId } = await drifted(f);
     const entriesBefore = (await saleEntries(f)).length;
 
-    expect(await sentenceOf(correct(f, f.manager, { salesDayId: dayId, feedId, entryDate: '2027-01-09' }))).toBe(S.early(DAY));
+    expect(await sentenceOf(correct(f, f.manager, { salesDayId: dayId, feedId, entryDate: '2026-01-09' }))).toBe(S.early(DAY));
 
-    await sql`update fiscal_periods set status = 'closed' where org_id = ${f.orgId} and starts_on in ('2026-12-01', '2027-01-01')`;
+    await sql`update fiscal_periods set status = 'closed' where org_id = ${f.orgId} and starts_on in ('2025-12-01', '2026-01-01')`;
     // T-492 (DEF-784): refused in words, before postEntry - the sentence still says "closed", never ids or "postEntry:".
     const closedSentence = await sentenceOf(correct(f, f.manager, { salesDayId: dayId, feedId, entryDate: OPEN_DATE }));
     expect(closedSentence).toBe(S.closed);
@@ -200,10 +202,10 @@ describe('C3 - the date of a correction', () => {
     expect(await corrections(dayId)).toHaveLength(0);
     expect((await saleEntries(f)).length).toBe(entriesBefore);
 
-    await correct(f, f.manager, { salesDayId: dayId, feedId, entryDate: '2027-02-15' });
+    await correct(f, f.manager, { salesDayId: dayId, feedId, entryDate: '2026-02-15' });
     const rows = await corrections(dayId);
     expect(rows, 'control: dated in an open month it posts').toHaveLength(1);
-    expect(rows[0]!.entry_date).toBe('2027-02-15');
+    expect(rows[0]!.entry_date).toBe('2026-02-15');
   });
 });
 
@@ -282,13 +284,13 @@ describe('C8 - reports reconcile with a correction in the period (R14)', () => {
   it('January with a January correction: reconciles; ledger 1,050.00; modes 550.00 / 500.00; a "POS corrections" channel line of -50.00 (no channel id)', async () => {
     const f = await s6Fixture(sql, 'c8');
     const { dayId, feedId } = await drifted(f);
-    const pre = await rollup(f, '2027-01-01', '2027-01-31');
+    const pre = await rollup(f, '2026-01-01', '2026-01-31');
     expect(pre.reconciles, 'control: before the correction').toBe(true);
     expect(pre.channels.some((c) => c.channelName === 'POS corrections'), 'control: no correction line yet').toBe(false);
     expect(Number(pre.ledgerTotal)).toBe(1100);
 
     await correct(f, f.manager, { salesDayId: dayId, feedId, entryDate: OPEN_DATE });
-    const r = await rollup(f, '2027-01-01', '2027-01-31');
+    const r = await rollup(f, '2026-01-01', '2026-01-31');
     expect(r.reconciles).toBe(true);
     expect(Number(r.ledgerTotal)).toBe(1050);
     expect(Number(r.channelTotal)).toBe(1050);
@@ -302,14 +304,14 @@ describe('C8 - reports reconcile with a correction in the period (R14)', () => {
   it('a correction dated in MARCH: January alone still reconciles at 1,100.00 with no correction line; January-March reconciles at 1,050.00 with the line', async () => {
     const f = await s6Fixture(sql, 'c8m');
     const { dayId, feedId } = await drifted(f);
-    await correct(f, f.manager, { salesDayId: dayId, feedId, entryDate: '2027-03-05' });
+    await correct(f, f.manager, { salesDayId: dayId, feedId, entryDate: '2026-03-05' });
 
-    const jan = await rollup(f, '2027-01-01', '2027-01-31');
+    const jan = await rollup(f, '2026-01-01', '2026-01-31');
     expect(jan.reconciles).toBe(true);
     expect(Number(jan.ledgerTotal)).toBe(1100);
     expect(jan.channels.some((c) => c.channelName === 'POS corrections')).toBe(false);
 
-    const all = await rollup(f, '2027-01-01', '2027-03-31');
+    const all = await rollup(f, '2026-01-01', '2026-03-31');
     expect(all.reconciles).toBe(true);
     expect(Number(all.ledgerTotal)).toBe(1050);
     expect(Number(all.channels.find((c) => c.channelName === 'POS corrections')?.total)).toBe(-50);
@@ -366,7 +368,7 @@ describe('V3 - voiding a corrected day reverses the day AND its correction; repo
     expect((await corrections(dayId)), 'the correction row stays (append-only)').toHaveLength(1);
     expect((await dayFigures(dayId))[0]!.status).toBe('voided');
 
-    const jan = await asOrgOn(f.orgId, (tx) => D.getSalesRollup(tx, { orgId: f.orgId, storeId: f.storeId, fromDate: '2027-01-01', toDate: '2027-01-31', groupBy: 'month' }));
+    const jan = await asOrgOn(f.orgId, (tx) => D.getSalesRollup(tx, { orgId: f.orgId, storeId: f.storeId, fromDate: '2026-01-01', toDate: '2026-01-31', groupBy: 'month' }));
     expect(jan.reconciles, 'the correction and its reversal are both matched by source id').toBe(true);
     expect(Number(jan.ledgerTotal)).toBe(0);
 
@@ -378,7 +380,7 @@ describe('V3 - voiding a corrected day reverses the day AND its correction; repo
         from journal_lines jl join journal_entries je on je.id = jl.entry_id join accounts a on a.id = jl.account_id
        where je.org_id = ${f.orgId} and je.source_type = 'sale' and a.code in ('4100', '4150')`;
     expect(Number(net!.n), '4100 + 4150 net of everything = the new feed once').toBe(1050);
-    const after = await asOrgOn(f.orgId, (tx) => D.getSalesRollup(tx, { orgId: f.orgId, storeId: f.storeId, fromDate: '2027-01-01', toDate: '2027-01-31', groupBy: 'month' }));
+    const after = await asOrgOn(f.orgId, (tx) => D.getSalesRollup(tx, { orgId: f.orgId, storeId: f.storeId, fromDate: '2026-01-01', toDate: '2026-01-31', groupBy: 'month' }));
     expect(after.reconciles).toBe(true);
     expect(Number(after.ledgerTotal)).toBe(1050);
   });
@@ -417,7 +419,7 @@ describe('B - two corrections on one day: the second one\'s old is the day entry
     const { dayId, feedId } = await drifted(f);
     await correct(f, f.manager, { salesDayId: dayId, feedId, entryDate: OPEN_DATE });
     const second = (await recheck(f, DAY, { ...D1_FIGURES, paidTotal: 950, packageOnly: 500, methods: { Cash: 600, GCash: 350 } })).ids.sales!;
-    await correct(f, f.manager, { salesDayId: dayId, feedId: second, entryDate: '2027-01-21', reason: 'POS voided another receipt' });
+    await correct(f, f.manager, { salesDayId: dayId, feedId: second, entryDate: '2026-01-21', reason: 'POS voided another receipt' });
 
     const rows = await corrections(dayId);
     expect(rows).toHaveLength(2);
@@ -434,7 +436,7 @@ describe('C - voiding a day with TWO corrections', () => {
     const { dayId, dayEntryId, feedId } = await drifted(f);
     await correct(f, f.manager, { salesDayId: dayId, feedId, entryDate: OPEN_DATE });
     const second = (await recheck(f, DAY, { ...D1_FIGURES, paidTotal: 950, packageOnly: 500, methods: { Cash: 600, GCash: 350 } })).ids.sales!;
-    await correct(f, f.manager, { salesDayId: dayId, feedId: second, entryDate: '2027-01-21', reason: 'POS voided another receipt' });
+    await correct(f, f.manager, { salesDayId: dayId, feedId: second, entryDate: '2026-01-21', reason: 'POS voided another receipt' });
     const rows = await corrections(dayId);
     const c1 = rows.find((r) => r.to_feed_id === feedId)!;
     const c2 = rows.find((r) => r.to_feed_id === second)!;
@@ -451,7 +453,7 @@ describe('C - voiding a day with TWO corrections', () => {
     expect(reversalOf(c2.journal_entry_id).source_id).toBe(c2.id);
     expect(reversalOf(c1.journal_entry_id).source_id).toBe(c1.id);
 
-    const jan = () => asOrgOn(f.orgId, (tx) => D.getSalesRollup(tx, { orgId: f.orgId, storeId: f.storeId, fromDate: '2027-01-01', toDate: '2027-01-31', groupBy: 'month' }));
+    const jan = () => asOrgOn(f.orgId, (tx) => D.getSalesRollup(tx, { orgId: f.orgId, storeId: f.storeId, fromDate: '2026-01-01', toDate: '2026-01-31', groupBy: 'month' }));
     const voided = await jan();
     expect(voided.reconciles).toBe(true);
     expect(Number(voided.ledgerTotal)).toBe(0);

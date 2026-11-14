@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
@@ -32,8 +34,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { closeDb, type Tx } from '@shareat/db';
@@ -83,7 +85,7 @@ async function recheckDay(actor: Actor, salesDayId: string, fetchers: Fetchers):
 }
 
 const findings = (f: S6F, kind: string) =>
-  asOrgOn(f.orgId, async (tx: Tx) => (await D.listFindings(tx, f.orgId, { period: '2026-12' })).findings.filter((x) => x.kind === kind));
+  asOrgOn(f.orgId, async (tx: Tx) => (await D.listFindings(tx, f.orgId, { period: '2025-12' })).findings.filter((x) => x.kind === kind));
 const feedDrift = (f: S6F) => findings(f, 'posDayFeedDrift');
 const itemsDrift = (f: S6F) => findings(f, 'posDaySoldItemsDrift');
 
@@ -190,7 +192,7 @@ describe('R3 - a recheck of a day imported under an earlier link refuses (T-382 
     expect(stubOld.calls, 'POS is not asked').toHaveLength(0);
     expect(await recheckFeeds(f, DAY), 'no recheck feed stored').toHaveLength(0);
 
-    const day2 = '2027-01-11';
+    const day2 = '2026-01-11';
     const newDay = await importVerified(f, day2);
     const stubNew = stubFetchers({ figures: R1_FIGURES });
     await recheckDay(f.manager, newDay, stubNew.fetchers);
@@ -342,8 +344,8 @@ describe('D - the 7-day recheck runs for an importer WITHOUT verify_sales_day', 
   }
   it('a cashier who can import (submit_sales_day, not verify_sales_day) triggers the recheck: batches stored for D-1 and D-2; control: a person who cannot import checks nothing', async () => {
     const f = await s6Fixture(sql, 'd1');
-    await importVerified(f, '2027-01-09');
-    await importVerified(f, '2027-01-08');
+    await importVerified(f, '2026-01-09');
+    await importVerified(f, '2026-01-08');
     const [p] = await sql<{ id: string }[]>`insert into persons (org_id, display_name) values (${f.orgId}, 'Cashier') returning id`;
     await sql`insert into person_roles (person_id, org_id, role) values (${p!.id}, ${f.orgId}, 'staff')`;
     await sql`insert into person_store_scope (person_id, store_id) values (${p!.id}, ${f.storeId})`;
@@ -354,11 +356,11 @@ describe('D - the 7-day recheck runs for an importer WITHOUT verify_sales_day', 
     const cashier: Actor = { personId: p!.id, orgId: f.orgId };
 
     await recheckRecent(f.plainStaff, f.storeId, DAY, stubFetchers({ figures: R1_FIGURES }).fetchers).catch(() => null);
-    expect(await recheckFeeds(f, '2027-01-09'), 'control: someone who cannot import checks nothing').toHaveLength(0);
-    expect(await recheckFeeds(f, '2027-01-08')).toHaveLength(0);
+    expect(await recheckFeeds(f, '2026-01-09'), 'control: someone who cannot import checks nothing').toHaveLength(0);
+    expect(await recheckFeeds(f, '2026-01-08')).toHaveLength(0);
 
     await recheckRecent(cashier, f.storeId, DAY, stubFetchers({ figures: R1_FIGURES }).fetchers);
-    for (const d of ['2027-01-09', '2027-01-08']) {
+    for (const d of ['2026-01-09', '2026-01-08']) {
       expect((await recheckFeeds(f, d)).map((r) => r.kind).sort(), `${d}: a batch of both kinds`).toEqual(['sales', 'sold_items']);
     }
   });

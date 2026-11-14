@@ -4,6 +4,7 @@
  * carry expense_subcategory_id whose category must equal the row's expense_category_id (trigger); an admin manages the list
  * (manage_chart_of_accounts); approval REQUIRES a sub-category when the chosen category has an active one, and is optional otherwise.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
@@ -23,7 +24,7 @@ import {
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) throw new Error('Refusing to run: database name must contain "_test".');
+if (!isTestDatabaseUrl(url)) throw new Error('Refusing to run: database name must contain "_test".');
 const sql = postgres(url, { max: 4 });
 afterAll(async () => {
   await sql.end({ timeout: 5 });

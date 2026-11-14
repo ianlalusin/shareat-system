@@ -185,6 +185,8 @@ const EXEMPT: Record<string, string> = {
   // `recordCollection` and `voidCharge` were DEF-190's unreachable half; T-226 gave them
   // `/customers/[customerId]` and this test failed until the rows were deleted — which is the
   // stale-exemption rule doing its whole job, on the very next task after the guard shipped.
+  gateLineAction:
+    'INTERNAL — T-576. Called only by cancelLine (pos/order.ts) and addLineDiscount, removeLineDiscount and applyPresetToAllLines (pos/discounts.ts), which the POS inbox runs; it is the manager-PIN gate on a line action, not a screen action of its own.',
   recordOwnerSelfAgreement:
     'INTERNAL — T-519 R5. Called only by `recoverFromPay` in owners/index.ts, in the same transaction; it is not a screen action and never authorizes a human of its own.',
   reconcileSupplier:
@@ -301,6 +303,14 @@ const EXEMPT: Record<string, string> = {
   authorizeWith:
     'INTERNAL — the gate with a sentence of the settlement review screen own: `rejectDay`, `reopenDay`, `overrideLoanAllocation`, `bookPeriodCharge` (review.ts) and `approveDay` (approve.ts) call it; it is exported only so approve.ts shares it (S7a).',
 
+  // ---- T-511 S7a — approve a settlement day (domain only; the screen is S7b) -----------------
+  approveDay:
+    'UNWIRED — S7b calls it: the Approve button of the settlement review screen (`approveDayAction`). The domain action is built and tested in S7a, one slice ahead of its screen (S7 spec, 8 Nov 2026; precedent: correctPlatformSales). ' +
+    'Delete this row in S7b, when `apps/` reaches it.',
+
+  authorizeWith:
+    'INTERNAL — the gate with a sentence of the settlement review screen own: `rejectDay`, `reopenDay`, `overrideLoanAllocation` (review.ts) and `approveDay` (approve.ts) call it; it is exported only so approve.ts shares it (S7a).',
+
   // ---- T-511 S5b — the settlement review stage ---------------------------------------------
   loanCheckForDay:
     'INTERNAL — `dayBlockers`, `dayBlockersForLines` and `getReviewDayDetail` / `listReviewDays` (`settlement-intake/review.ts`) call it; the screens read the loan check through ' +
@@ -314,8 +324,6 @@ const EXEMPT: Record<string, string> = {
   addLines:
     'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
   setHeadsCashier:
-    'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
-  requestRefill:
     'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
   cancelLine:
     'INTERNAL — T-525: `applyPosEvents` (packages/domain/src/pos/inbox.ts) calls it from its kind table, one event per transaction; the route /api/pos/events calls `applyPosEvents`, so this is not a screen action of its own.',
@@ -333,12 +341,10 @@ const EXEMPT: Record<string, string> = {
     'INTERNAL — T-525: `readPosState` (packages/domain/src/pos/snapshot.ts) calls it for the state poll, each read only for a person who holds its capability; the route /api/pos/state calls `readPosState`, so this is not a screen action of its own.',
   listKitchenQueue:
     'INTERNAL — T-525: `readPosState` (packages/domain/src/pos/snapshot.ts) calls it for the state poll, each read only for a person who holds its capability; the route /api/pos/state calls `readPosState`, so this is not a screen action of its own.',
+  listRefillableTables:
+    'INTERNAL — T-529: `readPosState` (packages/domain/src/pos/snapshot.ts) calls it for the state poll (`refillTables`), only for a person who holds request_pos_refill or confirm_pos_heads; the route /api/pos/state calls `readPosState`, so this is not a screen action of its own.',
   listRefillQueue:
     'INTERNAL — T-525: `readPosState` (packages/domain/src/pos/snapshot.ts) calls it for the state poll, each read only for a person who holds its capability; the route /api/pos/state calls `readPosState`, so this is not a screen action of its own.',
-  confirmHeads:
-    'UNWIRED — T-527 / T-529: the server phone is its caller (online-only, pairingId null, A9); T-525 left it out of the tablet events. Remove this row when it lands (7 Nov 2026).',
-  serveLine:
-    'UNWIRED — T-527 / T-529: the kitchen screen is its caller (online-only, pairingId null, A9); T-525 left it out of the tablet events. Remove this row when it lands (7 Nov 2026).',
   listTodaysSalesReceipts:
     'UNWIRED — T-526 on: the till screens list the day receipts through it; no T-525 door serves it. Remove this row when it lands (7 Nov 2026).',
   listPosQuarantine:
@@ -347,6 +353,10 @@ const EXEMPT: Record<string, string> = {
     'UNWIRED — T-526 / T-533: T-525 built the quarantine review (docs/tasks/525-pos-v2-apis.md R6) as domain functions only; the quarantine screen for managers is their caller. Remove this row when it lands (7 Nov 2026).',
   discardQuarantinedEvent:
     'UNWIRED — T-526 / T-533: T-525 built the quarantine review (docs/tasks/525-pos-v2-apis.md R6) as domain functions only; the quarantine screen for managers is their caller. Remove this row when it lands (7 Nov 2026).',
+  readingFor:
+    'INTERNAL — T-531: `xReading` (the X-reading, route GET /api/pos/x-reading and the Till tab) and `closeDay` / `closeBacklog` (packages/domain/src/pos/day-close.ts) call it after their own capability check; it is exported only so a test can read a window at a chosen time, so it is not a screen action of its own.',
+  deriveSalesDayFromZ:
+    'INTERNAL — T-531: `closeDay` and `closeBacklog` (packages/domain/src/pos/day-close.ts) call it inside the close transaction for each Z, after the capability check and the manager approval; the routes POST /api/pos/day-close and /api/pos/day-close/backlog call those, so it is not a screen action of its own.',
 };
 
 describe('T-227 — every action-shaped domain export is reachable from a screen', () => {

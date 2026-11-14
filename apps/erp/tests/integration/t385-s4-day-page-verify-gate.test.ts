@@ -1,7 +1,10 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
+import { grantPositionCapability } from '../helpers/grant-position-capability';
 
 /**
  * T-385 S4 - the day page shows "Verify & post" only on a SUBMITTED day. `docs/tasks/385-verify-only-after-submit.md` S4
@@ -27,8 +30,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 const h = vi.hoisted(() => ({ actor: null as null | { personId: string; orgId: string } }));
@@ -110,6 +113,8 @@ describe('T-385 S4 - the day page offers Verify & post only on a submitted day',
   it('P3: a SUBMITTED day, as staff WITHOUT verify_sales_day: no Verify & post', async () => {
     const { f, dayId, storeId } = await setup('p3');
     await asOrgOn(f.orgId, (tx) => submitSalesDay(tx, f.admin, dayId));
+    // T-577: floor staff read the day by holding submit_sales_day at the store (position-granted); they still may not verify.
+    await grantPositionCapability(sql, { orgId: f.orgId, storeId, personId: f.plainStaffId, setBy: f.adminId, capability: 'submit_sales_day' });
     const html = await render(f, f.plainStaff, dayId, storeId);
     expect(html).not.toContain('Verify & post');
   });

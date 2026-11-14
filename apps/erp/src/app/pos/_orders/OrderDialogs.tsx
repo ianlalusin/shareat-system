@@ -12,6 +12,8 @@ import { MenuPicker } from './MenuPicker';
 import type { MenuLike } from './menu-filter';
 import { CANCEL_REASONS, CANCEL_REASON_MAX, CANCEL_REASON_MIN, HEADS_MAX, HEADS_MIN, TAKE_OUT_NAME_MAX, type CartLine } from './payloads';
 import { seatStandChoices, type Tile } from './project';
+import { LineApprovalField } from '../_shell/LineApprovalField';
+import type { LineApprovalMode } from '../_shell/line-approval';
 
 /** UI starting value for the seat dialog's heads stepper (from the design); not a business setting. */
 const START_HEADS = 2;
@@ -34,7 +36,8 @@ export interface OrderSend {
   name: string;
 }
 
-export function OrderDialog({ mode, menu, stands, tiles, onClose, onSend }: { mode: OrderDialogMode; menu: MenuLike | null; stands: { id: string; number: number }[]; tiles: Tile[]; onClose: () => void; onSend: (o: OrderSend) => Promise<string | null> }) {
+/** `at` is the shell's menu clock (T-559): the picker and the items-so-far price at that instant and flip at each daypart boundary. */
+export function OrderDialog({ mode, menu, stands, tiles, onClose, onSend, at }: { mode: OrderDialogMode; menu: MenuLike | null; stands: { id: string; number: number }[]; tiles: Tile[]; onClose: () => void; onSend: (o: OrderSend) => Promise<string | null>; at?: Date }) {
   const [standId, setStandId] = useState<string | null>(null);
   const [heads, setHeads] = useState(START_HEADS);
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -147,17 +150,17 @@ export function OrderDialog({ mode, menu, stands, tiles, onClose, onSend }: { mo
           </label>
         ) : null}
         {menu ? (
-          <MenuPicker menu={menu} packageOpen={mode.kind === 'add' ? mode.packageOpen : false} hidePackages={mode.kind === 'take_out' || (mode.kind === 'add' && mode.takeOut)} heads={pickerHeads} cart={cart} onChange={setCart} />
+          <MenuPicker menu={menu} packageOpen={mode.kind === 'add' ? mode.packageOpen : false} hidePackages={mode.kind === 'take_out' || (mode.kind === 'add' && mode.takeOut)} heads={pickerHeads} cart={cart} onChange={setCart} at={at} />
         ) : (
           <p className="text-sm text-muted">The menu is not on this tablet yet. It loads once the tablet has been online.</p>
         )}
       </div>
       <aside aria-label="New order summary" className="flex flex-col gap-4 rounded-2xl border border-surface-border bg-surface p-4 lg:w-96 lg:shrink-0">
         <h2 className="font-display text-2xl font-bold">{asideTitle}</h2>
-        {menu ? <ItemsSoFar cart={cart} menu={menu} heads={pickerHeads} onChange={setCart} pinTotal /> : null}
+        {menu ? <ItemsSoFar cart={cart} menu={menu} heads={pickerHeads} onChange={setCart} pinTotal at={at} /> : null}
         {/* Pinned: the running total and the Send button stay in view however long the list grows (T-528 Addendum, P1). */}
         <div className="sticky bottom-0 -mx-4 -mb-4 space-y-3 rounded-b-2xl bg-surface px-4 pb-4">
-          {menu ? <ItemsSoFarTotal cart={cart} menu={menu} heads={pickerHeads} /> : null}
+          {menu ? <ItemsSoFarTotal cart={cart} menu={menu} heads={pickerHeads} at={at} /> : null}
           {error ? <p role="alert" className="text-sm font-semibold text-danger">{error}</p> : null}
           <button type="button" data-erp-size="free" className={SEND} disabled={!ready || busy} aria-disabled={!ready || busy} onClick={send}>
             {busy ? 'Saving…' : sendLabel}
@@ -169,18 +172,20 @@ export function OrderDialog({ mode, menu, stands, tiles, onClose, onSend }: { mo
   );
 }
 
-export function CancelLineDialog({ lineName, onClose, onConfirm }: { lineName: string; onClose: () => void; onConfirm: (reason: string) => Promise<string | null> }) {
+/** T-576: `approvalMode` pin = the store asks for a manager PIN (it goes with the reason); review = offline, goes ahead with a "needs manager review" note. */
+export function CancelLineDialog({ lineName, approvalMode = 'none', onClose, onConfirm }: { lineName: string; approvalMode?: LineApprovalMode; onClose: () => void; onConfirm: (reason: string, pin: string) => Promise<string | null> }) {
+  const [pin, setPin] = useState('');
   const [pick, setPick] = useState<string | null>(null);
   const [other, setOther] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const typed = other.trim();
   const reason = pick === 'Other' ? typed : pick;
-  const ready = reason !== null && reason.length >= CANCEL_REASON_MIN;
+  const ready = reason !== null && reason.length >= CANCEL_REASON_MIN && !(approvalMode === 'pin' && pin === '');
   const confirm = async () => {
     if (!reason) return;
     setBusy(true);
-    const message = await onConfirm(reason);
+    const message = await onConfirm(reason, approvalMode === 'pin' ? pin : '');
     setBusy(false);
     if (message) setError(message);
     else onClose();
@@ -213,6 +218,7 @@ export function CancelLineDialog({ lineName, onClose, onConfirm }: { lineName: s
             <input type="text" data-erp-size="free" className={FIELD} value={other} onChange={(e) => setOther(e.target.value.slice(0, CANCEL_REASON_MAX))} />
           </label>
         ) : null}
+        <LineApprovalField mode={approvalMode} pin={pin} onPin={setPin} />
       </div>
     </Dialog>
   );

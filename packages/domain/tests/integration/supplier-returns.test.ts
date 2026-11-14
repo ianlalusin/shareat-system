@@ -1,8 +1,10 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
-import { closeDb, transaction, systemTransaction, APP_ROLE, type Tx } from '@shareat/db';
+import { advisoryLocksRepo, closeDb, transaction, systemTransaction, APP_ROLE, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import {
   quantity,
@@ -23,6 +25,7 @@ import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
 import { seedExpenseCategories } from '../../../db/seed/expense-categories';
 import { grantEverydayPositionAccess } from './_fixtures/staff-everyday-access';
 import { testItemCode } from './_fixtures/item-code';
+import { heldRace } from './_fixtures/held-race';
 
 /**
  * T-170 — supplier returns: the goods go back, and we hold a credit. Bible row 166.
@@ -34,9 +37,9 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(
-    `Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — the database name must contain "_test".`,
+    `Refusing to run against ${redactDbUrl(url)} — the database name must contain "_test".`,
   );
 }
 
@@ -833,5 +836,244 @@ describe('T-231 / DEF-210 — a supplier return is stamped with the actor’s or
     const [entry] = await sql<{ org_id: string }[]>`
       select org_id from journal_entries where id = ${res.entryId}`;
     expect(entry!.org_id, 'the refund posted into another organisation’s books').toBe(f.orgId);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// T-574 (DEF-838, DEF-857) — the cap is serialised per delivery line, and a return stays at the delivery's own store.
+// ---------------------------------------------------------------------------------------------
+describe('T-574 — the returnable cap holds under concurrency and across stores', () => {
+  const line = (f: Fixture, deliveryLineId: string, qty: string) => ({
+    itemId: f.itemId, itemKind: 'raw_material' as const, locationId: f.locationId, quantity: quantity(qty), deliveryLineId,
+  });
+
+  it('⭐ two returns of 8 against one line that received 10 → exactly one succeeds, stock moves once', async () => {
+    const f = await fixture();
+    const { deliveryId, deliveryLineId } = await receiveOne(f, '10.000', '100.0000', '2026-01-05');
+    // Plenty of OTHER stock of the same item in the same room, so on-hand never refuses: only the line cap can.
+    await receiveOne(f, '30.000', '100.0000', '2026-01-04');
+    const ret = (tx: Tx) =>
+      recordReturn(tx, {
+        storeId: f.storeId, supplierId: f.supplierId, deliveryId,
+        returnedOn: '2026-01-06', reason: 'damaged', lines: [line(f, deliveryLineId, '8.000')], actor: f.staff,
+      });
+
+    // A does its whole return and HOLDS its transaction open; B starts meanwhile. Unlocked, B reads the still-committed
+    // "0 returned" and passes the cap. Locked, B queues behind A, then reads A's committed 8 and is refused.
+    const results = await heldRace(asOrg, f.orgId, ret, ret);
+    expect(results.filter((r) => r.ok), JSON.stringify(results)).toHaveLength(1);
+    const refused = results.find((r) => !r.ok);
+    expect(refused && !refused.ok && refused.reason).toMatch(/only 2\.000 is still returnable/);
+    const [cnt] = await sql<{ n: string }[]>`select count(*)::text as n from supplier_return_lines`;
+    expect(cnt!.n).toBe('1');
+    expect(await onHand(f.itemId, f.locationId)).toBe('32.000');
+  });
+
+  it('⭐ a return at store B citing store A\'s delivery line is refused in words, and nothing is posted', async () => {
+    const f = await fixture();
+    const { deliveryId, deliveryLineId } = await receiveOne(f, '10.000', '100.0000', '2026-01-05'); // received at Store A
+    await sql`insert into person_store_scope (person_id, store_id) values (${f.manager.personId}, ${f.otherStoreId})`;
+    await receiveOne({ ...f, storeId: f.otherStoreId, locationId: f.otherStoreLocationId }, '10.000', '100.0000', '2026-01-04'); // stock at B so on-hand cannot be the refusal
+
+    const res = await asOrg(f.orgId, (tx) =>
+      recordReturn(tx, {
+        storeId: f.otherStoreId, supplierId: f.supplierId, deliveryId,
+        returnedOn: '2026-01-06', reason: 'wrong store',
+        lines: [{ ...line(f, deliveryLineId, '5.000'), locationId: f.otherStoreLocationId }],
+        actor: f.manager,
+      }),
+    );
+    expect(res).toEqual({ ok: false, reason: 'That delivery was received at Store A, not Store B.' });
+
+    // Same hole through the line alone (no delivery named on the return).
+    const viaLine = await asOrg(f.orgId, (tx) =>
+      recordReturn(tx, {
+        storeId: f.otherStoreId, supplierId: f.supplierId, deliveryId: null,
+        returnedOn: '2026-01-06', reason: 'wrong store',
+        lines: [{ ...line(f, deliveryLineId, '5.000'), locationId: f.otherStoreLocationId }],
+        actor: f.manager,
+      }),
+    );
+    expect(viaLine).toEqual({ ok: false, reason: 'That delivery was received at Store A, not Store B.' });
+
+    const [cnt] = await sql<{ n: string }[]>`select count(*)::text as n from supplier_returns`;
+    expect(cnt!.n).toBe('0');
+    expect(await onHand(f.itemId, f.otherStoreLocationId)).toBe('10.000');
+  });
+
+  it('two multi-line returns naming the same two lines in OPPOSITE order all complete, cap respected', async () => {
+    const f = await fixture();
+    const [item2] = await sql<{ id: string }[]>`
+      insert into items (org_id, code, name, kind, base_unit, created_by)
+      values (${f.orgId}, ${testItemCode()}, 'Chicken', 'raw_material', 'kg', ${f.staff.personId}) returning id`;
+    const f2 = { ...f, itemId: item2!.id };
+    const d1 = await receiveOne(f, '10.000', '100.0000', '2026-01-05');
+    const d2 = await receiveOne(f2, '10.000', '100.0000', '2026-01-05');
+    const both = (first: 1 | 2) => (tx: Tx) => {
+      const l1 = line(f, d1.deliveryLineId, '2.000');
+      const l2 = line(f2, d2.deliveryLineId, '2.000');
+      return recordReturn(tx, {
+        storeId: f.storeId, supplierId: f.supplierId, deliveryId: null,
+        returnedOn: '2026-01-06', reason: 'damaged', lines: first === 1 ? [l1, l2] : [l2, l1], actor: f.staff,
+      });
+    };
+    const results = await Promise.all([both(1), both(2), both(1), both(2)].map((op) => asOrg(f.orgId, op)));
+    expect(results.map((r) => (r.ok ? 'ok' : r.reason))).toEqual(['ok', 'ok', 'ok', 'ok']);
+    expect(await asOrg(f.orgId, (tx) => returnableQuantity(tx, d1.deliveryLineId))).toBe('2.000');
+  });
+
+  it('⭐ lock ORDER: a return waiting on one line holds no other line lock (sorted ids) - removing .sort() turns this red', async () => {
+    const f = await fixture();
+    const [item2] = await sql<{ id: string }[]>`
+      insert into items (org_id, code, name, kind, base_unit, created_by)
+      values (${f.orgId}, ${testItemCode()}, 'Chicken', 'raw_material', 'kg', ${f.staff.personId}) returning id`;
+    const f2 = { ...f, itemId: item2!.id };
+    const d1 = await receiveOne(f, '10.000', '100.0000', '2026-01-05');
+    const d2 = await receiveOne(f2, '10.000', '100.0000', '2026-01-05');
+    const byId = new Map([
+      [d1.deliveryLineId, line(f, d1.deliveryLineId, '2.000')],
+      [d2.deliveryLineId, line(f2, d2.deliveryLineId, '2.000')],
+    ]);
+    const [first, second] = [d1.deliveryLineId, d2.deliveryLineId].sort() as [string, string];
+
+    // A bystander holds the SORTED-FIRST line. A return naming [second, first] must queue on `first` holding nothing:
+    // unsorted, it would already hold `second` while it waits - the half of a deadlock.
+    const held = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const holder = asOrg(f.orgId, async (tx) => {
+      await advisoryLocksRepo.lockDeliveryLine(tx, first);
+      held.resolve();
+      await release.promise;
+    });
+    holder.catch(() => held.resolve());
+    const pid = Promise.withResolvers<number>();
+    let heldByWaiter = -1;
+    let waiter: Promise<Awaited<ReturnType<typeof recordReturn>>> | undefined;
+    try {
+      await held.promise;
+      waiter = asOrg(f.orgId, async (tx) => {
+        const rows = await tx.execute(dsql`select pg_backend_pid() as pid`);
+        pid.resolve(Number((rows as unknown as { pid: number }[])[0]!.pid));
+        return recordReturn(tx, {
+          storeId: f.storeId, supplierId: f.supplierId, deliveryId: null,
+          returnedOn: '2026-01-06', reason: 'damaged', lines: [byId.get(second)!, byId.get(first)!], actor: f.staff,
+        });
+      });
+      waiter.catch(() => undefined);
+      const waiterPid = await pid.promise;
+      const deadline = Date.now() + 15_000;
+      let waiting = false;
+      while (!waiting && Date.now() < deadline) {
+        const [w] = await sql<{ n: string }[]>`
+          select count(*)::text as n from pg_stat_activity where pid = ${waiterPid} and wait_event_type = 'Lock' and wait_event = 'advisory'`;
+        waiting = w!.n === '1';
+        if (!waiting) await new Promise((r) => setTimeout(r, 25));
+      }
+      expect(waiting, 'the return never parked on the held line lock').toBe(true);
+      const [h] = await sql<{ n: string }[]>`
+        select count(*)::text as n from pg_locks where locktype = 'advisory' and granted and pid = ${waiterPid} and classid = 574001`;
+      heldByWaiter = Number(h!.n);
+    } finally {
+      release.resolve();
+    }
+    await holder;
+    expect(heldByWaiter, 'a waiting return already held another line lock').toBe(0);
+    const res = await waiter!;
+    expect(res.ok, JSON.stringify(res)).toBe(true);
+  });
+
+  it('⭐ a void and a new return on one line serialise: the return queues behind the void, then uses the freed quantity', async () => {
+    const f = await fixture();
+    const { deliveryId, deliveryLineId } = await receiveOne(f, '10.000', '100.0000', '2026-01-05');
+    await receiveOne(f, '30.000', '100.0000', '2026-01-04');
+    const ret = (tx: Tx) =>
+      recordReturn(tx, {
+        storeId: f.storeId, supplierId: f.supplierId, deliveryId,
+        returnedOn: '2026-01-06', reason: 'damaged', lines: [line(f, deliveryLineId, '8.000')], actor: f.staff,
+      });
+    const first = await asOrg(f.orgId, ret);
+    if (!first.ok) throw new Error(`setup return refused: ${first.reason}`);
+
+    // A voids that return and HOLDS. Unlocked, B reads the still-posted 8 and is refused ("only 2.000"). Locked, B waits for the
+    // void to commit and then sees all 10 returnable.
+    const [voided, second] = await heldRace(asOrg, f.orgId, (tx) => voidReturn(tx, f.manager, first.returnId, 'wrong goods'), ret);
+    expect(voided).toEqual({ ok: true });
+    expect(second.ok, JSON.stringify(second)).toBe(true);
+  });
+
+  // T-574 audit: one request may name the SAME delivery line from two rooms. The cap must hold on the SUM, not per request line.
+  describe('one request, same delivery line in two rooms', () => {
+    async function twoRooms() {
+      const f = await fixture();
+      const [type] = await sql<{ id: string }[]>`select id from location_types where org_id = ${f.orgId} limit 1`;
+      const [room2] = await sql<{ id: string }[]>`
+        insert into stock_locations (org_id, store_id, code, name, type_id, role, is_default, created_by)
+        values (${f.orgId}, ${f.storeId}, 'A2', 'Room A2', ${type!.id}, 'operating', false, ${f.staff.personId}) returning id`;
+      const { deliveryId, deliveryLineId } = await receiveOne(f, '10.000', '100.0000', '2026-01-05');
+      // Plenty of OTHER stock in BOTH rooms, so on-hand never refuses: only the line cap can.
+      await receiveOne(f, '30.000', '100.0000', '2026-01-04');
+      await receiveOne({ ...f, locationId: room2!.id }, '30.000', '100.0000', '2026-01-04');
+      const ret = (lines: [string, string][]) => asOrg(f.orgId, (tx) =>
+        recordReturn(tx, {
+          storeId: f.storeId, supplierId: f.supplierId, deliveryId,
+          returnedOn: '2026-01-06', reason: 'damaged', actor: f.staff,
+          lines: lines.map(([locationId, qty]) => ({
+            itemId: f.itemId, itemKind: 'raw_material' as const, locationId, quantity: quantity(qty), deliveryLineId,
+          })),
+        }),
+      );
+      return { f, room2: room2!.id, deliveryLineId, ret };
+    }
+
+    it('⭐ 6 + 6 against 10 received is refused with the cap error, and nothing is posted', async () => {
+      const { f, room2, ret } = await twoRooms();
+      const res = await ret([[f.locationId, '6.000'], [room2, '6.000']]);
+      expect(res.ok ? 'posted 12' : res.reason).toMatch(/only 10\.000 is still returnable/);
+      const [cnt] = await sql<{ n: string }[]>`select count(*)::text as n from supplier_return_lines`;
+      expect(cnt!.n).toBe('0');
+    });
+
+    it('4 + 6 against 10 received is allowed (exactly the cap)', async () => {
+      const { f, room2, deliveryLineId, ret } = await twoRooms();
+      const res = await ret([[f.locationId, '4.000'], [room2, '6.000']]);
+      expect(res.ok, JSON.stringify(res)).toBe(true);
+      expect(await asOrg(f.orgId, (tx) => returnableQuantity(tx, deliveryLineId))).toBe('0.000');
+    });
+
+    it('3 already returned, then 4 + 4 in one request is refused (only 7 left)', async () => {
+      const { f, room2, deliveryLineId, ret } = await twoRooms();
+      expect((await ret([[f.locationId, '3.000']])).ok).toBe(true);
+      const res = await ret([[f.locationId, '4.000'], [room2, '4.000']]);
+      expect(res.ok ? 'posted 8' : res.reason).toMatch(/only 7\.000 is still returnable/);
+      expect(await asOrg(f.orgId, (tx) => returnableQuantity(tx, deliveryLineId))).toBe('7.000');
+    });
+  });
+
+  it('a line from ANOTHER supplier\'s delivery at the same store is refused in words, and nothing is posted', async () => {
+    const f = await fixture();
+    const mine = await receiveOne(f, '10.000', '100.0000', '2026-01-05');
+    const theirs = await receiveOne(f, '10.000', '100.0000', '2026-01-05', f.otherSupplierId);
+
+    // Named delivery is the caller's own, but the cited line sits on the other supplier's delivery.
+    const wrongDelivery = await asOrg(f.orgId, (tx) =>
+      recordReturn(tx, {
+        storeId: f.storeId, supplierId: f.supplierId, deliveryId: mine.deliveryId,
+        returnedOn: '2026-01-06', reason: 'x', lines: [line(f, theirs.deliveryLineId, '2.000')], actor: f.staff,
+      }),
+    );
+    expect(wrongDelivery).toEqual({ ok: false, reason: 'That item is on a different delivery than the one this return names.' });
+
+    // No delivery named: the line's own delivery still has to be this supplier's.
+    const viaLine = await asOrg(f.orgId, (tx) =>
+      recordReturn(tx, {
+        storeId: f.storeId, supplierId: f.supplierId, deliveryId: null,
+        returnedOn: '2026-01-06', reason: 'x', lines: [line(f, theirs.deliveryLineId, '2.000')], actor: f.staff,
+      }),
+    );
+    expect(viaLine).toEqual({ ok: false, reason: "That item came from Beta Foods's delivery, not Acme Meats's." });
+
+    const [cnt] = await sql<{ n: string }[]>`select count(*)::text as n from supplier_returns`;
+    expect(cnt!.n).toBe('0');
+    expect(await onHand(f.itemId, f.locationId)).toBe('20.000');
   });
 });

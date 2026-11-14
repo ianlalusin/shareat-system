@@ -13,7 +13,7 @@ import { canonicalJson } from '../menu/project';
 import { loadStoreMenu } from '../menu/load-store-menu';
 import { refuse } from '../shared/refusal';
 import { POS_NOT_SWITCHED_ON, type PosPairing } from './inbox';
-import { listKitchenQueue, listOpenStands, listRefillQueue } from './sale';
+import { listKitchenQueue, listOpenStands, listRefillableTables, listRefillQueue } from './sale';
 import { businessDateOf, readRules, requireStoreScope, type PosDeps } from './shared';
 
 /** The POS capabilities the tablet greys its buttons by (the closed list of R7's `staff`). */
@@ -27,7 +27,7 @@ export interface PosSnapshot {
     stands: { id: string; number: number }[];
     tenders: { id: string; name: string; kind: string }[];
     discountPresets: { id: string; name: string; valueType: string; value: string }[];
-    rules: { vatPercentBasisPoints: number; scPwdPercentBasisPoints: number; businessDayStartHour: number; tableWarnMinutes: number };
+    rules: { vatPercentBasisPoints: number; scPwdPercentBasisPoints: number; businessDayStartHour: number; tableWarnMinutes: number; /** T-558: display hint only (centavos); the tablet never enforces it. */ saleVarianceToleranceCentavos: number; /** T-576: the tablet asks for a manager PIN on a line cancel / line discount when true. */ requirePinLineActions: boolean };
     staff: { personId: string; displayName: string; employeeId: string; posCapabilities: string[] }[];
     device: { pairingId: string; lastSeq: number; lastTerminalSeq: number };
     businessDate: string;
@@ -69,6 +69,8 @@ export async function buildPosSnapshot(tx: Tx, input: { pairing: PosPairing }, d
       scPwdPercentBasisPoints: Number(rules.scPwdPercentBasisPoints),
       businessDayStartHour: rules.businessDayStartHour,
       tableWarnMinutes: rules.tableWarnMinutes,
+      saleVarianceToleranceCentavos: Number(rules.saleVarianceToleranceCentavos),
+      requirePinLineActions: rules.requirePinLineActions === true,
     },
     staff,
     device: {
@@ -92,7 +94,7 @@ export function loadPosSnapshot(pairing: PosPairing, deps?: PosDeps): Promise<Po
 export type PosStateAnswer =
   | { status: 'forbidden' }
   | { status: 'not_modified' }
-  | { status: 'ok'; body: { stateVersion: number; openStands: unknown[] | null; kitchenQueue: unknown[] | null; refillQueue: unknown[] | null } };
+  | { status: 'ok'; body: { stateVersion: number; openStands: unknown[] | null; kitchenQueue: unknown[] | null; refillQueue: unknown[] | null; refillTables: unknown[] | null } };
 
 /**
  * `since` is the version the screen already holds (-1 when it has none). Store scope is judged FIRST, so a 304 never confirms another store's version;
@@ -115,6 +117,8 @@ export function readPosState(actor: Actor, input: { storeId: string; since: numb
       ? (await listKitchenQueue(tx, actor, input.stationId ? { ...at, stationId: input.stationId } : at)).tickets
       : null;
     const refillQueue = (await can(tx, actor, 'request_pos_refill', at)) ? (await listRefillQueue(tx, actor, at)).tickets : null;
-    return { status: 'ok', body: { stateVersion, openStands, kitchenQueue, refillQueue } };
+    // T-529: the open package tables, for a person who may ask for a refill or confirm heads.
+    const refillTables = (await can(tx, actor, 'request_pos_refill', at)) || (await can(tx, actor, 'confirm_pos_heads', at)) ? (await listRefillableTables(tx, actor, at)).tables : null;
+    return { status: 'ok', body: { stateVersion, openStands, kitchenQueue, refillQueue, refillTables } };
   });
 }

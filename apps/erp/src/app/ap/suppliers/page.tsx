@@ -1,7 +1,8 @@
 import Link from 'next/link';
-import { requireSession } from '../../../lib/session';
+import { requirePageAccess } from '@/lib/page-access';
 import {
   CLASSIFICATION_LABEL,
+  apStoreIds,
   listSuppliersWithPosition,
   maskAccountNumber,
   matchesSupplier,
@@ -40,9 +41,10 @@ export default async function SuppliersPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await withFlash(searchParams);
-  const { actor } = await requireSession('/ap/suppliers');
+  const { actor, refusal } = await requirePageAccess('/ap/suppliers');
+  if (refusal) return refusal;
 
-  const all = await listSuppliersWithPosition(actor.orgId);
+  const all = await listSuppliersWithPosition(actor.orgId, await apStoreIds(actor)); // T-577: balances at the viewer's stores only
   const q = sp.q ?? '';
   const includeInactive = sp.show === 'all';
 
@@ -128,7 +130,7 @@ export default async function SuppliersPage({
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[58rem] text-sm">
+          <table aria-label="Suppliers" className="w-full min-w-[58rem] text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-neutral-500">
                 <th className="py-2 pr-3 font-medium">Supplier</th>

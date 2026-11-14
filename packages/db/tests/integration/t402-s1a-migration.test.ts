@@ -24,6 +24,8 @@
  *    the count check would agree with itself). The test role is a superuser, so this leg cannot prove it - it is
  *    named here so the builder does not rely on it (0166's `set local row_security = off` pattern fails loudly).
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -39,8 +41,8 @@ config({ path: '.env.local' });
 
 const baseUrl = process.env.TEST_DATABASE_URL;
 if (!baseUrl) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(baseUrl)) {
-  throw new Error(`Refusing to run against ${baseUrl.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(baseUrl)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(baseUrl)} - the database name must contain "_test".`);
 }
 
 const REAL_MIGRATIONS_FOLDER = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..', 'migrations');

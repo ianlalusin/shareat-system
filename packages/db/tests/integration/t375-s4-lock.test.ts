@@ -24,6 +24,8 @@
  *  - `source` / `pos_sourced` / the feed id are changed in the one statement that keeps the row's CHECKs satisfied
  *    where a single column cannot (the `source` leg changes the four provenance columns together).
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { createHash } from 'node:crypto';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -35,8 +37,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { APP_ROLE } from '../../src/rls/registry';

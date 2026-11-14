@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -23,8 +25,8 @@ import { sql as dsql } from 'drizzle-orm';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
@@ -62,7 +64,7 @@ const BOTH = (name: string) => `${name}: you typed sales and ticked No sales —
 
 const FIG = { totalSales: '1000.00', unliSales: '1000.00', alaCarteSales: '0.00', cashCollected: '1000.00' };
 let dayN = 0;
-const nextDate = () => `2027-01-${String(10 + (++dayN % 15)).padStart(2, "0")}`;
+const nextDate = () => `2026-01-${String(10 + (++dayN % 15)).padStart(2, "0")}`;
 
 /**
  * Batangas: UNLINKED (typed days) with Walk-in (remitted), Foodpanda + GrabFood (non-remitted) and a RETIRED "Old Grab".
@@ -73,7 +75,7 @@ async function fixture(hint: string) {
   const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
   const orgId = org!.id;
   await seedChartOfAccounts(sql, orgId);
-  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2027-01-01', '2027-01-31', 'open')`;
+  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2026-01-01', '2026-01-31', 'open')`;
   const mkStore = async (name: string) =>
     (await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${orgId}, ${uid('st')}, ${name}) returning id`)[0]!.id;
   const typedStoreId = await mkStore('Batangas');

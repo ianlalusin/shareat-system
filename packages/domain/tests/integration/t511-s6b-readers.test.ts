@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -23,8 +25,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { closeDb, channelSettlementsRepo, dualRunRepo } from '@shareat/db';
@@ -168,20 +170,20 @@ describe('S6b reports show the corrected figure on the channel\'s own row', () =
 describe('S6b a later POS correction leaves the platform correction standing (no phantom reversal)', () => {
   it('a POS day with a Foodpanda row of 200.00, file 250.00 (platform correction +50.00), then POS voids a 50.00 cash receipt: the POS correction is exactly Dr 4100 50.00 / Cr 1110 50.00, and 1220 stays 250.00, 4150 stays 750.00 [kills: a POS correction that reverses the platform correction as phantom 1220 / 4150 lines]', async () => {
     const f = await s6Fixture(sql, 'poshaz');
-    const DAY = '2027-01-10';
+    const DAY = '2026-01-10';
     const { id: dayId } = await asOrgOn(f.orgId, (tx) => importTestDay(tx, f.manager, { storeId: f.storeId, businessDate: DAY }));
     await asOrgOn(f.orgId, (tx) => D.editSalesDay(tx, f.manager, { salesDayId: dayId, platform: [{ channelId: f.foodpandaId, amount: '200.00', noSales: false }] }));
     await asOrgOn(f.orgId, (tx) => submitThenVerify(tx, f.manager, dayId, f.admin));
     expect(Number(await netDebit(sql, f.orgId, '1220')), 'control: the day raised 200.00 on 1220').toBe(200);
 
     const lineId = await rawDayLine(sql, { orgId: f.orgId, storeId: f.storeId, channelId: f.foodpandaId, platform: 'foodpanda', salesDate: DAY, orderValue: '250.00', personId: f.adminId });
-    await correct({ orgId: f.orgId, lineId }, f.admin, { today: '2027-02-01' });
+    await correct({ orgId: f.orgId, lineId }, f.admin, { today: '2026-02-01' });
     expect(Number(await netDebit(sql, f.orgId, '1220')), 'the platform correction raised 1220 to 250.00').toBe(250);
 
     const feedId = (await asOrgOn(f.orgId, (tx) =>
       insertSalesRecheck(tx, { orgId: f.orgId, storeId: f.storeId, businessDate: DAY, posStoreId: f.posStoreId, fetchedBy: f.managerId, figures: R1_FIGURES }),
     )).ids.sales!;
-    await asOrgOn(f.orgId, (tx) => D.postPosCorrection(tx, f.manager, { salesDayId: dayId, feedId, entryDate: '2027-01-20', reason: 'POS voided a cash receipt' }));
+    await asOrgOn(f.orgId, (tx) => D.postPosCorrection(tx, f.manager, { salesDayId: dayId, feedId, entryDate: '2026-01-20', reason: 'POS voided a cash receipt' }));
 
     const [pc] = await sql<{ journal_entry_id: string }[]>`select journal_entry_id::text from sales_day_pos_corrections where org_id = ${f.orgId} and sales_day_id = ${dayId}`;
     expect(lineText(await linesOf(sql, pc!.journal_entry_id)), 'only the POS delta, no 1220 / 4150 line').toEqual(['Cr 1110 50.00', 'Dr 4100 50.00']);

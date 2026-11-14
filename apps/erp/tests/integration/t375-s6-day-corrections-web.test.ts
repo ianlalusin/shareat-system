@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, describe, expect, it, vi } from 'vitest';
@@ -19,8 +21,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 const h = vi.hoisted(() => ({ actor: null as null | { personId: string; orgId: string } }));
@@ -126,7 +128,7 @@ describe('W2 - the Corrections section and Post correction', () => {
 
   it('the manager submits the action: the correction row and its entry (Dr 4100 50.00 / Cr 1110 50.00) exist, it redirects without an error, and the section then lists the correction', async () => {
     const { f, dayId, feedId } = await setup('w2c');
-    const to = await run(f.manager, form({ salesDayId: dayId, feedId, entryDate: '2027-01-20', reason: REASON }));
+    const to = await run(f.manager, form({ salesDayId: dayId, feedId, entryDate: '2026-01-20', reason: REASON }));
     expect(to.searchParams.get('error')).toBeNull();
 
     const rows = await corrections(dayId);
@@ -145,7 +147,7 @@ describe('W2 - the Corrections section and Post correction', () => {
 
   it('a staff submitting the action is refused (a redirect with an error) and nothing is posted', async () => {
     const { dayId, feedId, staff } = await setup('w2d');
-    const to = await run(staff, form({ salesDayId: dayId, feedId, entryDate: '2027-01-20', reason: REASON }));
+    const to = await run(staff, form({ salesDayId: dayId, feedId, entryDate: '2026-01-20', reason: REASON }));
     expect(to.searchParams.get('error'), 'a sentence, not silence').toBeTruthy();
     expect(await corrections(dayId)).toHaveLength(0);
   });

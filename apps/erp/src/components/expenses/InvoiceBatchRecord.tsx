@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { add, compare, money, ZERO, type Money } from '@shareat/core/money';
 import { allocateBatchPayments } from '@shareat/domain/expenses/allocate';
-import { METHOD_LABELS, type MoneyLineMethod, type SourceOption } from '@shareat/domain/money-lines';
+import { METHOD_LABELS, tryMoney, type MoneyLineMethod, type SourceOption } from '@shareat/domain/money-lines';
 import { Select } from '@/components/ui';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 import { MoneyLines, type MoneyLinesProps } from '@/components/money/MoneyLines';
@@ -29,14 +29,6 @@ interface PaymentRow {
   moneyAccountId: string | null;
   amount: Money;
 }
-
-const tryMoney = (raw: string): Money | null => {
-  try {
-    return money(raw);
-  } catch {
-    return null;
-  }
-};
 
 /** The payment rows as typed in the form (blank or unreadable rows dropped), read from MoneyLines' own posted controls. */
 function readRows(form: HTMLFormElement): PaymentRow[] {

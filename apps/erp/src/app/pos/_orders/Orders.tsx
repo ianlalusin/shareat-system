@@ -13,11 +13,14 @@ import { printLines, type PrintResult } from '@/lib/pos-print/adapter';
 import { formatReceipt } from '@/lib/pos-print/receipt-text';
 import type { PrintLayout, ReceiptView } from '@/lib/pos-print/types';
 import { projectBill } from '../_payment/bill';
+import { lineApprovalMode, resolveApproval } from '../_shell/line-approval';
 import { extraHeadsId } from '../_payment/uuidv5';
 import { printSettingsOf, SENTENCES } from '../_payment/logic';
 import { PaymentPanel } from '../_payment/PaymentPanel';
 import { ReceiptScreen } from '../_payment/ReceiptScreen';
 import { usePos } from '../_shell/pos-context';
+import { OutageBanner } from '../_kitchen/outage-jobs';
+import { useOutagePrint } from '../_kitchen/use-outage-print';
 import { newDeviceId } from './ids';
 import { OrderDialog, CancelLineDialog, type OrderDialogMode, type OrderSend } from './OrderDialogs';
 import type { MenuLike } from './menu-filter';
@@ -57,6 +60,10 @@ export function Orders() {
   const storeId = pos?.storeId ?? null;
   const snapshot = pos?.ordersSnapshot ?? null;
   const menu = (snapshot?.menu ?? null) as MenuLike | null;
+  // T-576: the store's rule for a manager PIN on a line cancel / line discount; offline the till goes ahead and flags it.
+  const approvalMode = lineApprovalMode(snapshot?.requirePinLineActions, pos?.online ?? false);
+  const clockAt = pos?.clockAt;
+  const menuAt = useMemo(() => (clockAt === undefined ? undefined : new Date(clockAt)), [clockAt]); // T-559: the picker's "now" follows the shell's menu clock
 
   // What is drawn: the dropped-but-not-yet-caught-up events (settling) first, then the outbox as it stands.
   const outbox = pos?.pendingEvents ?? EMPTY;
@@ -66,6 +73,8 @@ export function Orders() {
     const ghosts = [...lastSeen.current.values()].filter((g) => cancelling.has(g.line.id));
     return projectOrders({ openStands: stands, sessions: bodies }, applied, snapshot && menu ? { stands: snapshot.stands, menu } : null, ghosts);
   }, [stands, bodies, applied, snapshot, menu]);
+  // T-529 R3: offline, a sent order also goes out on paper (one ticket per station). The tables' labels come from the view, which includes tables opened offline.
+  const printOutage = useOutagePrint(pos, () => Object.fromEntries(view.tiles.map((t) => [t.sessionId, t.standNumber !== null ? String(t.standNumber) : null])));
   const sessionOf = (e: PosEvent): string | null => {
     const p = e.payload as { sessionId?: unknown; lineId?: unknown };
     if (typeof p.sessionId === 'string') return p.sessionId;
@@ -173,6 +182,7 @@ export function Orders() {
   const submit = async (event: ReturnType<typeof seatEvent>): Promise<string | null> => {
     const result = await submitPosEvent({ enqueue, requestDrain: pos.requestDrain }, event);
     setProblem(result.ok ? null : result.message);
+    if (result.ok) void printOutage(result.event);
     return result.ok ? null : result.message;
   };
   const build = async (make: () => ReturnType<typeof seatEvent>): Promise<string | null> => {
@@ -232,6 +242,7 @@ export function Orders() {
             cashierName={pos.personName ?? payment.staff.find((s) => s.personId === personId)?.displayName ?? ''}
             personId={personId}
             online={pos.online}
+            approvalMode={approvalMode}
             layout={printSettingsOf(payment.store).layout}
             copies={printSettingsOf(payment.store).copies}
             deps={{ reserveTerminalSeq, newId: newDeviceId, enqueue, requestDrain: pos.requestDrain, print: printLines }}
@@ -262,9 +273,10 @@ export function Orders() {
     <div className="space-y-3">
       {receipt ? <ReceiptScreen lines={receipt.lines} receiptNo={receipt.receiptNo} notice={receipt.notice} onReprint={() => void reprintFromScreen()} onDone={() => setReceipt(null)} /> : null}
       {problem ? <Banner tone="error">{problem}</Banner> : null}
+      <OutageBanner />
       {notice ? <Banner tone="warning">{notice}</Banner> : null}
       {access.canWrite && stands === null ? <p className="text-sm text-muted">Waiting for the open tables…</p> : null}
-      {dialog ? <OrderDialog mode={dialog} menu={menu} stands={snapshot?.stands ?? []} tiles={view.tiles} onClose={() => setDialog(null)} onSend={send} /> : null}
+      {dialog ? <OrderDialog mode={dialog} menu={menu} stands={snapshot?.stands ?? []} tiles={view.tiles} onClose={() => setDialog(null)} onSend={send} at={menuAt} /> : null}
       <div hidden={dialog !== null}>
         <OrdersView
           readOnly={!access.canWrite}
@@ -294,7 +306,12 @@ export function Orders() {
         <CancelLineDialog
           lineName={cancelling.name}
           onClose={() => setCancelling(null)}
-          onConfirm={(reason) => build(() => cancelLineEvent({ personId, lineId: cancelling.lineId, reason, now: new Date() }))}
+          approvalMode={approvalMode}
+          onConfirm={async (reason, pin) => {
+            // T-576: the manager PIN is checked first; a wrong one is shown in the dialog and the line is NOT cancelled.
+            const a = await resolveApproval({ mode: approvalMode, pin, action: 'line.cancelled', targetId: cancelling.lineId, fetch: (...x) => fetch(...x) });
+            return 'error' in a ? a.error : build(() => cancelLineEvent({ personId, lineId: cancelling.lineId, reason, now: new Date(), approval: a.fields }));
+          }}
         />
       ) : null}
     </div>

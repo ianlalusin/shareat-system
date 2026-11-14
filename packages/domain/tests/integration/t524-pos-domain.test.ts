@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import { sql as dsql } from 'drizzle-orm';
@@ -41,8 +43,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
@@ -57,7 +59,7 @@ import { insDaypart, insDaypartOffer, insOptionOffer, insRule, menuFixture, newI
 // ------------------------------------------------------------------------------------------------------------------------------
 // The subject, loaded lazily so a missing module fails each case with its own message instead of killing the file at import.
 // ------------------------------------------------------------------------------------------------------------------------------
-type Deps = { readRules?: (tx: Tx, orgId: string, businessDate: string) => Promise<{ vatPercentBasisPoints: bigint; scPwdPercentBasisPoints: bigint; businessDayStartHour: number }>; now?: () => Date };
+type Deps = { readRules?: (tx: Tx, orgId: string, businessDate: string) => Promise<{ vatPercentBasisPoints: bigint; scPwdPercentBasisPoints: bigint; businessDayStartHour: number; saleVarianceToleranceCentavos?: bigint; requirePinLineActions?: boolean }>; now?: () => Date };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type W<R = any> = (tx: Tx, actor: Actor, input: any, deps?: Deps) => Promise<R>;
 interface PosApi {
@@ -97,7 +99,7 @@ const uuid = (): string => globalThis.crypto.randomUUID();
 const nowIso = () => new Date().toISOString();
 const actorOf = (orgId: string, personId: string): Actor => ({ personId, orgId });
 // BOSS ruling 6 Nov: one injectable reader; percents are basis points (12% = 1200n); the business day starts at an integer hour (4 = 04:00).
-const RATES: Deps = { readRules: async () => ({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4 }) };
+const RATES: Deps = { readRules: async () => ({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, saleVarianceToleranceCentavos: 1n, requirePinLineActions: false }) };
 const HOLDER = 'Zyxwv Quillfeather'; // a senior's name: must appear in statutory_discount_records and NOWHERE else
 const IDNO = 'OSCA-9990042';
 const SAME_ID_SENTENCE = 'This change was already recorded differently on the till.';
@@ -260,6 +262,7 @@ async function fixture(mode: 'off' | 'test' | 'live' = 'test') {
   // Ruling 9: option values with a store price delta. One single-choice group on the pork (Large +30.00; "Extra sauce" has NO store offer), one on the cola (+5.00).
   const optionOn = async (itemId: string, delta: string) => {
     const o = await newOption(m);
+    await sql`update menu_option_groups set min_selections = 0 where id = ${o.groupId}`; // T-552: newOption makes a REQUIRED group; these tests add the item with no choice
     await insOptionOffer(m, o.valueId, delta);
     await sql`insert into menu_option_group_links (org_id, option_group_id, menu_item_id, status, created_by) values (${orgId}, ${o.groupId}, ${itemId}, 'active', ${m.personId})`;
     return o;
@@ -1414,15 +1417,22 @@ describe('R9 / test 9 - completeSale: the server recomputes, then freezes', () =
     expect((await receiptPayments(i2.receiptId)).every((r) => r.change_given === '0.00')).toBe(true);
   });
 
-  it('over-payment with a wallet only is refused; so is change larger than the cash tendered; so is under-payment', async () => {
+  it('over-payment with a wallet only is refused; so is change larger than the cash tendered (under-payment is no longer refused: T-558, see the next case)', async () => {
     const f = await fixture();
     const s = await porkSession(f); // 500.00
     const pay = (payments: unknown[]) => saleInput(f, s.sessionId, { payments }).then((i) => complete(f, i));
     await expectRefusal(pay([{ tenderId: f.gcash, amount: '600.00', referenceNo: 'GC1234567', toCheck: false }]), 'Change can only be given in cash.');
     await expectRefusal(pay([{ tenderId: f.cash, amount: '10.00', toCheck: false }, { tenderId: f.gcash, amount: '505.00', referenceNo: 'GC1234567', toCheck: false }]), 'Change can only be given in cash.');
-    await expectRefusal(pay([{ tenderId: f.cash, amount: '499.99', toCheck: false }]));
     expect(await receiptOf(s.sessionId)).toBeUndefined();
     expect((await sessionRow(s.sessionId)).status).toBe('open');
+  });
+
+  it('T-558 replaces "under-payment is refused": cash 499.99 on 500.00 is recorded (the sale is never lost), paid, with no change', async () => {
+    const f = await fixture();
+    const s = await porkSession(f); // 500.00
+    await saleInput(f, s.sessionId, { payments: [{ tenderId: f.cash, amount: '499.99', toCheck: false }] }).then((i) => complete(f, i));
+    expect(await receiptOf(s.sessionId)).toBeDefined();
+    expect((await sessionRow(s.sessionId)).status).toBe('paid');
   });
 
   it('payment rows: 1 to 20 (21 refused, 20 fine); amounts above 0; an active tender of THIS store', async () => {
@@ -1584,17 +1594,45 @@ describe('R10 - reads for the screens', () => {
     expect(await asOrg(f.orgId, (tx) => P.currentBusinessDate(tx, f.storeId, { now: () => new Date('2026-11-06T20:00:00Z') }))).toBe('2026-11-07');
   });
 
-  it('currentBusinessDate is the Manila date the open Z window started: the last Z\'s window_end', async () => {
-    const f = await fixture();
-    const z = (n: number, bd: string, start: string, end: string) =>
+  // T-531 ruling 1 (8 Nov 2026) REPLACES the old test here ("the Manila date the open Z window started: the last Z's window_end"): a Z is dated with the business day it
+  // CLOSES, so a sale carries max(lastZ.business_date + 1 day, startHourDate(the sale's time)); with no Z yet the start-hour rule alone (kept above: ruling 8, F7).
+  describe('T-531 ruling 1: the business date after a Z is max(lastZ.business_date + 1, startHourDate(time))', () => {
+    const zOn = async (f: Awaited<ReturnType<typeof fixture>>, n: number, bd: string, start: string, end: string) =>
       sql`insert into pos_day_closes (org_id, store_id, terminal_id, z_no, business_date, window_start, window_end, receipt_count, gross_total, closed_by, approved_by)
           values (${f.orgId}, ${f.storeId}, ${f.terminalRowId}, ${n}, ${bd}, ${start}, ${end}, 0, 0, ${f.counter.personId}, ${f.manager.personId})`;
-    // window ended 2026-11-05 20:00 Manila (12:00Z): the next window started on the 5th
-    await z(1, '2026-11-04', '2026-11-04T20:00:00Z', '2026-11-05T12:00:00Z');
-    expect(await asOrg(f.orgId, (tx) => P.currentBusinessDate(tx, f.storeId))).toBe('2026-11-05');
-    // a later Z closed at 01:00 Manila on the 7th (17:00Z on the 6th): the open window started on the 7th
-    await z(2, '2026-11-05', '2026-11-05T12:00:00Z', '2026-11-06T17:00:00Z');
-    expect(await asOrg(f.orgId, (tx) => P.currentBusinessDate(tx, f.storeId))).toBe('2026-11-07');
+    const bdAt = (f: Awaited<ReturnType<typeof fixture>>, iso: string) => asOrg(f.orgId, (tx) => P.currentBusinessDate(tx, f.storeId, { ...RATES, now: () => new Date(iso) }));
+
+    it('a sale at 23:00 after a 22:00 Z is dated D+1 (the Z took D)', async () => {
+      const f = await fixture();
+      await zOn(f, 1, '2026-11-05', '2026-11-05T04:00:00+08:00', '2026-11-05T22:00:00+08:00');
+      expect(await bdAt(f, '2026-11-05T23:00:00+08:00')).toBe('2026-11-06');
+    });
+
+    it('a sale at 10:00 the next morning is dated D+1', async () => {
+      const f = await fixture();
+      await zOn(f, 1, '2026-11-05', '2026-11-05T04:00:00+08:00', '2026-11-05T22:00:00+08:00');
+      expect(await bdAt(f, '2026-11-06T10:00:00+08:00')).toBe('2026-11-06');
+    });
+
+    it('a sale at 02:00 on D+2, long after a Z dated D, is dated D+1 (still the business day of 02:00 minus 4 hours), not D+2', async () => {
+      const f = await fixture();
+      await zOn(f, 1, '2026-11-05', '2026-11-05T04:00:00+08:00', '2026-11-05T22:00:00+08:00');
+      expect(await bdAt(f, '2026-11-07T02:00:00+08:00')).toBe('2026-11-06');
+      expect(await bdAt(f, '2026-11-07T05:00:00+08:00')).toBe('2026-11-07');
+    });
+
+    it('a sale before any Z uses the start-hour rule', async () => {
+      const f = await fixture();
+      expect(await bdAt(f, '2026-11-06T03:30:00+08:00')).toBe('2026-11-05');
+      expect(await bdAt(f, '2026-11-06T04:30:00+08:00')).toBe('2026-11-06');
+    });
+
+    it('the latest Z BY BUSINESS DATE decides (a later Z of another date wins)', async () => {
+      const f = await fixture();
+      await zOn(f, 1, '2026-11-05', '2026-11-05T04:00:00+08:00', '2026-11-05T22:00:00+08:00');
+      await zOn(f, 2, '2026-11-06', '2026-11-05T22:00:00+08:00', '2026-11-06T22:00:00+08:00');
+      expect(await bdAt(f, '2026-11-06T23:00:00+08:00')).toBe('2026-11-07');
+    });
   });
 });
 

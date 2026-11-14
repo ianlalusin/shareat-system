@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -28,8 +30,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 const h = vi.hoisted(() => ({
@@ -80,7 +82,7 @@ import { urlOf } from '../helpers/flash-jar';
 const sql = postgres(url, { max: 5 });
 let seq = 0;
 const uid = (p: string) => `${p}-${Date.now()}-${++seq}`;
-const D10 = '2027-01-10';
+const D10 = '2026-12-10';
 
 afterAll(async () => {
   const { closeDb } = await import('@shareat/db');
@@ -121,7 +123,7 @@ async function fixture(hint: string) {
   const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
   const orgId = org!.id;
   await seedChartOfAccounts(sql, orgId);
-  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2027-01-01', '2027-01-31', 'open')`;
+  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2026-12-01', '2026-12-31', 'open')`;
   const mkStore = async (name: string) =>
     (await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${orgId}, ${uid('st')}, ${name}) returning id`)[0]!.id;
   const storeId = await mkStore('Lipa');
@@ -266,5 +268,75 @@ describe('W1 - the new-day page follows the link', () => {
     expect(html, 'the typed form is still there').toMatch(FIGURE_INPUTS);
     expect(html, 'the checkbox is gone for everyone').not.toContain('posSourced');
     expect(html).not.toContain('Import from POS');
+  });
+});
+
+// ---- T-551 (bible row 452 b): the v1 day feed stops after 2026-12-31 --------------------------------------------------
+const FEED_STOPPED = 'From 2027 the v1 day feed is not imported into this ERP. Stores on POS v1 keep their sales in the v1 ERP.';
+
+/** The page's date input, as rendered. */
+const dateInputOf = (html: string): string => /<input[^>]*name="businessDate"[^>]*>/.exec(html)?.[0] ?? '';
+
+async function renderNewOn(f: F, isoInstant: string): Promise<string> {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(isoInstant));
+  try {
+    return await renderNew(f, f.storeId);
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
+describe('T-551 - the actions refuse a 2027 date before POS is called', () => {
+  it('importSalesDayAction on 2027-01-01 -> back to the new-day page with the exact sentence; POS never called; no day', async () => {
+    const f = await fixture('t551a');
+    const to = await run(f.admin, importSalesDayAction, form({ storeId: f.storeId, businessDate: '2027-01-01' }));
+    expect(to.pathname).toBe('/sales-days/new');
+    expect(to.searchParams.get('error')).toBe(FEED_STOPPED);
+    expect(fetchSpy, 'the check comes before the bridge').not.toHaveBeenCalled();
+    expect(await days(f.storeId)).toHaveLength(0);
+  });
+
+  it('importSalesDayAction on 2026-12-31 still imports (the control)', async () => {
+    const f = await fixture('t551b');
+    const to = await run(f.admin, importSalesDayAction, form({ storeId: f.storeId, businessDate: '2026-12-31' }));
+    expect(to.searchParams.get('error')).toBeNull();
+    expect(await days(f.storeId)).toHaveLength(1);
+  });
+
+  it('reimportSalesDayAction on a day dated 2027 -> its own page with the exact sentence; POS never called', async () => {
+    const f = await fixture('t551c');
+    await run(f.admin, importSalesDayAction, form({ storeId: f.storeId, businessDate: D10 }));
+    const [day] = await days(f.storeId);
+    await sql.begin(async (tx) => {
+      await tx`set local session_replication_role = replica`; // the feed-day guard trigger refuses figure changes outside the derivation
+      await tx`update sales_days set business_date = '2027-01-05' where id = ${day!.id}`;
+    });
+    fetchSpy.mockClear();
+    const to = await run(f.admin, reimportSalesDayAction, form({ salesDayId: day!.id, storeId: f.storeId }));
+    expect(to.pathname).toBe(`/sales-days/${day!.id}`);
+    expect(to.searchParams.get('error')).toBe(FEED_STOPPED);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('T-551 - the new-day page offers no import for a 2027 date, and says why', () => {
+  it('opened in 2027: the sentence is shown, and the date can be no later than 31 Dec 2026 (kills: the page unchanged)', async () => {
+    const f = await fixture('t551d');
+    const html = await renderNewOn(f, '2027-01-05T04:00:00.000Z');
+    expect(html).toContain(FEED_STOPPED);
+    const input = dateInputOf(html);
+    expect(input, 'the date input is on the page').not.toBe('');
+    expect(input).toContain('max="2026-12-31"');
+    expect(input, 'it no longer starts on today').toContain('value="2026-12-31"');
+    expect(input).not.toContain('2027');
+  });
+
+  it('opened in December 2026: no sentence, the date starts on today (the control)', async () => {
+    const f = await fixture('t551e');
+    const html = await renderNewOn(f, '2026-12-20T04:00:00.000Z');
+    expect(html).not.toContain(FEED_STOPPED);
+    expect(html).toContain('Import from POS');
+    expect(dateInputOf(html)).toContain('value="2026-12-20"');
   });
 });

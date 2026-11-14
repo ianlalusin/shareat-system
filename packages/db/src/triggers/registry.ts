@@ -503,7 +503,8 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     table: 'sales_days',
     mode: 'origin',
     kind: 'validator',
-    reason: "A linked store's day figures change only inside the derivation (0185, T-375 R6) - reads the store's CURRENT link and the flag.",
+    reason:
+      "A linked store's day figures change only inside the derivation (0185, T-375 R6); a pos_receipts day (0247, T-531) is created and changed only inside the derivation, for a LIVE store on or after live_from, and a v1 feed day on or after live_from is refused - reads the store's CURRENT link, its pos_stores row and the flag.",
   },
   // T-385 (0188): the order submitted -> verified. Origin: a replay or restore must load historic days verified straight from open.
   sales_days_verify_requires_submitted: {
@@ -532,13 +533,13 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     table: 'sales_day_tenders',
     mode: 'origin',
     kind: 'validator',
-    reason: "A linked store's tender rows change only inside the derivation (0185) - reads the day's source, status and the store's link.",
+    reason: "A linked store's tender rows change only inside the derivation (0185); the tender rows of a pos_receipts day (0247, T-531) likewise, while the day is open or submitted - reads the day's source, status and the store's link.",
   },
   sales_day_channels_lock: {
     table: 'sales_day_channels',
     mode: 'origin',
     kind: 'validator',
-    reason: "A feed day's remitted channel rows change only inside the derivation; platform rows only while the day is unverified (0185).",
+    reason: "A feed day's remitted channel rows change only inside the derivation; platform rows only while the day is unverified (0185). A pos_receipts day (0247, T-531) takes platform rows while open or submitted and no remitted row.",
   },
   pos_v1_store_links_store_fixed: {
     table: 'pos_v1_store_links',
@@ -624,6 +625,24 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     mode: 'origin',
     kind: 'validator',
     reason: "id/org/store never change; retire refused while a live offer uses the daypart; a days/time edit may not create an overlap (0233). Reads other rows.",
+  },
+  menu_dayparts_version_insert_trg: {
+    table: 'menu_dayparts',
+    mode: 'origin',
+    kind: 'derivation',
+    reason: 'Opens window version 1 of a new daypart from the row itself (0253). A replica-mode bulk load must not run it twice.',
+  },
+  menu_dayparts_version_update_trg: {
+    table: 'menu_dayparts',
+    mode: 'origin',
+    kind: 'derivation',
+    reason: 'On a changed window or status, closes the open window version and opens the next from the row itself (0253). Derived, so a replay does not re-run it.',
+  },
+  menu_daypart_versions_append_guard: {
+    table: 'menu_daypart_versions',
+    mode: 'always',
+    kind: 'history_guard',
+    reason: 'A daypart window version is never deleted, and its only change is closing valid_to once from NULL (0253, ENABLE ALWAYS). Decides only from TG_OP and OLD/NEW.',
   },
   menu_offers_update_guard: {
     table: 'menu_offers',
@@ -1541,7 +1560,7 @@ export const TRIGGER_REGISTRY: Readonly<Record<string, TriggerEntry>> = {
     mode: 'always',
     kind: 'history_guard',
     reason:
-      'An inbox event is frozen at insert; only the three resolution columns may go NULL -> a value once; never deleted (0238, T-523 R10). Decides only from OLD/NEW.',
+      'An inbox event is frozen at insert; only the three resolution columns may go NULL -> a value once; never deleted (0238, T-523 R10). Lifted once by migration 0252 (T-572, DEF-823) to redact senior/PWD IDs in stored payloads, then re-enabled ALWAYS. Decides only from OLD/NEW.',
   },
   pos_sales_receipt_line_discounts_append_only: {
     table: 'pos_sales_receipt_line_discounts',

@@ -10,6 +10,20 @@ import { loadLiveStoreOffers } from './live-offers';
 import { projectStoreMenu, type MenuSnapshot, type ProjectedStoreMenu } from './project';
 
 export async function loadStoreMenu(tx: Tx, orgId: string, storeId: string, at?: Date, opts?: { showWithdrawnStore?: boolean }): Promise<ProjectedStoreMenu> {
+  return (await loadStoreMenuWithVersions(tx, orgId, storeId, at, opts)).menu;
+}
+
+/**
+ * The same menu, plus (T-565) for each variant whose STORE offer is dayparted the id of the window version that offer was judged by at `at`
+ * (a variant with an all-day offer, or none, is absent). A POS line records it. The windows are those in force at `at`, never today's edited ones.
+ */
+export async function loadStoreMenuWithVersions(
+  tx: Tx,
+  orgId: string,
+  storeId: string,
+  at?: Date,
+  opts?: { showWithdrawnStore?: boolean },
+): Promise<{ menu: ProjectedStoreMenu; versionOfVariant: ReadonlyMap<string, string> }> {
   const when = at ?? (await menuRepo.dbNow(tx));
   const [catalog, live, optionOffers, upcoming, stations, routes] = await Promise.all([
     menuRepo.catalogOfOrg(tx, orgId),
@@ -27,7 +41,12 @@ export async function loadStoreMenu(tx: Tx, orgId: string, storeId: string, at?:
     stations,
     routes,
   };
-  return projectStoreMenu(snapshot, storeId, when, opts);
+  const versionOfVariant = new Map<string, string>();
+  for (const o of live.offers) {
+    const version = o.channel === 'store' && !o.withdrawn && o.daypartId !== null ? live.daypartVersionIds.get(o.daypartId) : undefined;
+    if (version !== undefined) versionOfVariant.set(o.variantId, version);
+  }
+  return { menu: projectStoreMenu(snapshot, storeId, when, opts), versionOfVariant };
 }
 
 /**

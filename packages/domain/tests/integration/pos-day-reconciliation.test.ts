@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
@@ -23,8 +25,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} — name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} — name must contain "_test".`);
 }
 
 import { closeDb, type Tx } from '@shareat/db';
@@ -105,7 +107,7 @@ describe('getPosDayReconciliation', () => {
     const dayId = await importVerified(f);
     const feedId = (await recheck(f, R1_FIGURES)).ids.sales!;
     await asOrgOn(f.orgId, (tx) =>
-      D.postPosCorrection(tx, f.manager, { salesDayId: dayId, feedId, entryDate: '2027-01-20', reason: 'POS voided a cash receipt' }),
+      D.postPosCorrection(tx, f.manager, { salesDayId: dayId, feedId, entryDate: '2026-01-20', reason: 'POS voided a cash receipt' }),
     );
 
     const result = await reconcile(f);
@@ -132,7 +134,7 @@ describe('getPosDayReconciliation', () => {
   it('a date with no sales day and no stored feed is "none" on both sides, the ledger side absent', async () => {
     const f = await s6Fixture(sql, 'no-ledger-row');
 
-    const result = await reconcile(f, '2027-01-15');
+    const result = await reconcile(f, '2026-01-15');
 
     expect(result.postedBasis).toEqual({ status: 'none' });
     expect(result.latest).toEqual({ status: 'none' });

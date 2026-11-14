@@ -20,7 +20,8 @@ export interface RuleDefinition {
   readonly label: string;
   /** One sentence saying what the number does. */
   readonly help: string;
-  readonly unit: 'money' | 'percent' | 'hour' | 'minutes';
+  /** `days` and `flag` are whole numbers: `days` a count of days, `flag` an on/off switch stored as 0 or 1 (T-575). */
+  readonly unit: 'money' | 'percent' | 'hour' | 'minutes' | 'days' | 'flag';
   readonly default: string;
   readonly min: string;
   readonly max: string;
@@ -110,9 +111,41 @@ export const RULE_REGISTRY = {
     capability: RULE_ADMIN_CAPABILITY,
     namespace: 'pos',
   },
+  'pos.sale_variance_tolerance': {
+    label: 'Largest short payment on a POS sale that counts as normal (₱)',
+    help: 'The most a cashier may accept below the bill without it being flagged as a shortfall. ₱0.01 covers normal rounding.',
+    unit: 'money',
+    default: '0.01',
+    min: '0',
+    max: '0.10', // the hard ceiling (bible row 453, Ian 11 Nov 2026)
+    capability: RULE_ADMIN_CAPABILITY,
+    namespace: 'pos',
+  },
+  'pos.senior_id_repeat_days': {
+    label: 'Days a senior or PWD card number is checked for repeat use',
+    help: 'When a senior or PWD card number was already used at the same store within this many days, the till warns the cashier and the sale is flagged for a manager to review. 1 means the same business day. The sale is never blocked.',
+    unit: 'days',
+    default: '1',
+    min: '1',
+    max: '30',
+    capability: RULE_ADMIN_CAPABILITY,
+    namespace: 'pos',
+  },
+  'pos.require_pin_line_actions': {
+    label: 'Manager PIN for cancelling a line or giving a line discount',
+    help: 'When On, cancelling a line, giving a discount on a line (including marking it free) and removing a line discount need a manager PIN at the till, unless the person already holds manager approval. Offline the till goes ahead and flags the action for a manager to review. Off by default.',
+    unit: 'flag',
+    default: '0',
+    min: '0',
+    max: '1',
+    capability: RULE_ADMIN_CAPABILITY,
+    namespace: 'pos',
+  },
 } as const satisfies Record<string, RuleDefinition>;
 
 export type BusinessRuleKey = keyof typeof RULE_REGISTRY;
+
+export type RuleUnit = RuleDefinition['unit'];
 
 /** Own keys only: `'toString'`, `'__proto__'` and any near miss are not rules. */
 export function isBusinessRuleKey(key: string): key is BusinessRuleKey {

@@ -9,6 +9,7 @@
  * the two companies by id exercises the same per-company path (`listOrgsToRun(orgId)` -> `runJobForOrg` under that company's principal)
  * without touching anyone else's rows. The all-company enumeration itself (`listOrgsToRun()` with no id) is covered by the scheduler unit tests.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import postgres from 'postgres';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -19,7 +20,7 @@ import { posDayImportSweep } from '../../src/pos/day-import-job';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) throw new Error('Refusing to run: the database name must contain "_test".');
+if (!isTestDatabaseUrl(url)) throw new Error('Refusing to run: the database name must contain "_test".');
 const sql = postgres(url, { max: 3 });
 
 afterAll(async () => {

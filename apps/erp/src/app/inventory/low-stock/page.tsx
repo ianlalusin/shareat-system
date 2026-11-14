@@ -7,7 +7,7 @@ import { requireSession } from '../../../lib/session';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { CheckedForm, EditableRecord } from '@/components/forms';
 import { INVENTORY_THRESHOLD_RULES, nativeAttrs } from '@shareat/domain/field-rules';
-import { Button, Field, FlashBanner, HelpTip, Input, Select } from '@/components/ui';
+import { Button, Card, EmptyState, Field, FlashBanner, HelpTip, Input, NumTd, Select, Table, Td, Th } from '@/components/ui';
 import { Page } from '@/components/shell/Page';
 import { FilterRow } from '@/components/FilterRow';
 import { PageDescription } from '@/components/shell/PageDescription';
@@ -88,36 +88,36 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
         </label>
       </FilterRow>
 
-      <h2 className="mt-8 text-lg font-medium">At or below threshold</h2>
+      <h2 className="mt-8 text-lg font-semibold">At or below threshold</h2>
       {low.length === 0 ? (
-        <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
-          Nothing is low. ⚠️ That is only meaningful for items that HAVE a threshold — see below.
-        </p>
+        <EmptyState
+          illustration="magnifier"
+          title="Nothing is low"
+          body="That is only meaningful for items that have a threshold. Set one below and this list will start working."
+        />
       ) : (
-        <table className="mt-3 w-full border-collapse text-sm">
+        <Table card={{ title: 'Item', keys: ['On hand', 'Short by'] }}>
           <thead>
-            <tr className="border-b border-neutral-300 text-left dark:border-neutral-700">
-              <th className="py-2 pr-4 font-medium">Item</th>
-              <th className="py-2 pr-4 text-right font-medium">On hand</th>
-              <th className="py-2 pr-4 text-right font-medium">Threshold</th>
-              <th className="py-2 text-right font-medium">Short by</th>
+            <tr>
+              <Th>Item</Th>
+              <Th numeric>On hand</Th>
+              <Th numeric>Threshold</Th>
+              <Th numeric>Short by</Th>
             </tr>
           </thead>
           <tbody>
             {low.map((row) => (
-              <tr key={row.itemId} className="border-b border-neutral-200 dark:border-neutral-800">
-                <td className="py-2 pr-4 font-medium">{row.itemName}</td>
-                <td className="py-2 pr-4 text-right tabular-nums">
+              <tr key={row.itemId}>
+                <Td className="font-medium">{row.itemName}</Td>
+                <NumTd>
                   {row.onHand} {row.baseUnit}
-                </td>
-                <td className="py-2 pr-4 text-right tabular-nums">{row.threshold}</td>
-                <td className="py-2 text-right tabular-nums font-medium text-warning-ink">
-                  {row.shortfall}
-                </td>
+                </NumTd>
+                <NumTd>{row.threshold}</NumTd>
+                <NumTd className="font-medium text-warning-ink">{row.shortfall}</NumTd>
               </tr>
             ))}
           </tbody>
-        </table>
+        </Table>
       )}
 
       {/*
@@ -127,22 +127,22 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
         never block the person who cannot.
       */}
       {missing.length > 0 && (
-        <section className="mt-8 rounded-lg border border-warning bg-warning-soft p-4">
-          <h2 className="text-sm font-medium">
-            ⚠️ {missing.length} item{missing.length === 1 ? '' : 's'} moving in this store with no
+        <Card className="mt-8 border-warning bg-warning-soft">
+          <h2 className="text-sm font-semibold text-warning-ink">
+            {missing.length} item{missing.length === 1 ? '' : 's'} moving in this store with no
             threshold
           </h2>
-          <p className="mt-1 text-sm text-neutral-700 dark:text-neutral-300">
+          <p className="mt-1 text-sm">
             They can never appear on the list above, and nothing else will say so — the store simply
             runs out. Set one below.
           </p>
-          <ul className="mt-2 text-sm text-neutral-700 dark:text-neutral-300">
+          <ul className="mt-2 grid gap-1 text-sm sm:grid-cols-2">
             {missing.slice(0, 12).map((m) => (
               <li key={m.itemId}>· {m.itemName}</li>
             ))}
-            {missing.length > 12 && <li className="text-neutral-500">…and {missing.length - 12} more</li>}
+            {missing.length > 12 && <li className="text-muted">…and {missing.length - 12} more</li>}
           </ul>
-        </section>
+        </Card>
       )}
 
       <h2 className="mt-10 flex items-center gap-1 text-lg font-medium">
@@ -153,28 +153,28 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
           threshold entirely — a different state, and the item then falls off the list.
         </HelpTip>
       </h2>
-      <table className="mt-3 w-full border-collapse text-sm">
+      <Table card={{ title: 'Item', subtitle: 'Unit' }}>
         <thead>
-          <tr className="border-b border-neutral-300 text-left dark:border-neutral-700">
-            <th className="py-2 pr-4 font-medium">Item</th>
-            <th className="py-2 pr-4 font-medium">Unit</th>
-            <th className="py-2 font-medium">
+          <tr>
+            <Th>Item</Th>
+            <Th>Unit</Th>
+            <Th>
               <span className="inline-flex items-center gap-1">
                 Threshold
                 <HelpTip label="Threshold">A number of 0 or more. Blank means no threshold.</HelpTip>
               </span>
-            </th>
+            </Th>
           </tr>
         </thead>
         <tbody>
           {items.map((item) => (
-            <tr key={item.id} className="border-b border-neutral-200 dark:border-neutral-800">
-              <td className="py-2 pr-4">
+            <tr key={item.id}>
+              <Td>
                 <span className="font-medium">{item.name}</span>
-                <span className="ml-2 text-xs text-neutral-500">{item.code}</span>
-              </td>
-              <td className="py-2 pr-4 text-neutral-600 dark:text-neutral-400">{item.baseUnit}</td>
-              <td className="py-2">
+                <span className="ml-2 font-mono text-xs text-muted">{item.code}</span>
+              </Td>
+              <Td className="text-muted">{item.baseUnit}</Td>
+              <Td>
                 {thresholdByItem.has(item.id) ? (
                   <div className="flex items-center gap-3">
                   <span className="tabular-nums">{thresholdByItem.get(item.id)}</span>
@@ -214,11 +214,11 @@ export default async function LowStockPage({ searchParams }: { searchParams: Pro
                     </Button>
                   </CheckedForm>
                 )}
-              </td>
+              </Td>
             </tr>
           ))}
         </tbody>
-      </table>
+      </Table>
     </Page>
   );
 }

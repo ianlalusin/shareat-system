@@ -39,7 +39,7 @@ describe('DaypartsSection', () => {
 
   it('lists name, hours (overnight shown) and days to anyone; retired ones carry a Retired badge', () => {
     const t = plain(draw(false));
-    expect(t).toContain('Lunch and dinner hours');
+    expect(t).toContain('Menu hours');
     expect(t).toContain('Lunch 08:00 to 17:00 Every day');
     expect(t).toContain('Dinner 17:00 to 08:00 next day Mon to Fri');
     expect(t).toContain('Retired hours (1)');

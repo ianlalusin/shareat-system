@@ -23,6 +23,7 @@
  * account is asked for; `judgeDraw` decides whether that is allowed.
  */
 import { add, compare, money, subtract, ZERO, type Money } from '@shareat/core/money';
+import { ungroupThousands } from './money-input';
 /**
  * ⭐ Re-exported so a CLIENT component reaches the overdraft verdict through this one pure
  * subpath (`@shareat/domain/money-lines`) instead of the package barrel.
@@ -197,13 +198,17 @@ export function drawnPerSource(lines: readonly MoneyLine[]): Map<string, Money> 
   return drawn;
 }
 
-/** `money()` or nothing — never a throw, because this runs on every keystroke in the form. */
+/**
+ * `money()` or nothing — never a throw, because this runs on every keystroke in the form.
+ * ⭐ T-570: the number boxes hold the GROUPED text ("1,234.50"), so every client reader of a box goes through here and
+ * ungroups a correct grouping first (`ungroupThousands`); a wrong one ("1,5") is still unreadable, as on the server.
+ */
 export function tryMoney(raw: string | null | undefined): Money | null {
   if (raw === null || raw === undefined) return null;
   const trimmed = String(raw).trim();
   if (!trimmed) return null;
   try {
-    return money(trimmed);
+    return money(ungroupThousands(trimmed) ?? trimmed);
   } catch {
     return null;
   }

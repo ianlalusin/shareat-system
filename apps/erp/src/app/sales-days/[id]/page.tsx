@@ -1,11 +1,12 @@
 import { notFound } from 'next/navigation';
 import { authorize, can as canDo } from '@shareat/auth';
 import { salesDaysRepo, journalRepo, posV1Repo } from '@shareat/db';
-import { packageCapExcess, unpostedUsageDraftCount } from '@shareat/domain';
+import { packageCapExcess, unpostedUsageDraftCount, isAfterV1DayFeed, V1_DAY_FEED_STOPPED_SENTENCE } from '@shareat/domain';
 import { add, compare, formatMoney, money, ZERO } from '@shareat/core/money';
 import { addDays, formatBusinessDateTime, parseBusinessDate, toBusinessDate } from '@shareat/core/datetime';
 import { listStores, listActingPersons, getStoreLink } from '../lib';
 import { requireSession } from '../../../lib/session';
+import { canReadAtStore } from '@/lib/can-read-at-store';
 import { postPosCorrectionAction, recheckPosDayAction, reimportSalesDayAction, editSalesDayAction, submitSalesDayAction, verifySalesDayAction, voidSalesDayAction } from '../actions';
 import { withOrgPrincipal } from '../../expenses/lib';
 import { canOverrideClosedMonth } from '../../expenses/reimbursements/lib';
@@ -47,7 +48,8 @@ export default async function SalesDayDetailPage({
   const orgId = actor.orgId;
 
   const day = await withOrgPrincipal(orgId, (tx) => salesDaysRepo.getById(tx, orgId, id));
-  if (!day) notFound();
+  // T-577 (DEF-834): a sales day outside the viewer's stores is the same not-found as a forged id. The page's own actions are submit/verify.
+  if (!day || !(await withOrgPrincipal(orgId, (tx) => canReadAtStore(tx, actor, day.storeId, ['submit_sales_day', 'verify_sales_day'])))) notFound();
 
   const [channels, stores, persons] = await Promise.all([
     withOrgPrincipal(orgId, (tx) => salesDaysRepo.getChannelsForDay(tx, day.id)),
@@ -106,6 +108,8 @@ export default async function SalesDayDetailPage({
   // T-375 S3: where the figures came from. A feed day is imported (and re-imported while unverified); a typed day
   // belongs to a store that was not linked to POS when it was typed, and is the only kind that is edited by hand.
   const isFeedDay = day.source === 'pos_v1_day_feed';
+  // T-531: a day derived from the POS receipts at the Z. Never typed and never re-imported: it changes only by a void and a new close.
+  const isPosReceiptsDay = day.source === 'pos_receipts';
   const storeLink = await getStoreLink(orgId, day.storeId);
   // W1: POS's package figure can exceed the day's sales; the difference is not booked. Computed from the stored
   // feed on read (no column).
@@ -120,7 +124,7 @@ export default async function SalesDayDetailPage({
   // T-375 S4 (R8): platform sales are the one thing typed on a feed day - the store's NON-remitted channels, while the
   // day is unverified. A remitted channel comes from POS and is never offered here.
   const platformChannels =
-    isFeedDay && unverified && can.edit
+    (isFeedDay || isPosReceiptsDay) && unverified && can.edit
       ? (await withOrgPrincipal(orgId, (tx) => salesDaysRepo.listChannels(tx, orgId, day.storeId, { activeOnly: true }))).filter(
           (c) => !c.isRemittedDaily,
         )
@@ -173,7 +177,9 @@ export default async function SalesDayDetailPage({
             {storeName} ·{' '}
             {isFeedDay
               ? `Imported from POS at ${day.posSourcedAt ? formatBusinessDateTime(day.posSourcedAt) : 'an unknown time'}`
-              : 'Typed — store not linked to POS'}
+              : isPosReceiptsDay
+                ? 'Closed on the POS (Z reading)'
+                : 'Typed — store not linked to POS'}
           </PageDescription>
         </div>
         <div className="text-right">
@@ -388,7 +394,12 @@ export default async function SalesDayDetailPage({
         </form>
       )}
 
-      {unverified && can.edit && isFeedDay && (
+      {/* T-551: a day dated after the cut-off cannot be re-imported (bible row 452 b); say so instead of offering it. */}
+      {unverified && can.edit && isFeedDay && isAfterV1DayFeed(day.businessDate) && (
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">{V1_DAY_FEED_STOPPED_SENTENCE}</p>
+      )}
+
+      {unverified && can.edit && isFeedDay && !isAfterV1DayFeed(day.businessDate) && (
         <form action={reimportSalesDayAction} className="space-y-2 text-sm">
           {hiddenIds}
           <Button type="submit" variant="secondary">
@@ -400,7 +411,7 @@ export default async function SalesDayDetailPage({
         </form>
       )}
 
-      {unverified && can.edit && !isFeedDay && !storeLink && (
+      {unverified && can.edit && !isFeedDay && !isPosReceiptsDay && !storeLink && (
         <div>
           <a
             href={`/sales-days/${day.id}/edit?${carry.toString()}`}
@@ -527,7 +538,13 @@ export default async function SalesDayDetailPage({
         )}
       </section>
 
-      {unverified && can.void && (
+      {isPosReceiptsDay && day.status !== 'voided' && can.void && (
+        <p className="rounded-lg border border-surface-border p-4 text-sm text-neutral-700 dark:text-neutral-300">
+          A sales day from the POS can&apos;t be voided. Correct it with a refund or a platform correction.
+        </p>
+      )}
+
+      {unverified && !isPosReceiptsDay && can.void && (
         <CheckedForm rules={SALES_DAY_VOID_RULES} action={voidSalesDayAction} className="space-y-3 rounded-lg border border-danger p-4 text-sm">
           {hiddenIds}
           <h2 className="font-medium text-danger">Withdraw this unverified day</h2>
@@ -548,7 +565,7 @@ export default async function SalesDayDetailPage({
         </CheckedForm>
       )}
 
-      {day.status === 'verified' && can.void && (
+      {day.status === 'verified' && !isPosReceiptsDay && can.void && (
         <CheckedForm rules={SALES_DAY_VOID_RULES} action={voidSalesDayAction} className="space-y-3 rounded-lg border border-danger p-4 text-sm">
           {hiddenIds}
           <h2 className="font-medium text-danger">Void (reverses the posting)</h2>

@@ -51,6 +51,12 @@
 
   --success: #0e6b45;
   --success-soft: #e2f1e8;
+
+  /* T-568 — toast fill. Yellow is a surface, never body text; the toast's ink stays fixed
+     in both themes, so a dark page does not turn the type light on yellow. */
+  --toast: #f5d76e;
+  --toast-edge: #e7c44e;
+  --toast-ink: #241f18;
   --info: #1e4fb8;
   --info-soft: #e7eefb;
   --progress: #6427c9;
@@ -296,6 +302,8 @@
   .erp-tip { animation: erp-tip-in 0.12s ease-out both; }
   @keyframes erp-tip-in { from { opacity: 0; } to { opacity: 1; } }
   .toast-in { animation: toast-in 0.55s cubic-bezier(.34, 1.56, .64, 1) both; }
+  .toast-progress { animation: toast-progress 4s linear forwards; }
+  @keyframes toast-progress { from { transform: scaleX(1); } to { transform: scaleX(0); } }
   .stamp-slam { transform: rotate(-12deg); animation: stamp-slam 0.6s cubic-bezier(.5, 0, .5, 1.4) both; }
   .empty-flame { transform-box: fill-box; transform-origin: 50% 100%; animation: si-flick 1.2s ease-in-out infinite alternate; }
 
@@ -677,6 +685,9 @@ html { scrollbar-gutter: stable; }
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
     overflow: hidden; clip: rect(0, 0, 0, 0); clip-path: inset(50%); white-space: nowrap;
   }
+  /* T-568 (UI-009): a help tip in a clipped header cannot show its focus ring. visibility:hidden takes it out of the tab order
+     there; the column heading text itself stays for assistive technology. */
+  [data-phone-table-root] table[data-phone-cards] > thead:not([data-card-controls]) .erp-help-tip-wrap { visibility: hidden; }
   [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot),
   [data-phone-table-root] table[data-phone-cards] > thead[data-card-controls] { display: block; min-width: 0; }
   [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot, thead[data-card-controls]) > tr {
@@ -738,6 +749,8 @@ html { scrollbar-gutter: stable; }
   [data-phone-table-root] [data-card-slot="extra"] {
     position: relative; z-index: 10; grid-column: 2 / -1; margin-top: 0.75rem;
   }
+  /* A link-only action needs no "Actions" heading; a form action still needs its field label. */
+  [data-phone-table-root] [data-card-slot="actions"]:has(> a):not(:has(:is(input, select, textarea, button)))::before { content: none; }
   [data-phone-table-root] tr:not([data-card-expanded]) > [data-card-slot="extra"] { display: none !important; }
   [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr > [data-card-toggle-cell] {
     display: block; position: relative; z-index: 10; grid-column: -2 / -1; grid-row: 1 / span 2; align-self: center;
@@ -753,7 +766,13 @@ html { scrollbar-gutter: stable; }
     display: block; margin-block-end: 0.25rem;
     color: var(--muted); font-size: 0.75rem; font-weight: 500; line-height: 1.4;
   }
-  [data-phone-table-root] :is([data-card-span="full"], [data-card-slot="title"], [data-card-slot="subtitle"], [data-card-slot="key"], [data-card-slot="media"])::before { content: none; }
+  /* T-568: a key value without its label is a number nobody can name. Keep the label inline. */
+  [data-phone-table-root] [data-card-slot="key"]::before {
+    content: attr(data-card-label) / "";
+    display: inline; margin-inline-end: 0.3rem;
+    color: var(--muted); font-size: 0.7rem; font-weight: 400;
+  }
+  [data-phone-table-root] :is([data-card-span="full"], [data-card-slot="title"], [data-card-slot="subtitle"], [data-card-slot="media"])::before { content: none; }
   [data-phone-table-root] table[data-phone-cards] > :is(tbody, tfoot) > tr > [data-card-span="full"] {
     font-weight: 600;
   }
@@ -825,7 +844,14 @@ html { scrollbar-gutter: stable; }
     gap: 1rem;
   }
   .erp-page[data-view="detail"][data-sectioned] > * { grid-column: 1 / -1; margin-block: 0; min-width: 0; }
-  .erp-page[data-view="detail"][data-sectioned] > section:not(:has(table)) { grid-column: auto; }
+  /* ⭐ T-571 — a card may share the row only with ANOTHER CARD beside it. A table-less section with no
+     table-less neighbour on either side (the first rule: one with a table-less next sibling; the second:
+     one with a table-less previous sibling) spans both columns instead of leaving the second column empty.
+     Ian, on the supplier page: "the details card may use full width of the page". Runs of three or more
+     keep the old placement; a pair, a lone card and two pairs are all correct. A card marked data-fullwidth (the
+     supplier details card) never takes part in a pair, so it spans the row even beside the multi-store picker. */
+  .erp-page[data-view="detail"][data-sectioned] > section:not(:has(table)):not([data-fullwidth]):has(+ section:not(:has(table)):not([data-fullwidth])),
+  .erp-page[data-view="detail"][data-sectioned] > section:not(:has(table)):not([data-fullwidth]) + section:not(:has(table)):not([data-fullwidth]) { grid-column: auto; }
 }
 @media (min-width: 1024px) and (pointer: fine) {
   .erp-page tbody > tr {

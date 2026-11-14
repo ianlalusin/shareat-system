@@ -3,6 +3,8 @@
  * T-526 audit 5 + 4 (real Postgres) - on a PAIRED tablet the pairing's store wins and a different ?storeId is refused; and the pairing is
  * readable inside an org-principalled transaction (RLS lets an org see its own pairings, and nobody else's). Runs on any `_test` database.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
@@ -12,8 +14,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 vi.mock('next/navigation', async () => ({

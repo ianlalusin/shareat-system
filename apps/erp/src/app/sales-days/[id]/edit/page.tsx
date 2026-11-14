@@ -4,6 +4,7 @@ import { isZero, money } from '@shareat/core/money';
 import { salesDaysRepo } from '@shareat/db';
 import { listStores, listChannels, listStoreMoneyAccounts, getStoreLink, withOrgPrincipal, type ChannelOption } from '../../lib';
 import { requireSession } from '../../../../lib/session';
+import { canReadAtStore } from '@/lib/can-read-at-store';
 import { editSalesDayAction } from '../../actions';
 import { SalesDayForm, type SalesDayDefaults } from '../../SalesDayForm';
 import { CheckedForm } from '@/components/forms';
@@ -42,7 +43,8 @@ export default async function EditSalesDayPage({
   const orgId = actor.orgId;
 
   const day = await withOrgPrincipal(orgId, (tx) => salesDaysRepo.getById(tx, orgId, id));
-  if (!day) notFound();
+  // T-577 (DEF-834): same store check as the day page, BEFORE any "can't edit" message. The page's own actions are submit/verify.
+  if (!day || !(await withOrgPrincipal(orgId, (tx) => canReadAtStore(tx, actor, day.storeId, ['submit_sales_day', 'verify_sales_day'])))) notFound();
 
   const unverified = day.status === 'open' || day.status === 'submitted';
 
@@ -71,7 +73,7 @@ export default async function EditSalesDayPage({
   );
 
   // T-375 S3 (R13): the linked-store refusal shares this block (and its one PageDescription) with the status refusals.
-  const takesFromPos = link !== null || day.source === 'pos_v1_day_feed';
+  const takesFromPos = link !== null || day.source !== 'legacy_typed';
   if (takesFromPos || !unverified || !canEdit) {
     return (
       <Page density="table">

@@ -12,6 +12,8 @@
  * ASSUMED: the 0241 file is packages/db/migrations/0241_*.sql, its seed is an INSERT INTO business_rule_values (statements split by `--> statement-breakpoint`),
  * seed rows carry set_by null, effective_from 2000-01-01 and reason "Starting value" (the 0239 pattern).
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -22,8 +24,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { RULE_REGISTRY } from '../../src/business-rules/registry';
@@ -108,8 +110,8 @@ describe('T-539 seed pin - 0239, 0241 and 0245 together equal every registry def
     expect(rows[0]!.reason).toBe('Starting value');
   });
 
-  it('0239, 0241 and 0245 for one org write exactly one row per registry key, and every value IS the registry default [kills: a seed value that drifted from the registry; a registry key with no seed row anywhere]', async () => {
-    const rows = await replay([fileOf('0239_'), fileOf('0241_'), fileOf('0245_')]);
+  it('0239, 0241, 0245, 0248 and 0255 (T-575) and 0256 (T-576) for one org write exactly one row per registry key, and every value IS the registry default [kills: a seed value that drifted from the registry; a registry key with no seed row anywhere]', async () => {
+    const rows = await replay([fileOf('0239_'), fileOf('0241_'), fileOf('0245_'), fileOf('0248_'), fileOf('0255_'), fileOf('0256_')]);
     expect(rows.map((r) => r.key)).toEqual(Object.keys(RULE_REGISTRY).sort());
     for (const r of rows) {
       const want = (RULE_REGISTRY as Record<string, { default: unknown }>)[r.key]!.default;
@@ -120,8 +122,8 @@ describe('T-539 seed pin - 0239, 0241 and 0245 together equal every registry def
     }
   });
 
-  it('the three files name no key outside the registry, and between them name every registry key [kills: a typo in a seeded key; a key nobody seeds]', () => {
-    const named = [...new Set([...namedKeys(text(fileOf('0239_'))), ...namedKeys(text(fileOf('0241_'))), ...namedKeys(text(fileOf('0245_')))])].sort();
+  it('the six files (0255 = T-575, 0256 = T-576) name no key outside the registry, and between them name every registry key [kills: a typo in a seeded key; a key nobody seeds]', () => {
+    const named = [...new Set([...namedKeys(text(fileOf('0239_'))), ...namedKeys(text(fileOf('0241_'))), ...namedKeys(text(fileOf('0245_'))), ...namedKeys(text(fileOf('0248_'))), ...namedKeys(text(fileOf('0255_'))), ...namedKeys(text(fileOf('0256_')))])].sort();
     expect(named).toEqual(Object.keys(RULE_REGISTRY).sort());
   });
 

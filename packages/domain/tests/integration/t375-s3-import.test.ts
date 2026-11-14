@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
@@ -29,8 +31,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { seedChartOfAccounts } from '../../../db/seed/chart-of-accounts';
@@ -83,8 +85,8 @@ const chain = (e: unknown): string => {
   return parts.join(' | ');
 };
 
-const D10 = '2027-01-10';
-const D11 = '2027-01-11';
+const D10 = '2026-12-10';
+const D11 = '2026-12-11';
 
 interface FixtureOpts {
   link?: boolean;
@@ -101,7 +103,7 @@ async function fixture(hint: string, o: FixtureOpts = {}) {
   const [org] = await sql<{ id: string }[]>`insert into organizations (name, code) values (${`Org ${code}`}, ${code}) returning id`;
   const orgId = org!.id;
   await seedChartOfAccounts(sql, orgId);
-  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2027-01-01', '2027-01-31', 'open')`;
+  await sql`insert into fiscal_periods (org_id, starts_on, ends_on, status) values (${orgId}, '2026-12-01', '2026-12-31', 'open')`;
   const mkStore = async (name: string) =>
     (await sql<{ id: string }[]>`insert into stores (org_id, code, name) values (${orgId}, ${uid('st')}, ${name}) returning id`)[0]!.id;
   const storeId = await mkStore('Lipa');
@@ -562,7 +564,7 @@ describe('I5 - authorize() first: no submit_sales_day means no link read and no 
 });
 
 describe('I6 - the create-block moved with the code: an older open day blocks a newer import', () => {
-  it('staff: an open Jan 10 blocks Jan 11 (the create-block sentence), nothing written for Jan 11', async () => {
+  it('staff: an open Dec 10 blocks Dec 11 (the create-block sentence), nothing written for Dec 11', async () => {
     const f = await fixture('i6a');
     await imp(f, f.staff, D10);
     const err = await imp(f, f.staff, D11).then(() => null, (e) => e);

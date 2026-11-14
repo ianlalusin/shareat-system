@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, describe, expect, it, vi } from 'vitest';
@@ -34,8 +36,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 const h = vi.hoisted(() => ({ actor: null as null | { personId: string; orgId: string } }));
@@ -69,8 +71,8 @@ afterAll(async () => {
   await sql.end({ timeout: 5 });
 });
 
-const D1 = '2027-01-10';
-const D2 = '2027-01-11';
+const D1 = '2026-01-10';
+const D2 = '2026-01-11';
 const REASON = 'wrong store 123';
 
 async function asOrg<T>(orgId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
@@ -94,7 +96,7 @@ async function fixture(hint: string, o: { verified?: number; openDay?: boolean }
     const { id } = await asOrg(base.orgId, (tx) => importTestDay(tx, base.manager, { storeId: base.storeId, businessDate: date }));
     await asOrg(base.orgId, (tx) => submitThenVerify(tx, base.manager, id, base.admin));
   }
-  if (o.openDay) await asOrg(base.orgId, (tx) => importTestDay(tx, base.manager, { storeId: base.storeId, businessDate: '2027-01-15' }));
+  if (o.openDay) await asOrg(base.orgId, (tx) => importTestDay(tx, base.manager, { storeId: base.storeId, businessDate: '2026-01-15' }));
   return { ...base, superAdmin, adminActor: { personId: base.adminId, orgId: base.orgId } };
 }
 type F = Awaited<ReturnType<typeof fixture>>;
@@ -207,13 +209,13 @@ describe('W4 - R3 on the screen: an open imported day blocks the unlink', () => 
   it('the loader shows the R3 sentence and NO form; the action posted anyway refuses with the same sentence', async () => {
     const f = await fixture('w4', { verified: 1, openDay: true });
     const { html, text } = await renderAs(f.superAdmin);
-    expect(text, 'the sentence names the open day').toContain(r3Sentence('Lipa', [hd('2027-01-15')]));
+    expect(text, 'the sentence names the open day').toContain(r3Sentence('Lipa', [hd('2026-01-15')]));
     expect(text, 'and no form: no button, no confirmation').not.toContain('Unlink store from POS');
     expect(text).not.toContain('I understand:');
     expect(html).not.toMatch(/<input[^>]*type="checkbox"/);
 
     const { outcome, raw } = await run(f.superAdmin, form(f, { reason: REASON, confirmName: 'Lipa' }));
-    expect(outcome.flash.error).toBe(r3Sentence('Lipa', [hd('2027-01-15')]));
+    expect(outcome.flash.error).toBe(r3Sentence('Lipa', [hd('2026-01-15')]));
     expect(decodeURIComponent(raw.replace(/\+/g, ' ')), 'auditor: the reason is not in the address on the R3 refusal').not.toContain('wrong store');
     expect(raw).not.toMatch(/[?&](ok|error|reason)=/);
     expect(outcome.flash.ok).toBeUndefined();

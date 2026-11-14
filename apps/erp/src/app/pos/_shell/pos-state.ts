@@ -7,6 +7,8 @@ export interface PosStateBody {
   openStands: unknown[] | null;
   kitchenQueue: unknown[] | null;
   refillQueue: unknown[] | null;
+  /** T-529: the open package tables (the refill picker and heads list); null for a person who holds neither request_pos_refill nor confirm_pos_heads. */
+  refillTables?: unknown[] | null;
 }
 export interface PosState {
   body: PosStateBody | null;

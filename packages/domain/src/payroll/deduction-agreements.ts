@@ -16,6 +16,7 @@
 import { authorize, type Actor } from '@shareat/auth';
 import { auditLogRepo, deductionAgreementsRepo, filesRepo, type Tx } from '@shareat/db';
 import { DEDUCTION_SOURCE_TYPES, type DeductionSourceType } from '@shareat/db/schema';
+import { toBusinessDate } from '@shareat/core/datetime';
 import { ZERO, add, compare, fromCentavos, money, subtract, toCentavos, type Money } from '@shareat/core/money';
 import { parseMoneyInput } from '../shared/money-input';
 import { refuse } from '../shared/refusal';
@@ -45,7 +46,7 @@ const minMoney = (a: Money, b: Money): Money => (compare(a, b) <= 0 ? a : b);
  * `runGross` is the gross of the payslip being built (the wage cap applies, as of `on`, the run's period end); `null` = no wage cap (13th month, separation).
  */
 export async function agreedRecoverable(tx: Tx, orgId: string, personId: string, runGross: Money | null, on: string): Promise<Money> {
-  const active = await deductionAgreementsRepo.listActiveForPerson(tx, orgId, personId);
+  const active = await deductionAgreementsRepo.listActiveForPerson(tx, orgId, personId, false, on);
   let unpaid = ZERO;
   let limits = ZERO;
   for (const a of active) {
@@ -65,13 +66,14 @@ export async function agreedRecoverable(tx: Tx, orgId: string, personId: string,
 /**
  * R6: after a payout's journal entry is posted, spend `recovered` against the person's active agreements (oldest first), record how much each
  * covered, and complete any that are now paid in full. Same transaction as the posting.
+ * `on`: the payout date, the SAME date `agreedRecoverable` was asked with (T-555): an agreement signed after it is not spent.
  * `runTaken`: a PAYROLL run passes ONE map for the whole run (T-521). Each agreement then gets at most min(its room, its per-payroll limit minus what the run
  * already took from it, the figure left), however many payslips the person has in the run; the map is updated. 13th month and separation omit it (agreed unpaid only).
  * Refuses if the agreements no longer cover the figure (another post got there first): the whole posting rolls back.
  */
-export async function applyDeductionRecovery(tx: Tx, orgId: string, personId: string, entryId: string, recovered: Money, runTaken?: Map<string, Money>): Promise<void> {
+export async function applyDeductionRecovery(tx: Tx, orgId: string, personId: string, entryId: string, recovered: Money, on: string, runTaken?: Map<string, Money>): Promise<void> {
   if (compare(recovered, ZERO) <= 0) return;
-  const active = await deductionAgreementsRepo.listActiveForPerson(tx, orgId, personId, true);
+  const active = await deductionAgreementsRepo.listActiveForPerson(tx, orgId, personId, true, on);
   let left = recovered;
   for (const a of active) {
     if (compare(left, ZERO) <= 0) break;
@@ -145,6 +147,10 @@ export async function recordDeductionAgreement(tx: Tx, actor: Actor, input: Reco
   }
   if (!isoDate(input.noticeGivenAt) || !isoDate(input.signedOn)) {
     throw refuse('recordDeductionAgreement: bad date', 'Enter the notice date and the signing date as real dates.');
+  }
+  // T-555: a signing date in the future would authorise recovery before the employee signed. Today (business clock) is allowed.
+  if (input.signedOn.localeCompare(toBusinessDate()) > 0) {
+    throw refuse('recordDeductionAgreement: signing date in the future', 'The signing date cannot be in the future.');
   }
   if (input.noticeGivenAt.localeCompare(input.signedOn) > 0) {
     throw refuse(
@@ -266,6 +272,9 @@ export async function recordOwnerSelfAgreement(
   if (compare(input.amount, remaining) > 0) {
     throw refuse('recordOwnerSelfAgreement: amount above what the charge still has unrecovered', `The amount cannot be more than the charge still has to recover, which is ${remaining}.`);
   }
+  // T-555: the owner's act happens today, so an entry dated later is still signed today (a future signing date would not count for recovery yet).
+  const today = toBusinessDate();
+  const signed = input.on.localeCompare(today) > 0 ? today : input.on;
   const { id } = await deductionAgreementsRepo.insertAgreement(tx, {
     orgId: actor.orgId,
     personId: input.personId,
@@ -274,9 +283,9 @@ export async function recordOwnerSelfAgreement(
     sourceEntryId: input.sourceEntryId,
     amount: input.amount,
     perPayrollLimit: input.amount,
-    noticeGivenAt: input.on,
+    noticeGivenAt: signed,
     employeeExplanation: 'own request',
-    signedOn: input.on,
+    signedOn: signed,
     evidenceFileId: null,
     recordedBy: actor.personId,
   });
@@ -286,7 +295,7 @@ export async function recordOwnerSelfAgreement(
     storeId: input.storeId,
     entityId: id,
     before: null,
-    after: { amount: String(input.amount), perPayrollLimit: String(input.amount), sourceType: 'owner_pay_recovery', signedOn: input.on },
+    after: { amount: String(input.amount), perPayrollLimit: String(input.amount), sourceType: 'owner_pay_recovery', signedOn: signed },
     source: 'web',
   });
 }

@@ -287,7 +287,7 @@ export default async function PayrollRatesPage({ searchParams }: { searchParams:
                   )}
                   {a.value === 'bir' && <input type="hidden" name="employerNo" value="" />}
                   <Field label="Due day (1-31)" width="code">
-                    <Input name="dueDay" defaultValue={row ? String(row.dueDay) : ''} className="w-full" />
+                    <Input name="dueDay" inputMode="numeric" defaultValue={row ? String(row.dueDay) : ''} className="w-full" />
                   </Field>
                   <Button type="submit" variant="secondary">
                     Save

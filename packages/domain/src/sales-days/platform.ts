@@ -15,7 +15,7 @@
  * Delete this file, the day page's "Platform sales" section and the `platform` branch of `editSalesDay`, and the platform lines
  * in `compose.ts`; the 0185 channel trigger's non-remitted branch then becomes "needs the flag".
  */
-import { auditLogRepo, salesDaysRepo, type Tx } from '@shareat/db';
+import { auditLogRepo, posV1Repo, salesDaysRepo, type Tx } from '@shareat/db';
 import type { Actor } from '@shareat/auth';
 import { compare, ZERO } from '@shareat/core/money';
 import { interpretChannelEntry } from './channel-entry';
@@ -35,7 +35,8 @@ export async function writePlatformRows(
       'Platform sales can only be changed before the day is verified.',
     );
   }
-  if (day.source !== 'pos_v1_day_feed') {
+  // T-531: a day derived from the POS receipts takes platform sales exactly as a feed day does (its own figures are never typed; platform orders are rung outside POS).
+  if (day.source === 'legacy_typed') {
     throw refuse(
       `setPlatformSales: sales day ${day.id} is a typed day`,
       "This day's figures were typed in, so its platform sales are entered with them. Edit the day instead.",
@@ -45,6 +46,11 @@ export async function writePlatformRows(
   // Validate every row before anything is written.
   const configured = await salesDaysRepo.listChannels(tx, actor.orgId, day.storeId);
   const byId = new Map(configured.map((c) => [c.id, c]));
+  // The store's own POS channel (the link's `sales_channel_id`, where the till's money lands): its sales are the receipts' / the POS feed's, never typed.
+  const posChannels = new Set<string>();
+  const ownLink = await posV1Repo.getLinkByStore(tx, actor.orgId, day.storeId);
+  if (ownLink) posChannels.add(ownLink.salesChannelId);
+  for (const r of inputRows) if (await posV1Repo.getLinkByChannel(tx, actor.orgId, r.channelId)) posChannels.add(r.channelId);
   const seen = new Set<string>();
   const rows = inputRows.map((r) => {
     const cfg = byId.get(r.channelId);
@@ -58,6 +64,14 @@ export async function writePlatformRows(
       throw refuse(
         `setPlatformSales: channel "${cfg.name}" is remitted daily`,
         `${cfg.name} is paid at the till, so its sales come from POS, not from here.`,
+      );
+    }
+    // T-531 (BOSS, no double count): platform sales enter a day ONLY as typed rows on a NON-REMITTED platform channel. The store's POS / dine-in channel is the till's own
+    // money (already in the day's figures), so a typed row on it would count it twice. (A remitted channel is refused just above.)
+    if (posChannels.has(r.channelId)) {
+      throw refuse(
+        `setPlatformSales: channel "${cfg.name}" is a POS channel`,
+        `${cfg.name} is the till's own channel, so its sales come from POS, not from here.`,
       );
     }
     if (seen.has(r.channelId)) {

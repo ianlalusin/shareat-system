@@ -60,3 +60,23 @@ would either. `packages/db/tests/migration-journal.test.ts` enforces the grid.
 | `meta/_journal.json` | `idx` / `when` / `tag` per migration; `when` on the grid above | the migrator (gates on `when`), the journal test |
 | `meta/*_snapshot.json` | drizzle-kit's historical baselines, ending at 0019 | nothing that runs here; keep as history, do not extend |
 | this README | you | nobody else — the migrator reads only the journal and `<tag>.sql`, the journal test only `.sql` |
+
+
+## Interface
+
+- Ordered `NNNN_*.sql` migration files and `meta/_journal.json` are consumed by `../migrate.ts` through the Drizzle migrator.
+- [Schema contract](../schema/README.md) describes the builders; this folder holds the executable DDL and SQL-only guards.
+
+## Invariants
+
+- Preserve the checklist and developer notes above. Never edit applied migrations or generate new snapshots.
+- Keep journal idx/tag/file correspondence and the one-day-per-index `when` grid. New tables need explicit RLS and cutover registration; new triggers need firing-mode classification.
+
+## Side Effects
+
+- Applying these files changes PostgreSQL schema, constraints, triggers, privileges, policies and reference data; individual migrations can also transform stored data. Reading this directory applies nothing.
+
+## Verification
+
+- From the repository root: `npm test` (includes journal/classification guards).
+- `npm run test:integration` exercises the migrated schema against real PostgreSQL; migration application itself belongs on the configured scratch/CI database.

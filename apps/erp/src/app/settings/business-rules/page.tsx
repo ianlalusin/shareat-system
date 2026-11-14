@@ -3,13 +3,13 @@ import { requirePageAccess } from '../../../lib/page-access';
 import { withFlash } from '../../../lib/flash';
 import { typedFor } from '../../../lib/keep-typing';
 import { setBusinessRuleAction } from './actions';
-import { fromWords, inputValue, madeOn, rulesView, sharedDayWinners, showValue } from './lib';
+import { FLAG_OPTIONS, fromWords, inputValue, madeOn, rulesView, sharedDayWinners, showValue } from './lib';
 import { BUSINESS_RULE_EDIT, ruleRecordId } from './typed-forms';
 import { Page } from '@/components/shell/Page';
 import { PageDescription } from '@/components/shell/PageDescription';
 import { ACTION_LINK } from '@/components/action-link';
 import { EditableRecord } from '@/components/forms';
-import { Badge, Field, FlashBanner, FormGrid, Input, Textarea } from '@/components/ui';
+import { Badge, Field, FlashBanner, FormGrid, Input, Select, Textarea } from '@/components/ui';
 import { SETTINGS_BUSINESS_RULE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 
 export const metadata = { title: 'Business rules — Shareat System' };
@@ -21,7 +21,7 @@ const HISTORY_SHOWN = 3;
 const HOUR_BOX = { type: 'number', inputMode: 'numeric', step: 1, min: 0, max: 23 } as const;
 const MINUTES_BOX = { type: 'number', inputMode: 'numeric', step: 1, min: 1, max: 600 } as const;
 
-const NEW_VALUE_LABEL: Record<BusinessRuleItem['unit'], string> = { money: 'New value (pesos)', percent: 'New value (percent)', hour: 'New value (hour, 0–23)', minutes: 'New value (minutes)' };
+const NEW_VALUE_LABEL: Record<BusinessRuleItem['unit'], string> = { money: 'New value (pesos)', percent: 'New value (percent)', hour: 'New value (hour, 0–23)', minutes: 'New value (minutes)', days: 'New value (days)', flag: 'New setting' };
 
 /**
  * `/settings/business-rules`. T-512 (T-511 S5c).
@@ -79,8 +79,19 @@ export default async function BusinessRulesPage({ searchParams }: { searchParams
                     >
                       <FormGrid>
                         <Field label={NEW_VALUE_LABEL[item.unit]} rule={SETTINGS_BUSINESS_RULE_RULES.value}>
-                          {/* An hour or a count of minutes is a whole-number box (step 1; 0 to 23 or 1 to 600): the field rule's pattern alone would let 4.5 through; the writer refuses a fraction too. */}
-                          <Input {...nativeAttrs(SETTINGS_BUSINESS_RULE_RULES.value)} {...(item.unit === 'hour' ? HOUR_BOX : item.unit === 'minutes' ? MINUTES_BOX : { inputMode: 'decimal' as const })} defaultValue={inputValue(item.unit, item.current)} className="w-full text-right" />
+                          {/* An hour or a count of minutes is a whole-number box (step 1; 0 to 23, 1 to 600, or the days range): the field rule's pattern alone would let 4.5 through; the writer refuses a fraction too. */}
+                          {item.unit === 'flag' ? (
+                            // An on/off rule is a two-choice list that posts "1" or "0" (T-575); the writer refuses anything else.
+                            <Select {...nativeAttrs(SETTINGS_BUSINESS_RULE_RULES.value)} defaultValue={inputValue('flag', item.current)}>
+                              {FLAG_OPTIONS.map((o) => (
+                                <option key={o.value} value={o.value}>
+                                  {o.label}
+                                </option>
+                              ))}
+                            </Select>
+                          ) : (
+                            <Input {...nativeAttrs(SETTINGS_BUSINESS_RULE_RULES.value)} {...(item.unit === 'hour' ? HOUR_BOX : item.unit === 'minutes' ? MINUTES_BOX : item.unit === 'days' ? { type: 'number', inputMode: 'numeric', step: 1, min: Number(item.min), max: Number(item.max) } as const : { inputMode: 'decimal' as const })} defaultValue={inputValue(item.unit, item.current)} className="w-full text-right" />
+                          )}
                         </Field>
                         <Field label="Starts on" rule={SETTINGS_BUSINESS_RULE_RULES.effectiveFrom}>
                           <Input {...nativeAttrs(SETTINGS_BUSINESS_RULE_RULES.effectiveFrom)} type="date" min={view.today} defaultValue={view.tomorrow} className="w-full" />

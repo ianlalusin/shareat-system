@@ -9,6 +9,8 @@
  *   - (the seed rows are checked against the registry defaults in packages/domain/tests/integration/t512-seed-matches-registry.test.ts: the registry lives in the domain package)
  *   - the append-only trigger is ENABLE ALWAYS (tgenabled = 'A'), BEFORE UPDATE and BEFORE DELETE; the exact SQLSTATE of its refusal is not pinned here (only that it refuses).
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -19,8 +21,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 import { APP_ROLE } from '../../src/rls/registry';

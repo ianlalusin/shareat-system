@@ -16,8 +16,11 @@ import type { NewPosEvent } from '@/lib/pos-device';
 import { printAmount } from '@/lib/pos-print/layout';
 import type { PrintLayout, ReceiptView } from '@/lib/pos-print/types';
 import { AmountPad } from './AmountPad';
+import { lookupSeniorRepeat, repeatWarning } from './senior-repeat';
 import { receiptLinesOf, statutoryDiners, toPriceLines, type BillLineRow, type PresetLike, type ProjectedBill } from './bill';
 import { DiscountSheet, type SheetTarget } from './DiscountSheet';
+import { ManagerPinDialog } from '../_shell/LineApprovalField';
+import { REVIEW_NOTE, resolveApproval, type ApprovalFields, type LineActionKind, type LineApprovalMode } from '../_shell/line-approval';
 import {
   addSplitRow, amountCents, appendAmountKey, applyToAllEvent, canAddPayment, chooseTender, discountAddedEvent, discountRemovedEvent, finishLabel, paySale, payBlockerDetail, paymentSummary, priceBill, rateLabel, scPwdDiscountOf,
   type BlockerTarget, type DiscountAdd, type PayDeps, type PayRow, type PrintOutcome, type Tender,
@@ -54,6 +57,8 @@ export interface PaymentPanelProps {
   cashierName: string;
   personId: string;
   online: boolean;
+  /** T-576: the store asks for a manager PIN on a custom or preset discount, and on removing one (pin), or flags it for review while offline (review). */
+  approvalMode?: LineApprovalMode;
   layout: PrintLayout;
   /** Customer copies per receipt, from the till's settings (T-546). */
   copies: number;
@@ -137,10 +142,14 @@ export function PaymentPanel(p: PaymentPanelProps) {
   const [active, setActive] = useState<number | null>(null);
   const [fresh, setFresh] = useState(false); // the next digit replaces the pre-filled amount
   const [holders, setHolders] = useState<Record<number, { holderName: string; idNumber: string }>>({});
+  // T-575: the repeat-card warning under a diner's ID box, filled when the box loses focus. `id` is the number it was asked about, so a warning never outlives an edit of the box.
+  const [repeats, setRepeats] = useState<Record<number, { id: string; text: string }>>({});
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null); // a discount waiting for its manager PIN (T-576)
+  const approvalMode = p.approvalMode ?? 'none';
   const [sent, setSent] = useState(false);
   const [focusNew, setFocusNew] = useState<number | null>(null);
   const billScrollRef = useRef<HTMLDivElement>(null);
@@ -195,6 +204,13 @@ export function PaymentPanel(p: PaymentPanelProps) {
     root?.querySelector<HTMLElement>('[data-tender]:not(:disabled)')?.focus();
     setFocusNew(null);
   }, [focusNew]);
+
+  const askRepeat = async (dinerNo: number, raw: string) => {
+    const id = raw.trim();
+    const check = await lookupSeniorRepeat({ idNumber: id, online: p.online, fetch: (...a) => fetch(...a) });
+    const text = check ? repeatWarning(check, Date.now()) : null;
+    setRepeats((r) => ({ ...r, [dinerNo]: { id, text: text ?? '' } }));
+  };
 
   const priced = useMemo<PricedSession | null>(() => {
     try {
@@ -273,21 +289,35 @@ export function PaymentPanel(p: PaymentPanelProps) {
       return e instanceof Error ? e.message : 'That could not be saved.';
     }
   };
-  const addDiscount = (add: DiscountAdd & { presetId?: string }) =>
-    sendDiscount(
-      discountAddedEvent({
-        personId: p.personId,
-        now: new Date(),
-        discountId: p.newId(),
-        lineId: add.lineId,
-        kind: add.kind,
-        qty: add.qty,
-        ...(add.presetId !== undefined ? { presetId: add.presetId } : {}),
-        ...(add.valueType !== undefined ? { valueType: add.valueType } : {}),
-        ...(add.value !== undefined ? { value: add.value } : {}),
-        ...(add.dinerNo !== undefined ? { dinerNo: add.dinerNo } : {}),
-      }),
+  /** T-576: the manager PIN is checked FIRST (online); a wrong one comes back as the dialog's sentence and nothing is saved. */
+  const approved = async (mode: LineApprovalMode, pin: string, action: LineActionKind, targetId: string, detail: Record<string, string | number | undefined>, send: (approval: ApprovalFields) => Promise<string | null>): Promise<string | null> => {
+    const a = await resolveApproval({ mode, pin, action, targetId, detail, fetch: (...x) => fetch(...x) });
+    return 'error' in a ? a.error : send(a.fields);
+  };
+  const addDiscount = (add: DiscountAdd & { presetId?: string }, pin: string) => {
+    // T-576: the approval is for THIS new discount id (single-use) and for exactly this kind / preset / value / units.
+    const discountId = p.newId();
+    return approved(add.kind === 'senior' || add.kind === 'pwd' ? 'none' : approvalMode, pin, 'discount.added', discountId, { kind: add.kind, presetId: add.presetId, valueType: add.valueType, value: add.value, qty: add.qty, lineId: add.lineId }, (approval) =>
+      sendDiscount(
+        discountAddedEvent({
+          personId: p.personId,
+          now: new Date(),
+          discountId,
+          lineId: add.lineId,
+          kind: add.kind,
+          qty: add.qty,
+          ...(add.presetId !== undefined ? { presetId: add.presetId } : {}),
+          ...(add.valueType !== undefined ? { valueType: add.valueType } : {}),
+          ...(add.value !== undefined ? { value: add.value } : {}),
+          ...(add.dinerNo !== undefined ? { dinerNo: add.dinerNo } : {}),
+          approval,
+        }),
+      ),
     );
+  };
+  const removeDiscount = (id: string, pin: string) => approved(approvalMode, pin, 'discount.removed', id, {}, (approval) => sendDiscount(discountRemovedEvent({ personId: p.personId, now: new Date(), discountId: id, approval })));
+  const applyAll = (presetId: string, pin: string) =>
+    approved(approvalMode, pin, 'discount.applied_to_all', p.sessionId, { presetId }, (approval) => sendDiscount(applyToAllEvent({ personId: p.personId, now: new Date(), sessionId: p.sessionId, presetId, applyId: p.newId(), approval })));
 
   const finish = async () => {
     if (blocker !== null || priced === null || scPwdDiscount === null || busy || sent || finishing.current) return;
@@ -373,7 +403,7 @@ export function PaymentPanel(p: PaymentPanelProps) {
           {priced ? (
             <ul aria-label="Bill lines">
               {p.bill.lines.map((l) => (
-                <BillLineView key={l.lineId} line={l} priced={priced} scLabel={scLabel} holders={holders} onOpen={() => (l.discountsBlocked ? setNote(HEADS_SENDING_NOTE) : (setNote(null), setSheet({ kind: 'line', line: l })))} onRemove={(id) => void sendDiscount(discountRemovedEvent({ personId: p.personId, now: new Date(), discountId: id }))} />
+                <BillLineView key={l.lineId} line={l} priced={priced} scLabel={scLabel} holders={holders} onOpen={() => (l.discountsBlocked ? setNote(HEADS_SENDING_NOTE) : (setNote(null), setSheet({ kind: 'line', line: l })))} onRemove={(id) => (approvalMode === 'pin' ? setRemoving(id) : (setNote(approvalMode === 'review' ? REVIEW_NOTE : null), void removeDiscount(id, '')))} />
               ))}
             </ul>
           ) : null}
@@ -385,7 +415,12 @@ export function PaymentPanel(p: PaymentPanelProps) {
                     {d.kind === 'pwd' ? 'PWD' : 'Senior'} #{d.dinerNo}
                   </legend>
                   <input type="text" data-erp-size="free" data-holder={`${d.dinerNo}-holderName`} className={FIELD} {...HOLDER_ATTRS.holderName} placeholder="Name on the card" aria-label={`Name for ${d.kind === 'pwd' ? 'PWD' : 'Senior'} #${d.dinerNo}`} value={holders[d.dinerNo]?.holderName ?? ''} onChange={(e) => setHolders((h) => ({ ...h, [d.dinerNo]: { holderName: e.target.value, idNumber: h[d.dinerNo]?.idNumber ?? '' } }))} />
-                  <input type="text" data-erp-size="free" data-holder={`${d.dinerNo}-idNumber`} className={FIELD} {...HOLDER_ATTRS.idNumber} placeholder="ID number" aria-label={`ID number for ${d.kind === 'pwd' ? 'PWD' : 'Senior'} #${d.dinerNo}`} value={holders[d.dinerNo]?.idNumber ?? ''} onChange={(e) => setHolders((h) => ({ ...h, [d.dinerNo]: { holderName: h[d.dinerNo]?.holderName ?? '', idNumber: e.target.value } }))} />
+                  <input type="text" data-erp-size="free" data-holder={`${d.dinerNo}-idNumber`} className={FIELD} {...HOLDER_ATTRS.idNumber} placeholder="ID number" aria-label={`ID number for ${d.kind === 'pwd' ? 'PWD' : 'Senior'} #${d.dinerNo}`} value={holders[d.dinerNo]?.idNumber ?? ''} onChange={(e) => setHolders((h) => ({ ...h, [d.dinerNo]: { holderName: h[d.dinerNo]?.holderName ?? '', idNumber: e.target.value } }))} onBlur={(e) => void askRepeat(d.dinerNo, e.target.value)} />
+                  {repeats[d.dinerNo]?.text && repeats[d.dinerNo]!.id === (holders[d.dinerNo]?.idNumber ?? '').trim() ? (
+                    <p role="status" className="rounded-2xl bg-warning-soft px-4 py-2 text-sm font-semibold text-warning-ink">
+                      {repeats[d.dinerNo]!.text}
+                    </p>
+                  ) : null}
                 </fieldset>
               ))}
             </div>
@@ -523,11 +558,14 @@ export function PaymentPanel(p: PaymentPanelProps) {
           bill={p.bill.lines}
           heads={p.heads}
           presets={p.presets}
+          approvalMode={approvalMode}
           onClose={() => setSheet(null)}
           onAdd={addDiscount}
-          onApplyAll={(presetId) => sendDiscount(applyToAllEvent({ personId: p.personId, now: new Date(), sessionId: p.sessionId, presetId, applyId: p.newId() }))}
+          onApplyAll={applyAll}
         />
       ) : null}
+
+      {removing ? <ManagerPinDialog title="Remove this discount?" description="A manager PIN is needed to remove a discount." confirmLabel="Remove discount" onClose={() => setRemoving(null)} onConfirm={(pin) => removeDiscount(removing, pin)} /> : null}
 
     </section>
   );

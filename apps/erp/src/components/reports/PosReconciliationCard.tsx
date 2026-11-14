@@ -6,7 +6,7 @@ export type PosSideView =
   | { status: 'none' };
 
 export type LedgerSideView =
-  | { exists: true; status: string; totalSales: Money; source: 'legacy_typed' | 'pos_v1_day_feed' }
+  | { exists: true; status: string; totalSales: Money; source: 'legacy_typed' | 'pos_v1_day_feed' | 'pos_receipts' }
   | { exists: false };
 
 const SIDE_LABEL: Record<'not_found' | 'none', string> = {
@@ -75,7 +75,7 @@ export function PosReconciliationCard({
             <>
               <p className="text-xl font-semibold tabular-nums">{formatMoney(ledger.totalSales)}</p>
               <p className="text-xs text-neutral-500">
-                {ledger.status} · {ledger.source === 'pos_v1_day_feed' ? 'POS-sourced' : 'typed'}
+                {ledger.status} · {ledger.source === 'legacy_typed' ? 'typed' : 'POS-sourced'}
               </p>
             </>
           ) : (

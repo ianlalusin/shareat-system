@@ -279,7 +279,7 @@ export function DayDetail({
                       </Select>
                     </Field>
                     <Field label="Amount">
-                      <Input name="amount" className="w-full" />
+                      <Input name="amount" inputMode="decimal" className="w-full" />
                     </Field>
                   </div>
                 ))}

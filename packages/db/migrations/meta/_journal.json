@@ -1541,6 +1541,55 @@
       "when": 1807327907084,
       "tag": "0246_t546_pos_terminal_printer",
       "breakpoints": true
+    },
+    {
+      "idx": 247,
+      "version": "7",
+      "when": 1807414307084,
+      "tag": "0247_t531_pos_receipts_sales_day",
+      "breakpoints": true
+    },
+    {
+      "idx": 248,
+      "version": "7",
+      "when": 1807500707084,
+      "tag": "0248_t558_pos_sale_variance_tolerance",
+      "breakpoints": true
+    },
+    {
+      "idx": 249,
+      "version": "7",
+      "when": 1807587107084,
+      "tag": "0249_t557_line_option_ids",
+      "breakpoints": true
+    },
+    {
+      "idx": 252,
+      "version": "7",
+      "when": 1807846307084,
+      "tag": "0252_t572_pos_events_senior_id_scrub",
+      "breakpoints": true
+    },
+    {
+      "idx": 253,
+      "version": "7",
+      "when": 1807932707084,
+      "tag": "0253_t565_daypart_versions",
+      "breakpoints": true
+    },
+    {
+      "idx": 255,
+      "version": "7",
+      "when": 1808105507084,
+      "tag": "0255_t575_pos_senior_id_repeat_days",
+      "breakpoints": true
+    },
+    {
+      "idx": 256,
+      "version": "7",
+      "when": 1808191907084,
+      "tag": "0256_t576_pos_require_pin_line_actions",
+      "breakpoints": true
     }
   ]
 }

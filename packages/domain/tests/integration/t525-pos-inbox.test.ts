@@ -633,7 +633,7 @@ describe('R3 - a PIN never lands in a table', () => {
     const sessionId = uuid();
     const r = await send(f, [
       ev(1, 'heads.set', f.counterId, { sessionId, headsCashier: 3, pin: '482913' }),
-      ev(2, 'line.cancelled', f.counterId, { lineId: uuid(), reason: 'Changed mind', approval: { pin: '482913' } }),
+      ev(2, 'refill.requested', f.counterId, { sessionId, lines: [], approval: { pin: '482913' } }), // T-576: line.cancelled now carries an optional approval, so a kind that never does
     ]);
     expect(statuses(r)).toEqual(['quarantined', 'quarantined']);
     for (const x of r.results) expectQuarantined(x, 'POS_EVENT_INVALID: ');
@@ -926,26 +926,26 @@ describe('R6 - quarantine review (domain only)', () => {
 
   const replayWith = (f: Fx, eventId: string) => asOrg(f.orgId, (tx) => INBOX.replayQuarantinedEvent(tx, f.manager, { storeId: f.storeId, eventId }, RATES)) as Promise<{ replayed: boolean; error?: string }>;
 
-  it('a quarantined sale is replayed once its table is ready: one receipt, one statutory row per diner, resolution replayed', async () => {
+  it('a quarantined sale is replayed once its table is ready: one receipt, resolution replayed (T-572: a senior sale is refused instead - see t572-senior-id-scrub)', async () => {
     const f = await fixture();
     await signedIn(f, f.counterId);
-    const [open, lines, discount, sale] = seniorDay(f).events as [Ev, Ev, Ev, Ev];
-    // the sale arrives BEFORE the senior discount it needs: refused, so quarantined; the discount then lands
-    const r = await send(f, [open, lines, { ...sale, seq: 3 }, { ...discount, seq: 4 }], RATES);
-    expect(statuses(r)).toEqual(['applied', 'applied', 'quarantined', 'applied']);
-    const row = (await eventsOf(f)).find((x) => Number(x.seq) === 3)!;
+    const [open, lines, sale] = plainDay(f).events as [Ev, Ev, Ev];
+    // the sale arrives BEFORE the lines it sells: refused, so quarantined; the lines then land
+    const r = await send(f, [open, { ...sale, seq: 2 }, { ...lines, seq: 3 }], RATES);
+    expect(statuses(r)).toEqual(['applied', 'quarantined', 'applied']);
+    const row = (await eventsOf(f)).find((x) => Number(x.seq) === 2)!;
     expect(await replayWith(f, row.id)).toMatchObject({ replayed: true });
-    expect(await counts(f)).toMatchObject({ receipts: 1, statutory: 1 });
+    expect(await counts(f)).toMatchObject({ receipts: 1, statutory: 0 });
     expect(await rowOf(row.id)).toMatchObject({ resolution: 'replayed', resolved_by: f.managerId });
   });
 
-  it('a sale replay that refuses THROWS (the manager\'s transaction aborts): no receipt, no statutory row, the row stays unresolved', async () => {
+  it('a sale replay that refuses THROWS (the manager transaction aborts): no receipt, the row stays unresolved', async () => {
     const f = await fixture();
     await signedIn(f, f.counterId);
-    const [open, lines, , sale] = seniorDay(f).events as [Ev, Ev, Ev, Ev];
-    const r = await send(f, [open, lines, { ...sale, seq: 3 }], RATES); // no senior discount ever added
-    expect(statuses(r)).toEqual(['applied', 'applied', 'quarantined']);
-    const row = (await eventsOf(f)).find((x) => Number(x.seq) === 3)!;
+    const [open, , sale] = plainDay(f).events as [Ev, Ev, Ev];
+    const r = await send(f, [open, { ...sale, seq: 2 }], RATES); // its lines never arrive
+    expect(statuses(r)).toEqual(['applied', 'quarantined']);
+    const row = (await eventsOf(f)).find((x) => Number(x.seq) === 2)!;
     await expectRefusal(replayWith(f, row.id));
     expect(await counts(f)).toMatchObject({ receipts: 0, statutory: 0 });
     expect(await rowOf(row.id)).toMatchObject({ resolution: null, resolved_by: null });
@@ -1065,7 +1065,7 @@ describe('R7 - the snapshot (domain: buildPosSnapshot)', () => {
     const f = await fixture();
     await putRule(sql, f.orgId, 'pos.table_warn_minutes', '30.000000', '2000-01-02');
     expect(((await snapshot(f, {})).body.rules as Record<string, unknown>).tableWarnMinutes).toBe(30);
-    const injected = { readRules: async () => ({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 45 }) };
+    const injected = { readRules: async () => ({ vatPercentBasisPoints: 1200n, scPwdPercentBasisPoints: 2000n, businessDayStartHour: 4, tableWarnMinutes: 45, saleVarianceToleranceCentavos: 1n, requirePinLineActions: false }) };
     expect(((await snapshot(f, injected)).body.rules as Record<string, unknown>).tableWarnMinutes).toBe(45);
   });
 
@@ -1124,6 +1124,8 @@ describe('R7 - the snapshot (domain: buildPosSnapshot)', () => {
     const b = await snapshot(f);
     expect(b.etag).toBe(a.etag);
     await insOffer(f, f.menu.pork.variantId, '275.00'); // a newer store offer for the pork: its price is now 275.00
+    // The offer is stored at now() (microseconds); the snapshot reads the menu at now() cut to the millisecond (a JS Date). Taken in the same millisecond the new offer is still "upcoming" and the ETag is unchanged, so wait (at most ~2 ms, on the database clock) until it is past.
+    await sql`select pg_sleep(greatest(0, extract(epoch from (select max(effective_from) from menu_offers where variant_id = ${f.menu.pork.variantId}) + interval '2 milliseconds' - clock_timestamp())))`;
     const c = await snapshot(f);
     expect(c.etag).not.toBe(a.etag);
     expect((c.body.menu as { contentHash: string }).contentHash).not.toBe((a.body.menu as { contentHash: string }).contentHash);

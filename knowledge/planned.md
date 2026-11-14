@@ -1,10 +1,10 @@
 ---
 title: Planned changes — not live
 topic: planned
-about: [customer, cashier]
+about: [customer, cashier, manager, staff]
 readers: managers
 must_be_exact: false
-related: [customer-experience/dine-in-journey, customer-experience/customer-app, cash-and-payments/platform-payouts, staff/cashier-take-out-and-online-sop, store-operations/opening-and-closing, store-operations/daily-usage, company/future-franchise-roles, company/future-franchise-opening-and-provided-manager, store-operations/future-franchise-approvals-people-and-stock, store-operations/future-franchise-approvals-cash-and-customers, cash-and-payments/future-franchise-staff-charges, staff/future-franchise-manager-training]
+related: [customer-experience/dine-in-journey, customer-experience/customer-app, cash-and-payments/platform-payouts, staff/cashier-take-out-and-online-sop, store-operations/opening-and-closing, store-operations/daily-usage, company/future-franchise-roles, company/future-franchise-opening-and-provided-manager, store-operations/future-franchise-approvals-people-and-stock, store-operations/future-franchise-approvals-cash-and-customers, cash-and-payments/future-franchise-staff-charges, staff/future-franchise-manager-training, company/future-franchise-scope]
 updated: 2026-11-05
 ---
 
@@ -34,3 +34,10 @@ When a change goes live, move it into the real pages and delete it here.
 | Future franchised stores (date not set) | Monthly sales targets per store in the ERP | store-operations/future-franchise-approvals-cash-and-customers |
 | Future franchised stores (date not set) | Offline POS selling during an outage | store-operations/future-franchise-approvals-cash-and-customers |
 | Future franchised stores (date not set) | Head-office memos to stores and a pending-task view | store-operations/future-franchise-approvals-cash-and-customers |
+
+## Future franchise responsibilities approved 4 November 2026
+
+The [future franchise scope](company/future-franchise-scope.md) records the selected policy for
+future agreements and stores. Existing franchise agreements remain separate. It assigns people
+and approvals; it does not prove deployment of ERP/POS features or change company-owned-store
+procedures. Follow-up questions and agreement alignment remain in the linked source/resume page.

@@ -202,13 +202,31 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   def('pos.session_voided', 'order', 'high', 'store', 'table_sessions', 'T-524', { clientSources: ['pos'] }),
   def('pos.sale_completed', 'money', 'normal', 'store', 'pos_sales_receipts', 'T-524'),
   def('pos.sale_recompute_mismatch', 'money', 'high', 'store', 'pos_sales_receipts', 'T-524'),
+  // T-558 (row 453): a sale paid short of the server's total is recorded, never refused. Up to the tolerance it is a routine variance; above it, a finding for a manager.
+  def('pos.sale_payment_variance', 'money', 'low', 'store', 'pos_sales_receipts', 'T-558'),
+  def('pos.sale_payment_shortfall', 'money', 'high', 'store', 'pos_sales_receipts', 'T-558'),
+  // T-575 (row 462): a senior/PWD card number already used at this store within the repeat window; the sale went through (entity = the receipt). The details name receipts, never the card or the holder.
+  def('pos.senior_id_repeat', 'order', 'high', 'store', 'pos_sales_receipts', 'T-575'),
+  // T-576 (row 460): a line cancel / line discount went through with no manager PIN while the rule asks for one (the till was offline, or said so); a manager reviews it (entity = the line).
+  def('pos.line_action_unapproved', 'order', 'high', 'store', 'table_session_lines', 'T-576'),
   // T-525: a manager replayed or discarded a quarantined tablet event (entity = the pos_events row). Server-only: the tablet never sends them.
   def('pos.event_replayed', 'order', 'normal', 'store', 'pos_events', 'T-525'),
   def('pos.event_discarded', 'order', 'high', 'store', 'pos_events', 'T-525'),
+  // T-563: a carried-over event whose person could not be vouched for on the tablet it was made on is set aside for a manager (entity = that earlier pairing).
+  def('pos_events.carry_over_refused', 'order', 'high', 'store', 'pos_tablet_pairings', 'T-563', { actor: 'system' }),
+  // T-563 (audit P-004): a tablet that was replaced or paired back sent sales made under its earlier pairing of the SAME store (entity = that earlier pairing). Server-written, once per batch that stored anything.
+  def('pos_events.carried_over', 'order', 'high', 'store', 'pos_tablet_pairings', 'T-563', { actor: 'system' }),
   // T-546: a manager or admin added a till, chose its tablet, or set its receipt printer (entity = the pos_terminals row). Written from the ERP screen only.
   def('pos.terminal_created', 'settings', 'normal', 'store', 'pos_terminals', 'T-546'),
   def('pos.terminal_linked', 'settings', 'normal', 'store', 'pos_terminals', 'T-546'),
   def('pos.terminal_printer_set', 'settings', 'normal', 'store', 'pos_terminals', 'T-546'),
+  // T-531: the day close (the Z; entity = the pos_day_closes row, or the run id for the backlog), the ERP sales day it derives, and the December bridge to v1 (entity = the store).
+  // Server-only: the tablet never sends them. A Z is money, so the 10-year class; a failed bridge is `high` (a day v1 does not have yet).
+  def('pos.day_closed', 'money', 'high', 'store', 'pos_day_closes', 'T-531'),
+  def('pos.day_closed_backlog', 'money', 'high', 'store', 'pos_day_closes', 'T-531'),
+  def('pos.v1_bridge_sent', 'money', 'normal', 'store', 'stores', 'T-531'),
+  def('pos.v1_bridge_failed', 'money', 'high', 'store', 'stores', 'T-531'),
+  def('sales_day.derived_from_z', 'money', 'normal', 'store', 'sales_days', 'T-531'),
   def('create_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('update_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
   def('reactivate_tender', 'money', 'normal', 'store', 'tenders', 'T-375'),
@@ -363,7 +381,8 @@ export const AUDIT_CATALOGUE: readonly CatalogueEntry[] = Object.freeze([
   // T-475 S3: an admin verified the supplier invoice they logged themselves (written beside ap_invoice.approved).
   def('ap_invoice.self_verified', 'money', 'high', 'store', 'ap_invoices', 'T-475'),
   def('ap_payment.recorded', 'money', 'normal', 'store', 'ap_payments', 'T-402'),
-  def('data.export_downloaded', 'data', 'high', 'org', 'exports', 'T-402', ADMIN_RES),
+  // T-569: live - the POS v2 data download writes it (store_id stays null: the store is in the details).
+  def('data.export_downloaded', 'data', 'high', 'org', 'exports', 'T-402', ADMIN),
   def('data.bulk_import_applied', 'data', 'high', 'org', 'imports', 'T-402', RES),
   def('data.activity_log_exported', 'data', 'high', 'org', 'audit_log', 'T-402', ADMIN_RES),
   def('cutover.purge', 'data', 'critical', 'org', 'organizations', 'T-402', { ...ADMIN, actor: 'either' }),

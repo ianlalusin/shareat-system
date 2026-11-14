@@ -1,3 +1,5 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
+import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import postgres from 'postgres';
@@ -11,14 +13,16 @@ import { sql as dsql } from 'drizzle-orm';
  * redirect URL as well as `outcomeOf` (`outcomeOf` falls back to the URL until S6, so a flash assertion alone passes on HEAD).
  *
  * SPEC DEFECTS (reported, worked around): (1) the spec's M7 amount `'2,500.00'` is REFUSED by the domain (money input
- * takes no thousands separator), so the money leg posts `'2500.00'` and the refused leg (M7b) uses `'2,500.00'` on purpose.
+ * takes no thousands separator), so the money leg posts `'2500.00'`. T-570 then made a CORRECT grouping an amount
+ * (`'2,500.00'` reads as 2500; DEF-383 still refuses a wrong one), so the refused leg (M7b) uses `'2,50,0.00'` on purpose.
  * (2) the spec says the success lands on `/ap/invoices/<id>?...f=...`; `recordExpenseForInvoiceAction` ends on
  * `/expenses/<expenseId>?store=<id>` (no banner, so no `f`). M7 asserts that real target.
  *
  *  M7   GREEN on HEAD, by design: the money invariant. The posted lines equal what a direct domain call posts for the same
  *       input, and the address holds no amount. Named mutant: the builder re-parses/reformats a line amount while moving the
  *       redirect (e.g. `Number(amount)`), so the journal differs -> M7 red.
- *  M7b  RED on HEAD: a refused `'2,500.00'` rides in `?error=` (the sentence quotes it). No expense is written either way.
+ *  M7b  RED on HEAD: a refused `'2,50,0.00'` rides in `?error=` (the sentence quotes it). No expense is written either way.
+ *       Mutant (T-570): `ungroupThousands` drops every comma instead of only correct groups -> it posts 2500 -> red.
  *       Mutants: keep a template `?error=` -> red; `redirectWithFlash` not awaited on the catch path -> the success redirect
  *       wins and `flash.error` is absent -> red.
  *  M8   RED on HEAD for the hostile returnTo values: they redirect off-site (`https://evil.example?...`). Four call sites,
@@ -35,8 +39,8 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
-  throw new Error(`Refusing to run against ${url.replace(/:\/\/[^@]*@/, '://***@')} - the database name must contain "_test".`);
+if (!isTestDatabaseUrl(url)) {
+  throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 
 vi.mock('next/navigation', async () => (await import('../helpers/flash-jar-core')).nextNavigationMock());
@@ -201,15 +205,15 @@ describe('M7 - recording an expense against a verified invoice posts exactly wha
 });
 
 describe('M7b - a refused typed amount stays out of the address and nothing is written', () => {
-  it('"2,500.00" is refused; the sentence is in the flash, the URL has no amount, no expense row', async () => {
+  it('"2,50,0.00" (a wrong grouping) is refused; the sentence is in the flash, the URL has no amount, no expense row', async () => {
     const f = await fixture('m7b');
     const invoice = await f.verifiedInvoice('5000.00');
     const before = await expenseCount(f.orgId);
-    const seen = await run(f.admin, recordForInvoice, cashForm(f, invoice, '2,500.00'));
+    const seen = await run(f.admin, recordForInvoice, cashForm(f, invoice, '2,50,0.00'));
     expect(seen.out.path, 'back on the bill page').toBe(`/ap/invoices/${invoice}`);
     expect(seen.out.nav.get('store')).toBe(f.storeId);
     expect(seen.out.flash.error, 'the person is told').toBeTruthy();
-    expect(decoded(seen.raw), `no typed amount, no sentence in the address (saw: ${seen.raw})`).not.toMatch(/2,500|2500|error=/);
+    expect(decoded(seen.raw), `no typed amount, no sentence in the address (saw: ${seen.raw})`).not.toMatch(/2,50|250|error=/);
     expect(await expenseCount(f.orgId), 'a refusal writes nothing').toBe(before);
   });
 });

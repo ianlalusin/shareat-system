@@ -4,6 +4,7 @@
  * stock history. Without a row lock each sees the other's pre-commit state and the item ends up a service WITH stock history.
  * Asserts the FINAL STATE and the refusal in words, in BOTH orderings.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import postgres from 'postgres';
 import { afterAll, describe, expect, it, vi } from 'vitest';
@@ -11,7 +12,7 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) throw new Error('Refusing to run: database name must contain "_test".');
+if (!isTestDatabaseUrl(url)) throw new Error('Refusing to run: database name must contain "_test".');
 
 vi.setConfig({ testTimeout: 45000 });
 const PAUSE_MS = 700;

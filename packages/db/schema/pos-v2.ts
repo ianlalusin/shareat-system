@@ -52,7 +52,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { kitchenStations } from './kitchen';
-import { menuItems, menuItemVariants } from './menu';
+import { menuDaypartVersions, menuItems, menuItemVariants } from './menu';
 import { organizations } from './organizations';
 import { persons } from './persons';
 import { posTabletPairings } from './pos-tablet-pairings';
@@ -262,6 +262,8 @@ export const tableSessionLines = pgTable(
     bundleHeads: smallint('bundle_heads'),
     /** Composite FK (store_id, kitchen_station_id) -> kitchen_stations (store_id, id), hand-added in migration 0238 (no single-column FK). */
     kitchenStationId: uuid('kitchen_station_id'),
+    /** T-565 (migration 0253): the daypart window version a dayparted offer was judged by when the line was written; NULL for an all-day offer and for lines older than 0253. Composite FK (store_id, daypart_version_id) -> menu_daypart_versions, hand-added in migration 0253 (no single-column FK). */
+    daypartVersionId: uuid('daypart_version_id'),
     kitchenStatus: text('kitchen_status', { enum: KITCHEN_LINE_STATUSES }).notNull().default('queued'),
     servedAtDevice: timestamp('served_at_device', { withTimezone: true }),
     servedBy: personCol('served_by'),
@@ -272,6 +274,8 @@ export const tableSessionLines = pgTable(
     addedOnPairingId: uuid('added_on_pairing_id'),
     addedAtDevice: timestamp('added_at_device', { withTimezone: true }).notNull(),
     addedAt: timestamp('added_at', { withTimezone: true }).notNull().defaultNow(),
+    /** The option value ids chosen on this line, sorted and distinct ({} = none); NULL = written before migration 0249 (T-557), options only in `name`. Set at insert, never updated. Declared last because migration 0249 added it last: the T-569 export prints columns in this order and the test compares it to the database's. */
+    optionValueIds: uuid('option_value_ids').array(),
   },
   (t) => [
     check('table_session_lines_unit_price_finite_check', sql`${t.unitPrice} > '-Infinity'::numeric and ${t.unitPrice} < 'Infinity'::numeric`),
@@ -293,6 +297,7 @@ export const tableSessionLines = pgTable(
     foreignKey({ columns: [t.orgId, t.storeId], foreignColumns: [stores.orgId, stores.id], name: 'table_session_lines_store_id_same_org_fk' }).onDelete('restrict'),
     foreignKey({ columns: [t.storeId, t.sessionId], foreignColumns: [tableSessions.storeId, tableSessions.id], name: 'table_session_lines_session_same_store_fk' }).onDelete('restrict'),
     foreignKey({ columns: [t.storeId, t.kitchenStationId], foreignColumns: [kitchenStations.storeId, kitchenStations.id], name: 'table_session_lines_kitchen_station_same_store_fk' }).onDelete('restrict'),
+    foreignKey({ columns: [t.storeId, t.daypartVersionId], foreignColumns: [menuDaypartVersions.storeId, menuDaypartVersions.id], name: 'table_session_lines_daypart_version_same_store_fk' }).onDelete('restrict'),
     twin('table_session_lines_menu_item_id_same_org_fk', t.orgId, t.menuItemId, menuItems.orgId, menuItems.id),
     twin('table_session_lines_menu_item_variant_id_same_org_fk', t.orgId, t.menuItemVariantId, menuItemVariants.orgId, menuItemVariants.id),
     foreignKey({ columns: [t.orgId, t.servedBy], foreignColumns: [persons.orgId, persons.id], name: 'table_session_lines_served_by_same_org_fk' }).onDelete('restrict'),
@@ -525,6 +530,8 @@ export const posSalesReceiptLines = pgTable(
     discountTotal: numeric('discount_total', { precision: 14, scale: 2 }).notNull().default('0'),
     /** gross - discount_total (CHECK). */
     net: numeric('net', { precision: 14, scale: 2 }).notNull(),
+    /** Copied from the session line (T-557): sorted, distinct option value ids; NULL = a line written before migration 0249. Declared last because 0249 added it last (see table_session_lines). */
+    optionValueIds: uuid('option_value_ids').array(),
   },
   (t) => [
     check('pos_sales_receipt_lines_unit_price_finite_check', sql`${t.unitPrice} > '-Infinity'::numeric and ${t.unitPrice} < 'Infinity'::numeric`),
@@ -698,4 +705,5 @@ export type PosDiscountPresetRow = typeof posDiscountPresets.$inferSelect;
 export type TableSessionLineDiscountRow = typeof tableSessionLineDiscounts.$inferSelect;
 export type TableSessionLineRow = typeof tableSessionLines.$inferSelect;
 export type PosSalesReceiptRow = typeof posSalesReceipts.$inferSelect;
+export type PosDayCloseRow = typeof posDayCloses.$inferSelect;
 export type PosEventRow = typeof posEvents.$inferSelect;
