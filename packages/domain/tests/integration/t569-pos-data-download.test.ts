@@ -10,6 +10,7 @@
  * received_at on the Manila calendar. Money comes out as the database prints it ('1234.50'), never through a JS number.
  * MUTANTS: money through formatMoney (test 1), org-wide download, child rows of other parents, audit written on a refusal, audit written twice.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -18,7 +19,7 @@ vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error('Refusing to run against a database whose name does not contain "_test".');
 }
 

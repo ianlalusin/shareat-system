@@ -6,6 +6,7 @@
  * be a database holding real data. This guard makes that mistake impossible rather than
  * merely discouraged.
  */
+import { isTestDatabaseUrl } from '../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import { redactDbUrl } from '../helpers/redact-db-url';
 
@@ -51,7 +52,7 @@ if (!url) {
   );
 }
 
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(
     `Refusing to run integration tests against ${redactDbUrl(url)} — ` +
       'the database name must contain "_test". These tests TRUNCATE tables.',

@@ -21,6 +21,7 @@
  * **That is what was run red before this file was trusted** — see the READY report for the actual
  * zero-rows output, captured by temporarily deleting the `await` in `expenses/lib.ts`, then restored.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -31,7 +32,7 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(
     `Refusing to run against ${redactDbUrl(url)} — name must contain "_test".`,
   );

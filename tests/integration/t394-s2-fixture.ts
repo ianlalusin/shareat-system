@@ -1,3 +1,4 @@
+import { isTestDatabaseUrl } from '../../scripts/lib/test-db-name.mjs';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -21,7 +22,7 @@ import { seedChartOfAccounts } from '../../packages/db/seed/chart-of-accounts';
 config({ path: '.env.local' });
 export const laneUrl = process.env.TEST_DATABASE_URL as string;
 if (!laneUrl) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(laneUrl)) throw new Error('Refusing: lane database name must contain "_test".');
+if (!isTestDatabaseUrl(laneUrl)) throw new Error('Refusing: lane database name must contain "_test".');
 if (!['localhost', '127.0.0.1'].includes(new URL(laneUrl).hostname)) throw new Error('T-394 S2 tests run on localhost only.');
 
 export const repoRoot = path.resolve(__dirname, '../..');

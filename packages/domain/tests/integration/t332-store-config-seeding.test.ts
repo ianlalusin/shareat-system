@@ -33,6 +33,7 @@
  * black-box way to tell those two implementations apart from outside, and slice A's contract does
  * not need to — the row count is what matters, not which function produced it.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
@@ -46,7 +47,7 @@ import { seedAttendanceConfig } from '../../src/attendance/config';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(`Refusing to run against ${redactDbUrl(url)} — name must contain "_test".`);
 }
 const sql = postgres(url, { max: 3 });

@@ -14,6 +14,7 @@
  * Red now: the first insert of a kind 'service' item fails items_kind_check; every alias test fails
  * "relation item_aliases does not exist".
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
@@ -25,7 +26,7 @@ import { ITEM_KINDS, itemKindLabel } from '@shareat/db/schema';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) throw new Error('Refusing to run: database name must contain "_test".');
+if (!isTestDatabaseUrl(url)) throw new Error('Refusing to run: database name must contain "_test".');
 
 const sql = postgres(url, { max: 4 });
 afterAll(async () => {

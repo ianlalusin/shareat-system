@@ -28,6 +28,7 @@
  *   vi.mock('../../src/lib/session', async () => (await import('./t435-fixture')).sessionMock());
  *   vi.mock('@/components/shell/Page', () => ({ Page: ({ children }: { children: unknown }) => children }));
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import postgres from 'postgres';
@@ -45,7 +46,7 @@ config({ path: '.env.local' });
 
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(`Refusing to run against ${redactDbUrl(url)} - the database name must contain "_test".`);
 }
 

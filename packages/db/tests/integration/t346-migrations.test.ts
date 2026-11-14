@@ -17,6 +17,7 @@
  * of journal_entries with source_type = 'sale' and status = 'posted' with a line at the store)`,
  * else NULL. A construction-period expense or a voided-only sales day must not mark a store open.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -34,7 +35,7 @@ const baseUrl = process.env.TEST_DATABASE_URL;
 if (!baseUrl) {
   throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
 }
-if (!/shareat_test|_test(\?|$)/.test(baseUrl)) {
+if (!isTestDatabaseUrl(baseUrl)) {
   throw new Error(
     `Refusing to run against ${redactDbUrl(baseUrl)} — the database name must contain "_test".`,
   );

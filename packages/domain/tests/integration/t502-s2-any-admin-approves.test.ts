@@ -19,6 +19,7 @@
  * NOTE for the builder: items.test.ts "an ADMIN cannot approve - only a super-admin" (~line 718) states the OLD rule and must be
  * rewritten with this change (bible row: 2A supersedes 2026-08-28).
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { config } from 'dotenv';
 import postgres from 'postgres';
 import { sql as dsql } from 'drizzle-orm';
@@ -33,7 +34,7 @@ import { testItemCode } from './_fixtures/item-code';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) throw new Error('Refusing to run: database name must contain "_test".');
+if (!isTestDatabaseUrl(url)) throw new Error('Refusing to run: database name must contain "_test".');
 
 const sql = postgres(url, { max: 4 });
 afterAll(async () => {

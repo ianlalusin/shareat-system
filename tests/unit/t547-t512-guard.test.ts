@@ -22,7 +22,8 @@ const source = readFileSync(target, 'utf8');
 
 describe('T-547 — t512 uses the shared test-database guard', () => {
   it('accepts any _test database, not only "shareat_test"', () => {
-    expect(source).toContain(String.raw`_test(\?|$)`);
+    expect(source).toContain('isTestDatabaseUrl(url)');
+    expect(source).not.toContain(String.raw`_test(\?|$)`);
   });
 
   it('imports the shared redactDbUrl helper and uses it in the refusal', () => {

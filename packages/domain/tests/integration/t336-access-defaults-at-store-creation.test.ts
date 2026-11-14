@@ -6,6 +6,7 @@
  * House style matches T-335's own integration file: `systemTransaction` for anything that creates
  * an org, `withOrgPrincipal` for anything after, raw `postgres` for direct row assertions.
  */
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
@@ -20,7 +21,7 @@ import { createEmployment } from '../../src/people';
 config({ path: '.env.local' });
 const url = process.env.TEST_DATABASE_URL;
 if (!url) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(url)) {
+if (!isTestDatabaseUrl(url)) {
   throw new Error(`Refusing to run against ${redactDbUrl(url)} — name must contain "_test".`);
 }
 const sql = postgres(url, { max: 5 });

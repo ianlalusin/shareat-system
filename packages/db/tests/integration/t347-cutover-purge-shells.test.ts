@@ -1,3 +1,4 @@
+import { isTestDatabaseUrl } from '../../../../scripts/lib/test-db-name.mjs';
 import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -32,7 +33,7 @@ config({ path: '.env.local' });
 
 const baseUrl = process.env.TEST_DATABASE_URL;
 if (!baseUrl) throw new Error('TEST_DATABASE_URL is not set. See .env.example.');
-if (!/shareat_test|_test(\?|$)/.test(baseUrl)) {
+if (!isTestDatabaseUrl(baseUrl)) {
   throw new Error(`Refusing to run against ${redactDbUrl(baseUrl)} — name must contain "_test".`);
 }
 
