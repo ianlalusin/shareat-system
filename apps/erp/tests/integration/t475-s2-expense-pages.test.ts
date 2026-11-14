@@ -1,6 +1,7 @@
 import { redactDbUrl } from '../../../../tests/helpers/redact-db-url';
 import { config } from 'dotenv';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { grantPositionCapability } from '../helpers/grant-position-capability';
 import postgres from 'postgres';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
@@ -385,6 +386,8 @@ describe('T-475 S2 / R8 - the page\'s verdict and the real refusal agree for the
 describe('T-475 S2 / R10 - looking at the page never writes a denial row', () => {
   it('floor staff (who may not create or approve expenses) open /expenses/new and a draft\'s page: both still mount their rule checks, and no audit row and no denial counter is written (mutant: a loader calls authorize())', async () => {
     const f = await ap475Fixture(sql, 'r10');
+    // T-577: a floor person reads a draft by holding edit_own_expense at the store (position-granted); create and approve stay refused.
+    await grantPositionCapability(sql, { orgId: f.orgId, storeId: f.storeId, personId: f.staffId, setBy: f.adminId, capability: 'edit_own_expense' });
     const inv = await f.invoice({ itemised: true, status: 'pending' });
     const id = await f.draft(inv);
     const counts = async () =>

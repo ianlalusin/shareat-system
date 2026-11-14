@@ -13,6 +13,7 @@ import { printLines, type PrintResult } from '@/lib/pos-print/adapter';
 import { formatReceipt } from '@/lib/pos-print/receipt-text';
 import type { PrintLayout, ReceiptView } from '@/lib/pos-print/types';
 import { projectBill } from '../_payment/bill';
+import { lineApprovalMode, resolveApproval } from '../_shell/line-approval';
 import { extraHeadsId } from '../_payment/uuidv5';
 import { printSettingsOf, SENTENCES } from '../_payment/logic';
 import { PaymentPanel } from '../_payment/PaymentPanel';
@@ -59,6 +60,8 @@ export function Orders() {
   const storeId = pos?.storeId ?? null;
   const snapshot = pos?.ordersSnapshot ?? null;
   const menu = (snapshot?.menu ?? null) as MenuLike | null;
+  // T-576: the store's rule for a manager PIN on a line cancel / line discount; offline the till goes ahead and flags it.
+  const approvalMode = lineApprovalMode(snapshot?.requirePinLineActions, pos?.online ?? false);
   const clockAt = pos?.clockAt;
   const menuAt = useMemo(() => (clockAt === undefined ? undefined : new Date(clockAt)), [clockAt]); // T-559: the picker's "now" follows the shell's menu clock
 
@@ -239,6 +242,7 @@ export function Orders() {
             cashierName={pos.personName ?? payment.staff.find((s) => s.personId === personId)?.displayName ?? ''}
             personId={personId}
             online={pos.online}
+            approvalMode={approvalMode}
             layout={printSettingsOf(payment.store).layout}
             copies={printSettingsOf(payment.store).copies}
             deps={{ reserveTerminalSeq, newId: newDeviceId, enqueue, requestDrain: pos.requestDrain, print: printLines }}
@@ -302,7 +306,12 @@ export function Orders() {
         <CancelLineDialog
           lineName={cancelling.name}
           onClose={() => setCancelling(null)}
-          onConfirm={(reason) => build(() => cancelLineEvent({ personId, lineId: cancelling.lineId, reason, now: new Date() }))}
+          approvalMode={approvalMode}
+          onConfirm={async (reason, pin) => {
+            // T-576: the manager PIN is checked first; a wrong one is shown in the dialog and the line is NOT cancelled.
+            const a = await resolveApproval({ mode: approvalMode, pin, action: 'line.cancelled', targetId: cancelling.lineId, fetch: (...x) => fetch(...x) });
+            return 'error' in a ? a.error : build(() => cancelLineEvent({ personId, lineId: cancelling.lineId, reason, now: new Date(), approval: a.fields }));
+          }}
         />
       ) : null}
     </div>

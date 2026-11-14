@@ -207,7 +207,8 @@ describe('case 19 - the link is gated by record_ap_payment at the bill\'s store 
     const sup = await f.mkSupplier(uid('S19b'));
     const b = await verifiedBill(f, sup, '2000.00');
     expect(payLinks(await renderInvoice(f.staff, b.invoiceId))).toEqual([]);
-    expect(payLinks(await renderInvoice(f.managerB, b.invoiceId))).toEqual([]);
+    // T-577: another store's manager no longer reads the bill at all (the same not-found as a forged id), so there is no link to see.
+    await expect(renderInvoice(f.managerB, b.invoiceId)).rejects.toThrow('NEXT_NOT_FOUND');
   });
 });
 

@@ -73,7 +73,7 @@ describe('T7 — withInterStoreLegs', () => {
     expect(extra.find((l) => l.accountCode === '2150')).toMatchObject({ storeId: LIPA, credit: '650.00', partyType: 'store', partyId: 'MLV' });
     expect(out.slice(0, lines.length), 'the original lines are kept, in order').toEqual(lines);
     expect(storeCodes, 'codes resolved once').toHaveBeenCalledTimes(1);
-  });
+  }, 60_000); // cold import of ledger/inter-store.ts (pulls @shareat/db) exceeds the 5s default on first load
 
   it('two paying stores in one entry -> two pairs, each for its own store\'s credit', async () => {
     const withLegs = await load();

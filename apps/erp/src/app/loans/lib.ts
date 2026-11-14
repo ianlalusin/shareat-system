@@ -83,7 +83,7 @@ export async function getDetail(orgId: string, id: string): Promise<LoanDetail |
         ? accruedInterest({
             outstanding: money(position.outstanding),
             principal: money(loan.principalAmount),
-            ratePercent: Number(loan.interestRate),
+            ratePercent: loan.interestRate,
             ratePeriod: loan.ratePeriod,
             method: loan.interestMethod,
             since: lastPaymentOn ?? loan.startDate,

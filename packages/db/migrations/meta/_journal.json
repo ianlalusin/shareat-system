@@ -1569,6 +1569,27 @@
       "when": 1807846307084,
       "tag": "0252_t572_pos_events_senior_id_scrub",
       "breakpoints": true
+    },
+    {
+      "idx": 253,
+      "version": "7",
+      "when": 1807932707084,
+      "tag": "0253_t565_daypart_versions",
+      "breakpoints": true
+    },
+    {
+      "idx": 255,
+      "version": "7",
+      "when": 1808105507084,
+      "tag": "0255_t575_pos_senior_id_repeat_days",
+      "breakpoints": true
+    },
+    {
+      "idx": 256,
+      "version": "7",
+      "when": 1808191907084,
+      "tag": "0256_t576_pos_require_pin_line_actions",
+      "breakpoints": true
     }
   ]
 }

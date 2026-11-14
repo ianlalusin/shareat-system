@@ -28,6 +28,8 @@ export interface SnapshotOrdersPart {
   nextChangeAt?: string | null;
   /** T-539 S3: minutes before a table tile turns red. Null when the cached snapshot is older than the rule (no tile turns red until the next refresh). */
   tableWarnMinutes?: number | null;
+  /** T-576: the store asks for a manager PIN on a line cancel / line discount. False when the cached snapshot is older than the rule (nothing is asked until the next refresh). */
+  requirePinLineActions?: boolean;
   /** T-528: what the Payment screen prices and pays with. Null when the cached snapshot is older than the fields it needs (the tablet must go online once). */
   payment?: SnapshotPaymentPart | null;
 }
@@ -67,7 +69,8 @@ function ordersPartOf(s: CachedSnapshot | null): SnapshotOrdersPart | null {
   const b = s?.body as (Partial<SnapshotOrdersPart> & Record<string, unknown>) | undefined;
   if (!b || !Array.isArray(b.stands) || !b.menu) return null;
   const warn = (b.rules as { tableWarnMinutes?: unknown } | undefined)?.tableWarnMinutes;
-  return { stands: b.stands, menu: b.menu, nextChangeAt: snapshotNextChangeAt(s), tableWarnMinutes: typeof warn === 'number' ? warn : null, payment: paymentPartOf(b) };
+  const requirePin = (b.rules as { requirePinLineActions?: unknown } | undefined)?.requirePinLineActions === true;
+  return { stands: b.stands, menu: b.menu, nextChangeAt: snapshotNextChangeAt(s), tableWarnMinutes: typeof warn === 'number' ? warn : null, requirePinLineActions: requirePin, payment: paymentPartOf(b) };
 }
 
 const sameEvents = (a: PosEvent[], b: PosEvent[]): boolean => a.length === b.length && a.every((e, i) => e.seq === b[i]!.seq);
