@@ -1,21 +1,23 @@
 /**
- * T-511 S5b - one staged day, opened from the review table (?day=<id>). A server component: it prints what `getReviewDayDetail` returned, in plain words, and
- * offers the decisions the person may make. It queries nothing and books nothing. There is no booking button here: booking a day arrives in slice 7.
+ * T-511 S5b, S7b - one staged day, opened from the review table (?day=<id>). A server component: it prints what `getReviewDayDetail` returned, in plain words, and
+ * offers the decisions the person may make. It queries nothing; the only thing it can start is a form post. Approve (which books the day) shows only on a day that is
+ * waiting, has nothing stopping it and may be approved by this person; the domain checks all of that again. When the books ask for a reason, a second form with the
+ * figure and a reason box shows above it.
  * Order on the screen is the order a manager asks the questions: does the file match what staff recorded, what will the books say, what stops this day, what
- * did the platform take, what about the loan, then the decision.
+ * did the platform take (and the charges of its invoice), what about the loan, then the decision.
  */
 import { add, money, ZERO } from '@shareat/core/money';
-import type { ReviewDayDetail } from '@shareat/domain';
-import { SETTLEMENT_DAY_REJECT_RULES, nativeAttrs } from '@shareat/domain/field-rules';
+import type { PeriodChargeView, ReviewDayDetail } from '@shareat/domain';
+import { SETTLEMENT_DAY_REJECT_RULES, SETTLEMENT_DIFFERENCE_RULES, nativeAttrs } from '@shareat/domain/field-rules';
 import { ACTION_LINK } from '@/components/action-link';
 import { CheckedForm } from '@/components/forms';
 import { SubmitButton } from '@/components/feedback/SubmitButton';
 import { Badge, Banner, Field, FormModal, Input, Select, Textarea } from '@/components/ui';
 import { peso } from '@/lib/format';
 import type { LoanOption } from '../lib';
-import { overrideLoanAllocationAction, rejectDayAction, reopenDayAction } from './actions';
+import { approveDayAction, bookChargeAction, overrideLoanAllocationAction, rejectDayAction, reopenDayAction } from './actions';
 import { RejectReasonHint } from './RejectReasonHint';
-import { bookedAsWord, differenceWords, isNonZero, loanLineDetails, loanWord, noteText, ordersHint, otherKindWord, platformWord, shortDate, stateWord, type ReviewFilterValues } from './words';
+import { bookedAsWord, chargeStateWord, differenceWords, isNonZero, loanLineDetails, loanWord, noteText, ordersHint, otherKindWord, platformWord, shortDate, stateWord, type ReviewFilterValues } from './words';
 
 export interface DayDetailAccess {
   canReject: boolean;
@@ -90,18 +92,64 @@ function LineItems({ items }: { readonly items: readonly { readonly title: strin
   );
 }
 
+/**
+ * The staged charges that belong to no sales day, as a list (not a table: a charge has a sentence of its own). A charge that can be booked by this person gets its own
+ * "Book this charge" form; `lineId` (the open day, when there is one) brings the person back to it.
+ */
+export function ChargeList({ charges, filters, lineId }: { readonly charges: readonly PeriodChargeView[]; readonly filters: ReviewFilterValues; readonly lineId?: string }) {
+  return (
+    <ul className="space-y-2">
+      {charges.map((c) => {
+        const st = chargeStateWord(c.state);
+        return (
+          <li key={c.otherLineId} className="space-y-1 rounded-[20px] border border-surface-border px-3 py-2">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <span className="min-w-0 font-medium">
+                {noteText(c.description) || 'Charge'}
+                {c.invoiceNumber ? `, invoice ${c.invoiceNumber}` : ''}
+                {c.chargeDate ? `, ${shortDate(c.chargeDate)}` : ''}
+              </span>
+              <span className="shrink-0 whitespace-nowrap font-semibold tabular-nums">{c.total === null ? 'Total not known' : peso(c.total)}</span>
+            </div>
+            <p className="text-sm tabular-nums">
+              {peso(c.net)} before VAT{c.vat === null ? '' : `, ${peso(c.vat)} VAT`}
+            </p>
+            <p>
+              <Badge tone={st.tone} label={st.label} />
+            </p>
+            {c.why ? <p className="text-sm">{c.why}</p> : null}
+            {c.canBook ? (
+              <form action={bookChargeAction} className="pt-1">
+                <input type="hidden" name="otherLineId" value={c.otherLineId} />
+                {lineId ? <input type="hidden" name="lineId" value={lineId} /> : null}
+                <FilterFields filters={filters} />
+                <SubmitButton variant="secondary" pendingLabel="Booking…">
+                  Book this charge
+                </SubmitButton>
+              </form>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export function DayDetail({
   detail,
   access,
   loans,
   backHref,
   filters,
+  ack,
 }: {
   readonly detail: ReviewDayDetail;
   readonly access: DayDetailAccess;
   readonly loans: readonly LoanOption[];
   readonly backHref: string;
   readonly filters: ReviewFilterValues;
+  /** the reason question for THIS day, from the address (only a well-shaped one reaches here) */
+  readonly ack: { readonly sign: 'short' | 'over'; readonly difference: string } | null;
 }) {
   const state = stateWord(detail.reviewState);
   const differs = isNonZero(detail.difference);
@@ -184,6 +232,15 @@ export function DayDetail({
         {detail.feeMonthNote ? <p className="text-sm">{detail.feeMonthNote}</p> : null}
       </div>
 
+      {detail.invoiceCharges.length > 0 ? (
+        <div className="space-y-2">
+          <h3 className="font-medium">Charges on this invoice</h3>
+          <p className="text-sm">These charges belong to the whole statement, not to one day. Book each one before the last day of the invoice is approved.</p>
+          <ChargeList charges={detail.invoiceCharges} filters={filters} lineId={detail.lineId} />
+        </div>
+      ) : null}
+      {detail.carrierNote ? <p className="text-sm">{detail.carrierNote}</p> : null}
+
       {grab && detail.loan.check ? (
         <div className="space-y-2">
           <h3 className="font-medium">Grab loan check</h3>
@@ -246,6 +303,65 @@ export function DayDetail({
         </div>
       ) : null}
 
+      {detail.reviewState === 'pending' ? (
+        <div className="space-y-2">
+          <h3 className="font-medium">Approve this day</h3>
+          {detail.blockers.length > 0 ? (
+            <p className="text-sm text-muted">Fix the items above first.</p>
+          ) : !detail.canApprove ? (
+            <p className="text-sm">{detail.approveWhy ?? 'You do not have permission to approve settlement days for this store.'}</p>
+          ) : (
+            <>
+              {ack ? (
+                <CheckedForm
+                  rules={SETTLEMENT_DIFFERENCE_RULES}
+                  action={approveDayAction}
+                  className="space-y-2 rounded-[20px] border border-warning bg-warning-soft p-3 text-warning-ink [&>p[role=status]]:hidden"
+                >
+                  <p className="text-sm">
+                    {ack.sign === 'short' ? (
+                      <>
+                        <strong>The payout is {peso(ack.difference)} short of the day.</strong> That is more than the allowed difference. Accept it only if the platform statement is right and
+                        the day was over-reported. It is booked as a loss.
+                      </>
+                    ) : (
+                      <>
+                        <strong>The payout is {peso(ack.difference)} more than the day.</strong> That is more than the allowed difference. Accept it only if the payout is right and the day
+                        was under-reported. It is booked as a gain.
+                      </>
+                    )}
+                  </p>
+                  <input type="hidden" name="lineId" value={detail.lineId} />
+                  <input type="hidden" name="confirmedDifference" value={ack.difference} />
+                  <FilterFields filters={filters} />
+                  <Field label="Why do you accept this difference?" rule={SETTLEMENT_DIFFERENCE_RULES.reason}>
+                    <Textarea {...nativeAttrs(SETTLEMENT_DIFFERENCE_RULES.reason)} className="w-full" />
+                  </Field>
+                  <SubmitButton pendingLabel="Booking…" icon={null}>
+                    Approve and book
+                  </SubmitButton>
+                </CheckedForm>
+              ) : (
+                <form action={approveDayAction} className="space-y-1">
+                  <input type="hidden" name="lineId" value={detail.lineId} />
+                  <FilterFields filters={filters} />
+                  <SubmitButton pendingLabel="Booking…" icon={null}>
+                    Approve and book
+                  </SubmitButton>
+                  <p className="text-sm">Approving puts this day&apos;s payout on the books. If it is wrong, an administrator can cancel it on the Overview tab.</p>
+                </form>
+              )}
+            </>
+          )}
+        </div>
+      ) : null}
+
+      {detail.reviewState === 'booked' && detail.bookedOn ? (
+        <p className="text-sm">
+          This day&apos;s payout was booked on {shortDate(detail.bookedOn)}. {detail.undoNote}
+        </p>
+      ) : null}
+
       {access.canReject && detail.reviewState === 'pending' ? (
         <CheckedForm rules={SETTLEMENT_DAY_REJECT_RULES} action={rejectDayAction} className="space-y-2 [&>p[role=status]]:hidden">
           <h3 className="font-medium">Reject this day</h3>
@@ -272,8 +388,6 @@ export function DayDetail({
           <p className="text-sm">The day goes back to waiting for a decision.</p>
         </form>
       ) : null}
-
-      <p className="text-sm">Booking a day, and what it does to the books, comes in a later step. Nothing on this screen books money.</p>
     </section>
   );
 }

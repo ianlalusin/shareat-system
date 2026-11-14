@@ -12,7 +12,6 @@ allocationsFor
 apiUrl
 applyCreditAction
 applyReceiptDeltaServerFirst
-approveDay
 arrivalLag
 assetsMissingCapitalisation
 branchOrderDetail
@@ -138,7 +137,6 @@ poolKey
 posV1SalesBody
 posV1SoldItemsBody
 positionsBySupplier
-postPlatformCharge
 previewDrawingClose
 proxy
 pullHolds
